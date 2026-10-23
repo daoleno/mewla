@@ -48,8 +48,10 @@ Resources is a live view of the computer, refreshed every five seconds while
 it is open:
 
 - **CPU, Memory, Disk I/O and Pressure** cards, each with the last minutes of
-  history. Pressure is Linux PSI. **Details** adds per-core activity, load
-  averages, cache and swap, mount space, and PSI averages.
+  history. On Linux, Pressure is PSI. On a Mac there is no PSI: the card shows
+  the system's own memory pressure level (Normal, Warning or Critical) instead.
+  **Details** adds per-core activity, load averages, cache and swap, mount
+  space, and PSI averages on Linux.
 - The pressure state (normal, elevated or critical) and the signals that crossed
   a threshold.
 - **Consumers**: processes grouped by owner (Workers, Orphaned Workers, Brain,

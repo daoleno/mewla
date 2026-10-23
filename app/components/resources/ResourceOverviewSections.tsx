@@ -2,7 +2,7 @@ import React from "react";
 import { Text, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
 import {
-  chartWindow, cpuHistorySeries, formatBytes, formatPercent, memoryHistorySeries,
+  chartWindow, cpuHistorySeries, formatBytes, formatPercent, hasMachineReading, memoryHistorySeries,
   historyWindowLabel, memoryUsedRatio, pressureSpans, sampledAgoLabel, type ResourceTelemetry,
 } from "../../services/resourceTelemetry";
 import { IconButton } from "../ui/IconButton";
@@ -51,13 +51,19 @@ export function PressureSignals({ telemetry, styles }: SectionProps) {
 export function PressureHeadline({ telemetry, styles, now, statusLabel, onRetry, loading, connected, details, onToggleDetails }: SectionProps & {
   now: number; statusLabel?: string; onRetry(): void; loading: boolean; connected: boolean; onToggleDetails(): void;
 }) {
+  const { colors } = useAppTheme();
   const window = historyWindowLabel(telemetry);
+  // Without a single reading there is no state to name: a dashed grey ring,
+  // not a green Normal over a screen of dashes.
+  const known = hasMachineReading(telemetry);
   return (
     <View style={styles.headline}>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <View style={styles.legendItem}>
-          <StatusMark status={PRESSURE_MARK[telemetry.state]} size={16} />
-          <Text style={styles.sectionTitle} accessibilityRole="header">{PRESSURE_LABEL[telemetry.state]}</Text>
+          {known
+            ? <StatusMark status={PRESSURE_MARK[telemetry.state]} size={16} />
+            : <StatusMark status="blocked" size={16} color={colors.statusUnknown} />}
+          <Text style={styles.sectionTitle} accessibilityRole="header">{known ? PRESSURE_LABEL[telemetry.state] : "No reading"}</Text>
         </View>
         <Text style={styles.caption} numberOfLines={1}>
           {[statusLabel ?? sampledAgoLabel(telemetry.sampledAt, now), window].filter(Boolean).join(" · ")}
@@ -113,7 +119,11 @@ export function MemorySection({ telemetry, styles, details }: SectionProps) {
       <Text style={styles.caption}>{formatBytes(usedBytes)} / {formatBytes(totalBytes)}</Text>
       {details ? <>
         <Text style={styles.mono}>Available {formatBytes(availableBytes)}</Text>
-        <Text style={styles.caption}>Cache {formatBytes(cacheBytes)} · Shared {formatBytes(sharedBytes)}</Text>
+        <Text style={styles.caption}>
+          {telemetry.unavailable.includes("memory.shared")
+            ? `Cache ${formatBytes(cacheBytes)}`
+            : `Cache ${formatBytes(cacheBytes)} · Shared ${formatBytes(sharedBytes)}`}
+        </Text>
         <Text style={styles.caption}>Swap {formatBytes(swapUsedBytes)} / {formatBytes(swapTotalBytes)}</Text>
         {swapTotalBytes ? <StackBar height={4} segments={[{ key: "swap", ratio: (swapUsedBytes ?? 0) / swapTotalBytes, color: (swapUsedBytes ?? 0) / swapTotalBytes >= 0.9 ? colors.warning : colors.accent }]} /> : null}
       </> : null}

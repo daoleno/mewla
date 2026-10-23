@@ -3,16 +3,54 @@ import { Text, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
 import {
   chartWindow, diskThroughputSeries, formatBytes, formatPressurePercent, formatRate,
-  latestDiskThroughput, psiHistorySeries,
+  latestDiskThroughput, MEMORY_PRESSURE_LABEL, memoryPressureSeries, psiHistorySeries,
+  type MemoryPressureLevel,
 } from "../../services/resourceTelemetry";
 import { AreaChart, StackBar, pressureInk } from "./ResourceCharts";
 import { Legend, type SectionProps } from "./ResourceOverviewSections";
+
+const MEMORY_PRESSURE_STEPS: Record<MemoryPressureLevel, number> = { normal: 1, warn: 2, critical: 3 };
+
+/**
+ * Where the kernel reports a memory pressure level instead of PSI (macOS): the
+ * level as a three-step meter, its history, and the load behind it. Named for
+ * what it is; no PSI figure is shown or implied.
+ */
+function MemoryPressureSection({ telemetry, styles, details }: SectionProps) {
+  const { colors } = useAppTheme();
+  const pressure = telemetry.memoryPressure!;
+  const lit = MEMORY_PRESSURE_STEPS[pressure.level];
+  const ink = pressure.level === "critical" ? colors.dangerText : pressure.level === "warn" ? colors.warning : colors.accent;
+  const { load1 } = telemetry.cpu;
+  const cores = telemetry.cpu.perCorePercent.length;
+  return (
+    <View style={styles.surface}>
+      <View style={styles.tileHead}>
+        <Text style={styles.label}>Pressure</Text>
+        <Text style={styles.sectionValue}>{MEMORY_PRESSURE_LABEL[pressure.level]}</Text>
+      </View>
+      <AreaChart points={memoryPressureSeries(telemetry)} {...chartWindow(telemetry)} height={36}
+        color={ink} accessibilityLabel="Memory pressure history, from normal to critical" />
+      <View style={{ flexDirection: "row", gap: 3 }} accessible accessibilityLabel={`Memory pressure ${MEMORY_PRESSURE_LABEL[pressure.level]}`}>
+        {[1, 2, 3].map((step) => <View key={step}
+          style={{ flex: 1, height: 4, borderRadius: 2, backgroundColor: step <= lit ? ink : colors.borderSubtle }} />)}
+      </View>
+      <Text style={styles.caption}>Memory pressure</Text>
+      <Text style={styles.micro}>
+        {[pressure.freePercent === undefined ? null : `${Math.round(pressure.freePercent)}% free`,
+          load1 !== undefined && cores > 0 ? `Load ${load1.toFixed(1)} · ${cores} cores` : null].filter(Boolean).join(" · ") || "—"}
+      </Text>
+      {details ? <Text style={styles.caption}>Reported by the system: normal, warning or critical</Text> : null}
+    </View>
+  );
+}
 
 export function PressureSection({ telemetry, styles, details }: SectionProps) {
   const { colors } = useAppTheme();
   const values = (["cpu", "memory", "io"] as const).map((key) => ({ key, value: telemetry.psi[key]?.some?.avg10 }));
   const peak = values.reduce<typeof values[number] | undefined>((best, next) =>
     next.value !== undefined && (best?.value === undefined || next.value > best.value) ? next : best, undefined);
+  if (!peak && telemetry.memoryPressure) return <MemoryPressureSection telemetry={telemetry} styles={styles} details={details} />;
   const labels = { cpu: "CPU", memory: "Mem", io: "I/O" };
   // Pressure charts are ink until the machine is actually under pressure.
   const ink = pressureInk(telemetry.state, colors);

@@ -24,6 +24,15 @@ type PressureSnapshot struct {
 	Memory PressureResource `json:"memory"`
 	IO     PressureResource `json:"io"`
 }
+
+// MemoryPressure is the kernel's own memory pressure verdict on a platform
+// without PSI (macOS): Level is normal, warn or critical. It is never PSI and
+// is not folded into the psi object.
+type MemoryPressure struct {
+	Level string `json:"level"`
+	// FreePercent is the kernel's free-memory percentage, when it reports one.
+	FreePercent *float64 `json:"free_percent,omitempty"`
+}
 type CPUResource struct {
 	Load1              float64   `json:"load1"`
 	Load5              float64   `json:"load5"`
@@ -84,21 +93,24 @@ type TelemetryHistoryPoint struct {
 	PSIIOSomeAvg10          *float64  `json:"psi_io_some_avg10,omitempty"`
 	DiskReadBytesPerSecond  *float64  `json:"disk_read_bytes_per_second,omitempty"`
 	DiskWriteBytesPerSecond *float64  `json:"disk_write_bytes_per_second,omitempty"`
+	MemoryPressureLevel     string    `json:"memory_pressure_level,omitempty"`
 }
 
 type MachineResourceSnapshot struct {
-	Version     int                     `json:"version"`
-	SampledAt   time.Time               `json:"sampled_at"`
-	State       string                  `json:"state"`
-	CPU         *CPUResource            `json:"cpu,omitempty"`
-	Memory      *MemoryResource         `json:"memory,omitempty"`
-	PSI         *PressureSnapshot       `json:"psi,omitempty"`
-	Disks       []DiskResource          `json:"disks"`
-	Consumers   []ProcessConsumer       `json:"consumers"`
-	History     []TelemetryHistoryPoint `json:"history,omitempty"`
-	Endpoint    string                  `json:"endpoint"`
-	Signals     []PressureSignal        `json:"signals"`
-	Unavailable []string                `json:"unavailable,omitempty"`
+	Version   int               `json:"version"`
+	SampledAt time.Time         `json:"sampled_at"`
+	State     string            `json:"state"`
+	CPU       *CPUResource      `json:"cpu,omitempty"`
+	Memory    *MemoryResource   `json:"memory,omitempty"`
+	PSI       *PressureSnapshot `json:"psi,omitempty"`
+	// MemoryPressure is present only where the platform reports it (macOS).
+	MemoryPressure *MemoryPressure         `json:"memory_pressure,omitempty"`
+	Disks          []DiskResource          `json:"disks"`
+	Consumers      []ProcessConsumer       `json:"consumers"`
+	History        []TelemetryHistoryPoint `json:"history,omitempty"`
+	Endpoint       string                  `json:"endpoint"`
+	Signals        []PressureSignal        `json:"signals"`
+	Unavailable    []string                `json:"unavailable,omitempty"`
 }
 type PressureSignal struct {
 	Name      string  `json:"name"`
@@ -115,6 +127,7 @@ type ResourcePressureEvent struct {
 	CPU              *CPUResource            `json:"cpu,omitempty"`
 	Memory           *MemoryResource         `json:"memory,omitempty"`
 	PSI              *PressureSnapshot       `json:"psi,omitempty"`
+	MemoryPressure   *MemoryPressure         `json:"memory_pressure,omitempty"`
 	Consumers        []ProcessConsumer       `json:"consumers"`
 	Orphaned         []ProcessConsumer       `json:"orphaned"`
 	Queued           int                     `json:"queued"`
@@ -173,6 +186,9 @@ func (s *ResourceSampler) Sample(w *Watcher, now time.Time) (MachineResourceSnap
 		point.MemoryUsedBytes = &snap.Memory.UsedBytes
 		point.SwapUsedBytes = &snap.Memory.SwapUsedBytes
 	}
+	if snap.MemoryPressure != nil {
+		point.MemoryPressureLevel = snap.MemoryPressure.Level
+	}
 	if snap.PSI != nil {
 		if snap.PSI.CPU.Some != nil {
 			point.PSICPUSomeAvg10 = &snap.PSI.CPU.Some.Avg10
@@ -223,7 +239,7 @@ func (s *ResourceSampler) Sample(w *Watcher, now time.Time) (MachineResourceSnap
 	for i := len(s.history) - 1; i >= 0 && len(trend) < 3; i -= 6 {
 		trend = append(trend, s.history[i])
 	}
-	event := ResourcePressureEvent{State: state, PreviousState: previous, SampledAt: now, Crossed: signals, Trend: trend, CPU: snap.CPU, Memory: snap.Memory, PSI: snap.PSI, Consumers: top, Orphaned: orphans, SnapshotEndpoint: "get_resource_telemetry"}
+	event := ResourcePressureEvent{State: state, PreviousState: previous, SampledAt: now, Crossed: signals, Trend: trend, CPU: snap.CPU, Memory: snap.Memory, PSI: snap.PSI, MemoryPressure: snap.MemoryPressure, Consumers: top, Orphaned: orphans, SnapshotEndpoint: "get_resource_telemetry"}
 	s.pending = append(s.pending, event)
 	if err := s.saveResourceState(); err != nil {
 		log.Printf("resource pressure event persistence: %v", err)
@@ -311,7 +327,7 @@ func pressureRank(s string) int {
 func (m *PressureMachine) Step(s MachineResourceSnapshot, now time.Time) (string, []PressureSignal, bool) {
 	signals := m.signals(s)
 	// A failed platform read is not evidence of recovery.
-	if s.Memory == nil && (s.CPU == nil || s.CPU.UtilizationPercent == nil) && len(s.Disks) == 0 && (s.PSI == nil || (s.PSI.CPU.Some == nil && s.PSI.Memory.Some == nil && s.PSI.Memory.Full == nil && s.PSI.IO.Full == nil)) {
+	if s.Memory == nil && s.MemoryPressure == nil && (s.CPU == nil || s.CPU.UtilizationPercent == nil) && len(s.Disks) == 0 && (s.PSI == nil || (s.PSI.CPU.Some == nil && s.PSI.Memory.Some == nil && s.PSI.Memory.Full == nil && s.PSI.IO.Full == nil)) {
 		m.candidate = ""
 		return m.State, signals, false
 	}
@@ -379,7 +395,17 @@ func (m *PressureMachine) signals(s MachineResourceSnapshot) []PressureSignal {
 		}
 	}
 	c := m.Config
-	if s.Memory != nil && s.Memory.TotalBytes > 0 {
+	// Where the kernel reports its own memory pressure (macOS) it is the memory
+	// authority: Activity-Monitor-style availability sits low on a healthy Mac,
+	// which the share-of-RAM threshold would read as scarcity.
+	if s.MemoryPressure != nil {
+		switch s.MemoryPressure.Level {
+		case "warn":
+			signals = append(signals, PressureSignal{"memory.pressure_level", 2, 2, "elevated"})
+		case "critical":
+			signals = append(signals, PressureSignal{"memory.pressure_level", 4, 4, "critical"})
+		}
+	} else if s.Memory != nil && s.Memory.TotalBytes > 0 {
 		check("memory.available_percent", 100*float64(s.Memory.AvailableBytes)/float64(s.Memory.TotalBytes), c.AvailableMemoryPercent, true)
 	}
 	if s.CPU != nil && s.CPU.UtilizationPercent != nil {

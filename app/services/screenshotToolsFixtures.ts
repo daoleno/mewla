@@ -184,6 +184,7 @@ export function screenshotResourceTelemetry(now = Date.now()): ResourceTelemetry
     ],
     history,
     signals: [{ name: "memory_psi_some_avg10", value: 14.2, threshold: 10, state: "elevated" }],
+    unavailable: [],
   };
 }
 
