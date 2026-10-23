@@ -1,75 +1,11 @@
 package server
 
 import (
-	"encoding/binary"
-	"os"
-	"os/exec"
-	"strings"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"testing"
 )
-
-func TestParseCodexSlashDescriptionsFindsBinaryBlock(t *testing.T) {
-	data := []byte("noise" +
-		"choose what model and reasoning effort to use" +
-		"include current selection, open files, and other context from your IDE" +
-		"choose what Codex is allowed to do" +
-		"remap TUI shortcuts" +
-		"set up elevated agent sandbox" +
-		"let sandbox read a directory: /sandbox-add-read-dir <absolute_path>" +
-		"toggle experimental features" +
-		"approve one retry of a recent auto-review denial" +
-		"configure memory use and generation" +
-		"use skills to improve how Codex performs specific tasks" +
-		"view and manage lifecycle hooks" +
-		"review my current changes and find issues" +
-		"rename the current thread" +
-		"start a new chat during a conversation" +
-		"resume a saved chat" +
-		"fork the current chat" +
-		"create an AGENTS.md file with instructions for Codex" +
-		"set or view the goal for a long-running task" +
-		"start a side conversation in an ephemeral fork" +
-		"copy last response as markdown" +
-		"toggle raw scrollback mode for copy-friendly terminal selection" +
-		"show git diff (including untracked files)" +
-		"mention a file" +
-		"show current session configuration and token usage" +
-		"show config layers and requirement sources for debugging" +
-		"configure which items appear in the terminal title" +
-		"configure which items appear in the status line" +
-		"choose or hide the terminal pet" +
-		"list configured MCP tools; use /mcp verbose for details" +
-		"manage apps" +
-		"browse plugins" +
-		"exit Codex" +
-		"send logs to maintainers" +
-		"print the rollout file path" +
-		"list background terminals" +
-		"stop all background terminals" +
-		"clear the terminal and start a new chat" +
-		"choose a communication style for Codex" +
-		"toggle realtime voice mode (experimental)" +
-		"configure realtime microphone/speaker" +
-		"test approval request" +
-		"switch the active agent thread" +
-		"DO NOT USE" +
-		"tail")
-
-	descriptions := parseCodexSlashDescriptions(data)
-	if len(descriptions) < 40 {
-		t.Fatalf("description count = %d, want at least 40", len(descriptions))
-	}
-	for command, want := range map[string]string{
-		"model":       "choose what model and reasoning effort to use",
-		"permissions": "choose what Codex is allowed to do",
-		"skills":      "use skills to improve how Codex performs specific tasks",
-		"agent":       "switch the active agent thread",
-	} {
-		if got := descriptions[command]; got != want {
-			t.Fatalf("description for %s = %q, want %q", command, got, want)
-		}
-	}
-}
 
 func TestDefaultCodexSlashCommandsContainsRealCommandSet(t *testing.T) {
 	commands := defaultCodexSlashCommands("test")
@@ -141,128 +77,6 @@ func TestSlashCommandCapabilitiesAreConservative(t *testing.T) {
 	}
 }
 
-func TestCommandsFromDiscoveryIncludesNewBinaryCommands(t *testing.T) {
-	commands := commandsFromDiscovery(codexSlashCommandDiscovery{
-		names: []string{"model", "compact", "plan", "new-upstream-command"},
-		descriptions: map[string]string{
-			"model":                "model description from binary",
-			"compact":              "compact description from binary",
-			"plan":                 "plan description from binary",
-			"new-upstream-command": "new command description",
-		},
-	})
-
-	values := map[string]CodexSlashCommand{}
-	for _, command := range commands {
-		values[command.Value] = command
-	}
-	if got := values["/model"].Description; got != "model description from binary" {
-		t.Fatalf("/model description = %q, want binary override", got)
-	}
-	if got := values["/new-upstream-command"].Description; got != "new command description" {
-		t.Fatalf("/new-upstream-command description = %q, want discovered command", got)
-	}
-	if command := values["/new-upstream-command"]; command.Execution != "terminal-required" || command.Category != "unknown" || command.ChatSupported {
-		t.Fatalf("/new-upstream-command capability = %#v, want conservative unknown terminal command", command)
-	}
-	for _, value := range []string{"/compact", "/plan"} {
-		if _, ok := values[value]; ok {
-			t.Fatalf("unexpected hidden command %s from discovery", value)
-		}
-	}
-}
-
-func TestParseCodexSlashCommandNamesFindsPointerBackedCluster(t *testing.T) {
-	data := make([]byte, 512)
-	copy(data[128:], []byte("modelnew-upstream-commanddebug-m-dropdebug-m-update"))
-	for index, offset := range []uint64{128, 133, 153, 165} {
-		binary.LittleEndian.PutUint64(data[index*8:], offset)
-	}
-
-	names := parseCodexSlashCommandNames(data)
-	values := map[string]bool{}
-	for _, name := range names {
-		values[name] = true
-	}
-	for _, name := range []string{"model", "new-upstream-command", "debug-m-drop", "debug-m-update"} {
-		if !values[name] {
-			t.Fatalf("missing discovered command %s from %#v", name, names)
-		}
-	}
-}
-
-func TestParseCodexFastSlashDescription(t *testing.T) {
-	data := []byte(`{
-		"service_tiers": [
-			{"id": "priority", "name": "Fast", "description": "1.5x speed, increased usage"}
-		]
-	}`)
-
-	if got := parseCodexFastSlashDescription(data); got != "1.5x speed, increased usage" {
-		t.Fatalf("parseCodexFastSlashDescription() = %q", got)
-	}
-}
-
-func TestDiscoverCodexSlashCommandsFromInstalledCodex(t *testing.T) {
-	if _, err := exec.LookPath("codex"); err != nil {
-		t.Skip("codex not installed")
-	}
-
-	commands, source := discoverCodexSlashCommandsUncached()
-	if source != "codex-binary" {
-		t.Skipf("local Codex binary discovery unavailable; source = %s", source)
-	}
-	if len(commands) < 40 {
-		t.Fatalf("command count = %d, want at least 40", len(commands))
-	}
-
-	values := map[string]CodexSlashCommand{}
-	for _, command := range commands {
-		values[command.Value] = command
-	}
-	for _, value := range []string{"/model", "/fast", "/permissions", "/diff", "/settings"} {
-		if !strings.HasPrefix(values[value].Value, "/") {
-			t.Fatalf("missing discovered command %s", value)
-		}
-	}
-	for _, value := range []string{"/status", "/mcp"} {
-		if command, ok := values[value]; ok {
-			t.Fatalf("%s should be hidden from discovered commands, got %#v", value, command)
-		}
-	}
-	if fast := values["/fast"].Description; fast == "" || fast == "use fewer credits for upcoming turns" {
-		t.Fatalf("/fast description = %q, want installed Codex metadata", fast)
-	}
-}
-
-func TestParseCodexSlashCommandDiscoveryFromInstalledBinary(t *testing.T) {
-	if _, err := exec.LookPath("codex"); err != nil {
-		t.Skip("codex not installed")
-	}
-	binaryPath, ok := resolveCodexNativeBinary()
-	if !ok {
-		t.Skip("native Codex binary unavailable")
-	}
-	data, err := os.ReadFile(binaryPath)
-	if err != nil {
-		t.Fatalf("read native Codex binary: %v", err)
-	}
-
-	discovery := parseCodexSlashCommandDiscovery(data)
-	names := map[string]bool{}
-	for _, name := range discovery.names {
-		names[name] = true
-	}
-	for _, name := range []string{"setup-default-sandbox", "sandbox-add-read-dir", "debug-m-drop", "debug-m-update"} {
-		if !names[name] {
-			t.Fatalf("missing binary-discovered command name %s from %#v", name, discovery.names)
-		}
-	}
-	if got := discovery.descriptions["fast"]; got == "" || got == "use fewer credits for upcoming turns" {
-		t.Fatalf("fast description = %q, want installed Codex metadata", got)
-	}
-}
-
 func TestSlashCommandTitlePreservesKnownInitialisms(t *testing.T) {
 	for input, want := range map[string]string{
 		"ide":                   "IDE",
@@ -272,6 +86,81 @@ func TestSlashCommandTitlePreservesKnownInitialisms(t *testing.T) {
 	} {
 		if got := slashCommandTitle(input); got != want {
 			t.Fatalf("slashCommandTitle(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestBundledCodexSlashCommandsServeStaticList(t *testing.T) {
+	snapshot := bundledCodexSlashCommands()
+	if snapshot.Source != "bundled" {
+		t.Fatalf("source = %q, want bundled", snapshot.Source)
+	}
+	if len(snapshot.Commands) != len(codexSlashCommandSpecs) {
+		t.Fatalf("served %d commands, want %d", len(snapshot.Commands), len(codexSlashCommandSpecs))
+	}
+	values := map[string]CodexSlashCommand{}
+	for _, command := range snapshot.Commands {
+		values[command.Value] = command
+		if command.Source != "bundled" {
+			t.Fatalf("command %s source = %q, want bundled", command.Value, command.Source)
+		}
+		if command.Description == "" {
+			t.Fatalf("command %s has no description", command.Value)
+		}
+	}
+	for _, value := range []string{"/model", "/fast", "/review", "/goal", "/rename", "/new", "/clear", "/skills", "/init", "/stop", "/agent", "/debug-m-drop"} {
+		if _, ok := values[value]; !ok {
+			t.Fatalf("served list is missing %s", value)
+		}
+	}
+}
+
+func TestEveryCodexSlashCommandSpecHasCapability(t *testing.T) {
+	for _, spec := range codexSlashCommandSpecs {
+		if _, ok := codexSlashCommandCapabilities[spec.name]; !ok {
+			t.Fatalf("/%s has no capability entry", spec.name)
+		}
+	}
+	for name := range codexSlashCommandCapabilities {
+		found := false
+		for _, spec := range codexSlashCommandSpecs {
+			if spec.name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("capability entry %q has no spec", name)
+		}
+	}
+}
+
+func TestCodexBinaryScannerIsGone(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed := map[string]bool{
+		"discoverCodexSlashCommands":         true,
+		"discoverCodexSlashCommandsUncached": true,
+		"commandsFromDiscovery":              true,
+		"parseCodexSlashCommandDiscovery":    true,
+		"parseCodexSlashDescriptions":        true,
+		"parseCodexFastSlashDescription":     true,
+		"parseCodexSlashCommandNames":        true,
+		"resolveCodexNativeBinary":           true,
+		"newBinaryAddressMapper":             true,
+		"maxCodexBinaryScanBytes":            true,
+	}
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Files {
+			ast.Inspect(file, func(node ast.Node) bool {
+				if ident, ok := node.(*ast.Ident); ok && removed[ident.Name] && ident.Obj != nil {
+					t.Errorf("scanner symbol %s is back at %s", ident.Name, fset.Position(ident.Pos()))
+				}
+				return true
+			})
 		}
 	}
 }

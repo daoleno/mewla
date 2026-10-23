@@ -2719,14 +2719,12 @@ func clientStartedAt(raw json.RawMessage) time.Time {
 }
 
 func (s *Server) handleCodexSlashCommands(conn *websocket.Conn, raw clientMessage) {
-	snapshot := discoverCodexSlashCommands(time.Now())
+	snapshot := bundledCodexSlashCommands()
 	s.sendJSON(conn, map[string]any{
-		"type":         "codex_slash_commands",
-		"request_id":   raw.RequestID,
-		"generated_at": snapshot.GeneratedAt,
-		"source":       snapshot.Source,
-		"version":      snapshot.Version,
-		"commands":     snapshot.Commands,
+		"type":       "codex_slash_commands",
+		"request_id": raw.RequestID,
+		"source":     snapshot.Source,
+		"commands":   snapshot.Commands,
 	})
 }
 
