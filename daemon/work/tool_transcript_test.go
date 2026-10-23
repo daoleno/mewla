@@ -559,3 +559,48 @@ func runSQLite(t *testing.T, sqlite3, dbPath, script string) {
 		t.Fatalf("sqlite failed: %v%s", err, stderrSuffix(string(out)))
 	}
 }
+
+func TestCleanCodexDisplayText_KeepsOrdinaryMessagesThatMentionSandboxTooling(t *testing.T) {
+	for _, value := range []string{
+		"Can you set up a Daytona sandbox? Follow the repository guidelines and the testing guidelines.",
+		"Please move freeride-sandbox off compatibility barrels and update the testing guidelines and coding style & naming conventions.",
+		"First-principles engineering: write the agent & sandbox releases notes; mention the repository guidelines.",
+	} {
+		if got := CleanCodexDisplayText(value); got != value {
+			t.Fatalf("CleanCodexDisplayText(%q) = %q, want it kept verbatim", value, got)
+		}
+		if isTranscriptBoilerplate(value) {
+			t.Fatalf("isTranscriptBoilerplate(%q) = true, want an ordinary message", value)
+		}
+	}
+}
+
+func TestParseCodexConversation_KeepsSandboxMessageDropsPastedAgentsPreamble(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	userRecord := func(timestamp, text string) map[string]any {
+		return map[string]any{
+			"type":      "response_item",
+			"timestamp": timestamp,
+			"payload": map[string]any{
+				"type":    "message",
+				"role":    "user",
+				"content": []map[string]any{{"type": "input_text", "text": text}},
+			},
+		}
+	}
+	writeJSONL(t, path,
+		map[string]any{"type": "session_meta", "timestamp": "2026-05-20T10:00:00Z", "payload": map[string]any{"id": "codex-agents", "cwd": "/repo"}},
+		userRecord("2026-05-20T10:00:01Z", "# AGENTS.md instructions for /repo\n\n<INSTRUCTIONS>\n## Repository Guidelines\nUse Daytona and freeride-sandbox. Avoid compatibility barrels.\n</INSTRUCTIONS>"),
+		userRecord("2026-05-20T10:00:02Z", "# Repository Guidelines\n\n## Project Structure & Module Organization\nSandbox work runs in Daytona.\n\n## Testing Guidelines\nUse bun test."),
+		userRecord("2026-05-20T10:00:03Z", "Can you set up a Daytona sandbox? Follow the repository guidelines and testing guidelines."),
+	)
+
+	got, err := parseCodexConversation(path)
+	if err != nil {
+		t.Fatalf("parseCodexConversation: %v", err)
+	}
+	if len(got.Events) != 1 {
+		t.Fatalf("events len = %d, want 1: %#v", len(got.Events), got.Events)
+	}
+	assertEvent(t, got.Events[0], "user_message", "user", "", "Can you set up a Daytona sandbox?")
+}

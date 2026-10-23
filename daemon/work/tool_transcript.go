@@ -882,56 +882,22 @@ func isLegacyCodexContextualFragment(value string) bool {
 		strings.HasPrefix(trimmed, "Warning: The maximum number of unified exec processes you can keep open is")
 }
 
+// isCodexInstructionContextFragment recognises the AGENTS.md preamble Codex
+// injects as a user-role record: its fixed "# AGENTS.md instructions for <cwd>"
+// header, or a document that opens with the standard contributor-guide heading.
+// Current Codex rollouts write real user input as the same response_item
+// user-role record, so the record type cannot tell them apart; only the
+// preamble's own shape does. No project-specific phrases belong here.
 func isCodexInstructionContextFragment(value string) bool {
 	trimmed := cleanConversationText(value)
 	if trimmed == "" {
 		return false
 	}
 	lower := strings.ToLower(trimmed)
-	if strings.HasPrefix(lower, "# repository guidelines") ||
+	return strings.HasPrefix(lower, "# repository guidelines") ||
 		strings.HasPrefix(lower, "repository guidelines\n") ||
 		strings.HasPrefix(lower, "## project structure & module organization") ||
-		strings.Contains(lower, "agents.md instructions for ") {
-		return true
-	}
-	markers := []string{
-		"repository guidelines",
-		"project structure & module organization",
-		"build, test, and development commands",
-		"coding style & naming conventions",
-		"testing guidelines",
-		"commit & pull request guidelines",
-		"security & configuration tips",
-		"configuration & secrets",
-		"agent & sandbox releases",
-		"first-principles engineering",
-		"exchange data & trading state",
-		"refresh cadence is part of the product contract",
-		"avoid compatibility barrels",
-	}
-	strongMarkers := []string{
-		"agent & sandbox releases",
-		"first-principles engineering",
-		"exchange data & trading state",
-		"refresh cadence is part of the product contract",
-		"avoid compatibility barrels",
-		"freeride-sandbox",
-		"daytona",
-	}
-	count := 0
-	for _, marker := range markers {
-		if strings.Contains(lower, marker) {
-			count++
-		}
-	}
-	hasStrongMarker := false
-	for _, marker := range strongMarkers {
-		if strings.Contains(lower, marker) {
-			hasStrongMarker = true
-			break
-		}
-	}
-	return count >= 2 && hasStrongMarker
+		strings.Contains(lower, "agents.md instructions for ")
 }
 
 // maxClaudeProjectDirLength mirrors Claude Code's MAX_SANITIZED_LENGTH. Names
