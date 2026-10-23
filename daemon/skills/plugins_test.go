@@ -824,3 +824,17 @@ func TestPluginCatalogDeadlinePrecedesAppRequestDeadlines(t *testing.T) {
 		t.Fatalf("daemon Plugin deadline %v must precede App request deadlines", defaultPluginCLITimeout)
 	}
 }
+
+func TestBuiltInCodexPluginsExplainThemselves(t *testing.T) {
+	built := readonlyPluginReason(InstalledPluginCopy{Host: PluginHostCodex, Source: PluginSourceRemoteCache, Name: "plugin-management"})
+	if built != "Built into Codex for managing Plugins and connections, so its package files are protected." {
+		t.Fatalf("built-in reason = %q", built)
+	}
+	other := readonlyPluginReason(InstalledPluginCopy{Host: PluginHostCodex, Source: PluginSourceRemoteCache, Name: "something-else"})
+	if other != "Maintained by Codex's package service, so its package files are protected." {
+		t.Fatalf("remote cache reason = %q", other)
+	}
+	if got := readonlyPluginReason(InstalledPluginCopy{Host: PluginHostClaude, Source: PluginSourceManager, Name: "plugin-management"}); got != "This Plugin is protected by its provider." {
+		t.Fatalf("a Claude copy of the same name = %q", got)
+	}
+}

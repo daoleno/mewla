@@ -667,10 +667,18 @@ func localPluginUninstallReason(copy InstalledPluginCopy) string {
 	return ""
 }
 
+// codexBuiltInPlugins names the Plugins Codex ships in its package service
+// rather than installs from a marketplace, and what each is for. They get a
+// reason of their own where the rest of the service's packages get the
+// generic one.
+var codexBuiltInPlugins = map[string]string{
+	"plugin-management": "managing Plugins and connections",
+}
+
 func readonlyPluginReason(copy InstalledPluginCopy) string {
 	if copy.Source == PluginSourceRemoteCache {
-		if copy.Host == PluginHostCodex && copy.Name == "plugin-management" {
-			return "Built into Codex for managing Plugins and connections, so its package files are protected."
+		if purpose, ok := codexBuiltInPlugins[copy.Name]; ok && copy.Host == PluginHostCodex {
+			return "Built into Codex for " + purpose + ", so its package files are protected."
 		}
 		return "Maintained by Codex's package service, so its package files are protected."
 	}
