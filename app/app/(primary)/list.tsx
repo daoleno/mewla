@@ -699,22 +699,6 @@ export default function InboxScreen() {
     );
   }, [authoritativeWorkerKeySet, selectionMode]);
 
-  // Only a fresh snapshot from the batch's original server proves removal.
-  // Switching the current server is not evidence that a Session terminated.
-  useEffect(() => {
-    const batch = terminationBatchRef.current;
-    const serverId = submittedServerIdRef.current;
-    if (!batch || !serverId || !isWorkerSessionListFreshForConnection(state, serverId)) {
-      return;
-    }
-    const batchKeys = new Set(state.workers.filter((worker) => worker.serverId === serverId).map((worker) => worker.key));
-    for (const sessionKey of submittedKeysRef.current) {
-      if (!batchKeys.has(sessionKey)) {
-        batch.settleDisappeared(sessionKey);
-      }
-    }
-  }, [state, terminationRunning]);
-
   // Last deselection (or all-settled removal) exits selection mode.
   useEffect(() => {
     if (

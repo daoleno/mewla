@@ -32,12 +32,10 @@ const hydratedBrain = {
 };
 
 describe("connected read refresh", () => {
-  test("issues one fresh request per read model for every connection event", () => {
+  test("issues one fresh request per read model for every connection event, none for Sessions", () => {
     const calls: Array<[string, string]> = [];
     const client = {
       listWorkItems: (serverId: string) => calls.push(["work", serverId]),
-      listWorkerSessions: (serverId: string) =>
-        calls.push(["sessions", serverId]),
       requestBrainSnapshot: (serverId: string) =>
         calls.push(["brain", serverId]),
       listCalendarItems: (serverId: string) =>
@@ -50,11 +48,9 @@ describe("connected read refresh", () => {
 
     expect(calls).toEqual([
       ["work", "server-a"],
-      ["sessions", "server-a"],
       ["brain", "server-a"],
       ["calendar", "server-a"],
       ["work", "server-a"],
-      ["sessions", "server-a"],
       ["brain", "server-a"],
       ["calendar", "server-a"],
     ]);

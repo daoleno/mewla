@@ -12,21 +12,21 @@ export type DisconnectLifecycleDecision = {
 
 export type ConnectedReadModelClient = {
   listWorkItems(serverId: string): void;
-  listWorkerSessions(serverId: string): void;
   requestBrainSnapshot(serverId: string): void;
   listCalendarItems(serverId: string): void;
 };
 
 /**
  * Reconnect rebuilds read models with fresh requests. Nothing sent while the
- * socket was unavailable is retained or replayed by the transport.
+ * socket was unavailable is retained or replayed by the transport. Sessions are
+ * not requested: the daemon sends their full list as the first thing on every
+ * connection, and the client resyncs by itself when it sees a gap.
  */
 export function createConnectedReadRefreshHandler(
   client: ConnectedReadModelClient,
 ) {
   return ({ serverId }: { serverId: string }) => {
     client.listWorkItems(serverId);
-    client.listWorkerSessions(serverId);
     client.requestBrainSnapshot(serverId);
     client.listCalendarItems(serverId);
   };

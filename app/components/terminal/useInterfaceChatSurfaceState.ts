@@ -617,7 +617,7 @@ export function useInterfaceChatSurfaceState({
     [answerPendingChoice, pendingChoice, pendingChoiceLive],
   );
   const terminalActionPrompt = useMemo(() => {
-    // Live pane fact only: require a full worker_session_list for this WebSocket
+    // Live pane fact only: require the connect snapshot (worker_session_list) for this WebSocket
     // connection generation so retained pre-disconnect snapshots cannot flash.
     // A structured transcript choice owns the prompt; never show both.
     if (!workerId || !workerSessionListFresh || pendingChoice) {

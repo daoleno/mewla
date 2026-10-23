@@ -177,7 +177,7 @@ describe("one live connection", () => {
     const lists: unknown[] = [];
     client.on("worker_session_list", (payload) => lists.push(payload));
     first.onmessage?.({
-      data: JSON.stringify({ type: "worker_session_list", worker_sessions: [{ id: "old" }] }),
+      data: JSON.stringify({ type: "worker_session_list", seq: 0, worker_sessions: [{ id: "old" }] }),
     });
     expect(lists).toEqual([]);
 
@@ -1784,6 +1784,54 @@ async function socketAfter(socketIndex: number) {
   throw new Error("expected a WebSocket connection attempt");
 }
 
+describe("the sequenced Session feed", () => {
+  test("applies changes in order, resyncs once on a gap, and starts over on a new socket", async () => {
+    const client = new WebSocketClient();
+    const seen: string[] = [];
+    for (const type of [
+      "worker_session_list",
+      "worker_session_created",
+      "worker_session_updated",
+      "worker_session_archived",
+    ]) {
+      client.on(type, (payload: any) => seen.push(`${type}:${payload.seq}`));
+    }
+    const socket = await connectClient(client);
+    socket.open();
+    // A change ahead of the connect snapshot is already covered by it.
+    socket.receive({ type: "worker_session_updated", seq: 1, worker_session: { id: "a" } });
+    socket.receive({ type: "worker_session_list", seq: 2, worker_sessions: [] });
+    socket.receive({ type: "worker_session_created", seq: 3, worker_session: { id: "a" } });
+    socket.receive({ type: "worker_session_created", seq: 3, worker_session: { id: "a" } });
+    socket.receive({ type: "worker_session_updated", seq: 4, worker_session: { id: "a" } });
+    expect(seen).toEqual([
+      "worker_session_list:2",
+      "worker_session_created:3",
+      "worker_session_updated:4",
+    ]);
+    expect(socket.sent).toEqual([]);
+
+    // Seq 5 never arrives: the next change is held back and one list is asked for.
+    socket.receive({ type: "worker_session_archived", seq: 6, worker_session: { id: "a" } });
+    socket.receive({ type: "worker_session_updated", seq: 7, worker_session: { id: "b" } });
+    expect(seen).toHaveLength(3);
+    expect(socket.sent.map((frame) => JSON.parse(frame))).toEqual([{ type: "list_worker_sessions" }]);
+    socket.receive({ type: "worker_session_list", seq: 7, worker_sessions: [] });
+    socket.receive({ type: "worker_session_updated", seq: 8, worker_session: { id: "b" } });
+    expect(seen.slice(3)).toEqual(["worker_session_list:7", "worker_session_updated:8"]);
+
+    // A reconnect is a new feed: the daemon's list comes first, whatever its seq.
+    const nextIndex = FakeWebSocket.instances.length;
+    socket.close();
+    const replacement = await socketAfter(nextIndex);
+    replacement.open();
+    replacement.receive({ type: "worker_session_list", seq: 0, worker_sessions: [] });
+    replacement.receive({ type: "worker_session_updated", seq: 1, worker_session: { id: "b" } });
+    expect(seen.slice(5)).toEqual(["worker_session_list:0", "worker_session_updated:1"]);
+    client.disconnect();
+  });
+});
+
 describe("a connection that stops answering", () => {
   test("is replaced at once, and the next socket says how the last one ended", async () => {
     const original = { ...socketWatchdog };
@@ -1797,7 +1845,7 @@ describe("a connection that stops answering", () => {
       // The daemon's frames keep the socket alive.
       for (let beat = 0; beat < 5; beat += 1) {
         await new Promise((resolve) => setTimeout(resolve, 20));
-        socket.receive({ type: "worker_session_list", worker_sessions: [] });
+        socket.receive({ type: "worker_session_list", seq: beat, worker_sessions: [] });
       }
       expect(FakeWebSocket.instances.length).toBe(nextIndex);
       // Then nothing arrives: no close event, no error, just silence.

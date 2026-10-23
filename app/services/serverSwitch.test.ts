@@ -139,6 +139,7 @@ test("switching servers leaves only the new server in every store", async () => 
   const publish = (socket: FakeWebSocket, prefix: string) => {
     socket.receive({
       type: "worker_session_list",
+      seq: 0,
       worker_sessions: [{ id: `${prefix}-worker`, name: "worker", status: "running" }],
     });
     socket.receive({
