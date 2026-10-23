@@ -637,3 +637,37 @@ func TestTimelineOmitsCanonicalDirectWorkEventUserRows(t *testing.T) {
 		t.Fatalf("conversation leaked envelope: %#v", conversation)
 	}
 }
+
+func TestProviderRowsCarryTheirOriginAcrossReload(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	threadID := "brain_thread_origin"
+	if err := store.SetChatState(ChatState{ThreadID: threadID}); err != nil {
+		t.Fatal(err)
+	}
+	provider := work.CodexConversation{Available: true, SessionID: "host-a", Events: []work.CodexConversationEvent{
+		{ID: "typed", Timestamp: "2026-08-06T01:00:00Z", Kind: "user_message", Role: "user", Body: "typed in the terminal"},
+		{ID: "summary", Timestamp: "2026-08-06T01:00:01Z", Kind: "user_message", Role: "user", Body: "recap", Origin: work.ConversationOriginProvider},
+		{ID: "reply", Timestamp: "2026-08-06T01:00:02Z", Kind: "assistant_message", Role: "assistant", Body: "ok"},
+	}}
+	if err := store.MaterializeProviderConversation(threadID, provider); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := reopened.ThreadTimeline(threadID, 0)
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("rows = %+v err=%v", rows, err)
+	}
+	want := map[string]string{"typed": TimelineOriginTranscript, "summary": TimelineOriginProvider, "reply": TimelineOriginTranscript}
+	for _, row := range rows {
+		if row.Origin != want[row.ID] {
+			t.Errorf("origin of %s = %q, want %q", row.ID, row.Origin, want[row.ID])
+		}
+	}
+}

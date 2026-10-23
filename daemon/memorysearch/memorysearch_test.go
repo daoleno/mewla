@@ -16,6 +16,7 @@ import (
 type fixtureRow struct {
 	id, kind, body, at, workID string
 	admission                  bool
+	origin                     string
 }
 
 func writeRows(t *testing.T, path string, rows ...fixtureRow) {
@@ -33,7 +34,7 @@ func writeRows(t *testing.T, path string, rows ...fixtureRow) {
 		raw, _ := json.Marshal(map[string]any{
 			"id": row.id, "role": role, "kind": row.kind, "body": row.body,
 			"created_at": row.at, "work_id": row.workID, "session_id": "s",
-			"brain_admission": row.admission,
+			"brain_admission": row.admission, "origin": row.origin,
 		})
 		if _, err := file.Write(append(raw, '\n')); err != nil {
 			t.Fatal(err)
@@ -487,19 +488,23 @@ func TestSchemaVersionMismatchRebuilds(t *testing.T) {
 	}
 }
 
-func TestBackfilledNonTypingRowsAreContext(t *testing.T) {
+func TestProviderWrittenRowsAreContext(t *testing.T) {
 	ix, dir := openFixture(t)
 	writeRows(t, filepath.Join(dir, "messages.jsonl"),
 		fixtureRow{id: "typed", kind: "user_message", at: "2026-10-01T00:00:00Z", admission: true, body: "zeta rollout plan: ship Friday"},
-		fixtureRow{id: "s:t1:user", kind: "user_message", at: "2026-10-02T00:00:00Z", body: "This session is being continued from a previous conversation. zeta rollout plan was Friday."},
-		fixtureRow{id: "s:t2:user", kind: "user_message", at: "2026-10-03T00:00:00Z", body: "<task-notification>\n<task-id>x</task-id>zeta finished</task-notification>"},
-		fixtureRow{id: "s:t3:user", kind: "user_message", at: "2026-10-04T00:00:00Z", body: "<pasted_content id=\"1\">\n<zen_work_event>{\"summary\":\"zeta done\"}</zen_work_event>\n</pasted_content id=\"1\">"},
-		fixtureRow{id: "s:t4:user", kind: "user_message", at: "2026-10-05T00:00:00Z", body: "[Request interrupted by user] zeta"},
-		// What the user pasted or typed in Brain's terminal is still theirs.
-		fixtureRow{id: "s:t5:user", kind: "user_message", at: "2026-10-06T00:00:00Z", body: "<pasted_content id=\"2\">\n~ zeta ping ok\n</pasted_content id=\"2\">"},
-		fixtureRow{id: "s:t6:user", kind: "user_message", at: "2026-10-07T00:00:00Z", body: "typed zeta first <zen_work_event>{}</zen_work_event>"},
-		fixtureRow{id: "s:t7:user", kind: "user_message", at: "2026-10-08T00:00:00Z", body: "zeta 继续"},
-		fixtureRow{id: "s:a1:assistant:1", kind: "assistant_message", at: "2026-10-09T00:00:00Z", body: "zeta reply from brain"},
+		// The provider marked these as written by itself; the wording is irrelevant.
+		fixtureRow{id: "s:t1:user", kind: "user_message", at: "2026-10-02T00:00:00Z", origin: originProvider, body: "Recap of the earlier thread: zeta rollout plan was Friday."},
+		fixtureRow{id: "s:t2:user", kind: "user_message", at: "2026-10-03T00:00:00Z", origin: originProvider, body: "<pasted_content id=\"1\">zeta done</pasted_content id=\"1\">"},
+		// What the user typed or pasted into Brain's terminal is theirs, even
+		// when it reads like a compaction summary or opens with markup.
+		fixtureRow{id: "s:t3:user", kind: "user_message", at: "2026-10-04T00:00:00Z", origin: originTranscript, body: "This session is being continued from a previous conversation: zeta"},
+		fixtureRow{id: "s:t4:user", kind: "user_message", at: "2026-10-05T00:00:00Z", origin: originTranscript, body: "<pasted_content id=\"2\">\n~ zeta ping ok\n</pasted_content id=\"2\">"},
+		fixtureRow{id: "s:t5:user", kind: "user_message", at: "2026-10-06T00:00:00Z", origin: originTranscript, body: "[Request interrupted by user] zeta"},
+		fixtureRow{id: "s:t6:user", kind: "user_message", at: "2026-10-07T00:00:00Z", origin: originTranscript, body: "zeta 继续"},
+		// A row from before the field existed is read as written by the person,
+		// whatever its id looks like.
+		fixtureRow{id: "s:t7:user", kind: "user_message", at: "2026-10-08T00:00:00Z", body: "zeta legacy row"},
+		fixtureRow{id: "s:a1:assistant:1", kind: "assistant_message", at: "2026-10-09T00:00:00Z", origin: originTranscript, body: "zeta reply from brain"},
 	)
 	refresh(t, ix, dir)
 
@@ -511,18 +516,18 @@ func TestBackfilledNonTypingRowsAreContext(t *testing.T) {
 		return out
 	}
 	user := whoOfHit("user")
-	for _, id := range []string{"typed", "s:t5:user", "s:t6:user", "s:t7:user"} {
+	for _, id := range []string{"typed", "s:t3:user", "s:t4:user", "s:t5:user", "s:t6:user", "s:t7:user"} {
 		if user[id] != WhoUser {
 			t.Errorf("%s should be user, --from user gave %v", id, user)
 		}
 	}
-	for _, id := range []string{"s:t1:user", "s:t2:user", "s:t3:user", "s:t4:user", "s:a1:assistant:1"} {
+	for _, id := range []string{"s:t1:user", "s:t2:user", "s:a1:assistant:1"} {
 		if _, leaked := user[id]; leaked {
 			t.Errorf("%s leaked into --from user", id)
 		}
 	}
 	ctx := whoOfHit("context")
-	if len(ctx) != 4 || ctx["s:t1:user"] != WhoContext || ctx["s:t4:user"] != WhoContext {
+	if len(ctx) != 2 || ctx["s:t1:user"] != WhoContext || ctx["s:t2:user"] != WhoContext {
 		t.Fatalf("--from context = %v", ctx)
 	}
 
@@ -549,12 +554,12 @@ func TestBackfilledCopyCollapsesIntoRealMessage(t *testing.T) {
 	writeRows(t, filepath.Join(dir, "messages.jsonl"),
 		// The backfilled copy is NEWER than the real message: the real one wins.
 		fixtureRow{id: "real", kind: "user_message", at: "2026-10-01T00:00:00Z", admission: true, body: "please retry the job"},
-		fixtureRow{id: "s:t1:user", kind: "user_message", at: "2026-10-01T00:00:02Z", body: "please retry the job"},
+		fixtureRow{id: "s:t1:user", kind: "user_message", at: "2026-10-01T00:00:02Z", origin: originTranscript, body: "please retry the job"},
 		// No real counterpart: the backfilled typing stays a user hit.
-		fixtureRow{id: "s:t2:user", kind: "user_message", at: "2026-10-02T00:00:00Z", body: "only typed in the terminal"},
+		fixtureRow{id: "s:t2:user", kind: "user_message", at: "2026-10-02T00:00:00Z", origin: originTranscript, body: "only typed in the terminal"},
 		// A context row that repeats a real message folds in as well.
-		fixtureRow{id: "s:t3:user", kind: "user_message", at: "2026-10-03T00:00:00Z", body: "<task-notification>pinned</task-notification>"},
-		fixtureRow{id: "real2", kind: "user_message", at: "2026-10-04T00:00:00Z", admission: true, body: "<task-notification>pinned</task-notification>"},
+		fixtureRow{id: "s:t3:user", kind: "user_message", at: "2026-10-03T00:00:00Z", origin: originProvider, body: "pinned"},
+		fixtureRow{id: "real2", kind: "user_message", at: "2026-10-04T00:00:00Z", admission: true, body: "pinned"},
 	)
 	refresh(t, ix, dir)
 
@@ -576,7 +581,7 @@ func TestContextRanksAfterRealMessagesAcrossTiers(t *testing.T) {
 	ix, dir := openFixture(t)
 	writeRows(t, filepath.Join(dir, "messages.jsonl"),
 		// Exact phrase, but context (newest).
-		fixtureRow{id: "s:c:user", kind: "user_message", at: "2026-10-09T00:00:00Z", body: "This session is being continued: rollout plan for friday"},
+		fixtureRow{id: "s:c:user", kind: "user_message", at: "2026-10-09T00:00:00Z", origin: originProvider, body: "Recap: rollout plan for friday"},
 		// Terms only, but real.
 		fixtureRow{id: "real-terms", kind: "assistant_message", at: "2026-10-01T00:00:00Z", body: "friday is the day we do the rollout, per the plan"},
 		fixtureRow{id: "real-phrase", kind: "user_message", at: "2026-10-02T00:00:00Z", admission: true, body: "rollout plan: friday"},
@@ -588,5 +593,22 @@ func TestContextRanksAfterRealMessagesAcrossTiers(t *testing.T) {
 	// The limit never lets context displace a real message.
 	if got := ids(search(t, ix, SearchOptions{Query: "rollout plan", Limit: 2})); got != "real-phrase,real-terms" {
 		t.Fatalf("limited = %q", got)
+	}
+}
+
+// Brain's replies copied from the host transcript carry an origin too, but
+// only the user's side has backfilled copies: a repeated reply is represented
+// by its newest occurrence, not by an older row that merely lacks an origin.
+func TestTranscriptRepliesAreNotBackfilledCopies(t *testing.T) {
+	ix, dir := openFixture(t)
+	writeRows(t, filepath.Join(dir, "messages.jsonl"),
+		fixtureRow{id: "old-reply", kind: "assistant_message", at: "2026-10-01T00:00:00Z", body: "rollout plan: ship friday"},
+		fixtureRow{id: "new-reply", kind: "assistant_message", at: "2026-10-05T00:00:00Z", origin: originTranscript, body: "rollout plan: ship friday"},
+		fixtureRow{id: "ctx", kind: "user_message", at: "2026-10-09T00:00:00Z", origin: originProvider, body: "Recap: rollout plan for friday"},
+	)
+	refresh(t, ix, dir)
+	hits := search(t, ix, SearchOptions{Query: "rollout plan: ship friday", Limit: 10})
+	if len(hits) != 1 || hits[0].ID != "new-reply" || hits[0].Duplicates != 1 {
+		t.Fatalf("hits = %+v", hits)
 	}
 }

@@ -163,6 +163,13 @@ func (s *Store) ProjectBrainInputAdmission(admission BrainInputAdmission) error 
 	return nil
 }
 
+// Values of TimelineItem.Origin. memorysearch reads the same strings from
+// messages.jsonl.
+const (
+	TimelineOriginTranscript = "transcript"
+	TimelineOriginProvider   = "provider"
+)
+
 // TimelineItem is one durable Brain-thread timeline row. The append-only
 // timeline table is the sole presentation truth for Brain chat history
 // and Work cards. Work Events remain the scheduler audit log and are never
@@ -181,6 +188,13 @@ type TimelineItem struct {
 	Kind       string    `json:"kind,omitempty"`
 	Status     string    `json:"status,omitempty"`
 	Title      string    `json:"title,omitempty"`
+
+	// Origin says where a provider-materialized row came from:
+	// TimelineOriginTranscript for what the person typed into the host
+	// provider's own UI, TimelineOriginProvider for a record the provider wrote
+	// itself (Claude's compaction summary). Rows Brain admitted or built
+	// itself leave it empty. Readers use it instead of guessing from the text.
+	Origin string `json:"origin,omitempty"`
 
 	// BrainAdmission marks rows written by AdmitUserMessage (Interface
 	// send_input). Provider materialization never sets this. Digests alone are
@@ -306,7 +320,6 @@ func (s *Store) appendTimelineItemLocked(item TimelineItem) (TimelineItem, error
 		if err := json.Unmarshal(raw, &stored); err != nil {
 			s.timelineCache = timelineReadCache{}
 		} else {
-			normalizeLegacyTimelineKind(&stored)
 			s.timelineCache.items = append(s.timelineCache.items, stored)
 		}
 	}
@@ -527,6 +540,10 @@ func timelineItemFromProviderEvent(threadID, sessionID string, event work.CodexC
 			createdAt = parsed.UTC()
 		}
 	}
+	origin := TimelineOriginTranscript
+	if event.Origin == work.ConversationOriginProvider {
+		origin = TimelineOriginProvider
+	}
 	item := TimelineItem{
 		ID:        id,
 		ThreadID:  threadID,
@@ -537,6 +554,7 @@ func timelineItemFromProviderEvent(threadID, sessionID string, event work.CodexC
 		Kind:      kind,
 		Title:     strings.TrimSpace(event.Title),
 		Status:    strings.TrimSpace(event.Status),
+		Origin:    origin,
 		// Provider-native rows never receive Brain admission provenance.
 	}
 	if kind == timelineKindUserMessage {
@@ -698,7 +716,6 @@ func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
 		if err := json.Unmarshal(body, &stored); err != nil {
 			return "", err
 		}
-		normalizeLegacyTimelineKind(&stored)
 		result[index] = stored
 		return string(body), nil
 	}

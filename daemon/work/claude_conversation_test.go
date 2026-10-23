@@ -966,3 +966,49 @@ func TestParseClaudeConversation_ToolResultContentArrayAndInternalMetadata(t *te
 		}
 	}
 }
+
+func TestParseClaudeConversation_CompactSummaryCarriesProviderOrigin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "claude-compact.jsonl")
+	parent := ""
+	user := func(uuid, at string, extra map[string]any, text string) map[string]any {
+		line := map[string]any{
+			"type": "user", "cwd": "/repo/mewla", "sessionId": "claude-compact", "uuid": uuid, "timestamp": at, "parentUuid": parent,
+			"message": map[string]any{"role": "user", "content": text},
+		}
+		for key, value := range extra {
+			line[key] = value
+		}
+		parent = uuid
+		return line
+	}
+	writeJSONL(t, path,
+		user("typed", "2026-07-12T03:00:01.000Z", nil, "what did we decide?"),
+		// The flag is the contract, not the summary's wording.
+		user("summary", "2026-07-12T03:00:02.000Z", map[string]any{"isCompactSummary": true}, "Earlier work: the plan was agreed."),
+		// Text that merely reads like a summary, typed by the person, is theirs.
+		user("lookalike", "2026-07-12T03:00:03.000Z", nil, "This session is being continued from a previous conversation, said me"),
+	)
+	got, err := parseClaudeConversation(path)
+	if err != nil {
+		t.Fatalf("parseClaudeConversation: %v", err)
+	}
+	origin := map[string]string{}
+	for _, event := range got.Events {
+		if event.Kind == "user_message" {
+			origin[strings.TrimSpace(event.Body)] = event.Origin
+		}
+	}
+	want := map[string]string{
+		"what did we decide?":                "",
+		"Earlier work: the plan was agreed.": ConversationOriginProvider,
+		"This session is being continued from a previous conversation, said me": "",
+	}
+	if len(origin) != len(want) {
+		t.Fatalf("user messages = %v", origin)
+	}
+	for body, wantOrigin := range want {
+		if got, ok := origin[body]; !ok || got != wantOrigin {
+			t.Errorf("origin of %q = %q (present %v), want %q", body, got, ok, wantOrigin)
+		}
+	}
+}

@@ -34,6 +34,9 @@ type TranscriptMessage struct {
 	Role      string
 	Text      string
 	Timestamp time.Time
+	// Origin is the conversation event's origin: empty for the person,
+	// ConversationOriginProvider for a record the provider wrote itself.
+	Origin string
 	// AdmissionSHA256 is the provider-native digest of a user message's exact
 	// bytes; a match against a lifecycle admission means Mewla delivered it.
 	AdmissionSHA256          string
@@ -313,6 +316,7 @@ func emitTranscriptMessages(events []CodexConversationEvent, visit func(Transcri
 			Role:                     role,
 			Text:                     event.Body,
 			Timestamp:                at,
+			Origin:                   event.Origin,
 			AdmissionSHA256:          event.AdmissionSHA256,
 			AdmissionUnwrappedSHA256: event.AdmissionUnwrappedSHA256,
 		})

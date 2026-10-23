@@ -217,6 +217,11 @@ func conversationWithActivity(conversation CodexConversation, lifecycle *provide
 	return conversation
 }
 
+// ConversationOriginProvider marks a user-role record the provider wrote into
+// its own transcript, such as the summary that opens a compacted Claude
+// conversation. The person did not type it.
+const ConversationOriginProvider = "provider"
+
 type CodexConversationEvent struct {
 	ID        string `json:"id"`
 	Seq       int    `json:"seq"`
@@ -244,6 +249,11 @@ type CodexConversationEvent struct {
 	Plan        []CodexPlanStep               `json:"plan,omitempty"`
 	Choice      *ConversationChoice           `json:"choice,omitempty"`
 	Source      string                        `json:"source,omitempty"`
+	// Origin says who wrote a user_message when the provider records it:
+	// empty is the person, ConversationOriginProvider is the provider itself
+	// (Claude's compaction summary). Consumers read this field; they never
+	// infer authorship from the text.
+	Origin string `json:"origin,omitempty"`
 	// Work-card fields are only set for Brain timeline Source=work_result items.
 	WorkID      string `json:"work_id,omitempty"`
 	WorkSession string `json:"work_session_id,omitempty"`
