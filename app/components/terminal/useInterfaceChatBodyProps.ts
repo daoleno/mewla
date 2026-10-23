@@ -71,6 +71,8 @@ interface UseInterfaceChatBodyPropsInput {
   ): void;
   showUnavailableAction?: boolean;
   composerAccessory?: ReactNode;
+  /** Continues the last message inside the timeline. */
+  timelineTail?: ReactNode;
   /** The edit bar: above the composer, but not a picker that holds Enter. */
   composerEditBar?: ReactNode;
   skillsSheet?: ReactNode;
@@ -119,6 +121,7 @@ export function useInterfaceChatBodyProps({
   onKeyboardLifecycleInvalidate,
   showUnavailableAction,
   composerAccessory,
+  timelineTail,
   composerEditBar,
   skillsSheet,
 }: UseInterfaceChatBodyPropsInput): InterfaceChatBodyProps {
@@ -216,6 +219,7 @@ export function useInterfaceChatBodyProps({
       onPendingUserMessageAction: controller.actOnPendingUserMessage,
       onTerminalActionKey,
       composerAccessory,
+      timelineTail,
       composerEditBar,
       skillsSheet,
     }),
@@ -270,6 +274,7 @@ export function useInterfaceChatBodyProps({
       onTerminalActionKey,
       onKeyboardLifecycleInvalidate,
       composerAccessory,
+      timelineTail,
       composerEditBar,
       screenFocused,
       showUnavailableAction,

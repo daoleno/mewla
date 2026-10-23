@@ -45,6 +45,14 @@ interface InterfaceChatSurfaceProps {
   renderComposerAccessory?: (args: {
     draft: string;
     setDraft: (value: string) => void;
+    /** Sends text as if typed (live answers). */
+    sendText: (text: string) => void;
+  }) => React.ReactNode;
+  /** Continues the conversation's last message, in the timeline. */
+  renderTimelineTail?: (args: {
+    draft: string;
+    /** Whether the composer has focus. */
+    focused: boolean;
     /** Sends text as if typed (quick replies). */
     sendText: (text: string) => void;
     /** When the person last wrote in this conversation, in ms; 0 if never. */
@@ -85,6 +93,7 @@ function InterfaceChatSurfaceImpl({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
+  renderTimelineTail,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -116,6 +125,7 @@ function InterfaceChatSurfaceImpl({
     composerAccessory,
     onDraftChange,
     renderComposerAccessory,
+    renderTimelineTail,
     composerModelControl,
     onComposerModelControlPress,
     onSwitchToTerminal,

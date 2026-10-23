@@ -72,6 +72,8 @@ interface InterfaceChatTimelineSectionProps {
   topChromeInset: number;
   emptyTitle?: string;
   emptyBody?: string;
+  /** Continues the newest message, below it in the list. */
+  tail?: React.ReactNode;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   onLayout(event: LayoutChangeEvent): void;
@@ -133,6 +135,7 @@ export function InterfaceChatTimelineSection({
   topChromeInset,
   emptyTitle,
   emptyBody,
+  tail,
   chrome,
   theme,
   onLayout,
@@ -248,6 +251,7 @@ export function InterfaceChatTimelineSection({
         workerCwd={workerCwd}
         emptyTitle={emptyTitle}
         emptyBody={emptyBody}
+        tail={tail}
         onLayout={onLayout}
         onScroll={onScroll}
         onScrollBeginDrag={onScrollBeginDrag}

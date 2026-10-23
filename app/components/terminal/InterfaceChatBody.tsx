@@ -135,6 +135,8 @@ export interface InterfaceChatBodyProps {
   onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
   onTerminalActionKey(key: string): Promise<void> | void;
   composerAccessory?: React.ReactNode;
+  /** Continues the last message inside the timeline. */
+  timelineTail?: React.ReactNode;
   composerEditBar?: React.ReactNode;
   skillsSheet?: React.ReactNode;
 }
@@ -219,6 +221,7 @@ export function InterfaceChatBody({
   onPendingUserMessageAction,
   onTerminalActionKey,
   composerAccessory,
+  timelineTail,
   composerEditBar,
   skillsSheet,
 }: InterfaceChatBodyProps) {
@@ -354,6 +357,7 @@ export function InterfaceChatBody({
           showUnavailableAction={showUnavailableAction}
           emptyTitle={emptyTitle}
           emptyBody={emptyBody}
+          tail={timelineTail}
         />
       )}
     />

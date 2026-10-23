@@ -106,6 +106,8 @@ interface InterfaceTimelineViewProps {
   topChromeInset: number;
   emptyTitle?: string;
   emptyBody?: string;
+  /** Continues the newest message, below it in the list. */
+  tail?: React.ReactNode;
   workerCwd?: string;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
@@ -159,6 +161,7 @@ export function InterfaceTimelineView({
   topChromeInset,
   emptyTitle,
   emptyBody,
+  tail,
   workerCwd,
   chrome,
   theme,
@@ -503,11 +506,16 @@ export function InterfaceTimelineView({
             }
             data={windowItems}
             ListHeaderComponent={
-              turnFocusSpacer ? (
-                <TurnFocusSpacer
-                  request={turnFocusSpacer}
-                  onLayout={onTurnFocusSpacerLayout}
-                />
+              tail || turnFocusSpacer ? (
+                <>
+                  {tail}
+                  {turnFocusSpacer ? (
+                    <TurnFocusSpacer
+                      request={turnFocusSpacer}
+                      onLayout={onTurnFocusSpacerLayout}
+                    />
+                  ) : null}
+                </>
               ) : null
             }
             CellRendererComponent={renderTimelineCell}
