@@ -2396,6 +2396,23 @@ func codexStateSignature() string {
 // is then polled with a few stat calls instead of forking sqlite3, ps and lsof
 // and parsing up to 48 rollout headers twice a second.
 func (r *ProviderConversationReader) selectCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscriptCandidate, bool, error) {
+	// A Worker Mewla started is bound to its thread, and so to its rollout, the
+	// moment Codex announces it: nothing to find, so no guess to get wrong. A
+	// bound Worker whose rollout does not exist yet has no turn to show.
+	if path := CodexBoundRollout(worker.ID); path != "" {
+		info, err := os.Stat(path)
+		if err != nil {
+			return codexTranscriptCandidate{}, false, nil
+		}
+		meta, err := cachedCodexMeta(path)
+		if err != nil {
+			return codexTranscriptCandidate{}, false, nil
+		}
+		return codexTranscriptCandidate{Meta: meta, Path: path, Updated: info.ModTime()}, true, nil
+	}
+	// The one case left on discovery is a Codex that Mewla did not start with
+	// its own app-server (a session opened by hand): it has no binding, so its
+	// rollout is found by its folder, its start and the files it holds open.
 	signature := codexStateSignature()
 	cache := r.codexSelection
 	if cache.valid && signature != "" && signature == cache.signature {

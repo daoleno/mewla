@@ -36,6 +36,11 @@ var codexLookupCost struct {
 	SelectionHits atomic.Int64 // polls answered from the cached selection
 }
 
+// CodexBoundRollout is the rollout of the thread a Worker is bound to, empty
+// for a Worker with no binding. The daemon installs it from the agent events
+// it receives; tests leave it unset.
+var CodexBoundRollout = func(workerID string) string { return "" }
+
 // codexMetaCache keeps the parsed first record of each rollout. Codex writes
 // session_meta once, as the first record, and never edits it, so a path's
 // header is read once instead of on every poll. A path that fails to read is
