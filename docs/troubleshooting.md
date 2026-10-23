@@ -111,7 +111,11 @@ Brain decides what to do with its Work.
 - You are not notified about the Session you are looking at.
 - Each push is a single attempt; a missed one does not come back. The state is
   in the app when you open it.
-- Builds of the app you made yourself need your own Expo project for push.
+- The daemon logs a failed or undelivered push (`push: ... failed`). Run it
+  with `MEWLA_LOG_VERBOSE=1` to see skipped ones too.
+- Remote push on iOS is not yet available in official builds.
+- A fork's own build needs its own Expo project and Firebase app; see
+  [Notifications](notifications.md#push-notifications).
 
 ## A plugin says "Not yet available"
 

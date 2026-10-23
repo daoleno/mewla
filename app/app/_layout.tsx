@@ -11,7 +11,6 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import * as Linking from "expo-linking";
 import * as Notifications from "expo-notifications";
-import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -32,6 +31,7 @@ import {
   useCurrentServer,
 } from "../store/currentServer";
 import { syncCalendarNotifications } from "../services/calendarNotifications";
+import { ensurePushPermission } from "../services/pushPermission";
 import { terminalRouteParams } from "../services/workerRouteId";
 import { useAppTheme } from "../constants/tokens";
 import { useStackScreenOptions } from "../components/navigation/stackScreenOptions";
@@ -84,9 +84,13 @@ Notifications.setNotificationHandler({
   handleNotification: foregroundNotificationPresentation,
 });
 
+// Called once a server is connected, so the permission prompt follows the
+// first moment Mewla shows value instead of greeting a cold start. See
+// ensurePushPermission: the prompt is never repeated.
 async function registerForPushNotificationsAsync(): Promise<
   string | undefined
 > {
+  // Android 13+ shows no permission prompt until the app owns a channel.
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("mewla-agents", {
       name: "Worker Alerts",
@@ -95,18 +99,7 @@ async function registerForPushNotificationsAsync(): Promise<
     });
   }
 
-  if (!Device.isDevice) {
-    console.log("Push notifications require a physical device");
-    return;
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  if (finalStatus !== "granted") return;
+  if (!(await ensurePushPermission())) return;
 
   const projectId =
     Constants?.expoConfig?.extra?.eas?.projectId ??
@@ -574,22 +567,25 @@ const NotificationObserver = memo(function NotificationObserver() {
     };
   }, []);
 
-  // Register permissions and push token.
+  // Register the push token with each daemon once it is connected; the first
+  // connection is also when the permission prompt may appear.
   useEffect(() => {
     let cancelled = false;
-    let onConnected: ((data: any) => void) | null = null;
+    let pendingToken: Promise<string | undefined> | null = null;
 
-    (async () => {
-      const token = await registerForPushNotificationsAsync();
-      if (cancelled) {
-        return;
-      }
-
-      if (!token) {
-        return;
-      }
-
-      const registerPush = (serverId: string) => {
+    const registerPush = (serverId: string) => {
+      pendingToken ??= registerForPushNotificationsAsync().catch((e) => {
+        console.log("Failed to prepare push notifications:", e);
+        return undefined;
+      });
+      const attempt = pendingToken;
+      void attempt.then((token) => {
+        if (!token) {
+          // Retry on the next connection, e.g. after a transient token failure.
+          if (pendingToken === attempt) pendingToken = null;
+          return;
+        }
+        if (cancelled) return;
         wsClient.send(serverId, {
           type: "register_push",
           push_token: token,
@@ -598,18 +594,18 @@ const NotificationObserver = memo(function NotificationObserver() {
           time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           locale: Intl.DateTimeFormat().resolvedOptions().locale,
         });
-      };
+      });
+    };
 
-      onConnected = (data: any) => {
-        registerPush(data.serverId);
-      };
-      wsClient.on("connected", onConnected);
+    const onConnected = (data: any) => {
+      registerPush(data.serverId);
+    };
+    wsClient.on("connected", onConnected);
 
-      const liveServerId = wsClient.liveServerId();
-      if (liveServerId && wsClient.isConnected(liveServerId)) {
-        registerPush(liveServerId);
-      }
-    })();
+    const liveServerId = wsClient.liveServerId();
+    if (liveServerId && wsClient.isConnected(liveServerId)) {
+      registerPush(liveServerId);
+    }
 
     notificationListener.current =
       Notifications.addNotificationReceivedListener((notification) => {
@@ -658,9 +654,7 @@ const NotificationObserver = memo(function NotificationObserver() {
 
     return () => {
       cancelled = true;
-      if (onConnected) {
-        wsClient.off("connected", onConnected);
-      }
+      wsClient.off("connected", onConnected);
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };

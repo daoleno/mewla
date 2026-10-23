@@ -73,6 +73,29 @@ describe("native platform config", () => {
     ).toThrow("MEWLA_IOS_DISTRIBUTION");
   });
 
+  it("routes remote push through Mewla's EAS project and FCM app without per-user setup", () => {
+    expect(config.extra.eas.projectId).toBe("1b76d386-969b-4841-ae68-f32895ad2301");
+    expect(config.android.googleServicesFile).toBe("./google-services.json");
+    const { project_info, client } = require("./google-services.json");
+    expect(project_info.project_id).toBe("mewla-50425");
+    expect(
+      client.map((entry) => entry.client_info.android_client_info.package_name),
+    ).toEqual(expect.arrayContaining([config.android.package, `${config.android.package}.debug`]));
+    const notifications = config.plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === "expo-notifications",
+    );
+    expect(notifications?.[1]?.defaultChannel).toBe("mewla-agents");
+  });
+
+  it("lets a fork point push at its own EAS project", () => {
+    process.env.MEWLA_EXPO_PROJECT_ID = "fork-project";
+    try {
+      expect(createConfig().extra.eas.projectId).toBe("fork-project");
+    } finally {
+      delete process.env.MEWLA_EXPO_PROJECT_ID;
+    }
+  });
+
   it("registers only the mewla scheme", () => {
     expect(config.scheme).toBe("mewla");
   });

@@ -174,7 +174,7 @@ npx expo export --platform android
 
 Release builds explicitly allow cleartext HTTP so dynamic LAN and Tailscale IPs work. Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
 
-Remote Expo push is optional. To test it with your own EAS project, set `MEWLA_EXPO_PROJECT_ID` (see `app/.env.example`). OSS builds work without push.
+Remote push works in official builds: `app/app.config.js` carries Mewla's public EAS project ID and `app/google-services.json` is the public Firebase client config for `com.daoleno.mewla` and `com.daoleno.mewla.debug`. FCM delivery needs the FCM V1 key uploaded to that Expo project for each package (see [Notifications](../notifications.md)). A fork with its own package sets `MEWLA_EXPO_PROJECT_ID` (see `app/.env.example`), replaces `google-services.json`, and uploads its own key; a package name missing from `google-services.json` fails the build.
 
 ## Native terminal library
 

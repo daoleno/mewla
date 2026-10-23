@@ -16,7 +16,10 @@ function readEnv(name) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-const projectId = readEnv("EXPO_PROJECT_ID");
+// Mewla's own EAS project: remote push is routed through it for every official
+// build, so nobody needs a project of their own. It is public (it ships inside
+// the app); a fork that sends its own pushes sets MEWLA_EXPO_PROJECT_ID.
+const officialExpoProjectId = "1b76d386-969b-4841-ae68-f32895ad2301";
 
 module.exports = () => {
   const extra = { ...(baseConfig.extra || {}) };
@@ -28,9 +31,7 @@ module.exports = () => {
     trackedIOSBuildNumber,
   );
 
-  if (projectId) {
-    extra.eas = { projectId };
-  }
+  extra.eas = { projectId: readEnv("EXPO_PROJECT_ID") || officialExpoProjectId };
   extra.distribution = resolveDistribution(
     readEnv("ANDROID_DISTRIBUTION"),
     readEnv("IOS_DISTRIBUTION"),
@@ -63,6 +64,9 @@ module.exports = () => {
           mode: iosNotificationMode,
           icon: "./assets/branding/mewla-notification.png",
           color: "#C8372B",
+          // A push carries no channel of its own; Android files it here (the app
+          // creates the channel at launch, see registerForPushNotificationsAsync).
+          defaultChannel: "mewla-agents",
         },
       ],
       // Keep Expo Swift modules on one source-built ABI so patch upgrades
