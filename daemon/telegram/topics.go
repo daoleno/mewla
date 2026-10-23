@@ -543,7 +543,7 @@ func sessionStatusText(projection brain.SessionProjection) string {
 // enqueueTopicText enqueues a topic-scoped plain text message split into safe
 // chunks. The same row identity is shared across re-enqueues.
 func (m *Manager) enqueueTopicText(id, text string, threadID, reply int64, buttons ...[]InlineKeyboardButton) {
-	_ = m.store.mutate(func(state *durableState) error {
+	m.noteStore("enqueue-topic-text", m.store.mutate(func(state *durableState) error {
 		enqueueTopicTextLocked(state, id, threadID, text, m.now().UTC())
 		for i := range state.Outbox {
 			if state.Outbox[i].ID == id+":0" {
@@ -558,7 +558,7 @@ func (m *Manager) enqueueTopicText(id, text string, threadID, reply int64, butto
 			}
 		}
 		return nil
-	})
+	}))
 }
 
 func enqueueTopicTextLocked(state *durableState, id string, threadID int64, text string, now time.Time) bool {
@@ -1049,14 +1049,14 @@ func (m *Manager) deliverTopicOpOne(ctx context.Context) error {
 		if definite {
 			terminal = "failed"
 		}
-		_ = m.store.mutate(func(current *durableState) error {
+		m.noteStore("record-topic-operation-outcome", m.store.mutate(func(current *durableState) error {
 			for i := range current.TopicOps {
 				if current.TopicOps[i].ID == op.ID {
 					current.TopicOps[i].State = terminal
 				}
 			}
 			return nil
-		})
+		}))
 		return err
 	}
 }

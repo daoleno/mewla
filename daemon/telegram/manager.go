@@ -17,6 +17,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/logonce"
 )
 
 const (
@@ -74,6 +75,14 @@ type Manager struct {
 	typingCancel   context.CancelFunc
 	typingInterval time.Duration
 	typingDeadline time.Duration
+	failures       logonce.Log
+}
+
+// noteStore reports a durable write that failed where the caller has no one to
+// return the error to. The same cause is logged once, not once per pass; a
+// later success clears the scope.
+func (m *Manager) noteStore(scope string, err error) {
+	m.failures.Note("telegram "+scope, err)
 }
 
 func NewManagerWithOptions(root string, owner brainOwner, options Options) (*Manager, error) {
@@ -644,10 +653,10 @@ func (m *Manager) wait(ctx context.Context, delay time.Duration) bool {
 }
 
 func (m *Manager) recordError(message string) {
-	_ = m.store.mutate(func(state *durableState) error {
+	m.noteStore("record-error", m.store.mutate(func(state *durableState) error {
 		state.LastError = message
 		return nil
-	})
+	}))
 }
 
 func (m *Manager) handleUpdate(ctx context.Context, token string, update Update) error {
@@ -1048,10 +1057,10 @@ func (m *Manager) handleCallback(ctx context.Context, token string, query Callba
 			reply(sessionNewResponseText)
 			return "callback_rejected"
 		}
-		_ = m.store.mutate(func(current *durableState) error {
+		m.noteStore("enqueue-new-chat-confirmation", m.store.mutate(func(current *durableState) error {
 			enqueue(current, outboxRecord{ID: "callback:" + query.ID, Kind: "send", Text: "Start a new Brain conversation?", MessageThreadID: query.Message.MessageThreadID, ReplyMarkup: &InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{{{Text: "New Chat", CallbackData: "new_confirm"}, {Text: "Cancel", CallbackData: "brain"}}}}, CreatedAt: m.now().UTC()})
 			return nil
-		})
+		}))
 		return "callback_confirm"
 	case "new_confirm":
 		if _, sessionTopic := topicMappingByThread(state, query.Message.MessageThreadID); sessionTopic {
@@ -1143,7 +1152,7 @@ func (m *Manager) enqueueSessionList(updateID, replyID, threadID int64) {
 		}
 		rows = append(rows, []InlineKeyboardButton{button})
 	}
-	_ = m.store.mutate(func(state *durableState) error {
+	m.noteStore("enqueue-session-list", m.store.mutate(func(state *durableState) error {
 		state.CallbackRoutes = routes
 		state.SessionChoices = nil
 		for _, session := range sessions {
@@ -1159,7 +1168,7 @@ func (m *Manager) enqueueSessionList(updateID, replyID, threadID int64) {
 				MessageThreadID: threadID, ReplyMessageID: replyID, ReplyMarkup: keyboard, CreatedAt: m.now().UTC()})
 		}
 		return nil
-	})
+	}))
 }
 
 func (m *Manager) clearFallbackRecipient() bool {
@@ -1167,12 +1176,12 @@ func (m *Manager) clearFallbackRecipient() bool {
 	if state.FallbackSessionID == "" {
 		return false
 	}
-	_ = m.store.mutate(func(current *durableState) error {
+	m.noteStore("clear-fallback-recipient", m.store.mutate(func(current *durableState) error {
 		removePendingFallbackRows(current, current.FallbackSessionID)
 		current.FallbackSessionID = ""
 		current.FallbackStartedAt = time.Time{}
 		return nil
-	})
+	}))
 	return true
 }
 
@@ -1296,12 +1305,12 @@ func (m *Manager) stopTyping() {
 }
 
 func (m *Manager) enqueueText(id, text string, reply int64) {
-	_ = m.store.mutate(func(state *durableState) error {
+	m.noteStore("enqueue-text", m.store.mutate(func(state *durableState) error {
 		for index, chunk := range chunkRichText(richText{Text: strings.TrimSpace(text)}, maxMessageText) {
 			enqueue(state, outboxRecord{ID: fmt.Sprintf("%s:%d", id, index), Kind: "send", Text: chunk.Text, MessageThreadID: brainDestination(*state), ReplyMessageID: reply, CreatedAt: m.now().UTC()})
 		}
 		return nil
-	})
+	}))
 }
 
 func enqueue(state *durableState, record outboxRecord) bool {
@@ -1547,14 +1556,16 @@ func (m *Manager) deliverOne(ctx context.Context) error {
 		if errors.As(err, &apiErr) {
 			terminal = "failed"
 		}
-		_ = m.store.mutate(func(current *durableState) error {
+		// A delivery outcome that cannot be saved leaves the row dispatching,
+		// which is replayed as ambiguous after a restart; say so.
+		m.noteStore("record-delivery-outcome", m.store.mutate(func(current *durableState) error {
 			for i := range current.Outbox {
 				if current.Outbox[i].ID == row.ID {
 					current.Outbox[i].State = terminal
 				}
 			}
 			return nil
-		})
+		}))
 		return err
 	}
 	now := m.now().UTC()
