@@ -3715,11 +3715,6 @@ func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, pur
 		return nil, false
 	}
 	auth.NotifyAuthenticated(r.Context())
-	// A valid device signature is the proof that the owner reached this Host.
-	// Only then may an HTTPS address enter the daemon's address book.
-	if s.addresses != nil && (r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") || s.isKnownHTTPSHost(r.Host)) {
-		_ = s.addresses.Learn(r.Host)
-	}
 	return device, true
 }
 

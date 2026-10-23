@@ -16,7 +16,7 @@ func TestStorePersistsAndReloads(t *testing.T) {
 	if _, err := one.Add("https://Work.Example:443/", SourceManual); err != nil {
 		t.Fatal(err)
 	}
-	if err := one.Learn("verified.example"); err != nil {
+	if _, err := one.Add("https://verified.example", SourceDiscovered); err != nil {
 		t.Fatal(err)
 	}
 	two, err := New(filepath.Clean(dir))
@@ -121,50 +121,15 @@ func TestTailscaleAddressesAreDiscoveredAndPublicHTTPIsSkipped(t *testing.T) {
 	}
 }
 
-func TestLearningKeepsTheRemoteAddressLabel(t *testing.T) {
-	store, err := New(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.Add("https://studio-3f9a2c.mewla.test", SourceRemote); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Learn("studio-3f9a2c.mewla.test"); err != nil {
-		t.Fatal(err)
-	}
-	entries, _ := store.List()
-	if len(entries) != 1 || entries[0].Source != SourceRemote {
-		t.Fatalf("entries = %#v", entries)
-	}
-}
-
-// A phone on Mewla Link sends Host 127.0.0.1:<its tunnel port>. Learning it
-// made mewla pair offer the phone's own loopback port as this computer's
-// HTTPS address whenever remote access pairing was unavailable.
-func TestLearnIgnoresLoopbackHostsAndDropsOnesLearnedBefore(t *testing.T) {
+// An address book written by an earlier version learned phones' Link tunnel
+// ports from request Host headers; those entries are dropped on read and
+// nothing records new ones.
+func TestEarlierLearnedLoopbackAddressesAreDropped(t *testing.T) {
 	dir := t.TempDir()
 	book, err := New(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, host := range []string{"127.0.0.1:42091", "localhost:8443", "[::1]:9000"} {
-		if err := book.Learn(host); err != nil {
-			t.Fatalf("Learn(%q) = %v", host, err)
-		}
-	}
-	if err := book.Learn("swift-hill-a9de.m.mewla.ai"); err != nil {
-		t.Fatal(err)
-	}
-	entries, err := book.List()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 1 || entries[0].URL != "https://swift-hill-a9de.m.mewla.ai" {
-		t.Fatalf("entries = %+v, want only the remote host", entries)
-	}
-
-	// An address book written by an earlier version keeps manual loopback
-	// entries but loses learned ones.
 	polluted := `{"entries":[
 		{"url":"https://127.0.0.1:42091","source":"verified"},
 		{"url":"https://127.0.0.1:44303","source":"verified"},
@@ -173,7 +138,7 @@ func TestLearnIgnoresLoopbackHostsAndDropsOnesLearnedBefore(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, fileName), []byte(polluted), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	entries, err = book.List()
+	entries, err := book.List()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,27 +148,5 @@ func TestLearnIgnoresLoopbackHostsAndDropsOnesLearnedBefore(t *testing.T) {
 	}
 	if strings.Join(urls, " ") != "https://127.0.0.1:7443 https://swift-hill-a9de.m.mewla.ai" {
 		t.Fatalf("entries = %v", urls)
-	}
-}
-
-func TestLearnIgnoresPrivateAddresses(t *testing.T) {
-	store, err := New(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, host := range []string{"192.168.1.5:9876", "10.0.0.2:443", "100.64.0.9:9876", "127.0.0.1:9876"} {
-		if err := store.Learn(host); err != nil {
-			t.Fatalf("Learn(%s): %v", host, err)
-		}
-	}
-	entries, _ := store.List()
-	if len(entries) != 0 {
-		t.Fatalf("a private address was learned as an entry point: %v", entries)
-	}
-	if err := store.Learn("mewla.example.com"); err != nil {
-		t.Fatal(err)
-	}
-	if entries, _ := store.List(); len(entries) != 1 || entries[0].URL != "https://mewla.example.com" {
-		t.Fatalf("a public HTTPS host is still learned: %v", entries)
 	}
 }
