@@ -8,12 +8,16 @@ import {
   NO_MODIFIERS,
   powerSummary,
   powerWarning,
+  qualityReduced,
+  slowestStage,
   spendModifiers,
+  streamHeadline,
   tapModifier,
   unsupportedScreen,
 } from "./screenPageModel";
 import { parseScreenViewerMessage } from "./screenViewerProtocol";
 import type { ScreenStatus } from "../../services/screen";
+import { parseStreamStats, type ScreenStreamStats } from "../../services/screenStream";
 
 describe("soft keyboard diffing", () => {
   test("typed text after the sentinel is sent as text", () => {
@@ -109,5 +113,59 @@ describe("viewer messages", () => {
     expect(parseScreenViewerMessage(JSON.stringify({ type: "send", data: "<script>" }))).toBeNull();
     expect(parseScreenViewerMessage(JSON.stringify({ type: "navigate", url: "https://x" }))).toBeNull();
     expect(parseScreenViewerMessage("not json")).toBeNull();
+  });
+});
+
+const daemonStats = (over: Partial<ScreenStreamStats> = {}): ScreenStreamStats => ({
+  path: "relay", updates: 24, bytes: 400_000, dirtyPct: 60, captureSeq: 90, captureMs: 12, encodeMs: 10, encodeMaxMs: 15,
+  ackMs: 180, ackMaxMs: 300, quality: 6, inFlight: 2, ...over,
+});
+const readout = (over = {}) => ({ rttMs: 142, inputMs: 210, fps: 18, kbps: 2100, bridgeMs: 12, presentMs: 30, daemon: daemonStats(), ...over });
+
+describe("stream stages", () => {
+  test("the slowest of the disjoint stages is named", () => {
+    expect(slowestStage(readout())).toEqual({ stage: "network", label: "network", ms: 142 });
+    expect(slowestStage(readout({ rttMs: 20, presentMs: 95 }))?.stage).toBe("draw");
+    expect(slowestStage(readout({ rttMs: 20, daemon: daemonStats({ encodeMs: 64 }) }))?.stage).toBe("encode");
+    expect(slowestStage(readout({ rttMs: 8, bridgeMs: 70, presentMs: 5 }))?.stage).toBe("bridge");
+  });
+  test("an unmeasured stage never wins, and nothing measured names nothing", () => {
+    expect(slowestStage(readout({ rttMs: null, bridgeMs: undefined, presentMs: null, daemon: null }))).toBeNull();
+    expect(slowestStage(readout({ rttMs: null, bridgeMs: null, presentMs: null, daemon: daemonStats({ updates: 0, encodeMs: 50 }) }))).toBeNull();
+    expect(slowestStage(readout({ rttMs: 30, daemon: null, bridgeMs: null, presentMs: null }))?.stage).toBe("network");
+  });
+  test("the headline says the path first, then the slowest stage, then reduced quality", () => {
+    expect(streamHeadline(readout())).toBe("Relay · network 142 ms");
+    expect(streamHeadline(readout({ daemon: daemonStats({ path: "tailscale", quality: 3 }) }))).toBe("Tailscale · network 142 ms · reduced quality");
+    expect(streamHeadline(readout({ daemon: daemonStats({ path: "lan" }) }))).toContain("LAN");
+  });
+  test("an older daemon's stream still has a headline from what the phone measured", () => {
+    expect(streamHeadline(readout({ daemon: null }))).toBe("network 142 ms");
+    expect(streamHeadline(readout({ daemon: null, rttMs: null, bridgeMs: null, presentMs: null }))).toBeNull();
+  });
+  test("quality is reduced only below the viewer's level", () => {
+    expect(qualityReduced(daemonStats({ quality: 6 }))).toBe(false);
+    expect(qualityReduced(daemonStats({ quality: 2 }))).toBe(true);
+    expect(qualityReduced(null)).toBe(false);
+    expect(qualityReduced(daemonStats({ quality: 0 }))).toBe(false);
+  });
+});
+
+describe("daemon stream stats", () => {
+  test("a stats message becomes numbers and a known path", () => {
+    const stats = parseStreamStats({ type: "stats", path: "relay", updates: 3, bytes: 900, dirty_pct: 40, encode_ms: 9.5, ack_ms: 120, quality: 4, in_flight: 3 });
+    expect(stats).toMatchObject({ path: "relay", updates: 3, bytes: 900, dirtyPct: 40, encodeMs: 9.5, ackMs: 120, quality: 4, inFlight: 3 });
+  });
+  test("anything else is dropped or zeroed rather than trusted", () => {
+    expect(parseStreamStats({ type: "pong" })).toBeNull();
+    const odd = parseStreamStats({ type: "stats", path: "somewhere", updates: "x", bytes: Infinity, ack_ms: null });
+    expect(odd).toMatchObject({ path: null, updates: 0, bytes: 0, ackMs: 0 });
+  });
+});
+
+describe("viewer messages", () => {
+  test("a viewer stats message with the page's stages parses", () => {
+    const raw = JSON.stringify({ type: "stats", fps: 20, kbps: 900, inputMs: 120, bridgeMs: 9, presentMs: 22, width: 1512, height: 982 });
+    expect(parseScreenViewerMessage(raw)).toMatchObject({ type: "stats", bridgeMs: 9, presentMs: 22 });
   });
 });

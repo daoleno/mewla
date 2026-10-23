@@ -60,6 +60,12 @@ export function mountScreenViewer(container, post) {
   const stats = { bytes: 0, updates: 0, since: performance.now() };
   let pendingInput = 0;
   const latencies = [];
+  // Where an update's time goes on this side: the hop from the app into this
+  // page (bridge), and from handing noVNC its bytes to the first redraw
+  // (decode and draw). Both are medians of the latest few.
+  const bridge = [];
+  const present = [];
+  let presentFrom = 0;
 
 
   function bytesToBase64(bytes) {
@@ -519,8 +525,24 @@ export function mountScreenViewer(container, post) {
 
   // ---- stats ---------------------------------------------------------------
 
-  function onUpdate() {
-    stats.updates++;
+  function remember(list, ms) {
+    list.push(ms);
+    if (list.length > 20) list.shift();
+  }
+
+  function median(list) {
+    if (!list.length) return null;
+    const sorted = [...list].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  // Called when an update has been drawn, to time input → redraw and the
+  // viewer's own decode and draw.
+  function onDrawn() {
+    if (presentFrom) {
+      remember(present, performance.now() - presentFrom);
+      presentFrom = 0;
+    }
     if (pendingInput) {
       const ms = performance.now() - pendingInput;
       pendingInput = 0;
@@ -535,12 +557,13 @@ export function mountScreenViewer(container, post) {
     if (!rfb) return;
     const now = performance.now();
     const seconds = (now - stats.since) / 1000;
-    const sorted = [...latencies].sort((a, b) => a - b);
     post({
       type: "stats",
       fps: stats.updates / seconds,
       kbps: (stats.bytes * 8) / 1000 / seconds,
-      inputMs: sorted.length ? sorted[Math.floor(sorted.length / 2)] : null,
+      inputMs: median(latencies),
+      bridgeMs: median(bridge),
+      presentMs: median(present),
       width: fbW,
       height: fbH,
     });
@@ -579,12 +602,21 @@ export function mountScreenViewer(container, post) {
     rfb.clipViewport = false;
     rfb.focusOnClick = false;
     rfb.background = "transparent";
-    // FramebufferUpdate ends with a display flip; count them for stats and to
-    // time input → first redraw.
+    // A FramebufferUpdate ends with one display flip, which draws at once
+    // unless decoded pictures are still queued; then noVNC flips again from
+    // the queue when it gets there. Count updates by the first, and time
+    // redraws by whichever draws.
     const display = rfb._display;
     if (display && typeof display.flip === "function") {
       const flip = display.flip.bind(display);
-      display.flip = (...args) => { onUpdate(); return flip(...args); };
+      display.flip = (...args) => {
+        const fromQueue = args[0] === true;
+        const queued = !fromQueue && display._renderQ && display._renderQ.length !== 0;
+        if (!fromQueue) stats.updates++;
+        const result = flip(...args);
+        if (!queued) onDrawn();
+        return result;
+      };
     }
     rfb.addEventListener("connect", () => {
       observeCanvas();
@@ -618,8 +650,13 @@ export function mountScreenViewer(container, post) {
   }
 
   let inbox = [];
-  function deliver(chunks) {
+  function deliver(chunks, sentAt) {
     if (!channel) return;
+    // Wall clock on both sides of the bridge: the same device.
+    if (typeof sentAt === "number" && chunks.length) {
+      const hop = Date.now() - sentAt;
+      if (hop >= 0 && hop < 5000) remember(bridge, hop);
+    }
     inbox.push(...chunks);
     if (!channel.onmessage) {
       setTimeout(() => deliver([]), 10);
@@ -627,6 +664,7 @@ export function mountScreenViewer(container, post) {
     }
     const queued = inbox;
     inbox = [];
+    if (queued.length && !presentFrom) presentFrom = performance.now();
     for (const chunk of queued) {
       const bytes = base64ToBytes(chunk);
       stats.bytes += bytes.length;
@@ -638,7 +676,7 @@ export function mountScreenViewer(container, post) {
     switch (message.type) {
       case "open": open(); break;
       case "close": close(false); break;
-      case "rfb": deliver(message.data); break;
+      case "rfb": deliver(message.data, message.at); break;
       case "text": if (rfb) typeText(message.text, message.mods); break;
       case "key": if (rfb) withModifiers(message.mods, () => rfb.sendKey(keysymNamed(message.key), null)); break;
       case "mode":
