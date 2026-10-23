@@ -85,7 +85,6 @@ const FLAVOR_PRESENTATION: Record<Exclude<TerminalFlavor, 'shell'>, FlavorPresen
   terraform: { family: 'material', icon: 'terraform', tint: '#844FBA' },
   aws: { family: 'fa5', icon: 'aws', tint: '#FF9900' },
   bash: { family: 'material', icon: 'bash', tint: '#4EAA25' },
-  linux: { family: 'fa5', icon: 'linux', tint: '#FCC624' },
 };
 
 export function AgentKindIcon({
