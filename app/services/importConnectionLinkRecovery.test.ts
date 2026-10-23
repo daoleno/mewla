@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import nacl from "tweetnacl";
@@ -44,6 +45,9 @@ if (!isolated) {
     getRandomBytes: (length: number) =>
       crypto.getRandomValues(new Uint8Array(length)),
     randomUUID: () => crypto.randomUUID(),
+    CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+    digest: async (_algorithm: string, data: Uint8Array) =>
+      createHash("sha256").update(data).digest().buffer,
   }));
   mock.module("expo-device", () => ({
     deviceName: "Recovery phone",
@@ -92,10 +96,13 @@ if (!isolated) {
     "./deviceAuthContract"
   );
   const { importConnection } = await import("./importConnection");
+  const { buildLinkPairingTestLink } = await import("./linkPairingTestLink");
 
   const daemonKeys = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(5));
-  const daemonId = "d".repeat(64);
   const daemonPublicKey = bytesToHex(daemonKeys.publicKey);
+  // The daemon ID is the SHA-256 of its public key; the Link pairing link does
+  // not carry it.
+  const daemonId = createHash("sha256").update(daemonKeys.publicKey).digest("hex");
   const routeId = "a".repeat(32);
   const stableURL = `wss://swift-hill-a9de.m.link.test/ws`;
 
@@ -133,43 +140,16 @@ if (!isolated) {
   }
 
   function pairingLink(): string {
-    const payload = {
-      v: 2,
-      d: daemonId,
-      k: daemonPublicKey,
-      e: "e".repeat(64),
-      r: routeId,
-      p: "f".repeat(64),
-      c: [
-        {
-          n: "main",
-          a: "wss://0123456789abcdef0123456789abcdef.m.link.test/ws",
-          s: stableURL,
-        },
-      ],
-      x: Date.now() + 60_000,
-      z: "",
-    };
-    const binding = new TextEncoder().encode(
-      [
-        "2",
-        payload.d,
-        payload.k,
-        payload.e,
-        payload.r,
-        payload.p,
-        payload.x.toString(),
-        "main",
-        payload.c[0].a,
-        payload.c[0].s,
-      ].join("\n"),
-    );
-    const domain = new TextEncoder().encode("mewla-link-pairing-v2\u0000");
-    const signed = new Uint8Array(domain.length + binding.length);
-    signed.set(domain);
-    signed.set(binding, domain.length);
-    payload.z = bytesToHex(nacl.sign.detached(signed, daemonKeys.secretKey));
-    return `mewla://settings?v=2&p=${Buffer.from(JSON.stringify(payload)).toString("base64url")}`;
+    return buildLinkPairingTestLink({
+      secretKey: daemonKeys.secretKey,
+      publicKey: daemonKeys.publicKey,
+      enrollmentToken: "e".repeat(64),
+      routeId,
+      transportPin: "f".repeat(64),
+      label: "swift-hill-a9de",
+      domain: "m.link.test",
+      admissionAlias: "0123456789abcdef0123456789abcdef",
+    });
   }
 
   daemon = createServer((request, response) => {

@@ -1,3 +1,4 @@
+import * as Crypto from "expo-crypto";
 import {
   buildAuthorizationHeader,
   getOrCreateLocalDeviceIdentity,
@@ -120,13 +121,28 @@ export const PAIRING_CODE_USED_MESSAGE =
 // it already trusts this phone. A /pair response lost on the way back leaves
 // the daemon paired while the app saw only a network error; the signed probe
 // tells the two apart without spending another one-time code.
+async function daemonIdFromPublicKey(publicKeyHex: string): Promise<string> {
+  const key = Uint8Array.from(
+    publicKeyHex.match(/../g) ?? [],
+    (byte) => parseInt(byte, 16),
+  );
+  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, key);
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 export async function confirmPairedDevice(input: {
   serverUrl: string;
   daemonId: string;
   daemonPublicKey: string;
 }): Promise<{ daemonId: string; daemonPublicKey: string } | null> {
-  const daemonId = normalizeDaemonId(input.daemonId);
   const daemonPublicKey = normalizePublicKeyHex(input.daemonPublicKey);
+  // The Link pairing link leaves the daemon ID out: it is the SHA-256 of the
+  // daemon's public key.
+  const daemonId =
+    normalizeDaemonId(input.daemonId) ||
+    (daemonPublicKey ? await daemonIdFromPublicKey(daemonPublicKey) : "");
   const authCheckURL = buildHTTPURL(input.serverUrl, "/auth-check");
   if (!daemonId || !daemonPublicKey || !authCheckURL) {
     return null;
