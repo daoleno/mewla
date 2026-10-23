@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -824,7 +825,7 @@ func TestControlAppWorkerSpawnUsesNamedExecutorOrBrainHost(t *testing.T) {
 	if !fallback.OK || fallback.Worker == nil {
 		t.Fatalf("fallback response = %#v", fallback)
 	}
-	if got := fw.created[1].Command; got != "claude --permission-mode bypassPermissions" {
+	if got := stripClaudeSessionID(fw.created[1].Command); got != "claude --permission-mode bypassPermissions" {
 		t.Fatalf("fallback command = %q", got)
 	}
 
@@ -900,7 +901,7 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 	if !claudeResp.OK || claudeResp.Worker == nil {
 		t.Fatalf("claude spawn response = %#v", claudeResp)
 	}
-	if got := fw.created[2].Command; got != "claude --permission-mode bypassPermissions" {
+	if got := stripClaudeSessionID(fw.created[2].Command); got != "claude --permission-mode bypassPermissions" {
 		t.Fatalf("delegated claude command = %q, want hardened", got)
 	}
 
@@ -2218,7 +2219,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 			if err != nil {
 				t.Fatalf("resolveSpawnCommand() err = %v", err)
 			}
-			if got != tc.want {
+			if got = stripClaudeSessionID(got); got != tc.want {
 				t.Fatalf("resolveSpawnCommand() = %q, want %q", got, tc.want)
 			}
 		})
@@ -2242,4 +2243,12 @@ func TestControlAppBrainSetExecutorRejectsUnknownExecutor(t *testing.T) {
 	if resp.OK || resp.Error == nil || resp.Error.Code != "invalid_executor" {
 		t.Fatalf("response = %#v", resp)
 	}
+}
+
+// A delegated Claude launch carries a fresh session id so its conversation is
+// known from birth; these tests are about the rest of the command.
+var claudeSessionIDFlag = regexp.MustCompile(` --session-id [0-9a-f-]{36}`)
+
+func stripClaudeSessionID(command string) string {
+	return claudeSessionIDFlag.ReplaceAllString(command, "")
 }

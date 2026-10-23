@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -77,7 +79,13 @@ func PrepareDelegatedCommand(provider, command string) (string, error) {
 	switch provider {
 	case WorkerProviderCodex:
 		return codexWorkerCommand(command, "", "", true)
-	case WorkerProviderClaude, WorkerProviderCursor, WorkerProviderGrok:
+	case WorkerProviderClaude:
+		prepared, err := ScheduledActionCommand(provider, Executor{Name: provider, Kind: provider, Command: command})
+		if err != nil {
+			return "", err
+		}
+		return EnsureClaudeSessionLaunchCommand(prepared)
+	case WorkerProviderCursor, WorkerProviderGrok:
 		return ScheduledActionCommand(provider, Executor{Name: provider, Kind: provider, Command: command})
 	case WorkerProviderOpenCode:
 		hardened, err := HardenOpenCodeDelegatedCommand(command)
@@ -122,6 +130,29 @@ func HardenOpenCodeDelegatedCommand(command string) (string, error) {
 		return command, nil
 	}
 	return command + " " + OpenCodeAutoFlag, nil
+}
+
+// EnsureClaudeSessionLaunchCommand gives a delegated Claude launch its own
+// session id, so Mewla knows the conversation from the first moment instead of
+// matching a transcript to the Worker by time afterwards (which has no process
+// registry to fall back on outside Linux). A command that already names or
+// continues a session, or that cannot be read as a direct command, is left as
+// it is.
+func EnsureClaudeSessionLaunchCommand(command string) (string, error) {
+	options, ok := inspectLaunchCommandOptions(command)
+	if !ok {
+		return command, nil
+	}
+	if present, _ := options.option("", "--continue", "-c"); present {
+		return command, nil
+	}
+	if _, present, err := ProviderResumeToken(WorkerProviderClaude, command); err != nil || present {
+		return command, nil
+	}
+	if options.terminated {
+		return command, nil
+	}
+	return WithClaudeSessionID(command, uuid.NewString())
 }
 
 // EnsureOpenCodeSessionLaunchCommand gives a delegated OpenCode launch its own
