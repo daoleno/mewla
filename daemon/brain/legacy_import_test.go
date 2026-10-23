@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/sqlitedb"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
@@ -245,7 +246,7 @@ func listFiles(t *testing.T, dir string) []string {
 func withoutLock(files []string) []string {
 	var out []string
 	for _, file := range files {
-		if file != migrationLockName {
+		if file != sqlitedb.LockName {
 			out = append(out, file)
 		}
 	}
@@ -374,7 +375,7 @@ func TestMigrationResumesAfterCrashBeforeCommitPoint(t *testing.T) {
 	// A previous attempt died while building: a partial database and its
 	// sidecars are left under the temporary name.
 	for _, suffix := range []string{"", "-wal", "-shm"} {
-		if err := os.WriteFile(filepath.Join(stateDir, stateDatabaseName+migratingSuffix+suffix), []byte("not a database"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(stateDir, stateDatabaseName+sqlitedb.MigratingSuffix+suffix), []byte("not a database"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -389,7 +390,7 @@ func TestMigrationResumesAfterCrashBeforeCommitPoint(t *testing.T) {
 	}
 	requireRecord(t, migrated, source)
 	for _, leftover := range []string{"", "-wal", "-shm"} {
-		if _, err := os.Stat(filepath.Join(stateDir, stateDatabaseName+migratingSuffix+leftover)); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Stat(filepath.Join(stateDir, stateDatabaseName+sqlitedb.MigratingSuffix+leftover)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("temporary database %q survived: %v", leftover, err)
 		}
 	}
