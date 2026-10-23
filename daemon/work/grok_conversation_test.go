@@ -1815,6 +1815,13 @@ func TestGrokVisibleUserTextExtractsUserQuery(t *testing.T) {
 	}
 }
 
+func TestGrokVisibleUserTextDropsTheAttachmentEnvelope(t *testing.T) {
+	got := grokVisibleUserText("<user_query>\nHello Grok\n</user_query>\n\n<mewla_attachments>{\"files\":[{\"name\":\"a\",\"path\":\"/u/a\"}]}</mewla_attachments>")
+	if got != "Hello Grok" {
+		t.Fatalf("grokVisibleUserText = %q", got)
+	}
+}
+
 func TestIsGrokBootstrapUserMessage(t *testing.T) {
 	if !isGrokBootstrapUserMessage("<user_info>\nOS Version: linux\n</user_info>") {
 		t.Fatal("expected bootstrap detection")

@@ -39,13 +39,11 @@ import {
   type ConversationStreamCursor,
 } from "./interfaceConversationReconciliation";
 import { shouldDropStructuredChatEvent } from "./interfaceConversationVisibility";
+import { stripAttachmentEnvelope } from "./attachmentEnvelope";
 import {
   interfaceChatSessionCacheKey,
   isUnboundInterfaceChatSessionCacheKey,
 } from "./interfaceChatSessionIdentity";
-
-const INSTRUCTION_CONTEXT_ATTACHMENT_TAG_RE =
-  /<mewla_attachments>\s*([\s\S]*?)\s*<\/mewla_attachments>/i;
 
 type KeyedState<T> = {
   cacheKey: string;
@@ -1462,8 +1460,7 @@ function looksLikeCodexInstructionContext(value: string) {
 }
 
 function normalizeInstructionContextText(value: string) {
-  return value
-    .replace(INSTRUCTION_CONTEXT_ATTACHMENT_TAG_RE, "")
+  return stripAttachmentEnvelope(value)
     .replace(/\s+/g, " ")
     .trim();
 }

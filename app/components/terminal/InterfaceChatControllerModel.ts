@@ -5,6 +5,7 @@ import type {
 } from "../../services/codexConversation";
 import type { ConnectionIssue } from "../../services/connectionIssue";
 import type { ComposerAttachment } from "./InterfaceChatSession";
+import { buildAttachmentEnvelope } from "./attachmentEnvelope";
 
 export function buildInterfaceStatusMeta(input: {
   connectionState: ConnectionState;
@@ -50,13 +51,7 @@ export function buildInterfaceComposerMessage(
   if (attachments.length === 0) {
     return body;
   }
-  const attachmentBlock = `<mewla_attachments>${JSON.stringify({
-    files: attachments.map((attachment) => ({
-      name: attachment.name,
-      path: attachment.path,
-      content_type: attachment.mimeType,
-    })),
-  })}</mewla_attachments>`;
+  const attachmentBlock = buildAttachmentEnvelope(attachments);
   return [body, attachmentBlock].filter(Boolean).join("\n\n");
 }
 

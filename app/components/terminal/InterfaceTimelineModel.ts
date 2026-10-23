@@ -42,10 +42,9 @@ import { isImageAttachment } from "../../services/imageSource";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
 import { computerMessageTimelineItem } from "./computerMessageCardModel";
 import { pathBasename } from "../../services/pathDisplay";
+import { splitAttachmentEnvelope } from "./attachmentEnvelope";
 import { choiceAnswerDetails, choiceAnsweredSummary } from "./claudeChoiceModel";
 
-const ATTACHMENT_TAG_RE =
-  /<mewla_attachments>\s*([\s\S]*?)\s*<\/mewla_attachments>/i;
 const COMMAND_OUTPUT_PREVIEW_LINES = 7;
 const COMMAND_OUTPUT_PREVIEW_CHARS = 1200;
 const TOOL_PAYLOAD_PREVIEW_LINES = 6;
@@ -1044,79 +1043,10 @@ function extractDisplayMessage(value: string): {
   body: string;
   attachments: DisplayAttachment[];
 } {
-  let body = cleanStructuredMessageText(value);
-  const attachments: DisplayAttachment[] = [];
-
-  const tagMatch = ATTACHMENT_TAG_RE.exec(body);
-  if (tagMatch) {
-    attachments.push(...attachmentsFromTag(tagMatch[1]));
-    body = cleanStructuredMessageText(body.replace(tagMatch[0], ""));
-  }
-
-  if (!/(?:^|\n)Uploaded files?:\s*(?:\n|$)/i.test(body)) {
-    return { body, attachments };
-  }
-
-  const legacy = stripLegacyUploadedFiles(body);
-  body = legacy.body;
-  attachments.push(...legacy.attachments);
-
+  const split = splitAttachmentEnvelope(cleanStructuredMessageText(value));
   return {
-    body,
-    attachments,
-  };
-}
-
-function attachmentsFromTag(value: string): DisplayAttachment[] {
-  try {
-    const parsed = JSON.parse(value.trim());
-    const files = Array.isArray(parsed?.files) ? parsed.files : [];
-    return files
-      .map((file: any) => ({
-        name: typeof file?.name === "string" ? file.name.trim() : "",
-        path: typeof file?.path === "string" ? file.path.trim() : "",
-        mimeType: typeof file?.content_type === "string" ? file.content_type : undefined,
-      }))
-      .filter((file: DisplayAttachment) => file.path);
-  } catch {
-    return [];
-  }
-}
-
-function stripLegacyUploadedFiles(value: string): {
-  body: string;
-  attachments: DisplayAttachment[];
-} {
-  const lines = value.split("\n");
-  const keep: string[] = [];
-  const attachments: DisplayAttachment[] = [];
-  let consuming = false;
-
-  for (const line of lines) {
-    if (/^Uploaded files?:\s*$/i.test(line.trim())) {
-      consuming = true;
-      continue;
-    }
-    if (consuming) {
-      const item = /^-\s*(.*?):\s*(\/\S.*)$/.exec(line.trim());
-      if (item) {
-        attachments.push({
-          name: item[1].trim(),
-          path: item[2].trim(),
-        });
-        continue;
-      }
-      if (!line.trim()) {
-        continue;
-      }
-      consuming = false;
-    }
-    keep.push(line);
-  }
-
-  return {
-    body: cleanStructuredMessageText(keep.join("\n")),
-    attachments,
+    body: cleanStructuredMessageText(split.text),
+    attachments: split.attachments,
   };
 }
 

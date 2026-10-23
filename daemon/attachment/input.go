@@ -2,8 +2,19 @@ package attachment
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 )
+
+const (
+	envelopeOpenTag  = "<mewla_attachments>"
+	envelopeCloseTag = "</mewla_attachments>"
+)
+
+// envelopePattern is the one reader of the in-band envelope the phone app and
+// Telegram append to a message; app/components/terminal/attachmentEnvelope.ts
+// is its counterpart.
+var envelopePattern = regexp.MustCompile(`(?s)` + envelopeOpenTag + `\s*(.*?)\s*` + envelopeCloseTag)
 
 // Entity offsets are UTF-16 units in Text, never in the serialized envelope.
 type Entity struct {
@@ -40,6 +51,41 @@ func Input(body string, files []File, captions []Caption) string {
 	if len(files) == 0 && len(captions) == 0 {
 		return body
 	}
-	raw, _ := json.Marshal(Envelope{Files: files, Captions: captions})
-	return strings.TrimSpace(body) + "\n\n<mewla_attachments>" + string(raw) + "</mewla_attachments>"
+	return strings.TrimSpace(body) + "\n\n" + Format(Envelope{Files: files, Captions: captions})
+}
+
+// Format is the envelope as appended to a message body.
+func Format(envelope Envelope) string {
+	raw, _ := json.Marshal(envelope)
+	return envelopeOpenTag + string(raw) + envelopeCloseTag
+}
+
+// Match is the first envelope found in a message: text[Start:End] is the whole
+// tagged span and Raw its JSON.
+type Match struct {
+	Start, End int
+	Raw        string
+}
+
+func Find(text string) (Match, bool) {
+	loc := envelopePattern.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return Match{}, false
+	}
+	return Match{Start: loc[0], End: loc[1], Raw: text[loc[2]:loc[3]]}, true
+}
+
+func (m Match) Decode() (Envelope, error) {
+	var envelope Envelope
+	err := json.Unmarshal([]byte(m.Raw), &envelope)
+	return envelope, err
+}
+
+// WithoutEnvelope is the message as the person wrote it.
+func WithoutEnvelope(text string) string {
+	match, ok := Find(text)
+	if !ok {
+		return text
+	}
+	return strings.TrimSpace(text[:match.Start] + text[match.End:])
 }
