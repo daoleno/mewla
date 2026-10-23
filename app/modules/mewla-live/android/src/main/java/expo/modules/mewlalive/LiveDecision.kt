@@ -31,6 +31,15 @@ object LiveRules {
     return state.epoch == memory.epoch && state.seq <= memory.seq
   }
 
+  /** (epoch, seq) order: whether [state] is older than [other]. */
+  fun isOlder(state: LiveState, other: LiveState): Boolean =
+    state.epoch < other.epoch || (state.epoch == other.epoch && state.seq < other.seq)
+
+  /** A widget with nothing newer than this stops claiming to know what is running. */
+  const val WIDGET_STALE_MS = 12L * 60 * 60 * 1000
+
+  fun widgetFresh(fetchedAt: Long, now: Long): Boolean = fetchedAt > 0 && now - fetchedAt <= WIDGET_STALE_MS
+
   /** Android shows at most three actions; the daemon already caps choices at three. */
   fun actionChoices(state: LiveState): List<String> = state.question?.choices.orEmpty().take(3)
 }

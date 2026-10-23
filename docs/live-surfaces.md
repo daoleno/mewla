@@ -1,4 +1,4 @@
-# Live surfaces (daemon side)
+# Live surfaces
 
 A running task and a question that needs you can stay on the phone as one
 ongoing notification and as home-screen widgets. The daemon decides what they
@@ -115,12 +115,19 @@ from this endpoint, so a revoked token stops it for good.
   arrives, by push or by socket. A token the daemon refuses clears the widgets
   and is not re-issued until the server is switched; an unreadable token is
   dropped and issued again.
+- A server paired through Mewla Link has no address a widget can fetch, so its
+  widgets are fed instead: every state the app applies, by socket or by a push
+  that wakes the service with the app closed, is cached and repainted. States
+  are ordered by `(epoch, seq)`, so a late one never overwrites a newer one.
+  Nothing is issued for the widget on that path.
 
 ## Limits
 
-- The widget fetches the daemon directly, so it works for servers reached by a
-  plain URL. A server paired through the link transport cannot be fetched by the
-  widget; there the widget keeps its last data until it is opened.
+- On a plain URL the widget fetches the daemon itself and a revoked phone stops
+  at the next refresh. On Mewla Link the widget only shows what was pushed: it
+  shows "Open Mewla" once its last state is more than 12 hours old. Revoking
+  that phone stops the pushes (the daemon turns live pushes off for the device
+  that registered them), but the widget keeps its last state until that point.
 - Live pushes are not receipt-tracked: a newer state always follows, and a lost
   one costs nothing. Dead tokens and missing credentials are handled like any
   other push.

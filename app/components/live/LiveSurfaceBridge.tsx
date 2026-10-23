@@ -56,7 +56,13 @@ export function LiveSurfaceBridge() {
     const provisionWidget = async () => {
       // Only a widget that was never provisioned gets a token. A revoked one stays revoked until
       // the server is switched or cleared; re-issuing here would undo the revocation.
-      if (!baseUrl || provisioning || live.widgetState() !== "none") return;
+      if (provisioning || live.widgetState() !== "none") return;
+      if (!baseUrl) {
+        // Mewla Link has no address a widget can fetch, and no token to give it: it shows the
+        // states this app and the pushes apply.
+        live.configureWidgetPushed();
+        return;
+      }
       provisioning = true;
       try {
         const { token } = await wsClient.issueWidgetToken(serverId);

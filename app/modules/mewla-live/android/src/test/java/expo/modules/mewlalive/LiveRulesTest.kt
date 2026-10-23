@@ -57,4 +57,18 @@ class LiveRulesTest {
     assertNull(LiveState.liveFromSnapshot("""{"generated_at":1}"""))
     assertNull(LiveState.liveFromSnapshot("""{"live":{"kind":"weird"}}"""))
   }
+
+  @Test fun anOlderStateNeverReplacesANewerWidgetCache() {
+    assertEquals(true, LiveRules.isOlder(state(epoch = 1, seq = 4), state(epoch = 1, seq = 5)))
+    assertEquals(true, LiveRules.isOlder(state(epoch = 1, seq = 9), state(epoch = 2, seq = 1)))
+    assertEquals(false, LiveRules.isOlder(state(epoch = 2, seq = 1), state(epoch = 1, seq = 9)))
+    assertEquals(false, LiveRules.isOlder(state(epoch = 1, seq = 5), state(epoch = 1, seq = 5)))
+  }
+
+  @Test fun aWidgetOnlyClaimsWhatItLearnedRecently() {
+    val now = 100L * 60 * 60 * 1000
+    assertEquals(true, LiveRules.widgetFresh(now - 60_000, now))
+    assertEquals(false, LiveRules.widgetFresh(now - LiveRules.WIDGET_STALE_MS - 1, now))
+    assertEquals(false, LiveRules.widgetFresh(0, now))
+  }
 }
