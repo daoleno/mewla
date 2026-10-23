@@ -265,6 +265,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 			_ = logWriter.Close()
 		}()
 	}
+	if err := startPprof(ctx); err != nil {
+		return err
+	}
 	startUpdateNotice(stderr, stateDir)
 	for _, name := range []string{"tasks.json", "runs.json", "meta.json"} {
 		_ = os.Remove(filepath.Join(stateDir, name))
