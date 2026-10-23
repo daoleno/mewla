@@ -156,6 +156,9 @@ func (s *Server) handleDSHInteraction(conn *websocket.Conn, raw clientMessage) {
 	}
 	method := "session.interactions"
 	payload := map[string]any{}
+	if raw.DSHAfterRev != nil {
+		payload["afterRev"] = *raw.DSHAfterRev
+	}
 	if len(raw.DSHAnswer) > 0 {
 		method = "session.respond"
 		if json.Unmarshal(raw.DSHAnswer, &payload) != nil || payload == nil {

@@ -2018,6 +2018,7 @@ export class WebSocketClient {
     serverId: string,
     request: SessionFileRequest,
     answer?: import("./dshInteractions").DSHAnswer,
+    afterRev?: number,
   ): Promise<
     | import("./dshInteractions").DSHInteractionSnapshot
     | { accepted: boolean }
@@ -2030,6 +2031,7 @@ export class WebSocketClient {
         process_id: request.processId,
         started_at: request.startedAt,
         dsh_answer: answer,
+        dsh_after_rev: afterRev,
       },
       {
         requestId: newProviderRequestId(),

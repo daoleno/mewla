@@ -354,6 +354,7 @@ type clientMessage struct {
 	BrowserID            string                                 `json:"browser_id"`
 	ConnectionRequest    *connections.Request                   `json:"connection_request"`
 	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
+	DSHAfterRev          *int64                                 `json:"dsh_after_rev"`
 	ChoiceAnswer         json.RawMessage                        `json:"choice_answer"`
 	MessageRewind        json.RawMessage                        `json:"message_rewind"`
 	ServiceID            string                                 `json:"service_id"`
@@ -1102,7 +1103,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 			})
 		}
 	case "dsh_interaction":
-		s.handleDSHInteraction(conn, raw)
+		// A snapshot request that waits for a change must not hold the read loop.
+		go s.handleDSHInteraction(conn, raw)
 	case "session_image":
 		s.handleDSHImage(conn, raw)
 	case "get_resource_telemetry":
