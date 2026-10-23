@@ -119,6 +119,14 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("Too many connections in progress. Try again shortly.")
 		}
 		in := *q.Input
+		// Google signs in through Mewla's exchange, which this daemon polls: no
+		// browser return reaches the daemon, so no web origin applies.
+		if isGoogle(in.Integration) {
+			if reason := m.unavailableReason(in.Integration); reason != "" {
+				return Response{}, errors.New(reason)
+			}
+			return m.startGoogleExchange(ctx, &in)
+		}
 		in.Mobile = true
 		in.callback = NativeCallback
 		if in.WebOrigin != "" {
@@ -133,9 +141,6 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		}
 		if reason := m.unavailableReason(in.Integration); reason != "" {
 			return Response{}, errors.New(reason)
-		}
-		if isGoogle(in.Integration) {
-			return m.startGoogleExchange(ctx, &in)
 		}
 		if in.Integration == "github" {
 			return m.startGitHubDevice(ctx, &in)
@@ -159,6 +164,12 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		return Response{}, errors.New("This connection expired. Connect again.")
 	}
 	if q.Action == "connect_cancel" {
+		// The browser can close after the person approved on Google but before
+		// this daemon has collected the result. Collect it first: a completed
+		// consent is never undone by a late cancel.
+		if f.google != nil && f.Status == "waiting" {
+			_ = m.pollGoogleExchange(ctx, f)
+		}
 		if r := m.records[f.AccountID]; r != nil && r.Account.Status == "connected" && !m.isPending(r.Account.ID) {
 			return m.connectedFlow(f)
 		}
