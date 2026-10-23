@@ -103,5 +103,6 @@ export const pluginJobs: Record<string, { read: string; write: string; example: 
   cloudflare: { read: "Search Cloudflare’s API and docs, and see your account", write: "Call any Cloudflare API your sign-in allows, reads included, such as listing Workers, managing R2 buckets or editing DNS", example: "Allow changes, then ask Brain to list your Workers and R2 buckets." },
   "google-calendar": { read: "List your calendars and events and check when you are free", write: "Create, change and delete events and reply to invitations", example: "Ask Brain what is on your calendar tomorrow and when you are free on Friday." },
   gmail: { read: "Search and read your email and labels", write: "Draft and send email, mark messages read, archive and label them", example: "Ask Brain to find the latest email about your flight and summarize it." },
+  hyperliquid: { read: "Read markets, order books, candles and funding, and an account's positions, orders, fills and PnL", write: "Place, change and cancel orders and set leverage, with the API wallet you add. Never withdrawals or transfers", example: "Ask Brain for the BTC order book, or what an account holds." },
   slack: { read: "Find conversations and read channel messages", write: "Send and update messages", example: "Ask Brain to summarize a channel’s recent discussion." },
 };

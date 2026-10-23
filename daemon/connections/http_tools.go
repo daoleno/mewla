@@ -60,6 +60,9 @@ func builtinTools(kind string) []Tool {
 	if kind == "slack" {
 		return slackTools()
 	}
+	if kind == "hyperliquid" {
+		return hyperliquidTools()
+	}
 	repo := object(map[string]any{"owner": str(), "repo": str()}, "owner", "repo")
 	issue := object(map[string]any{"owner": str(), "repo": str(), "number": map[string]any{"type": "integer", "minimum": 1}}, "owner", "repo", "number")
 	page := object(map[string]any{"id": str()}, "id")
@@ -195,6 +198,11 @@ func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret strin
 				if allowed {
 					tools = append(tools, tool)
 				}
+			}
+		case "hyperliquid":
+			var err error
+			if tools, err = m.discoverHyperliquid(ctx, r, secret); err != nil {
+				return err
 			}
 		case "openapi":
 			var err error

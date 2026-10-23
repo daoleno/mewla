@@ -42,6 +42,7 @@ func Catalog() []Integration {
 		{ID: "google-calendar", Name: "Google Calendar", Available: true, SetupURL: "https://calendar.google.com", Description: "Calendars, events and free time"},
 		{ID: "gmail", Name: "Gmail", Available: true, SetupURL: "https://mail.google.com", Description: "Search, read and draft email"},
 		{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
+		{ID: "hyperliquid", Name: "Hyperliquid", Available: true, SetupURL: "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api", Description: "Markets and accounts on Hyperliquid, mainnet or testnet; trading only with an API wallet you add"},
 		{ID: "linear", Name: "Linear", Available: true, SetupURL: "https://linear.app/settings/account/security", Description: "Issues, projects and team activity"},
 		{ID: "onlora", Name: "Onlora", Available: true, SetupURL: "https://onlora.ai", Description: "Asset generation and search: images, speech and openly licensed media, kept in projects"},
 		{ID: "cloudflare", Name: "Cloudflare", Available: true, SetupURL: "https://github.com/cloudflare/mcp", Description: "The whole Cloudflare API: Workers, R2, D1, DNS and more"},
@@ -73,14 +74,20 @@ type Event struct {
 }
 
 type Account struct {
-	ID                       string     `json:"id"`
-	Integration              string     `json:"integration"`
-	Name                     string     `json:"name"`
-	Identity                 string     `json:"identity"`
-	Endpoint                 string     `json:"endpoint,omitempty"`
-	TrustedNetworks          []string   `json:"trusted_networks,omitempty"`
-	AuthMethod               string     `json:"auth_method,omitempty"`
-	Scopes                   []string   `json:"scopes,omitempty"`
+	ID              string   `json:"id"`
+	Integration     string   `json:"integration"`
+	Name            string   `json:"name"`
+	Identity        string   `json:"identity"`
+	Endpoint        string   `json:"endpoint,omitempty"`
+	TrustedNetworks []string `json:"trusted_networks,omitempty"`
+	AuthMethod      string   `json:"auth_method,omitempty"`
+	Scopes          []string `json:"scopes,omitempty"`
+	// Hyperliquid: an account is one address on one network ("mainnet" or
+	// "testnet"). Signer is the API wallet's public address when a trading
+	// key is saved. None of these is secret.
+	Network                  string     `json:"network,omitempty"`
+	Address                  string     `json:"address,omitempty"`
+	Signer                   string     `json:"signer,omitempty"`
 	Enabled                  bool       `json:"enabled"`
 	CredentialRemovalPending bool       `json:"credential_removal_pending,omitempty"`
 	Status                   string     `json:"status"`
@@ -108,15 +115,19 @@ type Access struct {
 }
 
 type Input struct {
-	Integration     string             `json:"integration"`
-	Name            string             `json:"name"`
-	Endpoint        string             `json:"endpoint,omitempty"`
-	TrustedNetworks []string           `json:"trusted_networks,omitempty"`
-	Credential      string             `json:"credential,omitempty"`
-	Spec            json.RawMessage    `json:"spec,omitempty"`
-	OAuthClient     *OAuthClientConfig `json:"oauth_client,omitempty"`
-	Mobile          bool               `json:"mobile,omitempty"`
-	AllowWrites     bool               `json:"allow_writes,omitempty"`
+	Integration     string   `json:"integration"`
+	Name            string   `json:"name"`
+	Endpoint        string   `json:"endpoint,omitempty"`
+	TrustedNetworks []string `json:"trusted_networks,omitempty"`
+	Credential      string   `json:"credential,omitempty"`
+	// Hyperliquid connects an address on a network; Credential is then an
+	// optional API wallet key.
+	Network     string             `json:"network,omitempty"`
+	Address     string             `json:"address,omitempty"`
+	Spec        json.RawMessage    `json:"spec,omitempty"`
+	OAuthClient *OAuthClientConfig `json:"oauth_client,omitempty"`
+	Mobile      bool               `json:"mobile,omitempty"`
+	AllowWrites bool               `json:"allow_writes,omitempty"`
 	// WebOrigin is the web UI's own origin. connect_start returns its browser
 	// there instead of to the native app, if the daemon serves the web UI on it.
 	WebOrigin string `json:"web_origin,omitempty"`

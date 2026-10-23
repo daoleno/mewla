@@ -13,6 +13,7 @@ import {
   accountTone,
   allowedToolCount,
   connectsWithForm,
+  networkLabel,
   serviceOff,
   toolSections,
   toolsSwitch,
@@ -36,6 +37,7 @@ const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"
 const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
+  hyperliquid: "stats",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
@@ -426,6 +428,7 @@ export function AccountCard({
   onRecover,
   onSetEnabled,
   onDisconnect,
+  onRemoveKey,
   onOpenTools,
 }: {
   plugin: PluginIntegration;
@@ -437,9 +440,14 @@ export function AccountCard({
   /** Off hides every tool from Brain and Workers; the sign-in and tool choices stay. */
   onSetEnabled(on: boolean): void;
   onDisconnect(): Promise<boolean>;
+  /** Hyperliquid: delete the saved API wallet key; the account stays, read only. */
+  onRemoveKey?(): Promise<boolean>;
   onOpenTools(): void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [confirmingKey, setConfirmingKey] = useState(false);
+  const network = networkLabel(account.network);
+  const removingKey = running === `key:${account.id}`;
   const recovery = accountRecovery(account, plugin.name);
   const tools = allowedToolCount(account);
   const custom = plugin.id === "mcp" || plugin.id === "openapi";
@@ -471,6 +479,8 @@ export function AccountCard({
         trailing={
           <View style={styles.accountControls}>
             {/* A fix row below names the state itself; the pill would repeat it. */}
+            {/* The network is always on the account, so testnet is never taken for mainnet. */}
+            {network ? <StatusPill label={network} tone={account.network === "testnet" ? "warning" : "accent"} /> : null}
             {recovery ? null : <StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
             {running === `enabled:${account.id}` ? <ActivityIndicator /> : (
               <InkSwitch accessibilityLabel={`${plugin.name} ${account.name} on`} value={account.enabled} disabled={busy} onValueChange={onSetEnabled} />
@@ -497,6 +507,19 @@ export function AccountCard({
         accessory="chevron"
         onPress={onOpenTools}
       />
+      {onRemoveKey && account.signer ? confirmingKey ? (
+        <View style={styles.confirm}>
+          <AppText variant="compact" tone="secondary">
+            Remove the trading key from {account.name}? Brain can still read it, and can no longer place or cancel orders. Mewla deletes the saved key.
+          </AppText>
+          <View style={styles.confirmActions}>
+            <Button label="Keep" variant="plain" size="sm" disabled={removingKey} onPress={() => setConfirmingKey(false)} />
+            <Button label="Remove key" variant="destructive" size="sm" loading={removingKey} disabled={busy && !removingKey} onPress={() => void onRemoveKey().then(() => setConfirmingKey(false))} />
+          </View>
+        </View>
+      ) : (
+        <ListRow icon="key" title="Remove trading key" subtitle={`API wallet ${account.signer.slice(0, 6)}…${account.signer.slice(-4)}`} destructive disabled={busy} onPress={() => setConfirmingKey(true)} />
+      ) : null}
       {confirming ? (
         <View style={styles.confirm}>
           <AppText variant="compact" tone="secondary">

@@ -29,6 +29,7 @@ Updated tools: when a service adds or changes tools, unchanged tools keep workin
 updates --id account asks the service now and shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
 A call blocked by an update names the confirm-updates command that clears every update waiting on its account.
 Add: --integration github|notion|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
+Hyperliquid (also in Extensions): add --integration hyperliquid --network mainnet|testnet --address 0x... --credential-stdin; the credential is an optional API wallet key (empty stdin for read only). One account per address and network; its tool results name the network.
 Cloudflare (connected in Extensions) covers the whole Cloudflare API: find the endpoint with its search tool, then call it with execute; docs searches Cloudflare's docs.
 Deleting Cloudflare resources, changing DNS, or creating or revoking tokens needs the user's authorization for that task.
 Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
@@ -59,6 +60,8 @@ Never send messages or make updates without task-specific user authorization, ev
 	fs.BoolVar(&q.Allowed, "allow", false, "allow future calls (explicit user consent required)")
 	fs.StringVar(&in.Integration, "integration", "", "plugin ID")
 	fs.StringVar(&in.Name, "name", "", "account name")
+	fs.StringVar(&in.Network, "network", "", "hyperliquid: mainnet or testnet")
+	fs.StringVar(&in.Address, "address", "", "hyperliquid: the account address, 0x...")
 	fs.StringVar(&in.Endpoint, "endpoint", "", "remote HTTPS endpoint")
 	fs.StringVar(&argsJSON, "args", "{}", "tool arguments JSON")
 	fs.StringVar(&argsFile, "args-file", "", "tool arguments file")

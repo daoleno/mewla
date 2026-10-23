@@ -5,9 +5,11 @@ import {
   accountRecovery,
   accountTone,
   bulkToolNames,
+  connectsWithForm,
   connectSteps,
   enabledRequest,
   isConnecting,
+  networkLabel,
   pluginCatalogRows,
   reconnectsWithWrites,
   serviceOff,
@@ -220,5 +222,23 @@ describe("tool updates from a service", () => {
     expect(toolUpdates(account({}), "Onlora")).toBeNull();
     expect(toolUpdates(account({ updates: ["a"], enabled: false }), "Onlora")).toBeNull();
     expect(toolUpdates(account({ updates: ["a"], status: "disconnected" }), "Onlora")).toBeNull();
+  });
+});
+
+describe("hyperliquid accounts", () => {
+  test("connect from a form that asks for an address and a network", () => {
+    expect(connectsWithForm("hyperliquid")).toBe(true);
+    expect(connectsWithForm("github")).toBe(false);
+  });
+  test("every account names its network", () => {
+    expect(networkLabel("mainnet")).toBe("Mainnet");
+    expect(networkLabel("testnet")).toBe("Testnet");
+    expect(networkLabel(undefined)).toBeNull();
+  });
+  test("the same address on two networks is two accounts under one service", () => {
+    const main = account({ id: "m", integration: "hyperliquid", name: "Hyperliquid Mainnet · 0x0000…00aa", network: "mainnet" });
+    const test = account({ id: "t", integration: "hyperliquid", name: "Hyperliquid Testnet · 0x0000…00aa", network: "testnet" });
+    const rows = pluginCatalogRows([plugin("hyperliquid", "Hyperliquid")], [main, test], { hyperliquid: {} });
+    expect(rows.services[0]!.accounts.map((a) => a.network)).toEqual(["mainnet", "testnet"]);
   });
 });

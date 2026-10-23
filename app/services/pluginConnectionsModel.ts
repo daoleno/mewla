@@ -43,9 +43,14 @@ export function pluginCatalogRows(
   return { services: rows.filter((row) => Boolean(reviewed[row.plugin.id])), custom: rows.filter((row) => !reviewed[row.plugin.id]) };
 }
 
-/** Services whose page holds a form: a custom service's address. */
+/** Services whose page holds a form: a custom service's address, or a Hyperliquid address and network. */
 export function connectsWithForm(serviceId: string): boolean {
-  return serviceId === "mcp" || serviceId === "openapi";
+  return serviceId === "mcp" || serviceId === "openapi" || serviceId === "hyperliquid";
+}
+
+/** The network a Hyperliquid account trades on, as people read it. */
+export function networkLabel(network: PluginAccount["network"]): string | null {
+  return network === "testnet" ? "Testnet" : network === "mainnet" ? "Mainnet" : null;
 }
 
 export function serviceState(plugin: PluginIntegration, accounts: readonly PluginAccount[]): ServiceState {

@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/andybalholm/brotli v1.1.1
 	github.com/creack/pty v1.1.24
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/getkin/kin-openapi v0.151.0
 	github.com/google/jsonschema-go v0.4.2

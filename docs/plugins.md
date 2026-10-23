@@ -2,7 +2,8 @@
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
 GitHub, Slack, Google Calendar, Gmail, Cloudflare, Onlora for generating and
-finding assets, and custom MCP or OpenAPI services. Plugins are a **preview**.
+finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
+services. Plugins are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
 shows that server's accounts and never moves an account between servers.
@@ -55,6 +56,7 @@ Mewla's own app registration with the provider:
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
 | Google Calendar, Gmail | **Invite only while Google reviews Mewla's app.** Google's own sign-in, one per plugin, through Mewla's sign-in service at `connect.mewla.ai` (see [Google Calendar and Gmail](#google-calendar-and-gmail)) | Works: the sign-in opens in a new tab, which says when to close it, and Extensions updates by itself |
+| Hyperliquid | No sign-in: an address and a network, plus an optional API wallet key you paste | Works everywhere; the form is on the service's page |
 
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
@@ -161,6 +163,60 @@ Cloudflare's MCP server covers the whole Cloudflare API with a few tools:
 under **Make changes when asked**, so turn that on before Brain reads anything
 from your account, and it can only do what you granted on Cloudflare's page; to grant more, disconnect and connect again, choosing more
 permissions there.
+
+## Hyperliquid
+
+Hyperliquid reads markets and accounts from its public API, and trades with an
+**API wallet** you add. Open **Hyperliquid** in Extensions and fill in:
+
+1. **Network**: **Mainnet** (the real exchange) or **Testnet** (Hyperliquid's
+   practice network, with test money). Each network is its own account in
+   Mewla, named for it (**Hyperliquid Testnet · 0x1234…abcd**) and marked
+   with a **Mainnet** or **Testnet** tag on its card and in every tool result.
+   To use both, connect the same address twice, once per network.
+2. **Address**: the account to read. Positions, orders, fills and balances on
+   Hyperliquid are public, so this needs no key.
+3. **API wallet key** (optional): leave it empty and the account is **read
+   only**. To let Brain trade, create an API wallet on Hyperliquid's own site
+   (`app.hyperliquid.xyz/API`, or `app.hyperliquid-testnet.xyz/API` for
+   testnet), approve it, and paste its private key here once. Never paste your
+   main wallet's key: Mewla refuses it. Hyperliquid approves an API wallet per
+   network, so a key is saved with the one account it was approved for and is
+   never used on the other network.
+
+An API wallet can sign trades but not withdrawals or transfers out; those need
+your main wallet's own signature, and Mewla has no code that makes them. A
+leaked API wallet can still trade, and Hyperliquid also lets an API wallet
+deposit into a vault, so it can move value that way; use a fresh one, and remove
+it on Hyperliquid's site if it is ever exposed. The key stays on the server in the
+private vault, is never shown or logged, and **Remove trading key** on the
+account (or **Disconnect**) deletes it.
+
+Connecting the same address and network again updates that account, which is
+how you add a key later.
+
+**Read and search** (on after you connect): `list_markets`, `get_mids`,
+`get_book`, `get_candles`, `get_funding_history`, `get_account` (positions,
+margin and spot balances), `get_open_orders`, `get_fills`,
+`get_funding_payments`, `get_portfolio`, `get_vaults` and `get_order_status`.
+Account tools take an optional `address` to read another public account. Times
+come back with a readable `…_at` field in the time zone you name (`timezone`),
+this computer's own if you don't. Results are bounded: lists are one page and say when they were
+cut.
+
+**Make changes when asked** (off until you turn it on, and only with a saved
+key): `place_order`, `modify_order`, `cancel_order`, `set_leverage` and
+`schedule_cancel`. Brain places an order only when you ask for it. Each result
+says which network it used and returns exactly what was signed and sent, with
+Hyperliquid's own reply and order id. Prices and sizes are never rounded for
+you: a price with too many digits is refused before anything is sent, with a
+valid example. An order is sent once and never retried; if Hyperliquid does not
+answer, check `get_open_orders` or `get_order_status` before trying again.
+
+Not supported: withdrawals, transfers, vault deposits, market orders and
+trigger orders, builder-deployed (HIP-3) markets, and sub-accounts. Hyperliquid
+limits one IP to 1,200 request weight a minute; Mewla does not retry when it
+says so.
 
 ## Custom services
 

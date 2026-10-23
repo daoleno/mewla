@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CustomServiceForm } from "../../../components/plugins/CustomServiceForm";
+import { HyperliquidForm } from "../../../components/plugins/HyperliquidForm";
 import { AccountCard, ConnectOffer, ServiceHeader, ToolUpdatesNotice } from "../../../components/plugins/PluginConnectionViews";
 import { pluginServicePath, PluginsPage, usePluginsFlow } from "../../../components/plugins/PluginsFlow";
 import { Button, InlineNotice } from "../../../components/ui";
@@ -28,7 +29,11 @@ export default function PluginServiceScreen() {
   const github = plugin.id === "github" ? () => void flow.useServerGitHub() : undefined;
   // A form brings its details; only a custom service's own sign-in opens a browser.
   const submit = (input: NonNullable<ConnectionRequest["input"]>, signIn = false) => flow.connect(plugin.id, { input, signIn });
-  const form = <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />;
+  // Hyperliquid is a reviewed service whose connect form asks for an address, a network and an optional key.
+  const trading = plugin.id === "hyperliquid";
+  const form = trading
+    ? <HyperliquidForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />
+    : <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />;
   return <PluginsPage title={plugin.name}>
     <ServiceHeader plugin={plugin} />
     {accounts.map((account) => <ToolUpdatesNotice
@@ -48,9 +53,10 @@ export default function PluginServiceScreen() {
       onRecover={(action) => flow.recover(account, action)}
       onSetEnabled={(on) => flow.setEnabled(account, on)}
       onDisconnect={() => flow.disconnect(account)}
+      onRemoveKey={trading ? () => flow.removeKey(account) : undefined}
       onOpenTools={() => router.push({ pathname: `${pluginServicePath(plugin.id)}/tools`, params: { account: account.id } } as never)}
     />)}
-    {!accounts.length ? custom ? form : <ConnectOffer
+    {!accounts.length ? custom || trading ? form : <ConnectOffer
       plugin={plugin}
       job={job}
       serverName={flow.serverName}
@@ -58,7 +64,7 @@ export default function PluginServiceScreen() {
       disabled={!!otherConnecting}
       onConnect={connect}
       onUseServerAccount={github}
-    /> : custom ? adding ? form : <Button label={plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service"} icon="add" variant="tinted" block onPress={() => setAdding(true)} />
+    /> : custom || trading ? adding ? form : <Button label={trading ? "Add another account or network" : plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service"} icon="add" variant="tinted" block onPress={() => setAdding(true)} />
       : plugin.available ? <Button label={`Add another ${plugin.name} account`} icon="add" variant="tinted" block loading={connecting} disabled={!!otherConnecting} onPress={connect} /> : null}
   </PluginsPage>;
 }
