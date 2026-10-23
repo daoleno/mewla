@@ -133,7 +133,7 @@ describe("Pairing V3", () => {
 });
 
 test("QR and paste accept HTTPS fragment links as well as mewla links", () => {
-  const query = `u=${encodeURIComponent("wss://mewla.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
+  const query = `v=3&p=${COMPACT_GOLDEN}`;
   const current = `mewla://settings?${query}`;
   const expected = parseConnectLink(current);
   expect(expected).not.toBeNull();
@@ -143,4 +143,10 @@ test("QR and paste accept HTTPS fragment links as well as mewla links", () => {
   expect(parseConnectLink(`https://mewla.example/#pair=${encodeURIComponent(`other://settings?${query}`)}`)).toBeNull();
   expect(parseConnectLink("https://mewla.example/")).toBeNull();
   expect(parseConnectLink("https://mewla.example/#pair=https%3A%2F%2Fevil.example")).toBeNull();
+});
+
+test("links that are not version 3 are not pairing links", () => {
+  const legacyLongForm = `u=${encodeURIComponent("wss://mewla.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
+  expect(parseConnectLink(`mewla://settings?${legacyLongForm}`)).toBeNull();
+  expect(parseConnectLink(`mewla://settings?url=wss%3A%2F%2Fmewla.example%2Fws&daemonPublicKey=${"a".repeat(64)}&enrollmentToken=${"b".repeat(64)}`)).toBeNull();
 });
