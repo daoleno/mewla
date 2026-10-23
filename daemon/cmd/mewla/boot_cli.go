@@ -89,6 +89,9 @@ type bootRunner interface {
 
 type execBootRunner struct{}
 
+// errBootLingerRequired: the systemd user unit needs `loginctl enable-linger` to start at boot.
+var errBootLingerRequired = errors.New("boot linger required")
+
 func (execBootRunner) run(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
 }
@@ -1267,7 +1270,7 @@ func bootInstall(config bootConfig, runner bootRunner, out io.Writer) error {
 		operator := "sudo loginctl enable-linger " + currentUserName()
 		if output, err := runner.run("loginctl", "enable-linger", currentUserName()); err != nil {
 			fmt.Fprintf(out, "Boot before login still requires lingering; run exactly:\n  %s\n", operator)
-			return fmt.Errorf("boot linger required: %s (%s)", operator, strings.TrimSpace(string(output)))
+			return fmt.Errorf("%w: %s (%s)", errBootLingerRequired, operator, strings.TrimSpace(string(output)))
 		}
 	}
 	fmt.Fprintln(out, "Linger: enabled (starts before an interactive login)")

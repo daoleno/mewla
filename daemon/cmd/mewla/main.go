@@ -206,6 +206,9 @@ func daemonTmuxRuntime(home, daemonID, tmuxEnv string) (socketPath, scratchDir s
 		filepath.Join(statedir.Default(home), "run", "tmux-scratch", daemonID), nil
 }
 
+// errDaemonOwned: another daemon holds this state directory's lifecycle lock.
+var errDaemonOwned = errors.New("another Mewla daemon owns this state directory")
+
 func runDaemon(args []string, stderr io.Writer) error {
 	cfg, err := parseDaemonConfig(args, stderr)
 	if err != nil {
@@ -219,7 +222,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		// A person at a terminal gets status or a pairing code; a supervisor
 		// launch with flags still fails as before.
 		interactive := stdioIsTerminal() && !daemonSupervised()
-		if (len(args) == 0 || interactive && onlyStateDirArgs(args)) && strings.Contains(err.Error(), "another Mewla daemon owns") {
+		if (len(args) == 0 || interactive && onlyStateDirArgs(args)) && errors.Is(err, errDaemonOwned) {
 			devices, listErr := listDevices(cfg.stateDir)
 			if listErr == nil && len(devices) == 0 {
 				return runPairCommand(stateDirArgs(cfg.stateDir), stderr)
@@ -880,9 +883,7 @@ func acquireDaemonAuthOwner(
 		return nil, nil, fmt.Errorf("acquire daemon lifecycle owner: %w", err)
 	}
 	if !acquired {
-		return nil, nil, errors.New(
-			"another Mewla daemon owns this state directory",
-		)
+		return nil, nil, errDaemonOwned
 	}
 	authManager, err := auth.NewManager(resolvedStateDir)
 	if err != nil {
