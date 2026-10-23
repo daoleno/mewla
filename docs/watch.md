@@ -249,6 +249,8 @@ mewla watch brief                  # hand Brain the brief now, whatever Calendar
 
 The chips are not Watch's: any Brain question can use them
 (`mewla brain replies set -row "Yes|No"`; see [Brain and Work](brain-and-work.md)).
+Watch keeps them light: an urgent problem gets one "Handle" chip and a brief
+one line of "1 Handle|2 Handle|3 Handle". "Not a problem" and "later" are typed.
 
 ## Storage
 
