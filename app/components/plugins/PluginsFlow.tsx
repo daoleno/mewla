@@ -312,6 +312,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     else if (action === "disconnect") void disconnect(account);
     else void connect(account.integration, { writes: reconnectsWithWrites(account) });
   };
+  /** Hyperliquid: deletes the saved API wallet key and leaves the account read only. */
+  const removeKey = (account: PluginAccount) => send({ action: "remove_key", id: account.id }, `key:${account.id}`).then((response) => !!response);
   /** The account's own on/off switch. Off keeps its sign-in and tool choices. */
   const setEnabled = (account: PluginAccount, on: boolean) => void send(enabledRequest(account, on), `enabled:${account.id}`);
   /** Loads one account's tools and history, for its Tools page. */
@@ -343,7 +345,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
     plugin, send, connect, cancel, check, openBrowser, useServerGitHub, importGitHub, dismiss,
-    setAccess, disconnect, recover, setEnabled, load, setTools, confirmUpdates, serviceLabel,
+    setAccess, disconnect, removeKey, recover, setEnabled, load, setTools, confirmUpdates, serviceLabel,
   };
 }
 

@@ -31,7 +31,7 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 	}
 	// Google signs in only through Mewla's exchange: no origin, no sign-in,
 	// whatever an operator saved on the daemon.
-	expected := map[string]bool{"github": false, "slack": false, "google-calendar": false, "gmail": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "mcp": true, "openapi": true}
+	expected := map[string]bool{"github": false, "slack": false, "google-calendar": false, "gmail": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "hyperliquid": true, "mcp": true, "openapi": true}
 	assertAvailability(expected)
 	for _, kind := range []string{"github", "slack", "google-calendar", "gmail"} {
 		_, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: kind}})

@@ -291,6 +291,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		if err := setPolicy(r, q); err != nil {
 			return Response{}, err
 		}
+	case "remove_key":
+		if err := m.removeHyperliquidKey(r); err != nil {
+			return Response{}, err
+		}
 	case "confirm_updates", "dismiss_updates":
 		if err := reviewUpdates(r, q.Tools, q.Action == "confirm_updates"); err != nil {
 			return Response{}, err
@@ -340,6 +344,9 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 }
 
 func (m *Manager) add(ctx context.Context, in *Input) (Response, error) {
+	if in != nil && in.Integration == "hyperliquid" {
+		return m.addHyperliquid(ctx, in)
+	}
 	if in == nil || strings.TrimSpace(in.Name) == "" || len(in.Name) > 80 {
 		return Response{}, errors.New("account name is required (up to 80 characters)")
 	}
@@ -588,6 +595,8 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 	var result []byte
 	if isGoogle(r.Account.Integration) {
 		result, err = m.invokeGoogle(ctx, r, secret, t, args)
+	} else if r.Account.Integration == "hyperliquid" {
+		result, err = m.invokeHyperliquid(ctx, r, secret, t, args)
 	} else {
 		result, err = m.invokeHTTP(ctx, r, secret, t, args)
 	}
