@@ -417,9 +417,19 @@ func (connector *Connector) serveStream(
 	}
 	if client != nil {
 		handler = withClientAddr(handler, client)
+	} else {
+		handler = withRelayed(handler)
 	}
 	keep = true
 	return serveSingleConnection(ctx, inner, gated.handler(handler), connector.config.HTTPIdleTimeout)
+}
+
+// withRelayed marks requests of a client whose address the relay did not
+// report, so they still read as relayed.
+func withRelayed(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		next.ServeHTTP(writer, request.WithContext(clientaddr.MarkRelayed(request.Context())))
+	})
 }
 
 func withClientAddr(next http.Handler, client net.IP) http.Handler {

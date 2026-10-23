@@ -159,7 +159,7 @@ func openViewer(t *testing.T, fake *FakeBackend) *testViewer {
 	t.Cleanup(cancel)
 	viewer, server := net.Pipe()
 	session, _ := fake.Start(ctx)
-	go func() { _ = serveRFB(ctx, server, session, "Test screen") }()
+	go func() { _ = serveRFB(ctx, server, session, "Test screen", nil) }()
 	t.Cleanup(func() { viewer.Close() })
 	v := &testViewer{t: t, conn: viewer}
 	v.write([]byte{1}) // ClientInit, shared

@@ -106,6 +106,9 @@ type Status struct {
 	CanRestart bool `json:"can_restart,omitempty"`
 	// Agent is the agent using the screen now.
 	Agent *AgentState `json:"agent,omitempty"`
+	// Locked means the computer is locked now, so a viewer sees its login
+	// window and the display may sleep.
+	Locked bool `json:"locked,omitempty"`
 }
 
 // Service reads its config on every use, so `mewla screen enable|disable`
@@ -139,6 +142,10 @@ type Service struct {
 	// agentIdle ends an agent's control after this long unused; tests
 	// shorten it.
 	agentIdle time.Duration
+	// holds counts who needs the display awake; lockPoll, when set, is how
+	// often a viewer looks at the lock (tests shorten it).
+	holds    displayHolds
+	lockPoll time.Duration
 }
 
 func NewService(stateDir string) *Service { return NewServiceWith(stateDir, newBackend()) }
@@ -212,6 +219,9 @@ func (s *Service) Status(ctx context.Context, deviceID string) Status {
 		}
 	}
 	status.Ready = capability.Ready() && status.Approved
+	if reporter, ok := s.backend.(presenceReporter); ok && capability.Supported {
+		status.Locked = reporter.Presence().Locked
+	}
 	status.CanRestart = s.restart != nil
 	if agent, ok := s.Agent(); ok {
 		status.Agent = &agent
@@ -322,8 +332,10 @@ func (s *Service) allowed(deviceID string) error {
 
 // Open starts a capture for an allowed device and returns the viewer's end
 // of an in-process RFB session, positioned right before ClientInit: the
-// caller has already done the version and security handshake.
-func (s *Service) Open(ctx context.Context, deviceID string) (net.Conn, error) {
+// caller has already done the version and security handshake. The display
+// is held on while the session lasts, unless the computer is locked, and obs
+// (which may be nil) hears the lock and the stream's stages.
+func (s *Service) Open(ctx context.Context, deviceID string, obs *Observer) (net.Conn, error) {
 	if err := s.allowed(deviceID); err != nil {
 		return nil, err
 	}
@@ -339,10 +351,13 @@ func (s *Service) Open(ctx context.Context, deviceID string) (net.Conn, error) {
 		return nil, err
 	}
 	viewer, server := net.Pipe()
+	hold, release := context.WithCancel(ctx)
+	s.holdWhileViewing(hold, obs)
 	go func() {
 		defer session.Close()
 		defer server.Close()
-		_ = serveRFB(ctx, server, session, computerName())
+		defer release()
+		_ = serveRFB(ctx, server, session, computerName(), obs)
 	}()
 	return viewer, nil
 }

@@ -328,3 +328,85 @@ func TestWatchingAnAgentLeavesItInControl(t *testing.T) {
 		t.Fatalf("agent ended: %q", got)
 	}
 }
+
+// The viewer is told when the computer is locked, and how its stream does:
+// the path it arrived by and what each stage of an update cost.
+func TestScreenViewerHearsLockStateAndStreamStats(t *testing.T) {
+	a, priv, device := sessionFileAuthFixture(t)
+	fake := screen.NewFakeBackend(320, 200)
+	service := screen.NewServiceWith(t.TempDir(), fake)
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetScreen(service)
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	if err := service.Enable(context.Background(), device, "Pixel"); err != nil {
+		t.Fatal(err)
+	}
+	fake.SetLocked(true)
+	header := http.Header{}
+	header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen-view"))
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http")+"/screen/viewer", header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	v := &screenViewerClient{t: t, conn: conn}
+	v.write([]byte("RFB 003.008\n"))
+	v.write([]byte{1})
+	v.write([]byte{1}) // ClientInit
+	// Tight, fences and continuous updates, as noVNC asks for them.
+	encodings := []int32{7, -312, -313}
+	msg := []byte{2, 0, 0, byte(len(encodings))}
+	for _, e := range encodings {
+		msg = binary.BigEndian.AppendUint32(msg, uint32(e))
+	}
+	v.write(msg)
+	v.write([]byte{150, 1, 0, 0, 0, 0, 1, 64, 0, 200})
+
+	var seen []string
+	locked := []bool{}
+	var stats struct {
+		Path    string  `json:"path"`
+		Updates int     `json:"updates"`
+		Bytes   int     `json:"bytes"`
+		Encode  float64 `json:"encode_ms"`
+		Quality int     `json:"quality"`
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	unlocked := false
+	for stats.Path == "" {
+		if time.Now().After(deadline) {
+			t.Fatalf("no stats; saw %v", seen)
+		}
+		_ = conn.SetReadDeadline(deadline)
+		kind, data, err := conn.ReadMessage()
+		if err != nil {
+			t.Fatalf("read: %v (saw %v)", err, seen)
+		}
+		if kind != websocket.TextMessage {
+			continue
+		}
+		var head struct {
+			Type   string `json:"type"`
+			Locked bool   `json:"locked"`
+		}
+		_ = json.Unmarshal(data, &head)
+		seen = append(seen, head.Type)
+		switch head.Type {
+		case "state":
+			locked = append(locked, head.Locked)
+			if !unlocked {
+				unlocked = true
+				fake.SetLocked(false)
+			}
+		case "stats":
+			_ = json.Unmarshal(data, &stats)
+		}
+	}
+	if len(locked) < 2 || !locked[0] || locked[1] {
+		t.Fatalf("lock states %v, want locked then unlocked", locked)
+	}
+	if stats.Path != "loopback" || stats.Updates == 0 || stats.Bytes == 0 || stats.Encode <= 0 || stats.Quality == 0 {
+		t.Fatalf("stats %+v", stats)
+	}
+}

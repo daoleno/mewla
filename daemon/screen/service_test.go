@@ -47,7 +47,7 @@ func TestApprovalIsPerDeviceAndAskedAtTheComputer(t *testing.T) {
 	if !status.Supported || status.Approved || status.Ready || status.KeepAwake {
 		t.Fatalf("fresh status = %+v", status)
 	}
-	if _, err := service.Open(ctx, "phone"); !errors.Is(err, ErrNotApproved) {
+	if _, err := service.Open(ctx, "phone", nil); !errors.Is(err, ErrNotApproved) {
 		t.Fatalf("open before approval = %v", err)
 	}
 	if err := service.SetKeepAwake("phone", false); !errors.Is(err, ErrNotApproved) {
@@ -126,7 +126,7 @@ func TestUnsupportedAndMissingPermissions(t *testing.T) {
 	if !status.Approved || status.Ready {
 		t.Fatalf("missing-permission status = %+v", status)
 	}
-	if _, err := service.Open(ctx, "phone"); !errors.Is(err, ErrPermissions) {
+	if _, err := service.Open(ctx, "phone", nil); !errors.Is(err, ErrPermissions) {
 		t.Fatalf("open without permission = %v", err)
 	}
 }

@@ -132,6 +132,8 @@ type Session interface {
 type Frame struct {
 	Seq   uint64
 	Image *image.RGBA
+	// At is when the system produced this screen; zero when unknown.
+	At time.Time
 }
 
 var (
