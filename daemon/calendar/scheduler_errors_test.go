@@ -39,8 +39,7 @@ func captureLog(t *testing.T) *lockedBuffer {
 // A due reminder whose status change cannot be persisted must be visible, and
 // a repeat of the same failure must not write a line per pass.
 func TestSchedulerReportsAStatusChangeThatCannotBePersistedOnce(t *testing.T) {
-	root := t.TempDir()
-	store, err := NewStore(root)
+	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,9 +50,7 @@ func TestSchedulerReportsAStatusChangeThatCannotBePersistedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.RemoveAll(root); err != nil {
-		t.Fatal(err)
-	}
+	failWrites(t, store)
 	out := captureLog(t)
 	scheduler := NewScheduler(store, nil)
 	scheduler.now = func() time.Time { return at.Add(time.Second) }
@@ -67,8 +64,7 @@ func TestSchedulerReportsAStatusChangeThatCannotBePersistedOnce(t *testing.T) {
 }
 
 func TestSchedulerReportsATerminalRunThatCannotBePersisted(t *testing.T) {
-	root := t.TempDir()
-	store, err := NewStore(root)
+	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,9 +79,7 @@ func TestSchedulerReportsATerminalRunThatCannotBePersisted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.RemoveAll(root); err != nil {
-		t.Fatal(err)
-	}
+	failWrites(t, store)
 	out := captureLog(t)
 	scheduler := NewScheduler(store, nil)
 	scheduler.finish(claimed, run, "done", "")
