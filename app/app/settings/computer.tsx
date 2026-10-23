@@ -253,7 +253,9 @@ export default function ComputerScreen() {
           dispatch({ type: "REMOVE_SERVER", serverId: server.id });
           await Storage.removeServer(server.id);
           await cancelCalendarNotifications(server.id);
-          await refreshServers();
+          // Removing the computer in use is the person's choice to move to
+          // the next one; any other removal leaves the current computer as is.
+          await refreshServers(current ? others[0]?.id : undefined);
           if (missed.length > 0) {
             const names = missed.map((other) => other.name).join(", ");
             Alert.alert(

@@ -17,6 +17,7 @@ import {
 import {
   enqueueCurrentServerPersistence,
   resolveCurrentServerId,
+  shouldPersistResolvedServerId,
   selectCurrentServer,
 } from "../services/currentServerSelection";
 
@@ -79,7 +80,7 @@ export function CurrentServerProvider({ children }: { children: ReactNode }) {
       setServers(savedServers);
       commitCurrentServerId(nextId);
       setHydrated(true);
-      if (nextId !== persistedServerId) {
+      if (shouldPersistResolvedServerId(nextId, persistedServerId)) {
         await persistCurrentServerId(nextId);
       }
     },
