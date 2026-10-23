@@ -107,6 +107,28 @@ func TestWorkerFeedSnapshotCarriesTheSeqItIsCurrentAs(t *testing.T) {
 	}
 }
 
+func TestWorkerFeedHeartbeatCarriesTheSeqWithoutConsumingOne(t *testing.T) {
+	var feed workerFeed
+	recorder := &feedRecorder{}
+	feed.heartbeat(recorder.emit)
+	feed.publish("worker_session_created", feedWire("a", "A"), recorder.emit)
+	feed.heartbeat(recorder.emit)
+	feed.publish("worker_session_updated", feedWire("a", "A2"), recorder.emit)
+	if len(recorder.sent) != 4 {
+		t.Fatalf("sent %d messages", len(recorder.sent))
+	}
+	first, second, last := decodeFeed(t, recorder.sent[0]), decodeFeed(t, recorder.sent[2]), decodeFeed(t, recorder.sent[3])
+	if first.Type != "worker_session_heartbeat" || first.Seq != 0 || second.Type != "worker_session_heartbeat" || second.Seq != 1 {
+		t.Fatalf("heartbeats = %s / %s", recorder.sent[0], recorder.sent[2])
+	}
+	if last.Seq != 2 {
+		t.Fatalf("a heartbeat consumed a seq: next change has %d, want 2", last.Seq)
+	}
+	if strings.Contains(string(recorder.sent[0]), "worker_session\"") {
+		t.Fatalf("a heartbeat must not carry a Session: %s", recorder.sent[0])
+	}
+}
+
 func TestWorkerFeedReconcileSendsOnlyDifferencesAsSequencedChanges(t *testing.T) {
 	var feed workerFeed
 	recorder := &feedRecorder{}
