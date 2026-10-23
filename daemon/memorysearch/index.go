@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -190,7 +189,18 @@ type timelineRow struct {
 	// BrainAdmission marks rows written when the user sent a message through
 	// Mewla, as opposed to rows backfilled from Brain's provider transcript.
 	BrainAdmission bool `json:"brain_admission"`
+	// Origin is set on rows copied from Brain's provider transcript (see
+	// brain.TimelineItem.Origin). Rows without it predate the field and read
+	// as written by the person or Brain.
+	Origin string `json:"origin"`
 }
+
+// Values of timelineRow.Origin; brain.TimelineOriginTranscript and
+// brain.TimelineOriginProvider write the same strings.
+const (
+	originTranscript = "transcript"
+	originProvider   = "provider"
+)
 
 // refreshSource indexes one batch of src's rows after the stored cursor and
 // moves the cursor past it in the same transaction. more reports a full batch.
@@ -230,8 +240,10 @@ func (ix *Index) refreshSource(ctx context.Context, src Source, name string) (ad
 		if !ok {
 			continue
 		}
-		backfilled := isBackfilled(item)
-		if backfilled && who == WhoUser && isContextBody(item.Body) {
+		// Only the user's side is ever a backfilled copy: Brain's own replies
+		// from the host transcript are the replies.
+		backfilled := who == WhoUser && (item.Origin == originTranscript || item.Origin == originProvider)
+		if who == WhoUser && item.Origin == originProvider {
 			who = WhoContext
 		}
 		at, perr := time.Parse(time.RFC3339Nano, item.CreatedAt)
@@ -269,36 +281,6 @@ func (ix *Index) refreshSource(ctx context.Context, src Source, name string) (ad
 	}
 	committed = true
 	return added, len(rows) == refreshBatch, nil
-}
-
-// isBackfilled reports a user row Brain's provider transcript wrote into the
-// chat (id "<session>:<turn>:user"), as opposed to one Mewla admitted when the
-// user sent it.
-func isBackfilled(item timelineRow) bool {
-	return item.Role == "user" && !item.BrainAdmission && strings.HasSuffix(item.ID, ":user") && strings.Count(item.ID, ":") >= 2
-}
-
-var (
-	pastedWrapper = regexp.MustCompile(`^<pasted_content[^>]*>\s*`)
-	markupStart   = regexp.MustCompile(`^<[A-Za-z][\w:-]*[\s>]`)
-)
-
-// isContextBody reports text the user did not type: Claude's compaction
-// summary, an interruption marker, or a message that is only markup (task
-// notifications, forwarded Mewla events). A paste wrapper is looked through;
-// the user's own paste (a log, a document) stays theirs. Typed text followed by
-// markup does not start with it and also stays theirs.
-func isContextBody(body string) bool {
-	body = strings.TrimSpace(body)
-	for _, prefix := range []string{"This session is being continued", "[Request interrupted", "Caveat:"} {
-		if strings.HasPrefix(body, prefix) {
-			return true
-		}
-	}
-	if loc := pastedWrapper.FindStringIndex(body); loc != nil {
-		body = body[loc[1]:]
-	}
-	return markupStart.MatchString(body)
 }
 
 func whoOf(item timelineRow) (string, bool) {

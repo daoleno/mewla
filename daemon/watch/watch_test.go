@@ -209,6 +209,14 @@ func claudeMessage(role, uuid, at, cwd string, content any) claudeLine {
 	}
 }
 
+// compactSummary marks a line the way Claude marks the summary that opens a
+// compacted conversation. The text is deliberately not Claude's current
+// wording: the flag is the contract.
+func compactSummary(line claudeLine) claudeLine {
+	line["isCompactSummary"] = true
+	return line
+}
+
 func newTestCollector(t *testing.T, home string) (*Collector, *Store) {
 	t.Helper()
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
@@ -241,7 +249,7 @@ func TestHumanCollectorIsIncrementalTaggedAndRedacted(t *testing.T) {
 		claudeMessage("assistant", "a1", stamp(2), repo, []any{map[string]any{"type": "text", "text": "I rebuilt the APK and installed it."}}),
 		claudeMessage("user", "u2", stamp(3), repo, "为什么要 build APK? use key:"+secrets["openai-compatible"]+" and "+secrets["anthropic"]),
 		claudeMessage("user", "u3", stamp(4), repo, "<mewla_work_event>\n{\"event_id\":\"x\",\"objective\":\"Mewla lifecycle protocol: ...\",\"ref\":\"turn:99999999-2222-3333-4444-555555555555\"}\n</mewla_work_event>"),
-		claudeMessage("user", "u3b", stamp(4), repo, "This session is being continued from a previous conversation that ran out of context."),
+		compactSummary(claudeMessage("user", "u3b", stamp(4), repo, "Earlier we agreed on the plan; the summary below replaces it.")),
 		claudeMessage("user", "u3c", stamp(4), repo, "Brain Host activation contract:\nRead AGENTS.md before continuing."),
 	}, `{"type":"user","uuid":"u4","timestamp":"`+stamp(5)+`","message":{"role":"user","content":"half writ`)
 

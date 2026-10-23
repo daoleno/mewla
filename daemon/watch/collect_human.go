@@ -50,16 +50,10 @@ var turnTokenPattern = regexp.MustCompile(`turn:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f
 
 var mewlaEnvelopePattern = regexp.MustCompile(`<[a-z]+_(?:work_event|calendar_result)>`)
 
-// Provider-written user-role records, such as Claude's summary that opens a
-// compacted conversation.
-var providerWrittenPrefixes = []string{
-	"This session is being continued from a previous conversation",
-}
-
 // classifyUserTurn decides who wrote a user-role message: the user, Brain or
 // Mewla delegating to a Worker (kept as delegated), or Mewla and the provider
 // talking to themselves (skipped).
-func classifyUserTurn(text string, admitted bool) (kind string, keep bool) {
+func classifyUserTurn(text, origin string, admitted bool) (kind string, keep bool) {
 	// Envelopes come first: a Work event quotes its Work's delegation prompt.
 	if mewlaEnvelopePattern.MatchString(text) {
 		return "", false
@@ -70,10 +64,8 @@ func classifyUserTurn(text string, admitted bool) (kind string, keep bool) {
 	if work.IsPrivateHostPrompt(text) || strings.HasPrefix(text, watcher.TurnContinuationPrompt) {
 		return "", false
 	}
-	for _, prefix := range providerWrittenPrefixes {
-		if strings.HasPrefix(text, prefix) {
-			return "", false
-		}
+	if origin == work.ConversationOriginProvider {
+		return "", false
 	}
 	return kindUserMessage, true
 }
@@ -171,7 +163,7 @@ func (c *Collector) collectTranscript(source work.TranscriptSource, since time.T
 		if text == "" {
 			return
 		}
-		kind, keep := classifyUserTurn(text, admitted[message.AdmissionSHA256] || admitted[message.AdmissionUnwrappedSHA256])
+		kind, keep := classifyUserTurn(text, message.Origin, admitted[message.AdmissionSHA256] || admitted[message.AdmissionUnwrappedSHA256])
 		if !keep {
 			return
 		}

@@ -506,7 +506,10 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		IsMeta      bool   `json:"isMeta"`
 		IsSidechain bool   `json:"isSidechain"`
 		TurnOrigin  string `json:"turnOrigin"`
-		Origin      struct {
+		// IsCompactSummary marks the summary Claude writes to open a compacted
+		// conversation; it is a user-role record the person did not type.
+		IsCompactSummary bool `json:"isCompactSummary"`
+		Origin           struct {
 			Kind string `json:"kind"`
 		} `json:"origin"`
 		Attachment    json.RawMessage `json:"attachment"`
@@ -566,7 +569,11 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 			}
 			return
 		}
-		if b.consumeUserContent(lineNumber, recordID, timestamp, envelope.Message.Content, envelope.ToolUseResult) &&
+		origin := ""
+		if envelope.IsCompactSummary {
+			origin = ConversationOriginProvider
+		}
+		if b.consumeUserContent(lineNumber, recordID, timestamp, origin, envelope.Message.Content, envelope.ToolUseResult) &&
 			!b.activityLifecycle.running() {
 			b.pendingTaskTurn = claudePendingTaskTurn{}
 			b.activityLifecycle.start(activityID, timestamp)
@@ -636,14 +643,14 @@ func claudeAssistantRecordContinuesTurn(stopReason string, raw json.RawMessage) 
 	return true
 }
 
-func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID, timestamp string, raw, toolUseResult json.RawMessage) bool {
+func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID, timestamp, origin string, raw, toolUseResult json.RawMessage) bool {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return false
 	}
 	if raw[0] == '"' {
 		var text string
 		if json.Unmarshal(raw, &text) == nil {
-			b.addMessage(lineNumber, recordID, 0, timestamp, "user", text)
+			b.addMessage(lineNumber, recordID, 0, timestamp, "user", origin, text)
 			return claudeVisibleUserText(text)
 		}
 		return false
@@ -659,7 +666,7 @@ func (b *claudeConversationBuilder) consumeUserContent(lineNumber int, recordID,
 		switch strings.ToLower(strings.TrimSpace(item.Type)) {
 		case "text":
 			textIndex++
-			b.addMessage(lineNumber, recordID, textIndex, timestamp, "user", item.Text)
+			b.addMessage(lineNumber, recordID, textIndex, timestamp, "user", origin, item.Text)
 			hasUserText = hasUserText || claudeVisibleUserText(item.Text)
 		case "tool_result":
 			b.settleChoice(item.ToolUseID, toolUseResults[strings.TrimSpace(item.ToolUseID)], item.IsError)
@@ -750,7 +757,7 @@ func (b *claudeConversationBuilder) consumeTaskNotificationAttachment(lineNumber
 		return
 	}
 	if text, ok := claudeUserPlainText(attachment.Prompt); ok {
-		b.addMessage(lineNumber, recordID, 0, timestamp, "user", text)
+		b.addMessage(lineNumber, recordID, 0, timestamp, "user", "", text)
 	}
 }
 
@@ -791,7 +798,7 @@ func (b *claudeConversationBuilder) consumeAssistantContent(lineNumber int, reco
 	if raw[0] == '"' {
 		var text string
 		if json.Unmarshal(raw, &text) == nil {
-			b.addMessage(lineNumber, recordID, 0, timestamp, "assistant", text)
+			b.addMessage(lineNumber, recordID, 0, timestamp, "assistant", "", text)
 		}
 		return
 	}
@@ -809,7 +816,7 @@ func (b *claudeConversationBuilder) consumeAssistantContent(lineNumber int, reco
 			b.addThinking(lineNumber, recordID, thinkingIndex, timestamp, item.Thinking)
 		case "text":
 			textIndex++
-			b.addMessage(lineNumber, recordID, textIndex, timestamp, "assistant", item.Text)
+			b.addMessage(lineNumber, recordID, textIndex, timestamp, "assistant", "", item.Text)
 		case "tool_use":
 			toolIndex++
 			b.addToolUse(lineNumber, recordID, toolIndex, timestamp, item)
@@ -829,7 +836,7 @@ type claudeContentBlock struct {
 	IsError   bool            `json:"is_error"`
 }
 
-func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, index int, timestamp, role, text string) {
+func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, index int, timestamp, role, origin, text string) {
 	exact := text
 	text = CleanCodexDisplayText(text)
 	if text == "" || isTranscriptBoilerplate(text) {
@@ -858,6 +865,7 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 		Role:      role,
 		Body:      text,
 		Source:    claudeConversationSource,
+		Origin:    origin,
 	}
 	if role == "user" {
 		// Retain literal native bytes as well as the strict transport-envelope
