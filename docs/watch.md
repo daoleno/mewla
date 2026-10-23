@@ -26,13 +26,14 @@ mewla watch project rename --project <id> --name "Billing"
 
 ## Signals
 
-Watch records four kinds of signal:
+Watch records five kinds of signal:
 
 | Source | What it records | Project |
 |---|---|---|
 | Human | What you said in Brain and Worker conversations, with the reply you were answering. Every agent Mewla supports is read: Claude Code, Codex, Pi, Cursor, Grok, OpenCode and dsh. Prompts that Brain wrote for a Worker are kept separate from what you typed. | The Session's working directory |
 | Process | Problems in the Work store: lost or stalled turns, automatic resumes, reconcile requests, ambiguous deliveries, input requests, failed turns, follow-up turns sent to a Worker, and Work reopened after it was closed. | The Work's working directory |
 | Runtime | Problem lines from the daemon log ([Troubleshooting](troubleshooting.md#reading-the-daemons-terminal-output)) | Mewla |
+| Notification | Every push Mewla sends to your phone, and every one it held back: the text as sent, the kind (a Worker needing input, failing or finishing; a Brain message; a scheduled result; a Watch alert), the Work or thread it was about, whether it was delivered, whether the app was in the foreground and whether you had that Session open. After the send it keeps what you did with it: tapped it, opened that Session, or brought the app forward. Push tokens are never stored. | The Session's working directory |
 | External | From connected [Plugins](plugins.md), read only. GitHub: failed CI runs on the default branch, open issues and pull requests with new activity, and Dependabot and code scanning alerts where your grant allows. Linear: issues and comments for the team you linked. | GitHub: by the repository's remote. Linear: by the team you confirm. |
 
 Collection is local and doesn't run a model, so it is always on, whatever the
@@ -90,6 +91,11 @@ A few clear-cut problems are flagged immediately, without a model:
   times within ten minutes in the last week.
 - **Worker stalled or lost repeatedly.** One piece of Work lost or stalled its
   Worker at least twice in the last week.
+- **Phone notifications are not being delivered.** The last three pushes that
+  reached the push service all failed, at the send or in the delivery
+  receipt (for example a missing push credential). A computer with no phone
+  paired sends nothing and is not flagged. Whether a push was *worth* sending
+  is never a rule: that is judgment's call.
 
 ### Problems and Work
 
@@ -110,7 +116,7 @@ with stop asking for you:
 ### Judgment
 
 With Watch on, new signals are handed in batches to one agent run with no
-tools. It does three things:
+tools. It does four things:
 
 - **Places** signals that have no project, by what they say: messages to
   Brain, conversations in folders that were renamed or deleted, and Work whose
@@ -121,7 +127,17 @@ tools. It does three things:
 - **Raises problems**: it separates problems from noise, merges signals from
   different sources about the same thing (rule flags included), estimates the
   cost (your attention, or the project's health), and marks problems that look
-  fixed. Each problem keeps its evidence and a one-paragraph reason.
+  fixed. Each problem keeps its evidence, a one-paragraph reason and, when there
+  is one, a concrete suggestion.
+- **Judges notifications**: for each push it reads the text, the Work or thread
+  it was about, whether you were already in the app or that Session, what you
+  wrote around then, earlier pushes about the same thing and what you did with
+  it, and decides whether it was worth interrupting you: `meaningful`, `noise`,
+  `poorly_timed`, `duplicate` or `unclear`. For a push that was held back it
+  says `missed` (you needed to know and nothing reached you) or `rightly_quiet`.
+  A tap is evidence, not the verdict, and so is no tap. A pattern, such as one
+  kind of push that is repeatedly noise, becomes an ordinary problem with what
+  it costs you and one suggested change.
 
 Before that, signals whose turn, Session or Work later turned up in a known
 repository are placed without a model.
@@ -165,6 +181,7 @@ mewla watch status                 # judgment: pending, runs, tokens and cost
 mewla watch judge --batches 3      # judge now instead of waiting
 mewla watch problems --rule judgment
 mewla watch signals --source human --kind user_message
+mewla watch signals --source notification --kind worker_done   # pushes, their outcome and verdicts
 ```
 
 ### Telling Watch it was right
