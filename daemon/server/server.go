@@ -170,6 +170,7 @@ type Server struct {
 	brainWorkSub                <-chan brain.WorkChange
 	brainHostRecovery           chan struct{}
 	signalSystemStartupComplete bool
+	workerFeed                  workerFeed
 
 	clients            map[*websocket.Conn]*authenticatedClient
 	active             map[*websocket.Conn]string
@@ -501,7 +502,7 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 	srv := &http.Server{Handler: s.Handler()}
 
 	var runtime sync.WaitGroup
-	runtime.Add(5)
+	runtime.Add(6)
 	go func() { defer runtime.Done(); s.runResourceTelemetry(runtimeCtx) }()
 	go func() { defer runtime.Done(); s.runBrainHostContinuity(runtimeCtx) }()
 	go func() { defer runtime.Done(); s.runPrivateListeners(runtimeCtx) }()
@@ -511,8 +512,9 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 	}()
 	go func() {
 		defer runtime.Done()
-		s.heartbeat(runtimeCtx)
+		s.runBrainSessionReconcile(runtimeCtx)
 	}()
+	go func() { defer runtime.Done(); s.runWorkerFeedReconcile(runtimeCtx) }()
 
 	shutdownDone := make(chan struct{})
 	go func() {
@@ -1239,7 +1241,15 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 				}
 			}
 			s.sendJSON(conn, payload)
+			return
 		}
+		// The Session is confirmed gone; this reply, not its absence from some
+		// later list, is what tells the client the terminate succeeded.
+		s.sendJSON(conn, map[string]any{
+			"type":       "worker_killed",
+			"request_id": raw.RequestID,
+			"worker_id":  raw.WorkerID,
+		})
 	}
 }
 
@@ -1681,9 +1691,19 @@ func (s *Server) sendTelegramStatus(conn *websocket.Conn, requestID string) {
 	})
 }
 
+// sendWorkerSessionList sends the full list, current as of the seq it carries.
+// It is sent once when a client connects and again only when the client asks
+// after noticing a gap in the sequenced changes.
 func (s *Server) sendWorkerSessionList(conn *websocket.Conn) {
-	workerSessions := s.currentVisibleWorkerSessions()
-	s.sendJSON(conn, map[string]any{"type": "worker_session_list", "worker_sessions": s.workerSessionsWire(workerSessions)})
+	s.workerFeed.snapshot(s.visibleWorkerSessionWires, func(data []byte) {
+		if err := s.queueMessage(conn, websocket.TextMessage, data, false); err != nil {
+			if errors.Is(err, errOutboxClosed) {
+				debuglog.Printf("websocket: send to closed client remote=%s: %v", conn.RemoteAddr(), err)
+				return
+			}
+			log.Printf("websocket: send failed remote=%s: %v", conn.RemoteAddr(), err)
+		}
+	})
 }
 
 type resolvedCodexConversationWorker struct {
@@ -3349,7 +3369,10 @@ func signalSystemStartupOutcome(complete bool, err error) (done, refused bool) {
 	return false, false
 }
 
-func (s *Server) heartbeat(ctx context.Context) {
+// runBrainSessionReconcile lets Brain settle Sessions whose owner is missing,
+// whose delegation lease expired or whose Event delivery was interrupted.
+// Leases expire with time, so this keeps a timer; it broadcasts nothing.
+func (s *Server) runBrainSessionReconcile(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -3357,27 +3380,25 @@ func (s *Server) heartbeat(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			allWorkerSessions := s.watcher.Workers()
-			workerSessions := visibleWorkerSessions(allWorkerSessions)
-			if s.brain != nil && s.watcher != nil && s.watcher.SnapshotReady() {
-				if !s.signalSystemStartupComplete {
-					complete, err := s.brain.ReconcileSignalSystemStartup(allWorkerSessions, 64)
-					done, refused := signalSystemStartupOutcome(complete, err)
-					switch {
-					case refused:
-						// Every Session left is one Mewla does not own. Retrying
-						// every tick would only repeat the same refusal (and its
-						// tmux probes) forever, so report it once and stop.
-						log.Printf("brain signal-system startup reconciliation finished; left alone: %v", err)
-					case err != nil:
-						log.Printf("brain signal-system startup reconciliation failed: %v", err)
-					}
-					s.signalSystemStartupComplete = done
-				}
-				s.brain.ReconcileDelegatedSessions(allWorkerSessions)
+			if s.brain == nil || s.watcher == nil || !s.watcher.SnapshotReady() {
+				continue
 			}
-			data, _ := json.Marshal(map[string]any{"type": "worker_session_list", "worker_sessions": s.workerSessionsWire(workerSessions)})
-			s.broadcast(data)
+			allWorkerSessions := s.watcher.Workers()
+			if !s.signalSystemStartupComplete {
+				complete, err := s.brain.ReconcileSignalSystemStartup(allWorkerSessions, 64)
+				done, refused := signalSystemStartupOutcome(complete, err)
+				switch {
+				case refused:
+					// Every Session left is one Mewla does not own. Retrying
+					// every tick would only repeat the same refusal (and its
+					// tmux probes) forever, so report it once and stop.
+					log.Printf("brain signal-system startup reconciliation finished; left alone: %v", err)
+				case err != nil:
+					log.Printf("brain signal-system startup reconciliation failed: %v", err)
+				}
+				s.signalSystemStartupComplete = done
+			}
+			s.brain.ReconcileDelegatedSessions(allWorkerSessions)
 		}
 	}
 }
@@ -3416,26 +3437,26 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 	switch ev.Type {
 	case "worker_discovered":
 		if ev.Worker != nil {
-			s.broadcastJSON(map[string]any{"type": "worker_session_created", "worker_session": s.workerSessionWire(ev.Worker)})
+			s.publishWorkerSession("worker_session_created", ev.Worker)
 		}
 	case "worker_output":
 		if ev.Worker != nil {
-			s.broadcastJSON(map[string]any{"type": "worker_session_updated", "worker_session": s.workerSessionWire(ev.Worker)})
+			s.publishWorkerSession("worker_session_updated", ev.Worker)
 		}
 	case "worker_state_change":
 		if ev.Worker != nil {
-			s.broadcastJSON(map[string]any{"type": "worker_session_updated", "worker_session": s.workerSessionWire(ev.Worker)})
+			s.publishWorkerSession("worker_session_updated", ev.Worker)
 		}
 		s.maybeNotifyForSessionEvent(ev)
 		s.routeSessionEventToBrain(ev)
 	case "worker_metadata_change":
 		if ev.Worker != nil {
-			s.broadcastJSON(map[string]any{"type": "worker_session_updated", "worker_session": s.workerSessionWire(ev.Worker)})
+			s.publishWorkerSession("worker_session_updated", ev.Worker)
 		}
 		s.routeSessionEventToBrain(ev)
 	case "worker_removed":
 		if ev.Worker != nil {
-			s.broadcastJSON(map[string]any{"type": "worker_session_archived", "worker_session": s.workerSessionWire(ev.Worker)})
+			s.publishWorkerSession("worker_session_archived", ev.Worker)
 		}
 		s.maybeNotifyForSessionEvent(ev)
 		s.routeSessionEventToBrain(ev)
