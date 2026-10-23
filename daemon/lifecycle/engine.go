@@ -1296,6 +1296,36 @@ func (e *Engine) ListViews() []*State {
 	return e.listStates(false)
 }
 
+// Each calls visit with every aggregate, in no particular order, without
+// copying any of them. visit runs under the engine lock: it must only read,
+// must not keep the *State or anything inside it, and must not call the
+// engine. Collect what you need and act after Each returns.
+func (e *Engine) Each(visit func(*State)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, state := range e.works {
+		visit(state)
+	}
+}
+
+// Find returns a view of the aggregate with the lowest ID for which match is
+// true. match has the same limits as Each's visit. Only the match is copied,
+// so looking up one Work costs a scan, not a clone of every Work.
+func (e *Engine) Find(match func(*State) bool) (*State, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var best *State
+	for _, state := range e.works {
+		if (best == nil || state.ID < best.ID) && match(state) {
+			best = state
+		}
+	}
+	if best == nil {
+		return nil, false
+	}
+	return best.cloneView(), true
+}
+
 func (e *Engine) listStates(includeSeenSources bool) []*State {
 	e.mu.Lock()
 	states := make(map[WorkID]*State, len(e.works))

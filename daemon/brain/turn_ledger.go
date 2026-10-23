@@ -321,10 +321,10 @@ func (s *Store) fsmStateForAdmission(candidate watcher.InputAdmission) (*lifecyc
 		}
 		return st, nil
 	}
-	for _, st := range s.fsm.ListViews() {
-		if st.Attempt != nil && st.Attempt.SessionID == candidate.SessionID {
-			return st, nil
-		}
+	if st, found := s.fsm.Find(func(st *lifecycle.State) bool {
+		return st.Attempt != nil && st.Attempt.SessionID == candidate.SessionID
+	}); found {
+		return st, nil
 	}
 	return nil, fmt.Errorf("no active Brain Work owns delegated Session %s; input was not submitted", candidate.SessionID)
 }
@@ -336,12 +336,14 @@ func (s *Store) InputAdmission(sessionID, proposedTurnID string) (watcher.InputA
 	if s == nil || sessionID == "" || proposedTurnID == "" {
 		return watcher.InputAdmission{}, false, nil
 	}
-	for _, st := range s.fsm.ListViews() {
-		if admission := st.AdmissionByToken(lifecycle.TurnToken(proposedTurnID)); admission != nil && admission.SessionID == sessionID {
-			return admissionSnapshot(st, admission), true, nil
-		}
+	st, found := s.fsm.Find(func(st *lifecycle.State) bool {
+		admission := st.AdmissionByToken(lifecycle.TurnToken(proposedTurnID))
+		return admission != nil && admission.SessionID == sessionID
+	})
+	if !found {
+		return watcher.InputAdmission{}, false, nil
 	}
-	return watcher.InputAdmission{}, false, nil
+	return admissionSnapshot(st, st.AdmissionByToken(lifecycle.TurnToken(proposedTurnID))), true, nil
 }
 
 // PendingInputAdmissions returns every unresolved submission for a Session in
@@ -356,13 +358,13 @@ func (s *Store) PendingInputAdmissions(sessionID string) ([]watcher.InputAdmissi
 		return nil, nil
 	}
 	out := make([]watcher.InputAdmission, 0)
-	for _, st := range s.fsm.ListViews() {
+	s.fsm.Each(func(st *lifecycle.State) {
 		admission := st.ActiveAdmission()
 		if admission != nil && admission.SessionID == sessionID &&
 			(admission.Status == lifecycle.AdmissionPrepared || admission.Status == lifecycle.AdmissionAmbiguous) {
 			out = append(out, admissionSnapshot(st, admission))
 		}
-	}
+	})
 	sort.SliceStable(out, func(left, right int) bool {
 		if out[left].AcceptedAt.Equal(out[right].AcceptedAt) {
 			return out[left].ProposedTurnID < out[right].ProposedTurnID
@@ -416,21 +418,21 @@ func (s *Store) AbortInputAdmission(sessionID, proposedTurnID, receipt, payloadS
 	if s == nil || s.fsm == nil {
 		return watcher.InputAdmission{}, fmt.Errorf("brain store is not configured")
 	}
-	for _, st := range s.fsm.ListViews() {
+	st, found := s.fsm.Find(func(st *lifecycle.State) bool {
 		admission := st.AdmissionByToken(lifecycle.TurnToken(proposedTurnID))
-		if admission == nil || admission.SessionID != sessionID {
-			continue
-		}
-		next, err := s.fsm.AbortAdmission(st.ID, lifecycle.TurnToken(proposedTurnID), receipt, payloadSHA256, "proved_not_submitted")
-		if err != nil {
-			return watcher.InputAdmission{}, err
-		}
-		if err := s.SyncWorkProjection(string(st.ID)); err != nil {
-			return watcher.InputAdmission{}, err
-		}
-		return admissionSnapshot(next, next.AdmissionByToken(lifecycle.TurnToken(proposedTurnID))), nil
+		return admission != nil && admission.SessionID == sessionID
+	})
+	if !found {
+		return watcher.InputAdmission{}, fmt.Errorf("pending submission not found")
 	}
-	return watcher.InputAdmission{}, fmt.Errorf("pending submission not found")
+	next, err := s.fsm.AbortAdmission(st.ID, lifecycle.TurnToken(proposedTurnID), receipt, payloadSHA256, "proved_not_submitted")
+	if err != nil {
+		return watcher.InputAdmission{}, err
+	}
+	if err := s.SyncWorkProjection(string(st.ID)); err != nil {
+		return watcher.InputAdmission{}, err
+	}
+	return admissionSnapshot(next, next.AdmissionByToken(lifecycle.TurnToken(proposedTurnID))), nil
 }
 
 // AbortUnmarkedInputAdmission is called only by the serialized transport owner
@@ -590,13 +592,14 @@ func (s *Store) rebuildFSMProjections() error {
 }
 
 func (s *Store) fsmAdmission(sessionID, proposedTurnID string) (*lifecycle.State, *lifecycle.AdmissionState, error) {
-	for _, st := range s.fsm.ListViews() {
+	st, found := s.fsm.Find(func(st *lifecycle.State) bool {
 		admission := st.AdmissionByToken(lifecycle.TurnToken(proposedTurnID))
-		if admission != nil && admission.SessionID == sessionID {
-			return st, admission, nil
-		}
+		return admission != nil && admission.SessionID == sessionID
+	})
+	if !found {
+		return nil, nil, fmt.Errorf("pending submission not found")
 	}
-	return nil, nil, fmt.Errorf("pending submission not found")
+	return st, st.AdmissionByToken(lifecycle.TurnToken(proposedTurnID)), nil
 }
 
 // projectAcceptedAdmission maintains the provider-facing Turn read model.
@@ -1383,12 +1386,11 @@ func (s *Store) prepareDelegatedSignalTurnLocked(database *presentationDatabase,
 	}
 	var state *lifecycle.State
 	var admission *lifecycle.AdmissionState
-	for _, candidate := range s.fsm.ListViews() {
-		if exact := candidate.AdmissionByToken(lifecycle.TurnToken(fact.TurnID)); exact != nil &&
-			exact.SessionID == fact.SessionID && exact.SignalProtocol && exact.ClaimToken == "" {
-			state, admission = candidate, exact
-			break
-		}
+	if candidate, found := s.fsm.Find(func(candidate *lifecycle.State) bool {
+		exact := candidate.AdmissionByToken(lifecycle.TurnToken(fact.TurnID))
+		return exact != nil && exact.SessionID == fact.SessionID && exact.SignalProtocol && exact.ClaimToken == ""
+	}); found {
+		state, admission = candidate, candidate.AdmissionByToken(lifecycle.TurnToken(fact.TurnID))
 	}
 	if state == nil || admission == nil {
 		for _, candidate := range s.fsm.ListViews() {

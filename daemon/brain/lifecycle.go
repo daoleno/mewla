@@ -2333,12 +2333,13 @@ func (s *Store) ClaimNextReviewAction(hostSessionID string) (WorkReviewAction, b
 		openedAt time.Time
 	}
 	candidates := []candidate{}
-	for _, st := range s.fsm.ListViews() {
-		if st.Review == nil || st.Review.Handler != nil || !st.Review.DeliveryReady(s.nowUTC()) || st.Status.Terminal() || st.ActiveAdmission() != nil {
-			continue
+	now := s.nowUTC()
+	s.fsm.Each(func(st *lifecycle.State) {
+		if st.Review == nil || st.Review.Handler != nil || !st.Review.DeliveryReady(now) || st.Status.Terminal() || st.ActiveAdmission() != nil {
+			return
 		}
 		candidates = append(candidates, candidate{id: string(st.ID), openedAt: st.Review.OpenedAt})
-	}
+	})
 	if len(candidates) == 0 {
 		return WorkReviewAction{}, false, nil
 	}

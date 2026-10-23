@@ -1,6 +1,9 @@
 package brain
 
-import "github.com/daoleno/mewla/daemon/watcher"
+import (
+	"github.com/daoleno/mewla/daemon/lifecycle"
+	"github.com/daoleno/mewla/daemon/watcher"
+)
 
 // CompletedOwnedTurns is a derived cleanup set, not another durable queue.
 // Only the latest exact delegated result of an explicitly closed Work qualifies.
@@ -12,14 +15,14 @@ func (s *Store) CompletedOwnedTurns(workID string) ([]watcher.TurnSnapshot, erro
 		return nil, err
 	}
 	busy := map[string]bool{}
-	for _, st := range s.fsm.ListViews() {
+	s.fsm.Each(func(st *lifecycle.State) {
 		if st.Attempt != nil {
 			busy[st.Attempt.SessionID] = true
 		}
 		if admission := st.ActiveAdmission(); admission != nil {
 			busy[admission.SessionID] = true
 		}
-	}
+	})
 	var result []watcher.TurnSnapshot
 	for _, turn := range database.BrainTurns {
 		if workID != "" && turn.WorkID != workID {
