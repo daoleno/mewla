@@ -79,6 +79,7 @@ type Service struct {
 
 	conversationMu             sync.Mutex
 	hostConversationReader     *work.ProviderConversationReader
+	hostIdentityProof          hostIdentityProof
 	sessionConversationReaders map[string]*work.ProviderConversationReader
 
 	dispatchMu sync.Mutex
@@ -2449,9 +2450,14 @@ func (s *Service) BindHostProviderTranscript() (work.HostTranscriptIdentity, err
 				if observed := work.InferWorkerProvider(worker.Command, worker.Name); observed != "" && observed != work.WorkerProviderCustom && observed != provider {
 					return work.HostTranscriptIdentity{Provider: provider}, nil
 				}
-				resolved = work.ResolveHostTranscriptIdentityForWorker(*worker, existing, provider)
-				if !resolved.Bound() && existing.Bound() {
+				if s.hostIdentityProof.fresh(host.ID, existing, time.Now()) {
 					resolved = existing
+				} else {
+					resolved = work.ResolveHostTranscriptIdentityForWorker(*worker, existing, provider)
+					if !resolved.Bound() && existing.Bound() {
+						resolved = existing
+					}
+					s.hostIdentityProof.record(host.ID, resolved, time.Now())
 				}
 			}
 		}
