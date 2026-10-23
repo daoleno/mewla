@@ -3,6 +3,7 @@ import {
   enqueueCurrentServerPersistence,
   resolveCurrentServerId,
   selectCurrentServer,
+  shouldPersistResolvedServerId,
 } from "./currentServerSelection";
 
 const servers = [
@@ -64,10 +65,25 @@ describe("canonical current-server selection", () => {
     expect(selectCurrentServer(servers, "server-b")).toEqual(servers[1]);
   });
 
-  test("uses array order only for one-time migration or removed configurations", () => {
+  test("uses array order only when no identity was ever persisted", () => {
     expect(resolveCurrentServerId(servers, null)).toBe("server-a");
-    expect(resolveCurrentServerId(servers, "removed")).toBe("server-a");
+    expect(resolveCurrentServerId(servers, undefined)).toBe("server-a");
+    expect(resolveCurrentServerId(servers, "  ")).toBe("server-a");
+    expect(resolveCurrentServerId([], null)).toBeNull();
+  });
+
+  test("a persisted server that is gone leaves no current server instead of another computer", () => {
+    expect(resolveCurrentServerId(servers, "removed")).toBeNull();
     expect(resolveCurrentServerId([], "server-a")).toBeNull();
+  });
+
+  test("no current server is never written back, so it cannot turn into a first-computer migration", () => {
+    expect(shouldPersistResolvedServerId(null, "removed")).toBe(false);
+    expect(shouldPersistResolvedServerId(null, null)).toBe(false);
+    expect(shouldPersistResolvedServerId("server-a", "server-a")).toBe(false);
+    expect(shouldPersistResolvedServerId("server-a", " server-a ")).toBe(false);
+    expect(shouldPersistResolvedServerId("server-a", null)).toBe(true);
+    expect(shouldPersistResolvedServerId("server-b", "server-a")).toBe(true);
   });
 
   test("never invents a current server outside the canonical owner", () => {

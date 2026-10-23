@@ -80,7 +80,12 @@ slow event consumer can read a snapshot without deadlocking the publisher.
 
 The app's current-server owner also guards delayed results. Sessions, service
 discovery, Stats, Terminal and Work routes do not choose a server by latency or
-aggregate configuration records. Switching servers hides old data immediately;
+aggregate configuration records. If the persisted current server is no longer
+paired, the app has no current server and shows its no-server state; it does not
+fall back to the first paired computer (only a phone that never stored a current
+server picks the first one, once). Removing the computer in use from its settings
+page moves to the next remaining computer as that action's explicit choice.
+Switching servers hides old data immediately;
 already-submitted operations retain their original identity until settlement.
 Unsaved Work text remains in the app-lifetime Work draft store, keyed by server
 and document. This is not durable offline storage; daemon saves remain the
