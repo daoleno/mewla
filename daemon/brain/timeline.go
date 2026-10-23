@@ -359,7 +359,6 @@ func (s *Store) threadTimelineLocked(threadID string, limit int) ([]TimelineItem
 		if item.ThreadID != threadID {
 			continue
 		}
-		normalizeLegacyTimelineKind(&item)
 		out = append(out, item)
 	}
 	sortTimelineItems(out)
@@ -367,36 +366,6 @@ func (s *Store) threadTimelineLocked(threadID string, limit int) ([]TimelineItem
 		out = append([]TimelineItem(nil), out[len(out)-limit:]...)
 	}
 	return out, nil
-}
-
-func normalizeLegacyTimelineKind(item *TimelineItem) {
-	if item == nil {
-		return
-	}
-	kind := strings.TrimSpace(item.Kind)
-	switch kind {
-	case timelineKindUserMessage, timelineKindAssistantMessage, timelineKindWorkCard, timelineKindCalendarResult:
-		item.Kind = kind
-		return
-	case "input":
-		item.Kind = timelineKindUserMessage
-		if item.Role == "" {
-			item.Role = "user"
-		}
-	case "chat", "memory", "":
-		if strings.EqualFold(item.Role, "user") {
-			item.Kind = timelineKindUserMessage
-		} else {
-			item.Kind = timelineKindAssistantMessage
-			if item.Role == "" {
-				item.Role = "assistant"
-			}
-		}
-	default:
-		if kind == "calendar_result" {
-			item.Kind = timelineKindCalendarResult
-		}
-	}
 }
 
 func sortTimelineItems(items []TimelineItem) {
@@ -682,7 +651,6 @@ func (s *Store) readAllTimelineItemsLocked() ([]TimelineItem, error) {
 		if err := json.Unmarshal(body, &item); err != nil {
 			return fmt.Errorf("decode timeline item: %w", err)
 		}
-		normalizeLegacyTimelineKind(&item)
 		out = append(out, item)
 		return nil
 	}); err != nil {
