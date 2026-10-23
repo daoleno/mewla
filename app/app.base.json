@@ -2,7 +2,7 @@
   "expo": {
     "name": "Mewla",
     "slug": "mewla",
-    "version": "0.2.47",
+    "version": "0.2.48",
     "orientation": "portrait",
     "icon": "./assets/branding/mewla-icon.png",
     "userInterfaceStyle": "automatic",
@@ -38,7 +38,7 @@
       },
       "package": "com.daoleno.mewla",
       "googleServicesFile": "./google-services.json",
-      "versionCode": 88,
+      "versionCode": 89,
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW"
