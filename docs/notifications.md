@@ -122,6 +122,18 @@ replies "Files received by Mewla" once the files are accepted.
 Replies from Brain and Sessions arrive as text. Mewla does not send files back to
 Telegram.
 
+### What Mewla remembers about delivered messages
+
+To edit a message as its source changes and not send it twice, Mewla remembers
+which Telegram message each Brain answer, Work card and Session reply became.
+It keeps that for the newest 500 messages of the Brain thread and of each
+Session, and for anything younger than 14 days. A message outside both limits is
+no longer projected to Telegram and its record is deleted, so an agent that was
+silent for two weeks and then answers sends a new message instead of editing an
+old one. A delivery that is still waiting, in flight or of unknown outcome keeps
+its records until it is settled. The limits are `projectionKeepNewest` and
+`projectionKeepFor` in `daemon/telegram/retention.go`.
+
 ### What Telegram can see
 
 Bot chats are Telegram cloud chats, so Telegram stores their history. Removing

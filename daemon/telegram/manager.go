@@ -1452,7 +1452,11 @@ func (m *Manager) projectTimeline() error {
 		return err
 	}
 	return m.store.mutate(func(state *durableState) error {
-		for _, item := range items {
+		plan := planBrainRetention(items, state.DeliveryStartedAt, m.now().UTC())
+		for index, item := range items {
+			if projectableBrainItem(item) && !plan.retained[index] {
+				continue
+			}
 			if !state.DeliveryStartedAt.IsZero() && !item.CreatedAt.After(state.DeliveryStartedAt) {
 				continue
 			}
@@ -1505,6 +1509,8 @@ func (m *Manager) projectTimeline() error {
 					Entities: formatted.Entities, Variant: variantFor(formatted), CreatedAt: m.now().UTC()})
 			}
 		}
+		pruneBrainCheckpoints(state, plan)
+		pruneOrphanCheckpoints(state)
 		return nil
 	})
 }
@@ -1672,7 +1678,9 @@ func (m *Manager) deliverOne(ctx context.Context) error {
 				current.Projection["work:"+row.WorkID] = digestRichText(richText{Text: row.PlainText, Entities: row.Entities})
 			}
 			if row.TopicKey != "" {
-				current.TopicMessages[row.TopicKey] = sent.MessageID
+				if editableKey(row.TopicKey) {
+					current.TopicMessages[row.TopicKey] = sent.MessageID
+				}
 				current.TopicProjection[row.TopicKey] = digestRichText(richText{Text: row.PlainText, Entities: row.Entities})
 			}
 		}
