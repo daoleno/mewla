@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
   },
   serverState: {
     flexShrink: 1,
-    maxWidth: "45%",
+    maxWidth: "62%",
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
