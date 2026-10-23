@@ -81,25 +81,25 @@ type ProcessConsumer struct {
 	Commands     []string          `json:"commands"`
 }
 type TelemetryHistoryPoint struct {
-	SampledAt               time.Time `json:"sampled_at"`
-	State                   string    `json:"state"`
-	MemoryAvailableBytes    *uint64   `json:"memory_available_bytes,omitempty"`
-	MemoryUsedBytes         *uint64   `json:"memory_used_bytes,omitempty"`
-	SwapUsedBytes           *uint64   `json:"swap_used_bytes,omitempty"`
-	Load15                  float64   `json:"load15"`
-	CPUPercent              *float64  `json:"cpu_percent,omitempty"`
-	PSICPUSomeAvg10         *float64  `json:"psi_cpu_some_avg10,omitempty"`
-	PSIMemorySomeAvg10      *float64  `json:"psi_memory_some_avg10,omitempty"`
-	PSIIOSomeAvg10          *float64  `json:"psi_io_some_avg10,omitempty"`
-	DiskReadBytesPerSecond  *float64  `json:"disk_read_bytes_per_second,omitempty"`
-	DiskWriteBytesPerSecond *float64  `json:"disk_write_bytes_per_second,omitempty"`
-	MemoryPressureLevel     string    `json:"memory_pressure_level,omitempty"`
+	SampledAt               time.Time     `json:"sampled_at"`
+	State                   PressureState `json:"state"`
+	MemoryAvailableBytes    *uint64       `json:"memory_available_bytes,omitempty"`
+	MemoryUsedBytes         *uint64       `json:"memory_used_bytes,omitempty"`
+	SwapUsedBytes           *uint64       `json:"swap_used_bytes,omitempty"`
+	Load15                  float64       `json:"load15"`
+	CPUPercent              *float64      `json:"cpu_percent,omitempty"`
+	PSICPUSomeAvg10         *float64      `json:"psi_cpu_some_avg10,omitempty"`
+	PSIMemorySomeAvg10      *float64      `json:"psi_memory_some_avg10,omitempty"`
+	PSIIOSomeAvg10          *float64      `json:"psi_io_some_avg10,omitempty"`
+	DiskReadBytesPerSecond  *float64      `json:"disk_read_bytes_per_second,omitempty"`
+	DiskWriteBytesPerSecond *float64      `json:"disk_write_bytes_per_second,omitempty"`
+	MemoryPressureLevel     string        `json:"memory_pressure_level,omitempty"`
 }
 
 type MachineResourceSnapshot struct {
 	Version   int               `json:"version"`
 	SampledAt time.Time         `json:"sampled_at"`
-	State     string            `json:"state"`
+	State     PressureState     `json:"state"`
 	CPU       *CPUResource      `json:"cpu,omitempty"`
 	Memory    *MemoryResource   `json:"memory,omitempty"`
 	PSI       *PressureSnapshot `json:"psi,omitempty"`
@@ -113,14 +113,39 @@ type MachineResourceSnapshot struct {
 	Unavailable    []string                `json:"unavailable,omitempty"`
 }
 type PressureSignal struct {
-	Name      string  `json:"name"`
-	Value     float64 `json:"value"`
-	Threshold float64 `json:"threshold"`
-	State     string  `json:"state"`
+	Name      string        `json:"name"`
+	Value     float64       `json:"value"`
+	Threshold float64       `json:"threshold"`
+	State     PressureState `json:"state"`
 }
+
+// PressureState is how strained the machine is.
+type PressureState string
+
+const (
+	PressureNormal   PressureState = "normal"
+	PressureElevated PressureState = "elevated"
+	PressureCritical PressureState = "critical"
+)
+
+// Valid reports a state this version defines.
+func (s PressureState) Valid() bool {
+	return s == PressureNormal || s == PressureElevated || s == PressureCritical
+}
+
+func (s PressureState) rank() int {
+	switch s {
+	case PressureCritical:
+		return 2
+	case PressureElevated:
+		return 1
+	}
+	return 0
+}
+
 type ResourcePressureEvent struct {
-	State            string                  `json:"state"`
-	PreviousState    string                  `json:"previous_state"`
+	State            PressureState           `json:"state"`
+	PreviousState    PressureState           `json:"previous_state"`
 	SampledAt        time.Time               `json:"sampled_at"`
 	Crossed          []PressureSignal        `json:"crossed"`
 	Trend            []TelemetryHistoryPoint `json:"trend"`
@@ -306,34 +331,25 @@ func (c ResourceThresholds) Valid() bool {
 
 type PressureMachine struct {
 	Config           ResourceThresholds
-	State            string
-	candidate        string
+	State            PressureState
+	candidate        PressureState
 	since            time.Time
-	lastNotification map[string]time.Time
+	lastNotification map[PressureState]time.Time
 }
 
 func NewPressureMachine(c ResourceThresholds) PressureMachine {
-	return PressureMachine{Config: c, State: "normal", lastNotification: map[string]time.Time{}}
+	return PressureMachine{Config: c, State: PressureNormal, lastNotification: map[PressureState]time.Time{}}
 }
-func pressureRank(s string) int {
-	switch s {
-	case "critical":
-		return 2
-	case "elevated":
-		return 1
-	}
-	return 0
-}
-func (m *PressureMachine) Step(s MachineResourceSnapshot, now time.Time) (string, []PressureSignal, bool) {
+func (m *PressureMachine) Step(s MachineResourceSnapshot, now time.Time) (PressureState, []PressureSignal, bool) {
 	signals := m.signals(s)
 	// A failed platform read is not evidence of recovery.
 	if s.Memory == nil && s.MemoryPressure == nil && (s.CPU == nil || s.CPU.UtilizationPercent == nil) && len(s.Disks) == 0 && (s.PSI == nil || (s.PSI.CPU.Some == nil && s.PSI.Memory.Some == nil && s.PSI.Memory.Full == nil && s.PSI.IO.Full == nil)) {
 		m.candidate = ""
 		return m.State, signals, false
 	}
-	desired := "normal"
+	desired := PressureNormal
 	for _, sig := range signals {
-		if pressureRank(sig.State) > pressureRank(desired) {
+		if sig.State.rank() > desired.rank() {
 			desired = sig.State
 		}
 	}
@@ -347,7 +363,7 @@ func (m *PressureMachine) Step(s MachineResourceSnapshot, now time.Time) (string
 		return m.State, signals, false
 	}
 	duration := time.Duration(m.Config.SustainSeconds) * time.Second
-	if pressureRank(desired) < pressureRank(m.State) {
+	if desired.rank() < m.State.rank() {
 		duration = time.Duration(m.Config.RecoverySeconds) * time.Second
 	}
 	if now.Sub(m.since) < duration {
@@ -355,7 +371,7 @@ func (m *PressureMachine) Step(s MachineResourceSnapshot, now time.Time) (string
 	}
 	// Recovery always gets one event; recurring escalations to the same state
 	// wait out cooldown before publishing another transition.
-	if desired != "normal" && !m.lastNotification[desired].IsZero() && now.Sub(m.lastNotification[desired]) < time.Duration(m.Config.CooldownSeconds)*time.Second {
+	if desired != PressureNormal && !m.lastNotification[desired].IsZero() && now.Sub(m.lastNotification[desired]) < time.Duration(m.Config.CooldownSeconds)*time.Second {
 		return m.State, signals, false
 	}
 	m.State = desired
@@ -368,27 +384,27 @@ func (m *PressureMachine) signals(s MachineResourceSnapshot) []PressureSignal {
 	check := func(name string, value float64, p ThresholdPair, low bool) {
 		// Hysteresis: exiting an active state requires 20% headroom.
 		elevated, critical := p.Elevated, p.Critical
-		if pressureRank(m.State) >= 1 {
+		if m.State.rank() >= 1 {
 			if low {
 				elevated *= 1.2
 			} else {
 				elevated *= 0.8
 			}
 		}
-		if m.State == "critical" {
+		if m.State == PressureCritical {
 			if low {
 				critical *= 1.2
 			} else {
 				critical *= 0.8
 			}
 		}
-		state := ""
+		var state PressureState
 		threshold := elevated
 		if (low && value <= critical) || (!low && value >= critical) {
-			state = "critical"
+			state = PressureCritical
 			threshold = critical
 		} else if (low && value <= elevated) || (!low && value >= elevated) {
-			state = "elevated"
+			state = PressureElevated
 		}
 		if state != "" {
 			signals = append(signals, PressureSignal{name, value, threshold, state})
@@ -401,9 +417,9 @@ func (m *PressureMachine) signals(s MachineResourceSnapshot) []PressureSignal {
 	if s.MemoryPressure != nil {
 		switch s.MemoryPressure.Level {
 		case "warn":
-			signals = append(signals, PressureSignal{"memory.pressure_level", 2, 2, "elevated"})
+			signals = append(signals, PressureSignal{"memory.pressure_level", 2, 2, PressureElevated})
 		case "critical":
-			signals = append(signals, PressureSignal{"memory.pressure_level", 4, 4, "critical"})
+			signals = append(signals, PressureSignal{"memory.pressure_level", 4, 4, PressureCritical})
 		}
 	} else if s.Memory != nil && s.Memory.TotalBytes > 0 {
 		check("memory.available_percent", 100*float64(s.Memory.AvailableBytes)/float64(s.Memory.TotalBytes), c.AvailableMemoryPercent, true)

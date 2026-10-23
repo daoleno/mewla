@@ -310,12 +310,13 @@ func TestMemoryPressureLevelDrivesAlertsWhenAvailableMemoryIsLow(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		level, want string
-		value       float64
-	}{{"warn", "elevated", 2}, {"critical", "critical", 4}} {
+		level string
+		want  PressureState
+		value float64
+	}{{"warn", PressureElevated, 2}, {"critical", PressureCritical, 4}} {
 		machine := NewPressureMachine(config)
 		snap := MachineResourceSnapshot{Memory: lowAvailable, MemoryPressure: &MemoryPressure{Level: tc.level}}
-		var state string
+		var state PressureState
 		var notify, notified bool
 		var signals []PressureSignal
 		for i := 0; i <= 5; i++ {

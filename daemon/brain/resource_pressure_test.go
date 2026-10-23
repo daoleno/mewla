@@ -87,7 +87,7 @@ func TestResourcePressureSupersedesOnlyUnengagedEarlierWork(t *testing.T) {
 	}
 	service := NewService(store, &fakeWatcher{}, nil)
 	now := time.Now().UTC()
-	route := func(state string, at time.Time) string {
+	route := func(state watcher.PressureState, at time.Time) string {
 		_ = service.RouteResourcePressure(watcher.ResourcePressureEvent{State: state, PreviousState: "normal", SampledAt: at, SnapshotEndpoint: "get_resource_telemetry"})
 		return resourcePressureWorkPrefix + at.UTC().Format("20060102T150405.000000000Z")
 	}

@@ -20,7 +20,7 @@ func (s *ResourceSampler) ConfigureResourceFiles(stateDir string) {
 	raw, err := os.ReadFile(s.statePath)
 	if err == nil {
 		var state resourcePressureState
-		if json.Unmarshal(raw, &state) == nil && (state.State == "normal" || state.State == "elevated" || state.State == "critical") {
+		if json.Unmarshal(raw, &state) == nil && state.State.Valid() {
 			s.machine.State = state.State
 			s.pending = state.Pending
 			if state.LastNotification != nil {
@@ -31,9 +31,9 @@ func (s *ResourceSampler) ConfigureResourceFiles(stateDir string) {
 }
 
 type resourcePressureState struct {
-	Pending          []ResourcePressureEvent `json:"pending,omitempty"`
-	State            string                  `json:"state"`
-	LastNotification map[string]time.Time    `json:"last_notification"`
+	Pending          []ResourcePressureEvent     `json:"pending,omitempty"`
+	State            PressureState               `json:"state"`
+	LastNotification map[PressureState]time.Time `json:"last_notification"`
 }
 
 func (s *ResourceSampler) reloadResourceConfig() error {
