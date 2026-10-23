@@ -2489,7 +2489,14 @@ func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
 		return nil, err
 	}
 	windows := make([]tmuxPane, 0, len(onSocket))
+	markers := ownedPaneSetFor(socket, onSocket)
 	for _, win := range onSocket {
+		if markers != nil {
+			if markers[win.target] {
+				windows = append(windows, win)
+			}
+			continue
+		}
 		present, owned, probeErr := probeTmuxTargetOwnershipOn(socket, win.target, true)
 		if probeErr != nil {
 			return nil, probeErr
@@ -2678,29 +2685,11 @@ func capturePaneContentOn(socket, target string) (string, bool, int) {
 	if !isPaneID(target) {
 		return "", false, -1
 	}
-	cmd := tmuxCommand(socket, "capture-pane", "-t", target, "-p", "-S", "-200")
-	out, err := cmd.Output()
+	screen, alive, deadStatus, err := capturePaneWithState(socket, target)
 	if err != nil {
 		return "", false, -1
 	}
-
-	cmdAlive := tmuxCommand(socket, "display-message", "-p", "-t", target, "#{pane_dead}\t#{pane_dead_status}")
-	aliveOut, err := cmdAlive.Output()
-	alive := true
-	deadStatus := -1
-	if err == nil {
-		fields := strings.Split(strings.TrimSpace(string(aliveOut)), "\t")
-		if len(fields) >= 1 && fields[0] == "1" {
-			alive = false
-			if len(fields) >= 2 && strings.TrimSpace(fields[1]) != "" {
-				if status, parseErr := strconv.Atoi(strings.TrimSpace(fields[1])); parseErr == nil {
-					deadStatus = status
-				}
-			}
-		}
-	}
-
-	return string(out), alive, deadStatus
+	return screen, alive, deadStatus
 }
 
 // CapturePaneContent returns a plain-text snapshot of a owned tmux pane.
@@ -4626,13 +4615,20 @@ func listTmuxSessionsOn(socket string) ([]string, error) {
 
 	sessions := make([]string, 0)
 	seen := make(map[string]bool)
+	markers := ownedPaneSetFor(socket, windows)
 	for _, win := range windows {
-		present, owned, probeErr := probeTmuxTargetOwnership(socket, win.target)
-		if probeErr != nil {
-			return nil, probeErr
-		}
-		if !present || !owned {
-			continue
+		if markers != nil {
+			if !markers[win.target] {
+				continue
+			}
+		} else {
+			present, owned, probeErr := probeTmuxTargetOwnership(socket, win.target)
+			if probeErr != nil {
+				return nil, probeErr
+			}
+			if !present || !owned {
+				continue
+			}
 		}
 		sessionName := win.sessionName
 		if sessionName == "" || seen[sessionName] {
