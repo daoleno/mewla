@@ -28,6 +28,8 @@ interface Paths {
 
 const paths = new Map<string, Paths>();
 const directSuppressedUntil = new Map<string, number>();
+const resolving = new Map<string, Promise<string>>();
+const directProbes = new Map<string, Promise<Selection | null>>();
 const SELECTION_TTL_MS = 30_000;
 // A direct address that cannot be verified in this long is treated as
 // unreachable; the relay is already being measured meanwhile.
@@ -45,8 +47,8 @@ function pathsFor(serverId: string): Paths {
   return entry;
 }
 
-function fresh(selection: Selection | undefined): selection is Selection {
-  return !!selection && Date.now() - selection.measuredAt < SELECTION_TTL_MS;
+function fresh(selection: Selection): boolean {
+  return Date.now() - selection.measuredAt < SELECTION_TTL_MS;
 }
 
 /** The path the phone is using for a computer, or null before it has chosen. */
@@ -72,19 +74,36 @@ export async function resolveStoredServerURL(
   }
   const entry = pathsFor(server.id);
   const direct = stillListed(server, entry.direct);
-  if (fresh(direct)) {
+  if (direct && fresh(direct)) {
     entry.current = "direct";
     return rewriteSelection(server, direct);
   }
   const relay = entry.relay;
   if (
     entry.current === "relay" &&
+    relay &&
     fresh(relay) &&
     linkCandidates(server).some((candidate) => candidate.url === relay.remoteURL)
   ) {
     return rewriteSelection(server, relay);
   }
 
+  // Callers that arrive while a choice is being made share it. Tunnels are
+  // keyed per address, so two overlapping races could stop each other's.
+  let flight = resolving.get(server.id);
+  if (!flight) {
+    flight = chooseTransport(server, entry).finally(() =>
+      resolving.delete(server.id),
+    );
+    resolving.set(server.id, flight);
+  }
+  return flight;
+}
+
+async function chooseTransport(
+  server: StoredServer,
+  entry: Paths,
+): Promise<string> {
   // A direct path that worked a moment ago is re-verified for its full budget
   // before the relay is considered; only a path never seen working gets the
   // short grace below.
@@ -193,23 +212,53 @@ async function measureRelay(
   return selection;
 }
 
-// Tries each address the computer published, in parallel, and keeps the first
-// that proves it is the paired daemon. Resolves null, never rejects, within
+// Tries the addresses the computer published and keeps the first that proves
+// it is the paired daemon. Resolves null, never rejects, within
 // DIRECT_PROBE_CAP_MS: an unreachable address must not delay the relay.
-async function probeDirect(
+function probeDirect(
+  server: StoredServer,
+  entry: Paths,
+): Promise<Selection | null> {
+  let probe = directProbes.get(server.id);
+  if (!probe) {
+    probe = verifyDirect(server, entry).finally(() =>
+      directProbes.delete(server.id),
+    );
+    directProbes.set(server.id, probe);
+  }
+  return probe;
+}
+
+async function verifyDirect(
   server: StoredServer,
   entry: Paths,
 ): Promise<Selection | null> {
   const addresses = directAddressesFor(server);
   if (addresses.length === 0) return null;
   if ((directSuppressedUntil.get(server.id) ?? 0) > Date.now()) return null;
-  const verified = stillListed(server, entry.direct);
-  if (fresh(verified)) return verified;
+  const current = stillListed(server, entry.direct);
+  if (current && fresh(current)) return current;
 
-  const winner = await firstVerified(
-    addresses.map((address) => probeAddress(server, address)),
-    (late) => void stopNativePinnedTunnel(late.tunnelKey).catch(() => undefined),
-  );
+  let winner: Selection | null = null;
+  let rest = addresses;
+  if (current) {
+    // The path in use is checked on its own first: moving to another address
+    // would close the tunnel the live connection is carried on.
+    const inUse = addresses.find((address) => directURL(address) === current.remoteURL);
+    rest = addresses.filter((address) => address !== inUse);
+    winner = inUse ? await probeAddress(server, inUse, current) : null;
+    if (!winner) delete entry.direct;
+  }
+  if (!winner) {
+    winner = await firstVerified(
+      rest.map((address) => probeAddress(server, address)),
+      (late) => {
+        if (late.tunnelKey !== entry.direct?.tunnelKey) {
+          void stopNativePinnedTunnel(late.tunnelKey).catch(() => undefined);
+        }
+      },
+    );
+  }
   if (!winner) {
     directSuppressedUntil.set(server.id, Date.now() + DIRECT_SUPPRESS_MS);
     return null;
@@ -219,21 +268,30 @@ async function probeDirect(
   return winner;
 }
 
+function directURL(address: DirectAddress): string {
+  return `wss://${address.host}:${address.port}`;
+}
+
+// `inUse` is the verified path a live connection is carried on. A re-check of
+// it that is merely slow keeps it; only a connect error, a bad answer or a
+// missing one drops it, because closing it would end that connection.
 async function probeAddress(
   server: StoredServer,
   address: DirectAddress,
+  inUse?: Selection,
 ): Promise<Selection | null> {
   const tunnelKey = `server:${server.id}:direct:${address.host}:${address.port}`;
   const abort = new AbortController();
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const cap = new Promise<null>((resolve) => {
+  const cap = new Promise<Selection | null>((resolve) => {
     timer = setTimeout(() => {
       timedOut = true;
       abort.abort();
-      resolve(null);
+      resolve(inUse ? { ...inUse, measuredAt: Date.now() } : null);
     }, DIRECT_PROBE_CAP_MS);
   });
+  const keepOpen = () => timedOut && !!inUse;
   const attempt = (async (): Promise<Selection | null> => {
     // The TLS stream is pinned to the computer's transport key before a byte
     // of HTTP flows, and the challenge below ties it to the daemon key. Only
@@ -246,19 +304,19 @@ async function probeAddress(
       "measure",
     );
     if (timedOut || !(await answersChallenge(server, tunnel.port, abort.signal))) {
-      await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
+      if (!keepOpen()) await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
       return null;
     }
     return {
       path: address.kind,
-      remoteURL: `wss://${address.host}:${address.port}`,
+      remoteURL: directURL(address),
       localOrigin: `ws://127.0.0.1:${tunnel.port}`,
       tunnelKey,
       rttMs: tunnel.rttMs,
       measuredAt: Date.now(),
     };
   })().catch(async () => {
-    await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
+    if (!keepOpen()) await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
     return null;
   });
   try {
@@ -308,6 +366,7 @@ function firstVerified<T>(
   return new Promise((resolve) => {
     let pending = attempts.length;
     let won = false;
+    if (pending === 0) resolve(null);
     for (const attempt of attempts) {
       attempt.then(
         (result) => {
@@ -334,7 +393,7 @@ function stillListed(
 ): Selection | undefined {
   if (!selection || selection.path === "relay") return undefined;
   return directAddressesFor(server).some(
-    (address) => selection.remoteURL === `wss://${address.host}:${address.port}`,
+    (address) => selection.remoteURL === directURL(address),
   )
     ? selection
     : undefined;
