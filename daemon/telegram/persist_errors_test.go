@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -35,23 +34,10 @@ func captureLog(t *testing.T) *logSink {
 	return sink
 }
 
-// breakStateFile makes every later durable write fail: a rename onto a
-// directory cannot succeed.
-func breakStateFile(t *testing.T, root string) {
-	t.Helper()
-	path := filepath.Join(root, "telegram", "state.json")
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Mkdir(path, 0o700); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestSwallowedStoreWritesAreReportedOncePerCause(t *testing.T) {
-	manager, _, _, root := configuredManager(t)
+	manager, _, _, _ := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	breakStateFile(t, root)
+	failWrites(t, manager.store)
 	sink := captureLog(t)
 
 	for range 3 {
@@ -68,24 +54,14 @@ func TestSwallowedStoreWritesAreReportedOncePerCause(t *testing.T) {
 }
 
 func TestReportedStoreWriteFailureClearsAfterASuccess(t *testing.T) {
-	manager, _, _, root := configuredManager(t)
+	manager, _, _, _ := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
-	path := filepath.Join(root, "telegram", "state.json")
-	original, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	breakStateFile(t, root)
+	restore := failWrites(t, manager.store)
 	sink := captureLog(t)
 	manager.recordError("one")
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, original, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	restore()
 	manager.recordError("two") // succeeds and re-arms the report
-	breakStateFile(t, root)
+	failWrites(t, manager.store)
 	manager.recordError("three")
 	if n := strings.Count(sink.String(), "WARN telegram record-error:"); n != 2 {
 		t.Fatalf("a failure after a recovery must be reported again; logged %d:\n%s", n, sink.String())
@@ -93,7 +69,7 @@ func TestReportedStoreWriteFailureClearsAfterASuccess(t *testing.T) {
 }
 
 func TestDeliveryOutcomeThatCannotBeSavedIsReported(t *testing.T) {
-	manager, _, api, root := configuredManager(t)
+	manager, _, api, _ := configuredManager(t)
 	bindOwner(t, manager, 1, 10, 10)
 	manager.enqueueText("ack:out", "hello", 0)
 	api.nextSendErr = &APIError{Code: 400, description: "Bad Request: chat not found"}
@@ -104,7 +80,7 @@ func TestDeliveryOutcomeThatCannotBeSavedIsReported(t *testing.T) {
 	go func() { done <- manager.deliverOne(t.Context()) }()
 	<-api.sendStarted
 	// The row is already marked dispatching; saving its terminal state fails.
-	breakStateFile(t, root)
+	failWrites(t, manager.store)
 	close(api.blockSend)
 	<-done
 	if !strings.Contains(sink.String(), "WARN telegram record-delivery-outcome:") {
