@@ -27,8 +27,8 @@ func capture(t *testing.T, client *Client, reply string) *map[string]any {
 
 func TestSendLiveIsDataOnlyHighPriorityAndStringly(t *testing.T) {
 	client := New()
-	client.SetRegistration("ExponentPushToken[abc]", "server-1")
-	client.SetLiveCapable(true)
+	client.SetRegistration("dev-1", "ExponentPushToken[abc]", "server-1")
+	client.SetLiveCapable("dev-1", true)
 	sent := capture(t, client, `{"data":{"status":"ok","id":"t1"}}`)
 
 	err := client.SendLive(map[string]any{"payload": `{"kind":"running"}`, "epoch": "1000", "seq": 7})
@@ -71,15 +71,15 @@ func TestSendLiveIsGatedByTheDeviceCapability(t *testing.T) {
 	if err := client.SendLive(map[string]any{"seq": "1"}); !errors.Is(err, ErrNoRegistration) {
 		t.Fatalf("without a device: %v", err)
 	}
-	client.SetRegistration("tok", "server-1")
+	client.SetRegistration("dev-1", "tok", "server-1")
 	if err := client.SendLive(map[string]any{"seq": "1"}); !errors.Is(err, ErrNotLiveCapable) {
 		t.Fatalf("a device that never declared live state must get nothing: %v", err)
 	}
-	client.SetLiveCapable(true)
+	client.SetLiveCapable("dev-1", true)
 	if err := client.SendLive(map[string]any{"seq": "1"}); err != nil {
 		t.Fatal(err)
 	}
-	client.SetLiveCapable(false) // re-registering without the flag turns it off
+	client.SetLiveCapable("dev-1", false) // re-registering without the flag turns it off
 	if err := client.SendLive(map[string]any{"seq": "2"}); !errors.Is(err, ErrNotLiveCapable) {
 		t.Fatalf("flag cleared: %v", err)
 	}
@@ -90,8 +90,8 @@ func TestSendLiveIsGatedByTheDeviceCapability(t *testing.T) {
 
 func TestSendLiveDropsDeadTokenAndReportsCredentials(t *testing.T) {
 	client := New()
-	client.SetRegistration("tok", "server-1")
-	client.SetLiveCapable(true)
+	client.SetRegistration("dev-1", "tok", "server-1")
+	client.SetLiveCapable("dev-1", true)
 	capture(t, client, `{"data":{"status":"error","message":"gone","details":{"error":"DeviceNotRegistered"}}}`)
 	if err := client.SendLive(map[string]any{"seq": "1"}); err == nil {
 		t.Fatal("a rejected ticket is an error")
@@ -100,9 +100,36 @@ func TestSendLiveDropsDeadTokenAndReportsCredentials(t *testing.T) {
 		t.Fatal("a dead token must be dropped")
 	}
 
-	client.SetRegistration("tok2", "server-1")
+	client.SetRegistration("dev-1", "tok2", "server-1")
 	capture(t, client, `{"data":{"status":"error","message":"no key","details":{"error":"InvalidCredentials"}}}`)
 	if err := client.SendLive(map[string]any{"seq": "2"}); !errors.Is(err, ErrCredentials) {
 		t.Fatalf("error = %v, want ErrCredentials", err)
+	}
+}
+
+func TestSendLiveGoesOnlyToDevicesThatAskedAndSurvivesReRegistration(t *testing.T) {
+	client := New()
+	var tokens []string
+	client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(request.Body)
+		var sent map[string]any
+		_ = json.Unmarshal(body, &sent)
+		tokens = append(tokens, sent["to"].(string))
+		return pushResponse(http.StatusOK, `{"data":{"status":"ok"}}`), nil
+	})
+	client.SetRegistration("phone", "tok-phone", "s")
+	client.SetRegistration("tablet", "tok-tablet", "s")
+	client.SetLiveCapable("phone", true)
+	// register_push reaches the live observer before the registration itself.
+	client.SetRegistration("phone", "tok-phone", "s")
+	if err := client.SendLive(map[string]any{"seq": "1"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 || tokens[0] != "tok-phone" {
+		t.Fatalf("live went to %v, want only the phone", tokens)
+	}
+	client.ForgetDevice("phone")
+	if err := client.SendLive(map[string]any{"seq": "2"}); !errors.Is(err, ErrNotLiveCapable) {
+		t.Fatalf("a forgotten device keeps no live state: %v", err)
 	}
 }

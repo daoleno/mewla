@@ -51,7 +51,10 @@ type Client struct {
 	// registrations are the paired devices' Expo push tokens, by device ID: a
 	// notification goes to every phone that asked for them.
 	registrations map[string]registration
-	observer      Observer
+	// liveDevices are the devices that asked for live state; a re-registration
+	// does not change it, and ForgetDevice drops it.
+	liveDevices map[string]bool
+	observer    Observer
 
 	receiptDelays    []time.Duration
 	credentialLogged map[string]bool
@@ -101,6 +104,7 @@ func (c *Client) ForgetDevice(deviceID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.registrations, deviceID)
+	delete(c.liveDevices, deviceID)
 }
 
 // HasToken returns true if any device has a push token registered.
