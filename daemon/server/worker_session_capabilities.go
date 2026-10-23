@@ -25,6 +25,10 @@ type workerSessionWireCapabilities struct {
 
 type workerSessionWire struct {
 	*classifier.Worker
+	// Provider is the adapter family of the Worker's executor (claude, codex,
+	// cursor, ...), empty for a plain terminal. The app presents the Worker by
+	// it instead of reading the agent out of the command line.
+	Provider     string                        `json:"provider,omitempty"`
 	Capabilities workerSessionWireCapabilities `json:"capabilities"`
 }
 
@@ -37,8 +41,15 @@ func (s *Server) workerSessionWire(worker *classifier.Worker) *workerSessionWire
 		managed = true
 		activeSwitch = true
 	}
+	executorID, provider := s.workerExecutor(worker)
+	if executorID != worker.ExecutorID {
+		named := *worker
+		named.ExecutorID = executorID
+		worker = &named
+	}
 	return &workerSessionWire{
-		Worker: worker,
+		Worker:   worker,
+		Provider: provider,
 		Capabilities: workerSessionWireCapabilities{
 			StructuredEvents:         s.workerSupportsStructuredEvents(worker),
 			ModelProfileManaged:      managed,
@@ -216,4 +227,22 @@ func (s *Server) agentLevels(worker *classifier.Worker) map[string]string {
 		return nil
 	}
 	return levels(worker)
+}
+
+// workerExecutor names the executor a Worker runs and its provider. A Worker
+// started before panes recorded their executor is placed by the configured
+// executor that starts the same program; no other source is consulted, so an
+// unclaimed command is a plain terminal.
+func (s *Server) workerExecutor(worker *classifier.Worker) (executorID, provider string) {
+	if s == nil || s.execs == nil || worker == nil {
+		return "", ""
+	}
+	executorID = worker.ExecutorID
+	if executorID == "" {
+		executorID = s.execs.IDForCommand(worker.Command)
+	}
+	if executor, ok := s.execs.WorkerExecutor(executorID); ok {
+		return executorID, executor.Provider
+	}
+	return executorID, ""
 }
