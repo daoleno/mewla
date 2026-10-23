@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +41,72 @@ func writeRows(t *testing.T, path string, rows ...fixtureRow) {
 	}
 }
 
+var fixtureSourceName = regexp.MustCompile(`^messages(-[0-9]+)?\.jsonl$`)
+
+// fileSource serves the fixture jsonl files as chat sources: archives sorted
+// by name, then messages.jsonl; a row's Seq is its 1-based line number, and a
+// trailing line without a newline is not a row yet.
+type fileSource struct{ dir string }
+
+func (f fileSource) ChatSources() []string {
+	entries, _ := os.ReadDir(f.dir)
+	var archives []string
+	live := false
+	for _, entry := range entries {
+		switch name := entry.Name(); {
+		case name == "messages.jsonl":
+			live = true
+		case fixtureSourceName.MatchString(name):
+			archives = append(archives, name)
+		}
+	}
+	sort.Strings(archives)
+	if live {
+		archives = append(archives, "messages.jsonl")
+	}
+	return archives
+}
+
+func (f fileSource) ChatRows(name string, after int64, limit int) ([]ChatRow, error) {
+	raw, err := os.ReadFile(filepath.Join(f.dir, name))
+	if err != nil {
+		return nil, err
+	}
+	var rows []ChatRow
+	for index, line := range strings.SplitAfter(string(raw), "\n") {
+		if !strings.HasSuffix(line, "\n") || int64(index+1) <= after {
+			continue
+		}
+		rows = append(rows, ChatRow{Seq: int64(index + 1), Body: []byte(line)})
+		if len(rows) == limit {
+			break
+		}
+	}
+	return rows, nil
+}
+
+// memSource is a source whose rows the test sets directly.
+type memSource struct{ rows []ChatRow }
+
+func (m *memSource) ChatSources() []string { return []string{"live"} }
+
+func (m *memSource) ChatRows(_ string, after int64, limit int) ([]ChatRow, error) {
+	var out []ChatRow
+	for _, row := range m.rows {
+		if row.Seq > after && len(out) < limit {
+			out = append(out, row)
+		}
+	}
+	return out, nil
+}
+
+func row(seq int64, id, at, body string) ChatRow {
+	raw, _ := json.Marshal(map[string]any{
+		"id": id, "role": "user", "kind": "user_message", "body": body, "created_at": at, "session_id": "s",
+	})
+	return ChatRow{Seq: seq, Body: raw}
+}
+
 func openFixture(t *testing.T) (*Index, string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -52,7 +120,7 @@ func openFixture(t *testing.T) (*Index, string) {
 
 func refresh(t *testing.T, ix *Index, dir string) RefreshStats {
 	t.Helper()
-	stats, err := ix.Refresh(context.Background(), dir)
+	stats, err := ix.Refresh(context.Background(), fileSource{dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +252,7 @@ func TestIncrementalCursor(t *testing.T) {
 	if stats := refresh(t, ix, dir); stats.Messages != 1 {
 		t.Fatalf("first refresh = %+v", stats)
 	}
-	if stats := refresh(t, ix, dir); stats.Messages != 0 || stats.Rescans != 0 {
+	if stats := refresh(t, ix, dir); stats.Messages != 0 {
 		t.Fatalf("idle refresh = %+v", stats)
 	}
 
@@ -198,7 +266,7 @@ func TestIncrementalCursor(t *testing.T) {
 	file, _ = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
 	_, _ = file.WriteString("ta\",\"created_at\":\"2026-10-05T10:01:00Z\"}\n")
 	_ = file.Close()
-	if stats := refresh(t, ix, dir); stats.Messages != 1 || stats.Rescans != 0 {
+	if stats := refresh(t, ix, dir); stats.Messages != 1 {
 		t.Fatalf("completed line refresh = %+v", stats)
 	}
 	if got := ids(search(t, ix, SearchOptions{Query: "second beta"})); got != "2" {
@@ -206,36 +274,44 @@ func TestIncrementalCursor(t *testing.T) {
 	}
 }
 
-func TestRewrittenFileRescansWithoutDuplicates(t *testing.T) {
-	ix, dir := openFixture(t)
-	path := filepath.Join(dir, "messages.jsonl")
-	writeRows(t, path,
-		fixtureRow{id: "1", kind: "user_message", at: "2026-10-05T10:00:00Z", body: "keep gamma one"},
-		fixtureRow{id: "2", kind: "user_message", at: "2026-10-05T10:01:00Z", body: "keep gamma two"})
-	refresh(t, ix, dir)
-
-	// Atomic rewrite (as rewriteTimelineLocked does) with different content.
-	if err := os.Remove(path); err != nil {
+func TestRewrittenRowsAreReadAgainWithoutDuplicates(t *testing.T) {
+	ix, _ := openFixture(t)
+	src := &memSource{rows: []ChatRow{
+		row(1, "1", "2026-10-05T10:00:00Z", "keep gamma one"),
+		row(2, "2", "2026-10-05T10:01:00Z", "keep gamma two"),
+	}}
+	if _, err := ix.Refresh(context.Background(), src); err != nil {
 		t.Fatal(err)
 	}
-	writeRows(t, path,
-		fixtureRow{id: "2", kind: "user_message", at: "2026-10-05T10:01:00Z", body: "keep gamma two"},
-		fixtureRow{id: "3", kind: "user_message", at: "2026-10-05T10:02:00Z", body: "keep gamma three"},
-		fixtureRow{id: "4", kind: "user_message", at: "2026-10-05T10:03:00Z", body: "keep gamma four"})
-	stats := refresh(t, ix, dir)
-	if stats.Rescans != 1 || stats.Messages != 2 {
-		t.Fatalf("rewrite refresh = %+v", stats)
+
+	// The timeline rewrote a row: the old one is gone and a new one took a
+	// later position, as moving a Work card does.
+	src.rows = []ChatRow{
+		row(3, "2", "2026-10-05T10:01:00Z", "keep gamma two"),
+		row(4, "3", "2026-10-05T10:02:00Z", "keep gamma three"),
+		row(5, "4", "2026-10-05T10:03:00Z", "keep gamma four"),
+	}
+	stats, err := ix.Refresh(context.Background(), src)
+	if err != nil || stats.Messages != 2 {
+		t.Fatalf("rewrite refresh = %+v %v", stats, err)
 	}
 	if got := ids(search(t, ix, SearchOptions{Query: "keep gamma", Limit: 10})); got != "4,3,2,1" {
 		t.Fatalf("after rewrite = %q", got)
 	}
-
-	// Shrunk file also rescans.
-	if err := os.WriteFile(path, nil, 0o600); err != nil {
-		t.Fatal(err)
+	if stats, err := ix.Refresh(context.Background(), src); err != nil || stats.Messages != 0 {
+		t.Fatalf("idle refresh = %+v %v", stats, err)
 	}
-	if stats := refresh(t, ix, dir); stats.Messages != 0 {
-		t.Fatalf("shrunk refresh = %+v", stats)
+}
+
+func TestRefreshReadsMoreThanOneBatch(t *testing.T) {
+	ix, _ := openFixture(t)
+	src := &memSource{}
+	for i := int64(1); i <= refreshBatch*2+7; i++ {
+		src.rows = append(src.rows, row(i, fmt.Sprintf("m%d", i), "2026-10-05T10:00:00Z", fmt.Sprintf("batch row %d", i)))
+	}
+	stats, err := ix.Refresh(context.Background(), src)
+	if err != nil || stats.Messages != refreshBatch*2+7 {
+		t.Fatalf("refresh = %+v %v", stats, err)
 	}
 }
 
@@ -251,7 +327,7 @@ func TestArchivesAreIndexedOnceAndLiveFileWins(t *testing.T) {
 		fixtureRow{id: "backup", kind: "user_message", at: "2026-10-02T00:00:00Z", body: "backup delta copy"})
 
 	stats := refresh(t, ix, dir)
-	if stats.Files != 2 || stats.Messages != 3 {
+	if stats.Messages != 3 {
 		t.Fatalf("stats = %+v", stats)
 	}
 	if got := ids(search(t, ix, SearchOptions{Query: "delta"})); got != "live,arch,shared" {
@@ -386,7 +462,7 @@ func TestSchemaVersionMismatchRebuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeRows(t, filepath.Join(dir, "messages.jsonl"), fixtureRow{id: "1", kind: "user_message", at: "2026-10-01T00:00:00Z", body: "stale row"})
-	if _, err := ix.Refresh(context.Background(), dir); err != nil {
+	if _, err := ix.Refresh(context.Background(), fileSource{dir}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := ix.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion+1)); err != nil {
@@ -402,7 +478,7 @@ func TestSchemaVersionMismatchRebuilds(t *testing.T) {
 	if got := search(t, ix, SearchOptions{Query: "stale row"}); len(got) != 0 {
 		t.Fatalf("old index survived: %+v", got)
 	}
-	if stats, err := ix.Refresh(context.Background(), dir); err != nil || stats.Messages != 1 {
+	if stats, err := ix.Refresh(context.Background(), fileSource{dir}); err != nil || stats.Messages != 1 {
 		t.Fatalf("rebuild = %+v %v", stats, err)
 	}
 	info, err := os.Stat(path)

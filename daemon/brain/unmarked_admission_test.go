@@ -61,7 +61,7 @@ func TestFailedPreparationProjectionDoesNotStrandAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	failure := errors.New("projection write failed")
-	s.writePresentation = func(string, any) error { return failure }
+	s.presentationFault = func() error { return failure }
 	candidate := delegatedSubmissionCandidate(w.ID, "session", "turn:failed-prepare", "input", time.Now().UTC())
 	candidate.SignalProtocol = true
 	if _, _, err = s.PrepareInputAdmission(candidate); !errors.Is(err, failure) {

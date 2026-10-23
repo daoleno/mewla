@@ -2,7 +2,6 @@ package brain
 
 import (
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -75,9 +74,7 @@ func testAdmissionProjectionOrder(t *testing.T, step time.Duration, removePresen
 	}
 	for attempt := 0; attempt < 12; attempt++ {
 		if removePresentation {
-			if err := os.Remove(store.presentationPath()); err != nil {
-				t.Fatal(err)
-			}
+			dropPresentationRows(t, store)
 		}
 		reopened, err := NewStore(root)
 		if err != nil {

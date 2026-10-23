@@ -304,11 +304,11 @@ func TestHostTranscriptCaptureWriteFailureKeepsCheckpoint(t *testing.T) {
 	}
 	appliedRevision := state.revision
 
-	messages := store.messagesPath()
-	if err := os.Chmod(messages, 0o400); err != nil {
+	// A timeline that refuses writes, as a full or read-only disk would.
+	if _, err := store.db.Exec(`CREATE TRIGGER refuse_timeline BEFORE INSERT ON timeline
+		BEGIN SELECT RAISE(ABORT, 'timeline is read-only'); END`); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = os.Chmod(messages, 0o600) }()
 	writePiTranscriptFixture(t, transcript, "capture-session", "public fixture question", "first captured reply", "second captured reply")
 	if _, err := service.captureHostTranscript(reader, state); err == nil {
 		t.Fatal("materialize into a read-only timeline unexpectedly succeeded")
@@ -316,7 +316,7 @@ func TestHostTranscriptCaptureWriteFailureKeepsCheckpoint(t *testing.T) {
 	if state.revision != appliedRevision {
 		t.Fatalf("checkpoint advanced after a failed write: %q -> %q", appliedRevision, state.revision)
 	}
-	if err := os.Chmod(messages, 0o600); err != nil {
+	if _, err := store.db.Exec(`DROP TRIGGER refuse_timeline`); err != nil {
 		t.Fatal(err)
 	}
 	captured, err = service.captureHostTranscript(reader, state)

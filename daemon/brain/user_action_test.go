@@ -83,7 +83,8 @@ func TestWorkQuestionAndChoicesProjectOnTheSlip(t *testing.T) {
 		t.Fatalf("question did not survive reopen: %+v err=%v", persisted, err)
 	}
 	empty := ""
-	cleared, err := store.UpdateWork(item.ID, WorkUpdate{Question: &empty})
+	// Only one Store may own a state directory: the reopened one is the owner now.
+	cleared, err := reopened.UpdateWork(item.ID, WorkUpdate{Question: &empty})
 	if err != nil || cleared.Question != "" || cleared.Choices != nil || cleared.QuestionAt != nil {
 		t.Fatalf("empty question must clear choices: %+v err=%v", cleared, err)
 	}

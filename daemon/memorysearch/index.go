@@ -1,7 +1,8 @@
-// Package memorysearch indexes Brain's visible chat (messages.jsonl and its
-// archives) into a SQLite FTS5 file so Brain can look up what the user said or
-// decided without guessing. The chat log stays the source of truth: the index
-// is rebuilt from it whenever the schema or redaction rules change.
+// Package memorysearch indexes Brain's visible chat (the timeline in
+// brain.db and its archive) into a SQLite FTS5 file so Brain can look up what
+// the user said or decided without guessing. The chat log stays the source of
+// truth: the index is rebuilt from it whenever the schema or redaction rules
+// change.
 //
 // Only visible text is indexed: the user's messages, Brain's replies and Work
 // result cards. Tool output and thinking never enter the log, so they never
@@ -16,11 +17,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,11 +28,10 @@ import (
 
 // schemaVersion is stored in PRAGMA user_version. Bump it when the schema or
 // Redact changes so the next open discards the index and rebuilds it.
-const schemaVersion = 2
+const schemaVersion = 3
 
-// cursorProbe is how many bytes before the cursor are hashed to detect that a
-// file was rewritten or replaced rather than appended to.
-const cursorProbe = 256
+// refreshBatch is how many chat rows one Refresh transaction reads.
+const refreshBatch = 500
 
 // maxCandidates bounds the rows one search tier reads before deduplication.
 const maxCandidates = 5000
@@ -51,7 +49,19 @@ const (
 	WhoContext = "context"
 )
 
-var sourceName = regexp.MustCompile(`^messages(-[0-9]+)?\.jsonl$`)
+// ChatRow is one stored chat row: its position in its source and its JSON.
+type ChatRow struct {
+	Seq  int64
+	Body []byte
+}
+
+// Source is where the chat lives. Sources are read in the order ChatSources
+// names them (archives before the live timeline), each from a position that
+// only grows: a row appended later has a larger Seq.
+type Source interface {
+	ChatSources() []string
+	ChatRows(source string, after int64, limit int) ([]ChatRow, error)
+}
 
 // Index is one open index file. It is not safe for concurrent use; callers
 // serialize Refresh and queries.
@@ -118,8 +128,8 @@ func openFile(path string) (*Index, error) {
 
 func (ix *Index) createSchema() error {
 	stmts := []string{
-		`CREATE TABLE files(
-			path TEXT PRIMARY KEY, off INTEGER NOT NULL, head TEXT NOT NULL, tail TEXT NOT NULL)`,
+		`CREATE TABLE cursors(
+			source TEXT PRIMARY KEY, seq INTEGER NOT NULL)`,
 		`CREATE TABLE msg(
 			seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, at INTEGER NOT NULL,
 			who TEXT NOT NULL, work_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL,
@@ -146,50 +156,26 @@ func (ix *Index) Close() error {
 
 // RefreshStats reports what one Refresh did.
 type RefreshStats struct {
-	Files    int
-	Rescans  int
 	Messages int
 }
 
-// Refresh reads whatever was appended to the chat log files in stateDir since
-// the last call. Archives are read before messages.jsonl; ids are unique, so
-// a message that appears in both is stored once.
-func (ix *Index) Refresh(ctx context.Context, stateDir string) (RefreshStats, error) {
+// Refresh reads whatever src gained since the last call. Archives are read
+// before the live timeline; ids are unique, so a message that appears in both
+// is stored once, and a row the source rewrote under a new position is read
+// again and ignored.
+func (ix *Index) Refresh(ctx context.Context, src Source) (RefreshStats, error) {
 	var stats RefreshStats
-	entries, err := os.ReadDir(stateDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return stats, nil
+	for _, name := range src.ChatSources() {
+		for {
+			added, more, err := ix.refreshSource(ctx, src, name)
+			stats.Messages += added
+			if err != nil {
+				return stats, fmt.Errorf("index %s: %w", name, err)
+			}
+			if !more {
+				break
+			}
 		}
-		return stats, err
-	}
-	var archives []string
-	live := ""
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !sourceName.MatchString(name) {
-			continue
-		}
-		if name == "messages.jsonl" {
-			live = name
-		} else {
-			archives = append(archives, name)
-		}
-	}
-	sort.Strings(archives)
-	if live != "" {
-		archives = append(archives, live)
-	}
-	for _, name := range archives {
-		stats.Files++
-		rescan, added, err := ix.refreshFile(ctx, filepath.Join(stateDir, name))
-		if err != nil {
-			return stats, fmt.Errorf("index %s: %w", name, err)
-		}
-		if rescan {
-			stats.Rescans++
-		}
-		stats.Messages += added
 	}
 	return stats, nil
 }
@@ -206,59 +192,27 @@ type timelineRow struct {
 	BrainAdmission bool `json:"brain_admission"`
 }
 
-func (ix *Index) refreshFile(ctx context.Context, path string) (rescan bool, added int, err error) {
-	file, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, 0, nil
-		}
-		return false, 0, err
-	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return false, 0, err
-	}
-
-	var off int64
-	var head, tail string
-	row := ix.db.QueryRowContext(ctx, `SELECT off, head, tail FROM files WHERE path = ?`, path)
-	switch err := row.Scan(&off, &head, &tail); {
+// refreshSource indexes one batch of src's rows after the stored cursor and
+// moves the cursor past it in the same transaction. more reports a full batch.
+func (ix *Index) refreshSource(ctx context.Context, src Source, name string) (added int, more bool, err error) {
+	var cursor int64
+	switch err := ix.db.QueryRowContext(ctx, `SELECT seq FROM cursors WHERE source = ?`, name).Scan(&cursor); {
 	case errors.Is(err, sql.ErrNoRows):
-		off = 0
 	case err != nil:
-		return false, 0, err
-	default:
-		if off > info.Size() || !cursorMatches(file, off, head, tail) {
-			// Shrunk or rewritten: read it all again. Stored ids are kept.
-			off, rescan = 0, true
-		}
+		return 0, false, err
 	}
-	if off == info.Size() {
-		return rescan, 0, nil
+	rows, err := src.ChatRows(name, cursor, refreshBatch)
+	if err != nil || len(rows) == 0 {
+		return 0, false, err
 	}
-
-	if _, err := file.Seek(off, io.SeekStart); err != nil {
-		return rescan, 0, err
-	}
-	data, err := io.ReadAll(io.LimitReader(file, info.Size()-off))
-	if err != nil {
-		return rescan, 0, err
-	}
-	// Only whole lines count: a writer may be mid-append.
-	end := strings.LastIndexByte(string(data), '\n') + 1
-	if end == 0 {
-		return rescan, 0, nil
-	}
-	data = data[:end]
 
 	conn, err := ix.db.Conn(ctx)
 	if err != nil {
-		return rescan, 0, err
+		return 0, false, err
 	}
 	defer conn.Close()
 	if _, err := conn.ExecContext(ctx, `BEGIN IMMEDIATE`); err != nil {
-		return rescan, 0, err
+		return 0, false, err
 	}
 	committed := false
 	defer func() {
@@ -267,12 +221,9 @@ func (ix *Index) refreshFile(ctx context.Context, path string) (rescan bool, add
 		}
 	}()
 
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
+	for _, row := range rows {
 		var item timelineRow
-		if json.Unmarshal([]byte(line), &item) != nil {
+		if json.Unmarshal(row.Body, &item) != nil {
 			continue
 		}
 		who, ok := whoOf(item)
@@ -293,37 +244,31 @@ func (ix *Index) refreshFile(ctx context.Context, path string) (rescan bool, add
 			 ON CONFLICT(id) DO NOTHING`,
 			item.ID, at.UnixNano(), who, strings.TrimSpace(item.WorkID), body, dedupeKey(who, body), backfilled)
 		if err != nil {
-			return rescan, added, err
+			return added, false, err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			continue
 		}
 		seq, err := res.LastInsertId()
 		if err != nil {
-			return rescan, added, err
+			return added, false, err
 		}
 		if _, err := conn.ExecContext(ctx, `INSERT INTO msg_fts(rowid, body) VALUES(?,?)`, seq, body); err != nil {
-			return rescan, added, err
+			return added, false, err
 		}
 		added++
 	}
-
-	newOff := off + int64(end)
-	newHead, newTail, err := cursorHashes(file, newOff)
-	if err != nil {
-		return rescan, added, err
-	}
+	last := rows[len(rows)-1].Seq
 	if _, err := conn.ExecContext(ctx,
-		`INSERT INTO files(path, off, head, tail) VALUES(?,?,?,?)
-		 ON CONFLICT(path) DO UPDATE SET off=excluded.off, head=excluded.head, tail=excluded.tail`,
-		path, newOff, newHead, newTail); err != nil {
-		return rescan, added, err
+		`INSERT INTO cursors(source, seq) VALUES(?,?)
+		 ON CONFLICT(source) DO UPDATE SET seq=excluded.seq`, name, last); err != nil {
+		return added, false, err
 	}
 	if _, err := conn.ExecContext(ctx, `COMMIT`); err != nil {
-		return rescan, added, err
+		return added, false, err
 	}
 	committed = true
-	return rescan, added, nil
+	return added, len(rows) == refreshBatch, nil
 }
 
 // isBackfilled reports a user row Brain's provider transcript wrote into the
@@ -388,31 +333,3 @@ func dedupeKey(who, body string) string {
 
 // cursorHashes fingerprints the start of the file and the bytes just before
 // off. A file replaced or rewritten in place almost surely changes one.
-func cursorHashes(file *os.File, off int64) (head, tail string, err error) {
-	if off <= 0 {
-		return "", "", nil
-	}
-	if head, err = hashRange(file, 0, min(off, cursorProbe)); err != nil {
-		return "", "", err
-	}
-	start := max(off-cursorProbe, 0)
-	tail, err = hashRange(file, start, off-start)
-	return head, tail, err
-}
-
-func cursorMatches(file *os.File, off int64, head, tail string) bool {
-	if off == 0 {
-		return true
-	}
-	gotHead, gotTail, err := cursorHashes(file, off)
-	return err == nil && gotHead == head && gotTail == tail
-}
-
-func hashRange(file *os.File, start, length int64) (string, error) {
-	buf := make([]byte, length)
-	if _, err := file.ReadAt(buf, start); err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(buf)
-	return hex.EncodeToString(sum[:8]), nil
-}

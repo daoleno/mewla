@@ -56,11 +56,13 @@ func TestHandleMemorySearchAndShow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rows := `{"id":"u1","session_id":"s","role":"user","kind":"user_message","body":"不要用写死的规则去优化","created_at":"2026-10-05T17:55:56Z"}
-{"id":"b1","session_id":"s","role":"assistant","kind":"assistant_message","body":"那条我撤回","created_at":"2026-10-05T17:56:08Z"}
-`
-	if err := os.WriteFile(filepath.Join(store.StateDir(), "messages.jsonl"), []byte(rows), 0o600); err != nil {
-		t.Fatal(err)
+	for _, item := range []brain.TimelineItem{
+		{ID: "u1", ThreadID: "t", SessionID: "s", Role: "user", Kind: "user_message", Body: "不要用写死的规则去优化", CreatedAt: time.Date(2026, 10, 5, 17, 55, 56, 0, time.UTC)},
+		{ID: "b1", ThreadID: "t", SessionID: "s", Role: "assistant", Kind: "assistant_message", Body: "那条我撤回", CreatedAt: time.Date(2026, 10, 5, 17, 56, 8, 0, time.UTC)},
+	} {
+		if _, err := store.AppendTimelineItem(item); err != nil {
+			t.Fatal(err)
+		}
 	}
 	app := &controlApp{brainStore: store}
 

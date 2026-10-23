@@ -2,23 +2,29 @@ package lifecycle
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/sqlitedb"
 )
 
 // Engine is the single serial authority for Work lifecycle state. Every
 // mutation is a command: validate against reduced state, append events to the
 // canonical log, apply them. Modules never write state directly (I1).
 type Engine struct {
-	root string
+	db *sql.DB
 
+	// mu serializes commands. works is the resident read model of lc_work:
+	// every command commits to the database first and only then replaces its
+	// Work here, so a failed commit leaves memory and disk unchanged. The Event
+	// log is not resident; it is read by index (see store.go).
 	mu      sync.Mutex
 	works   map[WorkID]*State
-	events  []Event
 	nextSeq uint64
 
 	nowMu sync.Mutex
@@ -47,33 +53,19 @@ func (e *Engine) nowUTC() time.Time {
 	return fn()
 }
 
-// Open loads the one canonical transaction image. There is no legacy
-// directory, snapshot fallback, migration, or second log to replay.
-func Open(root string) (*Engine, error) {
-	database, err := readLifecycleDatabase(root + "/state.json")
+// Open loads the lifecycle tables of db, creating them when absent. The
+// database is the one canonical image: there is no second log to replay.
+func Open(db *sql.DB) (*Engine, error) {
+	if err := sqlitedb.Migrate(db, schemaComponent, schemaSteps); err != nil {
+		return nil, err
+	}
+	works, nextSeq, err := loadWorks(db)
 	if err != nil {
 		return nil, err
 	}
-	e := &Engine{
-		root: root, works: database.Works, events: database.Events,
-		nextSeq: database.NextSeq, now: time.Now, wake: make(chan struct{}, 1),
-	}
-	return e, nil
-}
-
-func (e *Engine) statesLocked(replaceID WorkID, replacement *State) map[WorkID]*State {
-	states := make(map[WorkID]*State, len(e.works)+1)
-	for id, state := range e.works {
-		if id == replaceID {
-			states[id] = replacement
-		} else {
-			states[id] = state
-		}
-	}
-	if _, exists := states[replaceID]; !exists && replacement != nil {
-		states[replaceID] = replacement
-	}
-	return states
+	return &Engine{
+		db: db, works: works, nextSeq: nextSeq, now: time.Now, wake: make(chan struct{}, 1),
+	}, nil
 }
 
 func (e *Engine) newID() string {
@@ -101,19 +93,16 @@ func (e *Engine) dispatch(id WorkID, build func(st *State, now time.Time) ([]Eve
 		return a.Clone(), nil
 	}
 	next := a.Clone()
-	nextEvents := append([]Event(nil), e.events...)
 	nextSeq := e.nextSeq
 	for i := range events {
 		events[i].Seq = nextSeq
 		nextSeq++
 		next = Reduce(next, events[i])
-		nextEvents = append(nextEvents, events[i])
 	}
-	states := e.statesLocked(id, next)
-	if err := writeLifecycleDatabase(e.root+"/state.json", lifecycleDatabase{Works: states, Events: nextEvents, NextSeq: nextSeq}); err != nil {
+	if err := commit(e.db, next, events, nextSeq); err != nil {
 		return a.Clone(), err
 	}
-	e.works[id], e.events, e.nextSeq = next, nextEvents, nextSeq
+	e.works[id], e.nextSeq = next, nextSeq
 	e.signalWake()
 	return next.Clone(), nil
 }
@@ -183,13 +172,11 @@ func (e *Engine) DefineWork(id WorkID, in DefineWorkInput) (*State, error) {
 	}
 	events[0].Seq = e.nextSeq
 	next := Reduce(nil, events[0])
-	nextEvents := append(append([]Event(nil), e.events...), events[0])
-	states := e.statesLocked(id, next)
-	if err := writeLifecycleDatabase(e.root+"/state.json", lifecycleDatabase{Works: states, Events: nextEvents, NextSeq: e.nextSeq + 1}); err != nil {
+	if err := commit(e.db, next, events, e.nextSeq+1); err != nil {
 		return nil, err
 	}
 	e.works[id] = next
-	e.events, e.nextSeq = nextEvents, e.nextSeq+1
+	e.nextSeq++
 	e.signalWake()
 	return next.Clone(), nil
 }
@@ -611,7 +598,11 @@ func (e *Engine) AdmitTurn(id WorkID, in AdmitTurnInput) (applied bool, st *Stat
 		if terminal(st) {
 			return nil, ErrTerminal
 		}
-		if existing, found := e.admittedAttemptLocked(id, in.TurnToken); found {
+		existing, found, err := e.admittedAttemptLocked(id, in.TurnToken)
+		if err != nil {
+			return nil, err
+		}
+		if found {
 			if existing.SessionID != in.SessionID {
 				return nil, ErrStaleInput
 			}
@@ -632,22 +623,20 @@ func (e *Engine) AdmitTurn(id WorkID, in AdmitTurnInput) (applied bool, st *Stat
 	return st.Revision > before.Revision, st, nil
 }
 
-func (e *Engine) admittedAttemptLocked(id WorkID, token TurnToken) (AttemptIdentity, bool) {
-	for _, event := range e.events {
-		if event.WorkID != id || event.Kind != KTurnAdmitted || event.TurnToken != token {
-			continue
-		}
-		payload, ok := event.Payload.(AdmittedPayload)
-		if !ok {
-			return AttemptIdentity{}, false
-		}
-		return AttemptIdentity{SessionID: payload.SessionID, TurnToken: token, Fence: event.Fence}, true
+func (e *Engine) admittedAttemptLocked(id WorkID, token TurnToken) (AttemptIdentity, bool, error) {
+	events, err := eventsOf(e.db, id, KTurnAdmitted, token)
+	if err != nil || len(events) == 0 {
+		return AttemptIdentity{}, false, err
 	}
-	return AttemptIdentity{}, false
+	payload, ok := events[0].Payload.(AdmittedPayload)
+	if !ok {
+		return AttemptIdentity{}, false, nil
+	}
+	return AttemptIdentity{SessionID: payload.SessionID, TurnToken: token, Fence: events[0].Fence}, true, nil
 }
 
 // AdmittedAttempt reads the immutable execution fence for exact late results.
-func (e *Engine) AdmittedAttempt(id WorkID, token TurnToken) (AttemptIdentity, bool) {
+func (e *Engine) AdmittedAttempt(id WorkID, token TurnToken) (AttemptIdentity, bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.admittedAttemptLocked(id, token)
@@ -727,7 +716,10 @@ func (e *Engine) ReportTurnDone(id WorkID, attempt AttemptIdentity, in DoneInput
 			return nil, ErrUnknownWork
 		}
 		if !currentAttempt(st, attempt) {
-			historical, found := e.admittedAttemptLocked(id, attempt.TurnToken)
+			historical, found, err := e.admittedAttemptLocked(id, attempt.TurnToken)
+			if err != nil {
+				return nil, err
+			}
 			if !found || historical != attempt {
 				return nil, ErrStaleInput
 			}
@@ -751,8 +743,8 @@ func (e *Engine) ReportTurnDone(id WorkID, attempt AttemptIdentity, in DoneInput
 func (e *Engine) CanRecoverTerminal(id WorkID, sessionID string, token TurnToken) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	identity, found := e.admittedAttemptLocked(id, token)
-	return found && identity.SessionID == sessionID && recoverableTerminal(e.works[id], token, identity.Fence)
+	identity, found, err := e.admittedAttemptLocked(id, token)
+	return err == nil && found && identity.SessionID == sessionID && recoverableTerminal(e.works[id], token, identity.Fence)
 }
 
 // ReportTurnLost releases an Attempt after evidence loss or lease escalation.
@@ -1382,16 +1374,8 @@ func (e *Engine) Cards() []Card {
 // ReviewResolutions returns immutable resolution facts for one Work, including
 // resolutions committed by accepted follow-ups rather than an operator resolve.
 // Projection repair must not infer these decisions from current status alone.
-func (e *Engine) ReviewResolutions(id WorkID) []Event {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	var out []Event
-	for _, event := range e.events {
-		if event.WorkID == id && event.Kind == KReviewResolved {
-			out = append(out, event)
-		}
-	}
-	return out
+func (e *Engine) ReviewResolutions(id WorkID) ([]Event, error) {
+	return eventsOf(e.db, id, KReviewResolved, "")
 }
 
 // RetireAbsentPreparedAdmission consumes authoritative end-of-Session proof.

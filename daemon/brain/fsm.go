@@ -247,7 +247,11 @@ func (s *Store) fsmSyncWorkLocked(database *presentationDatabase, workID string,
 	// through ResolveWorkReview. Project the exact canonical resolution too;
 	// otherwise that old running Turn loses its relinquishment evidence when
 	// a later recovery closes and its typed wait is released.
-	for _, event := range s.fsm.ReviewResolutions(st.ID) {
+	resolutions, err := s.fsm.ReviewResolutions(st.ID)
+	if err != nil {
+		return err
+	}
+	for _, event := range resolutions {
 		resolution, ok := event.Payload.(lifecycle.ReviewResolvedPayload)
 		if !ok {
 			continue
@@ -479,7 +483,11 @@ func (s *Store) fsmTranslateCanonicalTransition(turn *TurnRecord, fact watcher.T
 		summary := firstNonEmpty(fact.Summary, mutationEventSummary(eventKind))
 		identity := lifecycle.AttemptIdentity{SessionID: sessionID, TurnToken: token, Fence: fence}
 		if fence == 0 {
-			if historical, found := s.fsm.AdmittedAttempt(lifecycle.WorkID(workID), token); found && historical.SessionID == sessionID {
+			historical, found, err := s.fsm.AdmittedAttempt(lifecycle.WorkID(workID), token)
+			if err != nil {
+				return fsmObservationResult(err)
+			}
+			if found && historical.SessionID == sessionID {
 				identity = historical
 			}
 		}

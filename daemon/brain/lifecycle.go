@@ -1,11 +1,8 @@
 package brain
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -350,13 +347,6 @@ type presentationDatabase struct {
 	BrainTurns           []TurnRecord          `json:"brain_turns"`
 }
 
-type presentationReadCache struct {
-	valid    bool
-	size     int64
-	modTime  time.Time
-	database presentationDatabase
-}
-
 // workRecord is the on-disk Work shape during decode. Unknown never-released
 // fields are ignored. SourceThreadID is required after Create/bind/persist.
 type workRecord struct {
@@ -396,78 +386,6 @@ type presentationDatabaseRecord struct {
 	BrainWork            []workRecord          `json:"brain_work"`
 	BrainWorkEvents      []WorkEvent           `json:"brain_work_events"`
 	BrainTurns           []TurnRecord          `json:"brain_turns"`
-}
-
-func (s *Store) presentationPath() string {
-	return s.statePath() + string(os.PathSeparator) + "presentation.json"
-}
-
-func (s *Store) ensurePresentationDatabase() error {
-	raw, err := os.ReadFile(s.presentationPath())
-	if errors.Is(err, os.ErrNotExist) {
-		return s.persistPresentationLocked(presentationDatabase{
-			SchemaVersion:        presentationSchemaVersion,
-			BrainInputAdmissions: []BrainInputAdmission{},
-			BrainWork:            []Work{},
-			BrainWorkEvents:      []WorkEvent{},
-			BrainTurns:           []TurnRecord{},
-		})
-	}
-	if err != nil {
-		return err
-	}
-	if _, err := decodePresentationDatabase(raw); err != nil {
-		return fmt.Errorf("decode Brain presentation database: %w", err)
-	}
-	return nil
-}
-
-// decodePresentationDatabase accepts only the current projection schema.
-// Older scheduler documents must reset; legacy fact rows are never promoted
-// back into writable lifecycle authority.
-func decodePresentationDatabase(raw []byte) (presentationDatabase, error) {
-	trimmed := bytes.TrimSpace(raw)
-	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return presentationDatabase{}, fmt.Errorf("document must be a JSON object")
-	}
-	var header struct {
-		SchemaVersion *int `json:"schema_version"`
-	}
-	if err := json.Unmarshal(trimmed, &header); err != nil {
-		return presentationDatabase{}, err
-	}
-	if header.SchemaVersion == nil {
-		return presentationDatabase{}, fmt.Errorf("schema_version is required")
-	}
-	version := *header.SchemaVersion
-	if version != presentationSchemaVersion {
-		return presentationDatabase{}, fmt.Errorf(
-			"%w: schema_version %d (expected %d)",
-			ErrSchedulerStateReset,
-			version,
-			presentationSchemaVersion,
-		)
-	}
-	var record presentationDatabaseRecord
-	if err := json.Unmarshal(trimmed, &record); err != nil {
-		return presentationDatabase{}, err
-	}
-	if record.BrainWork == nil || record.BrainWorkEvents == nil || record.BrainInputAdmissions == nil {
-		return presentationDatabase{}, fmt.Errorf("brain_input_admissions, brain_work, and brain_work_events are required arrays")
-	}
-	database := presentationDatabase{
-		SchemaVersion:        presentationSchemaVersion,
-		NextEventSequence:    record.NextEventSequence,
-		HostForegroundTurn:   record.HostForegroundTurn,
-		BrainWork:            worksFromRecords(record.BrainWork),
-		BrainWorkEvents:      record.BrainWorkEvents,
-		BrainTurns:           record.BrainTurns,
-		BrainInputAdmissions: record.BrainInputAdmissions,
-	}
-	if err := validatePresentationDatabase(database); err != nil {
-		return presentationDatabase{}, err
-	}
-	return database, nil
 }
 
 // worksFromRecords copies durable Work fields.
@@ -1100,35 +1018,10 @@ func validCompletionPolicy(policy CompletionPolicy) bool {
 	return policy == CompletionBounded || policy == CompletionUntilDone
 }
 
+// loadPresentationLocked returns a private copy of the committed presentation
+// image for the caller to mutate and hand to persistPresentationLocked.
 func (s *Store) loadPresentationLocked() (presentationDatabase, error) {
-	info, err := os.Stat(s.presentationPath())
-	if err != nil {
-		s.presentationCache = presentationReadCache{}
-		return presentationDatabase{}, err
-	}
-	if s.presentationCache.valid && s.presentationCache.size == info.Size() &&
-		s.presentationCache.modTime.Equal(info.ModTime()) {
-		return clonePresentationDatabase(s.presentationCache.database), nil
-	}
-	raw, err := os.ReadFile(s.presentationPath())
-	if err != nil {
-		return presentationDatabase{}, err
-	}
-	database, err := decodePresentationDatabase(raw)
-	if err != nil {
-		return presentationDatabase{}, err
-	}
-	// An external CLI may replace the file while it is being read. Cache only
-	// when the post-read version still matches the bytes that were decoded.
-	after, statErr := os.Stat(s.presentationPath())
-	if statErr == nil && after.Size() == int64(len(raw)) {
-		s.presentationCache = presentationReadCache{
-			valid: true, size: after.Size(), modTime: after.ModTime(), database: database,
-		}
-	} else {
-		s.presentationCache = presentationReadCache{}
-	}
-	return clonePresentationDatabase(database), nil
+	return clonePresentationDatabase(s.presentation), nil
 }
 
 func clonePresentationDatabase(database presentationDatabase) presentationDatabase {
@@ -1177,6 +1070,9 @@ func cloneTimePointer(value *time.Time) *time.Time {
 	return &clone
 }
 
+// persistPresentationLocked commits database, which the caller derived from
+// loadPresentationLocked, as the new presentation image. Only rows that differ
+// from the committed image are written, in one transaction.
 func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 	database.SchemaVersion = presentationSchemaVersion
 	if database.BrainInputAdmissions == nil {
@@ -1191,41 +1087,31 @@ func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 	if database.BrainTurns == nil {
 		database.BrainTurns = []TurnRecord{}
 	}
-	sort.Slice(database.BrainWork, func(left, right int) bool {
-		if database.BrainWork[left].CreatedAt.Equal(database.BrainWork[right].CreatedAt) {
-			return database.BrainWork[left].ID < database.BrainWork[right].ID
-		}
-		return database.BrainWork[left].CreatedAt.Before(database.BrainWork[right].CreatedAt)
-	})
-	sort.Slice(database.BrainInputAdmissions, func(left, right int) bool {
-		if database.BrainInputAdmissions[left].CreatedAt.Equal(database.BrainInputAdmissions[right].CreatedAt) {
-			if database.BrainInputAdmissions[left].RequestID == database.BrainInputAdmissions[right].RequestID {
-				return database.BrainInputAdmissions[left].ThreadID < database.BrainInputAdmissions[right].ThreadID
-			}
-			return database.BrainInputAdmissions[left].RequestID < database.BrainInputAdmissions[right].RequestID
-		}
-		return database.BrainInputAdmissions[left].CreatedAt.Before(database.BrainInputAdmissions[right].CreatedAt)
-	})
-	sort.Slice(database.BrainWorkEvents, func(left, right int) bool {
-		if database.BrainWorkEvents[left].CreatedAt.Equal(database.BrainWorkEvents[right].CreatedAt) {
-			return database.BrainWorkEvents[left].ID < database.BrainWorkEvents[right].ID
-		}
-		return database.BrainWorkEvents[left].CreatedAt.Before(database.BrainWorkEvents[right].CreatedAt)
-	})
-	sort.Slice(database.BrainTurns, func(left, right int) bool {
-		if database.BrainTurns[left].SessionID == database.BrainTurns[right].SessionID {
-			return database.BrainTurns[left].TurnID < database.BrainTurns[right].TurnID
-		}
-		return database.BrainTurns[left].SessionID < database.BrainTurns[right].SessionID
-	})
+	sortPresentation(&database)
 	if err := validatePresentationDatabase(database); err != nil {
 		return err
 	}
-	if err := s.writePresentation(s.presentationPath(), database); err != nil {
+	if s.presentationFault != nil {
+		if err := s.presentationFault(); err != nil {
+			return err
+		}
+	}
+	if err := commitPresentation(s.db, s.presentationGen, s.presentation, database); err != nil {
+		if errors.Is(err, errConcurrentWriter) {
+			// Another process moved the database; whatever this Store holds is
+			// stale. Fail the command and resume from what is durable.
+			if image, generation, readErr := readPresentationImage(s.db); readErr == nil {
+				s.presentation, s.presentationGen = image, generation
+				s.turnCache = turnReadCache{}
+				s.rev++
+			}
+		}
 		return err
 	}
-	s.presentationCache = presentationReadCache{}
+	s.presentation = clonePresentationDatabase(database)
+	s.presentationGen++
 	s.turnCache = turnReadCache{}
+	s.rev++
 	return nil
 }
 

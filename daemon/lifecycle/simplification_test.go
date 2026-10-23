@@ -9,7 +9,7 @@ import (
 
 func TestDueRetryIgnoresUnrelatedInputAndWakesExactlyOnce(t *testing.T) {
 	root := t.TempDir()
-	e, err := Open(root)
+	e, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,9 +36,7 @@ func TestDueRetryIgnoresUnrelatedInputAndWakesExactlyOnce(t *testing.T) {
 	}
 
 	revision := waiting.Revision
-	e.mu.Lock()
-	eventCount := len(e.events)
-	e.mu.Unlock()
+	eventCount := len(allEvents(t, e))
 	for i := 0; i < 32; i++ {
 		unrelated, clearErr := e.ClearWait("w-due-retry", WakeUserInput, "brain-thread:unrelated", fmt.Sprintf("message:%d", i))
 		if clearErr != nil {
@@ -48,13 +46,11 @@ func TestDueRetryIgnoresUnrelatedInputAndWakesExactlyOnce(t *testing.T) {
 			t.Fatalf("unrelated input revised Work: %d -> %d", revision, unrelated.Revision)
 		}
 	}
-	e.mu.Lock()
-	if len(e.events) != eventCount {
-		t.Fatalf("unrelated input appended lifecycle Events: %d -> %d", eventCount, len(e.events))
+	if got := len(allEvents(t, e)); got != eventCount {
+		t.Fatalf("unrelated input appended lifecycle Events: %d -> %d", eventCount, got)
 	}
-	e.mu.Unlock()
 
-	reopened, err := Open(root)
+	reopened, err := openAt(t, root)
 	if err != nil {
 		t.Fatal(err)
 	}

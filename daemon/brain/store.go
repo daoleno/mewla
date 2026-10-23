@@ -2,6 +2,7 @@ package brain
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,19 +27,31 @@ const (
 type Store struct {
 	Root string
 
-	mu                sync.Mutex
-	subMu             sync.Mutex
-	subs              map[int]chan WorkChange
-	nextSub           int
-	now               func() time.Time
-	timelineCache     timelineReadCache
-	turnCache         turnReadCache
-	presentationCache presentationReadCache
+	mu            sync.Mutex
+	subMu         sync.Mutex
+	subs          map[int]chan WorkChange
+	nextSub       int
+	now           func() time.Time
+	timelineCache timelineReadCache
+	turnCache     turnReadCache
+
+	// db is state/brain.db: the lifecycle engine's tables, the presentation
+	// rows and the timeline (presentation_store.go). presentation is the last
+	// committed presentation image, generation the database generation it was
+	// read or committed at. rev advances on every commit that can change a
+	// conversation projection, so caches and invalidation keys compare a
+	// number instead of file times.
+	db              *sql.DB
+	presentation    presentationDatabase
+	presentationGen int64
+	rev             uint64
 
 	// fsm is the canonical delegated-Work lifecycle engine (docs/work-lifecycle.md).
 	fsm *lifecycle.Engine
 
-	writePresentation func(string, any) error
+	// presentationFault is an optional Store-scoped fault seam run at the start
+	// of every presentation commit. Nil means no fault.
+	presentationFault func() error
 	// projectBrainInputAdmission is an optional Store-scoped fault seam for the
 	// recoverable messages.jsonl projection. Nil uses the production append.
 	projectBrainInputAdmission func(BrainInputAdmission) error
@@ -67,16 +80,30 @@ func NewStore(root string) (*Store, error) {
 		return nil, err
 	}
 	store := &Store{
-		Root:              root,
-		subs:              map[int]chan WorkChange{},
-		now:               time.Now,
-		writePresentation: writeJSONFile,
+		Root: root,
+		subs: map[int]chan WorkChange{},
+		now:  time.Now,
 	}
-	// The canonical delegated-Work lifecycle engine owns its own append-only
-	// log and current image under state/lifecycle. Startup reads the current
-	// image directly; reducer determinism remains an audit/test property.
-	fsm, err := lifecycle.Open(filepath.Join(root, "state", "lifecycle"))
+	if err := os.MkdirAll(store.statePath(), 0o700); err != nil {
+		return nil, err
+	}
+	db, err := openStateDatabase(store.statePath())
 	if err != nil {
+		return nil, err
+	}
+	store.db = db
+	image, generation, err := readPresentationImage(db)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open Brain presentation database: %w", err)
+	}
+	store.presentation, store.presentationGen = image, generation
+	// The canonical delegated-Work lifecycle engine keeps its Event log and
+	// Work rows in the same database. Startup reads the current rows
+	// directly; reducer determinism remains an audit/test property.
+	fsm, err := lifecycle.Open(db)
+	if err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("open work lifecycle engine: %w", err)
 	}
 	store.fsm = fsm
@@ -128,7 +155,7 @@ func hostSessionPath(root string) string {
 }
 
 // ConversationProjectionVersion returns a cheap version of every durable
-// Brain file that can change a thread conversation projection. Callers use it
+// Brain input that can change a thread conversation projection. Callers use it
 // only as an invalidation key; canonical content still comes from the normal
 // Store readers after the key changes.
 func (s *Store) ConversationProjectionVersion() (string, error) {
@@ -137,8 +164,9 @@ func (s *Store) ConversationProjectionVersion() (string, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	paths := []string{s.messagesPath(), s.presentationPath(), s.ChatStatePath(), s.HostSessionPath()}
+	paths := []string{s.ChatStatePath(), s.HostSessionPath()}
 	var version strings.Builder
+	fmt.Fprintf(&version, "brain:%d;", s.rev)
 	for _, path := range paths {
 		info, err := os.Stat(path)
 		if errors.Is(err, os.ErrNotExist) {
@@ -402,9 +430,6 @@ func (s *Store) snapshotLocked(workers []WorkerRef) (Snapshot, error) {
 
 func (s *Store) ensureFiles() error {
 	if err := os.MkdirAll(s.statePath(), 0o700); err != nil {
-		return err
-	}
-	if err := s.ensurePresentationDatabase(); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(s.WorkspacePath(), 0o700); err != nil {
