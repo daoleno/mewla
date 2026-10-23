@@ -491,42 +491,94 @@ command = "codex"
 	}
 }
 
+func exitError(t *testing.T, code int) error {
+	t.Helper()
+	err := exec.Command("sh", "-c", fmt.Sprintf("exit %d", code)).Run()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		t.Fatalf("exit %d produced %v", code, err)
+	}
+	return err
+}
+
 func TestParseAuthHelpers(t *testing.T) {
+	// Codex: exit 0 is logged in whatever it prints; exit 1 saying "Not logged
+	// in" is logged out; every other failure says nothing.
 	if got := parseCodexAuth([]byte("Logged in using an API key - sk-SECRET"), nil); got != AuthAuthenticated {
 		t.Fatalf("codex auth = %s", got)
 	}
-	if got := parseCodexAuth([]byte("Not logged in"), nil); got != AuthUnauthenticated {
+	if got := parseCodexAuth([]byte("Logged in using ChatGPT"), nil); got != AuthAuthenticated {
 		t.Fatalf("codex auth = %s", got)
 	}
-	if got := parseCodexAuth(nil, errors.New("exit 1")); got != AuthUnknown {
-		t.Fatalf("codex failed probe = %s", got)
+	notLoggedIn := []byte("WARNING: proceeding, even though we could not create PATH aliases\nNot logged in\n")
+	if got := parseCodexAuth(notLoggedIn, exitError(t, 1)); got != AuthUnauthenticated {
+		t.Fatalf("codex logged out = %s", got)
 	}
-	if got := parseClaudeAuth([]byte(`{"loggedIn":true}`), nil); got != AuthAuthenticated {
+	for name, tc := range map[string]struct {
+		out []byte
+		err error
+	}{
+		"other exit code":       {notLoggedIn, exitError(t, 2)},
+		"exit 1, other message": {[]byte("Error loading configuration: bad toml"), exitError(t, 1)},
+		"message inside a line": {[]byte("this is not logged in anywhere, really"), exitError(t, 1)},
+		"not an exit error":     {notLoggedIn, errors.New("context deadline exceeded")},
+		"exit 1, no output":     {nil, exitError(t, 1)},
+		"other wording":         {[]byte("Logged out"), exitError(t, 1)},
+	} {
+		if got := parseCodexAuth(tc.out, tc.err); got != AuthUnknown {
+			t.Errorf("codex %s = %s, want unknown", name, got)
+		}
+	}
+
+	if got := parseClaudeAuth([]byte(`{"loggedIn":true}`)); got != AuthAuthenticated {
 		t.Fatalf("claude auth = %s", got)
 	}
-	if got := parseClaudeAuth([]byte(`{"loggedIn":false}`), nil); got != AuthUnauthenticated {
+	if got := parseClaudeAuth([]byte(`{"loggedIn":false}`)); got != AuthUnauthenticated {
 		t.Fatalf("claude auth = %s", got)
 	}
-	if got := parseClaudeAuth([]byte(`{}`), nil); got != AuthUnknown {
-		t.Fatalf("claude empty object = %s, want unknown", got)
+	for _, out := range []string{``, `{}`, `{"loggedIn":"yes"}`, `Logged in as someone`, `Not logged in`} {
+		if got := parseClaudeAuth([]byte(out)); got != AuthUnknown {
+			t.Fatalf("claude %q = %s, want unknown", out, got)
+		}
 	}
-	if got := parseClaudeAuth(nil, errors.New("exit 1")); got != AuthUnknown {
-		t.Fatalf("claude failed probe = %s", got)
+
+	// A warning line from the CLI, merged in from stderr, does not hide the document.
+	if got := parseClaudeAuth([]byte("(node:1) ExperimentalWarning: something [beta]\n{\"loggedIn\":true}\n")); got != AuthAuthenticated {
+		t.Fatalf("claude with a warning line = %s", got)
 	}
-	if got := parseCursorAuth([]byte(`{"status":"authenticated","isAuthenticated":true}`), nil); got != AuthAuthenticated {
+	if got := parseOpenCodeAuth([]byte("[warn] stale cache\n[{\"id\":\"a\",\"connections\":[{\"type\":\"env\"}]}]\n")); got != AuthAuthenticated {
+		t.Fatalf("opencode with a warning line = %s", got)
+	}
+	if got := parseCursorAuth([]byte(`{"status":"authenticated","isAuthenticated":true}`)); got != AuthAuthenticated {
 		t.Fatalf("cursor auth = %s", got)
 	}
-	if got := parseCursorAuth([]byte(`{"status":"unauthenticated","isAuthenticated":false}`), nil); got != AuthUnauthenticated {
+	if got := parseCursorAuth([]byte(`{"status":"unauthenticated","isAuthenticated":false}`)); got != AuthUnauthenticated {
 		t.Fatalf("cursor auth = %s", got)
 	}
-	if got := parseCursorAuth([]byte(`{}`), nil); got != AuthUnknown {
-		t.Fatalf("cursor empty object = %s, want unknown", got)
-	}
-	if got := parseCursorAuth([]byte(`{"isAuthenticated":false}`), nil); got != AuthUnauthenticated {
+	if got := parseCursorAuth([]byte(`{"isAuthenticated":false}`)); got != AuthUnauthenticated {
 		t.Fatalf("cursor explicit false = %s", got)
 	}
-	if got := parseCursorAuth(nil, errors.New("unsupported")); got != AuthUnknown {
-		t.Fatalf("cursor failed probe = %s", got)
+	for _, out := range []string{``, `{}`, `unsupported`, `Logged in`} {
+		if got := parseCursorAuth([]byte(out)); got != AuthUnknown {
+			t.Fatalf("cursor %q = %s, want unknown", out, got)
+		}
+	}
+
+	if got := parseOpenCodeAuth([]byte(`[{"id":"openai","name":"OpenAI","connections":[{"type":"credential","id":"x","label":"y","method":"oauth"}]}]`)); got != AuthAuthenticated {
+		t.Fatalf("opencode credential = %s", got)
+	}
+	if got := parseOpenCodeAuth([]byte(`[{"id":"a","connections":[]},{"id":"b","connections":[{"type":"env","id":"OPENAI_API_KEY"}]}]`)); got != AuthAuthenticated {
+		t.Fatalf("opencode env = %s", got)
+	}
+	for _, out := range []string{`[]`, `[{"id":"a","name":"A","connections":[]}]`} {
+		if got := parseOpenCodeAuth([]byte(out)); got != AuthUnauthenticated {
+			t.Fatalf("opencode %q = %s, want unauthenticated", out, got)
+		}
+	}
+	for _, out := range []string{``, `null`, `{}`, `0 credentials`, `1 credentials\nopenai oauth`} {
+		if got := parseOpenCodeAuth([]byte(out)); got != AuthUnknown {
+			t.Fatalf("opencode %q = %s, want unknown", out, got)
+		}
 	}
 }
 
@@ -637,12 +689,17 @@ if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then
   exit 0
 fi
 if [ "$1" = "login" ] && [ "$2" = "status" ]; then
+  # Like the real CLI: exit 0 when logged in, exit 1 saying so when not.
+  if [ %q = "Not logged in" ]; then
+    echo %q >&2
+    exit 1
+  fi
   printf '%%s\n' %q
   exit 0
 fi
 echo "unexpected: $*" >&2
 exit 1
-`, loginStatus)
+`, loginStatus, loginStatus, loginStatus)
 	writeExec(t, filepath.Join(binDir, "codex"), script)
 }
 
@@ -702,7 +759,7 @@ func TestOpenCodeDoctorProbesAreSecretSafeAndNonMutating(t *testing.T) {
 	writeFakeTmux(t, binDir)
 	serviceURL := "http://127.0.0.1:49374"
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{
-		authList:   "1 credentials\nopenai oauth\n",
+		authList:   `[{"id":"openai","name":"OpenAI","connections":[{"type":"credential","id":"c1","label":"oauth","method":"oauth"}]}]`,
 		models:     "openai/gpt-5\nopencode/big-pickle\n",
 		serviceURL: serviceURL,
 	})
@@ -746,6 +803,9 @@ command = "opencode"
 		t.Fatalf("probe status models=%s service=%s summary=%q", item.ModelsStatus, item.ServiceStatus, item.Summary)
 	}
 	joined := strings.Join(seen, " | ")
+	if !strings.Contains(joined, "opencode auth list --format json") || item.Auth != AuthAuthenticated {
+		t.Fatalf("auth probe: auth=%s seen=%v", item.Auth, seen)
+	}
 	if !strings.Contains(joined, "opencode models") || !strings.Contains(joined, "opencode service status") {
 		t.Fatalf("expected models and service status probes, seen=%v", seen)
 	}
