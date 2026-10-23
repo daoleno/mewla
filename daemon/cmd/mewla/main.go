@@ -280,9 +280,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return err
 	}
 	startUpdateNotice(stderr, stateDir)
-	for _, name := range []string{"tasks.json", "runs.json", "meta.json"} {
-		_ = os.Remove(filepath.Join(stateDir, name))
-	}
 
 	w := watcher.New(500 * time.Millisecond)
 	w.ConfigureDelegatedResources(authManager.DaemonID())
