@@ -781,12 +781,12 @@ func (s *Store) TurnByID(sessionID, turnID string) (watcher.TurnSnapshot, bool, 
 }
 
 func (s *Store) turnRecordsLocked() (*turnReadCache, error) {
-	if s.turnCache.valid && s.turnCache.rev == s.rev {
+	if s.turnCache.valid && s.turnCache.rev == s.rev.Load() {
 		return &s.turnCache, nil
 	}
 	database := s.presentation
 	next := turnReadCache{
-		valid: true, rev: s.rev,
+		valid: true, rev: s.rev.Load(),
 		current: make(map[string]TurnRecord), exact: make(map[string]TurnRecord, len(database.BrainTurns)),
 	}
 	for _, turn := range database.BrainTurns {

@@ -323,7 +323,7 @@ func (s *Store) appendTimelineItemLocked(item TimelineItem) (TimelineItem, error
 			s.timelineCache.items = append(s.timelineCache.items, stored)
 		}
 	}
-	s.rev++
+	s.rev.Add(1)
 	return item, nil
 }
 
@@ -759,7 +759,7 @@ func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
 		return err
 	}
 	s.timelineCache = timelineReadCache{valid: true, items: result}
-	s.rev++
+	s.rev.Add(1)
 	return nil
 }
 

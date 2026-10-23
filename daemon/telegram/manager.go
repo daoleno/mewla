@@ -86,14 +86,14 @@ const timelineSafetyNet = time.Minute
 // versionedBrain is implemented by a Brain owner that can say, cheaply, whether
 // what a thread's conversation shows may have changed.
 type versionedBrain interface {
-	ConversationProjectionVersion() (string, error)
+	ConversationProjectionVersion() uint64
 }
 
 // timelineMark is everything the last Brain timeline projection depended on.
 // Projecting the same inputs again enqueues nothing new.
 type timelineMark struct {
 	valid             bool
-	brainVersion      string
+	brainVersion      uint64
 	usersCreateTopics bool
 	brainTopicID      int64
 	deliveryStarted   time.Time
@@ -1408,7 +1408,7 @@ func (t timelineMark) sameInputs(other timelineMark) bool {
 }
 
 // projectTimelineIfChanged projects the Brain timeline only when something it
-// reads changed: the timeline or chat files, the Telegram connection, or the
+// reads changed: Brain's change counter, the Telegram connection, or the
 // outbox (a full outbox refuses rows until it drains). Otherwise the pass would
 // copy the whole durable state and compare it to itself to learn nothing. A
 // minute-old projection is repeated regardless, and an owner that cannot version
@@ -1418,10 +1418,7 @@ func (m *Manager) projectTimelineIfChanged() error {
 	if !ok {
 		return m.projectTimeline()
 	}
-	version, err := versioned.ConversationProjectionVersion()
-	if err != nil {
-		return m.projectTimeline()
-	}
+	version := versioned.ConversationProjectionVersion()
 	connection := m.store.snapshot()
 	mark := timelineMark{valid: true, brainVersion: version, usersCreateTopics: connection.UsersCreateTopics, brainTopicID: connection.BrainTopicID,
 		deliveryStarted: connection.DeliveryStartedAt, outboxRows: len(connection.Outbox), pendingRows: pendingOutboxRows(connection), at: m.now()}

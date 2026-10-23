@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -2053,18 +2054,14 @@ func (s *Server) publishCodexConversationSubscription(
 	providerFingerprint := codexConversationSubscriptionFingerprint(conversation)
 	brainProjectionVersion := ""
 	if brainScoped {
-		if version, versionErr := s.brainConversationProjectionVersion(raw.ConversationScopeKey); versionErr == nil {
-			brainProjectionVersion = version
-			if (*previous) != nil && (*previous).providerFingerprint == providerFingerprint &&
-				(*previous).brainProjectionVersion == brainProjectionVersion &&
-				(*previous).attached == resolved.fromWatcher {
-				return
-			}
+		brainProjectionVersion = s.brainConversationProjectionVersion(raw.ConversationScopeKey)
+		if (*previous) != nil && (*previous).providerFingerprint == providerFingerprint &&
+			(*previous).brainProjectionVersion == brainProjectionVersion &&
+			(*previous).attached == resolved.fromWatcher {
+			return
 		}
 		conversation = s.brainScopedConversation(raw.ConversationScopeKey, conversation, now)
-		if version, versionErr := s.brainConversationProjectionVersion(raw.ConversationScopeKey); versionErr == nil {
-			brainProjectionVersion = version
-		}
+		brainProjectionVersion = s.brainConversationProjectionVersion(raw.ConversationScopeKey)
 	}
 	if took := time.Since(projectionStart); took >= slowSessionInputLog {
 		// The other half of a slow first snapshot: the load above is logged
@@ -2179,18 +2176,14 @@ func (s *Server) publishCodexConversationSubscription(
 	*previous = &next
 }
 
-func (s *Server) brainConversationProjectionVersion(scopeKey string) (string, error) {
+func (s *Server) brainConversationProjectionVersion(scopeKey string) string {
 	const prefix = "brain-thread:"
 	if s.brain == nil || !strings.HasPrefix(strings.TrimSpace(scopeKey), prefix) {
-		return "", nil
+		return ""
 	}
 	threadID := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(scopeKey), prefix))
-	version, err := s.brain.ConversationProjectionVersion()
-	if err != nil {
-		return "", err
-	}
 	hash := fnv.New64a()
-	writeFingerprintString(hash, version)
+	writeFingerprintString(hash, strconv.FormatUint(s.brain.ConversationProjectionVersion(), 10))
 	if s.calendar != nil {
 		for _, result := range s.calendar.ScheduledResults(threadID, 0) {
 			writeFingerprintString(hash, result.ID)
@@ -2199,7 +2192,7 @@ func (s *Server) brainConversationProjectionVersion(scopeKey string) (string, er
 			writeFingerprintString(hash, result.CreatedAt.Format(time.RFC3339Nano))
 		}
 	}
-	return fmt.Sprintf("%016x", hash.Sum64()), nil
+	return fmt.Sprintf("%016x", hash.Sum64())
 }
 
 func conversationForProviderAttachment(conversation work.CodexConversation, attached bool) work.CodexConversation {
