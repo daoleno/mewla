@@ -192,7 +192,7 @@ describe("shared Android/iOS pinned transport owner", () => {
 });
 
 describe("direct path beside the relay", () => {
-  const { currentTransportPath, directPathBecameAvailable, invalidateStoredServerTransport, transportFailed } =
+  const { currentTransportPath, transportPathOfURL, directPathBecameAvailable, invalidateStoredServerTransport, transportFailed } =
     pinnedTransportForDirect;
   const daemonKeys = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7));
   const otherKeys = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(9));
@@ -284,6 +284,17 @@ describe("direct path beside the relay", () => {
     });
     // Nothing closes the relay tunnel: it is the instant fallback.
     expect(stops).not.toContain(`server:${server.id}:0`);
+    await invalidateStoredServerTransport(server);
+  });
+
+  test("a resolved URL names the path it is carried on, even after the choice moves", async () => {
+    const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+    const direct = await resolveStoredServerURL(server);
+    expect(transportPathOfURL(server.id, direct)).toBe("lan");
+    expect(transportPathOfURL(server.id, "ws://127.0.0.1:1/ws")).toBeNull();
+    expect(transportPathOfURL("never-resolved", direct)).toBeNull();
+    // The relay tunnel kept open behind it is a different path.
+    expect(transportPathOfURL(server.id, "ws://127.0.0.1:19001/ws")).toBe("relay");
     await invalidateStoredServerTransport(server);
   });
 

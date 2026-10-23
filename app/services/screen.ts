@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
-import { resolveStoredServerURL } from "./pinnedTransport";
+import { resolveStoredServerURL, transportPathOfURL, type TransportPath } from "./pinnedTransport";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
 import type { StoredServer } from "./storage";
 
@@ -63,9 +63,10 @@ export class ScreenRequestError extends Error {
 
 async function endpoint(server: StoredServer, path: string) {
   const url = new URL(await resolveStoredServerURL(server));
+  const via = transportPathOfURL(server.id, url.toString());
   url.pathname = path;
   url.search = "";
-  return url;
+  return Object.assign(url, { via });
 }
 
 /** Reads Screen status, or runs one action and returns the new status. */
@@ -142,8 +143,12 @@ export class ScreenConnection {
   /** watch: see the agent using the screen without taking over; input goes nowhere. */
   constructor(private server: StoredServer, private handlers: ScreenConnectionHandlers, private watch = false) {}
 
+  /** The path this viewer's socket is carried on, known once it is dialed. */
+  path: TransportPath | null = null;
+
   async connect() {
     const url = await endpoint(this.server, "/screen/viewer");
+    this.path = url.via;
     url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
     if (this.watch) url.searchParams.set("watch", "1");
     const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-screen-view" });

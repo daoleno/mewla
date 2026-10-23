@@ -51,6 +51,26 @@ function fresh(selection: Selection): boolean {
   return Date.now() - selection.measuredAt < SELECTION_TTL_MS;
 }
 
+/**
+ * The path a URL returned by this resolver is carried on. The URL names the
+ * phone's own tunnel port, so it identifies the tunnel, and with it the path,
+ * even if the computer's selection has since moved on.
+ */
+export function transportPathOfURL(serverId: string, url: string): TransportPath | null {
+  const entry = paths.get(serverId);
+  if (!entry) return null;
+  let port = "";
+  try {
+    port = new URL(url).port;
+  } catch {
+    return null;
+  }
+  for (const selection of [entry.direct, entry.relay]) {
+    if (selection && new URL(selection.localOrigin).port === port) return selection.path;
+  }
+  return null;
+}
+
 /** The path the phone is using for a computer, or null before it has chosen. */
 export function currentTransportPath(serverId: string): TransportPath | null {
   const entry = paths.get(serverId);
@@ -303,7 +323,8 @@ async function probeAddress(
       server.transportPin!,
       "measure",
     );
-    if (timedOut || !(await answersChallenge(server, tunnel.port, abort.signal))) {
+    const answered = !timedOut && (await answersChallenge(server, tunnel.port, abort.signal));
+    if (!answered) {
       if (!keepOpen()) await stopNativePinnedTunnel(tunnelKey).catch(() => undefined);
       return null;
     }

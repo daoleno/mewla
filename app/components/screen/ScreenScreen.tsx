@@ -15,7 +15,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
-import { currentTransportPath, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
+import { currentTransportPath, directPathBecameAvailable, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
 import type { ScreenStreamStats } from "../../services/screenStream";
 import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
@@ -108,6 +108,7 @@ export function ScreenScreen() {
   const connection = useRef<ScreenConnection | null>(null);
   // The path the live viewer opened on, and whether it has retried its loss.
   const openedVia = useRef<TransportPath | null>(null);
+  const [viaPath, setViaPath] = useState<TransportPath | null>(null);
   const retriedLostPath = useRef(false);
   const viewerReady = useRef(false);
   const outbox = useRef<ScreenHostMessage[]>([]);
@@ -201,7 +202,8 @@ export function ScreenScreen() {
     const socket = new ScreenConnection(server, {
       open() {
         if (!active()) return;
-        openedVia.current = currentTransportPath(server.id);
+        openedVia.current = socket.path;
+        setViaPath(socket.path);
         toViewer({ type: "open" });
       },
       data(chunk) {
@@ -248,6 +250,29 @@ export function ScreenScreen() {
     });
     return () => { subscription.remove(); disconnect(); };
   }, [currentServer?.id, connect, disconnect]);
+
+  // A viewer opened on the relay moves to a direct path once one is verified,
+  // with one quick reconnect, at most once a minute.
+  const lastMove = useRef(0);
+  useEffect(() => {
+    if (!currentServer || phase !== "live" || watching) return;
+    const server = currentServer;
+    let checking = false;
+    const timer = setInterval(() => {
+      if (checking || openedVia.current !== "relay" || Date.now() - lastMove.current < 60_000) return;
+      checking = true;
+      const now = currentTransportPath(server.id);
+      void (now && now !== "relay" ? Promise.resolve(true) : directPathBecameAvailable(server))
+        .then((ready) => {
+          if (!ready || !isCurrentServer(server.id) || openedVia.current !== "relay") return;
+          lastMove.current = Date.now();
+          void connect();
+        })
+        .catch(() => undefined)
+        .finally(() => { checking = false; });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [currentServer, phase, watching, isCurrentServer, connect]);
 
   // Only this page may rotate; the rest of the app stays portrait.
   useEffect(() => {
@@ -462,7 +487,7 @@ export function ScreenScreen() {
   const readout = {
     rttMs: rtt, inputMs: stats?.inputMs ?? null, fps: stats?.fps ?? 0, kbps: stats?.kbps ?? 0,
     bridgeMs: stats?.bridgeMs, presentMs: stats?.presentMs, daemon: daemonStats,
-    viaPath: currentTransportPath(currentServer.id),
+    viaPath,
   };
   const readoutHeadline = streamHeadline(readout);
   const viewerVisible = phase === "connecting" || phase === "live";
