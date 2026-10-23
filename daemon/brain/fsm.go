@@ -13,7 +13,7 @@ import (
 // This file is the adapter between the canonical lifecycle engine (the only
 // writer of delegated-Work lifecycle state) and Brain's derived read models.
 // See docs/work-lifecycle.md: Work is the aggregate root; every
-// lifecycle transition is an engine command; presentation.json rows are a
+// lifecycle transition is an engine command; presentation rows are a
 // derived projection refreshed after each commit.
 
 func workStatusFromLifecycle(status lifecycle.Status) WorkStatus {

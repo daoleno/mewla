@@ -2273,7 +2273,7 @@ func (s *Service) ReleaseHostUserInputAttempt(requestID, threadID string) error 
 // mutation. It never reconstructs immutable generation/Session identity from
 // ambient state after acceptance. It then reserves any queued future Attention
 // behind that foreground turn and attempts the independently retryable
-// messages.jsonl projection.
+// timeline projection.
 func (s *Service) AdmitHostUserInput(prepared BrainInputAdmission) error {
 	if s == nil || s.store == nil {
 		return nil

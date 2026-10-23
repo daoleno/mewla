@@ -53,7 +53,7 @@ type Store struct {
 	// of every presentation commit. Nil means no fault.
 	presentationFault func() error
 	// projectBrainInputAdmission is an optional Store-scoped fault seam for the
-	// recoverable messages.jsonl projection. Nil uses the production append.
+	// recoverable timeline projection. Nil uses the production append.
 	projectBrainInputAdmission func(BrainInputAdmission) error
 	// replaceHostBindingWrite is an optional Store-scoped seam used only by
 	// ReplaceHostSessionBinding. Nil means writeJSONFile (production default).
