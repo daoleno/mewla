@@ -185,3 +185,25 @@ func TestLearnIgnoresLoopbackHostsAndDropsOnesLearnedBefore(t *testing.T) {
 		t.Fatalf("entries = %v", urls)
 	}
 }
+
+func TestLearnIgnoresPrivateAddresses(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range []string{"192.168.1.5:9876", "10.0.0.2:443", "100.64.0.9:9876", "127.0.0.1:9876"} {
+		if err := store.Learn(host); err != nil {
+			t.Fatalf("Learn(%s): %v", host, err)
+		}
+	}
+	entries, _ := store.List()
+	if len(entries) != 0 {
+		t.Fatalf("a private address was learned as an entry point: %v", entries)
+	}
+	if err := store.Learn("mewla.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if entries, _ := store.List(); len(entries) != 1 || entries[0].URL != "https://mewla.example.com" {
+		t.Fatalf("a public HTTPS host is still learned: %v", entries)
+	}
+}

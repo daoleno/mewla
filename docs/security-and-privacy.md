@@ -219,3 +219,30 @@ else. A recorded answer, another computer's key, a computer that predates the
 challenge, or a stale address now held by another device all fail and fall back
 to the relay. The connection is as private as the relay one, since the relay
 only carries the same pinned TLS stream.
+
+
+### The private-network listener
+
+So that a Link phone can go direct without any setting, a daemon that listens
+only on loopback also listens, on the same port, on this computer's private
+IPv4 addresses (RFC 1918 and Tailscale's 100.64.0.0/10), and follows those
+addresses as they change. That is new exposure on the local network, kept small:
+
+- **TLS only.** The listener presents the daemon's transport identity and
+  answers plain HTTP with a bare 400. Nothing is served in the clear.
+- **Only device-signed and proof routes.** `/ws`, `/health`, `/auth-check` and
+  the other routes that check a paired device's signature are served. Pairing
+  (`/pair`, `/p/…`), join requests (`/enrollment/…`), the OAuth return and the
+  web UI are not: they answer 404 there, so the pairing boundary is unchanged
+  and no one can start a pairing or join request from the network.
+- **Same authentication.** A request still needs a valid device signature; a
+  phone only sends one after the listener proves the daemon key.
+- **Not learned as an address.** A request that arrives on a private address
+  is never added to the address book as an HTTPS entry point.
+- **What a neighbour on the network can still do:** open TCP connections and
+  TLS handshakes, read `/health` (the daemon id and public key, which are not
+  secret), and get 401 on everything else. Handshakes and header reads have
+  timeouts, but there is no per-address rate limit; if you don't want any of
+  this on a network, the firewall is the control.
+- On macOS the first listen on a network interface can raise the system's
+  incoming-connections prompt for the app.

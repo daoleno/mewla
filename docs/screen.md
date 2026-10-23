@@ -229,8 +229,9 @@ and the stage says what holds the picture up.
   and a phone paired through Mewla Link uses one by itself when the computer
   listens on that network and the phone can reach it; see
   [Direct when it can](connect-and-pair.md#direct-when-it-can). If the path
-  stays **Relay** at home, the computer is probably listening on loopback only:
-  start it with `mewla --lan`.
+  stays **Relay** at home, the phone can't reach the computer's private
+  address: another Wi-Fi network, client isolation on the router, or a firewall
+  blocking the port.
 - **encode** is high: the computer is busy; a full-screen update normally takes
   about 10 ms.
 - **app** or **draw** is high: the phone is the limit (its bridge into the

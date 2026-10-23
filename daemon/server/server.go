@@ -157,6 +157,7 @@ type Server struct {
 	tlsConfig                  *tls.Config
 	addresses                  *addressbook.Store
 	directEndpoints            func() []DirectEndpoint
+	private                    *privateListeners
 	enrollments                *enrollment.Manager
 	enrollmentObserver         func(enrollment.Request)
 	webUIFiles                 fs.FS
@@ -494,9 +495,10 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 	srv := &http.Server{Handler: s.Handler()}
 
 	var runtime sync.WaitGroup
-	runtime.Add(4)
+	runtime.Add(5)
 	go func() { defer runtime.Done(); s.runResourceTelemetry(runtimeCtx) }()
 	go func() { defer runtime.Done(); s.runBrainHostContinuity(runtimeCtx) }()
+	go func() { defer runtime.Done(); s.runPrivateListeners(runtimeCtx) }()
 	go func() {
 		defer runtime.Done()
 		s.broadcastEvents(runtimeCtx)
