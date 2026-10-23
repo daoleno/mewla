@@ -843,6 +843,23 @@ func (w *Watcher) SetExecutorResolver(resolve func(command string) string) {
 	w.executorResolver = resolve
 }
 
+// SetStructuredInput installs how a message reaches a Session through its
+// agent's own interface. send reports handled=false for a Session without one,
+// which is then typed into its pane.
+func (w *Watcher) SetStructuredInput(send func(sessionID, payload, receipt string) (handled bool, err error)) {
+	if w == nil {
+		return
+	}
+	w.mu.RLock()
+	owner := w.sessionInput
+	w.mu.RUnlock()
+	if owner != nil {
+		owner.mu.Lock()
+		owner.structured = send
+		owner.mu.Unlock()
+	}
+}
+
 // ObserveSessions registers a function called with every session event as it
 // is published, before it is queued for the event consumer. It must return
 // quickly and never call back into the Watcher.

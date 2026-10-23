@@ -361,6 +361,13 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 	}
 }
 
+// Rejected reports whether err is the server answering a call with an error:
+// the call arrived and was refused, so nothing was done.
+func Rejected(err error) bool {
+	var refused *rpcCallError
+	return errors.As(err, &refused)
+}
+
 type rpcCallError struct {
 	Method  string
 	Code    int
@@ -388,12 +395,32 @@ func (c *Client) LoadedThreadIDs(ctx context.Context) ([]string, error) {
 
 // ThreadInfo is the subset of a native Thread record needed for resolution.
 type ThreadInfo struct {
-	ID        string `json:"id"`
-	Cwd       string `json:"cwd"`
-	Status    string `json:"status"`
-	ParentID  string `json:"parentThreadId"`
-	UpdatedAt int64  `json:"updatedAt"`
-	Model     string `json:"model"`
+	ID        string       `json:"id"`
+	Cwd       string       `json:"cwd"`
+	Status    ThreadStatus `json:"status"`
+	ParentID  string       `json:"parentThreadId"`
+	UpdatedAt int64        `json:"updatedAt"`
+	Model     string       `json:"model"`
+}
+
+// ThreadStatus is a thread's state name. Older servers send it as a bare
+// string, newer ones as an object carrying the name in "type".
+type ThreadStatus string
+
+func (s *ThreadStatus) UnmarshalJSON(raw []byte) error {
+	var name string
+	if err := json.Unmarshal(raw, &name); err == nil {
+		*s = ThreadStatus(name)
+		return nil
+	}
+	var object struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return err
+	}
+	*s = ThreadStatus(object.Type)
+	return nil
 }
 
 // ListThreads returns native threads whose session cwd matches exactly.
@@ -503,7 +530,7 @@ func pickPrimaryThread(candidates []ThreadInfo) string {
 }
 
 func threadRank(t ThreadInfo) int {
-	switch strings.ToLower(t.Status) {
+	switch strings.ToLower(string(t.Status)) {
 	case "active":
 		return 3
 	case "idle":

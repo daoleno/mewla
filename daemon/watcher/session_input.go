@@ -371,7 +371,21 @@ type sessionInputOwner struct {
 	io       sessionInputIO
 	ledger   TurnLedger
 	now      func() time.Time
+	// structured sends a message through the agent's own interface; it reports
+	// handled=false for a Session that has none.
+	structured func(sessionID, payload, receipt string) (handled bool, err error)
 }
+
+// StructuredInputError is a failure of an agent's typed input interface.
+// NotSent says the agent refused the message before taking it, so it is safe
+// to send again.
+type StructuredInputError struct {
+	Err     error
+	NotSent bool
+}
+
+func (e *StructuredInputError) Error() string { return e.Err.Error() }
+func (e *StructuredInputError) Unwrap() error { return e.Err }
 
 func newSessionInputOwner(io sessionInputIO) *sessionInputOwner {
 	return &sessionInputOwner{
@@ -859,61 +873,85 @@ func (owner *sessionInputOwner) submitWithTurn(
 				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
 			}
 		}
-		buffer := fmt.Sprintf("mewla-session-input-%d-%d", os.Getpid(), sessionInputBufferSequence.Add(1))
-		if err := owner.io.loadBuffer(socket, buffer, payload); err != nil {
-			return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
-		}
-		defer owner.io.deleteBuffer(socket, buffer)
-
-		adapter := sessionInputProviderForCommand(command)
-		// Claude 2.1.285 labels bracketed input as pasted_content. A delegated
-		// task needs explicit typed intent outside that data wrapper; manual
-		// input keeps its native semantics. The brief remains one exact buffer.
-		adapter.delegatedIntent = delegatedTransportSubmit && isClaudeCommand(command)
+		// An agent with a typed way to take a message takes it there: no paste,
+		// no wait for the prompt to be ready, no read-back. The receipt rides
+		// along as the message's own client id.
 		mutationBoundary := time.Time{}
-		started, queueErr := owner.io.runQueue(socket, sessionInputSubmitQueue(
-			current.paneID,
-			buffer,
-			adapter,
-		), func() error {
-			// Run this inside runQueue immediately before command.Start. The
-			// queue is bound to the immutable pane id; the two identity reads
-			// bracket the pane-generation proof so deterministic process/pane
-			// replacement during provider baseline cannot reach mutation.
-			if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
-				return err
-			}
-			boundaryPane := owner.io.pane(socket, current.paneID)
-			if err := validateSessionInputPane(boundaryPane); err != nil {
-				return err
-			}
-			if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
-				return err
-			}
-			if turn != nil {
-				if transport, ok := owner.ledger.(InputAdmissionTransportLedger); ok {
-					if err := transport.MarkInputAdmissionTransportStarted(sessionID, turn.ID); err != nil {
-						return err
+		structuredSent := false
+		if turn == nil && owner.structured != nil {
+			handled, sendErr := owner.structured(sessionID, payload, result.Receipt)
+			if handled {
+				if sendErr != nil {
+					var failure *StructuredInputError
+					if errors.As(sendErr, &failure) && failure.NotSent {
+						return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, sendErr)
 					}
+					result.Outcome = InputAmbiguous
+					return ambiguousSubmission(result.Receipt, sendErr)
 				}
+				if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
+					result.Outcome = InputAmbiguous
+					return ambiguousSubmission(result.Receipt, err)
+				}
+				structuredSent = true
 			}
-			mutationBoundary = owner.nowUTC()
-			return nil
-		})
-		if queueErr != nil {
-			if started {
+		}
+		if !structuredSent {
+			buffer := fmt.Sprintf("mewla-session-input-%d-%d", os.Getpid(), sessionInputBufferSequence.Add(1))
+			if err := owner.io.loadBuffer(socket, buffer, payload); err != nil {
+				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
+			}
+			defer owner.io.deleteBuffer(socket, buffer)
+
+			adapter := sessionInputProviderForCommand(command)
+			// Claude 2.1.285 labels bracketed input as pasted_content. A delegated
+			// task needs explicit typed intent outside that data wrapper; manual
+			// input keeps its native semantics. The brief remains one exact buffer.
+			adapter.delegatedIntent = delegatedTransportSubmit && isClaudeCommand(command)
+			started, queueErr := owner.io.runQueue(socket, sessionInputSubmitQueue(
+				current.paneID,
+				buffer,
+				adapter,
+			), func() error {
+				// Run this inside runQueue immediately before command.Start. The
+				// queue is bound to the immutable pane id; the two identity reads
+				// bracket the pane-generation proof so deterministic process/pane
+				// replacement during provider baseline cannot reach mutation.
+				if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
+					return err
+				}
+				boundaryPane := owner.io.pane(socket, current.paneID)
+				if err := validateSessionInputPane(boundaryPane); err != nil {
+					return err
+				}
+				if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
+					return err
+				}
 				if turn != nil {
-					if ambiguityLedger, ok := owner.ledger.(InputAdmissionAmbiguityLedger); ok {
-						if markErr := ambiguityLedger.MarkInputAdmissionAmbiguous(sessionID, turn.ID, queueErr.Error()); markErr != nil {
-							queueErr = errors.Join(queueErr, fmt.Errorf("persist ambiguous admission: %w", markErr))
+					if transport, ok := owner.ledger.(InputAdmissionTransportLedger); ok {
+						if err := transport.MarkInputAdmissionTransportStarted(sessionID, turn.ID); err != nil {
+							return err
 						}
 					}
 				}
-				result.Outcome = InputAmbiguous
-				return ambiguousSubmission(result.Receipt, fmt.Errorf("run target-bound tmux command queue: %w", queueErr))
+				mutationBoundary = owner.nowUTC()
+				return nil
+			})
+			if queueErr != nil {
+				if started {
+					if turn != nil {
+						if ambiguityLedger, ok := owner.ledger.(InputAdmissionAmbiguityLedger); ok {
+							if markErr := ambiguityLedger.MarkInputAdmissionAmbiguous(sessionID, turn.ID, queueErr.Error()); markErr != nil {
+								queueErr = errors.Join(queueErr, fmt.Errorf("persist ambiguous admission: %w", markErr))
+							}
+						}
+					}
+					result.Outcome = InputAmbiguous
+					return ambiguousSubmission(result.Receipt, fmt.Errorf("run target-bound tmux command queue: %w", queueErr))
+				}
+				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared,
+					fmt.Errorf("start target-bound tmux command queue: %w", queueErr))
 			}
-			return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared,
-				fmt.Errorf("start target-bound tmux command queue: %w", queueErr))
 		}
 		var confirmation delegatedInputConfirmation
 		resolvedBySignal := false

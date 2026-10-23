@@ -12,6 +12,7 @@ import (
 	"github.com/daoleno/mewla/daemon/codexctl"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/google/uuid"
 )
 
 const (
@@ -45,7 +46,7 @@ func (c *codexEvents) Observe(event watcher.SessionEvent) {
 	switch event.Type {
 	case "worker_discovered":
 		if event.Worker != nil && event.Worker.AgentControl != "" {
-			c.start(event.Worker.ID, event.Worker.AgentControl)
+			c.start(event.Worker.ID, event.Worker.AgentControl, event.Worker.Cwd)
 		}
 	case "worker_removed":
 		c.stop(event.WorkerID)
@@ -55,14 +56,14 @@ func (c *codexEvents) Observe(event watcher.SessionEvent) {
 	}
 }
 
-func (c *codexEvents) start(workerID, socket string) {
+func (c *codexEvents) start(workerID, socket, cwd string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if existing := c.sessions[workerID]; existing != nil && existing.socket == socket {
 		return
 	}
 	ctx, cancel := context.WithCancel(c.ctx)
-	s := &codexSession{owner: c, workerID: workerID, socket: socket, cancel: cancel, mapper: codex.NewMapper(workerID)}
+	s := &codexSession{owner: c, workerID: workerID, socket: socket, cwd: cwd, cancel: cancel, mapper: codex.NewMapper(workerID)}
 	c.sessions[workerID] = s
 	go s.run(ctx)
 }
@@ -92,6 +93,7 @@ type codexSession struct {
 	owner    *codexEvents
 	workerID string
 	socket   string
+	cwd      string
 	cancel   context.CancelFunc
 	mapper   *codex.Mapper
 
@@ -146,8 +148,12 @@ func (s *codexSession) run(ctx context.Context) {
 	// connection. Name it, and attach once if it has run a turn already; a
 	// thread that has not has no rollout to attach to, and is attached when
 	// it first goes active.
-	if ids, err := client.LoadedThreadIDs(ctx); err == nil && len(ids) > 0 {
-		if id, err := client.ResolveThread(ctx, ""); err == nil {
+	ids, err := client.LoadedThreadIDs(ctx)
+	if err == nil && len(ids) > 0 {
+		id, err := client.ResolveThread(ctx, s.cwd)
+		if err != nil {
+			log.Printf("codex events: %s could not name its thread in %q: %v", s.workerID, s.cwd, err)
+		} else {
 			known, _ := json.Marshal(map[string]any{"thread": map[string]any{"id": id, "ephemeral": false}})
 			s.publish(s.mapper.Notification("thread/started", known, s.owner.now().UTC())...)
 			s.setThread(s.mapper.Thread())
@@ -278,4 +284,24 @@ func (s *codexSession) attach(ctx context.Context, client *codexctl.Client, thre
 		}
 	}
 	return attachOutcome{thread: thread, tries: tries, err: lastErr}
+}
+
+// send submits a message to the Worker's thread through the app-server.
+// handled is false for a Worker without a connected session, which is typed
+// into its pane instead.
+func (c *codexEvents) send(sessionID, payload, receipt string) (handled bool, err error) {
+	client, thread := c.client(sessionID)
+	if client == nil || thread == "" {
+		return false, nil
+	}
+	if receipt == "" {
+		receipt = "mewla-msg-" + uuid.NewString()
+	}
+	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
+	defer cancel()
+	if _, err := client.StartTurn(ctx, thread, receipt, payload); err != nil {
+		// A refusal came back from the server: the message was not taken.
+		return true, &watcher.StructuredInputError{Err: err, NotSent: codexctl.Rejected(err)}
+	}
+	return true, nil
 }
