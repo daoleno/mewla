@@ -1,6 +1,6 @@
 //go:build linux || darwin
 
-package brain
+package sqlitedb
 
 import (
 	"os"
@@ -8,9 +8,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// lockMigration takes an exclusive lock on path, waiting for another process
+// lockFile takes an exclusive lock on path, waiting for another process
 // that is migrating the same state directory, and returns the unlock.
-func lockMigration(path string) (func(), error) {
+func lockFile(path string) (func(), error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err

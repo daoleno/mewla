@@ -26,6 +26,7 @@ import (
 //	                timeline, kept only so memory search can still find them
 //	migration       one row, present only when the database was built from
 //	                the pre-SQLite files: where they went and what was checked
+//	                (created by the migration, see legacy_import.go)
 //
 // Every row is the JSON of the same struct the code already used, so no
 // reader or writer changed shape. A commit rewrites only the rows that
@@ -75,10 +76,6 @@ CREATE TABLE timeline_archive (
 	id     TEXT NOT NULL,
 	body   TEXT NOT NULL,
 	UNIQUE (origin, id)
-);
-CREATE TABLE migration (
-	id   INTEGER PRIMARY KEY CHECK (id = 1),
-	body TEXT NOT NULL
 );
 `}
 

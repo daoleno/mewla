@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/sqlitedb"
 )
@@ -23,49 +22,33 @@ import (
 // Before the SQLite store, Brain kept lifecycle/state.json, presentation.json
 // and messages.jsonl, each rewritten whole on change. openStateDatabase is the
 // one place that still knows those files: it moves their contents into
-// brain.db once, proves the move, and sets the old files aside. Nothing reads
-// them afterwards.
+// brain.db once, proves the move, and sets the old files aside (the protocol
+// is sqlitedb.Migration). Nothing reads them afterwards.
 //
-// The migration is crash-safe and rerunnable:
-//
-//  1. Take an exclusive lock on the state directory.
-//  2. Build the new database as brain.db.migrating, apart from the live name.
-//  3. Re-read it and compare row counts and content hashes with what was
-//     decoded from the old files.
-//  4. Rename it to brain.db. This is the commit point.
-//  5. Move the old files into one dated backup directory and leave a schema 3
-//     tombstone at lifecycle/state.json, so an older binary that is started
-//     later refuses to run instead of opening an empty Brain.
-//
-// A crash before 4 leaves the old files untouched and the next start rebuilds
-// from scratch. A crash after 4 leaves a database with a migration record and
-// old files still in place; the next start only finishes step 5.
+// The tombstone left at lifecycle/state.json has schema 3. An older binary
+// started later reads it as an unsupported lifecycle schema and refuses to
+// run, instead of opening an empty Brain beside the real one.
 const (
 	stateDatabaseName   = "brain.db"
-	migratingSuffix     = ".migrating"
-	migrationLockName   = ".migrate.lock"
 	legacyBackupPrefix  = "legacy-state-"
 	tombstoneSchema     = 3
 	legacyLifecycleFile = "lifecycle/state.json"
 )
 
-// MigrationRecord is what a migrated database remembers about the move: where
-// the old files went and the counts and hashes the move was checked against.
-type MigrationRecord struct {
-	At           time.Time           `json:"at"`
-	BackupDir    string              `json:"backup_dir"`
+// MigrationDetails is what the Brain migration verified: the counts and
+// content hashes of everything it moved, as decoded from the old files and as
+// read back from the new database.
+type MigrationDetails struct {
 	Lifecycle    *lifecycle.Digest   `json:"lifecycle,omitempty"`
 	Presentation *presentationDigest `json:"presentation,omitempty"`
 	Timeline     *timelineDigest     `json:"timeline,omitempty"`
 	Archive      *timelineDigest     `json:"archive,omitempty"`
-	Files        []MigratedFile      `json:"files"`
-	Notes        []string            `json:"notes,omitempty"`
 }
 
-// MigratedFile is one old file set aside, relative to the state directory.
-type MigratedFile struct {
-	Path  string `json:"path"`
-	Bytes int64  `json:"bytes"`
+// MigrationRecord is the migration record of a Brain database.
+type MigrationRecord struct {
+	sqlitedb.Record
+	MigrationDetails
 }
 
 type presentationDigest struct {
@@ -86,62 +69,34 @@ type timelineDigest struct {
 // openStateDatabase opens stateDir/brain.db, migrating pre-SQLite files into
 // it first when they are present.
 func openStateDatabase(stateDir string) (*sql.DB, error) {
-	path := filepath.Join(stateDir, stateDatabaseName)
-	legacy, err := legacyPrimaryFiles(stateDir)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := os.Stat(path); err == nil && len(legacy) == 0 {
-		return openBrainDatabase(path)
-	}
-	if err := os.MkdirAll(stateDir, 0o700); err != nil {
-		return nil, err
-	}
-	unlock, err := lockMigration(filepath.Join(stateDir, migrationLockName))
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	// Another process may have finished while this one waited for the lock.
-	if legacy, err = legacyPrimaryFiles(stateDir); err != nil {
-		return nil, err
-	}
-	_, statErr := os.Stat(path)
-	switch {
-	case statErr == nil:
-		db, err := openBrainDatabase(path)
-		if err != nil {
-			return nil, err
-		}
-		if len(legacy) == 0 {
-			return db, nil
-		}
-		record, found, err := readMigrationRecord(db)
-		if err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-		if !found {
-			_ = db.Close()
-			return nil, fmt.Errorf("brain: %s and %s both exist and the database has no migration record; "+
-				"refusing to guess which holds the state", stateDatabaseName, strings.Join(legacy, ", "))
-		}
-		// The database was committed but the old files were not yet set aside.
-		if err := setAsideLegacy(stateDir, record.BackupDir); err != nil {
-			_ = db.Close()
-			return nil, err
-		}
-		return db, nil
-	case !errors.Is(statErr, os.ErrNotExist):
-		return nil, statErr
-	case len(legacy) == 0:
-		return openBrainDatabase(path)
-	}
-	return migrateLegacyState(stateDir, path)
+	return sqlitedb.Migration{
+		Dir:      stateDir,
+		Database: stateDatabaseName,
+		Backup: func(at time.Time) string {
+			return filepath.Join(filepath.Dir(stateDir), legacyBackupPrefix+at.Format("20060102T150405Z"))
+		},
+		Primaries: func() ([]string, error) { return legacyPrimaryFiles(stateDir) },
+		Artifacts: func() ([]string, error) { return legacyArtifacts(stateDir) },
+		Open:      openBrainDatabase,
+		Build: func(db *sql.DB, record *sqlitedb.Record) error {
+			details, err := buildMigratedDatabase(stateDir, db, record)
+			if err != nil {
+				return err
+			}
+			record.Details, err = json.Marshal(details)
+			return err
+		},
+		Tombstone: func() (string, []byte) {
+			body, _ := json.Marshal(map[string]any{
+				"schema":   tombstoneSchema,
+				"moved_to": "../" + stateDatabaseName,
+				"note":     "Brain state moved to state/brain.db; an older Mewla must not run on this directory",
+			})
+			return legacyLifecycleFile, append(body, '\n')
+		},
+	}.Run()
 }
 
-// legacyPrimaryFiles lists the pre-SQLite state files that still carry live
-// state. A tombstone left by an earlier migration is not one.
 func legacyPrimaryFiles(stateDir string) ([]string, error) {
 	var found []string
 	for _, rel := range []string{"presentation.json", "messages.jsonl"} {
@@ -160,112 +115,71 @@ func legacyPrimaryFiles(stateDir string) ([]string, error) {
 	return found, nil
 }
 
-func migrateLegacyState(stateDir, path string) (*sql.DB, error) {
-	building := path + migratingSuffix
-	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-		if err := os.Remove(building + suffix); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-	}
-	now := time.Now().UTC()
-	record := MigrationRecord{
-		At:        now,
-		BackupDir: filepath.Join(filepath.Dir(stateDir), legacyBackupPrefix+now.Format("20060102T150405Z")),
-	}
-	if err := buildMigratedDatabase(stateDir, building, &record); err != nil {
-		for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
-			_ = os.Remove(building + suffix)
-		}
-		return nil, fmt.Errorf("migrate Brain state to %s: %w", stateDatabaseName, err)
-	}
-	if err := os.Rename(building, path); err != nil {
-		return nil, err
-	}
-	if err := atomicfile.SyncDir(stateDir); err != nil {
-		return nil, err
-	}
-	if err := setAsideLegacy(stateDir, record.BackupDir); err != nil {
-		return nil, err
-	}
-	return openBrainDatabase(path)
-}
-
-// buildMigratedDatabase writes the new database next to its final name and
-// verifies it against the decoded old files before returning. The database is
-// sealed to a single file, so renaming it moves everything.
-func buildMigratedDatabase(stateDir, building string, record *MigrationRecord) error {
-	db, err := sqlitedb.Open(building)
-	if err != nil {
-		return err
-	}
-	db.SetMaxOpenConns(1)
-	closed := false
-	defer func() {
-		if !closed {
-			_ = db.Close()
-		}
-	}()
+// buildMigratedDatabase fills db from the old files and verifies each part
+// against what was decoded from them.
+func buildMigratedDatabase(stateDir string, db *sql.DB, record *sqlitedb.Record) (MigrationDetails, error) {
+	var details MigrationDetails
 	if err := sqlitedb.Migrate(db, brainSchemaComponent, brainSchemaSteps); err != nil {
-		return err
+		return details, err
 	}
 
 	// Lifecycle.
 	legacyLifecycle, found, err := lifecycle.ReadLegacy(filepath.Join(stateDir, legacyLifecycleFile))
 	if err != nil {
-		return err
+		return details, err
 	}
 	if found {
 		want, err := lifecycle.LegacyDigest(legacyLifecycle)
 		if err != nil {
-			return err
+			return details, err
 		}
 		if err := lifecycle.ImportLegacy(db, legacyLifecycle); err != nil {
-			return err
+			return details, err
 		}
 		got, err := lifecycle.ReadDigest(db)
 		if err != nil {
-			return err
+			return details, err
 		}
 		if got != want {
-			return fmt.Errorf("lifecycle verification failed: wrote %+v, read back %+v", want, got)
+			return details, fmt.Errorf("lifecycle verification failed: wrote %+v, read back %+v", want, got)
 		}
-		record.Lifecycle = &want
+		details.Lifecycle = &want
 	}
 
 	// Presentation.
 	if raw, err := os.ReadFile(filepath.Join(stateDir, "presentation.json")); err == nil {
 		decoded, err := decodePresentationDatabase(raw)
 		if err != nil {
-			return fmt.Errorf("decode Brain presentation database: %w", err)
+			return details, fmt.Errorf("decode Brain presentation database: %w", err)
 		}
 		sortPresentation(&decoded)
 		if _, err := commitPresentation(db, 0, presentationDatabase{}, decoded); err != nil {
-			return err
+			return details, err
 		}
 		image, _, err := readPresentationImage(db)
 		if err != nil {
-			return err
+			return details, err
 		}
 		want, err := digestPresentation(decoded)
 		if err != nil {
-			return err
+			return details, err
 		}
 		got, err := digestPresentation(image)
 		if err != nil {
-			return err
+			return details, err
 		}
 		if got != want {
-			return fmt.Errorf("presentation verification failed: wrote %+v, read back %+v", want, got)
+			return details, fmt.Errorf("presentation verification failed: wrote %+v, read back %+v", want, got)
 		}
-		record.Presentation = &want
+		details.Presentation = &want
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+		return details, err
 	}
 
 	// Timeline and its archives.
 	live, note, err := readLegacyTimeline(filepath.Join(stateDir, "messages.jsonl"))
 	if err != nil {
-		return err
+		return details, err
 	}
 	record.Notes = append(record.Notes, note...)
 	if err := sqlitedb.Tx(db, func(tx *sql.Tx) error {
@@ -281,11 +195,11 @@ func buildMigratedDatabase(stateDir, building string, record *MigrationRecord) e
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("write timeline: %w", err)
+		return details, fmt.Errorf("write timeline: %w", err)
 	}
 	wantTimeline, err := digestTimeline(live)
 	if err != nil {
-		return err
+		return details, err
 	}
 	var stored []TimelineItem
 	if err := scanBodies(db, `SELECT body FROM timeline ORDER BY seq`, func(body []byte) error {
@@ -296,20 +210,20 @@ func buildMigratedDatabase(stateDir, building string, record *MigrationRecord) e
 		stored = append(stored, item)
 		return nil
 	}); err != nil {
-		return err
+		return details, err
 	}
 	gotTimeline, err := digestTimeline(stored)
 	if err != nil {
-		return err
+		return details, err
 	}
 	if gotTimeline != wantTimeline {
-		return fmt.Errorf("timeline verification failed: wrote %+v, read back %+v", wantTimeline, gotTimeline)
+		return details, fmt.Errorf("timeline verification failed: wrote %+v, read back %+v", wantTimeline, gotTimeline)
 	}
-	record.Timeline = &wantTimeline
+	details.Timeline = &wantTimeline
 
 	archived, notes, err := readLegacyArchives(stateDir, live)
 	if err != nil {
-		return err
+		return details, err
 	}
 	record.Notes = append(record.Notes, notes...)
 	if err := sqlitedb.Tx(db, func(tx *sql.Tx) error {
@@ -325,88 +239,59 @@ func buildMigratedDatabase(stateDir, building string, record *MigrationRecord) e
 		}
 		return nil
 	}); err != nil {
-		return fmt.Errorf("write timeline archive: %w", err)
+		return details, fmt.Errorf("write timeline archive: %w", err)
 	}
 	wantArchive, err := digestArchive(archived)
 	if err != nil {
-		return err
+		return details, err
 	}
 	var storedArchive []archivedItem
 	rows, err := db.Query(`SELECT origin, body FROM timeline_archive ORDER BY seq`)
 	if err != nil {
-		return err
+		return details, err
 	}
 	for rows.Next() {
 		var origin, body string
 		if err := rows.Scan(&origin, &body); err != nil {
 			_ = rows.Close()
-			return err
+			return details, err
 		}
 		var item TimelineItem
 		if err := json.Unmarshal([]byte(body), &item); err != nil {
 			_ = rows.Close()
-			return err
+			return details, err
 		}
 		storedArchive = append(storedArchive, archivedItem{origin: origin, item: item})
 	}
 	if err := rows.Close(); err != nil {
-		return err
+		return details, err
 	}
 	gotArchive, err := digestArchive(storedArchive)
 	if err != nil {
-		return err
+		return details, err
 	}
 	if gotArchive != wantArchive {
-		return fmt.Errorf("timeline archive verification failed: wrote %+v, read back %+v", wantArchive, gotArchive)
+		return details, fmt.Errorf("timeline archive verification failed: wrote %+v, read back %+v", wantArchive, gotArchive)
 	}
-	record.Archive = &wantArchive
+	details.Archive = &wantArchive
 
-	// What gets set aside, recorded before the commit point.
-	files, err := legacyArtifacts(stateDir)
-	if err != nil {
-		return err
-	}
-	for _, rel := range files {
-		info, err := os.Stat(filepath.Join(stateDir, rel))
-		if err != nil {
-			return err
-		}
-		record.Files = append(record.Files, MigratedFile{Path: rel, Bytes: info.Size()})
-	}
-	body, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	if _, err := db.Exec(`INSERT INTO migration(id, body) VALUES(1, ?)`, string(body)); err != nil {
-		return err
-	}
-	if err := sqlitedb.Seal(db); err != nil {
-		return err
-	}
-	closed = true
-	return db.Close()
+	return details, nil
 }
 
-func readMigrationRecord(db *sql.DB) (MigrationRecord, bool, error) {
-	var body string
-	err := db.QueryRow(`SELECT body FROM migration WHERE id = 1`).Scan(&body)
-	if errors.Is(err, sql.ErrNoRows) {
-		return MigrationRecord{}, false, nil
-	}
-	if err != nil {
-		return MigrationRecord{}, false, err
-	}
-	var record MigrationRecord
-	if err := json.Unmarshal([]byte(body), &record); err != nil {
-		return MigrationRecord{}, false, err
-	}
-	return record, true, nil
-}
-
-// MigrationRecordOf reports what the migration of this Store's state
-// directory moved, when it happened here.
+// MigrationRecord reports what the migration of this Store's database moved,
+// when the database was built by one.
 func (s *Store) MigrationRecord() (MigrationRecord, bool, error) {
-	return readMigrationRecord(s.db)
+	record, found, err := sqlitedb.ReadRecord(s.db)
+	if err != nil || !found {
+		return MigrationRecord{}, false, err
+	}
+	out := MigrationRecord{Record: record}
+	if len(record.Details) > 0 {
+		if err := json.Unmarshal(record.Details, &out.MigrationDetails); err != nil {
+			return MigrationRecord{}, false, err
+		}
+	}
+	return out, true, nil
 }
 
 // legacyArtifacts lists every pre-SQLite file under stateDir, relative to it:
@@ -464,48 +349,6 @@ func legacyArtifacts(stateDir string) ([]string, error) {
 		kept = append(kept, file)
 	}
 	return kept, nil
-}
-
-// setAsideLegacy moves every old file into backupDir, keeping its relative
-// path, then writes the tombstone. Rerunning after a crash skips what already
-// moved. Nothing is deleted.
-func setAsideLegacy(stateDir, backupDir string) error {
-	files, err := legacyArtifacts(stateDir)
-	if err != nil {
-		return err
-	}
-	for _, rel := range files {
-		from := filepath.Join(stateDir, filepath.FromSlash(rel))
-		to := filepath.Join(backupDir, "state", filepath.FromSlash(rel))
-		if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {
-			return err
-		}
-		if _, err := os.Lstat(to); err == nil {
-			return fmt.Errorf("backup %s already holds %s; refusing to overwrite it", backupDir, rel)
-		}
-		if err := os.Rename(from, to); err != nil {
-			return err
-		}
-	}
-	if len(files) > 0 {
-		for _, dir := range []string{filepath.Dir(backupDir), backupDir} {
-			if err := atomicfile.SyncDir(dir); err != nil {
-				return err
-			}
-		}
-	}
-	tombstone, err := json.Marshal(map[string]any{
-		"schema":   tombstoneSchema,
-		"moved_to": "../" + stateDatabaseName,
-		"note":     "Brain state moved to state/brain.db; an older Mewla must not run on this directory",
-	})
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Join(stateDir, "lifecycle"), 0o700); err != nil {
-		return err
-	}
-	return atomicfile.Write(filepath.Join(stateDir, legacyLifecycleFile), append(tombstone, '\n'), 0o600)
 }
 
 // decodePresentationDatabase accepts only the current projection schema.
