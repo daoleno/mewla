@@ -18,7 +18,6 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   WorkerProvider,
   useWorkerDispatch,
-  useWorkerServerConnections,
 } from "../store/workers";
 import { BrainProvider, useBrainDispatch } from "../store/brain";
 import { WorkProvider, useWorkDispatch } from "../store/work";
@@ -70,7 +69,6 @@ import { CatSplash } from "../components/mewla/CatSplash";
 import { LaunchVeil } from "../components/mewla/LaunchVeil";
 import type { LaunchDestination } from "../components/mewla/launchTiming";
 import { consumeUnfinishedNativeTerminalBreadcrumb } from "../services/nativeTerminalDiagnosticsObserver";
-import { measureServerLatency } from "../services/serverLatency";
 import { LiveSurfaceBridge } from "../components/live/LiveSurfaceBridge";
 import { getMewlaLiveModule } from "../modules/mewla-live/src";
 import { startAppUpdateChecks } from "../services/useAppUpdate";
@@ -157,7 +155,6 @@ function LiveAppRuntime() {
       <NativeTerminalDiagnosticsObserver />
       <ConnectionLifecycle onBootstrapResolved={handleBootstrapResolved} />
       <CurrentServerConnectionBinder />
-      <LatencySampler />
       <NotificationObserver />
       <EnrollmentApprovalHost />
       <AppNavigator bootstrapResolved={destination !== null} />
@@ -508,33 +505,6 @@ const CurrentServerConnectionBinder = memo(
     return null;
   },
 );
-
-const LatencySampler = memo(function LatencySampler() {
-  const dispatch = useWorkerDispatch();
-  const serverConnections = useWorkerServerConnections();
-  const { currentServer, isCurrentServer } = useCurrentServer();
-  const connected = currentServer && serverConnections[currentServer.id] === "connected";
-
-  useEffect(() => {
-    if (!currentServer || !connected) return;
-    let cancelled = false;
-    const refreshServerLatency = async () => {
-      if (!isCurrentServer(currentServer.id)) return;
-      try {
-        const sample = await measureServerLatency({ server: currentServer });
-        if (sample && !cancelled && isCurrentServer(currentServer.id)) {
-          dispatch({ type: "SET_SERVER_LATENCY", serverId: currentServer.id, sample });
-        }
-      } catch {
-        // A failed probe is not a new latency observation.
-      }
-    };
-    void refreshServerLatency();
-    const interval = setInterval(() => { void refreshServerLatency(); }, 15000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [connected, currentServer, dispatch, isCurrentServer]);
-  return null;
-});
 
 // Watch judges whether a push was worth sending, and needs to know whether the
 // person was already in the app. Only the foreground state leaves the app.

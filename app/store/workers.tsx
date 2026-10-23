@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { WorkerStatus } from '../constants/tokens';
 import type { ConnectionIssue } from '../services/connectionIssue';
-import type { ServerLatencySample } from '../services/serverLatency';
 import { makeSessionKey } from '../services/sessionKeys';
 import {
   bumpServerConnectionGeneration,
@@ -51,7 +50,6 @@ export interface State {
   workers: Worker[];
   serverConnections: Record<string, ConnectionState>;
   serverConnectionIssues: Record<string, ConnectionIssue | null>;
-  serverLatencyById: Record<string, ServerLatencySample | undefined>;
   hydratedServers: Record<string, boolean>;
   /**
    * Transport-owned: increments when a server enters `connected`.
@@ -110,14 +108,12 @@ export type Action =
   | { type: 'REMOVE_WORKER'; serverId: string; worker_id: string }
   | { type: 'SET_SERVER_CONNECTION_STATE'; serverId: string; connectionState: ConnectionState }
   | { type: 'SET_SERVER_CONNECTION_ISSUE'; serverId: string; issue: ConnectionIssue | null }
-  | { type: 'SET_SERVER_LATENCY'; serverId: string; sample: ServerLatencySample }
   | { type: 'REMOVE_SERVER'; serverId: string };
 
 export const initialWorkerState: State = {
   workers: [],
   serverConnections: {},
   serverConnectionIssues: {},
-  serverLatencyById: {},
   hydratedServers: {},
   connectionGenerationByServer: {},
   workerSessionListGenerationByServer: {},
@@ -225,23 +221,11 @@ export function workerReducer(state: State, action: Action): State {
           [action.serverId]: action.issue,
         },
       };
-    case 'SET_SERVER_LATENCY':
-      if (serverLatencySamplesEqual(state.serverLatencyById[action.serverId], action.sample)) {
-        return state;
-      }
-      return {
-        ...state,
-        serverLatencyById: {
-          ...state.serverLatencyById,
-          [action.serverId]: action.sample,
-        },
-      };
     case 'REMOVE_SERVER':
       if (
         !state.workers.some(agent => agent.serverId === action.serverId) &&
         !(action.serverId in state.serverConnections) &&
         !(action.serverId in state.serverConnectionIssues) &&
-        !(action.serverId in state.serverLatencyById) &&
         !(action.serverId in state.hydratedServers) &&
         !(action.serverId in state.connectionGenerationByServer) &&
         !(action.serverId in state.workerSessionListGenerationByServer)
@@ -256,9 +240,6 @@ export function workerReducer(state: State, action: Action): State {
         ),
         serverConnectionIssues: Object.fromEntries(
           Object.entries(state.serverConnectionIssues).filter(([serverId]) => serverId !== action.serverId),
-        ),
-        serverLatencyById: Object.fromEntries(
-          Object.entries(state.serverLatencyById).filter(([serverId]) => serverId !== action.serverId),
         ),
         hydratedServers: Object.fromEntries(
           Object.entries(state.hydratedServers).filter(([serverId]) => serverId !== action.serverId),
@@ -419,19 +400,6 @@ function connectionIssuesEqual(
   );
 }
 
-function serverLatencySamplesEqual(
-  left: ServerLatencySample | undefined,
-  right: ServerLatencySample | undefined,
-): boolean {
-  if (left === right) {
-    return true;
-  }
-  if (!left || !right) {
-    return false;
-  }
-  return left.latencyMs === right.latencyMs && left.measuredAt === right.measuredAt;
-}
-
 function stringArraysEqual(left: string[], right: string[]): boolean {
   if (left === right) {
     return true;
@@ -525,7 +493,6 @@ const WorkerServerConnectionsContext = createContext<
 const WorkerServerSummaryContext = createContext<{
   serverConnections: State['serverConnections'];
   serverConnectionIssues: State['serverConnectionIssues'];
-  serverLatencyById: State['serverLatencyById'];
   hydratedServers: State['hydratedServers'];
   dispatch: React.Dispatch<Action>;
 } | null>(null);
@@ -536,7 +503,6 @@ export function WorkerProvider({ children }: { children: ReactNode }) {
     () => ({
       serverConnections: state.serverConnections,
       serverConnectionIssues: state.serverConnectionIssues,
-      serverLatencyById: state.serverLatencyById,
       hydratedServers: state.hydratedServers,
       dispatch,
     }),
@@ -544,7 +510,6 @@ export function WorkerProvider({ children }: { children: ReactNode }) {
       state.hydratedServers,
       state.serverConnectionIssues,
       state.serverConnections,
-      state.serverLatencyById,
     ],
   );
   return (
