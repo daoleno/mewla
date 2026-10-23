@@ -33,6 +33,13 @@ Calendar sends two other kinds of alert:
   the Brain thread that holds the result. The alert never contains the result
   itself.
 
+[Watch](watch.md) keeps a record of every push and every push it held back,
+and what you did with it (tapped it, opened that Session, brought the app
+forward). When Watch is on, an agent reads them in context and flags kinds of
+push that are noise, badly timed, repeated, or that never came when you were
+needed. The app tells your computer only the push's id, that you tapped it and
+when, and whether the app is in the foreground.
+
 Each push is a single attempt. If delivery fails or the daemon restarts at the
 wrong moment, there may be no alert, but the state and results are still there
 when you open the app.
