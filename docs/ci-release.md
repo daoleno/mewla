@@ -249,6 +249,10 @@ The same action installs a pinned ccache and points CMake at it through `CMAKE_C
 
 `native-cache.yml` also has a `macos-26` job that is the only writer of the iOS caches in the shared [`ios-native`](../.github/actions/ios-native/action.yml) action: the verified iOS Ghostty XCFramework, the pinned Zig and Ghostty source, and the CocoaPods download cache (it runs an unsigned prebuild and `pod install`, no secrets). `ios-release.yml` and the tag-time `ios-native` CI job only restore them. Before this, the iOS release saved those caches under the tag and rebuilt the XCFramework (about 4 minutes) on every release. Xcode DerivedData remains uncached because signed, identity-sensitive intermediates are large and the observed evidence does not justify that risk and complexity.
 
+The iOS Ghostty build carries a workaround for an Xcode and Zig mismatch: Xcode 26.6's macOS SDK lists `libSystem` as arm64e only while Zig 0.15.2 wants an exact arm64 match, so `scripts/build-libghostty-ios.sh` builds against a patched SDK clone and `scripts/zig-xcode-compat/xcrun` points Zig at it. A separate `macos-26` job in `native-cache.yml` (so that a red result never blocks the iOS cache refresh) runs [`scripts/check-zig-xcode-compat.sh`](../scripts/check-zig-xcode-compat.sh), which passes while the runner's SDK still needs the workaround and fails, naming what to delete, once it lists arm64. The job runs every five days, so the workaround cannot outlive its reason unnoticed.
+
+The generated viewer bundles (`app/components/markdown/mermaidRuntimeSource.js`, `app/components/screen/screenViewerSource.js` and `screenViewerRuntime.js`, about 4 MB) stay in the repository because the app's Metro bundle imports them. The `App` job in `ci.yml` runs `bun run mermaid:generate --check` and `bun run screen:generate --check`, which fail when a bundle no longer matches what its pinned dependency regenerates.
+
 Watch:
 
 ```bash

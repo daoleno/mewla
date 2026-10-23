@@ -25,6 +25,8 @@ on:
       - scripts/build-libghostty-ios.sh
       - scripts/verify-libghostty-ios.sh
       - scripts/zig-xcode-compat/**
+      - scripts/lib/zig-xcode-compat.sh
+      - scripts/check-zig-xcode-compat.sh
       - .github/actions/ios-native/**
       - .github/workflows/native-cache.yml
   # Unused caches are evicted after 7 days.
@@ -65,6 +67,20 @@ jobs:
       - name: ccache statistics
         if: always()
         run: ccache --show-stats
+
+  zig-xcode-workaround:
+    name: Zig/Xcode workaround is still needed
+    if: github.ref == 'refs/heads/main'
+    # Its own job on the iOS image, so a retired workaround turns this red
+    # without stopping the iOS caches from being refreshed.
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the SDK
+        # Fails, naming what to delete, once the Xcode on this runner lists
+        # arm64 in libSystem (see the script).
+        run: ./scripts/check-zig-xcode-compat.sh
 
   ios:
     name: iOS Ghostty and CocoaPods (unsigned)

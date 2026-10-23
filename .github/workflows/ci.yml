@@ -101,6 +101,10 @@ jobs:
         working-directory: app
       - name: Open-source licenses are current
         run: bun run licenses:generate --check
+      - name: Generated viewer bundles are current
+        run: |
+          bun run mermaid:generate --check
+          bun run screen:generate --check
       - name: Android export
         run: bunx expo export --platform android
         working-directory: app
