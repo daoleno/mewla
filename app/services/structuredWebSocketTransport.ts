@@ -1,5 +1,12 @@
 const WEB_SOCKET_OPEN_STATE = 1;
 
+/** A file staged in the upload store, sent next to the text as a typed field. */
+export type SendAttachment = {
+  name: string;
+  path: string;
+  content_type?: string;
+};
+
 export type StructuredCommandFailure = {
   requestId: string;
   code: string;
@@ -141,7 +148,7 @@ export function structuredInputMessage(input: {
   requestId: string;
   workerId: string;
   text: string;
-  displayBody?: string;
+  attachments?: SendAttachment[];
   conversationScopeKey?: string;
 }) {
   return {
@@ -149,8 +156,8 @@ export function structuredInputMessage(input: {
     request_id: input.requestId,
     worker_id: input.workerId,
     text: input.text,
-    ...(input.displayBody !== undefined
-      ? { display_body: input.displayBody }
+    ...(input.attachments && input.attachments.length > 0
+      ? { attachments: input.attachments }
       : {}),
     ...(input.conversationScopeKey
       ? { conversation_scope_key: input.conversationScopeKey }

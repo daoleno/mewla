@@ -76,6 +76,7 @@ import {
   structuredActionMessage,
   type WorkerAction,
   structuredInputMessage,
+  type SendAttachment,
   type StructuredCommandReceipt,
 } from "./structuredWebSocketTransport";
 import {
@@ -2256,7 +2257,7 @@ export class WebSocketClient {
     workerId: string,
     text: string,
     options?: {
-      displayBody?: string;
+      attachments?: SendAttachment[];
       conversationScopeKey?: string;
       requestId?: string;
     },
@@ -2285,7 +2286,7 @@ export class WebSocketClient {
             requestId,
             workerId,
             text,
-            displayBody: options?.displayBody,
+            attachments: options?.attachments,
             conversationScopeKey: options?.conversationScopeKey,
           }),
         );

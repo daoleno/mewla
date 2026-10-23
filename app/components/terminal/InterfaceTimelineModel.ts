@@ -42,7 +42,6 @@ import { isImageAttachment } from "../../services/imageSource";
 import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
 import { computerMessageTimelineItem } from "./computerMessageCardModel";
 import { pathBasename } from "../../services/pathDisplay";
-import { splitAttachmentEnvelope } from "./attachmentEnvelope";
 import { choiceAnswerDetails, choiceAnsweredSummary } from "./claudeChoiceModel";
 
 const COMMAND_OUTPUT_PREVIEW_LINES = 7;
@@ -134,11 +133,9 @@ export function buildTimelineFromSortedEvents(
   for (const event of sortedEvents) {
     if (event.kind === "user_message" || event.kind === "assistant_message") {
       flushExploration();
-      const extracted = extractDisplayMessage(event.body || "");
-      if (
-        !extracted.body &&
-        extracted.attachments.length === 0
-      ) {
+      const body = cleanStructuredMessageText(event.body || "");
+      const attachments = displayAttachments(event);
+      if (!body && attachments.length === 0) {
         continue;
       }
       const turnFocusAnchorId =
@@ -150,8 +147,8 @@ export function buildTimelineFromSortedEvents(
         id: event.id || `${event.kind}:${event.seq}`,
         role: event.kind === "user_message" ? "user" : "assistant",
         timestamp: event.timestamp,
-        body: extracted.body,
-        attachments: extracted.attachments,
+        body,
+        attachments,
         streaming: event.partial,
         ...(turnFocusAnchorId ? { turnFocusAnchorId } : {}),
       });
@@ -1030,7 +1027,7 @@ export function finalReplyIdsOf(unsortedEvents: readonly CodexConversationEvent[
     } else if (
       event.kind === "assistant_message" &&
       !event.partial &&
-      extractDisplayMessage(event.body || "").body
+      cleanStructuredMessageText(event.body || "")
     ) {
       reply = event;
     }
@@ -1039,15 +1036,12 @@ export function finalReplyIdsOf(unsortedEvents: readonly CodexConversationEvent[
   return ids;
 }
 
-function extractDisplayMessage(value: string): {
-  body: string;
-  attachments: DisplayAttachment[];
-} {
-  const split = splitAttachmentEnvelope(cleanStructuredMessageText(value));
-  return {
-    body: cleanStructuredMessageText(split.text),
-    attachments: split.attachments,
-  };
+function displayAttachments(event: CodexConversationEvent): DisplayAttachment[] {
+  return (event.attachments ?? []).map((file) => ({
+    name: file.name,
+    path: file.path,
+    mimeType: file.content_type,
+  }));
 }
 
 function cleanStructuredMessageText(value: string) {

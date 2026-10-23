@@ -31,8 +31,8 @@ export function useInterfaceDraftSubmission({
   submitTextToInterface,
 }: UseInterfaceDraftSubmissionInput) {
   return useCallback(() => {
-    const text = buildInterfaceComposerMessage(draft, attachments);
-    if (!text || sending || uploading) {
+    const message = buildInterfaceComposerMessage(draft, attachments);
+    if (!message || sending || uploading) {
       return;
     }
     const previousDraft = draft;
@@ -40,14 +40,14 @@ export function useInterfaceDraftSubmission({
     if (
       routeDraftSubmission({
         draft,
-        composedText: text,
+        composedText: message.text,
         previousDraft,
         previousAttachments,
       })
     ) {
       return;
     }
-    submitTextToInterface(text, previousDraft, previousAttachments);
+    submitTextToInterface(message.text, previousDraft, previousAttachments);
   }, [
     attachments,
     draft,

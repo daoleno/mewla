@@ -12,6 +12,7 @@ import {
   type OutboxTransport,
 } from "./messageOutbox";
 import type {
+  SendAttachment,
   StructuredCommandOutcome,
   StructuredCommandReceipt,
 } from "./structuredWebSocketTransport";
@@ -56,6 +57,7 @@ type Sent = {
   serverId: string;
   workerId: string;
   text: string;
+  attachments?: SendAttachment[];
   requestId: string;
   settle(outcome: StructuredCommandOutcome): void;
 };
@@ -71,7 +73,7 @@ class FakeTransport implements OutboxTransport {
     serverId: string,
     workerId: string,
     text: string,
-    options: { requestId: string },
+    options: { requestId: string; attachments?: SendAttachment[] },
   ): StructuredCommandReceipt {
     if (!this.connected.has(serverId)) {
       throw new Error("Daemon is not connected.");
@@ -84,6 +86,7 @@ class FakeTransport implements OutboxTransport {
       serverId,
       workerId,
       text,
+      attachments: options.attachments,
       requestId: options.requestId,
       settle: resolve,
     });
@@ -138,8 +141,7 @@ function setup(initial: OutboxEntry[] = [], idPrefix = "id") {
     const entry = outbox.enqueue({
       serverId,
       workerId,
-      text: `${text}\n`,
-      displayBody: text,
+      text,
     });
     await tick();
     return entry;
@@ -189,10 +191,10 @@ describe("MessageOutbox", () => {
     const third = await send("three");
     const other = await send("parallel", "w2");
     // The second waits for the first; another worker is not held up.
-    expect(transport.sent.map((sent) => sent.text)).toEqual(["one\n", "parallel\n"]);
+    expect(transport.sent.map((sent) => sent.text)).toEqual(["one", "parallel"]);
     transport.sent[0].settle({ kind: "sent" });
     await tick();
-    expect(transport.sent.map((sent) => sent.text)).toEqual(["one\n", "parallel\n", "two\n"]);
+    expect(transport.sent.map((sent) => sent.text)).toEqual(["one", "parallel", "two"]);
     transport.sent[2].settle({ kind: "sent" });
     await tick();
     transport.sent[3].settle({ kind: "sent" });
@@ -215,7 +217,7 @@ describe("MessageOutbox", () => {
     expect(transport.ids).toEqual([first.id, first.id]);
     transport.sent[1].settle({ kind: "sent" });
     await tick();
-    expect(transport.sent.map((sent) => sent.text)).toEqual(["one\n", "one\n", "two\n"]);
+    expect(transport.sent.map((sent) => sent.text)).toEqual(["one", "one", "two"]);
     expect(events.some((event) => event.kind === "undeliverable")).toBe(false);
   });
 
@@ -234,7 +236,7 @@ describe("MessageOutbox", () => {
     }
     expect(outbox.get(first.id)?.state).toBe("undeliverable");
     expect(events.filter((event) => event.kind === "undeliverable")).toHaveLength(1);
-    expect(transport.sent.at(-1)?.text).toBe("two\n");
+    expect(transport.sent.at(-1)?.text).toBe("two");
   });
 
   test("a stale receipt continues the same message under a fresh id", async () => {
@@ -296,7 +298,7 @@ describe("MessageOutbox", () => {
     await connect();
     daemonReceives(transport.sent[1], false);
     await tick();
-    expect(turns).toEqual(["你写的文案 AI 味道太重了\n"]);
+    expect(turns).toEqual(["你写的文案 AI 味道太重了"]);
     expect(outbox.entriesFor("s1", "w1")).toEqual([]);
   });
 
@@ -305,15 +307,30 @@ describe("MessageOutbox", () => {
     await first.send("one");
     await first.send("two");
     const persisted = first.store.saved;
-    expect(persisted.map((entry) => entry.displayBody)).toEqual(["one", "two"]);
+    expect(persisted.map((entry) => entry.text)).toEqual(["one", "two"]);
 
     const restarted = setup(persisted);
     await restarted.outbox.hydrate();
     await restarted.connect();
-    expect(restarted.transport.sent.map((sent) => sent.text)).toEqual(["one\n"]);
+    expect(restarted.transport.sent.map((sent) => sent.text)).toEqual(["one"]);
     restarted.transport.sent[0].settle({ kind: "sent" });
     await tick();
-    expect(restarted.transport.sent.map((sent) => sent.text)).toEqual(["one\n", "two\n"]);
+    expect(restarted.transport.sent.map((sent) => sent.text)).toEqual(["one", "two"]);
+  });
+
+  test("typed attachments are queued, persisted and sent next to the text", async () => {
+    const files = [{ name: "photo.png", path: "/uploads/photo.png", content_type: "image/png" }];
+    const first = setup();
+    first.outbox.enqueue({ serverId: "s1", workerId: "w1", text: "look", attachments: files });
+    first.outbox.enqueue({ serverId: "s1", workerId: "w1", text: "plain", attachments: [] });
+    await tick();
+    expect(first.store.saved.map((entry) => entry.attachments)).toEqual([files, undefined]);
+
+    const restarted = setup(first.store.saved);
+    await restarted.outbox.hydrate();
+    await restarted.connect();
+    expect(restarted.transport.sent[0].text).toBe("look");
+    expect(restarted.transport.sent[0].attachments).toEqual(files);
   });
 
   test("saving never erases what has not been loaded yet", async () => {
@@ -321,11 +338,11 @@ describe("MessageOutbox", () => {
     await stored.send("old");
     const restarted = setup(stored.store.saved, "later");
     // A new message arrives before the persisted queue was read back.
-    restarted.outbox.enqueue({ serverId: "s1", workerId: "w1", text: "new\n", displayBody: "new" });
+    restarted.outbox.enqueue({ serverId: "s1", workerId: "w1", text: "new" });
     await tick();
     await restarted.outbox.hydrate();
     await tick();
-    expect(restarted.store.saved.map((entry) => entry.displayBody).sort()).toEqual(["new", "old"]);
+    expect(restarted.store.saved.map((entry) => entry.text).sort()).toEqual(["new", "old"]);
   });
 
   test("only the current server's messages are sent", async () => {
@@ -333,7 +350,7 @@ describe("MessageOutbox", () => {
     await send("for A", "w1", "serverA");
     await send("for B", "w1", "serverB");
     await connect("serverB");
-    expect(transport.sent.map((sent) => sent.text)).toEqual(["for B\n"]);
+    expect(transport.sent.map((sent) => sent.text)).toEqual(["for B"]);
   });
 
   test("an answer that never comes on a live connection drops it so the send is repeated", async () => {

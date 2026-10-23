@@ -78,6 +78,13 @@ export interface ConversationChoice {
   answers?: string[];
 }
 
+/** A file a user message carried: typed by the daemon, never read out of text. */
+export interface ConversationAttachment {
+  name: string;
+  path: string;
+  content_type?: string;
+}
+
 export interface CodexConversationEvent {
   id: string;
   seq: number;
@@ -86,6 +93,8 @@ export interface CodexConversationEvent {
   role?: CodexConversationRole;
   title?: string;
   body?: string;
+  /** Files a user_message carried; `body` is then only what the person wrote. */
+  attachments?: ConversationAttachment[];
   command?: string;
   tool_name?: string;
   input?: string;
@@ -242,6 +251,28 @@ function normalizeProviderActivityStatus(
   }
 }
 
+function normalizeAttachments(value: unknown): ConversationAttachment[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const attachments = value.flatMap((entry): ConversationAttachment[] => {
+    const file = (entry ?? {}) as Record<string, unknown>;
+    const path = typeof file.path === "string" ? file.path.trim() : "";
+    if (!path) {
+      return [];
+    }
+    return [
+      {
+        name: typeof file.name === "string" ? file.name.trim() : "",
+        path,
+        content_type:
+          typeof file.content_type === "string" ? file.content_type : undefined,
+      },
+    ];
+  });
+  return attachments.length > 0 ? attachments : undefined;
+}
+
 function normalizeCodexConversationEvent(
   value: any,
 ): CodexConversationEvent | null {
@@ -272,6 +303,7 @@ function normalizeCodexConversationEvent(
         : undefined,
     title: sanitizeGoalInternalContext(event.title),
     body: sanitizeGoalInternalContext(event.body),
+    attachments: normalizeAttachments(event.attachments),
     command: sanitizeGoalInternalContext(event.command),
     tool_name:
       typeof event.tool_name === "string" ? event.tool_name : undefined,
@@ -355,7 +387,8 @@ function normalizeCodexConversationEvent(
   if (
     (normalized.kind === "user_message" ||
       normalized.kind === "assistant_message") &&
-    !normalized.body
+    !normalized.body &&
+    !normalized.attachments
   ) {
     return null;
   }

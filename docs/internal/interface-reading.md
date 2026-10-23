@@ -124,13 +124,22 @@ waits until attachments are ready or removed. Switching server or Session cancel
 pending work without deleting previously ready attachments. Android requires the
 updated Mewla Debug native module; iOS uses Expo's multi-document picker.
 
-Attachment envelopes retain `content_type`, so a supported image without a file
-extension remains an image when history reloads. The `<mewla_attachments>` tag
-is written and read in one place per side (`app/components/terminal/attachmentEnvelope.ts`,
-`daemon/attachment/input.go`); the retired `Uploaded files:` text list is no
-longer parsed, so old history shows it as plain text. The envelope is also how a
-Worker learns the uploaded paths, so a typed send field waits for the typed
-input command. Data URLs are accepted for
+Attachments are typed fields end to end. The phone sends `send_input` with
+`text` (what the person wrote) and `attachments: [{name, path, content_type}]`
+as separate fields, queues them together in the send outbox, and the daemon is
+the only place that renders them into provider input (`attachment.Message.Render`
+in `daemon/attachment/input.go`: the text, then a `<mewla_attachments>` JSON tag
+the Worker reads to learn the uploaded paths; golden-tested, one function for every
+provider and sender, including Telegram). Providers and the DSH terminal only
+accept text, so they echo that rendering back in their transcripts; the daemon
+reads it once at the projection boundary (`attachment.Split`, called from
+`work.ProjectUserAttachments`) and gives the phone `attachments` on the
+`user_message` event with `body` as the text alone. The app never reads or writes
+the tag, and `content_type` is kept so a supported image without a file extension
+remains an image when history reloads. The Brain admission digest covers the exact
+rendered provider input, so the files are part of what it matches the provider's
+echo against. Rows stored before attachments were typed are not special-cased in
+the app; the retired `Uploaded files:` text list is plain text. Data URLs are accepted for
 PNG/JPEG/GIF/WebP and SVG within an 8 MiB encoded source bound; SVG decoding is
 additionally capped at 2 MiB and never fetches embedded external resources. Composer image
 inspection navigates the selected batch without changing selection order.
