@@ -3042,6 +3042,15 @@ func (s *Server) enrichBrainSnapshotHostWorkerCapabilities(payload map[string]an
 		}
 	}
 	hostMap["capabilities"] = s.hostWorkerWireCapabilities(sessionID)
+	if host := s.lookupWorker(sessionID); host != nil {
+		executorID, provider := s.workerExecutor(host)
+		if executorID != "" {
+			hostMap["executor_id"] = executorID
+		}
+		if provider != "" {
+			hostMap["provider"] = provider
+		}
+	}
 	payload["host_worker"] = hostMap
 }
 

@@ -33,8 +33,8 @@ if (!process.env.MEWLA_READING_HOOK_CHILD) {
   mock.module("./InterfaceChatSurfaceModel", () => ({
     buildInterfaceComposerPresentation: () => ({}),
   }));
-  mock.module("../../services/chatComposerPresentation", () => ({
-    agentKindFromCommand: () => "codex",
+  mock.module("../../services/workerPresentation", () => ({
+    agentKindFromProvider: () => "codex",
   }));
   const { usePinnedTimeline } = await import("./InterfaceChatSurfaceHooks");
   const frames = new Map<number, FrameRequestCallback>();

@@ -1,7 +1,5 @@
-import { isDSHCommand } from "./agentCommands";
 import type { Worker } from '../store/workers';
 import { displayPathSubtitle, pathBasename } from './pathDisplay';
-import { isClaudeCommand, isCodexCommand, isCursorAgentCommand, isGrokCommand, isOpenCodeCommand, isPiCommand } from './agentCommands';
 import {
   detectTerminalFlavor,
   terminalFlavorLabel,
@@ -23,8 +21,8 @@ export type PresentedWorker = {
   titleSource: WorkerTitleSource;
 };
 
-export function presentWorker(agent: Pick<Worker, 'name' | 'project' | 'cwd' | 'command' | 'summary' | 'last_output_lines'>, alias?: string): PresentedWorker {
-  const kind = detectAgentKind(agent);
+export function presentWorker(agent: Pick<Worker, 'name' | 'project' | 'cwd' | 'command' | 'provider' | 'summary' | 'last_output_lines'>, alias?: string): PresentedWorker {
+  const kind = agentKindFromProvider(agent.provider);
   const terminalFlavor =
     kind === 'terminal' ? detectTerminalFlavor(agent) : 'shell';
   const label = typeLabel(kind, terminalFlavor);
@@ -64,15 +62,15 @@ export function presentWorker(agent: Pick<Worker, 'name' | 'project' | 'cwd' | '
   };
 }
 
-function detectAgentKind(agent: Pick<Worker, 'name' | 'project' | 'cwd' | 'command' | 'summary' | 'last_output_lines'>): AgentKind {
-  if (isClaudeCommand(agent.command)) return 'claude';
-  if (isCodexCommand(agent.command)) return 'codex';
-  if (isCursorAgentCommand(agent.command)) return 'cursor';
-  if (isGrokCommand(agent.command)) return 'grok';
-  if (isPiCommand(agent.command)) return 'pi';
-  if (isDSHCommand(agent.command)) return 'dsh';
-  if (isOpenCodeCommand(agent.command)) return 'opencode';
-  return 'terminal';
+const AGENT_KINDS: ReadonlySet<string> = new Set<AgentKind>(['claude', 'codex', 'cursor', 'grok', 'pi', 'opencode', 'dsh']);
+
+/**
+ * The kind to present a Worker as. The daemon names the provider of the
+ * Worker's executor; a Worker with none (a plain terminal, or a provider this
+ * app has no art for) is a terminal. The command line is never read.
+ */
+export function agentKindFromProvider(provider?: string): AgentKind {
+  return provider && AGENT_KINDS.has(provider) ? (provider as AgentKind) : 'terminal';
 }
 
 function isGenericWorkerTitle(name: string, kind: AgentKind): boolean {

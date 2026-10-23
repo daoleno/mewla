@@ -105,6 +105,7 @@ function TerminalViewportImpl({
             lastOutputLines: agent.last_output_lines,
             cwd: agent.cwd,
             command: agent.command,
+            provider: agent.provider,
             name: agent.name,
             startedAt: agent.started_at,
             processId: agent.process_id,
@@ -112,6 +113,7 @@ function TerminalViewportImpl({
         : undefined,
     [
       agent?.command,
+      agent?.provider,
       agent?.cwd,
       agent?.attention,
       agent?.details_json,

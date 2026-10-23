@@ -17,7 +17,6 @@ const WEEKLY_LIMIT_LINES = [
   "Esc:unselect | Tab:scrollback |",
 ];
 
-const GROK_COMMAND = "grok --no-alt-screen --permission-mode bypassPermissions";
 
 type TransportSlice = {
   connectionState: TransportConnectionState;
@@ -70,7 +69,7 @@ function projectPrompt(
     id: string;
     status: string;
     summary?: string;
-    command?: string;
+    provider?: string;
     processId?: number;
     startedAt?: number;
     lastOutputLines?: string[];
@@ -83,7 +82,7 @@ function projectPrompt(
     status: agent.status,
     summary: agent.summary,
     lastOutputLines: agent.lastOutputLines,
-    command: agent.command,
+    provider: agent.provider,
     scopeKey: liveActionPromptScopeKey({
       workerId: agent.id,
       processId: agent.processId,
@@ -96,7 +95,7 @@ function projectPrompt(
 const LIVE_BLOCKED = {
   id: "grok-1",
   status: "blocked",
-  command: GROK_COMMAND,
+  provider: "grok",
   summary: "↑/↓ navigate · y copy Enter:submit",
   processId: 41413,
   startedAt: 900,
@@ -107,7 +106,7 @@ describe("buildTerminalActionPrompt", () => {
   test("projects Grok weekly-limit choice menu as display-only Interface state", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",
-      command: GROK_COMMAND,
+      provider: "grok",
       summary: "↑/↓ navigate · y copy Enter:submit",
       lastOutputLines: WEEKLY_LIMIT_LINES,
     });
@@ -132,7 +131,7 @@ describe("buildTerminalActionPrompt", () => {
   test("preserves proven Grok selection caret without fabricating others", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",
-      command: "grok",
+      provider: "grok",
       lastOutputLines: [
         "You hit your free usage limit.",
         "› 1 ○ Upgrade to SuperGrok",
@@ -150,7 +149,7 @@ describe("buildTerminalActionPrompt", () => {
   test("preserves proven filled radio glyph without fabricating others", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",
-      command: "grok",
+      provider: "grok",
       lastOutputLines: [
         "Choose a plan",
         "1 ● Upgrade to SuperGrok",
@@ -166,7 +165,7 @@ describe("buildTerminalActionPrompt", () => {
   test("does not invent selection when multiple filled markers appear", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",
-      command: "grok",
+      provider: "grok",
       lastOutputLines: [
         "Choose a plan",
         "1 ● Upgrade to SuperGrok",
@@ -183,14 +182,14 @@ describe("buildTerminalActionPrompt", () => {
     expect(
       buildTerminalActionPrompt({
         status: "running",
-        command: GROK_COMMAND,
+        provider: "grok",
         lastOutputLines: WEEKLY_LIMIT_LINES,
       }),
     ).toBeNull();
     expect(
       buildTerminalActionPrompt({
         status: "unknown",
-        command: GROK_COMMAND,
+        provider: "grok",
         lastOutputLines: WEEKLY_LIMIT_LINES,
       }),
     ).toBeNull();
@@ -200,7 +199,7 @@ describe("buildTerminalActionPrompt", () => {
     expect(
       buildTerminalActionPrompt({
         status: "blocked",
-        command: GROK_COMMAND,
+        provider: "grok",
         lastOutputLines: [
           "│ ❯                                                                        │",
           "╰─────────────────────────────────────── Grok 4.5 (high) · always-approve ─╯",
@@ -214,7 +213,7 @@ describe("buildTerminalActionPrompt", () => {
     expect(
       buildTerminalActionPrompt({
         status: "blocked",
-        command: GROK_COMMAND,
+        provider: "grok",
         lastOutputLines: [
           "1 (O) Upgrade tier",
           "2 (O) Buy more credits",
@@ -228,7 +227,7 @@ describe("buildTerminalActionPrompt", () => {
     expect(
       buildTerminalActionPrompt({
         status: "blocked",
-        command: GROK_COMMAND,
+        provider: "grok",
         lastOutputLines: [
           "Resume session",
           "↑/↓ navigate · enter confirm · esc cancel",
@@ -240,7 +239,7 @@ describe("buildTerminalActionPrompt", () => {
   test("keeps Codex approval prompts actionable", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",
-      command: "codex --dangerously-bypass-approvals-and-sandbox",
+      provider: "codex",
       lastOutputLines: [
         "$ systemctl list-unit-files --state=enabled",
         "› 1. Yes, proceed (y)",
@@ -259,7 +258,7 @@ describe("buildTerminalActionPrompt", () => {
     expect(
       buildTerminalActionPrompt({
         status: "blocked",
-        command: GROK_COMMAND,
+        provider: "grok",
         summary: "Provider request failed",
         lastOutputLines: [
           "API error (status 402 Payment Required): Grok Build usage balance exhausted",
@@ -269,18 +268,12 @@ describe("buildTerminalActionPrompt", () => {
     ).toBeNull();
   });
 
-  for (const command of [
-    "codex --dangerously-bypass-approvals-and-sandbox",
-    "claude --dangerously-skip-permissions",
-    "cursor-agent --force --sandbox disabled",
-    "zsh",
-    "",
-  ]) {
-    test(`does not project Grok card under non-Grok command (${command || "unknown"})`, () => {
+  for (const provider of ["codex", "claude", "cursor", "terminal", ""]) {
+    test(`does not project Grok card under non-Grok provider (${provider || "unknown"})`, () => {
       expect(
         buildTerminalActionPrompt({
           status: "blocked",
-          command,
+          provider,
           lastOutputLines: WEEKLY_LIMIT_LINES,
         }),
       ).toBeNull();
@@ -290,7 +283,7 @@ describe("buildTerminalActionPrompt", () => {
   test("scopes prompt id to the live process/session generation", () => {
     const first = buildTerminalActionPrompt({
       status: "blocked",
-      command: GROK_COMMAND,
+      provider: "grok",
       scopeKey: liveActionPromptScopeKey({
         workerId: "agent-a",
         processId: 11,
@@ -301,7 +294,7 @@ describe("buildTerminalActionPrompt", () => {
     });
     const second = buildTerminalActionPrompt({
       status: "blocked",
-      command: GROK_COMMAND,
+      provider: "grok",
       scopeKey: liveActionPromptScopeKey({
         workerId: "agent-a",
         processId: 22,
@@ -378,7 +371,7 @@ describe("worker_session_list connection-generation freshness", () => {
       projectPrompt(slice, "server", {
         id: "grok-1",
         status: "unknown",
-        command: GROK_COMMAND,
+        provider: "grok",
         lastOutputLines: [
           "│ ❯",
           "╰─────────────────────────────────────── Grok 4.5 (high) · always-approve ─╯",
@@ -389,12 +382,11 @@ describe("worker_session_list connection-generation freshness", () => {
 });
 
 describe("Claude terminal prompts", () => {
-  const CLAUDE = "claude --model opus";
 
   test("plan approval is read-only with Claude's own labels", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",
-      command: CLAUDE,
+      provider: "claude",
       summary: "Waiting for plan approval",
       lastOutputLines: [
         " Claude has written up a plan and is ready to execute. Would you like to proceed?",
@@ -418,7 +410,7 @@ describe("Claude terminal prompts", () => {
   test("permission prompt never relabels Claude options as Codex actions", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",
-      command: CLAUDE,
+      provider: "claude",
       summary: "Waiting for Claude permission",
       lastOutputLines: [
         " Do you want to proceed?",

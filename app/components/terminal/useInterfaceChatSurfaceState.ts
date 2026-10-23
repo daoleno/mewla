@@ -19,7 +19,7 @@ import {
   useWorkers,
   type ConnectionState,
 } from "../../store/workers";
-import { agentKindFromCommand } from "../../services/chatComposerPresentation";
+import { agentKindFromProvider } from "../../services/workerPresentation";
 import type { ConnectionIssue } from "../../services/connectionIssue";
 import type {
   CodexConversation,
@@ -180,7 +180,7 @@ export function useInterfaceChatSurfaceState({
   const active = visible && screenFocused;
   const handledInitialComposerFocusGrantRef =
     useRef<InterfaceComposerInitialFocusGrant>(null);
-  const chatAgentKind = agentKindFromCommand(workerInfo?.command);
+  const chatAgentKind = agentKindFromProvider(workerInfo?.provider);
   const connectionGeneration =
     workerState.connectionGenerationByServer[serverId] ?? 0;
   const workerSessionListFresh = isWorkerSessionListFreshForConnection(
@@ -555,7 +555,7 @@ export function useInterfaceChatSurfaceState({
   const composerPresentation = useInterfaceComposerPresentation({
     draft,
     slashCommands,
-    workerCommand: workerInfo?.command,
+    workerProvider: workerInfo?.provider,
     connectionState,
     runningActivity,
     attachmentCount: attachments.length,
@@ -609,7 +609,7 @@ export function useInterfaceChatSurfaceState({
       status: workerInfo?.status,
       summary: workerInfo?.summary,
       lastOutputLines: workerInfo?.lastOutputLines,
-      command: workerInfo?.command,
+      provider: workerInfo?.provider,
       scopeKey: liveActionPromptScopeKey({
         workerId,
         processId: workerInfo?.processId,
@@ -619,7 +619,7 @@ export function useInterfaceChatSurfaceState({
     });
   }, [
     workerId,
-    workerInfo?.command,
+    workerInfo?.provider,
     workerInfo?.lastOutputLines,
     workerInfo?.processId,
     workerInfo?.startedAt,

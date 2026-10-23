@@ -16,7 +16,7 @@ import {
   type TextInput,
 } from "react-native";
 import { useReducedMotion, useSharedValue } from "react-native-reanimated";
-import { agentKindFromCommand } from "../../services/chatComposerPresentation";
+import { agentKindFromProvider } from "../../services/workerPresentation";
 import {
   buildInterfaceComposerPresentation,
   type InterfaceComposerPresentationInput,
@@ -61,13 +61,13 @@ type UseInterfaceComposerPresentationInput = Omit<
   InterfaceComposerPresentationInput,
   "agentKind"
 > & {
-  workerCommand?: string;
+  workerProvider?: string;
 };
 
 export function useInterfaceComposerPresentation({
   draft,
   slashCommands,
-  workerCommand,
+  workerProvider,
   connectionState,
   runningActivity,
   attachmentCount,
@@ -82,7 +82,7 @@ export function useInterfaceComposerPresentation({
   composerLayout,
   modelControl,
 }: UseInterfaceComposerPresentationInput) {
-  const agentKind = agentKindFromCommand(workerCommand);
+  const agentKind = agentKindFromProvider(workerProvider);
   return useMemo(
     () =>
       buildInterfaceComposerPresentation({

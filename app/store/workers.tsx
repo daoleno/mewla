@@ -26,6 +26,10 @@ export interface Worker {
   project?: string;
   cwd?: string;
   command?: string;
+  /** The executors.toml entry the daemon launched this Worker from. */
+  executor_id?: string;
+  /** Adapter family of that executor (claude, codex, cursor, ...); absent for a plain terminal. */
+  provider?: string;
   summary: string;
   phase?: string;
   attention?: string;
@@ -66,6 +70,8 @@ export type RawWorker = {
   project?: string;
   cwd?: string;
   command?: string;
+  executor_id?: string;
+  provider?: string;
   summary?: string;
   phase?: string;
   attention?: string;
@@ -368,6 +374,8 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       left.project === right.project &&
       left.cwd === right.cwd &&
       left.command === right.command &&
+      left.executor_id === right.executor_id &&
+      left.provider === right.provider &&
       left.summary === right.summary &&
       left.phase === right.phase &&
       left.attention === right.attention &&
@@ -456,6 +464,8 @@ function normalizeWorker(
     project: agent.project,
     cwd: agent.cwd,
     command: agent.command,
+    executor_id: typeof agent.executor_id === 'string' && agent.executor_id ? agent.executor_id : undefined,
+    provider: typeof agent.provider === 'string' && agent.provider ? agent.provider : undefined,
     summary: agent.summary || '',
     phase: typeof agent.phase === 'string' ? agent.phase : undefined,
     attention: typeof agent.attention === 'string' ? agent.attention : undefined,
