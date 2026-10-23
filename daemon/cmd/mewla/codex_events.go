@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -129,6 +130,9 @@ type codexSession struct {
 	mu     sync.Mutex
 	client *codexctl.Client
 	thread string
+	// tokens is the latest token use the server pushed for the thread; it
+	// serves no read for it.
+	tokens *codexctl.TokenDetails
 }
 
 func (s *codexSession) connection() (*codexctl.Client, string) {
@@ -185,7 +189,8 @@ func (s *codexSession) run(ctx context.Context) {
 		if err != nil {
 			log.Printf("codex events: %s could not name its thread in %q: %v", s.workerID, s.cwd, err)
 		} else {
-			known, _ := json.Marshal(map[string]any{"thread": map[string]any{"id": id, "ephemeral": false}})
+			path, _ := client.ThreadPath(ctx, id)
+			known, _ := json.Marshal(map[string]any{"thread": map[string]any{"id": id, "ephemeral": false, "path": path}})
 			s.publish(s.mapper.Notification("thread/started", known, s.owner.now().UTC())...)
 			s.setThread(s.mapper.Thread())
 			attach(id, 1)
@@ -199,6 +204,9 @@ func (s *codexSession) run(ctx context.Context) {
 			if !ok {
 				s.publish(agentevents.Event{WorkerID: s.workerID, Kind: agentevents.KindExit, At: s.owner.now().UTC()})
 				return
+			}
+			if notification.Method == "thread/tokenUsage/updated" {
+				s.noteTokens(notification.Params)
 			}
 			s.publish(s.mapper.Notification(notification.Method, notification.Params, s.owner.now().UTC())...)
 			if thread := s.mapper.Thread(); thread != "" {
@@ -249,6 +257,20 @@ func (s *codexSession) run(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (s *codexSession) noteTokens(params json.RawMessage) {
+	if tokens, ok := codexctl.ParseTokenUsage(params); ok {
+		s.mu.Lock()
+		s.tokens = &tokens
+		s.mu.Unlock()
+	}
+}
+
+func (s *codexSession) latestTokens() *codexctl.TokenDetails {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.tokens
 }
 
 func (s *codexSession) setThread(thread string) {
@@ -355,4 +377,30 @@ func (c *codexEvents) send(sessionID, payload, receipt string, begin func() erro
 		return true, &watcher.StructuredInputError{Err: err, NotSent: codexctl.Rejected(err)}
 	}
 	return true, nil
+}
+
+// ErrNoCodexStatus says a Worker has no app-server connection to ask: a Codex
+// opened by hand, or one whose thread has not been announced yet.
+var ErrNoCodexStatus = errors.New("this Codex was not started by Mewla, so it has no app-server to ask")
+
+// Status reads a Worker's status from its own app-server.
+func (c *codexEvents) Status(ctx context.Context, workerID string) (codexctl.Status, error) {
+	c.mu.Lock()
+	s := c.sessions[workerID]
+	c.mu.Unlock()
+	if s == nil {
+		return codexctl.Status{}, ErrNoCodexStatus
+	}
+	client, thread := s.connection()
+	if client == nil || thread == "" {
+		return codexctl.Status{}, ErrNoCodexStatus
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	status, err := client.ReadStatus(ctx, thread, s.cwd)
+	if err != nil {
+		return codexctl.Status{}, err
+	}
+	status.Tokens = s.latestTokens()
+	return status, nil
 }

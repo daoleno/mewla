@@ -39,6 +39,8 @@ type fakeAppServer struct {
 	resumeEffort string
 	// replies are the client's answers to requests the fake made of it.
 	replies []string
+	// statusFails names status methods the fake refuses.
+	statusFails map[string]bool
 }
 
 func startFakeAppServer(t *testing.T) *fakeAppServer {
@@ -184,6 +186,35 @@ func (f *fakeAppServer) serve(ws *websocket.Conn) {
 				}
 			}
 			f.reply(ws, envelope.ID, map[string]any{"data": filtered})
+		case "thread/read":
+			f.reply(ws, envelope.ID, map[string]any{"thread": map[string]any{
+				"id": "t-main", "name": nil, "cwd": "/work", "model": "gpt-6", "modelProvider": "openai",
+				"reasoningEffort": "high", "cliVersion": "0.163.0", "status": map[string]any{"type": "idle"},
+				"path": "/rollout.jsonl", "createdAt": 100, "updatedAt": 200,
+			}})
+		case "config/read":
+			if f.statusFails["config/read"] {
+				f.replyErr(ws, envelope.ID, -32000, "config unavailable")
+				continue
+			}
+			f.reply(ws, envelope.ID, map[string]any{"config": map[string]any{
+				"model": "gpt-6", "model_reasoning_effort": "high", "approval_policy": "on-request",
+				"sandbox_mode": "workspace-write", "model_context_window": 272000,
+				"service_tier": nil,
+			}, "origins": map[string]any{}})
+		case "account/read":
+			f.reply(ws, envelope.ID, map[string]any{"requiresOpenaiAuth": true, "account": map[string]any{"type": "chatgpt", "email": "me@example.com", "planType": "pro"}})
+		case "account/rateLimits/read":
+			f.reply(ws, envelope.ID, map[string]any{
+				"rateLimits": map[string]any{"primary": map[string]any{"usedPercent": 12, "windowDurationMins": 300, "resetsAt": 1000}},
+				"rateLimitsByLimitId": map[string]any{
+					"codex_other": map[string]any{"limitId": "codex_other", "limitName": "Other", "primary": map[string]any{"usedPercent": 3, "windowDurationMins": 60}},
+					"codex": map[string]any{"limitId": "codex", "planType": "pro",
+						"primary":   map[string]any{"usedPercent": 12, "windowDurationMins": 300, "resetsAt": 1000},
+						"secondary": map[string]any{"usedPercent": 40, "windowDurationMins": 10080, "resetsAt": 2000},
+						"credits":   map[string]any{"hasCredits": true, "unlimited": false, "balance": "5.00"}},
+				},
+			})
 		case methodTurnStart:
 			f.reply(ws, envelope.ID, map[string]any{"turn": map[string]any{"id": "turn-1", "status": "inProgress"}})
 		case methodTurnInterrupt:

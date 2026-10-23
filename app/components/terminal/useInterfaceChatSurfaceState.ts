@@ -34,6 +34,7 @@ import {
   useInterfaceChatSession,
 } from "./InterfaceChatSession";
 import { CodexStatusSheet } from "./CodexStatusSheet";
+import { useCodexStatus } from "./useCodexStatus";
 import { CodexSkillsSheet } from "./CodexSkillsSheet";
 import {
   buildTerminalActionPrompt,
@@ -125,31 +126,7 @@ interface InterfaceChatSurfaceState {
   >;
 }
 
-type CodexStatusRequest = {
-  baselineSeq: number;
-  requestedAt: string;
-};
-
-const CODEX_STATUS_OUTPUT_TIMEOUT_MS = 9000;
-const CODEX_STATUS_TERMINAL_POLL_INTERVAL_MS = 750;
 const EMPTY_CONVERSATION_EVENTS: CodexConversationEvent[] = [];
-const CODEX_STATUS_KEYS = new Set([
-  "account",
-  "agentsmd",
-  "approval",
-  "codexversion",
-  "configprofile",
-  "context",
-  "cwd",
-  "model",
-  "provider",
-  "reasoningeffort",
-  "sandbox",
-  "session",
-  "sessionid",
-  "tokens",
-  "workingdirectory",
-]);
 
 export function useInterfaceChatSurfaceState({
   visible,
@@ -206,12 +183,11 @@ export function useInterfaceChatSurfaceState({
   const [actionMenuPinned, setActionMenuPinned] = useState(false);
   const [skillsSheetVisible, setSkillsSheetVisible] = useState(false);
   const [statusSheetVisible, setStatusSheetVisible] = useState(false);
-  const [statusRequest, setStatusRequest] = useState<CodexStatusRequest | null>(
-    null,
-  );
-  const [statusTerminalEvent, setStatusTerminalEvent] =
-    useState<CodexConversationEvent | null>(null);
-  const [statusTimedOut, setStatusTimedOut] = useState(false);
+  const { state: statusState, load: loadStatus } = useCodexStatus({
+    serverId,
+    workerId,
+    connected: connectionState === "connected",
+  });
   const session = useInterfaceChatSession({
     serverId,
     workerId,
@@ -346,14 +322,9 @@ export function useInterfaceChatSurfaceState({
   const events = conversation?.events ?? EMPTY_CONVERSATION_EVENTS;
   const openStatusSheet = useCallback(() => {
     setActionMenuPinned(false);
-    setStatusTimedOut(false);
-    setStatusTerminalEvent(null);
     setStatusSheetVisible(true);
-    setStatusRequest({
-      baselineSeq: latestConversationEventSeq(events),
-      requestedAt: new Date().toISOString(),
-    });
-  }, [events]);
+    loadStatus();
+  }, [loadStatus]);
   const closeStatusSheet = useCallback(() => {
     setStatusSheetVisible(false);
   }, []);
@@ -364,92 +335,6 @@ export function useInterfaceChatSurfaceState({
     setStatusSheetVisible(false);
     onSwitchToTerminal();
   }, [onSwitchToTerminal]);
-  const statusOutputEvent = useMemo(
-    () => latestCodexStatusOutputEvent(events, statusRequest),
-    [events, statusRequest],
-  );
-  const statusDisplayEvent = statusOutputEvent ?? statusTerminalEvent;
-  useEffect(() => {
-    if (
-      !statusSheetVisible ||
-      !statusRequest ||
-      statusOutputEvent ||
-      statusTerminalEvent ||
-      statusTimedOut ||
-      connectionState !== "connected" ||
-      !serverId ||
-      !workerId
-    ) {
-      return;
-    }
-    let cancelled = false;
-    let inFlight = false;
-    const pollTerminalStatus = () => {
-      if (cancelled || inFlight) {
-        return;
-      }
-      inFlight = true;
-      void wsClient
-        .getCodexTerminalSnapshot(serverId, workerId)
-        .then((text) => {
-          if (cancelled) {
-            return;
-          }
-          const body = codexStatusBodyFromTerminalSnapshot(text);
-          if (!body) {
-            return;
-          }
-          setStatusTerminalEvent({
-            id: `terminal-status:${statusRequest.requestedAt}`,
-            seq: statusRequest.baselineSeq + 1,
-            timestamp: new Date().toISOString(),
-            kind: "status",
-            title: "Codex",
-            body,
-            source: "terminal_snapshot",
-          });
-        })
-        .catch(() => {
-          // The regular timeout state handles unavailable terminal snapshots.
-        })
-        .finally(() => {
-          inFlight = false;
-        });
-    };
-    const firstPoll = setTimeout(pollTerminalStatus, 350);
-    const interval = setInterval(
-      pollTerminalStatus,
-      CODEX_STATUS_TERMINAL_POLL_INTERVAL_MS,
-    );
-    return () => {
-      cancelled = true;
-      clearTimeout(firstPoll);
-      clearInterval(interval);
-    };
-  }, [
-    workerId,
-    connectionState,
-    serverId,
-    statusOutputEvent,
-    statusRequest,
-    statusSheetVisible,
-    statusTerminalEvent,
-    statusTimedOut,
-  ]);
-  useEffect(() => {
-    if (!statusSheetVisible || !statusRequest || statusDisplayEvent) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      setStatusTimedOut(true);
-    }, CODEX_STATUS_OUTPUT_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [statusDisplayEvent, statusRequest, statusSheetVisible]);
-  useEffect(() => {
-    if (statusDisplayEvent && statusTimedOut) {
-      setStatusTimedOut(false);
-    }
-  }, [statusDisplayEvent, statusTimedOut]);
   const latestTimelineTimestamp = useMemo(
     () => latestChatTimelineTimestamp(conversation, pendingUserMessages),
     [conversation, pendingUserMessages],
@@ -690,24 +575,14 @@ export function useInterfaceChatSurfaceState({
       theme,
     ],
   );
-  const retryStatusCommand = useCallback(() => {
-    controller.runStatusCommand(
-      "/status",
-      slashCommands.find((command) => command.name === "status"),
-    );
-  }, [controller.runStatusCommand, slashCommands]);
   const statusSheet = useMemo(
     () =>
       React.createElement(CodexStatusSheet, {
         visible: statusSheetVisible,
-        event: statusDisplayEvent,
-        loading: Boolean(
-          statusRequest && !statusDisplayEvent && !statusTimedOut,
-        ),
-        timedOut: statusTimedOut,
+        state: statusState,
         chrome,
         theme,
-        onRetry: retryStatusCommand,
+        onRetry: loadStatus,
         onSwitchToTerminal: onSwitchToTerminal
           ? switchFromStatusToTerminal
           : undefined,
@@ -717,11 +592,9 @@ export function useInterfaceChatSurfaceState({
       chrome,
       closeStatusSheet,
       onSwitchToTerminal,
-      retryStatusCommand,
-      statusDisplayEvent,
-      statusRequest,
+      loadStatus,
       statusSheetVisible,
-      statusTimedOut,
+      statusState,
       switchFromStatusToTerminal,
       theme,
     ],
@@ -807,119 +680,4 @@ function latestChatTimelineTimestamp(
     }
   });
   return latest > 0 ? new Date(latest).toISOString() : undefined;
-}
-
-function latestConversationEventSeq(events: CodexConversationEvent[]) {
-  return events.reduce(
-    (latest, event) =>
-      Number.isFinite(event.seq) && event.seq > latest ? event.seq : latest,
-    0,
-  );
-}
-
-function latestCodexStatusOutputEvent(
-  events: CodexConversationEvent[],
-  request: CodexStatusRequest | null,
-) {
-  if (!request) {
-    return null;
-  }
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    if (
-      !isCodexStatusOutputEvent(event) ||
-      !isEventAfterStatusRequest(event, request)
-    ) {
-      continue;
-    }
-    return event;
-  }
-  return null;
-}
-
-function isCodexStatusOutputEvent(event: CodexConversationEvent) {
-  if (event.kind !== "status") {
-    return false;
-  }
-  const body = event.body?.trim();
-  if (!body) {
-    return false;
-  }
-  if (event.title?.trim().toLowerCase() === "codex") {
-    return true;
-  }
-  return looksLikeCodexStatusBody(body);
-}
-
-function looksLikeCodexStatusBody(body: string) {
-  for (const line of body.split(/\r?\n/)) {
-    if (codexStatusKeyFromLine(line)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function codexStatusBodyFromTerminalSnapshot(text: string) {
-  const lines = text
-    .replace(/\r/g, "")
-    .split("\n")
-    .map(cleanCodexStatusTerminalLine)
-    .filter((line) => line.trim().length > 0);
-  if (lines.length === 0) {
-    return "";
-  }
-  const statusLineIndexes: number[] = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    if (codexStatusKeyFromLine(lines[index])) {
-      statusLineIndexes.push(index);
-    }
-  }
-  if (statusLineIndexes.length < 2) {
-    return "";
-  }
-  const start = statusLineIndexes[0];
-  const end = statusLineIndexes[statusLineIndexes.length - 1];
-  return lines
-    .slice(start, end + 1)
-    .join("\n")
-    .trim();
-}
-
-function codexStatusKeyFromLine(line: string) {
-  const cleaned = cleanCodexStatusTerminalLine(line);
-  const colonMatch = /^([^:：]{1,48})[:：]\s*\S/.exec(cleaned);
-  if (colonMatch && isCodexStatusKey(colonMatch[1])) {
-    return true;
-  }
-  const spacedMatch = /^([A-Za-z][A-Za-z0-9 ._-]{0,40})\s{2,}\S/.exec(cleaned);
-  return Boolean(spacedMatch && isCodexStatusKey(spacedMatch[1]));
-}
-
-function isCodexStatusKey(value: string) {
-  return CODEX_STATUS_KEYS.has(value.toLowerCase().replace(/[\s._-]/g, ""));
-}
-
-function cleanCodexStatusTerminalLine(line: string) {
-  return line
-    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
-    .replace(/^[\s│┃|>]+/, "")
-    .replace(/[\s│┃|]+$/, "")
-    .trim();
-}
-
-function isEventAfterStatusRequest(
-  event: CodexConversationEvent,
-  request: CodexStatusRequest,
-) {
-  if (Number.isFinite(event.seq) && event.seq > request.baselineSeq) {
-    return true;
-  }
-  const eventTimestamp = new Date(event.timestamp || "").getTime();
-  const requestTimestamp = new Date(request.requestedAt).getTime();
-  return (
-    Number.isFinite(eventTimestamp) &&
-    Number.isFinite(requestTimestamp) &&
-    eventTimestamp >= requestTimestamp
-  );
 }

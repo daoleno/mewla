@@ -51,6 +51,14 @@ const CHATUI_SLASH_COMMAND_OVERRIDES: Record<string, SlashCommandOverride> = {
     chat_supported: true,
     terminal_supported: true,
   },
+  status: {
+    execution: "native",
+    input: inputNone(),
+    output: { kind: "management-screen" },
+    interactive: false,
+    chat_supported: true,
+    terminal_supported: true,
+  },
   init: {
     execution: "terminal-required",
     input: inputNone(),
@@ -96,7 +104,6 @@ const HIDDEN_CHATUI_SLASH_COMMAND_NAMES = new Set([
   "plan",
   "ps",
   "rollout",
-  "status",
   "theme",
 ]);
 

@@ -2670,61 +2670,6 @@ exports[`correlated WebSocket requests executePluginMutation 1`] = `
 }
 `;
 
-exports[`correlated WebSocket requests getCodexTerminalSnapshot 1`] = `
-{
-  "disconnect": "pending",
-  "errorChannels": {
-    "error": {
-      "rejected": {
-        "message": "probe failure",
-        "name": "Error",
-      },
-    },
-  },
-  "errorWithoutMessage": {
-    "rejected": {
-      "message": "Failed to load Codex terminal output.",
-      "name": "Error",
-    },
-  },
-  "handlersAfterDisconnect": 0,
-  "handlersAfterOffline": 0,
-  "handlersAfterReply": 0,
-  "handlersAfterTimeout": 0,
-  "ignoredErrorChannels": [
-    "skills_inventory_error",
-    "skills_command_error",
-    "skills_mutation_error",
-    "skills_inspect_error",
-    "plugins_inventory_error",
-    "plugin_command_error",
-    "plugin_mutation_error",
-  ],
-  "offline": {
-    "rejected": {
-      "message": "Daemon is not connected.",
-      "name": "Error",
-    },
-  },
-  "reply": {
-    "resolved": "out",
-  },
-  "request": {
-    "request_id": "#_#",
-    "target_id": "t",
-    "type": "codex_terminal_snapshot",
-  },
-  "staleReply": "pending",
-  "timeout": {
-    "rejected": {
-      "message": "Timed out while loading Codex terminal output.",
-      "name": "Error",
-    },
-  },
-  "timeoutMs": 10000,
-}
-`;
-
 exports[`correlated WebSocket requests getCodexAsset 1`] = `
 {
   "disconnect": "pending",
@@ -4767,5 +4712,78 @@ exports[`correlated WebSocket requests decideApproval 1`] = `
     },
   },
   "timeoutMs": 8000,
+}
+`;
+
+exports[`correlated WebSocket requests getCodexStatus 1`] = `
+{
+  "disconnect": "pending",
+  "errorChannels": {
+    "error": {
+      "rejected": {
+        "code": "probe_code",
+        "message": "probe failure",
+        "name": "DaemonRequestError",
+      },
+    },
+  },
+  "errorWithoutMessage": {
+    "rejected": {
+      "message": "Failed to load Codex status.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "handlersAfterDisconnect": 0,
+  "handlersAfterOffline": 0,
+  "handlersAfterReply": 0,
+  "handlersAfterTimeout": 0,
+  "ignoredErrorChannels": [
+    "skills_inventory_error",
+    "skills_command_error",
+    "skills_mutation_error",
+    "skills_inspect_error",
+    "plugins_inventory_error",
+    "plugin_command_error",
+    "plugin_mutation_error",
+  ],
+  "offline": {
+    "rejected": {
+      "message": "Daemon is not connected.",
+      "name": "Error",
+    },
+  },
+  "reply": {
+    "resolved": {
+      "account": undefined,
+      "config": undefined,
+      "limits": [],
+      "thread": {
+        "cliVersion": undefined,
+        "cwd": undefined,
+        "effort": undefined,
+        "id": "th",
+        "model": "gpt-6",
+        "modelProvider": undefined,
+        "name": undefined,
+        "state": undefined,
+        "updatedAt": undefined,
+      },
+      "tokens": undefined,
+    },
+  },
+  "request": {
+    "request_id": "#_#",
+    "target_id": "t",
+    "type": "codex_status",
+  },
+  "staleReply": "pending",
+  "timeout": {
+    "rejected": {
+      "code": "timeout",
+      "message": "Timed out while loading Codex status.",
+      "name": "DaemonRequestError",
+    },
+  },
+  "timeoutMs": 20000,
 }
 `;

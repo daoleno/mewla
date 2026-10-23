@@ -43,6 +43,7 @@ describe("Interface provider-neutral naming boundary", () => {
       "useCodexSlashCommandDialogs.ts",
       "useCodexSlashCommandPicker.ts",
       "useCodexSlashCommandRouter.ts",
+      "useCodexStatus.ts",
     ]);
   });
 
