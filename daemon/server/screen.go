@@ -180,6 +180,15 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 		raw, _ := json.Marshal(v)
 		return send(websocket.TextMessage, raw)
 	}
+	// advise sends what a viewer can do without, dropping it when the link
+	// is behind rather than making its caller wait behind queued frames.
+	advise := func(v any) {
+		raw, _ := json.Marshal(v)
+		select {
+		case outbox <- screenMessage{kind: websocket.TextMessage, data: raw}:
+		default:
+		}
+	}
 
 	// watch=1 watches the agent using the screen without taking over: the
 	// viewer sees the agent's capture and its input goes nowhere.
@@ -191,14 +200,20 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	// What the viewer shows as its badge and the daemon logs once: how the
 	// request arrived and what each stage of the stream cost. Numbers only.
 	path := clientaddr.Path(r)
+	// Advisories may be dropped, so the lock rides on every stats message too.
+	var locked atomic.Bool
 	observer := &screen.Observer{
-		Locked: func(locked bool) { sendJSON(map[string]any{"type": "state", "locked": locked}) },
+		Locked: func(now bool) {
+			locked.Store(now)
+			advise(map[string]any{"type": "state", "locked": now})
+		},
 		Stats: func(stats screen.StreamStats) {
-			sendJSON(struct {
-				Type string `json:"type"`
-				Path string `json:"path"`
+			advise(struct {
+				Type   string `json:"type"`
+				Path   string `json:"path"`
+				Locked bool   `json:"locked"`
 				screen.StreamStats
-			}{"stats", path, stats})
+			}{"stats", path, locked.Load(), stats})
 		},
 		Done: func(sum screen.StreamSummary) {
 			log.Printf("screen: device %s stream via %s: %d updates (%d sharpened) %d KB, encode p50 %.1f p95 %.1f ms, ack p50 %.0f p95 %.0f ms, quality %d..%d, up to %d in flight",
