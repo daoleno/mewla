@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:background="@drawable/mewla_widget_bg"
+  android:orientation="horizontal"
+  android:padding="16dp">
+
+  <LinearLayout
+    android:layout_width="86dp"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <ImageView
+      android:layout_width="22dp"
+      android:layout_height="22dp"
+      android:contentDescription="@null"
+      android:src="@drawable/mewla_widget_cat" />
+
+    <TextView
+      android:id="@+id/headline"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="8dp"
+      android:fontFamily="sans-serif-black"
+      android:text="…"
+      android:textColor="@color/mewla_text_primary"
+      android:textSize="34sp" />
+
+    <TextView
+      android:id="@+id/label"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:fontFamily="sans-serif-medium"
+      android:maxLines="2"
+      android:textColor="@color/mewla_text_secondary"
+      android:textSize="12sp" />
+  </LinearLayout>
+
+  <LinearLayout
+    android:layout_width="0dp"
+    android:layout_height="match_parent"
+    android:layout_weight="1"
+    android:gravity="center_vertical"
+    android:orientation="vertical">
+
+    <LinearLayout
+      android:id="@+id/strip"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:gravity="center_vertical"
+      android:orientation="horizontal"
+      android:visibility="gone">
+
+      <TextView
+        android:id="@+id/strip_text"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="2"
+        android:textColor="@color/mewla_text_primary"
+        android:textSize="13sp" />
+
+      <TextView
+        android:id="@+id/chip0"
+        android:layout_width="wrap_content"
+        android:layout_height="28dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/mewla_widget_chip"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textColor="@color/mewla_text_primary"
+        android:textSize="12sp" />
+
+      <TextView
+        android:id="@+id/chip1"
+        android:layout_width="wrap_content"
+        android:layout_height="28dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/mewla_widget_chip"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textColor="@color/mewla_text_primary"
+        android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:id="@+id/row0"
+      android:layout_width="match_parent"
+      android:layout_height="30dp"
+      android:gravity="center_vertical"
+      android:orientation="horizontal"
+      android:visibility="gone">
+
+      <TextView
+        android:id="@+id/row0_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:maxWidth="130dp"
+        android:textColor="@color/mewla_text_primary"
+        android:textSize="13sp" />
+
+      <TextView
+        android:id="@+id/row0_phase"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/mewla_text_secondary"
+        android:textSize="12sp" />
+
+      <Chronometer
+        android:id="@+id/row0_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/mewla_text_secondary"
+        android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
+      android:id="@+id/row1"
+      android:layout_width="match_parent"
+      android:layout_height="30dp"
+      android:gravity="center_vertical"
+      android:orientation="horizontal"
+      android:visibility="gone">
+
+      <TextView
+        android:id="@+id/row1_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:maxWidth="130dp"
+        android:textColor="@color/mewla_text_primary"
+        android:textSize="13sp" />
+
+      <TextView
+        android:id="@+id/row1_phase"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/mewla_text_secondary"
+        android:textSize="12sp" />
+
+      <Chronometer
+        android:id="@+id/row1_time"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/mewla_text_secondary"
+        android:textSize="12sp" />
+    </LinearLayout>
+  </LinearLayout>
+</LinearLayout>

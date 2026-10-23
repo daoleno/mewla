@@ -71,6 +71,8 @@ import { LaunchVeil } from "../components/mewla/LaunchVeil";
 import type { LaunchDestination } from "../components/mewla/launchTiming";
 import { consumeUnfinishedNativeTerminalBreadcrumb } from "../services/nativeTerminalDiagnosticsObserver";
 import { measureServerLatency } from "../services/serverLatency";
+import { LiveSurfaceBridge } from "../components/live/LiveSurfaceBridge";
+import { getMewlaLiveModule } from "../modules/mewla-live/src";
 import { startAppUpdateChecks } from "../services/useAppUpdate";
 import {
   foregroundNotificationPresentation,
@@ -608,6 +610,8 @@ const NotificationObserver = memo(function NotificationObserver() {
           // Watch's morning brief follows where the person is and what they read.
           time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           locale: Intl.DateTimeFormat().resolvedOptions().locale,
+          // The Android live surface is a data push only this build can show.
+          ...(getMewlaLiveModule() ? { live_state: true } : {}),
         });
       });
     };
@@ -780,6 +784,7 @@ export default function RootLayout() {
                           <ThemedStatusBar />
                           <MermaidEngineHost />
                           <AppRuntime />
+                          <LiveSurfaceBridge />
                           <AlertHost />
                         </ToastProvider>
                       </SafeAreaProvider>

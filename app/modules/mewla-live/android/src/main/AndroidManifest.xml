@@ -1,0 +1,35 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Android 16 QPR1: promoted ongoing notifications (Live Updates). -->
+  <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.INTERNET" />
+
+  <application>
+    <receiver
+      android:name=".LiveDismissReceiver"
+      android:exported="false" />
+
+    <receiver
+      android:name=".SmallWidgetProvider"
+      android:exported="false"
+      android:label="@string/mewla_widget_small_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/mewla_widget_small_info" />
+    </receiver>
+
+    <receiver
+      android:name=".MediumWidgetProvider"
+      android:exported="false"
+      android:label="@string/mewla_widget_medium_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/mewla_widget_medium_info" />
+    </receiver>
+  </application>
+</manifest>

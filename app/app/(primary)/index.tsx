@@ -15,6 +15,7 @@ import {
 import { brainRouteLink } from "../../components/brain/brainRouteLink";
 import { BrainExecutorIcon } from "../../components/brain/BrainExecutorIcon";
 import { BrainExecutorMentionPicker } from "../../components/brain/BrainExecutorMentionPicker";
+import { LiveAnswer } from "../../components/brain/LiveAnswer";
 import { QuickReplies } from "../../components/brain/QuickReplies";
 import { quickRepliesVisible } from "../../components/brain/brainQuickReplies";
 import { BrainWorkspaceViewer } from "../../components/brain/BrainWorkspaceViewer";
@@ -444,7 +445,7 @@ export default function BrainScreen() {
   );
 
   const quickReplies = activeBrain?.quick_replies;
-  const renderBrainComposerAccessory = useCallback(
+  const renderBrainComposerAccessoryInner = useCallback(
     ({
       draft,
       setDraft,
@@ -480,6 +481,16 @@ export default function BrainScreen() {
       );
     },
     [availableExecutors, chrome, hostExecutor?.id, quickReplies],
+  );
+  // A tap on a live notification/widget answers through here, where the composer's send lives.
+  const renderBrainComposerAccessory = useCallback(
+    (accessory: Parameters<typeof renderBrainComposerAccessoryInner>[0]) => (
+      <>
+        <LiveAnswer sendText={accessory.sendText} />
+        {renderBrainComposerAccessoryInner(accessory)}
+      </>
+    ),
+    [renderBrainComposerAccessoryInner],
   );
 
   const [selectedWorkResult, setSelectedWorkResult] = useState<{ event: BrainWorkResultEvent; serverId: string } | null>(null);

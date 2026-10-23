@@ -1,0 +1,50 @@
+import { useGlobalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef } from "react";
+
+import { liveAnswerRequestId, parseLiveAnswerParams } from "../../services/liveSurface";
+import { wsClient } from "../../services/websocket";
+import { useCurrentServer } from "../../store/currentServer";
+import { useToast } from "../ui/Toast";
+
+/**
+ * Headless. A tap on a live notification, chip or widget opens Brain with the question and
+ * choice in the route; this sends that one answer. The daemon refuses a question that is
+ * no longer open, and the same tap twice is the same request, so a re-delivered intent
+ * cannot answer twice. A chat chip is sent through the composer's own outbox.
+ */
+export function LiveAnswer({ sendText }: { sendText: (text: string) => void }) {
+  const router = useRouter();
+  const toast = useToast();
+  const { currentServer } = useCurrentServer();
+  const params = useGlobalSearchParams<{ liveAnswer?: string; liveChoice?: string }>();
+  const handled = useRef<Set<string>>(new Set());
+  const sendTextRef = useRef(sendText);
+  sendTextRef.current = sendText;
+
+  const target = parseLiveAnswerParams(params.liveAnswer, params.liveChoice);
+  const serverId = currentServer?.id ?? "";
+  const requestId = target ? liveAnswerRequestId(target) : "";
+
+  useEffect(() => {
+    if (!target || !serverId || handled.current.has(requestId)) return;
+    if (!wsClient.isConnected(serverId)) return;
+    handled.current.add(requestId);
+    // Consume the route params first so a recreated screen does not see them again.
+    router.setParams({ liveAnswer: undefined, liveChoice: undefined });
+    wsClient.answerLive(serverId, { ...target, requestId }).then(
+      (result) => {
+        if (result.kind === "chat" && result.text && !result.duplicate) {
+          sendTextRef.current(result.text);
+        }
+      },
+      (error: Error) =>
+        toast.show({
+          title: "Couldn't send that answer",
+          detail: error.message,
+          tone: "error",
+        }),
+    );
+  }, [requestId, serverId, target, router, toast]);
+
+  return null;
+}

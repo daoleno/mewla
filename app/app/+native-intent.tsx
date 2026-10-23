@@ -1,3 +1,4 @@
+import { redirectLivePath } from "../services/liveSurface";
 import { isPluginReturnUrl } from "../services/pluginOnboarding";
 
 /**
@@ -5,7 +6,10 @@ import { isPluginReturnUrl } from "../services/pluginOnboarding";
  * through the Plugins flow's own Linking listener. Routing them as well would
  * pop the Plugins stack to its catalog mid-connection, so they are dropped
  * here. A cold start still opens Plugins, which restores and finishes the flow.
+ *
+ * Live notification, chip and widget links (mewla://live/…) open Brain.
  */
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }) {
-  return !initial && isPluginReturnUrl(path) ? null : path;
+  if (!initial && isPluginReturnUrl(path)) return null;
+  return redirectLivePath(path);
 }

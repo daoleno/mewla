@@ -1,0 +1,40 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+group = 'expo.modules.mewlalive'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.mewlalive"
+  compileSdk safeExtGet("compileSdkVersion", 35)
+
+  defaultConfig {
+    minSdk safeExtGet("minSdkVersion", 26)
+    targetSdk safeExtGet("targetSdkVersion", 35)
+  }
+
+  testOptions {
+    unitTests.returnDefaultValues = true
+  }
+}
+
+repositories {
+  google()
+  mavenCentral()
+}
+
+dependencies {
+  implementation project(':expo-modules-core')
+  // The FCM service subclasses Expo's, so every push that is not a live state
+  // still reaches expo-notifications untouched.
+  implementation project(':expo-notifications')
+  compileOnly 'com.google.firebase:firebase-messaging:25.0.1'
+  // NotificationCompat.ProgressStyle and requestPromotedOngoing (Android 16 Live Updates).
+  implementation 'androidx.core:core:1.17.0'
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20240303'
+}
+
+def safeExtGet(prop, fallback) {
+  rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+}

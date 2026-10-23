@@ -2544,6 +2544,80 @@ export class WebSocketClient {
     );
   }
 
+  /** The daemon's current live_state, so a reconnecting phone catches up. */
+  getLiveState(serverId: string): Promise<unknown> {
+    return this.request(
+      serverId,
+      "live_state_get",
+      {},
+      {
+        responseType: "live_state",
+        timeoutMs: 10000,
+        timeout: "Timed out while loading live state.",
+        error: "Could not load live state.",
+        parse: (payload) => payload.live,
+      },
+    );
+  }
+
+  /** A read-only, revocable token for the home-screen widgets; shown once. */
+  issueWidgetToken(serverId: string): Promise<{ token: string; id: string }> {
+    return this.request(
+      serverId,
+      "widget_token_issue",
+      {},
+      {
+        responseType: "widget_token",
+        timeoutMs: 10000,
+        timeout: "Timed out while preparing the widget.",
+        error: "Could not prepare the widget.",
+        parse: (payload) => ({ token: String(payload.token || ""), id: String(payload.id || "") }),
+      },
+    );
+  }
+
+  revokeWidgetToken(serverId: string): Promise<number> {
+    return this.request(
+      serverId,
+      "widget_token_revoke",
+      {},
+      {
+        responseType: "widget_token_revoked",
+        timeoutMs: 10000,
+        timeout: "Timed out while revoking the widget.",
+        error: "Could not revoke the widget.",
+        parse: (payload) => Number(payload.revoked || 0),
+      },
+    );
+  }
+
+  /**
+   * Answers the question on a live notification. The daemon checks that the question is still
+   * the current one; a Work question is answered there, a chat chip comes back as text to send.
+   */
+  answerLive(
+    serverId: string,
+    answer: { questionId: string; choiceIndex: number; requestId: string },
+  ): Promise<{ kind: string; text: string; duplicate: boolean }> {
+    return this.request(
+      serverId,
+      "live_answer",
+      { question_id: answer.questionId, choice_index: answer.choiceIndex },
+      {
+        requestId: answer.requestId,
+        responseType: "live_answer",
+        timeoutMs: 30000,
+        timeout: "Timed out. The answer may still have reached Brain.",
+        error: "That answer could not be sent.",
+        parse: (payload) => ({
+          kind: String(payload.kind || ""),
+          text: String(payload.text || ""),
+          duplicate: Boolean(payload.duplicate),
+        }),
+      },
+    );
+  }
+
   getBrainContext(serverId: string): Promise<BrainContextPayload> {
     return this.request(
       serverId,
