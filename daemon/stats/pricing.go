@@ -3,6 +3,7 @@ package stats
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/logonce"
 	"github.com/daoleno/mewla/daemon/modelfacts"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
@@ -57,13 +59,28 @@ func cloneProviderPricing(src map[string]map[string]modelPricing) map[string]map
 	return out
 }
 
+// staticProviderPricing is the built-in table plus the retired models: what
+// prices usage before any catalog has been downloaded.
 func staticProviderPricing() map[string]map[string]modelPricing {
-	out := map[string]map[string]modelPricing{"anthropic": {}, "openai": {}, "xai": {}}
+	out := retiredProviderPricing()
 	for modelID, price := range staticPricing {
 		out[inferOfficialProvider(modelID)][modelID] = price
 	}
 	return out
 }
+
+// retiredProviderPricing is what still prices usage beneath a loaded catalog.
+func retiredProviderPricing() map[string]map[string]modelPricing {
+	out := map[string]map[string]modelPricing{"anthropic": {}, "openai": {}, "xai": {}}
+	for modelID, price := range retiredPricing {
+		out[inferOfficialProvider(modelID)][modelID] = price
+	}
+	return out
+}
+
+// builtinPriceNotes tells, once, that costs are computed from the built-in
+// table because no catalog has ever been downloaded.
+var builtinPriceNotes logonce.Log
 
 func pricingFeedPath(home string) string {
 	return filepath.Join(statedir.Default(home), modelfacts.CacheFile)
@@ -146,7 +163,7 @@ func adoptSharedPricing(home string) (changed bool) {
 		return false
 	}
 	prices.mu.Lock()
-	prices.models = mergeProviderPricing(prices.models, fetched)
+	prices.models = mergeProviderPricing(retiredProviderPricing(), fetched)
 	prices.updatedAt = at
 	prices.source = "models.dev"
 	after := cloneProviderPricing(prices.models)
@@ -171,20 +188,23 @@ func samePricing(a, b map[string]map[string]modelPricing) bool {
 }
 
 // loadPricingCache applies the catalog the feed already holds, from its cache
-// file, on top of the built-in prices. A catalog that cannot establish prices
-// leaves the built-ins.
+// file. It replaces the built-in prices, which stay in force (and are reported
+// once, with Source "built-in") only while there is no usable catalog.
 func loadPricingCache(home string) {
 	catalog := pricingFeed(home).Catalog()
 	if catalog == nil {
+		builtinPriceNotes.Note("stats.prices", errors.New("the models.dev price catalog has not been downloaded yet; costs use the built-in price table until it is"))
 		return
 	}
 	at := catalog.At
 	loaded, err := pricingFromCatalog(catalog)
 	if err != nil {
+		builtinPriceNotes.Note("stats.prices", fmt.Errorf("the cached models.dev price catalog is unusable (%w); costs use the built-in price table", err))
 		return
 	}
+	builtinPriceNotes.Note("stats.prices", nil)
 	prices.mu.Lock()
-	prices.models = mergeProviderPricing(staticProviderPricing(), loaded)
+	prices.models = mergeProviderPricing(retiredProviderPricing(), loaded)
 	prices.updatedAt = at
 	prices.source = "models.dev"
 	prices.mu.Unlock()
@@ -222,8 +242,9 @@ func syncPricing(ctx context.Context, home string) error {
 	if err != nil {
 		return err
 	}
+	builtinPriceNotes.Note("stats.prices", nil)
 	prices.mu.Lock()
-	prices.models = mergeProviderPricing(prices.models, fetched)
+	prices.models = mergeProviderPricing(retiredProviderPricing(), fetched)
 	prices.updatedAt = at
 	prices.source = "models.dev"
 	prices.mu.Unlock()

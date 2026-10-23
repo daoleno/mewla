@@ -233,3 +233,63 @@ func TestPricingAdoptsACatalogAnotherReaderDownloaded(t *testing.T) {
 		t.Fatal("an adopted fresh catalog is stale")
 	}
 }
+
+// The built-in table prices usage only until a catalog has been loaded; the
+// catalog then owns the prices, and only the retired models stay beneath it.
+func TestBuiltinPricesAreALastResortUntilACatalogLoads(t *testing.T) {
+	prevModels := cloneProviderPricing(prices.models)
+	prevSource, prevUpdated, prevURL := prices.source, prices.updatedAt, pricingSyncURL
+	t.Cleanup(func() {
+		pricingSyncURL = prevURL
+		prices.mu.Lock()
+		defer prices.mu.Unlock()
+		prices.models, prices.source, prices.updatedAt = prevModels, prevSource, prevUpdated
+	})
+	pricingSyncURL = "http://unused.invalid/last-resort"
+	reset := func() {
+		prices.mu.Lock()
+		prices.models, prices.source, prices.updatedAt = staticProviderPricing(), "built-in", time.Time{}
+		prices.mu.Unlock()
+	}
+
+	// No catalog: the built-in table stays, and says so.
+	reset()
+	home := t.TempDir()
+	loadPricingCache(home)
+	if got, ok := currentPricing("gpt-5.4"); !ok || got.priceSource() != "built-in" {
+		t.Fatalf("built-in price = %+v ok=%v", got, ok)
+	}
+	prices.mu.RLock()
+	source := prices.source
+	prices.mu.RUnlock()
+	if source != "built-in" {
+		t.Fatalf("source = %q before any catalog", source)
+	}
+
+	// A catalog replaces the built-in table; a retired model keeps its price.
+	reset()
+	home = t.TempDir()
+	path := pricingFeedPath(home)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"openai":{"models":{"catalog-model":{"cost":{"input":7,"output":9}}}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loadPricingCache(home)
+	if got, ok := currentPricing("catalog-model"); !ok || got.input != 7 || got.priceSource() != "models.dev" {
+		t.Fatalf("catalog price = %+v ok=%v", got, ok)
+	}
+	if _, ok := currentPricing("gpt-5.4"); ok {
+		t.Fatal("a built-in price survived beside a loaded catalog that does not list the model")
+	}
+	if got, ok := currentPricing("gpt-5.1-codex"); !ok || got.input == 0 {
+		t.Fatalf("a retired model lost its price: %+v ok=%v", got, ok)
+	}
+	prices.mu.RLock()
+	source = prices.source
+	prices.mu.RUnlock()
+	if source != "models.dev" {
+		t.Fatalf("source = %q with a catalog", source)
+	}
+}
