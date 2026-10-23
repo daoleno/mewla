@@ -7,11 +7,20 @@ import "sync"
 type Adapter interface {
 	// Descriptor declares what the adapter can do and at what level.
 	Descriptor() Descriptor
-	// PrepareLaunch returns the command to launch the agent with, adding
-	// whatever lets Mewla follow it from its first moment (a session id, a
-	// hook file). A command the adapter cannot safely extend comes back
+	// PrepareLaunch returns how to launch the agent, adding whatever lets
+	// Mewla follow it from its first moment (a session id, a hook file, a
+	// control socket). A command the adapter cannot safely extend comes back
 	// unchanged: the Worker is then followed by the fallback.
-	PrepareLaunch(command string) (string, error)
+	PrepareLaunch(command string) (Launch, error)
+}
+
+// Launch is how a session starts.
+type Launch struct {
+	// Command is the command to run.
+	Command string
+	// Control is the socket of the agent's own control server, when the launch
+	// starts one for Mewla to attach to; empty for an agent followed by hooks.
+	Control string
 }
 
 // Registry maps a provider name (an executor's declared provider) to its

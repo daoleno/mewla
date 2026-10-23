@@ -23,6 +23,7 @@ import (
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/agentevents"
 	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
+	codexadapter "github.com/daoleno/mewla/daemon/agentevents/codex"
 	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
@@ -365,6 +366,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 		log.Printf("WARN agent events: cannot write the Claude hook file, Claude Workers will be followed from their transcript: %v", err)
 	} else {
 		adapters.Register(claudeadapter.Provider, claudeadapter.Adapter{SettingsPath: claudeSettingsPath(authManager.StorageDir())})
+	}
+	codexControlDir := filepath.Join(authManager.StorageDir(), "codex-ctl")
+	if err := os.MkdirAll(codexControlDir, 0o700); err != nil {
+		log.Printf("WARN agent events: cannot create %s, Codex Workers will be followed from their transcript: %v", codexControlDir, err)
+	} else {
+		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir})
+		w.ObserveSessions(newCodexEvents(ctx, eventHub).Observe)
 	}
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,

@@ -93,8 +93,13 @@ func (m *Mapper) Notification(method string, params json.RawMessage, at time.Tim
 		if json.Unmarshal(params, &p) != nil || p.ThreadID != m.thread || m.thread == "" {
 			return nil
 		}
-		if p.Status.Type == "active" && m.turn == "" && m.activeSince.IsZero() {
+		switch {
+		case p.Status.Type == "active" && m.turn == "" && m.activeSince.IsZero():
 			m.activeSince = at
+		case p.Status.Type == "idle" && m.turn == "":
+			// A turn that ended before the observer attached left no id to
+			// name it by; the fallback reads it from the transcript.
+			m.activeSince = time.Time{}
 		}
 		return nil
 	case "turn/started":

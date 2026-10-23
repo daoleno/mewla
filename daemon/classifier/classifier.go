@@ -29,7 +29,10 @@ type Worker struct {
 	Command   string `json:"command,omitempty"`
 	// ExecutorID names the executors.toml entry the Worker was launched from.
 	// Empty for a Worker Mewla did not launch.
-	ExecutorID          string      `json:"executor_id,omitempty"`
+	ExecutorID string `json:"executor_id,omitempty"`
+	// AgentControl is the socket of the agent's own control server, when the
+	// launch started one for Mewla. It is never sent to a phone.
+	AgentControl        string      `json:"-"`
 	State               WorkerState `json:"status"`
 	Summary             string      `json:"summary"`
 	Phase               string      `json:"phase,omitempty"`

@@ -723,3 +723,23 @@ func (c *Client) InterruptTurn(ctx context.Context, threadID, turnID string) err
 	_, err := c.call(ctx, methodTurnInterrupt, map[string]any{"threadId": threadID, "turnId": turnID})
 	return err
 }
+
+// Attach subscribes this connection to the thread's messages and returns the
+// thread as the server describes it (the ThreadResumeResponse's thread
+// object). It fails before the thread's first turn has written its rollout.
+func (c *Client) Attach(ctx context.Context, threadID string) (json.RawMessage, error) {
+	if strings.TrimSpace(threadID) == "" {
+		return nil, fmt.Errorf("%w: thread id required", ErrNoThread)
+	}
+	result, err := c.call(ctx, methodThreadResume, map[string]any{"threadId": threadID})
+	if err != nil {
+		return nil, err
+	}
+	var parsed struct {
+		Thread json.RawMessage `json:"thread"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil || len(parsed.Thread) == 0 {
+		return nil, fmt.Errorf("%w: thread/resume returned no thread", ErrProtocol)
+	}
+	return parsed.Thread, nil
+}
