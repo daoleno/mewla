@@ -102,3 +102,6 @@ daemon/webui/dist/*
 
 # Local QA and crash captures (scripts/capture-android-crash.sh)
 /artifacts/
+
+# go build in daemon/cmd/mewla drops the binary here
+/daemon/cmd/mewla/mewla
