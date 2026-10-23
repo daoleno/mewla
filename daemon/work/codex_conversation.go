@@ -320,7 +320,7 @@ func (r *ProviderConversationReader) loadCodexConversationForWorker(worker class
 		}, nil
 	}
 
-	candidate, ok, err := findCodexTranscript(worker, now)
+	candidate, ok, err := r.selectCodexTranscript(worker, now)
 	if err != nil {
 		r.resetSource()
 		return CodexConversation{}, err
@@ -2335,4 +2335,73 @@ func consumeCodexSegmentPrefix(builder *codexConversationBuilder, segment codexH
 	}
 	builder.flushPendingUserEcho()
 	return int(segment.end)
+}
+
+// codexSelectionMaxAge bounds how long a selection is reused even while the
+// Codex state files look unchanged, so a choice that depended on something the
+// signature cannot see (another rollout file's modification time) is revisited.
+const codexSelectionMaxAge = 15 * time.Second
+
+type codexSelectionCache struct {
+	valid     bool
+	signature string
+	at        time.Time
+	found     bool
+	candidate codexTranscriptCandidate
+}
+
+// codexStateSignature identifies the state of Codex's thread database: size
+// and modification time of the database and its write-ahead log. Codex records
+// a new or switched thread there, so while it holds still the selection cannot
+// have changed. An unreadable database has no signature and is never cached.
+func codexStateSignature() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	db := filepath.Join(home, ".codex", "state_5.sqlite")
+	var parts []string
+	for _, path := range []string{db, db + "-wal"} {
+		info, err := os.Stat(path)
+		if err != nil {
+			if path == db {
+				return ""
+			}
+			parts = append(parts, "-")
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano()))
+	}
+	return strings.Join(parts, "|")
+}
+
+// selectCodexTranscript is findCodexTranscript with the previous answer reused
+// while the thread database is unchanged, the answer is younger than
+// codexSelectionMaxAge, and the chosen rollout still exists. An idle Codex pane
+// is then polled with a few stat calls instead of forking sqlite3, ps and lsof
+// and parsing up to 48 rollout headers twice a second.
+func (r *ProviderConversationReader) selectCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscriptCandidate, bool, error) {
+	signature := codexStateSignature()
+	cache := r.codexSelection
+	if cache.valid && signature != "" && signature == cache.signature {
+		if age := now.Sub(cache.at); age >= 0 && age < codexSelectionMaxAge {
+			if !cache.found {
+				codexLookupCost.SelectionHits.Add(1)
+				return codexTranscriptCandidate{}, false, nil
+			}
+			if info, err := os.Stat(cache.candidate.Path); err == nil {
+				candidate := cache.candidate
+				candidate.Updated = info.ModTime()
+				codexLookupCost.SelectionHits.Add(1)
+				return candidate, true, nil
+			}
+		}
+	}
+	candidate, ok, err := findCodexTranscript(worker, now)
+	if err != nil || signature == "" {
+		r.codexSelection = codexSelectionCache{}
+		return candidate, ok, err
+	}
+	r.codexSelection = codexSelectionCache{valid: true, signature: signature, at: now, found: ok, candidate: candidate}
+	return candidate, ok, nil
 }

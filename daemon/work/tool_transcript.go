@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -22,6 +24,48 @@ const (
 	maxTranscriptAge                      = 72 * time.Hour
 	maxCodexActiveTranscriptStartBackdate = 2 * time.Minute
 )
+
+// codexLookupCost counts what selecting a Codex transcript costs, so a test
+// can show an idle poll costs none of it. Each run forks sqlite3, and either
+// walks /proc or forks ps and lsof; each header read opens and parses a file.
+var codexLookupCost struct {
+	Selections    atomic.Int64 // full findCodexTranscript runs
+	Subprocesses  atomic.Int64 // sqlite3, ps and lsof spawned
+	HeaderParses  atomic.Int64 // rollout headers opened and parsed
+	SelectionHits atomic.Int64 // polls answered from the cached selection
+}
+
+// codexMetaCache keeps the parsed first record of each rollout. Codex writes
+// session_meta once, as the first record, and never edits it, so a path's
+// header is read once instead of on every poll. A path that fails to read is
+// not cached.
+var codexMetaCache struct {
+	sync.Mutex
+	entries map[string]codexMeta
+}
+
+const codexMetaCacheLimit = 512
+
+func cachedCodexMeta(path string) (codexMeta, error) {
+	codexMetaCache.Lock()
+	meta, ok := codexMetaCache.entries[path]
+	codexMetaCache.Unlock()
+	if ok {
+		return meta, nil
+	}
+	codexLookupCost.HeaderParses.Add(1)
+	meta, err := readCodexMeta(path)
+	if err != nil {
+		return codexMeta{}, err
+	}
+	codexMetaCache.Lock()
+	if codexMetaCache.entries == nil || len(codexMetaCache.entries) >= codexMetaCacheLimit {
+		codexMetaCache.entries = map[string]codexMeta{}
+	}
+	codexMetaCache.entries[path] = meta
+	codexMetaCache.Unlock()
+	return meta, nil
+}
 
 type codexThreadRow struct {
 	ID          string `json:"id"`
@@ -38,6 +82,7 @@ type codexTranscriptCandidate struct {
 }
 
 func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscriptCandidate, bool, error) {
+	codexLookupCost.Selections.Add(1)
 	cwd := strings.TrimSpace(worker.Cwd)
 	if cwd == "" {
 		return codexTranscriptCandidate{}, false, nil
@@ -67,7 +112,7 @@ func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscri
 			if path == "" {
 				continue
 			}
-			meta, err := readCodexMeta(path)
+			meta, err := cachedCodexMeta(path)
 			if err != nil {
 				continue
 			}
@@ -252,17 +297,17 @@ func openCodexRolloutPathsForProcess(processID int) []string {
 	if processID <= 0 {
 		return nil
 	}
+	// The process tree is listed once: on macOS every listing is a ps fork.
+	codexLookupCost.Subprocesses.Add(1)
+	pids := append([]int{processID}, procDescendantPIDs(processID)...)
 	var paths []string
-	for _, pid := range append([]int{processID}, procDescendantPIDs(processID)...) {
+	for _, pid := range pids {
 		paths = append(paths, procOpenCodexRolloutPaths(pid)...)
 	}
 	if len(paths) > 0 {
 		return uniqueStrings(paths)
 	}
-	for _, pid := range append([]int{processID}, procDescendantPIDs(processID)...) {
-		paths = append(paths, lsofOpenCodexRolloutPaths(pid)...)
-	}
-	return uniqueStrings(paths)
+	return uniqueStrings(lsofOpenCodexRolloutPaths(pids))
 }
 
 func procOpenCodexRolloutPaths(processID int) []string {
@@ -275,15 +320,24 @@ func procOpenCodexRolloutPaths(processID int) []string {
 	return uniqueStrings(paths)
 }
 
-func lsofOpenCodexRolloutPaths(processID int) []string {
-	if processID <= 0 {
+// lsofOpenCodexRolloutPaths asks lsof about the whole process tree in one
+// run: one fork however many descendants Codex has.
+func lsofOpenCodexRolloutPaths(processIDs []int) []string {
+	ids := make([]string, 0, len(processIDs))
+	for _, processID := range processIDs {
+		if processID > 0 {
+			ids = append(ids, strconv.Itoa(processID))
+		}
+	}
+	if len(ids) == 0 {
 		return nil
 	}
 	lsof, err := exec.LookPath("lsof")
 	if err != nil {
 		return nil
 	}
-	out, err := exec.Command(lsof, "-w", "-p", strconv.Itoa(processID), "-Fn").Output()
+	codexLookupCost.Subprocesses.Add(1)
+	out, err := exec.Command(lsof, "-w", "-p", strings.Join(ids, ","), "-Fn").Output()
 	if err != nil {
 		return nil
 	}
@@ -368,6 +422,7 @@ func queryCodexThreads(sqlite3, dbPath, cwd string) ([]codexThreadRow, error) {
 }
 
 func queryCodexThreadRows(sqlite3, dbPath, query string) ([]codexThreadRow, error) {
+	codexLookupCost.Subprocesses.Add(1)
 	out, err := exec.Command(sqlite3, "-json", dbPath, query).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("query codex threads: %w%s", err, stderrSuffix(string(out)))

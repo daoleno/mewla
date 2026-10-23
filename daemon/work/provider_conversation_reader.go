@@ -48,6 +48,11 @@ type ProviderConversationReader struct {
 	// content-changing OpenCode load, used for cheap memoized deltas.
 	openCodeLastChangedIDs []string
 
+	// codexSelection is the last Codex transcript choice for this binding. The
+	// choice costs a sqlite3 spawn, a process-tree listing and header reads, so
+	// an idle poll reuses it while nothing it depends on has changed.
+	codexSelection codexSelectionCache
+
 	// piPinnedSessionPath retains the auto-bound shared-directory Pi transcript
 	// for this subscription so a newer same-CWD session never leaks into the
 	// active agent's Interface mid-turn.
@@ -170,6 +175,7 @@ func (r *ProviderConversationReader) bind(worker classifier.Worker, provider str
 	}
 	r.bound = true
 	r.binding = next
+	r.codexSelection = codexSelectionCache{}
 	r.resetSource()
 }
 
