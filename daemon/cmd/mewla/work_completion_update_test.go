@@ -43,14 +43,6 @@ func TestWorkUpdateCompletionCLICommitsCanonicalContract(t *testing.T) {
 	if err != nil || canonical.Policy != lifecycle.PolicyUntilDone || canonical.DoneCriteriaRef != updated.DoneCriteriaRef {
 		t.Fatalf("canonical contract=%+v %v", canonical, err)
 	}
-	reopened, err := brain.NewStore(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	durable, err := reopened.Work(item.ID)
-	if err != nil || durable.CompletionPolicy != updated.CompletionPolicy || durable.DoneCriteriaRef != updated.DoneCriteriaRef {
-		t.Fatalf("reload lost contract: %+v %v", durable, err)
-	}
 	for _, args := range [][]string{{"--completion", "invalid"}, {"--done-criteria", ""}} {
 		command := append([]string{"work", "update", "--state-dir", root, "--id", item.ID}, args...)
 		if err := runBrainCommand(command, &stderr); err == nil {
@@ -69,5 +61,15 @@ func TestWorkUpdateCompletionCLICommitsCanonicalContract(t *testing.T) {
 	}
 	if err := runBrainCommand([]string{"work", "update", "--state-dir", root, "--id", item.ID, "--completion", "bounded"}, &stderr); err == nil {
 		t.Fatal("terminal contract update falsely succeeded")
+	}
+	// A second store on the same database is only safe once the first has
+	// stopped writing: it would otherwise find the generation moved.
+	reopened, err := brain.NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	durable, err := reopened.Work(item.ID)
+	if err != nil || durable.CompletionPolicy != updated.CompletionPolicy || durable.DoneCriteriaRef != updated.DoneCriteriaRef {
+		t.Fatalf("reload lost contract: %+v %v", durable, err)
 	}
 }
