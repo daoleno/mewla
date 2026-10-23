@@ -143,6 +143,25 @@ A Session's ⋯ menu holds:
 
 Items appear only where they apply: Open Web for DSH, Open Brain for a Worker.
 
+## What the daemon costs while idle
+
+The daemon watches your `tmux` Sessions by listing their panes and reading the
+process table, not by attaching to them. With nothing happening it settles to
+under 1% of one CPU core (it was above 6% when it forked `ps` and `tmux` several
+times a second):
+
+- The process table is read straight from `/proc` on Linux (`ps` elsewhere), and
+  again only when a pane printed, appeared or went away, or when it is five
+  seconds old.
+- A pane's screen is read again only when `tmux` says the pane printed
+  (`window_activity`), or when the last read is 30 seconds old.
+- After three quiet seconds the pane list is checked every two seconds instead
+  of every half second; the first change brings the fast cadence back.
+
+`tmux` control mode was tried and rejected: its subscriptions only cover panes of
+the session the control client is attached to, and each Worker is its own
+`tmux` session.
+
 ## Services
 
 ![Services: two ports from atlas-notes Sessions, one with a public Quick Tunnel, and a persistent postgres](assets/services.svg)
