@@ -2,17 +2,18 @@ package calendar
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/google/uuid"
 
 	"github.com/daoleno/mewla/daemon/statedir"
@@ -33,10 +34,14 @@ type Event struct {
 }
 
 type Store struct {
-	path    string
-	now     func() time.Time
-	mu      sync.RWMutex
+	path string
+	db   *sql.DB
+	now  func() time.Time
+	mu   sync.RWMutex
+	// items is the resident calendar; stored is a copy of what was last
+	// committed, so a commit can write only what changed (see db.go).
 	items   map[string]Item
+	stored  map[string]Item
 	subs    map[int]chan Event
 	nextSub int
 }
@@ -56,35 +61,41 @@ func NewStore(root string) (*Store, error) {
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, err
 	}
-	s := &Store{path: filepath.Join(root, "calendar.json"), now: time.Now, items: map[string]Item{}, subs: map[int]chan Event{}}
+	if err := os.Chmod(root, 0o700); err != nil {
+		return nil, err
+	}
+	db, err := openRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	s := &Store{path: filepath.Join(root, databaseName), db: db, now: time.Now, items: map[string]Item{}, subs: map[int]chan Event{}}
 	if err := s.load(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	return s, nil
 }
 
 func (s *Store) load() error {
-	raw, err := os.ReadFile(s.path)
-	if errors.Is(err, os.ErrNotExist) {
-		if err := os.Chmod(filepath.Dir(s.path), 0o700); err != nil {
-			return err
-		}
-		return s.persistLocked()
-	}
+	items, err := loadItems(s.db)
 	if err != nil {
-		return err
+		return fmt.Errorf("load calendar: %w", err)
 	}
-	doc, err := decodeDocument(raw)
-	if err != nil {
-		return fmt.Errorf("decode calendar store: %w", err)
-	}
-	for _, item := range doc.Items {
-		if item.ID == "" {
-			continue
+	for id, item := range items {
+		if id != "" {
+			s.items[id] = item
 		}
-		s.items[item.ID] = item
 	}
+	s.stored = cloneItems(s.items)
 	return nil
+}
+
+func cloneItems(items map[string]Item) map[string]Item {
+	out := make(map[string]Item, len(items))
+	for id, item := range items {
+		out[id] = cloneItem(item)
+	}
+	return out
 }
 
 func decodeDocument(raw []byte) (document, error) {
@@ -536,16 +547,21 @@ func normalizeTerminalPayload(result, failure string) (Status, string, string, e
 	return StatusFailed, "", normalized, nil
 }
 
+// persistLocked commits what changed since the last commit. Callers hold
+// s.mu and restore the Item they changed when it fails.
 func (s *Store) persistLocked() error {
-	doc := document{SchemaVersion: SchemaVersion, Items: make([]Item, 0, len(s.items))}
-	for _, item := range s.items {
-		doc.Items = append(doc.Items, item)
-	}
-	sort.Slice(doc.Items, func(i, j int) bool { return doc.Items[i].CreatedAt.Before(doc.Items[j].CreatedAt) })
-	raw, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
+	if err := commit(s.db, s.stored, s.items); err != nil {
 		return err
 	}
-	raw = append(raw, '\n')
-	return atomicfile.Write(s.path, raw, 0o600)
+	for id, item := range s.items {
+		if !reflect.DeepEqual(s.stored[id], item) {
+			s.stored[id] = cloneItem(item)
+		}
+	}
+	for id := range s.stored {
+		if _, kept := s.items[id]; !kept {
+			delete(s.stored, id)
+		}
+	}
+	return nil
 }

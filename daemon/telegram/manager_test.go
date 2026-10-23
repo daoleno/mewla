@@ -385,14 +385,11 @@ func bindOwner(t *testing.T, manager *Manager, updateID, ownerID, chatID int64) 
 
 func TestConfigureBindingIdentityDedupeAndOffsetRecovery(t *testing.T) {
 	manager, owner, _, root := configuredManager(t)
-	stateBytes, err := os.ReadFile(filepath.Join(root, "telegram", "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	_, stateBytes := storedState(t, root)
 	if strings.Contains(string(stateBytes), "test-token") {
 		t.Fatal("public state contains bot token")
 	}
-	for _, name := range []string{"state.json", "token"} {
+	for _, name := range []string{databaseName, "token"} {
 		info, err := os.Stat(filepath.Join(root, "telegram", name))
 		if err != nil {
 			t.Fatal(err)

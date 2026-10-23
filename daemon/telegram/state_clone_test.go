@@ -2,7 +2,6 @@ package telegram
 
 import (
 	"errors"
-	"os"
 	"reflect"
 	"testing"
 )
@@ -18,18 +17,14 @@ func TestUnchangedProjectionDoesNotRewriteDurableState(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	before, err := os.Stat(s.statePath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	written := countWrites(t, s)
 	for i := 0; i < 5; i++ {
 		if err = s.mutate(func(v *durableState) error { return nil }); err != nil {
 			t.Fatal(err)
 		}
 	}
-	after, _ := os.Stat(s.statePath)
-	if !os.SameFile(before, after) || !before.ModTime().Equal(after.ModTime()) {
-		t.Fatal("no-op rewrote state")
+	if n := written(); n != 0 {
+		t.Fatalf("no-op wrote %d rows", n)
 	}
 	snapshot := s.snapshot()
 	snapshot.Outbox[0].ReplyMarkup.InlineKeyboard[0][0].Text = "external"

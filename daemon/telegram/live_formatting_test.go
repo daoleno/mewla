@@ -1,7 +1,6 @@
 package telegram
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -22,12 +21,8 @@ func TestLiveTelegramLocalFileFormatting(t *testing.T) {
 	if err != nil || topic <= 1 {
 		t.Fatal("exact QA topic required")
 	}
-	raw, err := os.ReadFile(filepath.Join(root, "telegram", "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var state durableState
-	if json.Unmarshal(raw, &state) != nil || state.OwnerID == 0 || state.OwnerID != state.ChatID {
+	state, _ := storedState(t, root)
+	if state.OwnerID == 0 || state.OwnerID != state.ChatID {
 		t.Fatal("verified private owner binding required")
 	}
 	secret, err := os.ReadFile(filepath.Join(root, "telegram", "token"))

@@ -69,7 +69,7 @@ func TestStoreLoadsCurrentDocumentWithoutWritingAndPreservesRunningClaim(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	path, before := writeCalendarFixture(t, root, raw)
+	writeCalendarFixture(t, root, raw)
 
 	for load := 1; load <= 2; load++ {
 		store, err := NewStore(root)
@@ -83,11 +83,21 @@ func TestStoreLoadsCurrentDocumentWithoutWritingAndPreservesRunningClaim(t *test
 		if recovered.Status != StatusRunning || len(recovered.Runs) != 1 || recovered.Runs[0].Status != StatusRunning {
 			t.Fatalf("load %d recovered = %#v", load, recovered)
 		}
-		assertCalendarFixtureUnchanged(t, path, raw, before)
+	}
+	// The first load moved calendar.json into calendar.db and set it aside.
+	if _, err := os.Stat(filepath.Join(root, databaseName)); err != nil {
+		t.Fatal(err)
+	}
+	backups, _ := filepath.Glob(filepath.Join(filepath.Dir(root), backupPrefix+"*", filepath.Base(root), legacyFile))
+	if len(backups) != 1 {
+		t.Fatalf("calendar.json was not set aside exactly once: %v", backups)
+	}
+	if kept, err := os.ReadFile(backups[0]); err != nil || !bytes.Equal(kept, raw) {
+		t.Fatalf("backup differs from the original calendar.json: %v", err)
 	}
 }
 
-func TestStoreInitializesMissingFileWithCurrentDocumentAndPrivateModes(t *testing.T) {
+func TestStoreInitializesMissingDatabaseWithPrivateModes(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "calendar")
 	if err := os.Mkdir(root, 0o755); err != nil {
 		t.Fatal(err)
@@ -107,16 +117,8 @@ func TestStoreInitializesMissingFileWithCurrentDocumentAndPrivateModes(t *testin
 	if dirInfo.Mode().Perm() != 0o700 || fileInfo.Mode().Perm() != 0o600 {
 		t.Fatalf("modes directory=%o file=%o", dirInfo.Mode().Perm(), fileInfo.Mode().Perm())
 	}
-	raw, err := os.ReadFile(store.Path())
-	if err != nil {
-		t.Fatal(err)
-	}
-	doc, err := decodeDocument(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if doc.SchemaVersion != SchemaVersion || doc.Items == nil || len(doc.Items) != 0 {
-		t.Fatalf("initialized document = %#v", doc)
+	if got := store.List(); len(got) != 0 {
+		t.Fatalf("new calendar holds items: %#v", got)
 	}
 }
 
@@ -364,9 +366,8 @@ func TestPersistenceFailureRollsBackEveryStateTransition(t *testing.T) {
 		}
 	}
 
-	// Renaming the temporary file over a directory fails after the temp file has
-	// been synced, exercising the rollback path without permission assumptions.
-	store.path = root
+	// A database that refuses every write exercises the rollback path.
+	restore := failWrites(t, store)
 	if _, err := store.Cancel(rem.ID, rem.Revision); err == nil {
 		t.Fatal("expected cancel persistence failure")
 	}
@@ -394,6 +395,7 @@ func TestPersistenceFailureRollsBackEveryStateTransition(t *testing.T) {
 		t.Fatal("expected finish persistence failure")
 	}
 	assertUnchanged(action.ID, claimed)
+	restore()
 }
 
 func TestFinishRunRejectsInvalidPayloadWithoutMutation(t *testing.T) {
@@ -650,18 +652,18 @@ func TestSchedulerLaunchGuardClearsOnErrorExits(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		calendarPath := store.path
+		var restore func()
 		runner := &fakeRunner{
 			result: ActionResult{WorkID: "work-1", WorkerSession: "agent-1", Launched: true},
 			beforeReturn: func() {
-				store.path = root
+				restore = failWrites(t, store)
 			},
 		}
 		scheduler := NewScheduler(store, runner)
 		if _, err := scheduler.RunNow(context.Background(), item.ID); err == nil {
 			t.Fatal("expected RecordLaunch persistence error")
 		}
-		store.path = calendarPath
+		restore()
 		if scheduler.isLaunching(item.ID) {
 			t.Fatal("launch guard remained set after RecordLaunch error")
 		}
@@ -736,14 +738,13 @@ func TestSchedulerRetriesOneTerminalCommitWithoutRelaunchingOccurrence(t *testin
 	}
 	runner := &fakeRunner{inspectStatus: StatusCompleted, inspectKnown: true}
 	scheduler := NewScheduler(store, runner)
-	calendarPath := store.path
-	store.path = root // rename over a directory fails before the atomic commit.
+	restore := failWrites(t, store)
 	scheduler.Tick(context.Background())
 	first, _ := store.Get(item.ID)
 	if first.Status != StatusRunning || first.Runs[0].Status != StatusRunning || len(store.ScheduledResults("thread-1", 0)) != 0 {
 		t.Fatalf("failed terminal commit leaked state: %#v", first)
 	}
-	store.path = calendarPath
+	restore()
 	scheduler.Tick(context.Background())
 	finished, _ := store.Get(item.ID)
 	if finished.Status != StatusCompleted || len(finished.Runs) != 1 || len(store.ScheduledResults("thread-1", 0)) != 1 {

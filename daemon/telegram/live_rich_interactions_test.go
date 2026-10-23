@@ -44,10 +44,7 @@ func TestLiveTelegramRichInteractions(t *testing.T) {
 		BrainTopicID int64 `json:"brain_topic_id"`
 	}
 	readBinding := func() binding {
-		raw, err := os.ReadFile(filepath.Join(root, "telegram", "state.json"))
-		if err != nil {
-			t.Fatal("binding unavailable")
-		}
+		_, raw := storedState(t, root)
 		var value binding
 		if json.Unmarshal(raw, &value) != nil {
 			t.Fatal("binding invalid")

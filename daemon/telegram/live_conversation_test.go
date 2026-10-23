@@ -121,11 +121,7 @@ func TestLiveTelegramConversationWithIsolatedBrainStore(t *testing.T) {
 		t.Skip("requires explicit authorization for two bound private QA topics")
 	}
 	readState := func() durableState {
-		raw, err := os.ReadFile(filepath.Join(root, "telegram", "state.json"))
-		var state durableState
-		if err != nil || json.Unmarshal(raw, &state) != nil {
-			t.Fatal("bound state unavailable")
-		}
+		state, _ := storedState(t, root)
 		return state
 	}
 	before := readState()
