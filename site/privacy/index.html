@@ -26,7 +26,7 @@
   <article class="d-doc">
 <h1>Privacy policy</h1>
 <p>Mewla lets you run AI agents on your own computer and use them from your phone. Your work stays between your devices and your computer.</p>
-<p class="d-updated">Last updated 15 October 2026</p>
+<p class="d-updated">Last updated 23 October 2026</p>
 
 <div class="callout callout-short">
 <ul>
@@ -73,6 +73,16 @@
 <ul>
 <li>Your computer gets its own HTTPS certificate from Let’s Encrypt. Like every public certificate, it is listed in public Certificate Transparency logs, so your computer’s address is public. It is two random words unless you choose a name.</li>
 <li>The service runs on a server we rent from OVHcloud. Its DNS is hosted by Cloudflare. Sign-in goes through GitHub.</li>
+</ul>
+
+<h2 id="google">Google Calendar and Gmail (optional)</h2>
+<p>If you connect Google Calendar or Gmail in Plugins, your computer reads your calendar events or your mail through Google’s APIs, with the access you approve on Google’s own page: Calendar for events and free time (and, if you allow changes, creating and editing events); Gmail for searching and reading mail (and, if you allow changes, drafting, sending, labeling and archiving). Each plugin asks only for its own access.</p>
+<ul>
+<li><strong>Where it goes.</strong> What Google returns goes to your computer, where Brain and your agents use it for the tasks you give them, and only to provide the features you use in Mewla (for example, summarizing a mail you asked about or adding an event you asked for). If an agent includes it in a prompt, it goes to the model provider you chose, under your own account with that provider, as described above. Mewla does not send it to us, and does not use it, or let the model provider use it through Mewla, to develop, improve or train generalized AI or machine-learning models.</li>
+<li><strong>Sign-in.</strong> Google’s sign-in and token exchange for these two plugins run on Mewla’s account service at <code>connect.mewla.ai</code>, because Google’s client secret must stay off your computer. Google’s tokens pass through it once, sealed so that only the computer that started the sign-in can open them. The service holds them in memory for at most ten minutes while that computer collects them, and does not store them. When your computer refreshes a token, the request passes through the service the same way. The service never calls the Gmail or Calendar APIs and never receives your mail or events. Your tokens live only in your computer’s credential store.</li>
+<li><strong>What we do not do.</strong> We do not read, keep, sell or share your calendar or mail, we do not transfer it to anyone except as described above to provide the features you use, and we do not use it for advertising. No one at Mewla can see it. Mail and events your agents read are treated as untrusted content, not as instructions; sending mail, creating or changing events, and every other change stays off until you allow changes and ask for them.</li>
+<li><strong>Google API Services User Data Policy.</strong> Mewla’s use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</li>
+<li><strong>Disconnecting.</strong> Disconnect the account in Plugins; Mewla revokes the access at Google and deletes the tokens from your computer. You can also remove Mewla at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>.</li>
 </ul>
 
 <h2 id="delete">Deleting your data</h2>
