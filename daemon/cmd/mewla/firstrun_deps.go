@@ -531,7 +531,7 @@ func offerBoot(d *depsPrompt, stateDir string, choice startupChoice) {
 	switch {
 	case err == nil:
 		fmt.Fprintln(d.w, "Mewla now runs in the background and starts with this computer. Turn it off: mewla boot uninstall")
-	case strings.Contains(err.Error(), "boot linger required"):
+	case errors.Is(err, errBootLingerRequired):
 		fmt.Fprintf(d.w, "Mewla now runs in the background and starts when you log in.\nTo start it at boot before anyone logs in: sudo loginctl enable-linger %s\n", currentUserName())
 	default:
 		fmt.Fprintf(d.w, "Could not start Mewla in the background: %v\nMewla runs in this terminal instead. Later: mewla boot install\n", err)
