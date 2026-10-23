@@ -239,7 +239,7 @@ func buildMigratedDatabase(stateDir, building string, record *MigrationRecord) e
 			return fmt.Errorf("decode Brain presentation database: %w", err)
 		}
 		sortPresentation(&decoded)
-		if err := commitPresentation(db, 0, presentationDatabase{}, decoded); err != nil {
+		if _, err := commitPresentation(db, 0, presentationDatabase{}, decoded); err != nil {
 			return err
 		}
 		image, _, err := readPresentationImage(db)

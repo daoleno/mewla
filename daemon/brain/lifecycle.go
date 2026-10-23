@@ -1096,7 +1096,8 @@ func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 			return err
 		}
 	}
-	if err := commitPresentation(s.db, s.presentationGen, s.presentation, database); err != nil {
+	committed, err := commitPresentation(s.db, s.presentationGen, s.presentation, database)
+	if err != nil {
 		if errors.Is(err, errConcurrentWriter) {
 			// Another process moved the database; whatever this Store holds is
 			// stale. Fail the command and resume from what is durable.
@@ -1108,7 +1109,7 @@ func (s *Store) persistPresentationLocked(database presentationDatabase) error {
 		}
 		return err
 	}
-	s.presentation = clonePresentationDatabase(database)
+	s.presentation = committed
 	s.presentationGen++
 	s.turnCache = turnReadCache{}
 	s.rev++

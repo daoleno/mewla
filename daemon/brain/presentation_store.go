@@ -251,9 +251,13 @@ func sortPresentation(database *presentationDatabase) {
 
 // commitPresentation writes the difference between two images in one
 // transaction and advances the generation. It fails, writing nothing, when the
-// generation on disk is not the one prev was read at.
-func commitPresentation(db *sql.DB, generation int64, prev, next presentationDatabase) error {
-	return sqlitedb.Tx(db, func(tx *sql.Tx) error {
+// generation on disk is not the one prev was read at. It returns the committed
+// image as the next start will read it: every row that was written is the
+// decode of what was stored, so the resident image never differs from the
+// durable one in representation (nil against empty, omitted fields).
+func commitPresentation(db *sql.DB, generation int64, prev, next presentationDatabase) (presentationDatabase, error) {
+	committed := clonePresentationDatabase(next)
+	err := sqlitedb.Tx(db, func(tx *sql.Tx) error {
 		res, err := tx.Exec(
 			`UPDATE pres_meta SET value = ? WHERE key = ? AND value = ?`,
 			strconv.FormatInt(generation+1, 10), metaGeneration, strconv.FormatInt(generation, 10),
@@ -266,8 +270,15 @@ func commitPresentation(db *sql.DB, generation int64, prev, next presentationDat
 		} else if n != 1 {
 			return errConcurrentWriter
 		}
-		if err := diffTable(tx, prev.BrainWork, next.BrainWork,
+		if err := diffTable(tx, prev.BrainWork, committed.BrainWork,
 			func(item Work) string { return item.ID },
+			func(body []byte) (Work, error) {
+				var record workRecord
+				if err := json.Unmarshal(body, &record); err != nil {
+					return Work{}, err
+				}
+				return worksFromRecords([]workRecord{record})[0], nil
+			},
 			`INSERT INTO pres_work(id, body) VALUES(?, ?) ON CONFLICT(id) DO UPDATE SET body = excluded.body`,
 			func(item Work, body string) []any { return []any{item.ID, body} },
 			`DELETE FROM pres_work WHERE id = ?`,
@@ -275,8 +286,9 @@ func commitPresentation(db *sql.DB, generation int64, prev, next presentationDat
 		); err != nil {
 			return fmt.Errorf("write Brain Work: %w", err)
 		}
-		if err := diffTable(tx, prev.BrainWorkEvents, next.BrainWorkEvents,
+		if err := diffTable(tx, prev.BrainWorkEvents, committed.BrainWorkEvents,
 			func(event WorkEvent) string { return event.ID },
+			decodeRow[WorkEvent],
 			`INSERT INTO pres_event(id, work_id, body) VALUES(?, ?, ?) ON CONFLICT(id) DO UPDATE SET work_id = excluded.work_id, body = excluded.body`,
 			func(event WorkEvent, body string) []any { return []any{event.ID, event.WorkID, body} },
 			`DELETE FROM pres_event WHERE id = ?`,
@@ -284,8 +296,9 @@ func commitPresentation(db *sql.DB, generation int64, prev, next presentationDat
 		); err != nil {
 			return fmt.Errorf("write Brain Work events: %w", err)
 		}
-		if err := diffTable(tx, prev.BrainTurns, next.BrainTurns,
+		if err := diffTable(tx, prev.BrainTurns, committed.BrainTurns,
 			func(turn TurnRecord) string { return turnRecordKey(turn.SessionID, turn.TurnID) },
+			decodeRow[TurnRecord],
 			`INSERT INTO pres_turn(session_id, turn_id, body) VALUES(?, ?, ?) ON CONFLICT(session_id, turn_id) DO UPDATE SET body = excluded.body`,
 			func(turn TurnRecord, body string) []any { return []any{turn.SessionID, turn.TurnID, body} },
 			`DELETE FROM pres_turn WHERE session_id = ? AND turn_id = ?`,
@@ -293,8 +306,9 @@ func commitPresentation(db *sql.DB, generation int64, prev, next presentationDat
 		); err != nil {
 			return fmt.Errorf("write Brain turns: %w", err)
 		}
-		if err := diffTable(tx, prev.BrainInputAdmissions, next.BrainInputAdmissions,
+		if err := diffTable(tx, prev.BrainInputAdmissions, committed.BrainInputAdmissions,
 			func(admission BrainInputAdmission) string { return admission.RequestID + "\x00" + admission.ThreadID },
+			decodeRow[BrainInputAdmission],
 			`INSERT INTO pres_admission(request_id, thread_id, body) VALUES(?, ?, ?) ON CONFLICT(request_id, thread_id) DO UPDATE SET body = excluded.body`,
 			func(admission BrainInputAdmission, body string) []any {
 				return []any{admission.RequestID, admission.ThreadID, body}
@@ -318,6 +332,11 @@ func commitPresentation(db *sql.DB, generation int64, prev, next presentationDat
 					return err
 				}
 				value = string(raw)
+				var stored HostForegroundTurn
+				if err := json.Unmarshal(raw, &stored); err != nil {
+					return err
+				}
+				committed.HostForegroundTurn = &stored
 			}
 			if _, err := tx.Exec(`UPDATE pres_meta SET value = ? WHERE key = ?`, value, metaForegound); err != nil {
 				return err
@@ -325,6 +344,16 @@ func commitPresentation(db *sql.DB, generation int64, prev, next presentationDat
 		}
 		return nil
 	})
+	if err != nil {
+		return presentationDatabase{}, err
+	}
+	return committed, nil
+}
+
+func decodeRow[T any](body []byte) (T, error) {
+	var row T
+	err := json.Unmarshal(body, &row)
+	return row, err
 }
 
 // splitTurnRecordKey undoes a "<first>\x00<second>" key.
@@ -339,10 +368,12 @@ func splitTurnRecordKey(key string) (string, string) {
 
 // diffTable upserts the rows of next that are new or changed against prev and
 // deletes the rows prev has that next lacks. Rows are compared as values, so
-// an untouched row costs no write.
+// an untouched row costs no write. Each written row of next is replaced by the
+// decode of the JSON that was stored.
 func diffTable[T any](
 	tx *sql.Tx, prev, next []T,
 	key func(T) string,
+	decode func([]byte) (T, error),
 	upsert string, upsertArgs func(T, string) []any,
 	remove string, removeArgs func(string) []any,
 ) error {
@@ -366,6 +397,11 @@ func diffTable[T any](
 		if _, err := tx.Exec(upsert, upsertArgs(row, string(body))...); err != nil {
 			return err
 		}
+		stored, err := decode(body)
+		if err != nil {
+			return err
+		}
+		next[index] = stored
 	}
 	for k := range old {
 		if _, err := tx.Exec(remove, removeArgs(k)...); err != nil {
