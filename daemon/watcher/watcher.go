@@ -322,6 +322,7 @@ type Watcher struct {
 	pendingPumping        bool
 	resources             delegatedResourceManager
 	sessionInput          *sessionInputOwner
+	screens               *paneScreens
 	targetProcessResolver func(string) (targetProcessIdentity, bool)
 	targetCommandResolver func(string) (string, bool)
 	// Poll and input readers are owned by the watcher instance. Keeping these
@@ -362,9 +363,10 @@ func New(pollInterval time.Duration) *Watcher {
 	// The production session input IO and poll sources are bound to this
 	// watcher so every tmux invocation resolves each target's server.
 	w.sessionInput = newSessionInputOwner(realSessionInputIO{socketFor: w.socketPathFor})
+	w.screens = newPaneScreens()
 	w.listPanes = w.listTmuxPanes
 	w.capturePane = w.capturePaneContent
-	w.snapshotProcesses = snapshotProcesses
+	w.snapshotProcesses = func() map[int]processInfo { return w.screens.processes(snapshotProcesses) }
 	return w
 }
 
@@ -1402,15 +1404,16 @@ func (w *Watcher) ProbeProviderEvidence(sessionID string) (ProviderActivityObser
 // Run starts the polling loop. Blocks until context is cancelled.
 func (w *Watcher) Run(ctx context.Context) error {
 	defer w.StopServiceTunnels()
-	ticker := time.NewTicker(w.pollInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(w.pollInterval)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-ticker.C:
+		case <-timer.C:
 			w.poll()
+			timer.Reset(w.screens.nextPollDelay(w.pollInterval))
 		}
 	}
 }
@@ -2565,6 +2568,8 @@ type tmuxPane struct {
 	resourceUnit     string
 	executorID       string // executors.toml entry the pane was launched from (@mewla_worker_executor)
 	agentControl     string // the agent's control socket (@mewla_worker_agent_control)
+	activity         int64  // tmux window_activity: the second the pane last printed
+	dead             bool   // tmux pane_dead
 }
 
 // listTmuxPanes inventories only explicitly Mewla-owned panes on the one
@@ -2584,8 +2589,19 @@ func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
 	if err != nil {
 		return nil, err
 	}
+	w.screens.inventory(onSocket)
 	windows := make([]tmuxPane, 0, len(onSocket))
-	markers := ownedPaneSetFor(socket, onSocket)
+	markers, ask := w.screens.ownership(onSocket)
+	if len(ask) > 0 {
+		if asked := ownedPaneSetFor(socket, ask); asked != nil {
+			w.screens.learnOwnership(ask, asked)
+			for target := range asked {
+				markers[target] = true
+			}
+		} else {
+			markers = nil
+		}
+	}
 	for _, win := range onSocket {
 		if markers != nil {
 			if markers[win.target] {
@@ -2609,7 +2625,7 @@ func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
 var malformedPaneInventoryLogged atomic.Bool
 
 func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
-	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{@mewla_worker_executor}\t#{@mewla_worker_agent_control}\t#{session_name}")
+	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{@mewla_worker_executor}\t#{@mewla_worker_agent_control}\t#{window_activity}\t#{pane_dead}\t#{session_name}")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, tmuxFailure(socket, "list-panes", err, out)
@@ -2621,15 +2637,15 @@ func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\t", 12)
-		if len(parts) != 12 && malformedPaneInventoryLogged.CompareAndSwap(false, true) {
-			log.Printf("watcher: tmux list-panes line has %d of 12 tab-separated fields (non-UTF-8 tmux client?): %q", len(parts), truncateDiagnostic(line))
+		parts := strings.SplitN(line, "\t", 14)
+		if len(parts) != 14 && malformedPaneInventoryLogged.CompareAndSwap(false, true) {
+			log.Printf("watcher: tmux list-panes line has %d of 14 tab-separated fields (non-UTF-8 tmux client?): %q", len(parts), truncateDiagnostic(line))
 		}
 		target := parts[0]
 		// Terminal views link an owned window but are not execution Sessions.
 		sessionName := ""
-		if len(parts) >= 12 {
-			sessionName = parts[11]
+		if len(parts) >= 14 {
+			sessionName = parts[13]
 		}
 		if strings.HasPrefix(sessionName, "mewla-view-") || seen[target] {
 			continue
@@ -2675,7 +2691,14 @@ func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 		if len(parts) >= 11 {
 			agentControl = strings.TrimSpace(parts[10])
 		}
+		var activity int64
+		dead := false
+		if len(parts) >= 14 {
+			activity, _ = strconv.ParseInt(strings.TrimSpace(parts[11]), 10, 64)
+			dead = strings.TrimSpace(parts[12]) == "1"
+		}
 		windows = append(windows, tmuxPane{
+			activity: activity, dead: dead,
 			target: target, name: name, cwd: cwd, command: command, sessionName: sessionName,
 			piSessionBinding: piSessionBinding, executorID: executorID, agentControl: agentControl,
 			panePID: panePID, hidden: hidden, delegated: delegated,
@@ -2777,7 +2800,13 @@ func (w *Watcher) capturePaneContent(target string) (string, bool, int) {
 	if w == nil {
 		return "", false, -1
 	}
-	return capturePaneContentOn(w.socketPathFor(target), target)
+	if content, alive, deadStatus, ok := w.screens.reuse(target); ok {
+		return content, alive, deadStatus
+	}
+	startedAt, startedUnix := w.screens.readStarted()
+	content, alive, deadStatus := capturePaneContentOn(w.socketPathFor(target), target)
+	w.screens.remember(target, content, alive, deadStatus, startedAt, startedUnix)
+	return content, alive, deadStatus
 }
 
 func capturePaneContentOn(socket, target string) (string, bool, int) {
