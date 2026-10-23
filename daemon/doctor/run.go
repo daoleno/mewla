@@ -786,17 +786,18 @@ func (e env) probeAuth(binaryPath, provider string) AuthState {
 		out, err := e.opts.RunCommand(ctx, binaryPath, "login", "status")
 		return parseCodexAuth(out, err)
 	case work.WorkerProviderClaude:
-		out, err := e.opts.RunCommand(ctx, binaryPath, "auth", "status", "--json")
-		return parseClaudeAuth(out, err)
+		// Claude prints its JSON status and exits 1 when logged out.
+		out, _ := e.opts.RunCommand(ctx, binaryPath, "auth", "status", "--json")
+		return parseClaudeAuth(out)
 	case work.WorkerProviderCursor:
-		out, err := e.opts.RunCommand(ctx, binaryPath, "status", "--format", "json")
-		return parseCursorAuth(out, err)
+		out, _ := e.opts.RunCommand(ctx, binaryPath, "status", "--format", "json")
+		return parseCursorAuth(out)
 	case work.WorkerProviderGrok:
 		// Grok has login but no safe official non-interactive status command.
 		return AuthUnknown
 	case work.WorkerProviderOpenCode:
-		out, err := e.opts.RunCommand(ctx, binaryPath, "auth", "list")
-		return parseOpenCodeAuth(out, err)
+		out, _ := e.opts.RunCommand(ctx, binaryPath, "auth", "list", "--format", "json")
+		return parseOpenCodeAuth(out)
 	case work.WorkerProviderPi:
 		return probePiAuth()
 	default:
@@ -804,122 +805,111 @@ func (e env) probeAuth(binaryPath, provider string) AuthState {
 	}
 }
 
+// Auth probes read each CLI's structured answer where it has one: Claude,
+// Cursor and OpenCode print JSON. Codex only has `login status`, which exits 0
+// when logged in and 1 otherwise, saying "Not logged in" when it knows; any
+// other answer is AuthUnknown, never a guess. Raw output is never returned or
+// logged: it may embed API key fragments or account identifiers.
+
 func parseCodexAuth(out []byte, err error) AuthState {
-	_ = err
-	// Never return or log raw output: Codex may embed API key fragments.
-	text := strings.ToLower(string(out))
-	switch {
-	case strings.Contains(text, "not logged in") || strings.Contains(text, "logged out"):
-		return AuthUnauthenticated
-	case strings.Contains(text, "logged in"):
+	if err == nil {
 		return AuthAuthenticated
-	default:
-		// Failed/unsupported/ambiguous official probes must not become unauthenticated.
-		return AuthUnknown
 	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 && hasLineEqual(out, "not logged in") {
+		return AuthUnauthenticated
+	}
+	// A failed probe (missing flag, broken config, timeout) says nothing.
+	return AuthUnknown
 }
 
-func parseClaudeAuth(out []byte, err error) AuthState {
-	_ = err
-	trimmed := bytes.TrimSpace(out)
-	if len(trimmed) == 0 {
-		return AuthUnknown
-	}
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(trimmed, &raw) != nil {
-		text := strings.ToLower(string(trimmed))
-		switch {
-		case strings.Contains(text, "not logged") || strings.Contains(text, "logged out"):
-			return AuthUnauthenticated
-		case strings.Contains(text, "logged in"):
-			return AuthAuthenticated
-		default:
-			return AuthUnknown
+// hasLineEqual reports whether one trimmed line of out equals want, ignoring case.
+func hasLineEqual(out []byte, want string) bool {
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.EqualFold(strings.TrimSpace(line), want) {
+			return true
 		}
 	}
-	loggedInRaw, ok := raw["loggedIn"]
-	if !ok {
+	return false
+}
+
+// decodeProbeJSON decodes the first JSON document in a probe's output. The
+// runner merges stderr into the output, so a CLI's warning lines may come
+// before the document; only a line that starts a document that decodes counts.
+func decodeProbeJSON(out []byte, into any) bool {
+	for offset := 0; offset < len(out); {
+		end := bytes.IndexByte(out[offset:], '\n')
+		line := out[offset:]
+		if end >= 0 {
+			line = out[offset : offset+end]
+		}
+		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') {
+			if json.NewDecoder(bytes.NewReader(out[offset:])).Decode(into) == nil {
+				return true
+			}
+		}
+		if end < 0 {
+			break
+		}
+		offset += end + 1
+	}
+	return false
+}
+
+func parseClaudeAuth(out []byte) AuthState {
+	var status struct {
+		LoggedIn *bool `json:"loggedIn"`
+	}
+	if !decodeProbeJSON(out, &status) || status.LoggedIn == nil {
 		return AuthUnknown
 	}
-	var loggedIn bool
-	if json.Unmarshal(loggedInRaw, &loggedIn) != nil {
-		return AuthUnknown
-	}
-	if loggedIn {
+	if *status.LoggedIn {
 		return AuthAuthenticated
 	}
 	return AuthUnauthenticated
 }
 
-func parseCursorAuth(out []byte, err error) AuthState {
-	_ = err
-	trimmed := bytes.TrimSpace(out)
-	if len(trimmed) == 0 {
+func parseCursorAuth(out []byte) AuthState {
+	var status struct {
+		Status          string `json:"status"`
+		IsAuthenticated *bool  `json:"isAuthenticated"`
+	}
+	if !decodeProbeJSON(out, &status) {
 		return AuthUnknown
 	}
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(trimmed, &raw) != nil {
-		text := strings.ToLower(string(trimmed))
-		switch {
-		case strings.Contains(text, "not logged") || strings.Contains(text, "unauthenticated"):
-			return AuthUnauthenticated
-		case strings.Contains(text, "logged in") || strings.Contains(text, "authenticated"):
+	switch strings.ToLower(strings.TrimSpace(status.Status)) {
+	case "authenticated":
+		return AuthAuthenticated
+	case "unauthenticated":
+		return AuthUnauthenticated
+	}
+	if status.IsAuthenticated != nil {
+		if *status.IsAuthenticated {
 			return AuthAuthenticated
-		default:
-			return AuthUnknown
 		}
+		return AuthUnauthenticated
 	}
-
-	if statusRaw, ok := raw["status"]; ok {
-		var status string
-		if json.Unmarshal(statusRaw, &status) == nil {
-			switch strings.ToLower(strings.TrimSpace(status)) {
-			case "authenticated":
-				return AuthAuthenticated
-			case "unauthenticated":
-				return AuthUnauthenticated
-			}
-		}
-	}
-	if authRaw, ok := raw["isAuthenticated"]; ok {
-		var isAuth bool
-		if json.Unmarshal(authRaw, &isAuth) == nil {
-			if isAuth {
-				return AuthAuthenticated
-			}
-			return AuthUnauthenticated
-		}
-	}
-	// Empty object / missing fields / failed probe → unknown, never default-false.
+	// Empty object / missing fields → unknown, never default-false.
 	return AuthUnknown
 }
 
-func parseOpenCodeAuth(out []byte, err error) AuthState {
-	_ = err
-	text := strings.ToLower(string(out))
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
+// parseOpenCodeAuth reads `opencode auth list --format json`: a list of
+// integrations, each with its connections (a stored credential or an
+// environment variable). Any connection means a provider is usable; a list
+// with none means OpenCode has nothing to authenticate with.
+func parseOpenCodeAuth(out []byte) AuthState {
+	var integrations []struct {
+		Connections []json.RawMessage `json:"connections"`
+	}
+	if !decodeProbeJSON(out, &integrations) || integrations == nil {
 		return AuthUnknown
 	}
-	// Never log or return raw output: auth list may include account identifiers.
-	switch {
-	case strings.Contains(trimmed, "0 credentials") &&
-		!strings.Contains(trimmed, "env") &&
-		!strings.Contains(trimmed, "provider"):
-		return AuthUnauthenticated
-	case strings.Contains(trimmed, "logged out") ||
-		strings.Contains(trimmed, "not logged") ||
-		strings.Contains(trimmed, "unauthenticated"):
-		return AuthUnauthenticated
-	case strings.Contains(trimmed, "credential") ||
-		strings.Contains(trimmed, "authenticated") ||
-		strings.Contains(trimmed, "api key") ||
-		strings.Contains(trimmed, "oauth"):
-		// Presence of credential rows is suggestive but formats vary; stay honest.
-		return AuthUnknown
-	default:
-		return AuthUnknown
+	for _, integration := range integrations {
+		if len(integration.Connections) > 0 {
+			return AuthAuthenticated
+		}
 	}
+	return AuthUnauthenticated
 }
 
 func probePiAuth() AuthState {
