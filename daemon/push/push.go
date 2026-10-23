@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -28,19 +30,28 @@ var (
 	ErrNoRegistration = errors.New("no push token registered")
 	// ErrCredentials means Expo has no usable FCM or APNs credential for the
 	// registered app. The client reports it once per token itself, so a phone
-	// whose platform has no credential yet does not report on every push.
-	ErrCredentials                   = errors.New("push credentials unavailable")
-	notificationSessionSuffixPattern = regexp.MustCompile(`\s+\([^)]+\)\s*$`)
-	notificationTimestampPrefix      = regexp.MustCompile(`^\d{4}[/-]\d{2}[/-]\d{2}[ T]\d{2}:\d{2}:\d{2}\s*`)
+	// whose platform has no credential yet does not report (and raise a Watch
+	// problem) on every push.
+	ErrCredentials = errors.New("push credentials unavailable")
+	// ErrDeviceGone means Expo says the device's token is no longer accepted;
+	// the client has dropped it and reported that once.
+	ErrDeviceGone = errors.New("push device no longer registered")
+	// A summary read off a terminal can start with the log line's timestamp.
+	notificationTimestampPrefix = regexp.MustCompile(`^\d{4}[/-]\d{2}[/-]\d{2}[ T]\d{2}:\d{2}:\d{2}\s*`)
 )
+
+// maxNotificationBodyRunes is how much of a summary a lock screen shows
+// without cutting a word the person needs.
+const maxNotificationBodyRunes = 110
 
 // Client sends push notifications via Expo Push API.
 type Client struct {
 	httpClient *http.Client
 	mu         sync.RWMutex
-	token      string // Expo push token from mobile app
-	serverRef  string // Opaque client-side server identifier for notification routing
-	observer   Observer
+	// registrations are the paired devices' Expo push tokens, by device ID: a
+	// notification goes to every phone that asked for them.
+	registrations map[string]registration
+	observer      Observer
 
 	receiptDelays    []time.Duration
 	credentialLogged map[string]bool
@@ -50,8 +61,9 @@ type Client struct {
 }
 
 type registration struct {
+	deviceID  string
 	token     string
-	serverRef string
+	serverRef string // Opaque client-side server identifier for notification routing
 }
 
 // New creates a push notification client.
@@ -62,19 +74,40 @@ func New() *Client {
 	}
 }
 
-// SetRegistration sets the Expo push token and client-provided server reference.
-func (c *Client) SetRegistration(token, serverRef string) {
+// SetRegistration records a device's Expo push token and client-provided
+// server reference. A device registers again on every connection, replacing
+// its earlier entry; a token a different device held before is that install's
+// and moves with it.
+func (c *Client) SetRegistration(deviceID, token, serverRef string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.token = token
-	c.serverRef = serverRef
+	if token == "" {
+		return
+	}
+	for id, existing := range c.registrations {
+		if existing.token == token {
+			delete(c.registrations, id)
+		}
+	}
+	if c.registrations == nil {
+		c.registrations = map[string]registration{}
+	}
+	c.registrations[deviceID] = registration{deviceID: deviceID, token: token, serverRef: serverRef}
 }
 
-// HasToken returns true if a push token is registered.
+// ForgetDevice drops a device's registration, such as a revoked one's: it must
+// not keep hearing what its agents say.
+func (c *Client) ForgetDevice(deviceID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.registrations, deviceID)
+}
+
+// HasToken returns true if any device has a push token registered.
 func (c *Client) HasToken() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.token != ""
+	return len(c.registrations) > 0
 }
 
 // Message represents a push notification.
@@ -86,51 +119,116 @@ type Message struct {
 	Sound    string            `json:"sound,omitempty"`
 }
 
-// Send sends a push notification to the registered device.
+// Send sends a push notification to every registered device.
 func (c *Client) Send(msg Message) error {
 	return c.dispatch(KindOther, func(registration) Message { return msg })
 }
 
-func (c *Client) registration() (registration, error) {
+// snapshot returns the registrations in a stable order.
+func (c *Client) snapshot() []registration {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.token == "" {
-		return registration{}, ErrNoRegistration
+	out := make([]registration, 0, len(c.registrations))
+	for _, r := range c.registrations {
+		out = append(out, r)
 	}
-	return registration{token: c.token, serverRef: c.serverRef}, nil
+	slices.SortFunc(out, func(a, b registration) int { return strings.Compare(a.deviceID, b.deviceID) })
+	return out
 }
 
-// dispatch builds one notification for the registered device, sends it and
-// tells the observer what became of it. Without a registration nothing is
-// sent, but the observer still hears of the notification that would have been.
+// dispatch builds one notification for every registered device, sends each and
+// tells the observer what became of it: one event for the notification, with
+// one id every device's copy carries, so a tap on any phone answers it. Without
+// a registration nothing is sent, but the observer still hears of the
+// notification that would have been. It succeeds when any device took the
+// notification; when none did, the returned error carries every device's
+// failure.
 func (c *Client) dispatch(kind string, build func(registration) Message) error {
-	registration, regErr := c.registration()
-	msg := build(registration)
-	event := Sent{
-		ID: newNotificationID(), Kind: kind, At: time.Now().UTC(),
-		Title: msg.Title, Body: msg.Body, Priority: msg.Priority,
-		Refs: msg.Data,
-	}
-	if regErr != nil {
+	registrations := c.snapshot()
+	event := Sent{ID: newNotificationID(), Kind: kind, At: time.Now().UTC()}
+	if len(registrations) == 0 {
+		msg := build(registration{})
+		event.Title, event.Body, event.Priority, event.Refs = msg.Title, msg.Body, msg.Priority, msg.Data
 		event.Outcome, event.Reason = OutcomeNotSent, ReasonNoRegistration
 		c.observeSent(event)
-		return regErr
+		return ErrNoRegistration
 	}
-	// The app reports a tap with this id; it changes no visible text.
+	// Watch judges and learns from one record per notification, however many
+	// phones got it; the delivery receipt it hears of is the first device's
+	// that Expo accepted.
+	receipt := &receiptClaim{id: event.ID}
+	var failures []error
+	var first submitResult
+	accepted := false
+	for index, registration := range registrations {
+		msg := build(registration)
+		if index == 0 {
+			event.Title, event.Body, event.Priority, event.Refs = msg.Title, msg.Body, msg.Priority, msg.Data
+		}
+		result, err := c.deliver(event.ID, receipt, registration, msg)
+		if err == nil {
+			accepted = true
+			continue
+		}
+		if len(failures) == 0 {
+			first = result
+		}
+		failures = append(failures, err)
+	}
+	if accepted {
+		event.Outcome = OutcomeAccepted
+	} else {
+		event.Outcome, event.Reason, event.Detail = first.outcome, first.reason, first.detail
+	}
+	c.observeSent(event)
+	if len(failures) == len(registrations) {
+		if len(failures) == 1 {
+			return failures[0]
+		}
+		return errors.Join(failures...)
+	}
+	for _, err := range failures {
+		// A device whose credentials or registration is gone was logged when
+		// it was found out; saying it on every push would only repeat it.
+		if !errors.Is(err, ErrCredentials) && !errors.Is(err, ErrDeviceGone) {
+			log.Printf("push: one of %d devices did not get the notification: %v", len(registrations), err)
+		}
+	}
+	return nil
+}
+
+// receiptClaim hands a notification's id to the first delivery receipt that
+// asks for it.
+type receiptClaim struct {
+	mu    sync.Mutex
+	id    string
+	taken bool
+}
+
+func (r *receiptClaim) take() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.taken {
+		return ""
+	}
+	r.taken = true
+	return r.id
+}
+
+// deliver sends one device's copy. The id in its payload is the
+// notification's, which the app reports back on a tap.
+func (c *Client) deliver(id string, receipt *receiptClaim, registration registration, msg Message) (submitResult, error) {
 	data := make(map[string]string, len(msg.Data)+1)
 	for key, value := range msg.Data {
 		data[key] = value
 	}
-	data[dataNotificationID] = event.ID
+	data[dataNotificationID] = id
 	msg.Data = data
-	result, err := c.submit(registration.token, msg, event.ID)
-	event.Outcome, event.Reason, event.Detail = result.outcome, result.reason, result.detail
-	c.observeSent(event)
-	return err
+	return c.submit(registration.token, msg, receipt)
 }
 
 func (c *Client) sendTo(token string, msg Message) error {
-	_, err := c.submit(token, msg, "")
+	_, err := c.submit(token, msg, nil)
 	return err
 }
 
@@ -145,7 +243,9 @@ func failedResult(reason, detail string) submitResult {
 	return submitResult{outcome: OutcomeFailed, reason: reason, detail: detail}
 }
 
-func (c *Client) submit(token string, msg Message, notificationID string) (submitResult, error) {
+// receipt, when not nil, lends the notification id to the delivery receipt of
+// the first copy Expo accepts.
+func (c *Client) submit(token string, msg Message, receipt *receiptClaim) (submitResult, error) {
 	payload := map[string]any{
 		"to":    token,
 		"title": msg.Title,
@@ -195,7 +295,14 @@ func (c *Client) submit(token string, msg Message, notificationID string) (submi
 			c.logCredentialFailureOnce(token, "send"+problem)
 			return result, fmt.Errorf("push API rejected notification%s: %w", problem, ErrCredentials)
 		}
+		if ticket.Details.Error == errDeviceNotRegistered {
+			return result, fmt.Errorf("push API rejected notification%s: %w", problem, ErrDeviceGone)
+		}
 		return result, fmt.Errorf("push API rejected notification%s", problem)
+	}
+	notificationID := ""
+	if receipt != nil {
+		notificationID = receipt.take()
 	}
 	c.trackReceipt(ticket.ID, token, notificationID)
 	return submitResult{outcome: OutcomeAccepted}, nil
@@ -238,24 +345,24 @@ func (c *Client) post(url string, body []byte) ([]byte, int, error) {
 	return respBody, resp.StatusCode, nil
 }
 
-func formatNotificationWorkerLabel(workerName, workerID string) string {
-	raw := strings.TrimSpace(workerName)
-	if raw == "" {
-		raw = strings.TrimSpace(workerID)
-	}
-	if raw == "" {
-		return ""
-	}
+// WorkerNotice is what a Worker notification says, as the sender knows it.
+type WorkerNotice struct {
+	WorkerID string
+	// Window is the Worker's tmux window name, which names it in the title. It
+	// can be a command path; only its last element is shown.
+	Window string
+	// Summary is the Worker's one-line state.
+	Summary string
+}
 
-	withoutSessionSuffix := notificationSessionSuffixPattern.ReplaceAllString(raw, "")
-	parts := strings.FieldsFunc(withoutSessionSuffix, func(r rune) bool {
-		return r == '/' || r == '\\'
-	})
-	if len(parts) == 0 {
-		return withoutSessionSuffix
+// label is the short name a title carries: the window name's last path
+// element, or the Worker's ID when it has none.
+func (n WorkerNotice) label() string {
+	window := strings.TrimSpace(n.Window)
+	if parts := strings.FieldsFunc(window, func(r rune) bool { return r == '/' || r == '\\' }); len(parts) > 0 {
+		return parts[len(parts)-1]
 	}
-
-	return parts[len(parts)-1]
+	return strings.TrimSpace(n.WorkerID)
 }
 
 func normalizeNotificationSummary(summary string) string {
@@ -265,11 +372,11 @@ func normalizeNotificationSummary(summary string) string {
 	}
 
 	runes := []rune(collapsed)
-	if len(runes) <= 110 {
+	if len(runes) <= maxNotificationBodyRunes {
 		return collapsed
 	}
 
-	return string(runes[:107]) + "..."
+	return string(runes[:maxNotificationBodyRunes-3]) + "..."
 }
 
 func buildNotificationBody(summary, fallback string) string {
@@ -289,22 +396,22 @@ func notificationData(workerID, serverRef string) map[string]string {
 }
 
 // workerMessage is the notification for a Worker that became blocked, failed or done.
-func workerMessage(kind, workerID, workerName, summary, serverRef string) Message {
-	label := formatNotificationWorkerLabel(workerName, workerID)
-	message := Message{Data: notificationData(workerID, serverRef)}
+func workerMessage(kind string, notice WorkerNotice, serverRef string) Message {
+	label := notice.label()
+	message := Message{Data: notificationData(notice.WorkerID, serverRef)}
 	switch kind {
 	case KindWorkerBlocked:
-		message.Title, message.Body, message.Priority = label+" needs input", buildNotificationBody(summary, "Waiting for your response."), "high"
+		message.Title, message.Body, message.Priority = label+" needs input", buildNotificationBody(notice.Summary, "Waiting for your response."), "high"
 		if label == "" {
 			message.Title = "Agent needs input"
 		}
 	case KindWorkerFailed:
-		message.Title, message.Body, message.Priority = label+" failed", buildNotificationBody(summary, "Check the terminal for details."), "high"
+		message.Title, message.Body, message.Priority = label+" failed", buildNotificationBody(notice.Summary, "Check the terminal for details."), "high"
 		if label == "" {
 			message.Title = "Agent failed"
 		}
 	default:
-		message.Title, message.Body, message.Priority = label+" finished", buildNotificationBody(summary, "Session completed."), "default"
+		message.Title, message.Body, message.Priority = label+" finished", buildNotificationBody(notice.Summary, "Session completed."), "default"
 		if label == "" {
 			message.Title = "Agent finished"
 		}
@@ -314,30 +421,18 @@ func workerMessage(kind, workerID, workerName, summary, serverRef string) Messag
 
 // WorkerMessageText is the title and body a Worker notification of kind would
 // carry, for recording a notification that was held back.
-func WorkerMessageText(kind, workerID, workerName, summary string) (title, body string) {
-	message := workerMessage(kind, workerID, workerName, summary, "")
+func WorkerMessageText(kind string, notice WorkerNotice) (title, body string) {
+	message := workerMessage(kind, notice, "")
 	return message.Title, message.Body
 }
 
-func (c *Client) notifyWorker(kind, workerID, workerName, summary string) error {
+// NotifyWorker sends the notification for a Worker that became blocked or
+// failed (high priority) or done (neutral); kind is KindWorkerBlocked,
+// KindWorkerFailed or KindWorkerDone.
+func (c *Client) NotifyWorker(kind string, notice WorkerNotice) error {
 	return c.dispatch(kind, func(r registration) Message {
-		return workerMessage(kind, workerID, workerName, summary, r.serverRef)
+		return workerMessage(kind, notice, r.serverRef)
 	})
-}
-
-// NotifyWorkerBlocked sends a high-priority notification for a blocked agent.
-func (c *Client) NotifyWorkerBlocked(workerID, workerName, summary string) error {
-	return c.notifyWorker(KindWorkerBlocked, workerID, workerName, summary)
-}
-
-// NotifyWorkerFailed sends a high-priority notification for a failed agent.
-func (c *Client) NotifyWorkerFailed(workerID, workerName, summary string) error {
-	return c.notifyWorker(KindWorkerFailed, workerID, workerName, summary)
-}
-
-// NotifyWorkerDone sends a low-priority neutral completion notification.
-func (c *Client) NotifyWorkerDone(workerID, workerName, summary string) error {
-	return c.notifyWorker(KindWorkerDone, workerID, workerName, summary)
 }
 
 // BrainNotifier returns a sender for notifications that open the Brain

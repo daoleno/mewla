@@ -36,7 +36,7 @@ func TestObserverHearsNotSentWithoutRegistration(t *testing.T) {
 	client := New()
 	observer := &recordingObserver{}
 	client.SetObserver(observer)
-	if err := client.NotifyWorkerDone("agent-1", "Agent", "finished the tests"); err != ErrNoRegistration {
+	if err := client.NotifyWorker(KindWorkerDone, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "finished the tests"}); err != ErrNoRegistration {
 		t.Fatalf("err = %v", err)
 	}
 	sent, _ := observer.snapshot()
@@ -53,7 +53,7 @@ func TestObserverHearsNotSentWithoutRegistration(t *testing.T) {
 func TestObserverHearsTicketReceiptAndNeverTheToken(t *testing.T) {
 	client := New()
 	client.receiptDelays = []time.Duration{time.Millisecond}
-	client.SetRegistration("ExponentPushToken[secret]", "server-1")
+	client.SetRegistration("phone", "ExponentPushToken[secret]", "server-1")
 	client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.String() == expoPushURL {
 			return pushResponse(http.StatusOK, `{"data":{"status":"ok","id":"ticket-1"}}`), nil
@@ -96,7 +96,7 @@ func TestObserverHearsTicketReceiptAndNeverTheToken(t *testing.T) {
 
 func TestObserverHearsCredentialRejection(t *testing.T) {
 	client := New()
-	client.SetRegistration("ExponentPushToken[abc]", "server-1")
+	client.SetRegistration("phone", "ExponentPushToken[abc]", "server-1")
 	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return pushResponse(http.StatusOK, `{"data":{"status":"error","message":"no key","details":{"error":"InvalidCredentials"}}}`), nil
 	})
@@ -114,7 +114,7 @@ func TestObserverHearsCredentialRejection(t *testing.T) {
 func TestObserverHearsAnOkReceipt(t *testing.T) {
 	client := New()
 	client.receiptDelays = []time.Duration{time.Millisecond}
-	client.SetRegistration("ExponentPushToken[abc]", "server-1")
+	client.SetRegistration("phone", "ExponentPushToken[abc]", "server-1")
 	client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.String() == expoPushURL {
 			return pushResponse(http.StatusOK, `{"data":{"status":"ok","id":"ticket-9"}}`), nil
@@ -123,7 +123,7 @@ func TestObserverHearsAnOkReceipt(t *testing.T) {
 	})
 	observer := &recordingObserver{}
 	client.SetObserver(observer)
-	if err := client.NotifyWorkerDone("agent-1", "Agent", "done"); err != nil {
+	if err := client.NotifyWorker(KindWorkerDone, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "done"}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(3 * time.Second)

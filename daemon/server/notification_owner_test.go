@@ -11,6 +11,7 @@ import (
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/gorilla/websocket"
 )
@@ -23,6 +24,7 @@ type recordedPush struct {
 	threadID  string
 	resultID  string
 	serverRef string
+	deviceID  string
 }
 
 type recordingNotificationPusher struct {
@@ -31,22 +33,21 @@ type recordingNotificationPusher struct {
 	err   error
 }
 
-func (p *recordingNotificationPusher) SetRegistration(_, serverRef string) {
+func (p *recordingNotificationPusher) SetRegistration(deviceID, _, serverRef string) {
 	p.mu.Lock()
-	p.calls = append(p.calls, recordedPush{kind: "registration", serverRef: serverRef})
+	p.calls = append(p.calls, recordedPush{kind: "registration", serverRef: serverRef, deviceID: deviceID})
 	p.mu.Unlock()
 }
 
-func (p *recordingNotificationPusher) NotifyWorkerBlocked(workerID, _, _ string) error {
-	return p.record(recordedPush{kind: "blocked", workerID: workerID})
+func (p *recordingNotificationPusher) ForgetDevice(deviceID string) {
+	p.mu.Lock()
+	p.calls = append(p.calls, recordedPush{kind: "forget", deviceID: deviceID})
+	p.mu.Unlock()
 }
 
-func (p *recordingNotificationPusher) NotifyWorkerFailed(workerID, _, _ string) error {
-	return p.record(recordedPush{kind: "failed", workerID: workerID})
-}
-
-func (p *recordingNotificationPusher) NotifyWorkerDone(workerID, _, _ string) error {
-	return p.record(recordedPush{kind: "done", workerID: workerID})
+func (p *recordingNotificationPusher) NotifyWorker(kind string, notice push.WorkerNotice) error {
+	short := map[string]string{push.KindWorkerBlocked: "blocked", push.KindWorkerFailed: "failed", push.KindWorkerDone: "done"}[kind]
+	return p.record(recordedPush{kind: short, workerID: notice.WorkerID, title: notice.Window})
 }
 
 func (p *recordingNotificationPusher) NotifyScheduledResult(title, status, threadID, resultID string) error {

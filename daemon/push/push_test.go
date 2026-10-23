@@ -16,24 +16,45 @@ import (
 	"github.com/daoleno/mewla/daemon/diag"
 )
 
-func TestFormatNotificationWorkerLabel(t *testing.T) {
+func TestWorkerNoticeLabel(t *testing.T) {
 	tests := []struct {
-		name       string
-		workerName string
-		workerID   string
-		want       string
+		name   string
+		notice WorkerNotice
+		want   string
 	}{
-		{name: "clean shell path and session suffix", workerName: "./bin/mewla (main:7)", workerID: "main:7", want: "mewla"},
-		{name: "fallback to agent id", workerName: "", workerID: "main:7", want: "main:7"},
-		{name: "keep simple project name", workerName: "backend-api", workerID: "main:7", want: "backend-api"},
+		{name: "command path shows its last element", notice: WorkerNotice{WorkerID: "main:7", Window: "./bin/mewla"}, want: "mewla"},
+		{name: "windows path", notice: WorkerNotice{WorkerID: "main:7", Window: `C:\tools\agent`}, want: "agent"},
+		{name: "fallback to worker id", notice: WorkerNotice{WorkerID: "main:7"}, want: "main:7"},
+		{name: "separators only fall back to the worker id", notice: WorkerNotice{WorkerID: "main:7", Window: "//"}, want: "main:7"},
+		{name: "keep simple project name", notice: WorkerNotice{WorkerID: "main:7", Window: "backend-api"}, want: "backend-api"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := formatNotificationWorkerLabel(tt.workerName, tt.workerID); got != tt.want {
-				t.Fatalf("formatNotificationAgentLabel() = %q, want %q", got, tt.want)
+			if got := tt.notice.label(); got != tt.want {
+				t.Fatalf("label() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestWorkerMessageTitles(t *testing.T) {
+	notice := WorkerNotice{WorkerID: "main:7", Window: "claude", Summary: "2026/04/02 14:37:37   permission denied"}
+	for kind, want := range map[string]string{KindWorkerBlocked: "claude needs input", KindWorkerFailed: "claude failed", KindWorkerDone: "claude finished"} {
+		title, body := WorkerMessageText(kind, notice)
+		if title != want || body != "permission denied" {
+			t.Errorf("%s = %q / %q", kind, title, body)
+		}
+	}
+	if title, _ := WorkerMessageText(KindWorkerDone, WorkerNotice{}); title != "Agent finished" {
+		t.Errorf("nameless title = %q", title)
+	}
+}
+
+func TestLongSummariesAreCutToTheBodyLimit(t *testing.T) {
+	got := normalizeNotificationSummary(strings.Repeat("é", maxNotificationBodyRunes+20))
+	if n := len([]rune(got)); n != maxNotificationBodyRunes || !strings.HasSuffix(got, "...") {
+		t.Fatalf("got %d runes %q", n, got)
 	}
 }
 
@@ -62,8 +83,8 @@ func TestShortPushRegistrationNeverPanicsOrLogsCredential(t *testing.T) {
 	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return pushResponse(http.StatusOK, `{"data":{"status":"ok","id":"ticket-1"}}`), nil
 	})
-	client.SetRegistration("x", "server-1")
-	if err := client.NotifyWorkerDone("agent-1", "Agent", "finished"); err != nil {
+	client.SetRegistration("phone", "x", "server-1")
+	if err := client.NotifyWorker(KindWorkerDone, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "finished"}); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(logs.String(), "x") {
@@ -79,7 +100,7 @@ func TestNotifyWithoutRegistrationDoesNotAttemptHTTP(t *testing.T) {
 		return pushResponse(http.StatusOK, `{"data":{"status":"ok"}}`), nil
 	})
 
-	err := client.NotifyWorkerBlocked("agent-1", "Agent", "waiting")
+	err := client.NotifyWorker(KindWorkerBlocked, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "waiting"})
 	if !errors.Is(err, ErrNoRegistration) {
 		t.Fatalf("error = %v, want ErrNoRegistration", err)
 	}
@@ -116,13 +137,13 @@ func TestNotifyFailuresAreSingleAttempts(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			client := New()
-			client.SetRegistration("credential-token", "server-1")
+			client.SetRegistration("phone", "credential-token", "server-1")
 			var attempts atomic.Int64
 			client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				attempts.Add(1)
 				return test.transport(request)
 			})
-			if err := client.NotifyWorkerFailed("agent-1", "Agent", "failed"); err == nil {
+			if err := client.NotifyWorker(KindWorkerFailed, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "failed"}); err == nil {
 				t.Fatal("expected notification failure")
 			} else if strings.Contains(err.Error(), "credential-token") {
 				t.Fatalf("credential leaked in error: %v", err)
@@ -150,7 +171,7 @@ func TestScheduledResultPushUsesOnlyRoutingAndGenericCopy(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.status, func(t *testing.T) {
 			client := New()
-			client.SetRegistration("token-1", "server-1")
+			client.SetRegistration("phone", "token-1", "server-1")
 			var payload map[string]any
 			client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
@@ -209,7 +230,7 @@ func TestConcurrentRegistrationAndNotificationUseCoherentSnapshot(t *testing.T) 
 		"token-a": "server-a",
 		"token-b": "server-b",
 	}
-	client.SetRegistration("token-a", "server-a")
+	client.SetRegistration("phone", "token-a", "server-a")
 	var attempts atomic.Int64
 	errCh := make(chan error, 512)
 	client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
@@ -232,16 +253,16 @@ func TestConcurrentRegistrationAndNotificationUseCoherentSnapshot(t *testing.T) 
 		defer wg.Done()
 		for index := range 250 {
 			if index%2 == 0 {
-				client.SetRegistration("token-a", "server-a")
+				client.SetRegistration("phone", "token-a", "server-a")
 			} else {
-				client.SetRegistration("token-b", "server-b")
+				client.SetRegistration("phone", "token-b", "server-b")
 			}
 		}
 	}()
 	go func() {
 		defer wg.Done()
 		for range 250 {
-			if err := client.NotifyWorkerDone("agent-1", "Agent", "done"); err != nil {
+			if err := client.NotifyWorker(KindWorkerDone, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "done"}); err != nil {
 				errCh <- err
 			}
 		}
@@ -277,10 +298,10 @@ func TestTicketDeviceNotRegisteredDropsOnlyTheSentToken(t *testing.T) {
 	defer log.SetOutput(previousWriter)
 
 	client := New()
-	client.SetRegistration("ExponentPushToken[old]", "server-1")
+	client.SetRegistration("phone", "ExponentPushToken[old]", "server-1")
 	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		// The app re-registers while the send is in flight.
-		client.SetRegistration("ExponentPushToken[new]", "server-1")
+		client.SetRegistration("phone", "ExponentPushToken[new]", "server-1")
 		return pushResponse(http.StatusOK, `{"data":{"status":"error","message":"\"ExponentPushToken[old]\" is not a registered push notification recipient","details":{"error":"DeviceNotRegistered"}}}`), nil
 	})
 	err := client.sendTo("ExponentPushToken[old]", Message{Title: "t"})
@@ -324,7 +345,7 @@ func TestReceiptErrorIsLoggedAndDropsDeadDevice(t *testing.T) {
 	after := diag.Last()
 	client := New()
 	client.receiptDelays = []time.Duration{time.Millisecond, time.Millisecond}
-	client.SetRegistration("credential-token", "server-1")
+	client.SetRegistration("phone", "credential-token", "server-1")
 	var receiptRequests atomic.Int64
 	client.httpClient.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.String() == expoPushURL {
@@ -336,7 +357,7 @@ func TestReceiptErrorIsLoggedAndDropsDeadDevice(t *testing.T) {
 		}
 		return pushResponse(http.StatusOK, `{"data":{"ticket-1":{"status":"error","message":"gone","details":{"error":"DeviceNotRegistered"}}}}`), nil
 	})
-	if err := client.NotifyWorkerDone("agent-1", "Agent", "done"); err != nil {
+	if err := client.NotifyWorker(KindWorkerDone, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "done"}); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(3 * time.Second)
@@ -384,12 +405,12 @@ func TestCredentialFailureIsReportedOncePerToken(t *testing.T) {
 
 	after := diag.Last()
 	client := New()
-	client.SetRegistration("credential-token", "server-1")
+	client.SetRegistration("phone", "credential-token", "server-1")
 	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return pushResponse(http.StatusOK, `{"data":{"status":"error","message":"Unable to retrieve the FCM server key","details":{"error":"InvalidCredentials"}}}`), nil
 	})
 	for range 3 {
-		err := client.NotifyWorkerFailed("agent-1", "Agent", "failed")
+		err := client.NotifyWorker(KindWorkerFailed, WorkerNotice{WorkerID: "agent-1", Window: "Agent", Summary: "failed"})
 		if !errors.Is(err, ErrCredentials) || !strings.Contains(err.Error(), "InvalidCredentials") {
 			t.Fatalf("error = %v, want ErrCredentials naming InvalidCredentials", err)
 		}

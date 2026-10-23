@@ -24,9 +24,12 @@ type Worker struct {
 	BrowserID string `json:"browser_id,omitempty"`
 	ID        string `json:"id"`
 	Name      string `json:"name"`
-	Project   string `json:"project,omitempty"`
-	Cwd       string `json:"cwd,omitempty"`
-	Command   string `json:"command,omitempty"`
+	// Window is the tmux window name alone; Name adds the pane target to it.
+	// Notifications name the Worker by it.
+	Window  string `json:"-"`
+	Project string `json:"project,omitempty"`
+	Cwd     string `json:"cwd,omitempty"`
+	Command string `json:"command,omitempty"`
 	// ExecutorID names the executors.toml entry the Worker was launched from.
 	// Empty for a Worker Mewla did not launch.
 	ExecutorID string `json:"executor_id,omitempty"`
