@@ -2,29 +2,25 @@ package work
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	attachmentpkg "github.com/daoleno/mewla/daemon/attachment"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
-
-var dshAttachmentsTag = regexp.MustCompile(`(?s)<mewla_attachments>\s*(.*?)\s*</mewla_attachments>`)
 
 // Only files already admitted to the canonical Mewla upload directory may become
 // native image bytes. Provider-authored paths never acquire filesystem authority.
 func dshPromptContent(text string) ([]map[string]any, error) {
 	content := []map[string]any{{"type": "text", "text": text}}
-	match := dshAttachmentsTag.FindStringSubmatch(text)
-	if len(match) != 2 {
+	match, ok := attachmentpkg.Find(text)
+	if !ok {
 		return content, nil
 	}
-	var envelope attachmentpkg.Envelope
-	if err := json.Unmarshal([]byte(match[1]), &envelope); err != nil {
+	envelope, err := match.Decode()
+	if err != nil {
 		return nil, fmt.Errorf("invalid attachment envelope")
 	}
 	if len(envelope.Files) > 8 {
@@ -86,12 +82,12 @@ func dshUserContent(blocks []dshBlock) (display, exact string) {
 		}
 	}
 	exact = strings.Join(texts, "\n")
-	match := dshAttachmentsTag.FindStringSubmatch(exact)
-	if len(match) != 2 {
+	match, ok := attachmentpkg.Find(exact)
+	if !ok {
 		return dshContentText(blocks), exact
 	}
-	var envelope attachmentpkg.Envelope
-	if json.Unmarshal([]byte(match[1]), &envelope) != nil {
+	envelope, err := match.Decode()
+	if err != nil {
 		return dshContentText(blocks), exact
 	}
 	used := map[int]bool{}
@@ -106,8 +102,7 @@ func dshUserContent(blocks []dshBlock) (display, exact string) {
 			break
 		}
 	}
-	data, _ := json.Marshal(envelope)
-	display = strings.Replace(exact, match[0], "<mewla_attachments>"+string(data)+"</mewla_attachments>", 1)
+	display = exact[:match.Start] + attachmentpkg.Format(envelope) + exact[match.End:]
 	for index, block := range blocks {
 		if block.Type == "image" && !used[index] {
 			display += "\n" + dshContentText([]dshBlock{block})

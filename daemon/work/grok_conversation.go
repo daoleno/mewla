@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	attachmentpkg "github.com/daoleno/mewla/daemon/attachment"
 	"io"
 	"net/url"
 	"os"
@@ -1937,9 +1938,7 @@ func grokVisibleUserText(text string) string {
 	if text == "" {
 		return ""
 	}
-	if idx := strings.Index(text, "<mewla_attachments>"); idx >= 0 {
-		text = strings.TrimSpace(text[:idx])
-	}
+	text = attachmentpkg.WithoutEnvelope(text)
 	const openTag = "<user_query>"
 	const closeTag = "</user_query>"
 	if start := strings.Index(text, openTag); start >= 0 {
