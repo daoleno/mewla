@@ -37,8 +37,23 @@ Each push is a single attempt. If delivery fails or the daemon restarts at the
 wrong moment, there may be no alert, but the state and results are still there
 when you open the app.
 
-Push delivery in your own builds of the app needs your own Expo project; Mewla
-works without push.
+Official builds need no setup: install the app, pair, and allow notifications
+when the app asks. On Android 13 and later the system prompt appears after your
+first server connects, not at launch. If you decline it, Mewla does not ask
+again; turn notifications on in the system settings for Mewla.
+
+Your daemon sends each push to Expo's push service with your phone's push
+token, and Expo hands it to Google (Android) or Apple (iOS). The push carries
+the title, the Session name and a short line, never the full result. If Expo
+reports that the phone is no longer registered, the daemon forgets the token
+until the app connects again.
+
+Remote push on iOS is not yet available in official builds; Android is.
+
+A fork that signs its own build needs its own Expo project and Firebase app:
+set `MEWLA_EXPO_PROJECT_ID`, replace `app/google-services.json` with the file
+for your Android package, and upload your FCM V1 key to that Expo project.
+Without them a fork still works, just without remote push.
 
 ## Telegram
 

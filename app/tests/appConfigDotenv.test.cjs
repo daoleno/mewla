@@ -32,7 +32,7 @@ test("EXPO_NO_DOTENV prevents custom config from reading personal dotenv", () =>
   const result = load({ EXPO_NO_DOTENV: "1" }, true);
   assert.equal(result.reads, 0);
   assert.equal(result.env.PRIVATE_FIXTURE_VALUE, undefined);
-  assert.equal(result.config.extra.eas, undefined);
+  assert.equal(result.config.extra.eas.projectId, "1b76d386-969b-4841-ae68-f32895ad2301");
 });
 
 test("default config retains local dotenv behavior without overwriting explicit values", () => {

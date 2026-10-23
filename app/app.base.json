@@ -37,6 +37,7 @@
         "monochromeImage": "./assets/branding/mewla-adaptive-monochrome.png"
       },
       "package": "com.daoleno.mewla",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 78,
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",

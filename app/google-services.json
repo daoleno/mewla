@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "559015099660",
+    "project_id": "mewla-50425",
+    "storage_bucket": "mewla-50425.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:559015099660:android:8b8c0000135a4df73a5d29",
+        "android_client_info": {
+          "package_name": "com.daoleno.mewla"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtnvza3fVo9o0YbSAqSlEpZ-HZyKK8eMQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:559015099660:android:bba5bcb463881bb53a5d29",
+        "android_client_info": {
+          "package_name": "com.daoleno.mewla.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtnvza3fVo9o0YbSAqSlEpZ-HZyKK8eMQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
