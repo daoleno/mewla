@@ -243,15 +243,16 @@ func TestAFeedWithoutAURLNeverDownloads(t *testing.T) {
 
 func TestARejectedCatalogReplacesNeitherTheFileNorTheCopy(t *testing.T) {
 	var body atomic.Value
-	body.Store(`{"good":true}`)
+	const good = `{"good":{"models":{"m":{"name":"M"}}}}`
+	body.Store(good)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(body.Load().(string)))
 	}))
 	defer server.Close()
 	path := filepath.Join(t.TempDir(), "f.json")
 	feed := &Feed{url: server.URL, path: path, client: server.Client()}
-	needsGood := func(raw []byte) error {
-		if !strings.Contains(string(raw), "good") {
+	needsGood := func(catalog *Catalog) error {
+		if _, ok := catalog.Model("good", "m"); !ok {
 			return errors.New("no supported rates")
 		}
 		return nil
@@ -263,10 +264,10 @@ func TestARejectedCatalogReplacesNeitherTheFileNorTheCopy(t *testing.T) {
 	if _, _, err := feed.Refresh(context.Background(), needsGood); err == nil || !strings.Contains(err.Error(), "no supported rates") {
 		t.Fatalf("err = %v", err)
 	}
-	if raw, _ := feed.Raw(); string(raw) != `{"good":true}` {
+	if raw, _ := feed.Raw(); string(raw) != good {
 		t.Fatalf("copy = %q", raw)
 	}
-	if onDisk, _ := os.ReadFile(path); string(onDisk) != `{"good":true}` {
+	if onDisk, _ := os.ReadFile(path); string(onDisk) != good {
 		t.Fatalf("file = %q", onDisk)
 	}
 }

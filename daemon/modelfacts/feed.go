@@ -3,8 +3,8 @@
 // Several parts of the daemon derive facts from that catalog: reference
 // prices for usage stats, context windows and display names for the model
 // picker. Each used to fetch and cache its own copy. A Feed fetches it once,
-// keeps the raw document in memory and in one file, and hands the same bytes
-// to every reader, which parses the part it needs.
+// keeps the raw document in memory and in one file, and parses it once into a
+// Catalog that every reader shares.
 package modelfacts
 
 import (
@@ -56,6 +56,7 @@ type Feed struct {
 	loaded bool
 	raw    []byte
 	at     time.Time
+	parsed *Catalog
 	flight *flight
 }
 
@@ -134,11 +135,11 @@ func (f *Feed) loadLocked() {
 // a download is under way share it. A caller that gives up through ctx stops
 // waiting; the download is cancelled when no caller is left to want it.
 //
-// validate, when not nil, judges the document before it is kept: a catalog it
+// validate, when not nil, judges the parsed document before it is kept: a catalog it
 // rejects replaces neither the file nor the copy in memory, so the last good
 // one survives a bad day at the source. The caller that starts a download
 // supplies the judgement for everyone sharing it.
-func (f *Feed) Refresh(ctx context.Context, validate func([]byte) error) ([]byte, time.Time, error) {
+func (f *Feed) Refresh(ctx context.Context, validate func(*Catalog) error) ([]byte, time.Time, error) {
 	f.mu.Lock()
 	f.loadLocked()
 	current := f.flight
@@ -171,12 +172,12 @@ func (f *Feed) Refresh(ctx context.Context, validate func([]byte) error) ([]byte
 	return raw, at, nil
 }
 
-func (f *Feed) download(ctx context.Context, current *flight, validate func([]byte) error) {
+func (f *Feed) download(ctx context.Context, current *flight, validate func(*Catalog) error) {
 	defer current.cancel()
 	raw, err := f.fetch(ctx, validate)
 	f.mu.Lock()
 	if err == nil {
-		f.raw, f.at = raw, time.Now().UTC()
+		f.raw, f.at, f.parsed = raw, time.Now().UTC(), nil
 	}
 	if f.flight == current {
 		f.flight = nil
@@ -186,7 +187,7 @@ func (f *Feed) download(ctx context.Context, current *flight, validate func([]by
 	close(current.done)
 }
 
-func (f *Feed) fetch(ctx context.Context, validate func([]byte) error) ([]byte, error) {
+func (f *Feed) fetch(ctx context.Context, validate func(*Catalog) error) ([]byte, error) {
 	if f.url == "" {
 		return nil, errors.New("models.dev refresh is disabled")
 	}
@@ -217,7 +218,11 @@ func (f *Feed) fetch(ctx context.Context, validate func([]byte) error) ([]byte, 
 		return nil, errors.New("models.dev catalog is not valid JSON")
 	}
 	if validate != nil {
-		if err := validate(raw); err != nil {
+		catalog, err := Parse(raw, time.Now().UTC())
+		if err != nil {
+			return nil, err
+		}
+		if err := validate(catalog); err != nil {
 			return nil, err
 		}
 	}
