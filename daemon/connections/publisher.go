@@ -14,16 +14,9 @@ var SlackPublicClientID string
 var GoogleExchangeOrigin string
 
 func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
-	switch kind {
-	case "github":
-		if GitHubPublicClientID != "" {
-			return OAuthClientConfig{ClientID: GitHubPublicClientID}, true, nil
-		}
-	case "slack":
-		// Public distribution requires https on every Slack redirect URL, so
-		// the app's sign-in returns through Mewla's page to mewla://plugins.
-		if SlackPublicClientID != "" {
-			return OAuthClientConfig{ClientID: SlackPublicClientID, RedirectURL: NativeReturnRelay}, true, nil
+	if e := lookup(kind); e != nil && e.OAuth != nil && e.OAuth.Public != nil {
+		if client, ok := e.OAuth.Public(); ok {
+			return client, true, nil
 		}
 	}
 	// Operator overrides serve existing single-operator installations. This is
@@ -39,12 +32,11 @@ func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
 // Availability describes starting a new built-in connection on this daemon.
 // Existing accounts remain visible and usable independently of publisher setup.
 func (m *Manager) unavailableReason(kind string) string {
-	switch kind {
-	case "github", "slack", googleCalendarID, gmailID:
-	default:
+	e := lookup(kind)
+	if e == nil {
 		return ""
 	}
-	if isGoogle(kind) {
+	if e.Google != nil {
 		// Google signs in only through Mewla's exchange, which holds the
 		// client secret; a daemon never has one.
 		if GoogleExchangeOrigin == "" {
@@ -52,16 +44,19 @@ func (m *Manager) unavailableReason(kind string) string {
 		}
 		return ""
 	}
+	if e.OAuth == nil || e.OAuth.Source != clientPublisher {
+		return ""
+	}
 	client, ok, err := m.clientConfig(kind)
 	if err != nil {
 		return "Connection settings are unavailable. Try again later."
 	}
 	ready := ok && client.ClientID != ""
-	if kind == "slack" {
-		ready = ready && (appReturn(client.RedirectURL) && client.ClientSecret == "" || validCallback(client.RedirectURL) && client.ClientSecret != "")
+	if e.OAuth.ReturnOK != nil {
+		ready = ready && e.OAuth.ReturnOK(client)
 	}
 	if !ready {
-		return serviceName(kind) + " sign-in is not set up yet."
+		return e.Name + " sign-in is not set up yet."
 	}
 	return ""
 }

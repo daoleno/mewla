@@ -56,42 +56,37 @@ func builtin(name, desc, method, path string, read bool, params, query, body map
 	schema, _ := json.Marshal(object(p, required...))
 	return Tool{Name: name, Description: desc, InputSchema: schema, Method: method, Path: path, Read: read}
 }
-func builtinTools(kind string) []Tool {
-	if kind == "slack" {
-		return slackTools()
-	}
-	if kind == "hyperliquid" {
-		return hyperliquidTools()
-	}
+func githubTools() []Tool {
 	repo := object(map[string]any{"owner": str(), "repo": str()}, "owner", "repo")
 	issue := object(map[string]any{"owner": str(), "repo": str(), "number": map[string]any{"type": "integer", "minimum": 1}}, "owner", "repo", "number")
-	page := object(map[string]any{"id": str()}, "id")
 	pagination := object(map[string]any{"per_page": pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000}})
-	if kind == "github" {
-		alertQuery := object(map[string]any{"state": str(), "per_page": pageSize()})
-		return []Tool{
-			builtin("get_me", "Read the authenticated GitHub account", "GET", "/user", true, nil, nil, nil),
-			builtin("list_repositories", "List repositories visible to this account (one page)", "GET", "/user/repos", true, nil, pagination, nil),
-			builtin("get_repository", "Read repository details", "GET", "/repos/{owner}/{repo}", true, repo, nil, nil),
-			builtin("list_issues", "List repository issues and pull requests (one page)", "GET", "/repos/{owner}/{repo}/issues", true, repo, pagination, nil),
-			builtin("get_issue", "Read an issue or pull request", "GET", "/repos/{owner}/{repo}/issues/{number}", true, issue, nil, nil),
-			builtin("list_updated_issues", "List issues and pull requests updated since a time, most recently updated first (one page)", "GET", "/repos/{owner}/{repo}/issues", true, repo, object(map[string]any{
-				"state": map[string]any{"type": "string", "enum": []string{"open", "closed", "all"}}, "since": str(),
-				"sort":      map[string]any{"type": "string", "enum": []string{"created", "updated", "comments"}},
-				"direction": map[string]any{"type": "string", "enum": []string{"asc", "desc"}},
-				"per_page":  pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000},
-			}), nil),
-			builtin("list_workflow_runs", "List a repository's GitHub Actions workflow runs, newest first (one page)", "GET", "/repos/{owner}/{repo}/actions/runs", true, repo, object(map[string]any{
-				"branch": str(), "event": str(),
-				"status":   map[string]any{"type": "string", "enum": []string{"completed", "success", "failure", "in_progress", "queued"}},
-				"per_page": pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000},
-			}), nil),
-			builtin("list_dependabot_alerts", "List a repository's Dependabot alerts (one page)", "GET", "/repos/{owner}/{repo}/dependabot/alerts", true, repo, alertQuery, nil),
-			builtin("list_code_scanning_alerts", "List a repository's code scanning alerts (one page)", "GET", "/repos/{owner}/{repo}/code-scanning/alerts", true, repo, alertQuery, nil),
-			builtin("create_issue", "Create a repository issue", "POST", "/repos/{owner}/{repo}/issues", false, repo, nil, object(map[string]any{"title": str(), "body": str()}, "title")),
-			builtin("comment_on_issue", "Post a comment on an issue or pull request", "POST", "/repos/{owner}/{repo}/issues/{number}/comments", false, issue, nil, object(map[string]any{"body": str()}, "body")),
-		}
+	alertQuery := object(map[string]any{"state": str(), "per_page": pageSize()})
+	return []Tool{
+		builtin("get_me", "Read the authenticated GitHub account", "GET", "/user", true, nil, nil, nil),
+		builtin("list_repositories", "List repositories visible to this account (one page)", "GET", "/user/repos", true, nil, pagination, nil),
+		builtin("get_repository", "Read repository details", "GET", "/repos/{owner}/{repo}", true, repo, nil, nil),
+		builtin("list_issues", "List repository issues and pull requests (one page)", "GET", "/repos/{owner}/{repo}/issues", true, repo, pagination, nil),
+		builtin("get_issue", "Read an issue or pull request", "GET", "/repos/{owner}/{repo}/issues/{number}", true, issue, nil, nil),
+		builtin("list_updated_issues", "List issues and pull requests updated since a time, most recently updated first (one page)", "GET", "/repos/{owner}/{repo}/issues", true, repo, object(map[string]any{
+			"state": map[string]any{"type": "string", "enum": []string{"open", "closed", "all"}}, "since": str(),
+			"sort":      map[string]any{"type": "string", "enum": []string{"created", "updated", "comments"}},
+			"direction": map[string]any{"type": "string", "enum": []string{"asc", "desc"}},
+			"per_page":  pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000},
+		}), nil),
+		builtin("list_workflow_runs", "List a repository's GitHub Actions workflow runs, newest first (one page)", "GET", "/repos/{owner}/{repo}/actions/runs", true, repo, object(map[string]any{
+			"branch": str(), "event": str(),
+			"status":   map[string]any{"type": "string", "enum": []string{"completed", "success", "failure", "in_progress", "queued"}},
+			"per_page": pageSize(), "page": map[string]any{"type": "integer", "minimum": 1, "maximum": 10000},
+		}), nil),
+		builtin("list_dependabot_alerts", "List a repository's Dependabot alerts (one page)", "GET", "/repos/{owner}/{repo}/dependabot/alerts", true, repo, alertQuery, nil),
+		builtin("list_code_scanning_alerts", "List a repository's code scanning alerts (one page)", "GET", "/repos/{owner}/{repo}/code-scanning/alerts", true, repo, alertQuery, nil),
+		builtin("create_issue", "Create a repository issue", "POST", "/repos/{owner}/{repo}/issues", false, repo, nil, object(map[string]any{"title": str(), "body": str()}, "title")),
+		builtin("comment_on_issue", "Post a comment on an issue or pull request", "POST", "/repos/{owner}/{repo}/issues/{number}/comments", false, issue, nil, object(map[string]any{"body": str()}, "body")),
 	}
+}
+
+func notionTools() []Tool {
+	page := object(map[string]any{"id": str()}, "id")
 	return []Tool{
 		builtin("get_me", "Read this Notion integration and workspace identity", "GET", "/users/me", true, nil, nil, nil),
 		builtin("search", "Search pages shared with this Notion connection (one page)", "POST", "/search", true, nil, nil, object(map[string]any{"query": str(), "start_cursor": str(), "page_size": pageSize()})),
@@ -132,99 +127,23 @@ func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret strin
 			r.Account.Identity = identity
 		}
 	} else {
-		switch r.Account.Integration {
-		case googleCalendarID, gmailID:
-			if err := m.discoverGoogle(ctx, r, secret); err != nil {
-				return err
-			}
-			tools = r.Account.Tools
-		case "github", "notion":
-			raw, err := m.request(ctx, r, r.Account.Endpoint, secret, "GET", map[string]string{"github": "/user", "notion": "/users/me"}[r.Account.Integration], nil)
-			if err != nil {
-				return err
-			}
-			var user struct {
-				Login string `json:"login"`
-				Name  string `json:"name"`
-				ID    any    `json:"id"`
-				Bot   struct {
-					WorkspaceName string `json:"workspace_name"`
-				} `json:"bot"`
-			}
-			if json.Unmarshal(raw, &user) != nil || user.ID == nil {
-				return errors.New("service did not return an account identity")
-			}
-			r.Account.Identity = user.Login
-			if r.Account.Identity == "" {
-				r.Account.Identity = user.Bot.WorkspaceName
-			}
-			if r.Account.Identity == "" {
-				r.Account.Identity = user.Name
-			}
-			if r.Account.Identity == "" {
-				r.Account.Identity = fmt.Sprint(user.ID)
-			}
-			tools = builtinTools(r.Account.Integration)
-		case "slack":
-			var headers http.Header
-			raw, err := m.request(ctx, r, r.Account.Endpoint, secret, "GET", "/auth.test", nil, &headers)
-			if err != nil {
-				return err
-			}
-			var identity struct {
-				Team   string `json:"team"`
-				User   string `json:"user"`
-				UserID string `json:"user_id"`
-				BotID  string `json:"bot_id"`
-			}
-			if json.Unmarshal(raw, &identity) != nil || identity.UserID == "" {
-				return errors.New("Slack did not return an account identity")
-			}
-			r.Account.Identity = identity.Team + " · " + identity.User
-			granted := map[string]bool{}
-			for _, scope := range strings.Split(headers.Get("X-OAuth-Scopes"), ",") {
-				granted[strings.TrimSpace(scope)] = true
-			}
-			for _, tool := range slackTools() {
-				allowed := tool.Name == "get_me"
-				for _, scope := range slackToolScopes[tool.Name] {
-					if granted[scope] {
-						allowed = true
-					}
-				}
-				if tool.Name == "search_messages" && identity.BotID != "" {
-					allowed = false
-				}
-				if allowed {
-					tools = append(tools, tool)
-				}
-			}
-		case "hyperliquid":
-			var err error
-			if tools, err = m.discoverHyperliquid(ctx, r, secret); err != nil {
-				return err
-			}
-		case "openapi":
-			var err error
-			tools, err = openAPITools(r.Spec)
-			if err != nil {
-				return err
-			}
+		d, ok := driverFor(r)
+		if !ok {
+			return errors.New("unknown plugin")
+		}
+		var err error
+		tools, err = d.discover(m, ctx, r, secret)
+		if err != nil {
+			return err
+		}
+		if d.unverified {
 			// A schema is not proof of account authorization. The first permitted call
 			// verifies the remote endpoint; never label an uploaded spec connected.
 			r.Account.Tools = tools
-			r.Account.Identity = "Account identity unavailable"
 			if r.Account.VerifiedAt == nil {
 				r.Account.Status = "configured"
 			}
 			return nil
-		case "mcp", "linear":
-			var err error
-			tools, err = m.discoverMCP(ctx, r, secret)
-			if err != nil {
-				return err
-			}
-			r.Account.Identity = "MCP account · identity not provided by server"
 		}
 	}
 	if len(tools) > MaxTools {
@@ -400,15 +319,9 @@ func expandRefBudget(value, root any, depth int, budget *int) (any, error) {
 	}
 }
 
-func (m *Manager) invokeHTTP(ctx context.Context, r *record, secret string, tool Tool, args map[string]any, capture ...*http.Header) ([]byte, error) {
-	tools := builtinTools(r.Account.Integration)
-	if r.Account.Integration == "openapi" {
-		var err error
-		tools, err = openAPITools(r.Spec)
-		if err != nil {
-			return nil, err
-		}
-	}
+// invokeListed runs a tool by the definition the daemon holds, not the one the
+// caller presents: a changed definition is refused until it is confirmed.
+func (m *Manager) invokeListed(ctx context.Context, r *record, tools []Tool, secret string, tool Tool, args map[string]any, capture ...*http.Header) ([]byte, error) {
 	var t *Tool
 	for _, candidate := range tools {
 		if candidate.Name == tool.Name {
@@ -442,11 +355,12 @@ func (m *Manager) dispatchHTTP(ctx context.Context, r *record, endpoint, secret 
 			query.Set(k, fmt.Sprint(v))
 		}
 	}
-	if r.Account.Integration == "github" && strings.HasPrefix(t.Name, "list_") && query.Get("per_page") == "" {
-		query.Set("per_page", "30")
-	}
-	if r.Account.Integration == "notion" && t.Name == "list_block_children" && query.Get("page_size") == "" {
-		query.Set("page_size", "30")
+	if e := lookup(r.Account.Integration); e != nil {
+		for _, d := range e.QueryDefaults {
+			if (d.Tool == t.Name || d.ToolPrefix != "" && strings.HasPrefix(t.Name, d.ToolPrefix)) && query.Get(d.Param) == "" {
+				query.Set(d.Param, d.Value)
+			}
+		}
 	}
 	if len(query) > 0 {
 		path += "?" + query.Encode()
@@ -456,4 +370,66 @@ func (m *Manager) dispatchHTTP(ctx context.Context, r *record, endpoint, secret 
 		body, _ = json.Marshal(b)
 	}
 	return m.request(ctx, r, endpoint, secret, t.Method, path, bytes.NewReader(body), capture...)
+}
+
+// REST services (GitHub, Notion) name the account with one identity call and
+// offer their reviewed tool list.
+func discoverREST(m *Manager, ctx context.Context, r *record, secret string) ([]Tool, error) {
+	e := lookup(r.Account.Integration)
+	raw, err := m.request(ctx, r, r.Account.Endpoint, secret, "GET", e.IdentityPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	var user struct {
+		Login string `json:"login"`
+		Name  string `json:"name"`
+		ID    any    `json:"id"`
+		Bot   struct {
+			WorkspaceName string `json:"workspace_name"`
+		} `json:"bot"`
+	}
+	if json.Unmarshal(raw, &user) != nil || user.ID == nil {
+		return nil, errors.New("service did not return an account identity")
+	}
+	r.Account.Identity = user.Login
+	if r.Account.Identity == "" {
+		r.Account.Identity = user.Bot.WorkspaceName
+	}
+	if r.Account.Identity == "" {
+		r.Account.Identity = user.Name
+	}
+	if r.Account.Identity == "" {
+		r.Account.Identity = fmt.Sprint(user.ID)
+	}
+	return e.reviewed(), nil
+}
+
+func discoverOpenAPI(m *Manager, ctx context.Context, r *record, secret string) ([]Tool, error) {
+	tools, err := openAPITools(r.Spec)
+	if err != nil {
+		return nil, err
+	}
+	r.Account.Identity = "Account identity unavailable"
+	return tools, nil
+}
+
+func discoverMCPToken(m *Manager, ctx context.Context, r *record, secret string) ([]Tool, error) {
+	tools, err := m.discoverMCP(ctx, r, secret)
+	if err != nil {
+		return nil, err
+	}
+	r.Account.Identity = "MCP account · identity not provided by server"
+	return tools, nil
+}
+
+func invokeREST(m *Manager, ctx context.Context, r *record, secret string, tool Tool, args map[string]any, capture ...*http.Header) ([]byte, error) {
+	return m.invokeListed(ctx, r, lookup(r.Account.Integration).reviewed(), secret, tool, args, capture...)
+}
+
+func invokeOpenAPI(m *Manager, ctx context.Context, r *record, secret string, tool Tool, args map[string]any, capture ...*http.Header) ([]byte, error) {
+	tools, err := openAPITools(r.Spec)
+	if err != nil {
+		return nil, err
+	}
+	return m.invokeListed(ctx, r, tools, secret, tool, args, capture...)
 }

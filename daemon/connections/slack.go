@@ -1,5 +1,13 @@
 package connections
 
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+)
+
 // These are reviewed Slack Web API capabilities. Available tools are filtered
 // against auth.test's X-OAuth-Scopes response; bot tokens never advertise the
 // user-only search.messages operation, even with misleading token annotations.
@@ -20,4 +28,42 @@ func slackTools() []Tool {
 		builtin("send_message", "Send a message to a Slack conversation", "POST", "/chat.postMessage", false, nil, nil, object(map[string]any{"channel": str(), "text": str(), "thread_ts": str()}, "channel", "text")),
 		builtin("update_message", "Update a message posted by this account", "POST", "/chat.update", false, nil, nil, object(map[string]any{"channel": str(), "ts": str(), "text": str()}, "channel", "ts", "text")),
 	}
+}
+
+func discoverSlack(m *Manager, ctx context.Context, r *record, secret string) ([]Tool, error) {
+	var headers http.Header
+	raw, err := m.request(ctx, r, r.Account.Endpoint, secret, "GET", "/auth.test", nil, &headers)
+	if err != nil {
+		return nil, err
+	}
+	var identity struct {
+		Team   string `json:"team"`
+		User   string `json:"user"`
+		UserID string `json:"user_id"`
+		BotID  string `json:"bot_id"`
+	}
+	if json.Unmarshal(raw, &identity) != nil || identity.UserID == "" {
+		return nil, errors.New("Slack did not return an account identity")
+	}
+	r.Account.Identity = identity.Team + " · " + identity.User
+	granted := map[string]bool{}
+	for _, scope := range strings.Split(headers.Get("X-OAuth-Scopes"), ",") {
+		granted[strings.TrimSpace(scope)] = true
+	}
+	var tools []Tool
+	for _, tool := range slackTools() {
+		allowed := tool.Name == "get_me"
+		for _, scope := range slackToolScopes[tool.Name] {
+			if granted[scope] {
+				allowed = true
+			}
+		}
+		if tool.Name == "search_messages" && identity.BotID != "" {
+			allowed = false
+		}
+		if allowed {
+			tools = append(tools, tool)
+		}
+	}
+	return tools, nil
 }

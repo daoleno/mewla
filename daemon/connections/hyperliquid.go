@@ -31,18 +31,15 @@ import (
 // "Mainnet" or "Testnet") and signatures carry the network (phantom agent
 // source "a" or "b"), so a key is stored with the account it was approved for
 // and never reused for the other network.
-const (
-	hlMainnetAPI = "https://api.hyperliquid.xyz"
-	hlTestnetAPI = "https://api.hyperliquid-testnet.xyz"
+const hlMaxRows = 200
 
-	hlMaxRows = 200
-)
-
+// hlEndpoint is the API origin of a network; the catalog names both.
 func hlEndpoint(network string) string {
+	networks := lookup("hyperliquid").Networks
 	if network == "testnet" {
-		return hlTestnetAPI
+		return networks["testnet"]
 	}
-	return hlMainnetAPI
+	return networks["mainnet"]
 }
 
 func hlNetworkLabel(network string) string {
@@ -1155,3 +1152,17 @@ func (m *Manager) removeHyperliquidKey(r *record) error {
 	r.Account.Tools = tools
 	return nil
 }
+
+func discoverHyperliquidDriver(m *Manager, ctx context.Context, r *record, secret string) ([]Tool, error) {
+	return m.discoverHyperliquid(ctx, r, secret)
+}
+
+func invokeHyperliquidDriver(m *Manager, ctx context.Context, r *record, secret string, t Tool, args map[string]any, _ ...*http.Header) ([]byte, error) {
+	return m.invokeHyperliquid(ctx, r, secret, t, args)
+}
+
+func addHyperliquidDriver(m *Manager, ctx context.Context, in *Input) (Response, error) {
+	return m.addHyperliquid(ctx, in)
+}
+
+func removeHyperliquidKeyDriver(m *Manager, r *record) error { return m.removeHyperliquidKey(r) }

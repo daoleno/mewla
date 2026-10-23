@@ -39,7 +39,8 @@ func isTransportError(err, target error) bool {
 }
 
 func usesMCP(r *record) bool {
-	return r.Account.Integration == "mcp" || r.Account.Integration == "linear" || r.Account.AuthMethod == "mcp_oauth"
+	e := lookup(r.Account.Integration)
+	return r.Account.AuthMethod == "mcp_oauth" || e != nil && e.TokenMCP
 }
 
 // serviceError is an answer the service itself gave: a tool result marked
@@ -99,8 +100,8 @@ func (e timeoutError) Error() string {
 }
 
 func accountService(r *record) string {
-	if name := serviceName(r.Account.Integration); name != "" && r.Account.Integration != "mcp" {
-		return name
+	if e := lookup(r.Account.Integration); e == nil || !e.NamedByPerson {
+		return serviceName(r.Account.Integration)
 	}
 	if r.Account.Name != "" {
 		return r.Account.Name
@@ -420,7 +421,7 @@ func (m *Manager) invokeMCPAccount(parent context.Context, q Request) (Response,
 		prep, cancel := context.WithTimeout(parent, 20*time.Second)
 		secret, err = m.accountToken(prep, r)
 		cancel()
-		if err == nil && secret == "" && r.Account.Integration == "linear" {
+		if e := lookup(r.Account.Integration); err == nil && secret == "" && e != nil && e.NeedsCredential {
 			err = errAuth
 		}
 	}
@@ -517,20 +518,32 @@ func (m *Manager) finishMCP(id, tool string, sensitive []string, out mcpOutcome,
 // Identity is optional in MCP. Only call a reviewed identity operation on a
 // fixed official resource, using its discovered structured input contract.
 func (m *Manager) officialMCPIdentity(ctx context.Context, r *record, secret string, tools []Tool) string {
+	e := lookup(r.Account.Integration)
+	if e == nil || e.MCP == nil || e.MCP.Identity == "" {
+		return ""
+	}
 	for _, tool := range tools {
+		if tool.Name != e.MCP.Identity || toolGroup(r, tool) != "read" {
+			continue
+		}
 		args := map[string]any{}
-		if r.Account.Integration == "notion" && tool.Name == "notion-get-self" && toolGroup(r, tool) == "read" {
-		} else if r.Account.Integration == "cloudflare" && tool.Name == "whoami" && toolGroup(r, tool) == "read" {
-		} else if r.Account.Integration == "linear" && tool.Name == "get_user" && toolGroup(r, tool) == "read" {
+		if len(e.MCP.IdentityArgs) > 0 {
 			var schema struct {
 				Properties map[string]json.RawMessage `json:"properties"`
 			}
-			if json.Unmarshal(tool.InputSchema, &schema) != nil || schema.Properties["query"] == nil {
+			if json.Unmarshal(tool.InputSchema, &schema) != nil {
 				continue
 			}
-			args["query"] = "me"
-		} else {
-			continue
+			usable := true
+			for name, value := range e.MCP.IdentityArgs {
+				if schema.Properties[name] == nil {
+					usable = false
+				}
+				args[name] = value
+			}
+			if !usable {
+				continue
+			}
 		}
 		out := m.callMCP(ctx, r, secret, tool, args, 0)
 		if out.Err != nil {

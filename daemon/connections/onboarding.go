@@ -53,14 +53,6 @@ type connectFlow struct {
 	google      *googlePending
 }
 
-func serviceName(kind string) string {
-	for _, item := range Catalog() {
-		if item.ID == kind {
-			return item.Name
-		}
-	}
-	return "Custom service"
-}
 func (m *Manager) isPending(id string) bool {
 	for _, flow := range m.pending {
 		if flow.ID == id {
@@ -103,7 +95,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
-		r := &record{Account: Account{Integration: "github", Endpoint: "https://api.github.com"}}
+		r := &record{Account: Account{Integration: "github", Endpoint: endpointOf("github")}}
 		if err = m.discover(ctx, r, token); err != nil {
 			return Response{}, err
 		}
@@ -121,7 +113,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		in := *q.Input
 		// Google signs in through Mewla's exchange, which this daemon polls: no
 		// browser return reaches the daemon, so no web origin applies.
-		if isGoogle(in.Integration) {
+		if e := lookup(in.Integration); e != nil && e.Google != nil {
 			if reason := m.unavailableReason(in.Integration); reason != "" {
 				return Response{}, errors.New(reason)
 			}
@@ -142,8 +134,8 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if reason := m.unavailableReason(in.Integration); reason != "" {
 			return Response{}, errors.New(reason)
 		}
-		if in.Integration == "github" {
-			return m.startGitHubDevice(ctx, &in)
+		if e := lookup(in.Integration); e != nil && e.OAuth != nil && e.OAuth.Device != nil {
+			return m.startDevice(ctx, e, &in)
 		}
 		response, err := m.startOAuth(ctx, &in)
 		if err != nil {
@@ -194,7 +186,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if f.Status != "confirm" || f.Integration != "github" {
 			return Response{}, errors.New("Preview this GitHub identity before connecting")
 		}
-		r := &record{Account: Account{Integration: "github", Endpoint: "https://api.github.com"}}
+		r := &record{Account: Account{Integration: "github", Endpoint: endpointOf("github")}}
 		if err := m.discover(ctx, r, f.secret); err != nil {
 			return Response{}, err
 		}
@@ -279,7 +271,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		}
 	}
 	if f.deviceCode != "" && f.Status == "waiting" {
-		if err := m.pollGitHubDevice(ctx, f); err != nil {
+		if err := m.pollDevice(ctx, f); err != nil {
 			return Response{}, err
 		}
 	}
@@ -346,34 +338,36 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 		return
 	}
 }
-func (m *Manager) startGitHubDevice(ctx context.Context, in *Input) (Response, error) {
-	client, ok, err := m.clientConfig("github")
+func (m *Manager) startDevice(ctx context.Context, e *entry, in *Input) (Response, error) {
+	device := e.OAuth.Device
+	client, ok, err := m.clientConfig(e.ID)
 	if err != nil || !ok || client.ClientID == "" {
-		return Response{}, errors.New("Mewla’s GitHub browser authorization is not ready yet. You can use the account already signed in on this server.")
+		return Response{}, errors.New("Mewla’s " + e.Name + " browser authorization is not ready yet. You can use the account already signed in on this server.")
 	}
-	config := oauth2.Config{ClientID: client.ClientID, Scopes: []string{"read:user", "repo"}, Endpoint: oauth2.Endpoint{DeviceAuthURL: "https://github.com/login/device/code"}}
-	r := &record{Account: Account{Endpoint: "https://api.github.com"}}
+	config := oauth2.Config{ClientID: client.ClientID, Scopes: device.Scopes, Endpoint: oauth2.Endpoint{DeviceAuthURL: device.CodeURL}}
+	r := &record{Account: Account{Endpoint: e.Endpoint}}
 	auth, err := config.DeviceAuth(context.WithValue(ctx, oauth2.HTTPClient, m.oauthHTTP(r)))
 	if err != nil {
-		return Response{}, errors.New("GitHub authorization could not start. Try again.")
+		return Response{}, errors.New(e.Name + " authorization could not start. Try again.")
 	}
-	if auth.VerificationURI != "https://github.com/login/device" {
-		return Response{}, errors.New("GitHub returned an unexpected authorization destination")
+	if auth.VerificationURI != device.Verification {
+		return Response{}, errors.New(e.Name + " returned an unexpected authorization destination")
 	}
 	interval := time.Duration(auth.Interval) * time.Second
 	if interval < 5*time.Second {
 		interval = 5 * time.Second
 	}
-	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: "github", Status: "waiting", AuthorizationURL: auth.VerificationURI, UserCode: auth.UserCode, Expires: auth.Expiry}, deviceCode: auth.DeviceCode, clientID: client.ClientID, interval: interval, nextPoll: time.Now().Add(interval), allowWrites: in.AllowWrites}
+	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: e.ID, Status: "waiting", AuthorizationURL: auth.VerificationURI, UserCode: auth.UserCode, Expires: auth.Expiry}, deviceCode: auth.DeviceCode, clientID: client.ClientID, interval: interval, nextPoll: time.Now().Add(interval), allowWrites: in.AllowWrites}
 	m.connectFlows[f.ID] = f
 	return flowResult(f), nil
 }
-func (m *Manager) pollGitHubDevice(ctx context.Context, f *connectFlow) error {
+func (m *Manager) pollDevice(ctx context.Context, f *connectFlow) error {
 	if time.Now().Before(f.nextPoll) {
 		return nil
 	}
 	f.nextPoll = time.Now().Add(f.interval)
-	r := &record{Account: Account{Endpoint: "https://api.github.com"}}
+	e := lookup(f.Integration)
+	r := &record{Account: Account{Endpoint: e.Endpoint}}
 	var data struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
@@ -381,8 +375,8 @@ func (m *Manager) pollGitHubDevice(ctx context.Context, f *connectFlow) error {
 		Scope        string `json:"scope"`
 		Error        string `json:"error"`
 	}
-	if err := m.oauthForm(ctx, r, "https://github.com/login/oauth/access_token", url.Values{"client_id": {f.clientID}, "device_code": {f.deviceCode}, "grant_type": {"urn:ietf:params:oauth:grant-type:device_code"}}, &data); err != nil {
-		return errors.New("Could not check GitHub authorization. Try again.")
+	if err := m.oauthForm(ctx, r, e.OAuth.Device.TokenURL, url.Values{"client_id": {f.clientID}, "device_code": {f.deviceCode}, "grant_type": {"urn:ietf:params:oauth:grant-type:device_code"}}, &data); err != nil {
+		return errors.New("Could not check " + e.Name + " authorization. Try again.")
 	}
 	switch data.Error {
 	case "authorization_pending":
@@ -394,12 +388,12 @@ func (m *Manager) pollGitHubDevice(ctx context.Context, f *connectFlow) error {
 	case "":
 	default:
 		f.Status = "failed"
-		f.Message = "GitHub authorization was declined or expired. Connect again."
+		f.Message = e.Name + " authorization was declined or expired. Connect again."
 		f.deviceCode = ""
 		return nil
 	}
 	if data.AccessToken == "" || len(data.AccessToken) > 16384 || len(data.RefreshToken) > 16384 || strings.ContainsAny(data.AccessToken+data.RefreshToken, "\r\n") || data.ExpiresIn < 0 || data.ExpiresIn > 365*24*60*60 || data.ExpiresIn > 0 && data.RefreshToken == "" {
-		return errors.New("GitHub returned an invalid credential")
+		return errors.New(e.Name + " returned an invalid credential")
 	}
 	if len(m.records) >= 50 {
 		return errors.New("maximum of 50 accounts reached")
@@ -410,7 +404,7 @@ func (m *Manager) pollGitHubDevice(ctx context.Context, f *connectFlow) error {
 	if data.ExpiresIn > 0 {
 		token.Expiry = time.Now().Add(time.Duration(data.ExpiresIn) * time.Second)
 	}
-	account := &record{Account: Account{ID: uuid.NewString(), Integration: "github", Name: "GitHub", Endpoint: "https://api.github.com", AuthMethod: "oauth", Enabled: true, Scopes: strings.Fields(strings.ReplaceAll(data.Scope, ",", " ")), History: []Event{}}, OAuth: &oauthAccount{ClientID: f.clientID, Issuer: "https://github.com", TokenURL: "https://github.com/login/oauth/access_token", AuthStyle: oauth2.AuthStyleInParams}, Grants: map[string]string{}}
+	account := &record{Account: Account{ID: uuid.NewString(), Integration: e.ID, Name: e.Name, Endpoint: e.Endpoint, AuthMethod: "oauth", Enabled: true, Scopes: strings.Fields(strings.ReplaceAll(data.Scope, ",", " ")), History: []Event{}}, OAuth: &oauthAccount{ClientID: f.clientID, Issuer: e.OAuth.Device.Issuer, TokenURL: e.OAuth.Device.TokenURL, AuthStyle: oauth2.AuthStyleInParams}, Grants: map[string]string{}}
 	// Verify identity before creating an account or persisting any credential.
 	if err := m.discover(ctx, account, token.AccessToken); err != nil {
 		return err
@@ -429,7 +423,7 @@ func (m *Manager) pollGitHubDevice(ctx context.Context, f *connectFlow) error {
 	if account.Account.Identity != "" && !strings.Contains(account.Account.Identity, "identity not provided") {
 		account.Account.Name = account.Account.Identity
 		for _, existing := range m.records {
-			if existing.Account.Integration == "github" && existing.Account.Status != "disconnected" && existing.Account.Identity == account.Account.Identity {
+			if existing.Account.Integration == e.ID && existing.Account.Status != "disconnected" && existing.Account.Identity == account.Account.Identity {
 				account.Account.ID = existing.Account.ID
 				previous = existing
 				break
@@ -480,13 +474,26 @@ func (m *Manager) oauthForm(ctx context.Context, r *record, endpoint string, val
 	}
 	return json.NewDecoder(http.MaxBytesReader(nil, resp.Body, MaxResultBytes)).Decode(out)
 }
-func (m *Manager) exchangeSlack(ctx context.Context, r *record, secret, code, verifier string) (*oauth2.Token, error) {
-	values := url.Values{"client_id": {r.OAuth.ClientID}, "code": {code}, "redirect_uri": {r.OAuth.RedirectURL}, "code_verifier": {verifier}}
-	if secret != "" {
-		values.Set("client_secret", secret)
-	}
-	return m.slackToken(ctx, r, values)
+
+var slackCodec = tokenCodec{
+	exchange: func(m *Manager, ctx context.Context, r *record, secret, code, verifier string) (*oauth2.Token, error) {
+		values := url.Values{"client_id": {r.OAuth.ClientID}, "code": {code}, "redirect_uri": {r.OAuth.RedirectURL}, "code_verifier": {verifier}}
+		if secret != "" {
+			values.Set("client_secret", secret)
+		}
+		return m.slackToken(ctx, r, values)
+	},
+	refresh: func(m *Manager, ctx context.Context, r *record, refreshToken string) (*oauth2.Token, error) {
+		return m.slackToken(ctx, r, url.Values{"client_id": {r.OAuth.ClientID}, "grant_type": {"refresh_token"}, "refresh_token": {refreshToken}})
+	},
+	revoke: func(m *Manager, ctx context.Context, r *record, accessToken string) error {
+		if _, err := m.request(ctx, r, lookup(r.Account.Integration).Endpoint, accessToken, "POST", "/auth.revoke", nil); err != nil {
+			return errors.New("account disabled; Slack revocation failed, retry disconnect")
+		}
+		return nil
+	},
 }
+
 func (m *Manager) slackToken(ctx context.Context, r *record, values url.Values) (*oauth2.Token, error) {
 	type payload struct {
 		AccessToken  string `json:"access_token"`
