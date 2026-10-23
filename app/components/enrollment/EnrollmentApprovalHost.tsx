@@ -1,3 +1,4 @@
+import { warnOnce } from "../../services/warnOnce";
 import { useEffect, useMemo, useState } from "react";
 import { AppState, Modal, ScrollView, StyleSheet, View } from "react-native";
 import { useCurrentServer } from "../../store/currentServer";
@@ -26,7 +27,7 @@ export function EnrollmentApprovalHost() {
     };
     const refresh = () => void pendingEnrollments(currentServer).then((pending) => {
       if (active && isCurrentServer(currentServer.id)) setRequests(pending.map((request) => ({ ...request, serverId: currentServer.id })));
-    }).catch(() => {});
+    }).catch((error) => warnOnce("enrollment.pending", error));
     const connected = (data: any) => { if (data.serverId === currentServer.id) refresh(); };
     const disconnected = (data: { serverId: string }) => { if (data.serverId === currentServer.id) setRequests([]); };
     wsClient.on("disconnected", disconnected);
