@@ -334,6 +334,75 @@ describe("direct path beside the relay", () => {
     await invalidateStoredServerTransport(server);
   });
 
+  test("overlapping resolves share one choice and never stop each other's tunnel", async () => {
+    const server = linkServer([
+      { host: "192.168.1.20", port: 9876 },
+      { host: "100.64.0.9", port: 9876 },
+    ]);
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => resolveStoredServerURL(server)),
+    );
+    expect(new Set(results).size).toBe(1);
+    expect(starts.filter((entry) => entry.host === "192.168.1.20")).toHaveLength(1);
+    expect(starts.filter((entry) => entry.host === "100.64.0.9")).toHaveLength(1);
+    await new Promise((done) => setTimeout(done, 30));
+    const chosen = results[0].includes("20001") ? "192.168.1.20" : "100.64.0.9";
+    expect(stops).not.toContain(`server:${server.id}:direct:${chosen}:9876`);
+    await invalidateStoredServerTransport(server);
+  });
+
+  test("a slow re-check of the path in use keeps it and its tunnel", async () => {
+    const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+    await resolveStoredServerURL(server);
+    stops.length = 0;
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+      await new Promise((done) => setTimeout(done, 1500));
+      return realFetch(...args);
+    }) as typeof fetch;
+    const realNow = Date.now;
+    Date.now = () => realNow() + 31_000;
+    try {
+      expect(await resolveStoredServerURL(server)).toBe("ws://127.0.0.1:20001/ws");
+    } finally {
+      Date.now = realNow;
+      globalThis.fetch = realFetch;
+    }
+    await new Promise((done) => setTimeout(done, 400));
+    expect(currentTransportPath(server.id)).toBe("lan");
+    expect(stops).not.toContain(`server:${server.id}:direct:192.168.1.20:9876`);
+    await invalidateStoredServerTransport(server);
+  }, 10_000);
+
+  test("the path in use is re-checked on its own, not swapped for a faster address", async () => {
+    const server = linkServer([
+      { host: "192.168.1.20", port: 9876 },
+      { host: "100.64.0.9", port: 9876 },
+    ]);
+    const first = await resolveStoredServerURL(server);
+    const inUsePort = first.includes("20001") ? "20001" : "20002";
+    stops.length = 0;
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+      if (String(args[0]).includes(`:${inUsePort}/`)) {
+        await new Promise((done) => setTimeout(done, 300));
+      }
+      return realFetch(...args);
+    }) as typeof fetch;
+    const realNow = Date.now;
+    Date.now = () => realNow() + 31_000;
+    try {
+      expect(await resolveStoredServerURL(server)).toBe(first);
+    } finally {
+      Date.now = realNow;
+      globalThis.fetch = realFetch;
+    }
+    expect(stops).toEqual([]);
+    await invalidateStoredServerTransport(server);
+  });
+
   test("an unreachable address does not hold up the relay", async () => {
     hangingHosts = new Set(["192.168.1.20"]);
     const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
