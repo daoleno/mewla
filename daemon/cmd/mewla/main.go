@@ -24,6 +24,7 @@ import (
 	"github.com/daoleno/mewla/daemon/agentevents"
 	claudeadapter "github.com/daoleno/mewla/daemon/agentevents/claude"
 	codexadapter "github.com/daoleno/mewla/daemon/agentevents/codex"
+	opencodeadapter "github.com/daoleno/mewla/daemon/agentevents/opencode"
 	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
@@ -375,9 +376,20 @@ func runDaemon(args []string, stderr io.Writer) error {
 		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir})
 		codexFollow = newCodexEvents(ctx, eventHub)
 		w.ObserveSessions(codexFollow.Observe)
-		w.SetStructuredInput(codexFollow.send)
-		w.SetStructuredInterrupt(codexFollow.interrupt)
 	}
+	adapters.Register(opencodeadapter.Provider, opencodeadapter.Adapter{})
+	opencodeFollow := newOpencodeEvents(ctx, eventHub, func(worker *classifier.Worker) string {
+		return providerOf(execs, worker.ExecutorID, worker.Command)
+	})
+	w.ObserveSessions(opencodeFollow.Observe)
+	// Each agent's follower takes the sends and stops of the Workers it
+	// follows; any other Worker is typed into.
+	senders, stops := []watcher.StructuredSender{opencodeFollow.send}, []func(string) (bool, error){opencodeFollow.interrupt}
+	if codexFollow != nil {
+		senders, stops = append([]watcher.StructuredSender{codexFollow.send}, senders...), append([]func(string) (bool, error){codexFollow.interrupt}, stops...)
+	}
+	w.SetStructuredInput(firstHandled(senders...))
+	w.SetStructuredInterrupt(firstHandledStop(stops...))
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,
 		resourceSampler: resourceSampler,
