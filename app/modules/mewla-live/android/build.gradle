@@ -26,8 +26,16 @@ repositories {
 dependencies {
   implementation project(':expo-modules-core')
   // The FCM service subclasses Expo's, so every push that is not a live state
-  // still reaches expo-notifications untouched.
-  implementation project(':expo-notifications')
+  // still reaches expo-notifications untouched. The app already ships it at runtime:
+  // a Gradle project when built from source, a prebuilt artifact (SDK 57 default) otherwise.
+  def expoNotificationsProject = rootProject.findProject(':expo-notifications')
+  if (expoNotificationsProject != null) {
+    compileOnly expoNotificationsProject
+  } else {
+    def notificationsVersion = ['node', '--print', "require('expo-notifications/package.json').version"]
+      .execute(null, rootProject.projectDir).text.trim()
+    compileOnly "host.exp.exponent:expo.modules.notifications:${notificationsVersion}"
+  }
   compileOnly 'com.google.firebase:firebase-messaging:25.0.1'
   // NotificationCompat.ProgressStyle and requestPromotedOngoing (Android 16 Live Updates).
   implementation 'androidx.core:core:1.17.0'
