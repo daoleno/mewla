@@ -37,6 +37,8 @@ type fakeAppServer struct {
 	// ThreadResumeResponse (current native settings at attach time).
 	resumeModel  string
 	resumeEffort string
+	// replies are the client's answers to requests the fake made of it.
+	replies []string
 }
 
 func startFakeAppServer(t *testing.T) *fakeAppServer {
@@ -142,6 +144,10 @@ func (f *fakeAppServer) serve(ws *websocket.Conn) {
 			Params json.RawMessage `json:"params"`
 		}
 		if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Method == "" {
+			// A reply to a request this fake made of its client.
+			f.mu.Lock()
+			f.replies = append(f.replies, string(raw))
+			f.mu.Unlock()
 			continue
 		}
 		var params map[string]any
@@ -178,6 +184,10 @@ func (f *fakeAppServer) serve(ws *websocket.Conn) {
 				}
 			}
 			f.reply(ws, envelope.ID, map[string]any{"data": filtered})
+		case methodTurnStart:
+			f.reply(ws, envelope.ID, map[string]any{"turn": map[string]any{"id": "turn-1", "status": "inProgress"}})
+		case methodTurnInterrupt:
+			f.reply(ws, envelope.ID, map[string]any{})
 		case methodThreadSettingsUpd:
 			hook := f.settingsUpdateHook
 			if hook != nil {
@@ -492,5 +502,80 @@ func TestOpenFailsOnMissingSocket(t *testing.T) {
 	_, err := Open(ctx, filepath.Join(t.TempDir(), "nope.sock"), DialOptions{DialTimeout: 300 * time.Millisecond})
 	if !errors.Is(err, ErrConnect) {
 		t.Fatalf("err = %v, want ErrConnect", err)
+	}
+}
+
+func (f *fakeAppServer) askClient(id any, method string, params any) {
+	raw, _ := json.Marshal(map[string]any{"id": id, "method": method, "params": params})
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.writeMu.Lock()
+	defer f.writeMu.Unlock()
+	for _, ws := range f.clients {
+		_ = ws.WriteMessage(websocket.TextMessage, raw)
+	}
+}
+
+func TestStartTurnSendsTheMessageAndReturnsTheTurnID(t *testing.T) {
+	f := startFakeAppServer(t)
+	c, err := Open(context.Background(), f.socketPath, DialOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	turnID, err := c.StartTurn(context.Background(), "t-main", "mewla-msg-1", "Reply with exactly: PONG")
+	if err != nil || turnID != "turn-1" {
+		t.Fatalf("turn = %q, %v", turnID, err)
+	}
+	params := f.lastParams(methodTurnStart)
+	input, _ := params["input"].([]any)
+	first, _ := input[0].(map[string]any)
+	if params["threadId"] != "t-main" || params["clientUserMessageId"] != "mewla-msg-1" || first["text"] != "Reply with exactly: PONG" || first["type"] != "text" {
+		t.Fatalf("params = %+v", params)
+	}
+	if err := c.InterruptTurn(context.Background(), "t-main", "turn-1"); err != nil {
+		t.Fatal(err)
+	}
+	if p := f.lastParams(methodTurnInterrupt); p["threadId"] != "t-main" || p["turnId"] != "turn-1" {
+		t.Fatalf("interrupt params = %+v", p)
+	}
+}
+
+func TestServerRequestsAreDeliveredAndAnsweredByTheirOwnID(t *testing.T) {
+	f := startFakeAppServer(t)
+	c, err := Open(context.Background(), f.socketPath, DialOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	// Id 1 is also the id of the client's own initialize call; a server
+	// request must never be taken for its response.
+	f.askClient(1, "item/commandExecution/requestApproval", map[string]any{"threadId": "t-main", "command": "touch x"})
+	select {
+	case req := <-c.ServerRequests():
+		if req.Method != "item/commandExecution/requestApproval" || string(req.ID) != "1" {
+			t.Fatalf("request = %+v", req)
+		}
+		if err := c.Respond(req.ID, map[string]any{"decision": "accept"}); err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no server request arrived")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		f.mu.Lock()
+		replies := append([]string{}, f.replies...)
+		f.mu.Unlock()
+		if len(replies) == 1 {
+			if !strings.Contains(replies[0], `"decision":"accept"`) || !strings.Contains(replies[0], `"id":1`) {
+				t.Fatalf("reply = %s", replies[0])
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the answer never reached the server")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
