@@ -181,6 +181,7 @@ exit 1`)
 		t.Fatalf("missing presence=%v err=%v", presence, err)
 	}
 
+	reachableTmuxSocket(t)
 	writeTmux(`echo "permission denied reading tmux socket" >&2
 exit 1`)
 	presence, err = w.ProbeSession("%1")
@@ -193,8 +194,8 @@ for arg in "$@"; do
   case "$arg" in list-panes|show-options) cmd=$arg ;; esac
 done
 if [ "$cmd" = "list-panes" ]; then
-  echo "can't find session: %1" >&2
-  exit 1
+  echo "%2"
+  exit 0
 fi
 if [ "$cmd" = "show-options" ]; then
   exit 0

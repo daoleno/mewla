@@ -264,7 +264,7 @@ func (w *Watcher) listServicePanes() ([]servicePane, error) {
 func listServicePanesOn(socket string) ([]servicePane, error) {
 	out, err := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{pane_active}").CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("tmux list-panes: %w: %s", err, strings.TrimSpace(string(out)))
+		return nil, tmuxFailure(socket, "list-panes", err, out)
 	}
 	return parseServicePanes(string(out)), nil
 }

@@ -2593,7 +2593,7 @@ func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
 	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{@mewla_worker_executor}\t#{@mewla_worker_agent_control}\t#{session_name}")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("tmux list-panes: %w: %s", err, strings.TrimSpace(string(out)))
+		return nil, tmuxFailure(socket, "list-panes", err, out)
 	}
 	var windows []tmuxPane
 	seen := map[string]bool{}
@@ -2704,22 +2704,18 @@ func probeTmuxTargetOwnershipOn(socket, target string, requireServer bool) (pres
 		target,
 		"@mewla_worker_created",
 	).CombinedOutput()
-	outText := strings.TrimSpace(string(out))
-	if requireServer && (isNoTmuxServerError(commandErr) || isNoTmuxServerError(fmt.Errorf("%s", outText))) {
-		return false, false, fmt.Errorf("%w: selected tmux server became unavailable", ErrOwnershipProbeUnavailable)
-	}
-	if isTmuxTargetMissing(commandErr, outText) ||
-		isNoTmuxServerError(commandErr) ||
-		isNoTmuxServerError(fmt.Errorf("%s", outText)) {
-		return false, false, nil
-	}
 	if commandErr != nil {
-		return false, false, fmt.Errorf(
-			"probe tmux ownership for %s: %w: %s",
-			target,
-			commandErr,
-			outText,
-		)
+		// The pane was listed a moment ago. A list that no longer has it (or
+		// no server) says it went away in between; otherwise ownership simply
+		// could not be read, which is unknown, never "not owned".
+		present, presenceErr := tmuxTargetPresentOn(socket, target, requireServer)
+		if presenceErr != nil {
+			return false, false, presenceErr
+		}
+		if !present {
+			return false, false, nil
+		}
+		return false, false, fmt.Errorf("%w: %w", ErrOwnershipProbeUnavailable, tmuxFailure(socket, "show-options "+target, commandErr, out))
 	}
 	return true, tmuxBoolOption(string(out)), nil
 }
@@ -2731,16 +2727,15 @@ func tmuxTargetPresentOn(socket, target string, requireServer bool) (bool, error
 	}
 	out, commandErr := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}").CombinedOutput()
 	outText := strings.TrimSpace(string(out))
-	if requireServer && (isNoTmuxServerError(commandErr) || isNoTmuxServerError(fmt.Errorf("%s", outText))) {
-		return false, fmt.Errorf("%w: selected tmux server became unavailable", ErrOwnershipProbeUnavailable)
-	}
-	if isTmuxTargetMissing(commandErr, outText) ||
-		isNoTmuxServerError(commandErr) ||
-		isNoTmuxServerError(fmt.Errorf("%s", outText)) {
-		return false, nil
-	}
 	if commandErr != nil {
-		return false, fmt.Errorf("probe tmux presence for %s: %w: %s", target, commandErr, outText)
+		failure := tmuxFailure(socket, "list-panes", commandErr, out)
+		if errors.Is(failure, ErrTmuxServerGone) {
+			if requireServer {
+				return false, fmt.Errorf("%w: selected tmux server became unavailable", ErrOwnershipProbeUnavailable)
+			}
+			return false, nil
+		}
+		return false, fmt.Errorf("probe tmux presence for %s: %w", target, failure)
 	}
 	if outText == "" {
 		return false, fmt.Errorf("%w: tmux presence for %s returned no pane identity", ErrOwnershipProbeUnavailable, target)
@@ -4110,7 +4105,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		return "", fmt.Errorf("tmux returned invalid pane identity %q", target)
 	}
 	cleanup := func(cause error) (string, error) {
-		if out, err := tmuxCommand(createSocket, "kill-pane", "-t", target).CombinedOutput(); err != nil && !isTmuxTargetMissing(err, string(out)) {
+		if err := tmuxCommand(createSocket, "kill-pane", "-t", target).Run(); err != nil && !tmuxTargetGone(createSocket, target) {
 			return "", fmt.Errorf("%v; remove allocated pane: %w", cause, err)
 		}
 		return "", cause
@@ -4692,7 +4687,8 @@ func (w *Watcher) KillSession(sessionID string) error {
 	if present {
 		out, killErr := tmuxCommand(socket, "kill-pane", "-t", sessionID).CombinedOutput()
 		outText := strings.TrimSpace(string(out))
-		missing := killErr != nil && isTmuxTargetMissing(killErr, outText)
+		// A failed kill is "already gone" only when a fresh listing says so.
+		missing := killErr != nil && tmuxTargetGone(socket, sessionID)
 		if killErr != nil && !missing {
 			// Non-missing kill failure: pane may still be live. Do not release
 			// delegated resources; surface the kill error for retry.
@@ -4705,25 +4701,6 @@ func (w *Watcher) KillSession(sessionID string) error {
 		}
 	}
 	return nil
-}
-
-func isTmuxTargetMissing(err error, output string) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(strings.TrimSpace(err.Error() + " " + output))
-	if isNoTmuxServerError(err) || isNoTmuxServerError(fmt.Errorf("%s", output)) {
-		return true
-	}
-	return strings.Contains(text, "can't find pane") || strings.Contains(text, "no such pane") || strings.Contains(text, "pane not found") ||
-		strings.Contains(text, "can't find window") ||
-		strings.Contains(text, "couldn't find window") ||
-		strings.Contains(text, "can't find session") ||
-		strings.Contains(text, "couldn't find session") ||
-		strings.Contains(text, "no such window") ||
-		strings.Contains(text, "no such session") ||
-		strings.Contains(text, "session not found") ||
-		strings.Contains(text, "window not found")
 }
 
 func tmuxDelegatedResource(socket, target string) (bool, string) {
@@ -4780,21 +4757,6 @@ func listTmuxSessionsOn(socket string) ([]string, error) {
 		sessions = append(sessions, sessionName)
 	}
 	return sessions, nil
-}
-
-func isNoTmuxServerError(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "no server running") ||
-		strings.Contains(text, "failed to connect to server") ||
-		// An explicit -S socket with no server behind it reports the connect
-		// failure as ENOENT (socket path absent) or ECONNREFUSED (stale
-		// socket file). Both mean there is no server on that socket; a
-		// permission failure is a real error and stays fail-closed.
-		(strings.Contains(text, "error connecting to") &&
-			(strings.Contains(text, "no such file") || strings.Contains(text, "connection refused")))
 }
 
 func currentPathForTarget(socket, target string) (string, error) {
