@@ -301,9 +301,14 @@ func (s *Store) appendTimelineItemLocked(item TimelineItem) (TimelineItem, error
 		return TimelineItem{}, err
 	}
 	if s.timelineCache.valid {
-		normalized := item
-		normalizeLegacyTimelineKind(&normalized)
-		s.timelineCache.items = append(s.timelineCache.items, cloneTimelineItems([]TimelineItem{normalized})...)
+		// The cache holds what a read of the stored row returns.
+		var stored TimelineItem
+		if err := json.Unmarshal(raw, &stored); err != nil {
+			s.timelineCache = timelineReadCache{}
+		} else {
+			normalizeLegacyTimelineKind(&stored)
+			s.timelineCache.items = append(s.timelineCache.items, stored)
+		}
 	}
 	s.rev++
 	return item, nil
@@ -713,17 +718,35 @@ func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
 		items[index].ID = strings.TrimSpace(items[index].ID)
 		items[index].ThreadID = strings.TrimSpace(items[index].ThreadID)
 	}
+	// result is what a read of the rewritten timeline returns: rows that were
+	// written are decoded back from the JSON that was stored.
+	result := make([]TimelineItem, len(items))
+	write := func(index int) (string, error) {
+		body, err := json.Marshal(items[index])
+		if err != nil {
+			return "", err
+		}
+		var stored TimelineItem
+		if err := json.Unmarshal(body, &stored); err != nil {
+			return "", err
+		}
+		normalizeLegacyTimelineKind(&stored)
+		result[index] = stored
+		return string(body), nil
+	}
 	err = sqlitedb.Tx(s.db, func(tx *sql.Tx) error {
 		next := 0
 		for _, row := range current {
 			if next < len(items) && items[next].ID == strings.TrimSpace(row.ID) {
-				if !reflect.DeepEqual(row, items[next]) {
-					body, err := json.Marshal(items[next])
+				if reflect.DeepEqual(row, items[next]) {
+					result[next] = row
+				} else {
+					body, err := write(next)
 					if err != nil {
 						return err
 					}
 					if _, err := tx.Exec(`UPDATE timeline SET thread_id = ?, body = ? WHERE id = ?`,
-						items[next].ThreadID, string(body), items[next].ID); err != nil {
+						items[next].ThreadID, body, items[next].ID); err != nil {
 						return err
 					}
 				}
@@ -735,12 +758,12 @@ func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
 			}
 		}
 		for ; next < len(items); next++ {
-			body, err := json.Marshal(items[next])
+			body, err := write(next)
 			if err != nil {
 				return err
 			}
 			if _, err := tx.Exec(`INSERT INTO timeline(id, thread_id, body) VALUES(?, ?, ?)`,
-				items[next].ID, items[next].ThreadID, string(body)); err != nil {
+				items[next].ID, items[next].ThreadID, body); err != nil {
 				return err
 			}
 		}
@@ -750,7 +773,7 @@ func (s *Store) rewriteTimelineLocked(items []TimelineItem) error {
 		s.timelineCache = timelineReadCache{}
 		return err
 	}
-	s.timelineCache = timelineReadCache{valid: true, items: cloneTimelineItems(items)}
+	s.timelineCache = timelineReadCache{valid: true, items: result}
 	s.rev++
 	return nil
 }
