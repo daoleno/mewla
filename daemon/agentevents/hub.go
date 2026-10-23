@@ -58,7 +58,8 @@ type Hub struct {
 
 type workerState struct {
 	State
-	subs map[int]chan Event
+	subs    map[int]chan Event
+	waiters map[string]chan Decision
 }
 
 // NewHub returns an empty Hub.
@@ -107,6 +108,12 @@ func (h *Hub) Publish(e Event) {
 func (w *workerState) apply(e Event) {
 	if e.At.After(w.LastEvent) {
 		w.LastEvent = e.At
+	}
+	switch e.Kind {
+	case KindProgress, KindTurnStarted, KindTurnFinished, KindUserMessage:
+		// An agent waiting on a decision does not move. If it moved, the
+		// decision was made somewhere else (its own prompt).
+		w.Approvals = nil
 	}
 	switch e.Kind {
 	case KindBound:
@@ -230,4 +237,15 @@ func (h *Hub) Workers() []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// Snapshot returns every Worker's state, for diagnostics.
+func (h *Hub) Snapshot() map[string]State {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make(map[string]State, len(h.workers))
+	for id, w := range h.workers {
+		out[id] = w.snapshot()
+	}
+	return out
 }

@@ -1,6 +1,8 @@
 package agentevents
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -93,5 +95,60 @@ func TestHubExitDisconnects(t *testing.T) {
 	h.Forget("w")
 	if _, ok := h.State("w"); ok {
 		t.Fatal("forgotten worker still known")
+	}
+}
+
+func TestAskWaitsForADecisionAndRefusesALateOne(t *testing.T) {
+	h := NewHub()
+	got := make(chan Decision, 1)
+	go func() {
+		d, ok := h.Ask(context.Background(), "w", Approval{ID: "a1"}, t0)
+		if !ok {
+			t.Error("ask was not decided")
+		}
+		got <- d
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if s, _ := h.State("w"); len(s.Approvals) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("approval was never published")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := h.Decide("w", "a1", "allow", t0); err != nil {
+		t.Fatal(err)
+	}
+	if d := <-got; d.OptionID != "allow" || d.By != "mewla" {
+		t.Fatalf("decision = %+v", d)
+	}
+	if err := h.Decide("w", "a1", "deny", t0); !errors.Is(err, ErrNoSuchApproval) {
+		t.Fatalf("late decision err = %v", err)
+	}
+	if err := h.Decide("w", "nope", "allow", t0); !errors.Is(err, ErrNoSuchApproval) {
+		t.Fatalf("unknown approval err = %v", err)
+	}
+}
+
+func TestAskGivesUpWhenTheContextEndsAndLeavesNothingPending(t *testing.T) {
+	h := NewHub()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if _, ok := h.Ask(ctx, "w", Approval{ID: "a1"}, t0); ok {
+		t.Fatal("ask reported a decision")
+	}
+	if s, _ := h.State("w"); len(s.Approvals) != 0 {
+		t.Fatalf("approvals = %+v", s.Approvals)
+	}
+}
+
+func TestProgressAfterARequestMeansTheAgentAnsweredItselfElsewhere(t *testing.T) {
+	h := NewHub()
+	h.Publish(Event{WorkerID: "w", Kind: KindApprovalRequest, Approval: &Approval{ID: "a1"}})
+	h.Publish(Event{WorkerID: "w", Kind: KindProgress, At: t0})
+	if s, _ := h.State("w"); len(s.Approvals) != 0 {
+		t.Fatalf("approvals = %+v", s.Approvals)
 	}
 }
