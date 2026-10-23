@@ -416,6 +416,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		ListenerPath:       listenerPath,
 		DiscoveryPath:      discoveryPath,
 		ModelsDevURL:       modelprofiles.ModelsDevURL,
+		CodexModels:        modelprofiles.InstalledCodexModels,
 		ModelsObserved:     sc.ObserveModels,
 		Credentials:        credentialStore,
 		LiveRouteEndpoints: modelprofiles.LiveClaudeRouteEndpoints,

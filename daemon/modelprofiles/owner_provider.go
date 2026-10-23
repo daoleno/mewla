@@ -163,6 +163,12 @@ func (o *Owner) projectConnectionModels(profile Profile, discovered discoveryEnt
 		executorID = executorFromClient(profile.Client)
 	}
 	localIDs, localMetadata, _ := loadInstalledCodexModelCatalog()
+	var listedIDs []string
+	var listedMetadata map[string]modelPresentationMetadata
+	if executorID == ExecutorCodex {
+		o.refreshCodexModelsInBackground()
+		listedIDs, listedMetadata, _ = o.codexModels.snapshot()
+	}
 	ids := append([]string(nil), discovered.IDs...)
 	metadata := cloneModelMetadataMap(discovered.Metadata)
 	fallbackMetadata := localMetadata
@@ -176,6 +182,7 @@ func (o *Owner) projectConnectionModels(profile Profile, discovered discoveryEnt
 		appendModelIDs(&ids, sources, discovered.LastGood, ModelSourceLKG)
 		metadata = cloneModelMetadataMap(discovered.LastGoodMeta)
 		if executorID == ExecutorCodex {
+			appendModelIDs(&ids, sources, listedIDs, ModelSourceCodexAppServer)
 			appendModelIDs(&ids, sources, localIDs, ModelSourceCodexCache)
 			for _, entry := range CodexModelCatalogEntries() {
 				appendModelIDs(&ids, sources, []string{entry.Slug}, ModelSourceBundled)
@@ -215,13 +222,18 @@ func (o *Owner) projectConnectionModels(profile Profile, discovered discoveryEnt
 		for id, pinned := range pinnedMetadata {
 			fallbackMetadata[id] = mergeModelPresentationMetadata(pinned, fallbackMetadata[id])
 		}
+		for id, listed := range listedMetadata {
+			fallbackMetadata[id] = mergeModelPresentationMetadata(listed, fallbackMetadata[id])
+		}
 		for _, id := range ids {
-			// The daemon-pinned catalog is the final metadata authority for
-			// managed Codex: the installed CLI cache is volatile (rewritten by
-			// every codex run) and must never decide whether a model identity
-			// has daemon-known display/effort metadata.
-			metadata[id] = mergeModelPresentationMetadata(pinnedMetadata[id],
-				mergeModelPresentationMetadata(metadata[id], localMetadata[id]))
+			// What the installed Codex itself lists wins; the pinned catalog
+			// (model_catalog.go) is the last resort for display/effort
+			// metadata. Codex's models_cache.json sits between them: it is
+			// volatile (rewritten by every codex run) and never decides
+			// whether a model identity has daemon-known metadata.
+			metadata[id] = mergeModelPresentationMetadata(listedMetadata[id],
+				mergeModelPresentationMetadata(pinnedMetadata[id],
+					mergeModelPresentationMetadata(metadata[id], localMetadata[id])))
 		}
 	}
 	providerKey := strings.ToLower(normalizeSpace(profile.ProviderID))

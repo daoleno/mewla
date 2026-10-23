@@ -59,12 +59,16 @@ type codexEffortContract struct {
 	supported     []string
 }
 
-// codexModelCatalog is the daemon-owned versioned Codex model metadata.
-// Entries are pinned from the Codex CLI 0.147 model catalog (runtime-fetched
-// `ModelsResponse` cache shape, verified on the daemon's reference install),
-// the OpenAI Responses reasoning contract, and Codex openai_model_info
-// context windows. The exact slug is the single model identity; there is no
-// hidden compatibility model.
+// codexModelCatalog is the pinned Codex model catalog, and the single place
+// that declares it a last resort: the model picker takes the Codex model list
+// from the installed Codex's app-server (codex_app_server_models.go), then from
+// Codex's models_cache.json, and reaches this table only when neither answered.
+// Entries are shown with Source "bundled". The table also remains the source of
+// the capability envelopes and effort contracts of the models it lists (launch
+// admission and session bindings), which Codex does not report. Entries were
+// pinned from the Codex CLI 0.147 model catalog, the OpenAI Responses reasoning
+// contract, and Codex openai_model_info context windows. The exact slug is the
+// single model identity; there is no hidden compatibility model.
 var codexModelCatalog = []CodexModelMetadata{
 	{
 		Slug: "gpt-5.6-sol", DisplayName: "GPT-5.6-Sol",

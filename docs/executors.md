@@ -168,6 +168,15 @@ catalog when it can. Choosing a connection sets no default model: each CLI
 keeps its own (for Claude Code, whatever you chose with `/model`). A model
 picked for one Session applies to that Session only.
 
+When a provider cannot list its models, the Codex list comes from the installed
+Codex itself (its app-server answers `model/list`, so new Codex models appear
+without a Mewla update). If Codex does not answer, Mewla uses Codex's
+`models_cache.json`, and last a short list built into the daemon. Each model in
+the list shows which of these it came from (`codex_app_server`, `codex_cache` or
+`bundled`); the daemon logs when Codex's app-server did not answer. Context
+windows, names and prices of other models come from the public models.dev
+catalog.
+
 The Model Provider and Brain's executor are separate choices; changing one
 never changes the other.
 
