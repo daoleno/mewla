@@ -843,10 +843,27 @@ func (w *Watcher) SetExecutorResolver(resolve func(command string) string) {
 	w.executorResolver = resolve
 }
 
+// SetStructuredInterrupt installs how a running turn is stopped through the
+// agent's own interface. stop reports handled=false for a Session without one,
+// which then gets Ctrl-C.
+func (w *Watcher) SetStructuredInterrupt(stop func(sessionID string) (handled bool, err error)) {
+	if w == nil {
+		return
+	}
+	w.mu.RLock()
+	owner := w.sessionInput
+	w.mu.RUnlock()
+	if owner != nil {
+		owner.mu.Lock()
+		owner.interrupt = stop
+		owner.mu.Unlock()
+	}
+}
+
 // SetStructuredInput installs how a message reaches a Session through its
 // agent's own interface. send reports handled=false for a Session without one,
 // which is then typed into its pane.
-func (w *Watcher) SetStructuredInput(send func(sessionID, payload, receipt string) (handled bool, err error)) {
+func (w *Watcher) SetStructuredInput(send StructuredSender) {
 	if w == nil {
 		return
 	}
@@ -2851,31 +2868,6 @@ func allowedTmuxKey(key string) bool {
 	}
 }
 
-// SendControlKey sends one allowlisted control key to a session pane (used by
-// the managed Codex handoff to interrupt a running turn). Only "C-c" is
-// admitted; every other key keeps the tight WS surface.
-func (w *Watcher) SendControlKey(sessionID, key string) error {
-	if key != "C-c" {
-		return fmt.Errorf("unsupported control key %q", key)
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return fmt.Errorf("missing session id")
-	}
-	identity, known := w.targetForSession(sessionID)
-	if !known {
-		return fmt.Errorf("target provider could not be proven; control key was not sent")
-	}
-	resolver := w.targetForSession
-	action := func() error {
-		if err := guardTargetIdentity(resolver, sessionID, identity); err != nil {
-			return err
-		}
-		return tmuxCommand(w.socketPathFor(sessionID), "send-keys", "-t", sessionID, key).Run()
-	}
-	return w.sessionInputOwner().serialized(sessionID, action)
-}
-
 // WaitForPaneProcessExit waits until the pane's provider process (processID)
 // is gone or the timeout elapses. Returns true only when the process exited.
 func (w *Watcher) WaitForPaneProcessExit(sessionID string, processID int, timeout time.Duration) bool {
@@ -3900,8 +3892,9 @@ func commandOutputSuffix(output []byte) string {
 	return ": " + text
 }
 
-// SendAction executes a predefined action on an owned tmux pane. The only
-// production action is "pause" (Ctrl-C), sent by the app's stop control.
+// SendAction executes a predefined action on an owned pane. The only
+// production action is "pause", sent by the app's stop control: an agent with a
+// typed way to stop its turn is stopped there, any other gets Ctrl-C.
 func (w *Watcher) SendAction(sessionID, action string) error {
 	var args []string
 	switch action {
@@ -3910,6 +3903,9 @@ func (w *Watcher) SendAction(sessionID, action string) error {
 	default:
 		return fmt.Errorf("unknown action: %s", action)
 	}
+	w.mu.RLock()
+	owner := w.sessionInput
+	w.mu.RUnlock()
 	identity, known := w.targetForSession(sessionID)
 	if !known {
 		return fmt.Errorf("target provider could not be proven; action was not sent")
@@ -3918,6 +3914,11 @@ func (w *Watcher) SendAction(sessionID, action string) error {
 	send := func() error {
 		if err := guardTargetIdentity(resolver, sessionID, identity); err != nil {
 			return err
+		}
+		if owner != nil && owner.interrupt != nil {
+			if handled, err := owner.interrupt(sessionID); handled {
+				return err
+			}
 		}
 		return tmuxCommand(w.socketPathFor(sessionID), args...).Run()
 	}

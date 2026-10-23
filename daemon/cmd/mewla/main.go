@@ -368,13 +368,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 		adapters.Register(claudeadapter.Provider, claudeadapter.Adapter{SettingsPath: claudeSettingsPath(authManager.StorageDir())})
 	}
 	codexControlDir := filepath.Join(authManager.StorageDir(), "codex-ctl")
+	var codexFollow *codexEvents
 	if err := os.MkdirAll(codexControlDir, 0o700); err != nil {
 		log.Printf("WARN agent events: cannot create %s, Codex Workers will be followed from their transcript: %v", codexControlDir, err)
 	} else {
 		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir})
-		codexEvents := newCodexEvents(ctx, eventHub)
-		w.ObserveSessions(codexEvents.Observe)
-		w.SetStructuredInput(codexEvents.send)
+		codexFollow = newCodexEvents(ctx, eventHub)
+		w.ObserveSessions(codexFollow.Observe)
+		w.SetStructuredInput(codexFollow.send)
+		w.SetStructuredInterrupt(codexFollow.interrupt)
 	}
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,
@@ -454,6 +456,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 	})
 	if err != nil {
 		return fmt.Errorf("start model profiles owner: %w", err)
+	}
+	if codexFollow != nil {
+		// A Codex Worker launched on a model Provider's route has its own
+		// app-server; the route table knows its socket.
+		codexFollow.SetSocketSource(profileOwner.CodexControlSocket)
 	}
 	for _, n := range profileOwner.RestoreContractNotices() {
 		log.Printf("WARN model settings changed for session %s; keeping its running configuration until an explicit model switch (%s)", n.SessionID, n.Reason)
