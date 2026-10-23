@@ -58,6 +58,13 @@ export async function finishPluginReturn(
   if (Date.parse(pending.flow.expires) <= Date.now()) throw new Error("This connection expired. Connect again.");
   return send(pending.serverId, { action: "connect_finish", flow_id: pending.flow.id, callback });
 }
+export const GOOGLE_DATA_USE_URL = "https://mewla.ai/privacy/#google";
+/** Google asks for this notice in the app, next to where access is offered. */
+export function dataUseNotice(integration: string): string | null {
+  return integration === "google-calendar" || integration === "gmail"
+    ? "Mewla's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements."
+    : null;
+}
 /** The line under "Waiting for <service>". Google's review of Mewla blocks accounts that aren't on its early-access list on Google's own page, which never comes back, so say so while waiting. */
 export function waitingDetail(integration: string | undefined, serviceName: string): string {
   const base = `Finish signing in on ${serviceName}'s page. This updates when you're back.`;

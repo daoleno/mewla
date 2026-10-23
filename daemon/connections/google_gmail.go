@@ -296,7 +296,9 @@ func gmailReadMessage(c *googleCall, args map[string]any) (any, error) {
 	if err := c.do("", "GET", "/gmail/v1/users/me/messages/"+pathID(argString(args, "message_id")), url.Values{"format": {"full"}}, nil, &message); err != nil {
 		return nil, err
 	}
-	return message.full(gmailBodyLimit), nil
+	out := message.full(gmailBodyLimit)
+	out["content_notice"] = untrustedNotice
+	return out, nil
 }
 
 func gmailReadThread(c *googleCall, args map[string]any) (any, error) {
@@ -316,7 +318,7 @@ func gmailReadThread(c *googleCall, args map[string]any) (any, error) {
 	for i := range thread.Messages {
 		rows = append(rows, thread.Messages[i].full(gmailThreadBody))
 	}
-	return map[string]any{"thread_id": thread.ID, "message_count": total, "messages": rows, "older_messages_left_out": total - len(rows)}, nil
+	return map[string]any{"thread_id": thread.ID, "message_count": total, "messages": rows, "older_messages_left_out": total - len(rows), "content_notice": untrustedNotice}, nil
 }
 
 type gmailLabel struct {

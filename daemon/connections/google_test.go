@@ -182,6 +182,9 @@ func TestGmailReadMessageDecodesTheBody(t *testing.T) {
 		return out
 	}
 	plain := read("plain")
+	if plain["content_notice"] != untrustedNotice {
+		t.Fatal("mail body is not marked as untrusted")
+	}
 	if plain["body"] != "Hello\r\nworld" || plain["body_format"] != "text" || plain["subject"] != "Hi" {
 		t.Fatalf("plain body: %v", plain)
 	}

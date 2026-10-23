@@ -277,7 +277,9 @@ func calendarGetEvent(c *googleCall, args map[string]any) (any, error) {
 	if err := c.do("", "GET", calendarPath(args)+"/events/"+pathID(argString(args, "event_id")), nil, nil, &event); err != nil {
 		return nil, err
 	}
-	return event.shaped(true), nil
+	out := event.shaped(true)
+	out["content_notice"] = untrustedNotice
+	return out, nil
 }
 
 func calendarFreeBusy(c *googleCall, args map[string]any) (any, error) {
