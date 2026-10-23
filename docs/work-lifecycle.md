@@ -1,16 +1,19 @@
 # Mewla Work Lifecycle
 
 Mewla's durable coordination model has one `Work` aggregate with at most one
-`Attempt`, one `Wake`, one `Review`, and append-only `Event` records. They are persisted by one lifecycle authority under
-`state/lifecycle/`; current rows and append-only scheduler events commit in one
-transaction. Provider, tmux, PID, transcript, and UI state are evidence or
-projections, never lifecycle truth.
+`Attempt`, one `Wake`, one `Review`, and append-only `Event` records. They are persisted by one lifecycle authority in
+the `lc_work` and `lc_event` tables of `state/brain.db` (see
+[the state store](internal/state-store.md)); a command's new Events, the Work
+row they reduce into and the next sequence number commit in one transaction.
+Provider, tmux, PID, transcript, and UI state are evidence or projections,
+never lifecycle truth.
 
-This schema is intentionally breaking. Normal startup accepts only the current
-transaction-image schema; it never falls back to an earlier scheduler directory
-or reconstructs execution state from presentation. There is no supported
-old-schema migration or offline upgrade command; see Worker Upgrade below for
-the fresh-state maintenance handoff. This lifecycle candidate adds no migration.
+Normal startup reads the database and nothing else; it never falls back to an
+earlier scheduler directory or reconstructs execution state from presentation.
+The one exception is the first start after upgrading from the whole-file JSON
+store, which moves `state/lifecycle/state.json` into the database once (see the
+state store page). Schemas older than that image are still not migrated; see
+Worker Upgrade below for the fresh-state maintenance handoff.
 
 ## Work
 

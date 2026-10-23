@@ -4,7 +4,7 @@ Calendar is Mewla's time view. Brain owns intent and lifecycle, Calendar owns wh
 
 ## Model
 
-The daemon is the source of truth. It stores a versioned, private document at `~/.mewla/calendar/calendar.json`; mobile clients sync snapshots over the authenticated WebSocket. Each item has one explicit kind:
+The daemon is the source of truth. It stores a private SQLite database at `~/.mewla/calendar/calendar.db` (one row per item, one per run; see [the state store](state-store.md)); mobile clients sync snapshots over the authenticated WebSocket. Each item has one explicit kind:
 
 - `event`: `start_at` and `end_at`
 - `reminder`: `notify_at`

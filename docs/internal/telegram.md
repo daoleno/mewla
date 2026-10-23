@@ -142,12 +142,15 @@ failures remain explicit.
 
 ## Durable Delivery
 
-The private `telegram/state.json` schema is 4. Schema 1/2/3 migrations preserve
-the owner, bot, cursor, outbox and successful topic identities. Optional schema-4
+The private `telegram/state.db` holds schema 4 (the scalars in one row, every
+map entry and list element in a row of its own; see
+[the state store](state-store.md)). Schema 1/2/3 `state.json` files are brought
+to 4 as they are moved in, preserving the owner, bot, cursor, outbox and
+successful topic identities. Optional schema-4
 fields contain Brain destinations, callback routes/IDs, chooser order and reply
-destinations. No token is present in this file; `telegram/token` is a separate
-0600 file. State replacement is atomic and failed persistence cannot become
-in-memory routing authority.
+destinations. No token is present in the database; `telegram/token` is a separate
+0600 file. A mutation commits in one transaction and failed persistence cannot
+become in-memory routing authority.
 
 Inbound receipts use `telegram:update:<bot-id>:<update-id>`. Brain admissions
 are durable in the real Brain Store. The Telegram cursor advances only after
