@@ -8,6 +8,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/shellquote"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // Provider is the executor provider this adapter serves.
@@ -35,10 +36,16 @@ func (Adapter) Descriptor() agentevents.Descriptor {
 	}
 }
 
-// PrepareLaunch adds the hook file to a fresh launch. A command that already
-// carries its own --settings is left alone, so the user's choice stands and
+// PrepareLaunch gives a fresh launch its own session id, so its conversation
+// is known from the first moment, and the hook file. A command that already
+// names or continues a session keeps it, and one that carries its own
+// --settings is left without the hook file, so the user's choice stands and
 // that Worker is followed by the fallback.
 func (a Adapter) PrepareLaunch(command string) (string, error) {
+	command, err := work.EnsureClaudeSessionLaunchCommand(command)
+	if err != nil {
+		return "", err
+	}
 	if a.SettingsPath == "" || hasSettingsFlag(command) {
 		return command, nil
 	}

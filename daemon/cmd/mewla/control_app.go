@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/brain"
@@ -61,7 +60,6 @@ type controlWatcher interface {
 
 type controlApp struct {
 	agentEvents     *agentEventService
-	adapters        *agentevents.Registry
 	browsers        *browser.Manager
 	connections     *connections.Manager
 	computers       *computers.Manager
@@ -1675,20 +1673,7 @@ func (a *controlApp) spawnExecutorID(req control.Request) string {
 	return ""
 }
 
-// resolveSpawnCommand builds the launch command for a spawn and lets the
-// agent's adapter add what lets Mewla follow the Worker from its first moment.
 func (a *controlApp) resolveSpawnCommand(req control.Request) (string, error) {
-	command, err := a.resolveSpawnBaseCommand(req)
-	if err != nil || req.Hidden || a == nil || a.adapters == nil {
-		return command, err
-	}
-	if adapter, ok := a.adapters.For(work.InferWorkerProvider(command)); ok {
-		return adapter.PrepareLaunch(command)
-	}
-	return command, nil
-}
-
-func (a *controlApp) resolveSpawnBaseCommand(req control.Request) (string, error) {
 	if a == nil || a.execs == nil {
 		if req.Command != "" {
 			if req.Hidden {
@@ -1758,6 +1743,7 @@ func controlWorker(worker *classifier.Worker) control.Worker {
 		LeaseSeconds:        worker.LeaseSeconds,
 		Cwd:                 worker.Cwd,
 		Command:             worker.Command,
+		ExecutorID:          worker.ExecutorID,
 		UpdatedAt:           worker.UpdatedAt,
 		LastSeenAt:          lastSeenAt,
 		Hidden:              worker.Hidden,

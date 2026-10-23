@@ -267,6 +267,7 @@ type Watcher struct {
 	delegated             map[string]bool
 	activityProbe         classifier.ActivityProbe
 	executorResolver      func(command string) string
+	launchAdapter         func(executorID, command string) (string, error)
 	providerActivityProbe ProviderActivityProbe
 	agentTools            func(command string, worker bool) string
 	nextEpoch             int64
@@ -838,6 +839,18 @@ func (w *Watcher) SetExecutorResolver(resolve func(command string) string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.executorResolver = resolve
+}
+
+// SetLaunchAdapter installs what every visible session's command gains from the
+// agent's adapter, so Mewla follows the agent from its first moment however the
+// session was created.
+func (w *Watcher) SetLaunchAdapter(adapt func(executorID, command string) (string, error)) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.launchAdapter = adapt
 }
 
 // SetAgentTools installs what every visible agent launch gains on this
@@ -3996,6 +4009,18 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 			return "", err
 		}
 		opts.Command = command
+	}
+	if !opts.Hidden {
+		w.mu.RLock()
+		adapt := w.launchAdapter
+		w.mu.RUnlock()
+		if adapt != nil {
+			command, err := adapt(opts.ExecutorID, opts.Command)
+			if err != nil {
+				return "", err
+			}
+			opts.Command = command
+		}
 	}
 	if !opts.Hidden {
 		w.mu.RLock()
