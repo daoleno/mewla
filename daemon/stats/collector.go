@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -29,23 +28,21 @@ import (
 // and Pi data files and builds aggregated stats. All reads are read-only —
 // it never modifies source files.
 type Collector struct {
-	usageCacheDir            string
-	mu                       sync.RWMutex
-	refreshMu                sync.Mutex
-	codexRolloutCacheMu      sync.Mutex
-	cached                   *StatsResponse
-	codexRolloutCache        map[string]codexRolloutCacheEntry
-	pricingRefresh           *pricingRefresher
-	codexUsageClient         codexUsageHTTPClient
-	codexUsageEndpoint       string
-	codexUsageTimeout        time.Duration
-	now                      func() time.Time
-	lastCodexSubscription    *CodexSubscriptionUsage
-	lastCodexAuthFingerprint string
-	warningsMu               sync.Mutex
-	warnings                 map[string]string
-	openCodeUsageMu          sync.Mutex
-	openCodeUsage            map[string]openCodeSessionUsage
+	usageCacheDir         string
+	mu                    sync.RWMutex
+	refreshMu             sync.Mutex
+	codexRolloutCacheMu   sync.Mutex
+	cached                *StatsResponse
+	codexRolloutCache     map[string]codexRolloutCacheEntry
+	pricingRefresh        *pricingRefresher
+	readCodexAccount      codexAccountReader
+	codexUsageTimeout     time.Duration
+	now                   func() time.Time
+	lastCodexSubscription *CodexSubscriptionUsage
+	warningsMu            sync.Mutex
+	warnings              map[string]string
+	openCodeUsageMu       sync.Mutex
+	openCodeUsage         map[string]openCodeSessionUsage
 }
 
 // warnf logs a degraded-state warning once per change. Refreshes repeat every
@@ -68,13 +65,12 @@ func (c *Collector) warnf(key, format string, args ...any) {
 func NewCollector() *Collector {
 	loadPricingCache(homeDir())
 	return &Collector{
-		usageCacheDir:      filepath.Join(homeDir(), ".cache", "mewla", "usage-v1"),
-		codexUsageClient:   &http.Client{Timeout: 8 * time.Second},
-		codexUsageEndpoint: codexUsageEndpoint,
-		codexUsageTimeout:  8 * time.Second,
-		now:                time.Now,
-		codexRolloutCache:  make(map[string]codexRolloutCacheEntry),
-		pricingRefresh:     newPricingRefresher(),
+		usageCacheDir:     filepath.Join(homeDir(), ".cache", "mewla", "usage-v1"),
+		readCodexAccount:  readCodexAccountWithAppServer,
+		codexUsageTimeout: 15 * time.Second,
+		now:               time.Now,
+		codexRolloutCache: make(map[string]codexRolloutCacheEntry),
+		pricingRefresh:    newPricingRefresher(),
 	}
 }
 
@@ -435,12 +431,12 @@ func (c *Collector) refresh() {
 	}
 
 	// Publish local history before the bounded network lookup so an unavailable
-	// Codex endpoint never delays or removes the existing Stats experience.
+	// Codex lookup never delays or removes the existing Stats experience.
 	c.mu.Lock()
 	c.cached = &StatsResponse{Type: "stats_data", Ranges: ranges}
 	c.mu.Unlock()
 
-	subscription := c.collectCodexSubscription(home)
+	subscription := c.collectCodexSubscription()
 	c.mu.Lock()
 	c.cached = &StatsResponse{
 		Type:              "stats_data",
