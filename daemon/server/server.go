@@ -3402,6 +3402,11 @@ func logPushFailure(kind, target string, err error) {
 		debuglog.Printf("push: %s %s skipped: %v", kind, target, err)
 		return
 	}
+	if errors.Is(err, push.ErrCredentials) {
+		// The push client already logged this once for the device.
+		debuglog.Printf("push: %s %s failed: %v", kind, target, err)
+		return
+	}
 	log.Printf("push: %s %s failed: %v", kind, target, err)
 }
 
