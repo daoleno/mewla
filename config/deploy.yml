@@ -43,7 +43,7 @@ env:
   clear:
     # Public OAuth client ID (release/plugin-publishers.json), Device Flow on.
     MEWLA_ACCOUNT_GITHUB_CLIENT_ID: Ov23liBbGJrVUAJyzDHg
-    MEWLA_ACCOUNT_GOOGLE_CLIENT_ID: GOOGLE_CLIENT_ID_PENDING
+    MEWLA_ACCOUNT_GOOGLE_CLIENT_ID: 559015099660-8d5a9ihqqq9blsdq7s3ds2dhlcjo06an.apps.googleusercontent.com
   secret:
     - MEWLA_ACCOUNT_CLOUDFLARE_TOKEN
     # Mewla's Google OAuth client secret and the key that signs refresh
