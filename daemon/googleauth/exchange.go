@@ -26,10 +26,30 @@ import (
 const CallbackPath = "/google/callback"
 const scopeBase = "https://www.googleapis.com/auth/"
 
-func Scopes(writes bool) []string {
-	out := []string{"openid", "email", scopeBase + "drive.readonly", scopeBase + "gmail.readonly", scopeBase + "calendar.readonly"}
-	if writes {
-		out = append(out, scopeBase+"drive.file", scopeBase+"gmail.send", scopeBase+"calendar.events")
+// Services are the two plugins this exchange signs in. Each asks Google for
+// only its own scopes, so a Calendar sign-in never holds mail access.
+const (
+	Calendar = "calendar"
+	Gmail    = "gmail"
+)
+
+// Scopes returns the fixed scope set for a service, or nil for an unknown
+// one. Writes adds the scope that lets the plugin change things.
+func Scopes(service string, writes bool) []string {
+	out := []string{"openid", "email"}
+	switch service {
+	case Calendar:
+		out = append(out, scopeBase+"calendar.calendarlist.readonly", scopeBase+"calendar.events.readonly", scopeBase+"calendar.freebusy")
+		if writes {
+			out = append(out, scopeBase+"calendar.events")
+		}
+	case Gmail:
+		out = append(out, scopeBase+"gmail.readonly")
+		if writes {
+			out = append(out, scopeBase+"gmail.modify")
+		}
+	default:
+		return nil
 	}
 	return out
 }
@@ -37,6 +57,7 @@ func Scopes(writes bool) []string {
 type Start struct {
 	PublicKey string `json:"public_key"`
 	Nonce     string `json:"nonce"`
+	Service   string `json:"service"`
 	Writes    bool   `json:"writes"`
 }
 type Session struct {
@@ -65,6 +86,7 @@ type receipt struct {
 	ClientID  string   `json:"client_id"`
 	Scopes    []string `json:"scopes"`
 	Nonce     string   `json:"nonce"`
+	Service   string   `json:"service"`
 }
 type pending struct {
 	Session
@@ -226,7 +248,7 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !readJSON(w, r, &input) {
 			return
 		}
-		if _, err := decodePublic(input.PublicKey); err != nil || len(input.Nonce) < 32 || len(input.Nonce) > 128 {
+		if _, err := decodePublic(input.PublicKey); err != nil || len(input.Nonce) < 32 || len(input.Nonce) > 128 || Scopes(input.Service, false) == nil {
 			http.Error(w, "Invalid binding", 400)
 			return
 		}
@@ -258,7 +280,7 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.cookie = oauth2.GenerateVerifier()
 		http.SetCookie(w, &http.Cookie{Name: "mewla_google_" + id, Value: f.cookie, Path: "/google/callback", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
 		config := e.oauth
-		config.Scopes = Scopes(f.start.Writes)
+		config.Scopes = Scopes(f.start.Service, f.start.Writes)
 		http.Redirect(w, r, config.AuthCodeURL(id, oauth2.S256ChallengeOption(f.verifier), oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent")), 302)
 	case CallbackPath:
 		cookie, err := r.Cookie("mewla_google_" + id)
@@ -274,19 +296,29 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			defer cancel()
 			token, err := e.oauth.Exchange(context.WithValue(ctx, oauth2.HTTPClient, e.client), r.URL.Query().Get("code"), oauth2.VerifierOption(f.verifier))
 			if err == nil && token.AccessToken != "" && token.RefreshToken != "" && len(token.AccessToken) <= 16384 && len(token.RefreshToken) <= 16384 {
-				scopes := Scopes(f.start.Writes)
+				scopes := Scopes(f.start.Service, f.start.Writes)
 				if granted, ok := token.Extra("scope").(string); ok {
 					scopes = strings.Fields(granted)
 				}
-				binding := receipt{PublicKey: f.start.PublicKey, TokenHash: hash(token.RefreshToken), ProofHash: hash(f.proof), ClientID: e.config.ClientID, Scopes: scopes, Nonce: f.start.Nonce}
+				binding := receipt{PublicKey: f.start.PublicKey, TokenHash: hash(token.RefreshToken), ProofHash: hash(f.proof), ClientID: e.config.ClientID, Scopes: scopes, Nonce: f.start.Nonce, Service: f.start.Service}
 				f.Ciphertext, err = Seal(Credential{Token: token, Scopes: scopes, Proof: f.proof, Receipt: e.sign(binding), Nonce: f.start.Nonce}, f.start.PublicKey)
 				if err == nil {
 					f.Status = "connected"
 				}
 			}
 		}
-		// Browser carries no code/token/retrieval capability back to the app.
-		http.Redirect(w, r, "mewla://plugins", http.StatusFound)
+		// The browser carries no code, token or retrieval capability. A phone
+		// goes back to the app; any other browser tab is told it can close.
+		if phone(r.UserAgent()) {
+			http.Redirect(w, r, "mewla://plugins", http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		page := donePage
+		if f.Status != "connected" {
+			page = failedPage
+		}
+		_, _ = io.WriteString(w, page)
 	case "/google/status":
 		if !hmac.Equal([]byte(r.Header.Get("Authorization")), []byte("Bearer "+f.start.Nonce)) {
 			http.Error(w, "Flow binding rejected", 403)
@@ -312,6 +344,14 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 }
+func phone(agent string) bool {
+	return strings.Contains(agent, "Android") || strings.Contains(agent, "iPhone") || strings.Contains(agent, "iPad")
+}
+
+const pageHead = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mewla</title><style>body{font:16px system-ui,sans-serif;max-width:28rem;margin:18vh auto;padding:0 1rem;text-align:center}</style>`
+const donePage = pageHead + `<h1>Signed in to Google</h1><p>You can close this tab and go back to Mewla.</p>`
+const failedPage = pageHead + `<h1>Google was not connected</h1><p>Close this tab, go back to Mewla and connect again.</p>`
+
 func (e *Exchange) refresh(w http.ResponseWriter, r *http.Request) {
 	var input Refresh
 	if !readJSON(w, r, &input) {
@@ -327,6 +367,10 @@ func (e *Exchange) refresh(w http.ResponseWriter, r *http.Request) {
 	token, err := e.oauth.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, e.client), &oauth2.Token{RefreshToken: input.RefreshToken}).Token()
 	if err != nil || token.AccessToken == "" || len(token.AccessToken) > 16384 || len(token.RefreshToken) > 16384 {
 		http.Error(w, "Reconnect this Google account", 401)
+		return
+	}
+	if Scopes(binding.Service, false) == nil {
+		http.Error(w, "Refresh binding rejected", 403)
 		return
 	}
 	binding.TokenHash = hash(token.RefreshToken)

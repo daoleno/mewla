@@ -123,11 +123,11 @@ func (m *Manager) configureOAuth(in *Input) (Response, error) {
 		return Response{}, errors.New("provide an OAuth client and registered daemon /plugins/oauth/callback URL")
 	}
 	switch in.Integration {
-	case "github", "slack", "google", "notion", "linear", "mcp":
+	case "github", "slack", "notion", "linear", "mcp":
 	default:
 		return Response{}, errors.New("OAuth is not supported for this plugin")
 	}
-	if (in.Integration == "google" || in.Integration == "slack" || in.Integration == "github") && in.OAuthClient.ClientID == "" {
+	if (in.Integration == "slack" || in.Integration == "github") && in.OAuthClient.ClientID == "" {
 		return Response{}, errors.New("this service requires a publisher-owned client ID")
 	}
 	if in.Integration == "mcp" && in.OAuthClient.ClientID != "" {
@@ -143,7 +143,7 @@ func (m *Manager) configureOAuth(in *Input) (Response, error) {
 }
 func (m *Manager) oauthConfigured() []string {
 	configured := []string{}
-	for _, kind := range []string{"github", "slack", "google", "notion", "linear", "mcp"} {
+	for _, kind := range []string{"github", "slack", "notion", "linear", "mcp"} {
 		if _, ok, err := m.vault.Get("oauth-client:" + kind); err == nil && ok {
 			configured = append(configured, kind)
 		}
@@ -204,8 +204,6 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	switch in.Integration {
 	case "slack":
 		endpoint = "https://slack.com/api"
-	case "google":
-		endpoint = "https://www.googleapis.com"
 	case "notion":
 		endpoint = "https://mcp.notion.com/mcp"
 	case "linear":
@@ -236,10 +234,6 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		if in.AllowWrites {
 			r.Account.Scopes = append(r.Account.Scopes, "chat:write")
 		}
-	} else if in.Integration == "google" {
-		r.Account.AuthMethod = "oauth"
-		meta = oauthMetadata{Issuer: "https://accounts.google.com", AuthorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth", TokenEndpoint: "https://oauth2.googleapis.com/token", RevocationEndpoint: "https://oauth2.googleapis.com/revoke", AuthMethods: []string{"client_secret_post"}}
-		r.Account.Scopes = googleScopes(in.AllowWrites)
 	} else {
 		meta, err = m.discoverOAuth(ctx, r)
 		if err != nil {
@@ -317,9 +311,6 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
 	if r.OAuth.Resource != "" {
 		options = append(options, oauth2.SetAuthURLParam("resource", r.OAuth.Resource))
-	}
-	if in.Integration == "google" {
-		options = append(options, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 	}
 	config := oauthConfig(r, client.ClientSecret)
 	if in.Integration == "slack" {

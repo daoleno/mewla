@@ -85,6 +85,7 @@ export const pluginJobs: Record<string, { read: string; write: string; example: 
   linear: { read: "Read issues, projects and team activity", write: "Create and update issues, projects and comments", example: "Ask Brain to summarize the issues assigned to you." },
   onlora: { read: "Search openly licensed images, fonts, sounds and video, and read projects, assets and files", write: "Generate and edit images, generate music, voice and video, add assets and write project files. Onlora counts generation against your quota", example: "Ask Brain to start a project and generate a character sheet." },
   cloudflare: { read: "Search Cloudflare’s API and docs, and see your account", write: "Call any Cloudflare API your sign-in allows, reads included, such as listing Workers, managing R2 buckets or editing DNS", example: "Allow changes, then ask Brain to list your Workers and R2 buckets." },
-  google: { read: "Find files, read email and check calendars", write: "Send email, update files and manage events", example: "Ask Brain to summarize your upcoming calendar events." },
+  "google-calendar": { read: "List your calendars and events and check when you are free", write: "Create, change and delete events and reply to invitations", example: "Ask Brain what is on your calendar tomorrow and when you are free on Friday." },
+  gmail: { read: "Search and read your email and labels", write: "Draft and send email, mark messages read, archive and label them", example: "Ask Brain to find the latest email about your flight and summarize it." },
   slack: { read: "Find conversations and read channel messages", write: "Send and update messages", example: "Ask Brain to summarize a channel’s recent discussion." },
 };

@@ -29,10 +29,11 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 			}
 		}
 	}
-	// Google is listed for no one, even with an account or a configured client.
-	expected := map[string]bool{"github": false, "slack": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "mcp": true, "openapi": true}
+	// Google signs in only through Mewla's exchange: no origin, no sign-in,
+	// whatever an operator saved on the daemon.
+	expected := map[string]bool{"github": false, "slack": false, "google-calendar": false, "gmail": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "mcp": true, "openapi": true}
 	assertAvailability(expected)
-	for _, kind := range []string{"github", "slack", "google"} {
+	for _, kind := range []string{"github", "slack", "google-calendar", "gmail"} {
 		_, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: kind}})
 		if err == nil || !strings.Contains(err.Error(), "sign-in is not set up yet") {
 			t.Fatalf("%s: %v", kind, err)
@@ -42,23 +43,17 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 		t.Fatal("unavailable connection created state")
 	}
 	GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "public-github", "public-slack", "https://publisher.example"
-	expected["github"], expected["slack"] = true, true
-	m.records["existing-google"] = &record{Account: Account{ID: "existing-google", Integration: "google", Enabled: true, Status: "connected"}}
+	expected["github"], expected["slack"], expected["google-calendar"], expected["gmail"] = true, true, true, true
+	m.records["existing-gmail"] = &record{Account: Account{ID: "existing-gmail", Integration: "gmail", Enabled: true, Status: "connected"}}
 	assertAvailability(expected)
 	GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "", "", ""
-	for _, kind := range []string{"github", "slack", "google"} {
+	for _, kind := range []string{"github", "slack"} {
 		mustHandle(t, m, Request{Action: "oauth_configure", Input: &Input{Integration: kind, OAuthClient: &OAuthClientConfig{ClientID: "operator", ClientSecret: "private", RedirectURL: "https://daemon.example/plugins/oauth/callback"}}})
 	}
+	expected["google-calendar"], expected["gmail"] = false, false
 	assertAvailability(expected)
-	if m.unavailableReason("google") != "" {
-		t.Fatal("configured Google client unavailable")
-	}
-	// Incomplete saved configuration must not offer a connection that cannot exchange a code.
-	if err := m.vault.Set("oauth-client:google", `{"client_id":"operator","redirect_url":"https://daemon.example/plugins/oauth/callback"}`); err != nil {
-		t.Fatal(err)
-	}
-	if m.unavailableReason("google") == "" {
-		t.Fatal("incomplete Google client offered")
+	if _, err := m.Handle(context.Background(), Request{Action: "oauth_configure", Input: &Input{Integration: "gmail", OAuthClient: &OAuthClientConfig{ClientID: "operator", ClientSecret: "private", RedirectURL: "https://daemon.example/plugins/oauth/callback"}}}); err == nil {
+		t.Fatal("an operator client was accepted for Google")
 	}
 	// Existing linked accounts remain accessible when new sign-in is unavailable.
 	if len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 1 {
@@ -98,5 +93,32 @@ func TestRetiredIntegrationsAreRemovedOnStart(t *testing.T) {
 	again, err := New(dir)
 	if err != nil || len(again.records) != 1 {
 		t.Fatalf("removal did not persist: %v", err)
+	}
+}
+
+// A daemon that still holds the old single Google Workspace account deletes
+// it, with its saved key, when it starts.
+func TestOldGoogleWorkspaceAccountIsRemovedOnStart(t *testing.T) {
+	dir := t.TempDir()
+	m, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.records["old"] = &record{Account: Account{ID: "old", Integration: "google", Enabled: true, Status: "connected"}, Grants: map[string]string{}}
+	if err := m.vault.Set("integration:old", "token"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.save(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := New(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restarted.records) != 0 {
+		t.Fatalf("records after start: %v", restarted.records)
+	}
+	if _, ok, _ := restarted.vault.Get("integration:old"); ok {
+		t.Fatal("old Google credential kept")
 	}
 }

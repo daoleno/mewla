@@ -135,7 +135,7 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 		m.mu.Lock()
 		body, err = m.finishMCP(accountID, tool, sensitive, outcome, false)
 		m.mu.Unlock()
-	} else if snapshot.Account.Integration == "google" {
+	} else if isGoogle(snapshot.Account.Integration) {
 		body, err = m.invokeGoogle(ctx, &snapshot, secret, t, checked)
 	} else {
 		body, err = m.invokeHTTP(ctx, &snapshot, secret, t, checked, &headers)

@@ -18,7 +18,7 @@ import (
 func TestNativeReturnBoundToFlowAndServer(t *testing.T) {
 	m, _ := New(t.TempDir())
 	other, _ := New(t.TempDir())
-	r := &record{Account: Account{ID: "pending", Integration: "google", Name: "Google", Enabled: true, Status: "authorization_required"}, Grants: map[string]string{}}
+	r := &record{Account: Account{ID: "pending", Integration: "gmail", Name: "Gmail", Enabled: true, Status: "authorization_required"}, Grants: map[string]string{}}
 	m.records[r.Account.ID] = r
 	m.pending["state-a"] = &oauthFlow{ID: r.Account.ID, Mobile: true, Expires: time.Now().Add(time.Minute)}
 	f := &connectFlow{ConnectFlow: ConnectFlow{ID: "flow-a", Status: "waiting", AccountID: r.Account.ID, Expires: time.Now().Add(time.Minute)}, state: "state-a"}

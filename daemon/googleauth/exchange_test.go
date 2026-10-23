@@ -40,7 +40,7 @@ func TestBoundExchangeRefreshAndBrowserSecrecy(t *testing.T) {
 	public, private, _ := box.GenerateKey(rand.Reader)
 	other, otherPrivate, _ := box.GenerateKey(rand.Reader)
 	nonce := oauth2.GenerateVerifier()
-	w := post(e, "/google/start", Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: nonce})
+	w := post(e, "/google/start", Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: nonce, Service: Gmail, Writes: true})
 	var session Session
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &session) != nil {
 		t.Fatal("start failed", w.Body.String())
@@ -62,6 +62,9 @@ func TestBoundExchangeRefreshAndBrowserSecrecy(t *testing.T) {
 	if location.Host != "accounts.google.com" || location.Query().Get("code_challenge") != oauth2.S256ChallengeFromVerifier(flow.verifier) {
 		t.Fatal("official browser entry missing PKCE")
 	}
+	if got := location.Query().Get("scope"); got != strings.Join(Scopes(Gmail, true), " ") || strings.Contains(got, "calendar") {
+		t.Fatalf("Gmail sign-in asked for %q", got)
+	}
 	callback := e.config.Origin + CallbackPath + "?state=" + session.ID + "&code=vendor-code"
 	bad := httptest.NewRecorder()
 	e.ServeHTTP(bad, httptest.NewRequest("GET", callback, nil))
@@ -70,6 +73,7 @@ func TestBoundExchangeRefreshAndBrowserSecrecy(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", callback, nil)
 	req.AddCookie(begin.Result().Cookies()[0])
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Linux; Android 15)")
 	done := httptest.NewRecorder()
 	e.ServeHTTP(done, req)
 	if done.Code != http.StatusFound || done.Header().Get("Location") != "mewla://plugins" {
@@ -136,7 +140,7 @@ func TestDenialExpiryAndFixedDestination(t *testing.T) {
 	e := fixture(t)
 	public, _, _ := box.GenerateKey(rand.Reader)
 	for _, expired := range []bool{false, true} {
-		result := post(e, "/google/start", Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: oauth2.GenerateVerifier()})
+		result := post(e, "/google/start", Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: oauth2.GenerateVerifier(), Service: Calendar})
 		var session Session
 		_ = json.Unmarshal(result.Body.Bytes(), &session)
 		if expired {
@@ -160,5 +164,57 @@ func TestDenialExpiryAndFixedDestination(t *testing.T) {
 	}
 	if post(e, "/google/start", map[string]any{"public_key": base64.RawURLEncoding.EncodeToString(public[:]), "nonce": oauth2.GenerateVerifier(), "redirect_uri": "https://attacker.test"}).Code != 400 {
 		t.Fatal("caller redirect accepted")
+	}
+}
+
+func TestScopesStayWithTheirService(t *testing.T) {
+	has := func(scopes []string, name string) bool {
+		for _, scope := range scopes {
+			if strings.HasSuffix(scope, "/"+name) {
+				return true
+			}
+		}
+		return false
+	}
+	calendar, gmail := Scopes(Calendar, false), Scopes(Gmail, false)
+	if has(calendar, "gmail.readonly") || has(gmail, "calendar.events.readonly") || has(gmail, "calendar.freebusy") {
+		t.Fatal("a service asked for the other's access")
+	}
+	if has(calendar, "calendar.events") || has(gmail, "gmail.modify") {
+		t.Fatal("read-only sign-in asked for write access")
+	}
+	if !has(Scopes(Calendar, true), "calendar.events") || !has(Scopes(Gmail, true), "gmail.modify") {
+		t.Fatal("write sign-in lacks write access")
+	}
+	if Scopes("drive", false) != nil || Scopes("", true) != nil {
+		t.Fatal("unknown service has scopes")
+	}
+}
+
+func TestStartNeedsAKnownService(t *testing.T) {
+	e := fixture(t)
+	public, _, _ := box.GenerateKey(rand.Reader)
+	for _, service := range []string{"", "drive", "google"} {
+		if post(e, "/google/start", Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: oauth2.GenerateVerifier(), Service: service}).Code != 400 {
+			t.Fatalf("service %q accepted", service)
+		}
+	}
+}
+
+// A desktop or web tab has nowhere to go on mewla://, so it gets a page.
+func TestBrowserTabEndsOnAPage(t *testing.T) {
+	e := fixture(t)
+	public, _, _ := box.GenerateKey(rand.Reader)
+	var session Session
+	_ = json.Unmarshal(post(e, "/google/start", Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: oauth2.GenerateVerifier(), Service: Calendar}).Body.Bytes(), &session)
+	begin := httptest.NewRecorder()
+	e.ServeHTTP(begin, httptest.NewRequest("GET", session.AuthorizationURL, nil))
+	req := httptest.NewRequest("GET", CallbackPath+"?state="+session.ID+"&error=access_denied", nil)
+	req.AddCookie(begin.Result().Cookies()[0])
+	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) Chrome/130")
+	w := httptest.NewRecorder()
+	e.ServeHTTP(w, req)
+	if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Type"), "text/html") || !strings.Contains(w.Body.String(), "not connected") || w.Header().Get("Location") != "" {
+		t.Fatal(w.Code, w.Body.String())
 	}
 }

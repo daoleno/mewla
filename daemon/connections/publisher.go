@@ -8,8 +8,9 @@ import "encoding/json"
 var GitHubPublicClientID string
 var SlackPublicClientID string
 
-// GoogleExchangeOrigin is a product-owned HTTPS origin shipped in releases.
-// It points to cmd/mewla-google-auth, never a caller-supplied callback or daemon.
+// GoogleExchangeOrigin is a product-owned HTTPS origin shipped in releases:
+// the account service (cmd/mewla-account) that runs Google sign-in for Google
+// Calendar and Gmail. It is never a caller-supplied callback or daemon.
 var GoogleExchangeOrigin string
 
 func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
@@ -39,11 +40,16 @@ func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
 // Existing accounts remain visible and usable independently of publisher setup.
 func (m *Manager) unavailableReason(kind string) string {
 	switch kind {
-	case "github", "slack", "google":
+	case "github", "slack", googleCalendarID, gmailID:
 	default:
 		return ""
 	}
-	if kind == "google" && GoogleExchangeOrigin != "" {
+	if isGoogle(kind) {
+		// Google signs in only through Mewla's exchange, which holds the
+		// client secret; a daemon never has one.
+		if GoogleExchangeOrigin == "" {
+			return "Google sign-in is not set up yet."
+		}
 		return ""
 	}
 	client, ok, err := m.clientConfig(kind)
@@ -51,9 +57,6 @@ func (m *Manager) unavailableReason(kind string) string {
 		return "Connection settings are unavailable. Try again later."
 	}
 	ready := ok && client.ClientID != ""
-	if kind == "google" {
-		ready = ready && client.ClientSecret != "" && validCallback(client.RedirectURL)
-	}
 	if kind == "slack" {
 		ready = ready && (appReturn(client.RedirectURL) && client.ClientSecret == "" || validCallback(client.RedirectURL) && client.ClientSecret != "")
 	}
@@ -63,17 +66,9 @@ func (m *Manager) unavailableReason(kind string) string {
 	return ""
 }
 
-// Unlisted reports a service the catalog shows to no one, not even a daemon
-// with an account for it. Google is held back until it can do more than
-// Calendar; its code stays for then.
-func Unlisted(id string) bool { return id == "google" }
-
 func (m *Manager) catalog() []Integration {
 	catalog := []Integration{}
 	for _, item := range Catalog() {
-		if Unlisted(item.ID) {
-			continue
-		}
 		item.UnavailableReason = m.unavailableReason(item.ID)
 		item.Available = item.UnavailableReason == ""
 		catalog = append(catalog, item)

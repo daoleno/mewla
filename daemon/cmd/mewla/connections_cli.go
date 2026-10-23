@@ -28,10 +28,10 @@ MCP resources: resources --id account [--cursor c] lists documents and URI templ
 Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
 updates --id account asks the service now and shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
 A call blocked by an update names the confirm-updates command that clears every update waiting on its account.
-Add: --integration github|notion|google|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
+Add: --integration github|notion|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
 Cloudflare (connected in Extensions) covers the whole Cloudflare API: find the endpoint with its search tool, then call it with execute; docs searches Cloudflare's docs.
 Deleting Cloudflare resources, changing DNS, or creating or revoking tokens needs the user's authorization for that task.
-Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|google|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
+Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
 Custom internal endpoints: --trust-networks 127.0.0.1/32 (explicit, per account).
 Credentials are read from a hidden terminal prompt; --credential-stdin supports a secure pipe.
 import-gh explicitly copies the current github.com gh login into this daemon's private vault.

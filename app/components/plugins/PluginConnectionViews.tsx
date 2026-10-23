@@ -31,7 +31,6 @@ type Job = { read: string; write: string; example: string } | undefined;
 const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"]> = {
   github: "logo-github",
   slack: "logo-slack",
-  google: "logo-google",
 };
 
 const SERVICE_ICONS: Record<string, IconName> = {

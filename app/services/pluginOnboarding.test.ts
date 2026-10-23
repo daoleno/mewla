@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
+import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
 const pending: PendingConnection = { serverId: "server-a", flow: { id: "flow-a", integration: "linear", status: "waiting", expires: new Date(Date.now() + 60000).toISOString(), authorization_url: "https://mcp.linear.app/authorize?state=secret-state" } };
 test("native return is bound to exact URI and original state", () => {
   expect(matchesPluginReturn("mewla://plugins?state=secret-state&code=one", pending.flow)).toBe(true);
@@ -44,4 +44,13 @@ test("bare Plugins callbacks are recognised only on the mewla scheme", () => {
   expect(isPluginCallbackUrl("mewla://plugins")).toBe(true);
   expect(isPluginCallbackUrl("other://plugins")).toBe(false);
   expect(isPluginCallbackUrl("mewla://plugins?state=abc")).toBe(false);
+});
+test("Google Calendar and Gmail each say what Brain can do, and have their own mark", async () => {
+  const { hasServiceMark } = await import("../components/plugins/serviceMarkPaths");
+  for (const id of ["google-calendar", "gmail"]) {
+    expect(pluginJobs[id]?.read).toBeTruthy();
+    expect(pluginJobs[id]?.write).toBeTruthy();
+    expect(hasServiceMark(id)).toBe(true);
+  }
+  expect(pluginJobs.google).toBeUndefined();
 });

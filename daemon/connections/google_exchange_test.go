@@ -34,7 +34,7 @@ func TestGooglePublisherHandoffKeepsSecretOffDaemon(t *testing.T) {
 			if req.Header.Get("Authorization") != "Bearer "+start.Nonce {
 				t.Fatal("daemon retrieval proof missing")
 			}
-			sealed, _ := googleauth.Seal(googleauth.Credential{Token: &oauth2.Token{AccessToken: "access", RefreshToken: "refresh", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}, Receipt: "signed-publisher-binding", Proof: "daemon-proof", Nonce: start.Nonce, Scopes: []string{"openid", "email", googleScopeBase + "drive.readonly"}}, start.PublicKey)
+			sealed, _ := googleauth.Seal(googleauth.Credential{Token: &oauth2.Token{AccessToken: "access", RefreshToken: "refresh", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}, Receipt: "signed-publisher-binding", Proof: "daemon-proof", Nonce: start.Nonce, Scopes: []string{"openid", "email", googleScopeBase + "gmail.readonly"}}, start.PublicKey)
 			result = googleauth.Session{ID: "publisher-flow", Status: "connected", Ciphertext: sealed}
 		case "mewla-owned.example/google/cancel":
 			result = map[string]bool{"cancelled": true}
@@ -44,7 +44,7 @@ func TestGooglePublisherHandoffKeepsSecretOffDaemon(t *testing.T) {
 			if refresh.RefreshToken != "refresh" || refresh.Receipt != "signed-publisher-binding" || refresh.Proof != "daemon-proof" {
 				t.Fatal("refresh ownership lost")
 			}
-			sealed, _ := googleauth.Seal(googleauth.Credential{Token: &oauth2.Token{AccessToken: "new-access", RefreshToken: "refresh", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}, Receipt: "new-signed-binding", Proof: "daemon-proof", Nonce: start.Nonce, Scopes: []string{"openid", "email", googleScopeBase + "drive.readonly"}}, start.PublicKey)
+			sealed, _ := googleauth.Seal(googleauth.Credential{Token: &oauth2.Token{AccessToken: "new-access", RefreshToken: "refresh", TokenType: "Bearer", Expiry: time.Now().Add(time.Hour)}, Receipt: "new-signed-binding", Proof: "daemon-proof", Nonce: start.Nonce, Scopes: []string{"openid", "email", googleScopeBase + "gmail.readonly"}}, start.PublicKey)
 			result = googleauth.Session{Status: "connected", Ciphertext: sealed}
 		case "openidconnect.googleapis.com/v1/userinfo":
 			identityCalls++
@@ -57,9 +57,12 @@ func TestGooglePublisherHandoffKeepsSecretOffDaemon(t *testing.T) {
 		raw, _ := json.Marshal(result)
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(raw)))}, nil
 	})}
-	begun := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "google"}})
+	begun := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "gmail"}})
+	if start.Service != googleauth.Gmail || start.Writes {
+		t.Fatalf("the exchange was asked for %q (writes %t)", start.Service, start.Writes)
+	}
 	connected := mustHandle(t, m, Request{Action: "connect_status", FlowID: begun.Flow.ID})
-	if connected.Account == nil || connected.Account.Identity != "person@example.test" || identityCalls != 1 {
+	if connected.Account == nil || connected.Account.Integration != "gmail" || connected.Account.Identity != "person@example.test" || identityCalls != 1 {
 		t.Fatal("handoff did not verify actual identity")
 	}
 	raw, _, _ := m.vault.Get("integration:" + connected.Account.ID)
