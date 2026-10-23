@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/diag"
 )
 
 var errAuth = errors.New("authorization expired or revoked; reconnect this account")
@@ -250,7 +251,7 @@ func (t bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	resp, err := t.base.RoundTrip(c)
 	if err != nil {
 		if r.Context().Err() == nil {
-			log.Printf("plugins: request to %s failed: %.300s", t.origin, err)
+			diag.Report("plugins.request", diag.SeverityWarn, t.origin, fmt.Sprintf("%.300s", err))
 		}
 		return nil, errNetwork
 	}

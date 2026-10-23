@@ -2,9 +2,12 @@ package push
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/diag"
 )
 
 // A ticket only says Expo accepted the message. Whether FCM or APNs took it
@@ -133,7 +136,7 @@ func (c *Client) fetchReceipts(batch []pendingReceipt) []pendingReceipt {
 			c.logCredentialFailureOnce(entry.token, "delivery"+problem)
 			continue
 		}
-		log.Printf("push: delivery failed (ticket %s)%s", entry.ticketID, problem)
+		diag.Report("push.delivery", diag.SeverityWarn, "", fmt.Sprintf("ticket %s%s", entry.ticketID, problem))
 	}
 	return c.reschedule(missing)
 }
@@ -179,7 +182,7 @@ func (c *Client) logCredentialFailureOnce(token, problem string) {
 	c.credentialLogged[token] = true
 	c.mu.Unlock()
 	if !seen {
-		log.Printf("push: %s (reported once per device)", problem)
+		diag.Report("push.credentials", diag.SeverityError, "", problem+" (reported once per device)")
 	}
 }
 

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"sync"
+
+	"github.com/daoleno/mewla/daemon/diag"
 )
 
 // SendFunc delivers protocol messages to a single client.
@@ -259,7 +261,7 @@ func (m *Manager) forward(ownerID string, session Session, send SendFunc) {
 			message := "terminal session error"
 			if ev.Err != nil {
 				message = ev.Err.Error()
-				log.Printf("terminal session %s error: %v", session.ID(), ev.Err)
+				diag.Report("terminal.session", diag.SeverityError, "", fmt.Sprintf("session %s: %v", session.ID(), ev.Err))
 			}
 			send(map[string]any{
 				"type":       "terminal_error",

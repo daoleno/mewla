@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/diag"
 )
 
 func TestFormatNotificationWorkerLabel(t *testing.T) {
@@ -319,6 +321,7 @@ func TestReceiptErrorIsLoggedAndDropsDeadDevice(t *testing.T) {
 	log.SetOutput(logs)
 	defer log.SetOutput(previousWriter)
 
+	after := diag.Last()
 	client := New()
 	client.receiptDelays = []time.Duration{time.Millisecond, time.Millisecond}
 	client.SetRegistration("credential-token", "server-1")
@@ -350,6 +353,10 @@ func TestReceiptErrorIsLoggedAndDropsDeadDevice(t *testing.T) {
 	if receiptRequests.Load() != 2 {
 		t.Fatalf("receipt lookups = %d, want 2", receiptRequests.Load())
 	}
+	events, _ := diag.After(after)
+	if len(events) != 1 || events[0].Kind != "push.delivery" || !strings.Contains(events[0].Detail, "DeviceNotRegistered") {
+		t.Fatalf("diag events = %+v, want one push.delivery", events)
+	}
 }
 
 type lockedBuffer struct {
@@ -375,6 +382,7 @@ func TestCredentialFailureIsReportedOncePerToken(t *testing.T) {
 	log.SetOutput(logs)
 	defer log.SetOutput(previousWriter)
 
+	after := diag.Last()
 	client := New()
 	client.SetRegistration("credential-token", "server-1")
 	client.httpClient.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -391,6 +399,9 @@ func TestCredentialFailureIsReportedOncePerToken(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "credential-token") {
 		t.Fatalf("token leaked: %q", logs.String())
+	}
+	if events, _ := diag.After(after); len(events) != 1 || events[0].Kind != "push.credentials" || events[0].Severity != diag.SeverityError {
+		t.Fatalf("diag events = %+v, want one push.credentials error", events)
 	}
 	if !client.HasToken() {
 		t.Fatal("a credential problem is not the device's fault; keep the token")

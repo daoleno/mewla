@@ -95,15 +95,12 @@ func ruleCIRed(store *Store, now time.Time) []Problem {
 	return out
 }
 
-// ruleRepeatedError flags a daemon log signature seen repeatedly within a
+// ruleRepeatedError flags a daemon problem (kind and subject) seen repeatedly within a
 // short window during the last week.
 func ruleRepeatedError(store *Store, now time.Time) []Problem {
 	since := now.Add(-repeatedErrorRecent)
 	bySignature := map[string][]Signal{}
 	for _, signal := range store.Signals(Filter{Source: SourceRuntime, Since: since}) {
-		if signal.Kind == kindLogLine {
-			continue
-		}
 		key := signal.ProjectID + "|" + signal.Refs["signature"]
 		bySignature[key] = append(bySignature[key], signal)
 	}

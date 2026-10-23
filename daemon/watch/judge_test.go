@@ -162,7 +162,7 @@ func TestJudgmentFailureKeepsSignalsPendingAndShrinksBatch(t *testing.T) {
 	if _, err := store.SetEnabled(true); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Append([]Signal{{ID: "s1", Source: SourceRuntime, Kind: "log_error", Time: time.Now(), Excerpt: "boom"}}); err != nil {
+	if _, err := store.Append([]Signal{{ID: "s1", Source: SourceRuntime, Kind: kindRuntimeError, Time: time.Now(), Excerpt: "boom"}}); err != nil {
 		t.Fatal(err)
 	}
 	collector.judge.execute, _ = fakeJudge(`{"attributions":"not a list"}`)
@@ -275,7 +275,7 @@ func TestJudgmentPacingSurvivesRestart(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := store.Append([]Signal{{ID: "s1", Source: SourceRuntime, Kind: "log_error", Time: now, Excerpt: "boom"}}); err != nil {
+	if _, err := store.Append([]Signal{{ID: "s1", Source: SourceRuntime, Kind: kindRuntimeError, Time: now, Excerpt: "boom"}}); err != nil {
 		t.Fatal(err)
 	}
 	// A new daemon reads the run log: a partial batch still waits, and the

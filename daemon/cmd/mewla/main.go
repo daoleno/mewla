@@ -645,7 +645,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 		watchCollector = watch.NewCollector(watch.Options{
 			Store:      watchStore,
 			Home:       home,
-			LogPath:    logfile.Path(stateDir),
 			Works:      brainStore,
 			Admissions: brainStore.FSM(),
 			Sessions:   w,

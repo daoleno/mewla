@@ -3,11 +3,11 @@ package server
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/gorilla/websocket"
 )
 
@@ -154,7 +154,7 @@ func (o *clientOutbox) failLocked(err error) {
 	if o.closed {
 		return
 	}
-	log.Printf("websocket client %s dropped with %d bytes pending: %v", o.conn.RemoteAddr(), o.bytes, err)
+	diag.Report("server.websocket.dropped", diag.SeverityWarn, "", fmt.Sprintf("client %s dropped with %d bytes pending: %v", o.conn.RemoteAddr(), o.bytes, err))
 	o.closeLocked(fmt.Errorf("%w: %v", errOutboxClosed, err))
 	_ = o.conn.Close()
 }

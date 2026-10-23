@@ -1,6 +1,6 @@
 // Package watch collects signals about the user's projects and flags the few
 // that need attention. Collection is local, deterministic and free: it reads
-// transcripts, the Work store, the daemon log and connected Plugins, and
+// transcripts, the Work store, the daemon's own reports and connected Plugins, and
 // never wakes Brain. See docs/watch.md.
 package watch
 
