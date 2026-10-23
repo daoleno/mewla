@@ -213,8 +213,7 @@ func TestNewStoreIgnoresLegacyRootFilesAndInitializesCurrentLayout(t *testing.T)
 	}
 
 	for path, want := range map[string][]byte{
-		store.memoryPath():    []byte("# Brain Memory\n\n"),
-		store.remindersPath(): []byte("[]\n"),
+		store.memoryPath(): []byte("# Brain Memory\n\n"),
 	} {
 		got, err := os.ReadFile(path)
 		if err != nil {
@@ -223,6 +222,10 @@ func TestNewStoreIgnoresLegacyRootFilesAndInitializesCurrentLayout(t *testing.T)
 		if string(got) != string(want) {
 			t.Fatalf("current destination %s = %q, want first-version default %q", path, got, want)
 		}
+	}
+
+	if pathExists(filepath.Join(store.statePath(), "reminders.json")) {
+		t.Fatalf("NewStore created the retired reminders.json")
 	}
 
 	stateProfileRaw, err := os.ReadFile(store.profilePath())
