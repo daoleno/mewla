@@ -108,6 +108,29 @@ func publicIP(ip net.IP) bool {
 	return true
 }
 
+// benchmarkNet is the RFC 2544 benchmarking range. It is never a real host, so
+// proxies in fake-IP mode (Surge, Clash, sing-box and others, common for people
+// behind a filtered network) answer every DNS lookup from it and then route by
+// the name on the connection. For a hostname it is therefore safe to dial: the
+// TLS handshake still checks the certificate against that name, which only the
+// real service can present. A literal address in it is never a proxy's answer,
+// so that stays refused. The other blocked ranges stay blocked on purpose:
+// 100.64.0.0/10 (carrier NAT, Tailscale) and 192.0.0.0/24 (IETF protocol
+// assignments) hold real internal hosts, and link-local, private, loopback and
+// unspecified addresses are the host's own network.
+var benchmarkNet = netip.MustParsePrefix("198.18.0.0/15")
+
+func benchmarkIP(host string, ip net.IP) bool {
+	if net.ParseIP(host) != nil {
+		return false
+	}
+	address, ok := netip.AddrFromSlice(ip)
+	return ok && benchmarkNet.Contains(address.Unmap())
+}
+
+// errPrivateEndpoint is a name that resolves to an address Mewla will not dial.
+var errPrivateEndpoint = errors.New("private network endpoints are not supported")
+
 // Resolve and dial the checked IP together, preventing DNS rebinding. Custom
 // sources never get access to host-local services or ambient proxy credentials.
 func newHTTPClient() *http.Client { return newHTTPClientFor("", nil) }
@@ -124,24 +147,29 @@ func noRedirects(*http.Request, []*http.Request) error {
 // each one in turn: a host behind a CDN often answers on one address while
 // another times out.
 func checkedTransport(origin string, networks []string) *http.Transport {
+	return checkedTransportWith(origin, networks, net.DefaultResolver.LookupIPAddr, (&net.Dialer{}).DialContext)
+}
+
+func checkedTransportWith(origin string, networks []string, lookup func(context.Context, string) ([]net.IPAddr, error), dial func(context.Context, string, string) (net.Conn, error)) *http.Transport {
 	transport := &http.Transport{DisableKeepAlives: true, TLSHandshakeTimeout: 8 * time.Second, ResponseHeaderTimeout: 15 * time.Second, MaxResponseHeaderBytes: 32 << 10}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(address)
 		if err != nil {
 			return nil, errors.New("invalid endpoint")
 		}
-		ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+		ips, err := lookup(ctx, host)
 		if err != nil {
 			return nil, errors.New("endpoint DNS failed")
 		}
 		addresses := make([]net.IP, 0, len(ips))
 		for _, ip := range ips {
-			if !publicIP(ip.IP) && !(address == origin && trustedIP(ip.IP, networks)) {
-				return nil, errors.New("private network endpoints are not supported")
+			if !publicIP(ip.IP) && !benchmarkIP(host, ip.IP) && !(address == origin && trustedIP(ip.IP, networks)) {
+				log.Printf("plugins: %s resolves to %s, a private address; not connecting", host, ip.IP)
+				return nil, errPrivateEndpoint
 			}
 			addresses = append(addresses, ip.IP)
 		}
-		return dialEach(ctx, network, port, addresses, (&net.Dialer{}).DialContext)
+		return dialEach(ctx, network, port, addresses, dial)
 	}
 	return transport
 }

@@ -45,7 +45,7 @@ type googlePending struct {
 type exchangeUnreachable struct{ cause string }
 
 func (e exchangeUnreachable) Error() string {
-	return "Couldn't reach Mewla's Google sign-in (" + e.cause + "). Trying again."
+	return "Couldn't reach Mewla's Google sign-in (" + e.cause + ")."
 }
 
 func exchangeFailure(err error) string {
@@ -53,6 +53,8 @@ func exchangeFailure(err error) string {
 	var record tls.RecordHeaderError
 	var timeout net.Error
 	switch {
+	case errors.Is(err, errPrivateEndpoint):
+		return "this network answers with a private address"
 	case errors.Is(err, syscall.ECONNREFUSED):
 		return "connection refused"
 	case errors.Is(err, syscall.ECONNRESET), errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
