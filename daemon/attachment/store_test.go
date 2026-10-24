@@ -133,3 +133,77 @@ func TestStoreConcurrentFinalizationNeverDoubleCountsReservation(t *testing.T) {
 		t.Fatalf("stored=%d err=%v", stored, err)
 	}
 }
+
+// A sender names attachment paths; only plain files the store itself holds are
+// accepted, and what comes back is the stored spelling and size.
+func TestConfineRejectsEverythingButStoredFiles(t *testing.T) {
+	root := t.TempDir()
+	s := &Store{Dir: filepath.Join(root, "uploads")}
+	limits := DefaultLimits()
+	saved, err := s.Save(t.Context(), bytes.NewBufferString("hello"), File{Name: "a.txt", Size: 5}, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(root, "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(s.Dir, "sub"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(s.Dir, "sub", "nested.txt"), []byte("n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(s.Dir, "link.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Fatal(err)
+	}
+	dirLink := filepath.Join(root, "uploads-link")
+	if err := os.Symlink(s.Dir, dirLink); err != nil {
+		t.Fatal(err)
+	}
+	reject := map[string]string{
+		"empty":              "",
+		"relative":           "uploads/" + filepath.Base(saved.Path),
+		"name only":          filepath.Base(saved.Path),
+		"dot-dot out":        s.Dir + "/../secret.txt",
+		"dot-dot round trip": s.Dir + "/../uploads/" + filepath.Base(saved.Path),
+		"absolute elsewhere": secret,
+		"etc passwd":         "/etc/passwd",
+		"symlink out":        link,
+		"nested":             filepath.Join(s.Dir, "sub", "nested.txt"),
+		"directory":          filepath.Join(s.Dir, "sub"),
+		"missing":            filepath.Join(s.Dir, "missing.txt"),
+		"trailing slash":     saved.Path + "/",
+		"double slash":       s.Dir + "//" + filepath.Base(saved.Path),
+		"sibling prefix":     s.Dir + "-other/" + filepath.Base(saved.Path),
+	}
+	for name, path := range reject {
+		if got, err := s.Confine(File{Name: "x", Path: path, Size: 5}); !errors.Is(err, ErrOutsideStore) {
+			t.Errorf("%s: accepted %q as %+v (err %v)", name, path, got, err)
+		}
+	}
+	// The same file reached through a symlinked directory is the same file.
+	viaLink, err := s.Confine(File{Path: filepath.Join(dirLink, filepath.Base(saved.Path)), Size: 5})
+	if err != nil || viaLink.Size != 5 {
+		t.Fatalf("directory alias: %+v %v", viaLink, err)
+	}
+	// Sender-supplied size and name are not trusted for the size.
+	got, err := s.Confine(File{Name: "renamed.txt", Path: saved.Path, Size: 9999, ContentType: "text/plain"})
+	if err != nil || got.Size != 5 || got.Name != "renamed.txt" || got.Path != saved.Path {
+		t.Fatalf("confine = %+v %v", got, err)
+	}
+	if s.Exists(File{Path: saved.Path, Size: 9999}) || !s.Exists(saved) {
+		t.Fatal("Exists must compare the size on disk")
+	}
+	if _, err := s.ConfineAll([]File{saved, {Name: "evil", Path: "/etc/passwd"}}); err == nil {
+		t.Fatal("a batch with one outside file was accepted")
+	}
+	if files, err := s.ConfineAll(nil); err != nil || files != nil {
+		t.Fatalf("empty batch: %v %v", files, err)
+	}
+	var none *Store
+	if _, err := none.Confine(saved); !errors.Is(err, ErrOutsideStore) {
+		t.Fatal("nil store accepted a file")
+	}
+}

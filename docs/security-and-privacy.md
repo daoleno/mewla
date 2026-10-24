@@ -133,7 +133,7 @@ All paths are under the state directory, `~/.mewla` by default.
 | `trusted-devices.json` | Public keys of paired devices |
 | `pairing-tokens.json` | Unused pairing codes until they expire |
 | `addresses.json` | Addresses the daemon can be reached at |
-| `uploads/` | Files sent from the app or Telegram: at most 2 GiB per file and 8 GiB in total, deleted after seven days |
+| `uploads/` | Files sent from the app or Telegram: at most 2 GiB per file and 8 GiB in total, deleted after seven days. A message can only attach files that are in this folder: any other path (elsewhere on disk, `..`, or a link out of the folder) is refused before an agent sees it |
 | `work/`, `brain/` | Work records and Brain's workspace |
 | `calendar/` | Calendar items |
 | `telegram/` | Telegram binding and delivery state; the bot token is in its own private file |
