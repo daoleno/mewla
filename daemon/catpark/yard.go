@@ -69,6 +69,9 @@ func (y *Yard) Collect(slot int) bool {
 // Pack puts one treat from the pantry in the bag (a treat already there goes
 // back). An empty kind unpacks.
 func (y *Yard) Pack(kind string) bool {
+	if y.Pantry == nil {
+		y.Pantry = map[string]int{}
+	}
 	if kind == y.Bag {
 		return false
 	}
