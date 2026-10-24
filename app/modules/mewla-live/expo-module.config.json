@@ -1,6 +1,27 @@
 {
-  "platforms": ["android"],
+  "platforms": [
+    "android",
+    "apple"
+  ],
+  "apple": {
+    "modules": [
+      "MewlaLiveModule"
+    ],
+    "podspecPath": [
+      "MewlaLive.podspec"
+    ],
+    "appDelegateSubscribers": [
+      "MewlaLiveAppDelegate"
+    ]
+  },
   "android": {
-    "modules": ["expo.modules.mewlalive.MewlaLiveModule"]
+    "modules": [
+      "expo.modules.mewlalive.MewlaLiveModule"
+    ]
+  },
+  "ios": {
+    "modules": [
+      "MewlaLiveModule"
+    ]
   }
 }

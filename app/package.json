@@ -19,6 +19,7 @@
     "serve:apk:debug": "cd android/app/build/outputs/apk/debug && python3 -m http.server 8899"
   },
   "dependencies": {
+    "@bacons/apple-targets": "5.0.0",
     "@expo/config-plugins": "~57.0.9",
     "@expo/ui": "~57.0.16",
     "@expo/vector-icons": "^15.0.2",

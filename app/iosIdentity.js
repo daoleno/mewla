@@ -8,6 +8,8 @@ const IOS_IDENTITIES = Object.freeze({
     // Release identities ship to TestFlight/App Store Connect; remote push needs
     // production APS. Local notifications do not depend on this entitlement.
     notificationMode: "production",
+    liveExtensionBundleIdentifier: "com.daoleno.mewla.live",
+    appGroup: "group.com.daoleno.mewla",
   }),
   preview: Object.freeze({
     variant: "preview",
@@ -16,6 +18,8 @@ const IOS_IDENTITIES = Object.freeze({
     nativeProjectName: "Mewla",
     artifactName: "mewla-preview-ios",
     notificationMode: "production",
+    liveExtensionBundleIdentifier: "com.daoleno.mewla.preview.live",
+    appGroup: "group.com.daoleno.mewla.preview",
   }),
 });
 

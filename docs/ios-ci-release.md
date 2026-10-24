@@ -111,6 +111,23 @@ Apple's current references are [Generating tokens for API requests](https://deve
 
 An invitation alone is not sufficient for CI: the exact role and Certificates, Identifiers & Profiles access must permit the assigned work. If the invited operator lacks certificate/App ID/profile or app-management permissions, the friend's Account Holder or Admin must perform those Apple-side steps. The repository workflow intentionally does not create Apple resources or testers.
 
+## Live Activity and widget extension
+
+The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLive` (`app/targets/mewla-live`), embedded in the app. It is a second signed target, so it needs Apple-side identifiers the app alone did not. The release workflow builds it only when the repository variable `MEWLA_IOS_LIVE` is `1`; unsigned CI always builds it so it keeps compiling.
+
+Per identity (Preview shown; Production uses the same names without `.preview`), an authorized member of the owning team must:
+
+1. Register the explicit App ID `com.daoleno.mewla.preview.live` (the extension).
+2. Register the App Group `group.com.daoleno.mewla.preview`.
+3. Enable **App Groups** on both `com.daoleno.mewla.preview` and `com.daoleno.mewla.preview.live`, assigning that group to each.
+4. **Regenerate** the existing App Store profile for `com.daoleno.mewla.preview` (it must now carry the App Group) and update `ZEN_APPLE_PROVISIONING_PROFILE_BASE64` in the Environment.
+5. Create an App Store distribution profile for `com.daoleno.mewla.preview.live` with the same distribution certificate, and store it base64-encoded as the Environment secret `ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64`.
+6. Set the repository variable `MEWLA_IOS_LIVE` to `1`.
+
+The workflow checks, before archiving, that the extension profile is for `<bundle>.live`, belongs to the team, is an App Store profile, is unexpired, and that **both** profiles contain the App Group. `scripts/set-ios-target-signing.js` then gives each target its own profile (a single command-line profile would be applied to the extension too), the export options list both, and `scripts/verify-ios-artifact.sh` checks the extension's identity, version, extension point and App Group entitlement.
+
+Live Activities need no portal capability of their own; `NSSupportsLiveActivities` is in the app's Info.plist. The APNs key stays in Expo: it carries the ordinary and silent pushes, but cannot send an ActivityKit (`liveactivity`) push, see `docs/live-surfaces.md`.
+
 ## Local verification boundary
 
 Linux can validate configuration, YAML structure, JavaScript/TypeScript tests, shell syntax, native lock consistency, and Android/daemon compatibility. It cannot run Xcode, CocoaPods integration, `security`, `codesign`, archive export, or App Store Connect upload.

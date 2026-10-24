@@ -8,6 +8,8 @@ export interface LiveDiagnostics {
 }
 
 interface MewlaLiveNativeModule {
+  /** False on iOS in a build without the Live Activity extension: the surface is absent, not broken. */
+  isSupported(): boolean;
   apply(rawLiveState: string): boolean;
   setCurrentServer(serverRef: string): void;
   configureWidget(baseUrl: string, token: string): void;
@@ -23,13 +25,14 @@ interface MewlaLiveNativeModule {
 let cached: MewlaLiveNativeModule | null | undefined;
 
 /**
- * Android only. iOS has no counterpart yet (Live Activities wait on an APNs key), so it gets
- * null and the app shows nothing new there; callers treat null as "this platform has no live surface".
+ * Android (notification, widgets) and iOS (Live Activity, widgets). Null where the platform or the
+ * build has no live surface; callers treat null as "nothing to draw on".
  */
 export function getMewlaLiveModule(): MewlaLiveNativeModule | null {
   if (cached === undefined) {
     try {
-      cached = requireNativeModule<MewlaLiveNativeModule>("MewlaLive");
+      const native = requireNativeModule<MewlaLiveNativeModule>("MewlaLive");
+      cached = native.isSupported() ? native : null;
     } catch {
       cached = null;
     }

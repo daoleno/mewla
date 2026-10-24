@@ -13,6 +13,7 @@ const IDENTITY_ENV_KEYS = [
   "MEWLA_IOS_APP_VARIANT",
   "MEWLA_IOS_BUILD_NUMBER",
   "MEWLA_IOS_DISTRIBUTION",
+  "MEWLA_IOS_LIVE",
 ];
 
 // Shell or CI identity variables must not leak into these assertions.
@@ -114,7 +115,34 @@ describe("native platform config", () => {
       nativeProjectName: "Mewla",
       artifactName: "mewla-preview-ios",
       notificationMode: "production",
+      liveExtensionBundleIdentifier: "com.daoleno.mewla.preview.live",
+      appGroup: "group.com.daoleno.mewla.preview",
     });
+  });
+
+  it("builds the Live Activity extension only when asked, with its own identity per variant", () => {
+    const off = withIdentityEnv({ MEWLA_IOS_APP_VARIANT: "preview" }, () => createConfig());
+    expect(off.ios.entitlements).toBeUndefined();
+    expect(off.ios.infoPlist.NSSupportsLiveActivities).toBeUndefined();
+    expect(JSON.stringify(off.plugins)).not.toContain("apple-targets");
+
+    for (const [variant, group] of [
+      ["preview", "group.com.daoleno.mewla.preview"],
+      ["production", "group.com.daoleno.mewla"],
+    ]) {
+      const on = withIdentityEnv(
+        { MEWLA_IOS_APP_VARIANT: variant, MEWLA_IOS_LIVE: "1" },
+        () => createConfig(),
+      );
+      expect(on.ios.entitlements["com.apple.security.application-groups"]).toEqual([group]);
+      expect(on.ios.infoPlist.NSSupportsLiveActivities).toBe(true);
+      expect(on.plugins.some((plugin) => Array.isArray(plugin) && plugin[0] === "@bacons/apple-targets")).toBe(true);
+      const target = withIdentityEnv({ MEWLA_IOS_APP_VARIANT: variant }, () =>
+        require("./targets/mewla-live/expo-target.config.js")(on),
+      );
+      expect(target.bundleIdentifier).toBe(`${on.ios.bundleIdentifier}.live`);
+      expect(target.entitlements["com.apple.security.application-groups"]).toEqual([group]);
+    }
   });
 
   it("applies the complete Preview identity to Expo without changing Android package identity", () => {

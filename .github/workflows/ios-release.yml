@@ -53,6 +53,10 @@ jobs:
       MEWLA_IOS_BUILD_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.build_number || '' }}
       MEWLA_IOS_DESTINATION: ${{ github.event_name == 'push' && 'testflight' || inputs.destination }}
       MEWLA_IOS_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
+      # The Dynamic Island / Live Activity / widget extension is a second signed target. It is
+      # built only once the repository variable MEWLA_IOS_LIVE is "1", which is set after its App
+      # IDs, App Group and provisioning profile exist (docs/ios-ci-release.md).
+      MEWLA_IOS_LIVE: ${{ vars.MEWLA_IOS_LIVE == '1' && '1' || '' }}
     steps:
       - name: Checkout explicit ref
         uses: actions/checkout@v4
@@ -119,8 +123,13 @@ jobs:
           MEWLA_APPLE_TEAM_ID: ${{ secrets.ZEN_APPLE_TEAM_ID }}
           MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
           MEWLA_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64: ${{ secrets.ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64 }}
         run: |
           set -euo pipefail
+          if [[ "${MEWLA_IOS_LIVE:-}" == "1" && -z "${MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64:-}" ]]; then
+            echo "error: MEWLA_IOS_LIVE=1 requires environment secret ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64 for the Live Activity extension" >&2
+            exit 1
+          fi
           for name in \
             MEWLA_APPLE_CERTIFICATE_BASE64 \
             MEWLA_APPLE_CERTIFICATE_PASSWORD \
@@ -215,6 +224,8 @@ jobs:
         uses: ./.github/actions/ios-native
 
       - name: Generate release project and install pods
+        env:
+          MEWLA_APPLE_TEAM_ID: ${{ secrets.ZEN_APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           cd app
@@ -229,6 +240,9 @@ jobs:
           CERTIFICATE_PATH: ${{ runner.temp }}/mewla-distribution.p12
           PROFILE_PATH: ${{ runner.temp }}/mewla-app-store.mobileprovision
           PROFILE_PLIST: ${{ runner.temp }}/mewla-app-store.plist
+          LIVE_PROFILE_PATH: ${{ runner.temp }}/mewla-live-app-store.mobileprovision
+          LIVE_PROFILE_PLIST: ${{ runner.temp }}/mewla-live-app-store.plist
+          MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64: ${{ secrets.ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64 }}
           KEYCHAIN_PATH: ${{ runner.temp }}/mewla-signing.keychain-db
           MEWLA_APPLE_CERTIFICATE_BASE64: ${{ secrets.ZEN_APPLE_CERTIFICATE_BASE64 }}
           MEWLA_APPLE_CERTIFICATE_PASSWORD: ${{ secrets.ZEN_APPLE_CERTIFICATE_PASSWORD }}
@@ -307,17 +321,66 @@ jobs:
           PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST")"
           cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
 
+          # The Live Activity extension is a second App ID with its own profile; both profiles
+          # must carry the shared App Group, or the widget cannot read what the app wrote.
+          if [[ "${MEWLA_IOS_LIVE:-}" == "1" ]]; then
+            python3 - "$LIVE_PROFILE_PATH" <<'PY'
+          import base64, os, pathlib, sys
+          try:
+              data = base64.b64decode(os.environ["MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64"], validate=True)
+          except Exception as exc:
+              raise SystemExit(f"error: MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64 is not valid base64: {exc}")
+          if not data:
+              raise SystemExit("error: MEWLA_APPLE_LIVE_PROVISIONING_PROFILE_BASE64 decoded to an empty file")
+          path = pathlib.Path(sys.argv[1])
+          path.write_bytes(data)
+          path.chmod(0o600)
+          PY
+            security cms -D -i "$LIVE_PROFILE_PATH" > "$LIVE_PROFILE_PLIST"
+            python3 - "$PROFILE_PLIST" "$LIVE_PROFILE_PLIST" "$GITHUB_OUTPUT" <<'PY'
+          import datetime, os, plistlib, sys
+          expected_team = os.environ["MEWLA_APPLE_TEAM_ID"]
+          bundle = os.environ["MEWLA_IOS_BUNDLE_ID"]
+          group = "group." + bundle
+          main_profile = plistlib.load(open(sys.argv[1], "rb"))
+          profile = plistlib.load(open(sys.argv[2], "rb"))
+          if (profile.get("TeamIdentifier") or []) != [expected_team]:
+              raise SystemExit("error: extension provisioning profile team does not match MEWLA_APPLE_TEAM_ID")
+          entitlements = profile.get("Entitlements") or {}
+          if entitlements.get("application-identifier", "") != f"{expected_team}.{bundle}.live":
+              raise SystemExit(f"error: extension provisioning profile is not for {bundle}.live")
+          if entitlements.get("get-task-allow") is not False or entitlements.get("beta-reports-active") is not True:
+              raise SystemExit("error: extension provisioning profile is not an App Store distribution profile")
+          for label, item in (("app", main_profile), ("extension", profile)):
+              groups = (item.get("Entitlements") or {}).get("com.apple.security.application-groups") or []
+              if group not in groups:
+                  raise SystemExit(f"error: {label} provisioning profile does not include App Group {group}; regenerate it after enabling App Groups")
+          expiration = profile.get("ExpirationDate")
+          now = datetime.datetime.now(datetime.timezone.utc)
+          if not expiration or expiration.replace(tzinfo=datetime.timezone.utc) <= now:
+              raise SystemExit("error: extension provisioning profile is expired")
+          if not profile.get("Name") or not profile.get("UUID"):
+              raise SystemExit("error: extension provisioning profile has no Name or UUID")
+          with open(sys.argv[3], "a", encoding="utf-8") as output:
+              output.write(f"live_profile_name={profile['Name']}\n")
+              output.write(f"live_profile_uuid={profile['UUID']}\n")
+          PY
+            LIVE_PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$LIVE_PROFILE_PLIST")"
+            cp "$LIVE_PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/${LIVE_PROFILE_UUID}.mobileprovision"
+          fi
+
       - name: Archive and export signed IPA
         env:
           ARCHIVE_PATH: ${{ runner.temp }}/Mewla.xcarchive
           EXPORT_PATH: ${{ runner.temp }}/ios-export
           EXPORT_OPTIONS: ${{ runner.temp }}/ExportOptions.plist
           PROFILE_NAME: ${{ steps.signing.outputs.profile_name }}
+          LIVE_PROFILE_NAME: ${{ steps.signing.outputs.live_profile_name }}
           MEWLA_APPLE_TEAM_ID: ${{ secrets.ZEN_APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
           set -o pipefail
-          python3 - "$EXPORT_OPTIONS" "$MEWLA_APPLE_TEAM_ID" "$PROFILE_NAME" <<'PY'
+          python3 - "$EXPORT_OPTIONS" "$MEWLA_APPLE_TEAM_ID" "$PROFILE_NAME" "${LIVE_PROFILE_NAME:-}" <<'PY'
           import os, plistlib, sys
           options = {
               "method": "app-store-connect",
@@ -330,19 +393,33 @@ jobs:
               "stripSwiftSymbols": True,
               "uploadSymbols": True,
           }
+          if sys.argv[4]:
+              options["provisioningProfiles"][os.environ["MEWLA_IOS_BUNDLE_ID"] + ".live"] = sys.argv[4]
           with open(sys.argv[1], "wb") as output:
               plistlib.dump(options, output)
           PY
+          SIGNING_ARGS=(
+            DEVELOPMENT_TEAM="$MEWLA_APPLE_TEAM_ID"
+            CODE_SIGN_STYLE=Manual
+            CODE_SIGN_IDENTITY='Apple Distribution'
+          )
+          if [[ "${MEWLA_IOS_LIVE:-}" == "1" ]]; then
+            # One profile per target: a command-line PROVISIONING_PROFILE_SPECIFIER would apply
+            # the app's profile to the extension too.
+            node scripts/set-ios-target-signing.js \
+              "app/ios/${MEWLA_IOS_NATIVE_PROJECT_NAME}.xcodeproj/project.pbxproj" \
+              "${MEWLA_IOS_NATIVE_PROJECT_NAME}=$PROFILE_NAME" \
+              "MewlaLive=$LIVE_PROFILE_NAME"
+          else
+            SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME")
+          fi
           xcodebuild \
             -workspace "app/ios/${MEWLA_IOS_NATIVE_PROJECT_NAME}.xcworkspace" \
             -scheme "$MEWLA_IOS_NATIVE_PROJECT_NAME" \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$ARCHIVE_PATH" \
-            DEVELOPMENT_TEAM="$MEWLA_APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY='Apple Distribution' \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            "${SIGNING_ARGS[@]}" \
             archive
           test -d "$ARCHIVE_PATH"
           xcodebuild \
@@ -440,6 +517,7 @@ jobs:
         env:
           KEYCHAIN_PATH: ${{ runner.temp }}/mewla-signing.keychain-db
           PROFILE_UUID: ${{ steps.signing.outputs.profile_uuid }}
+          LIVE_PROFILE_UUID: ${{ steps.signing.outputs.live_profile_uuid }}
         run: |
           set +e
           if [[ -n "${KEYCHAIN_PATH:-}" ]]; then
@@ -448,8 +526,13 @@ jobs:
           if [[ -n "${PROFILE_UUID:-}" ]]; then
             rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
           fi
+          if [[ -n "${LIVE_PROFILE_UUID:-}" ]]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/${LIVE_PROFILE_UUID}.mobileprovision"
+          fi
           rm -f \
             "${{ runner.temp }}/mewla-distribution.p12" \
             "${{ runner.temp }}/mewla-app-store.mobileprovision" \
             "${{ runner.temp }}/mewla-app-store.plist" \
+            "${{ runner.temp }}/mewla-live-app-store.mobileprovision" \
+            "${{ runner.temp }}/mewla-live-app-store.plist" \
             "${{ runner.temp }}/mewla-asc-individual-key.p8"
