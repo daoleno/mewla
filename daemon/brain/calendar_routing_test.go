@@ -119,6 +119,10 @@ func TestRouteCalendarEventLaunchedRunSurvivesRestartAndNeverBecomesLost(t *test
 	}
 	// Calendar owns the Worker's execution: it is not a lifecycle Attempt, so
 	// nothing can lease-expire it while it works.
+	if before.Status != WorkWaiting || before.Wake == nil || before.Wake.Kind != WorkWakeCalendarResult ||
+		before.Wake.Ref != "calendar:item-1:run-1" {
+		t.Fatalf("a running occurrence must leave its Work waiting on the result, not open: %+v", before)
+	}
 	if before.AttemptSessionID != "" || before.ContextRef != "calendar:item-1:run-1" {
 		t.Fatalf("calendar Work identity: %+v", before)
 	}
