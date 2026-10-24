@@ -279,6 +279,7 @@ type Watcher struct {
 	inventoryMu           sync.Mutex       // register resource ownership after in-flight inventory/reconciliation
 	workerEpoch           map[string]int64 // per-agent generation for lock-free probe apply
 	turnLedger            TurnLedger
+	progressAnnotator     func(workerID string) string
 	pollSources           *PollSources              // test-only seam (SetPollSources); production is nil
 	ledgerTurns           map[string]TurnSnapshot   // projection cache of the canonical ledger, never a truth owner
 	appliedFactIDs        map[string]string         // session -> last applied provider FactID (skip identical applies)
@@ -503,6 +504,15 @@ func (w *Watcher) socketPathFor(target string) string {
 	socket := w.tmuxSocketPath
 	w.mu.RUnlock()
 	return socket
+}
+
+// SetProgressAnnotator installs a note put in front of a Worker's done report,
+// for facts the Worker's own summary may leave out (an action Auto mode refused
+// that never ran). An empty note leaves the report as written.
+func (w *Watcher) SetProgressAnnotator(annotate func(workerID string) string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.progressAnnotator = annotate
 }
 
 // SetTurnLedger installs the canonical per-turn ledger. The watcher applies
@@ -1050,6 +1060,16 @@ func (w *Watcher) UpdateWorkerProgress(id string, progress classifier.WorkerProg
 	progress, err := classifier.ValidateProgress(progress)
 	if err != nil {
 		return nil, err
+	}
+	if progress.Status == "done" {
+		w.mu.RLock()
+		annotate := w.progressAnnotator
+		w.mu.RUnlock()
+		if annotate != nil {
+			if note := annotate(id); note != "" {
+				progress.Summary = noteThenSummary(note, progress.Summary, 160)
+			}
+		}
 	}
 
 	now := time.Now().UTC()
@@ -5062,4 +5082,31 @@ func lastN(s []string, n int) []string {
 		return s
 	}
 	return s[len(s)-n:]
+}
+
+// noteThenSummary puts note first and keeps as much of the Worker's own
+// summary as fits in limit runes.
+func noteThenSummary(note, summary string, limit int) string {
+	note = strings.TrimSpace(note)
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return truncateRunesWithEllipsis(note, limit)
+	}
+	room := limit - len([]rune(note)) - 3
+	if room < 20 {
+		return truncateRunesWithEllipsis(note, limit)
+	}
+	runes := []rune(summary)
+	if len(runes) > room {
+		summary = string(runes[:room-1]) + "…"
+	}
+	return note + " | " + summary
+}
+
+func truncateRunesWithEllipsis(text string, limit int) string {
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit-1]) + "…"
 }

@@ -247,13 +247,13 @@ func TestAnApprovalCannotBeAnsweredOnceTheWorkerLeftItsConversation(t *testing.T
 	if resp := <-done; !resp.OK || resp.HookOutput != "" {
 		t.Fatalf("a hook of the old conversation was answered: %+v", resp)
 	}
-	if resp := s.decide("%4", approval.ID, "allow"); resp.OK {
+	if resp := s.decide("%4", approval.ID, "allow", answeredByApp, ""); resp.OK {
 		t.Fatal("an approval of the old conversation was decided")
 	}
 	// An approval stamped with another conversation is refused even if pending.
 	hub.Publish(agentevents.Event{WorkerID: "%4", Kind: agentevents.KindApprovalRequest, At: time.Now(),
 		Approval: &agentevents.Approval{ID: "stale", ConversationID: "s-1", Options: []agentevents.ApprovalOption{{ID: "allow"}}}})
-	if resp := s.decide("%4", "stale", "allow"); resp.OK {
+	if resp := s.decide("%4", "stale", "allow", answeredByApp, ""); resp.OK {
 		t.Fatal("an approval from another conversation was decided")
 	}
 }

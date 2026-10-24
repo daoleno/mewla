@@ -164,12 +164,12 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		if a.agentEvents == nil {
 			return control.ErrorResponse("agent_events_unavailable", "Agent events are not running.")
 		}
-		return control.Response{OK: true, Approvals: a.agentEvents.approvals(strings.TrimSpace(req.WorkerID))}
+		return control.Response{OK: true, Approvals: a.agentEvents.approvals(strings.TrimSpace(req.WorkerID), false)}
 	case "worker_approve":
 		if a.agentEvents == nil {
 			return control.ErrorResponse("agent_events_unavailable", "Agent events are not running.")
 		}
-		return a.agentEvents.decide(strings.TrimSpace(req.WorkerID), strings.TrimSpace(req.ApprovalID), strings.TrimSpace(req.OptionID))
+		return a.agentEvents.decide(strings.TrimSpace(req.WorkerID), strings.TrimSpace(req.ApprovalID), strings.TrimSpace(req.OptionID), answeredByOperator, req.ApprovalBasis)
 	case "worker_list":
 		return a.handleWorkerList()
 	case "worker_spawn":
@@ -1850,7 +1850,7 @@ Shared tools: mewla connections --help.
 Progress: run "$MEWLA_WORKER_PROGRESS_CMD" worker progress with the turn contract's --turn-id at phase changes, long steps, blockers and completion; MEWLA_WORKER_ID identifies this Session. It is a check-in: continue without waiting for a reply.
   --status running|done|failed|blocked --phase starting|reading|planning|working|verifying|reporting --attention none|done|blocked|failed|user_input|stale --summary "<result>"
   optional: --event-kind progress|invariant|artifact|risk|needs_judgment|verification|done --details-json '<evidence>' --lease <seconds> (running status lapses to unknown after the lease; renew it during long quiet steps)
-Use --attention user_input only for a necessary decision, and --status done --attention done only after acceptance and feasible verification.`, normalizeWorkerProfile(profile)))
+Use --attention user_input only for a necessary decision, and --status done --attention done only after acceptance and feasible verification. A refusal that blocks you is blocked, not done.`, normalizeWorkerProfile(profile)))
 }
 
 func normalizeWorkerProfile(profile string) string {

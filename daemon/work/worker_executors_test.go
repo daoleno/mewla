@@ -16,12 +16,12 @@ func TestHardenClaudeCommandAppendsAutoPermission(t *testing.T) {
 		{
 			name: "plain claude",
 			in:   "claude",
-			want: "claude --permission-mode auto",
+			want: "claude " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow,
 		},
 		{
 			name: "claude with profile",
 			in:   "claude --profile my-profile",
-			want: "claude --profile my-profile --permission-mode auto",
+			want: "claude --profile my-profile " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow,
 		},
 		{
 			name: "already authorized dontAsk",
@@ -36,7 +36,7 @@ func TestHardenClaudeCommandAppendsAutoPermission(t *testing.T) {
 		{
 			name: "absolute path",
 			in:   "/usr/local/bin/claude --profile test",
-			want: "/usr/local/bin/claude --profile test --permission-mode auto",
+			want: "/usr/local/bin/claude --profile test " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow,
 		},
 		{
 			name: "dangerously-skip-permissions preserved",

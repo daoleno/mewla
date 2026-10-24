@@ -19,7 +19,6 @@ import (
 	"github.com/daoleno/mewla/daemon/server"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/work"
-	"github.com/google/uuid"
 )
 
 // agentApprovalWait is how long a hook waits for a person to decide before it
@@ -34,13 +33,34 @@ type agentEventService struct {
 	workers func() []*classifier.Worker
 	// approvalWait bounds one wait on a person; tests shorten it.
 	approvalWait time.Duration
-	now          func() time.Time
-	pruneMu      sync.Mutex
-	prunedAt     time.Time
+	// brainWait is how long Brain holds a delegated Worker's blocked action
+	// before it goes to the user.
+	brainWait time.Duration
+	now       func() time.Time
+	pruneMu   sync.Mutex
+	prunedAt  time.Time
+
+	// gate connects the permission path to Brain; see permission_gate.go.
+	gate permissionGate
+	// stop is closed when the daemon starts shutting down, so a question
+	// waiting on an answer does not hold the shutdown (or a hot reload) up.
+	stop <-chan struct{}
+	// mu guards the maps below.
+	mu       sync.Mutex
+	routes   map[string]string        // approval id -> brain or user
+	raised   map[string]bool          // approval id -> Brain was told
+	told     map[string]chan struct{} // approval id -> closed once Brain was told or could not be
+	notes    map[string]string        // approval id -> what the answer relied on
+	grants   map[string]time.Time     // worker + action -> retry allowed until
+	refusals map[string][]*refusal
 }
 
 func newAgentEventService(hub *agentevents.Hub, workers func() []*classifier.Worker) *agentEventService {
-	return &agentEventService{hub: hub, workers: workers, approvalWait: agentApprovalWait, now: time.Now}
+	return &agentEventService{
+		hub: hub, workers: workers, approvalWait: agentApprovalWait, brainWait: agentBrainWait, now: time.Now,
+		routes: map[string]string{}, raised: map[string]bool{}, told: map[string]chan struct{}{}, notes: map[string]string{},
+		grants: map[string]time.Time{}, refusals: map[string][]*refusal{},
+	}
 }
 
 // Handle processes one hook call and returns what the hook should print.
@@ -64,8 +84,17 @@ func (s *agentEventService) handleClaude(ctx context.Context, req control.AgentE
 		// let Claude proceed.
 		return control.Response{OK: true}
 	}
-	if payload.HookEvent == "PermissionRequest" {
-		return s.askClaude(ctx, workerID, payload)
+	switch payload.HookEvent {
+	case "PermissionRequest":
+		return s.askPrompt(ctx, workerID, payload)
+	case "PermissionDenied":
+		return s.askDenied(ctx, workerID, payload)
+	case "PreToolUse":
+		return s.grantFor(workerID, payload)
+	case "UserPromptSubmit":
+		s.clearRefusals(workerID)
+	case "PostToolUse":
+		s.markRan(workerID, payload)
 	}
 	now := s.now().UTC()
 	if event, ok := s.rebind(workerID, payload, now); ok {
@@ -118,22 +147,6 @@ func hubConversation(hub *agentevents.Hub) func(string) string {
 		}
 		return ""
 	}
-}
-
-// askClaude publishes the approval and waits for a decision. With none, the
-// hook prints nothing and Claude's own permission prompt decides.
-func (s *agentEventService) askClaude(ctx context.Context, workerID string, payload claude.Payload) control.Response {
-	ctx, cancel := context.WithTimeout(ctx, s.approvalWait)
-	defer cancel()
-	decision, ok := s.hub.Ask(ctx, workerID, claude.Approval(uuid.NewString(), payload), s.now().UTC())
-	if !ok {
-		return control.Response{OK: true}
-	}
-	output, ok := claude.Decision(decision.OptionID)
-	if !ok {
-		return control.Response{OK: true}
-	}
-	return control.Response{OK: true, HookOutput: output}
 }
 
 // agentEventPruneEvery bounds how often Handle looks for vanished Workers.
@@ -275,7 +288,9 @@ func claudeSettingsPath(stateDir string) string {
 }
 
 // approvals lists the decisions agents are waiting on, for one Worker or all.
-func (s *agentEventService) approvals(workerID string) []control.Approval {
+// The app sees only what is its to answer: a blocked action Brain still holds
+// is not shown until Brain hands it over.
+func (s *agentEventService) approvals(workerID string, forApp bool) []control.Approval {
 	out := []control.Approval{}
 	for _, id := range s.hub.Workers() {
 		if workerID != "" && id != workerID {
@@ -283,7 +298,11 @@ func (s *agentEventService) approvals(workerID string) []control.Approval {
 		}
 		state, _ := s.hub.State(id)
 		for _, a := range state.Approvals {
-			item := control.Approval{ID: a.ID, WorkerID: id, Kind: a.Kind, Tool: a.Tool, Summary: a.Summary, Options: []control.ApprovalOption{}}
+			route := s.routeOf(a.ID)
+			if forApp && route == routeBrain {
+				continue
+			}
+			item := control.Approval{ID: a.ID, WorkerID: id, Kind: a.Kind, Tool: a.Tool, Summary: a.Summary, Reason: a.Reason, Route: route, Options: []control.ApprovalOption{}}
 			for _, o := range a.Options {
 				item.Options = append(item.Options, control.ApprovalOption{ID: o.ID, Label: o.Label, Scope: o.Scope})
 			}
@@ -294,8 +313,12 @@ func (s *agentEventService) approvals(workerID string) []control.Approval {
 }
 
 // decide answers a pending approval with one of its options. A late or
-// unknown answer is refused; it is never turned into a keystroke.
-func (s *agentEventService) decide(workerID, approvalID, optionID string) control.Response {
+// unknown answer is refused; it is never turned into a keystroke. by is who
+// answers (answeredByOperator or answeredByApp) and basis what the answer
+// relies on. A blocked action Brain holds can be answered only through the
+// control socket, where allowing it requires a basis, and escalate hands it to
+// the user.
+func (s *agentEventService) decide(workerID, approvalID, optionID, by, basis string) control.Response {
 	state, ok := s.hub.State(workerID)
 	if !ok {
 		return control.ErrorResponse("approval_not_pending", "That approval is not pending.")
@@ -313,6 +336,18 @@ func (s *agentEventService) decide(workerID, approvalID, optionID string) contro
 	if chosen == nil {
 		return control.ErrorResponse("approval_not_pending", "That approval is not pending.")
 	}
+	basis = strings.TrimSpace(basis)
+	route := s.routeOf(approvalID)
+	if route == routeBrain && by == answeredByApp {
+		return control.ErrorResponse("approval_with_brain", "Brain is handling this and will ask you if it needs you.")
+	}
+	if optionID == "escalate" {
+		if by != answeredByOperator || route != routeBrain {
+			return control.ErrorResponse("invalid_approval_option", "Only Brain can hand a blocked action to the user, and only while it holds it.")
+		}
+		s.escalate(workerID, *chosen, firstNonEmptyString(basis, "Brain escalated it"))
+		return control.Response{OK: true}
+	}
 	offered := false
 	for _, o := range chosen.Options {
 		offered = offered || o.ID == optionID
@@ -320,10 +355,42 @@ func (s *agentEventService) decide(workerID, approvalID, optionID string) contro
 	if !offered {
 		return control.ErrorResponse("invalid_approval_option", "The agent did not offer that option.")
 	}
+	if optionID == "allow" && route == routeBrain && basis == "" {
+		return control.ErrorResponse("approval_basis_required", "Allowing a delegated Worker's blocked action needs -basis: the sentence of the brief that authorizes it. If the brief does not cover it, use -option escalate.")
+	}
+	if basis != "" {
+		s.mu.Lock()
+		s.notes[approvalID] = basis
+		s.mu.Unlock()
+	}
 	if err := s.hub.Decide(workerID, approvalID, optionID, s.now().UTC()); err != nil {
 		return control.ErrorResponse("approval_not_pending", "That approval is not pending.")
 	}
+	outcome, verb := "denied", "refused"
+	if optionID == "allow" {
+		outcome, verb = "approved", "approved"
+	}
+	who := "the user"
+	if by == answeredByOperator && route == routeBrain {
+		who = "Brain"
+	} else if by == answeredByOperator {
+		who = "an operator"
+	}
+	summary := fmt.Sprintf("%s %s: %s", firstNonEmptyString(who, "someone"), verb, describeAction(*chosen))
+	if basis != "" {
+		summary += " — basis: " + truncateRunes(basis, 300)
+	}
+	s.finishQuestion(workerID, *chosen, outcome, summary, who, basis)
 	return control.Response{OK: true}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // agentLevelsFor says, for one Worker, how Mewla performs each capability: by
@@ -367,13 +434,17 @@ func launchAdapterFor(execs *work.ExecutorConfig, adapters *agentevents.Registry
 type appApprovals struct{ service *agentEventService }
 
 func (a appApprovals) Pending(workerID string) []server.ApprovalWire {
-	pending := a.service.approvals(workerID)
+	pending := a.service.approvals(workerID, true)
 	if len(pending) == 0 {
 		return nil
 	}
 	out := make([]server.ApprovalWire, 0, len(pending))
 	for _, item := range pending {
-		wire := server.ApprovalWire{ID: item.ID, Kind: item.Kind, Tool: item.Tool, Summary: item.Summary, Options: []server.ApprovalOptionWire{}}
+		summary := item.Summary
+		if item.Reason != "" {
+			summary += "\n(blocked by Auto mode: " + item.Reason + ")"
+		}
+		wire := server.ApprovalWire{ID: item.ID, Kind: item.Kind, Tool: item.Tool, Summary: summary, Options: []server.ApprovalOptionWire{}}
 		for _, o := range item.Options {
 			wire.Options = append(wire.Options, server.ApprovalOptionWire{ID: o.ID, Label: o.Label, Scope: o.Scope})
 		}
@@ -383,7 +454,7 @@ func (a appApprovals) Pending(workerID string) []server.ApprovalWire {
 }
 
 func (a appApprovals) Decide(workerID, approvalID, optionID string) error {
-	response := a.service.decide(workerID, approvalID, optionID)
+	response := a.service.decide(workerID, approvalID, optionID, answeredByApp, "")
 	if response.OK {
 		return nil
 	}

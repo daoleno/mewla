@@ -27,8 +27,8 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 	if !strings.Contains(agents, "## Engineering Judgment") || len(agents) > 5700 {
 		t.Fatalf("standing guidance missing or oversized: %d bytes", len(agents))
 	}
-	if len(catalog.Playbooks) != 3 {
-		t.Fatalf("expected three lazy playbooks, got %d", len(catalog.Playbooks))
+	if len(catalog.Playbooks) != 4 {
+		t.Fatalf("expected four lazy playbooks, got %d", len(catalog.Playbooks))
 	}
 	methodMarkers := map[string][]string{
 		"slice-work":     {"read a few actual session transcripts", "missing information", "a wrong or missing test", "a bad split", "an unclear instruction", "fix that cause"},

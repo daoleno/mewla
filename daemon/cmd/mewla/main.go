@@ -307,6 +307,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
 	adapters := agentevents.NewRegistry()
 	agentEvents := newAgentEventService(eventHub, w.Workers)
+	agentEvents.stop = ctx.Done()
 	w.SetProviderActivityProbe(newEventActivityProbe(eventHub, newWorkProviderActivityProbe()))
 	// A Codex that Mewla started announces its thread and rollout; its
 	// conversation is read from there instead of being searched for.
@@ -542,6 +543,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 		})
 	}
 	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
+	agentEvents.gate = permissionGateHooks(w, brainStore, brainService, srv.WorkerApprovalsChanged)
+	w.SetProgressAnnotator(agentEvents.RefusalNote)
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize address book: %w", err)

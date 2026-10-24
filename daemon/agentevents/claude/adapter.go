@@ -62,13 +62,14 @@ func hasSettingsFlag(command string) bool {
 }
 
 // SettingsJSON is the hook file for hookCommand, the command line Claude runs
-// for each hook (it receives the payload on stdin). PermissionRequest may wait
-// on a person, so it gets the longest timeout Claude allows by default.
+// for each hook (it receives the payload on stdin). PermissionRequest and
+// PermissionDenied may wait on Brain or a person, so they get the longest
+// timeout Claude allows by default.
 func SettingsJSON(hookCommand string) ([]byte, error) {
 	hooks := map[string]any{}
 	for _, name := range HookEvents {
 		entry := map[string]any{"type": "command", "command": hookCommand}
-		if name == "PermissionRequest" {
+		if name == "PermissionRequest" || name == "PermissionDenied" {
 			entry["timeout"] = 600
 		} else {
 			entry["timeout"] = 10
