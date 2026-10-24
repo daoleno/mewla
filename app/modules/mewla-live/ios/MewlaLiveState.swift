@@ -82,6 +82,11 @@ struct MewlaLiveState: Codable, Hashable {
     epoch != other.epoch ? epoch > other.epoch : seq > other.seq
   }
 
+  /// The same comparison against a remembered pair, so a stored "epoch:seq" needs no full state.
+  func isNewer(thanEpoch epoch: Int64, seq: Int64) -> Bool {
+    self.epoch != epoch ? self.epoch > epoch : self.seq > seq
+  }
+
   static func parse(_ raw: String) -> MewlaLiveState? {
     guard let data = raw.data(using: .utf8) else { return nil }
     return try? JSONDecoder().decode(MewlaLiveState.self, from: data)

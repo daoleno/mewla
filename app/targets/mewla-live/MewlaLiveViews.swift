@@ -1,9 +1,16 @@
 import SwiftUI
+import UIKit
 import WidgetKit
 
 enum MewlaStyle {
   /// The seal vermilion. Red marks only "you are needed"; everything else is neutral.
-  static let seal = Color(red: 200 / 255, green: 55 / 255, blue: 43 / 255)
+  /// In dark mode it lifts to a lighter vermilion: the print red on a dark surface was legible
+  /// but dim in the small widget's caption.
+  static let seal = Color(uiColor: UIColor { traits in
+    traits.userInterfaceStyle == .dark
+      ? UIColor(red: 255 / 255, green: 130 / 255, blue: 114 / 255, alpha: 1)
+      : UIColor(red: 200 / 255, green: 55 / 255, blue: 43 / 255, alpha: 1)
+  })
 
   static func headline(_ state: MewlaLiveState) -> String {
     if state.needsYou { return "Brain needs you" }
