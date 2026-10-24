@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/daoleno/mewla/daemon/attachment"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -614,3 +615,24 @@ func (body *gatedUploadBody) Read(buffer []byte) (int, error) {
 }
 
 func (*gatedUploadBody) Close() error { return nil }
+
+// What the phone gets back from /upload is exactly what it sends in
+// send_input, and the daemon accepts it: the upload and the attachment check
+// agree on the stored path.
+func TestUploadedPathIsAcceptedAsAnAttachment(t *testing.T) {
+	stateDir := t.TempDir()
+	deviceID := "device-upload"
+	authManager, privateKey := uploadAuthFixture(t, stateDir, deviceID)
+	server := New(authManager, nil, nil, nil, nil, nil, nil)
+	request := rawUploadRequest(t, authManager, privateKey, deviceID, bytes.NewBufferString("a picture"), "photo 1.PNG", "image/png")
+	response := httptest.NewRecorder()
+	server.handleUpload(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+	}
+	payload := decodeUploadResponse(t, response)
+	files, err := server.AttachmentStore().ConfineAll([]attachment.File{{Name: payload["name"], Path: payload["path"], ContentType: "image/png"}})
+	if err != nil || len(files) != 1 || files[0].Size != int64(len("a picture")) {
+		t.Fatalf("an uploaded file was refused as an attachment: %+v %v", files, err)
+	}
+}

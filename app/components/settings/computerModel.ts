@@ -80,7 +80,7 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
       }
       problems.push({
         key: "browser-key",
-        text: "Then run mewla agent-use key on that computer and paste it, or copy it on this phone and paste it here.",
+        text: "Then run mewla agent-use key on that computer, or paste it here.",
         action: { label: "Paste key", does: { kind: "paste_key" } },
       });
       break;
