@@ -17,6 +17,7 @@ New here? [Get started](get-started.md) is one path from install to your first g
 - [Sessions](sessions.md): start agents and shells, Chat, Terminal, Git, and the ports they open.
 - [Brain and Work](brain-and-work.md): hand Brain a goal, follow the Work, answer when it asks.
 - [Notifications and Telegram](notifications.md): when Mewla interrupts you, and Brain from Telegram.
+- [The cat's house](cat.md): the cat leaves when Work starts, sends postcards, and comes home with a souvenir.
 - [Calendar](calendar.md): reminders and scheduled actions that run as Work.
 - [Plugins](plugins.md): let Brain read Linear, Notion, GitHub and more, and change them with your consent.
 - [Screen](screen.md): see and control your Mac's screen from the phone.
