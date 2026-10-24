@@ -97,13 +97,16 @@ The reason comes from the provider's own structured record, not the screen:
   still ends that Activity.
 - **Codex:** an `event_msg` of type `error` with `codex_error_info`.
 
-The record is carried as `ProviderActivity.error`.
+The record is carried as `ProviderActivity.error`. Only its code and HTTP status
+are read; the message is for people. Mewla never guesses from wording, so an error
+a provider leaves as `other` or `unknown` is persistent and goes to Brain once.
+Cursor and Grok record no turn error, so they have nothing to classify.
 
 | Shape | Action |
 | --- | --- |
-| Transient error: connection lost or reset, ECONNREFUSED, timeout, overloaded, 5xx, 429 | Submit one continuation after 30 s, 2 min, 5 min, 10 min and 10 min |
+| Transient error by the provider's own code or HTTP status: dropped connection or stream, timeout, overloaded, 5xx, 429 | Submit one continuation after 30 s, 2 min, 5 min, 10 min and 10 min |
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
-| Persistent error: login, billing, unknown model, invalid or oversized request | One stall escalation after 30 s (`provider_error`); never resumed |
+| Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx; and any error the provider did not classify | One stall escalation after 30 s (`provider_error`); never resumed |
 | Stopped with no error and no terminal report | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease, and not while the footer shows background shells or agents |
 
 **Continuation.**

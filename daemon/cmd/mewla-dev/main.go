@@ -424,7 +424,7 @@ func isDoneProcess(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(err.Error(), "process already finished")
+	return errors.Is(err, os.ErrProcessDone)
 }
 
 // Use the same validated public identities as release and local build scripts.

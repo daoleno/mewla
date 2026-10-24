@@ -51,6 +51,10 @@ func (e exchangeUnreachable) Error() string {
 func exchangeFailure(err error) string {
 	var certificate x509.UnknownAuthorityError
 	var record tls.RecordHeaderError
+	var alert tls.AlertError
+	var verification *tls.CertificateVerificationError
+	var hostname x509.HostnameError
+	var invalid x509.CertificateInvalidError
 	var timeout net.Error
 	switch {
 	case errors.Is(err, errPrivateEndpoint):
@@ -61,11 +65,13 @@ func exchangeFailure(err error) string {
 		return "connection reset"
 	case errors.Is(err, syscall.ENETUNREACH), errors.Is(err, syscall.EHOSTUNREACH):
 		return "network unreachable"
-	case errors.As(err, &certificate), errors.As(err, &record), strings.Contains(err.Error(), "tls:"), strings.Contains(err.Error(), "x509:"):
+	case errors.As(err, &certificate), errors.As(err, &record), errors.As(err, &verification), errors.As(err, &hostname), errors.As(err, &invalid), errors.As(err, &alert),
+		// crypto/tls reports some handshake failures only as untyped "tls: ..." text.
+		strings.Contains(err.Error(), "tls:"):
 		return "secure connection failed"
-	case strings.Contains(err.Error(), "endpoint DNS"):
+	case errors.Is(err, errEndpointDNS):
 		return "DNS lookup failed"
-	case strings.Contains(err.Error(), "redirects are not allowed"):
+	case errors.Is(err, errRedirect):
 		return "unexpected redirect"
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &timeout) && timeout.Timeout():
 		return "timed out"

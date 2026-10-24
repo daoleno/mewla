@@ -4,9 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
@@ -110,7 +110,8 @@ func (s *Server) handleComputers(w http.ResponseWriter, r *http.Request) {
 	result, err := s.computers.Handle(r.Context(), req)
 	if err != nil {
 		status := http.StatusBadRequest
-		if strings.HasPrefix(err.Error(), "could not reach") {
+		var unreachable *computers.UnreachableError
+		if errors.As(err, &unreachable) {
 			status = http.StatusBadGateway
 		}
 		http.Error(w, err.Error(), status)

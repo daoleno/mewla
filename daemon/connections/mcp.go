@@ -203,7 +203,7 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 			if isTransportError(err, errAuth) {
 				return nil, errAuth
 			}
-			if strings.Contains(err.Error(), "exceeds size limit") {
+			if isTransportError(err, errResponseTooLarge) {
 				return nil, errors.New("MCP tool list exceeds 1 MB")
 			}
 			if isTransportError(err, errNetwork) {
