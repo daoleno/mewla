@@ -252,7 +252,7 @@ export function resolveTerminalRouteWorker({
       serverName: "",
       serverUrl: "",
       name: brainHostWorker.name || workerId,
-      status: (brainHostWorker.status as Worker["status"]) || "running",
+      status: brainHostWorker.status as Worker["status"],
       project: undefined,
       cwd: brainHostWorker.cwd || routeSessionHint.cwd,
       command: brainHostWorker.command || routeSessionHint.command,
