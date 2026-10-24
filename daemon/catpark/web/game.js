@@ -10,7 +10,7 @@ var LANG = /^zh/i.test(navigator.language || '') ? 'zh' : 'en';
 var SV_ORDER = ['palette', 'bottle', 'book', 'wrench', 'lantern', 'pot', 'telescope', 'bell', 'teapot', 'stamp', 'compass', 'pinecone'];
 var TREATS = ['fish', 'yarn', 'leaf'];
 var SLOTS = [[28, 73], [50, 65], [71, 72]];   // yard treat spots, % of the picture
-var SHELF_X = [13, 22.5, 32, 41.5];
+var SHELF_X = [16.5, 25, 33.5, 42];
 var PANTRY_CAP = 9;
 
 var S = null;                 // the latest View from the daemon
@@ -103,7 +103,7 @@ function renderHouse(popShelf) {
   sign.classList.toggle('on', !!p.waiting);
   sign.classList.toggle('hook', !!p.away);
   hot.style.display = p.waiting ? '' : 'none';
-  if (p.away) { hot.style.left = '11%'; hot.style.top = '25%'; } else { hot.style.left = '25%'; hot.style.top = '36%'; }
+  if (p.away) { hot.style.left = '11%'; hot.style.top = '25%'; } else { hot.style.left = '22.5%'; hot.style.top = '33%'; }
   $('hot-bag').style.display = p.waiting && p.away ? 'none' : '';
 
   var bag = S && S.yard && S.yard.bag;
