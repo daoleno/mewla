@@ -236,6 +236,10 @@ func driveClaudeChoice(pane claudeChoicePane, questions []ClaudeChoiceQuestion, 
 
 func verifyPristineClaudeChoice(screen claudeChoiceScreen, questions []ClaudeChoiceQuestion) error {
 	if !isClaudeChoiceQuestion(screen, questions[0]) {
+		if screenShowsChoice(screen, questions) {
+			// Same prompt, moved off its first question: not passed, so the card stays.
+			return refuseClaudeChoice("the Terminal prompt is not on its first question; go back to it there")
+		}
 		return ErrClaudeChoiceGone
 	}
 	if len(screen.Tabs) != len(questions) {
@@ -252,6 +256,30 @@ func verifyPristineClaudeChoice(screen claudeChoiceScreen, questions []ClaudeCho
 		}
 	}
 	return nil
+}
+
+// screenShowsChoice proves the screen is this prompt on another tab or on its
+// review step, as opposed to no prompt or a different one.
+func screenShowsChoice(screen claudeChoiceScreen, questions []ClaudeChoiceQuestion) bool {
+	switch screen.Kind {
+	case claudeChoiceScreenQuestion:
+		for _, question := range questions {
+			if screen.Question == claudeChoiceCompact(question.Question) {
+				return true
+			}
+		}
+	case claudeChoiceScreenReview:
+		if len(screen.Review) != len(questions) {
+			return false
+		}
+		for index, item := range screen.Review {
+			if claudeChoiceCompact(item.Question) != claudeChoiceCompact(questions[index].Question) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // isClaudeChoiceQuestion proves the screen shows this question with these options.
@@ -309,7 +337,7 @@ func (d *claudeChoiceDriver) answerSingle(screen claudeChoiceScreen, question Cl
 	if final {
 		return screen, nil
 	}
-	return d.waitFor(func(s claudeChoiceScreen) bool { return !isClaudeChoiceQuestion(s, question) })
+	return d.waitPast(question)
 }
 
 func (d *claudeChoiceDriver) answerMulti(screen claudeChoiceScreen, question ClaudeChoiceQuestion, answer ClaudeChoiceAnswer) (claudeChoiceScreen, error) {
@@ -364,7 +392,7 @@ func (d *claudeChoiceDriver) answerMulti(screen claudeChoiceScreen, question Cla
 	if err := d.key("Enter"); err != nil {
 		return screen, err
 	}
-	return d.waitFor(func(s claudeChoiceScreen) bool { return !isClaudeChoiceQuestion(s, question) })
+	return d.waitPast(question)
 }
 
 func (d *claudeChoiceDriver) typeOther(screen claudeChoiceScreen, question ClaudeChoiceQuestion, target int, text string) (claudeChoiceScreen, error) {
@@ -507,6 +535,17 @@ func (d *claudeChoiceDriver) waitForStable(ready func(claudeChoiceScreen) bool) 
 }
 
 var errClaudeChoiceTimeout = errors.New("timed out")
+
+// waitPast waits for the prompt to leave this question after the selecting
+// Enter. A screen that never moves on is a refusal in plain words, not a bare
+// timeout the app would show as is.
+func (d *claudeChoiceDriver) waitPast(question ClaudeChoiceQuestion) (claudeChoiceScreen, error) {
+	screen, err := d.waitFor(func(s claudeChoiceScreen) bool { return !isClaudeChoiceQuestion(s, question) })
+	if errors.Is(err, errClaudeChoiceTimeout) {
+		return screen, d.stopped("the Terminal didn't respond; check it and try again")
+	}
+	return screen, err
+}
 
 func (d *claudeChoiceDriver) stopped(format string, args ...any) error {
 	reason := fmt.Sprintf(format, args...)
