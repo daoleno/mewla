@@ -190,3 +190,25 @@ func TestTrustPreparationRetriesConcurrentConfigChange(t *testing.T) {
 		t.Fatalf("concurrent setting lost: %s", raw)
 	}
 }
+
+// A delegated Codex resume carries the folder trust flag; the resume parser must
+// still find the one resume token and not call the quoted table ambiguous.
+func TestDelegatedCodexResumeWithFolderTrustIsNotAmbiguous(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, `it's "odd" dir`)
+	if err := os.Mkdir(cwd, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	command, err := PrepareDelegatedCommand("codex", "codex resume 019a1234-aaaa-bbbb-cccc-0123456789ab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := PrepareDelegatedWorkspace(command, cwd, map[string]string{"HOME": root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, present, err := ProviderResumeToken("codex", prepared)
+	if err != nil || !present || token != "019a1234-aaaa-bbbb-cccc-0123456789ab" {
+		t.Fatalf("token=%q present=%v err=%v for %s", token, present, err, prepared)
+	}
+}
