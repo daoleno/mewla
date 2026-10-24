@@ -55,8 +55,16 @@ function souvenirs() { return (S && S.souvenirs) || []; }
 function unseen() { return postcards().filter(function (c) { return !c.seen; }).sort(function (a, b) { return a.at - b.at; }); }
 function overlayOpen() { return !!document.querySelector('.ov.on'); }
 
+function words() { return window.CAT_UI[LANG] || window.CAT_UI.en; }
+function applyWords() {
+  var w = words();
+  Object.keys(w).forEach(function (id) { var n = $(id); if (n && id !== 'home') n.setAttribute('aria-label', w[id]); });
+  document.documentElement.lang = LANG;
+}
+applyWords();
+
 function setState(next, locale) {
-  if (locale) LANG = /^zh/i.test(locale) ? 'zh' : 'en';
+  if (locale) { LANG = /^zh/i.test(locale) ? 'zh' : 'en'; applyWords(); }
   var first = known === null;
   var fresh = [];
   var freshSv = [];
@@ -306,7 +314,7 @@ function renderBack() {
   var b = $('back');
   b.style.display = overlayOpen() ? 'none' : '';
   b.innerHTML = screen === 'house' ? CHEVRON : HOME;
-  b.setAttribute('aria-label', screen === 'house' ? 'Back' : 'Home');
+  b.setAttribute('aria-label', screen === 'house' ? words().back : words().home);
 }
 $('back').addEventListener('click', function () {
   if (screen === 'album') closeAlbum();
