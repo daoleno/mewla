@@ -1031,6 +1031,23 @@ func reduceTurnFact(turn *TurnRecord, fact watcher.TurnFact, now time.Time) (tur
 				mutation.changed = true
 				return mutation, nil
 			}
+			if turn.SignalProtocol && liveTurnStatus(status) {
+				// A signal Turn is settled only by the Worker's own progress
+				// report: a provider Activity ends whenever the model stops
+				// answering, and a background wake or a retry resumes it. The
+				// bound terminal is evidence; the stall supervisor tells Brain
+				// when the Worker really stopped.
+				if adopts {
+					admission = fact.Admission
+					mutation.recordAdmission = true
+				}
+				if activityID == "" && fact.ActivityID != "" {
+					mutation.activityID = fact.ActivityID
+				}
+				hintOnly(kind, "Delegated provider reported "+fact.Kind+"; awaiting the Worker's progress report")
+				mutation.changed = true
+				break
+			}
 			if adopts {
 				admission = fact.Admission
 				mutation.recordAdmission = true
@@ -1308,6 +1325,16 @@ func providerFactBinds(turn *TurnRecord, fact watcher.TurnFact) bool {
 	return false
 }
 
+// liveTurnStatus reports a turn that has not settled and can still be bound to
+// the provider Activity that carried its input.
+func liveTurnStatus(status watcher.TurnStatus) bool {
+	switch status {
+	case watcher.TurnAdmitted, watcher.TurnAccepted, watcher.TurnRunning, watcher.TurnBlocked:
+		return true
+	}
+	return false
+}
+
 // providerFactAdopts implements admission uncertainty reconciliation (C.6): an
 // Admitted/Accepted turn with no recorded provider identity adopts the
 // provider's newest observation that started inside its admission window.
@@ -1317,7 +1344,7 @@ func providerFactAdopts(turn *TurnRecord, fact watcher.TurnFact) bool {
 	if fact.Class != watcher.EvidenceProvider {
 		return false
 	}
-	if turn.Status != watcher.TurnAdmitted && turn.Status != watcher.TurnAccepted {
+	if !liveTurnStatus(turn.Status) || turn.Status == watcher.TurnBlocked {
 		return false
 	}
 	if !turn.Admission.Empty() {
@@ -1325,6 +1352,15 @@ func providerFactAdopts(turn *TurnRecord, fact watcher.TurnFact) bool {
 	}
 	if fact.StartedAt.IsZero() || fact.StartedAt.Before(turn.AcceptedAt) {
 		return false
+	}
+	if turn.Status == watcher.TurnRunning {
+		// The Worker's own check-in can outrun the first provider read, so a
+		// running turn may still lack its provider identity. Only the Activity
+		// that carried this turn's exact input adopts it.
+		if strings.TrimSpace(turn.PayloadSHA256) == "" ||
+			strings.TrimSpace(fact.Admission.SHA256) != strings.TrimSpace(turn.PayloadSHA256) {
+			return false
+		}
 	}
 	return !fact.Admission.Empty() || strings.TrimSpace(fact.ActivityID) != ""
 }

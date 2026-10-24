@@ -70,6 +70,10 @@ a Work and a turn; `cmd/mewla/permission_gate.go`) a refusal takes this path:
    allow|deny|escalate -basis "<brief sentence>"`. `allow` requires the basis: the
    sentence of the brief that authorizes the action (`playbooks/permission-block.md`
    says what to approve, escalate or refuse). `escalate` hands it to the user.
+   Brain's answer (any option) also resolves the `needs_input` review it was
+   handed with a `wait` on the Worker's Session Turn, so ending the Host turn
+   raises no `brain.reconcile_required` and Brain is not woken again; the user's
+   later answer is not Brain's disposition and does not touch the review.
 3. **The user, only if needed.** On `escalate`, or if Brain does not answer within
    two minutes, the approval becomes an ordinary approval card in the app.
 4. **No Worker waits at a prompt.** If nobody answers before the hook's own

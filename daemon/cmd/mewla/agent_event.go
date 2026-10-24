@@ -346,6 +346,7 @@ func (s *agentEventService) decide(workerID, approvalID, optionID, by, basis str
 			return control.ErrorResponse("invalid_approval_option", "Only Brain can hand a blocked action to the user, and only while it holds it.")
 		}
 		s.escalate(workerID, *chosen, firstNonEmptyString(basis, "Brain escalated it"))
+		s.brainAnswered(workerID)
 		return control.Response{OK: true}
 	}
 	offered := false
@@ -381,7 +382,18 @@ func (s *agentEventService) decide(workerID, approvalID, optionID, by, basis str
 		summary += " — basis: " + truncateRunes(basis, 300)
 	}
 	s.finishQuestion(workerID, *chosen, outcome, summary, who, basis)
+	if by == answeredByOperator && route == routeBrain {
+		s.brainAnswered(workerID)
+	}
 	return control.Response{OK: true}
+}
+
+// brainAnswered counts Brain's answer to a blocked action as its disposition
+// of the review that raised it.
+func (s *agentEventService) brainAnswered(workerID string) {
+	if s.gate.answered != nil {
+		s.gate.answered(workerID)
+	}
 }
 
 func firstNonEmptyString(values ...string) string {

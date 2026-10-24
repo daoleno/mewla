@@ -2,6 +2,7 @@ package brain
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -248,4 +249,40 @@ func (s *Service) EscalateStalledTurn(stall watcher.TurnStall) error {
 		return fmt.Errorf("brain service is not configured")
 	}
 	return s.store.EscalateStalledTurn(stall)
+}
+
+// ResolveAnsweredWorkerBlock records Brain's answer to a delegated Worker's
+// blocked action as the disposition of the review that raised it: Brain handed
+// the decision back, so the Work waits on the exact Session Turn. Without it
+// the Host turn ends with the review still open and the lifecycle wakes Brain
+// again to reconcile a turn that did all it had to do. It reports whether a
+// delivered needs_input review of that Session was resolved; any other Work
+// state is left alone.
+func (s *Store) ResolveAnsweredWorkerBlock(sessionID string) (bool, error) {
+	if s == nil || s.fsm == nil {
+		return false, fmt.Errorf("brain store is not configured")
+	}
+	st, found := s.fsmWorkByAttemptSession(sessionID)
+	if !found || st.Attempt == nil || st.Review == nil || st.Review.Reason != "session.needs_input" {
+		return false, nil
+	}
+	item, err := s.Work(string(st.ID))
+	if err != nil {
+		return false, err
+	}
+	if !reviewDeliveredAwaitingDisposition(item.Review) || item.Review.EventID != st.Review.EventID {
+		return false, nil
+	}
+	lease := item.Review.Lease
+	_, _, err = s.ResolveWorkReview(WorkReviewDispositionRequest{
+		WorkID: item.ID, HandlingID: lease.HandlingID, ProviderTurnID: lease.ProviderTurnID,
+		ExpectedWorkRevision: lease.DeliveryWorkRevision, Disposition: WorkDispositionWait,
+		Wake: &WorkWake{Kind: WorkWakeSessionTerminal,
+			Ref: SessionTerminalWakeRef(st.Attempt.SessionID, string(st.Attempt.TurnToken))},
+		Summary: "Brain answered the Worker's blocked action; the Work waits for the Worker.",
+	})
+	if errors.Is(err, ErrEventHandled) || errors.Is(err, ErrEventClaim) {
+		return false, nil
+	}
+	return err == nil, err
 }

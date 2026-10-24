@@ -17,6 +17,7 @@ type gateRecorder struct {
 	details []map[string]any
 	audits  []string
 	resumed []string
+	answers int
 	changed int
 	tellErr error
 }
@@ -37,6 +38,11 @@ func (r *gateRecorder) gate(delegated bool) permissionGate {
 		resumed: func(_ string, summary string) {
 			r.mu.Lock()
 			r.resumed = append(r.resumed, summary)
+			r.mu.Unlock()
+		},
+		answered: func(string) {
+			r.mu.Lock()
+			r.answers++
 			r.mu.Unlock()
 		},
 		audit: func(_ string, outcome, summary string, _ map[string]any) {
@@ -384,5 +390,42 @@ func TestAQuestionStillWaitingDoesNotHoldTheDaemonsShutdownUp(t *testing.T) {
 	}
 	if _, audits, _, _ := rec.snapshot(); len(audits) != 0 {
 		t.Fatalf("a shutdown was recorded as an answer or a timeout: %q", audits)
+	}
+}
+
+func (r *gateRecorder) answered() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.answers
+}
+
+// Brain's answer is its disposition of the review that raised the question;
+// the user's answer, a refused answer and an unanswered question are not.
+func TestOnlyBrainsAnswerCountsAsItsDispositionOfTheBlockedAction(t *testing.T) {
+	for _, option := range []string{"allow", "deny", "escalate"} {
+		t.Run("brain "+option, func(t *testing.T) {
+			s, rec := gateService(t, true)
+			done := start(s, deniedPush)
+			asked := pending(t, s, false, 1)[0]
+			if resp := s.decide("%4", asked.ID, option, answeredByApp, ""); resp.OK || rec.answered() != 0 {
+				t.Fatalf("the app's attempt counted: %+v answers=%d", resp, rec.answered())
+			}
+			if resp := s.decide("%4", asked.ID, option, answeredByOperator, "Release v0.2.62: push the release commit."); !resp.OK {
+				t.Fatalf("decide: %+v", resp)
+			}
+			if rec.answered() != 1 {
+				t.Fatalf("Brain's %s was not recorded as its disposition: %d", option, rec.answered())
+			}
+			if option == "escalate" {
+				// The user's later answer is not Brain's.
+				if resp := s.decide("%4", asked.ID, "deny", answeredByApp, ""); !resp.OK {
+					t.Fatalf("user answer: %+v", resp)
+				}
+				if rec.answered() != 1 {
+					t.Fatalf("the user's answer counted as Brain's: %d", rec.answered())
+				}
+			}
+			<-done
+		})
 	}
 }

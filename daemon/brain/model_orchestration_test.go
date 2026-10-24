@@ -25,7 +25,8 @@ func TestProviderResultPersistsAndReachesBrainWithoutImplicitAcceptance(t *testi
 			}
 			at := time.Now().UTC().Add(-time.Second)
 			candidate := delegatedSubmissionCandidate(item.ID, "worker", "turn-result", "implement", at)
-			candidate.SignalProtocol = true
+			// A provider-native turn: a signal turn is settled only by the
+			// Worker's own report (TestSignalTurnProviderTerminalIsEvidenceOnly).
 			pending, _, err := store.PrepareInputAdmission(candidate)
 			if err != nil {
 				t.Fatal(err)

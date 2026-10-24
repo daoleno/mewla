@@ -108,7 +108,18 @@ Cursor and Grok record no turn error, so they have nothing to classify.
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
 | Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx |
 | An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) | One stall escalation after 30 s (`provider_error`); never resumed |
-| Stopped with no error and no terminal report | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease, and not while the footer shows background shells or agents |
+| Stopped with no error and no terminal report, the pane idle at its prompt | One stall escalation after 90 s (`stopped`, "Worker stopped; review the result"), whatever lease the Turn declared, and not while the footer shows background shells or agents |
+| Stopped with no error and no terminal report, the pane not recognized as idle | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease |
+
+A Turn that carries its identity in the prompt (a signal Turn) is settled only by
+the Worker's own `worker progress --status done|failed`. The provider's own
+`completed` / `failed` is evidence: it ends whenever the model stops answering,
+and a background wake or a retry resumes it, so it never settles the Turn. The
+Turn still binds to the provider Activity that carried its exact input (matched
+by the input's digest) even when the Worker's first check-in arrived before the
+transcript was read; without that, every later provider fact stayed unbound. The
+`stopped` row above is how Brain hears about a Worker that ended without
+reporting.
 
 **Continuation.**
 - The continuation is "The previous response was cut off by a provider error.

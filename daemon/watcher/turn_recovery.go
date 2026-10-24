@@ -95,7 +95,10 @@ func ClassifyProviderError(failure ProviderActivityError) ProviderErrorClass {
 // whichever is later); len(Backoff) is the per-episode budget. Resumes more
 // than ResetAfter apart start a new episode: the Worker made real progress in
 // between. A provider stop without any error escalates after IdleAfter, and
-// never before the Worker's own declared check-in deadline.
+// never before the Worker's own declared check-in deadline. A Worker whose
+// provider stopped and sits idle at its prompt is told to Brain after
+// StoppedAfter instead, whatever lease it declared: nothing is left running
+// that could still check in.
 type TurnRecoveryPolicy struct {
 	// UnclassifiedResumes is how many of Backoff's resumes an unclassified
 	// provider error gets before it escalates.
@@ -103,16 +106,19 @@ type TurnRecoveryPolicy struct {
 	Backoff             []time.Duration
 	ResetAfter          time.Duration
 	IdleAfter           time.Duration
+	StoppedAfter        time.Duration
 	PersistentAfter     time.Duration
 }
 
 // DefaultTurnRecoveryPolicy: 30 s, 2 min, 5 min, 10 min, 10 min; five resumes.
+// StoppedAfter covers the transcript flush and a background wake's latency.
 func DefaultTurnRecoveryPolicy() TurnRecoveryPolicy {
 	return TurnRecoveryPolicy{
 		UnclassifiedResumes: 2,
 		Backoff:             []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 10 * time.Minute},
 		ResetAfter:          30 * time.Minute,
 		IdleAfter:           15 * time.Minute,
+		StoppedAfter:        90 * time.Second,
 		PersistentAfter:     30 * time.Second,
 	}
 }
@@ -389,7 +395,14 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
 			continue
 		}
-		decision := decideTurnRecovery(policy, item.now, stall.settledAt, stall.deadline, item.provider.Error, records)
+		deadline := stall.deadline
+		if stall.stopped && policy.StoppedAfter > 0 {
+			policy.IdleAfter, deadline = policy.StoppedAfter, time.Time{}
+		}
+		decision := decideTurnRecovery(policy, item.now, stall.settledAt, deadline, item.provider.Error, records)
+		if stall.stopped && decision.reason == "idle" {
+			decision.reason = "stopped"
+		}
 		switch decision.action {
 		case turnRecoveryWait:
 			next := item.now.Add(turnRecoveryRecheck)
@@ -445,6 +458,9 @@ type delegatedStall struct {
 	settledAt    time.Time
 	pendingFresh bool
 	stale        []string
+	// stopped marks a live turn whose provider ended without an error and
+	// whose pane is idle at its prompt: the Worker has nothing left running.
+	stopped bool
 }
 
 // turnRecoveryRecheck bounds how long a Session's stall decision is cached.
@@ -494,6 +510,9 @@ func stalledDelegatedTurn(item probedPollWorker) (delegatedStall, bool) {
 			return delegatedStall{}, false
 		}
 		stall.turnID, stall.deadline = turn.TurnID, turn.LeaseDeadline
+		// A Blocked turn already holds an actionable request for Brain.
+		stall.stopped = provider.Error == nil && turn.Status != TurnBlocked &&
+			isWorkerInputReady(item.workerSnap.Command, item.content)
 	case (!item.hasTurn || TurnTerminal(turn.Status)) && newestStale != nil:
 		stall.turnID = newestStale.ProposedTurnID
 	default:
@@ -561,6 +580,8 @@ func stallSummary(decision turnRecoveryDecision, failure *ProviderActivityError,
 		head = fmt.Sprintf("Worker stalled: provider error persisted after %d automatic resumes", decision.attempt)
 	case "provider_error":
 		head = "Worker stalled: provider error needs attention; not resumed automatically"
+	case "stopped":
+		head = "Worker stopped; review the result"
 	default:
 		head = "Worker stopped without a terminal progress report"
 	}

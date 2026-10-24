@@ -178,3 +178,170 @@ func TestStallBeforeFirstProgressOpensOneUnknownDeliveryReview(t *testing.T) {
 		t.Fatalf("Brain receives %+v (%v %v)", action, found, err)
 	}
 }
+
+// Brain hears about a stopped Worker once. A provider terminal arriving after
+// the stopped escalation is evidence only; the Worker's own late done replaces
+// the open review in place. Either way exactly one actionable event is open.
+func TestStoppedWorkerThenLateDoneReachesBrainExactlyOnce(t *testing.T) {
+	for _, late := range []watcher.EvidenceClass{watcher.EvidenceControl, watcher.EvidenceProvider} {
+		t.Run(string(late), func(t *testing.T) {
+			store, err := NewStore(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := store.SetHostSession("host", "codex"); err != nil {
+				t.Fatal(err)
+			}
+			item, err := store.CreateWork(Work{Title: "stage 1", Objective: "build stage 1 then stop"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
+				"host":   {ID: "host", Hidden: true, State: classifier.StateDone},
+				"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
+			}}
+			service := NewService(store, fw, nil)
+			if _, err := fw.SubmitDelegatedWorkInput("worker", "build stage 1", item.ID, "turn:first", "", "", time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.ApplyDelegatedTurnProgress(watcher.TurnFact{SessionID: "worker", TurnID: "turn:first", Class: watcher.EvidenceControl, Kind: "running", SourceID: "running-first", At: time.Now()}); err != nil {
+				t.Fatal(err)
+			}
+			stall := watcher.TurnStall{WorkID: item.ID, SessionID: "worker", TurnID: "turn:first", Reason: "stopped",
+				Summary: "Worker stopped; review the result. Last output: ● Stage 1 done", At: time.Now()}
+			if err := service.EscalateStalledTurn(stall); err != nil {
+				t.Fatal(err)
+			}
+			actionable := func() int {
+				count := 0
+				for _, event := range mustWorkEvents(t, store, item.ID) {
+					if event.Actionable {
+						count++
+					}
+				}
+				return count
+			}
+			state, _ := store.FSM().State(lifecycle.WorkID(item.ID))
+			if state.Review == nil || state.Review.Reason != "turn_lost" || actionable() != 1 {
+				t.Fatalf("after stop: review=%+v actionable=%d", state.Review, actionable())
+			}
+			turn, _, _ := store.Turn("worker")
+			fact := watcher.TurnFact{SessionID: "worker", TurnID: "turn:first", Class: late, Kind: "done",
+				SourceID: "late-done", Summary: "Stage 1 done", Bound: true, ActivityID: turn.ActivityID,
+				Admission: turn.Admission, At: time.Now(), SettledAt: time.Now()}
+			if late == watcher.EvidenceControl {
+				if _, err := service.ApplyDelegatedTurnProgress(fact); err != nil {
+					t.Fatal(err)
+				}
+			} else if _, _, err := store.ApplyTurnFact(fact); err != nil {
+				t.Fatal(err)
+			}
+			again, _ := store.FSM().State(lifecycle.WorkID(item.ID))
+			if got := actionable(); got != 1 || again.Review == nil {
+				t.Fatalf("late %s done: actionable=%d review=%+v, want exactly one open event", late, got, again.Review)
+			}
+			if late == watcher.EvidenceProvider && again.Review.EventID != state.Review.EventID {
+				t.Fatalf("provider terminal replaced the stopped review: %+v", again.Review)
+			}
+		})
+	}
+}
+
+// Brain's answer to a Worker's blocked action is its disposition of the review
+// that raised it, so ending the Host turn does not ask Brain to reconcile.
+func TestAnsweredWorkerBlockResolvesTheReviewAndLeavesNoReconcile(t *testing.T) {
+	setup := func(t *testing.T) (*Store, *Service, Work) {
+		store, err := NewStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.SetHostSession("host", "codex"); err != nil {
+			t.Fatal(err)
+		}
+		item, err := store.CreateWork(Work{Title: "deploy", Objective: "deploy the preview build"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fw := &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}, sessions: map[string]*classifier.Worker{
+			"host":   {ID: "host", Hidden: true, State: classifier.StateDone},
+			"worker": {ID: "worker", Delegated: true, State: classifier.StateRunning},
+		}}
+		service := NewService(store, fw, nil)
+		if _, err := fw.SubmitDelegatedWorkInput("worker", "deploy", item.ID, "turn:first", "", "", time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		for _, fact := range []watcher.TurnFact{
+			{Kind: "running", SourceID: "r1"},
+			{Kind: "attention", SourceID: "blocked-1", Summary: "Blocked by Auto mode: git push", LeaseSeconds: 900},
+		} {
+			fact.SessionID, fact.TurnID, fact.Class, fact.At = "worker", "turn:first", watcher.EvidenceControl, time.Now()
+			if _, err := service.ApplyDelegatedTurnProgress(fact); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return store, service, item
+	}
+
+	t.Run("delivered needs_input review is resolved with a wait on the Worker", func(t *testing.T) {
+		store, service, item := setup(t)
+		claimed, _ := claimAndDeliverTestReview(t, store, "host")
+		// The gate clears the Worker's block first, then records the answer.
+		if _, err := service.ApplyDelegatedTurnProgress(watcher.TurnFact{SessionID: "worker", TurnID: "turn:first",
+			Class: watcher.EvidenceControl, Kind: "running", SourceID: "r2", At: time.Now(), LeaseSeconds: 300}); err != nil {
+			t.Fatal(err)
+		}
+		if ok, err := store.ResolveAnsweredWorkerBlock("worker"); err != nil || !ok {
+			t.Fatalf("resolve answered block = %v, %v", ok, err)
+		}
+		after, _ := store.Work(item.ID)
+		t.Logf("after: status=%s wake=%+v waitFor=%q", after.Status, after.Wake, after.WaitFor)
+		if after.Review != nil || after.Status != WorkRunning {
+			t.Fatalf("Work after answer = review %+v status %s wake %+v", after.Review, after.Status, after.Wake)
+		}
+		resolved := false
+		for _, event := range mustWorkEvents(t, store, item.ID) {
+			resolved = resolved || (event.Disposition == WorkDispositionWait && event.HandledAt != nil)
+		}
+		if !resolved {
+			t.Fatal("the blocked event carries no wait disposition")
+		}
+		// Ending the Host turn afterwards finds nothing left to reconcile.
+		if _, ended, err := store.EndReviewDelivery(item.ID, claimed.HandlingID, claimed.ProviderTurnID); err != nil || ended {
+			t.Fatalf("EndReviewDelivery after answer = %v, %v", ended, err)
+		}
+		for _, event := range mustWorkEvents(t, store, item.ID) {
+			if event.Kind == "brain.reconcile_required" {
+				t.Fatalf("answer left a reconcile event: %+v", event)
+			}
+		}
+		// Answering again changes nothing.
+		if ok, err := store.ResolveAnsweredWorkerBlock("worker"); err != nil || ok {
+			t.Fatalf("second answer = %v, %v", ok, err)
+		}
+	})
+
+	t.Run("a review Brain has not been handed stays untouched", func(t *testing.T) {
+		store, _, item := setup(t)
+		if ok, err := store.ResolveAnsweredWorkerBlock("worker"); err != nil || ok {
+			t.Fatalf("undelivered review resolved = %v, %v", ok, err)
+		}
+		if after, _ := store.Work(item.ID); after.Review == nil {
+			t.Fatal("undelivered review was closed")
+		}
+	})
+
+	t.Run("without an answer the unresolved turn still asks for reconciliation", func(t *testing.T) {
+		store, _, item := setup(t)
+		claimed, _ := claimAndDeliverTestReview(t, store, "host")
+		if _, ended, err := store.EndReviewDelivery(item.ID, claimed.HandlingID, claimed.ProviderTurnID); err != nil || !ended {
+			t.Fatalf("EndReviewDelivery = %v, %v", ended, err)
+		}
+		found := false
+		for _, event := range mustWorkEvents(t, store, item.ID) {
+			found = found || event.Kind == "brain.reconcile_required"
+		}
+		if !found {
+			t.Fatal("control: an unanswered handling should still record reconcile_required")
+		}
+	})
+}
