@@ -51,10 +51,9 @@ Anthropic's documented behavior (permission modes, "when auto mode falls back").
   allow rules; narrow rules such as `Bash(git push *)` stay. Give a task that
   needs a specific action a narrow `--allowedTools` entry in its executor command.
 - **Never auto-approved.** Whatever the classifier judges dangerous is denied
-  (observed: `git push` and `git push --force` to a bare remote were both denied
-  in one run, yet a plain push was allowed in two identical-shaped control runs,
-  so the verdict is not deterministic and compound shell commands are judged as
-  one unit). `ask` rules and organization policy apply in every mode.
+  (force push, sending secrets out, production deploys); the verdict depends on
+  the whole conversation, so the same push can pass in one task and be refused
+  in another. `ask` rules and organization policy apply in every mode.
 
 All delegated Codex launches, including explicit commands and resume, use the
 same client adapter and run autonomously by default. Explicit interactive

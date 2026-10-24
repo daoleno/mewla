@@ -66,7 +66,7 @@ adds these flags whatever the configuration says:
 | Agent | Added for unattended work |
 | --- | --- |
 | Codex | `--dangerously-bypass-approvals-and-sandbox` |
-| Claude Code | `--permission-mode bypassPermissions` (a weaker mode such as `acceptEdits` is rejected) |
+| Claude Code | `--permission-mode auto`: a classifier reviews each action and blocks dangerous ones such as force pushes and deploys. An explicit `bypassPermissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected |
 | Cursor Agent | `--force --sandbox disabled --trust --approve-mcps` |
 | Grok | `--permission-mode bypassPermissions --sandbox off` |
 | OpenCode | `--auto` |
