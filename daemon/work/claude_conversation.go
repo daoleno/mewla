@@ -87,6 +87,47 @@ func (r *ProviderConversationReader) loadClaudeConversation(path string) (CodexC
 	return r.loadFileConversation(WorkerProviderClaude, path, parseClaudeConversation)
 }
 
+// ClaudeBoundTranscript is the transcript of the conversation a Claude Worker
+// is bound to (the transcript_path its SessionStart hook reported), empty for a
+// Worker with no binding. The daemon installs it from the agent events it
+// receives; tests leave it unset.
+var ClaudeBoundTranscript = func(workerID string) string { return "" }
+
+// claudeKnownTranscript reads the one transcript a Worker is known to have
+// without listing a directory: the one its hooks reported, else the one named by
+// the session id Mewla launched it with. found is false when neither is known
+// or the file is not there yet (Claude writes it on the first prompt).
+func claudeKnownTranscript(worker classifier.Worker, configDirs []string, resumeID string) (candidate claudeTranscriptCandidate, known, found bool) {
+	paths := []string{}
+	if bound := ClaudeBoundTranscript(worker.ID); bound != "" {
+		paths = append(paths, bound)
+	} else if resumeID != "" {
+		for _, dir := range configDirs {
+			for _, cwd := range transcriptCWDCandidates(strings.TrimSpace(worker.Cwd)) {
+				paths = append(paths, filepath.Join(claudeProjectDir(dir, cwd), resumeID+".jsonl"))
+			}
+		}
+	}
+	if len(paths) == 0 {
+		return claudeTranscriptCandidate{}, false, false
+	}
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		updated := info.ModTime()
+		return claudeTranscriptCandidate{
+			ID:        strings.TrimSuffix(filepath.Base(path), ".jsonl"),
+			CWD:       strings.TrimSpace(worker.Cwd),
+			Path:      path,
+			CreatedAt: claudeTranscriptCreatedAt(path, updated),
+			Updated:   updated,
+		}, true, true
+	}
+	return claudeTranscriptCandidate{}, true, false
+}
+
 func findClaudeTranscript(worker classifier.Worker, now time.Time) (claudeTranscriptCandidate, bool, error) {
 	cwd := strings.TrimSpace(worker.Cwd)
 	if cwd == "" {
@@ -110,6 +151,11 @@ func findClaudeTranscript(worker classifier.Worker, now time.Time) (claudeTransc
 		// A process-local relative config directory cannot be resolved safely
 		// from the daemon's cwd. Never bind another account's HOME transcript.
 		return claudeTranscriptCandidate{}, false, nil
+	}
+	// A transcript Mewla knows by name is read, or waited for, directly. The
+	// listing below is for a Claude opened by hand, which names nothing.
+	if candidate, known, found := claudeKnownTranscript(worker, []string{configDir}, resumeID); known {
+		return candidate, found, nil
 	}
 	if candidate, owned, found := claudeProcessOwnedTranscript(worker, configDir); owned {
 		return candidate, found, nil

@@ -2,6 +2,7 @@ package codexctl
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
@@ -211,5 +212,44 @@ func TestMonitorNeverRetargetsThreadIDFromPayload(t *testing.T) {
 	settings, ok := m.Settings()
 	if !ok || settings.ThreadID != "t-main" || settings.Effort != "high" {
 		t.Fatalf("snapshot identity was retargeted by another thread: ok=%v settings=%#v", ok, settings)
+	}
+}
+
+func TestMonitorFollowsTheAnnouncedThreadNotTheFolderGuess(t *testing.T) {
+	f := startFakeAppServer(t)
+	// Two threads in one folder: resolving by folder and recency would pick the
+	// first. The Session's own agent announced the second.
+	f.loaded = []string{"t-other", "t-mine"}
+	f.threads = []ThreadInfo{
+		{ID: "t-other", Cwd: "/repo/mewla", Status: "active"},
+		{ID: "t-mine", Cwd: "/repo/mewla", Status: "idle"},
+	}
+	f.resumeModel = "gpt-5.5"
+	f.resumeEffort = "high"
+
+	var mu sync.Mutex
+	announced := ""
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	m, err := OpenMonitorFor(ctx, f.socketPath, DialOptions{ResolveRetryWindow: 200 * time.Millisecond}, func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return announced
+	})
+	if err != nil {
+		t.Fatalf("OpenMonitorFor: %v", err)
+	}
+	t.Cleanup(m.Close)
+
+	time.Sleep(300 * time.Millisecond)
+	if _, ok := m.Settings(); ok {
+		t.Fatal("monitor attached before the agent announced its thread")
+	}
+	mu.Lock()
+	announced = "t-mine"
+	mu.Unlock()
+	waitMonitorSettings(t, m, "gpt-5.5", "high")
+	if settings, _ := m.Settings(); settings.ThreadID != "t-mine" {
+		t.Fatalf("thread id = %q, want the announced t-mine", settings.ThreadID)
 	}
 }

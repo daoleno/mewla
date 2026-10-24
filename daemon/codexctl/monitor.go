@@ -41,7 +41,11 @@ type Monitor struct {
 	// ready reports whether a snapshot is currently available.
 	ready bool
 	// dead reports a terminal connection failure (snapshot unavailable).
-	dead      bool
+	dead bool
+	// thread names the Session's native thread when its agent has announced
+	// it. With a source, the monitor never guesses a thread by folder and rank:
+	// it waits for the announcement.
+	thread    func() string
 	current   NativeSettings
 	done      chan struct{}
 	closeOnce sync.Once
@@ -53,6 +57,12 @@ type Monitor struct {
 // error means the monitor is running; the snapshot becomes available once
 // the thread exists and the resume response was parsed.
 func OpenMonitor(ctx context.Context, socketPath string, opts DialOptions) (*Monitor, error) {
+	return OpenMonitorFor(ctx, socketPath, opts, nil)
+}
+
+// OpenMonitorFor is OpenMonitor for a Session whose thread is announced by its
+// agent: thread returns its id, or "" before it is known.
+func OpenMonitorFor(ctx context.Context, socketPath string, opts DialOptions, thread func() string) (*Monitor, error) {
 	if opts.ClientName == "" {
 		opts.ClientName = "mewla-monitor"
 	}
@@ -62,6 +72,7 @@ func OpenMonitor(ctx context.Context, socketPath string, opts DialOptions) (*Mon
 	}
 	m := &Monitor{
 		client: client,
+		thread: thread,
 		done:   make(chan struct{}),
 	}
 	go m.pump()
@@ -162,9 +173,16 @@ func (m *Monitor) pump() {
 func (m *Monitor) tryAttach() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	threadID, err := m.client.ResolveThread(ctx, "")
-	if err != nil {
-		return false
+	var threadID string
+	if m.thread != nil {
+		if threadID = m.thread(); threadID == "" {
+			return false
+		}
+	} else {
+		var err error
+		if threadID, err = m.client.ResolveThread(ctx, ""); err != nil {
+			return false
+		}
 	}
 	settings, err := m.client.ResumeThread(ctx, threadID)
 	if err != nil {

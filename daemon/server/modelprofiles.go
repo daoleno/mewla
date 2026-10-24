@@ -483,7 +483,17 @@ func (s *Server) applyLiveNativeThreadRuntime(socket, sessionID string, prepared
 	if liveErr != nil {
 		return nil, nil, fmt.Errorf("%w: dial %s: %v", modelprofiles.ErrInvalid, socket, liveErr)
 	}
-	threadID, resolveErr := live.ResolveThread(ctx, s.codexSessionCwd(sessionID))
+	var threadID string
+	var resolveErr error
+	if source := s.codexThreadSource(); source != nil {
+		// The thread the Session's own app-server announced; not one picked
+		// by folder and recency among whatever the server has loaded.
+		if threadID = source(sessionID); threadID == "" {
+			resolveErr = errors.New("Codex has not announced this Session's thread yet")
+		}
+	} else {
+		threadID, resolveErr = live.ResolveThread(ctx, s.codexSessionCwd(sessionID))
+	}
 	if resolveErr != nil {
 		_ = live.Close()
 		return nil, nil, fmt.Errorf("%w: resolve native thread: %v", modelprofiles.ErrInvalid, resolveErr)
@@ -520,6 +530,23 @@ func codexEffortPointer(effort string) *string {
 		return nil
 	}
 	return &effort
+}
+
+// SetCodexThreadSource installs the lookup of the thread a Session's Codex
+// announced ("" before it has).
+func (s *Server) SetCodexThreadSource(source func(sessionID string) string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.codexThread = source
+	s.mu.Unlock()
+}
+
+func (s *Server) codexThreadSource() func(string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.codexThread
 }
 
 // codexSessionCwd returns the watcher-observed cwd for a Session ("" when

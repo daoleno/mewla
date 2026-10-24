@@ -67,10 +67,57 @@ func (s *agentEventService) handleClaude(ctx context.Context, req control.AgentE
 	if payload.HookEvent == "PermissionRequest" {
 		return s.askClaude(ctx, workerID, payload)
 	}
-	for _, event := range claude.Map(workerID, payload, s.now().UTC()) {
+	now := s.now().UTC()
+	if event, ok := s.rebind(workerID, payload, now); ok {
+		s.hub.Publish(event)
+	}
+	for _, event := range claude.Map(workerID, payload, now) {
 		s.hub.Publish(event)
 	}
 	return control.Response{OK: true}
+}
+
+// rebind restores a Worker's binding from any hook that names its transcript.
+// The Hub lives in the daemon, so after a restart the SessionStart that bound a
+// running Claude is gone; the next hook it fires carries the same session and
+// transcript path and puts the binding back. speaksFor has already shown that
+// the session is the Worker's.
+func (s *agentEventService) rebind(workerID string, p claude.Payload, now time.Time) (agentevents.Event, bool) {
+	if p.HookEvent == "SessionStart" || p.SessionID == "" || p.TranscriptPath == "" {
+		return agentevents.Event{}, false
+	}
+	state, _ := s.hub.State(workerID)
+	if state.Bound && state.Binding.ConversationID == p.SessionID && state.Binding.Ref == p.TranscriptPath {
+		return agentevents.Event{}, false
+	}
+	if state.Bound && state.Binding.ConversationID != p.SessionID {
+		return agentevents.Event{}, false
+	}
+	return agentevents.Event{
+		WorkerID: workerID, Kind: agentevents.KindBound, At: now,
+		Binding: &agentevents.Binding{ConversationID: p.SessionID, Ref: p.TranscriptPath, By: "agent"},
+	}, true
+}
+
+// hubBoundTranscript answers, for a Worker, the transcript its agent reported.
+func hubBoundTranscript(hub *agentevents.Hub) func(string) string {
+	return func(workerID string) string {
+		if state, ok := hub.State(workerID); ok && state.Bound && !state.Exited {
+			return state.Binding.Ref
+		}
+		return ""
+	}
+}
+
+// hubConversation returns the conversation id the Worker's agent announced, or
+// "" before it has (or once it exited).
+func hubConversation(hub *agentevents.Hub) func(string) string {
+	return func(workerID string) string {
+		if state, ok := hub.State(workerID); ok && state.Bound && !state.Exited {
+			return state.Binding.ConversationID
+		}
+		return ""
+	}
 }
 
 // askClaude publishes the approval and waits for a decision. With none, the

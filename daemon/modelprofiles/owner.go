@@ -115,6 +115,9 @@ type Owner struct {
 	// nativeSettingsLookup, when set (tests), replaces the monitor-backed
 	// authoritative native settings source.
 	nativeSettingsLookup func(routeID string) (codexctl.NativeSettings, bool)
+	// nativeThread names the thread a Session's agent announced ("" when it has
+	// not). Unset, monitors find the thread themselves.
+	nativeThread func(sessionID string) string
 	router               *Router
 	routes               *RouteStateFile
 	listener             *ListenerFile
@@ -1142,6 +1145,17 @@ func (o *Owner) CodexControlSocket(sessionID string) string {
 
 // SetNativeSettingsLookup replaces the authoritative native settings source
 // (test seam; nil restores the monitor-backed implementation).
+// SetNativeThreadSource makes native-settings monitors follow the thread each
+// Session's agent announced instead of resolving one by folder.
+func (o *Owner) SetNativeThreadSource(source func(sessionID string) string) {
+	if o == nil {
+		return
+	}
+	o.nativeMu.Lock()
+	o.nativeThread = source
+	o.nativeMu.Unlock()
+}
+
 func (o *Owner) SetNativeSettingsLookup(lookup func(routeID string) (codexctl.NativeSettings, bool)) {
 	if o == nil {
 		return
@@ -1184,7 +1198,12 @@ func (o *Owner) nativeSettingsForRoute(routeID string) (codexctl.NativeSettings,
 			return codexctl.NativeSettings{}, false
 		}
 		dialCtx, dialCancel := context.WithTimeout(context.Background(), 6*time.Second)
-		opened, openErr := codexctl.OpenMonitor(dialCtx, binding.CodexControlSocket, codexctl.DialOptions{})
+		var thread func() string
+		if source := o.nativeThread; source != nil {
+			sessionID := binding.SessionID
+			thread = func() string { return source(sessionID) }
+		}
+		opened, openErr := codexctl.OpenMonitorFor(dialCtx, binding.CodexControlSocket, codexctl.DialOptions{}, thread)
 		dialCancel()
 		if openErr != nil {
 			o.nativeMu.Unlock()
