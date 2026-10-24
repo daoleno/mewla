@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
+	"github.com/daoleno/mewla/daemon/codextrust"
 )
 
 func TestAdapterDeclaresStructuredEverything(t *testing.T) {
@@ -60,5 +61,31 @@ func TestPrepareLaunchLeavesWhatItCannotSafelyWrap(t *testing.T) {
 	}
 	if launch, _ := (Adapter{}).PrepareLaunch("codex"); launch.Control != "" || launch.Command != "codex" {
 		t.Fatalf("no control directory, yet %+v", launch)
+	}
+}
+
+// The app-server loads the folder's own config, so it must carry the launch's
+// folder trust; the same line also has to survive a quoted path that holds
+// shell syntax.
+func TestPrepareLaunchGivesTheAppServerTheFolderTrust(t *testing.T) {
+	a := Adapter{ControlDir: "/state/codex-ctl"}
+	dir := `/work/it's "odd"; $(x)`
+	command := "codex --dangerously-bypass-hook-trust -c check_for_update_on_startup=false " + codextrust.Flag(dir)
+	launch, err := a.PrepareLaunch(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.Control == "" {
+		t.Fatalf("a launch with a quoted path was not wrapped: %s", launch.Command)
+	}
+	server, _, ok := strings.Cut(launch.Command, " > ")
+	if !ok || !strings.HasSuffix(server, " "+codextrust.Flag(dir)) {
+		t.Fatalf("app-server lacks the trust:\n%s", launch.Command)
+	}
+	if strings.Count(launch.Command, codextrust.Flag(dir)) != 2 {
+		t.Fatalf("trust should be on the app-server and the TUI:\n%s", launch.Command)
+	}
+	if strings.Contains(server, "check_for_update_on_startup") {
+		t.Fatalf("only the trust is forwarded:\n%s", server)
 	}
 }

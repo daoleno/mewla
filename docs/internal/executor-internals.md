@@ -33,15 +33,26 @@ approval/sandbox flags fail with an explanation instead of silently bypassing
 policy or adding conflicting flags. Shell composition is not a supported Codex
 launch command. Ordinary manual/hidden Sessions retain their own policies.
 
-Delegated launches prepare folder trust before starting the provider. Codex's
-native `projects."<cwd>".trust_level = "trusted"` is persisted in its effective
-`CODEX_HOME/config.toml`; an invocation `-c` override alone does not clear the
-0.159.2 folder gate. Mewla also passes `--dangerously-bypass-hook-trust` and
-`-c check_for_update_on_startup=false`. The latter prevents a startup update
-picker from consuming the brief's Enter and exiting into npm. Claude's effective
-`.claude.json` gets `projects[<cwd>].hasTrustDialogAccepted = true`, independently
-of `bypassPermissions`. Existing unrelated settings are retained. Trust applies
-to the actual cwd and its resolved symlink spelling, not every parent directory.
+Delegated launches answer the provider's folder trust before it starts, and Mewla
+writes nothing to the user's Codex config. Codex is told on its own command line:
+`--config 'projects={"<cwd>"={trust_level="trusted"}}'` (an inline table; Codex
+0.163 accepts but does not honour the dotted `projects."<cwd>".trust_level` form
+for a path), for the cwd and its resolved symlink spelling only, never a parent.
+When Codex runs as a TUI attached to an app-server of Mewla's (`--remote`), the
+app-server is the process that loads the folder's own config and the TUI shows no
+trust screen, so the same override is also forwarded to the app-server command
+(`daemon/codextrust`; both the plain wrapper and the Model Profile wrapper do it).
+Mewla also passes `--dangerously-bypass-hook-trust` and
+`-c check_for_update_on_startup=false`; the latter prevents a startup update
+picker from consuming the brief's Enter and exiting into npm. Claude Code has no
+per-launch way to trust a folder, so its effective `.claude.json` gets
+`projects[<cwd>].hasTrustDialogAccepted = true` (the key Claude's own errors tell
+a person to set), independently of `bypassPermissions`; that is the one write to
+another tool's configuration that remains, and unrelated settings are retained.
+Claude's undocumented `CLAUDE_CODE_SANDBOXED` environment variable also skips the
+dialog but is Anthropic's internal switch for its own hosted sandboxes and widens
+more than trust, so it is deliberately not used. Mewla never answers a Codex trust
+screen on a person's behalf either.
 Cursor already supplies `--trust --approve-mcps` with its unattended execution
 flags, and delegated launch disables its background self-updater with the
 native `--disable-auto-update` option; OpenCode uses `--auto`. Initial input still waits for the provider's

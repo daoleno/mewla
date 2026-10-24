@@ -3,6 +3,8 @@ package work
 import (
 	"strings"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 func TestBrowserLaunchIsInvocationScopedAndPreservesProviderOptions(t *testing.T) {
@@ -15,7 +17,7 @@ func TestBrowserLaunchIsInvocationScopedAndPreservesProviderOptions(t *testing.T
 		if !strings.HasPrefix(got, command+" ") || !strings.Contains(got, "mewla_browser") || !strings.Contains(got, id) || strings.Contains(got, "--strict-mcp-config") || strings.Contains(got, "--task") {
 			t.Fatal(got)
 		}
-		if _, ok := splitSupportedLaunchFields(got); !ok {
+		if _, ok := shellquote.Fields(got); !ok {
 			t.Fatalf("unsafe command: %s", got)
 		}
 	}

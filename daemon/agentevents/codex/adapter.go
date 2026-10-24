@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
+	"github.com/daoleno/mewla/daemon/codextrust"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/google/uuid"
 )
@@ -42,7 +43,9 @@ func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
 	}
 	socket := filepath.Join(a.ControlDir, "codex-ctl-"+uuid.NewString()+".sock")
 	program := strings.Fields(command)[0]
-	server := program + " app-server --listen unix://" + shellquote.Word(socket)
+	// The app-server is the process that loads the folder's own config, so it
+	// carries the launch's folder trust; the attached TUI shows no trust screen.
+	server := program + " app-server --listen unix://" + shellquote.Word(socket) + codextrust.Forwarded(rest)
 	log, pid := ControlLogPath(socket), ControlPidPath(socket)
 	wrapped := "set +m; " + server + " > " + shellquote.Word(log) + " 2>&1 & echo $! > " + shellquote.Word(pid) +
 		"; exec " + program + " --remote unix://" + shellquote.Word(socket)
@@ -69,11 +72,8 @@ func ControlLogPath(socket string) string {
 // subcommand, no shell syntax, and no existing --remote.
 func plainInteractiveArgs(command string) (rest string, ok bool) {
 	command = strings.TrimSpace(command)
-	if strings.ContainsAny(command, ";&|<>`\n$(") {
-		return "", false
-	}
-	fields := strings.Fields(command)
-	if len(fields) == 0 || filepath.Base(fields[0]) != "codex" {
+	fields, ok := shellquote.Fields(command)
+	if !ok || len(fields) == 0 || filepath.Base(fields[0]) != "codex" {
 		return "", false
 	}
 	if len(fields) > 1 && !strings.HasPrefix(fields[1], "-") {
@@ -84,5 +84,5 @@ func plainInteractiveArgs(command string) (rest string, ok bool) {
 			return "", false
 		}
 	}
-	return strings.TrimSpace(strings.TrimPrefix(command, fields[0])), true
+	return strings.TrimSpace(strings.TrimPrefix(command, strings.Fields(command)[0])), true
 }

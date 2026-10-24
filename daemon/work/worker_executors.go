@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/google/uuid"
 )
 
@@ -194,7 +195,7 @@ func NewOpenCodeSessionID(now time.Time) string {
 // openCodeCommandHasExactAuto reports an exact `--auto` argv token without
 // treating `--auto=…` or `--auto-review` as enabled.
 func openCodeCommandHasExactAuto(command string) bool {
-	fields, ok := splitSupportedLaunchFields(command)
+	fields, ok := shellquote.Fields(command)
 	if !ok {
 		return false
 	}
@@ -376,7 +377,7 @@ type launchCommandOptions struct {
 }
 
 func inspectLaunchCommandOptions(command string) (launchCommandOptions, bool) {
-	fields, ok := splitSupportedLaunchFields(command)
+	fields, ok := shellquote.Fields(command)
 	if !ok || len(fields) == 0 {
 		return launchCommandOptions{}, false
 	}
@@ -424,71 +425,6 @@ func scheduledProviderExecutable(provider, executable string) bool {
 	default:
 		return false
 	}
-}
-
-// splitSupportedLaunchFields only recognizes the direct executable and
-// env-assignment launch shapes Mewla emits. It handles shell quoting needed to
-// recover argv but deliberately rejects shell comments, command composition,
-// and substitution.
-func splitSupportedLaunchFields(command string) ([]string, bool) {
-	var fields []string
-	var token strings.Builder
-	var quote byte
-	started := false
-	flush := func() {
-		if started {
-			fields = append(fields, token.String())
-			token.Reset()
-			started = false
-		}
-	}
-	for index := 0; index < len(command); index++ {
-		current := command[index]
-		if quote != 0 {
-			if current == quote {
-				quote = 0
-				continue
-			}
-			if quote == '"' && (current == '`' ||
-				current == '$' && index+1 < len(command) && command[index+1] == '(') {
-				return nil, false
-			}
-			if quote == '"' && current == '\\' {
-				index++
-				if index >= len(command) {
-					return nil, false
-				}
-				current = command[index]
-			}
-			token.WriteByte(current)
-			started = true
-			continue
-		}
-		switch current {
-		case '\'', '"':
-			quote = current
-			started = true
-		case '\\':
-			index++
-			if index >= len(command) {
-				return nil, false
-			}
-			token.WriteByte(command[index])
-			started = true
-		case '#', ';', '|', '&', '<', '>', '`', '(', ')', '\n', '\r':
-			return nil, false
-		case ' ', '\t':
-			flush()
-		default:
-			token.WriteByte(current)
-			started = true
-		}
-	}
-	if quote != 0 {
-		return nil, false
-	}
-	flush()
-	return fields, true
 }
 
 func appendScheduledOptions(executorID, command string, options launchCommandOptions, additions ...string) (string, error) {

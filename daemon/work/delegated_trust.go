@@ -10,16 +10,22 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/BurntSushi/toml"
+	"github.com/daoleno/mewla/daemon/codextrust"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 var delegatedTrustMu sync.Mutex
 var errTrustConfigChanged = errors.New("provider config changed while preparing trust")
 
-// PrepareDelegatedWorkspace seeds the native folder trust gate before a provider
-// starts. Approval bypass does not bypass folder trust. Trust is limited to the
-// actual cwd (and its canonical spelling), never HOME or every ancestor.
-// Manual Sessions do not call this function.
+// PrepareDelegatedWorkspace answers the native folder trust gate for a delegated
+// provider before it starts. Approval bypass does not bypass folder trust. Trust
+// is limited to the actual cwd (and its canonical spelling), never HOME or every
+// ancestor. Manual Sessions do not call this function.
+//
+// Codex is told on its own command line and Mewla writes nothing to the user's
+// Codex config. Claude Code has no per-launch way to say it: its own errors name
+// projects[<cwd>].hasTrustDialogAccepted in ~/.claude.json as the way to trust a
+// folder without the dialog, so that one key is written (see docs/sessions.md).
 func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (string, error) {
 	provider := InferWorkerProvider(command)
 	if provider != WorkerProviderCodex && provider != WorkerProviderClaude && provider != WorkerProviderCursor {
@@ -63,12 +69,24 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 	if real != abs {
 		dirs = append(dirs, real)
 	}
+	if provider == WorkerProviderCodex {
+		present, enabled := options.option("", "--dangerously-bypass-hook-trust")
+		if present && !enabled {
+			return "", fmt.Errorf("delegated Codex requires exact --dangerously-bypass-hook-trust")
+		}
+		// Startup self-update consumes Enter and exits instead of admitting the
+		// brief. Hook trust is a separate invocation-scoped gate from folder trust.
+		if !enabled {
+			command += " --dangerously-bypass-hook-trust"
+		}
+		return command + " -c check_for_update_on_startup=false " + codextrust.Flag(dirs...), nil
+	}
 	// Direct env wrappers are part of the parsed launch contract too.
 	launchEnv := make(map[string]string, len(env))
 	for key, value := range env {
 		launchEnv[key] = value
 	}
-	fields, _ := splitSupportedLaunchFields(command)
+	fields, _ := shellquote.Fields(command)
 	if len(fields) > 0 && filepath.Base(fields[0]) == "env" {
 		for _, field := range fields[1:] {
 			if !isLaunchEnvAssignment(field) {
@@ -90,34 +108,6 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 	}
 	delegatedTrustMu.Lock()
 	defer delegatedTrustMu.Unlock()
-	if provider == WorkerProviderCodex {
-		present, enabled := options.option("", "--dangerously-bypass-hook-trust")
-		if present && !enabled {
-			return "", fmt.Errorf("delegated Codex requires exact --dangerously-bypass-hook-trust")
-		}
-		root := value("CODEX_HOME")
-		if root == "" {
-			root = filepath.Join(home, ".codex")
-		}
-		if err := updateTrustFile(filepath.Join(root, "config.toml"), func(raw []byte) ([]byte, error) {
-			for _, dir := range dirs {
-				var err error
-				raw, err = trustCodexDirectory(raw, dir)
-				if err != nil {
-					return nil, err
-				}
-			}
-			return raw, nil
-		}); err != nil {
-			return "", err
-		}
-		// Startup self-update consumes Enter and exits instead of admitting the
-		// brief. Hook trust is a separate invocation-scoped gate from folder trust.
-		if !enabled {
-			command += " --dangerously-bypass-hook-trust"
-		}
-		return command + " -c check_for_update_on_startup=false", nil
-	}
 	path := filepath.Join(home, ".claude.json")
 	if root := value("CLAUDE_CONFIG_DIR"); root != "" {
 		path = filepath.Join(root, ".claude.json")
@@ -168,58 +158,6 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 		return "", err
 	}
 	return command, nil
-}
-
-// Keep comments and all unrelated bytes in ordinary native project tables.
-// Unsupported inline project tables fail closed instead of rewriting user config.
-func trustCodexDirectory(raw []byte, cwd string) ([]byte, error) {
-	var cfg struct {
-		Projects map[string]struct {
-			TrustLevel string `toml:"trust_level"`
-		} `toml:"projects"`
-	}
-	if _, err := toml.Decode(string(raw), &cfg); err != nil {
-		return nil, err
-	}
-	project, exists := cfg.Projects[cwd]
-	if project.TrustLevel == "trusted" {
-		return raw, nil
-	}
-	if !exists {
-		key, _ := json.Marshal(cwd) // JSON string escapes are valid TOML basic-string escapes.
-		return append(raw, []byte("\n[projects."+string(key)+"]\ntrust_level = \"trusted\"\n")...), nil
-	}
-	lines := strings.Split(string(raw), "\n")
-	start, end := -1, len(lines)
-	for i, line := range lines {
-		trim := strings.TrimSpace(line)
-		if !strings.HasPrefix(trim, "[") {
-			continue
-		}
-		if start >= 0 {
-			end = i
-			break
-		}
-		var table map[string]any
-		meta, err := toml.Decode(line, &table)
-		if err == nil && meta.IsDefined("projects", cwd) && len(meta.Keys()) == 1 {
-			start = i
-		}
-	}
-	if start < 0 {
-		return nil, fmt.Errorf("Codex trust entry for %s must use a project table", cwd)
-	}
-	for i := start + 1; i < end; i++ {
-		var entry map[string]any
-		if _, err := toml.Decode(lines[i], &entry); err == nil {
-			if _, ok := entry["trust_level"]; ok {
-				lines[i] = "trust_level = \"trusted\""
-				return []byte(strings.Join(lines, "\n")), nil
-			}
-		}
-	}
-	lines[start] += "\ntrust_level = \"trusted\""
-	return []byte(strings.Join(lines, "\n")), nil
 }
 
 func updateTrustFile(path string, patch func([]byte) ([]byte, error)) error {

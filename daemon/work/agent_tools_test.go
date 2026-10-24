@@ -3,6 +3,8 @@ package work
 import (
 	"strings"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 func TestAgentToolsAreInvocationScopedAndCarryNoKey(t *testing.T) {
@@ -15,7 +17,7 @@ func TestAgentToolsAreInvocationScopedAndCarryNoKey(t *testing.T) {
 		if strings.Contains(got, "TOKEN") || strings.Contains(got, "--strict-mcp-config") {
 			t.Fatal(got)
 		}
-		if _, ok := splitSupportedLaunchFields(got); !ok {
+		if _, ok := shellquote.Fields(got); !ok {
 			t.Fatalf("unsafe command: %s", got)
 		}
 		// Launching again (a resume) does not add them twice.
@@ -68,7 +70,7 @@ func TestTheSwitchTurnsOffCodexsOwnComputerUse(t *testing.T) {
 	if got != "codex --model selected -c mcp_servers.computer-use.enabled=false" {
 		t.Fatal(got)
 	}
-	if _, ok := splitSupportedLaunchFields(got); !ok {
+	if _, ok := shellquote.Fields(got); !ok {
 		t.Fatalf("unsafe command: %s", got)
 	}
 	if again := WithAgentTools(got, "/mewla", "/state", off); again != got {

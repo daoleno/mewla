@@ -1,18 +1,21 @@
 package watcher
 
 import (
-	"path/filepath"
 	"strings"
 	"time"
 )
 
 const piProjectTrustSessionKey = "__mewla_pi_trust_session__"
 
+// advanceStartupTrustPromptOnce answers a startup trust picker that Mewla's own
+// launch of a Worker could not answer on its command line: Pi's (session-only)
+// and Cursor's. Codex's is not here. Delegated Codex launches carry their folder
+// trust and show no screen, and a person's own Codex session is theirs to
+// answer, not Mewla's.
 func advanceStartupTrustPromptOnce(
 	alreadyAdvanced bool,
 	command string,
 	content string,
-	paneCWD string,
 	guard func() error,
 	sendKey func(string) error,
 ) (bool, bool, bool) {
@@ -25,8 +28,6 @@ func advanceStartupTrustPromptOnce(
 		key = piProjectTrustSessionKey
 	case isCursorWorkspaceTrustPrompt(command, content):
 		key = "a"
-	case isCodexWorkspaceTrustPrompt(command, content, paneCWD):
-		key = "Enter"
 	default:
 		return false, false, true
 	}
@@ -69,73 +70,6 @@ func isPiProjectTrustPrompt(command, content string) bool {
 		}
 	}
 	return !piVersionRe.MatchString(current) && !piChromeRe.MatchString(current)
-}
-
-func capturePaneWorkingDirectory(socket, sessionID string) string {
-	output, err := tmuxCommand(
-		socket,
-		"display-message",
-		"-p",
-		"-t",
-		sessionID,
-		"#{pane_current_path}",
-	).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(output))
-}
-
-func isCodexWorkspaceTrustPrompt(command, content, paneCWD string) bool {
-	if !isCodexCommand(command) || strings.TrimSpace(paneCWD) == "" {
-		return false
-	}
-	normalized := strings.ReplaceAll(content, "\r\n", "\n")
-	lines := strings.Split(normalized, "\n")
-	if len(lines) > 80 {
-		normalized = strings.Join(lines[len(lines)-80:], "\n")
-	}
-	currentPath := filepath.Clean(strings.TrimSpace(paneCWD))
-	pathMatches := false
-	for _, candidate := range codexWorkspaceTrustPathCandidates(normalized) {
-		if filepath.Clean(candidate) == currentPath {
-			pathMatches = true
-			break
-		}
-	}
-	if !pathMatches {
-		return false
-	}
-	return strings.Contains(normalized, "Do you trust the contents of this directory?") &&
-		strings.Contains(normalized, "1. Yes, continue") &&
-		strings.Contains(normalized, "2. No, quit") &&
-		strings.Contains(normalized, "Press enter to continue")
-}
-
-func codexWorkspaceTrustPathCandidates(content string) []string {
-	lines := strings.Split(content, "\n")
-	const prefix = "> You are in "
-	for index, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, prefix) {
-			continue
-		}
-		parts := []string{strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))}
-		for next := index + 1; next < len(lines); next++ {
-			segment := strings.TrimSpace(lines[next])
-			if segment == "" {
-				break
-			}
-			parts = append(parts, segment)
-		}
-		concatenated := strings.Join(parts, "")
-		spaceJoined := strings.Join(parts, " ")
-		if concatenated == spaceJoined {
-			return []string{concatenated}
-		}
-		return []string{concatenated, spaceJoined}
-	}
-	return nil
 }
 
 func isWorkerInputReady(command, content string) bool {
