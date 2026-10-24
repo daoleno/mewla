@@ -36,6 +36,7 @@ const GROK_NUMBERED_OPTION_RE =
 const GROK_FILLED_RADIO_RE = /^[●◉◎]$|^\([●◉◎]\)$/;
 const GROK_CHOICE_FOOTER_RE =
   /(?:↑\s*\/\s*↓|↑|↓).{0,24}navigate|\bnavigate\b.{0,40}\benter\b|\benter\s*:\s*submit\b|\benter\s+confirm\b/i;
+const CLAUDE_QUESTION_ROW_RE = /^[1-9]\.\s+Chat about this$/;
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 
 type CleanPromptLine = {
@@ -76,6 +77,10 @@ export function buildApprovalPrompt(approval: WorkerApproval, scopeKey?: string)
   return scope ? { ...prompt, id: `${scope}|${prompt.id}` } : prompt;
 }
 
+function isQuestionApproval(approval: WorkerApproval) {
+  return approval.tool?.trim().toLowerCase() === "askuserquestion";
+}
+
 export function buildTerminalActionPrompt({
   status,
   summary,
@@ -94,8 +99,11 @@ export function buildTerminalActionPrompt({
   /** Live process/session identity so a switched generation cannot reuse card state. */
   scopeKey?: string;
 }): TerminalActionPrompt | null {
-  if (approvals && approvals.length > 0) {
-    return buildApprovalPrompt(approvals[0], scopeKey);
+  // AskUserQuestion is a question, not a permission: the generic Allow/Deny
+  // card would press keys on whatever question the Terminal shows now.
+  const decisions = approvals?.filter((approval) => !isQuestionApproval(approval));
+  if (decisions && decisions.length > 0) {
+    return buildApprovalPrompt(decisions[0], scopeKey);
   }
   if (status !== "blocked") {
     return null;
@@ -171,6 +179,11 @@ function buildClaudeTerminalPrompt(
   lines: CleanPromptLine[],
   summary?: string,
 ): TerminalActionPrompt | null {
+  // AskUserQuestion always ends with this row; a question is answered from the
+  // transcript card, and a clipped screen of it must not become a prompt.
+  if (lines.some((line) => CLAUDE_QUESTION_ROW_RE.test(line.text))) {
+    return null;
+  }
   const options = extractClaudeNumberedOptions(lines);
   if (options.length === 0) {
     return null;

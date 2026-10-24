@@ -69,6 +69,17 @@ export function visiblePendingChoice(
   return pending?.call_id && gone.has(pending.call_id) ? null : pending;
 }
 
+/**
+ * Whether the agent is waiting on a question: its newest choice has no result
+ * yet. Unlike the card, this ignores the daemon's "passed", so the Working row
+ * stays away until the transcript settles the question.
+ */
+export function awaitingChoiceAnswer(
+  events: readonly CodexConversationEvent[] | undefined,
+): boolean {
+  return latestPendingChoice(events) !== null;
+}
+
 /** Whether an answer error means the question is no longer on screen. */
 export function isChoiceGoneError(reason: unknown): boolean {
   return (

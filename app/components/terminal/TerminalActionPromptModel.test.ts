@@ -103,6 +103,60 @@ const LIVE_BLOCKED = {
 };
 
 describe("buildTerminalActionPrompt", () => {
+  const approval = (id: string, tool: string) => ({
+    id,
+    tool,
+    options: [
+      { id: "allow", label: "Allow", scope: "once" },
+      { id: "deny", label: "Deny", scope: "deny" },
+    ],
+  });
+
+  test("never turns an AskUserQuestion into an Allow/Deny card", () => {
+    for (const tool of ["AskUserQuestion", "askuserquestion"]) {
+      expect(
+        buildTerminalActionPrompt({ status: "blocked", provider: "claude", approvals: [approval("a1", tool)] }),
+      ).toBeNull();
+    }
+  });
+
+  test("a question approval does not hide a real permission behind it", () => {
+    const prompt = buildTerminalActionPrompt({
+      status: "blocked",
+      provider: "claude",
+      approvals: [approval("a1", "AskUserQuestion"), approval("a2", "Bash")],
+    });
+    expect(prompt?.approvalId).toBe("a2");
+    expect(prompt?.requestLabel).toBe("Bash");
+  });
+
+  test("a Claude question screen, whole or clipped, is never a prompt", () => {
+    const screens = [
+      ["←  ☐ Color  ☐ Size  ✔ Submit  →", "Pick a color?", "❯ 1. Red", "  2. Blue", "  3. Type something.", "  4. Chat about this", "Enter to select · Esc to cancel"],
+      ["  4. Chat about this", "Enter to select · Tab/Arrow keys to navigate · Esc to cancel"],
+    ];
+    for (const lastOutputLines of screens) {
+      expect(
+        buildTerminalActionPrompt({
+          status: "blocked",
+          provider: "claude",
+          approvals: [approval("a1", "AskUserQuestion")],
+          lastOutputLines,
+        }),
+      ).toBeNull();
+    }
+  });
+
+  test("a Claude permission menu is still shown read-only", () => {
+    const prompt = buildTerminalActionPrompt({
+      status: "blocked",
+      provider: "claude",
+      lastOutputLines: ["Do you want to proceed?", "❯ 1. Yes", "  2. No, and tell Claude what to do differently"],
+    });
+    expect(prompt?.actionable).toBe(false);
+    expect(prompt?.options.map((option) => option.id)).toEqual(["1", "2"]);
+  });
+
   test("projects Grok weekly-limit choice menu as display-only Interface state", () => {
     const prompt = buildTerminalActionPrompt({
       status: "blocked",

@@ -16,6 +16,7 @@ import {
   unansweredChoiceQuestions,
   emptyChoiceDraft,
   latestPendingChoice,
+  awaitingChoiceAnswer,
   visiblePendingChoice,
   isChoiceGoneError,
   CHOICE_GONE_CODE,
@@ -239,6 +240,15 @@ describe("a pending choice the status has not caught up with", () => {
     expect(visiblePendingChoice(events, new Set(["toolu_1"]))).toBeNull();
     expect(visiblePendingChoice(events, new Set(["toolu_0"]))?.call_id).toBe("toolu_1");
     expect(visiblePendingChoice([...events, choiceEvent("toolu_2", "pending")], new Set(["toolu_1"]))?.call_id).toBe("toolu_2");
+  });
+
+  test("still counts as waiting for the person after the card is hidden as passed", () => {
+    const events = [choiceEvent("toolu_1", "pending")];
+    expect(visiblePendingChoice(events, new Set(["toolu_1"]))).toBeNull();
+    expect(awaitingChoiceAnswer(events)).toBe(true);
+    expect(awaitingChoiceAnswer([choiceEvent("toolu_1", "answered", ["Apple", "Red"])])).toBe(false);
+    expect(awaitingChoiceAnswer([])).toBe(false);
+    expect(awaitingChoiceAnswer(undefined)).toBe(false);
   });
 
   test("recognises the daemon's gone code and nothing else", () => {
