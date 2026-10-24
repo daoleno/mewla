@@ -13,6 +13,8 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/daoleno/mewla/daemon/brain"
+	"github.com/daoleno/mewla/daemon/hostdeps"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
@@ -447,5 +449,28 @@ func writeExec(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("WriteFile %s: %v", path, err)
+	}
+}
+
+// Capability reporting looks for hostdeps.AgentCommand(id); that must be the
+// executable the executor registry launches for the same agent.
+func TestAgentCommandIsWhatTheExecutorRunsByDefault(t *testing.T) {
+	providers := map[string]string{
+		"claude":   work.WorkerProviderClaude,
+		"codex":    work.WorkerProviderCodex,
+		"agent":    work.WorkerProviderCursor,
+		"grok":     work.WorkerProviderGrok,
+		"pi":       work.WorkerProviderPi,
+		"opencode": work.WorkerProviderOpenCode,
+	}
+	for _, id := range hostdeps.AgentOrder() {
+		provider, ok := providers[id]
+		if !ok {
+			t.Fatalf("agent %q has no provider here", id)
+		}
+		command, _ := commandForProfile(provider, id, "", ProfileSafe)
+		if fields := strings.Fields(command); len(fields) == 0 || fields[0] != hostdeps.AgentCommand(id) {
+			t.Fatalf("agent %q: registry runs %q, caps look for %q", id, command, hostdeps.AgentCommand(id))
+		}
 	}
 }
