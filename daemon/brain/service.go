@@ -2578,10 +2578,14 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 	update := WorkUpdate{}
 	switch run.Status {
 	case calendar.StatusRunning:
-		// A running occurrence changes no Work field. The launched Worker is
+		// The Work waits on the occurrence's result. The launched Worker is
 		// not an Attempt: Calendar owns its execution and it sends the
 		// lifecycle engine no heartbeats, so admitting it would let lease
-		// expiry declare a still-working Worker lost. Only the stage is recorded.
+		// expiry declare a still-working Worker lost. waiting is a status a
+		// producer may set; running is derived from an admitted Attempt.
+		status := WorkWaiting
+		wake := &WorkWake{Kind: WorkWakeCalendarResult, Ref: contextRef}
+		update = WorkUpdate{Status: &status, Wake: &wake}
 		if strings.TrimSpace(run.WorkerSession) != "" {
 			kind = "calendar.launched"
 		}
@@ -2637,9 +2641,16 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 		}
 		producerWoke = len(wakes) > 0
 	} else {
-		_, _, err = s.store.EnsureWork(candidate)
+		var item Work
+		item, _, err = s.store.EnsureWork(candidate)
 		if err != nil {
 			return false, err
+		}
+		// A stage replayed after the result must not reopen a finished Work.
+		if item.Status != WorkDone && item.Status != WorkCancelled && workUpdateChanges(item, update) {
+			if _, err = s.store.UpdateWork(item.ID, update); err != nil {
+				return false, err
+			}
 		}
 		recorded, created, err = s.store.AppendWorkEvent(producerEvent)
 		if err != nil {
