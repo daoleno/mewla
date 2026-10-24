@@ -121,6 +121,17 @@ transcript was read; without that, every later provider fact stayed unbound. The
 `stopped` row above is how Brain hears about a Worker that ended without
 reporting.
 
+The wait is counted from the first poll that saw the Session idle, not from when
+the provider settled. A Worker idle at its prompt while a background Monitor,
+shell or agent runs is not stopped (the footer says `· 1 monitor`); when that work
+ends, the footer disappears a moment before the provider's next Activity shows,
+and the Worker is not reported in that gap.
+
+The brief Mewla submits is a typed `Execute: ` followed by one paste envelope.
+Its submitted digest is the brief's own, so the transcript parser and the hook
+both report that unwrapped digest; without it the provider's admission never
+matched the Turn and every later provider fact stayed unbound.
+
 **Continuation.**
 - The continuation is "The previous response was cut off by a provider error.
   Continue the task from where you stopped; don't redo finished steps." with a

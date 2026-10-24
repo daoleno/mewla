@@ -149,3 +149,18 @@ func TestActionKeyIgnoresFieldsThatVaryBetweenAttempts(t *testing.T) {
 		t.Fatalf("non-shell keys: %q %q", w1, w2)
 	}
 }
+
+func TestUserPromptSubmitOfADelegatedBriefCarriesTheBriefsOwnDigest(t *testing.T) {
+	brief := "# Brief\n\nDo the thing."
+	prompt := "Execute: \n\n<pasted_content id=\"11c9\">\n" + brief + "\n</pasted_content id=\"11c9\">\n"
+	payload, err := json.Marshal(map[string]string{"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt_id": "p1", "prompt": prompt})
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := mustMap(t, string(payload))
+	wrapped := fmt.Sprintf("%x", sha256.Sum256([]byte(prompt)))
+	exact := fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
+	if events[0].InputSHA256 != wrapped || events[0].InputUnwrappedSHA256 != exact {
+		t.Fatalf("digests = %q / %q, want %q / %q", events[0].InputSHA256, events[0].InputUnwrappedSHA256, wrapped, exact)
+	}
+}

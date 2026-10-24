@@ -326,6 +326,13 @@ type turnRecoverySupervisor struct {
 	// nextCheck throttles durable reads for a Session whose stall decision
 	// is not yet due; it is a cache of the decision, never budget state.
 	nextCheck map[string]time.Time
+	// idleSince is when the supervisor first saw a Session in its current
+	// stalled shape. A Worker idle at its prompt while a background Monitor or
+	// shell runs is not stalled; the moment that work ends, and before the
+	// provider's next Activity shows, the Session looks stopped for a few
+	// seconds. Waiting is counted from the first poll that saw it stalled,
+	// never from when the provider settled.
+	idleSince map[string]time.Time
 	submit    func(sessionID, payload, workID, turnID string, at time.Time) (InputResult, error)
 	run       func(func())
 }
@@ -335,6 +342,7 @@ func newTurnRecoverySupervisor(w *Watcher) *turnRecoverySupervisor {
 		policy:    DefaultTurnRecoveryPolicy(),
 		inflight:  map[string]bool{},
 		nextCheck: map[string]time.Time{},
+		idleSince: map[string]time.Time{},
 		submit: func(sessionID, payload, workID, turnID string, at time.Time) (InputResult, error) {
 			return w.SubmitDelegatedWorkInput(sessionID, payload, workID, turnID, "", "", at)
 		},
@@ -377,7 +385,20 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 					delete(supervisor.nextCheck, existing)
 				}
 			}
+			for existing := range supervisor.idleSince {
+				if strings.HasPrefix(existing, item.id+"\x00") {
+					delete(supervisor.idleSince, existing)
+				}
+			}
+		} else {
+			if supervisor.idleSince == nil {
+				supervisor.idleSince = map[string]time.Time{}
+			}
+			if _, seen := supervisor.idleSince[key]; !seen {
+				supervisor.idleSince[key] = item.now
+			}
 		}
+		idleSince := supervisor.idleSince[key]
 		due, throttled := supervisor.nextCheck[key]
 		busy := supervisor.inflight[item.id]
 		policy := supervisor.policy
@@ -399,7 +420,11 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		if stall.stopped && policy.StoppedAfter > 0 {
 			policy.IdleAfter, deadline = policy.StoppedAfter, time.Time{}
 		}
-		decision := decideTurnRecovery(policy, item.now, stall.settledAt, deadline, item.provider.Error, records)
+		settledAt := stall.settledAt
+		if item.provider.Error == nil && idleSince.After(settledAt) {
+			settledAt = idleSince
+		}
+		decision := decideTurnRecovery(policy, item.now, settledAt, deadline, item.provider.Error, records)
 		if stall.stopped && decision.reason == "idle" {
 			decision.reason = "stopped"
 		}

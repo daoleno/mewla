@@ -412,3 +412,30 @@ func TestClaudeMidTurnHumanPromptAttachmentProjectsUserMessage(t *testing.T) {
 		t.Fatalf("absorbing a prompt must not replace the running turn: %#v", conversation.Activity)
 	}
 }
+
+// The brief Mewla submits is the pasted part only, so a delegated message's
+// unwrapped admission digest is the brief's own; that is what the submitted
+// payload digest is compared with. A person's own text stays raw.
+func TestClaudeDelegatedInputUnwrapsToTheSubmittedBrief(t *testing.T) {
+	brief := "# Brief\n\nDo the <thing>."
+	raw := "Execute: \n\n<pasted_content id=\"11c9\">\n" + brief + "\n</pasted_content id=\"11c9\">\n"
+	got, ok := UnwrapClaudeDelegatedInput(raw)
+	if !ok || got != brief {
+		t.Fatalf("unwrap = %q, %v", got, ok)
+	}
+	conversation := parseClaudeFixture(t, claudeTaskNotificationRecord("u7", "2026-10-07T01:41:00Z", "human", raw))
+	want := fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
+	if conversation.Events[0].AdmissionUnwrappedSHA256 != want {
+		t.Fatalf("unwrapped digest = %q, want the brief's %q", conversation.Events[0].AdmissionUnwrappedSHA256, want)
+	}
+	for _, text := range []string{
+		"Execute: do it",
+		"Execute: \n\n<pasted_content id=\"11c9\">\nbody\n</pasted_content id=\"aaaa\">\n",
+		"please Execute: \n\n<pasted_content id=\"11c9\">\nbody\n</pasted_content id=\"11c9\">\n",
+		"\n\n<pasted_content id=\"11c9\">\nbody\n</pasted_content id=\"11c9\">\n" + "tail",
+	} {
+		if got, ok := UnwrapClaudeDelegatedInput(text); ok {
+			t.Fatalf("%q unwrapped to %q", text, got)
+		}
+	}
+}

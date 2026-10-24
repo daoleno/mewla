@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 // HookEvents are the hooks Mewla registers. Only these fire a process, so the
@@ -67,9 +68,15 @@ func Map(workerID string, p Payload, now time.Time) []agentevents.Event {
 		return []agentevents.Event{bound}
 	case "UserPromptSubmit":
 		digest := fmt.Sprintf("%x", sha256.Sum256([]byte(p.Prompt)))
+		unwrapped := digest
+		// Mewla's delegated brief arrives typed-prefix plus one paste envelope;
+		// its submitted digest is the brief's own.
+		if brief, delegated := work.UnwrapClaudeDelegatedInput(p.Prompt); delegated {
+			unwrapped = fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
+		}
 		msg := event(agentevents.KindUserMessage)
 		msg.ID = p.PromptID
-		msg.InputSHA256, msg.InputUnwrappedSHA256 = digest, digest
+		msg.InputSHA256, msg.InputUnwrappedSHA256 = digest, unwrapped
 		started := event(agentevents.KindTurnStarted)
 		started.Status = agentevents.TurnRunning
 		return []agentevents.Event{msg, started}

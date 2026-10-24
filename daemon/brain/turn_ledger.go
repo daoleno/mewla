@@ -204,6 +204,7 @@ func (t TurnRecord) snapshot() watcher.TurnSnapshot {
 		TranscriptBinding:      t.TranscriptBinding,
 		LeaseDeadline:          t.LeaseDeadline,
 		SignalProtocol:         t.SignalProtocol,
+		PayloadSHA256:          t.PayloadSHA256,
 		UpdatedAt:              t.UpdatedAt,
 	}
 	return snapshot
@@ -734,6 +735,7 @@ func (s *Store) Turn(sessionID string) (watcher.TurnSnapshot, bool, error) {
 				Provider: admission.TranscriptProvider, PiFlag: admission.TranscriptFlag, PiPath: admission.TranscriptPath,
 			}
 			snapshot.SignalProtocol = admission.SignalProtocol
+			snapshot.PayloadSHA256 = admission.PayloadSHA256
 		}
 		return snapshot, true, nil
 	}

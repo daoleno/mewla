@@ -919,6 +919,8 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 		event.AdmissionSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(exact)))
 		if pasted {
 			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(inner)))
+		} else if brief, delegated := UnwrapClaudeDelegatedInput(exact); delegated {
+			event.AdmissionUnwrappedSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(brief)))
 		}
 	}
 	if b.addEvent(event) {
@@ -1150,6 +1152,23 @@ func claudeToolInputString(raw json.RawMessage, key string) string {
 // payload substring, or recursively unwrap. Both IDs must match. Unknown or
 // nested forms stay raw and therefore fail closed for an inner submission.
 var claudePasteEnvelope = regexp.MustCompile(`(?s)\A\n\n<pasted_content id="([0-9a-f]{4})">\n(.*)\n</pasted_content id="([0-9a-f]{4})">\n\z`)
+
+// claudeDelegatedInputPrefix is the intent Mewla types before it pastes a
+// delegated Worker's brief (watcher.DelegatedInputPrefix); Claude wraps only the
+// pasted part.
+const claudeDelegatedInputPrefix = "Execute: "
+
+// UnwrapClaudeDelegatedInput recovers the exact brief Mewla submitted from a
+// native delegated user message: the typed intent prefix followed by one whole
+// paste envelope. Anything else, including a prefix with no envelope, stays raw
+// and fails closed, so a person's own message never reads as a delegated input.
+func UnwrapClaudeDelegatedInput(raw string) (string, bool) {
+	rest, found := strings.CutPrefix(raw, claudeDelegatedInputPrefix)
+	if !found {
+		return "", false
+	}
+	return claudePastedInput(rest)
+}
 
 func claudePastedInput(raw string) (string, bool) {
 	parts := claudePasteEnvelope.FindStringSubmatch(raw)
