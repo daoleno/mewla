@@ -295,37 +295,35 @@ func isClaudeInputReady(content string) bool {
 	if strings.TrimSpace(content) == "" {
 		return false
 	}
-	// Require all three ready indicators to distinguish from startup/loading.
-	// Header: numeric Claude Code version marker
-	// Composer: empty input line with prompt glyph (spaces/tabs/NBSP only)
-	// Footer: mode indication (auto mode, bypass permissions or manual mode)
-	if !claudeHeaderRe.MatchString(content) || !claudeComposerRe.MatchString(content) {
-		return false
-	}
+	// Ready evidence is the pair of an empty composer line and the
+	// permission/mode footer below it. Composer: prompt glyph with only
+	// spaces/tabs/NBSP (plus the fixed suggestion placeholder). Footer: mode
+	// indication (auto mode, bypass permissions or manual mode).
+	//
+	// The "Claude Code vX.Y.Z" banner is not required: `claude --resume`
+	// replays the transcript, which scrolls the banner out of the pane while
+	// the TUI is fully usable (captured live 2026-10-24 on a resumed 432 MB
+	// transcript: transcript, empty composer and auto-mode footer, no header).
 	composers := claudeComposerRe.FindAllStringIndex(content, -1)
 	footers := claudeModeFooterRe.FindAllStringIndex(content, -1)
-	if len(composers) == 0 || len(footers) == 0 || footers[len(footers)-1][0] < composers[len(composers)-1][1] {
+	if len(composers) == 0 || len(footers) == 0 {
 		return false
 	}
-	// Evaluate overlays in the current composer window. Claude keeps startup
-	// text in scrollback after the TUI becomes usable; treating words such as
-	// "loading" from that old epoch as live state causes a ready Worker to
-	// time out and the shared handoff to report input-not-ready.
-	if headers := claudeHeaderRe.FindAllStringIndex(content, -1); len(headers) > 0 {
-		current := content[headers[len(headers)-1][0]:]
-		composers := claudeComposerRe.FindAllStringIndex(current, -1)
-		if len(composers) > 0 {
-			composerStart := composers[len(composers)-1][0] - 96
-			if composerStart < 0 {
-				composerStart = 0
-			}
-			current = current[composerStart:]
-		}
-		if claudeBlockedOverlayRe.MatchString(current) {
-			return false
-		}
+	composer := composers[len(composers)-1]
+	if footers[len(footers)-1][0] < composer[1] {
+		return false
 	}
-	return true
+	// Evaluate overlays in the current UI epoch. Claude keeps startup text in
+	// scrollback after the TUI becomes usable; treating words such as
+	// "loading" from that old epoch as live state causes a ready Worker to
+	// time out and the shared handoff to report input-not-ready. A header, when
+	// the pane still shows one, bounds the epoch earlier; otherwise the last
+	// composer is the anchor.
+	start := composer[0]
+	if headers := claudeHeaderRe.FindAllStringIndex(content, -1); len(headers) > 0 {
+		start = max(headers[len(headers)-1][0], composer[0]-96)
+	}
+	return !claudeBlockedOverlayRe.MatchString(content[start:])
 }
 
 func tmuxSubmitDelay(command string) time.Duration {

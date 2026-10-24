@@ -86,6 +86,13 @@ flags, and delegated launch disables its background self-updater with the
 native `--disable-auto-update` option; OpenCode uses `--auto`. Initial input still waits for the provider's
 composer, and update menus are explicitly excluded from readiness.
 
+Claude input readiness is the pair of an empty composer (`❯`) and the
+permission-mode footer below it, with blocked overlays evaluated from the current
+composer onward. The `Claude Code vX.Y.Z` banner is not required: `claude --resume`
+replays the transcript, which scrolls the banner out of the pane while the TUI is
+already usable, so requiring that banner made every resumed Worker fail as
+input-not-ready and tore its pane down.
+
 Claude 2.1.285 wraps bracketed terminal paste in `<pasted_content>`. For delegated
 input, Mewla types the short instruction `Execute: ` outside that wrapper before
 pasting the unchanged brief. This makes the assignment explicit in the same
