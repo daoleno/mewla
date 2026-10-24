@@ -210,6 +210,13 @@ terminal or superseding Turn evidence retires interrupted handlers; accepted
 delivery remains consumed across restart. Unresolved results remain available
 for ordinary model decisions without a mandatory receipt-resolution command.
 Provider transcript probe errors defer mutation until evidence is readable.
+A Worker's transcript link is proven from the live process only when its agent
+does not announce its conversation. For a Worker whose agent does (Claude hooks,
+Codex), the agent event Hub's binding is the proof, and a new binding (a `/clear`
+or a resume) re-proves the link at once; the 30 second recheck remains only for
+Workers the Hub has no binding for. The Hub is in memory, so after a daemon
+restart Claude's binding returns on the Worker's next hook; until then the
+launch session id names its transcript directly.
 An incomplete discovery inventory also cannot prove process death: restart
 reconciliation requires an authoritative absent Session probe before recording
 loss. Present or unreadable Session transport preserves the original Attempt.
