@@ -154,3 +154,16 @@ func TestInstallWritesGuardedShimAndRealTmuxSkipsIt(t *testing.T) {
 		t.Fatalf("a PATH with only the shim has no real tmux, got %q", got)
 	}
 }
+
+func TestWithoutGuardDropsOnlyGuardDirs(t *testing.T) {
+	state := t.TempDir()
+	dir, err := Install(state, filepath.Join(state, "mewla"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := t.TempDir()
+	sep := string(os.PathListSeparator)
+	if got, want := WithoutGuard(dir+sep+other+sep+"/usr/bin"), other+sep+"/usr/bin"; got != want {
+		t.Fatalf("WithoutGuard = %q, want %q", got, want)
+	}
+}

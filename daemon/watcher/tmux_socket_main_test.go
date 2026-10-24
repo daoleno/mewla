@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/tmuxguard"
 )
 
 // TestMain points the default tmux socket at an empty directory for the whole
@@ -19,6 +21,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("TMUX_TMPDIR", dir)
+	// These tests start and kill their own isolated servers; run from a guarded
+	// Worker pane they must reach the real tmux, not the pane shim.
+	os.Setenv("PATH", tmuxguard.WithoutGuard(os.Getenv("PATH")))
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
