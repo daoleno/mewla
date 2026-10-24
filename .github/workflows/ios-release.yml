@@ -409,7 +409,7 @@ jobs:
             node scripts/set-ios-target-signing.js \
               "app/ios/${MEWLA_IOS_NATIVE_PROJECT_NAME}.xcodeproj/project.pbxproj" \
               "${MEWLA_IOS_NATIVE_PROJECT_NAME}=$PROFILE_NAME" \
-              "MewlaLive=$LIVE_PROFILE_NAME"
+              "MewlaLiveWidgets=$LIVE_PROFILE_NAME"
           else
             SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME")
           fi

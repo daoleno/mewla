@@ -113,7 +113,7 @@ An invitation alone is not sufficient for CI: the exact role and Certificates, I
 
 ## Live Activity and widget extension
 
-The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLive` (`app/targets/mewla-live`), embedded in the app. It is a second signed target, so it needs Apple-side identifiers the app alone did not. The release workflow builds it only when the repository variable `MEWLA_IOS_LIVE` is `1`; unsigned CI always builds it so it keeps compiling.
+The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLiveWidgets` (`app/targets/mewla-live`), embedded in the app. It is a second signed target, so it needs Apple-side identifiers the app alone did not. The release workflow builds it only when the repository variable `MEWLA_IOS_LIVE` is `1`; unsigned CI always builds it so it keeps compiling.
 
 Per identity (Preview shown; Production uses the same names without `.preview`), an authorized member of the owning team must:
 

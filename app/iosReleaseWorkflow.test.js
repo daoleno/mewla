@@ -162,7 +162,7 @@ describe('iOS release signs the Live Activity extension as its own target', () =
 
   it('never passes one profile for every target when the extension is built', () => {
     expect(workflow).toContain('node scripts/set-ios-target-signing.js');
-    expect(workflow).toContain('"MewlaLive=$LIVE_PROFILE_NAME"');
+    expect(workflow).toContain('"MewlaLiveWidgets=$LIVE_PROFILE_NAME"');
     expect(workflow).toContain('SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME")');
     expect(workflow).not.toMatch(/\n\s+PROVISIONING_PROFILE_SPECIFIER="\$PROFILE_NAME" \\\n\s+archive/);
   });

@@ -2,7 +2,7 @@
 // Give each iOS target its own manual-signing profile in the generated Xcode project.
 //
 //   node scripts/set-ios-target-signing.js app/ios/Mewla.xcodeproj/project.pbxproj \
-//     "Mewla=<app profile name>" "MewlaLive=<extension profile name>"
+//     "Mewla=<app profile name>" "MewlaLiveWidgets=<extension profile name>"
 //
 // xcodebuild's PROVISIONING_PROFILE_SPECIFIER on the command line applies to every target, so
 // an app with an extension would sign the extension with the app's profile and the archive would
