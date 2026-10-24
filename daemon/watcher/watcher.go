@@ -1878,9 +1878,16 @@ func (w *Watcher) restoreTurnTranscriptBindingLocked(worker *classifier.Worker, 
 // a historical accepted/running ledger fact conceal a visible approval prompt.
 // The ledger remains authoritative for settlement; this gate clears on the
 // next poll when the live adapter no longer observes it.
+//
+// The hidden Brain host is the one exception to "settlement wins": its ledger
+// only records review hand-offs, while the person chats with Brain without
+// opening a turn. A settled host turn therefore says nothing about whether
+// Brain is waiting on a choice, plan approval, or permission prompt right now,
+// so a visible gate still projects blocked. Worker turns stay final once settled.
 func projectDelegatedActivity(worker *classifier.Worker, turn TurnSnapshot, activity classifier.ActivitySignal) (classifier.WorkerState, string) {
 	state, summary := projectDelegatedTurn(worker, turn)
-	if !TurnTerminal(turn.Status) && activity.State == classifier.StateBlocked {
+	hostGate := worker != nil && worker.Hidden
+	if (hostGate || !TurnTerminal(turn.Status)) && activity.State == classifier.StateBlocked {
 		worker.Attention = "user_input"
 		worker.NeedsAttention = true
 		worker.LastProgressAt = nil
