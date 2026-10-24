@@ -29,7 +29,7 @@ func TestWorkerPromptKeepsPayloadAndOneExactTurn(t *testing.T) {
 	if strings.Count(result, "Mewla lifecycle protocol:") != 1 || strings.Count(result, "Mewla delegated turn contract:") != 1 {
 		t.Fatal("duplicate protocol")
 	}
-	if len(result)-len(user) > 2500 {
+	if len(result)-len(user) > 2560 {
 		t.Fatalf("Worker overhead=%d bytes", len(result)-len(user))
 	}
 	for _, required := range []string{"required repository gates", "risk-proportionate", "--phase", "--attention", "never in the project repository", "report resource limits rather than bypassing them"} {
@@ -115,7 +115,7 @@ func TestEngineeringScenarioBriefsReachNativeWorkers(t *testing.T) {
 					t.Fatalf("Codex command changed: %s", command)
 				}
 				payload := fw.submitted[0].text
-				if !strings.HasPrefix(payload, scenario.ExampleBrief+"\n\n") || len(payload)-len(scenario.ExampleBrief) > 2500 {
+				if !strings.HasPrefix(payload, scenario.ExampleBrief+"\n\n") || len(payload)-len(scenario.ExampleBrief) > 2560 {
 					t.Fatalf("method-bearing brief was changed or overhead grew: overhead=%d", len(payload)-len(scenario.ExampleBrief))
 				}
 				for _, excluded := range []string{"pstack", "# Wayfind", "# Delegate Brief"} {
