@@ -45,7 +45,7 @@ trust screen, so the same override is also forwarded to the app-server command
 Mewla also passes `--dangerously-bypass-hook-trust` and
 `-c check_for_update_on_startup=false`; the latter prevents a startup update
 picker from consuming the brief's Enter and exiting into npm. Claude Code has no
-per-launch way to trust a folder, so its effective `.claude.json` gets
+per-launch way to trust a folder (`--settings` with a `projects` map was tried on 2.1.310: the dialog still appears), so its effective `.claude.json` gets
 `projects[<cwd>].hasTrustDialogAccepted = true` (the key Claude's own errors tell
 a person to set), independently of `bypassPermissions`; that is the one write to
 another tool's configuration that remains, and unrelated settings are retained.

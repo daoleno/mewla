@@ -74,13 +74,13 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
       if (browser.fix) {
         problems.push({
           key: "browser",
-          text: "Open the Playwright extension in Chrome and copy its key.",
+          text: "Open the Playwright extension in Chrome and copy its PLAYWRIGHT_MCP_EXTENSION_TOKEN.",
           action: { label: "Open it", does: { kind: "fix", fix: browser.fix, target: "browser" } },
         });
       }
       problems.push({
         key: "browser-key",
-        text: "Then paste the key here.",
+        text: "Then run mewla agent-use key on that computer and paste it, or copy it on this phone and paste it here.",
         action: { label: "Paste key", does: { kind: "paste_key" } },
       });
       break;
