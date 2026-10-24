@@ -44,7 +44,7 @@ var Kinds = []Kind{
 // find "thread"). A CJK keyword matches anywhere: it has no word boundaries.
 var kindKeywords = map[Kind][]string{
 	KindWorkshop:    {"fix", "bug", "repair", "debug", "patch", "refactor", "lint", "flaky", "crash", "=test", "testing", "修", "故障", "重构", "测试", "排查"},
-	KindHarbour:     {"release", "deploy", "ship", "publish", "package", "rollout", "=ci", "=cd", "=tag", "发版", "发布", "部署", "打包", "上线"},
+	KindHarbour:     {"release", "deploy", "ship", "publish", "package", "rollout", "harbo", "parcel", "cargo", "freight", "=ci", "=cd", "=tag", "发版", "发布", "部署", "打包", "上线"},
 	KindStudio:      {"design", "logo", "image", "illustrat", "paint", "draw", "icon", "mockup", "figma", "=ui", "=ux", "animation", "设计", "画", "图", "视觉", "动画"},
 	KindLibrary:     {"research", "survey", "study", "paper", "docs", "documentation", "read", "investigat", "explore", "调研", "研究", "文档", "阅读", "调查"},
 	KindGarden:      {"data", "database", "=db", "=sql", "etl", "pipeline", "dataset", "schema", "index", "postgres", "mysql", "sqlite", "数据", "数据库", "报表"},
