@@ -618,3 +618,29 @@ func collectWatcherEvents(w *Watcher) []SessionEvent {
 		}
 	}
 }
+
+// Whether a Worker is hidden follows its pane's option both ways: a Worker
+// hidden from tmux leaves the list, and one unhidden comes back, without the
+// daemon restarting.
+func TestPollFollowsAHiddenFlipInBothDirections(t *testing.T) {
+	w := New(time.Second)
+	windows := []tmuxPane{{target: "sess-a:@1", name: "A", cwd: "/a", command: "codex", panePID: 111}}
+	restore := installFakePollSeams(w, windows, map[string]string{windows[0].target: contentA},
+		map[int]processInfo{111: fakeProcess(111, sessionAStarted)})
+	defer restore()
+
+	w.poll()
+	if got := w.GetWorker("sess-a:@1"); got == nil || got.Hidden {
+		t.Fatalf("a new Worker must be visible, got %+v", got)
+	}
+	windows[0].hidden = true
+	w.poll()
+	if got := w.GetWorker("sess-a:@1"); got == nil || !got.Hidden {
+		t.Fatalf("hiding the pane must hide the Worker, got %+v", got)
+	}
+	windows[0].hidden = false
+	w.poll()
+	if got := w.GetWorker("sess-a:@1"); got == nil || got.Hidden {
+		t.Fatalf("unhiding the pane must bring the Worker back, got %+v", got)
+	}
+}

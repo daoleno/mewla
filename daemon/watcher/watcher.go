@@ -1518,10 +1518,15 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 			worker.Name = nextName
 			worker.Window = strings.TrimSpace(win.name)
 		}
-		if w.hidden[win.target] || win.hidden {
+		// The pane's option is the record of whether a Worker is hidden, so a
+		// flip in either direction shows on the next poll. (Registration writes
+		// the option before the Worker exists.)
+		if win.hidden {
 			w.hidden[win.target] = true
-			worker.Hidden = true
+		} else {
+			delete(w.hidden, win.target)
 		}
+		worker.Hidden = win.hidden
 		worker.Cwd = win.cwd
 		worker.Project = projectNameFromPath(win.cwd)
 		// A failed ps leaves processes nil: the process table is unknown, so
@@ -1539,9 +1544,6 @@ func (w *Watcher) preparePollObservations(observations []paneObservation, proces
 			worker.Command = mergeWorkerCommandOwnership(worker.Command, detectedCommand)
 			worker.StartedAt = detectedStartedAt
 			worker.ProcessID = detectedPID
-		}
-		if w.hidden[win.target] {
-			worker.Hidden = true
 		}
 		if win.delegated {
 			w.delegated[win.target] = true
