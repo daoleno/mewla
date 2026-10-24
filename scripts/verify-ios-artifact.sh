@@ -98,7 +98,7 @@ verify_app() {
 # bundle id, and (signed) the shared App Group in both entitlements.
 verify_live_extension() {
   local app="$1" require_signature="$2" app_id="$3" build_number="$4" version="$5"
-  local appex="$app/PlugIns/MewlaLive.appex"
+  local appex="$app/PlugIns/MewlaLiveWidgets.appex"
   local plist="$appex/Info.plist"
   [[ -d "$appex" ]] || { echo "error: Live Activity extension is missing: $appex" >&2; exit 1; }
   local id ext_build ext_version point

@@ -10,7 +10,8 @@ module.exports = (config) => {
   const identity = resolveIOSIdentity(process.env.MEWLA_IOS_APP_VARIANT);
   return {
     type: "widget",
-    name: "MewlaLive",
+    // Not "MewlaLive": that is the app module's pod, and a target of the same name shadows its module.
+    name: "MewlaLiveWidgets",
     displayName: "Mewla",
     bundleIdentifier: identity.liveExtensionBundleIdentifier,
     // Widgets and Live Activities need containerBackground and Text(timerInterval:) (iOS 17).

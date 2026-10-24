@@ -131,7 +131,7 @@ from this endpoint, so a revoked token stops it for good.
 ## On the phone (iOS)
 
 - The same `app/modules/mewla-live` module (Swift side in `ios/`) and a WidgetKit
-  extension, `MewlaLive` (`app/targets/mewla-live`, generated into the Xcode
+  extension, `MewlaLiveWidgets` (`app/targets/mewla-live`, generated into the Xcode
   project by `@bacons/apple-targets`). The app and the extension compile the same
   `MewlaLiveState.swift`, so the state has one shape.
 - The Live Activity shows the Dynamic Island (compact, minimal, expanded) and the

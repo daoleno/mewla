@@ -11,8 +11,8 @@ function fakeProject(names) {
 
 describe("set-ios-target-signing", () => {
   it("gives each target its own profile", () => {
-    const { project, targets } = fakeProject(["Mewla", "MewlaLive", "Pods-Mewla"]);
-    applyTargetSigning(project, { Mewla: "App Profile", MewlaLive: "Live Profile" });
+    const { project, targets } = fakeProject(["Mewla", "MewlaLiveWidgets", "Pods-Mewla"]);
+    applyTargetSigning(project, { Mewla: "App Profile", MewlaLiveWidgets: "Live Profile" });
     expect(targets[0].settings.PROVISIONING_PROFILE_SPECIFIER).toBe("App Profile");
     expect(targets[1].settings.PROVISIONING_PROFILE_SPECIFIER).toBe("Live Profile");
     expect(targets[2].settings).toEqual({});
@@ -21,7 +21,7 @@ describe("set-ios-target-signing", () => {
 
   it("fails loudly for a missing target or an empty profile name", () => {
     const { project } = fakeProject(["Mewla"]);
-    expect(() => applyTargetSigning(project, { MewlaLive: "x" })).toThrow("no target named MewlaLive");
+    expect(() => applyTargetSigning(project, { MewlaLiveWidgets: "x" })).toThrow("no target named MewlaLiveWidgets");
     expect(() => applyTargetSigning(project, { Mewla: "" })).toThrow("no provisioning profile name");
   });
 
