@@ -63,10 +63,12 @@ broadcast announced.
   `payload` (the State as JSON). Going idle after idle is not pushed.
 - **Push** (iOS, while the app is not running): the same data message with
   `contentAvailable: true`, a silent push that wakes the app so it can update the
-  Live Activity and widgets. It is best effort: iOS does not deliver it to an
-  app the user force-quit and throttles it. The daemon cannot send an ActivityKit
-  push (`apns-push-type: liveactivity`) itself: Expo's push API has no such type,
-  and the APNs key stays in Expo.
+  Live Activity and widgets. This is the chosen route, not a fallback: the APNs
+  key stays in Expo, and Expo's push API has no ActivityKit (`liveactivity`)
+  push type, so the daemon sends the silent push and the app applies it. iOS
+  does not deliver it to an app the user force-quit and throttles it, so an
+  update can be late or, after a force-quit, missing until the app is opened
+  again.
 - A device gets live pushes only if its `register_push` said
   `"live_state": true`. Registering again without it turns them off, so a
   device that cannot show them (an iOS build without the extension) receives
@@ -151,10 +153,9 @@ from this endpoint, so a revoked token stops it for good.
 
 ## Limits
 
-- iOS: with the app closed, a Live Activity can only be updated by the silent
-  push above (best effort) and cannot be started from the background. A
-  guaranteed update needs an ActivityKit push sent with the APNs key, which the
-  daemon does not have.
+- iOS: with the app closed, a Live Activity is updated by the silent push above
+  (best effort: late sometimes, absent after a force-quit) and cannot be started
+  from the background, so the first card of a run appears once the app is open.
 
 - On a plain URL the widget fetches the daemon itself and a revoked phone stops
   at the next refresh. On Mewla Link the widget only shows what was pushed: it
