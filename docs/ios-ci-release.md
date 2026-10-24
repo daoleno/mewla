@@ -115,6 +115,8 @@ An invitation alone is not sufficient for CI: the exact role and Certificates, I
 
 The Dynamic Island, Lock Screen Live Activity and home-screen widgets are one WidgetKit extension, `MewlaLiveWidgets` (`app/targets/mewla-live`), embedded in the app. It is a second signed target, so it needs Apple-side identifiers the app alone did not. The release workflow builds it only when the repository variable `MEWLA_IOS_LIVE` is `1`; unsigned CI always builds it so it keeps compiling.
 
+Every release so far ships the Preview identity (tag pushes always build `preview` under `app-store-connect-preview`); the Production Environment `app-store-connect` does not exist yet. So the Live Activity extension ships on the Preview identity, and the Production steps below are needed only if Production ever starts being used. Note that `MEWLA_IOS_LIVE` is one repository variable read by the whole job, not by a Production-only check: a Production dispatch with it set fails at the validation step with a named missing-secret error, while the Preview release path is the one it is built for.
+
 Per identity (Preview shown; Production uses the same names without `.preview`), an authorized member of the owning team must:
 
 1. Register the explicit App ID `com.daoleno.mewla.preview.live` (the extension).
