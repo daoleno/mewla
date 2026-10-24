@@ -95,27 +95,61 @@ type pending struct {
 	cookie   string
 	proof    string
 }
+
+// Client is one Google Cloud project's Web client. Google grants verification
+// per project, not per scope, so Calendar and Gmail may need to live in
+// different projects: Calendar can then be verified on its own while Gmail
+// waits for a decision about its restricted scopes.
+type Client struct {
+	ID     string
+	Secret string
+}
+
+func (c Client) complete() bool { return c.ID != "" && c.Secret != "" }
+
 type Config struct {
-	Origin       string
-	ClientID     string
-	ClientSecret string
-	ReceiptKey   []byte
+	Origin     string
+	Clients    map[string]Client
+	ReceiptKey []byte
 }
 type Exchange struct {
-	mu     sync.Mutex
-	config Config
-	client *http.Client
-	oauth  oauth2.Config
-	flows  map[string]*pending
-	rate   map[string][]time.Time
+	mu      sync.Mutex
+	config  Config
+	client  *http.Client
+	clients map[string]oauth2.Config
+	flows   map[string]*pending
+	rate    map[string][]time.Time
 }
 
 func New(config Config) (*Exchange, error) {
 	u, err := url.Parse(config.Origin)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || config.ClientID == "" || config.ClientSecret == "" || len(config.ReceiptKey) < 32 {
-		return nil, errors.New("configure a publisher-owned HTTPS origin, Google Web client and private 32-byte receipt key")
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || len(config.ReceiptKey) < 32 {
+		return nil, errors.New("configure a publisher-owned HTTPS origin and a private 32-byte receipt key")
 	}
-	return &Exchange{config: config, client: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect rejected") }}, oauth: oauth2.Config{ClientID: config.ClientID, ClientSecret: config.ClientSecret, RedirectURL: config.Origin + CallbackPath, Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token", AuthStyle: oauth2.AuthStyleInParams}}, flows: map[string]*pending{}, rate: map[string][]time.Time{}}, nil
+	// Both services are always configured: a daemon picks the service, so a
+	// missing client would strand one plugin rather than one sign-in.
+	clients := map[string]oauth2.Config{}
+	for _, service := range []string{Calendar, Gmail} {
+		client := config.Clients[service]
+		if !client.complete() {
+			return nil, errors.New("configure a Google Web client for each service")
+		}
+		clients[service] = oauth2.Config{
+			ClientID:     client.ID,
+			ClientSecret: client.Secret,
+			RedirectURL:  config.Origin + CallbackPath,
+			// The callback is one URI for every project, so each client must
+			// register it. PKCE and the browser cookie still bind the flow.
+			Endpoint: oauth2.Endpoint{AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token", AuthStyle: oauth2.AuthStyleInParams},
+		}
+	}
+	return &Exchange{
+		config:  config,
+		client:  &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect rejected") }},
+		clients: clients,
+		flows:   map[string]*pending{},
+		rate:    map[string][]time.Time{},
+	}, nil
 }
 func hash(value string) string {
 	sum := sha256.Sum256([]byte(value))
@@ -179,10 +213,18 @@ func (e *Exchange) verify(raw string) (receipt, error) {
 	}
 	mac := hmac.New(sha256.New, e.config.ReceiptKey)
 	mac.Write(data)
-	if !hmac.Equal(sig, mac.Sum(nil)) || json.Unmarshal(data, &out) != nil || out.ClientID != e.config.ClientID {
+	if !hmac.Equal(sig, mac.Sum(nil)) || json.Unmarshal(data, &out) != nil || !e.owns(out) {
 		return out, errors.New("invalid binding")
 	}
 	return out, nil
+}
+
+// owns reports whether a receipt names a client this exchange signs with. The
+// receipt is otherwise self-describing, so this is what stops a receipt minted
+// for one service or project from driving another.
+func (e *Exchange) owns(r receipt) bool {
+	client, ok := e.config.Clients[r.Service]
+	return ok && client.ID != "" && r.ClientID == client.ID
 }
 func jsonResponse(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -279,7 +321,7 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		f.cookie = oauth2.GenerateVerifier()
 		http.SetCookie(w, &http.Cookie{Name: "mewla_google_" + id, Value: f.cookie, Path: "/google/callback", Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: 600})
-		config := e.oauth
+		config := e.clients[f.start.Service]
 		config.Scopes = Scopes(f.start.Service, f.start.Writes)
 		http.Redirect(w, r, config.AuthCodeURL(id, oauth2.S256ChallengeOption(f.verifier), oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent")), 302)
 	case CallbackPath:
@@ -294,13 +336,14 @@ func (e *Exchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("error") == "" && r.URL.Query().Get("code") != "" && len(r.URL.Query()["state"]) == 1 && len(r.URL.Query()["code"]) == 1 && (r.URL.Query().Get("iss") == "" || r.URL.Query().Get("iss") == "https://accounts.google.com") {
 			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 			defer cancel()
-			token, err := e.oauth.Exchange(context.WithValue(ctx, oauth2.HTTPClient, e.client), r.URL.Query().Get("code"), oauth2.VerifierOption(f.verifier))
+			config := e.clients[f.start.Service]
+			token, err := config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, e.client), r.URL.Query().Get("code"), oauth2.VerifierOption(f.verifier))
 			if err == nil && token.AccessToken != "" && token.RefreshToken != "" && len(token.AccessToken) <= 16384 && len(token.RefreshToken) <= 16384 {
 				scopes := Scopes(f.start.Service, f.start.Writes)
 				if granted, ok := token.Extra("scope").(string); ok {
 					scopes = strings.Fields(granted)
 				}
-				binding := receipt{PublicKey: f.start.PublicKey, TokenHash: hash(token.RefreshToken), ProofHash: hash(f.proof), ClientID: e.config.ClientID, Scopes: scopes, Nonce: f.start.Nonce, Service: f.start.Service}
+				binding := receipt{PublicKey: f.start.PublicKey, TokenHash: hash(token.RefreshToken), ProofHash: hash(f.proof), ClientID: e.config.Clients[f.start.Service].ID, Scopes: scopes, Nonce: f.start.Nonce, Service: f.start.Service}
 				f.Ciphertext, err = Seal(Credential{Token: token, Scopes: scopes, Proof: f.proof, Receipt: e.sign(binding), Nonce: f.start.Nonce}, f.start.PublicKey)
 				if err == nil {
 					f.Status = "connected"
@@ -364,7 +407,8 @@ func (e *Exchange) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
-	token, err := e.oauth.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, e.client), &oauth2.Token{RefreshToken: input.RefreshToken}).Token()
+	config := e.clients[binding.Service]
+	token, err := config.TokenSource(context.WithValue(ctx, oauth2.HTTPClient, e.client), &oauth2.Token{RefreshToken: input.RefreshToken}).Token()
 	if err != nil || token.AccessToken == "" || len(token.AccessToken) > 16384 || len(token.RefreshToken) > 16384 {
 		http.Error(w, "Reconnect this Google account", 401)
 		return

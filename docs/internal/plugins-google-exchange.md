@@ -6,23 +6,39 @@ Why not the alternatives: a **Desktop** client needs a loopback redirect, which 
 
 ## Configuration
 
-`mewla-account` mounts the exchange only on its public HTTPS listener (`-tls-addr`) and only when all three values are set (a partial set stops the service at start):
+`mewla-account` mounts the exchange only on its public HTTPS listener (`-tls-addr`) and only when every value is set (a partial set stops the service at start):
 
 | Name | Where |
 | --- | --- |
 | `MEWLA_ACCOUNT_GOOGLE_CLIENT_ID` | `env.clear` in `config/deploy.yml` (public) |
 | `MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET` | Kamal secret, read by `.kamal/secrets` from `~/.config/mewla-remote/google-oauth-client.json` (`jq -r .web.client_secret`) |
 | `MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY` | Kamal secret, from `~/.config/mewla-remote/google-receipt-key`: 32 random bytes, base64url without padding. Losing it forces every Google account to reconnect |
+| `MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID`, `MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET` | Optional pair, `config/deploy.yml` and a Kamal secret. Set both only after Gmail moves to its own Cloud project; unset means Gmail signs in with the client above |
 
-Official daemons carry only the public origin: `release/plugin-publishers.json` → `google.exchange_origin` → `connections.GoogleExchangeOrigin` (`scripts/plugin-publisher-flags.py`).
+**Google verifies a Cloud project, not a scope.** Calendar's scopes are sensitive and Gmail's are restricted (yearly CASA), so keeping them in one project couples Calendar's approval to Gmail's assessment. The exchange therefore takes one Web client per plugin (`googleauth.Client`, keyed by service), which lets Gmail move to a second project without touching Calendar's sign-in. The two may share a project and client; the code never assumes they differ. Both clients register the same redirect URI, `https://connect.mewla.ai/google/callback`; the flow's own state, S256 PKCE and browser cookie bind the callback, and a signed refresh receipt names the client ID and service so a receipt minted in one project cannot drive the other.
+
+Official daemons carry only the public origin: `release/plugin-publishers.json` → `google.exchange_origin` → `connections.GoogleExchangeOrigin` (`scripts/plugin-publisher-flags.py`). No client ID or secret reaches a user daemon.
 
 ## Google Cloud project
 
 Project `mewla-50425` (the Firebase project). Enable the Gmail API and the Google Calendar API. Branding: app name Mewla, home page `https://mewla.ai/`, privacy policy `https://mewla.ai/privacy/`, authorized domain `mewla.ai`. One **Web application** client, named `Mewla sign-in`, with no JavaScript origins and exactly one redirect URI: `https://connect.mewla.ai/google/callback`.
 
-Scopes, by plugin (`googleauth.Scopes`): Calendar `calendar.calendarlist.readonly`, `calendar.events.readonly`, `calendar.freebusy`, plus `calendar.events` when changes are allowed; Gmail `gmail.readonly`, plus `gmail.modify` when changes are allowed; both with `openid` and `email`.
+Scopes, by plugin (`googleauth.Scopes`): Calendar `calendar.calendarlist.readonly`, `calendar.events.readonly`, `calendar.freebusy`, plus `calendar.events` when changes are allowed; Gmail `gmail.readonly`, plus `gmail.modify` when changes are allowed; both with `openid` and `email`. The sets never overlap, so a Calendar sign-in never asks for mail access and the reverse.
 
-Publishing status is **Testing**: only listed test users can connect, and Google ends a Testing grant after 7 days. Moving to production needs Google's verification: Calendar's scopes are sensitive (verification), Gmail's are restricted (verification and a yearly third-party CASA assessment, because the exchange can reach the tokens). Nothing has been submitted.
+Publishing status is **Production**. Data Access verification was submitted on 2026-10-24 covering both plugins and is under review. Calendar's scopes are sensitive (verification only). Gmail's are restricted: verification plus a yearly third-party CASA security assessment, because the exchange can reach the tokens. `worklog/mewla-gmail-no-casa/DESIGN.md` holds the reasoning and the options.
+
+### Moving Gmail to its own project
+
+Google's review, user cap and CASA answer all attach to the project, so this is a console change plus one secret pair; nothing else in the code changes.
+
+1. New Cloud project. Enable the Gmail API. Fill Branding exactly as above (same app name, homepage, privacy policy, authorized domain) and publish it. Branding must be published before Data Access can be requested.
+2. Create a **Web application** client named `Mewla Gmail sign-in`, no JavaScript origins, one redirect URI: `https://connect.mewla.ai/google/callback`. Download its JSON.
+3. Declare only the Gmail scopes in the new project's Data Access, and remove `gmail.readonly`/`gmail.modify` from the old project's Data Access, leaving only the Calendar scopes.
+4. Add `MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID` to `config/deploy.yml` `env.clear` and `MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET` to `.kamal/secrets`. Both or neither: a half-set pair stops the account service at start.
+5. Deploy. A refresh receipt names the client that minted it and the service, and the exchange honours a receipt only for its own client of that service, so **Gmail accounts connected before the move must reconnect once** ("Reconnect this Google account" on their next refresh). Calendar connections are unaffected.
+6. Submit the new project for Gmail's Data Access review separately. Its 100-user cap is its own: the cap counts new users over the project's whole lifetime and cannot be reset. Check usage under APIs & Services → OAuth consent screen → OAuth user cap.
+
+
 
 ## Protocol
 
