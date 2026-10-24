@@ -32,11 +32,13 @@ const (
 	// outside the Codex sandbox).
 	CodexFullAuthorizationFlag = "--dangerously-bypass-approvals-and-sandbox"
 
-	// ClaudeFullAuthorizationFlag is the Claude CLI flag that bypasses
-	// permission checks, providing the most permissive non-interactive
-	// authorization mode available. Brain-delegated Claude sessions use this so
-	// internal progress commands never block on approval prompts.
-	ClaudeFullAuthorizationFlag = "--permission-mode bypassPermissions"
+	// ClaudeAutoPermissionFlag starts Claude Code in Auto permission mode: a
+	// classifier reviews every non-read-only action and blocks the dangerous
+	// ones (force push, exfiltrating secrets, production deploys), instead of
+	// bypassPermissions, which checks nothing. Every Mewla-launched Claude uses
+	// it by default; docs/internal/executor-internals.md explains the
+	// blocked-action behavior.
+	ClaudeAutoPermissionFlag = "--permission-mode auto"
 
 	// OpenCodeAutoFlag auto-approves permissions that are not explicitly denied.
 	// Brain-delegated and Calendar OpenCode sessions use this so unattended
@@ -54,10 +56,9 @@ const (
 var ErrScheduledActionUnattended = errors.New("scheduled_action executor cannot launch unattended")
 
 // HardenClaudeCommand returns a Claude launch command configured for
-// non-interactive autonomous execution. When command does not already declare
-// an explicit authorization mode, ClaudeFullAuthorizationFlag is appended so
-// Brain-delegated and Brain-host Claude sessions bypass permission checks for
-// internal shell/progress commands. Commands that already include
+// autonomous execution. When command does not already declare an explicit
+// authorization mode, ClaudeAutoPermissionFlag is appended so Brain-host
+// Claude sessions run under the Auto classifier. Commands that already include
 // --permission-mode (any value) or --dangerously-skip-permissions are returned
 // unchanged so explicit user-provided authorization configuration is preserved.
 func HardenClaudeCommand(command string) string {
@@ -69,7 +70,7 @@ func HardenClaudeCommand(command string) string {
 		strings.Contains(command, "--dangerously-skip-permissions") {
 		return command
 	}
-	return command + " " + ClaudeFullAuthorizationFlag
+	return command + " " + ClaudeAutoPermissionFlag
 }
 
 // PrepareDelegatedCommand applies the provider adapter's launch contract for
@@ -250,15 +251,20 @@ func ScheduledActionCommand(executorID string, executor Executor) (string, error
 		}
 		return appendScheduledOptions(executorID, command, options, CodexFullAuthorizationFlag)
 	case WorkerProviderClaude:
-		permissionPresent, permissionCompatible := options.option("bypassPermissions", "--permission-mode")
+		// Auto is the default. An explicit bypassPermissions or
+		// --dangerously-skip-permissions is the person's own choice and is kept;
+		// every mode that can stop at a prompt (default, acceptEdits, dontAsk,
+		// plan) fails before spawn.
+		permissionPresent, permissionMode := options.optionValue("--permission-mode")
 		skipPresent, skipEnabled := options.option("", "--dangerously-skip-permissions")
-		if !permissionCompatible || skipPresent && !skipEnabled {
-			return "", fmt.Errorf("%w: executor %q has a non-bypass Claude permission mode", ErrScheduledActionUnattended, executorID)
+		if skipPresent && !skipEnabled ||
+			permissionPresent && permissionMode != "auto" && permissionMode != "bypassPermissions" {
+			return "", fmt.Errorf("%w: executor %q has a Claude permission mode other than auto or bypassPermissions", ErrScheduledActionUnattended, executorID)
 		}
 		if permissionPresent || skipEnabled {
 			return command, nil
 		}
-		return appendScheduledOptions(executorID, command, options, "--permission-mode", "bypassPermissions")
+		return appendScheduledOptions(executorID, command, options, "--permission-mode", "auto")
 	case WorkerProviderCursor:
 		autoReviewPresent, _ := options.option("", "--auto-review")
 		planPresent, _ := options.option("", "--plan")

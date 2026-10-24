@@ -2488,7 +2488,7 @@ func TestServiceSnapshotHonorsHostExecutorOverride(t *testing.T) {
 		t.Fatalf("created sessions = %#v", fw.created)
 	}
 	command := fw.created[0].opts.Command
-	if !strings.HasPrefix(command, "claude") || !strings.Contains(command, "--permission-mode bypassPermissions") || !strings.Contains(command, " --add-dir ") {
+	if !strings.HasPrefix(command, "claude") || !strings.Contains(command, "--permission-mode auto") || !strings.Contains(command, " --add-dir ") {
 		t.Fatalf("host command = %q", command)
 	}
 	hostSession, err := store.HostSession()

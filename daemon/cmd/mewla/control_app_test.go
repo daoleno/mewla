@@ -825,7 +825,7 @@ func TestControlAppWorkerSpawnUsesNamedExecutorOrBrainHost(t *testing.T) {
 	if !fallback.OK || fallback.Worker == nil {
 		t.Fatalf("fallback response = %#v", fallback)
 	}
-	if got := stripClaudeSessionID(fw.created[1].Command); got != "claude --permission-mode bypassPermissions" {
+	if got := stripClaudeSessionID(fw.created[1].Command); got != "claude --permission-mode auto" {
 		t.Fatalf("fallback command = %q", got)
 	}
 
@@ -901,7 +901,7 @@ func TestControlAppWorkerSpawnHardensDelegatedCodexAndPreservesOverrides(t *test
 	if !claudeResp.OK || claudeResp.Worker == nil {
 		t.Fatalf("claude spawn response = %#v", claudeResp)
 	}
-	if got := stripClaudeSessionID(fw.created[2].Command); got != "claude --permission-mode bypassPermissions" {
+	if got := stripClaudeSessionID(fw.created[2].Command); got != "claude --permission-mode auto" {
 		t.Fatalf("delegated claude command = %q, want hardened", got)
 	}
 
@@ -2149,7 +2149,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"claude": {Name: "claude", Command: "claude"},
 			}),
-			want: "claude --permission-mode bypassPermissions",
+			want: "claude --permission-mode auto",
 		},
 		{
 			name: "configured Claude default gets hardened",
@@ -2157,7 +2157,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 			execs: work.NewExecutorConfig(map[string]work.Executor{
 				"claude": {Name: "claude", Command: "claude --profile my-profile"},
 			}),
-			want: "claude --profile my-profile --permission-mode bypassPermissions",
+			want: "claude --profile my-profile --permission-mode auto",
 		},
 		{
 			name: "explicit Claude permission mode preserved",
@@ -2178,7 +2178,7 @@ func TestResolveSpawnCommandHardensDefaults(t *testing.T) {
 		{
 			name: "no-config Claude executor name gets hardened",
 			req:  control.Request{Executor: "claude"},
-			want: "claude --permission-mode bypassPermissions",
+			want: "claude --permission-mode auto",
 		},
 		{
 			name: "custom executor unchanged",

@@ -13,7 +13,7 @@ import (
 func BrainHardensHostAtRuntime() bool {
 	// Inspected from daemon/brain/service.go hostCommand() and resolveSpawnCommand():
 	// bare/default Codex gets --dangerously-bypass-approvals-and-sandbox; bare/default
-	// Claude gets --permission-mode bypassPermissions. Explicit req.Command is unchanged.
+	// Claude gets --permission-mode auto. Explicit req.Command is unchanged.
 	return true
 }
 
@@ -30,7 +30,7 @@ func PermissionExplanation() []string {
 		lines = append(lines,
 			"",
 			"Brain limitation (current runtime):",
-			"  Brain host sessions for Codex/Claude are hardened to noninteractive/bypass mode in code.",
+			"  Brain host sessions are hardened in code: Codex bypasses approvals and Claude runs in Auto mode.",
 			"  Safe profile therefore leaves Brain host unconfigured and does not claim a safe Brain mode.",
 			"  Choosing Autonomous with explicit confirmation configures Brain host and accepts that risk.",
 		)

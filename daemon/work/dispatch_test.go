@@ -96,7 +96,7 @@ func TestLauncher_StartDedicatedUsesFreshConfiguredExecutor(t *testing.T) {
 			name:        "Claude direct",
 			role:        "claude",
 			executor:    Executor{Name: "claude", Command: "claude --flag"},
-			wantCommand: "claude --flag --permission-mode bypassPermissions",
+			wantCommand: "claude --flag --permission-mode auto",
 		},
 		{
 			name:        "Codex direct",
