@@ -84,7 +84,7 @@ func TestSettingsJSONRegistersEveryHookAndAllowsPermissionToWait(t *testing.T) {
 		if entry.Type != "command" || !strings.Contains(entry.Command, "agent-event claude") {
 			t.Fatalf("%s = %+v", name, entry)
 		}
-		if (name == "PermissionRequest") != (entry.Timeout == 600) {
+		if (name == "PermissionRequest" || name == "PermissionDenied") != (entry.Timeout == 600) {
 			t.Fatalf("%s timeout = %d", name, entry.Timeout)
 		}
 	}

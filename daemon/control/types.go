@@ -96,7 +96,10 @@ type Request struct {
 	Memory               *MemoryRequest                         `json:"memory,omitempty"`
 	AgentEvent           *AgentEventRequest                     `json:"agent_event,omitempty"`
 	ApprovalID           string                                 `json:"approval_id,omitempty"`
-	OptionID             string                                 `json:"option_id,omitempty"`
+	// ApprovalBasis is what an answer relied on (the brief sentence that
+	// authorizes an approved action); worker_approve from Brain requires it.
+	ApprovalBasis string `json:"approval_basis,omitempty"`
+	OptionID      string `json:"option_id,omitempty"`
 }
 
 // AgentEventRequest carries one agent hook call to the daemon. Payload is the
@@ -235,12 +238,17 @@ type Worker struct {
 // Approval is a decision a Worker's agent is waiting on. Each option carries
 // the agent's own id; a decision names one of them.
 type Approval struct {
-	ID       string           `json:"id"`
-	WorkerID string           `json:"worker_id"`
-	Kind     string           `json:"kind,omitempty"`
-	Tool     string           `json:"tool,omitempty"`
-	Summary  string           `json:"summary,omitempty"`
-	Options  []ApprovalOption `json:"options"`
+	ID       string `json:"id"`
+	WorkerID string `json:"worker_id"`
+	Kind     string `json:"kind,omitempty"`
+	Tool     string `json:"tool,omitempty"`
+	Summary  string `json:"summary,omitempty"`
+	// Reason is why the agent asks; for an Auto-mode refusal, the rule named.
+	Reason string `json:"reason,omitempty"`
+	// Route says who answers now: "brain" first for a delegated Worker's
+	// blocked action, "user" once Brain escalated or did not answer.
+	Route   string           `json:"route,omitempty"`
+	Options []ApprovalOption `json:"options"`
 }
 
 // ApprovalOption is one answer the agent offers.

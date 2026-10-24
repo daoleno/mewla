@@ -2,6 +2,7 @@ package claude
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -91,5 +92,60 @@ func TestParseRejectsPayloadsWithoutAnEvent(t *testing.T) {
 	}
 	if _, err := Parse([]byte(`nope`)); err == nil {
 		t.Fatal("expected an error")
+	}
+}
+
+func TestAutoDeniedCarriesTheActionAndTheRuleTheClassifierNamed(t *testing.T) {
+	p, err := Parse([]byte(`{"hook_event_name":"PermissionDenied","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"git push origin main","description":"push"},"reason":" [Data Exfiltration] "}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := AutoDenied("a-1", p)
+	if a.Kind != "auto_denied" || a.Tool != "Bash" || a.Summary != "git push origin main" || a.Reason != "[Data Exfiltration]" || a.ConversationID != "s-1" {
+		t.Fatalf("approval = %+v", a)
+	}
+	if len(a.Options) != 2 || a.Options[0].ID != "allow" || a.Options[1].ID != "deny" {
+		t.Fatalf("options = %+v", a.Options)
+	}
+}
+
+func TestDeniedDecisionOnlyLetsTheAgentRetryAnApprovedAction(t *testing.T) {
+	out, ok := DeniedDecision("allow")
+	if !ok || !strings.Contains(out, `"retry":true`) || !strings.Contains(out, `"hookEventName":"PermissionDenied"`) {
+		t.Fatalf("allow = %q, %v", out, ok)
+	}
+	if out, ok := DeniedDecision("deny"); ok || out != "" {
+		t.Fatalf("deny = %q, %v: a refusal that stands prints nothing", out, ok)
+	}
+}
+
+func TestToolGrantAndDenyPromptAreTheDocumentedHookOutputs(t *testing.T) {
+	grant := ToolGrant("approved")
+	for _, want := range []string{`"hookEventName":"PreToolUse"`, `"permissionDecision":"allow"`} {
+		if !strings.Contains(grant, want) {
+			t.Fatalf("grant = %q, missing %s", grant, want)
+		}
+	}
+	deny := DenyPrompt("nobody answered")
+	for _, want := range []string{`"hookEventName":"PermissionRequest"`, `"behavior":"deny"`, `"message":"nobody answered"`} {
+		if !strings.Contains(deny, want) {
+			t.Fatalf("deny = %q, missing %s", deny, want)
+		}
+	}
+}
+
+func TestActionKeyIgnoresFieldsThatVaryBetweenAttempts(t *testing.T) {
+	a := ActionKey("Bash", json.RawMessage(`{"command":"git push origin main","description":"first","timeout":1000}`))
+	b := ActionKey("Bash", json.RawMessage(`{"timeout":5,"command":" git push origin main ","description":"retry"}`))
+	if a != b {
+		t.Fatalf("same command keyed differently: %q vs %q", a, b)
+	}
+	if a == ActionKey("Bash", json.RawMessage(`{"command":"git push origin dev"}`)) {
+		t.Fatal("a different command shares a key")
+	}
+	w1 := ActionKey("Write", json.RawMessage(`{"file_path":"/a","content":"x"}`))
+	w2 := ActionKey("Write", json.RawMessage(`{"content":"x","file_path":"/a"}`))
+	if w1 != w2 || w1 == ActionKey("Write", json.RawMessage(`{"file_path":"/a","content":"y"}`)) {
+		t.Fatalf("non-shell keys: %q %q", w1, w2)
 	}
 }

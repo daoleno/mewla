@@ -30,3 +30,4 @@ When delivery is uncertain, weigh the cost of a duplicate effect against the evi
 ## Machine resources
 
 A resource_pressure event reports sustained machine pressure: crossed signals, headroom, the largest Workers and orphan processes, and queued Work. Run mewla resources --json only when you will act on it. Brain decides whether to defer dispatch, ask a Worker to release a tool, or close an owned Worker; the daemon never kills or throttles. Release one tool with mewla worker release -id SESSION -pid PID -start START from that snapshot. A newer event or recovery closes unreviewed pressure Work, and recovery itself is not delivered.
+- A Worker whose action Auto mode refused raises session.needs_input with "event":"permission_blocked". Answer it with the command in its details before the user is asked; playbooks/permission-block.md says what to approve, escalate or deny.

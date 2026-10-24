@@ -40,6 +40,16 @@ const (
 	// blocked-action behavior.
 	ClaudeAutoPermissionFlag = "--permission-mode auto"
 
+	// ClaudeBrainApproveAllow lets the Brain host run `mewla worker approve`
+	// without Auto mode's classifier second-guessing it. Approving a delegated
+	// Worker's blocked action looks like lifting a security control to the
+	// classifier (a real Brain run was refused as Data Exfiltration), but it is
+	// the job the user gave Brain: Mewla requires the brief sentence that
+	// authorizes it, records it on the Work, and hands anything the brief does
+	// not cover to the user. A narrow rule survives Auto mode; the second form
+	// covers a Brain that calls the CLI by absolute path.
+	ClaudeBrainApproveAllow = "--allowedTools 'Bash(mewla worker approve *)' 'Bash(*/mewla worker approve *)'"
+
 	// OpenCodeAutoFlag auto-approves permissions that are not explicitly denied.
 	// Brain-delegated and Calendar OpenCode sessions use this so unattended
 	// turns do not stall on interactive permission prompts.
@@ -58,7 +68,8 @@ var ErrScheduledActionUnattended = errors.New("scheduled_action executor cannot 
 // HardenClaudeCommand returns a Claude launch command configured for
 // autonomous execution. When command does not already declare an explicit
 // authorization mode, ClaudeAutoPermissionFlag is appended so Brain-host
-// Claude sessions run under the Auto classifier. Commands that already include
+// Claude sessions run under the Auto classifier, with ClaudeBrainApproveAllow
+// so Brain can answer a Worker's blocked action. Commands that already include
 // --permission-mode (any value) or --dangerously-skip-permissions are returned
 // unchanged so explicit user-provided authorization configuration is preserved.
 func HardenClaudeCommand(command string) string {
@@ -70,7 +81,7 @@ func HardenClaudeCommand(command string) string {
 		strings.Contains(command, "--dangerously-skip-permissions") {
 		return command
 	}
-	return command + " " + ClaudeAutoPermissionFlag
+	return command + " " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow
 }
 
 // PrepareDelegatedCommand applies the provider adapter's launch contract for

@@ -40,20 +40,65 @@ actions (force push, sending secrets out, production deploys, `git reset --hard`
 carries on with the rest of the task or stops to ask the person. This is
 Anthropic's documented behavior (permission modes, "when auto mode falls back").
 
-- **Blocked action.** Only that action does not run. In an interactive Worker
-  (a tmux TUI) Claude falls back to a normal permission prompt after 3 blocks in
-  a row or 20 in total; the documented "action just doesn't run and the run
-  continues" applies to non-interactive `-p` runs. A Worker that needs a blocked
-  action can therefore end up waiting on a person, so Mewla does not treat Auto
-  as a guarantee that a Worker finishes unaided.
+- **Blocked action.** Only that action does not run. Claude's own rule is that
+  a non-interactive `-p` run carries on after a block, but a Worker is an
+  interactive terminal: after 3 blocks in a row or 20 in total Claude falls back
+  to a real permission prompt, and an `ask` rule opens one at once. Nobody sits at
+  a delegated Worker's terminal, so Mewla answers these itself (below).
 - **Broad allow rules are dropped.** Entering Auto drops blanket `Bash(*)`,
   wildcarded interpreters, package-manager run commands, `Agent` and `Monitor`
-  allow rules; narrow rules such as `Bash(git push *)` stay. Give a task that
-  needs a specific action a narrow `--allowedTools` entry in its executor command.
+  allow rules; narrow rules such as `Bash(git push *)` stay (a push to a
+  hard-denied remote was refused without the rule and ran with it).
 - **Never auto-approved.** Whatever the classifier judges dangerous is denied
   (force push, sending secrets out, production deploys); the verdict depends on
   the whole conversation, so the same push can pass in one task and be refused
   in another. `ask` rules and organization policy apply in every mode.
+
+### Blocked actions of a delegated Worker
+
+The hook file registers `PermissionDenied`, `PermissionRequest` and `PreToolUse`
+besides the events it already followed. For a Worker that Brain delegated (it has
+a Work and a turn; `cmd/mewla/permission_gate.go`) a refusal takes this path:
+
+1. **Brain first.** The daemon opens an approval (`auto_denied` for a classifier
+   refusal, `permission` for a prompt) and raises `needs_input` on the Worker's
+   turn through the ordinary progress path, so Brain is woken by a normal
+   `session.needs_input`. Its details carry the action, the rule the classifier
+   named, the approval id, the Work and the command to answer with. The app does
+   not list the approval yet.
+2. **Brain answers** with `mewla worker approve -id W -approval A -option
+   allow|deny|escalate -basis "<brief sentence>"`. `allow` requires the basis: the
+   sentence of the brief that authorizes the action (`playbooks/permission-block.md`
+   says what to approve, escalate or refuse). `escalate` hands it to the user.
+3. **The user, only if needed.** On `escalate`, or if Brain does not answer within
+   two minutes, the approval becomes an ordinary approval card in the app.
+4. **No Worker waits at a prompt.** If nobody answers before the hook's own
+   timeout (590 s), a refused prompt is denied with a message saying so, and a
+   blocked action simply stays blocked. A daemon that is stopping ends pending
+   questions at once instead of holding the shutdown.
+5. **Approving a refusal.** Claude cannot reverse an Auto-mode refusal, so
+   `PermissionDenied` answers `retry: true` and the daemon remembers the exact
+   action (the shell command, otherwise the whole input) for ten minutes; the
+   Worker's retry passes once through a `PreToolUse` allow. `PreToolUse` allow is
+   documented not to approve critical-path `rm` or network reads.
+6. **Record.** Every answer (approved, refused, escalated, timed out) is written
+   to the Work as `permission.*` with who answered and the basis, and the
+   Worker's `needs_input` is cleared.
+
+A session that is not a delegated Worker keeps its old behavior: a prompt becomes
+an approval card at once and an Auto-mode refusal never waits.
+
+The Brain host is launched with a narrow allow rule, `Bash(mewla worker approve
+*)` (and the absolute-path form), because Auto mode's classifier refuses a
+Brain's own `allow` as lifting a security control (`[Data Exfiltration]` in a real
+run). The rule is deliberate: the basis requirement, the playbook, the escalation
+path and the Work record are what bound Brain's authority, and a host command that
+sets its own `--permission-mode` does not get it.
+
+When a Worker reports `done`, the daemon puts `⚠ N refused action(s) never ran:
+…` in front of its summary if any action Auto mode refused did not later run, so a
+blocked push cannot read as success. The Worker protocol also tells a Worker that
+is blocked by a refusal to report `blocked`, not `done`.
 
 All delegated Codex launches, including explicit commands and resume, use the
 same client adapter and run autonomously by default. Explicit interactive

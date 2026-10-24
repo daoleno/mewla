@@ -86,8 +86,8 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlaybookCatalog() error = %v", err)
 	}
-	if len(catalog.Playbooks) != 3 {
-		t.Fatalf("catalog playbooks = %d, want 3: %#v", len(catalog.Playbooks), catalog.Playbooks)
+	if len(catalog.Playbooks) != 4 {
+		t.Fatalf("catalog playbooks = %d, want 4: %#v", len(catalog.Playbooks), catalog.Playbooks)
 	}
 
 	byName := map[string]PlaybookEntry{}
@@ -172,7 +172,7 @@ func TestHousekeepingCreatesMissingPlaybooks(t *testing.T) {
 			t.Fatalf("changed paths %v missing %q", report.ChangedPaths, path)
 		}
 	}
-	if len(report.PlaybookPaths) != 3 {
+	if len(report.PlaybookPaths) != 4 {
 		t.Fatalf("playbook paths = %#v", report.PlaybookPaths)
 	}
 	if _, err := os.Stat(store.playbookPath("delegate-brief.md")); err != nil {
