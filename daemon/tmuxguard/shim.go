@@ -168,3 +168,18 @@ func Main(args []string, stderr io.Writer) int {
 	fmt.Fprintf(stderr, "tmux: exec %s: %v\n", real, err)
 	return 126
 }
+
+// WithoutGuard returns pathEnv minus every directory holding a guard shim.
+// Tests that create and kill their own isolated tmux servers use it, so a
+// Worker running them from a guarded pane exercises the real tmux; production
+// code never needs it (see Pin).
+func WithoutGuard(pathEnv string) string {
+	var kept []string
+	for _, dir := range filepath.SplitList(pathEnv) {
+		if dir != "" && isGuard(filepath.Join(dir, "tmux")) {
+			continue
+		}
+		kept = append(kept, dir)
+	}
+	return strings.Join(kept, string(os.PathListSeparator))
+}
