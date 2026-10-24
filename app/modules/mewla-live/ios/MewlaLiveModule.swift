@@ -181,12 +181,23 @@ final class MewlaLiveStore {
     }
   }
 
+  /// NSLock is not usable from async code (an error in Swift 6), so the observed-set bookkeeping
+  /// lives in these synchronous helpers and the Tasks below only call them.
+  private func markObserved(_ id: String) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return observed.insert(id).inserted
+  }
+
+  private func forgetObserved(_ id: String) {
+    lock.lock()
+    defer { lock.unlock() }
+    observed.remove(id)
+  }
+
   @available(iOS 17.0, *)
   private func observe(_ activity: Activity<MewlaLiveAttributes>, onToken: @escaping (String) -> Void) {
-    lock.lock()
-    let isNew = observed.insert(activity.id).inserted
-    lock.unlock()
-    guard isNew else { return }
+    guard markObserved(activity.id) else { return }
     Task {
       for await data in activity.pushTokenUpdates {
         onToken(data.map { String(format: "%02x", $0) }.joined())
@@ -199,9 +210,7 @@ final class MewlaLiveStore {
           self?.defaults.set(activity.content.state.runKey, forKey: "mewla.live.dismissedRun")
         }
         if update == .dismissed || update == .ended {
-          self?.lock.lock()
-          self?.observed.remove(activity.id)
-          self?.lock.unlock()
+          self?.forgetObserved(activity.id)
           break
         }
       }

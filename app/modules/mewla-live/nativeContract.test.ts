@@ -53,6 +53,16 @@ describe("MewlaLive iOS native contract", () => {
     expect(delegate).not.toContain("message.state.title");
   });
 
+  test("no NSLock is taken inside an async Task (an error in Swift 6)", () => {
+    const swift = read(join(moduleRoot, "ios/MewlaLiveModule.swift"));
+    // Every `Task { ... }` body in the module; none may touch the lock directly.
+    for (const match of swift.matchAll(/Task(?: \[weak self\] in)? \{([\s\S]*?)\n    \}\n/g)) {
+      expect(match[1]).not.toMatch(/\block\.(lock|unlock)\(\)/);
+    }
+    expect(swift).toContain("private func markObserved");
+    expect(swift).toContain("private func forgetObserved");
+  });
+
   test("a chip opens the app on its question with the link the app already routes", () => {
     const views = read(join(targetRoot, "MewlaLiveViews.swift"));
     expect(views).toContain('components.scheme = "mewla"');
