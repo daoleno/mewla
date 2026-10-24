@@ -162,7 +162,8 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 	case agentuse.FixInstallExtension:
 		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension's page in Chrome; click Add to Chrome.")
 	case agentuse.FixOpenExtension:
-		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension in Chrome so it makes its key.")
+		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension in Chrome, which shows its key;")
+		fmt.Fprintln(w, "  mewla agent-use key   then reads that key from stdin (paste it, press Enter).")
 	case agentuse.FixRetry:
 		fmt.Fprintln(w, "  mewla agent-use fix   tries the download again.")
 	}

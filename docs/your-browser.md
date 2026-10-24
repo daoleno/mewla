@@ -14,8 +14,9 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
 2. Tap **Add extension**. Chrome on that computer opens the Playwright
    Extension in the Chrome Web Store. Click **Add to Chrome** there, or
    through [Screen](screen.md) if you are not at the computer.
-3. Mewla reads the extension's key from Chrome by itself. If the page asks,
-   tap **Open it** once so the extension makes its key.
+3. The extension shows a key on its own page. Tap **Open it** to open that page
+   in Chrome, copy the key, and tap **Paste key**. Mewla does not read the key
+   out of Chrome's storage; you hand it over once.
 
 When nothing is missing, the page shows only the switch. Mewla downloads the
 browser tools the first time (it needs Node.js 20 or later on the computer).
@@ -59,7 +60,7 @@ the Mac's Chrome. See [Your other computers](computers.md).
 | --- | --- |
 | Google Chrome isn't installed | Install Google Chrome. Chrome from Flatpak or Snap is not supported. |
 | Add the Playwright extension to Chrome | Tap the row below it, then **Add to Chrome**. |
-| Open the Playwright extension once | Tap the row below it. If Mewla still can't read the key, open the extension in Chrome, copy its key, and tap **Paste the extension's key** (or run `mewla agent-use key` and paste it). |
+| Open the Playwright extension in Chrome and copy its key | Tap **Open it**, copy the key the extension shows, then tap **Paste key** (or run `mewla agent-use key` and paste it). |
 | Sign in to this computer's desktop | On Linux, agents open Chrome in your desktop session. With nobody signed in to the desktop there is no Chrome to use; sign in and the row turns ready. |
 | Install Node.js 20 or later | Install Node.js on that computer; Mewla finds it in the usual places, including version managers. |
 | Couldn't download the browser tools | Check the computer's network, then tap **Try again**. |

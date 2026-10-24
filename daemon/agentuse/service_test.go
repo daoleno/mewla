@@ -96,7 +96,9 @@ func TestBrowserStatusWalksTheUserThroughWhatIsMissing(t *testing.T) {
 	}
 	waitForFile(t, filepath.Join(c.root, "chrome-opened"), "--profile-directory=Default\n"+extensionPageURL)
 
-	writeSQLiteStorage(t, filepath.Join(c.chrome.UserDataDir, "Default"), append([]byte{1}, validKey...))
+	if _, err := s.SetKey(validKey); err != nil {
+		t.Fatal(err)
+	}
 	if status := s.Refresh(); status.Browser.State != BrowserNoNode || status.Browser.Fix != "" {
 		t.Fatalf("no node: %+v", status)
 	}
@@ -120,7 +122,7 @@ func TestBrowserStatusWalksTheUserThroughWhatIsMissing(t *testing.T) {
 func TestMCPServerPassesTheKeyOnlyInTheEnvironment(t *testing.T) {
 	c := newFakeComputer(t)
 	c.installExtension("Profile 2")
-	writeSQLiteStorage(t, filepath.Join(c.chrome.UserDataDir, "Profile 2"), append([]byte{1}, validKey...))
+	c.pasteKey(t)
 	c.withNode()
 	s := c.service(true)
 	waitReady(t, s)
@@ -158,7 +160,7 @@ func TestMCPServerPassesTheKeyOnlyInTheEnvironment(t *testing.T) {
 func TestTheSwitchIsSharedAndOffMeansNoBrowser(t *testing.T) {
 	c := newFakeComputer(t)
 	c.installExtension("Default")
-	writeSQLiteStorage(t, filepath.Join(c.chrome.UserDataDir, "Default"), append([]byte{1}, validKey...))
+	c.pasteKey(t)
 	c.withNode()
 	daemon := c.service(true)
 	waitReady(t, daemon)
@@ -218,7 +220,7 @@ func TestPastedKeyWinsAndIsValidated(t *testing.T) {
 func TestAFailedDownloadSaysWhyAndCanBeRetried(t *testing.T) {
 	c := newFakeComputer(t)
 	c.installExtension("Default")
-	writeSQLiteStorage(t, filepath.Join(c.chrome.UserDataDir, "Default"), append([]byte{1}, validKey...))
+	c.pasteKey(t)
 	c.withNode()
 	c.script(c.npm, `echo "npm error network ENOTFOUND registry.npmjs.org" >&2; exit 1`)
 	s := c.service(true)
@@ -307,7 +309,7 @@ func waitForFile(t *testing.T, path, want string) {
 func TestNoDesktopIsNotReady(t *testing.T) {
 	c := newFakeComputer(t)
 	c.installExtension("Default")
-	writeSQLiteStorage(t, filepath.Join(c.chrome.UserDataDir, "Default"), append([]byte{1}, validKey...))
+	c.pasteKey(t)
 	c.withNode()
 	c.noDesktop = true
 	s := c.service(true)
@@ -350,7 +352,7 @@ func TestTheDaemonNoticesChromeGettingReadyOnItsOwn(t *testing.T) {
 	go s.Run(ctx)
 
 	c.installExtension("Default")
-	writeSQLiteStorage(t, filepath.Join(c.chrome.UserDataDir, "Default"), append([]byte{1}, validKey...))
+	c.pasteKey(t)
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		s.mu.Lock()
@@ -363,5 +365,38 @@ func TestTheDaemonNoticesChromeGettingReadyOnItsOwn(t *testing.T) {
 			t.Fatalf("never ready on its own: %s", state)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+const validKey = "endAriTgxnY7Ioqr-VLcI61jAkY0E0WUMjueI4p8HXQ"
+
+// pasteKey stores the extension's key the way a person's paste does.
+func (c *computer) pasteKey(t *testing.T) {
+	t.Helper()
+	if _, err := c.service(false).SetKey(validKey); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestKeyShape(t *testing.T) {
+	if !validToken(validKey) {
+		t.Fatal("the extension's own key was refused")
+	}
+	for _, bad := range []string{"", "short", validKey + "\nEVIL=1", validKey + " x", strings.Repeat("a", 300)} {
+		if validToken(bad) {
+			t.Fatalf("%q accepted", bad)
+		}
+	}
+}
+
+// Mewla never goes looking for the key in Chrome's storage: with nothing pasted
+// the status says what to do, whatever Chrome's profile holds.
+func TestWithoutAPastedKeyTheStatusSaysHowToGetOne(t *testing.T) {
+	c := newFakeComputer(t)
+	c.installExtension("Default")
+	c.withNode()
+	status := c.service(true).Refresh()
+	if status.Browser.State != BrowserNoKey || status.Browser.Fix != FixOpenExtension || !strings.Contains(status.Browser.Summary, "paste") {
+		t.Fatalf("no key: %+v", status.Browser)
 	}
 }
