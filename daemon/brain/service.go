@@ -2563,14 +2563,11 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 		ID:               calendarWorkID(event.Item.ID, run.ID),
 		Title:            firstNonEmpty(run.Title, event.Item.Title),
 		Objective:        strings.TrimSpace(event.Item.ActionInstruction),
-		Status:           WorkRunning,
-		AttemptSessionID: strings.TrimSpace(run.WorkerSession),
-		AttemptDelegated: strings.TrimSpace(run.WorkerSession) != "",
 		SourceThreadID:   sourceThreadID,
 		CompletionPolicy: CompletionBounded,
 		NextAction:       "Wait for the scheduled action.",
-		WaitFor:          calendarWaitCondition(run),
-		Wake:             calendarRunWake(run, contextRef),
+		WaitFor:          "Calendar occurrence " + run.ID,
+		Wake:             &WorkWake{Kind: WorkWakeCalendarResult, Ref: contextRef},
 		ContextRef:       contextRef,
 	}
 
@@ -2581,19 +2578,11 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 	update := WorkUpdate{}
 	switch run.Status {
 	case calendar.StatusRunning:
-		status := WorkRunning
-		next := "Wait for the scheduled action."
-		wait := calendarWaitCondition(run)
-		owner := strings.TrimSpace(run.WorkerSession)
-		wake := calendarRunWake(run, contextRef)
-		update = WorkUpdate{
-			Status:           &status,
-			AttemptSessionID: &owner,
-			NextAction:       &next,
-			WaitFor:          &wait,
-			Wake:             &wake,
-		}
-		if owner != "" {
+		// A running occurrence changes no Work field. The launched Worker is
+		// not an Attempt: Calendar owns its execution and it sends the
+		// lifecycle engine no heartbeats, so admitting it would let lease
+		// expiry declare a still-working Worker lost. Only the stage is recorded.
+		if strings.TrimSpace(run.WorkerSession) != "" {
 			kind = "calendar.launched"
 		}
 	case calendar.StatusCompleted:
@@ -2608,11 +2597,11 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 			payloadRef = event.ScheduledResult.ID
 		}
 	case calendar.StatusFailed:
-		status := WorkNeedsInput
-		next := "Inspect the scheduled action failure."
-		empty := ""
+		// The failure stays open for Brain to inspect through its actionable
+		// Event: needs_input is derived from lifecycle evidence, never set by
+		// a producer.
 		var noWake *WorkWake
-		update = WorkUpdate{Status: &status, NextAction: &next, WaitFor: &empty, Wake: &noWake}
+		update = WorkUpdate{Wake: &noWake}
 		kind = "calendar.failure"
 		actionable = true
 		terminal = true
@@ -2632,12 +2621,11 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 	}
 	var err error
 	var recorded WorkEvent
-	var item Work
 	created := false
 	producerWoke := false
 	if terminal {
 		wakes := []WorkEvent{}
-		item, recorded, created, wakes, err = s.store.ApplyProducerTransition(
+		_, recorded, created, wakes, err = s.store.ApplyProducerTransition(
 			&candidate,
 			&update,
 			producerEvent,
@@ -2649,15 +2637,9 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 		}
 		producerWoke = len(wakes) > 0
 	} else {
-		item, _, err = s.store.EnsureWork(candidate)
+		_, _, err = s.store.EnsureWork(candidate)
 		if err != nil {
 			return false, err
-		}
-		if workUpdateChanges(item, update) {
-			item, err = s.store.UpdateWork(item.ID, update)
-			if err != nil {
-				return false, err
-			}
 		}
 		recorded, created, err = s.store.AppendWorkEvent(producerEvent)
 		if err != nil {
@@ -2671,25 +2653,11 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 	return woke || producerWoke || recorded.Actionable, dispatchErr
 }
 
-func calendarRunWake(run calendar.Run, contextRef string) *WorkWake {
-	if strings.TrimSpace(run.WorkerSession) != "" {
-		return nil
-	}
-	return &WorkWake{Kind: WorkWakeCalendarResult, Ref: strings.TrimSpace(contextRef)}
-}
-
 func latestCalendarRun(item calendar.Item) (calendar.Run, bool) {
 	if len(item.Runs) == 0 {
 		return calendar.Run{}, false
 	}
 	return item.Runs[len(item.Runs)-1], true
-}
-
-func calendarWaitCondition(run calendar.Run) string {
-	if sessionID := strings.TrimSpace(run.WorkerSession); sessionID != "" {
-		return "Session " + sessionID
-	}
-	return "Calendar occurrence " + run.ID
 }
 
 func calendarWorkID(itemID, runID string) string {
