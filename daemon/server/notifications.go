@@ -97,6 +97,46 @@ func (s *Server) NotificationPresence(workerID string) NotificationPresence {
 	return presence
 }
 
+// doneSuppression says why a worker_done push should not go out, or "" when it
+// should. The first done of a Work in a run is pushed (the Work's later
+// versions and progress stay in the app); blocked or failed on the Work starts
+// a new run, since the person then acted on it.
+func (s *Server) doneSuppression(ev watcher.SessionEvent, kind string) string {
+	workID := ""
+	if s.brain != nil {
+		workID, _ = s.brain.TurnWorkID(ev.WorkerID, ev.TurnID)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if kind != push.KindWorkerDone {
+		if workID != "" {
+			delete(s.doneNotified, workID)
+		}
+		return ""
+	}
+	foreground := false
+	for conn := range s.clients {
+		if s.appStates[conn] == "active" {
+			foreground = true
+			break
+		}
+	}
+	if foreground {
+		return "app_in_foreground"
+	}
+	if workID == "" {
+		return ""
+	}
+	if s.doneNotified[workID] {
+		return "work_already_notified"
+	}
+	if s.doneNotified == nil {
+		s.doneNotified = make(map[string]bool)
+	}
+	s.doneNotified[workID] = true
+	return ""
+}
+
 // noteSuppressedNotification records a Worker notification the server decided
 // not to send, so Watch can tell a rightly quiet moment from a missed one.
 func (s *Server) noteSuppressedNotification(ev watcher.SessionEvent, reason string) {

@@ -801,6 +801,24 @@ func (s *Store) turnRecordsLocked() (*turnReadCache, error) {
 	return &s.turnCache, nil
 }
 
+// TurnWorkID names the Work that owns one exact Turn of a Session.
+func (s *Store) TurnWorkID(sessionID, turnID string) (string, bool) {
+	if s == nil {
+		return "", false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	turns, err := s.turnRecordsLocked()
+	if err != nil {
+		return "", false
+	}
+	turn, found := turns.exact[turnRecordKey(strings.TrimSpace(sessionID), strings.TrimSpace(turnID))]
+	if !found || strings.TrimSpace(turn.WorkID) == "" {
+		return "", false
+	}
+	return turn.WorkID, true
+}
+
 func turnRecordKey(sessionID, turnID string) string {
 	return sessionID + "\x00" + turnID
 }

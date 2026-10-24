@@ -435,6 +435,14 @@ func (s *Service) Turn(sessionID string) (watcher.TurnSnapshot, bool, error) {
 	return s.store.Turn(sessionID)
 }
 
+// TurnWorkID names the Work that owns one exact Turn of a Session.
+func (s *Service) TurnWorkID(sessionID, turnID string) (string, bool) {
+	if s == nil || s.store == nil {
+		return "", false
+	}
+	return s.store.TurnWorkID(sessionID, turnID)
+}
+
 // ApplyTurnFact applies one observation through the single canonical reducer.
 // It implements watcher.TurnLedger; the store persists turn + derived Work +
 // presentation event atomically, so this method never dispatches directly; the
