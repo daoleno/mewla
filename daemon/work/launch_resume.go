@@ -349,6 +349,7 @@ func codexFlagTakesValue(flag string) bool {
 func codexFlagBoolean(flag string) bool {
 	switch flag {
 	case "--dangerously-bypass-approvals-and-sandbox",
+		"--dangerously-bypass-hook-trust",
 		"--no-alt-screen",
 		"--full-auto",
 		"--quiet",
