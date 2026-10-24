@@ -19,6 +19,8 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/procspawn"
 	"github.com/daoleno/mewla/daemon/workerproc"
+
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 const (
@@ -97,7 +99,7 @@ func findCodexTranscript(worker classifier.Worker, now time.Time) (codexTranscri
 	if err != nil {
 		return codexTranscriptCandidate{}, false, err
 	}
-	dbPath := filepath.Join(home, ".codex", "state_5.sqlite")
+	dbPath := providerpaths.CodexStateDB(home)
 	if _, err := os.Stat(dbPath); err != nil {
 		return codexTranscriptCandidate{}, false, nil
 	}
@@ -403,6 +405,9 @@ func uniqueStrings(values []string) []string {
 
 func isCodexResumeCommand(command string) bool {
 	fields := strings.Fields(strings.ToLower(strings.TrimSpace(command)))
+	if len(fields) == 0 {
+		return false
+	}
 	for _, field := range fields[1:] {
 		if strings.Trim(field, `"'`) == "resume" {
 			return true
@@ -429,7 +434,7 @@ func queryCodexThreads(sqlite3, dbPath, cwd string) ([]codexThreadRow, error) {
 
 func queryCodexThreadRows(sqlite3, dbPath, query string) ([]codexThreadRow, error) {
 	codexLookupCost.Subprocesses.Add(1)
-	out, err := procspawn.Command("sqlite3 codex state", sqlite3, "-json", dbPath, query).CombinedOutput()
+	out, err := procspawn.Command("sqlite3 codex state", sqlite3, "-readonly", "-json", dbPath, query).CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("query codex threads: %w%s", err, stderrSuffix(string(out)))
 	}

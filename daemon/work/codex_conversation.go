@@ -16,6 +16,8 @@ import (
 
 	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/classifier"
+
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 const (
@@ -2392,7 +2394,7 @@ func codexStateSignature() string {
 	if err != nil {
 		return ""
 	}
-	db := filepath.Join(home, ".codex", "state_5.sqlite")
+	db := providerpaths.CodexStateDB(home)
 	var parts []string
 	for _, path := range []string{db, db + "-wal"} {
 		info, err := os.Stat(path)
