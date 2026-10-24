@@ -537,31 +537,54 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 
 	err := filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			// Totals built from a partial walk must not look complete.
+			c.warnf("claude-walk", "[stats] Claude sessions could not all be read (%s): %v", path, err)
 			return nil
 		}
 		if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {
 			return nil
 		}
-
 		rel, err := filepath.Rel(projectsDir, path)
 		if err != nil {
 			return nil
 		}
 		parts := strings.Split(rel, string(os.PathSeparator))
-		projectName := ""
-		if len(parts) == 1 {
-			projectName = decodeProjectDir(parts[0])
-		} else {
-			projectName = decodeProjectDir(parts[0])
+		// The session file records the folder it ran in. The directory name is
+		// a lossy encoding of it (a "-" in a folder name is a "/" too), so it
+		// only names the project of a file that records no folder.
+		projectName := decodeProjectDir(parts[0])
+		if cwd := firstSessionCwd(path); cwd != "" {
+			projectName = filepath.Base(cwd)
 		}
 		c.scanSessionJSONL(path, projectName, byDate)
 		return nil
 	})
 	if err != nil {
-		return byDate
+		c.warnf("claude-walk", "[stats] Claude sessions could not be listed: %v", err)
 	}
 
 	return byDate
+}
+
+// firstSessionCwd is the first folder a session file records, from its first
+// few lines, or "".
+func firstSessionCwd(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	for line := 0; line < 50 && scanner.Scan(); line++ {
+		var entry struct {
+			Cwd string `json:"cwd"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &entry) == nil && entry.Cwd != "" {
+			return entry.Cwd
+		}
+	}
+	return ""
 }
 
 type skillEntry struct {
@@ -1133,7 +1156,7 @@ func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, 
 	modelsByDate := make(map[string]map[string]modelAggEntry)
 	projectsByDate := make(map[string]map[string]*projectAggEntry)
 
-	dbPath := filepath.Join(home, ".codex", "state_5.sqlite")
+	dbPath := providerpaths.CodexStateDB(home)
 	if _, err := os.Stat(dbPath); err != nil {
 		return daily, modelsByDate, projectsByDate
 	}
@@ -1145,7 +1168,7 @@ func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, 
 		return daily, modelsByDate, projectsByDate
 	}
 
-	out, err := procspawn.Command("sqlite3 stats", sqlite3, "-json", dbPath,
+	out, err := procspawn.Command("sqlite3 stats", sqlite3, "-readonly", "-json", dbPath,
 		"SELECT id, cwd, model, rollout_path FROM threads WHERE tokens_used > 0").Output()
 	if err != nil {
 		c.warnf("codex-query", "[stats] Codex sqlite3 query failed: %v", err)

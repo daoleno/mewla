@@ -24,6 +24,17 @@ func ClaudeConfigDir(home string) string {
 	return filepath.Join(home, ".claude")
 }
 
+// CodexHome is Codex's home: CODEX_HOME, else ~/.codex.
+func CodexHome(home string) string {
+	if dir := strings.TrimSpace(os.Getenv("CODEX_HOME")); dir != "" {
+		return dir
+	}
+	return filepath.Join(home, ".codex")
+}
+
+// CodexStateDB is Codex's thread database under that home.
+func CodexStateDB(home string) string { return filepath.Join(CodexHome(home), "state_5.sqlite") }
+
 // PiAgentDir is Pi's agent root: PI_CODING_AGENT_DIR (a leading ~ expands to
 // home), else ~/.pi/agent. Sessions live in its "sessions" directory.
 func PiAgentDir(home string) string {

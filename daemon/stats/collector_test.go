@@ -823,3 +823,24 @@ func TestCollectorWarnsOncePerChangedProblem(t *testing.T) {
 		t.Fatalf("want one line per distinct problem, got %d: %s", got, logs.String())
 	}
 }
+
+// The project is named by the folder the session recorded, not by decoding the
+// directory name, which cannot tell "-" in a name from "/".
+func TestClaudeSessionProjectComesFromTheRecordedFolder(t *testing.T) {
+	setTestLocalLocation(t, time.UTC)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	home := t.TempDir()
+	dir := filepath.Join(home, ".claude", "projects", "-home-u-workspace-mewla-cat-lab")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	line := `{"type":"assistant","timestamp":"2026-04-04T10:00:00.000Z","cwd":"/home/u/workspace/mewla-cat-lab","message":{"id":"m1","model":"claude-sonnet-4-6","content":[{"type":"text","text":"a"}],"usage":{"input_tokens":10,"output_tokens":5}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "s.jsonl"), []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	byDate := NewCollector().collectClaudeSessionStats(home)
+	agg := byDate["2026-04-04"]
+	if agg == nil || agg.projects["mewla-cat-lab"] == nil || agg.projects["lab"] != nil {
+		t.Fatalf("projects = %+v", agg)
+	}
+}
