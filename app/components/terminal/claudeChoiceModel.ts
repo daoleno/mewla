@@ -8,8 +8,10 @@ import type {
 export type InterfaceChoicePrompt = {
   callId: string;
   choice: ConversationChoice;
-  /** The live pane shows the prompt, so an answer can be sent. */
+  /** The Session list confirms the prompt is on screen; this only picks the copy. */
   live: boolean;
+  /** The daemon connection is up, which is all an answer needs: the daemon re-checks the screen. */
+  connected: boolean;
   onSubmit(payload: ChoiceAnswerPayload): Promise<void>;
 };
 
@@ -47,6 +49,33 @@ export function latestPendingChoice(
       : null;
   }
   return null;
+}
+
+/** The daemon code for "the question already passed" (answered, dismissed or replaced). */
+export const CHOICE_GONE_CODE = "answer_choice_gone";
+
+/** What the person is told when the card disappears because the question passed. */
+export const CHOICE_GONE_NOTICE = "That question has already passed.";
+
+/**
+ * The pending choice the card should show: the latest pending one, unless the
+ * daemon already said its question passed (the transcript can lag the screen).
+ */
+export function visiblePendingChoice(
+  events: readonly CodexConversationEvent[] | undefined,
+  gone: ReadonlySet<string>,
+): (CodexConversationEvent & { choice: ConversationChoice }) | null {
+  const pending = latestPendingChoice(events);
+  return pending?.call_id && gone.has(pending.call_id) ? null : pending;
+}
+
+/** Whether an answer error means the question is no longer on screen. */
+export function isChoiceGoneError(reason: unknown): boolean {
+  return (
+    typeof reason === "object" &&
+    reason !== null &&
+    (reason as { code?: unknown }).code === CHOICE_GONE_CODE
+  );
 }
 
 export function questionAllowsOther(question: ConversationChoiceQuestion) {

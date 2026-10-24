@@ -3160,15 +3160,16 @@ exports[`correlated WebSocket requests answerChoice 1`] = `
   "errorChannels": {
     "error": {
       "rejected": {
+        "code": "probe_code",
         "message": "probe failure",
-        "name": "Error",
+        "name": "DaemonRequestError",
       },
     },
   },
   "errorWithoutMessage": {
     "rejected": {
       "message": "Could not send the answer.",
-      "name": "Error",
+      "name": "DaemonRequestError",
     },
   },
   "handlersAfterDisconnect": 0,

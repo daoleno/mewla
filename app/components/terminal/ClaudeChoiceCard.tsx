@@ -32,8 +32,10 @@ import {
 interface ClaudeChoiceCardProps {
   callId: string;
   choice: ConversationChoice;
-  /** The live pane shows this prompt; answers can be sent. */
+  /** The Session list confirms the prompt is on screen; only changes the copy. */
   live: boolean;
+  /** The daemon is reachable. The daemon re-checks the screen before any key. */
+  connected: boolean;
   chrome: TerminalThemeChrome;
   /** The tallest the card may grow before it scrolls instead of passing under the header. */
   maxHeight?: number;
@@ -49,6 +51,7 @@ export function ClaudeChoiceCard({
   callId,
   choice,
   live,
+  connected,
   chrome,
   maxHeight,
   onSubmit,
@@ -79,7 +82,7 @@ export function ClaudeChoiceCard({
     () => buildChoiceAnswerPayload(callId, choice, draft),
     [callId, choice, draft],
   );
-  const editable = live && !sending;
+  const editable = connected && !sending;
   const canSend = Boolean(payload) && editable;
   const showTabs = choice.questions.length > 1 && !typing;
 
@@ -133,6 +136,9 @@ export function ClaudeChoiceCard({
         maxHeight != null ? { maxHeight } : null,
       ]}
     >
+      <Text style={[styles.waiting, { color: chrome.textMuted }]} numberOfLines={1}>
+        Waiting for your answer
+      </Text>
       {showTabs ? (
         <ScrollView
           ref={tabsRef}
@@ -354,9 +360,13 @@ export function ClaudeChoiceCard({
         <Text style={[styles.status, { color: chrome.danger }]} numberOfLines={3}>
           {error}
         </Text>
+      ) : !connected ? (
+        <Text style={[styles.status, { color: chrome.textMuted }]} numberOfLines={2}>
+          Reconnecting to answer…
+        </Text>
       ) : !live ? (
         <Text style={[styles.status, { color: chrome.textMuted }]} numberOfLines={2}>
-          Waiting for the prompt to appear in the Terminal…
+          Not confirmed in the Terminal yet; it is checked when you send.
         </Text>
       ) : null}
 
@@ -524,6 +534,10 @@ const styles = StyleSheet.create({
   },
   header: {
     ...TypeScale.micro,
+  },
+  waiting: {
+    ...TypeScale.micro,
+    paddingHorizontal: 4,
   },
   questionText: {
     fontFamily: Typography.chatFontMedium,

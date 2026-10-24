@@ -51,7 +51,9 @@ func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 	answers, err := s.answerChoice(resolved.targetID, request, load)
 	if err != nil {
 		code, message := "answer_choice_failed", err.Error()
-		if errors.Is(err, watcher.ErrClaudeChoiceRefused) {
+		if errors.Is(err, watcher.ErrClaudeChoiceGone) {
+			code, message = "answer_choice_gone", "This question has already passed."
+		} else if errors.Is(err, watcher.ErrClaudeChoiceRefused) {
 			code = "answer_choice_refused"
 			message = strings.TrimPrefix(message, watcher.ErrClaudeChoiceRefused.Error()+": ")
 			message = strings.ToUpper(message[:1]) + message[1:] + "."
@@ -77,7 +79,7 @@ func (s *Server) answerChoice(workerID string, request answerChoiceRequest, load
 	}
 	event, ok := work.PendingConversationChoice(conversation, request.CallID)
 	if !ok {
-		return nil, fmt.Errorf("%w: this question is no longer waiting for an answer", watcher.ErrClaudeChoiceRefused)
+		return nil, watcher.ErrClaudeChoiceGone
 	}
 	questions := make([]watcher.ClaudeChoiceQuestion, len(event.Choice.Questions))
 	for index, question := range event.Choice.Questions {

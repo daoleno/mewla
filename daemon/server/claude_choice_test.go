@@ -81,13 +81,13 @@ func TestAnswerChoice_RefusesStaleCallsAndReportsMismatches(t *testing.T) {
 	answered := func() (work.CodexConversation, error) {
 		return choiceConversation(work.ConversationChoiceAnswered, "Apple", "Red"), nil
 	}
-	if _, err := srv.answerChoice("%7", answerRequest("toolu_1"), answered); !errors.Is(err, watcher.ErrClaudeChoiceRefused) || driven {
+	if _, err := srv.answerChoice("%7", answerRequest("toolu_1"), answered); !errors.Is(err, watcher.ErrClaudeChoiceGone) || driven {
 		t.Fatalf("answered choice: err=%v driven=%v", err, driven)
 	}
 	pending := func() (work.CodexConversation, error) {
 		return choiceConversation(work.ConversationChoicePending), nil
 	}
-	if _, err := srv.answerChoice("%7", answerRequest("toolu_other"), pending); !errors.Is(err, watcher.ErrClaudeChoiceRefused) || driven {
+	if _, err := srv.answerChoice("%7", answerRequest("toolu_other"), pending); !errors.Is(err, watcher.ErrClaudeChoiceGone) || driven {
 		t.Fatalf("unknown call: err=%v driven=%v", err, driven)
 	}
 

@@ -16,6 +16,9 @@ import {
   unansweredChoiceQuestions,
   emptyChoiceDraft,
   latestPendingChoice,
+  visiblePendingChoice,
+  isChoiceGoneError,
+  CHOICE_GONE_CODE,
   setChoiceOtherText,
   toggleChoiceOption,
   toggleChoiceOther,
@@ -220,5 +223,28 @@ describe("one-question-at-a-time steps", () => {
   test("the card height budget keeps the card under the header and never collapses", () => {
     expect(choiceCardMaxHeight({ windowHeight: 844, topChromeInset: 100, bottomInset: 34 })).toBe(590);
     expect(choiceCardMaxHeight({ windowHeight: 300, topChromeInset: 100, bottomInset: 34 })).toBe(200);
+  });
+});
+
+describe("a pending choice the status has not caught up with", () => {
+  test("stays the visible prompt whatever the Session status says", () => {
+    // The surface no longer consults the Session status to show or answer the
+    // card; only the transcript's pending state and the daemon's verdict count.
+    const events = [choiceEvent("toolu_1", "pending")];
+    expect(visiblePendingChoice(events, new Set())?.call_id).toBe("toolu_1");
+  });
+
+  test("goes away once the daemon says the question passed", () => {
+    const events = [choiceEvent("toolu_1", "pending")];
+    expect(visiblePendingChoice(events, new Set(["toolu_1"]))).toBeNull();
+    expect(visiblePendingChoice(events, new Set(["toolu_0"]))?.call_id).toBe("toolu_1");
+    expect(visiblePendingChoice([...events, choiceEvent("toolu_2", "pending")], new Set(["toolu_1"]))?.call_id).toBe("toolu_2");
+  });
+
+  test("recognises the daemon's gone code and nothing else", () => {
+    expect(isChoiceGoneError(Object.assign(new Error("x"), { code: CHOICE_GONE_CODE }))).toBe(true);
+    expect(isChoiceGoneError(Object.assign(new Error("x"), { code: "answer_choice_refused" }))).toBe(false);
+    expect(isChoiceGoneError(new Error(CHOICE_GONE_CODE))).toBe(false);
+    expect(isChoiceGoneError(undefined)).toBe(false);
   });
 });

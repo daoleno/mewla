@@ -238,6 +238,7 @@ export function InterfaceChatBody({
           callId={choicePrompt.callId}
           choice={choicePrompt.choice}
           live={choicePrompt.live}
+          connected={choicePrompt.connected}
           chrome={chrome}
           maxHeight={choiceCardMaxHeight({
             windowHeight,
