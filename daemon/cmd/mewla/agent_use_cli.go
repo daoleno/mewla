@@ -18,13 +18,14 @@ const agentUseUsage = `Usage: mewla agent-use <status|on|off|fix|key> [flags]
 
 Let agents on this computer use it the way you do: your Chrome, with the
 sites you are logged in to, in a tab group of their own. It is on by default
-and needs no setup beyond adding the Playwright extension to Chrome.
+and needs no setup beyond adding the Playwright extension to Chrome and
+giving Mewla its key once.
 
   status          What agents can use now, and the one thing to fix if not
   on | off        The same switch as the app's "Agents can use this computer"
   fix             Do the fix status names (opens Chrome on this computer)
-  key [-clear]    Paste the Playwright extension's key from stdin, when Mewla
-                  can't read it from Chrome itself
+  key [-clear]    Paste the Playwright extension's key (shown on its page in
+                  Chrome) from stdin; -clear forgets it
 
 The app shows the same status: Settings → Agents on this computer.
 `
@@ -45,7 +46,7 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	fs.StringVar(&stateDir, "state-dir", "", "state directory (default: ~/.mewla)")
 	fs.BoolVar(&outputJSON, "json", false, "print JSON")
 	if action == "key" {
-		fs.BoolVar(&clear, "clear", false, "forget the pasted key and read it from Chrome again")
+		fs.BoolVar(&clear, "clear", false, "forget the pasted key")
 	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return err

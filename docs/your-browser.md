@@ -14,9 +14,12 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
 2. Tap **Add extension**. Chrome on that computer opens the Playwright
    Extension in the Chrome Web Store. Click **Add to Chrome** there, or
    through [Screen](screen.md) if you are not at the computer.
-3. The extension shows a key on its own page. Tap **Open it** to open that page
-   in Chrome, copy the key, and tap **Paste key**. Mewla does not read the key
-   out of Chrome's storage; you hand it over once.
+3. The extension shows a key (`PLAYWRIGHT_MCP_EXTENSION_TOKEN`) on its own
+   page. Tap **Open it** to open that page in Chrome and copy the key. Then, on
+   that computer, run `mewla agent-use key` and paste it. If the key is on your
+   phone's clipboard instead, tap **Paste key**. Mewla does not read the key out
+   of Chrome's storage; you hand it over once, and it stays until you clear it
+   with `mewla agent-use key -clear`.
 
 When nothing is missing, the page shows only the switch. Mewla downloads the
 browser tools the first time (it needs Node.js 20 or later on the computer).
@@ -60,7 +63,7 @@ the Mac's Chrome. See [Your other computers](computers.md).
 | --- | --- |
 | Google Chrome isn't installed | Install Google Chrome. Chrome from Flatpak or Snap is not supported. |
 | Add the Playwright extension to Chrome | Tap the row below it, then **Add to Chrome**. |
-| Open the Playwright extension in Chrome and copy its key | Tap **Open it**, copy the key the extension shows, then tap **Paste key** (or run `mewla agent-use key` and paste it). |
+| Open the Playwright extension in Chrome and copy its key | Tap **Open it**, copy the key the extension shows, then run `mewla agent-use key` on the computer and paste it (or tap **Paste key** to use your phone's clipboard). |
 | Sign in to this computer's desktop | On Linux, agents open Chrome in your desktop session. With nobody signed in to the desktop there is no Chrome to use; sign in and the row turns ready. |
 | Install Node.js 20 or later | Install Node.js on that computer; Mewla finds it in the usual places, including version managers. |
 | Couldn't download the browser tools | Check the computer's network, then tap **Try again**. |
