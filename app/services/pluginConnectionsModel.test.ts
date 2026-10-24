@@ -226,7 +226,7 @@ describe("tool updates from a service", () => {
 });
 
 describe("hyperliquid accounts", () => {
-  test("connect from a form that asks for an address and a network", () => {
+  test("Hyperliquid has a form, for its trading key", () => {
     expect(connectsWithForm("hyperliquid")).toBe(true);
     expect(connectsWithForm("github")).toBe(false);
   });
@@ -235,8 +235,8 @@ describe("hyperliquid accounts", () => {
     expect(networkLabel("testnet")).toBe("Testnet");
     expect(networkLabel(undefined)).toBeNull();
   });
-  test("the same address on two networks is two accounts under one service", () => {
-    const main = account({ id: "m", integration: "hyperliquid", name: "Hyperliquid Mainnet · 0x0000…00aa", network: "mainnet" });
+  test("a mainnet reader and a testnet account are two accounts under one service", () => {
+    const main = account({ id: "m", integration: "hyperliquid", name: "Hyperliquid", network: "mainnet" });
     const test = account({ id: "t", integration: "hyperliquid", name: "Hyperliquid Testnet · 0x0000…00aa", network: "testnet" });
     const rows = pluginCatalogRows([plugin("hyperliquid", "Hyperliquid")], [main, test], { hyperliquid: {} });
     expect(rows.services[0]!.accounts.map((a) => a.network)).toEqual(["mainnet", "testnet"]);

@@ -21,7 +21,7 @@ shows that server's accounts and never moves an account between servers.
 
 The card at the top of Extensions follows the sign-in: **Waiting for Linear**
 while you are on the service's page (with **Open Linear again** and **Cancel**),
-then the result. After a connect it offers **Allow changes too**; you can skip
+then the result. It adds nothing while you wait. After a connect it offers **Allow changes too**; you can skip
 it and allow changes later on the service's page.
 
 From the web UI, the service returns your browser tab to the web UI's own
@@ -56,7 +56,7 @@ Mewla's own app registration with the provider:
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
 | Google Calendar, Gmail | **Invite only while Google reviews Mewla's app.** Google's own sign-in, one per plugin, through Mewla's sign-in service at `connect.mewla.ai` (see [Google Calendar and Gmail](#google-calendar-and-gmail)) | Works: the sign-in opens in a new tab, which says when to close it, and Extensions updates by itself |
-| Hyperliquid | No sign-in: an address and a network, plus an optional API wallet key you paste | Works everywhere; the form is on the service's page |
+| Hyperliquid | No sign-in and no setup to read; one API wallet key you paste to let Brain trade | Works everywhere; the key field is on the service's page |
 
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
@@ -150,8 +150,9 @@ service with a receipt only your computer holds.
 **Invite only while Google reviews Mewla's app.** Until Google has verified
 Mewla, only accounts on Mewla's early-access list can sign in, and Google ends
 each connection after 7 days. Any other account gets Google's own "access
-blocked" page, and Mewla says "This Google account isn't on Mewla's
-early-access list yet". A connection that Google ended shows
+blocked" page, which never returns to the app. Mewla says nothing before you
+connect; when you close that page, or Google refuses, the card reads "If Google
+blocked it, this account isn't on Mewla's early-access list yet". A connection that Google ended shows
 **Needs sign-in again**; tap **Reconnect**. Google's verification of Gmail
 access also needs a yearly third-party security assessment.
 
@@ -166,23 +167,25 @@ permissions there.
 
 ## Hyperliquid
 
-Hyperliquid reads markets and accounts from its public API, and trades with an
-**API wallet** you add. Open **Hyperliquid** in Extensions and fill in:
+Hyperliquid needs no setup to read. Every server has one **Hyperliquid** account
+(mainnet, **Read only**) from the start, so Brain can read markets, prices,
+order books and any address's positions, orders, fills and PnL right away. It
+takes the address from your conversation and can remember it itself; positions
+and balances on Hyperliquid are public, so no key is involved. You can switch
+the account off, and it comes back only if you disconnect a trading account.
 
-1. **Network**: **Mainnet** (the real exchange) or **Testnet** (Hyperliquid's
-   practice network, with test money). Each network is its own account in
-   Mewla, named for it (**Hyperliquid Testnet · 0x1234…abcd**) and marked
-   with a **Mainnet** or **Testnet** tag on its card and in every tool result.
-   To use both, connect the same address twice, once per network.
-2. **Address**: the account to read. Positions, orders, fills and balances on
-   Hyperliquid are public, so this needs no key.
-3. **API wallet key** (optional): leave it empty and the account is **read
-   only**. To let Brain trade, create an API wallet on Hyperliquid's own site
-   (`app.hyperliquid.xyz/API`, or `app.hyperliquid-testnet.xyz/API` for
-   testnet), approve it, and paste its private key here once. Never paste your
-   main wallet's key: Mewla refuses it. Hyperliquid approves an API wallet per
-   network, so a key is saved with the one account it was approved for and is
-   never used on the other network.
+To let Brain trade, open **Hyperliquid** in Extensions and paste one **API
+wallet key**. Create the API wallet on Hyperliquid's own site
+(`app.hyperliquid.xyz/API`; **Create an API wallet** opens it), approve it, and
+paste its private key once. Never paste your main wallet's key: Mewla refuses
+it. Mewla asks Hyperliquid which account the key trades for and on which
+network, so there is no address or network to fill in. The account shows the
+address it trades for (**0x1234…abcd**), and every tool result names its
+network. A mainnet key turns the read-only account into that trading account; a
+testnet key (Hyperliquid's practice network, test money only) adds a separate
+**Hyperliquid Testnet** account, tagged **Testnet** on its card. A key is
+saved with the one account it was approved for and never used on the other
+network.
 
 An API wallet can sign trades but not withdrawals or transfers out; those need
 your main wallet's own signature, and Mewla has no code that makes them. A
@@ -192,14 +195,13 @@ it on Hyperliquid's site if it is ever exposed. The key stays on the server in t
 private vault, is never shown or logged, and **Remove trading key** on the
 account (or **Disconnect**) deletes it.
 
-Connecting the same address and network again updates that account, which is
-how you add a key later.
+Adding a key for an account that is already connected updates that account.
 
 **Read and search** (on after you connect): `list_markets`, `get_mids`,
 `get_book`, `get_candles`, `get_funding_history`, `get_account` (positions,
 margin and spot balances), `get_open_orders`, `get_fills`,
 `get_funding_payments`, `get_portfolio`, `get_vaults` and `get_order_status`.
-Account tools take an optional `address` to read another public account. Times
+Account tools take an optional `address`; the read-only account has none of its own, so Brain names one with each read, and a trading account defaults to its own. Times
 come back with a readable `…_at` field in the time zone you name (`timezone`),
 this computer's own if you don't. Results are bounded: lists are one page and say when they were
 cut.

@@ -66,9 +66,10 @@ type Account struct {
 	TrustedNetworks []string `json:"trusted_networks,omitempty"`
 	AuthMethod      string   `json:"auth_method,omitempty"`
 	Scopes          []string `json:"scopes,omitempty"`
-	// Hyperliquid: an account is one address on one network ("mainnet" or
-	// "testnet"). Signer is the API wallet's public address when a trading
-	// key is saved. None of these is secret.
+	// Hyperliquid: an account is one network ("mainnet" or "testnet"). Address
+	// is the account a trading key trades for, empty on the keyless reader.
+	// Signer is the API wallet's public address when a trading key is saved.
+	// None of these is secret.
 	Network                  string     `json:"network,omitempty"`
 	Address                  string     `json:"address,omitempty"`
 	Signer                   string     `json:"signer,omitempty"`
@@ -104,10 +105,9 @@ type Input struct {
 	Endpoint        string   `json:"endpoint,omitempty"`
 	TrustedNetworks []string `json:"trusted_networks,omitempty"`
 	Credential      string   `json:"credential,omitempty"`
-	// Hyperliquid connects an address on a network; Credential is then an
-	// optional API wallet key.
+	// Hyperliquid adds an API wallet key as Credential. The key names its
+	// account and network; Network only limits the search to one of them.
 	Network     string             `json:"network,omitempty"`
-	Address     string             `json:"address,omitempty"`
 	Spec        json.RawMessage    `json:"spec,omitempty"`
 	OAuthClient *OAuthClientConfig `json:"oauth_client,omitempty"`
 	Mobile      bool               `json:"mobile,omitempty"`

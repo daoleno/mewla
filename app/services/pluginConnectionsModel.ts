@@ -43,7 +43,7 @@ export function pluginCatalogRows(
   return { services: rows.filter((row) => Boolean(reviewed[row.plugin.id])), custom: rows.filter((row) => !reviewed[row.plugin.id]) };
 }
 
-/** Services whose page holds a form: a custom service's address, or a Hyperliquid address and network. */
+/** Services whose page holds a form: a custom service's address, or Hyperliquid's trading key. */
 export function connectsWithForm(serviceId: string): boolean {
   return serviceId === "mcp" || serviceId === "openapi" || serviceId === "hyperliquid";
 }
