@@ -34,6 +34,11 @@ on:
         options:
           - artifact-only
           - testflight
+      live_extension:
+        description: "Build the Live Activity / widget extension for this run, without setting the MEWLA_IOS_LIVE repository variable"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ios-release-${{ github.event_name == 'push' && 'preview' || inputs.app_identity }}-${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
@@ -55,8 +60,9 @@ jobs:
       MEWLA_IOS_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
       # The Dynamic Island / Live Activity / widget extension is a second signed target. It is
       # built only once the repository variable MEWLA_IOS_LIVE is "1", which is set after its App
-      # IDs, App Group and provisioning profile exist (docs/ios-ci-release.md).
-      MEWLA_IOS_LIVE: ${{ vars.MEWLA_IOS_LIVE == '1' && '1' || '' }}
+      # IDs, App Group and provisioning profile exist (docs/ios-ci-release.md). A manual dispatch can
+      # turn it on for that one run with the live_extension input (an export-only trial build).
+      MEWLA_IOS_LIVE: ${{ (vars.MEWLA_IOS_LIVE == '1' || inputs.live_extension == true) && '1' || '' }}
     steps:
       - name: Checkout explicit ref
         uses: actions/checkout@v4

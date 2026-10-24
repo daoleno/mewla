@@ -150,7 +150,11 @@ describe('iOS unsigned Simulator contract', () => {
 
 describe('iOS release signs the Live Activity extension as its own target', () => {
   it('builds the extension only behind the MEWLA_IOS_LIVE repository variable', () => {
-    expect(workflow).toContain("MEWLA_IOS_LIVE: ${{ vars.MEWLA_IOS_LIVE == '1' && '1' || '' }}");
+    expect(workflow).toContain(
+      "MEWLA_IOS_LIVE: ${{ (vars.MEWLA_IOS_LIVE == '1' || inputs.live_extension == true) && '1' || '' }}",
+    );
+    // The per-run switch is opt-in and never changes what a tag push builds.
+    expect(workflow).toMatch(/live_extension:[\s\S]*?type: boolean\s*\n\s*default: false/);
     expect(workflow).toContain('requires environment secret ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64');
   });
 
