@@ -3403,6 +3403,8 @@ func (s *Server) runBrainSessionReconcile(ctx context.Context) {
 					log.Printf("brain signal-system startup reconciliation finished; left alone: %v", err)
 				case err != nil:
 					log.Printf("brain signal-system startup reconciliation failed: %v", err)
+				case done:
+					log.Printf("brain signal-system startup reconciliation complete")
 				}
 				s.signalSystemStartupComplete = done
 			}

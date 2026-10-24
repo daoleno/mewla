@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -203,6 +204,9 @@ func (t *RouteTable) snapshotLocked() []SessionRouteState {
 	for _, state := range t.bySession {
 		out = append(out, cloneSessionState(state))
 	}
+	// Map order is random; a stable order keeps the durable file byte-identical
+	// for an unchanged table.
+	sort.Slice(out, func(i, j int) bool { return out[i].Binding.SessionID < out[j].Binding.SessionID })
 	return out
 }
 

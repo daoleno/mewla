@@ -1471,18 +1471,22 @@ func (o *Owner) ReleaseSession(sessionID string) (PersistResult, error) {
 	if o == nil || !o.started {
 		return PersistResult{Applied: true, Durable: true}, nil
 	}
-	routeID := ""
-	if state, ok := o.table.Get(strings.TrimSpace(sessionID)); ok {
-		routeID = state.Binding.RouteID
-	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	persist, err := o.mutateAndPersistLocked(func() error {
-		if err := o.table.Release(sessionID); err != nil && !errors.Is(err, ErrBindingNotFound) {
-			return err
-		}
-		return nil
-	})
+	routeID := ""
+	persist := PersistResult{Applied: true, Durable: true}
+	var err error
+	if state, ok := o.table.Get(strings.TrimSpace(sessionID)); ok {
+		routeID = state.Binding.RouteID
+		persist, err = o.mutateAndPersistLocked(func() error {
+			if err := o.table.Release(sessionID); err != nil && !errors.Is(err, ErrBindingNotFound) {
+				return err
+			}
+			return nil
+		})
+	}
+	// A Session with no binding has nothing to release: the table and the
+	// durable route file already agree, so there is nothing to rewrite or fsync.
 	if persist.Applied && routeID != "" {
 		o.nativeMu.Lock()
 		if monitor := o.nativeMonitors[routeID]; monitor != nil {
