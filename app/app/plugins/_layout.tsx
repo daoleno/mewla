@@ -9,6 +9,7 @@ import { AgentExtensionsProvider } from "../../components/extensions/AgentExtens
 import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { secureStorage } from "../../services/secureStorage";
 import { retainPluginReturn } from "../../services/pluginOnboarding";
+import { serverDisplayName } from "../../services/serverDisplayName";
 
 // Extensions. A deep-linked service or tool page still has the index below it.
 export const unstable_settings = { initialRouteName: "index" };
@@ -34,7 +35,7 @@ export default function PluginsLayout() {
   return <PluginsFlowProvider
     key={currentServerId ?? "none"}
     serverId={currentServerId}
-    serverName={currentServer?.name ?? "this server"}
+    serverName={serverDisplayName(currentServer?.name)}
     connection={connection}
     deferredName={deferredName}
     deferReturn={deferReturn}

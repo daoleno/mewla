@@ -24,6 +24,7 @@ import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
 import { ScreenViewerHost } from "./ScreenViewerHost";
 import { warnOnce } from "../../services/warnOnce";
+import { serverDisplayName } from "../../services/serverDisplayName";
 import {
   activeModifiers,
   connectionQuality,
@@ -88,7 +89,7 @@ export function ScreenScreen() {
   const landscape = width > height;
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
-  const serverName = currentServer?.name || "this computer";
+  const serverName = serverDisplayName(currentServer?.name);
   const [phase, setPhase] = useState<Phase>("checking");
   const [status, setStatus] = useState<ScreenStatus | null>(null);
   const [reason, setReason] = useState<string | null>(null);
