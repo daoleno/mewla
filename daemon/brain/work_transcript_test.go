@@ -273,3 +273,48 @@ func TestTurnEndOfFastWorkerLinksThroughPendingAdmission(t *testing.T) {
 		t.Fatalf("unexpected links: %+v", links)
 	}
 }
+
+func TestCoveredWorkerIsReResolvedWhenItsAgentAnnouncesAnotherConversation(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(5000, 0)
+	service := &Service{store: store, now: func() time.Time { return now }}
+	service.SetConversationCoverage(func(workerID string) bool { return workerID == "%7" })
+	conversation := "conv-a"
+	calls := 0
+	service.resolveWorkerTranscript = func(*classifier.Worker) (string, work.HostTranscriptIdentity, bool, error) {
+		calls++
+		return "claude", work.HostTranscriptIdentity{SessionID: conversation, Path: "/t/" + conversation + ".jsonl"}, true, nil
+	}
+	item := Work{ID: "work-1"}
+	covered := &classifier.Worker{ID: "%7", ProcessID: 99, StartedAt: time.Unix(1000, 0)}
+	plain := &classifier.Worker{ID: "%8", ProcessID: 98, StartedAt: time.Unix(1000, 0)}
+
+	service.recordWorkTranscript(item, covered, "t1", false)
+	service.recordWorkTranscript(item, plain, "t1", false)
+	now = now.Add(time.Hour)
+	service.recordWorkTranscript(item, covered, "t1", false)
+	if calls != 2 {
+		t.Fatalf("resolver ran %d times; the covered Worker must not be re-asked on a timer (and the plain one's first ask counts)", calls)
+	}
+	service.recordWorkTranscript(item, plain, "t1", false)
+	if calls != 3 {
+		t.Fatalf("resolver ran %d times; a Worker the Hub does not cover keeps the timed recheck", calls)
+	}
+
+	conversation = "conv-b" // /clear, announced by the agent
+	service.NoteConversationRebound("%7")
+	service.recordWorkTranscript(item, covered, "t1", false)
+	var ids []string
+	links, _ := store.WorkTranscripts("work-1")
+	for _, link := range links {
+		if link.SessionID == "%7" {
+			ids = append(ids, link.ProviderSessionID)
+		}
+	}
+	if len(ids) != 2 || ids[1] != "conv-b" {
+		t.Fatalf("links for the covered Worker = %v, want conv-a then conv-b", ids)
+	}
+}

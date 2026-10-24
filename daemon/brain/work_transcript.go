@@ -141,11 +141,14 @@ func appendJSONLine(path string, value any) error {
 
 // workTranscriptRecheck bounds how often one live Worker's conversation is
 // re-resolved after it was recorded (a /clear or resume starts a new one).
+// A Worker whose agent announces its conversation is re-resolved when it does
+// (conversationRebinds), not on this timer.
 const workTranscriptRecheck = 30 * time.Second
 
 type workTranscriptWatch struct {
 	checkedAt time.Time
 	recorded  bool
+	epoch     uint64
 }
 
 // resolveWorkerTranscript names the provider conversation a live Worker
@@ -181,7 +184,9 @@ func (s *Service) recordWorkTranscript(item Work, worker *classifier.Worker, tur
 	}
 	key := fmt.Sprintf("%s|%s|%d|%d", item.ID, worker.ID, worker.ProcessID, worker.StartedAt.Unix())
 	now := s.nowUTC()
-	if seen, ok := s.workTranscriptWatch[key]; ok && !force && now.Sub(seen.checkedAt) < workTranscriptRecheck && seen.recorded {
+	epoch, covered := s.rebinds.state(worker.ID)
+	if seen, ok := s.workTranscriptWatch[key]; ok && !force && seen.recorded && seen.epoch == epoch &&
+		(covered || now.Sub(seen.checkedAt) < workTranscriptRecheck) {
 		return
 	}
 	resolve := s.resolveWorkerTranscript
@@ -192,7 +197,7 @@ func (s *Service) recordWorkTranscript(item Work, worker *classifier.Worker, tur
 	if err != nil {
 		log.Printf("brain Work %s transcript link for %s: %v", item.ID, worker.ID, err)
 	}
-	s.workTranscriptWatch[key] = workTranscriptWatch{checkedAt: now, recorded: ok}
+	s.workTranscriptWatch[key] = workTranscriptWatch{checkedAt: now, recorded: ok, epoch: epoch}
 	if !ok {
 		return
 	}
