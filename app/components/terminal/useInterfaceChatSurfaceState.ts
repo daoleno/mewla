@@ -41,7 +41,9 @@ import {
   type TerminalActionPromptOption,
 } from "./TerminalActionPromptModel";
 import {
-  latestPendingChoice,
+  CHOICE_GONE_NOTICE,
+  isChoiceGoneError,
+  visiblePendingChoice,
   type ChoiceAnswerPayload,
   type InterfaceChoicePrompt,
 } from "./claudeChoiceModel";
@@ -183,6 +185,7 @@ export function useInterfaceChatSurfaceState({
   const [actionMenuPinned, setActionMenuPinned] = useState(false);
   const [skillsSheetVisible, setSkillsSheetVisible] = useState(false);
   const [statusSheetVisible, setStatusSheetVisible] = useState(false);
+  const [choiceNotice, setChoiceNotice] = useState<string>();
   const { state: statusState, load: loadStatus } = useCodexStatus({
     serverId,
     workerId,
@@ -472,10 +475,35 @@ export function useInterfaceChatSurfaceState({
     composerLayout,
     modelControl: composerModelControl,
   });
-  const pendingChoice = useMemo(() => latestPendingChoice(events), [events]);
+  // Questions the daemon said already passed; the transcript can lag the screen.
+  const [goneChoiceCallIds, setGoneChoiceCallIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const bodyController = useMemo(
+    () => ({
+      ...editAwareController,
+      operationalError: editAwareController.operationalError ?? choiceNotice,
+    }),
+    [choiceNotice, editAwareController],
+  );
+  const pendingChoice = useMemo(
+    () => visiblePendingChoice(events, goneChoiceCallIds),
+    [events, goneChoiceCallIds],
+  );
+  useEffect(() => {
+    setGoneChoiceCallIds((existing) => (existing.size ? new Set() : existing));
+    setChoiceNotice(undefined);
+  }, [serverId, workerId]);
+  useEffect(() => {
+    if (pendingChoice?.call_id) {
+      setChoiceNotice(undefined);
+    }
+  }, [pendingChoice?.call_id]);
   // A listed Session proves the prompt is on screen with status "blocked". The
   // hidden Brain host carries no live status, so a pending (not abandoned)
-  // choice counts as live there; the daemon re-checks the screen before any key.
+  // choice counts as live there. This only picks the card's copy: a stale or
+  // missing status never locks the card, because the daemon re-checks the
+  // screen before any key and says when the question has passed.
   const pendingChoiceLive =
     Boolean(pendingChoice) &&
     connectionState === "connected" &&
@@ -485,7 +513,16 @@ export function useInterfaceChatSurfaceState({
       if (connectionState !== "connected" || !serverId || !workerId) {
         throw new Error("Daemon is not connected.");
       }
-      await wsClient.answerChoice(serverId, workerId, payload);
+      try {
+        await wsClient.answerChoice(serverId, workerId, payload);
+      } catch (reason) {
+        if (isChoiceGoneError(reason)) {
+          setGoneChoiceCallIds((existing) => new Set(existing).add(payload.call_id));
+          setChoiceNotice(CHOICE_GONE_NOTICE);
+          return;
+        }
+        throw reason;
+      }
     },
     [connectionState, serverId, workerId],
   );
@@ -496,10 +533,11 @@ export function useInterfaceChatSurfaceState({
             callId: pendingChoice.call_id,
             choice: pendingChoice.choice,
             live: pendingChoiceLive,
+            connected: connectionState === "connected",
             onSubmit: answerPendingChoice,
           }
         : null,
-    [answerPendingChoice, pendingChoice, pendingChoiceLive],
+    [answerPendingChoice, connectionState, pendingChoice, pendingChoiceLive],
   );
   const terminalActionPrompt = useMemo(() => {
     // Live pane fact only: require the connect snapshot (worker_session_list) for this WebSocket
@@ -617,9 +655,9 @@ export function useInterfaceChatSurfaceState({
     events,
     pendingUserMessages,
     turnFocusAnchorAliases,
-    // While Claude waits on a choice the card says so; a Working row would
-    // read as stuck.
-    runningActivity: pendingChoiceLive ? undefined : runningActivity,
+    // While the agent waits on a choice the card says so; a Working row would
+    // read as busy. The composer and controller still see the real activity.
+    runningActivity: pendingChoice ? undefined : runningActivity,
     onBrainWorkEventActivate,
     openSessionIds,
     brainCurrentWork,
@@ -636,7 +674,7 @@ export function useInterfaceChatSurfaceState({
     emptyTitle,
     emptyBody,
     composerInput,
-    controller: editAwareController,
+    controller: bodyController,
     chrome,
     theme,
     onSwitchToTerminal,

@@ -2362,7 +2362,11 @@ export class WebSocketClient {
         responseType: "choice_answered",
         timeoutMs: 30000,
         timeout: "Timed out while answering. Check the Terminal.",
-        error: "Could not send the answer.",
+        error: (payload) =>
+          daemonRequestError(
+            payload.message || "Could not send the answer.",
+            payload.code,
+          ),
         parse: (payload) =>
           Array.isArray(payload.answers) ? payload.answers : [],
       },

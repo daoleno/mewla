@@ -30,6 +30,10 @@ type ClaudeChoiceAnswer struct {
 // the prompt unsubmitted; the user can always finish in the Terminal.
 var ErrClaudeChoiceRefused = errors.New("claude choice refused")
 
+// ErrClaudeChoiceGone is a refusal because the question is no longer on
+// screen: it was answered, dismissed or replaced, and no key was sent.
+var ErrClaudeChoiceGone = fmt.Errorf("%w: the question has passed", ErrClaudeChoiceRefused)
+
 const (
 	maxClaudeChoiceOtherRunes = 500
 	claudeChoiceStepTimeout   = 3 * time.Second
@@ -232,7 +236,7 @@ func driveClaudeChoice(pane claudeChoicePane, questions []ClaudeChoiceQuestion, 
 
 func verifyPristineClaudeChoice(screen claudeChoiceScreen, questions []ClaudeChoiceQuestion) error {
 	if !isClaudeChoiceQuestion(screen, questions[0]) {
-		return refuseClaudeChoice("the Terminal is not showing this question")
+		return ErrClaudeChoiceGone
 	}
 	if len(screen.Tabs) != len(questions) {
 		return refuseClaudeChoice("the Terminal prompt has %d questions, expected %d", len(screen.Tabs), len(questions))

@@ -546,6 +546,7 @@ function ChatDemo() {
                   callId="demo-choice"
                   choice={SCREENSHOT_CHOICE_FIXTURE}
                   live
+                  connected
                   chrome={chrome}
                   maxHeight={choiceCardMaxHeight({
                     windowHeight,

@@ -59,11 +59,15 @@ something** row. Review lists every answer; tap a row or a tab to change it,
 then tap **Submit**. Questions you have not answered are marked there, and the
 button counts them.
 
-Mewla reads the questions from Claude's transcript, not from the screen. It
-selects your answer in the live terminal and checks the screen before every
-key. If the prompt has changed, or was partly answered in the Terminal, Mewla
-stops and says so, and nothing is submitted. You can always finish in the
-Terminal. Once the question is answered, from the card or from the Terminal,
+The card stays tappable whenever the app is connected, even if the Session
+list still shows the agent as working; the Working row is replaced by
+**Waiting for your answer** while a question is open. Mewla reads the
+questions from Claude's transcript, not from the screen. It selects your answer
+in the live terminal and checks the screen before every key. If the question
+has already passed, Mewla says **That question has already passed** and the
+card goes away. If the prompt has changed in some other way, or was partly
+answered in the Terminal, Mewla stops and says so, and nothing is submitted.
+You can always finish in the Terminal. Once the question is answered, from the card or from the Terminal,
 the card becomes an **Answered** line in the chat.
 
 When Claude, Codex or OpenCode asks to run a command or change files, and Mewla

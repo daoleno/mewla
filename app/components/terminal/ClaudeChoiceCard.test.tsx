@@ -93,11 +93,11 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     answers: [{ selected: [1] }, { selected: [0] }, { selected: [0, 2], other: "Oceania" }, { selected: [1] }],
   };
 
-  function render(live: boolean, onSubmit: (payload: any) => Promise<void>, shown: any = choice, callId = "toolu_1") {
+  function render(live: boolean, onSubmit: (payload: any) => Promise<void>, shown: any = choice, callId = "toolu_1", connected = true) {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
-        <ClaudeChoiceCard callId={callId} choice={shown} live={live} chrome={chrome} onSubmit={onSubmit} />,
+        <ClaudeChoiceCard callId={callId} choice={shown} live={live} connected={connected} chrome={chrome} onSubmit={onSubmit} />,
       );
     });
     const all = () => renderer.root.findAllByType("Pressable" as any);
@@ -277,11 +277,27 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     await act(async () => renderer.unmount());
   });
 
-  test("is read-only until the live pane shows the prompt, but can be browsed", async () => {
-    const { renderer, pressable, optionPressable, tab, press, text } = render(false, async () => {});
+  test("stays answerable when the Session list has not confirmed the prompt", async () => {
+    const payloads: any[] = [];
+    const { renderer, pressable, optionPressable, press, text } = render(false, async (payload) => {
+      payloads.push(payload);
+    });
+    expect(optionPressable("Apple").props.disabled).toBe(false);
+    expect(text()).toContain("Waiting for your answer");
+    expect(text()).toContain("checked when you send");
+    await press(optionPressable("Apple"));
+    await press(optionPressable("Red"));
+    await press(pressable("Next question"));
+    expect(pressable("Send answer").props.disabled).toBe(false);
+    await press(pressable("Send answer"));
+    expect(payloads).toEqual([{ call_id: "toolu_1", answers: [{ selected: [0] }, { selected: [0] }] }]);
+    await act(async () => renderer.unmount());
+  });
+
+  test("is read-only while disconnected, but can be browsed", async () => {
+    const { renderer, pressable, optionPressable, tab, press, text } = render(true, async () => {}, choice, "toolu_1", false);
     expect(optionPressable("Apple").props.disabled).toBe(true);
-    expect(text()).toContain("Waiting for the prompt to appear in the Terminal");
-    expect(text()).not.toContain("Open Terminal");
+    expect(text()).toContain("Reconnecting");
     await press(tab("Review"));
     expect(text()).toContain("Review your answers");
     expect(pressable("Answer 2 more").props.disabled).toBe(false);
@@ -294,7 +310,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     expect(text()).toContain("Which colors?");
     await act(async () => {
       renderer.update(
-        <ClaudeChoiceCard callId="toolu_2" choice={choice} live chrome={chrome} onSubmit={async () => {}} />,
+        <ClaudeChoiceCard callId="toolu_2" choice={choice} live connected chrome={chrome} onSubmit={async () => {}} />,
       );
     });
     expect(text()).toContain("Which fruit?");
@@ -306,7 +322,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     expect(JSON.stringify(renderer.toJSON())).not.toContain("maxHeight");
     await act(async () => {
       renderer.update(
-        <ClaudeChoiceCard callId="toolu_1" choice={choice} live chrome={chrome} maxHeight={321} onSubmit={async () => {}} />,
+        <ClaudeChoiceCard callId="toolu_1" choice={choice} live connected chrome={chrome} maxHeight={321} onSubmit={async () => {}} />,
       );
     });
     expect(JSON.stringify(renderer.toJSON())).toContain('"maxHeight":321');
