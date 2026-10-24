@@ -1,0 +1,183 @@
+// The cat's house is one web page the daemon owns. The phone cannot load it by
+// URL (its connection is a pinned tunnel on a port that changes per launch, and
+// the daemon only serves browsers on web UI origins), so the App syncs the
+// daemon's bundle into a content-addressed cache with signed requests and loads
+// it from there. This module is the pure part: the manifest, the cache plan and
+// the bridge messages between the page and the App. The page holds no
+// credentials and never touches the network; the App forwards its actions over
+// the existing WebSocket.
+
+export type CatKind =
+  | "studio" | "harbour" | "library" | "workshop" | "night" | "garden"
+  | "observatory" | "market" | "kitchen" | "postoffice" | "station" | "trail";
+
+export interface CatPostcard {
+  id: string;
+  work_id: string;
+  kind: CatKind;
+  phase: "start" | "long";
+  variant: number;
+  treat?: string;
+  at: number;
+  seen?: boolean;
+}
+
+export interface CatSouvenir {
+  id: string;
+  work_id: string;
+  kind: CatKind;
+  item: string;
+  title?: string;
+  at: number;
+  seen?: boolean;
+}
+
+export interface CatYard {
+  day: string;
+  treats: { slot: number; kind: string; taken?: boolean }[];
+  pantry: Record<string, number>;
+  bag?: string;
+}
+
+/** What the daemon says the cat is doing and has collected. */
+export interface CatView {
+  presence: { away: boolean; waiting: boolean; kind?: CatKind };
+  postcards: CatPostcard[];
+  souvenirs: CatSouvenir[];
+  yard: CatYard;
+  now: number;
+}
+
+export interface CatManifestFile {
+  path: string;
+  size: number;
+  sha256: string;
+}
+
+export interface CatManifest {
+  version: string;
+  files: CatManifestFile[];
+}
+
+export const CAT_BUNDLE_PURPOSE = "mewla-cat";
+export const CAT_INDEX = "index.html";
+const MAX_FILES = 200;
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
+
+/** A bundle path stays inside the cache directory: relative, no dot segments. */
+export function isSafeCatPath(path: unknown): path is string {
+  return typeof path === "string" && path.length <= 120 && SAFE_PATH.test(path) && !path.split("/").some((part) => part === "..");
+}
+
+/** The daemon's manifest, or null when it is not a manifest this App can trust to write. */
+export function parseCatManifest(value: unknown): CatManifest | null {
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as { version?: unknown; files?: unknown };
+  if (typeof record.version !== "string" || !/^[0-9a-f]{8,64}$/.test(record.version)) return null;
+  if (!Array.isArray(record.files) || record.files.length === 0 || record.files.length > MAX_FILES) return null;
+  const files: CatManifestFile[] = [];
+  const seen = new Set<string>();
+  for (const entry of record.files) {
+    const file = entry as Partial<CatManifestFile> | null;
+    if (!file || !isSafeCatPath(file.path) || seen.has(file.path)) return null;
+    if (typeof file.size !== "number" || !Number.isInteger(file.size) || file.size < 0 || file.size > MAX_FILE_BYTES) return null;
+    if (typeof file.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(file.sha256)) return null;
+    seen.add(file.path);
+    files.push({ path: file.path, size: file.size, sha256: file.sha256 });
+  }
+  if (!seen.has(CAT_INDEX)) return null;
+  return { version: record.version, files };
+}
+
+/** What still has to be fetched: files missing from the cache or of the wrong size. */
+export function filesToFetch(manifest: CatManifest, cached: ReadonlyMap<string, number>): CatManifestFile[] {
+  return manifest.files.filter((file) => cached.get(file.path) !== file.size);
+}
+
+/** Cache versions to delete: everything but the newest `keep`, never the one in use. */
+export function staleVersions(versions: readonly string[], inUse: string, order: readonly string[], keep = 2): string[] {
+  const recent = new Set([inUse, ...order.slice(0, keep)]);
+  return versions.filter((version) => !recent.has(version));
+}
+
+/* ---- bridge between the page and the App ---- */
+
+export type CatBridgeMessage =
+  | { type: "ready" }
+  | { type: "back" }
+  | { type: "open_brain" }
+  | { type: "collect"; slot: number }
+  | { type: "pack"; treat: string }
+  | { type: "seen"; what: "postcard" | "souvenir"; id: string };
+
+/** A message from the page, validated: the page is content, not authority. */
+export function parseCatBridgeMessage(raw: unknown): CatBridgeMessage | null {
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    if (raw.length > 4096) return null;
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const message = value as Record<string, unknown>;
+  if (message.cat !== 1) return null;
+  switch (message.type) {
+    case "ready":
+    case "back":
+    case "open_brain":
+      return { type: message.type };
+    case "collect":
+      return typeof message.slot === "number" && Number.isInteger(message.slot) && message.slot >= 0 && message.slot < 16
+        ? { type: "collect", slot: message.slot }
+        : null;
+    case "pack":
+      return typeof message.treat === "string" && /^[a-z]{0,16}$/.test(message.treat) ? { type: "pack", treat: message.treat } : null;
+    case "seen":
+      return (message.what === "postcard" || message.what === "souvenir") && typeof message.id === "string" && message.id.length > 0 && message.id.length <= 200
+        ? { type: "seen", what: message.what, id: message.id }
+        : null;
+    default:
+      return null;
+  }
+}
+
+/** The WebSocket message a page action becomes, or null when it stays in the App. */
+export function catSocketMessage(message: CatBridgeMessage): Record<string, unknown> | null {
+  switch (message.type) {
+    case "collect":
+      return { type: "cat_collect", slot: message.slot };
+    case "pack":
+      return { type: "cat_pack", treat: message.treat };
+    case "seen":
+      return { type: "cat_seen", what: message.what, id: message.id };
+    default:
+      return null;
+  }
+}
+
+const LINE_SEPARATOR = String.fromCharCode(0x2028);
+const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
+
+/** Script that hands a state to the page; U+2028/9 are escaped so the literal is always valid. */
+export function catStateScript(view: CatView, locale?: string): string {
+  const payload = JSON.stringify({ cat: 1, type: "state", state: view, locale })
+    .split(LINE_SEPARATOR).join("\\u2028")
+    .split(PARAGRAPH_SEPARATOR).join("\\u2029");
+  return `window.__catHost&&window.__catHost(${payload});true;`;
+}
+
+/** Cached last-known state is per computer: another computer has another cat. */
+export function catCacheKey(serverKey: string): string {
+  return `mewla.cat.view.v1:${serverKey}`;
+}
+
+export function parseCatView(raw: unknown): CatView | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const view = raw as Partial<CatView>;
+  if (!view.presence || typeof view.presence !== "object" || !Array.isArray(view.postcards) || !Array.isArray(view.souvenirs) || !view.yard) return null;
+  return view as CatView;
+}
