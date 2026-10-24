@@ -64,9 +64,14 @@ list still shows the agent as working; the Working row is replaced by
 **Waiting for your answer** while a question is open. Mewla reads the
 questions from Claude's transcript, not from the screen. It selects your answer
 in the live terminal and checks the screen before every key. If the question
-has already passed, Mewla says **That question has already passed** and the
-card goes away. If the prompt has changed in some other way, or was partly
-answered in the Terminal, Mewla stops and says so, and nothing is submitted.
+has already passed (the Terminal no longer shows it, or shows a different
+prompt), Mewla says **That question has already passed** and the card goes
+away; no Allow or Deny card ever takes its place, and the Working row stays
+hidden until the chat records the outcome. If the Terminal still shows the same
+prompt but moved to another question or to Review, or it was partly answered in
+the Terminal, Mewla stops and says so, the card stays, and nothing is
+submitted. When the Terminal does not respond to a key, Mewla says so in plain
+words and you can try again.
 You can always finish in the Terminal. Once the question is answered, from the card or from the Terminal,
 the card becomes an **Answered** line in the chat.
 

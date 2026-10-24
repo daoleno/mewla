@@ -42,6 +42,7 @@ import {
 } from "./TerminalActionPromptModel";
 import {
   CHOICE_GONE_NOTICE,
+  awaitingChoiceAnswer,
   isChoiceGoneError,
   visiblePendingChoice,
   type ChoiceAnswerPayload,
@@ -656,8 +657,10 @@ export function useInterfaceChatSurfaceState({
     pendingUserMessages,
     turnFocusAnchorAliases,
     // While the agent waits on a choice the card says so; a Working row would
-    // read as busy. The composer and controller still see the real activity.
-    runningActivity: pendingChoice ? undefined : runningActivity,
+    // read as busy. That holds after the card is hidden as "passed" too, until
+    // the transcript settles the question. The composer and controller still
+    // see the real activity.
+    runningActivity: awaitingChoiceAnswer(events) ? undefined : runningActivity,
     onBrainWorkEventActivate,
     openSessionIds,
     brainCurrentWork,
