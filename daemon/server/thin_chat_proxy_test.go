@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -605,7 +607,12 @@ func TestNonBrainSendInputStillAcknowledgesAfterProviderAccept(t *testing.T) {
 
 func TestServerSendInputRendersTypedTextAndAttachmentsForTheProvider(t *testing.T) {
 	var gotWorker, gotText, gotReceipt string
-	srv := &Server{sendInputWithReceiptOverride: func(workerID, text, receipt string) error {
+	store := &attachment.Store{Dir: filepath.Join(t.TempDir(), "uploads")}
+	stored, err := store.Save(t.Context(), strings.NewReader("png!"), attachment.File{Name: "photo.png", ContentType: "image/png", Size: 4}, attachment.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{uploadStore: store, sendInputWithReceiptOverride: func(workerID, text, receipt string) error {
 		gotWorker, gotText, gotReceipt = workerID, text, receipt
 		return nil
 	}}
@@ -623,7 +630,7 @@ func TestServerSendInputRendersTypedTextAndAttachmentsForTheProvider(t *testing.
 		t.Fatalf("forwarded input = agent %q text %q receipt %q", gotWorker, gotText, gotReceipt)
 	}
 
-	files := []attachment.File{{Name: "photo.png", Path: "/uploads/photo.png", ContentType: "image/png"}}
+	files := []attachment.File{{Name: "photo.png", Path: stored.Path, ContentType: "image/png"}}
 	response = sendThinProxyRequest(t, conn, clientMessage{
 		Type: "send_input", RequestID: "request-attachments", WorkerID: "owned-session:@1",
 		Text: "look at this", Attachments: files,
@@ -631,7 +638,7 @@ func TestServerSendInputRendersTypedTextAndAttachmentsForTheProvider(t *testing.
 	if response.Type != "input_sent" {
 		t.Fatalf("attachment send response = %#v", response)
 	}
-	want := "look at this\n\n<mewla_attachments>{\"files\":[{\"name\":\"photo.png\",\"path\":\"/uploads/photo.png\",\"content_type\":\"image/png\"}]}</mewla_attachments>\n"
+	want := "look at this\n\n<mewla_attachments>{\"files\":[{\"name\":\"photo.png\",\"path\":\"" + stored.Path + "\",\"content_type\":\"image/png\",\"size\":4}]}</mewla_attachments>\n"
 	if gotText != want || gotReceipt != "request-attachments" {
 		t.Fatalf("provider input = %q receipt %q, want %q", gotText, gotReceipt, want)
 	}
@@ -988,4 +995,57 @@ type failingLaneWatcher struct {
 
 func (w *failingLaneWatcher) ProbeSession(string) (watcher.SessionPresence, error) {
 	return watcher.SessionPresenceUnknown, errors.New("host liveness probe failed")
+}
+
+// A phone names attachments by path. A path outside the upload store never
+// reaches a provider, whatever it points at; a stored file does.
+func TestInboundSendInputRefusesAttachmentsOutsideTheUploadStore(t *testing.T) {
+	root := t.TempDir()
+	store := &attachment.Store{Dir: filepath.Join(root, "uploads")}
+	stored, err := store.Save(t.Context(), strings.NewReader("hello"), attachment.File{Name: "a.txt", Size: 5}, attachment.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(root, "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(store.Dir, "link.txt")
+	if err := os.Symlink(secret, link); err != nil {
+		t.Fatal(err)
+	}
+	var sent []string
+	srv := &Server{
+		uploadStore: store,
+		sendInputOverride: func(_ string, text string) error {
+			sent = append(sent, text)
+			return nil
+		},
+	}
+	conn := openThinProxyTestSocket(t, srv)
+	for name, path := range map[string]string{
+		"absolute elsewhere": secret,
+		"etc passwd":         "/etc/passwd",
+		"dot-dot":            store.Dir + "/../secret.txt",
+		"symlink out":        link,
+		"relative":           "uploads/" + filepath.Base(stored.Path),
+	} {
+		response := sendThinProxyRequest(t, conn, clientMessage{
+			Type: "send_input", RequestID: "r-" + name, WorkerID: "agent-1", Text: "read it",
+			Attachments: []attachment.File{{Name: "x", Path: path, Size: 6}},
+		})
+		if response.Type != "input_failed" || response.Code != "attachment_not_uploaded" {
+			t.Errorf("%s: response = %#v", name, response)
+		}
+	}
+	if len(sent) != 0 {
+		t.Fatalf("provider received input with outside attachments: %q", sent)
+	}
+	response := sendThinProxyRequest(t, conn, clientMessage{
+		Type: "send_input", RequestID: "ok", WorkerID: "agent-1", Text: "read it",
+		Attachments: []attachment.File{{Name: "a.txt", Path: stored.Path, Size: 5}},
+	})
+	if response.Type != "input_sent" || len(sent) != 1 || !strings.Contains(sent[0], stored.Path) {
+		t.Fatalf("stored attachment: response=%#v sent=%q", response, sent)
+	}
 }

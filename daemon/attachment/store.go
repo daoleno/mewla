@@ -147,6 +147,54 @@ func (s *Store) Save(ctx context.Context, body io.Reader, file File, limits Limi
 	return file, nil
 }
 
+// ErrOutsideStore reports an attachment that is not a plain file this store
+// holds.
+var ErrOutsideStore = errors.New("attachment is not in upload storage")
+
+// Confine is the one check for an attachment a sender names. The path must be
+// absolute and exactly where this store puts files: a regular file directly in
+// Dir, not a symlink, and not reached through one. ".." segments, relative
+// paths, other directories and links out of the store are refused. The returned
+// File carries the size on disk, never the sender's.
+func (s *Store) Confine(file File) (File, error) {
+	if s == nil || s.Dir == "" || file.Path == "" || !filepath.IsAbs(file.Path) {
+		return File{}, ErrOutsideStore
+	}
+	if clean := filepath.Clean(file.Path); clean != file.Path {
+		return File{}, ErrOutsideStore
+	}
+	dir, err := filepath.EvalSymlinks(s.Dir)
+	if err != nil {
+		return File{}, ErrOutsideStore
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(file.Path))
+	if err != nil || parent != dir {
+		return File{}, ErrOutsideStore
+	}
+	info, err := os.Lstat(filepath.Join(dir, filepath.Base(file.Path)))
+	if err != nil || !info.Mode().IsRegular() {
+		return File{}, ErrOutsideStore
+	}
+	file.Size = info.Size()
+	return file, nil
+}
+
+// ConfineAll applies Confine to a message's files, in order.
+func (s *Store) ConfineAll(files []File) ([]File, error) {
+	if len(files) == 0 {
+		return files, nil
+	}
+	out := make([]File, len(files))
+	for index, file := range files {
+		confined, err := s.Confine(file)
+		if err != nil {
+			return nil, fmt.Errorf("attachment %q: %w", file.Name, err)
+		}
+		out[index] = confined
+	}
+	return out, nil
+}
+
 // Remove confines removal to this store. Remote names never address a local
 // path. Used for unadmitted partial batches, not conversation history.
 func (s *Store) Remove(file File) error {
@@ -162,12 +210,10 @@ func (s *Store) Remove(file File) error {
 	return err
 }
 
+// Exists reports whether the attachment is a confined file of the size it names.
 func (s *Store) Exists(file File) bool {
-	if s == nil || filepath.Dir(file.Path) != filepath.Clean(s.Dir) {
-		return false
-	}
-	info, err := os.Lstat(file.Path)
-	return err == nil && info.Mode().IsRegular() && info.Size() == file.Size
+	confined, err := s.Confine(file)
+	return err == nil && confined.Size == file.Size
 }
 
 func Inspect(dir string, now time.Time, limits Limits, removePartials bool) (int64, error) {

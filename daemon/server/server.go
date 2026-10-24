@@ -1302,7 +1302,17 @@ func (s *Server) handleSessionInputMessage(conn *websocket.Conn, raw clientMessa
 		// The phone sends the person's text and the staged files as typed
 		// fields; this is the one place they become what a provider receives.
 		// The final newline is the transport's submit delimiter.
-		message := attachment.Message{Text: raw.Text, Files: raw.Attachments}.Render()
+		// The phone names its attachments by path; only files the upload store
+		// holds may reach a provider, which can read whatever the path says.
+		files, confineErr := s.uploadStore.ConfineAll(raw.Attachments)
+		if confineErr != nil {
+			s.sendJSON(conn, map[string]any{
+				"type": "input_failed", "request_id": raw.RequestID,
+				"code": "attachment_not_uploaded", "message": confineErr.Error(),
+			})
+			break
+		}
+		message := attachment.Message{Text: raw.Text, Files: files}.Render()
 		if message == "" {
 			s.sendJSON(conn, map[string]any{
 				"type": "input_failed", "request_id": raw.RequestID,
