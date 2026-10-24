@@ -51,6 +51,10 @@ const (
 	FixRetry            = "retry"
 )
 
+// ExtensionID is the Playwright Extension in the Chrome Web Store. Its
+// manifest carries a fixed key, so an unpacked build has the same ID.
+const ExtensionID = "mmlmfjhmonkocbjadbfplnigmagldckm"
+
 const (
 	storeURL         = "https://chromewebstore.google.com/detail/playwright-extension/" + ExtensionID
 	extensionPageURL = "chrome-extension://" + ExtensionID + "/status.html"
@@ -224,18 +228,16 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 		return BrowserStatus{State: BrowserNoExtension, Summary: "Add the Playwright extension to Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
 	}
 	status := BrowserStatus{Profile: profile}
+	// The extension's key is the person's to hand over: the extension shows it
+	// on its status page and checks it when the browser tools connect. Mewla
+	// does not read it out of Chrome's storage.
 	key := s.settings.Key
-	if key != "" {
-		status.KeyPasted = true
-	} else {
-		read, err := readExtensionToken(filepath.Join(chrome.UserDataDir, profile))
-		if err != nil {
-			status.State, status.Fix = BrowserNoKey, FixOpenExtension
-			status.Summary = "Open the Playwright extension once so it makes its key."
-			return status, launch{}
-		}
-		key = read
+	if key == "" {
+		status.State, status.Fix = BrowserNoKey, FixOpenExtension
+		status.Summary = "Copy the Playwright extension's key from its page in Chrome and paste it here."
+		return status, launch{}
 	}
+	status.KeyPasted = true
 	node, npm, ok := s.lookNode(s.home)
 	if !ok {
 		status.State = BrowserNoNode
@@ -370,8 +372,8 @@ func (s *Service) saveLocked(next settings) error {
 }
 
 // Fix performs one of the status's fixes on this computer: it opens the
-// extension's store page or its status page in the user's Chrome, or retries
-// the download.
+// extension's store page or its status page (where it shows its key) in the
+// user's Chrome, or retries the download.
 func (s *Service) Fix(fix string) (Status, error) {
 	switch fix {
 	case FixInstallExtension, FixOpenExtension:
@@ -474,4 +476,18 @@ func firstLine(text string) string {
 		line = line[:160] + "…"
 	}
 	return line
+}
+
+// validToken accepts the extension's base64url keys and nothing that could
+// smuggle other text into an environment variable.
+func validToken(token string) bool {
+	if len(token) < 16 || len(token) > 256 {
+		return false
+	}
+	for _, r := range token {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '=') {
+			return false
+		}
+	}
+	return true
 }

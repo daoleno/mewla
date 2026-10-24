@@ -69,12 +69,19 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
       });
       break;
     case "no_key":
+      // Mewla does not read the key out of Chrome: the extension shows it and
+      // the person hands it over.
+      if (browser.fix) {
+        problems.push({
+          key: "browser",
+          text: "Open the Playwright extension in Chrome and copy its key.",
+          action: { label: "Open it", does: { kind: "fix", fix: browser.fix, target: "browser" } },
+        });
+      }
       problems.push({
-        key: "browser",
-        text: "Open the Playwright extension once in Chrome.",
-        action: browser.fix
-          ? { label: "Open it", does: { kind: "fix", fix: browser.fix, target: "browser" } }
-          : { label: "Paste key", does: { kind: "paste_key" } },
+        key: "browser-key",
+        text: "Then paste the key here.",
+        action: { label: "Paste key", does: { kind: "paste_key" } },
       });
       break;
     case "no_chrome":

@@ -72,8 +72,13 @@ describe("computerProblems", () => {
     ]);
   });
 
-  test("a missing extension key can be pasted when the computer can't open the extension", () => {
-    const problems = computerProblems({ enabled: true, browser: { state: "no_key", summary: "" } });
-    expect(problems[0].action?.does).toEqual({ kind: "paste_key" });
+  test("a missing extension key is opened in Chrome, then pasted", () => {
+    const problems = computerProblems({ enabled: true, browser: { state: "no_key", summary: "", fix: "open_extension" } });
+    expect(problems.map((problem) => problem.action?.does)).toEqual([
+      { kind: "fix", fix: "open_extension", target: "browser" },
+      { kind: "paste_key" },
+    ]);
+    const headless = computerProblems({ enabled: true, browser: { state: "no_key", summary: "" } });
+    expect(headless.map((problem) => problem.action?.does)).toEqual([{ kind: "paste_key" }]);
   });
 });
