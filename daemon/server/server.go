@@ -114,6 +114,7 @@ type Server struct {
 	deviceHook                   func(timeZone, locale string)
 	notifications                notificationRecorder
 	appStates                    map[*websocket.Conn]string
+	doneNotified                 map[string]bool // Work ID -> its done push already went out this run
 	stats                        *stats.Collector
 	work                         *work.Store
 	execs                        *work.ExecutorConfig
@@ -3552,6 +3553,13 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 
 	kind, ok := workerNotificationKind(ev.NewState)
 	if !ok {
+		return
+	}
+	// A done push is a nicety: skip it while the app is open in front of the
+	// person, and send only the first one a Work earns in a run. blocked and
+	// failed need the person and always go out.
+	if reason := s.doneSuppression(ev, kind); reason != "" {
+		s.noteSuppressedNotification(ev, reason)
 		return
 	}
 	if err := s.pusher.NotifyWorker(kind, workerNotice(ev)); err != nil {

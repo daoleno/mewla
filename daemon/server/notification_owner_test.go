@@ -381,3 +381,83 @@ func newScheduledNotificationFixture(t *testing.T, workerID string) (*calendar.S
 	}
 	return store, item, run
 }
+
+type suppressionRecorder struct {
+	mu      sync.Mutex
+	reasons []string
+}
+
+func (r *suppressionRecorder) NotificationSuppressed(_, _, _, _, reason string) {
+	r.mu.Lock()
+	r.reasons = append(r.reasons, reason)
+	r.mu.Unlock()
+}
+func (r *suppressionRecorder) NotificationResponse(string, string, time.Time) {}
+func (r *suppressionRecorder) NotificationEngaged(string, string)             {}
+
+func (r *suppressionRecorder) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.reasons...)
+}
+
+func TestSameWorkDonePushesOnceAndRecordsTheRest(t *testing.T) {
+	pusher := &recordingNotificationPusher{}
+	recorder := &suppressionRecorder{}
+	srv, turnID := ledgerNotificationServer(t, "agent-1")
+	srv.pusher = pusher
+	srv.notifications = recorder
+
+	done := notificationTransition("agent-1", "running", "done")
+	done.TurnID = turnID
+	srv.maybeNotifyForSessionEvent(done)
+	srv.maybeNotifyForSessionEvent(done)
+	if calls := pusher.snapshot(); len(calls) != 1 || calls[0].kind != "done" {
+		t.Fatalf("calls = %#v", calls)
+	}
+	if reasons := recorder.snapshot(); !reflect.DeepEqual(reasons, []string{"work_already_notified"}) {
+		t.Fatalf("suppressed = %#v", reasons)
+	}
+
+	// The Work needing the person starts a new run, so its next done pushes.
+	blocked := notificationTransition("agent-1", "running", "blocked")
+	blocked.TurnID = turnID
+	srv.maybeNotifyForSessionEvent(blocked)
+	srv.maybeNotifyForSessionEvent(done)
+	if calls := pusher.snapshot(); len(calls) != 3 || calls[1].kind != "blocked" || calls[2].kind != "done" {
+		t.Fatalf("calls after blocked = %#v", calls)
+	}
+}
+
+func TestDoneStaysQuietWhileAppIsForegroundButBlockedAndFailedPush(t *testing.T) {
+	pusher := &recordingNotificationPusher{}
+	recorder := &suppressionRecorder{}
+	srv, turnID := ledgerNotificationServer(t, "agent-1")
+	srv.pusher = pusher
+	srv.notifications = recorder
+	conn := &websocket.Conn{}
+	srv.clients = map[*websocket.Conn]*authenticatedClient{conn: nil}
+	srv.appStates = map[*websocket.Conn]string{conn: "active"}
+
+	for _, state := range []string{"done", "blocked", "failed"} {
+		event := notificationTransition("agent-1", "running", state)
+		event.TurnID = turnID
+		srv.maybeNotifyForSessionEvent(event)
+	}
+	calls := pusher.snapshot()
+	if len(calls) != 2 || calls[0].kind != "blocked" || calls[1].kind != "failed" {
+		t.Fatalf("calls = %#v", calls)
+	}
+	if reasons := recorder.snapshot(); !reflect.DeepEqual(reasons, []string{"app_in_foreground"}) {
+		t.Fatalf("suppressed = %#v", reasons)
+	}
+
+	// A foreground-suppressed done does not use up the run's one push.
+	srv.appStates[conn] = "background"
+	done := notificationTransition("agent-1", "running", "done")
+	done.TurnID = turnID
+	srv.maybeNotifyForSessionEvent(done)
+	if calls := pusher.snapshot(); len(calls) != 3 || calls[2].kind != "done" {
+		t.Fatalf("background done = %#v", calls)
+	}
+}
