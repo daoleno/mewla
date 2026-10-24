@@ -19,6 +19,7 @@ import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui"
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { browserRendererHTML } from "./renderer";
 import { Icon } from "../icons/Icon";
+import { serverDisplayName } from "../../services/serverDisplayName";
 
 type ViewerPhase = "idle" | "connecting" | "live" | "reconnecting" | "lost";
 
@@ -32,7 +33,7 @@ export function BrowserScreen() {
   const router = useRouter();
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
-  const serverName = currentServer?.name || "this server";
+  const serverName = serverDisplayName(currentServer?.name);
   const [resources, setResources] = useState<BrowserResource[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<BrowserResource | null>(null);

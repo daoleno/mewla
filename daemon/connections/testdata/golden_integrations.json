@@ -593,7 +593,7 @@
       "name": "Hyperliquid",
       "available": true,
       "setup_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api",
-      "description": "Markets and any address's positions, with no setup; trading with an API wallet key you add"
+      "description": "Markets and any address's positions. Add a key to let Brain trade."
     },
     {
       "id": "linear",

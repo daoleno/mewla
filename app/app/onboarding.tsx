@@ -12,6 +12,7 @@ import { createPairScanClaim, releasePairScan, tryClaimPairScan } from "../servi
 import { OnboardingPresentation } from "../components/onboarding/OnboardingPresentation";
 
 import { BrowserEnrollmentScreen } from "../components/enrollment/BrowserEnrollmentScreen";
+import { serverDisplayName } from "../services/serverDisplayName";
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -56,7 +57,7 @@ export default function OnboardingScreen() {
 
   return (
     <OnboardingPresentation
-      serverName={server?.name}
+      serverName={server ? serverDisplayName(server.name, "your computer") : undefined}
       connection={server ? serverConnections[server.id] ?? "connecting" : undefined}
       error={server ? serverConnectionIssues[server.id]?.detail : undefined}
       pairing={pairing}
