@@ -37,16 +37,43 @@ func TestClassifyProviderErrorRealRecords(t *testing.T) {
 		{ProviderActivityError{Code: "unauthorized", HTTPStatus: 401}, ProviderErrorPersistent},
 		{ProviderActivityError{Code: "context_window_exceeded"}, ProviderErrorPersistent},
 		// A failure the provider did not classify is not guessed from its text.
-		{ProviderActivityError{Code: "other", Message: "stream disconnected before completion: stream closed"}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "unknown", Message: "API Error: upstream stream disconnected: connection reset by peer, try again"}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "other", Message: "unexpected status 402 Payment Required: temporarily over the limit"}, ProviderErrorPersistent},
-		{ProviderActivityError{Message: "Connection lost, timeout, overloaded, 额度不足"}, ProviderErrorPersistent},
-		{ProviderActivityError{}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "other", Message: "stream disconnected before completion: stream closed"}, ProviderErrorUnclassified},
+		{ProviderActivityError{Code: "unknown", Message: "API Error: upstream stream disconnected: connection reset by peer, try again"}, ProviderErrorUnclassified},
+		{ProviderActivityError{Code: "other", Message: "unexpected status 402 Payment Required: temporarily over the limit"}, ProviderErrorUnclassified},
+		{ProviderActivityError{Message: "Connection lost, timeout, overloaded, 额度不足"}, ProviderErrorUnclassified},
+		{ProviderActivityError{}, ProviderErrorUnclassified},
 	}
 	for _, tc := range cases {
 		if got := ClassifyProviderError(tc.failure); got != tc.want {
 			t.Errorf("ClassifyProviderError(%+v) = %s, want %s", tc.failure, got, tc.want)
 		}
+	}
+}
+
+// An error the provider did not classify gets two continuations, then Brain is
+// told once, whatever its message says.
+func TestUnclassifiedProviderErrorGetsTwoResumesThenEscalates(t *testing.T) {
+	policy := DefaultTurnRecoveryPolicy()
+	stalled := time.Date(2026, 10, 12, 1, 0, 0, 0, time.UTC)
+	other := &ProviderActivityError{Code: "other", Message: "everything is fine, retry forever, 额度不足"}
+	var records []TurnRecovery
+	at := stalled
+	for attempt := 1; attempt <= policy.UnclassifiedResumes; attempt++ {
+		at = at.Add(policy.Backoff[attempt-1])
+		got := decideTurnRecovery(policy, at, stalled, time.Time{}, other, records)
+		if got.action != turnRecoveryResume || got.attempt != attempt {
+			t.Fatalf("attempt %d = %+v", attempt, got)
+		}
+		records = append(records, TurnRecovery{Attempt: attempt, At: at})
+	}
+	got := decideTurnRecovery(policy, at.Add(time.Second), stalled, time.Time{}, other, records)
+	if got.action != turnRecoveryEscalate || got.reason != "retries_exhausted" {
+		t.Fatalf("after the budget = %+v", got)
+	}
+	// A persistent code never resumes and a transient one keeps its full budget.
+	persistent := &ProviderActivityError{Code: "billing_error"}
+	if got := decideTurnRecovery(policy, stalled.Add(time.Hour), stalled, time.Time{}, persistent, nil); got.action != turnRecoveryEscalate || got.reason != "provider_error" {
+		t.Fatalf("persistent = %+v", got)
 	}
 }
 

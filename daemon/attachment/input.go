@@ -65,7 +65,7 @@ type rendering struct {
 // attachment tag when there are files or captions. With nothing attached it is
 // just the trimmed text. Every provider and every sender receives this form.
 func (m Message) Render() string {
-	body := strings.TrimSpace(m.Text)
+	body := strings.TrimSpace(untagged(m.Text))
 	if len(m.Files) == 0 && len(m.Captions) == 0 {
 		return body
 	}
@@ -79,6 +79,16 @@ func (m Message) Render() string {
 		return tag
 	}
 	return body + "\n\n" + tag
+}
+
+// untagged removes the rendering's own tags from a sender's text. Files reach a
+// provider only through Message.Files, which the daemon has confined to the
+// upload store; text that carried its own tag would name any path it liked.
+func untagged(text string) string {
+	if !strings.Contains(text, envelopeOpenTag) && !strings.Contains(text, envelopeCloseTag) {
+		return text
+	}
+	return strings.NewReplacer(envelopeOpenTag, "", envelopeCloseTag, "").Replace(text)
 }
 
 // Split reads a provider's echo of Render back into typed fields. Text without
