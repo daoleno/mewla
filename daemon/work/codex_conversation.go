@@ -743,8 +743,9 @@ func (b *codexConversationBuilder) consumeEvent(lineNumber int, timestamp string
 		if codexErrorAffectsTurnStatus(payload.CodexErrorInfo) {
 			b.settleActivity(payload.TurnID, ProviderActivityFailed, timestamp, lineNumber)
 			b.activityLifecycle.recordError(timestamp, ProviderActivityError{
-				Code:    codexErrorInfoCode(payload.CodexErrorInfo),
-				Message: firstLine(payload.Message),
+				Code:       codexErrorInfoCode(payload.CodexErrorInfo),
+				HTTPStatus: codexErrorInfoStatus(payload.CodexErrorInfo),
+				Message:    firstLine(payload.Message),
 			}, false)
 			b.finishPendingReasoning()
 		}
@@ -1846,6 +1847,23 @@ func codexErrorInfoCode(raw json.RawMessage) string {
 		}
 	}
 	return ""
+}
+
+// codexErrorInfoStatus is the upstream HTTP status a codex_error_info object
+// records ({"http_connection_failed":{"http_status_code":502}}), or 0.
+func codexErrorInfoStatus(raw json.RawMessage) int {
+	var value map[string]struct {
+		Status *int `json:"http_status_code"`
+	}
+	if json.Unmarshal(bytes.TrimSpace(raw), &value) != nil {
+		return 0
+	}
+	for _, detail := range value {
+		if detail.Status != nil {
+			return *detail.Status
+		}
+	}
+	return 0
 }
 
 func firstLine(text string) string {

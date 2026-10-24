@@ -2,9 +2,12 @@ package connections
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/daoleno/mewla/daemon/googleauth"
 	"golang.org/x/oauth2"
 	"io"
@@ -205,17 +208,26 @@ func TestGoogleSignInSurvivesAFailedCheckAfterConsent(t *testing.T) {
 }
 
 func TestExchangeFailureNamesTheCause(t *testing.T) {
-	for want, err := range map[string]error{
-		"timed out":                &net.OpError{Op: "dial", Err: context.DeadlineExceeded},
-		"connection refused":       &net.OpError{Op: "dial", Err: syscall.ECONNREFUSED},
-		"connection reset":         io.ErrUnexpectedEOF,
-		"DNS lookup failed":        errors.New("endpoint DNS failed"),
-		"unexpected redirect":      errors.New("redirects are not allowed"),
-		"secure connection failed": errors.New("tls: handshake failure"),
-		"network error":            errors.New("something else"),
+	for _, c := range []struct {
+		want string
+		err  error
+	}{
+		{"timed out", &net.OpError{Op: "dial", Err: context.DeadlineExceeded}},
+		{"connection refused", &net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}},
+		{"connection reset", io.ErrUnexpectedEOF},
+		{"DNS lookup failed", fmt.Errorf("dial: %w", errEndpointDNS)},
+		{"unexpected redirect", fmt.Errorf("get: %w", errRedirect)},
+		{"secure connection failed", errors.New("tls: handshake failure")},
+		{"secure connection failed", &tls.CertificateVerificationError{}},
+		{"secure connection failed", x509.HostnameError{}},
+		{"secure connection failed", tls.AlertError(40)},
+		{"network error", errors.New("something else")},
+		// Our own errors are matched by identity, not by their wording.
+		{"network error", errors.New("endpoint DNS failed")},
+		{"network error", errors.New("redirects are not allowed")},
 	} {
-		if got := exchangeFailure(err); got != want {
-			t.Errorf("%v: got %q, want %q", err, got, want)
+		if got := exchangeFailure(c.err); got != c.want {
+			t.Errorf("%v: got %q, want %q", c.err, got, c.want)
 		}
 	}
 }

@@ -44,39 +44,34 @@ var (
 		"billing_error": true, "model_not_found": true, "not_found_error": true,
 		"invalid_request": true, "invalid_request_error": true, "request_too_large": true,
 		"usage_limit_exceeded": true, "quota_exceeded": true,
+		// Codex codex_error_info variants.
+		"unauthorized": true, "bad_request": true, "context_window_exceeded": true,
+		"sandbox_error": true, "session_budget_exceeded": true,
 	}
 	providerErrorTransientCodes = map[string]bool{
 		"server_error": true, "api_error": true, "overloaded": true, "overloaded_error": true,
 		"rate_limit": true, "rate_limit_error": true, "timeout": true, "server_overloaded": true,
 		"internal_server_error": true, "response_too_many_failed_attempts": true,
 		"response_stream_disconnected": true, "response_stream_connection_failed": true,
-	}
-	// Text markers decide only after codes and statuses that are explicit.
-	providerErrorPersistentText = []string{
-		"/login", "not logged in", "unauthorized", "invalid access token", "invalid api key",
-		"payment required", "spending limit", "insufficient", "额度不足", "billing",
-		"prompt is too long", "not allowed", "issue with the selected model", "may not exist",
-		"account has been disabled", "已被禁用", "context window",
-	}
-	providerErrorTransientText = []string{
-		"connection lost", "stream disconnected", "stream closed", "connection reset", "connection refused",
-		"econnreset", "econnrefused", "etimedout", "timed out", "timeout", "unexpected eof",
-		"overloaded", "at capacity", "high demand", "temporarily", "try again", "retry later",
-		"too many requests", "rate limit", "upstream request failed", "network error",
-		"socket", "service unavailable", "bad gateway", "gateway timeout",
+		"http_connection_failed": true, "flex_unavailable": true,
 	}
 )
 
-// ClassifyProviderError decides whether resubmitting the same work can succeed.
-// A provider's own credential, billing or request-shape verdict always wins.
+// ClassifyProviderError decides whether resubmitting the same work can succeed,
+// from the provider's own structured record only: its error code and the
+// upstream HTTP status. An explicit persistent code (credentials, billing,
+// request shape) wins, then the status, then a transient code. The message is
+// for people and is never read: a failure the provider did not classify is
+// persistent, so Brain is told once rather than the same work being retried on
+// a guess.
+//
+// Every agent that reports turn errors does so structurally: Claude (StopFailure
+// hook, or the API error record's code and status), Codex (app-server
+// error classes, or codex_error_info and its status), OpenCode and Pi (typed
+// error events). Cursor and Grok record no turn error at all, so there is no
+// text for a fallback to read.
 func ClassifyProviderError(failure ProviderActivityError) ProviderErrorClass {
 	code := strings.ToLower(strings.TrimSpace(failure.Code))
-	text := strings.ToLower(failure.Message)
-	for _, marker := range providerErrorPersistentText {
-		if strings.Contains(text, marker) {
-			return ProviderErrorPersistent
-		}
-	}
 	if providerErrorPersistentCodes[code] {
 		return ProviderErrorPersistent
 	}
@@ -88,11 +83,6 @@ func ClassifyProviderError(failure ProviderActivityError) ProviderErrorClass {
 	}
 	if providerErrorTransientCodes[code] {
 		return ProviderErrorTransient
-	}
-	for _, marker := range providerErrorTransientText {
-		if strings.Contains(text, marker) {
-			return ProviderErrorTransient
-		}
 	}
 	return ProviderErrorPersistent
 }

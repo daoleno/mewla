@@ -10,32 +10,37 @@ import (
 )
 
 // Real provider error records observed in local Claude Code and Codex
-// transcripts (error category, upstream status, first line of the message).
+// transcripts (error category, upstream status). The message is never read, so
+// every case carries a misleading one.
 func TestClassifyProviderErrorRealRecords(t *testing.T) {
 	cases := []struct {
 		failure ProviderActivityError
 		want    ProviderErrorClass
 	}{
-		{ProviderActivityError{Code: "server_error", Message: "API Error: Connection lost mid-response. The response above may be incomplete."}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "server_error", Message: "API Error: Connection refused — a firewall or proxy may be blocking it (ECONNREFUSED)"}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "rate_limit", HTTPStatus: 429, Message: "API Error: Request rejected (429) · All credentials for model claude-opus-5-5 are cooling down"}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "server_error", HTTPStatus: 524, Message: `API Error: 524 {"type":"https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare`}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "server_error", HTTPStatus: 529, Message: "API Error: Repeated 529 Overloaded errors. The API is at capacity — this is usually temporary."}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "server_error", HTTPStatus: 503, Message: "API Error: 503 No available accounts: no available accounts. This is a server-side issue, usually temporary"}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "unknown", Message: "API Error: upstream stream disconnected: connection reset by peer"}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "unknown", Message: "API Error: Upstream request failed"}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "model_not_found", HTTPStatus: 404, Message: "There's an issue with the selected model (claude-opus-5-5[1m]). It may not exist or you may not have access to it."}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "authentication_failed", Message: "Not logged in · Please run /login"}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "authentication_failed", HTTPStatus: 403, Message: "Please run /login · API Error: 403 用户额度不足, 剩余额度: ＄-0.409198"}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "invalid_request", HTTPStatus: 400, Message: "Prompt is too long · automatic compaction failed: API Error: 524"}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "unknown", HTTPStatus: 400, Message: "API Error: 400 Upstream request error (request_ori_id: ac352776)"}, ProviderErrorPersistent},
-		// Codex event_msg error records.
-		{ProviderActivityError{Code: "other", Message: "stream disconnected before completion: stream closed before response.completed"}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "server_overloaded", Message: "Selected model is at capacity. Please try a different model."}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "response_too_many_failed_attempts", Message: "exceeded retry limit, last status: 429 Too Many Requests"}, ProviderErrorTransient},
-		{ProviderActivityError{Code: "other", Message: "unexpected status 402 Payment Required: Weekly spending limit reached. Please wait for your limit to reset."}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "other", Message: "unexpected status 401 Unauthorized: Invalid access token"}, ProviderErrorPersistent},
-		{ProviderActivityError{Code: "other", Message: "unexpected status 403 Forbidden: Model 'gpt-5.5' is not allowed for this provider."}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "server_error", Message: "API Error: Connection lost mid-response."}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "rate_limit", HTTPStatus: 429}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "server_error", HTTPStatus: 524}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "server_error", HTTPStatus: 529}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "server_error", HTTPStatus: 503}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "model_not_found", HTTPStatus: 404}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "authentication_failed"}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "authentication_failed", HTTPStatus: 403, Message: "429 try again, retry later"}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "invalid_request", HTTPStatus: 400}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "unknown", HTTPStatus: 400}, ProviderErrorPersistent},
+		// Codex codex_error_info records.
+		{ProviderActivityError{Code: "server_overloaded"}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "response_too_many_failed_attempts", HTTPStatus: 429}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "http_connection_failed", HTTPStatus: 502}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "http_connection_failed"}, ProviderErrorTransient},
+		{ProviderActivityError{Code: "http_connection_failed", HTTPStatus: 413}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "usage_limit_exceeded"}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "unauthorized", HTTPStatus: 401}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "context_window_exceeded"}, ProviderErrorPersistent},
+		// A failure the provider did not classify is not guessed from its text.
+		{ProviderActivityError{Code: "other", Message: "stream disconnected before completion: stream closed"}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "unknown", Message: "API Error: upstream stream disconnected: connection reset by peer, try again"}, ProviderErrorPersistent},
+		{ProviderActivityError{Code: "other", Message: "unexpected status 402 Payment Required: temporarily over the limit"}, ProviderErrorPersistent},
+		{ProviderActivityError{Message: "Connection lost, timeout, overloaded, 额度不足"}, ProviderErrorPersistent},
 		{ProviderActivityError{}, ProviderErrorPersistent},
 	}
 	for _, tc := range cases {

@@ -147,6 +147,14 @@ func benchmarkIP(host string, ip net.IP) bool {
 // errPrivateEndpoint is a name that resolves to an address Mewla will not dial.
 var errPrivateEndpoint = errors.New("private network endpoints are not supported")
 
+// Fixed errors of the checked transport, named so callers match them with
+// errors.Is instead of reading their wording.
+var (
+	errEndpointDNS      = errors.New("endpoint DNS failed")
+	errRedirect         = errors.New("redirects are not allowed")
+	errResponseTooLarge = errors.New("integration response exceeds size limit")
+)
+
 // Resolve and dial the checked IP together, preventing DNS rebinding. Custom
 // sources never get access to host-local services or ambient proxy credentials.
 func newHTTPClient() *http.Client { return newHTTPClientFor("", nil) }
@@ -156,7 +164,7 @@ func newHTTPClientFor(origin string, networks []string) *http.Client {
 }
 
 func noRedirects(*http.Request, []*http.Request) error {
-	return errors.New("redirects are not allowed")
+	return errRedirect
 }
 
 // checkedTransport dials only addresses that pass the network check, trying
@@ -175,7 +183,7 @@ func checkedTransportWith(origin string, networks []string, lookup func(context.
 		}
 		ips, err := lookup(ctx, host)
 		if err != nil {
-			return nil, errors.New("endpoint DNS failed")
+			return nil, errEndpointDNS
 		}
 		addresses := make([]net.IP, 0, len(ips))
 		for _, ip := range ips {
@@ -194,7 +202,7 @@ func checkedTransportWith(origin string, networks []string, lookup func(context.
 // gets a share of the time, so one silent address cannot use it all.
 func dialEach(ctx context.Context, network, port string, addresses []net.IP, dial func(context.Context, string, string) (net.Conn, error)) (net.Conn, error) {
 	if len(addresses) == 0 {
-		return nil, errors.New("endpoint DNS returned no addresses")
+		return nil, fmt.Errorf("%w: no addresses", errEndpointDNS)
 	}
 	each := 8 * time.Second
 	if len(addresses) > 1 {
@@ -223,7 +231,7 @@ type limitedBody struct {
 
 func (b *limitedBody) Read(p []byte) (int, error) {
 	if b.remaining <= 0 {
-		return 0, errors.New("integration response exceeds size limit")
+		return 0, errResponseTooLarge
 	}
 	if int64(len(p)) > b.remaining {
 		p = p[:b.remaining]

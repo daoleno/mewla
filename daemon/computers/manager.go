@@ -893,7 +893,7 @@ func (m *Manager) add(ctx context.Context, req Request) (Result, error) {
 		}
 	}
 	if reached == "" {
-		return Result{}, fmt.Errorf("could not reach %s: %v", invite.Name, lastErr)
+		return Result{}, &UnreachableError{Name: invite.Name, Cause: lastErr}
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -1012,3 +1012,16 @@ func (m *Manager) removeOutboundLocked(key string) {
 	}
 	m.dropOutboxLocked(key)
 }
+
+// UnreachableError reports a computer none of whose addresses answered, so the
+// HTTP layer can tell a bad gateway from a bad request without reading text.
+type UnreachableError struct {
+	Name  string
+	Cause error
+}
+
+func (e *UnreachableError) Error() string {
+	return fmt.Sprintf("could not reach %s: %v", e.Name, e.Cause)
+}
+
+func (e *UnreachableError) Unwrap() error { return e.Cause }
