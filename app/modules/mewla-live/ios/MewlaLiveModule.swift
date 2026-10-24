@@ -147,16 +147,24 @@ final class MewlaLiveStore {
 
     if state.isIdle {
       for activity in existing { await activity.end(content, dismissalPolicy: .immediate) }
+      if !existing.isEmpty { MewlaLiveLog.update("ended (idle)") }
       return
     }
     // A swiped-away run stays away until a new run key (a new Work or a new question).
-    if defaults.string(forKey: dismissedKey) == state.runKey { return }
+    if defaults.string(forKey: dismissedKey) == state.runKey {
+      MewlaLiveLog.update("skipped: this run was dismissed")
+      return
+    }
 
     if let activity = existing.first(where: { $0.activityState == .active }) {
       await activity.update(content)
+      MewlaLiveLog.update("updated \(state.epoch):\(state.seq) kind=\(state.kind)")
       return
     }
-    guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+    guard ActivityAuthorizationInfo().areActivitiesEnabled else {
+      MewlaLiveLog.update("not started: Live Activities are off for Mewla")
+      return
+    }
     do {
       // The system only starts an activity while the app is in the foreground; from the
       // background this throws and the next foreground apply starts it.
@@ -167,7 +175,9 @@ final class MewlaLiveStore {
       )
       observe(activity, onToken: onToken)
     } catch {
-      NSLog("MewlaLive: Live Activity not started: \(error)")
+      // `visibility` means the app was in the background: iOS only starts an activity in the
+      // foreground, so this arrives with the next foreground apply.
+      MewlaLiveLog.update("not started: \(error)")
     }
   }
 

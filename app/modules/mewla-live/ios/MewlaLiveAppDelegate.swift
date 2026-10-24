@@ -10,18 +10,45 @@ public class MewlaLiveAppDelegate: ExpoAppDelegateSubscriber {
     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
   ) {
-    guard MewlaLiveShared.isEnabled, let message = MewlaLivePush.parse(userInfo) else {
+    // Every branch logs, and logs nothing from the payload: a real-device test reads these lines
+    // from the device console to tell "iOS never called us" from "we dropped it" from "applied".
+    MewlaLiveLog.push("received state=\(application.applicationState.rawValue)")
+    guard MewlaLiveShared.isEnabled else {
+      MewlaLiveLog.push("ignored: this build has no Live Activity extension")
+      completionHandler(.noData)
+      return
+    }
+    guard let message = MewlaLivePush.parse(userInfo) else {
+      MewlaLiveLog.push("ignored: not a live_state push")
       completionHandler(.noData)
       return
     }
     // Pushes for a server that is not the current one are dropped.
     let store = MewlaLiveStore.shared
     guard store.currentServer == message.serverRef else {
+      MewlaLiveLog.push("dropped: another server")
       completionHandler(.noData)
       return
     }
+    let pair = "\(message.state.epoch):\(message.state.seq)"
     // apply() runs `done` on every path (stale state included), so iOS always hears back.
-    _ = store.apply(message.state, onToken: { _ in }, done: { completionHandler(.newData) })
+    let applied = store.apply(message.state, onToken: { _ in }, done: {
+      completionHandler(.newData)
+    })
+    MewlaLiveLog.push(
+      applied ? "applied \(pair)" : "skipped \(pair): older than what is shown")
+  }
+}
+
+/// NSLog-based so the lines show up in the device console (`xcrun devicectl ... console` or
+/// Console.app) with no configuration. Never log the question text or choices.
+enum MewlaLiveLog {
+  static func push(_ message: String) {
+    NSLog("MewlaLive push: %@", message)
+  }
+
+  static func update(_ message: String) {
+    NSLog("MewlaLive activity: %@", message)
   }
 }
 
