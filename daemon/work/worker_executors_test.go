@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestHardenClaudeCommandAppendsFullAuthorization(t *testing.T) {
+func TestHardenClaudeCommandAppendsAutoPermission(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -16,12 +16,12 @@ func TestHardenClaudeCommandAppendsFullAuthorization(t *testing.T) {
 		{
 			name: "plain claude",
 			in:   "claude",
-			want: "claude --permission-mode bypassPermissions",
+			want: "claude --permission-mode auto",
 		},
 		{
 			name: "claude with profile",
 			in:   "claude --profile my-profile",
-			want: "claude --profile my-profile --permission-mode bypassPermissions",
+			want: "claude --profile my-profile --permission-mode auto",
 		},
 		{
 			name: "already authorized dontAsk",
@@ -36,7 +36,7 @@ func TestHardenClaudeCommandAppendsFullAuthorization(t *testing.T) {
 		{
 			name: "absolute path",
 			in:   "/usr/local/bin/claude --profile test",
-			want: "/usr/local/bin/claude --profile test --permission-mode bypassPermissions",
+			want: "/usr/local/bin/claude --profile test --permission-mode auto",
 		},
 		{
 			name: "dangerously-skip-permissions preserved",
@@ -61,7 +61,7 @@ func TestHardenClaudeCommandDefaultsToClaude(t *testing.T) {
 	if !strings.HasPrefix(got, "claude ") {
 		t.Fatalf("empty input should default to claude, got %q", got)
 	}
-	if !strings.Contains(got, ClaudeFullAuthorizationFlag) {
+	if !strings.Contains(got, ClaudeAutoPermissionFlag) {
 		t.Fatalf("default claude command should be hardened: %q", got)
 	}
 }
@@ -73,7 +73,7 @@ func TestPrepareDelegatedCommandUsesOneProviderAdapterBoundary(t *testing.T) {
 		want     string
 	}{
 		{WorkerProviderCodex, "codex", "codex " + CodexFullAuthorizationFlag},
-		{WorkerProviderClaude, "claude", "claude " + ClaudeFullAuthorizationFlag},
+		{WorkerProviderClaude, "claude", "claude " + ClaudeAutoPermissionFlag},
 	}
 	for _, tc := range cases {
 		got, err := PrepareDelegatedCommand(tc.provider, tc.command)
@@ -102,6 +102,9 @@ func TestScheduledActionCommandRecognizesExactUnattendedArgv(t *testing.T) {
 		{"Codex partial sandbox", "codex", "codex -s=danger-full-access", "", "codex -s=danger-full-access --ask-for-approval never"},
 		{"Codex before terminator", "codex", `codex -a never -s danger-full-access -- "literal prompt"`, "", `codex -a never -s danger-full-access -- "literal prompt"`},
 		{"Claude quoted equals", "claude", `claude "--permission-mode=bypassPermissions"`, "", `claude "--permission-mode=bypassPermissions"`},
+		{"Claude explicit auto", "claude", "claude --permission-mode auto", "", "claude --permission-mode auto"},
+		{"Claude explicit auto equals", "claude", "claude --permission-mode=auto --model m", "", "claude --permission-mode=auto --model m"},
+		{"Claude default is auto", "claude", "claude --model m", "", "claude --model m --permission-mode auto"},
 		{"Cursor substrings", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra --force --trust --approve-mcps"},
 		{"Cursor quoted exact", "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`, "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`},
 		{"Grok env spoof", "grok", "env APPROVAL=--always-approve grok --sandbox=off", "", "env APPROVAL=--always-approve grok --sandbox=off --permission-mode bypassPermissions"},
@@ -140,6 +143,9 @@ func TestScheduledActionCommandRejectsExplicitNonUnattendedModes(t *testing.T) {
 		{"Codex argv terminator", "codex", "codex -- --dangerously-bypass-approvals-and-sandbox", ""},
 		{"Claude permission", "claude", "claude --permission-mode dontAsk", ""},
 		{"Claude quoted equals", "claude", `claude "--permission-mode=dontAsk"`, ""},
+		{"Claude acceptEdits", "claude", "claude --permission-mode acceptEdits", ""},
+		{"Claude default mode", "claude", "claude --permission-mode default", ""},
+		{"Claude plan mode", "claude", "claude --permission-mode plan", ""},
 		{"Cursor auto review", "agent", "cursor-agent --auto-review --sandbox disabled", "cursor"},
 		{"Cursor equals plan", "agent", "cursor-agent --mode=plan", "cursor"},
 		{"Cursor quoted ask", "agent", `cursor-agent "--mode" "ask"`, "cursor"},

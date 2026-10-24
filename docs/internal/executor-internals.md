@@ -22,10 +22,39 @@ Delete them at any time. The `mewla worker defaults` and `mewla brain set-delega
 commands and the `MEWLA_DELEGATED_EXECUTOR` lock no longer exist.
 
 Claude, Cursor and Grok delegated launches reuse the existing unattended client
-adapters. Claude `--permission-mode auto`, `dontAsk`, and `acceptEdits` are not
-bypass guarantees and are rejected for delegated work; the manual/Brain host
-paths keep their prior permission policy. Pi/DSH retain their native client
-behavior; extensions and authentication may still require setup.
+adapters. Claude runs in `--permission-mode auto` by default for Brain host,
+delegated Workers and Calendar `scheduled_action`; an explicit
+`--permission-mode bypassPermissions` or `--dangerously-skip-permissions` in the
+executor command is the person's own choice and is kept. `default`,
+`acceptEdits`, `dontAsk` and `plan` can stop at a prompt, so they are rejected
+for delegated work. Pi/DSH retain their native client behavior; extensions and
+authentication may still require setup.
+
+### Why Claude defaults to Auto
+
+Auto lets a classifier review each non-read-only action before it runs, where
+`bypassPermissions` checks nothing. Routine work (editing files, running tests,
+committing, calling the progress command) is allowed without a prompt; risky
+actions (force push, sending secrets out, production deploys, `git reset --hard`,
+`rm -rf /`) are denied. A denied action returns its reason to the agent, which
+carries on with the rest of the task or stops to ask the person. This is
+Anthropic's documented behavior (permission modes, "when auto mode falls back").
+
+- **Blocked action.** Only that action does not run. In an interactive Worker
+  (a tmux TUI) Claude falls back to a normal permission prompt after 3 blocks in
+  a row or 20 in total; the documented "action just doesn't run and the run
+  continues" applies to non-interactive `-p` runs. A Worker that needs a blocked
+  action can therefore end up waiting on a person, so Mewla does not treat Auto
+  as a guarantee that a Worker finishes unaided.
+- **Broad allow rules are dropped.** Entering Auto drops blanket `Bash(*)`,
+  wildcarded interpreters, package-manager run commands, `Agent` and `Monitor`
+  allow rules; narrow rules such as `Bash(git push *)` stay. Give a task that
+  needs a specific action a narrow `--allowedTools` entry in its executor command.
+- **Never auto-approved.** Whatever the classifier judges dangerous is denied
+  (observed: `git push` and `git push --force` to a bare remote were both denied
+  in one run, yet a plain push was allowed in two identical-shaped control runs,
+  so the verdict is not deterministic and compound shell commands are judged as
+  one unit). `ask` rules and organization policy apply in every mode.
 
 All delegated Codex launches, including explicit commands and resume, use the
 same client adapter and run autonomously by default. Explicit interactive

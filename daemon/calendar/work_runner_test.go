@@ -448,7 +448,7 @@ func TestRunScheduledActionPersistsFreshDelegatedLaunch(t *testing.T) {
 	if !result.Launched || result.WorkID != run.ID || result.WorkerSession != "claude-scheduled" {
 		t.Fatalf("action result = %#v", result)
 	}
-	if len(tmux.spawnRoles) != 1 || tmux.spawnRoles[0] != "claude" || tmux.spawnCwds[0] != "/calendar-cwd" || tmux.spawnCommands[0] != "claude --configured --permission-mode bypassPermissions" {
+	if len(tmux.spawnRoles) != 1 || tmux.spawnRoles[0] != "claude" || tmux.spawnCwds[0] != "/calendar-cwd" || tmux.spawnCommands[0] != "claude --configured --permission-mode auto" {
 		t.Fatalf("spawn = roles %#v, cwds %#v, commands %#v", tmux.spawnRoles, tmux.spawnCwds, tmux.spawnCommands)
 	}
 	if len(tmux.sendReadyCalls) != 1 {
