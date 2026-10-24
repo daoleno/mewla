@@ -10,10 +10,10 @@ import { useCurrentServer } from "../../store/currentServer";
 let provisioning = false;
 
 /**
- * Headless. Keeps the Android live notification and home-screen widgets bound to the one
+ * Headless. Keeps the live surface (Android notification, iOS Live Activity) and home-screen widgets bound to the one
  * current server: it applies live_state from the socket (pushes reach the native service
  * directly), catches up on connect, and gives the widgets their own revocable token.
- * iOS has no module yet and does nothing here.
+ * A build without a live surface (iOS without the extension) has no module and does nothing here.
  */
 export function LiveSurfaceBridge() {
   const { currentServer, hydrated } = useCurrentServer();

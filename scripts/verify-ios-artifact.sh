@@ -88,6 +88,56 @@ verify_app() {
   fi
 
   echo "ok: $display_name ($bundle_id) app bundle contains a Mach-O executable"
+
+  if [[ "${MEWLA_IOS_LIVE:-}" == "1" ]]; then
+    verify_live_extension "$app" "$require_signature" "$bundle_id" "$build_number" "$version"
+  fi
+}
+
+# The Live Activity / widget extension rides inside the app: same version and build, its own
+# bundle id, and (signed) the shared App Group in both entitlements.
+verify_live_extension() {
+  local app="$1" require_signature="$2" app_id="$3" build_number="$4" version="$5"
+  local appex="$app/PlugIns/MewlaLive.appex"
+  local plist="$appex/Info.plist"
+  [[ -d "$appex" ]] || { echo "error: Live Activity extension is missing: $appex" >&2; exit 1; }
+  local id ext_build ext_version point
+  id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")"
+  ext_build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")"
+  ext_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")"
+  point="$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$plist")"
+  [[ "$id" == "$app_id.live" ]] || {
+    echo "error: extension bundle identifier is $id; expected $app_id.live" >&2
+    exit 1
+  }
+  [[ "$ext_build" == "$build_number" && "$ext_version" == "$version" ]] || {
+    echo "error: extension version $ext_version ($ext_build) differs from the app's $version ($build_number)" >&2
+    exit 1
+  }
+  [[ "$point" == "com.apple.widgetkit-extension" ]] || {
+    echo "error: extension point is $point; expected com.apple.widgetkit-extension" >&2
+    exit 1
+  }
+  /usr/libexec/PlistBuddy -c 'Print :NSSupportsLiveActivities' "$app/Info.plist" | grep -q true || {
+    echo "error: app Info.plist does not set NSSupportsLiveActivities" >&2
+    exit 1
+  }
+  if [[ "$require_signature" == "yes" ]]; then
+    [[ -f "$appex/embedded.mobileprovision" ]] || {
+      echo "error: signed extension has no embedded provisioning profile" >&2
+      exit 1
+    }
+    codesign --verify --deep --strict "$appex"
+    local bundle_group="group.$app_id"
+    local target
+    for target in "$app" "$appex"; do
+      codesign -d --entitlements :- "$target" 2>/dev/null | grep -q "$bundle_group" || {
+        echo "error: $(basename "$target") is not signed with App Group $bundle_group" >&2
+        exit 1
+      }
+    done
+  fi
+  echo "ok: Live Activity extension ($id) matches the app version and App Group"
 }
 
 if [[ "$MODE" == "simulator" ]]; then

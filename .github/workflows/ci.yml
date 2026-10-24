@@ -138,6 +138,9 @@ jobs:
       - name: iOS Ghostty and CocoaPods caches (restore-only)
         uses: ./.github/actions/ios-native
       - name: Generate iOS project and install pods
+        env:
+          # Compile the Live Activity / widget extension here even before releases ship it.
+          MEWLA_IOS_LIVE: "1"
         run: |
           set -euo pipefail
           cd app
@@ -150,6 +153,7 @@ jobs:
       - name: Build unsigned Simulator app
         env:
           DERIVED_DATA: ${{ runner.temp }}/ios-derived
+          MEWLA_IOS_LIVE: "1"
         run: |
           set -euo pipefail
           set -o pipefail

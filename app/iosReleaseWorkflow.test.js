@@ -147,3 +147,37 @@ describe('iOS unsigned Simulator contract', () => {
     expect(nativeLibsWorkflow).not.toMatch(/push:\s*\n\s*tags:/);
   });
 });
+
+describe('iOS release signs the Live Activity extension as its own target', () => {
+  it('builds the extension only behind the MEWLA_IOS_LIVE repository variable', () => {
+    expect(workflow).toContain("MEWLA_IOS_LIVE: ${{ vars.MEWLA_IOS_LIVE == '1' && '1' || '' }}");
+    expect(workflow).toContain('requires environment secret ZEN_APPLE_LIVE_PROVISIONING_PROFILE_BASE64');
+  });
+
+  it('validates the extension profile against its own App ID and the shared App Group', () => {
+    expect(workflow).toContain('"application-identifier", "") != f"{expected_team}.{bundle}.live"');
+    expect(workflow).toContain('group = "group." + bundle');
+    expect(workflow).toContain('regenerate it after enabling App Groups');
+  });
+
+  it('never passes one profile for every target when the extension is built', () => {
+    expect(workflow).toContain('node scripts/set-ios-target-signing.js');
+    expect(workflow).toContain('"MewlaLive=$LIVE_PROFILE_NAME"');
+    expect(workflow).toContain('SIGNING_ARGS+=(PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME")');
+    expect(workflow).not.toMatch(/\n\s+PROVISIONING_PROFILE_SPECIFIER="\$PROFILE_NAME" \\\n\s+archive/);
+  });
+
+  it('exports both profiles and removes both from the runner', () => {
+    expect(workflow).toContain('options["provisioningProfiles"][os.environ["MEWLA_IOS_BUNDLE_ID"] + ".live"]');
+    expect(workflow).toContain('${LIVE_PROFILE_UUID}.mobileprovision');
+    expect(workflow).toContain('mewla-live-app-store.mobileprovision');
+  });
+
+  it('keeps CI compiling the extension in the unsigned Simulator build', () => {
+    const ci = require('fs').readFileSync(
+      require('path').join(__dirname, '..', '.github', 'workflows', 'ci.yml'),
+      'utf8',
+    );
+    expect(ci.match(/MEWLA_IOS_LIVE: "1"/g)?.length).toBe(2);
+  });
+});

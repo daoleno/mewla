@@ -42,7 +42,7 @@ func (c *Client) liveTargets() []registration {
 	return targets
 }
 
-// SendLive pushes a data-only, high-priority message: no title, body or sound,
+// SendLive pushes a data-only, high-priority message (content-available on iOS): no title, body or sound,
 // so the phone shows nothing by itself and its app code decides what to post.
 // No channelId: Expo turns it into an FCM notification block, and a phone whose
 // app is not running would then show an empty system notification instead of
@@ -94,6 +94,9 @@ func (c *Client) sendLiveTo(registration registration, data map[string]any) erro
 		"data":     flat,
 		"priority": "high",
 		"ttl":      120,
+		// iOS only (Android ignores it): a silent push that wakes the app to apply the state. It is
+		// best effort; iOS does not deliver it to a force-quit app and throttles it.
+		"contentAvailable": true,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal live push: %w", err)

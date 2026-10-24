@@ -50,6 +50,8 @@ class MewlaLiveModule : Module() {
 
     Function("refreshWidgets") { WidgetSync.refreshAsync(context) }
 
+    Function("isSupported") { true }
+
     Function("widgetState") {
       val prefs = LivePrefs(context)
       when {

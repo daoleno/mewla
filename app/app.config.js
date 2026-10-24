@@ -31,6 +31,11 @@ module.exports = () => {
     trackedIOSBuildNumber,
   );
 
+  // The Live Activity / widget extension is its own signed target, so it ships only once its App
+  // IDs, App Group and provisioning profile exist (docs/ios-ci-release.md). Until then iOS builds
+  // are exactly what they were; CI's unsigned Simulator build turns it on to keep it compiling.
+  const iosLive = readEnv("IOS_LIVE") === "1";
+
   extra.eas = { projectId: readEnv("EXPO_PROJECT_ID") || officialExpoProjectId };
   extra.distribution = resolveDistribution(
     readEnv("ANDROID_DISTRIBUTION"),
@@ -43,8 +48,19 @@ module.exports = () => {
       ...(baseConfig.ios || {}),
       bundleIdentifier: iosIdentity.bundleIdentifier,
       buildNumber: iosBuildNumber,
+      ...(iosLive
+        ? {
+            entitlements: {
+              "com.apple.security.application-groups": [iosIdentity.appGroup],
+            },
+          }
+        : {}),
       infoPlist: {
         ...((baseConfig.ios && baseConfig.ios.infoPlist) || {}),
+        // remote-notification: a live_state push wakes the app to update the Live Activity.
+        ...(iosLive
+          ? { NSSupportsLiveActivities: true, UIBackgroundModes: ["remote-notification"] }
+          : {}),
         CFBundleDisplayName: iosIdentity.displayName,
         CFBundleShortVersionString: iosMarketingVersion,
         CFBundleVersion: iosBuildNumber,
@@ -79,6 +95,11 @@ module.exports = () => {
           buildNumber: iosBuildNumber,
         },
       ],
+      // Dynamic Island, Lock Screen Live Activity and home-screen widgets: the WidgetKit
+      // extension in targets/mewla-live, with its own bundle id and the shared App Group.
+      ...(iosLive
+        ? [["@bacons/apple-targets", { appleTeamId: readEnv("APPLE_TEAM_ID") || undefined }]]
+        : []),
       // Package Ghostty MIT notice into Android assets + env-based release signing.
       "./plugins/withAndroidRelease",
       // Resolve duplicate BouncyCastle metadata in the Android resource merge.

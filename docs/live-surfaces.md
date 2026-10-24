@@ -61,9 +61,16 @@ broadcast announced.
   Its data is strings: `mewla_live` = `"1"`, `server_ref` (the phone drops
   state from a server that is not its current one), `epoch`, `seq`, and
   `payload` (the State as JSON). Going idle after idle is not pushed.
+- **Push** (iOS, while the app is not running): the same data message with
+  `contentAvailable: true`, a silent push that wakes the app so it can update the
+  Live Activity and widgets. It is best effort: iOS does not deliver it to an
+  app the user force-quit and throttles it. The daemon cannot send an ActivityKit
+  push (`apns-push-type: liveactivity`) itself: Expo's push API has no such type,
+  and the APNs key stays in Expo.
 - A device gets live pushes only if its `register_push` said
   `"live_state": true`. Registering again without it turns them off, so a
-  device that cannot show them (iOS, for now) receives nothing.
+  device that cannot show them (an iOS build without the extension) receives
+  nothing.
 
 ## Answering from the notification
 
@@ -121,7 +128,33 @@ from this endpoint, so a revoked token stops it for good.
   are ordered by `(epoch, seq)`, so a late one never overwrites a newer one.
   Nothing is issued for the widget on that path.
 
+## On the phone (iOS)
+
+- The same `app/modules/mewla-live` module (Swift side in `ios/`) and a WidgetKit
+  extension, `MewlaLive` (`app/targets/mewla-live`, generated into the Xcode
+  project by `@bacons/apple-targets`). The app and the extension compile the same
+  `MewlaLiveState.swift`, so the state has one shape.
+- The Live Activity shows the Dynamic Island (compact, minimal, expanded) and the
+  Lock Screen card from the state: Work title and phase, a clock that runs by
+  itself, segments from `done` / `total`, and for "Brain needs you" the question
+  with up to three neutral chips. A chip opens `mewla://live/answer?q=…&c=…`, which
+  sends the answer once, as on Android. It starts while the app is in the
+  foreground (iOS only allows that), updates in the background, and ends when
+  nothing runs or waits. A removed card stays away until a new run key arrives.
+- Widgets (small, medium) read `live_state.json` from the App Group the app
+  writes on every state, and, on a plain URL, fetch `/widget/snapshot` with the
+  same revocable token as Android. A refused token clears them and they ask to
+  open Mewla; Mewla Link servers show only what the app and pushes applied.
+- The extension is built only when `MEWLA_IOS_LIVE=1` (repository variable
+  `MEWLA_IOS_LIVE` for releases), after its App IDs, App Group and provisioning
+  profile exist: see `docs/ios-ci-release.md`. A build without it behaves as before.
+
 ## Limits
+
+- iOS: with the app closed, a Live Activity can only be updated by the silent
+  push above (best effort) and cannot be started from the background. A
+  guaranteed update needs an ActivityKit push sent with the APNs key, which the
+  daemon does not have.
 
 - On a plain URL the widget fetches the daemon itself and a revoked phone stops
   at the next refresh. On Mewla Link the widget only shows what was pushed: it

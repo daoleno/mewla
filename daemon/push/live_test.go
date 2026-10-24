@@ -44,6 +44,10 @@ func TestSendLiveIsDataOnlyHighPriorityAndStringly(t *testing.T) {
 	if body["to"] != "ExponentPushToken[abc]" || body["priority"] != "high" || body["ttl"] != float64(120) {
 		t.Fatalf("body = %v", body)
 	}
+	// iOS wakes the app for it; without content-available a data-only push never reaches a closed app.
+	if body["contentAvailable"] != true {
+		t.Fatalf("contentAvailable = %v, want true", body["contentAvailable"])
+	}
 	data, ok := body["data"].(map[string]any)
 	if !ok {
 		t.Fatalf("data = %v", body["data"])
