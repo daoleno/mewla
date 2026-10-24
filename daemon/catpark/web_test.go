@@ -80,7 +80,7 @@ func TestBundleHasEveryLineAndPicture(t *testing.T) {
 		exists("a/t_" + treat + ".webp")
 	}
 	for _, name := range []string{"index.html", "game.js", "game.css", "lines.js", "hand.woff2", "a/sign_bubble.webp",
-		"a/yard_day.jpg", "a/yard_night.jpg", "a/home_nocat.jpg", "a/away.jpg", "a/night.jpg", "a/cat_home.webp", "a/cat_night.webp"} {
+		"a/yard_day.jpg", "a/yard_night.jpg", "a/home_nocat.jpg", "a/away.jpg", "a/night.jpg", "a/night_away.jpg", "a/cat_home.webp", "a/cat_night.webp"} {
 		exists(name)
 	}
 }

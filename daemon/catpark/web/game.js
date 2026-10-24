@@ -82,7 +82,7 @@ function setState(next, locale) {
 }
 
 /* ---- house ---- */
-var plates = { home: $('p-home'), away: $('p-away'), night: $('p-night') };
+var plates = { home: $('p-home'), away: $('p-away'), night: $('p-night'), nightaway: $('p-nightaway') };
 
 function render(popShelf) {
   renderHouse(popShelf);
@@ -96,7 +96,7 @@ function render(popShelf) {
 function renderHouse(popShelf) {
   var p = (S && S.presence) || {};
   var night = isNight();
-  var plate = night ? 'night' : (p.away ? 'away' : 'home');
+  var plate = night ? (p.away ? 'nightaway' : 'night') : (p.away ? 'away' : 'home');
   Object.keys(plates).forEach(function (k) { plates[k].classList.toggle('on', k === plate); });
   $('cat-home').classList.toggle('on', !p.away && !night);
   $('cat-night').classList.toggle('on', !p.away && night);
@@ -116,7 +116,7 @@ function renderHouse(popShelf) {
 
   var bag = S && S.yard && S.yard.bag;
   var bt = $('bagtreat');
-  if (bag && !p.away && !night) { bt.src = 'a/t_' + bag + '.webp'; bt.classList.add('on'); } else { bt.classList.remove('on'); }
+  if (bag && !p.away) { bt.src = 'a/t_' + bag + '.webp'; bt.classList.add('on'); } else { bt.classList.remove('on'); }
 
   $('badge').classList.toggle('on', unseen().length > 0);
   renderShelf(popShelf);
