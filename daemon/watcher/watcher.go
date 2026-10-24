@@ -3589,17 +3589,11 @@ func (w *Watcher) waitForInputReadyGuarded(
 		if !alive {
 			return false
 		}
-		paneCWD := ""
-		if isCodexCommand(command) &&
-			strings.Contains(content, "Do you trust the contents of this directory?") {
-			paneCWD = capturePaneWorkingDirectory(socket, sessionID)
-		}
 		var advanced, ok bool
 		advancedWorkspaceTrustPrompt, advanced, ok = advanceStartupTrustPromptOnce(
 			advancedWorkspaceTrustPrompt,
 			command,
 			content,
-			paneCWD,
 			guard,
 			func(key string) error {
 				keys := []string{key}

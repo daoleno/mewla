@@ -167,6 +167,12 @@ at all: until it announces its thread (a moment after it starts) there is
 nothing to read, and only if it has not announced one after 30 seconds is its
 transcript searched for.
 
+Folder trust follows the same rule. Codex is trusted for a Worker's folder by
+the Worker's own command line, so Mewla leaves your Codex config alone. Claude Code
+has no per-launch way to do that, so for Claude Workers Mewla sets that one
+folder's `hasTrustDialogAccepted` in Claude's own config, which is the key
+Claude itself names for it.
+
 Cursor and Grok can only be hooked through the user's own global
 configuration, and Mewla never writes to it. They stay on the transcript and the
 screen, and so does anything an agent offers only through such a file.

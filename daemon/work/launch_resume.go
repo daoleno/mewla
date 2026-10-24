@@ -73,7 +73,7 @@ func WithProviderResumeToken(provider, command, token string) (string, error) {
 			if provider == WorkerProviderClaude {
 				// A fresh --session-id declaration identifies the conversation but cannot
 				// reopen it. Convert it to Claude's native resume flag on replacement.
-				fields, _ := splitSupportedLaunchFields(command)
+				fields, _ := shellquote.Fields(command)
 				changed := false
 				executable := 0
 				if fields[0] == "env" {

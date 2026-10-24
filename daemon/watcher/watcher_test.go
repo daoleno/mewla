@@ -999,66 +999,6 @@ func TestCursorWorkspaceTrustPromptIsNotInputReady(t *testing.T) {
 	}
 }
 
-func TestCodexWorkspaceTrustPromptMatchesRequestedWorkingDirectory(t *testing.T) {
-	trust := "> You are in /workspace/future\n\n" +
-		"  Do you trust the contents of this directory? Working with untrusted contents\n" +
-		"  comes with higher risk of prompt injection.\n\n" +
-		"› 1. Yes, continue\n  2. No, quit\n\n  Press enter to continue\n"
-	if !isCodexWorkspaceTrustPrompt("codex --dangerously-bypass-approvals-and-sandbox", trust, "/workspace/future") {
-		t.Fatal("unambiguous Codex trust prompt for requested cwd was not detected")
-	}
-	wrapped := strings.Replace(trust, "/workspace/future", "/workspace/fu\n  ture", 1)
-	if !isCodexWorkspaceTrustPrompt("codex", wrapped, "/workspace/future") {
-		t.Fatal("hard-wrapped Codex trust path was not reconstructed exactly")
-	}
-	siblingPrefix := strings.Replace(trust, "/workspace/future", "/workspace/fut", 1)
-	if isCodexWorkspaceTrustPrompt("codex", siblingPrefix, "/workspace/future") {
-		t.Fatal("Codex trust prompt authorized a sibling path by plain prefix")
-	}
-	if isCodexWorkspaceTrustPrompt("codex", trust, "/workspace/other") {
-		t.Fatal("Codex trust prompt for a different cwd was accepted")
-	}
-	if isCodexWorkspaceTrustPrompt("future-agent", trust, "/workspace/future") {
-		t.Fatal("unknown provider inherited Codex-specific trust handling")
-	}
-}
-
-func TestCodexWorkspaceTrustPromptAdvancesOnce(t *testing.T) {
-	trust := "> You are in /workspace/future\n\n" +
-		"  Do you trust the contents of this directory?\n\n" +
-		"› 1. Yes, continue\n  2. No, quit\n\n  Press enter to continue\n"
-	sends := 0
-	send := func(key string) error {
-		sends++
-		if key != "Enter" {
-			t.Fatalf("trust key = %q, want Enter", key)
-		}
-		return nil
-	}
-	advanced, didAdvance, ok := advanceStartupTrustPromptOnce(
-		false,
-		"codex",
-		trust,
-		"/workspace/future",
-		func() error { return nil },
-		send,
-	)
-	if !ok || !advanced || !didAdvance || sends != 1 {
-		t.Fatalf("first advance = (%v, %v, %v), sends=%d", advanced, didAdvance, ok, sends)
-	}
-	advanced, didAdvance, ok = advanceStartupTrustPromptOnce(
-		advanced,
-		"codex",
-		trust,
-		"/workspace/future",
-		func() error { return nil },
-		send,
-	)
-	if !ok || !advanced || didAdvance || sends != 1 {
-		t.Fatalf("duplicate advance = (%v, %v, %v), sends=%d", advanced, didAdvance, ok, sends)
-	}
-}
-
 func TestPiProjectTrustPromptAdvancesSessionOnly(t *testing.T) {
 	trust := `
 ────────────────────────────────────────────────────────────────────────
@@ -1089,7 +1029,6 @@ func TestPiProjectTrustPromptAdvancesSessionOnly(t *testing.T) {
 		false,
 		"pi --session /tmp/owned.jsonl --no-extensions",
 		trust,
-		"",
 		func() error { return nil },
 		func(key string) error { sent = key; return nil },
 	)
@@ -1118,27 +1057,6 @@ func TestPiProjectTrustPromptRejectsIncompleteOrForeignSurface(t *testing.T) {
 		if isPiProjectTrustPrompt("codex", content) {
 			t.Fatalf("foreign/incomplete trust surface accepted: %q", content)
 		}
-	}
-}
-
-func TestCodexWorkspaceTrustPromptIdentityChangePreventsAdvance(t *testing.T) {
-	trust := "> You are in /workspace/future\n\n" +
-		"  Do you trust the contents of this directory?\n\n" +
-		"› 1. Yes, continue\n  2. No, quit\n\n  Press enter to continue\n"
-	sends := 0
-	advanced, didAdvance, ok := advanceStartupTrustPromptOnce(
-		false,
-		"codex",
-		trust,
-		"/workspace/future",
-		func() error { return errors.New("provider generation changed") },
-		func(string) error {
-			sends++
-			return nil
-		},
-	)
-	if ok || advanced || didAdvance || sends != 0 {
-		t.Fatalf("identity change advanced trust = (%v, %v, %v), sends=%d", advanced, didAdvance, ok, sends)
 	}
 }
 
@@ -2377,6 +2295,23 @@ func TestClaudeReadinessRecognizesCommandOverrides(t *testing.T) {
 	} {
 		if !needsInputReadinessWait(command, "") || !isWorkerInputReady(command, pane) {
 			t.Fatalf("Claude command override %q was not recognized as ready", command)
+		}
+	}
+}
+
+// A Codex trust screen is never answered for the person: a delegated launch
+// carries its folder trust, and a person's own session is theirs to answer.
+func TestCodexTrustScreenIsNeverAnsweredByMewla(t *testing.T) {
+	for _, screen := range []string{
+		"> You are in /workspace/future\n  Do you trust the contents of this directory?\n› 1. Yes, continue\n  2. No, quit\n  Press enter to continue\n",
+		"  Folder access\n  /workspace/future\n  Trust this folder? Codex can read, edit, and run files here.\n› 1. Trust and continue\n  2. Quit\n",
+	} {
+		_, didAdvance, ok := advanceStartupTrustPromptOnce(false, "codex", screen, nil, func(key string) error {
+			t.Fatalf("sent %q to a Codex trust screen", key)
+			return nil
+		})
+		if didAdvance || !ok {
+			t.Fatalf("didAdvance=%v ok=%v", didAdvance, ok)
 		}
 	}
 }

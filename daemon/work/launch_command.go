@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 // launchModelFlags is one client's verified per-launch selection surface.
@@ -91,7 +93,7 @@ func withLaunchModel(provider, command, model, reasoning string) (string, error)
 			return "", fmt.Errorf("pi model %q already carries a thinking level; pass the level only with -reasoning", model)
 		}
 	}
-	fields, ok := splitSupportedLaunchFields(command)
+	fields, ok := shellquote.Fields(command)
 	options, inspectable := inspectLaunchCommandOptions(command)
 	if !ok || !inspectable || options.terminated {
 		return "", fmt.Errorf("per-launch model/reasoning requires a direct %s command without shell composition or -- terminator", provider)

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/daoleno/mewla/daemon/codextrust"
 )
 
 func TestCompileCodexLiveControlWrapper(t *testing.T) {
@@ -332,4 +334,28 @@ func mustDecodeDurable(t *testing.T, raw []byte) []SessionRouteState {
 		t.Fatal(err)
 	}
 	return states
+}
+
+// The app-server loads the folder's own config, so the profile wrapper hands it
+// the folder trust the delegated launch put on the command line.
+func TestCompileCodexLiveControlForwardsFolderTrustToTheAppServer(t *testing.T) {
+	profile := codexResponsesProfile("gw", "gpt-5", "org/m1")
+	trust := codextrust.Flag(`/work/it's "odd"`)
+	resolved, err := Compile("codex --dangerously-bypass-hook-trust "+trust, profile, CompileOptions{
+		LoopbackRouteURL:        "http://127.0.0.1:4317/r/rt_x/v1",
+		CatalogRevision:         1,
+		Lookup:                  readyLookup("secret"),
+		VerifiedProfileContract: contractFor(profile),
+		CodexControlSocket:      "/tmp/mewla/codex-ctl-abc.sock",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, _, ok := strings.Cut(resolved.Command, " > ")
+	if !ok || !strings.Contains(server, " "+trust) {
+		t.Fatalf("app-server half lacks the folder trust:\n%s", resolved.Command)
+	}
+	if !strings.Contains(resolved.Command[len(server):], trust) {
+		t.Fatalf("TUI half lost the folder trust:\n%s", resolved.Command)
+	}
 }

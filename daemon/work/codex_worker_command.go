@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 var safeLaunchToken = regexp.MustCompile(`^[a-zA-Z0-9_./:@+=,-]+$`)
@@ -32,7 +34,7 @@ func joinLaunchTokens(args []string) string {
 // Normalize direct codex commands, including resume. Reject shell composition
 // rather than pretending to enforce policy inside an arbitrary shell program.
 func codexCommandParts(command string, autonomous bool) (out []string, model, reasoning string, err error) {
-	args, ok := splitSupportedLaunchFields(command)
+	args, ok := shellquote.Fields(command)
 	opts, inspectable := inspectLaunchCommandOptions(command)
 	if !ok || !inspectable || opts.executable != "codex" || opts.terminated {
 		return nil, "", "", fmt.Errorf("delegated Codex requires a direct codex command (resume supported), without shell composition or -- terminator")

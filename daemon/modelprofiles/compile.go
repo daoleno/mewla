@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/daoleno/mewla/daemon/codextrust"
 	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
@@ -170,6 +171,9 @@ func compileCodexAppServerLive(baseCommand, explicitModel, tuiCommand, socket, l
 		appServer = appendConfig(appServer, fmt.Sprintf("model=%s", tomlString(explicitModel)))
 	}
 	appServer = appendConfig(appServer, `model_provider="openai"`)
+	// The app-server loads the folder's own config, so it carries the launch's
+	// folder trust; the attached TUI shows no trust screen.
+	appServer += codextrust.Forwarded(tuiCommand)
 	appServer = appendConfig(appServer, fmt.Sprintf("openai_base_url=%s", tomlString(loopbackRouteURL)))
 	if path := normalizeSpace(modelCatalogPath); path != "" {
 		appServer = appendConfig(appServer, fmt.Sprintf("model_catalog_json=%s", tomlString(path)))
