@@ -46,6 +46,7 @@ OFL redistribution still expects copyright/license notice availability to recipi
 | `app/assets/branding/mewla-*`, `site/mark.png`, `site/favicon*`, `site/apple-touch-icon.png`, `site/og-card.png` | First-party Mewla mark: the default pet (`p05`) in the vermilion seal, generated the same way | Product assets; not third-party. See [TRADEMARKS.md](../TRADEMARKS.md). |
 | `docs/assets/*`                                                               | First-party drawings (`scripts/site-svg/`, embedding the mark and the default pet) and demo app screenshots | Product assets; not third-party.                                     |
 | Product logos in `site/index.html` and `app/components/plugins/ServiceMarks.tsx` | [LobeHub Icons](https://github.com/lobehub/lobe-icons) (AI brands), [Simple Icons](https://simpleicons.org) (the rest) | MIT and CC0; the marks stay their owners' trademarks. |
+| Hyperliquid mark in `site/index.html` and `app/components/plugins/serviceMarkPaths.ts` | The symbol (first path) of the logo SVG inlined on [hyperliquid.xyz](https://hyperliquid.xyz); Simple Icons has no Hyperliquid glyph | Hyperliquid's own mark, shown only to name its plugin; it stays Hyperliquid's trademark. |
 | `app/assets/theme/`                                                           | No bundled rasters                      | README only; do not add unattributed stock.                                |
 
 Removed from the tree (unknown provenance): former `sky-meadow-ambient.webp` and `moonlit-meadow-ambient.webp`.
