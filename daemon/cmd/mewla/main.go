@@ -310,12 +310,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetProviderActivityProbe(newEventActivityProbe(eventHub, newWorkProviderActivityProbe()))
 	// A Codex that Mewla started announces its thread and rollout; its
 	// conversation is read from there instead of being searched for.
-	work.CodexBoundRollout = func(workerID string) string {
-		if state, ok := eventHub.State(workerID); ok && state.Bound && !state.Exited {
-			return state.Binding.Ref
-		}
-		return ""
-	}
+	work.CodexBoundRollout = hubBoundTranscript(eventHub)
+	// A Claude that Mewla started reports its transcript with its hooks.
+	work.ClaudeBoundTranscript = hubBoundTranscript(eventHub)
 	sc := stats.NewCollector()
 
 	workRoot, err := work.DefaultRoot()
@@ -680,6 +677,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetTelegram(telegramManager)
 	controlHandler.telegram = telegramManager
 	srv.SetModelProfiles(profileOwner)
+	// Native-settings reads and writes follow the thread Codex announced for the
+	// Session, not one chosen by folder among the app-server's loaded threads.
+	hubThread := hubConversation(eventHub)
+	profileOwner.SetNativeThreadSource(hubThread)
+	srv.SetCodexThreadSource(hubThread)
 	controlHandler.threadRuntimeSet = func(sessionID string, choice modelprofiles.ThreadRuntimeChoice) (modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error) {
 		snapshot, persist, err := srv.SetThreadRuntime(sessionID, choice)
 		return snapshot, persist, err

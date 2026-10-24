@@ -91,6 +91,21 @@ func (r *ProviderConversationReader) findCursorTranscript(worker classifier.Work
 		return cursorTranscriptCandidate{}, false, err
 	}
 
+	// A chat Mewla created for the launch is named in the command: its
+	// transcript is read, or waited for, directly instead of listing every
+	// chat the folder has.
+	if sessionID := cursorResumeSessionID(worker.Command); sessionID != "" {
+		for _, root := range projectRoots {
+			path := filepath.Join(root.dir, cursorTranscriptDir, sessionID, sessionID+".jsonl")
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				return cursorTranscriptCandidate{
+					ID: sessionID, CWD: root.cwd, Path: path,
+					CreatedAt: cursorTranscriptCreatedAt(path), Updated: info.ModTime(),
+				}, true, nil
+			}
+		}
+	}
+
 	var candidates []cursorTranscriptCandidate
 	for _, root := range projectRoots {
 		projectDir := root.dir

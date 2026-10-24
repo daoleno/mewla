@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -788,5 +789,63 @@ func TestTerminalEffortOnlyChangeConvergesInterfaceProjection(t *testing.T) {
 	}
 	if len(upstreamBodies) != 1 || !strings.Contains(upstreamBodies[0], `"effort":"low"`) {
 		t.Fatalf("upstream must receive the converged low effort: %#v", upstreamBodies)
+	}
+}
+
+func codexThreadSwitchFixture(t *testing.T, sessionID string, announced string) (*Server, *fakeLiveControl, *modelprofiles.Owner, modelprofiles.Profile) {
+	t.Helper()
+	owner := startLiveProfileOwner(t)
+	bindLiveCodexSession(t, owner, sessionID)
+	target := modelprofiles.Profile{
+		ID: "provider-b", Name: "Provider B", ExecutorID: modelprofiles.ExecutorCodex,
+		ProviderID: "b", ProviderLabel: "B", Protocol: modelprofiles.ProtocolOpenAIResponses,
+		ClientModel: "gpt-5.5", Model: "gpt-5.5", BaseURL: "https://gateway.example/v1",
+		AuthMode: modelprofiles.AuthModeBearerEnv, CredentialEnv: "B_KEY",
+	}
+	if _, err := owner.UpsertProfile(target, 1, true); err != nil {
+		t.Fatal(err)
+	}
+	live := &fakeLiveControl{resolvedID: "thread-by-folder"}
+	srv := &Server{}
+	srv.SetModelProfiles(owner)
+	srv.codexLiveDial = func(context.Context, string) (codexctl.LiveControl, error) { return live, nil }
+	srv.SetCodexThreadSource(func(id string) string {
+		if id != sessionID {
+			return ""
+		}
+		return announced
+	})
+	return srv, live, owner, target
+}
+
+func TestSetThreadRuntimeAppliesToTheThreadCodexAnnounced(t *testing.T) {
+	const sessionID = "tmux:@live-native-announced"
+	srv, live, _, target := codexThreadSwitchFixture(t, sessionID, "thread-from-hub")
+	_, persist, err := srv.SetThreadRuntime(sessionID, modelprofiles.ThreadRuntimeChoice{
+		ConnectionID: target.ID, ModelID: target.Model, Effect: "high",
+	})
+	if err != nil || !persist.Applied {
+		t.Fatalf("switch err=%v persist=%#v", err, persist)
+	}
+	if got := live.lastApplied().ThreadID; got != "thread-from-hub" {
+		t.Fatalf("applied to thread %q, want the announced thread, not the folder guess", got)
+	}
+}
+
+func TestSetThreadRuntimeWaitsForCodexToAnnounceItsThread(t *testing.T) {
+	const sessionID = "tmux:@live-native-silent"
+	srv, live, owner, target := codexThreadSwitchFixture(t, sessionID, "")
+	before, _ := owner.ThreadRuntime(sessionID)
+	_, persist, err := srv.SetThreadRuntime(sessionID, modelprofiles.ThreadRuntimeChoice{
+		ConnectionID: target.ID, ModelID: target.Model, Effect: "high",
+	})
+	if err == nil || persist.Applied {
+		t.Fatalf("switch must fail before Codex announces a thread: err=%v persist=%#v", err, persist)
+	}
+	if applied := live.lastApplied(); applied.ThreadID != "" {
+		t.Fatalf("applied %#v without an announced thread", applied)
+	}
+	if after, _ := owner.ThreadRuntime(sessionID); !reflect.DeepEqual(after, before) {
+		t.Fatalf("runtime changed after a failed switch: %#v -> %#v", before, after)
 	}
 }

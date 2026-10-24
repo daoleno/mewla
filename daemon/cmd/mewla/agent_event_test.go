@@ -257,3 +257,43 @@ func TestAnApprovalCannotBeAnsweredOnceTheWorkerLeftItsConversation(t *testing.T
 		t.Fatal("an approval from another conversation was decided")
 	}
 }
+
+// The Hub is in the daemon's memory, so a restart forgets the SessionStart that
+// bound a running Claude. Its next hook of any kind puts the binding back, so
+// the transcript is read directly again; a stranger's hook does not.
+func TestClaudeBindingSurvivesADaemonRestartOnTheNextHook(t *testing.T) {
+	worker := &classifier.Worker{ID: "%4", Command: "claude --session-id s-1"}
+	s, hub := newTestAgentEvents(worker)
+	ctx := context.Background()
+	s.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"SessionStart","session_id":"s-1","transcript_path":"/c/projects/p/s-1.jsonl"}`))
+	if got := hubBoundTranscript(hub)("%4"); got != "/c/projects/p/s-1.jsonl" {
+		t.Fatalf("bound = %q", got)
+	}
+
+	// Restart: a new Hub knows nothing.
+	s2, hub2 := newTestAgentEvents(worker)
+	if got := hubBoundTranscript(hub2)("%4"); got != "" {
+		t.Fatalf("a fresh Hub claims %q", got)
+	}
+	s2.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"PostToolUse","session_id":"s-1","transcript_path":"/c/projects/p/s-1.jsonl"}`))
+	if got := hubBoundTranscript(hub2)("%4"); got != "/c/projects/p/s-1.jsonl" {
+		t.Fatalf("after the next hook bound = %q", got)
+	}
+	// An unchanged binding is not republished.
+	before, _ := hub2.State("%4")
+	s2.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"PostToolUse","session_id":"s-1","transcript_path":"/c/projects/p/s-1.jsonl"}`))
+	after, _ := hub2.State("%4")
+	if !after.LastEvent.After(before.LastEvent) && after.Binding != before.Binding {
+		t.Fatalf("binding changed: %+v -> %+v", before.Binding, after.Binding)
+	}
+	// Another Claude that inherited the Worker's id cannot move the binding.
+	s2.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"PostToolUse","session_id":"other","transcript_path":"/elsewhere/other.jsonl"}`))
+	if got := hubBoundTranscript(hub2)("%4"); got != "/c/projects/p/s-1.jsonl" {
+		t.Fatalf("a stranger moved the binding to %q", got)
+	}
+	// An exited Worker has no transcript to read.
+	s2.Handle(ctx, hook("claude", "%4", `{"hook_event_name":"SessionEnd","session_id":"s-1"}`))
+	if got := hubBoundTranscript(hub2)("%4"); got != "" {
+		t.Fatalf("exited Worker still bound to %q", got)
+	}
+}

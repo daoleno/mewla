@@ -172,6 +172,7 @@ type Server struct {
 	brainHostRecovery           chan struct{}
 	signalSystemStartupComplete bool
 	workerFeed                  workerFeed
+	codexThread                 func(sessionID string) string
 
 	clients            map[*websocket.Conn]*authenticatedClient
 	active             map[*websocket.Conn]string
