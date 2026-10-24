@@ -25,6 +25,8 @@ type fakeClaudeChoiceTUI struct {
 	toggleOffset int
 	// renameQuestion swaps the question text after this many keys.
 	renameAfter int
+	// frozen simulates a Terminal that stops reacting to Enter.
+	frozen bool
 }
 
 func newFakeClaudeChoiceTUI(questions ...ClaudeChoiceQuestion) *fakeClaudeChoiceTUI {
@@ -148,6 +150,9 @@ func (t *fakeClaudeChoiceTUI) sendKey(key string) error {
 	case "Up":
 		t.cursor = max(t.cursor-1, 1)
 	case "Enter":
+		if t.frozen {
+			return nil
+		}
 		switch {
 		case !q.MultiSelect:
 			if t.cursor <= len(q.Options) {
@@ -318,4 +323,51 @@ func TestDriveClaudeChoice_StopsWithoutSubmittingWhenTheScreenDisagrees(t *testi
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+func TestDriveClaudeChoice_GoneOnlyWhenThePromptIsNotOnScreen(t *testing.T) {
+	answers := []ClaudeChoiceAnswer{{Selected: []int{0}}, {Selected: []int{0}}}
+	t.Run("same prompt on another tab is not gone", func(t *testing.T) {
+		tui := newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion)
+		tui.tab = 1
+		err := driveFake(t, tui, answers...)
+		if !errors.Is(err, ErrClaudeChoiceRefused) || errors.Is(err, ErrClaudeChoiceGone) || len(tui.keys) != 0 {
+			t.Fatalf("err=%v keys=%#v", err, tui.keys)
+		}
+	})
+	t.Run("same prompt on its review step is not gone", func(t *testing.T) {
+		tui := newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion)
+		tui.tab = 2
+		tui.answers = []string{"Apple", "Red"}
+		err := driveFake(t, tui, answers...)
+		if !errors.Is(err, ErrClaudeChoiceRefused) || errors.Is(err, ErrClaudeChoiceGone) || len(tui.keys) != 0 {
+			t.Fatalf("err=%v keys=%#v", err, tui.keys)
+		}
+	})
+	t.Run("no prompt on screen is gone", func(t *testing.T) {
+		tui := newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion)
+		tui.done = true
+		err := driveFake(t, tui, answers...)
+		if !errors.Is(err, ErrClaudeChoiceGone) || len(tui.keys) != 0 {
+			t.Fatalf("err=%v keys=%#v", err, tui.keys)
+		}
+	})
+	t.Run("a different prompt is gone", func(t *testing.T) {
+		tui := newFakeClaudeChoiceTUI(colorsQuestion, ClaudeChoiceQuestion{Question: "Pick a size?", Options: []string{"S", "L"}, AllowsOther: true})
+		questions := []ClaudeChoiceQuestion{fruitQuestion, ClaudeChoiceQuestion{Question: "Ship it?", Options: []string{"Yes", "No"}, AllowsOther: true}}
+		expected, _ := ExpectedClaudeChoiceAnswers(questions, answers)
+		err := driveClaudeChoice(tui, questions, answers, expected, 100*time.Millisecond)
+		if !errors.Is(err, ErrClaudeChoiceGone) || len(tui.keys) != 0 {
+			t.Fatalf("err=%v keys=%#v", err, tui.keys)
+		}
+	})
+}
+
+func TestDriveClaudeChoice_UnresponsiveTerminalIsSaidInPlainWords(t *testing.T) {
+	tui := newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion)
+	tui.frozen = true
+	err := driveFake(t, tui, ClaudeChoiceAnswer{Selected: []int{0}}, ClaudeChoiceAnswer{Selected: []int{0}})
+	if !errors.Is(err, ErrClaudeChoiceRefused) || strings.Contains(err.Error(), "timed out") || !strings.Contains(err.Error(), "didn't respond") {
+		t.Fatalf("err = %v", err)
+	}
 }
