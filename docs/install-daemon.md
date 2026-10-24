@@ -56,7 +56,7 @@ Options, set as environment variables on `sh`:
 
 | Variable | Effect |
 | --- | --- |
-| `MEWLA_VERSION=v0.2.58` | Install this exact release tag, beta included, instead of the newest stable |
+| `MEWLA_VERSION=v0.2.59` | Install this exact release tag, beta included, instead of the newest stable |
 | `MEWLA_INSTALL_DIR="$HOME/bin"` | Install into this user-owned directory |
 | `MEWLA_NO_PATH_UPDATE=1` | Do not add the install directory to your shell profile |
 | `MEWLA_DRY_RUN=1` | Print the platform, version and destination; change nothing |
