@@ -50,6 +50,7 @@ import (
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/tmuxguard"
 	"github.com/daoleno/mewla/daemon/tmuxsocket"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -86,6 +87,11 @@ func directClaudePID(sessionID string) (int, bool) {
 }
 
 func main() {
+	// The pane tmux shim re-enters here for every `tmux` a Worker types; answer
+	// before any state, config or socket initialisation.
+	if len(os.Args) > 1 && os.Args[1] == "tmux-guard" {
+		os.Exit(tmuxguard.Main(os.Args[2:], os.Stderr))
+	}
 	if err := run(os.Args[1:], os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
@@ -304,6 +310,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("create daemon tmux scratch directory: %w", err)
 	}
 	w.SetTmuxServer(tmuxSocketPath, tmuxScratchDir)
+	// A plain `tmux` in a Worker or Brain pane must never fall back to the live
+	// default server. Best effort: without the shim panes keep the older
+	// TMUX_TMPDIR containment.
+	if guardDir, err := tmuxguard.Install(stateDir, watcher.ExecutablePath()); err != nil {
+		log.Printf("tmux guard shim unavailable: %v", err)
+	} else {
+		w.SetTmuxGuard(guardDir)
+	}
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
 	adapters := agentevents.NewRegistry()
 	agentEvents := newAgentEventService(eventHub, w.Workers)

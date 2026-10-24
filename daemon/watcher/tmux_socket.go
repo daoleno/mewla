@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/procspawn"
+	"github.com/daoleno/mewla/daemon/tmuxguard"
 	"github.com/daoleno/mewla/daemon/tmuxsocket"
 )
 
@@ -22,7 +23,7 @@ import (
 // tmuxCommand builds a tmux invocation bound to the given server socket.
 // Empty socketPath targets the user's default server.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
-	cmd := procspawn.Command(procspawn.Label("tmux", args), "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...)
+	cmd := tmuxguard.Pin(procspawn.Command(procspawn.Label("tmux", args), "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...))
 	cmd.Env = tmuxHostEnvironment()
 	return cmd
 }
@@ -33,7 +34,7 @@ func tmuxHostEnvironment() []string {
 	env := make([]string, 0, len(os.Environ()))
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "MEWLA_WORKER_") || strings.HasPrefix(key, "MEWLA_BRAIN_") || key == "MEWLA_BUILD_TMPDIR" || key == "MEWLA_WORKTREE_ROOT" || key == "MEWLA_STATE_DIR" {
+		if strings.HasPrefix(key, "MEWLA_WORKER_") || strings.HasPrefix(key, "MEWLA_BRAIN_") || strings.HasPrefix(key, "MEWLA_TMUX_") || key == "MEWLA_BUILD_TMPDIR" || key == "MEWLA_WORKTREE_ROOT" || key == "MEWLA_STATE_DIR" {
 			continue
 		}
 		env = append(env, entry)
