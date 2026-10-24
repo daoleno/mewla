@@ -2,24 +2,15 @@ package computers
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
-)
 
-// agentCommands are the agent CLIs a computer reports, by executable name.
-var agentCommands = []struct{ name, command string }{
-	{"claude", "claude"},
-	{"codex", "codex"},
-	{"agent", "cursor-agent"},
-	{"grok", "grok"},
-	{"pi", "pi"},
-	{"opencode", "opencode"},
-}
+	"github.com/daoleno/mewla/daemon/hostdeps"
+)
 
 var (
 	capsMu     sync.Mutex
@@ -38,13 +29,9 @@ func DetectCaps() Caps {
 	hostname, _ := os.Hostname()
 	caps := Caps{OS: runtime.GOOS, Arch: runtime.GOARCH, Hostname: ShortHostname(hostname)}
 	home, _ := os.UserHomeDir()
-	extra := []string{"/opt/homebrew/bin", "/usr/local/bin"}
-	if home != "" {
-		extra = append(extra, filepath.Join(home, ".local", "bin"), filepath.Join(home, ".bun", "bin"), filepath.Join(home, ".npm-global", "bin"))
-	}
-	for _, agent := range agentCommands {
-		if findCommand(agent.command, extra) {
-			caps.Agents = append(caps.Agents, agent.name)
+	for _, id := range hostdeps.AgentOrder() {
+		if _, err := hostdeps.LookPath(hostdeps.AgentCommand(id)); err == nil {
+			caps.Agents = append(caps.Agents, id)
 		}
 	}
 	if runtime.GOOS == "darwin" {
@@ -56,18 +43,6 @@ func DetectCaps() Caps {
 	}
 	capsCached, capsAt = caps, time.Now()
 	return caps
-}
-
-func findCommand(command string, extra []string) bool {
-	if _, err := exec.LookPath(command); err == nil {
-		return true
-	}
-	for _, dir := range extra {
-		if info, err := os.Stat(filepath.Join(dir, command)); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
-			return true
-		}
-	}
-	return false
 }
 
 func listApps(dirs []string) []string {

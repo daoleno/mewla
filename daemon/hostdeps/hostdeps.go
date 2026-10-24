@@ -207,6 +207,18 @@ type Agent struct {
 // than one agent CLI is ready. Claude Code comes first, as on mewla.ai.
 var agentOrder = []string{"claude", "codex", "agent", "grok", "pi", "opencode"}
 
+// agentCommands names the executable each agent id runs, where it differs from
+// the id: Cursor's CLI is installed as cursor-agent.
+var agentCommands = map[string]string{"agent": "cursor-agent"}
+
+// AgentCommand is the executable the agent id launches.
+func AgentCommand(id string) string {
+	if command := agentCommands[id]; command != "" {
+		return command
+	}
+	return id
+}
+
 // AgentOrder returns the executor ids in Mewla's preference order.
 func AgentOrder() []string {
 	return slices.Clone(agentOrder)
