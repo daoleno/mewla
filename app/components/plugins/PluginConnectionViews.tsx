@@ -5,7 +5,7 @@ import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
-import { dataUseNotice, GOOGLE_DATA_USE_URL, waitingDetail, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
+import { brainCanNow, dataUseNotice, GOOGLE_DATA_USE_URL, googleBlockedDetail, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 import {
   accessControl,
   accountRecovery,
@@ -246,6 +246,7 @@ export function ServiceHeader({ plugin, state }: { plugin: PluginIntegration; st
  */
 export function ConnectStatusCard({
   serviceName,
+  integration,
   phase,
   flow,
   error,
@@ -264,6 +265,8 @@ export function ConnectStatusCard({
 }: {
   /** Null for a return that names no service (a stale or replayed sign-in). */
   serviceName: string | null;
+  /** The service the sign-in was for, which a cancelled sign-in no longer has a flow to name. */
+  integration?: string;
   phase: ConnectPhase;
   flow: PendingConnection | null;
   error: string;
@@ -316,7 +319,7 @@ export function ConnectStatusCard({
   }
   if (phase === "waiting") {
     return (
-      <StatusCard busy title={`Waiting for ${serviceName}`} detail={waitingDetail(flow?.flow.integration, serviceName, error || undefined)}>
+      <StatusCard busy title={`Waiting for ${serviceName}`} detail={error || undefined}>
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>
@@ -335,7 +338,7 @@ export function ConnectStatusCard({
     const changes = accessControl(connected, "write");
     const changesOn = changes.kind === "switch" && changes.on;
     return (
-      <StatusCard glyph="check-circle-fill" glyphColor={colors.success} title={`${serviceName} connected`} detail={`${connected.access?.read === "none" ? `Brain can use ${connected.name} once you allow changes.` : `Brain can read and search ${connected.name}.`}${changes.kind === "consent" ? ` To let it make changes too, ${serviceName} asks you once more.` : ""}`}>
+      <StatusCard glyph="check-circle-fill" glyphColor={colors.success} title={`${serviceName} connected`} detail={`${connected.access?.read === "none" ? `Brain can use ${connected.name} once you allow changes.` : brainCanNow(job?.read, connected.name)}${changes.kind === "consent" ? ` To let it make changes too, ${serviceName} asks you once more.` : ""}`}>
         {changes.kind !== "none" && !changesOn ? (
           <Button label="Allow changes too" variant="tinted" block loading={allowing} onPress={() => onAllowChanges(connected)} accessibilityHint={job?.write} />
         ) : null}
@@ -345,7 +348,7 @@ export function ConnectStatusCard({
   }
   if ((phase === "failed" || phase === "cancelled") && error) {
     return (
-      <StatusCard glyph={phase === "failed" ? "alert-circle-fill" : "info-fill"} glyphColor={phase === "failed" ? colors.dangerText : colors.textSecondary} title={phase === "failed" ? `Couldn't connect ${serviceName}` : "Sign-in cancelled"} detail={error}>
+      <StatusCard glyph={phase === "failed" ? "alert-circle-fill" : "info-fill"} glyphColor={phase === "failed" ? colors.dangerText : colors.textSecondary} title={phase === "failed" ? `Couldn't connect ${serviceName}` : "Sign-in cancelled"} detail={googleBlockedDetail(flow?.flow.integration ?? integration, phase === "cancelled", error)}>
         <Button label="Start again" icon="refresh" variant="tinted" block loading={starting} onPress={onRetry} />
         <Button label="Dismiss" variant="plain" block onPress={onDismiss} />
       </StatusCard>
@@ -394,17 +397,27 @@ export function ConnectOffer({ plugin, job, serverName, connecting, disabled, on
       </ListSection>
     );
   }
+  // Google: connect, then the footnote Google's verification asks for, kept quiet.
+  const notice = dataUseNotice(plugin.id);
+  if (notice) {
+    return (
+      <>
+        <View style={styles.actions}>
+          <Button label={`Connect ${plugin.name}`} variant="filled" size="lg" block loading={connecting} disabled={disabled} onPress={onConnect} />
+        </View>
+        <AppText variant="caption" tone="tertiary" style={styles.footnote}>
+          {notice}{" "}
+          <AppText variant="caption" tone="accent" accessibilityRole="link" onPress={() => void Linking.openURL(GOOGLE_DATA_USE_URL)}>How Mewla uses your Google data</AppText>
+        </AppText>
+      </>
+    );
+  }
   return (
     <>
       <ListSection title="What Brain can do" footer={`Your sign-in stays on ${serverName}. Brain only acts on tasks you give it.`}>
         <ListRow icon="eye" title="Read and search" subtitle={job?.read} numberOfLines={3} value="On" />
         <ListRow icon="edit" title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} numberOfLines={3} value="Off" />
       </ListSection>
-      {dataUseNotice(plugin.id) ? (
-        <ListSection footer={dataUseNotice(plugin.id) ?? undefined}>
-          <ListRow icon="open-external" title="How Mewla uses your Google data" onPress={() => void Linking.openURL(GOOGLE_DATA_USE_URL)} />
-        </ListSection>
-      ) : null}
       <View style={styles.actions}>
         <Button label={`Connect ${plugin.name}`} variant="filled" size="lg" block loading={connecting} disabled={disabled} onPress={onConnect} />
         {onUseServerAccount ? <Button label="Use the GitHub login on this server" variant="plain" block disabled={disabled || connecting} onPress={onUseServerAccount} /> : null}
@@ -445,11 +458,13 @@ export function AccountCard({
 }) {
   const [confirming, setConfirming] = useState(false);
   const [confirmingKey, setConfirmingKey] = useState(false);
-  const network = networkLabel(account.network);
+  const network = account.network === "testnet" ? networkLabel(account.network) : null;
   const removingKey = running === `key:${account.id}`;
   const recovery = accountRecovery(account, plugin.name);
   const tools = allowedToolCount(account);
   const custom = plugin.id === "mcp" || plugin.id === "openapi";
+  // Hyperliquid's keyless reader has nothing to sign out of; its switch turns it off.
+  const keylessReader = plugin.id === "hyperliquid" && !account.address;
   const busy = running !== null;
   const recovering = running === `recover:${account.id}` || recovery?.action === "reconnect" && running === `connect:${plugin.id}` || recovery?.action === "disconnect" && running === `disconnect:${account.id}`;
   const removing = running === `disconnect:${account.id}`;
@@ -478,7 +493,7 @@ export function AccountCard({
         trailing={
           <View style={styles.accountControls}>
             {/* A fix row below names the state itself; the pill would repeat it. */}
-            {/* The network is always on the account, so testnet is never taken for mainnet. */}
+            {/* Mainnet is the default and needs no tag; testnet always has one, so it is never taken for mainnet. */}
             {network ? <StatusPill label={network} tone={account.network === "testnet" ? "warning" : "accent"} /> : null}
             {recovery ? null : <StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
             {running === `enabled:${account.id}` ? <ActivityIndicator /> : (
@@ -529,7 +544,7 @@ export function AccountCard({
             <Button label="Disconnect" variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then((done) => { if (!done) setConfirming(false); })} />
           </View>
         </View>
-      ) : (
+      ) : keylessReader ? null : (
         <ListRow icon="remove-circle" title="Disconnect" destructive disabled={busy} onPress={() => setConfirming(true)} />
       )}
     </ListSection>
@@ -715,6 +730,7 @@ const styles = StyleSheet.create({
   card: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
   cardTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardActions: { gap: 4, paddingTop: 4 },
+  footnote: { paddingHorizontal: 16 },
   code: { fontSize: 26, lineHeight: 34, letterSpacing: 2, paddingVertical: 4 },
   actions: { gap: 6, marginBottom: 26 },
   confirm: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },

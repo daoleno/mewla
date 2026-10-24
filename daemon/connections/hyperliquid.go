@@ -25,12 +25,14 @@ import (
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api and the
 // official Python SDK (hyperliquid-dex/hyperliquid-python-sdk).
 //
-// An account is one address on one network. The network is chosen when the
-// account is connected and shown wherever the account is; the other network is
-// another account. An API wallet is approved per network (approveAgent names
-// "Mainnet" or "Testnet") and signatures carry the network (phantom agent
-// source "a" or "b"), so a key is stored with the account it was approved for
-// and never reused for the other network.
+// Reading needs no setup: the daemon keeps one keyless mainnet account, and a
+// read names the address it concerns as an argument (Brain takes it from the
+// conversation). Trading needs only an API wallet key. The account it trades
+// for is the key's master user, which the info API's userRole names, and the
+// network is whichever one approved the key. An API wallet is approved per
+// network (approveAgent names "Mainnet" or "Testnet") and signatures carry the
+// network (phantom agent source "a" or "b"), so a key is stored with the
+// account it was approved for and never reused for the other network.
 const hlMaxRows = 200
 
 // hlEndpoint is the API origin of a network; the catalog names both.
@@ -56,14 +58,22 @@ func hlShort(address string) string {
 	return address[:6] + "…" + address[len(address)-4:]
 }
 
-// hlAccountName names an account by network and address, so the same address
-// on both networks is two clearly different accounts.
-func hlAccountName(network, address string) string {
-	return "Hyperliquid " + hlNetworkLabel(network) + " · " + hlShort(address)
+// hlAccountName names an account. The network shows as its own tag in the
+// app, and the testnet account says so in its name, so the same key on both
+// networks is two clearly different accounts.
+func hlAccountName(network string) string {
+	if network == "testnet" {
+		return "Hyperliquid Testnet"
+	}
+	return "Hyperliquid"
 }
 
 func hlIdentity(network, address string, trading bool) string {
-	identity := hlNetworkLabel(network) + " · " + hlShort(address)
+	if address == "" {
+		// The keyless reader: the network shows as its tag.
+		return "Read only"
+	}
+	identity := hlShort(address)
 	if trading {
 		identity += " · trading key saved"
 	} else {
@@ -299,25 +309,31 @@ func (m *Manager) hlInfo(ctx context.Context, r *record, req map[string]any) (js
 func (m *Manager) discoverHyperliquid(ctx context.Context, r *record, secret string) ([]Tool, error) {
 	a := &r.Account
 	if a.Network != "mainnet" && a.Network != "testnet" {
-		return nil, errors.New("choose Mainnet or Testnet")
-	}
-	if !hlValidAddress(a.Address) {
-		return nil, errors.New("enter the account address: 0x followed by 40 hex digits")
+		return nil, errors.New("this account has no network; connect it again")
 	}
 	a.Endpoint = hlEndpoint(a.Network)
+	a.Signer = ""
+	if a.Address == "" {
+		// The keyless reader: its reads name their own address, so there is
+		// nothing to verify and no request to make.
+		if secret != "" {
+			return nil, errors.New("a trading key needs its account address; connect the key again")
+		}
+		a.Identity = hlIdentity(a.Network, "", false)
+		return hlReadTools(), nil
+	}
+	if !hlValidAddress(a.Address) {
+		return nil, errors.New("this account has no valid address; connect it again")
+	}
 	if _, err := m.hlInfo(ctx, r, map[string]any{"type": "clearinghouseState", "user": a.Address}); err != nil {
 		return nil, errors.New("could not reach Hyperliquid " + hlNetworkLabel(a.Network) + ": " + err.Error())
 	}
-	a.Signer = ""
 	if secret != "" {
 		key, err := hlParseKey(secret)
 		if err != nil {
 			return nil, err
 		}
 		signer := hlAddress(key)
-		if hlSameAddress(signer, a.Address) {
-			return nil, errors.New("this is the key of the account itself. Paste an API wallet key instead: create one at app.hyperliquid.xyz/API, which can trade but cannot withdraw")
-		}
 		raw, err := m.hlInfo(ctx, r, map[string]any{"type": "extraAgents", "user": a.Address})
 		if err != nil {
 			return nil, err
@@ -336,22 +352,32 @@ func (m *Manager) discoverHyperliquid(ctx context.Context, r *record, secret str
 			}
 		}
 		if !approved {
-			site := "app.hyperliquid.xyz/API"
-			if a.Network == "testnet" {
-				site = "app.hyperliquid-testnet.xyz/API"
-			}
-			return nil, fmt.Errorf("this key (%s) is not an approved API wallet for %s on %s. API wallets are approved per network: approve it at %s", hlShort(signer), hlShort(a.Address), hlNetworkLabel(a.Network), site)
+			return nil, errors.New("this API wallet is no longer approved. Create a new one at " + hlAPIPage(a.Network))
 		}
 		a.Signer = signer
 	}
 	a.Identity = hlIdentity(a.Network, a.Address, a.Signer != "")
+	if secret != "" {
+		return hyperliquidTools(), nil
+	}
+	return hlReadTools(), nil
+}
+
+func hlReadTools() []Tool {
 	var tools []Tool
 	for _, t := range hyperliquidTools() {
-		if t.Read || secret != "" {
+		if t.Read {
 			tools = append(tools, t)
 		}
 	}
-	return tools, nil
+	return tools
+}
+
+func hlAPIPage(network string) string {
+	if network == "testnet" {
+		return "app.hyperliquid-testnet.xyz/API"
+	}
+	return "app.hyperliquid.xyz/API"
 }
 
 // ---- invoke -------------------------------------------------------------
@@ -431,13 +457,17 @@ func hlTime(args map[string]any, key string, def time.Time) (time.Time, error) {
 	return t, nil
 }
 
-// hlAddressArg is the address a read concerns: the one named, else the account's.
+// hlAddressArg is the address a read concerns: the one named, else the
+// account's own, which the keyless reader lacks.
 func hlAddressArg(r *record, args map[string]any) (string, error) {
 	if a := hlStr(args, "address"); a != "" {
 		if !hlValidAddress(a) {
 			return "", errors.New("address must be 0x followed by 40 hex digits")
 		}
 		return strings.ToLower(a), nil
+	}
+	if r.Account.Address == "" {
+		return "", errors.New("name the account to read: pass its 0x address as `address`")
 	}
 	return r.Account.Address, nil
 }
@@ -512,7 +542,9 @@ func (m *Manager) hlRead(ctx context.Context, r *record, name string, args map[s
 	now := time.Now()
 	switch name {
 	case "get_me":
-		out["address"] = r.Account.Address
+		if r.Account.Address != "" {
+			out["address"] = r.Account.Address
+		}
 		out["trading_enabled"] = r.Account.Signer != ""
 		if r.Account.Signer != "" {
 			out["api_wallet"] = r.Account.Signer
@@ -1041,52 +1073,104 @@ func (m *Manager) hlSend(ctx context.Context, r *record, key *secp256k1.PrivateK
 
 // ---- connect ----------------------------------------------------------------
 
-// addHyperliquid connects an address on a network, with an optional API wallet
-// key. Connecting an address and network that is already connected updates
-// that account, so adding a key later needs no second account. Without a key
-// the account is read-only, and an existing key is kept.
+// hlResolveKey finds the account an API wallet key trades for. The info API's
+// userRole maps an approved agent address to its master user, on the network
+// that approved it. Mainnet is tried first; hint limits the search to one
+// network.
+func (m *Manager) hlResolveKey(ctx context.Context, signer, hint string) (network, master string, err error) {
+	networks := []string{"mainnet", "testnet"}
+	if hint != "" {
+		networks = []string{hint}
+	}
+	role := ""
+	for _, n := range networks {
+		probe := &record{Account: Account{Endpoint: hlEndpoint(n)}}
+		raw, e := m.hlInfo(ctx, probe, map[string]any{"type": "userRole", "user": signer})
+		if e != nil {
+			return "", "", errors.New("could not reach Hyperliquid " + hlNetworkLabel(n) + ": " + e.Error())
+		}
+		var out struct {
+			Role string `json:"role"`
+			Data struct {
+				User string `json:"user"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(raw, &out) != nil {
+			return "", "", errors.New("Hyperliquid did not say what this key is")
+		}
+		if out.Role == "agent" && hlValidAddress(out.Data.User) {
+			return n, strings.ToLower(out.Data.User), nil
+		}
+		if out.Role != "" && out.Role != "missing" {
+			role = out.Role
+		}
+	}
+	switch role {
+	case "":
+		return "", "", errors.New("This key isn't an approved API wallet. Create one at " + hlAPIPage(networks[0]) + ", then paste its key.")
+	case "user":
+		return "", "", errors.New("That is a wallet's own key. Paste an API wallet key instead: create one at " + hlAPIPage(networks[0]) + ". It can trade but not withdraw.")
+	default:
+		return "", "", errors.New("That key belongs to a " + role + ", which Mewla can't trade for.")
+	}
+}
+
+// addHyperliquid adds a trading key. The key alone says which account it
+// trades for and on which network. A mainnet key upgrades the keyless reader
+// in place, so Brain never sees two sets of read tools; a key for an account
+// that is already connected updates that account.
 func (m *Manager) addHyperliquid(ctx context.Context, in *Input) (Response, error) {
-	network := strings.ToLower(strings.TrimSpace(in.Network))
-	address := strings.ToLower(strings.TrimSpace(in.Address))
+	hint := strings.ToLower(strings.TrimSpace(in.Network))
 	key := strings.TrimSpace(in.Credential)
-	if network != "mainnet" && network != "testnet" {
+	if hint != "" && hint != "mainnet" && hint != "testnet" {
 		return Response{}, errors.New("choose Mainnet or Testnet")
 	}
-	if !hlValidAddress(address) {
-		return Response{}, errors.New("enter the account address: 0x followed by 40 hex digits")
+	if key == "" {
+		return Response{}, errors.New("paste an API wallet key")
 	}
 	if len(key) > 200 || strings.ContainsAny(key, "\r\n") {
 		return Response{}, errors.New("invalid API wallet key")
 	}
-	var existing *record
+	parsed, err := hlParseKey(key)
+	if err != nil {
+		return Response{}, err
+	}
+	network, address, err := m.hlResolveKey(ctx, hlAddress(parsed), hint)
+	if err != nil {
+		return Response{}, errors.New(redactText(err.Error(), key))
+	}
+	var existing, reader *record
 	for _, r := range m.records {
-		if r.Account.Integration == "hyperliquid" && r.Account.Network == network && r.Account.Address == address && r.Account.Status != "disconnected" {
-			existing = r
+		if r.Account.Integration != "hyperliquid" || r.Account.Network != network || r.Account.Status == "disconnected" {
+			continue
 		}
+		if r.Account.Address == address {
+			existing = r
+		} else if r.Account.Address == "" {
+			reader = r
+		}
+	}
+	if existing == nil && reader != nil {
+		existing = reader
 	}
 	if existing == nil && len(m.records) >= 50 {
 		return Response{}, errors.New("maximum of 50 accounts reached")
 	}
 	r := existing
 	if r == nil {
-		r = &record{Account: Account{ID: uuid.NewString(), Integration: "hyperliquid", Name: hlAccountName(network, address), Network: network, Address: address, Endpoint: hlEndpoint(network), Enabled: true, History: []Event{}}, Grants: map[string]string{}}
-	}
-	ref := "integration:" + r.Account.ID
-	secret := key
-	if secret == "" && existing != nil {
-		if saved, ok, err := m.vault.Get(ref); err == nil && ok {
-			secret = saved
-		}
+		r = &record{Account: Account{ID: uuid.NewString(), Integration: "hyperliquid", Network: network, Enabled: true, History: []Event{}}, Grants: map[string]string{}}
 	}
 	candidate := *r
 	candidate.Account = cloneAccount(r.Account)
-	if err := m.discover(ctx, &candidate, secret); err != nil {
-		return Response{}, errors.New(redactText(err.Error(), secret))
+	candidate.Account.Network = network
+	candidate.Account.Address = address
+	candidate.Account.Name = hlAccountName(network)
+	if err := m.discover(ctx, &candidate, key); err != nil {
+		return Response{}, errors.New(redactText(err.Error(), key))
 	}
-	if key != "" {
-		if err := m.vault.Set(ref, key); err != nil {
-			return Response{}, errors.New("credential could not be stored")
-		}
+	ref := "integration:" + r.Account.ID
+	if err := m.vault.Set(ref, key); err != nil {
+		return Response{}, errors.New("credential could not be stored")
 	}
 	before := map[string]bool{}
 	for _, t := range r.Account.Tools {
@@ -1119,6 +1203,32 @@ func (m *Manager) addHyperliquid(ctx context.Context, in *Input) (Response, erro
 	}
 	a := m.projection(r)
 	return Response{Account: &a}, nil
+}
+
+// ensureHyperliquidReader keeps one keyless mainnet account, so reading
+// Hyperliquid works with nothing configured. It makes no request. It adds
+// none while a mainnet account is active, and none after the person
+// disconnected the reader itself.
+func (m *Manager) ensureHyperliquidReader() error {
+	for _, r := range m.records {
+		a := r.Account
+		if a.Integration != "hyperliquid" || a.Network != "mainnet" {
+			continue
+		}
+		if a.Status != "disconnected" || a.Address == "" {
+			return nil
+		}
+	}
+	r := &record{Account: Account{ID: uuid.NewString(), Integration: "hyperliquid", Name: "Hyperliquid", Network: "mainnet", Endpoint: hlEndpoint("mainnet"), Identity: hlIdentity("mainnet", "", false), Enabled: true, Status: "connected", Tools: hlReadTools(), History: []Event{}}, Grants: map[string]string{}}
+	for _, t := range r.Account.Tools {
+		r.Grants[t.Name] = fingerprint(t)
+	}
+	m.records[r.Account.ID] = r
+	if err := m.save(); err != nil {
+		delete(m.records, r.Account.ID)
+		return err
+	}
+	return nil
 }
 
 func redactText(text, secret string) string {

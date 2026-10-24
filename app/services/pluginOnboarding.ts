@@ -65,14 +65,20 @@ export function dataUseNotice(integration: string): string | null {
     ? "Mewla's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements."
     : null;
 }
-/** The line under "Waiting for <service>". Google's review of Mewla blocks accounts that aren't on its early-access list on Google's own page, which never comes back, so say so while waiting. */
-export function waitingDetail(integration: string | undefined, serviceName: string, note?: string): string {
-  const base = `Finish signing in on ${serviceName}'s page. This updates when you're back.`;
-  const detail = integration === "google-calendar" || integration === "gmail"
-    ? `${base} If Google says Mewla isn't verified or blocks access, this Google account isn't on Mewla's early-access list yet.`
-    : base;
-  // A check that didn't get through (a flaky network) keeps the sign-in waiting and says why.
-  return note ? `${note} ${detail}` : detail;
+/**
+ * Why a Google sign-in ended without access. Google's block page for an
+ * account outside Mewla's early-access list never returns to the app, so the
+ * dismissed browser or Google's refusal is the only sign there is.
+ */
+export function googleBlockedDetail(integration: string | undefined, cancelled: boolean, message: string): string {
+  const google = integration === "google-calendar" || integration === "gmail";
+  return google && (cancelled || message === pluginReturnError("denied"))
+    ? "If Google blocked it, this account isn't on Mewla's early-access list yet."
+    : message;
+}
+/** What Brain can now do, in one line, from the service's read job. */
+export function brainCanNow(read: string | undefined, name: string): string {
+  return read ? `Brain can now ${read.charAt(0).toLowerCase()}${read.slice(1)}.` : `Brain can read and search ${name}.`;
 }
 type ConnectInput = NonNullable<ConnectionRequest["input"]>;
 // The web UI asks the daemon to return sign-in to its own origin; native apps
@@ -103,6 +109,6 @@ export const pluginJobs: Record<string, { read: string; write: string; example: 
   cloudflare: { read: "Search Cloudflare’s API and docs, and see your account", write: "Call any Cloudflare API your sign-in allows, reads included, such as listing Workers, managing R2 buckets or editing DNS", example: "Allow changes, then ask Brain to list your Workers and R2 buckets." },
   "google-calendar": { read: "List your calendars and events and check when you are free", write: "Create, change and delete events and reply to invitations", example: "Ask Brain what is on your calendar tomorrow and when you are free on Friday." },
   gmail: { read: "Search and read your email and labels", write: "Draft and send email, mark messages read, archive and label them", example: "Ask Brain to find the latest email about your flight and summarize it." },
-  hyperliquid: { read: "Read markets, order books, candles and funding, and an account's positions, orders, fills and PnL", write: "Place, change and cancel orders and set leverage, with the API wallet you add. Never withdrawals or transfers", example: "Ask Brain for the BTC order book, or what an account holds." },
+  hyperliquid: { read: "Read markets, order books, candles and funding, and any address's positions, orders, fills and PnL", write: "Place, change and cancel orders and set leverage, with the API wallet key you add. Never withdrawals or transfers", example: "Ask Brain for the BTC order book, or what an address holds." },
   slack: { read: "Find conversations and read channel messages", write: "Send and update messages", example: "Ask Brain to summarize a channel’s recent discussion." },
 };

@@ -200,223 +200,23 @@
     },
     "hyperliquid": {
       "credential": {
-        "account": {
-          "access": {
-            "read": "allowed",
-            "write": "none",
-            "allowed": 13,
-            "tools": 13
-          },
-          "address": "0x1234567890abcdef1234567890abcdef12345678",
-          "auth_method": "",
-          "enabled": true,
-          "endpoint": "https://api.hyperliquid.xyz",
-          "identity": "Mainnet · 0x1234…5678 · read only",
-          "integration": "hyperliquid",
-          "name": "Hyperliquid Mainnet · 0x1234…5678",
-          "network": "mainnet",
-          "scopes": null,
-          "status": "connected",
-          "tools": [
-            {
-              "allowed": true,
-              "fingerprint": "9b542ccceada4ad872d6d5b10326b19ab9dc9e5ed01ff87fc4c46eb3d6f0605b",
-              "group": "read",
-              "name": "get_me"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "f3e2d1a50a2e9f34d9487ee1e8d6b568406d406e5cbf46f91b2a985d6cc6e7d7",
-              "group": "read",
-              "name": "list_markets"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "88694a99c8693681999b7720a5b9c93c5fc360ca4f7cd68c607dd69d74c6223f",
-              "group": "read",
-              "name": "get_mids"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "7485095802bfc2ce0c9f0078973020aca8f25d8cdac8d1658fef07f41a7e84d5",
-              "group": "read",
-              "name": "get_book"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "f084a9f68b4062071b5e7b0af46d025634c22786db1822c367576917d5e54d7e",
-              "group": "read",
-              "name": "get_candles"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "ca3ff86b75e99c74029933f3fcdd0f5def282a0695aa17e98c681552ae1a703a",
-              "group": "read",
-              "name": "get_funding_history"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "718b76565b4f44b0fe0f57363718d35883de029ae5252da04a3691d36741bc82",
-              "group": "read",
-              "name": "get_account"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "d4be2b3d4e9f73d15cf4203de24197c38385653a331b4b29c70b25f4d9ad941b",
-              "group": "read",
-              "name": "get_open_orders"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "08d6cbb57807d8450740a2763f88f8452086cc36a2dec8ae396e46437a50a91e",
-              "group": "read",
-              "name": "get_fills"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "d53e723d1a1a4ec176aef7e0695f7102f4b1c9cfefea49de9bfe4a6048d1a756",
-              "group": "read",
-              "name": "get_funding_payments"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "82b6e262654ac4e2ce8892d8d1db5d420369db0a3ae4a4c141f5d791eac6c100",
-              "group": "read",
-              "name": "get_portfolio"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "73773df2e48bc69a5c4c2c98c3099f33d9be9709d203575f58fac7c3cbdea07b",
-              "group": "read",
-              "name": "get_vaults"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "45a53e7541430928efe23bcfa686606fda584f925a05e47966c10d1cd0df3c12",
-              "group": "read",
-              "name": "get_order_status"
-            }
-          ],
-          "trusted_networks": null
-        },
-        "requests": [
-          "POST https://api.hyperliquid.xyz/info body={\"type\":\"clearinghouseState\",\"user\":\"0x1234567890abcdef1234567890abcdef12345678\"}"
-        ]
+        "error": "an API wallet private key is 64 hexadecimal characters, with or without 0x",
+        "requests": []
       },
       "no_credential": {
-        "account": {
-          "access": {
-            "read": "allowed",
-            "write": "none",
-            "allowed": 13,
-            "tools": 13
-          },
-          "address": "0x1234567890abcdef1234567890abcdef12345678",
-          "auth_method": "",
-          "enabled": true,
-          "endpoint": "https://api.hyperliquid-testnet.xyz",
-          "identity": "Testnet · 0x1234…5678 · read only",
-          "integration": "hyperliquid",
-          "name": "Hyperliquid Testnet · 0x1234…5678",
-          "network": "testnet",
-          "scopes": null,
-          "status": "connected",
-          "tools": [
-            {
-              "allowed": true,
-              "fingerprint": "9b542ccceada4ad872d6d5b10326b19ab9dc9e5ed01ff87fc4c46eb3d6f0605b",
-              "group": "read",
-              "name": "get_me"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "f3e2d1a50a2e9f34d9487ee1e8d6b568406d406e5cbf46f91b2a985d6cc6e7d7",
-              "group": "read",
-              "name": "list_markets"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "88694a99c8693681999b7720a5b9c93c5fc360ca4f7cd68c607dd69d74c6223f",
-              "group": "read",
-              "name": "get_mids"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "7485095802bfc2ce0c9f0078973020aca8f25d8cdac8d1658fef07f41a7e84d5",
-              "group": "read",
-              "name": "get_book"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "f084a9f68b4062071b5e7b0af46d025634c22786db1822c367576917d5e54d7e",
-              "group": "read",
-              "name": "get_candles"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "ca3ff86b75e99c74029933f3fcdd0f5def282a0695aa17e98c681552ae1a703a",
-              "group": "read",
-              "name": "get_funding_history"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "718b76565b4f44b0fe0f57363718d35883de029ae5252da04a3691d36741bc82",
-              "group": "read",
-              "name": "get_account"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "d4be2b3d4e9f73d15cf4203de24197c38385653a331b4b29c70b25f4d9ad941b",
-              "group": "read",
-              "name": "get_open_orders"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "08d6cbb57807d8450740a2763f88f8452086cc36a2dec8ae396e46437a50a91e",
-              "group": "read",
-              "name": "get_fills"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "d53e723d1a1a4ec176aef7e0695f7102f4b1c9cfefea49de9bfe4a6048d1a756",
-              "group": "read",
-              "name": "get_funding_payments"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "82b6e262654ac4e2ce8892d8d1db5d420369db0a3ae4a4c141f5d791eac6c100",
-              "group": "read",
-              "name": "get_portfolio"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "73773df2e48bc69a5c4c2c98c3099f33d9be9709d203575f58fac7c3cbdea07b",
-              "group": "read",
-              "name": "get_vaults"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "45a53e7541430928efe23bcfa686606fda584f925a05e47966c10d1cd0df3c12",
-              "group": "read",
-              "name": "get_order_status"
-            }
-          ],
-          "trusted_networks": null
-        },
-        "requests": [
-          "POST https://api.hyperliquid-testnet.xyz/info body={\"type\":\"clearinghouseState\",\"user\":\"0x1234567890abcdef1234567890abcdef12345678\"}"
-        ]
+        "error": "paste an API wallet key",
+        "requests": []
       },
       "spec_on_other": {
-        "error": "choose Mainnet or Testnet",
+        "error": "an API wallet private key is 64 hexadecimal characters, with or without 0x",
         "requests": []
       },
       "trusted": {
-        "error": "choose Mainnet or Testnet",
+        "error": "an API wallet private key is 64 hexadecimal characters, with or without 0x",
         "requests": []
       },
       "unnamed": {
-        "error": "choose Mainnet or Testnet",
+        "error": "an API wallet private key is 64 hexadecimal characters, with or without 0x",
         "requests": []
       }
     },
@@ -793,7 +593,7 @@
       "name": "Hyperliquid",
       "available": true,
       "setup_url": "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api",
-      "description": "Markets and accounts on Hyperliquid, mainnet or testnet; trading only with an API wallet you add"
+      "description": "Markets and any address's positions, with no setup; trading with an API wallet key you add"
     },
     {
       "id": "linear",

@@ -29,11 +29,20 @@ export default function PluginServiceScreen() {
   const github = plugin.id === "github" ? () => void flow.useServerGitHub() : undefined;
   // A form brings its details; only a custom service's own sign-in opens a browser.
   const submit = (input: NonNullable<ConnectionRequest["input"]>, signIn = false) => flow.connect(plugin.id, { input, signIn });
-  // Hyperliquid is a reviewed service whose connect form asks for an address, a network and an optional key.
+  // Hyperliquid reads with no setup; its one form is the API wallet key that lets Brain trade.
   const trading = plugin.id === "hyperliquid";
   const form = trading
     ? <HyperliquidForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />
     : <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />;
+  const addAnother = (label: string) => <Button label={label} icon="add" variant="tinted" block onPress={() => setAdding(true)} />;
+  const tail = trading
+    // Reading needs no account of its own; only a trading key is added.
+    ? accounts.some((account) => account.signer) ? adding ? form : addAnother("Add another key") : form
+    : custom
+      ? !accounts.length || adding ? form : addAnother(plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service")
+      : !accounts.length
+        ? <ConnectOffer plugin={plugin} job={job} serverName={flow.serverName} connecting={connecting} disabled={!!otherConnecting} onConnect={connect} onUseServerAccount={github} />
+        : plugin.available ? <Button label={`Add another ${plugin.name} account`} icon="add" variant="tinted" block loading={connecting} disabled={!!otherConnecting} onPress={connect} /> : null;
   return <PluginsPage title={plugin.name}>
     <ServiceHeader plugin={plugin} />
     {accounts.map((account) => <ToolUpdatesNotice
@@ -56,15 +65,6 @@ export default function PluginServiceScreen() {
       onRemoveKey={trading ? () => flow.removeKey(account) : undefined}
       onOpenTools={() => router.push({ pathname: `${pluginServicePath(plugin.id)}/tools`, params: { account: account.id } } as never)}
     />)}
-    {!accounts.length ? custom || trading ? form : <ConnectOffer
-      plugin={plugin}
-      job={job}
-      serverName={flow.serverName}
-      connecting={connecting}
-      disabled={!!otherConnecting}
-      onConnect={connect}
-      onUseServerAccount={github}
-    /> : custom || trading ? adding ? form : <Button label={trading ? "Add another account or network" : plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service"} icon="add" variant="tinted" block onPress={() => setAdding(true)} />
-      : plugin.available ? <Button label={`Add another ${plugin.name} account`} icon="add" variant="tinted" block loading={connecting} disabled={!!otherConnecting} onPress={connect} /> : null}
+    {tail}
   </PluginsPage>;
 }

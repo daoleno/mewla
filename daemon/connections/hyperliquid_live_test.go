@@ -12,7 +12,7 @@ import (
 )
 
 // Opt-in: MEWLA_HL_LIVE=1 go test -run TestHyperliquidLive -v ./connections
-// Reads real data on both networks. The only write is a signed order from a
+// Reads real mainnet data with no connection configured. The only write is a signed order from a
 // throwaway key that Hyperliquid has not approved, which the exchange refuses
 // while naming the address it recovered from the signature. Nothing is traded.
 func TestHyperliquidLive(t *testing.T) {
@@ -24,12 +24,15 @@ func TestHyperliquidLive(t *testing.T) {
 		t.Fatal(err)
 	}
 	const hlp = "0xdfc24b077bc1425ad1dea75bcb6f8158e10df303" // Hyperliquidity Provider (HLP), a public vault
-	for _, network := range []string{"mainnet", "testnet"} {
-		r, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "hyperliquid", Network: network, Address: hlp}})
-		if err != nil {
-			t.Fatal(network, err)
+	// Reads need no connection: the keyless mainnet reader names each address.
+	if err := m.ensureHyperliquidReader(); err != nil {
+		t.Fatal(err)
+	}
+	for _, network := range []string{"mainnet"} {
+		id := ""
+		for _, r := range m.records {
+			id = r.Account.ID
 		}
-		id := r.Account.ID
 		for _, call := range []struct{ tool, args string }{
 			{"get_me", `{}`},
 			{"list_markets", `{"search":"BTC","limit":5}`},
@@ -37,11 +40,11 @@ func TestHyperliquidLive(t *testing.T) {
 			{"get_book", `{"coin":"BTC","depth":2,"timezone":"Asia/Shanghai"}`},
 			{"get_candles", `{"coin":"BTC","interval":"1h","limit":3,"timezone":"Asia/Shanghai"}`},
 			{"get_funding_history", `{"coin":"BTC","limit":3,"timezone":"Asia/Shanghai"}`},
-			{"get_account", `{}`},
-			{"get_open_orders", `{}`},
-			{"get_fills", `{"limit":2}`},
-			{"get_portfolio", `{"timeframe":"week"}`},
-			{"get_vaults", `{}`},
+			{"get_account", `{"address":"` + hlp + `"}`},
+			{"get_open_orders", `{"address":"` + hlp + `"}`},
+			{"get_fills", `{"address":"` + hlp + `","limit":2}`},
+			{"get_portfolio", `{"address":"` + hlp + `","timeframe":"week"}`},
+			{"get_vaults", `{"address":"` + hlp + `"}`},
 		} {
 			res, err := m.Handle(context.Background(), Request{Action: "invoke", ID: id, Tool: call.tool, Arguments: json.RawMessage(call.args)})
 			if err != nil {

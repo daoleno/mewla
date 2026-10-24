@@ -24,8 +24,9 @@ export type PluginAccount = {
   trusted_networks?: string[];
   auth_method?: string;
   scopes?: string[];
-  /** Hyperliquid: one address on one network. The other network is another account. */
+  /** Hyperliquid: an account is one network. */
   network?: "mainnet" | "testnet";
+  /** Hyperliquid: the account a trading key trades for; absent on the keyless reader. */
   address?: string;
   /** Hyperliquid: the saved API wallet's public address; absent when the account is read only. */
   signer?: string;
@@ -60,7 +61,7 @@ export type ConnectionRequest = {
   /** policy: several tools at once, all of them or none. confirm_updates and dismiss_updates: the updated tools shown. */
   tools?: string[];
   allowed?: boolean;
-  input?: { integration: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; address?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+  input?: { integration: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectFlow = {
   id: string;

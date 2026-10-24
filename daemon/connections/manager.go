@@ -60,6 +60,15 @@ func New(dir string) (*Manager, error) {
 	}
 	return m, err
 }
+
+// EnsureDefaults adds the accounts every server has without setup. It makes no
+// network request. The daemon calls it once at start.
+func (m *Manager) EnsureDefaults() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ensureHyperliquidReader()
+}
+
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
 	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
 	raw, err := os.ReadFile(path)
@@ -341,6 +350,12 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		r.Account.CredentialRemovalPending = false
 		if err := m.save(); err != nil {
 			return Response{}, err
+		}
+		// Disconnecting a trading account leaves reading as it was.
+		if r.Account.Integration == "hyperliquid" {
+			if err := m.ensureHyperliquidReader(); err != nil {
+				log.Printf("plugins: restoring the Hyperliquid reader: %v", err)
+			}
 		}
 	}
 	a := m.projection(r)

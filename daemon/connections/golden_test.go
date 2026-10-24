@@ -282,8 +282,6 @@ func canonicalJSON(raw []byte) string {
 // randomFields are per-flow secrets a request carries; their values change on every run.
 var randomFields = regexp.MustCompile(`"(public_key|nonce)":"[^"]*"`)
 
-const goldenAddress = "0x1234567890abcdef1234567890abcdef12345678"
-
 func goldenServices(t *testing.T, slackScopes string, slackBot bool) *goldenWire {
 	return &goldenWire{t: t, respond: func(req *http.Request, body []byte) (int, http.Header, string) {
 		switch req.URL.Host + req.URL.Path {
@@ -329,18 +327,12 @@ func goldenAdd(t *testing.T, ids []string) map[string]any {
 			if id == "openapi" {
 				in.Spec = spec
 			}
-			if id == "hyperliquid" {
-				in.Network, in.Address, in.Credential = "mainnet", goldenAddress, ""
-			}
 			return in
 		},
 		"no_credential": func(id string) *Input {
 			in := &Input{Integration: id, Name: "Name", Endpoint: "https://custom.example/mcp"}
 			if id == "openapi" {
 				in.Spec = spec
-			}
-			if id == "hyperliquid" {
-				in.Network, in.Address = "testnet", goldenAddress
 			}
 			return in
 		},

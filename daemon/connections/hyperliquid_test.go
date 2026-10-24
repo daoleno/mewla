@@ -153,6 +153,8 @@ type hlFake struct {
 	posts    []string
 	exchange string // body for /exchange
 	approved bool
+	network  string // the host that approved the signer: "api.hyperliquid.xyz" unless set
+	role     string // userRole of an unapproved signer: "missing" unless set
 }
 
 func (f *hlFake) transport(r *http.Request) (*http.Response, error) {
@@ -167,6 +169,19 @@ func (f *hlFake) transport(r *http.Request) (*http.Response, error) {
 	var req map[string]any
 	_ = json.Unmarshal(body, &req)
 	switch req["type"] {
+	case "userRole":
+		host := f.network
+		if host == "" {
+			host = "api.hyperliquid.xyz"
+		}
+		if f.approved && req["user"] == f.signer && r.URL.Host == host {
+			return reply(200, `{"role":"agent","data":{"user":"`+hlMaster+`"}}`), nil
+		}
+		role := f.role
+		if role == "" {
+			role = "missing"
+		}
+		return reply(200, `{"role":"`+role+`"}`), nil
 	case "extraAgents":
 		if f.approved {
 			return reply(200, `[{"name":"mewla","address":"`+f.signer+`","validUntil":4102444800000}]`), nil
@@ -186,9 +201,9 @@ func (f *hlFake) transport(r *http.Request) (*http.Response, error) {
 
 const hlMaster = "0x00000000000000000000000000000000000000aa"
 
-func hlConnect(t *testing.T, m *Manager, network, key string) (*Account, error) {
+func hlConnect(t *testing.T, m *Manager, key string) (*Account, error) {
 	t.Helper()
-	r, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "hyperliquid", Network: network, Address: hlMaster, Credential: key}})
+	r, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "hyperliquid", Credential: key}})
 	if err != nil {
 		return nil, err
 	}
@@ -208,25 +223,134 @@ func hlInvoke(t *testing.T, m *Manager, id, tool, args string) (map[string]any, 
 	return out, nil
 }
 
-func TestHyperliquidNetworkIsPerAccountAndEveryResultNamesIt(t *testing.T) {
+func hlReader(t *testing.T, m *Manager) *Account {
+	t.Helper()
+	if err := m.ensureHyperliquidReader(); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range m.records {
+		if r.Account.Integration == "hyperliquid" && r.Account.Address == "" && r.Account.Status != "disconnected" {
+			a := m.projection(r)
+			return &a
+		}
+	}
+	t.Fatal("no reader")
+	return nil
+}
+
+func TestHyperliquidReadsNeedNoSetup(t *testing.T) {
 	f := &hlFake{t: t}
 	m := testManager(t, f.transport)
-	main, err := hlConnect(t, m, "mainnet", "")
+	reader := hlReader(t, m)
+	if len(f.posts) != 0 {
+		t.Fatalf("seeding made requests: %v", f.posts)
+	}
+	if reader.Name != "Hyperliquid" || reader.Network != "mainnet" || reader.Address != "" || reader.Status != "connected" || reader.Identity != "Read only" {
+		t.Fatalf("%+v", reader)
+	}
+	for _, tool := range reader.Tools {
+		if tool.Group != "read" || !tool.Allowed {
+			t.Fatalf("%s group=%s allowed=%v", tool.Name, tool.Group, tool.Allowed)
+		}
+	}
+	// Seeding again adds nothing.
+	hlReader(t, m)
+	if len(m.records) != 1 {
+		t.Fatalf("%d accounts", len(m.records))
+	}
+	// Market reads need no address; an account read names its own.
+	f.posts = nil
+	out, err := hlInvoke(t, m, reader.ID, "get_book", `{"coin":"BTC"}`)
+	if err != nil || out["network"] != "mainnet" || !strings.HasPrefix(f.posts[0], "api.hyperliquid.xyz/info") {
+		t.Fatalf("%v %s %v", err, mustJSON(out), f.posts)
+	}
+	if _, err := hlInvoke(t, m, reader.ID, "get_account", `{}`); err == nil || !strings.Contains(err.Error(), "`address`") || !strings.HasPrefix(err.Error(), "Hyperliquid Mainnet: ") {
+		t.Fatalf("a read without an address: %v", err)
+	}
+	f.posts = nil
+	out, err = hlInvoke(t, m, reader.ID, "get_open_orders", `{"address":"`+hlMaster+`"}`)
+	if err != nil || out["address"] != hlMaster || !strings.Contains(f.posts[0], hlMaster) {
+		t.Fatalf("%v %s %v", err, mustJSON(out), f.posts)
+	}
+	if _, err := hlInvoke(t, m, reader.ID, "get_me", `{}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hlInvoke(t, m, reader.ID, "place_order", `{"coin":"BTC","side":"buy","size":"0.001","price":"50000"}`); err == nil {
+		t.Fatal("the reader placed an order")
+	}
+	// Disconnecting the reader itself sticks.
+	mustHandle(t, m, Request{Action: "disconnect", ID: reader.ID})
+	if err := m.ensureHyperliquidReader(); err != nil || len(m.records) != 1 {
+		t.Fatalf("a disconnected reader came back: %v %d", err, len(m.records))
+	}
+}
+
+func TestHyperliquidReaderIsSeededOnStartAndTradingKeyUpgradesIt(t *testing.T) {
+	key, _ := hlParseKey(hlTestKey)
+	f := &hlFake{t: t, signer: hlAddress(key), approved: true}
+	m := testManager(t, f.transport)
+	reader := hlReader(t, m)
+	acct, err := hlConnect(t, m, hlTestKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	test, err := hlConnect(t, m, "testnet", "")
+	// The key becomes the reader's trading side; Brain never sees two readers.
+	if acct.ID != reader.ID || len(m.records) != 1 || acct.Network != "mainnet" || acct.Address != hlMaster || acct.Signer != hlAddress(key) {
+		t.Fatalf("%+v (%d accounts)", acct, len(m.records))
+	}
+	if acct.Name != "Hyperliquid" || !strings.Contains(acct.Identity, "trading key saved") {
+		t.Fatalf("%+v", acct)
+	}
+	// With an address of its own, reads default to it and may still name another.
+	f.posts = nil
+	out, err := hlInvoke(t, m, acct.ID, "get_open_orders", `{}`)
+	if err != nil || out["address"] != hlMaster {
+		t.Fatalf("%v %s", err, mustJSON(out))
+	}
+	// Disconnecting the trading account brings the reader back.
+	mustHandle(t, m, Request{Action: "disconnect", ID: acct.ID})
+	again := hlReader(t, m)
+	if again.ID == acct.ID || again.Address != "" {
+		t.Fatalf("%+v", again)
+	}
+	if _, ok, _ := m.vault.Get("integration:" + acct.ID); ok {
+		t.Fatal("the key survived disconnect")
+	}
+}
+
+func TestHyperliquidDaemonStartSeedsTheReader(t *testing.T) {
+	dir := t.TempDir()
+	m, err := New(dir)
+	if err != nil || m.EnsureDefaults() != nil {
+		t.Fatal(err)
+	}
+	if len(m.records) != 1 {
+		t.Fatalf("%d accounts", len(m.records))
+	}
+	again, err := New(dir)
+	if err != nil || again.EnsureDefaults() != nil || len(again.records) != 1 {
+		t.Fatalf("restart: %v %d", err, len(again.records))
+	}
+}
+
+func TestHyperliquidTheKeyNamesTheNetworkAndEveryResultNamesIt(t *testing.T) {
+	key, _ := hlParseKey(hlTestKey)
+	f := &hlFake{t: t, signer: hlAddress(key), approved: true, network: "api.hyperliquid-testnet.xyz"}
+	m := testManager(t, f.transport)
+	reader := hlReader(t, m)
+	// A key only testnet approved is a testnet account beside the mainnet reader.
+	test, err := hlConnect(t, m, hlTestKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if main.ID == test.ID || main.Name == test.Name || !strings.HasPrefix(main.Identity, "Mainnet") || !strings.HasPrefix(test.Identity, "Testnet") {
-		t.Fatalf("one account per network: %+v %+v", main, test)
+	if test.ID == reader.ID || test.Network != "testnet" || test.Name != "Hyperliquid Testnet" || !strings.HasPrefix(test.Identity, "0x0000…00aa") || len(m.records) != 2 {
+		t.Fatalf("%+v", test)
 	}
 	for _, c := range []struct {
 		id, network, host string
-	}{{main.ID, "mainnet", "api.hyperliquid.xyz"}, {test.ID, "testnet", "api.hyperliquid-testnet.xyz"}} {
+	}{{reader.ID, "mainnet", "api.hyperliquid.xyz"}, {test.ID, "testnet", "api.hyperliquid-testnet.xyz"}} {
 		for _, call := range []struct{ tool, args string }{
-			{"get_me", `{}`}, {"list_markets", `{}`}, {"get_book", `{"coin":"BTC"}`}, {"get_open_orders", `{}`},
+			{"get_me", `{}`}, {"list_markets", `{}`}, {"get_book", `{"coin":"BTC"}`}, {"get_open_orders", `{"address":"` + hlMaster + `"}`},
 		} {
 			f.posts = nil
 			out, err := hlInvoke(t, m, c.id, call.tool, call.args)
@@ -243,19 +367,10 @@ func TestHyperliquidNetworkIsPerAccountAndEveryResultNamesIt(t *testing.T) {
 			}
 		}
 	}
-	// Reconnecting an address and network that exists updates it.
-	again, err := hlConnect(t, m, "testnet", "")
+	// The same key again updates the account.
+	again, err := hlConnect(t, m, hlTestKey)
 	if err != nil || again.ID != test.ID || len(m.records) != 2 {
 		t.Fatalf("reconnect: %v %v", err, len(m.records))
-	}
-	// A read-only account offers no trading tools.
-	for _, tool := range again.Tools {
-		if tool.Group != "read" {
-			t.Fatalf("read-only account offers %s", tool.Name)
-		}
-	}
-	if _, err := hlInvoke(t, m, test.ID, "place_order", `{"coin":"BTC","side":"buy","size":"0.001","price":"50000"}`); err == nil {
-		t.Fatal("read-only account placed an order")
 	}
 	// Errors name the network too.
 	if _, err := hlInvoke(t, m, test.ID, "get_book", `{"coin":"BTC","timezone":"Nowhere/Land"}`); err == nil || !strings.HasPrefix(err.Error(), "Hyperliquid Testnet: ") {
@@ -276,23 +391,33 @@ func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 func TestHyperliquidTradingKey(t *testing.T) {
 	key, _ := hlParseKey(hlTestKey)
 	signer := hlAddress(key)
-	f := &hlFake{t: t, signer: signer}
+	f := &hlFake{t: t, signer: signer, network: "api.hyperliquid-testnet.xyz", role: "user"}
 	m := testManager(t, f.transport)
 
-	// The main wallet's own key is refused, before anything is stored.
-	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "hyperliquid", Network: "testnet", Address: signer, Credential: hlTestKey}}); err == nil || !strings.Contains(err.Error(), "API wallet") {
+	// A wallet's own key is refused, before anything is stored.
+	if _, err := hlConnect(t, m, hlTestKey); err == nil || !strings.Contains(err.Error(), "API wallet") || strings.Contains(err.Error(), hlTestKey[2:]) {
 		t.Fatalf("main key accepted: %v", err)
 	}
-	// A key that is not approved on this network is refused, naming the site.
-	_, err := hlConnect(t, m, "testnet", hlTestKey)
-	if err == nil || !strings.Contains(err.Error(), "app.hyperliquid-testnet.xyz/API") || strings.Contains(err.Error(), hlTestKey[2:]) {
+	// Vaults and sub-accounts are refused in a few words.
+	f.role = "vault"
+	if _, err := hlConnect(t, m, hlTestKey); err == nil || !strings.Contains(err.Error(), "vault") {
+		t.Fatalf("vault key: %v", err)
+	}
+	// A key nobody approved is refused, naming the page that makes one.
+	f.role = "missing"
+	_, err := hlConnect(t, m, hlTestKey)
+	if err == nil || !strings.Contains(err.Error(), "app.hyperliquid.xyz/API") || strings.Contains(err.Error(), hlTestKey[2:]) {
 		t.Fatalf("unapproved key: %v", err)
+	}
+	// Not a key at all.
+	if _, err := hlConnect(t, m, "nope"); err == nil {
+		t.Fatal("a non-key was accepted")
 	}
 	if len(m.records) != 0 {
 		t.Fatal("a refused connect left an account")
 	}
 	f.approved = true
-	acct, err := hlConnect(t, m, "testnet", hlTestKey)
+	acct, err := hlConnect(t, m, hlTestKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,19 +551,23 @@ func TestHyperliquidTradingKey(t *testing.T) {
 
 func TestHyperliquidKeyIsPerNetwork(t *testing.T) {
 	key, _ := hlParseKey(hlTestKey)
-	f := &hlFake{t: t, signer: hlAddress(key), approved: true}
+	f := &hlFake{t: t, signer: hlAddress(key), approved: true, network: "api.hyperliquid-testnet.xyz"}
 	m := testManager(t, f.transport)
-	testnet, err := hlConnect(t, m, "testnet", hlTestKey)
+	reader := hlReader(t, m)
+	testnet, err := hlConnect(t, m, hlTestKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The mainnet account for the same address has no key unless one is given.
-	mainnet, err := hlConnect(t, m, "mainnet", "")
-	if err != nil || mainnet.Signer != "" || mainnet.ID == testnet.ID {
-		t.Fatalf("%v %+v", err, mainnet)
+	// The mainnet reader has no key: the testnet key was not copied to it.
+	if testnet.ID == reader.ID {
+		t.Fatal("a testnet key upgraded the mainnet reader")
 	}
-	if v, ok, _ := m.vault.Get("integration:" + mainnet.ID); ok || v != "" {
+	if v, ok, _ := m.vault.Get("integration:" + reader.ID); ok || v != "" {
 		t.Fatal("the testnet key was copied to the mainnet account")
+	}
+	// Asking for mainnet only does not find a testnet key.
+	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "hyperliquid", Network: "mainnet", Credential: hlTestKey}}); err == nil {
+		t.Fatal("a testnet key was accepted for mainnet")
 	}
 }
 

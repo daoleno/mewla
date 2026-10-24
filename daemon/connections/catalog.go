@@ -319,7 +319,7 @@ func buildCatalog() []*entry {
 			},
 		},
 		{
-			Integration: Integration{ID: "hyperliquid", Name: "Hyperliquid", Available: true, SetupURL: "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api", Description: "Markets and accounts on Hyperliquid, mainnet or testnet; trading only with an API wallet you add"},
+			Integration: Integration{ID: "hyperliquid", Name: "Hyperliquid", Available: true, SetupURL: "https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api", Description: "Markets and any address's positions, with no setup; trading with an API wallet key you add"},
 			Driver:      "hyperliquid", Tools: hyperliquidTools,
 			Networks: map[string]string{"mainnet": hlMainnetAPI, "testnet": hlTestnetAPI},
 		},
