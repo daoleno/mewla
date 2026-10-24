@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -17,6 +18,9 @@ import (
 // marker is on line 2 of every shim script. RealTmux and the guard's own
 // lookup skip a PATH entry that carries it, so neither can exec a guard; any
 // other `tmux` on PATH (a test firewall, a wrapper) is used as found.
+// loopEnv carries the pid of the guard that is about to exec the real tmux.
+const loopEnv = "MEWLA_TMUX_GUARD_EXEC_PID"
+
 const marker = "# mewla-tmux-guard"
 
 // Install writes the shim into <stateDir>/tmux-guard/bin and returns that
@@ -164,7 +168,16 @@ func Main(args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "tmux: the Mewla tmux guard found no real tmux on PATH")
 		return 127
 	}
-	err := syscall.Exec(real, append([]string{"tmux"}, args...), os.Environ())
+	// exec keeps the pid, so a wrapper that execs back into this shim (a test
+	// firewall whose "real" tmux resolved to the shim) is caught here instead of
+	// spinning forever.
+	pid := strconv.Itoa(os.Getpid())
+	if os.Getenv(loopEnv) == pid {
+		fmt.Fprintln(stderr, "tmux: the Mewla tmux guard was re-entered by a wrapper that resolves back to it; refusing")
+		return 1
+	}
+	env := append(os.Environ(), loopEnv+"="+pid)
+	err := syscall.Exec(real, append([]string{"tmux"}, args...), env)
 	fmt.Fprintf(stderr, "tmux: exec %s: %v\n", real, err)
 	return 126
 }

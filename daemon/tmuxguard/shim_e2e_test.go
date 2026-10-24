@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The shim is the real installed script re-entering the real mewla binary. The
@@ -73,6 +74,24 @@ func TestShimEndToEnd(t *testing.T) {
 	}
 	if got := calledWith(); got != "-S "+sock+" kill-server\n" {
 		t.Fatalf("real tmux got %q, want the original arguments untouched", got)
+	}
+
+	// A wrapper that resolves back to the shim must end in a refusal, not a loop.
+	loopDir := filepath.Join(root, "loop")
+	if err := os.MkdirAll(loopDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	wrapper := "#!/bin/sh\nexec " + filepath.Join(shimDir, "tmux") + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(loopDir, "tmux"), []byte(wrapper), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	loop := exec.Command(filepath.Join(shimDir, "tmux"), "-S", sock, "ls")
+	loop.Env = []string{"PATH=" + shimDir + ":" + loopDir + ":" + stubDir, ScratchEnv + "=" + scratch}
+	timer := time.AfterFunc(20*time.Second, func() { _ = loop.Process.Kill() })
+	loopOut, loopErr := loop.CombinedOutput()
+	timer.Stop()
+	if ee, ok := loopErr.(*exec.ExitError); !ok || ee.ExitCode() != 1 || !strings.Contains(string(loopOut), "re-entered") {
+		t.Fatalf("wrapper loop: err=%v out=%q, want exit 1 and a re-entry refusal", loopErr, loopOut)
 	}
 
 	// A shim whose mewla binary vanished (mid-rebuild) must not fall through.
