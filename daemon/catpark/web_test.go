@@ -3,6 +3,7 @@ package catpark
 import (
 	"encoding/json"
 	"io/fs"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -14,9 +15,41 @@ func TestBundleHasEveryLineAndPicture(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(raw)
+	object := func(from, to string) string {
+		start := strings.Index(text, from)
+		end := len(text)
+		if to != "" {
+			end = strings.Index(text, to)
+		}
+		part := text[start:end]
+		return part[strings.Index(part, "{") : strings.LastIndex(part, "}")+1]
+	}
 	var lines map[string]map[Kind]map[string][]string
-	if err := json.Unmarshal([]byte(text[strings.Index(text, "{"):strings.LastIndex(text, "}")+1]), &lines); err != nil {
+	if err := json.Unmarshal([]byte(object("window.CAT_LINES", "window.CAT_UI")), &lines); err != nil {
 		t.Fatal(err)
+	}
+	var words map[string]map[string]string
+	if err := json.Unmarshal([]byte(object("window.CAT_UI", "")), &words); err != nil {
+		t.Fatal(err)
+	}
+	// Every name a screen reader hears in the page is spoken in both languages.
+	page, err := fs.ReadFile(files, "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, match := range regexp.MustCompile(`id="([^"]+)"[^>]*aria-label="`).FindAllStringSubmatch(string(page), -1) {
+		for _, language := range []string{"zh", "en"} {
+			if strings.TrimSpace(words[language][match[1]]) == "" {
+				t.Errorf("%s has no %s name", match[1], language)
+			}
+		}
+	}
+	for _, key := range []string{"home"} {
+		for _, language := range []string{"zh", "en"} {
+			if words[language][key] == "" {
+				t.Errorf("no %s name for %s", language, key)
+			}
+		}
 	}
 	exists := func(name string) {
 		t.Helper()

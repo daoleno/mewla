@@ -31,3 +31,9 @@ window.CAT_LINES = {
     "trail": {"start": ["Backpack on. Off I go.", "A winding path. I'll walk slowly.", "The sign says nothing, so I picked one."], "long": ["Walked far. The view is nice.", "Resting a while by the road."]}
   }
 };
+
+// The few words that only a screen reader hears: names of the things in the picture.
+window.CAT_UI = {
+  "zh": {"hot-mail": "信箱", "hot-shelf": "纪念品架", "hot-window": "窗户", "hot-bag": "小包", "hot-sign": "小牌子", "hot-cat": "猫", "back": "返回", "home": "回屋里", "arrivetap": "收下", "zoomtap": "关闭", "sheettap": "关闭", "bagtap": "关闭"},
+  "en": {"hot-mail": "Mailbox", "hot-shelf": "Shelf", "hot-window": "Window", "hot-bag": "Bag", "hot-sign": "Sign", "hot-cat": "Cat", "back": "Back", "home": "Home", "arrivetap": "Keep", "zoomtap": "Close", "sheettap": "Close", "bagtap": "Close"}
+};
