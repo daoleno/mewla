@@ -73,6 +73,11 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 				log.Printf("permission: could not mark %s running again: %v", workerID, err)
 			}
 		},
+		answered: func(workerID string) {
+			if _, err := store.ResolveAnsweredWorkerBlock(workerID); err != nil {
+				log.Printf("permission: could not record Brain's answer for %s as its disposition: %v", workerID, err)
+			}
+		},
 		audit: func(workerID, outcome, summary string, details map[string]any) {
 			item, ok := workFor(workerID)
 			if !ok {

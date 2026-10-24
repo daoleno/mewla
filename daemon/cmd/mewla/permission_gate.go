@@ -56,6 +56,9 @@ type permissionGate struct {
 	tellBrain func(workerID, summary string, details map[string]any) error
 	// resumed clears that needs_input once the question is answered.
 	resumed func(workerID, summary string)
+	// answered records Brain's answer as the disposition of the review that
+	// raised the question.
+	answered func(workerID string)
 	// audit writes an answer on the Work.
 	audit func(workerID, outcome, summary string, details map[string]any)
 	// changed tells the app which approvals it may show have changed.

@@ -381,3 +381,68 @@ func TestPaneTailKeepsTheNewestLines(t *testing.T) {
 		t.Fatalf("paneTail = %q", got)
 	}
 }
+
+// A provider that stopped without an error and sits idle at its prompt has
+// nothing left running that could still check in: Brain hears about it after
+// StoppedAfter, not after the Worker's declared lease or IdleAfter.
+func TestSuperviseDelegatedTurnsTellsBrainOnceWhenWorkerStopped(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 10, 24, 5, 0, 0, 0, time.UTC)
+	stopped := func(at time.Time) probedPollWorker {
+		item := stalledPollItem(at, settled, "a1", nil)
+		item.workerSnap.Command = "claude"
+		item.content = "● Stage 1 is built and checked.\n────\n❯ \n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle)"
+		item.turn.LeaseDeadline = settled.Add(time.Hour)
+		return item
+	}
+
+	w.superviseDelegatedTurns([]probedPollWorker{stopped(settled.Add(DefaultTurnRecoveryPolicy().StoppedAfter - time.Second))})
+	if len(ledger.stalls) != 0 {
+		t.Fatalf("told Brain inside the settle grace: %+v", ledger.stalls)
+	}
+	for i := 0; i < 3; i++ {
+		w.superviseDelegatedTurns([]probedPollWorker{stopped(settled.Add(DefaultTurnRecoveryPolicy().StoppedAfter + time.Duration(i)*time.Minute))})
+	}
+	if len(ledger.stalls) != 1 || len(submits) != 0 {
+		t.Fatalf("stalls=%+v submits=%v, want exactly one escalation and no resume", ledger.stalls, submits)
+	}
+	got := ledger.stalls[0]
+	if got.Reason != "stopped" || !strings.HasPrefix(got.Summary, "Worker stopped; review the result") ||
+		!strings.Contains(got.Summary, "Stage 1 is built and checked") {
+		t.Fatalf("stall = %+v", got)
+	}
+}
+
+func TestSuperviseDelegatedTurnsStoppedNeedsAnIdlePromptAndNoError(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 10, 24, 5, 0, 0, 0, time.UTC)
+	later := settled.Add(5 * time.Minute)
+	base := func() probedPollWorker {
+		item := stalledPollItem(later, settled, "a1", nil)
+		item.workerSnap.Command = "claude"
+		item.content = "● done\n────\n❯ \n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle)"
+		item.turn.LeaseDeadline = settled.Add(time.Hour)
+		return item
+	}
+	working := base()
+	working.content = "✻ Cooking… (12s · esc to interrupt)\n────\n❯ \n────"
+	background := base()
+	background.content = "● Waiting on the render\n────\n❯ \n────\n  ⏵⏵ bypass permissions on · 1 shell · esc to interrupt"
+	blocked := base()
+	blocked.turn.Status = TurnBlocked
+	w.superviseDelegatedTurns([]probedPollWorker{working, background, blocked})
+	if len(ledger.stalls) != 0 || len(submits) != 0 {
+		t.Fatalf("stopped fast path fired without an idle prompt: stalls=%+v submits=%v", ledger.stalls, submits)
+	}
+	// With a provider error the resume path owns the stall, not the stopped one.
+	errored := base()
+	errored.provider.Error = &ProviderActivityError{Code: "server_error", Message: "Connection lost"}
+	w.superviseDelegatedTurns([]probedPollWorker{errored})
+	if len(ledger.stalls) != 0 || len(submits) != 0 && !strings.HasPrefix(submits[0], TurnContinuationPrompt) {
+		t.Fatalf("provider error stall = %+v submits=%v", ledger.stalls, submits)
+	}
+}
