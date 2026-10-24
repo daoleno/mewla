@@ -55,6 +55,42 @@ func (f *workerFeed) publish(kind string, wire *workerSessionWire, emit func([]b
 	f.publishLocked(kind, wire, emit)
 }
 
+// publishChange publishes a change to a visible Session: an update for one
+// clients hold, a creation for one they do not (it was hidden until now).
+func (f *workerFeed) publishChange(wire *workerSessionWire, emit func([]byte)) {
+	if wire == nil || wire.Worker == nil {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	kind := "worker_session_updated"
+	if _, known := f.sent[wire.ID]; !known {
+		kind = "worker_session_created"
+	}
+	f.publishLocked(kind, wire, emit)
+}
+
+// retire tells clients a Session they were sent is gone from the list, because
+// it became hidden. It is a no-op for a Session clients never had, so every
+// event of a hidden Session can call it.
+func (f *workerFeed) retire(id string, emit func([]byte)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.retireLocked(id, emit)
+}
+
+func (f *workerFeed) retireLocked(id string, emit func([]byte)) {
+	last, known := f.sent[id]
+	if !known {
+		return
+	}
+	worker := *last.wire.Worker
+	worker.State = classifier.StateRemoved
+	archived := *last.wire
+	archived.Worker = &worker
+	f.publishLocked("worker_session_archived", &archived, emit)
+}
+
 func (f *workerFeed) publishLocked(kind string, wire *workerSessionWire, emit func([]byte)) {
 	body, err := json.Marshal(wire)
 	if err != nil {
@@ -150,16 +186,18 @@ func (f *workerFeed) reconcile(build func() []*workerSessionWire, emit func([]by
 	}
 	sort.Strings(gone)
 	for _, id := range gone {
-		last := *f.sent[id].wire.Worker
-		last.State = classifier.StateRemoved
-		archived := *f.sent[id].wire
-		archived.Worker = &last
-		f.publishLocked("worker_session_archived", &archived, emit)
+		f.retireLocked(id, emit)
 	}
 }
 
 func (s *Server) publishWorkerSession(kind string, worker *classifier.Worker) {
 	s.workerFeed.publish(kind, s.workerSessionWire(worker), s.broadcast)
+}
+
+// publishWorkerSessionChange is publishWorkerSession for a change that may be a
+// Session becoming visible.
+func (s *Server) publishWorkerSessionChange(worker *classifier.Worker) {
+	s.workerFeed.publishChange(s.workerSessionWire(worker), s.broadcast)
 }
 
 func (s *Server) visibleWorkerSessionWires() []*workerSessionWire {

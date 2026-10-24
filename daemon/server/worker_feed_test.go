@@ -276,3 +276,62 @@ func TestKillWorkerRepliesWithAnExplicitSuccessFact(t *testing.T) {
 		t.Fatalf("reply = %v", reply)
 	}
 }
+
+// A Session that becomes hidden leaves the list when it happens, and one that
+// becomes visible appears as a new Session, without waiting for the reconcile.
+func TestWorkerFeedFollowsHiddenAndVisibleFlipsImmediately(t *testing.T) {
+	var feed workerFeed
+	recorder := &feedRecorder{}
+	feed.publish("worker_session_created", feedWire("a", "shell"), recorder.emit)
+
+	feed.retire("never-listed", recorder.emit)
+	if len(recorder.sent) != 1 {
+		t.Fatalf("retiring a Session clients never had sent %d messages", len(recorder.sent))
+	}
+	feed.retire("a", recorder.emit)
+	feed.retire("a", recorder.emit)
+	if len(recorder.sent) != 2 {
+		t.Fatalf("hiding sent %d messages, want one archive", len(recorder.sent)-1)
+	}
+	gone := decodeFeed(t, recorder.sent[1])
+	if gone.Type != "worker_session_archived" || gone.Seq != 2 || gone.WorkerSession.ID != "a" || gone.WorkerSession.State != string(classifier.StateRemoved) {
+		t.Fatalf("archive = %+v", gone)
+	}
+
+	// Visible again: an update for a Session clients do not hold is a creation.
+	feed.publishChange(feedWire("a", "shell"), recorder.emit)
+	back := decodeFeed(t, recorder.sent[2])
+	if back.Type != "worker_session_created" || back.Seq != 3 {
+		t.Fatalf("reappearance = %+v", back)
+	}
+	feed.publishChange(feedWire("a", "renamed"), recorder.emit)
+	if again := decodeFeed(t, recorder.sent[3]); again.Type != "worker_session_updated" || again.Seq != 4 {
+		t.Fatalf("known Session update = %+v", again)
+	}
+	// And the reconcile finds nothing left to say.
+	before := len(recorder.sent)
+	feed.reconcile(func() []*workerSessionWire { return []*workerSessionWire{feedWire("a", "renamed")} }, recorder.emit)
+	if len(recorder.sent) != before {
+		t.Fatalf("reconcile re-announced %d messages", len(recorder.sent)-before)
+	}
+}
+
+func TestWatcherEventsMoveASessionInAndOutOfTheListWhenItsVisibilityFlips(t *testing.T) {
+	srv := New(nil, nil, nil, nil, nil, nil, nil)
+	conn := feedTestSocket(t, srv)
+	defer srv.shutdownAuthenticatedClients()
+	readFeedType(t, conn, "worker_session_list")
+
+	srv.handleWatcherEvent(watcher.SessionEvent{Type: "worker_discovered", WorkerID: "w", Worker: &classifier.Worker{ID: "w", Name: "shell"}})
+	if m, _ := readFeedType(t, conn, "worker_session_created"); m.WorkerSession.ID != "w" {
+		t.Fatalf("created = %+v", m)
+	}
+	srv.handleWatcherEvent(watcher.SessionEvent{Type: "worker_metadata_change", WorkerID: "w", Worker: &classifier.Worker{ID: "w", Name: "shell", Hidden: true}})
+	if m, _ := readFeedType(t, conn, "worker_session_archived"); m.WorkerSession.ID != "w" || m.Seq != 2 {
+		t.Fatalf("hiding = %+v", m)
+	}
+	srv.handleWatcherEvent(watcher.SessionEvent{Type: "worker_metadata_change", WorkerID: "w", Worker: &classifier.Worker{ID: "w", Name: "shell"}})
+	if m, _ := readFeedType(t, conn, "worker_session_created"); m.WorkerSession.ID != "w" || m.Seq != 3 {
+		t.Fatalf("showing = %+v", m)
+	}
+}

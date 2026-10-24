@@ -3416,6 +3416,9 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 		s.calendarScheduler.WorkerChanged()
 	}
 	if ev.Worker != nil && ev.Worker.Hidden {
+		// A Session that was listed and has become hidden leaves the list now,
+		// not at the next reconcile.
+		s.workerFeed.retire(ev.Worker.ID, s.broadcast)
 		if s.brain != nil {
 			if _, err := s.brain.ObserveHostSessionEvent(ev); err != nil {
 				log.Printf("brain host event dispatch failed: %v", err)
@@ -3451,13 +3454,13 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 		}
 	case "worker_state_change":
 		if ev.Worker != nil {
-			s.publishWorkerSession("worker_session_updated", ev.Worker)
+			s.publishWorkerSessionChange(ev.Worker)
 		}
 		s.maybeNotifyForSessionEvent(ev)
 		s.routeSessionEventToBrain(ev)
 	case "worker_metadata_change":
 		if ev.Worker != nil {
-			s.publishWorkerSession("worker_session_updated", ev.Worker)
+			s.publishWorkerSessionChange(ev.Worker)
 		}
 		s.routeSessionEventToBrain(ev)
 	case "worker_removed":
