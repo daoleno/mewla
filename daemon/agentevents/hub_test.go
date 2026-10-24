@@ -187,3 +187,20 @@ func TestHubSaysWhenAWorkersPendingApprovalsChange(t *testing.T) {
 		t.Fatalf("changes = %v, want one for the request and one for the agent moving on without it", changed)
 	}
 }
+
+func TestHubAnnouncesABindingThatMoved(t *testing.T) {
+	h := NewHub()
+	var moved []string
+	h.OnBound(func(workerID string) { moved = append(moved, workerID) })
+	bind := func(id, ref, by string) {
+		h.Publish(Event{WorkerID: "w", Kind: KindBound, Binding: &Binding{ConversationID: id, Ref: ref, By: by}})
+	}
+	bind("c1", "/t/c1.jsonl", "launch")
+	bind("c1", "/t/c1.jsonl", "agent") // same conversation, learned another way
+	h.Publish(Event{WorkerID: "w", Kind: KindProgress, At: t0})
+	bind("c2", "/t/c2.jsonl", "agent") // /clear
+	bind("c2", "/t/c2-moved.jsonl", "agent")
+	if len(moved) != 3 {
+		t.Fatalf("announced %d times, want first binding, clear and transcript move: %v", len(moved), moved)
+	}
+}

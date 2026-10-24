@@ -80,6 +80,7 @@ type Service struct {
 	conversationMu             sync.Mutex
 	hostConversationReader     *work.ProviderConversationReader
 	hostIdentityProof          hostIdentityProof
+	rebinds                    conversationRebinds
 	sessionConversationReaders map[string]*work.ProviderConversationReader
 
 	dispatchMu sync.Mutex
@@ -2446,14 +2447,17 @@ func (s *Service) BindHostProviderTranscript() (work.HostTranscriptIdentity, err
 				if observed := work.InferWorkerProvider(worker.Command, worker.Name); observed != "" && observed != work.WorkerProviderCustom && observed != provider {
 					return work.HostTranscriptIdentity{Provider: provider}, nil
 				}
-				if s.hostIdentityProof.fresh(host.ID, existing, time.Now()) {
+				// Read before proving: a rebind that lands while the process is
+				// being asked invalidates this proof too.
+				epoch, covered := s.rebinds.state(host.ID)
+				if s.hostIdentityProof.fresh(host.ID, existing, time.Now(), epoch, covered) {
 					resolved = existing
 				} else {
 					resolved = work.ResolveHostTranscriptIdentityForWorker(*worker, existing, provider)
 					if !resolved.Bound() && existing.Bound() {
 						resolved = existing
 					}
-					s.hostIdentityProof.record(host.ID, resolved, time.Now())
+					s.hostIdentityProof.record(host.ID, resolved, time.Now(), epoch)
 				}
 			}
 		}

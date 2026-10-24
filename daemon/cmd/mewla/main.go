@@ -354,6 +354,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	brainService := brain.NewService(brainStore, w, execs)
 	w.SetTurnLedger(brainService)
+	// A Worker whose agent announces its conversation is re-proved when it
+	// announces another, not every 30 seconds; one the Hub has no binding for
+	// keeps the timed recheck.
+	eventHub.OnBound(brainService.NoteConversationRebound)
+	brainService.SetConversationCoverage(func(workerID string) bool {
+		state, ok := eventHub.State(workerID)
+		return ok && state.Bound && !state.Exited
+	})
 	calendarRoot, err := calendar.DefaultRoot()
 	if err != nil {
 		return fmt.Errorf("resolve calendar root: %w", err)

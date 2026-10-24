@@ -56,6 +56,7 @@ type Hub struct {
 	workers     map[string]*workerState
 	nextSub     int
 	onApprovals func(workerID string)
+	onBound     func(workerID string)
 }
 
 type workerState struct {
@@ -94,9 +95,11 @@ func (h *Hub) Publish(e Event) {
 	h.mu.Lock()
 	w := h.worker(e.WorkerID)
 	before := approvalIDs(w.Approvals)
+	bindingBefore, boundBefore := w.Binding, w.Bound
 	w.apply(e)
 	changed := before != approvalIDs(w.Approvals)
-	onApprovals := h.onApprovals
+	rebound := e.Kind == KindBound && (w.Bound != boundBefore || w.Binding.ConversationID != bindingBefore.ConversationID || w.Binding.Ref != bindingBefore.Ref)
+	onApprovals, onBound := h.onApprovals, h.onBound
 	subs := make([]chan Event, 0, len(w.subs))
 	for _, ch := range w.subs {
 		subs = append(subs, ch)
@@ -104,6 +107,9 @@ func (h *Hub) Publish(e Event) {
 	h.mu.Unlock()
 	if changed && onApprovals != nil {
 		onApprovals(e.WorkerID)
+	}
+	if rebound && onBound != nil {
+		onBound(e.WorkerID)
 	}
 	for _, ch := range subs {
 		select {
@@ -119,6 +125,15 @@ func (h *Hub) Publish(e Event) {
 func (h *Hub) OnApprovalsChanged(notify func(workerID string)) {
 	h.mu.Lock()
 	h.onApprovals = notify
+	h.mu.Unlock()
+}
+
+// OnBound calls notify, outside the Hub's lock, whenever a Worker's binding
+// changes: it was bound for the first time, or moved to another conversation
+// or transcript (a clear, a resume).
+func (h *Hub) OnBound(notify func(workerID string)) {
+	h.mu.Lock()
+	h.onBound = notify
 	h.mu.Unlock()
 }
 
