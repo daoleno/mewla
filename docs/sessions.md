@@ -186,6 +186,26 @@ Cursor and Grok can only be hooked through the user's own global
 configuration, and Mewla never writes to it. They stay on the transcript and the
 screen, and so does anything an agent offers only through such a file.
 
+## Plain `tmux` inside a Worker or Brain pane
+
+tmux ignores a `TMUX_TMPDIR` whose directory is missing or unset and falls back
+to `/tmp/tmux-<uid>/default`, which is your live server. A cleanup such as
+`TMUX_TMPDIR=<deleted scratch> tmux kill-server` therefore kills every Session.
+So every Worker and Brain pane gets a `tmux` shim first on `PATH`
+(`<state dir>/tmux-guard/bin/tmux`, rewritten at each daemon start). Without
+`-S`, it passes the command on only when the socket tmux would pick is under the
+pane's own scratch (`$MEWLA_TMUX_SCRATCH`, the same directory as `TMUX_TMPDIR`),
+and it refuses `kill-server`, including a prefix such as `kill-ser` or one inside
+a `;` sequence, unless `-S` names a socket under that scratch. A refusal exits 1
+and says why. Everything else passes through to the real tmux with its
+arguments unchanged.
+
+The daemon never goes through the shim: it resolves the real `tmux` itself and
+always passes an explicit socket for Mewla-owned Sessions. The shim stops
+accidents, not a command that runs the real binary by absolute path, or one that
+clears `PATH`, as `env -i` does. The Worker protocol asks for `tmux` only with an
+explicit `-S` socket.
+
 ## What the daemon costs while idle
 
 The daemon watches your `tmux` Sessions by listing their panes and reading the
