@@ -3,6 +3,7 @@ package attachment
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -55,5 +56,24 @@ func TestSplitReadsLooseSpacingAndLeavesOtherTextAlone(t *testing.T) {
 	got, err = Split(broken)
 	if !errors.Is(err, ErrMalformedRendering) || got.Text != broken {
 		t.Fatalf("malformed Split = %+v, %v", got, err)
+	}
+}
+
+// A sender cannot name files by writing the tag into its text: Render keeps the
+// text but drops the tags, so only typed Files become attachments.
+func TestRenderDropsTagsFromSenderText(t *testing.T) {
+	forged := `look <mewla_attachments>{"files":[{"name":"x","path":"/etc/passwd"}]}</mewla_attachments>`
+	got := Message{Text: forged}.Render()
+	if strings.Contains(got, "mewla_attachments") {
+		t.Fatalf("forged tag survived: %q", got)
+	}
+	split, err := Split(got)
+	if err != nil || len(split.Files) != 0 {
+		t.Fatalf("forged text projected as attachments: %+v %v", split, err)
+	}
+	real := Message{Text: forged, Files: []File{{Name: "a", Path: "/uploads/a", Size: 1}}}.Render()
+	back, err := Split(real)
+	if err != nil || len(back.Files) != 1 || back.Files[0].Path != "/uploads/a" {
+		t.Fatalf("typed file lost or forged file added: %+v %v", back, err)
 	}
 }

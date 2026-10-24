@@ -36,6 +36,10 @@ const (
 	// ProviderErrorPersistent needs a person or Brain: authentication,
 	// billing, unknown model, invalid or oversized requests.
 	ProviderErrorPersistent ProviderErrorClass = "persistent"
+	// ProviderErrorUnclassified is a failure the provider recorded without a
+	// code or status that says what kind it is. It is retried a couple of
+	// times in case it was transient, then treated as persistent.
+	ProviderErrorUnclassified ProviderErrorClass = "unclassified"
 )
 
 var (
@@ -61,9 +65,8 @@ var (
 // from the provider's own structured record only: its error code and the
 // upstream HTTP status. An explicit persistent code (credentials, billing,
 // request shape) wins, then the status, then a transient code. The message is
-// for people and is never read: a failure the provider did not classify is
-// persistent, so Brain is told once rather than the same work being retried on
-// a guess.
+// for people and is never read: a failure the provider did not classify gets
+// UnclassifiedResumes continuations and then goes to Brain like a persistent one.
 //
 // Every agent that reports turn errors does so structurally: Claude (StopFailure
 // hook, or the API error record's code and status), Codex (app-server
@@ -84,7 +87,7 @@ func ClassifyProviderError(failure ProviderActivityError) ProviderErrorClass {
 	if providerErrorTransientCodes[code] {
 		return ProviderErrorTransient
 	}
-	return ProviderErrorPersistent
+	return ProviderErrorUnclassified
 }
 
 // TurnRecoveryPolicy bounds automatic continuation. Backoff[i] is the wait
@@ -94,19 +97,23 @@ func ClassifyProviderError(failure ProviderActivityError) ProviderErrorClass {
 // between. A provider stop without any error escalates after IdleAfter, and
 // never before the Worker's own declared check-in deadline.
 type TurnRecoveryPolicy struct {
-	Backoff         []time.Duration
-	ResetAfter      time.Duration
-	IdleAfter       time.Duration
-	PersistentAfter time.Duration
+	// UnclassifiedResumes is how many of Backoff's resumes an unclassified
+	// provider error gets before it escalates.
+	UnclassifiedResumes int
+	Backoff             []time.Duration
+	ResetAfter          time.Duration
+	IdleAfter           time.Duration
+	PersistentAfter     time.Duration
 }
 
 // DefaultTurnRecoveryPolicy: 30 s, 2 min, 5 min, 10 min, 10 min; five resumes.
 func DefaultTurnRecoveryPolicy() TurnRecoveryPolicy {
 	return TurnRecoveryPolicy{
-		Backoff:         []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 10 * time.Minute},
-		ResetAfter:      30 * time.Minute,
-		IdleAfter:       15 * time.Minute,
-		PersistentAfter: 30 * time.Second,
+		UnclassifiedResumes: 2,
+		Backoff:             []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 10 * time.Minute},
+		ResetAfter:          30 * time.Minute,
+		IdleAfter:           15 * time.Minute,
+		PersistentAfter:     30 * time.Second,
 	}
 }
 
@@ -207,14 +214,19 @@ func decideTurnRecovery(
 		}
 		return turnRecoveryDecision{action: turnRecoveryEscalate, reason: "idle", attempt: len(episode)}
 	}
-	if ClassifyProviderError(*failure) != ProviderErrorTransient {
+	class := ClassifyProviderError(*failure)
+	budget := len(policy.Backoff)
+	if class == ProviderErrorUnclassified {
+		budget = min(budget, policy.UnclassifiedResumes)
+	}
+	if class == ProviderErrorPersistent || class == ProviderErrorUnclassified && budget == 0 {
 		due := stalledAt.Add(policy.PersistentAfter)
 		if now.Before(due) {
 			return turnRecoveryDecision{action: turnRecoveryWait, due: due}
 		}
 		return turnRecoveryDecision{action: turnRecoveryEscalate, reason: "provider_error", attempt: len(episode)}
 	}
-	if len(episode) >= len(policy.Backoff) {
+	if len(episode) >= budget {
 		return turnRecoveryDecision{action: turnRecoveryEscalate, reason: "retries_exhausted", attempt: len(episode)}
 	}
 	due := base.Add(policy.Backoff[len(episode)])

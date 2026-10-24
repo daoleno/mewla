@@ -99,14 +99,15 @@ The reason comes from the provider's own structured record, not the screen:
 
 The record is carried as `ProviderActivity.error`. Only its code and HTTP status
 are read; the message is for people. Mewla never guesses from wording, so an error
-a provider leaves as `other` or `unknown` is persistent and goes to Brain once.
+a provider leaves as `other` or `unknown` is tried twice more and then goes to Brain once.
 Cursor and Grok record no turn error, so they have nothing to classify.
 
 | Shape | Action |
 | --- | --- |
 | Transient error by the provider's own code or HTTP status: dropped connection or stream, timeout, overloaded, 5xx, 429 | Submit one continuation after 30 s, 2 min, 5 min, 10 min and 10 min |
 | Five resumes in one episode, the Turn still dropping | One stall escalation (`retries_exhausted`) |
-| Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx; and any error the provider did not classify | One stall escalation after 30 s (`provider_error`); never resumed |
+| Persistent error by code or status: login, billing, unknown model, invalid or oversized request, 4xx |
+| An error the provider recorded without a code or status that classifies it (`other`, `unknown`) | Two continuations on the same backoff, then one stall escalation (`retries_exhausted`) | One stall escalation after 30 s (`provider_error`); never resumed |
 | Stopped with no error and no terminal report | One stall escalation after 15 min (`idle`), never before the Turn's own check-in lease, and not while the footer shows background shells or agents |
 
 **Continuation.**
