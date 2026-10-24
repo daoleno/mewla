@@ -40,6 +40,19 @@ describe("MewlaLive iOS native contract", () => {
     }
   });
 
+  test("the background push path is diagnosable from the device console", () => {
+    const delegate = read(join(moduleRoot, "ios/MewlaLiveAppDelegate.swift"));
+    // iOS only calls didReceiveRemoteNotification for a content-available push, so a device test
+    // needs to tell apart "never called" from "we dropped it": every branch logs, and none of
+    // them can log the question text.
+    for (const marker of ["received state=", "not a live_state push", "dropped: another server", "skipped ", "applied "]) {
+      expect(delegate).toContain(marker);
+    }
+    expect(delegate).toContain('NSLog("MewlaLive push: %@", message)');
+    expect(delegate).not.toContain("question.text");
+    expect(delegate).not.toContain("message.state.title");
+  });
+
   test("a chip opens the app on its question with the link the app already routes", () => {
     const views = read(join(targetRoot, "MewlaLiveViews.swift"));
     expect(views).toContain('components.scheme = "mewla"');
