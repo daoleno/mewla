@@ -4693,7 +4693,7 @@ func (w *Watcher) guardCompletedOwnedIdentity(sessionID string, turn TurnSnapsho
 	paneGeneration := strings.TrimSpace(w.currentPaneGeneration(sessionID))
 	if known {
 		if delegatedTurnIdentity(identity) != turn.ProcessIdentity {
-			return fmt.Errorf("completed Session %s generation changed", sessionID)
+			return completedGenerationChanged(sessionID)
 		}
 		if turn.PaneGeneration == "" {
 			return nil
@@ -4702,7 +4702,7 @@ func (w *Watcher) guardCompletedOwnedIdentity(sessionID string, turn TurnSnapsho
 			return fmt.Errorf("%w: completed Session %s pane generation is unproven", ErrOwnershipProbeUnavailable, sessionID)
 		}
 		if paneGeneration != turn.PaneGeneration {
-			return fmt.Errorf("completed Session %s generation changed", sessionID)
+			return completedGenerationChanged(sessionID)
 		}
 		return nil
 	}

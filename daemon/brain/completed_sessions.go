@@ -5,8 +5,10 @@ import (
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
-// CompletedOwnedTurns is a derived cleanup set, not another durable queue.
-// Only the latest exact delegated result of an explicitly closed Work qualifies.
+// CompletedOwnedTurns is the cleanup set: the latest exact delegated result of
+// an explicitly closed Work whose Session has not been reclaimed yet. A Turn
+// leaves the set once MarkTurnsReclaimed records its finished teardown, so the
+// set does not grow with history.
 func (s *Store) CompletedOwnedTurns(workID string) ([]watcher.TurnSnapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -28,7 +30,7 @@ func (s *Store) CompletedOwnedTurns(workID string) ([]watcher.TurnSnapshot, erro
 		if workID != "" && turn.WorkID != workID {
 			continue
 		}
-		if busy[turn.SessionID] || isHostHandlingTurn(turn) || !turn.SignalProtocol ||
+		if turn.Reclaimed || busy[turn.SessionID] || isHostHandlingTurn(turn) || !turn.SignalProtocol ||
 			(turn.Status != watcher.TurnDone && turn.Status != watcher.TurnFailed) {
 			continue
 		}
@@ -45,4 +47,34 @@ func (s *Store) CompletedOwnedTurns(workID string) ([]watcher.TurnSnapshot, erro
 		}
 	}
 	return result, nil
+}
+
+// MarkTurnsReclaimed durably records that the Sessions of these exact Turns
+// were fully torn down, in one commit. Turns that no longer exist are ignored.
+func (s *Store) MarkTurnsReclaimed(turns []watcher.TurnSnapshot) error {
+	if len(turns) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return err
+	}
+	want := make(map[[2]string]struct{}, len(turns))
+	for _, turn := range turns {
+		want[[2]string{turn.SessionID, turn.TurnID}] = struct{}{}
+	}
+	changed := false
+	for index := range database.BrainTurns {
+		turn := &database.BrainTurns[index]
+		if _, ok := want[[2]string{turn.SessionID, turn.TurnID}]; ok && !turn.Reclaimed {
+			turn.Reclaimed = true
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return s.persistPresentationLocked(database)
 }

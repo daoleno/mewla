@@ -250,7 +250,13 @@ current Turn; superseded identities cannot mutate a reused Session.
 
 `work update`, typed disposition and explicit Work close share cleanup. Cleanup
 is derived from closed Work and current terminal delegated Turns rather than a
-second persisted workflow. Startup and durable Work-change events recover a
+second persisted workflow; the only record kept is a `reclaimed` mark on the
+exact Turn once its teardown finished, so finished Sessions are not torn down
+again on every reconcile. A refused, failed or retryable teardown is never
+marked. A completed Session whose pane id now belongs to another process or
+pane generation is a final refusal for that record, so it ends the startup
+retry instead of repeating every 10 seconds. Releasing a Session that has no
+route binding writes nothing. Startup and durable Work-change events recover a
 decision saved before teardown. Under the Session input lock, teardown rechecks
 the exact Turn, pending admissions, delegated ownership, and process/pane
 generation. A newer execution, user Session, Host or uncertain result is not

@@ -210,8 +210,10 @@ func (s *Service) cleanupAfterWorkDecision(workID string) error {
 }
 
 // ReconcileCompletedSessions derives cleanup from durable Work acceptance and
-// exact completed delegated turns. No completion flag, timer or second workflow
-// is needed: removed Sessions are idempotent and newer executions are fenced.
+// exact completed delegated turns. A Turn whose teardown finished is marked
+// reclaimed (one commit per pass) and is not processed again; refused and
+// failed teardowns are not marked and stay in the set. Removed Sessions are
+// idempotent and newer executions are fenced.
 func (s *Service) ReconcileCompletedSessions() error {
 	return s.reconcileCompletedSessions("")
 }
@@ -225,13 +227,21 @@ func (s *Service) reconcileCompletedSessions(workID string) error {
 		return err
 	}
 	var result error
+	var reclaimed []watcher.TurnSnapshot
 	for _, turn := range turns {
 		err := s.teardownSessionWith(turn.SessionID, func(id string) error {
 			return s.watcher.KillCompletedSession(id, turn.TurnID)
 		})
-		if errors.Is(err, watcher.ErrUnownedTmuxTarget) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) {
+		if errors.Is(err, watcher.ErrUnownedTmuxTarget) || errors.Is(err, watcher.ErrNotOwnedDelegatedWorker) ||
+			errors.Is(err, watcher.ErrCompletedSessionGenerationChanged) {
 			err = &cleanupRefusal{sessionID: turn.SessionID, err: err}
 		}
+		if err == nil {
+			reclaimed = append(reclaimed, turn)
+		}
+		result = errors.Join(result, err)
+	}
+	if err := s.store.MarkTurnsReclaimed(reclaimed); err != nil {
 		result = errors.Join(result, err)
 	}
 	return result

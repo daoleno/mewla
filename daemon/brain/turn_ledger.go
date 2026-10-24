@@ -46,6 +46,11 @@ type TurnRecord struct {
 	// in its delegated prompt. It is an authority marker, not another identity.
 	SignalProtocol bool `json:"signal_protocol,omitempty"`
 	HostHandling   bool `json:"host_handling,omitempty"`
+	// Reclaimed is set once this exact Turn's completed Session has been fully
+	// torn down (pane gone, route released). Cleanup skips it from then on. It
+	// is keyed by the Turn, not the pane id, so a reused pane id is never
+	// mistaken for a finished teardown.
+	Reclaimed bool `json:"reclaimed,omitempty"`
 	// LeaseDeadline is the turn's own expected-next-check time (per-turn
 	// liveness): minted fresh at admission, extended only by this turn's
 	// Control lease facts, and the sole basis for session.stale. An old turn's
