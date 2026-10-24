@@ -98,21 +98,37 @@ func TestGoogleExchangeNeedsEveryValueOrNone(t *testing.T) {
 		return func(key string) string { return values[key] }
 	}
 	key := "MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY"
-	good := map[string]string{
-		"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret",
-		key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	base := map[string]string{"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret"}
+	gmail := map[string]string{"MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID": "mail", "MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET": "mail-secret"}
+	good := map[string]string{key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}
+	for k, v := range base {
+		good[k] = v
 	}
 	if handler, err := googleExchange("https://connect.example", true, env(nil)); handler != nil || err != nil {
 		t.Fatalf("no configuration: %v %v", handler, err)
 	}
 	if handler, err := googleExchange("https://connect.example", true, env(good)); handler == nil || err != nil {
-		t.Fatalf("full configuration: %v %v", handler, err)
+		t.Fatalf("shared-client configuration: %v %v", handler, err)
+	}
+	// The Gmail project is optional; once set, it is all-or-nothing.
+	split := map[string]string{}
+	for k, v := range good {
+		split[k] = v
+	}
+	for k, v := range gmail {
+		split[k] = v
+	}
+	if handler, err := googleExchange("https://connect.example", true, env(split)); handler == nil || err != nil {
+		t.Fatalf("split-client configuration: %v %v", handler, err)
 	}
 	for name, values := range map[string]map[string]string{
-		"only an id":     {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id"},
-		"no receipt key": {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret"},
-		"short key":      {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", key: "AAAA"},
-		"bad key":        {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", key: "not base64!"},
+		"only an id":         {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id"},
+		"no receipt key":     base,
+		"short key":          {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", key: "AAAA"},
+		"bad key":            {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", key: "not base64!"},
+		"gmail without base": {"MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID": "mail", "MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET": "mail-secret", key: good[key]},
+		"gmail id only":      {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", "MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID": "mail", key: good[key]},
+		"gmail secret only":  {"MEWLA_ACCOUNT_GOOGLE_CLIENT_ID": "id", "MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET": "secret", "MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET": "mail-secret", key: good[key]},
 	} {
 		if handler, err := googleExchange("https://connect.example", true, env(values)); handler != nil || err == nil {
 			t.Errorf("%s accepted", name)

@@ -262,19 +262,35 @@ func run(args []string) error {
 }
 
 // googleExchange is the sign-in service behind the Google Calendar and Gmail
-// plugins: it holds Mewla's Google client secret so that no daemon has to.
-// It runs on the public HTTPS listener only, and only when all three values
-// are set; a half-set configuration stops the service rather than starting
+// plugins: it holds Mewla's Google client secrets so that no daemon has to.
+// Google verifies a Cloud project rather than a scope, so each plugin can hold
+// its own client: Gmail's restricted scopes can then move to a second project
+// and be reviewed without holding Calendar's sign-in in the same review. Until
+// the Gmail pair is set, both plugins share the one client.
+// It runs on the public HTTPS listener only, and only when every value is
+// set; a half-set configuration stops the service rather than starting
 // without it.
 func googleExchange(publicURL string, publicTLS bool, env func(string) string) (http.Handler, error) {
-	clientID := strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_CLIENT_ID"))
-	clientSecret := strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET"))
+	base := googleauth.Client{ID: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_CLIENT_ID")), Secret: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET"))}
+	gmail := googleauth.Client{ID: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID")), Secret: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET"))}
 	receiptKey := strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY"))
-	if clientID == "" && clientSecret == "" && receiptKey == "" {
+	configured := base.ID != "" || base.Secret != "" || gmail.ID != "" || gmail.Secret != "" || receiptKey != ""
+	if !configured {
 		return nil, nil
 	}
-	if clientID == "" || clientSecret == "" || receiptKey == "" {
-		return nil, errors.New("Google sign-in needs $MEWLA_ACCOUNT_GOOGLE_CLIENT_ID, $MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET and $MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY together")
+	if base.ID == "" || base.Secret == "" {
+		return nil, errors.New("Google sign-in needs $MEWLA_ACCOUNT_GOOGLE_CLIENT_ID and $MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET")
+	}
+	// A half-set Gmail client would fail after the user already tapped
+	// Connect, so it is refused at start like every other value.
+	if (gmail.ID == "") != (gmail.Secret == "") {
+		return nil, errors.New("the Gmail client needs both $MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID and $MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET")
+	}
+	if gmail.ID == "" {
+		gmail = base
+	}
+	if receiptKey == "" {
+		return nil, errors.New("Google sign-in needs $MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY")
 	}
 	if !publicTLS {
 		return nil, errors.New("Google sign-in is served on -tls-addr only")
@@ -283,7 +299,8 @@ func googleExchange(publicURL string, publicTLS bool, env func(string) string) (
 	if err != nil {
 		return nil, errors.New("$MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY must be base64url without padding")
 	}
-	exchange, err := googleauth.New(googleauth.Config{Origin: publicURL, ClientID: clientID, ClientSecret: clientSecret, ReceiptKey: key})
+	clients := map[string]googleauth.Client{googleauth.Calendar: base, googleauth.Gmail: gmail}
+	exchange, err := googleauth.New(googleauth.Config{Origin: publicURL, Clients: clients, ReceiptKey: key})
 	if err != nil {
 		return nil, fmt.Errorf("Google sign-in: %w", err)
 	}

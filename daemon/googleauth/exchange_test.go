@@ -21,7 +21,11 @@ type transport func(*http.Request) (*http.Response, error)
 func (f transport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 func fixture(t *testing.T) *Exchange {
 	t.Helper()
-	e, err := New(Config{Origin: "https://mewla-owned.example", ClientID: "owned-google-web", ClientSecret: "publisher-secret", ReceiptKey: bytes.Repeat([]byte{1}, 32)})
+	e, err := New(Config{
+		Origin:     "https://mewla-owned.example",
+		Clients:    map[string]Client{Calendar: {ID: "owned-calendar-web", Secret: "calendar-secret"}, Gmail: {ID: "owned-google-web", Secret: "publisher-secret"}},
+		ReceiptKey: bytes.Repeat([]byte{1}, 32),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,6 +168,49 @@ func TestDenialExpiryAndFixedDestination(t *testing.T) {
 	}
 	if post(e, "/google/start", map[string]any{"public_key": base64.RawURLEncoding.EncodeToString(public[:]), "nonce": oauth2.GenerateVerifier(), "redirect_uri": "https://attacker.test"}).Code != 400 {
 		t.Fatal("caller redirect accepted")
+	}
+}
+
+// Calendar and Gmail sign in with their own Google client, so each project's
+// verification and consent screen stand alone.
+func TestEachServiceUsesItsOwnGoogleClient(t *testing.T) {
+	e := fixture(t)
+	public, private, _ := box.GenerateKey(rand.Reader)
+	for _, want := range []struct{ service, clientID, secret string }{
+		{Calendar, "owned-calendar-web", "calendar-secret"},
+		{Gmail, "owned-google-web", "publisher-secret"},
+	} {
+		var session Session
+		if w := post(e, "/google/start", Start{PublicKey: base64.RawURLEncoding.EncodeToString(public[:]), Nonce: oauth2.GenerateVerifier(), Service: want.service}); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &session) != nil {
+			t.Fatalf("%s start failed: %s", want.service, w.Body.String())
+		}
+		e.client = &http.Client{Transport: transport(func(req *http.Request) (*http.Response, error) {
+			_ = req.ParseForm()
+			if req.PostForm.Get("client_id") != want.clientID || req.PostForm.Get("client_secret") != want.secret {
+				t.Errorf("%s sign-in used client %q", want.service, req.PostForm.Get("client_id"))
+			}
+			return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"access_token":"a","refresh_token":"r","expires_in":3600,"token_type":"Bearer","scope":"openid email"}`))}, nil
+		})}
+		begin := httptest.NewRecorder()
+		e.ServeHTTP(begin, httptest.NewRequest("GET", session.AuthorizationURL, nil))
+		req := httptest.NewRequest("GET", CallbackPath+"?state="+session.ID+"&code=c", nil)
+		req.AddCookie(begin.Result().Cookies()[0])
+		e.ServeHTTP(httptest.NewRecorder(), req)
+		// Refresh must keep using the same project's client, not the other's.
+		status := httptest.NewRecorder()
+		req = httptest.NewRequest("GET", "/google/status?id="+session.ID, nil)
+		req.Header.Set("Authorization", "Bearer "+e.flows[session.ID].start.Nonce)
+		e.ServeHTTP(status, req)
+		if json.Unmarshal(status.Body.Bytes(), &session) != nil || session.Status != "connected" {
+			t.Fatalf("%s completion missing: %s", want.service, status.Body.String())
+		}
+		credential, err := Open(session.Ciphertext, public, private)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := post(e, "/google/refresh", Refresh{RefreshToken: "r", Receipt: credential.Receipt, Proof: credential.Proof}); got.Code != 200 {
+			t.Fatalf("%s refresh failed: %s", want.service, got.Body.String())
+		}
 	}
 }
 
