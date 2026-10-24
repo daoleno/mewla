@@ -2342,12 +2342,27 @@ func admissionFactFromObservation(sessionID string, turn TurnSnapshot, provider 
 		Kind:       "admission",
 		SourceID:   fmt.Sprintf("provider\x00%s\x00%s\x00%s\x00%d", sessionID, strings.TrimSpace(provider.AdmissionStream), strings.TrimSpace(provider.AdmissionID), provider.AdmissionCursor),
 		Cursor:     provider.AdmissionCursor,
-		Admission:  AdmissionFromObservation(provider),
+		Admission:  admissionForTurn(turn, provider),
 		ActivityID: strings.TrimSpace(provider.ID),
 		StartedAt:  provider.StartedAt,
 		At:         time.Now().UTC(),
 		Summary:    "Provider admitted the delegated input",
 	}
+}
+
+// admissionForTurn is the provider admission tuple as the turn's ledger
+// records it. A provider that wrapped the submitted bytes in a transport
+// envelope (a Claude paste) reports the wrapped digest first; when the unwrapped
+// one is the turn's own payload, the tuple carries that exact submitted digest,
+// as the admission transaction records it, so later facts keep binding.
+func admissionForTurn(turn TurnSnapshot, provider ProviderActivityObservation) TurnAdmission {
+	admission := AdmissionFromObservation(provider)
+	payload := strings.TrimSpace(turn.PayloadSHA256)
+	if payload != "" && (strings.TrimSpace(provider.InputSHA256) == payload ||
+		strings.TrimSpace(provider.InputUnwrappedSHA256) == payload) {
+		admission.SHA256 = payload
+	}
+	return admission
 }
 
 // activityFactFromObservation derives the provider activity fact (running /
@@ -2373,7 +2388,7 @@ func activityFactFromObservation(sessionID string, turn TurnSnapshot, provider P
 		Kind:       kind,
 		SourceID:   ProviderFactSourceID(sessionID, provider),
 		Cursor:     provider.AdmissionCursor,
-		Admission:  AdmissionFromObservation(provider),
+		Admission:  admissionForTurn(turn, provider),
 		ActivityID: strings.TrimSpace(provider.ID),
 		StartedAt:  provider.StartedAt,
 		SettledAt:  provider.SettledAt,

@@ -143,7 +143,9 @@ type TurnSnapshot struct {
 	// its delegated prompt. Only these Turns accept lifecycle authority from
 	// matching Control progress; pre-upgrade/provider-native Turns do not.
 	SignalProtocol bool
-	UpdatedAt      time.Time
+	// PayloadSHA256 is the digest of the exact input the turn submitted.
+	PayloadSHA256 string
+	UpdatedAt     time.Time
 }
 
 // TurnFact is one provider-neutral observation applied to the canonical turn

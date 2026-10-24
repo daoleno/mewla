@@ -398,12 +398,15 @@ func TestSuperviseDelegatedTurnsTellsBrainOnceWhenWorkerStopped(t *testing.T) {
 		return item
 	}
 
-	w.superviseDelegatedTurns([]probedPollWorker{stopped(settled.Add(DefaultTurnRecoveryPolicy().StoppedAfter - time.Second))})
+	grace := DefaultTurnRecoveryPolicy().StoppedAfter
+	first := settled.Add(10 * time.Second)
+	w.superviseDelegatedTurns([]probedPollWorker{stopped(first)})
+	w.superviseDelegatedTurns([]probedPollWorker{stopped(first.Add(grace - time.Second))})
 	if len(ledger.stalls) != 0 {
 		t.Fatalf("told Brain inside the settle grace: %+v", ledger.stalls)
 	}
 	for i := 0; i < 3; i++ {
-		w.superviseDelegatedTurns([]probedPollWorker{stopped(settled.Add(DefaultTurnRecoveryPolicy().StoppedAfter + time.Duration(i)*time.Minute))})
+		w.superviseDelegatedTurns([]probedPollWorker{stopped(first.Add(grace + time.Duration(i)*time.Minute))})
 	}
 	if len(ledger.stalls) != 1 || len(submits) != 0 {
 		t.Fatalf("stalls=%+v submits=%v, want exactly one escalation and no resume", ledger.stalls, submits)
@@ -444,5 +447,70 @@ func TestSuperviseDelegatedTurnsStoppedNeedsAnIdlePromptAndNoError(t *testing.T)
 	w.superviseDelegatedTurns([]probedPollWorker{errored})
 	if len(ledger.stalls) != 0 || len(submits) != 0 && !strings.HasPrefix(submits[0], TurnContinuationPrompt) {
 		t.Fatalf("provider error stall = %+v submits=%v", ledger.stalls, submits)
+	}
+}
+
+// A Claude paste reaches the transcript inside a transport envelope, so the
+// provider's first digest is the wrapped one. The fact must carry the turn's
+// own submitted digest or no provider fact ever binds.
+func TestProviderFactCarriesTheTurnsSubmittedDigestWhenTheProviderWrappedIt(t *testing.T) {
+	turn := TurnSnapshot{SessionID: "%1", TurnID: "turn:a", PayloadSHA256: "payload", Status: TurnRunning}
+	provider := ProviderActivityObservation{
+		ID: "act", Status: "completed", AdmissionStream: "s", AdmissionID: "i", AdmissionCursor: 7,
+		InputSHA256: "wrapped", InputUnwrappedSHA256: "payload",
+	}
+	if got := activityFactFromObservation("%1", turn, provider).Admission.SHA256; got != "payload" {
+		t.Fatalf("wrapped input digest = %q, want the turn's payload digest", got)
+	}
+	provider.InputUnwrappedSHA256 = "other"
+	if got := activityFactFromObservation("%1", turn, provider).Admission.SHA256; got != "wrapped" {
+		t.Fatalf("a different input's digest was rewritten: %q", got)
+	}
+}
+
+// Idle at the prompt while a background Monitor runs is not a stop. When the
+// Monitor ends, the footer count disappears before the provider's next
+// Activity shows; the wait is counted from that first stalled poll, not from
+// when the provider settled long before, so the Worker is not reported stopped
+// in that gap and its later report still binds.
+func TestSuperviseDelegatedTurnsDoesNotReportAWorkerWakingFromABackgroundMonitor(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 10, 24, 5, 0, 0, 0, time.UTC)
+	poll := func(at time.Time, footer string) probedPollWorker {
+		item := stalledPollItem(at, settled, "a1", nil)
+		item.workerSnap.Command = "claude"
+		status := "  ⏵⏵ auto mode on (shift+tab to cycle)"
+		if footer != "" {
+			status = "  ⏵⏵ auto mode on" + footer + " · ↓ to manage"
+		}
+		item.content = "● Monitor started · task b55oocn6e\n✻ Cooked for 8s · done 19:00" + footer + "\n────\n❯ \n────\n" + status
+		item.turn.LeaseDeadline = settled.Add(time.Minute)
+		return item
+	}
+	// A quarter of an hour of waiting on the Monitor: never stalled.
+	for minute := 1; minute <= 20; minute++ {
+		w.superviseDelegatedTurns([]probedPollWorker{poll(settled.Add(time.Duration(minute)*time.Minute), " · 1 monitor")})
+	}
+	// The Monitor ends; the Worker is about to wake but the provider still reads settled.
+	end := settled.Add(21 * time.Minute)
+	w.superviseDelegatedTurns([]probedPollWorker{poll(end, "")})
+	w.superviseDelegatedTurns([]probedPollWorker{poll(end.Add(30*time.Second), "")})
+	if len(ledger.stalls) != 0 {
+		t.Fatalf("reported a Worker waking from its Monitor as stopped: %+v", ledger.stalls)
+	}
+	// It wakes: the provider is running again, and the wait starts over.
+	running := poll(end.Add(45*time.Second), "")
+	running.provider.Status = "running"
+	w.superviseDelegatedTurns([]probedPollWorker{running})
+	w.superviseDelegatedTurns([]probedPollWorker{poll(end.Add(10*time.Minute), "")})
+	if len(ledger.stalls) != 0 {
+		t.Fatalf("the wait was not restarted after the Worker woke: %+v", ledger.stalls)
+	}
+	// Left genuinely idle past the grace, it is reported once.
+	w.superviseDelegatedTurns([]probedPollWorker{poll(end.Add(10*time.Minute+DefaultTurnRecoveryPolicy().StoppedAfter), "")})
+	if len(ledger.stalls) != 1 || ledger.stalls[0].Reason != "stopped" {
+		t.Fatalf("stalls = %+v, want one stopped escalation", ledger.stalls)
 	}
 }
