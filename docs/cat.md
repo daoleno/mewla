@@ -8,7 +8,7 @@ The cat's life is Brain's real Work, nothing invented:
 
 | Brain | The cat |
 | --- | --- |
-| Idle | At home. At night (8 pm to 6 am on the phone's clock) the lamp is on and it sleeps |
+| Idle | At home. At night (8 pm to 6 am on the phone's clock) the lamp is on and it sleeps, and the bag still hangs on the wall |
 | A Worker starts a Work | It leaves, and the bag is gone from the wall |
 | The Work runs | It sends a postcard shortly after it leaves, and one more if the Work runs long |
 | The Work is accepted | It comes home with a souvenir, and the shelf gains it |
@@ -34,6 +34,12 @@ comes when a Work starts and one when it runs long (45 minutes), and at least
 10 minutes pass between any two, so many Works starting at once never flood the
 album. A Work that is already running when the daemon first learns of the cat
 sends nothing: history is not backfilled.
+
+The line is in the phone's language, chosen the way the rest of the App does:
+the device locale, Chinese when it starts with `zh` and English otherwise. The
+page's screen-reader names for the mailbox, shelf, window, bag, sign, cat and
+back button follow it too. A new language is a new set of lines in
+`daemon/catpark/web/lines.js`; a test fails if a name or a kind lacks a language.
 
 The souvenir keeps the title of your own Work, on your own shelf only.
 
