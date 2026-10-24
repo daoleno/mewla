@@ -69,6 +69,10 @@ final class MewlaLiveStore {
   private let defaults = UserDefaults.standard
   private let serverKey = "mewla.live.currentServer"
   private let dismissedKey = "mewla.live.dismissedRun"
+  /// The last state this app put on the Live Activity. Kept apart from the shared widget cache:
+  /// the widget extension writes that file when it fetches, and a fetch must not make the app
+  /// think the Activity already shows the state.
+  private let appliedKey = "mewla.live.lastApplied"
   private var observed = Set<String>()
 
   // MARK: Server binding
@@ -83,6 +87,7 @@ final class MewlaLiveStore {
     if previous == serverRef { return }
     endActivities()
     defaults.removeObject(forKey: dismissedKey)
+    defaults.removeObject(forKey: appliedKey)
     clearWidget()
     removeState()
   }
@@ -98,7 +103,11 @@ final class MewlaLiveStore {
   ) -> Bool {
     lock.lock()
     // (epoch, seq) orders states from the socket and from pushes; a late one never wins.
-    if let last = MewlaLiveShared.readState(), !state.isNewer(than: last) {
+    // Against what this app last showed, not the shared widget file: the extension writes that
+    // file when it fetches. Same rule as the widget's store() — a state is shown wherever it is
+    // newer than that surface's own last state — so a fetch that won the race cannot leave the
+    // Live Activity on an older state.
+    if let last = lastApplied, !state.isNewer(thanEpoch: last.epoch, seq: last.seq) {
       lock.unlock()
       done?()
       return false
@@ -106,6 +115,7 @@ final class MewlaLiveStore {
     if let data = try? JSONEncoder().encode(state) {
       MewlaLiveShared.write(data, to: MewlaLiveShared.stateURL)
     }
+    defaults.set("\(state.epoch):\(state.seq)", forKey: appliedKey)
     lock.unlock()
     WidgetCenter.shared.reloadAllTimelines()
     if #available(iOS 17.0, *) {
@@ -117,6 +127,14 @@ final class MewlaLiveStore {
       done?()
     }
     return true
+  }
+
+  /// The "epoch:seq" pair this app last showed on the Live Activity.
+  private var lastApplied: (epoch: Int64, seq: Int64)? {
+    guard let raw = defaults.string(forKey: appliedKey) else { return nil }
+    let parts = raw.split(separator: ":", maxSplits: 1).compactMap { Int64($0) }
+    guard parts.count == 2 else { return nil }
+    return (parts[0], parts[1])
   }
 
   /// The state of a server that is not the current one is dropped, like on Android.

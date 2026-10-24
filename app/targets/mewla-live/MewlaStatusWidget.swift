@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WidgetKit
 
 struct MewlaEntry: TimelineEntry {
@@ -47,7 +48,7 @@ private struct MewlaWidgetView: View {
   private var background: Color {
     if needs {
       return scheme == .dark
-        ? Color(red: 0.22, green: 0.10, blue: 0.09) : Color(red: 0.99, green: 0.91, blue: 0.90)
+        ? Color(red: 0.16, green: 0.07, blue: 0.06) : Color(red: 0.99, green: 0.91, blue: 0.90)
     }
     return scheme == .dark
       ? Color(red: 0.12, green: 0.11, blue: 0.10) : Color(red: 0.99, green: 0.98, blue: 0.97)
@@ -91,7 +92,7 @@ private struct SmallView: View {
         .font(.system(size: 44, weight: .bold, design: .rounded))
         .foregroundStyle(state.needsYou ? MewlaStyle.seal : Color.primary)
       Text(state.needsYou ? "Brain needs you" : "running")
-        .font(.footnote)
+        .font(.footnote.weight(state.needsYou ? .semibold : .regular))
         .foregroundStyle(state.needsYou ? MewlaStyle.seal : Color.secondary)
         .lineLimit(1)
     }

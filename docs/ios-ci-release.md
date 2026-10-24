@@ -169,6 +169,8 @@ xcodebuild \
 
 Do not test release signing by copying production secrets into a pull-request workflow or a developer `.env.local` file.
 
+For the Live Activity extension, build with `MEWLA_IOS_LIVE=1` and sign ad hoc (`CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES`): Xcode then writes the Simulator's App Group entitlement into the Mach-O `__TEXT/__entitlements` section, which is where a Simulator build reads it. Do not add device entitlements (`aps-environment`, the App Group) to the host signature itself: macOS refuses to launch the app (`FBSOpenApplicationServiceErrorDomain` / POSIX 163). To confirm the entitlement, read the section out of the binary rather than trusting `codesign -d --entitlements`.
+
 ## Remaining release gates
 
 ### Mewla rename recovery (2026-10-10)
