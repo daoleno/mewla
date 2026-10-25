@@ -31,7 +31,7 @@ function scene(card, live) {
     box.appendChild(cat);
     if (card.friend) {
       var f = pic('a/f_' + card.friend + '.webp', 'friend');
-      var fh = (d.edge ? h : spot[2]) * 0.5, fw = fh / 1.5, side = cx < 0.6 ? 1 : -1;
+      var fh = (d.edge ? h : spot[2]) * 0.5, fw = fh / 1.5, side = place.friend === 'left' ? -1 : place.friend === 'right' ? 1 : cx < 0.6 ? 1 : -1;  // a place may say where there is ground beside the cat
       f.style.left = pct(cx + side * (w / 2 + 0.01) - (side < 0 ? fw : 0)); f.style.top = pct(foot - fh); f.style.width = pct(fw);
       if (side < 0) f.classList.add('flip');
       box.appendChild(f);

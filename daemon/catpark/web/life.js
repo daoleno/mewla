@@ -638,7 +638,9 @@ function tick() {
   Snd.setNight(night);
   renderProps();
   // the cat keeps its day: when the hour turns, it goes on to what the next part of the day is for
-  if (L.cur && !L.away && !L.busy && !L.cur.react && !fits(L.cur) && Date.now() > L.holdUntil) queue(function () { return changeAct(pick()); });
+  // (but it stays put while you learn to pet it)
+  var waiting = window.CatGuide && window.CatGuide.step === 'pet';
+  if (L.cur && !L.away && !L.busy && !waiting && !L.cur.react && !fits(L.cur) && Date.now() > L.holdUntil) queue(function () { return changeAct(pick()); });
   return before;
 }
 
@@ -646,7 +648,9 @@ function tick() {
 function ensureOn() {
   build(); L.on = true; layer.style.display = '';
   window.addEventListener('resize', function () { stage.style.setProperty('--pan', '0px'); if (L.cur) follow(headOf(L.cur)[0]); });
-  tick();
+  // the room opens already at the hour's light, not fading from day to it
+  var night = document.getElementById('p-night');
+  night.style.transition = 'none'; tick(); void night.offsetWidth; night.style.transition = '';
   clearInterval(L.timers.tick); L.timers.tick = setInterval(tick, 30000);
 }
 /* the page's state has changed: bring the room to match, with a leave or a return when it is the cat that moved */

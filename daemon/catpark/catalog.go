@@ -34,7 +34,10 @@ type Place struct {
 	// Indoor places show the weather only in the card's words.
 	Indoor bool      `json:"indoor,omitempty"`
 	Spot   []float64 `json:"spot"`
-	Acts   []string  `json:"acts"`
+	// Friend is the side of the cat a friend stands on, left or right, where
+	// the other side is water; otherwise the side with more room.
+	Friend string   `json:"friend,omitempty"`
+	Acts   []string `json:"acts"`
 }
 
 // Words are the cat's lines; the daemon only checks they exist.

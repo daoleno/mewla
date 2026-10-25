@@ -83,9 +83,10 @@ function evaluate() {
       G.went = true; Life.attend(s.spot, ICON[s.id]());
     }, 1400);
   } else if (G.went && !Life.attending && !Life.busy && !Life.held) {
-    // it wandered off (a tap, the hour): it comes back to show the thing again
-    G.went = false; G.step = null; evaluate();
+    // it wandered off (a tap, a greeting, the hour): it comes back to show the thing again
+    G.went = false; G.step = null; evaluate(); return;
   }
+  G.wait = setTimeout(evaluate, 2500);   // keep an eye on it while the step waits
 }
 
 /* a new hobby: once the cat is home, its prop glows and the cat goes over to it */

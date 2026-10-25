@@ -13,7 +13,7 @@ window.CAT_CATALOG = {
   },
   "places": {
     "workshop": {"indoor": true, "spot": [0.385, 0.69, 0.34], "acts": ["tinker", "tea", "read"]},
-    "harbour": {"spot": [0.22, 0.5, 0.17], "acts": ["fish", "eat", "music", "view", "stroll"]},
+    "harbour": {"spot": [0.22, 0.5, 0.17], "friend": "left", "acts": ["fish", "eat", "music", "view", "stroll"]},
     "studio": {"indoor": true, "spot": [0.28, 0.77, 0.36], "acts": ["paint", "tea", "write"]},
     "library": {"indoor": true, "spot": [0.34, 0.64, 0.27], "acts": ["paper", "read", "write"]},
     "garden": {"spot": [0.47, 0.79, 0.23], "acts": ["garden", "eat", "yarn", "view", "stroll"]},
