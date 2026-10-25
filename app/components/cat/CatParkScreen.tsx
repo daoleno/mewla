@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useIsFocused, useRouter } from "expo-router";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
-import { catStateScript, parseCatBridgeMessage } from "../../services/catPark";
+import { catFocusScript, catStateScript, parseCatBridgeMessage } from "../../services/catPark";
 import { cachedCatBundle, syncCatBundle, type CatBundle } from "../../services/catParkBundle";
 import { resolvePrimaryAppBarGeometry } from "../navigation/primaryAppBarGeometry";
 import { useCatPark } from "./useCatPark";
@@ -38,6 +38,15 @@ export function CatParkScreen() {
   const ready = useRef(false);
   const latest = useRef(view);
   latest.current = view;
+  const focused = useIsFocused();
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (next) => setForeground(next === "active"));
+    return () => subscription.remove();
+  }, []);
+  const onScreen = focused && foreground;
+  const onScreenRef = useRef(onScreen);
+  onScreenRef.current = onScreen;
 
   // Leaving the house is Brain, the first tab, wherever the tab was opened from.
   const leave = useCallback(() => {
@@ -79,6 +88,11 @@ export function CatParkScreen() {
   }, []);
   useEffect(push, [view, push]);
 
+  // The room rests and its sounds stop while the tab is not on screen.
+  useEffect(() => {
+    if (ready.current) web.current?.injectJavaScript(catFocusScript(onScreen));
+  }, [onScreen]);
+
   const onMessage = useCallback((event: WebViewMessageEvent) => {
     const message = parseCatBridgeMessage(event.nativeEvent.data);
     if (!message) return;
@@ -86,6 +100,7 @@ export function CatParkScreen() {
       case "ready":
         ready.current = true;
         push();
+        web.current?.injectJavaScript(catFocusScript(onScreenRef.current));
         break;
       case "back":
       case "open_brain":
