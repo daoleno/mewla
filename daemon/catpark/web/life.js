@@ -60,7 +60,7 @@ function nightAmount(h) {
   return t * t * (3 - 2 * t);
 }
 /* the cat's day, by the clock: what part of it this is */
-function slotOf(h) { return h < 5.5 ? 'night' : h < 8 ? 'dawn' : h < 12 ? 'morning' : h < 13.5 ? 'noon' : h < 17 ? 'afternoon' : h < 19.5 ? 'dusk' : h < 22.5 ? 'evening' : 'night'; }
+function slotOf(h) { return Sh.slotOf(h); }
 function warmth(h) { return Math.max(0, 1 - Math.abs(h - 18.7) / 1.6) * 0.2 + Math.max(0, 1 - Math.abs(h - 6.4) / 1.0) * 0.13; }
 
 /* ---- build the layer once ---- */
@@ -358,21 +358,27 @@ function release() {
 function greet() {
   if (L.away || L.greeted) return;
   L.greeted = true;
-  var c = Sh.cat(), gap = c.gap || 0, level = c.level || 1;
   if (L.cur && L.cur.still) return;   // asleep: it does not stir until you touch it
-  var big = gap > 20 * 3600e3 || c.visits <= 1, warm = gap > 3600e3 || level >= 3;
-  if (!big && !warm) {   // you were only just here: it carries on, and sometimes looks round
-    if (L.cur && !L.cur.patch) setTimeout(function () { showB(1600); Snd.meow(0.6); }, rnd(3, 6) * 1000);
-    return;
-  }
+  // how long you were away is known once the visit is counted, a moment after the page opens
   setTimeout(function () {
-    if (L.away || L.busy || !Sh.onHouse()) return;
-    react('greet', big ? 3600 : 2200).then(function () { hearts(big ? 3 : 1); });
-    if (big) setTimeout(function () { hearts(2); }, 1200);
-    // it remembers what you last did together, and asks for it again
-    var lastFeed = (c.memory || []).filter(function (m) { return m.what === 'feed'; }).pop();
-    if (!big && lastFeed && (c.today.feed || 0) < 2 && (Sh.yard().pantry[lastFeed.arg] || 0) > 0) setTimeout(function () { wantFood(lastFeed.arg); }, 4600);
-  }, (big ? rnd(1.8, 2.6) : rnd(4.5, 7.5)) * 1000);
+    var c = Sh.cat(), gap = c.gap || 0, level = c.level || 1;
+    var big = gap > 20 * 3600e3 || c.visits <= 1, warm = gap > 3600e3 || level >= 3;
+    if (!big && !warm) {   // you were only just here: it carries on, and sometimes looks round
+      if (L.cur && !L.cur.patch) setTimeout(function () { showB(1600); Snd.meow(0.6); }, rnd(2.2, 5.2) * 1000);
+      return;
+    }
+    var notice = function () {
+      if (L.away || L.busy) return;
+      // the diary or a card is open: it notices you once you are back in the room
+      if (!Sh.onHouse()) { seen().then(function () { setTimeout(notice, rnd(1.2, 2) * 1000); }); return; }
+      react('greet', big ? 3600 : 2200).then(function () { hearts(big ? 3 : 1); });
+      if (big) setTimeout(function () { hearts(2); }, 1200);
+      // it remembers what you last did together, and asks for it again
+      var lastFeed = (c.memory || []).filter(function (m) { return m.what === 'feed'; }).pop();
+      if (!big && lastFeed && (c.today.feed || 0) < 2 && (Sh.yard().pantry[lastFeed.arg] || 0) > 0) setTimeout(function () { wantFood(lastFeed.arg); }, 4600);
+    };
+    setTimeout(notice, (big ? rnd(1, 1.8) : rnd(3.7, 6.7)) * 1000);
+  }, 800);
 }
 function wantFood(food) {
   react('want', 3800);

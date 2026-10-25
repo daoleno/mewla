@@ -48,8 +48,25 @@ type Words struct {
 	// Away is the note the room leaves while the cat is out: where, and when back.
 	Away map[string]string `json:"away"`
 	// Name is the card that asks the cat's name, and how it signs what it writes.
-	Name   map[string]string `json:"name"`
-	Letter []string          `json:"letter"`
+	Name map[string]string `json:"name"`
+	// Diary is the page it writes about the time you were away.
+	Diary  Diary    `json:"diary"`
+	Letter []string `json:"letter"`
+}
+
+// Diary is the cat's page for "while you were away": a few lines for the
+// parts of the day it spent at home, and one for each thing that happened.
+type Diary struct {
+	Title string `json:"title"`
+	Quiet string `json:"quiet"`
+	Days  string `json:"days"`
+	// Slots are lines for each part of the day (life.js slotOf), a few each.
+	Slots   map[string][]string `json:"slots"`
+	Hobby   string              `json:"hobby"`
+	Out     string              `json:"out"`
+	Back    string              `json:"back"`
+	Learnt  string              `json:"learnt"`
+	Brought map[string]string   `json:"brought"`
 }
 
 var (
