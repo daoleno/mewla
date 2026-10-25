@@ -4,11 +4,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Acts are what the person can do in the house; the page sends one with an
 // argument and the daemon checks it. Anything else is ignored.
-var Acts = []string{"visit", "pet", "feed", "play", "hobby", "collect", "pack", "seen", "gift", "learn"}
+var Acts = []string{"visit", "pet", "feed", "play", "hobby", "collect", "pack", "seen", "gift", "learn", "name"}
+
+// maxNameRunes is how long a cat's name may be: it is written on letters.
+const maxNameRunes = 16
 
 // ValidAct reports whether the daemon knows an act.
 func ValidAct(act string) bool { return contains(Acts, act) }
@@ -107,6 +111,16 @@ func (s *State) Act(act, arg string, now time.Time) bool {
 		c.care("gift", world, now, 0)
 		c.remember(now, "gift", arg)
 		changed = true
+	case "name":
+		// the person names the cat; letters and cards sign with it
+		name, ok := cleanName(arg)
+		if !ok || name == c.Name {
+			return changed
+		}
+		c.Name = name
+		c.Learned["name"] = true
+		c.remember(now, "name", name)
+		changed = true
 	case "learn":
 		// a page step, or a hobby's prop the person has now met
 		hobby, isProp := strings.CutPrefix(arg, "prop:")
@@ -116,6 +130,21 @@ func (s *State) Act(act, arg string, now time.Time) bool {
 		}
 	}
 	return changed
+}
+
+// cleanName accepts a short name of letters, digits, spaces, apostrophes and
+// hyphens, the way it will be written on a letter.
+func cleanName(raw string) (string, bool) {
+	name := strings.Join(strings.Fields(raw), " ")
+	if name == "" || len([]rune(name)) > maxNameRunes {
+		return "", false
+	}
+	for _, r := range name {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != ' ' && r != '\'' && r != '-' {
+			return "", false
+		}
+	}
+	return name, true
 }
 
 // hobbyYield is what a hobby gives back once a day: a fish from the pond, a

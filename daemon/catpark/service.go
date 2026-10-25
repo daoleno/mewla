@@ -46,8 +46,11 @@ type CatView struct {
 	Today    map[string]int  `json:"today"`
 	Learned  map[string]bool `json:"learned"`
 	Bowl     string          `json:"bowl,omitempty"`
-	// Gap is how long the person was away before this visit, in ms.
+	// Gap is how long the person was away before this visit, in ms; Since is
+	// when that last visit was, the line for "while you were away".
 	Gap    int64    `json:"gap"`
+	Since  int64    `json:"since,omitempty"`
+	Name   string   `json:"name,omitempty"`
 	Visits int      `json:"visits"`
 	Memory []Moment `json:"memory"`
 }
@@ -191,15 +194,17 @@ func (s *Service) viewLocked() View {
 			Learned:  cloneMap(care.Learned),
 			Bowl:     care.Bowl,
 			Visits:   care.Visits,
+			Name:     care.Name,
 		},
 		Now: now.UnixMilli(),
 	}
 	if care.PrevVisit != 0 {
 		view.Cat.Gap = care.LastVisit - care.PrevVisit
+		view.Cat.Since = care.PrevVisit
 	}
 	memory := care.Memory
-	if len(memory) > 12 {
-		memory = memory[len(memory)-12:]
+	if len(memory) > 30 {
+		memory = memory[len(memory)-30:]
 	}
 	view.Cat.Memory = append([]Moment{}, memory...)
 	return view

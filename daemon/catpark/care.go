@@ -23,6 +23,8 @@ type Care struct {
 	// Learned are the first-visit steps the person has done once.
 	Learned map[string]bool `json:"learned"`
 	Memory  []Moment        `json:"memory"`
+	// Name is what its person called it on the first visit.
+	Name string `json:"name,omitempty"`
 	// Bowl is food left out while the cat is away; it eats it on coming home.
 	Bowl      string `json:"bowl,omitempty"`
 	LastVisit int64  `json:"last_visit,omitempty"`
@@ -55,7 +57,7 @@ var starCaps = map[string][2]int{
 }
 
 // Steps the page may mark learnt itself; the rest follow from what the person does.
-var pageSteps = map[string]bool{"jar": true, "shelf": true, "album": true, "bag": true, "play": true, "window": true}
+var pageSteps = map[string]bool{"shelf": true, "album": true, "bag": true, "play": true, "window": true}
 
 func (c *Care) ensure() {
 	if c.Today == nil {
