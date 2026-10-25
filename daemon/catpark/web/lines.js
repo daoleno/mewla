@@ -1,3 +1,9 @@
+// The names of the house's art styles, in the order the picker shows them.
+window.CAT_STYLES = {
+  "zh": {"crayon": "蜡笔", "watercolor": "水彩", "gouache": "水粉绘本", "papercut": "剪纸", "pixel": "像素", "clay": "黏土"},
+  "en": {"crayon": "Crayon", "watercolor": "Watercolour", "gouache": "Storybook", "papercut": "Paper cut", "pixel": "Pixel", "clay": "Clay"}
+};
+
 // What the cat writes. Only a kind, a phase and a variant come from the
 // daemon; the words live here, so they can be warmed up without touching
 // stored postcards. Short, warm, and never a technical detail.
@@ -34,6 +40,7 @@ window.CAT_LINES = {
 
 // The few words that only a screen reader hears: names of the things in the picture.
 window.CAT_UI = {
-  "zh": {"hot-mail": "信箱", "hot-shelf": "纪念品架", "hot-window": "窗户", "hot-bag": "小包", "hot-sign": "小牌子", "hot-cat": "猫", "back": "返回", "home": "回屋里", "arrivetap": "收下", "zoomtap": "关闭", "sheettap": "关闭", "bagtap": "关闭"},
-  "en": {"hot-mail": "Mailbox", "hot-shelf": "Shelf", "hot-window": "Window", "hot-bag": "Bag", "hot-sign": "Sign", "hot-cat": "Cat", "back": "Back", "home": "Home", "arrivetap": "Keep", "zoomtap": "Close", "sheettap": "Close", "bagtap": "Close"}
+  "zh": {"hot-mail": "信箱", "hot-shelf": "纪念品架", "hot-window": "窗户", "hot-bag": "小包", "hot-sign": "小牌子", "hot-cat": "猫", "frame": "画框", "back": "返回", "home": "回屋里", "arrivetap": "收下", "zoomtap": "关闭", "sheettap": "关闭", "bagtap": "关闭", "stylestap": "关闭"},
+  "en": {"hot-mail": "Mailbox", "hot-shelf": "Shelf", "hot-window": "Window", "hot-bag": "Bag", "hot-sign": "Sign", "hot-cat": "Cat", "frame": "Pictures", "back": "Back", "home": "Home", "arrivetap": "Keep", "zoomtap": "Close", "sheettap": "Close", "bagtap": "Close", "stylestap": "Close"}
 };
+

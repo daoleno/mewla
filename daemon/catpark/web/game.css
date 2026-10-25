@@ -41,6 +41,28 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .bagtreat{width:4.6%;height:auto;left:8.6%;top:22.5%;opacity:0;transition:opacity .4s ease;z-index:2}
 .bagtreat.on{opacity:1}
 
+/* the picture frame on the wall: it shows the style the house is drawn in */
+.frame{position:absolute;z-index:3;min-width:44px;min-height:44px;aspect-ratio:3/2.15;transform:translate(-50%,-50%) rotate(-2deg);padding:3px;border-radius:2px;background:#8a5a32;box-shadow:0 2px 0 rgba(60,35,15,.35),0 0 0 1.5px #5b3a1f inset;outline:none;transition:filter .9s ease}
+.frame img{position:static;display:block;width:100%;height:100%;object-fit:cover;border:2px solid #f6ecd9;border-radius:1px}
+.night .frame{filter:brightness(.62) saturate(.85)}
+.plate.poke{transform-origin:62% 62%;animation:platepoke .5s ease-out}
+@keyframes platepoke{0%{transform:scale(1)}30%{transform:scale(1.014,.99)}60%{transform:scale(.995,1.008)}100%{transform:scale(1)}}
+.frame.bump{animation:bump .5s ease-out}
+/* the one night fallback: a style has no picture of the empty room at night, so the empty day room is darkened */
+.veil{position:absolute;inset:0;pointer-events:none;background:rgba(14,22,66,.66);mix-blend-mode:multiply;opacity:0;transition:opacity .9s ease;z-index:1}
+.veil.on{opacity:1}
+.ghost{left:0;top:0;width:100%;height:100%;opacity:0;transition:opacity .7s ease}
+.ghost.on{opacity:1}
+
+/* the style picker: a low sheet, no dimming, so the room is judged in place */
+#styles .panel{padding-top:14px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+.stylerow{display:flex;gap:10px;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;padding:4px 2px 6px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.stylerow::-webkit-scrollbar{display:none}
+.stile{flex:none;width:96px;scroll-snap-align:start;text-align:center;padding:5px 5px 6px;border-radius:6px;background:#fffaf0;box-shadow:0 2px 6px rgba(60,40,20,.2);min-height:44px;border:2px solid transparent}
+.stile img{display:block;width:100%;aspect-ratio:3/2;object-fit:cover;background:#eadfca;border-radius:2px}
+.stile span{display:block;margin-top:5px;font:17px/1.2 var(--hand);color:var(--ink)}
+.stile.on{border-color:var(--red)}
+
 /* ---------- overlays ---------- */
 .ov{position:absolute;inset:0;z-index:20;display:none}
 .ov.on{display:block}
@@ -113,4 +135,4 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .empty i{display:block;aspect-ratio:3/2.55;border:2px dashed #0002;border-radius:3px}
 .back{position:fixed;z-index:25;left:max(8px,env(safe-area-inset-left));top:max(8px,env(safe-area-inset-top));width:48px;height:48px;border-radius:50%;background:#fffaf0;box-shadow:0 2px 8px rgba(60,40,20,.25);display:flex;align-items:center;justify-content:center}
 .back svg{width:26px;height:26px}
-@media (prefers-reduced-motion:reduce){.cat img,.badge.on,.sign.on,#treats .tt img{animation:none}.plate,.cat{transition:none}}
+@media (prefers-reduced-motion:reduce){.cat img,.badge.on,.sign.on,#treats .tt img{animation:none}.plate,.cat,.ghost,.veil{transition:none}}
