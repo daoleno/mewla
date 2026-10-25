@@ -28,6 +28,7 @@ func openTest(t *testing.T, dir string, c *clock, lookup Lookup, views *[]View) 
 		t.Fatal(err)
 	}
 	s.now = c.now
+	s.state.Enabled = true // switched on in Labs; TestServiceSwitchedOff covers off
 	return s
 }
 
@@ -156,5 +157,45 @@ func TestDamagedStateIsSetAside(t *testing.T) {
 	openTest(t, dir, &clock{at: t0}, nil, &views)
 	if _, err := os.Stat(filepath.Join(folder, "state.json.damaged")); err != nil {
 		t.Fatal("the damaged file should be kept aside")
+	}
+}
+
+// The cat is a Labs feature: off by default it follows no Work and keeps no
+// care, and the switch is remembered on the computer.
+func TestServiceSwitchedOff(t *testing.T) {
+	dir := t.TempDir()
+	c := &clock{at: t0}
+	var views []View
+	s, err := Open(dir, nil, func(v View) { views = append(views, v) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.now = c.now
+	if s.View().Enabled {
+		t.Fatal("the cat starts switched off")
+	}
+	s.Observe(brain.Snapshot{CurrentWork: []brain.CurrentWork{delegated("w1", "fix the login bug")}})
+	s.Act("pet", "")
+	if len(views) != 0 || s.View().Presence.Away {
+		t.Fatalf("switched off, the cat does nothing: %d views", len(views))
+	}
+	s.SetEnabled(true)
+	if len(views) != 1 || !views[0].Enabled {
+		t.Fatalf("switching on is announced: %+v", views)
+	}
+	reopened, err := Open(dir, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reopened.View().Enabled {
+		t.Fatal("the switch survives a restart")
+	}
+	s.Observe(brain.Snapshot{CurrentWork: []brain.CurrentWork{delegated("w1", "fix the login bug")}})
+	if !s.View().Presence.Away {
+		t.Fatal("switched on, the cat follows the running Work")
+	}
+	s.SetEnabled(false)
+	if s.View().Enabled {
+		t.Fatal("the switch turns off again")
 	}
 }

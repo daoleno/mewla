@@ -22,6 +22,8 @@ const stateVersion = 2
 // View is the wire projection the page draws. It carries no Work titles
 // except on the person's own souvenirs.
 type View struct {
+	// Enabled is the Labs switch: off, the App shows no Cat tab.
+	Enabled   bool       `json:"enabled"`
 	Presence  Presence   `json:"presence"`
 	Postcards []Postcard `json:"postcards"`
 	Souvenirs []Souvenir `json:"souvenirs"`
@@ -108,8 +110,11 @@ func (s *Service) Observe(snapshot brain.Snapshot) {
 	}
 
 	s.mu.Lock()
-	open := s.state.OpenWorkIDs()
+	enabled, open := s.state.Enabled, s.state.OpenWorkIDs()
 	s.mu.Unlock()
+	if !enabled {
+		return // switched off in Labs: the cat stays home and follows nothing
+	}
 	obs.Outcomes = make(map[string]Outcome, len(open))
 	for _, id := range open {
 		if item, ok := current[id]; ok && item.Status != brain.WorkDone && item.Status != brain.WorkCancelled {
@@ -170,6 +175,7 @@ func (s *Service) viewLocked() View {
 	care := &s.state.Care
 	level, stars, need := world.LevelOf(care.Stars)
 	view := View{
+		Enabled:   s.state.Enabled,
 		Presence:  s.state.Presence(s.waiting),
 		Postcards: append([]Postcard{}, s.state.Postcards...),
 		Souvenirs: append([]Souvenir{}, s.state.Souvenirs...),
@@ -205,7 +211,19 @@ func (s *Service) Act(act, arg string) {
 		return
 	}
 	now := s.clock()
-	s.update(func(state *State) bool { return state.Act(act, arg, now) }, s.waitingNow())
+	s.update(func(state *State) bool { return state.Enabled && state.Act(act, arg, now) }, s.waitingNow())
+}
+
+// SetEnabled is the Labs switch. Turning it on does not observe Brain by
+// itself; the caller does that next, so the cat joins the Work running now.
+func (s *Service) SetEnabled(on bool) {
+	s.update(func(state *State) bool {
+		if state.Enabled == on {
+			return false
+		}
+		state.Enabled = on
+		return true
+	}, s.waitingNow())
 }
 
 // SetClock replaces the service's clock; previews use it to move through days.

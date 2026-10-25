@@ -84,6 +84,7 @@ describe("bridge", () => {
 
   test("the state script is one safe call even with hostile text in a title", () => {
     const view: CatView = {
+      enabled: true,
       presence: { away: true, waiting: false },
       postcards: [], yard: { day: "d", treats: [], pantry: {} }, now: 1,
       cat: { level: 1, stars: 0, need: 6, hobbies: [], pending: [], mood: "calm", today: {}, learned: {}, gap: 0, visits: 1, memory: [] },
@@ -112,6 +113,9 @@ describe("cached state", () => {
   });
   test("a cached document must look like a cat view", () => {
     expect(parseCatView({ presence: {}, postcards: [], souvenirs: [], yard: {}, cat: {} })).not.toBeNull();
+    // a view from before the Labs switch reads as switched off
+    expect(parseCatView({ presence: {}, postcards: [], souvenirs: [], yard: {}, cat: {} })?.enabled).toBe(false);
+    expect(parseCatView({ enabled: true, presence: {}, postcards: [], souvenirs: [], yard: {}, cat: {} })?.enabled).toBe(true);
     expect(parseCatView({ presence: {}, postcards: [], souvenirs: [], yard: {} })).toBeNull();
     expect(parseCatView({ presence: {} })).toBeNull();
     expect(parseCatView("x")).toBeNull();

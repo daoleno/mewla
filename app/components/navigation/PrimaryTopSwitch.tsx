@@ -12,6 +12,7 @@ import { Typography, useAppColors } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
 import { useBrain } from "../../store/brain";
+import { useCatLabs } from "../../store/catLabs";
 import { brainNeedsYou, sessionsNeedYou } from "./primarySessionsAttention";
 import {
   beginInteraction,
@@ -26,15 +27,14 @@ import {
   reconcilePrimarySwitchPending,
 } from "./primarySwitchSelection";
 
-const SWITCH_OPTION_WIDTH = 84;
-const SWITCH_OPTION_COUNT = 3;
+// Two tabs breathe wider; the Labs cat makes three.
+const SWITCH_OPTION_WIDTH = { two: 92, three: 84 } as const;
 /** The selected tab's ink underline. */
 const SWITCH_UNDERLINE_WIDTH = 28;
 const SWITCH_TRACK_PADDING = 3;
 const SWITCH_TRACK_HEIGHT = 38;
 // Extends the 32pt segment to a 48pt vertical touch target.
 const SWITCH_HIT_SLOP = { top: 8, bottom: 8 } as const;
-const PAGER_POSITION_INPUT_RANGE = [0, 1, 2] as const;
 
 interface PendingSwitchTrace {
   activated: boolean;
@@ -55,6 +55,7 @@ interface PrimarySwitchOptionProps {
   onPress: PressableProps["onPress"];
   onPressIn(): void;
   primaryColor: string;
+  width: number;
 }
 
 function PrimarySwitchOption({
@@ -69,6 +70,7 @@ function PrimarySwitchOption({
   onPress,
   onPressIn,
   primaryColor,
+  width,
 }: PrimarySwitchOptionProps) {
   const webHrefProps = Platform.OS === "web" ? { href } : {};
   return (
@@ -82,7 +84,7 @@ function PrimarySwitchOption({
       accessibilityState={{ selected: isSelected }}
       aria-selected={isSelected}
       hitSlop={SWITCH_HIT_SLOP}
-      style={styles.switchButton}
+      style={[styles.switchButton, { width }]}
     >
       <Text
         numberOfLines={1}
@@ -157,26 +159,16 @@ export function PrimaryTopSwitch({
     fallbackPosition.setValue(primaryRoutePagerIndex(activeRoute));
   }, [activeRoute, fallbackPosition, pagerPosition]);
 
-  const indicatorTranslateX = position.interpolate({
-    inputRange: [...PAGER_POSITION_INPUT_RANGE],
-    outputRange: [0, SWITCH_OPTION_WIDTH, SWITCH_OPTION_WIDTH * 2],
-    extrapolate: "clamp",
-  });
-  const brainActiveOpacity = position.interpolate({
-    inputRange: [...PAGER_POSITION_INPUT_RANGE],
-    outputRange: [1, 0, 0],
-    extrapolate: "clamp",
-  });
-  const listActiveOpacity = position.interpolate({
-    inputRange: [...PAGER_POSITION_INPUT_RANGE],
-    outputRange: [0, 1, 0],
-    extrapolate: "clamp",
-  });
-  const catActiveOpacity = position.interpolate({
-    inputRange: [...PAGER_POSITION_INPUT_RANGE],
-    outputRange: [0, 0, 1],
-    extrapolate: "clamp",
-  });
+  // Off in Labs, the cat has no page: the pager holds Brain and Sessions only.
+  const { enabled: catOn } = useCatLabs();
+  const optionWidth = catOn ? SWITCH_OPTION_WIDTH.three : SWITCH_OPTION_WIDTH.two;
+  const pages = catOn ? [0, 1, 2] : [0, 1];
+  const along = (values: number[]) =>
+    position.interpolate({ inputRange: pages, outputRange: values.slice(0, pages.length), extrapolate: "clamp" });
+  const indicatorTranslateX = along([0, optionWidth, optionWidth * 2]);
+  const brainActiveOpacity = along([1, 0, 0]);
+  const listActiveOpacity = along([0, 1, 0]);
+  const catActiveOpacity = along([0, 0, 1]);
 
   const cancelAfterPaintFrames = useCallback(() => {
     if (outerFrameRef.current != null) {
@@ -301,12 +293,13 @@ export function PrimaryTopSwitch({
 
   return (
     <View accessibilityRole="tablist" style={styles.switchRoot}>
-      <View style={styles.switchTrack}>
+      <View style={[styles.switchTrack, { width: optionWidth * pages.length + SWITCH_TRACK_PADDING * 2 }]}>
         <Animated.View
           pointerEvents="none"
           style={[
             styles.switchThumb,
             {
+              left: SWITCH_TRACK_PADDING + (optionWidth - SWITCH_UNDERLINE_WIDTH) / 2,
               backgroundColor: colors.textPrimary,
               transform: [{ translateX: indicatorTranslateX }],
             },
@@ -323,6 +316,7 @@ export function PrimaryTopSwitch({
           activeOpacity={brainActiveOpacity}
           inactiveColor={colors.textTertiary}
           primaryColor={colors.textPrimary}
+          width={optionWidth}
           onPressIn={() => beginSwitch("brain")}
           onPress={(event) => {
             event.preventDefault?.();
@@ -341,6 +335,7 @@ export function PrimaryTopSwitch({
           activeOpacity={listActiveOpacity}
           inactiveColor={colors.textTertiary}
           primaryColor={colors.textPrimary}
+          width={optionWidth}
           onPressIn={() => beginSwitch("list")}
           onPress={(event) => {
             event.preventDefault?.();
@@ -350,22 +345,25 @@ export function PrimaryTopSwitch({
             selectRoute("list");
           }}
         />
-        <PrimarySwitchOption
-          href="/cat"
-          isSelected={catSelected}
-          label="Cat"
-          activeOpacity={catActiveOpacity}
-          inactiveColor={colors.textTertiary}
-          primaryColor={colors.textPrimary}
-          onPressIn={() => beginSwitch("cat")}
-          onPress={(event) => {
-            event.preventDefault?.();
-            selectRoute("cat");
-          }}
-          onLongPress={() => {
-            selectRoute("cat");
-          }}
-        />
+        {catOn ? (
+          <PrimarySwitchOption
+            href="/cat"
+            isSelected={catSelected}
+            label="Cat"
+            activeOpacity={catActiveOpacity}
+            inactiveColor={colors.textTertiary}
+            primaryColor={colors.textPrimary}
+            width={optionWidth}
+            onPressIn={() => beginSwitch("cat")}
+            onPress={(event) => {
+              event.preventDefault?.();
+              selectRoute("cat");
+            }}
+            onLongPress={() => {
+              selectRoute("cat");
+            }}
+          />
+        ) : null}
       </View>
     </View>
   );
@@ -378,14 +376,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   switchTrack: {
-    width: SWITCH_OPTION_WIDTH * SWITCH_OPTION_COUNT + SWITCH_TRACK_PADDING * 2,
     height: SWITCH_TRACK_HEIGHT,
     padding: SWITCH_TRACK_PADDING,
     flexDirection: "row",
     alignItems: "stretch",
   },
   switchButton: {
-    width: SWITCH_OPTION_WIDTH,
     paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
@@ -403,7 +399,6 @@ const styles = StyleSheet.create({
   },
   switchThumb: {
     position: "absolute",
-    left: SWITCH_TRACK_PADDING + (SWITCH_OPTION_WIDTH - SWITCH_UNDERLINE_WIDTH) / 2,
     bottom: 2,
     width: SWITCH_UNDERLINE_WIDTH,
     height: 2,

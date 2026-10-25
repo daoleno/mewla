@@ -87,12 +87,14 @@ type catClientMessage struct {
 	// daemon ignores anything it does not know.
 	Act string `json:"act"`
 	Arg string `json:"arg"`
+	// On is the Settings → Labs switch carried by cat_labs.
+	On bool `json:"on"`
 }
 
 // handleCatMessage serves the cat_* messages and reports whether it did.
 func (s *Server) handleCatMessage(conn *websocket.Conn, msg []byte, raw clientMessage) bool {
 	switch raw.Type {
-	case "cat_get", "cat_act":
+	case "cat_get", "cat_act", "cat_labs":
 	default:
 		return false
 	}
@@ -108,6 +110,9 @@ func (s *Server) handleCatMessage(conn *websocket.Conn, msg []byte, raw clientMe
 	switch raw.Type {
 	case "cat_act":
 		hub.service.Act(message.Act, message.Arg)
+	case "cat_labs":
+		hub.service.SetEnabled(message.On)
+		fallthrough // switched on, the cat looks at Brain at once
 	case "cat_get":
 		if snapshot, err := s.liveSnapshot(); err == nil {
 			hub.service.Observe(snapshot)
