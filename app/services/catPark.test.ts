@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   catCacheKey,
+  catFocusScript,
   catSocketMessage,
   catStateScript,
   filesToFetch,
@@ -97,6 +98,13 @@ describe("bridge", () => {
     expect(JSON.parse(catStateScript(view, "en", true).slice("window.__catHost&&window.__catHost(".length, -");true;".length)).tab).toBe(true);
     const literal = script.slice("window.__catHost&&window.__catHost(".length, -");true;".length);
     expect(JSON.parse(literal).state.souvenirs[0].title).toContain("alert(1)");
+  });
+});
+
+describe("focus script", () => {
+  test("tells the page whether it is on screen", () => {
+    expect(catFocusScript(false)).toBe('window.__catHost&&window.__catHost({"cat":1,"type":"focus","on":false});true;');
+    expect(catFocusScript(true)).toContain('"on":true');
   });
 });
 

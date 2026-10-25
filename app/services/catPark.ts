@@ -180,6 +180,14 @@ export function catStateScript(view: CatView, locale?: string, tab?: boolean): s
   return `window.__catHost&&window.__catHost(${payload});true;`;
 }
 
+/**
+ * Tells the page whether the tab is on screen and the App in front: the room
+ * rests and its sounds stop while it is not.
+ */
+export function catFocusScript(on: boolean): string {
+  return `window.__catHost&&window.__catHost(${JSON.stringify({ cat: 1, type: "focus", on })});true;`;
+}
+
 /** Cached last-known state is per computer: another computer has another cat. */
 export function catCacheKey(serverKey: string): string {
   return `mewla.cat.view.v1:${serverKey}`;
