@@ -574,6 +574,8 @@ function closeDiary() {
   }, 450);
 }
 $('diarytap').addEventListener('click', closeDiary);
+/* the page is the obvious thing to tap; only a postcard on it opens instead */
+$('diarypage').addEventListener('click', function (e) { if (!e.target.closest('.dcard')) closeDiary(); });
 $('hot-cal').addEventListener('click', function () {
   if (window.CatSound) window.CatSound.paper();
   openDiary(diary || composeDiary(), false);
