@@ -90,6 +90,7 @@ function setState(next) {
     (next.souvenirs || []).forEach(function (v) { if (!known.s[v.id]) freshSv.push(v); });
   }
   S = next;
+  if (next.now) skew = next.now - Date.now();
   known = known || { p: {}, s: {} };
   postcards().forEach(function (c) { known.p[c.id] = 1; });
   souvenirs().forEach(function (v) { known.s[v.id] = 1; });
@@ -136,6 +137,42 @@ function renderHouse(popShelf) {
   $('badge').classList.toggle('on', unseen().length > 0);
   renderShelf(popShelf);
   renderFrames();
+  renderAway();
+}
+
+/* while the cat is out, a note where it sits says where it went and when it is back */
+var skew = 0, awayTimer = 0;   // skew: the daemon's clock minus ours, so "back in" never trusts the phone's clock
+function awayText() {
+  var p = S.presence, W = cwords(), place = W.places[p.kind] || W.places.trail;
+  var n = Math.ceil((p.back - (Date.now() + skew)) / 60000);
+  return { place: place, n: n, note: W.away.note.replace('{p}', place), when: n > 1 ? W.away['in'].replace('{n}', n) : W.away.soon,
+    line: n > 1 ? W.away.line.replace('{p}', place).replace('{n}', n) : W.away.line_soon.replace('{p}', place) };
+}
+function renderAway() {
+  var p = (S && S.presence) || {}, note = $('awaynote');
+  clearTimeout(awayTimer);
+  // shown once the cat has gone through the window, not while it is still packing
+  if (!p.away || !p.back || (window.CatLife && !window.CatLife.away)) { note.classList.remove('on'); return; }
+  var t = awayText();
+  note.querySelector('img').src = 'a/pl_' + (C.places[p.kind] ? p.kind : 'trail') + '.jpg';
+  $('awaywhere').textContent = t.note;
+  $('awaywhen').textContent = t.when;
+  note.setAttribute('aria-label', t.line);
+  note.classList.add('on');
+  awayTimer = setTimeout(renderAway, 20000);
+}
+/* the note opens the outing's postcard once it has come, or the place it went to */
+function openAway() {
+  var p = (S && S.presence) || {};
+  if (!p.away) return;
+  if (window.CatSound) window.CatSound.paper();
+  var card = p.card && postcards().filter(function (c) { return c.id === p.card; })[0];
+  if (card) { if (!card.seen) markSeen('postcard', card.id); openZoomCard(card); return; }
+  var t = awayText(), h = $('zoomholder'), pc = el('div', 'postcard away');
+  var sc = el('div', 'scene'); sc.appendChild(img('a/pl_' + (C.places[p.kind] ? p.kind : 'trail') + '.jpg', 'bg'));
+  var strip = el('div', 'strip'), line = el('span', 'line'); line.textContent = t.line; strip.appendChild(line);
+  pc.appendChild(sc); pc.appendChild(strip);
+  h.innerHTML = ''; h.appendChild(pc); on('zoom');
 }
 
 var shelfShown = {};
@@ -187,6 +224,7 @@ $('hot-window').addEventListener('click', openYard);
 $('hot-bag').addEventListener('click', openBag);
 $('hot-bed').addEventListener('click', function () { if (window.CatLife) window.CatLife.nap(); });
 $('hot-sign').addEventListener('click', function () { send({ type: 'open_brain' }); });
+$('awaynote').addEventListener('click', openAway);
 
 /* ---- care ---- */
 function petCat() {
@@ -567,7 +605,7 @@ setInterval(function () { if (S) { renderHouse(false); if (screen === 'yard') re
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S) { renderHouse(false); act('visit', ''); } });
 
 window.CatShell = {
-  words: words, cwords: cwords, renderHouse: renderHouse, cat: cat, yard: yard, away: away, postcards: postcards, unseen: unseen,
+  words: words, cwords: cwords, renderHouse: renderHouse, renderAway: renderAway, cat: cat, yard: yard, away: away, postcards: postcards, unseen: unseen,
   isNight: isNight, screen: function () { return screen; },
   onHouse: function () { return screen === 'house' && !overlayOpen() && !document.hidden; },
   overlayOpen: overlayOpen, arriving: function () { return arriving; },

@@ -41,10 +41,14 @@ func TestServiceLifecycleAndRestart(t *testing.T) {
 	s := openTest(t, dir, c, lookup, &views)
 
 	s.Observe(snapshotWith()) // first look: idle
+	s.Act("pet", "")          // the person meets the cat
+	s.Act("feed", "fish")
 	c.at = c.at.Add(time.Minute)
 	s.Observe(snapshotWith(delegated("w1", "Fix the login bug")))
+	c.at = c.at.Add(StartDelay)
+	s.Observe(snapshotWith(delegated("w1", "Fix the login bug")))
 	// the welcome note is the only card so far
-	if v := s.View(); !v.Presence.Away || len(v.Postcards) != 1 {
+	if v := s.View(); !v.Presence.Away || v.Presence.Back == 0 || len(v.Postcards) != 1 {
 		t.Fatalf("away with no postcard yet: %+v", v)
 	}
 	c.at = c.at.Add(StartDelay)
@@ -191,8 +195,8 @@ func TestServiceSwitchedOff(t *testing.T) {
 		t.Fatal("the switch survives a restart")
 	}
 	s.Observe(brain.Snapshot{CurrentWork: []brain.CurrentWork{delegated("w1", "fix the login bug")}})
-	if !s.View().Presence.Away {
-		t.Fatal("switched on, the cat follows the running Work")
+	if ids := s.state.OpenWorkIDs(); len(ids) != 1 || s.View().Presence.Away {
+		t.Fatalf("switched on, the cat follows the running Work from home: %v", ids)
 	}
 	s.SetEnabled(false)
 	if s.View().Enabled {

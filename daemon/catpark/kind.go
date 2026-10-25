@@ -1,6 +1,6 @@
-// Package catpark is the daemon side of the cat's little life: the cat leaves
-// when Brain's delegated Work starts, sends a few postcards while it is away,
-// comes home with a souvenir when the Work is accepted, and tends a small yard.
+// Package catpark is the daemon side of the cat's little life: it follows
+// Brain's delegated Work, goes out on short outings and sends a few postcards,
+// brings home a souvenir when a Work is accepted, and tends a small yard.
 //
 // It invents no state. Trips open and close from Brain's real Work, the cat
 // waits when something needs the person (the same signal as the live

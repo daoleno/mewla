@@ -45,6 +45,8 @@ func TestFeedingFillsTheCatAndTheBowlWaitsWhileItIsAway(t *testing.T) {
 
 	next := t0.Add(24 * time.Hour)
 	s.Apply(Observation{Now: next, Running: running("w1")})
+	next = next.Add(StartDelay)
+	s.Apply(Observation{Now: next, Running: running("w1")})
 	if !s.Act("feed", "berry", next) || s.Care.Bowl != "berry" || s.Yard.Pantry["berry"] != 0 {
 		t.Fatalf("food left while it is away goes in the bowl: %+v", s.Care)
 	}
@@ -129,6 +131,8 @@ func TestLettersWriteOneLetterADay(t *testing.T) {
 
 func TestUnknownActsAndArgumentsAreIgnored(t *testing.T) {
 	s := seeded(t)
+	delete(s.Care.Learned, "pet")
+	delete(s.Care.Learned, "feed")
 	before := s.Care.Stars
 	for _, act := range [][2]string{{"style", "crayon"}, {"feed", "leaf"}, {"pack", "../x"}, {"learn", "pet"}, {"learn", "prop:gold"}, {"learn", "prop:"}, {"collect", "nine"}, {"gift", "gold"}, {"seen", "postcard:nope"}} {
 		s.Act(act[0], act[1], t0)
@@ -153,6 +157,7 @@ func TestReadingMailTeachesAndPetsWhileAwayDoNothing(t *testing.T) {
 		t.Fatal("a card is read once")
 	}
 	s.Apply(Observation{Now: t0.Add(time.Minute), Running: running("w1")})
+	s.Apply(Observation{Now: t0.Add(time.Minute + StartDelay), Running: running("w1")})
 	if s.Act("pet", "", t0.Add(time.Minute)) || s.Act("play", "", t0.Add(time.Minute)) {
 		t.Fatal("there is no cat to pet while it is away")
 	}

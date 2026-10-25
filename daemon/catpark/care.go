@@ -205,7 +205,7 @@ func (s *State) Mood(now time.Time) string {
 	c := &s.Care
 	at := now.UnixMilli()
 	switch {
-	case len(s.Trips) > 0:
+	case !s.home():
 		return "away"
 	case c.LastBack != 0 && at-c.LastBack < int64(30*time.Minute/time.Millisecond):
 		return "excited"

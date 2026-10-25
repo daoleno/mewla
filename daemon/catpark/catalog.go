@@ -45,7 +45,9 @@ type Words struct {
 	Times    map[string]string   `json:"times"`
 	Treat    string              `json:"treat"`
 	Welcome  string              `json:"welcome"`
-	Letter   []string            `json:"letter"`
+	// Away is the note the room leaves while the cat is out: where, and when back.
+	Away   map[string]string `json:"away"`
+	Letter []string          `json:"letter"`
 }
 
 var (

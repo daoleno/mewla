@@ -25,11 +25,30 @@ the bond that grows changes what it does and what it brings back.
 | --- | --- |
 | Idle | At home, doing its own things. The light follows the phone's clock (dusk from about 6 pm, night by 8:30 pm, dawn from about 5:30 am) |
 | A Worker starts a Work | The bag flies from its hook, the cat hops to the window and slips out, taking the snack you packed |
-| The Work runs | A postcard shortly after it leaves, and one more if the Work runs long |
-| The Work is accepted | It comes home with a souvenir for the shelf, stars for the jar and often a new hobby |
+| The Work runs | A postcard shortly after it leaves; it comes home on its own after a short outing, and may go out once more if the Work runs long |
+| The Work is accepted | A souvenir for the shelf, stars for the jar and often a new hobby; if the cat is out on that Work, it comes home with it |
 | Something waits on you | A small sign hangs by the cat, or on its empty hook while it is away. Tap it to go back to Brain |
 
-A Work that is cancelled brings the cat home with nothing.
+A Work that is cancelled brings nothing home.
+
+### Outings
+
+The cat follows every Work, but it is out of the house only now and then, so
+you find it home on most visits even when Brain is busy all day. An outing
+lasts 15 minutes; then it comes home by itself, the Work still running, and
+stays home for at least 45 minutes before it goes out again. Under nonstop Work
+it is home about three quarters of the time. Each Work can take it out twice:
+when it starts (once it has run for 15 seconds, so a Work over in moments never
+does) and once more after 45 minutes. A Work that starts while the cat rests
+waits; after 30 minutes it is no longer news and lets the start go. The
+souvenir does not depend on outings: every accepted Work brings one.
+
+The cat does not go out at all until you have met it: it stays in until you
+have petted and fed it once, so the first visit always finds it home.
+
+While it is out, a note on its rug shows where it went and when it will be
+back. Tap it to see that outing's postcard, or the place itself if the card has
+not come yet.
 
 ## The first visit
 
@@ -141,9 +160,9 @@ apart. The line is written in English from the same pieces. Besides trip
 cards, the cat writes a welcome note on the first visit and, once it has taken
 up letters, a letter from home.
 
-At most one postcard comes when a Work starts and one when it runs long (45
-minutes), and at least 10 minutes pass between any two, so many Works starting
-at once never flood the album. A Work that is already running when the daemon
+A postcard comes from each outing, so at most one when a Work starts and one
+when it runs long, and at least 10 minutes pass between any two, so many Works
+starting at once never flood the album. A Work that is already running when the daemon
 first learns of the cat sends nothing: history is not backfilled.
 
 The souvenir keeps the title of your own Work, on your own shelf only.

@@ -40,6 +40,8 @@ func seeded(t *testing.T) *State {
 	if len(s.Postcards) != 1 || s.Postcards[0].Phase != PhaseWelcome || s.Yard.Pantry["fish"] != starterFish {
 		t.Fatalf("a new cat writes one welcome note and has fish to share: %+v %+v", s.Postcards, s.Yard)
 	}
+	// the person has met the cat: from now on it may go out
+	s.Care.Learned["pet"], s.Care.Learned["feed"] = true, true
 	return s
 }
 
@@ -79,8 +81,8 @@ func TestKindOf(t *testing.T) {
 func TestFirstLookNeverBackfillsHistory(t *testing.T) {
 	s := &State{}
 	s.Apply(Observation{Now: t0, Running: running("w1", "w2")})
-	if len(s.Trips) != 2 || !s.Presence(false).Away {
-		t.Fatalf("running Work should already be away: %+v", s.Trips)
+	if len(s.Trips) != 2 || s.Presence(false).Away {
+		t.Fatalf("running Work is followed, from home: %+v", s.Trips)
 	}
 	s.Apply(Observation{Now: t0.Add(2 * time.Hour), Running: running("w1", "w2")})
 	if len(tripCards(s)) != 0 {
@@ -92,8 +94,13 @@ func TestStartLeavesAndSendsOnePostcard(t *testing.T) {
 	s := seeded(t)
 	obs := Observation{Now: t0.Add(time.Minute), Running: running("w1")}
 	s.Apply(obs)
-	if !s.Presence(false).Away || s.Presence(false).Kind != KindWorkshop {
-		t.Fatalf("cat should be away at the workshop: %+v", s.Presence(false))
+	if s.Presence(false).Away {
+		t.Fatal("a Work that has only just begun does not take the cat out")
+	}
+	obs.Now = obs.Now.Add(StartDelay)
+	s.Apply(obs)
+	if p := s.Presence(false); !p.Away || p.Kind != KindWorkshop || p.Back != obs.Now.Add(OutingLength).UnixMilli() {
+		t.Fatalf("cat should be out at the workshop until it is due back: %+v", p)
 	}
 	if len(tripCards(s)) != 0 {
 		t.Fatal("a Work that has only just begun sends nothing")
@@ -119,11 +126,10 @@ func TestStartLeavesAndSendsOnePostcard(t *testing.T) {
 func TestPostcardsNeverCarryTheTitle(t *testing.T) {
 	s := seeded(t)
 	obs := Observation{Now: t0.Add(time.Minute), Running: []RunningWork{{ID: "w1", Title: "Rotate the AWS key sk-live-SECRET for acme-prod"}}}
-	s.Apply(obs)
-	obs.Now = obs.Now.Add(StartDelay)
-	s.Apply(obs)
-	obs.Now = obs.Now.Add(LongAfter + time.Minute)
-	s.Apply(obs)
+	for _, step := range []time.Duration{0, StartDelay, StartDelay, LongAfter + RestLength, StartDelay} {
+		obs.Now = obs.Now.Add(step)
+		s.Apply(obs)
+	}
 	if len(tripCards(s)) != 2 {
 		t.Fatalf("start and long postcards expected: %+v", s.Postcards)
 	}
@@ -146,8 +152,8 @@ func TestLongWorkSendsOneMorePostcardOnce(t *testing.T) {
 	if len(tripCards(s)) != 1 {
 		t.Fatalf("too early for a long-work postcard: %+v", s.Postcards)
 	}
-	for i := 0; i < 20; i++ {
-		obs.Now = t0.Add(LongAfter + time.Duration(i)*time.Hour)
+	for at := LongAfter; at < 20*time.Hour; at += 20 * time.Second {
+		obs.Now = t0.Add(at)
 		s.Apply(obs)
 	}
 	if cards := tripCards(s); len(cards) != 2 || cards[1].Phase != PhaseLong {
@@ -200,9 +206,9 @@ func TestAbsenceFromSnapshotIsNotCompletion(t *testing.T) {
 	s := seeded(t)
 	s.Apply(Observation{Now: t0.Add(time.Minute), Running: running("w1")})
 	// The Work is no longer running (the Worker's session closed) but the
-	// record has no verdict yet: the cat stays away and nothing is shelved.
+	// record has no verdict yet: the trip stays open and nothing is shelved.
 	s.Apply(Observation{Now: t0.Add(time.Hour)})
-	if !s.Presence(false).Away || len(s.Souvenirs) != 0 {
+	if len(s.Trips) != 1 || len(s.Souvenirs) != 0 {
 		t.Fatalf("cat must wait for the real verdict: %+v %+v", s.Trips, s.Souvenirs)
 	}
 }
@@ -213,6 +219,7 @@ func TestWaitingIsPresenceNotHistory(t *testing.T) {
 		t.Fatalf("waiting at home: %+v", p)
 	}
 	s.Apply(Observation{Now: t0.Add(time.Minute), Running: running("w1")})
+	s.Apply(Observation{Now: t0.Add(time.Minute + StartDelay), Running: running("w1")})
 	if p := s.Presence(true); !p.Waiting || !p.Away {
 		t.Fatalf("waiting while away: %+v", p)
 	}
@@ -285,6 +292,11 @@ func TestPackedTreatTravelsOnceAndMarksThePostcard(t *testing.T) {
 		t.Fatalf("pack: %+v", s.Yard)
 	}
 	obs := Observation{Now: t0.Add(time.Minute), Running: running("w1")}
+	s.Apply(obs)
+	if s.Yard.Bag != "fish" {
+		t.Fatal("the bag waits until the cat goes out")
+	}
+	obs.Now = obs.Now.Add(StartDelay)
 	s.Apply(obs)
 	if s.Yard.Bag != "" || s.Trips[0].Packed != "fish" {
 		t.Fatalf("the bag should leave with the cat: %+v %+v", s.Yard, s.Trips)

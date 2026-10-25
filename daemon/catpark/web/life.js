@@ -409,6 +409,7 @@ async function doLeave() {
     walker.querySelector('.sit').classList.add('on');
     L.away = true;
     renderProps();
+    Sh.renderAway();   // the note it left
   } finally { L.busy = false; }
 }
 
