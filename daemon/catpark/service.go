@@ -23,6 +23,7 @@ type View struct {
 	Postcards []Postcard `json:"postcards"`
 	Souvenirs []Souvenir `json:"souvenirs"`
 	Yard      Yard       `json:"yard"`
+	Style     Style      `json:"style"`
 	Now       int64      `json:"now"`
 }
 
@@ -142,6 +143,7 @@ func (s *Service) viewLocked() View {
 		Postcards: append([]Postcard{}, s.state.Postcards...),
 		Souvenirs: append([]Souvenir{}, s.state.Souvenirs...),
 		Yard:      s.state.Yard.clone(),
+		Style:     s.state.StyleOrDefault(),
 		Now:       s.now().UnixMilli(),
 	}
 	return view
@@ -155,6 +157,11 @@ func (s *Service) Collect(slot int) {
 // Pack puts a treat in the bag for the next trip; an empty kind unpacks.
 func (s *Service) Pack(kind string) {
 	s.update(func(state *State) bool { return state.Yard.Pack(kind) }, s.waitingNow())
+}
+
+// SetStyle records the art the person chose for the house.
+func (s *Service) SetStyle(style string) {
+	s.update(func(state *State) bool { return state.SetStyle(style) }, s.waitingNow())
 }
 
 // MarkSeen records that a postcard or souvenir was opened.

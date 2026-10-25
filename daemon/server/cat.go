@@ -87,12 +87,13 @@ type catClientMessage struct {
 	Treat     string `json:"treat"`
 	What      string `json:"what"`
 	ID        string `json:"id"`
+	Style     string `json:"style"`
 }
 
 // handleCatMessage serves the cat_* messages and reports whether it did.
 func (s *Server) handleCatMessage(conn *websocket.Conn, msg []byte, raw clientMessage) bool {
 	switch raw.Type {
-	case "cat_get", "cat_collect", "cat_pack", "cat_seen":
+	case "cat_get", "cat_collect", "cat_pack", "cat_seen", "cat_style":
 	default:
 		return false
 	}
@@ -112,6 +113,8 @@ func (s *Server) handleCatMessage(conn *websocket.Conn, msg []byte, raw clientMe
 		hub.service.Pack(message.Treat)
 	case "cat_seen":
 		hub.service.MarkSeen(message.What, message.ID)
+	case "cat_style":
+		hub.service.SetStyle(message.Style)
 	case "cat_get":
 		if snapshot, err := s.liveSnapshot(); err == nil {
 			hub.service.Observe(snapshot)
