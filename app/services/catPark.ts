@@ -61,6 +61,10 @@ export interface CatSelf {
   learned: Record<string, boolean>;
   bowl?: string;
   gap: number;
+  /** When the person was last here before this visit (ms): the start of "while you were away". */
+  since?: number;
+  /** What the person named it; it signs its letters with it. */
+  name?: string;
   visits: number;
   memory: { at: number; what: string; arg?: string }[];
 }

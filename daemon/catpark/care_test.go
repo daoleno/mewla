@@ -204,3 +204,21 @@ func TestYardGrowsWithTheBond(t *testing.T) {
 		t.Fatalf("a closer cat's yard grows more: %d then %d", small, len(y.Treats))
 	}
 }
+
+func TestTheCatIsNamedOnceAndCleanly(t *testing.T) {
+	s := seeded(t)
+	for _, bad := range []string{"", "   ", "<b>Mochi</b>", "A name far too long to write", "Mo/chi"} {
+		if s.Act("name", bad, t0) {
+			t.Fatalf("%q should not be a name", bad)
+		}
+	}
+	if !s.Act("name", "  Mochi   Bun ", t0) || s.Care.Name != "Mochi Bun" || !s.Care.Learned["name"] {
+		t.Fatalf("named: %+v", s.Care)
+	}
+	if s.Act("name", "Mochi Bun", t0) {
+		t.Fatal("the same name again is no change")
+	}
+	if !s.Act("name", "Tofu", t0) || s.Care.Name != "Tofu" {
+		t.Fatal("it can be renamed")
+	}
+}
