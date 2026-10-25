@@ -6,6 +6,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
 
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/catpark"
@@ -71,4 +74,50 @@ func TestCatBundleRefusesStrangersAndTraversal(t *testing.T) {
 func TestObserveCatSurvivesAnUnopenedState(t *testing.T) {
 	s := &Server{}
 	s.observeCat(brain.Snapshot{}) // no state directory: the cat sleeps, nothing breaks
+}
+
+// The page's acts reach the cat through one message; an act the daemon does
+// not know is answered with the unchanged state.
+func TestCatActMessageAppliesKnownActsOnly(t *testing.T) {
+	serverConn, client := upgradedTestPair(t, &websocket.Dialer{HandshakeTimeout: 5 * time.Second})
+	s := &Server{outboxes: map[*websocket.Conn]*clientOutbox{}}
+	outbox := newClientOutbox(serverConn)
+	defer outbox.close()
+	s.outboxes[serverConn] = outbox
+	s.cat.once.Do(func() { s.cat.service, s.cat.initErr = catpark.Open(t.TempDir(), nil, nil) })
+
+	stars := func(raw string) int {
+		t.Helper()
+		var message clientMessage
+		if err := json.Unmarshal([]byte(raw), &message); err != nil {
+			t.Fatal(err)
+		}
+		if !s.handleCatMessage(serverConn, []byte(raw), message) {
+			t.Fatalf("%s was not handled", raw)
+		}
+		_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
+		var reply struct {
+			Type      string       `json:"type"`
+			RequestID string       `json:"request_id"`
+			Cat       catpark.View `json:"cat"`
+		}
+		if err := client.ReadJSON(&reply); err != nil {
+			t.Fatal(err)
+		}
+		if reply.Type != "cat_state" || reply.RequestID == "" {
+			t.Fatalf("unexpected reply %+v", reply)
+		}
+		return reply.Cat.Cat.Stars
+	}
+	if got := stars(`{"type":"cat_act","request_id":"r1","act":"pet"}`); got != 1 {
+		t.Fatalf("petting drops a star, got %d", got)
+	}
+	if got := stars(`{"type":"cat_act","request_id":"r2","act":"style","arg":"crayon"}`); got != 1 {
+		t.Fatalf("an unknown act changes nothing, got %d", got)
+	}
+	var message clientMessage
+	_ = json.Unmarshal([]byte(`{"type":"cat_style"}`), &message)
+	if s.handleCatMessage(serverConn, []byte(`{"type":"cat_style"}`), message) {
+		t.Fatal("the old style message is gone")
+	}
 }

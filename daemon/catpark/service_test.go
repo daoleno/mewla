@@ -42,12 +42,13 @@ func TestServiceLifecycleAndRestart(t *testing.T) {
 	s.Observe(snapshotWith()) // first look: idle
 	c.at = c.at.Add(time.Minute)
 	s.Observe(snapshotWith(delegated("w1", "Fix the login bug")))
-	if v := s.View(); !v.Presence.Away || len(v.Postcards) != 0 {
+	// the welcome note is the only card so far
+	if v := s.View(); !v.Presence.Away || len(v.Postcards) != 1 {
 		t.Fatalf("away with no postcard yet: %+v", v)
 	}
 	c.at = c.at.Add(StartDelay)
 	s.Observe(snapshotWith(delegated("w1", "Fix the login bug")))
-	if v := s.View(); len(v.Postcards) != 1 {
+	if v := s.View(); len(v.Postcards) != 2 {
 		t.Fatalf("one postcard: %+v", v.Postcards)
 	}
 
@@ -61,7 +62,7 @@ func TestServiceLifecycleAndRestart(t *testing.T) {
 		c.at = c.at.Add(20 * time.Second)
 		s.Observe(snapshotWith(delegated("w1", "Fix the login bug")))
 	}
-	if v := s.View(); len(v.Postcards) != 1 || len(views) != 0 {
+	if v := s.View(); len(v.Postcards) != 2 || len(views) != 0 {
 		t.Fatalf("a restart re-announced something: %d postcards, %d views", len(v.Postcards), len(views))
 	}
 
@@ -94,18 +95,51 @@ func TestServiceWaitingFollowsTheQuestion(t *testing.T) {
 	}
 }
 
-func TestServiceYardActionsPersist(t *testing.T) {
+func TestServiceActsPersistAndUnknownActsAreQuiet(t *testing.T) {
 	dir := t.TempDir()
 	var views []View
 	c := &clock{at: t0}
 	s := openTest(t, dir, c, nil, &views)
 	s.Observe(snapshotWith())
 	kind := s.View().Yard.Treats[1].Kind
-	s.Collect(1)
-	s.Pack(kind)
+	s.Act("collect", "1")
+	s.Act("pack", kind)
+	s.Act("pet", "")
+	views = nil
+	s.Act("style", "crayon")
+	s.Act("../pet", "")
+	if len(views) != 0 {
+		t.Fatalf("unknown acts must not broadcast: %d", len(views))
+	}
 	reloaded := openTest(t, dir, c, nil, &views)
-	if y := reloaded.View().Yard; y.Bag != kind || !y.Treats[1].Taken {
-		t.Fatalf("yard actions must persist: %+v", y)
+	v := reloaded.View()
+	if v.Yard.Bag != kind || !v.Yard.Treats[1].Taken || v.Cat.Stars != 1 || !v.Cat.Learned["pet"] || !v.Cat.Learned["pack"] {
+		t.Fatalf("acts must persist: %+v %+v", v.Yard, v.Cat)
+	}
+	if v.Cat.Level != 1 || v.Cat.Need <= 0 || v.Cat.Mood != "happy" || len(v.Cat.Memory) == 0 {
+		t.Fatalf("the view tells the page about the cat: %+v", v.Cat)
+	}
+}
+
+func TestAnOlderCatIsKeptBesideAndANewOneStarts(t *testing.T) {
+	dir := t.TempDir()
+	folder := filepath.Join(dir, "catpark")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"version":1,"seeded":true,"style":"crayon","trips":[],"postcards":[{"id":"pc:w1:start","phase":"start","kind":"workshop","variant":2}],"souvenirs":[],"yard":{}}`
+	if err := os.WriteFile(filepath.Join(folder, "state.json"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var views []View
+	s := openTest(t, dir, &clock{at: t0}, nil, &views)
+	s.Observe(snapshotWith())
+	if kept, err := os.ReadFile(filepath.Join(folder, "state.json.v1")); err != nil || string(kept) != old {
+		t.Fatal("the older state must be kept beside, untouched")
+	}
+	v := s.View()
+	if len(v.Postcards) != 1 || v.Postcards[0].Phase != PhaseWelcome {
+		t.Fatalf("a new cat starts with its welcome note: %+v", v.Postcards)
 	}
 }
 
@@ -122,48 +156,5 @@ func TestDamagedStateIsSetAside(t *testing.T) {
 	openTest(t, dir, &clock{at: t0}, nil, &views)
 	if _, err := os.Stat(filepath.Join(folder, "state.json.damaged")); err != nil {
 		t.Fatal("the damaged file should be kept aside")
-	}
-}
-
-func TestServiceStyleIsChosenPersistedAndAllowlisted(t *testing.T) {
-	dir := t.TempDir()
-	c := &clock{at: t0}
-	var views []View
-	s := openTest(t, dir, c, func(string) Outcome { return OutcomeOpen }, &views)
-	if got := s.View().Style; got != DefaultStyle {
-		t.Fatalf("an unchosen style reads as %q, got %q", DefaultStyle, got)
-	}
-	s.SetStyle("not-a-style")
-	s.SetStyle("../crayon")
-	if len(views) != 0 || s.View().Style != DefaultStyle {
-		t.Fatalf("unknown styles must be ignored: %q after %d broadcasts", s.View().Style, len(views))
-	}
-	s.SetStyle("pixel")
-	if len(views) != 1 || views[0].Style != "pixel" {
-		t.Fatalf("a choice is broadcast once: %+v", views)
-	}
-	s.SetStyle("pixel")
-	if len(views) != 1 {
-		t.Fatalf("choosing the same style again is quiet, got %d broadcasts", len(views))
-	}
-	reopened := openTest(t, dir, c, func(string) Outcome { return OutcomeOpen }, &views)
-	if got := reopened.View().Style; got != "pixel" {
-		t.Fatalf("the choice must survive a restart, got %q", got)
-	}
-}
-
-func TestStateWithoutStyleStillLoads(t *testing.T) {
-	dir := t.TempDir()
-	folder := filepath.Join(dir, "catpark")
-	if err := os.MkdirAll(folder, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(folder, "state.json"), []byte(`{"version":1,"seeded":true,"trips":[],"postcards":[],"souvenirs":[],"yard":{}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var views []View
-	s := openTest(t, dir, &clock{at: t0}, func(string) Outcome { return OutcomeOpen }, &views)
-	if got := s.View().Style; got != DefaultStyle {
-		t.Fatalf("an older state reads as %q, got %q", DefaultStyle, got)
 	}
 }

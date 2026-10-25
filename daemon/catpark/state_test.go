@@ -18,6 +18,17 @@ func running(ids ...string) []RunningWork {
 	return out
 }
 
+// tripCards are the postcards trips sent: the welcome note and letters are written at home.
+func tripCards(s *State) []Postcard {
+	var out []Postcard
+	for _, card := range s.Postcards {
+		if card.WorkID != "" {
+			out = append(out, card)
+		}
+	}
+	return out
+}
+
 // seeded returns a state that already took its first look at an idle Brain.
 func seeded(t *testing.T) *State {
 	t.Helper()
@@ -25,6 +36,9 @@ func seeded(t *testing.T) *State {
 	s.Apply(Observation{Now: t0})
 	if !s.Seeded {
 		t.Fatal("first look should seed the state")
+	}
+	if len(s.Postcards) != 1 || s.Postcards[0].Phase != PhaseWelcome || s.Yard.Pantry["fish"] != starterFish {
+		t.Fatalf("a new cat writes one welcome note and has fish to share: %+v %+v", s.Postcards, s.Yard)
 	}
 	return s
 }
@@ -69,7 +83,7 @@ func TestFirstLookNeverBackfillsHistory(t *testing.T) {
 		t.Fatalf("running Work should already be away: %+v", s.Trips)
 	}
 	s.Apply(Observation{Now: t0.Add(2 * time.Hour), Running: running("w1", "w2")})
-	if len(s.Postcards) != 0 {
+	if len(tripCards(s)) != 0 {
 		t.Fatalf("history must not send postcards: %+v", s.Postcards)
 	}
 }
@@ -81,22 +95,23 @@ func TestStartLeavesAndSendsOnePostcard(t *testing.T) {
 	if !s.Presence(false).Away || s.Presence(false).Kind != KindWorkshop {
 		t.Fatalf("cat should be away at the workshop: %+v", s.Presence(false))
 	}
-	if len(s.Postcards) != 0 {
+	if len(tripCards(s)) != 0 {
 		t.Fatal("a Work that has only just begun sends nothing")
 	}
 	obs.Now = obs.Now.Add(StartDelay)
-	if !s.Apply(obs) || len(s.Postcards) != 1 {
+	if !s.Apply(obs) || len(tripCards(s)) != 1 {
 		t.Fatalf("one postcard expected: %+v", s.Postcards)
 	}
-	card := s.Postcards[0]
-	if card.Phase != PhaseStart || card.Kind != KindWorkshop || card.Variant < 0 || card.Variant >= StartVariants {
+	card := tripCards(s)[0]
+	place, ok := World().Places[card.Place]
+	if card.Phase != PhaseStart || card.Kind != KindWorkshop || !ok || !contains(place.Acts, card.Act) || card.Time == "" || card.Seed == 0 {
 		t.Fatalf("bad postcard %+v", card)
 	}
 	for step := 1; step <= 50; step++ {
 		obs.Now = obs.Now.Add(30 * time.Second)
 		s.Apply(obs)
 	}
-	if len(s.Postcards) != 1 {
+	if len(tripCards(s)) != 1 {
 		t.Fatalf("no second postcard while the trip is young: %+v", s.Postcards)
 	}
 }
@@ -109,7 +124,7 @@ func TestPostcardsNeverCarryTheTitle(t *testing.T) {
 	s.Apply(obs)
 	obs.Now = obs.Now.Add(LongAfter + time.Minute)
 	s.Apply(obs)
-	if len(s.Postcards) != 2 {
+	if len(tripCards(s)) != 2 {
 		t.Fatalf("start and long postcards expected: %+v", s.Postcards)
 	}
 	wire, _ := json.Marshal(s.Postcards)
@@ -128,14 +143,14 @@ func TestLongWorkSendsOneMorePostcardOnce(t *testing.T) {
 	s.Apply(obs)
 	obs.Now = t0.Add(LongAfter - time.Minute)
 	s.Apply(obs)
-	if len(s.Postcards) != 1 {
+	if len(tripCards(s)) != 1 {
 		t.Fatalf("too early for a long-work postcard: %+v", s.Postcards)
 	}
 	for i := 0; i < 20; i++ {
 		obs.Now = t0.Add(LongAfter + time.Duration(i)*time.Hour)
 		s.Apply(obs)
 	}
-	if len(s.Postcards) != 2 || s.Postcards[1].Phase != PhaseLong {
+	if cards := tripCards(s); len(cards) != 2 || cards[1].Phase != PhaseLong {
 		t.Fatalf("exactly one start and one long postcard: %+v", s.Postcards)
 	}
 }
@@ -152,8 +167,11 @@ func TestAcceptedWorkComesHomeWithOneSouvenir(t *testing.T) {
 	if s.Presence(false).Away || len(s.Trips) != 0 {
 		t.Fatalf("cat should be home: %+v", s.Trips)
 	}
-	if len(s.Souvenirs) != 1 || s.Souvenirs[0].Item != "wrench" || s.Souvenirs[0].WorkID != "w1" {
-		t.Fatalf("one wrench souvenir: %+v", s.Souvenirs)
+	if len(s.Souvenirs) != 1 || s.Souvenirs[0].Item != "wrench" || s.Souvenirs[0].WorkID != "w1" || s.Souvenirs[0].Hobby != "tinker" {
+		t.Fatalf("one wrench souvenir that taught mending: %+v", s.Souvenirs)
+	}
+	if !s.Care.knows("tinker") || s.Care.Stars != 3 || s.Care.LastBack == 0 {
+		t.Fatalf("home with a hobby and three stars: %+v", s.Care)
 	}
 	done.Now = done.Now.Add(time.Minute)
 	if s.Apply(done) && len(s.Souvenirs) != 1 {
@@ -162,7 +180,7 @@ func TestAcceptedWorkComesHomeWithOneSouvenir(t *testing.T) {
 	// The same Work running again (a follow-up) does not earn a second one.
 	s.Apply(Observation{Now: t0.Add(2 * time.Hour), Running: running("w1")})
 	s.Apply(Observation{Now: t0.Add(3 * time.Hour), Outcomes: map[string]Outcome{"w1": OutcomeDone}})
-	if len(s.Souvenirs) != 1 || len(s.Postcards) > 2 {
+	if len(s.Souvenirs) != 1 || len(tripCards(s)) > 2 {
 		t.Fatalf("a Work earns one souvenir and at most two postcards: %+v %+v", s.Souvenirs, s.Postcards)
 	}
 }
@@ -172,8 +190,8 @@ func TestCancelledOrMissingWorkBringsNothingHome(t *testing.T) {
 		s := seeded(t)
 		s.Apply(Observation{Now: t0.Add(time.Minute), Running: running("w1")})
 		s.Apply(Observation{Now: t0.Add(time.Hour), Outcomes: map[string]Outcome{"w1": outcome}})
-		if s.Presence(false).Away || len(s.Souvenirs) != 0 {
-			t.Fatalf("%s: home with no souvenir expected: %+v %+v", outcome, s.Trips, s.Souvenirs)
+		if s.Presence(false).Away || len(s.Souvenirs) != 0 || len(s.Care.Hobbies) != 0 || s.Care.Stars != 0 {
+			t.Fatalf("%s: home with no souvenir, hobby or stars expected: %+v %+v", outcome, s.Souvenirs, s.Care)
 		}
 	}
 }
@@ -273,8 +291,12 @@ func TestPackedTreatTravelsOnceAndMarksThePostcard(t *testing.T) {
 	}
 	obs.Now = obs.Now.Add(StartDelay)
 	s.Apply(obs)
-	if len(s.Postcards) != 1 || s.Postcards[0].Treat != "fish" {
+	if cards := tripCards(s); len(cards) != 1 || cards[0].Treat != "fish" {
 		t.Fatalf("postcard should mention the treat: %+v", s.Postcards)
+	}
+	s.Apply(Observation{Now: obs.Now.Add(time.Hour), Outcomes: map[string]Outcome{"w1": OutcomeDone}})
+	if s.Care.Stars != 5 {
+		t.Fatalf("a packed trip brings two more stars home: %d", s.Care.Stars)
 	}
 }
 
@@ -286,7 +308,8 @@ func TestYardGrowsDailyAndMissingADayCostsNothing(t *testing.T) {
 	if !s.Yard.Collect(0) || s.Yard.Collect(0) {
 		t.Fatal("a treat is picked once")
 	}
-	if s.Yard.Pantry[s.Yard.Treats[0].Kind] != 1 {
+	kind := s.Yard.Treats[0].Kind
+	if want := map[bool]int{true: starterFish + 1, false: 1}[kind == "fish"]; s.Yard.Pantry[kind] != want {
 		t.Fatalf("pantry: %+v", s.Yard.Pantry)
 	}
 	day := s.Yard.Day
@@ -306,14 +329,14 @@ func TestYardGrowsDailyAndMissingADayCostsNothing(t *testing.T) {
 
 func TestPackSwapsAndUnpacks(t *testing.T) {
 	var y Yard
-	y.Pantry = map[string]int{"fish": 1, "yarn": 1}
+	y.Pantry = map[string]int{"fish": 1, "berry": 1}
 	y.Pack("fish")
-	y.Pack("yarn")
-	if y.Bag != "yarn" || y.Pantry["fish"] != 1 || y.Pantry["yarn"] != 0 {
+	y.Pack("berry")
+	if y.Bag != "berry" || y.Pantry["fish"] != 1 || y.Pantry["berry"] != 0 {
 		t.Fatalf("swap: %+v", y)
 	}
 	y.Pack("")
-	if y.Bag != "" || y.Pantry["yarn"] != 1 {
+	if y.Bag != "" || y.Pantry["berry"] != 1 {
 		t.Fatalf("unpack: %+v", y)
 	}
 	if y.Pack("leaf") {

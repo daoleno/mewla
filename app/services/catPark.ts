@@ -13,11 +13,18 @@ export type CatKind =
 
 export interface CatPostcard {
   id: string;
-  work_id: string;
-  kind: CatKind;
-  phase: "start" | "long";
-  variant: number;
+  work_id?: string;
+  kind?: CatKind;
+  /** start and long come from a trip; welcome and letter are written at home. */
+  phase: "start" | "long" | "welcome" | "letter";
+  place?: string;
+  act?: string;
+  time?: string;
+  weather?: string;
+  friend?: string;
   treat?: string;
+  hobby?: string;
+  seed: number;
   at: number;
   seen?: boolean;
 }
@@ -28,6 +35,7 @@ export interface CatSouvenir {
   kind: CatKind;
   item: string;
   title?: string;
+  hobby?: string;
   at: number;
   seen?: boolean;
 }
@@ -39,14 +47,31 @@ export interface CatYard {
   bag?: string;
 }
 
+/** The cat itself: its bond, hobbies, mood and what it remembers. */
+export interface CatSelf {
+  level: number;
+  stars: number;
+  need: number;
+  hobbies: string[];
+  pending: string[];
+  mood: string;
+  favorite?: string;
+  fav_hobby?: string;
+  today: Record<string, number>;
+  learned: Record<string, boolean>;
+  bowl?: string;
+  gap: number;
+  visits: number;
+  memory: { at: number; what: string; arg?: string }[];
+}
+
 /** What the daemon says the cat is doing and has collected. */
 export interface CatView {
   presence: { away: boolean; waiting: boolean; kind?: CatKind };
   postcards: CatPostcard[];
   souvenirs: CatSouvenir[];
   yard: CatYard;
-  /** The art the person chose for the house; the daemon remembers it. */
-  style?: string;
+  cat: CatSelf;
   now: number;
 }
 
@@ -63,7 +88,7 @@ export interface CatManifest {
 
 export const CAT_BUNDLE_PURPOSE = "mewla-cat";
 export const CAT_INDEX = "index.html";
-const MAX_FILES = 200;
+const MAX_FILES = 400;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
 
@@ -109,10 +134,7 @@ export type CatBridgeMessage =
   | { type: "ready" }
   | { type: "back" }
   | { type: "open_brain" }
-  | { type: "collect"; slot: number }
-  | { type: "pack"; treat: string }
-  | { type: "style"; style: string }
-  | { type: "seen"; what: "postcard" | "souvenir"; id: string };
+  | { type: "act"; act: string; arg: string };
 
 /** A message from the page, validated: the page is content, not authority. */
 export function parseCatBridgeMessage(raw: unknown): CatBridgeMessage | null {
@@ -133,17 +155,11 @@ export function parseCatBridgeMessage(raw: unknown): CatBridgeMessage | null {
     case "back":
     case "open_brain":
       return { type: message.type };
-    case "collect":
-      return typeof message.slot === "number" && Number.isInteger(message.slot) && message.slot >= 0 && message.slot < 16
-        ? { type: "collect", slot: message.slot }
-        : null;
-    case "pack":
-      return typeof message.treat === "string" && /^[a-z]{0,16}$/.test(message.treat) ? { type: "pack", treat: message.treat } : null;
-    case "style":
-      return typeof message.style === "string" && /^[a-z]{3,16}$/.test(message.style) ? { type: "style", style: message.style } : null;
-    case "seen":
-      return (message.what === "postcard" || message.what === "souvenir") && typeof message.id === "string" && message.id.length > 0 && message.id.length <= 200
-        ? { type: "seen", what: message.what, id: message.id }
+    case "act":
+      // the daemon knows the acts and checks each one; here only the shape
+      return typeof message.act === "string" && /^[a-z]{2,16}$/.test(message.act)
+        && typeof message.arg === "string" && /^[A-Za-z0-9:_.-]{0,200}$/.test(message.arg)
+        ? { type: "act", act: message.act, arg: message.arg }
         : null;
     default:
       return null;
@@ -153,14 +169,8 @@ export function parseCatBridgeMessage(raw: unknown): CatBridgeMessage | null {
 /** The WebSocket message a page action becomes, or null when it stays in the App. */
 export function catSocketMessage(message: CatBridgeMessage): Record<string, unknown> | null {
   switch (message.type) {
-    case "collect":
-      return { type: "cat_collect", slot: message.slot };
-    case "pack":
-      return { type: "cat_pack", treat: message.treat };
-    case "style":
-      return { type: "cat_style", style: message.style };
-    case "seen":
-      return { type: "cat_seen", what: message.what, id: message.id };
+    case "act":
+      return { type: "cat_act", act: message.act, arg: message.arg };
     default:
       return null;
   }
@@ -190,12 +200,12 @@ export function catFocusScript(on: boolean): string {
 
 /** Cached last-known state is per computer: another computer has another cat. */
 export function catCacheKey(serverKey: string): string {
-  return `mewla.cat.view.v1:${serverKey}`;
+  return `mewla.cat.view.v2:${serverKey}`;
 }
 
 export function parseCatView(raw: unknown): CatView | null {
   if (typeof raw !== "object" || raw === null) return null;
   const view = raw as Partial<CatView>;
-  if (!view.presence || typeof view.presence !== "object" || !Array.isArray(view.postcards) || !Array.isArray(view.souvenirs) || !view.yard) return null;
+  if (!view.presence || typeof view.presence !== "object" || !Array.isArray(view.postcards) || !Array.isArray(view.souvenirs) || !view.yard || !view.cat) return null;
   return view as CatView;
 }

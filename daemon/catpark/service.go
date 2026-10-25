@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/daoleno/mewla/daemon/live"
 )
 
-const stateVersion = 1
+// stateVersion 2 is the v4 game. An older file is set aside and the cat
+// starts afresh: there is no migration.
+const stateVersion = 2
 
 // View is the wire projection the page draws. It carries no Work titles
 // except on the person's own souvenirs.
@@ -23,8 +26,28 @@ type View struct {
 	Postcards []Postcard `json:"postcards"`
 	Souvenirs []Souvenir `json:"souvenirs"`
 	Yard      Yard       `json:"yard"`
-	Style     Style      `json:"style"`
+	Cat       CatView    `json:"cat"`
 	Now       int64      `json:"now"`
+}
+
+// CatView is the cat itself: its bond, hobbies, mood and what it remembers.
+type CatView struct {
+	Level int `json:"level"`
+	// Stars are the stars toward the next level, out of Need (0 at the top).
+	Stars    int             `json:"stars"`
+	Need     int             `json:"need"`
+	Hobbies  []string        `json:"hobbies"`
+	Pending  []string        `json:"pending"`
+	Mood     string          `json:"mood"`
+	Favorite string          `json:"favorite,omitempty"`
+	FavHobby string          `json:"fav_hobby,omitempty"`
+	Today    map[string]int  `json:"today"`
+	Learned  map[string]bool `json:"learned"`
+	Bowl     string          `json:"bowl,omitempty"`
+	// Gap is how long the person was away before this visit, in ms.
+	Gap    int64    `json:"gap"`
+	Visits int      `json:"visits"`
+	Memory []Moment `json:"memory"`
 }
 
 // Lookup reports how the durable record says a Work stands.
@@ -59,6 +82,10 @@ func Open(dir string, lookup Lookup, onChange func(View)) (*Service, error) {
 			// A damaged file is set aside, never overwritten silently.
 			_ = os.Rename(s.path, s.path+".damaged")
 			s.state = State{}
+		} else if s.state.Version != stateVersion {
+			// An older cat: kept beside, and this one starts afresh.
+			_ = os.Rename(s.path, s.path+".v"+strconv.Itoa(s.state.Version))
+			s.state = State{}
 		}
 	case !errors.Is(err, os.ErrNotExist):
 		return nil, fmt.Errorf("catpark: %w", err)
@@ -69,7 +96,7 @@ func Open(dir string, lookup Lookup, onChange func(View)) (*Service, error) {
 
 // Observe reads Brain and folds it into the cat's state.
 func (s *Service) Observe(snapshot brain.Snapshot) {
-	now := s.now()
+	now := s.clock()
 	waiting := live.Project(snapshot, now).Kind == live.KindNeedsYou
 	obs := Observation{Now: now, Waiting: waiting}
 	current := map[string]brain.CurrentWork{}
@@ -138,35 +165,61 @@ func (s *Service) View() View {
 }
 
 func (s *Service) viewLocked() View {
+	now := s.now()
+	world := World()
+	care := &s.state.Care
+	level, stars, need := world.LevelOf(care.Stars)
 	view := View{
 		Presence:  s.state.Presence(s.waiting),
 		Postcards: append([]Postcard{}, s.state.Postcards...),
 		Souvenirs: append([]Souvenir{}, s.state.Souvenirs...),
 		Yard:      s.state.Yard.clone(),
-		Style:     s.state.StyleOrDefault(),
-		Now:       s.now().UnixMilli(),
+		Cat: CatView{
+			Level: level, Stars: stars, Need: need,
+			Hobbies:  append([]string{}, care.Hobbies...),
+			Pending:  append([]string{}, care.Pending...),
+			Mood:     s.state.Mood(now),
+			Favorite: care.Favorite(),
+			FavHobby: care.FavoriteHobby(),
+			Today:    cloneMap(care.Today),
+			Learned:  cloneMap(care.Learned),
+			Bowl:     care.Bowl,
+			Visits:   care.Visits,
+		},
+		Now: now.UnixMilli(),
 	}
+	if care.PrevVisit != 0 {
+		view.Cat.Gap = care.LastVisit - care.PrevVisit
+	}
+	memory := care.Memory
+	if len(memory) > 12 {
+		memory = memory[len(memory)-12:]
+	}
+	view.Cat.Memory = append([]Moment{}, memory...)
 	return view
 }
 
-// Collect picks up a treat in today's yard.
-func (s *Service) Collect(slot int) {
-	s.update(func(state *State) bool { return state.Yard.Collect(slot) }, s.waitingNow())
+// Act applies one thing the person did in the house.
+func (s *Service) Act(act, arg string) {
+	if !ValidAct(act) {
+		return
+	}
+	now := s.clock()
+	s.update(func(state *State) bool { return state.Act(act, arg, now) }, s.waitingNow())
 }
 
-// Pack puts a treat in the bag for the next trip; an empty kind unpacks.
-func (s *Service) Pack(kind string) {
-	s.update(func(state *State) bool { return state.Yard.Pack(kind) }, s.waitingNow())
+// SetClock replaces the service's clock; previews use it to move through days.
+func (s *Service) SetClock(now func() time.Time) {
+	s.mu.Lock()
+	s.now = now
+	s.mu.Unlock()
 }
 
-// SetStyle records the art the person chose for the house.
-func (s *Service) SetStyle(style string) {
-	s.update(func(state *State) bool { return state.SetStyle(style) }, s.waitingNow())
-}
-
-// MarkSeen records that a postcard or souvenir was opened.
-func (s *Service) MarkSeen(what, id string) {
-	s.update(func(state *State) bool { return state.markSeen(what, id) }, s.waitingNow())
+func (s *Service) clock() time.Time {
+	s.mu.Lock()
+	now := s.now
+	s.mu.Unlock()
+	return now()
 }
 
 func (s *Service) waitingNow() bool {
@@ -175,42 +228,37 @@ func (s *Service) waitingNow() bool {
 	return s.waiting
 }
 
-func (s *State) markSeen(what, id string) bool {
-	switch what {
-	case "postcard":
-		for i := range s.Postcards {
-			if s.Postcards[i].ID == id && !s.Postcards[i].Seen {
-				s.Postcards[i].Seen = true
-				return true
-			}
-		}
-	case "souvenir":
-		for i := range s.Souvenirs {
-			if s.Souvenirs[i].ID == id && !s.Souvenirs[i].Seen {
-				s.Souvenirs[i].Seen = true
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func (s State) clone() State {
 	s.Trips = append([]Trip(nil), s.Trips...)
 	s.Postcards = append([]Postcard(nil), s.Postcards...)
 	s.Souvenirs = append([]Souvenir(nil), s.Souvenirs...)
 	s.Yard = s.Yard.clone()
+	s.Care = s.Care.clone()
 	return s
+}
+
+func (c Care) clone() Care {
+	c.Hobbies = append([]string(nil), c.Hobbies...)
+	c.Pending = append([]string(nil), c.Pending...)
+	c.Today = cloneMap(c.Today)
+	c.Habits = cloneMap(c.Habits)
+	c.Learned = cloneMap(c.Learned)
+	c.Memory = append([]Moment(nil), c.Memory...)
+	return c
 }
 
 func (y Yard) clone() Yard {
 	y.Treats = append([]Treat{}, y.Treats...)
-	pantry := make(map[string]int, len(y.Pantry))
-	for kind, count := range y.Pantry {
-		pantry[kind] = count
-	}
-	y.Pantry = pantry
+	y.Pantry = cloneMap(y.Pantry)
 	return y
+}
+
+func cloneMap[K comparable, V any](in map[K]V) map[K]V {
+	out := make(map[K]V, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 // OutcomeOf maps a durable Work to the cat's verdict on its trip.
