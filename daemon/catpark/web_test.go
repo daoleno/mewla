@@ -96,3 +96,49 @@ func TestManifestChangesWithContent(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryStyleHasItsWholeRoomAndAName(t *testing.T) {
+	files := Bundle()
+	raw, err := fs.ReadFile(files, "lines.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	part := text[strings.Index(text, "window.CAT_STYLES"):]
+	part = part[strings.Index(part, "{") : strings.Index(part, "};")+1]
+	var names map[string]map[string]string
+	if err := json.Unmarshal([]byte(part), &names); err != nil {
+		t.Fatal(err)
+	}
+	page, err := fs.ReadFile(files, "game.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	listed := regexp.MustCompile(`var STYLES = \[([^\]]*)\]`).FindStringSubmatch(string(page))
+	if listed == nil {
+		t.Fatal("the page lists no styles")
+	}
+	want := make([]string, 0, len(Styles))
+	for _, style := range Styles {
+		want = append(want, "'"+string(style)+"'")
+	}
+	if strings.Join(want, ", ") != strings.TrimSpace(listed[1]) {
+		t.Errorf("the page's styles %q differ from the daemon's %q", listed[1], strings.Join(want, ", "))
+	}
+	for _, style := range Styles {
+		for _, language := range []string{"zh", "en"} {
+			if strings.TrimSpace(names[language][string(style)]) == "" {
+				t.Errorf("style %s has no %s name", style, language)
+			}
+		}
+		slots := []string{"card"}
+		if style != DefaultStyle {
+			slots = []string{"home", "away", "night", "card"}
+		}
+		for _, slot := range slots {
+			if _, err := fs.Stat(files, "a/s/"+string(style)+"/"+slot+".jpg"); err != nil {
+				t.Errorf("style %s is missing its %s picture", style, slot)
+			}
+		}
+	}
+}

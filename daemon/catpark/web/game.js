@@ -13,6 +13,10 @@ var SLOTS = [[28, 73], [50, 65], [71, 72]];   // yard treat spots, % of the pict
 var SHELF_X = [16.5, 25, 33.5, 42];
 var PANTRY_CAP = 9;
 
+var STYLES = ['crayon', 'watercolor', 'gouache', 'papercut', 'pixel', 'clay'];
+var STYLE = 'crayon';         // the art the house is drawn in; the daemon remembers it per user
+var TAB = false;              // hosted as the App's Cat tab: its header already leads home
+
 var S = null;                 // the latest View from the daemon
 var screen = 'house';
 var known = null;             // postcard / souvenir ids already shown
@@ -33,7 +37,10 @@ function send(msg) {
 }
 function receive(msg) {
   if (!msg || msg.cat !== 1) return;
-  if (msg.type === 'state' && msg.state) setState(msg.state, msg.locale);
+  if (msg.type === 'state' && msg.state) {
+    if (msg.tab && !TAB) { TAB = true; renderBack(); }
+    setState(msg.state, msg.locale);
+  }
 }
 window.__catHost = receive;
 window.addEventListener('message', function (e) {
@@ -64,7 +71,8 @@ function applyWords() {
 applyWords();
 
 function setState(next, locale) {
-  if (locale) { LANG = /^zh/i.test(locale) ? 'zh' : 'en'; applyWords(); }
+  if (locale) { LANG = /^zh/i.test(locale) ? 'zh' : 'en'; applyWords(); renderStyleRow(); }
+  if (next.style && next.style !== STYLE && STYLES.indexOf(next.style) >= 0) changeStyle(next.style, known !== null);
   var first = known === null;
   var fresh = [];
   var freshSv = [];
@@ -84,6 +92,52 @@ function setState(next, locale) {
 /* ---- house ---- */
 var plates = { home: $('p-home'), away: $('p-away'), night: $('p-night'), nightaway: $('p-nightaway') };
 
+/* ---- the house's art style ----
+   Crayon is the original: an empty room plus the cat as a cut-out that breathes.
+   Every other style is whole pictures with the cat painted in, so its cut-outs
+   stay hidden; a style has no picture of the empty room at night, so that one
+   moment is the empty day room under a dark veil. */
+function baked() { return STYLE !== 'crayon'; }
+function plateSrc(style, slot) {
+  if (style === 'crayon') return { home: 'a/home_nocat.jpg', away: 'a/away.jpg', night: 'a/night.jpg', nightaway: 'a/night_away.jpg' }[slot];
+  return 'a/s/' + style + '/' + (slot === 'nightaway' ? 'away' : slot) + '.jpg';
+}
+function plateKey() {
+  var p = (S && S.presence) || {}, night = isNight();
+  return night ? (p.away ? 'nightaway' : 'night') : (p.away ? 'away' : 'home');
+}
+function setStylePlates(style) {
+  Object.keys(plates).forEach(function (k) { plates[k].src = plateSrc(style, k); });
+  $('frameimg').src = 'a/s/' + style + '/card.jpg';
+}
+var styleToken = 0;
+/* Swap the whole scene: the new picture fades in over the old one, then the plates take it over. */
+function changeStyle(next, animate) {
+  if (next === STYLE || STYLES.indexOf(next) < 0) return;
+  var token = ++styleToken, key = plateKey(), url = plateSrc(next, key);
+  var finish = function () {
+    if (token !== styleToken) return;
+    STYLE = next;
+    setStylePlates(next);
+    var g = document.querySelector('.ghost'); if (g) g.remove();
+    renderHouse(false); renderStyleRow();
+  };
+  if (!animate) { finish(); return; }
+  var pre = new Image();
+  pre.onload = pre.onerror = function () {
+    if (token !== styleToken) return;
+    var ghost = img(url, 'plate ghost');
+    var old = document.querySelector('.ghost'); if (old) old.remove();
+    $('stage').insertBefore(ghost, $('cat-home'));
+    void ghost.offsetWidth; ghost.classList.add('on');
+    STYLE = next;                       // cut-outs fade out and the veil follows at once
+    renderHouse(false); renderStyleRow();
+    $('frameimg').src = 'a/s/' + next + '/card.jpg';
+    $('frame').classList.remove('bump'); void $('frame').offsetWidth; $('frame').classList.add('bump');
+    setTimeout(function () { if (token === styleToken) { setStylePlates(next); var g = document.querySelector('.ghost'); if (g) g.remove(); } }, 760);
+  };
+  pre.src = url;
+}
 function render(popShelf) {
   renderHouse(popShelf);
   if (screen === 'album') renderAlbum();
@@ -96,10 +150,11 @@ function render(popShelf) {
 function renderHouse(popShelf) {
   var p = (S && S.presence) || {};
   var night = isNight();
-  var plate = night ? (p.away ? 'nightaway' : 'night') : (p.away ? 'away' : 'home');
+  var plate = plateKey();
   Object.keys(plates).forEach(function (k) { plates[k].classList.toggle('on', k === plate); });
-  $('cat-home').classList.toggle('on', !p.away && !night);
-  $('cat-night').classList.toggle('on', !p.away && night);
+  $('cat-home').classList.toggle('on', !p.away && !night && !baked());
+  $('cat-night').classList.toggle('on', !p.away && night && !baked());
+  $('veil').classList.toggle('on', baked() && night && !!p.away);
   $('stage').classList.toggle('night', night);
   var cat = $('hot-cat');
   cat.style.display = p.away ? 'none' : '';
@@ -141,9 +196,10 @@ function renderShelf(pop) {
 }
 
 $('hot-cat').addEventListener('click', function () {
-  var c = isNight() ? $('cat-night') : $('cat-home');
+  var c = baked() ? plates[plateKey()] : isNight() ? $('cat-night') : $('cat-home');
   c.classList.remove('poke'); void c.offsetWidth; c.classList.add('poke');
 });
+$('frame').addEventListener('click', openStyles);
 $('hot-mail').addEventListener('click', function () { if (unseen().length) showArrive(); else openAlbum(); });
 $('hot-shelf').addEventListener('click', openSheet);
 $('hot-window').addEventListener('click', openYard);
@@ -307,12 +363,33 @@ function closeYard() { screen = 'house'; $('yard').classList.remove('on'); rende
 function openBag() { renderTray($('bagtray')); on('bagsheet'); }
 $('bagtap').addEventListener('click', function () { off('bagsheet'); });
 
+/* ---- style picker: tap the picture frame ---- */
+function renderStyleRow() {
+  var row = $('stylerow'), names = (window.CAT_STYLES[LANG] || window.CAT_STYLES.en);
+  row.innerHTML = '';
+  STYLES.forEach(function (k) {
+    var b = el('button', 'stile' + (k === STYLE ? ' on' : ''));
+    b.setAttribute('aria-pressed', k === STYLE ? 'true' : 'false');
+    b.appendChild(img('a/s/' + k + '/card.jpg'));
+    var n = el('span'); n.textContent = names[k]; b.appendChild(n);
+    b.addEventListener('click', function () { chooseStyle(k); });
+    row.appendChild(b);
+  });
+}
+function chooseStyle(k) {
+  if (k === STYLE) return;
+  changeStyle(k, true);
+  send({ type: 'style', style: k });
+}
+function openStyles() { renderStyleRow(); on('styles'); var s = document.querySelector('#stylerow .stile.on'); if (s && s.scrollIntoView) s.scrollIntoView({ inline: 'center', block: 'nearest' }); }
+$('stylestap').addEventListener('click', function () { off('styles'); });
+
 /* ---- the one back button ---- */
 var CHEVRON = '<svg viewBox="0 0 26 26" fill="none" stroke="#4a3b2e" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"><path d="M16 4L7 13l9 9"/></svg>';
 var HOME = '<svg viewBox="0 0 26 26" fill="none" stroke="#4a3b2e" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M3 12.5L13 4l10 8.5"/><path d="M6 11v11h14V11"/><path d="M11 22v-6h4v6" stroke="#c8442f"/></svg>';
 function renderBack() {
   var b = $('back');
-  b.style.display = overlayOpen() ? 'none' : '';
+  b.style.display = overlayOpen() || (TAB && screen === 'house') ? 'none' : '';
   b.innerHTML = screen === 'house' ? CHEVRON : HOME;
   b.setAttribute('aria-label', screen === 'house' ? words().back : words().home);
 }
@@ -332,6 +409,7 @@ document.addEventListener('touchend', function (e) {
   if ($('zoom').classList.contains('on')) closeZoom();
   else if ($('sheet').classList.contains('on')) off('sheet');
   else if ($('bagsheet').classList.contains('on')) off('bagsheet');
+  else if ($('styles').classList.contains('on')) off('styles');
   else if (screen === 'album' && $('albumscroll').scrollTop <= 0) closeAlbum();
 }, { passive: true });
 
@@ -339,7 +417,7 @@ document.addEventListener('touchend', function (e) {
 setInterval(function () { if (S) { renderHouse(false); if (screen === 'yard') renderYard(); } }, 60000);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S) renderHouse(false); });
 
-window.__cat = { setState: setState, get state() { return S; }, openAlbum: openAlbum, openYard: openYard, openSheet: openSheet, openBag: openBag };
+window.__cat = { setState: setState, openStyles: openStyles, chooseStyle: chooseStyle, get style() { return STYLE; }, get state() { return S; }, openAlbum: openAlbum, openYard: openYard, openSheet: openSheet, openBag: openBag };
 
 renderBack();
 renderHouse(false);
