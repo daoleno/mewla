@@ -12,28 +12,29 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #yard.on{display:block}
 .stage{position:absolute;left:50%;top:50%;width:max(100vw,calc(100dvh*864/1536));aspect-ratio:864/1536;transform:translate(-50%,-50%)}
 
+/* the house slides a little to keep the cat in view (life.js follow) */
+#stage{transform:translate(calc(-50% + var(--pan,0px)),-50%);transition:transform 1.6s cubic-bezier(.4,0,.2,1)}
+@media (prefers-reduced-motion:reduce){#stage{transition:none}}
 #yardstage{width:max(100vw,calc(100dvh*2/3));aspect-ratio:2/3;transform:translate(-44%,-50%)}
 .stage img{position:absolute;display:block;pointer-events:none;-webkit-user-drag:none}
 .plate{left:0;top:0;width:100%;height:100%;opacity:0;transition:opacity .9s ease}
 .plate.on{opacity:1}
 .hot{position:absolute;min-width:44px;min-height:44px;transform:translate(-50%,-50%);z-index:3;outline:none;border-radius:50%}
 #hot-cat{z-index:5}
+#hot-mail{z-index:6}  /* the cat sits by the doormat to show you the letters; the letters stay tappable */
 .shelfitems{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;transition:filter .9s ease}
 .night .shelfitems{filter:brightness(.62) saturate(.85)}
-.si{position:absolute;bottom:89.1%;width:7.6%;height:5.4%;object-fit:contain;object-position:50% 100%;transform:translateX(-50%);filter:drop-shadow(0 1px 0 rgba(60,40,20,.25))}
+.si{position:absolute;transform:translateX(-50%);pointer-events:auto;z-index:3;min-width:30px;min-height:30px;display:flex;align-items:flex-end;justify-content:center;outline:none}
+.si img{position:static;width:100%;height:auto;filter:drop-shadow(0 1px 1px rgba(60,40,20,.35))}
 .si.pop{animation:pop .9s cubic-bezier(.3,1.6,.5,1)}
 @keyframes pop{0%{transform:translateX(-50%) translateY(-40px) scale(.2);opacity:0}60%{transform:translateX(-50%) translateY(2px) scale(1.2);opacity:1}100%{transform:translateX(-50%) scale(1)}}
-.badge{position:absolute;z-index:4;width:34px;height:26px;left:69%;top:8.5%;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity .3s}
-.badge.on{opacity:1;animation:wig 1.6s ease-in-out infinite}
-@keyframes wig{0%,100%{transform:translate(-50%,-50%) rotate(-6deg)}50%{transform:translate(-50%,-62%) rotate(6deg)}}
 .bump{animation:bump .5s ease-out}
 @keyframes bump{0%{transform:translate(-50%,-50%) scale(1)}40%{transform:translate(-50%,-50%) scale(1.18)}100%{transform:translate(-50%,-50%) scale(1)}}
-/* the waiting sign hangs by the cat, or on its empty hook while it is away */
-.sign{width:13%;height:auto;left:16%;top:29%;opacity:0;transform-origin:50% 0;transition:opacity .5s ease,left .5s,top .5s,width .5s;z-index:2}
+/* the waiting sign hangs on the door */
+.sign{width:12%;height:auto;left:9.5%;top:27%;opacity:0;transform-origin:50% 0;transition:opacity .5s ease;z-index:2}
 .sign.on{opacity:1;animation:sway 3.2s ease-in-out infinite}
-.sign.hook{left:7%;top:19%;width:12%}
 @keyframes sway{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
-.bagtreat{width:4.6%;height:auto;left:8.6%;top:22.5%;opacity:0;transition:opacity .4s ease;z-index:2}
+.bagtreat{width:3.6%;height:auto;left:44.5%;top:29.5%;opacity:0;transition:opacity .4s ease;z-index:2}
 .bagtreat.on{opacity:1}
 
 /* ---------- overlays ---------- */
@@ -108,7 +109,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .empty i{display:block;aspect-ratio:3/2.55;border:2px dashed #0002;border-radius:3px}
 .back{position:fixed;z-index:25;left:max(8px,env(safe-area-inset-left));top:max(8px,env(safe-area-inset-top));width:48px;height:48px;border-radius:50%;background:#fffaf0;box-shadow:0 2px 8px rgba(60,40,20,.25);display:flex;align-items:center;justify-content:center}
 .back svg{width:26px;height:26px}
-@media (prefers-reduced-motion:reduce){.badge.on,.sign.on,#treats .tt img{animation:none}.plate{transition:none}}
+@media (prefers-reduced-motion:reduce){.sign.on,#treats .tt img{animation:none}.plate{transition:none}}
 
 /* ---------- the gouache house, alive (life.js) ---------- */
 #life{position:absolute;inset:0;pointer-events:none}
@@ -130,43 +131,33 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #life .walker .sit{position:static;width:100%;height:auto;opacity:0}
 #life .walker .ready{position:absolute;left:7.8%;bottom:0;width:84.3%;height:auto;opacity:0}
 #life .walker .on{opacity:1}
-#life .walker.lit img{filter:brightness(.72) saturate(.9)}
-#life .bag{transition:opacity .35s ease;transform-origin:50% 8%}
-#life .bag.off{opacity:0}
-#life .bag.lit{filter:brightness(.62) saturate(.9)}
-#life .bag.swing{animation:bagswing 1.5s ease-out}
-@keyframes bagswing{0%{transform:rotate(14deg)}25%{transform:rotate(-8deg)}50%{transform:rotate(5deg)}75%{transform:rotate(-2deg)}100%{transform:rotate(0)}}
+#life .walker.lit img,#life.is-night .act:not(.patch) .in img,#life.is-night .flybag img{filter:brightness(.72) saturate(.9)}
+/* a corner of the room in its day and night pictures: the cat at one of its places, the empty peg, letters on the mat */
+#life .patch,#life .corner{position:absolute}
+#life .patch img,#life .corner img{position:absolute;left:0;top:0;width:100%;height:auto}
+#life .patch .d,#life .corner .d{position:static}
+#life .patch .n,#life .corner .n{opacity:var(--np,0)}
+#life .corner{opacity:0;transition:opacity .35s ease}
+#life .corner.on{opacity:1}
 #life .flybag{position:absolute}
 #life .flybag img{position:static;width:100%;height:auto}
 #life .tint{position:absolute;inset:0;background:#ff9446;opacity:0;transition:opacity 3s ease}
-#life .beam{position:absolute;inset:0;clip-path:polygon(56% 44%,84% 44%,52% 80%,12% 80%);transition:opacity 3s ease}
+#life .beam{position:absolute;inset:0;clip-path:polygon(50% 34%,73% 34%,82% 76%,32% 76%);transition:opacity 3s ease}
 #life .beam::before{content:"";position:absolute;inset:0;background:linear-gradient(170deg,rgba(255,243,196,.32),rgba(255,236,170,.14) 60%,rgba(255,236,170,0));animation:beampulse 9s ease-in-out infinite}
 @keyframes beampulse{0%,100%{opacity:.65}50%{opacity:1}}
 #life .mote{position:absolute;width:3px;height:3px;border-radius:50%;background:rgba(255,248,215,.95);opacity:0;animation:mote 14s linear infinite}
 @keyframes mote{0%{transform:translate(0,0);opacity:0}15%{opacity:.8}85%{opacity:.7}100%{transform:translate(14px,-46px);opacity:0}}
-#life .lamp{position:absolute;width:32%;aspect-ratio:1;transform:translate(-50%,-50%);transition:opacity 3s ease}
-#life .lamp i{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle,rgba(255,214,120,.55),rgba(255,184,80,.16) 42%,rgba(255,170,70,0) 70%);animation:flicker 5.3s ease-in-out infinite}
-@keyframes flicker{0%{opacity:.9}7%{opacity:.68}13%{opacity:.96}29%{opacity:.8}33%{opacity:1}52%{opacity:.74}57%{opacity:.93}71%{opacity:.84}86%{opacity:.7}92%{opacity:1}100%{opacity:.9}}
-#life .sky{position:absolute;border-radius:50%;overflow:hidden}
-#life .sky .cloud{position:absolute;left:0;height:auto;opacity:.92;transition:opacity 3s ease;animation:drift 80s linear infinite}
-#life .sky .cloud.b{animation-duration:125s;animation-delay:-52s}
-#life.is-night .sky .cloud{opacity:0}
-@keyframes drift{from{transform:translateX(-125%)}to{transform:translateX(330%)}}
-#life .star{display:none;position:absolute;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:radial-gradient(circle,#fffbe0,rgba(255,250,200,0) 72%);opacity:0;animation:twinkle 3.6s ease-in-out infinite}
-#life.is-night .star{display:block}
-@keyframes twinkle{0%,100%{opacity:.15;transform:scale(.7)}50%{opacity:1;transform:scale(1.3)}}
-#life .mull{position:absolute;height:auto;transition:opacity 3s ease}
 #life .top{position:absolute;inset:0}
 #life .bird{position:absolute;aspect-ratio:1;transform:translate(-50%,-100%)}
 #life .bird img{position:absolute;left:0;bottom:0;width:100%;height:auto;opacity:0}
 #life .bird img.on{opacity:1}
-#life .heart{position:absolute;width:5.5%}
+#life .heart{position:absolute;width:4.5%}
 #life .heart svg{display:block;width:100%;height:auto}
-#life .puff{position:absolute;width:8%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,250,235,.95),rgba(255,250,235,0) 70%)}
+#life .puff{position:absolute;width:6%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,250,235,.95),rgba(255,250,235,0) 70%)}
 #life .bfly{position:absolute;left:0;top:0}
 #life .bfly img{position:static;width:100%;height:auto;animation:flap .28s ease-in-out infinite alternate}
 @keyframes flap{from{transform:scaleX(1)}to{transform:scaleX(.35)}}
-#life .steam{position:absolute;width:11%;aspect-ratio:1;margin:-5% 0 0 -5%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.75),rgba(255,255,255,0) 70%);opacity:0;animation:steam 3.4s ease-out infinite}
+#life .steam{position:absolute;width:14%;aspect-ratio:1;margin:-7% 0 0 -7%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.75),rgba(255,255,255,0) 70%);opacity:0;animation:steam 3.4s ease-out infinite}
 @keyframes steam{0%{opacity:0;transform:translate(0,0) scale(.5)}25%{opacity:.65}100%{opacity:0;transform:translate(9px,-36px) scale(1.5)}}
 #life .zz{position:absolute;width:13%;color:#7f62a8;opacity:0;animation:zz 4.6s ease-out infinite}
 #life .zz svg{display:block;width:100%;height:auto}
@@ -176,9 +167,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .gift.landed img{animation:glint 2.6s ease-in-out infinite}
 @keyframes glint{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
 .gift.gone{opacity:0;transition:opacity .4s ease}
-@media (prefers-reduced-motion:reduce){#life .act .in,#life .beam::before,#life .mote,#life .lamp i,#life .sky .cloud,#life .star,#life .steam,#life .zz,#life .bfly img,.gift.landed img{animation:none}}
+@media (prefers-reduced-motion:reduce){#life .act .in,#life .beam::before,#life .mote,#life .steam,#life .zz,#life .bfly img,.gift.landed img{animation:none}}
 
-/* ---------- v4: props, jar, bowl, guidance ---------- */
+/* ---------- v4: props, bowl, guidance ---------- */
 #life .props{position:absolute;inset:0}
 #life .prop{position:absolute;pointer-events:auto;z-index:4;min-width:36px;min-height:36px;transform-origin:50% 100%;outline:none}
 #life .prop img{position:static;display:block;width:100%;height:auto;transition:filter 3s ease}
@@ -188,18 +179,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #life .prop.hob.busy{opacity:0;pointer-events:none}
 #life .prop.new img{animation:newglint 1.8s ease-in-out infinite}
 @keyframes newglint{0%,100%{filter:drop-shadow(0 0 0 rgba(255,224,130,0))}50%{filter:drop-shadow(0 0 7px rgba(255,214,110,.95)) brightness(1.08)}}
-#life .prop.bowl .food{position:absolute;left:22%;width:56%;bottom:38%;height:auto;opacity:0;transform:scale(.4);transition:opacity .3s,transform .4s cubic-bezier(.3,1.6,.5,1)}
+#life .prop.spot,#life .prop.bowl,#life .prop.yarn{border-radius:14px}
+#life .prop.bowl .food{position:absolute;left:30%;width:40%;bottom:45%;height:auto;opacity:0;transform:scale(.4);transition:opacity .3s,transform .4s cubic-bezier(.3,1.6,.5,1)}
 #life .prop.bowl .food.on{opacity:1;transform:scale(1)}
-#life .jarstars{position:absolute;left:14%;right:14%;top:30%;bottom:8%;overflow:hidden;border-radius:0 0 30% 30%}
-#life .jarstars i{position:absolute;width:16%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,#fff6c8,#ffd25e 45%,rgba(255,200,80,0) 72%);animation:twinkle 3.2s ease-in-out infinite}
-#life .prop.jar.clink{animation:clink .55s ease-out}
-@keyframes clink{0%{transform:scale(1)}30%{transform:scale(1.14,.9)}60%{transform:scale(.95,1.08)}100%{transform:scale(1)}}
-#life .prop.jar.burst img{animation:burst 1.2s ease-out}
-@keyframes burst{0%{filter:none}30%{filter:drop-shadow(0 0 14px #ffe08a) brightness(1.3)}100%{filter:none}}
-#life .spark{position:absolute;width:3%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,#fff8d0,#ffd25e 50%,rgba(255,210,94,0) 72%)}
-.flystar{position:absolute;z-index:8;width:5%;pointer-events:none;transform:translate(-50%,-50%)}
-.flystar svg{display:block;width:100%;height:auto;filter:drop-shadow(0 0 4px rgba(255,220,120,.9))}
-#life .think{position:absolute;z-index:6;width:15%;aspect-ratio:1;transform:translate(-50%,-100%) scale(.3);opacity:0;transition:opacity .3s,transform .4s cubic-bezier(.3,1.6,.5,1);background:#fffaf0;border-radius:50%;box-shadow:0 3px 10px rgba(60,40,20,.28);display:flex;align-items:center;justify-content:center}
+#life .think{position:absolute;z-index:6;width:11%;aspect-ratio:1;transform:translate(-50%,-100%) scale(.3);opacity:0;transition:opacity .3s,transform .4s cubic-bezier(.3,1.6,.5,1);background:#fffaf0;border-radius:50%;box-shadow:0 3px 10px rgba(60,40,20,.28);display:flex;align-items:center;justify-content:center}
 #life .think::after{content:"";position:absolute;left:30%;bottom:-9%;width:16%;aspect-ratio:1;border-radius:50%;background:#fffaf0;box-shadow:0 2px 4px rgba(60,40,20,.2)}
 #life .think.on{opacity:1;transform:translate(-50%,-100%) scale(1);animation:thinkbob 2.4s ease-in-out .4s infinite}
 @keyframes thinkbob{0%,100%{margin-top:0}50%{margin-top:-4px}}
@@ -211,10 +194,11 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #life .prop.glow::before{inset:-25%}
 @keyframes breathglow{0%,100%{opacity:.5}50%{opacity:1}}
 #life .prop.glow::after{inset:-30%}
+#life .prop.spot.glow::after,#life .prop.spot.glow::before{inset:-6px;border-radius:16px}
 #hot-window.glow::after{inset:-19%}   /* round the painted frame, not inside it */
 /* it beckons and never fades out: a ring that fades is missed on a busy painted wall */
 @keyframes ring{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.07);opacity:.65}}
-.catring{position:absolute;z-index:2;width:30%;aspect-ratio:3/1;transform:translate(-50%,-50%);border-radius:50%;border:3px solid rgba(255,214,110,.9);box-shadow:0 0 16px rgba(255,214,110,.7);opacity:0;pointer-events:none;transition:opacity .4s}
+.catring{position:absolute;z-index:2;width:20%;aspect-ratio:3/1;transform:translate(-50%,-50%);border-radius:50%;border:3px solid rgba(255,214,110,.9);box-shadow:0 0 16px rgba(255,214,110,.7);opacity:0;pointer-events:none;transition:opacity .4s}
 .catring.on{opacity:1;animation:catring 1.8s ease-out infinite}
 @keyframes catring{0%{transform:translate(-50%,-50%) scale(.8);opacity:1}100%{transform:translate(-50%,-50%) scale(1.25);opacity:0}}
 .guide-yard #treats .tt::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:3px solid rgba(255,214,110,.95);animation:ring 1.6s ease-in-out infinite}
@@ -277,21 +261,6 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .mini .scene{border-radius:0}
 @media (prefers-reduced-motion:reduce){.scene.live .weather{animation:none}#life .prop.new img,#life .think.on,.catring.on{animation:none}}
 
-/* ---------- the jar card ---------- */
-#jarsheet .holder{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.9);opacity:0;transition:transform .3s,opacity .3s;z-index:3;pointer-events:none}
-#jarsheet.on .holder{transform:translate(-50%,-50%) scale(1);opacity:1}
-.jarcard{width:min(80vw,300px);background:#fffaf0;border-radius:18px;padding:18px 18px 16px;box-shadow:0 10px 28px rgba(30,15,5,.4);display:flex;flex-direction:column;align-items:center;gap:12px}
-.jarcard .lv{position:relative;width:96px}
-.jarcard .lv img{display:block;width:100%;height:auto}
-.jarcard .lv b{position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);font:600 30px/1 var(--hand);color:#c98a1c;text-shadow:0 1px 0 #fff}
-.jarcard .stars{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;max-width:250px}
-.jarcard .stars i{width:16px;height:16px;clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%);background:#e8dcc6}
-.jarcard .stars i.on{background:#ffc93c}
-.jarcard .next{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
-.jarcard .next .arrow svg{width:24px;height:24px;display:block}
-.jarcard .ghost{width:52px;height:52px;object-fit:contain;filter:brightness(0) opacity(.18)}
-.jarcard .ghost.card{width:66px;height:44px;object-fit:cover;filter:grayscale(1) opacity(.35);border-radius:3px}
-.jarcard .u-frame{display:block;width:56px;height:40px;border:5px solid #c9b79a;border-radius:3px;background:#efe6d6}
 #life .act,#life .walker{z-index:4}
 #life .top,#life .think{z-index:6}
 
@@ -306,3 +275,15 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 @keyframes notein{from{opacity:0;transform:translate(-50%,-30%) rotate(-8deg)}}
 .postcard.away .scene{aspect-ratio:3/2}
 @media (prefers-reduced-motion:reduce){.awaynote.on{animation:none}}
+
+/* the card that asks its name: high on the screen, clear of the keyboard */
+#namesheet .namecard{position:absolute;left:50%;top:max(14px,env(safe-area-inset-top));margin-top:12vh;transform:translate(-50%,0) rotate(-1.5deg) scale(.92);opacity:0;transition:transform .35s cubic-bezier(.3,1.4,.5,1),opacity .3s;z-index:3;width:min(82vw,320px);display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 18px 18px;background:#fbf3e2 repeating-linear-gradient(180deg,transparent 0 22px,rgba(120,150,190,.16) 22px 23px);border-radius:4px;box-shadow:0 10px 28px rgba(30,15,5,.4)}
+#namesheet.on .namecard{transform:translate(-50%,0) rotate(-1.5deg);opacity:1}
+.namecard img{width:38%;height:auto}
+.namecard b{font:24px/1.2 var(--hand);color:#3b4a6b;font-weight:normal}
+.namecard input{width:100%;min-height:48px;padding:8px 12px;border:0;border-bottom:2px dashed #8a7867;background:transparent;font:26px/1.2 var(--hand);color:var(--ink);text-align:center;outline:none;user-select:text;-webkit-user-select:text}
+.namecard input::placeholder{color:#b5a590}
+.namecard button{min-height:48px;padding:8px 26px;border-radius:24px;background:var(--red);color:#fffaf0;font:20px/1 var(--hand);box-shadow:0 2px 0 rgba(100,30,20,.35)}
+/* how the cat signs what it writes */
+.postcard .sig{position:absolute;right:16px;bottom:4px;font:15px/1 var(--hand);color:#7a6a58}
+.postcard{padding-bottom:14px}

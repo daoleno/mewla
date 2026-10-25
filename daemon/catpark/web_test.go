@@ -34,6 +34,8 @@ type kitFile struct {
 		ID string `json:"id"`
 		A  string `json:"a"`
 		B  string `json:"b"`
+		// N is the night picture of a place in the home with the cat painted in
+		N string `json:"n"`
 	} `json:"acts"`
 	Cards map[string]struct {
 		F string `json:"f"`
@@ -42,9 +44,10 @@ type kitFile struct {
 		A string `json:"a"`
 		B string `json:"b"`
 	} `json:"yard"`
-	Props map[string]string `json:"props"`
-	Sit   string            `json:"sit"`
-	Ready string            `json:"ready"`
+	Props map[string]string    `json:"props"`
+	Spots map[string][]float64 `json:"spots"`
+	Sit   string               `json:"sit"`
+	Ready string               `json:"ready"`
 }
 
 func readKit(t *testing.T, files fs.FS) kitFile {
@@ -92,7 +95,8 @@ func TestCatalogIsWhole(t *testing.T) {
 	for _, hobby := range world.Hobbies {
 		prop, inRoom := kit.Props[hobby]
 		_, inYard := kit.Yard[hobby]
-		if !inRoom && !inYard {
+		_, atSpot := kit.Spots[hobby]
+		if !inRoom && !inYard && !atSpot {
 			t.Errorf("hobby %s has nowhere to be done", hobby)
 		}
 		if inRoom {
@@ -184,6 +188,17 @@ func TestCatalogIsWhole(t *testing.T) {
 			}
 		}
 	}
+	for key, needs := range map[string][]string{"ask": nil, "hint": nil, "ok": nil, "sign": {"{n}"}} {
+		line := words.Name[key]
+		if strings.TrimSpace(line) == "" {
+			t.Errorf("the name card's %q line must be written", key)
+		}
+		for _, hole := range needs {
+			if !strings.Contains(line, hole) {
+				t.Errorf("the name card's %q line must say %s", key, hole)
+			}
+		}
+	}
 }
 
 // The room draws the cat in layers: every pose the house uses must be drawn,
@@ -193,9 +208,9 @@ func TestHouseHasEveryPose(t *testing.T) {
 	kit := readKit(t, files)
 	exists := existsIn(t, files)
 	for _, act := range kit.Acts {
-		// a quick reaction is one pose; everything else has two
-		for i, frame := range []string{act.A, act.B} {
-			if i == 1 && frame == "" {
+		// a quick reaction is one pose; a place in the home is a day and a night picture
+		for i, frame := range []string{act.A, act.B, act.N} {
+			if i > 0 && frame == "" {
 				continue
 			}
 			if frame == "" || kit.Meta[frame] == nil {
@@ -217,7 +232,7 @@ func TestHouseHasEveryPose(t *testing.T) {
 		"hand.woff2", "a/room_day.jpg", "a/room_night.jpg", "a/yard_day.jpg", "a/yard_night.jpg", "a/sign_bubble.webp"} {
 		exists(name)
 	}
-	for _, gone := range []string{"a/s", "a/pc_workshop.jpg", "a/home_nocat.jpg"} {
+	for _, gone := range []string{"a/s", "a/pc_workshop.jpg", "a/home_nocat.jpg", "a/p_jar.webp", "a/mullion_day.webp"} {
 		if _, err := fs.Stat(files, gone); err == nil {
 			t.Errorf("%s should be gone", gone)
 		}
@@ -241,7 +256,7 @@ func TestEveryNameIsSpoken(t *testing.T) {
 			t.Errorf("%s has no name", match[1])
 		}
 	}
-	for _, key := range []string{"home", "jar", "bowl", "yarn", "frame", "gift"} {
+	for _, key := range []string{"home", "souvenir", "bowl", "yarn", "frame", "gift"} {
 		if words[key] == "" {
 			t.Errorf("no name for %s", key)
 		}

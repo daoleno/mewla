@@ -3,8 +3,7 @@
 /* The first visit teaches itself, without words: the cat walks over to the
    next thing to try and thinks of it, and that thing glows. Each step is done
    once (the daemon remembers it per person) and then never shown again. Later,
-   anything new introduces itself the same way: a hobby's prop, the jar's first
-   star, a level. */
+   anything new introduces itself the same way: a hobby's prop, a level. */
 
 var Sh = window.CatShell, Life = window.CatLife, K = window.CAT_KIT;
 if (!Sh || !Life) return;
@@ -21,10 +20,10 @@ var ICON = {
 /* where the cat goes to show each thing, and what glows */
 var STEPS = [
   { id: 'pet', glow: function () { return null; } },
-  { id: 'mail', spot: [0.6, 0.67], glow: function () { return $('hot-mail'); }, when: function () { return Sh.unseen().length > 0; } },
-  { id: 'feed', spot: [0.8, 0.72], glow: function () { return document.querySelector('#life .prop.bowl'); }, home: true },
-  { id: 'yard', spot: [0.72, 0.64], glow: function () { return $('hot-window'); } },
-  { id: 'pack', spot: [0.2, 0.74], glow: function () { return $('hot-bag'); } }
+  { id: 'mail', spot: [0.2, 0.56], glow: function () { return $('hot-mail'); }, when: function () { return Sh.unseen().length > 0; } },
+  { id: 'feed', spot: [0.66, 0.8], glow: function () { return document.querySelector('#life .prop.bowl'); }, home: true },
+  { id: 'yard', spot: [0.55, 0.625], glow: function () { return $('hot-window'); } },
+  { id: 'pack', spot: [0.47, 0.6], glow: function () { return $('hot-bag'); } }
 ];
 var G = { step: null, glowing: null, ring: null, wait: 0, go: 0, intro: null, introGlow: null };
 
@@ -98,7 +97,7 @@ function introduce(hobbies) {
     var spot = Life.propSpot(h), p = Life.prop(h);
     if (!spot || !p) return;
     G.intro = h; setGlow(null); ring(false);
-    var i = new Image(); i.src = 'a/' + K.props[h] + '.webp'; i.alt = ''; i.className = 'icon';
+    var i = new Image(); i.src = 'a/' + (K.props[h] || K.cards[h].f) + '.webp'; i.alt = ''; i.className = 'icon';
     Life.attend(spot, i);
     p.classList.add('glow');
     var done = function () { p.classList.remove('glow'); G.intro = null; evaluate(); };
@@ -121,14 +120,6 @@ function introduceYard(h) {
   setTimeout(done, 20000);
 }
 
-/* the jar introduces itself with its first star */
-function firstStar() {
-  if (Sh.learnt('jar')) return;
-  Sh.markLearnt('jar');
-  var jar = document.querySelector('#life .prop.jar');
-  if (jar) { jar.classList.add('glow'); setTimeout(function () { jar.classList.remove('glow'); }, 3600); }
-}
-
 Sh.on('state', function (e) { setTimeout(evaluate, e.first ? 2200 : 200); });
 Sh.on('did', function (what) {
   var c = Sh.cat(); c.learned = c.learned || {};
@@ -140,7 +131,6 @@ Sh.on('did', function (what) {
 });
 Sh.on('overlay', function () { setTimeout(evaluate, 100); });
 Sh.on('screen', function () { setTimeout(evaluate, 300); });
-Sh.on('star', firstStar);
 Sh.on('learn', introduce);
 Sh.on('level', function () { Life.levelUp(); });
 

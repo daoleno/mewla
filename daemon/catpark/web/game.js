@@ -11,7 +11,6 @@ var $ = function (id) { return document.getElementById(id); };
 var C = window.CAT_CATALOG, K = window.CAT_KIT;
 var SV_ORDER = ['palette', 'bottle', 'book', 'wrench', 'lantern', 'pot', 'telescope', 'bell', 'teapot', 'stamp', 'compass', 'pinecone'];
 var SLOTS = [[30, 63], [48, 69], [66, 62], [40, 75], [60, 76]];   // yard treat spots on the bed of soil, % of the picture
-var SHELF_X = [16.5, 25, 33.5, 42];
 var PANTRY_CAP = 9;
 /* how many times a day each kind of care drops a star (the daemon keeps the same caps) */
 var CAPS = { pet: 3, feed: 2, play: 2, hobby: 3, read: 4, gift: 2 };
@@ -26,7 +25,10 @@ var listeners = {};
 function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
 function img(src, cls) { var i = el('img', cls); i.src = src; i.alt = ''; i.draggable = false; return i; }
 function fmt(ts) { var d = new Date(ts); return (d.getMonth() + 1) + '/' + ('0' + d.getDate()).slice(-2); }
-function isNight() { var h = new Date().getHours(); return h >= 20 || h < 6; }
+/* the hour of the day; ?hour=6.5 pins it, to look at the room at any time */
+var HOUR = parseFloat((location.search.match(/[?&]hour=([0-9.]+)/) || [])[1]);
+function hour() { if (HOUR >= 0 && HOUR < 24) return HOUR; var d = new Date(); return d.getHours() + d.getMinutes() / 60; }
+function isNight() { var h = hour(); return h >= 20 || h < 6; }
 function emit(name, data) { (listeners[name] || []).forEach(function (fn) { try { fn(data); } catch (e) { /* one listener never stops the rest */ } }); }
 function food(k) { return 'a/t_' + k + '.webp'; }
 function bump(n) { if (!n) return; n.classList.remove('bump'); void n.offsetWidth; n.classList.add('bump'); }
@@ -101,7 +103,7 @@ function setState(next) {
     if (met.length) emit('learn', met);
   }
   emit('state', { first: first, prev: prev });
-  if (first) act('visit', '');
+  if (first) { act('visit', ''); setTimeout(askName, 6000); }
   if (first && unseen().length) setTimeout(maybeArrive, 2600);
   else if (fresh.length) setTimeout(maybeArrive, 350);
 }
@@ -123,19 +125,15 @@ function renderHouse(popShelf) {
   $('stage').classList.toggle('night', night);
   if (window.CatLife) window.CatLife.sync(S);
 
-  // the waiting sign: by the cat at home, on its empty hook while it is away
-  var sign = $('sign'), hot = $('hot-sign');
-  sign.classList.toggle('on', !!p.waiting);
-  sign.classList.toggle('hook', !!p.away);
-  hot.style.display = p.waiting ? '' : 'none';
-  if (p.away) { hot.style.left = '11%'; hot.style.top = '25%'; } else { hot.style.left = '22.5%'; hot.style.top = '33%'; }
-  $('hot-bag').style.display = p.waiting && p.away ? 'none' : '';
+  // the waiting sign hangs on the door
+  $('sign').classList.toggle('on', !!p.waiting);
+  $('hot-sign').style.display = p.waiting ? '' : 'none';
 
+  // what you packed peeks out of the satchel on its peg
   var bag = yard().bag, bt = $('bagtreat');
   if (bag && !p.away) { bt.src = food(bag); bt.classList.add('on'); } else { bt.classList.remove('on'); }
 
-  $('badge').classList.toggle('on', unseen().length > 0);
-  renderShelf(popShelf);
+  renderSouvenirs(popShelf);
   renderFrames();
   renderAway();
 }
@@ -175,23 +173,26 @@ function openAway() {
   h.innerHTML = ''; h.appendChild(pc); on('zoom');
 }
 
-var shelfShown = {};
-function renderShelf(pop) {
-  var box = $('shelfitems');
-  var latest = souvenirs().slice().sort(function (a, b) { return b.at - a.at; }).slice(0, SHELF_X.length).reverse();
-  var want = {};
-  latest.forEach(function (v, i) {
-    want[v.id] = 1;
-    var n = shelfShown[v.id];
+/* what it brought home is put about the room, each kind of thing in its own place: the newest of each */
+var svShown = {};
+function renderSouvenirs(pop) {
+  var box = $('shelfitems'), newest = {};
+  souvenirs().forEach(function (v) { if (K.sv[v.item] && (!newest[v.item] || newest[v.item].at < v.at)) newest[v.item] = v; });
+  Object.keys(newest).forEach(function (item) {
+    var v = newest[item], n = svShown[item];
+    if (n && n.dataset.id === v.id) return;
+    if (window.CatLife && window.CatLife.holding()) return;   // the cat is still carrying it home
     if (!n) {
-      if (window.CatLife && window.CatLife.holding()) return;   // the cat is still carrying it home
-      n = img('a/sv_' + v.item + '.webp', 'si');
-      if (pop && known) n.classList.add('pop');
-      box.appendChild(n); shelfShown[v.id] = n;
+      var at = K.sv[item];
+      n = el('button', 'si'); n.appendChild(img('a/sv_' + item + '.webp'));
+      n.style.left = (at[0] * 100) + '%'; n.style.bottom = ((1 - at[1]) * 100) + '%'; n.style.width = (at[2] * 100) + '%';
+      n.setAttribute('aria-label', words().souvenir);
+      n.addEventListener('click', function () { var cur = newest[item]; souvenirs().forEach(function (x) { if (x.id === n.dataset.id) cur = x; }); markSeen('souvenir', cur.id); openZoomSouvenir(cur); });
+      box.appendChild(n); svShown[item] = n;
     }
-    n.style.left = SHELF_X[i] + '%';
+    n.dataset.id = v.id;
+    if (pop && known) { n.classList.remove('pop'); void n.offsetWidth; n.classList.add('pop'); }
   });
-  Object.keys(shelfShown).forEach(function (id) { if (!want[id]) { shelfShown[id].remove(); delete shelfShown[id]; } });
 }
 
 /* the wall fills up as you grow close: one framed postcard per level from 2, the newest ones */
@@ -229,12 +230,11 @@ $('awaynote').addEventListener('click', openAway);
 /* ---- care ---- */
 function petCat() {
   if (away() || !window.CatLife) return;
-  var star = earns('pet');
   count('pet');
   window.CatLife.poke();
   act('pet', '');
-  if (star) setTimeout(function () { flyStar(window.CatLife.catPoint()); }, 250);
   emit('did', 'pet');
+  if (!cat().name) setTimeout(askName, 2600);
 }
 /* feed from the bowl: away, it waits in the bowl; full, the cat says no */
 function feed(k) {
@@ -250,43 +250,25 @@ function feed(k) {
     return;
   }
   if ((cat().today.feed || 0) >= CAPS.feed) { if (window.CatLife) window.CatLife.react('full'); return; }
-  var star = earns('feed');
   y.pantry[k]--; count('feed'); cat().learned.feed = true;
   act('feed', k);
-  if (window.CatLife) window.CatLife.eat(k).then(function () { if (star) flyStar(window.CatLife.catPoint()); });
+  if (window.CatLife) window.CatLife.eat(k);
   emit('did', 'feed');
 }
 function play() {
   if (away() || !window.CatLife) return;
-  var star = earns('play');
   count('play');
   act('play', '');
-  window.CatLife.doAct('yarn', 14000).then(function () { if (star) flyStar(window.CatLife.catPoint()); });
+  window.CatLife.doAct('yarn', 14000);
   emit('did', 'play');
 }
 function hobby(id) {
   if (away() || !window.CatLife || cat().hobbies.indexOf(id) < 0) return;
-  var star = earns('hobby');
   count('hobby');
   act('hobby', id);
   if (id === 'letters' && !(cat().today['yield:letters'] > 0)) cat().today['yield:letters'] = 1;
-  window.CatLife.doAct(id, 18000).then(function () { if (star) flyStar(window.CatLife.catPoint()); });
+  window.CatLife.doAct(id, 18000);
   emit('did', 'hobby');
-}
-
-/* a star flies from where something happened into the jar */
-function flyStar(from) {
-  var jar = window.CatLife && window.CatLife.jarPoint();
-  if (!from || !jar) return;
-  var stage = $('stage'), r = stage.getBoundingClientRect();
-  var s = el('i', 'flystar', '<svg viewBox="0 0 24 24"><path d="M12 1.5l3 6.9 7.5.7-5.7 5 1.7 7.4L12 17.6l-6.5 3.9 1.7-7.4-5.7-5 7.5-.7z" fill="#ffd25e" stroke="#c98a1c" stroke-width="1.2" stroke-linejoin="round"/></svg>');
-  s.style.left = (from[0] * 100) + '%'; s.style.top = (from[1] * 100) + '%';
-  stage.appendChild(s);
-  var dx = (jar[0] - from[0]) * r.width, dy = (jar[1] - from[1]) * r.height, kf = [];
-  for (var i = 0; i <= 16; i++) { var u = i / 16, e = u * u * (3 - 2 * u); kf.push({ offset: u, transform: 'translate(-50%,-50%) translate(' + (dx * e).toFixed(1) + 'px,' + (dy * e - Math.sin(Math.PI * u) * r.width * 0.16).toFixed(1) + 'px) rotate(' + (u * 300).toFixed(0) + 'deg) scale(' + (1 - u * 0.4).toFixed(2) + ')' }); }
-  var an; try { an = s.animate(kf, { duration: 900, easing: 'linear', fill: 'forwards' }); } catch (e) { an = null; }
-  var done = function () { s.remove(); if (window.CatLife) window.CatLife.jarClink(); if (window.CatSound) window.CatSound.clink(); emit('star'); };
-  if (an) an.finished.then(done, done); else setTimeout(done, 900);
 }
 
 /* ---- overlay plumbing ---- */
@@ -303,6 +285,7 @@ function postcardEl(card, cls, live) {
   strip.appendChild(line);
   if (card.treat && !home) strip.appendChild(img(food(card.treat), 'tr'));
   p.appendChild(strip);
+  if (cat().name) p.appendChild(el('span', 'sig', '')).textContent = cwords().name.sign.replace('{n}', cat().name);
   if (!home) { p.appendChild(el('i', 'stamp')); p.appendChild(el('span', 'pm', fmt(card.at))); }
   return p;
 }
@@ -328,14 +311,12 @@ $('arrivetap').addEventListener('click', function () {
   var dx = (mr.left + mr.width / 2) - (pr.left + pr.width / 2), dy = (mr.top + mr.height / 2) - (pr.top + pr.height / 2);
   p.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(.12) rotate(14deg)';
   p.classList.add('out');
-  var star = earns('read');
+  if (earns('read')) count('read');
   markSeen('postcard', p.dataset.id);
-  if (star) { count('read'); setTimeout(function () { var s = $('stage').getBoundingClientRect(); flyStar([(mr.left + mr.width / 2 - s.left) / s.width, (mr.top + mr.height / 2 - s.top) / s.height]); }, 650); }
   off('arrive', 700);
   setTimeout(function () {
     arriving = false;
-    $('badge').classList.toggle('on', unseen().length > 0);
-    bump($('hot-mail'));
+    renderHouse(false);
     emit('did', 'mail');
     if (unseen().length) setTimeout(maybeArrive, 900);
   }, 620);
@@ -395,6 +376,34 @@ function openZoomSouvenir(v) {
   on('zoom');
 }
 
+/* ---- its name: asked once you have met (after the first pet), until it has one ---- */
+var nameAsked = false;
+function askName() {
+  if (nameAsked || cat().name || !learnt('pet') || away()) return;
+  if (overlayOpen() || screen !== 'house' || document.hidden) { setTimeout(askName, 2500); return; }   // after the letter, back home
+  nameAsked = true;
+  var W = cwords().name;
+  $('nameask').textContent = W.ask;
+  $('namein').placeholder = W.hint; $('namein').value = '';
+  $('nameok').textContent = W.ok;
+  on('namesheet');
+  setTimeout(function () { try { $('namein').focus(); } catch (e) { /* the keyboard comes on the first tap */ } }, 420);
+}
+function cleanName(v) { return Array.from(v.replace(/\s+/g, ' ').replace(/[^\p{L}\p{N} '\-]/gu, '').trim()).slice(0, 16).join('').trim(); }
+$('nameform').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var name = cleanName($('namein').value);
+  if (!name) { bump($('namein')); return; }
+  $('namein').blur();
+  var c = cat(); c.name = name; c.learned = c.learned || {}; c.learned.name = true;
+  act('name', name);
+  off('namesheet');
+  if (window.CatSound) window.CatSound.chime();
+  if (window.CatLife) setTimeout(function () { window.CatLife.react('greet', 2400).then(function () { window.CatLife.hearts(3); }); }, 500);
+  emit('did', 'name');
+});
+$('nametap').addEventListener('click', function () { $('namein').blur(); off('namesheet'); });
+
 /* ---- the food tray (from the bowl) and the bag ---- */
 function trayItem(k, n, fn) {
   var b = el('button', 'it'); b.appendChild(img(food(k))); b.appendChild(el('b', '', String(n)));
@@ -450,39 +459,6 @@ function pack(kind) {
 function openBag() { act('learn', 'bag'); renderBagTray(); on('bagsheet'); if (window.CatSound) window.CatSound.cloth(); }
 $('bagtap').addEventListener('click', function () { off('bagsheet'); });
 $('foodtap').addEventListener('click', function () { off('foodsheet'); });
-
-/* ---- the jar: stars toward the next level, and what that level brings ---- */
-var UNLOCKS = { 2: 'frame', 3: 'run', 4: 'friend', 5: 'gift', 6: 'frame', 7: 'more', 8: 'rare', 9: 'frame', 10: 'rare' };
-function openJar() {
-  act('learn', 'jar');
-  var c = cat(), h = $('jarholder'); h.innerHTML = '';
-  var card = el('div', 'jarcard');
-  var lv = el('div', 'lv'); lv.appendChild(img('a/p_jar.webp')); lv.appendChild(el('b', '', String(c.level))); card.appendChild(lv);
-  var row = el('div', 'stars');
-  for (var i = 0; i < (c.need || 0); i++) row.appendChild(el('i', i < c.stars ? 'on' : ''));
-  card.appendChild(row);
-  if (c.need) {
-    var next = el('div', 'next');
-    next.appendChild(el('span', 'arrow', '<svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6" fill="none" stroke="#8a7867" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'));
-    next.appendChild(unlockIcon(UNLOCKS[c.level + 1]));
-    (c.pending || []).forEach(function (p) { if (K.props[p]) next.appendChild(img('a/' + K.props[p] + '.webp', 'ghost')); });
-    card.appendChild(next);
-  }
-  h.appendChild(card);
-  on('jarsheet');
-  if (window.CatSound) window.CatSound.clink();
-}
-function unlockIcon(u) {
-  switch (u) {
-    case 'frame': return el('i', 'u-frame');
-    case 'friend': return img('a/f_frog.webp', 'ghost');
-    case 'gift': return img('a/gift_acorn.webp', 'ghost');
-    case 'run': return img('a/cat_greet_a.webp', 'ghost');
-    case 'more': return img('a/t_berry.webp', 'ghost');
-    default: return img('a/pl_' + (C.rare[0] || 'trail') + '.jpg', 'ghost card');
-  }
-}
-$('jartap').addEventListener('click', function () { off('jarsheet'); });
 
 /* ---- yard ---- */
 function renderYard() {
@@ -547,14 +523,12 @@ function yardHobby(which) {
   if (yardCatEl.classList.contains('glow')) { yardCatEl.classList.remove('glow'); seeProp(which); emit('did', 'yardnew'); }
   yardCatEl.classList.add('b'); setTimeout(function () { if (yardCatEl) yardCatEl.classList.remove('b'); }, 2200);
   if (window.CatSound) window.CatSound.hobby(which);
-  var star = earns('hobby');
   count('hobby'); act('hobby', which);
   if (which === 'fish' && !(c.today['yield:fish'] > 0)) {
     c.today['yield:fish'] = 1;
     var y = yard(); y.pantry.fish = Math.min(PANTRY_CAP, (y.pantry.fish || 0) + 1);
     setTimeout(function () { renderYardTray(); bump(document.querySelector('#yardtray .it[data-k="fish"]')); }, 900);
   }
-  if (star && window.CatSound) setTimeout(function () { window.CatSound.clink(); }, 900);
 }
 $('hot-pond').addEventListener('click', function () {
   if (window.CatSound) window.CatSound.plop();
@@ -594,7 +568,7 @@ document.addEventListener('touchend', function (e) {
   if (!t0) return;
   var t = e.changedTouches[0], dx = t.clientX - t0.x, dy = t.clientY - t0.y; t0 = null;
   if (dy < 80 || Math.abs(dx) > 70) return;
-  var top = ['zoom', 'jarsheet', 'sheet', 'bagsheet', 'foodsheet'].filter(function (id) { return $(id).classList.contains('on'); })[0];
+  var top = ['zoom', 'sheet', 'bagsheet', 'foodsheet'].filter(function (id) { return $(id).classList.contains('on'); })[0];
   if (top) { if (top === 'zoom') closeZoom(); else off(top); }
   else if (screen === 'album' && $('albumscroll').scrollTop <= 0) closeAlbum();
   else if (screen === 'yard') closeYard();
@@ -615,12 +589,12 @@ window.CatShell = {
     if (x == null) { c.style.display = 'none'; return; }
     c.style.display = ''; c.style.left = (x * 100) + '%'; c.style.top = (y * 100) + '%'; c.style.width = (w * 100) + '%'; c.style.height = (h * 100) + '%';
   },
-  openFood: openFood, openJar: openJar, play: play, hobby: hobby, yardNew: yardNew, learnt: learnt, markLearnt: markLearnt, flyStar: flyStar, showArrive: showArrive, maybeArrive: maybeArrive, act: act
+  openFood: openFood, play: play, hobby: hobby, yardNew: yardNew, learnt: learnt, markLearnt: markLearnt, showArrive: showArrive, maybeArrive: maybeArrive, act: act, hour: hour
 };
 /* audio starts with the first touch, as the browser demands */
 ['touchend', 'click'].forEach(function (name) { document.addEventListener(name, function () { if (window.CatSound) window.CatSound.unlock(); }, { passive: true }); });
 
-window.__cat = { setState: setState, get state() { return S; }, openAlbum: openAlbum, openYard: openYard, openSheet: openSheet, openBag: openBag, openJar: openJar, openFood: openFood };
+window.__cat = { setState: setState, get state() { return S; }, openAlbum: openAlbum, openYard: openYard, openSheet: openSheet, openBag: openBag, openFood: openFood };
 
 renderBack();
 // the host can miss the first hello (a tab mounted off screen): say it until the state comes
