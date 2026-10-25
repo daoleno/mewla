@@ -2,10 +2,10 @@ package catpark
 
 // Style is the art the person chose for the house: one whole set of pictures.
 // The choice lives on the daemon, per user, so every phone and the web UI show
-// the same room. An absent choice reads as the first style.
+// the same room. An absent choice reads as the gouache storybook.
 type Style string
 
-const DefaultStyle Style = "crayon"
+const DefaultStyle Style = "gouache"
 
 // Styles lists every style the page has art for, in the order the picker shows.
 var Styles = []Style{"crayon", "watercolor", "gouache", "papercut", "pixel", "clay"}

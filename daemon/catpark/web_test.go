@@ -131,9 +131,12 @@ func TestEveryStyleHasItsWholeRoomAndAName(t *testing.T) {
 				t.Errorf("style %s has no %s name", style, language)
 			}
 		}
-		slots := []string{"card"}
-		if style != DefaultStyle {
-			slots = []string{"home", "away", "night", "card"}
+		slots := []string{"home", "away", "night", "card"}
+		switch style {
+		case "crayon":
+			slots = []string{"card"}
+		case "gouache":
+			slots = []string{"room_day", "room_night", "card", "yard_day", "yard_night"}
 		}
 		for _, slot := range slots {
 			if _, err := fs.Stat(files, "a/s/"+string(style)+"/"+slot+".jpg"); err != nil {
@@ -141,4 +144,66 @@ func TestEveryStyleHasItsWholeRoomAndAName(t *testing.T) {
 			}
 		}
 	}
+}
+
+// The gouache house is drawn in layers and draws its own postcards, souvenirs
+// and treats, so nothing in it falls back to crayon. Every picture it names
+// must be in the bundle.
+func TestGouacheWorldIsWhole(t *testing.T) {
+	files := Bundle()
+	has := func(name string) {
+		t.Helper()
+		if _, err := fs.Stat(files, "a/s/gouache/"+name); err != nil {
+			t.Errorf("the gouache world is missing %s", name)
+		}
+	}
+	for _, kind := range Kinds {
+		has("pc_" + string(kind) + ".jpg")
+		has("sv_" + SouvenirItem(kind) + ".webp")
+	}
+	for _, treat := range TreatKinds {
+		has("t_" + treat + ".webp")
+	}
+	raw, err := fs.ReadFile(files, "kit.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(raw)
+	body := strings.TrimSuffix(strings.TrimSpace(text[strings.Index(text, "window.CAT_KIT")+len("window.CAT_KIT"):]), ";")
+	body = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(body), "="))
+	var kit map[string]struct {
+		Files []string `json:"files"`
+		Meta  map[string][]float64
+		Acts  []struct {
+			ID string `json:"id"`
+			A  string `json:"a"`
+			B  string `json:"b"`
+		}
+		Sit   string
+		Ready string
+	}
+	if err := json.Unmarshal([]byte(body), &kit); err != nil {
+		t.Fatalf("kit.js does not parse: %v", err)
+	}
+	gouache, ok := kit["gouache"]
+	if !ok || len(gouache.Files) == 0 {
+		t.Fatal("kit.js has no gouache kit")
+	}
+	for _, name := range gouache.Files {
+		if strings.HasPrefix(name, "room_") {
+			has(name + ".jpg")
+		} else {
+			has(name + ".webp")
+		}
+	}
+	for _, act := range gouache.Acts {
+		for _, frame := range []string{act.A, act.B} {
+			if frame == "" || gouache.Meta[frame] == nil {
+				t.Errorf("act %s names the frame %q the kit has no place for", act.ID, frame)
+			}
+			has("cat_" + frame + ".webp")
+		}
+	}
+	has("cat_" + gouache.Sit + ".webp")
+	has("cat_" + gouache.Ready + ".webp")
 }
