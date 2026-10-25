@@ -152,10 +152,9 @@ export function CatParkScreen() {
         scrollEnabled={false}
         setBuiltInZoomControls={false}
         accessibilityLabel="Cat"
+        // No reset on load start: the page's "ready" can arrive before that
+        // event, and a push into a page still loading is a no-op anyway.
         onMessage={onMessage}
-        onLoadStart={() => {
-          ready.current = false;
-        }}
       />
     </View>
   );
