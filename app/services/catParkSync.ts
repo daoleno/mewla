@@ -45,6 +45,30 @@ export class CatRequestError extends Error {
   }
 }
 
+/**
+ * How to take a refusal. A server error may pass on its own. A 404 is retried
+ * too: the computer answers 404 to a signed request it will not honour, and a
+ * request resent underneath the app carries the same signature, which it takes
+ * for a replay; asking again signs afresh. For a file the manifest already named
+ * a 404 cannot mean "too old", so it is worded as a turned-away request.
+ * Anything else (401, 403, ...) will not change by asking.
+ */
+export function catRefusalPolicy(status: number, named: boolean): { retryable: boolean; turnedAway: boolean } {
+  return { retryable: status >= 500 || status === 404, turnedAway: named && status === 404 };
+}
+
+/**
+ * Asks for an archive part. A computer without archives answers 404 every time,
+ * one that merely turned a request away does not, so a single 404 is asked
+ * again; null means the computer has no such part.
+ */
+export async function askArchive<R extends { status: number }>(ask: () => Promise<R>): Promise<R | null> {
+  const first = await ask();
+  if (first.status !== 404) return first;
+  const second = await ask();
+  return second.status === 404 ? null : second;
+}
+
 export type CatSyncStage = "manifest" | "part" | "file" | "digest" | "write" | "deadline";
 
 /** Short and plain: what a person can read in one line, and a log can keep. */
