@@ -183,8 +183,8 @@ const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
  * Script that hands a state to the page; U+2028/9 are escaped so the literal is
  * always valid. `tab` tells the page the App's header already leads home.
  */
-export function catStateScript(view: CatView, locale?: string, tab?: boolean): string {
-  const payload = JSON.stringify({ cat: 1, type: "state", state: view, locale, tab })
+export function catStateScript(view: CatView, tab?: boolean): string {
+  const payload = JSON.stringify({ cat: 1, type: "state", state: view, tab })
     .split(LINE_SEPARATOR).join("\\u2028")
     .split(PARAGRAPH_SEPARATOR).join("\\u2029");
   return `window.__catHost&&window.__catHost(${payload});true;`;

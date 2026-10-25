@@ -10,14 +10,6 @@ import { useCatPark } from "./useCatPark";
 
 const GROUND = "#2a211a";
 
-function deviceLocale(): string | undefined {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().locale;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * The cat's house, the App's third primary page (Brain · Sessions · Cat). It
  * sits under the primary app bar, so the page starts below it. The page is the
@@ -84,7 +76,7 @@ export function CatParkScreen() {
 
   const push = useCallback(() => {
     const current = latest.current;
-    if (ready.current && current) web.current?.injectJavaScript(catStateScript(current, deviceLocale(), true));
+    if (ready.current && current) web.current?.injectJavaScript(catStateScript(current, true));
   }, []);
   useEffect(push, [view, push]);
 
