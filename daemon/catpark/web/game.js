@@ -14,7 +14,11 @@ var SHELF_X = [16.5, 25, 33.5, 42];
 var PANTRY_CAP = 9;
 
 var STYLES = ['crayon', 'watercolor', 'gouache', 'papercut', 'pixel', 'clay'];
-var STYLE = 'crayon';         // the art the house is drawn in; the daemon remembers it per user
+var STYLE = (function () {   // the art the house is drawn in; the daemon remembers it per user
+  try { var last = localStorage.getItem('cat.style'); if (last && STYLES.indexOf(last) >= 0) return last; } catch (e) { /* no storage */ }
+  return 'gouache';
+})();
+var WORLD = { gouache: true };  // styles with a whole world of their own: postcards, souvenirs, treats, yard and a living room
 var TAB = false;              // hosted as the App's Cat tab: its header already leads home
 
 var S = null;                 // the latest View from the daemon
@@ -25,6 +29,9 @@ var arriving = false;
 function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
 function img(src, cls) { var i = el('img', cls); i.src = src; i.alt = ''; i.draggable = false; return i; }
 function fmt(ts) { var d = new Date(ts); return (d.getMonth() + 1) + '/' + ('0' + d.getDate()).slice(-2); }
+function layered() { return STYLE === 'gouache'; }
+/* a picture of the current world: its own folder when the style has one, the original crayon set otherwise */
+function art(name) { return WORLD[STYLE] ? 'a/s/' + STYLE + '/' + name : 'a/' + name; }
 function isNight() { var h = new Date().getHours(); return h >= 20 || h < 6; }
 
 /* ---- bridge: the host owns the connection ---- */
@@ -40,6 +47,10 @@ function receive(msg) {
   if (msg.type === 'state' && msg.state) {
     if (msg.tab && !TAB) { TAB = true; renderBack(); }
     setState(msg.state, msg.locale);
+  } else if (msg.type === 'focus') {
+    // the host's tab is on or off screen: the room sleeps with it, and so do its sounds
+    if (window.CatLife) window.CatLife.pause(!msg.on);
+    if (window.CatSound) window.CatSound.pause(!msg.on);
   }
 }
 window.__catHost = receive;
@@ -97,18 +108,28 @@ var plates = { home: $('p-home'), away: $('p-away'), night: $('p-night'), nighta
    Every other style is whole pictures with the cat painted in, so its cut-outs
    stay hidden; a style has no picture of the empty room at night, so that one
    moment is the empty day room under a dark veil. */
-function baked() { return STYLE !== 'crayon'; }
+function baked() { return STYLE !== 'crayon' && !layered(); }
 function plateSrc(style, slot) {
+  if (style === 'gouache') return 'a/s/gouache/' + (slot === 'night' || slot === 'nightaway' ? 'room_night' : 'room_day') + '.jpg';
   if (style === 'crayon') return { home: 'a/home_nocat.jpg', away: 'a/away.jpg', night: 'a/night.jpg', nightaway: 'a/night_away.jpg' }[slot];
   return 'a/s/' + style + '/' + (slot === 'nightaway' ? 'away' : slot) + '.jpg';
 }
 function plateKey() {
   var p = (S && S.presence) || {}, night = isNight();
+  if (layered()) return night ? 'night' : 'home';
   return night ? (p.away ? 'nightaway' : 'night') : (p.away ? 'away' : 'home');
 }
 function setStylePlates(style) {
   Object.keys(plates).forEach(function (k) { plates[k].src = plateSrc(style, k); });
   $('frameimg').src = 'a/s/' + style + '/card.jpg';
+}
+/* everything else the style draws: the sign, the yard, the shelf and whatever overlay is open */
+function applyWorld() {
+  try { localStorage.setItem('cat.style', STYLE); } catch (e) { /* no storage */ }
+  $('sign').src = art('sign_bubble.webp');
+  $('y-day').src = art('yard_day.jpg'); $('y-night').src = art('yard_night.jpg');
+  Object.keys(shelfShown).forEach(function (id) { shelfShown[id].remove(); delete shelfShown[id]; });
+  if (S) render(false);
 }
 var styleToken = 0;
 /* Swap the whole scene: the new picture fades in over the old one, then the plates take it over. */
@@ -120,7 +141,7 @@ function changeStyle(next, animate) {
     STYLE = next;
     setStylePlates(next);
     var g = document.querySelector('.ghost'); if (g) g.remove();
-    renderHouse(false); renderStyleRow();
+    applyWorld(); renderHouse(false); renderStyleRow();
   };
   if (!animate) { finish(); return; }
   var pre = new Image();
@@ -131,7 +152,7 @@ function changeStyle(next, animate) {
     $('stage').insertBefore(ghost, $('cat-home'));
     void ghost.offsetWidth; ghost.classList.add('on');
     STYLE = next;                       // cut-outs fade out and the veil follows at once
-    renderHouse(false); renderStyleRow();
+    applyWorld(); renderHouse(false); renderStyleRow();
     $('frameimg').src = 'a/s/' + next + '/card.jpg';
     $('frame').classList.remove('bump'); void $('frame').offsetWidth; $('frame').classList.add('bump');
     setTimeout(function () { if (token === styleToken) { setStylePlates(next); var g = document.querySelector('.ghost'); if (g) g.remove(); } }, 760);
@@ -150,16 +171,24 @@ function render(popShelf) {
 function renderHouse(popShelf) {
   var p = (S && S.presence) || {};
   var night = isNight();
-  var plate = plateKey();
-  Object.keys(plates).forEach(function (k) { plates[k].classList.toggle('on', k === plate); });
-  $('cat-home').classList.toggle('on', !p.away && !night && !baked());
-  $('cat-night').classList.toggle('on', !p.away && night && !baked());
-  $('veil').classList.toggle('on', baked() && night && !!p.away);
-  $('stage').classList.toggle('night', night);
   var cat = $('hot-cat');
-  cat.style.display = p.away ? 'none' : '';
-  if (night) { cat.style.left = '46.6%'; cat.style.top = '58.7%'; cat.style.width = '26%'; cat.style.height = '10%'; }
-  else { cat.style.left = '51%'; cat.style.top = '51%'; cat.style.width = '36%'; cat.style.height = '21%'; }
+  if (layered()) {
+    // the living room owns the plates, the cat and its hotspot
+    $('cat-home').classList.remove('on'); $('cat-night').classList.remove('on'); $('veil').classList.remove('on');
+    $('stage').classList.toggle('night', night);
+    if (window.CatLife) window.CatLife.sync(S);
+  } else {
+    if (window.CatLife) window.CatLife.stop();
+    var plate = plateKey();
+    Object.keys(plates).forEach(function (k) { plates[k].classList.toggle('on', k === plate); });
+    $('cat-home').classList.toggle('on', !p.away && !night && STYLE === 'crayon');
+    $('cat-night').classList.toggle('on', !p.away && night && STYLE === 'crayon');
+    $('veil').classList.toggle('on', baked() && night && !!p.away);
+    $('stage').classList.toggle('night', night);
+    cat.style.display = p.away ? 'none' : '';
+    if (night) { cat.style.left = '46.6%'; cat.style.top = '58.7%'; cat.style.width = '26%'; cat.style.height = '10%'; }
+    else { cat.style.left = '51%'; cat.style.top = '51%'; cat.style.width = '36%'; cat.style.height = '21%'; }
+  }
 
   // The waiting sign: by the cat at home, on its empty hook while it is away.
   var sign = $('sign'), hot = $('hot-sign');
@@ -171,7 +200,7 @@ function renderHouse(popShelf) {
 
   var bag = S && S.yard && S.yard.bag;
   var bt = $('bagtreat');
-  if (bag && !p.away) { bt.src = 'a/t_' + bag + '.webp'; bt.classList.add('on'); } else { bt.classList.remove('on'); }
+  if (bag && !p.away) { bt.src = art('t_' + bag + '.webp'); bt.classList.add('on'); } else { bt.classList.remove('on'); }
 
   $('badge').classList.toggle('on', unseen().length > 0);
   renderShelf(popShelf);
@@ -186,7 +215,8 @@ function renderShelf(pop) {
     want[v.id] = 1;
     var n = shelfShown[v.id];
     if (!n) {
-      n = img('a/sv_' + v.item + '.webp', 'si');
+      if (window.CatLife && window.CatLife.holding()) return;   // the cat is still carrying it home
+      n = img(art('sv_' + v.item + '.webp'), 'si');
       if (pop && known) n.classList.add('pop');
       box.appendChild(n); shelfShown[v.id] = n;
     }
@@ -196,6 +226,7 @@ function renderShelf(pop) {
 }
 
 $('hot-cat').addEventListener('click', function () {
+  if (layered()) { if (window.CatLife) window.CatLife.poke(); return; }
   var c = baked() ? plates[plateKey()] : isNight() ? $('cat-night') : $('cat-home');
   c.classList.remove('poke'); void c.offsetWidth; c.classList.add('poke');
 });
@@ -213,11 +244,11 @@ function off(id, ms) { var o = $(id); o.classList.remove('on'); setTimeout(funct
 /* ---- postcards ---- */
 function postcardEl(card, cls) {
   var p = el('div', 'postcard ' + (cls || ''));
-  p.appendChild(img('a/pc_' + card.kind + '.jpg', 'pic'));
+  p.appendChild(img(art('pc_' + card.kind + '.jpg'), 'pic'));
   var strip = el('div', 'strip'), line = el('span', 'line');
   line.textContent = lineFor(card);
   strip.appendChild(line);
-  if (card.treat) strip.appendChild(img('a/t_' + card.treat + '.webp', 'tr'));
+  if (card.treat) strip.appendChild(img(art('t_' + card.treat + '.webp'), 'tr'));
   p.appendChild(strip); p.appendChild(el('i', 'stamp'));
   return p;
 }
@@ -232,6 +263,7 @@ function showArrive() {
   var h = $('arriveholder'); h.innerHTML = '';
   var p = postcardEl(card, 'wipe'); p.dataset.id = card.id; h.appendChild(p);
   on('arrive');
+  if (window.CatSound) window.CatSound.paper();
   requestAnimationFrame(function () { requestAnimationFrame(function () { p.classList.add('in'); }); });
 }
 
@@ -265,7 +297,7 @@ function renderAlbum() {
   g.className = 'grid';
   list.forEach(function (c) {
     var b = el('button', 'mini' + (c.seen ? '' : ' fresh'));
-    b.appendChild(img('a/pc_' + c.kind + '.jpg'));
+    b.appendChild(img(art('pc_' + c.kind + '.jpg')));
     b.appendChild(el('span', 'd', fmt(c.at))); b.appendChild(el('i', 'stamp'));
     b.addEventListener('click', function () { if (!c.seen) markSeen('postcard', c.id); openZoomCard(c); });
     g.appendChild(b);
@@ -285,7 +317,7 @@ function renderSheet() {
   var r = $('sheetrow'); r.innerHTML = '';
   SV_ORDER.forEach(function (k) {
     var v = have[k], s = el('button', 'slot' + (v ? '' : ' locked') + (v && !v.seen ? ' fresh' : ''));
-    s.appendChild(img('a/sv_' + k + '.webp'));
+    s.appendChild(img(art('sv_' + k + '.webp')));
     if (v) s.addEventListener('click', function () { markSeen('souvenir', v.id); openZoomSouvenir(v); });
     r.appendChild(s);
   });
@@ -295,9 +327,9 @@ $('sheettap').addEventListener('click', function () { off('sheet'); });
 
 function openZoomSouvenir(v) {
   var h = $('zoomholder'); h.innerHTML = '';
-  h.appendChild(img('a/sv_' + v.item + '.webp', 'big'));
+  h.appendChild(img(art('sv_' + v.item + '.webp'), 'big'));
   var p = el('div', 'postcard small');
-  p.appendChild(img('a/pc_' + v.kind + '.jpg', 'pic'));
+  p.appendChild(img(art('pc_' + v.kind + '.jpg'), 'pic'));
   var strip = el('div', 'strip'), line = el('span', 'line');
   line.textContent = (v.title || '') + (v.title ? '  ' : '') + fmt(v.at);
   strip.appendChild(line); p.appendChild(strip);
@@ -315,7 +347,7 @@ function renderYard() {
     if (t.taken) return;
     var spot = SLOTS[t.slot % SLOTS.length];
     var b = el('button', 'tt'); b.style.left = spot[0] + '%'; b.style.top = spot[1] + '%';
-    b.appendChild(img('a/t_' + t.kind + '.webp'));
+    b.appendChild(img(art('t_' + t.kind + '.webp')));
     b.addEventListener('click', function () { collect(t, b); });
     box.appendChild(b);
   });
@@ -326,6 +358,7 @@ function collect(t, node) {
   if ((y.pantry[t.kind] || 0) >= PANTRY_CAP) return;
   t.taken = true; y.pantry[t.kind] = (y.pantry[t.kind] || 0) + 1;
   node.classList.add('take');
+  if (window.CatSound) window.CatSound.pop();
   send({ type: 'collect', slot: t.slot });
   setTimeout(function () { renderTray($('yardtray')); }, 250);
 }
@@ -338,13 +371,13 @@ function renderTray(box) {
     var n = y.pantry[k] || 0;
     if (n <= 0) return;
     any = true;
-    var b = el('button', 'it'); b.appendChild(img('a/t_' + k + '.webp')); b.appendChild(el('b', '', String(n)));
+    var b = el('button', 'it'); b.appendChild(img(art('t_' + k + '.webp'))); b.appendChild(el('b', '', String(n)));
     b.addEventListener('click', function () { pack(k); });
     box.appendChild(b);
   });
   if (!any && !y.bag) return;
   var bag = el('button', 'it bag', SATCHEL);
-  if (y.bag) bag.appendChild(img('a/t_' + y.bag + '.webp'));
+  if (y.bag) bag.appendChild(img(art('t_' + y.bag + '.webp')));
   bag.addEventListener('click', function () { if (yard().bag) pack(''); });
   box.appendChild(bag);
 }
@@ -417,8 +450,21 @@ document.addEventListener('touchend', function (e) {
 setInterval(function () { if (S) { renderHouse(false); if (screen === 'yard') renderYard(); } }, 60000);
 document.addEventListener('visibilitychange', function () { if (!document.hidden && S) renderHouse(false); });
 
+window.CatShell = {
+  art: art, layered: layered, words: words, renderHouse: renderHouse,
+  onHouse: function () { return screen === 'house' && !overlayOpen() && !document.hidden; },
+  hotCat: function (x, y, w, h) {
+    var c = $('hot-cat');
+    if (x == null) { c.style.display = 'none'; return; }
+    c.style.display = ''; c.style.left = (x * 100) + '%'; c.style.top = (y * 100) + '%'; c.style.width = (w * 100) + '%'; c.style.height = (h * 100) + '%';
+  }
+};
+/* audio starts with the first touch, as the browser demands */
+['touchend', 'click'].forEach(function (name) { document.addEventListener(name, function () { if (window.CatSound) window.CatSound.unlock(); }, { passive: true }); });
+
 window.__cat = { setState: setState, openStyles: openStyles, chooseStyle: chooseStyle, get style() { return STYLE; }, get state() { return S; }, openAlbum: openAlbum, openYard: openYard, openSheet: openSheet, openBag: openBag };
 
+applyWorld();
 renderBack();
 renderHouse(false);
 send({ type: 'ready' });
