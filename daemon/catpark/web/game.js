@@ -295,7 +295,10 @@ function postcardEl(card, cls, live) {
   return p;
 }
 
-function maybeArrive() { if (screen === 'house' && !overlayOpen() && !diaryWaits() && unseen().length && !(window.CatGuide && window.CatGuide.holdMail())) showArrive(); }
+function maybeArrive() {
+  if (diaryWaits()) { setTimeout(maybeArrive, 700); return; }
+  if (screen === 'house' && !overlayOpen() && unseen().length && !(window.CatGuide && window.CatGuide.holdMail())) showArrive();
+}
 
 function showArrive() {
   var list = unseen();
@@ -413,22 +416,27 @@ $('nametap').addEventListener('click', function () { $('namein').blur(); off('na
 /* ---- while you were away: on a new visit the cat's diary opens on the time you were gone,
    from what the daemon remembers and the hours of its day. A reopen within minutes is the
    same visit and shows nothing; the calendar on the wall opens the page again. ---- */
-var visits = null, visitAt = 0, diary = null, diaryDue = 0;
+var visits = null, visitAt = 0, diary = null, diaryPending = 0;
 function visit() { visitAt = Date.now(); act('visit', ''); }
-function diaryWaits() { return Date.now() < diaryDue; }
+/* the diary goes first: while a visit is on its way to the daemon (over a slow tunnel it can
+   take seconds) and while a page is due, the postcard and the name card wait */
+function diaryWaits() { return !!diaryPending || Date.now() - visitAt < 6000; }
 function maybeDiary() {
   var c = cat(), was = visits;
   visits = c.visits;
   // a visit counted just now, for this page (another device's visit opens nothing here)
-  if (was == null || !(c.visits > was) || Date.now() - visitAt > 5000) return;
+  if (was == null || !(c.visits > was) || Date.now() - visitAt > 15000) return;
+  visitAt = 0;
   var d = composeDiary();
   diary = d;
   $('calmark').classList.toggle('on', !!d.lines.length);
   if (!c.since || !learnt('pet') || !(c.gap >= 3600e3 || d.events || d.cards.length)) return;
-  diaryDue = Date.now() + 3000;
+  var token = diaryPending = c.visits;
   setTimeout(function open() {
-    if (!diaryWaits()) return;
-    if (screen !== 'house' || overlayOpen() || document.hidden) { setTimeout(open, 500); return; }
+    if (diaryPending !== token) return;   // a newer visit has its own page
+    if (screen !== 'house') { diaryPending = 0; return; }   // you went elsewhere: the calendar keeps it
+    if (overlayOpen() || document.hidden) { setTimeout(open, 500); return; }
+    diaryPending = 0;
     openDiary(d, true);
   }, 500);
 }
@@ -542,7 +550,6 @@ function openDiary(d, arrival) {
 function closeDiary() {
   var page = $('diarypage'), d = diary, arrival = page.dataset.arrival === '1';
   off('diary');
-  diaryDue = 0;
   $('calmark').classList.add('on');
   if (!arrival || !d) return;
   page.dataset.arrival = '';
