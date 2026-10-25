@@ -42,8 +42,23 @@ conversation skipped a revision and resubscribed, `snapshot_wait` means no
 snapshot came back within 8 seconds of subscribing, `send_unsettled` means a
 send was not confirmed, and `pending_unreconciled` means a confirmed send
 still had no row 45 seconds later. A connection that dropped without a clean
-close is logged as `websocket: client connection lost ... device=<id>`. To
-check a stuck screen afterwards:
+close is logged as `websocket: client connection lost ... device=<id> cause=<who>`.
+The cause says which end hung up:
+
+- `peer-closed`: the phone, or something between it and the daemon (a tunnel,
+  the phone's operating system closing the app's sockets), closed the
+  connection without a goodbye.
+- `client-silent`: the phone did not answer the daemon's pings for 60 seconds,
+  as when the app is frozen in the background.
+- `daemon-closed(...)`: the daemon ended it, and the brackets say why (a ping
+  that could not be sent, or a client that fell too far behind).
+
+The rest of the line shows the link: bytes sent, bytes still queued, the last
+send's size, age and duration, and how many pings the phone answered
+(`pongs=answered/sent`) and when. A phone's own report of how its socket ended
+is `event=ws_closed`; it carries the platform's error text (`error=`) and the
+last frame it received (`lastFrame=type/size`). To check a stuck screen
+afterwards:
 
 ```sh
 grep -E 'client diagnostic|client connection lost' ~/.mewla/logs/daemon.log | tail -n 30
@@ -51,6 +66,18 @@ grep -E 'client diagnostic|client connection lost' ~/.mewla/logs/daemon.log | ta
 
 A device id is in `mewla devices list`. Each event is reported at most once
 every 10 seconds per device.
+
+When a phone or browser is turned away with `401` (or `404` on the cat's
+files), the daemon says why in one line,
+`auth: refused <method> <path> purpose=<p> reason=<why> device=<id> remote=<addr>`,
+at most once every 30 seconds per reason and device (the line says how many
+more were held back). The reasons are `malformed-header`, `wrong-daemon`,
+`clock-skew` (the phone's clock is more than 5 minutes from the computer's;
+the line says by how much), `replay` (the same signed request arrived twice;
+the line says how long after the first, which separates a request resent after
+a lost response from a captured one), `unknown-device` (revoked or never
+paired), `wrong-purpose` and `bad-signature`. The signature, nonce and
+Authorization header are never logged.
 
 ## The daemon will not start
 

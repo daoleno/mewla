@@ -445,18 +445,55 @@ func (m *Manager) repeatedEnrollmentLocked(token, deviceID, devicePublicKeyHex s
 	return &copyDevice
 }
 
+// refusal is an authorization error that also says why the request was
+// refused. It reads and matches (errors.Is) as the error it wraps, so the
+// response a client sees does not change; RefusalReason is for the daemon's log.
+type refusal struct {
+	error
+	reason string
+	detail string
+}
+
+func (r refusal) Unwrap() error { return r.error }
+
+func refuse(err error, reason, detail string) error {
+	return refusal{error: err, reason: reason, detail: detail}
+}
+
+// RefusalReason names why VerifyAuthorization refused a request, from a fixed
+// set: malformed-header, wrong-daemon, clock-skew, malformed-nonce,
+// malformed-signature, replay, unknown-device, wrong-purpose, bad-device-key,
+// bad-signature. The detail is safe to log (no header, nonce or signature).
+func RefusalReason(err error) (reason, detail string) {
+	var r refusal
+	if errors.As(err, &r) {
+		return r.reason, r.detail
+	}
+	return "", ""
+}
+
+// ClaimedDeviceID is the device a request says it is from, read without
+// checking anything: for a log line about a refused request, never for trust.
+func ClaimedDeviceID(headerValue string) string {
+	deviceID, _, _, _, _, err := parseAuthorizationHeader(headerValue)
+	if err != nil {
+		return ""
+	}
+	return deviceID
+}
+
 func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.Duration) (*TrustedDevice, error) {
 	deviceID, daemonID, timestamp, nonceHex, signatureHex, err := parseAuthorizationHeader(headerValue)
 	if err != nil {
-		return nil, ErrUnauthorized
+		return nil, refuse(ErrUnauthorized, "malformed-header", "")
 	}
 	if daemonID != m.daemonID {
-		return nil, ErrWrongDaemon
+		return nil, refuse(ErrWrongDaemon, "wrong-daemon", "")
 	}
 
 	timestampMillis, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil {
-		return nil, ErrUnauthorized
+		return nil, refuse(ErrUnauthorized, "malformed-header", "timestamp")
 	}
 	timestampValue := time.UnixMilli(timestampMillis)
 	now := time.Now()
@@ -464,14 +501,15 @@ func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.D
 		maxAge = 5 * time.Minute
 	}
 	if timestampValue.Before(now.Add(-maxAge)) || timestampValue.After(now.Add(maxAge)) {
-		return nil, ErrUnauthorized
+		// The device's clock against this computer's, to the second.
+		return nil, refuse(ErrUnauthorized, "clock-skew", fmt.Sprintf("device clock %+ds from this computer's", int64(timestampValue.Sub(now).Seconds())))
 	}
 	if _, err := decodeFixedHex(nonceHex, 16); err != nil {
-		return nil, ErrUnauthorized
+		return nil, refuse(ErrUnauthorized, "malformed-nonce", "")
 	}
 	signature, err := decodeFixedHex(signatureHex, ed25519.SignatureSize)
 	if err != nil {
-		return nil, ErrUnauthorized
+		return nil, refuse(ErrUnauthorized, "malformed-signature", "")
 	}
 
 	m.mu.Lock()
@@ -481,25 +519,28 @@ func (m *Manager) VerifyAuthorization(headerValue, purpose string, maxAge time.D
 		return nil, err
 	}
 	nonceKey := deviceID + ":" + nonceHex
-	if _, seen := m.usedNonces[nonceKey]; seen {
-		return nil, ErrReplayDetected
+	if firstUsed, seen := m.usedNonces[nonceKey]; seen {
+		// How long ago the same request was first accepted tells a client
+		// that resent it after a lost response (moments) from an attacker
+		// replaying a capture (much later).
+		return nil, refuse(ErrReplayDetected, "replay", "first accepted "+now.Sub(firstUsed).Round(time.Millisecond).String()+" ago")
 	}
 
 	device, ok := m.devices[deviceID]
 	if !ok {
-		return nil, ErrUnknownDevice
+		return nil, refuse(ErrUnknownDevice, "unknown-device", "")
 	}
 	if (device.Kind == DeviceKindComputer) != (strings.TrimSpace(purpose) == ComputerPurpose) {
-		return nil, ErrUnauthorized
+		return nil, refuse(ErrUnauthorized, "wrong-purpose", "")
 	}
 	publicKeyBytes, err := decodeFixedHex(device.PublicKeyHex, ed25519.PublicKeySize)
 	if err != nil {
-		return nil, ErrUnauthorized
+		return nil, refuse(ErrUnauthorized, "bad-device-key", "")
 	}
 
 	payload := BuildSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex)
 	if !ed25519.Verify(ed25519.PublicKey(publicKeyBytes), payload, signature) {
-		return nil, ErrUnauthorized
+		return nil, refuse(ErrUnauthorized, "bad-signature", "")
 	}
 
 	m.usedNonces[nonceKey] = now.UTC()

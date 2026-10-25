@@ -136,6 +136,11 @@ func (s *Server) catBundleAllowed(r *http.Request) bool {
 			return false
 		}
 		_, err := s.auth.VerifyAuthorization(header, catBundlePurpose, 5*time.Minute)
+		if err != nil {
+			// The caller answers 404, which hides the reason from the phone;
+			// the log keeps it.
+			s.logRefusedRequest(r, catBundlePurpose, err)
+		}
 		return err == nil
 	}
 	return s.webUIAdmitted(r)

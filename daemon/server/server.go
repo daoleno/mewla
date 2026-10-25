@@ -189,6 +189,7 @@ type Server struct {
 	pluginRuntime      skillmgmt.PluginRuntime
 	mu                 sync.Mutex
 	enrollmentRateMu   sync.Mutex
+	refusals           refusalLog
 	enrollmentRates    map[string][]time.Time
 	agentLevelsFn      func(*classifier.Worker) map[string]string
 	agentApprovals     AgentApprovals
@@ -577,8 +578,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	debuglog.Printf("websocket: client connected remote=%s device=%s clients=%d", r.RemoteAddr, device.ID, s.clientCount())
 	connectedAt := time.Now()
-	stopKeepalive := keepWebSocketAlive(conn)
-	defer stopKeepalive()
+	link := keepWebSocketAlive(conn)
+	defer link.stop()
 	s.sendWorkerSessionList(conn)
 	if s.work != nil {
 		s.sendJSON(conn, map[string]any{
@@ -595,10 +596,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			out := s.outboxStats(conn)
+			if cause := link.endCause(err, out); cause != "peer-closed" || websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				// Without this line a phone that lost its connection leaves no
-				// trace here: connect and disconnect are verbose-only.
-				log.Printf("websocket: client connection lost remote=%s device=%s age=%s: %v", r.RemoteAddr, device.ID, time.Since(connectedAt).Round(time.Second), err)
+				// trace here: connect and disconnect are verbose-only. The
+				// cause says which end hung up.
+				log.Printf("websocket: client connection lost remote=%s device=%s age=%s cause=%s %s: %v", r.RemoteAddr, device.ID, time.Since(connectedAt).Round(time.Second), cause, link.describe(out), err)
 			}
 			break
 		}
@@ -3766,6 +3769,7 @@ func formatUploadBytes(size int64) string {
 func (s *Server) authenticateRequest(w http.ResponseWriter, r *http.Request, purpose string) (*auth.TrustedDevice, bool) {
 	device, err := s.auth.VerifyAuthorization(authorizationFromRequest(r), purpose, 5*time.Minute)
 	if err != nil {
+		s.logRefusedRequest(r, purpose, err)
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return nil, false
 	}
@@ -4044,6 +4048,16 @@ func (s *Server) hasActiveViewer(workerID string) bool {
 	}
 
 	return false
+}
+
+func (s *Server) outboxStats(conn *websocket.Conn) outboxStats {
+	s.mu.Lock()
+	outbox := s.outboxes[conn]
+	s.mu.Unlock()
+	if outbox == nil {
+		return outboxStats{}
+	}
+	return outbox.stats()
 }
 
 // queueMessage hands one message to the client's writer. It never writes to
