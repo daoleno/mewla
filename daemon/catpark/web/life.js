@@ -326,6 +326,7 @@ function showThink(icon, spot) {
   think.innerHTML = '';
   if (!icon) return;
   var P = stagePx();
+  icon.classList.add('icon');   // whatever it thinks of fits inside the bubble
   think.appendChild(icon);
   think.style.left = pct(spot[0]); think.style.top = pct(spot[1] - 0.24 * 0.95 * P.w / P.h - 0.01);
   think.classList.remove('on'); void think.offsetWidth; think.classList.add('on');
@@ -356,7 +357,7 @@ function greet() {
 }
 function wantFood(food) {
   react('want', 3800);
-  var i = new Image(); i.src = BASE + 't_' + food + '.webp'; i.alt = '';
+  var i = new Image(); i.src = BASE + 't_' + food + '.webp'; i.alt = ''; i.className = 'icon';
   setTimeout(function () { var a = L.cur; if (a) showThink(i, a.foot); setTimeout(hideThink, 3200); }, 900);
 }
 function hearts(n) {
