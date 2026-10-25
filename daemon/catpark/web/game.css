@@ -202,9 +202,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #hot-window.glow::after{inset:-19%}   /* round the painted frame, not inside it */
 /* it beckons and never fades out: a ring that fades is missed on a busy painted wall */
 @keyframes ring{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.07);opacity:.65}}
-.catring{position:absolute;z-index:2;width:20%;aspect-ratio:3/1;transform:translate(-50%,-50%);border-radius:50%;border:3px solid rgba(255,214,110,.9);box-shadow:0 0 16px rgba(255,214,110,.7);opacity:0;pointer-events:none;transition:opacity .4s}
-.catring.on{opacity:1;animation:catring 1.8s ease-out infinite}
-@keyframes catring{0%{transform:translate(-50%,-50%) scale(.8);opacity:1}100%{transform:translate(-50%,-50%) scale(1.25);opacity:0}}
+/* over the cat, so a chair or a desk it sits at never hides it */
+.catring{position:absolute;z-index:5;width:20%;aspect-ratio:3/1;transform:translate(-50%,-50%);border-radius:50%;border:4px solid #f7b733;box-shadow:0 0 0 1.5px rgba(150,90,20,.5),inset 0 0 0 1.5px rgba(150,90,20,.35),0 0 18px 5px rgba(255,185,60,.85);opacity:0;pointer-events:none;transition:opacity .4s}
+.catring.on{opacity:1;animation:catring 1.6s ease-in-out infinite}
+@keyframes catring{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:1}50%{transform:translate(-50%,-50%) scale(1.08);opacity:.7}}
 .guide-yard #treats .tt::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:3px solid rgba(255,214,110,.95);animation:ring 1.6s ease-in-out infinite}
 .guide-back #back{animation:backglow 1.6s ease-in-out infinite}
 @keyframes backglow{0%,100%{box-shadow:0 2px 8px rgba(60,40,20,.25),0 0 0 0 rgba(255,214,110,.9)}50%{box-shadow:0 2px 8px rgba(60,40,20,.25),0 0 0 8px rgba(255,214,110,.35)}}
@@ -245,7 +246,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .scene .hour,.scene .weather{position:absolute;inset:0;pointer-events:none}
 .scene.t-dawn .hour{background:linear-gradient(180deg,rgba(255,170,190,.35),rgba(255,214,150,.18) 50%,rgba(255,214,150,0));mix-blend-mode:soft-light}
 .scene.t-dusk .hour{background:linear-gradient(180deg,rgba(255,130,60,.42),rgba(255,160,90,.25) 60%,rgba(120,60,90,.25));mix-blend-mode:multiply}
-.scene.t-night .hour{background:rgba(24,34,92,.55);mix-blend-mode:multiply}
+/* a gradient, not a flat colour: Android's WebView draws a flat full-size wash as a plain layer and drops the blend inside a moving card */
+.scene.t-night .hour{background:linear-gradient(180deg,rgba(18,26,84,.5),rgba(24,34,92,.38));mix-blend-mode:multiply}
+.scene.t-night .bg{filter:brightness(.68) saturate(.85)}
 .scene.t-night .who,.scene.t-night .friend{filter:brightness(.78) saturate(.9) drop-shadow(0 2px 2px rgba(0,0,0,.3))}
 .scene .glow{position:absolute;width:44%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(255,206,120,.42),rgba(255,190,100,0) 68%);mix-blend-mode:screen;pointer-events:none}
 .scene.w-cloudy .weather{background:linear-gradient(180deg,rgba(150,160,175,.5),rgba(150,160,175,.12) 55%,rgba(150,160,175,0));mix-blend-mode:multiply}
