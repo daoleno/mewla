@@ -95,6 +95,8 @@ export interface CatManifest {
 
 export const CAT_BUNDLE_PURPOSE = "mewla-cat";
 export const CAT_INDEX = "index.html";
+/** The whole bundle as one tar, served next to the per-file route. */
+export const CAT_ARCHIVE = "bundle.tar";
 const MAX_FILES = 400;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;

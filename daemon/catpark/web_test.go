@@ -1,7 +1,12 @@
 package catpark
 
 import (
+	"archive/tar"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"regexp"
 	"strings"
@@ -375,5 +380,40 @@ func TestManifestChangesWithContent(t *testing.T) {
 		if len(file.SHA256) != 64 || file.Size <= 0 {
 			t.Fatalf("bad entry %+v", file)
 		}
+	}
+}
+
+func TestArchiveCarriesTheWholeBundleOnce(t *testing.T) {
+	files := Bundle()
+	manifest, err := BuildManifest(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range manifest.Files {
+		if file.Path == ArchiveName {
+			t.Fatalf("the bundle holds a file named %s, which the archive route would shadow", ArchiveName)
+		}
+	}
+	packed, err := Archive(files, manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader := tar.NewReader(bytes.NewReader(packed))
+	for _, want := range manifest.Files {
+		header, err := reader.Next()
+		if err != nil {
+			t.Fatalf("before %s: %v", want.Path, err)
+		}
+		data, err := io.ReadAll(reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(data)
+		if header.Name != want.Path || int64(len(data)) != want.Size || hex.EncodeToString(sum[:]) != want.SHA256 {
+			t.Fatalf("entry %q does not match manifest entry %+v", header.Name, want)
+		}
+	}
+	if _, err := reader.Next(); err != io.EOF {
+		t.Fatalf("archive holds more than the manifest names: %v", err)
 	}
 }
