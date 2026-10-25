@@ -384,6 +384,19 @@ let appState = "unknown";
  * left for the OS to notice minutes later.
  */
 export const socketWatchdog = { silentLimitMs: 25_000, checkMs: 5_000 };
+/**
+ * What the platform said when a socket failed ("Software caused connection
+ * abort", "timeout", ...): one short line for the diagnostic the daemon logs.
+ * A bare "error" says nothing about which side or which layer gave up.
+ */
+export function socketErrorText(event: unknown): string {
+  const message = (event as { message?: unknown } | null | undefined)?.message;
+  if (typeof message !== "string") {
+    return "";
+  }
+  return message.replace(/\s+/g, " ").replace(/"/g, "'").trim().slice(0, 100);
+}
+
 /** How often a connection on the relay looks for a direct path. */
 const DIRECT_UPGRADE_CHECK_MS = 20_000;
 /** A connection that lived this long and then dropped reconnects without delay. */
@@ -398,6 +411,8 @@ class ServerSocket {
   private attemptSequence = 0;
   /** When the live socket last delivered a frame (the daemon sends one at least every 10 s). */
   lastFrameAt: number | undefined;
+  /** What that frame was ("type/bytes"): a silence that follows a large frame reads differently from one that follows a heartbeat. */
+  private lastFrameInfo = "none";
   /** Ends the current socket now, whatever state it is in. */
   private endCurrent: ((reason: string, code?: number) => void) | null = null;
   private watchdog: ReturnType<typeof setInterval> | null = null;
@@ -451,8 +466,19 @@ class ServerSocket {
 
   private startWatchdog() {
     this.stopWatchdog();
+    let lastTickAt = Date.now();
     this.watchdog = setInterval(() => {
-      const quietFor = Date.now() - (this.lastFrameAt ?? 0);
+      const now = Date.now();
+      // A tick this late means the app itself was away (frozen in the
+      // background, or busy). Frames that arrived meanwhile are still queued
+      // behind this tick, so the quiet it would measure is the app's, not the
+      // link's. Judge again next tick, once those frames have been read.
+      const away = now - lastTickAt > socketWatchdog.checkMs * 3;
+      lastTickAt = now;
+      if (away) {
+        return;
+      }
+      const quietFor = now - (this.lastFrameAt ?? 0);
       if (this.isConnected && quietFor > socketWatchdog.silentLimitMs) {
         this.abandon("silent");
       }
@@ -600,6 +626,7 @@ class ServerSocket {
         this.workerFeed.reset();
         openedAt = Date.now();
         this.lastFrameAt = openedAt;
+        this.lastFrameInfo = "none";
         this.reconnectDelay = 1000;
         this.startWatchdog();
         this.emit("connection_issue", { issue: null });
@@ -623,6 +650,7 @@ class ServerSocket {
         this.lastFrameAt = Date.now();
         try {
           const data = JSON.parse(event.data);
+          this.lastFrameInfo = `${typeof data?.type === "string" ? data.type : "?"}/${event.data.length}B`;
           if (data.type === "direct_addresses") {
             void rememberDirectAddresses(this.meta.serverId, data.addresses);
           }
@@ -654,6 +682,8 @@ class ServerSocket {
 
       // A socket ends once, whichever event reports it first.
       let ended = false;
+      let errorText = "";
+      let closeText = "";
       const handleEnd = (reason = "closed", code?: number) => {
         if (ended) {
           return;
@@ -675,7 +705,10 @@ class ServerSocket {
             `reason=${reason} code=${code ?? ""} ` +
             `livedMs=${lived} ` +
             `quietMs=${Math.max(0, Date.now() - (this.lastFrameAt ?? Date.now()))} ` +
-            `appState=${appState}`;
+            `lastFrame=${this.lastFrameInfo} ` +
+            `appState=${appState}` +
+            (errorText ? ` error="${errorText}"` : "") +
+            (closeText ? ` closeReason="${closeText}"` : "");
         }
 
         // Transient close (background suspension, network blip). Keep
@@ -702,10 +735,13 @@ class ServerSocket {
         }
       };
       this.endCurrent = endThis;
-      ws.onclose = (event: any) =>
+      ws.onclose = (event: any) => {
+        closeText = socketErrorText({ message: event?.reason });
         handleEnd("closed", typeof event?.code === "number" ? event.code : undefined);
+      };
 
-      ws.onerror = () => {
+      ws.onerror = (event: any) => {
+        errorText = socketErrorText(event) || errorText;
         try {
           ws.close();
         } catch {

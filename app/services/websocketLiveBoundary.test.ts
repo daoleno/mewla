@@ -63,16 +63,22 @@ class FakeWebSocket {
   }
 
   /** A refused handshake that reports error and never a close event. */
-  failWithoutClose() {
+  failWithoutClose(event?: unknown) {
     this.readyState = FakeWebSocket.CLOSED;
-    this.onerror?.();
+    this.onerror?.(event);
+  }
+
+  /** The platform ending the socket with a close event that carries a code and reason. */
+  closeWith(code: number, reason: string) {
+    this.readyState = FakeWebSocket.CLOSED;
+    this.onclose?.({ code, reason });
   }
 }
 
 const originalWebSocket = globalThis.WebSocket;
 Object.assign(globalThis, { WebSocket: FakeWebSocket });
 
-const { WebSocketClient, socketWatchdog } = await import("./websocket");
+const { WebSocketClient, socketWatchdog, socketErrorText } = await import("./websocket");
 
 const server = {
   id: "server-a",
@@ -1862,6 +1868,91 @@ describe("a connection that stops answering", () => {
       client.disconnect();
     } finally {
       Object.assign(socketWatchdog, original);
+    }
+  });
+
+  test("the next socket says what the platform reported and what the last frame was", async () => {
+    const client = new WebSocketClient();
+    const socket = await connectClient(client);
+    socket.open();
+    socket.receive({ type: "worker_session_heartbeat", seq: 3 });
+    const nextIndex = FakeWebSocket.instances.length;
+    socket.failWithoutClose({ message: "Software caused\nconnection \"abort\"" });
+    const replacement = await socketAfter(nextIndex);
+    replacement.open();
+    const body = replacement.sent
+      .map((frame) => JSON.parse(frame))
+      .find((frame) => frame.type === "client_diagnostic" && frame.name === "ws_closed")?.body as string;
+    expect(body).toContain("reason=error");
+    expect(body).toContain("lastFrame=worker_session_heartbeat/");
+    expect(body).toContain("error=\"Software caused connection 'abort'\"");
+    client.disconnect();
+  });
+
+  test("a close event's code and reason are reported", async () => {
+    const client = new WebSocketClient();
+    const socket = await connectClient(client);
+    socket.open();
+    const nextIndex = FakeWebSocket.instances.length;
+    socket.closeWith(1006, "Connection reset by peer");
+    const replacement = await socketAfter(nextIndex);
+    replacement.open();
+    const body = replacement.sent
+      .map((frame) => JSON.parse(frame))
+      .find((frame) => frame.type === "client_diagnostic" && frame.name === "ws_closed")?.body as string;
+    expect(body).toContain("reason=closed code=1006");
+    expect(body).toContain("closeReason=\"Connection reset by peer\"");
+    client.disconnect();
+  });
+
+  test("socketErrorText is one short quote-free line, and empty when the platform said nothing", () => {
+    expect(socketErrorText(undefined)).toBe("");
+    expect(socketErrorText({})).toBe("");
+    expect(socketErrorText({ message: 42 })).toBe("");
+    expect(socketErrorText({ message: "  a\n\tb \"c\"  " })).toBe("a b 'c'");
+    expect(socketErrorText({ message: "x".repeat(500) })).toHaveLength(100);
+  });
+
+  test("a frozen app does not mistake its own absence for a silent link", async () => {
+    // Drive the watchdog by hand so the order of events is exact: the app
+    // wakes, the watchdog's tick runs first, and the frames that arrived while
+    // it slept are read only after.
+    const callbacks: Array<() => void> = [];
+    const intervals = spyOn(globalThis, "setInterval").mockImplementation(((fn: () => void) => {
+      callbacks.push(fn);
+      return callbacks.length;
+    }) as unknown as typeof setInterval);
+    const realNow = Date.now;
+    let skew = 0;
+    Date.now = () => realNow() + skew;
+    try {
+      const client = new WebSocketClient();
+      const socket = await connectClient(client);
+      socket.open();
+      const watchdogTick = callbacks[0]!;
+      const nextIndex = FakeWebSocket.instances.length;
+
+      skew += 60_000; // the app was away for a minute
+      watchdogTick();
+      expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+      socket.receive({ type: "worker_session_heartbeat", seq: 1 }); // read after the tick
+      skew += socketWatchdog.checkMs;
+      watchdogTick();
+      expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+      expect(FakeWebSocket.instances.length).toBe(nextIndex);
+
+      // Away again, and this time the link really was dead: nothing was
+      // queued, so the next ordinary look drops it.
+      skew += 60_000;
+      watchdogTick();
+      expect(socket.readyState).toBe(FakeWebSocket.OPEN);
+      skew += socketWatchdog.checkMs;
+      watchdogTick();
+      expect(socket.readyState).toBe(FakeWebSocket.CLOSED);
+      client.disconnect();
+    } finally {
+      Date.now = realNow;
+      intervals.mockRestore();
     }
   });
 
