@@ -383,37 +383,70 @@ func TestManifestChangesWithContent(t *testing.T) {
 	}
 }
 
-func TestArchiveCarriesTheWholeBundleOnce(t *testing.T) {
+func TestArchivePartsCarryTheWholeBundleOnce(t *testing.T) {
 	files := Bundle()
 	manifest, err := BuildManifest(files)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, file := range manifest.Files {
-		if file.Path == ArchiveName {
-			t.Fatalf("the bundle holds a file named %s, which the archive route would shadow", ArchiveName)
+		if _, _, ok := ParseArchivePart(file.Path); ok {
+			t.Fatalf("the bundle holds %s, which the archive route would shadow", file.Path)
 		}
 	}
-	packed, err := Archive(files, manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reader := tar.NewReader(bytes.NewReader(packed))
-	for _, want := range manifest.Files {
-		header, err := reader.Next()
-		if err != nil {
-			t.Fatalf("before %s: %v", want.Path, err)
-		}
-		data, err := io.ReadAll(reader)
+	const of = 8
+	seen := map[string]int{}
+	for part := 0; part < of; part++ {
+		packed, err := ArchivePart(files, manifest, part, of)
 		if err != nil {
 			t.Fatal(err)
 		}
-		sum := sha256.Sum256(data)
-		if header.Name != want.Path || int64(len(data)) != want.Size || hex.EncodeToString(sum[:]) != want.SHA256 {
-			t.Fatalf("entry %q does not match manifest entry %+v", header.Name, want)
+		if len(packed) > 1<<20 {
+			t.Fatalf("part %d is %d bytes: parts should stay small enough to survive a dropped connection", part, len(packed))
+		}
+		reader := tar.NewReader(bytes.NewReader(packed))
+		for {
+			header, err := reader.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := io.ReadAll(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sum := sha256.Sum256(data)
+			var want File
+			for i, file := range manifest.Files {
+				if file.Path == header.Name {
+					want = file
+					if i%of != part {
+						t.Fatalf("%s is in part %d, its position says %d", header.Name, part, i%of)
+					}
+				}
+			}
+			if int64(len(data)) != want.Size || hex.EncodeToString(sum[:]) != want.SHA256 {
+				t.Fatalf("entry %q does not match its manifest entry", header.Name)
+			}
+			seen[header.Name]++
 		}
 	}
-	if _, err := reader.Next(); err != io.EOF {
-		t.Fatalf("archive holds more than the manifest names: %v", err)
+	for _, file := range manifest.Files {
+		if seen[file.Path] != 1 {
+			t.Fatalf("%s appears %d times across the parts", file.Path, seen[file.Path])
+		}
+	}
+}
+
+func TestArchivePartNamesAreStrict(t *testing.T) {
+	if part, of, ok := ParseArchivePart(ArchivePartName(3, 8)); !ok || part != 3 || of != 8 {
+		t.Fatalf("round trip: %d %d %v", part, of, ok)
+	}
+	for _, name := range []string{"bundle.tar", "bundle-8-8.tar", "bundle-0-0.tar", "bundle-0-33.tar", "bundle--1-8.tar", "bundle-1-8.tar.gz", "../bundle-1-8.tar", "bundle-001-8.tar"} {
+		if _, _, ok := ParseArchivePart(name); ok {
+			t.Fatalf("%q must not name a part", name)
+		}
 	}
 }

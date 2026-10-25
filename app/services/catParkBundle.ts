@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
-import { CAT_ARCHIVE, CAT_BUNDLE_PURPOSE, CAT_INDEX, parseCatManifest, staleVersions } from "./catPark";
+import { CAT_BUNDLE_PURPOSE, CAT_INDEX, catArchivePartName, parseCatManifest, staleVersions } from "./catPark";
 import { runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
 import { bytesToHex } from "./protocolCrypto";
 import { requestFailure, signedFetchBytes } from "./signedRequest";
@@ -51,7 +51,7 @@ export async function cachedCatBundle(serverId: string): Promise<CatBundle | nul
 
 const MANIFEST_TIMEOUT_MS = 30_000;
 const FILE_TIMEOUT_MS = 30_000;
-const ARCHIVE_TIMEOUT_MS = 90_000;
+const PART_TIMEOUT_MS = 45_000;
 /** However slow the link, the first open ends here, with a retry. */
 const SYNC_DEADLINE_MS = 120_000;
 
@@ -69,8 +69,8 @@ function depsFor(server: StoredServer): CatSyncDeps {
       if (!manifest) throw new Error(`${server.name} sent a cat bundle this app cannot use.`);
       return manifest;
     },
-    async archive() {
-      const { response, bytes } = await fetchBytes(server, `/cat/${CAT_ARCHIVE}`, ARCHIVE_TIMEOUT_MS);
+    async archive(part, of) {
+      const { response, bytes } = await fetchBytes(server, `/cat/${catArchivePartName(part, of)}`, PART_TIMEOUT_MS);
       if (response.status === 404) return null;
       if (!bytes) throw await requestFailure(server, response);
       return bytes;
@@ -100,8 +100,8 @@ const running = new Map<string, { done: Promise<CatBundle>; listeners: Set<(prog
 
 /**
  * Brings the phone's copy of the computer's bundle up to date: the manifest
- * names every file with its digest, what is missing arrives as one archive (or
- * file by file from a computer that has none), and each file is checked against
+ * names every file with its digest, what is missing arrives as a few archive parts
+ * (or file by file from a computer that has none), and each file is checked against
  * its digest before it is written. The version is remembered only once every
  * file is in place. A sync already running for this computer is joined, not
  * repeated, and none runs past its deadline.
