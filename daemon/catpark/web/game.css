@@ -273,7 +273,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .scene.note{background:#fbf3e2 repeating-linear-gradient(180deg,transparent 0 22px,rgba(120,150,190,.18) 22px 23px)}
 .scene.note .notecat{left:50%;bottom:8%;width:38%;height:auto;transform:translateX(-50%)}
 .postcard.letter{background:#fbf3e2}
-.postcard .pm{position:absolute;right:14px;top:56px;font:12px/1 system-ui;color:rgba(255,250,240,.9);text-shadow:0 1px 2px rgba(0,0,0,.4);letter-spacing:.06em}
+.postcard .pm{position:absolute;right:14px;top:56px;font:12px/1 system-ui;color:rgba(255,250,240,.9);text-shadow:0 0 3px rgba(60,40,20,.7),0 1px 2px rgba(0,0,0,.5);letter-spacing:.06em}
 .mini .scene{border-radius:0}
 @media (prefers-reduced-motion:reduce){.scene.live .weather{animation:none}#life .prop.new img,#life .think.on,.catring.on{animation:none}}
 

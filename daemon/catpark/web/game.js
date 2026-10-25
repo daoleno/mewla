@@ -588,5 +588,6 @@ window.CatShell = {
 window.__cat = { setState: setState, get state() { return S; }, openAlbum: openAlbum, openYard: openYard, openSheet: openSheet, openBag: openBag, openJar: openJar, openFood: openFood };
 
 renderBack();
-send({ type: 'ready' });
+// the host can miss the first hello (a tab mounted off screen): say it until the state comes
+(function hello() { if (S) return; send({ type: 'ready' }); setTimeout(hello, 1000); })();
 })();
