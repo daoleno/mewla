@@ -579,9 +579,11 @@ function sync(view) {
   renderProps();
   var away = !!p.away;
   if (away === !!L.away) return;
-  if (away) queue(function () { return L.away ? Promise.resolve() : doLeave(); });
-  else queue(function () { return L.away ? doReturn() : Promise.resolve(); });
+  // the cat leaves and comes home in front of you: off screen it waits for you to look
+  if (away) queue(function () { return seen().then(function () { return L.away || !Sh.away() ? null : doLeave(); }); });
+  else queue(function () { return seen().then(function () { return L.away && !Sh.away() ? doReturn() : null; }); });
 }
+async function seen() { while (L.paused || !Sh.onHouse()) await wait(400); }
 function pause(on) {
   on = !!on;
   if (L.paused === on) return;
@@ -591,7 +593,7 @@ function pause(on) {
   try { stage.getAnimations({ subtree: true }).forEach(function (a) { if (on) a.pause(); else a.play(); }); } catch (e) { /* older engine: CSS pause still holds */ }
   if (!on) { tick(); L.greeted = false; setTimeout(greet, 600); }
 }
-function holding() { return L.returning; }
+function holding() { return L.returning || (L.on && L.away && !Sh.away()); }   // home in the state, not yet through the window
 function catPoint() { var a = L.cur; if (a) return headOf(a); var w = whereNow(); return [w.x, w.y - 0.08]; }
 function jarPoint() { return center('p_jar'); }
 function jarClink() {
