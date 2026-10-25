@@ -9,7 +9,7 @@ The cat's life is Brain's real Work, nothing invented:
 
 | Brain | The cat |
 | --- | --- |
-| Idle | At home. At night (8 pm to 6 am on the phone's clock) the lamp is on and it sleeps, and the bag still hangs on the wall |
+| Idle | At home. The light follows the phone's clock (dusk from about 6 pm, night by 8:30 pm, dawn from about 5:30 am). At night the lamp is on and it sleeps, and the bag still hangs on the wall |
 | A Worker starts a Work | It leaves, and the bag is gone from the wall |
 | The Work runs | It sends a postcard shortly after it leaves, and one more if the Work runs long |
 | The Work is accepted | It comes home with a souvenir, and the shelf gains it |
@@ -22,14 +22,27 @@ A Work that is cancelled brings the cat home with nothing.
 - **The mailbox** shows a new postcard and keeps it in the **album**; with none waiting it opens the album.
 - **The shelf** opens every souvenir the cat can bring. Tap one to see the Work it came from.
 - **The window** is the yard. A few treats grow each day: pick them up, and tap one in the tray to pack it in the bag before the cat leaves. The treat only changes the postcard's mood. Days you miss cost nothing.
-- **The cat** answers a poke.
+- **The cat** answers a tap: a purr, a happy look and a little hop. Tap the little gift a visitor left to keep it.
 - **The picture frame** on the wall opens the pictures: six ways to draw the same
   house (crayon, watercolour, gouache, paper cut-out, pixel, clay). Tap one and
-  the whole room, home, away and night, changes in place, so you compare it
-  where you live. The choice is remembered per user on the daemon, so every
-  device shows the same house. The album and the cat's own postcards stay in
-  crayon for now. In the other styles the cat is drawn into the room picture, so
-  its cut-out is hidden and the poke is a small nudge of the room.
+  the whole room changes in place, so you compare it where you live. The choice
+  is remembered per user on the daemon, so every device shows the same house.
+  Gouache storybook is the default. Only gouache is the full living house
+  described below; the other styles keep one picture per state, with the cat
+  drawn into it, so a tap on the cat there is a small nudge of the room, and the
+  album, postcards and souvenirs stay crayon.
+
+## The living house (gouache)
+
+The room is two empty pictures, day and night, that cross-fade with the phone's
+clock, plus a dusk glow. The cat is drawn on its own, one round silhouette, and
+only changes pose.
+
+- **At home** it does one of eight things, picked by the time of day and chance, never the same one twice in a row: reads, plays with yarn, writes, has tea (steam rises), eats, naps on its bed; at night it sleeps on its cushion or watches the stars at the window. After a while it hops over to the next one and the pictures cross-fade; now and then it looks up.
+- **Leaving** is a moment: the bag flies from the hook to the cat, which hops to the window and slips out. **Coming home** reverses it, the bag goes back on the hook, and the souvenir appears on the shelf after that.
+- **Small life**: clouds, a butterfly, a lit lamp that flickers at night with crickets, and now and then a bird lands on the window sill and leaves a small gift. The gift is only for fun and is not saved.
+- **Sound** is made in the page, with no audio files: a quiet room tone, paper for postcards, a purr. It starts with the first tap and stops whenever the tab is not on screen. There is no switch.
+- Weather is not shown: the page has no network by design.
 
 ## Postcards
 
@@ -71,9 +84,9 @@ offline with the last state it knew. The web UI frames the same page from
 only `/cat/` allows being framed, by the web UI itself.
 
 The state also carries the chosen `style`; an unknown name is ignored and a
-state saved before styles existed reads as crayon. The pictures are generated
+state saved before styles existed reads as gouache; a style someone already chose is kept. The pictures are generated
 art kept in the page's `a/` folder, one folder per style under `a/s/`, and a
-test fails if a style lacks home, away, night or its card.
+test fails if a style lacks its pictures, and for gouache every postcard, souvenir, treat and cat pose.
 
 The handwritten line uses a subset of LXGW WenKai (SIL OFL 1.1); its notice is in the
 repository's third-party assets list.
