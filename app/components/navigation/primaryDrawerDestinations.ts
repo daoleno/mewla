@@ -24,10 +24,11 @@ export interface PrimaryDrawerDestination {
   icon: IconName;
 }
 
-/** Brain and Sessions, the two primary pages, lead the menu on every layout. */
+/** Brain, Sessions and the Cat, the primary pages, lead the menu on every layout. */
 export const PRIMARY_DRAWER_PLACES: readonly PrimaryDrawerPlace[] = [
   { key: "brain", label: "Brain", route: "brain", icon: "brain" },
   { key: "sessions", label: "Sessions", route: "list", icon: "sessions" },
+  { key: "cat", label: "Cat", route: "cat", icon: "paw" },
 ];
 
 /**

@@ -679,7 +679,6 @@ const AppNavigator = memo(function AppNavigator({
     >
       <Stack.Screen name="(primary)" options={{ headerShown: false }} />
       <Stack.Screen name="calendar" options={{ title: "Calendar" }} />
-      <Stack.Screen name="cat" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen name="plugins" options={{ headerShown: false }} />
       <Stack.Screen name="stats" options={{ title: "Stats" }} />
       <Stack.Screen name="browser" options={{ title: "Browser" }} />

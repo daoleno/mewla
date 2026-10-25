@@ -62,11 +62,12 @@ describe("bridge", () => {
     expect(parseCatBridgeMessage('{"cat":1,"type":"collect","slot":2}')).toEqual({ type: "collect", slot: 2 });
     expect(parseCatBridgeMessage('{"cat":1,"type":"pack","treat":"fish"}')).toEqual({ type: "pack", treat: "fish" });
     expect(parseCatBridgeMessage('{"cat":1,"type":"pack","treat":""}')).toEqual({ type: "pack", treat: "" });
+    expect(parseCatBridgeMessage('{"cat":1,"type":"style","style":"watercolor"}')).toEqual({ type: "style", style: "watercolor" });
     expect(parseCatBridgeMessage('{"cat":1,"type":"seen","what":"postcard","id":"pc:w1:start"}')).toEqual({ type: "seen", what: "postcard", id: "pc:w1:start" });
     for (const bad of [
       "not json", "null", "[]", '{"type":"ready"}', '{"cat":1,"type":"eval","code":"x"}',
       '{"cat":1,"type":"collect","slot":-1}', '{"cat":1,"type":"collect","slot":1.5}', '{"cat":1,"type":"collect","slot":"1"}',
-      '{"cat":1,"type":"pack","treat":"../x"}', '{"cat":1,"type":"seen","what":"work","id":"x"}', '{"cat":1,"type":"seen","what":"postcard","id":""}',
+      '{"cat":1,"type":"pack","treat":"../x"}', '{"cat":1,"type":"style","style":"../crayon"}', '{"cat":1,"type":"style","style":7}', '{"cat":1,"type":"seen","what":"work","id":"x"}', '{"cat":1,"type":"seen","what":"postcard","id":""}',
       "x".repeat(5000),
     ]) {
       expect(parseCatBridgeMessage(bad)).toBeNull();
@@ -76,6 +77,7 @@ describe("bridge", () => {
   test("only the actions that change state reach the daemon", () => {
     expect(catSocketMessage({ type: "collect", slot: 1 })).toEqual({ type: "cat_collect", slot: 1 });
     expect(catSocketMessage({ type: "pack", treat: "yarn" })).toEqual({ type: "cat_pack", treat: "yarn" });
+    expect(catSocketMessage({ type: "style", style: "pixel" })).toEqual({ type: "cat_style", style: "pixel" });
     expect(catSocketMessage({ type: "seen", what: "souvenir", id: "sv:w" })).toEqual({ type: "cat_seen", what: "souvenir", id: "sv:w" });
     expect(catSocketMessage({ type: "back" })).toBeNull();
     expect(catSocketMessage({ type: "open_brain" })).toBeNull();
@@ -92,6 +94,7 @@ describe("bridge", () => {
     expect(script.startsWith("window.__catHost&&window.__catHost(")).toBe(true);
     expect(script.endsWith(");true;")).toBe(true);
     expect(script.includes(String.fromCharCode(0x2028))).toBe(false);
+    expect(JSON.parse(catStateScript(view, "en", true).slice("window.__catHost&&window.__catHost(".length, -");true;".length)).tab).toBe(true);
     const literal = script.slice("window.__catHost&&window.__catHost(".length, -");true;".length);
     expect(JSON.parse(literal).state.souvenirs[0].title).toContain("alert(1)");
   });

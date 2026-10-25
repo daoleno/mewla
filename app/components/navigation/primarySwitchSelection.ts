@@ -1,8 +1,8 @@
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 
-/** Pager index for the two primary TopTabs routes (index → list). */
-export function primaryRoutePagerIndex(route: PrimaryRouteName): 0 | 1 {
-  return route === "list" ? 1 : 0;
+/** Pager index for the primary TopTabs routes (index → list → cat). */
+export function primaryRoutePagerIndex(route: PrimaryRouteName): 0 | 1 | 2 {
+  return route === "cat" ? 2 : route === "list" ? 1 : 0;
 }
 
 export interface PrimarySwitchTapResult {

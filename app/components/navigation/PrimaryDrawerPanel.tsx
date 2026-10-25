@@ -369,10 +369,11 @@ export function PrimaryDrawerPanel({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* One home per layout: the phone's app bar switches Brain and
-            Sessions, so only the docked sidebar lists them. */}
+        {/* One home per layout: the phone's app bar switches Brain, Sessions
+            and Cat, so only the docked sidebar lists them. The desktop web
+            sidebar (selectedKey set) has no Cat page. */}
         {docked ? <View accessibilityRole="tablist" style={styles.drawerList}>
-          {PRIMARY_DRAWER_PLACES.map((place) => (
+          {PRIMARY_DRAWER_PLACES.filter((place) => selectedKey === undefined || place.route !== "cat").map((place) => (
             <PrimaryPlaceRow
               key={place.key}
               drawerVisible={drawerVisible}
@@ -384,7 +385,7 @@ export function PrimaryDrawerPanel({
                   : selectedKey === place.key
               }
               // Brain's dot points elsewhere, so it hides on Brain itself.
-              attention={place.route === "list" ? sessionsAttention : brainAttention && (selectedKey === undefined ? activePrimaryRoute !== place.route : selectedKey !== place.key)}
+              attention={place.route === "list" ? sessionsAttention : place.route === "brain" && brainAttention && (selectedKey === undefined ? activePrimaryRoute !== place.route : selectedKey !== place.key)}
               tooltip={shortcutTip(place.label, place.key)}
               onPress={() => selectPlace(place.route)}
             />

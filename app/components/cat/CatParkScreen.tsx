@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { catStateScript, parseCatBridgeMessage } from "../../services/catPark";
 import { cachedCatBundle, syncCatBundle, type CatBundle } from "../../services/catParkBundle";
+import { resolvePrimaryAppBarGeometry } from "../navigation/primaryAppBarGeometry";
 import { useCatPark } from "./useCatPark";
 
 const GROUND = "#2a211a";
@@ -18,7 +19,9 @@ function deviceLocale(): string | undefined {
 }
 
 /**
- * The cat's house, full screen. The page is the daemon's own bundle, synced
+ * The cat's house, the App's third primary page (Brain · Sessions · Cat). It
+ * sits under the primary app bar, so the page starts below it. The page is the
+ * daemon's own bundle, synced
  * into the phone's cache and opened from disk: it holds no credentials, never
  * touches the network, and can only ask this screen for the few things the
  * bridge allows (see services/catPark.ts).
@@ -36,9 +39,9 @@ export function CatParkScreen() {
   const latest = useRef(view);
   latest.current = view;
 
+  // Leaving the house is Brain, the first tab, wherever the tab was opened from.
   const leave = useCallback(() => {
-    if (router.canGoBack()) router.back();
-    else router.replace("/");
+    router.navigate("/");
   }, [router]);
 
   // Open what the phone already has at once, and refresh it for next time; the
@@ -72,7 +75,7 @@ export function CatParkScreen() {
 
   const push = useCallback(() => {
     const current = latest.current;
-    if (ready.current && current) web.current?.injectJavaScript(catStateScript(current, deviceLocale()));
+    if (ready.current && current) web.current?.injectJavaScript(catStateScript(current, deviceLocale(), true));
   }, []);
   useEffect(push, [view, push]);
 
@@ -110,7 +113,7 @@ export function CatParkScreen() {
     );
   }
   return (
-    <View style={[styles.fill, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[styles.fill, { paddingTop: resolvePrimaryAppBarGeometry(insets.top).contentInset, paddingBottom: insets.bottom }]}>
       <WebView
         key={bundle.version}
         ref={web}

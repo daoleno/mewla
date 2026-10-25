@@ -26,14 +26,15 @@ import {
   reconcilePrimarySwitchPending,
 } from "./primarySwitchSelection";
 
-const SWITCH_OPTION_WIDTH = 92;
+const SWITCH_OPTION_WIDTH = 84;
+const SWITCH_OPTION_COUNT = 3;
 /** The selected tab's ink underline. */
 const SWITCH_UNDERLINE_WIDTH = 28;
 const SWITCH_TRACK_PADDING = 3;
 const SWITCH_TRACK_HEIGHT = 38;
 // Extends the 32pt segment to a 48pt vertical touch target.
 const SWITCH_HIT_SLOP = { top: 8, bottom: 8 } as const;
-const PAGER_POSITION_INPUT_RANGE = [0, 1] as const;
+const PAGER_POSITION_INPUT_RANGE = [0, 1, 2] as const;
 
 interface PendingSwitchTrace {
   activated: boolean;
@@ -143,6 +144,7 @@ export function PrimaryTopSwitch({
   const position = pagerPosition ?? fallbackPosition;
   const brainSelected = activeRoute === "brain";
   const listSelected = activeRoute === "list";
+  const catSelected = activeRoute === "cat";
   const pendingRouteRef = useRef<PrimaryRouteName | null>(null);
   const pendingTraceRef = useRef<PendingSwitchTrace | null>(null);
   const outerFrameRef = useRef<number | null>(null);
@@ -157,17 +159,22 @@ export function PrimaryTopSwitch({
 
   const indicatorTranslateX = position.interpolate({
     inputRange: [...PAGER_POSITION_INPUT_RANGE],
-    outputRange: [0, SWITCH_OPTION_WIDTH],
+    outputRange: [0, SWITCH_OPTION_WIDTH, SWITCH_OPTION_WIDTH * 2],
     extrapolate: "clamp",
   });
   const brainActiveOpacity = position.interpolate({
     inputRange: [...PAGER_POSITION_INPUT_RANGE],
-    outputRange: [1, 0],
+    outputRange: [1, 0, 0],
     extrapolate: "clamp",
   });
   const listActiveOpacity = position.interpolate({
     inputRange: [...PAGER_POSITION_INPUT_RANGE],
-    outputRange: [0, 1],
+    outputRange: [0, 1, 0],
+    extrapolate: "clamp",
+  });
+  const catActiveOpacity = position.interpolate({
+    inputRange: [...PAGER_POSITION_INPUT_RANGE],
+    outputRange: [0, 0, 1],
     extrapolate: "clamp",
   });
 
@@ -343,6 +350,22 @@ export function PrimaryTopSwitch({
             selectRoute("list");
           }}
         />
+        <PrimarySwitchOption
+          href="/cat"
+          isSelected={catSelected}
+          label="Cat"
+          activeOpacity={catActiveOpacity}
+          inactiveColor={colors.textTertiary}
+          primaryColor={colors.textPrimary}
+          onPressIn={() => beginSwitch("cat")}
+          onPress={(event) => {
+            event.preventDefault?.();
+            selectRoute("cat");
+          }}
+          onLongPress={() => {
+            selectRoute("cat");
+          }}
+        />
       </View>
     </View>
   );
@@ -355,7 +378,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   switchTrack: {
-    width: SWITCH_OPTION_WIDTH * 2 + SWITCH_TRACK_PADDING * 2,
+    width: SWITCH_OPTION_WIDTH * SWITCH_OPTION_COUNT + SWITCH_TRACK_PADDING * 2,
     height: SWITCH_TRACK_HEIGHT,
     padding: SWITCH_TRACK_PADDING,
     flexDirection: "row",
@@ -363,7 +386,7 @@ const styles = StyleSheet.create({
   },
   switchButton: {
     width: SWITCH_OPTION_WIDTH,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     alignItems: "center",
     justifyContent: "center",
   },

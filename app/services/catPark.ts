@@ -45,6 +45,8 @@ export interface CatView {
   postcards: CatPostcard[];
   souvenirs: CatSouvenir[];
   yard: CatYard;
+  /** The art the person chose for the house; the daemon remembers it. */
+  style?: string;
   now: number;
 }
 
@@ -109,6 +111,7 @@ export type CatBridgeMessage =
   | { type: "open_brain" }
   | { type: "collect"; slot: number }
   | { type: "pack"; treat: string }
+  | { type: "style"; style: string }
   | { type: "seen"; what: "postcard" | "souvenir"; id: string };
 
 /** A message from the page, validated: the page is content, not authority. */
@@ -136,6 +139,8 @@ export function parseCatBridgeMessage(raw: unknown): CatBridgeMessage | null {
         : null;
     case "pack":
       return typeof message.treat === "string" && /^[a-z]{0,16}$/.test(message.treat) ? { type: "pack", treat: message.treat } : null;
+    case "style":
+      return typeof message.style === "string" && /^[a-z]{3,16}$/.test(message.style) ? { type: "style", style: message.style } : null;
     case "seen":
       return (message.what === "postcard" || message.what === "souvenir") && typeof message.id === "string" && message.id.length > 0 && message.id.length <= 200
         ? { type: "seen", what: message.what, id: message.id }
@@ -152,6 +157,8 @@ export function catSocketMessage(message: CatBridgeMessage): Record<string, unkn
       return { type: "cat_collect", slot: message.slot };
     case "pack":
       return { type: "cat_pack", treat: message.treat };
+    case "style":
+      return { type: "cat_style", style: message.style };
     case "seen":
       return { type: "cat_seen", what: message.what, id: message.id };
     default:
@@ -162,9 +169,12 @@ export function catSocketMessage(message: CatBridgeMessage): Record<string, unkn
 const LINE_SEPARATOR = String.fromCharCode(0x2028);
 const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
 
-/** Script that hands a state to the page; U+2028/9 are escaped so the literal is always valid. */
-export function catStateScript(view: CatView, locale?: string): string {
-  const payload = JSON.stringify({ cat: 1, type: "state", state: view, locale })
+/**
+ * Script that hands a state to the page; U+2028/9 are escaped so the literal is
+ * always valid. `tab` tells the page the App's header already leads home.
+ */
+export function catStateScript(view: CatView, locale?: string, tab?: boolean): string {
+  const payload = JSON.stringify({ cat: 1, type: "state", state: view, locale, tab })
     .split(LINE_SEPARATOR).join("\\u2028")
     .split(PARAGRAPH_SEPARATOR).join("\\u2029");
   return `window.__catHost&&window.__catHost(${payload});true;`;

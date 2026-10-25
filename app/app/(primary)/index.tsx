@@ -672,7 +672,6 @@ export default function BrainScreen() {
         return slip ? { slip, actions: workActionsFor(slip, "slip") } : undefined;
       },
       onTurnRunning: setBrainTurnRunning,
-      onOpenHouse: activeServer ? () => router.push("/cat") : undefined,
       onCatTap: ({ turnRunning, turnLabel }) => {
         const answer = brainCatTap({ presence, turnRunning, turnLabel, counts: workSurface.counts });
         switch (answer.kind) {

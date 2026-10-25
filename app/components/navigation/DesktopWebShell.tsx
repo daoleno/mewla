@@ -35,6 +35,7 @@ import { buildPaletteItems, type PaletteAction } from "./desktopPalette";
 import { DesktopCommandPalette, DesktopShortcutsDialog } from "./DesktopCommandPalette";
 import { ResizeHandle, useResizableWidth } from "./ResizeHandle";
 import type { PrimaryDrawerPathname } from "./primaryDrawerDestinations";
+import type { PrimaryRouteName } from "../../services/interactionTrace";
 
 const SIDEBAR_DEFAULT_WIDTH = 264;
 const SIDEBAR_MIN_WIDTH = 216;
@@ -256,7 +257,7 @@ export function DesktopWebShell({ children }: { children: ReactNode }) {
     [go],
   );
   const selectPrimary = useCallback(
-    (route: "brain" | "list") => go(route === "brain" ? "brain" : "sessions"),
+    (route: PrimaryRouteName) => go(route === "list" ? "sessions" : "brain"),
     [go],
   );
   const noop = useCallback(() => undefined, []);

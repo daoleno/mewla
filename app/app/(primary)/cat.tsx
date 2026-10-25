@@ -1,3 +1,3 @@
-import { CatParkScreen } from "../components/cat/CatParkScreen";
+import { CatParkScreen } from "../../components/cat/CatParkScreen";
 
 export default CatParkScreen;
