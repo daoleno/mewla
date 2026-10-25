@@ -33,10 +33,11 @@ function rows(node: ts.Node) {
 }
 
 describe("primary drawer destinations", () => {
-  test("one ordered menu: Brain and Sessions, the tools, then Settings apart", () => {
+  test("one ordered menu: Brain, Sessions and Cat, the tools, then Settings apart", () => {
     expect(PRIMARY_DRAWER_PLACES.map((item) => [item.label, item.route])).toEqual([
       ["Brain", "brain"],
       ["Sessions", "list"],
+      ["Cat", "cat"],
     ]);
     expect(destinations.map((item) => item.label)).toEqual([
       "Calendar", "Extensions", "Screen", "Stats", "Resources", "Settings",
@@ -68,7 +69,7 @@ describe("primary drawer panel", () => {
     const scrolled = rows(scroll);
     expect(scrolled).toHaveLength(1);
     expect(scrolled[0].getText(file)).toContain("onPress={() => openRoute(destination.pathname)}");
-    expect(scroll.getText(file)).toContain("PRIMARY_DRAWER_PLACES.map(");
+    expect(scroll.getText(file)).toContain("PRIMARY_DRAWER_PLACES.filter(");
     expect(scroll.getText(file)).toContain("PRIMARY_DRAWER_DESTINATIONS.map(");
     expect(source).not.toContain("Caption");
     expect(source).not.toContain("On this computer");

@@ -11,7 +11,7 @@ import {
 interface PrimaryTabsLayoutProps {
   children: ReactNode;
   navigation: {
-    navigate(route: "index" | "list"): void;
+    navigate(route: "index" | "list" | "cat"): void;
   };
   state: {
     index: number;
@@ -28,14 +28,14 @@ const renderPrimaryTabsLayout = ({
   navigation,
   state,
 }: PrimaryTabsLayoutProps) => {
-  const activeRoute =
-    state.routes[state.index]?.name === "list" ? "list" : "brain";
+  const name = state.routes[state.index]?.name;
+  const activeRoute = name === "list" ? "list" : name === "cat" ? "cat" : "brain";
   return (
     <PrimaryPagerPositionProvider>
       <PrimaryDrawerShell
         activePrimaryRoute={activeRoute}
         onSelectPrimaryRoute={(target) => {
-          navigation.navigate(target === "brain" ? "index" : "list");
+          navigation.navigate(target === "brain" ? "index" : target);
         }}
       >
         {children}
@@ -66,6 +66,8 @@ export default function PrimaryLayout() {
     >
       <TopTabs.Screen name="index" options={{ title: "Brain" }} />
       <TopTabs.Screen name="list" options={{ title: "Sessions" }} />
+      {/* The house loads its bundle and a WebView: only when first opened. */}
+      <TopTabs.Screen name="cat" options={{ title: "Cat", lazy: true }} />
     </TopTabs>
   );
 }

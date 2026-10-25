@@ -1,6 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from "react-native";
-import { Icon } from "../icons/Icon";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import type { BrainCatPresence } from "./brainCatState";
@@ -16,8 +15,6 @@ export interface BrainCompanion {
   sessionLabels?: ReadonlyMap<string, string>;
   /** Shows the Work list (the sheet, or the column beside the chat); the tail row hands off to it. */
   onOpenWork?: () => void;
-  /** Opens the cat's house; the tail row carries the small house mark that does it. */
-  onOpenHouse?: () => void;
   /** The live slip for a Work, with its inline actions, while it is current. */
   workSlip?: (workId: string) => { slip: BrainWorkSlip; actions: readonly WorkSlipAction[] } | undefined;
   /** The Working row reports while it is on screen, so only one cat shows. */
@@ -102,17 +99,6 @@ export function BrainCatRow({
           </Text>
         ) : null}
       </Pressable>
-      {companion.onOpenHouse ? (
-        <Pressable
-          onPress={companion.onOpenHouse}
-          hitSlop={8}
-          style={({ pressed }) => [styles.house, pressed ? styles.pressed : null]}
-          accessibilityRole="button"
-          accessibilityLabel="Cat's house"
-        >
-          <Icon name="home" color={chrome.textMuted} size={22} />
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -147,13 +133,6 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
-  },
-  house: {
-    marginLeft: "auto",
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
   },
   copy: {
     flexShrink: 1,

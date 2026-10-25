@@ -25,7 +25,6 @@ export function screenBackParent(routeName: string): ScreenBackParent | null {
   switch (routeName) {
     case "(primary)":
     case "plugins":
-    case "cat":
     case "terminal/[id]":
     case "onboarding":
     case "screenshot-demo":
