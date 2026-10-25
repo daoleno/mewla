@@ -71,8 +71,7 @@ card and it asks again later.
 
 Each step is shown once, and the daemon remembers which ones you have done and
 which new things you have already met, so another device does not show them
-again. Anything new later introduces itself
-the same way: a hobby's prop, a new picture frame.
+again. A hobby's prop that is new later introduces itself the same way.
 
 ## What you can tap
 
@@ -120,8 +119,8 @@ a day for each kind so it cannot be ground:
 | An accepted Work | 3 when it comes home, 2 more if you packed it a snack |
 
 There are ten levels (at 0, 6, 16, 30, 48, 70, 96, 126, 160 and 200 stars). A
-level lets the cat hold one more hobby, hangs one more picture frame (from level
-2), grows one more treat in the yard (at levels 3 and 6), and from level 4 it
+level lets the cat hold one more hobby, hangs one more picture frame (at levels
+2, 3 and 4), grows one more treat in the yard (at levels 3 and 6), and from level 4 it
 meets friends on its trips and now and then finds a rare place. Days you miss
 cost nothing: nothing decays, and a new day simply allows new stars.
 
