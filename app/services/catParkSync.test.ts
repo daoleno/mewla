@@ -1,7 +1,19 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import type { CatManifest, CatManifestFile } from "./catPark";
-import { ARCHIVE_MIN_FILES, ARCHIVE_PARTS, CatSyncTimeout, readTar, runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
+import {
+  ARCHIVE_MIN_FILES,
+  ARCHIVE_PARTS,
+  REQUEST_ATTEMPTS,
+  CatRequestError,
+  CatSyncError,
+  CatSyncTimeout,
+  catFailureCause,
+  readTar,
+  runCatSync,
+  type CatSyncDeps,
+  type CatSyncProgress,
+} from "./catParkSync";
 
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const text = (value: string) => new TextEncoder().encode(value);
@@ -88,7 +100,7 @@ function manualTimers() {
   };
 }
 
-const options = (extra: Record<string, unknown> = {}) => ({ deadlineMs: 120_000, ...extra });
+const options = (extra: Record<string, unknown> = {}) => ({ deadlineMs: 120_000, sleep: async () => undefined, ...extra });
 
 describe("readTar", () => {
   test("yields each file with its bytes", () => {
@@ -110,30 +122,103 @@ describe("first open", () => {
     const { deps, calls, written } = harness(123);
     const progress: CatSyncProgress[] = [];
     const manifest = await runCatSync(deps, options({ onProgress: (next: CatSyncProgress) => progress.push(next) }));
-    expect([...calls.parts].sort()).toEqual(Array.from({ length: ARCHIVE_PARTS }, (_, part) => part));
+    expect([...calls.parts].sort((a, b) => a - b)).toEqual(Array.from({ length: ARCHIVE_PARTS }, (_, part) => part));
     expect(calls.files).toEqual([]);
     expect(written.size).toBe(manifest.files.length);
     expect(progress.length).toBeGreaterThan(ARCHIVE_PARTS);
     expect(progress.at(-1)).toEqual({ done: 123, total: 123 });
   });
 
-  test("a part that fails keeps what the others brought, and a retry asks only for what is missing", async () => {
-    const written = new Map<string, Uint8Array>();
-    const failing = harness(40, {}, (entries, part) => {
-      if (part === 3) throw new Error("connection dropped");
+  test("a request that fails once is asked again, and nothing is fetched singly", async () => {
+    let failures = 0;
+    const { deps, calls, written } = harness(40, {}, (entries, part) => {
+      if (part === 2 && failures++ < REQUEST_ATTEMPTS - 1) throw new Error("Network request failed");
       return tarOf(entries);
-    }, written);
-    await expect(runCatSync(failing.deps, options())).rejects.toThrow("connection dropped");
-    expect(written.size).toBeGreaterThan(0);
-    expect(written.size).toBeLessThan(40);
+    });
+    await runCatSync(deps, options());
+    expect(calls.parts.filter((part) => part === 2).length).toBe(REQUEST_ATTEMPTS);
+    expect(calls.files).toEqual([]);
+    expect(written.size).toBe(40);
+  });
 
+  test("a part that keeps failing is fetched file by file, small requests surviving where the big one did not", async () => {
+    const { deps, calls, written } = harness(40, {}, (entries, part) => {
+      if (part === 3) throw new Error("Network request failed");
+      return tarOf(entries);
+    });
+    await runCatSync(deps, options());
+    expect(calls.files.sort()).toEqual(["a/pic19.webp", "a/pic3.webp", "a/pic35.webp"]);
+    expect(written.size).toBe(40);
+  });
+
+  test("a link that lost parts and can fetch nothing ends with the step and how far it got", async () => {
+    const written = new Map<string, Uint8Array>();
+    const failing = harness(
+      40,
+      { file: async () => Promise.reject(new Error("Network request failed")) },
+      (entries, part) => {
+        if (part === 3) throw new Error("Network request failed");
+        return tarOf(entries);
+      },
+      written,
+    );
+    const error = await runCatSync(failing.deps, options()).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(CatSyncError);
+    const failure = error as CatSyncError;
+    expect(failure.stage).toBe("file");
+    expect([failure.done, failure.total]).toEqual([37, 40]);
+    expect(failure.message).toContain("connection dropped");
+    expect(failure.diagnostic()).toMatch(/^stage=file done=37\/40 error="connection dropped" trail=/);
+    expect(failure.trail.join(";")).toContain("part 3/16 x3");
+
+    // A later run asks only for what is still missing.
     const retry = harness(40, {}, undefined, written);
     await runCatSync(retry.deps, options());
-    expect(retry.calls.parts).toContain(3);
-    for (const landed of failing.calls.parts.filter((part) => part !== 3 && part < 3)) expect(retry.calls.parts).not.toContain(landed);
-    expect(retry.calls.parts.length).toBeLessThan(ARCHIVE_PARTS);
-    expect(retry.calls.files).toEqual([]);
+    expect(retry.calls.parts).toEqual([]);
+    expect(retry.calls.files.sort()).toEqual(["a/pic19.webp", "a/pic3.webp", "a/pic35.webp"]);
     expect(written.size).toBe(40);
+  });
+
+  test("a dead link is not asked for every part", async () => {
+    const { deps, calls } = harness(
+      80,
+      { file: async () => Promise.reject(new Error("Network request failed")) },
+      () => {
+        throw new Error("Network request failed");
+      },
+    );
+    await expect(runCatSync(deps, options())).rejects.toBeInstanceOf(CatSyncError);
+    expect(calls.parts.length).toBeLessThan(ARCHIVE_PARTS * REQUEST_ATTEMPTS);
+  });
+
+  test("a computer that says no is not asked again, and its answer is the reason", async () => {
+    const { deps, calls } = harness(3, { file: async (file) => (calls.files.push(file.path), Promise.reject(new CatRequestError("manjaro runs an older Mewla; update it first", false))) });
+    const error = (await runCatSync(deps, options()).catch((caught: unknown) => caught)) as CatSyncError;
+    expect(error.refused).toBe(true);
+    expect(error.message).toBe("manjaro runs an older Mewla; update it first");
+    expect(calls.files.length).toBeLessThanOrEqual(3);
+  });
+
+  test("a server error is asked again", async () => {
+    let asked = 0;
+    const { deps } = harness(3, {
+      manifest: async () => {
+        if (asked++ === 0) throw new CatRequestError("bad gateway", true);
+        return bundle(3).manifest;
+      },
+    });
+    await runCatSync(deps, options());
+    expect(asked).toBe(2);
+  });
+
+  test("a manifest that never arrives is named as the step", async () => {
+    const { deps } = harness(3, { manifest: async () => Promise.reject(new Error("The operation was aborted")) });
+    const error = (await runCatSync(deps, options()).catch((caught: unknown) => caught)) as CatSyncError;
+    expect(error.stage).toBe("manifest");
+    expect(error.cause_).toBe("timed out");
   });
 
   test("an entry that does not match its digest is fetched on its own", async () => {
@@ -189,5 +274,14 @@ describe("a stalled computer", () => {
       expect(await outcome).toBe("timed out");
       expect(clock.wasCleared()).toBe(true);
     }
+  });
+});
+
+describe("failure causes", () => {
+  test("are one short plain line and carry no address", () => {
+    expect(catFailureCause(new Error("Network request failed"))).toBe("connection dropped");
+    expect(catFailureCause(Object.assign(new Error("Aborted"), { name: "AbortError" }))).toBe("timed out");
+    expect(catFailureCause(new Error("GET https://example.test/cat/x failed badly"))).toBe("GET <url> failed badly");
+    expect(catFailureCause(new Error("x".repeat(200))).length).toBeLessThanOrEqual(80);
   });
 });

@@ -5,11 +5,23 @@ import { useIsFocused, useRouter } from "expo-router";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { catFocusScript, catStateScript, parseCatBridgeMessage } from "../../services/catPark";
 import { cachedCatBundle, syncCatBundle, type CatBundle } from "../../services/catParkBundle";
-import type { CatSyncProgress } from "../../services/catParkSync";
+import { reportCatSync } from "../../services/catParkReport";
+import { catFailureCause, CatSyncError, type CatSyncProgress } from "../../services/catParkSync";
+import { wsClient } from "../../services/websocket";
 import { resolvePrimaryAppBarGeometry } from "../navigation/primaryAppBarGeometry";
 import { useCatPark } from "./useCatPark";
 
 const GROUND = "#2a211a";
+/** A sync that fails early is run again (what arrived stays), this many runs in all. */
+const SYNC_RUNS = 3;
+/** No new run starts after this long: one that hit its deadline is not repeated behind the person's back. */
+const SYNC_RERUN_WITHIN_MS = 60_000;
+const SYNC_RERUN_PAUSE_MS = 1_500;
+
+interface Failure {
+  /** What went wrong, shown only when the computer itself is reachable; otherwise the link is the story. */
+  reason: string | null;
+}
 
 /**
  * The cat's house, the App's third primary page (Brain · Sessions · Cat). It
@@ -25,7 +37,7 @@ export function CatParkScreen() {
   const { server, view, act } = useCatPark();
   const serverKey = server?.id ?? "";
   const [bundle, setBundle] = useState<CatBundle | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const [progress, setProgress] = useState<CatSyncProgress | null>(null);
   const [attempt, setAttempt] = useState(0);
   const web = useRef<WebView>(null);
@@ -52,7 +64,7 @@ export function CatParkScreen() {
   useEffect(() => {
     ready.current = false;
     setBundle(null);
-    setFailed(false);
+    setFailure(null);
     setProgress(null);
     if (!server) return;
     let cancelled = false;
@@ -64,14 +76,32 @@ export function CatParkScreen() {
         void syncCatBundle(server).catch(() => undefined);
         return;
       }
-      try {
-        const fresh = await syncCatBundle(server, (next) => {
-          if (!cancelled) setProgress(next);
-        });
-        if (!cancelled) setBundle(fresh);
-      } catch {
-        if (!cancelled) setFailed(true);
+      const started = Date.now();
+      let last: unknown = null;
+      for (let run = 1; run <= SYNC_RUNS; run++) {
+        try {
+          const fresh = await syncCatBundle(server, (next) => {
+            if (!cancelled) setProgress(next);
+          });
+          if (cancelled) return;
+          setBundle(fresh);
+          if (run > 1) reportCatSync(server.id, "cat_sync_recovered", `runs=${run} after=${Date.now() - started}ms last=${last instanceof CatSyncError ? last.diagnostic() : catFailureCause(last)}`);
+          return;
+        } catch (error) {
+          last = error;
+          if (cancelled) return;
+          if ((error instanceof CatSyncError && error.refused) || Date.now() - started > SYNC_RERUN_WITHIN_MS) break;
+          if (run < SYNC_RUNS) await new Promise<void>((resolve) => setTimeout(resolve, SYNC_RERUN_PAUSE_MS));
+          if (cancelled) return;
+        }
       }
+      const reachable = wsClient.isConnected(server.id);
+      reportCatSync(
+        server.id,
+        "cat_sync_failed",
+        `${last instanceof CatSyncError ? last.diagnostic() : `stage=other error="${catFailureCause(last)}"`} reachable=${reachable} after=${Date.now() - started}ms`,
+      );
+      setFailure({ reason: reachable ? (last instanceof CatSyncError ? last.message : catFailureCause(last)) : null });
     })();
     return () => {
       cancelled = true;
@@ -108,11 +138,12 @@ export function CatParkScreen() {
     }
   }, [act, leave, push]);
 
-  if (!server || failed) {
+  if (!server || failure) {
     return (
       <View style={[styles.fill, styles.center]}>
         <Pressable accessibilityRole="button" onPress={server ? () => setAttempt((n) => n + 1) : leave} style={styles.retry}>
-          <Text style={styles.retryText}>{server ? "Can't reach your computer" : "No computer"}</Text>
+          <Text style={styles.retryText}>{server ? failure?.reason ?? "Can't reach your computer" : "No computer"}</Text>
+          {server ? <Text style={styles.retryHint}>Tap to retry</Text> : null}
         </Pressable>
       </View>
     );
@@ -165,7 +196,8 @@ export function CatParkScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: GROUND },
   center: { alignItems: "center", justifyContent: "center" },
-  retry: { minHeight: 48, paddingHorizontal: 20, justifyContent: "center" },
+  retry: { minHeight: 48, paddingHorizontal: 28, justifyContent: "center", alignItems: "center" },
   status: { color: "#f3e9d8", fontSize: 13, opacity: 0.7, marginTop: 14 },
-  retryText: { color: "#f3e9d8", fontSize: 15 },
+  retryText: { color: "#f3e9d8", fontSize: 15, textAlign: "center" },
+  retryHint: { color: "#f3e9d8", fontSize: 13, opacity: 0.6, marginTop: 6 },
 });
