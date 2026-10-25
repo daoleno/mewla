@@ -48,6 +48,8 @@ type kitFile struct {
 	Spots map[string][]float64 `json:"spots"`
 	Sit   string               `json:"sit"`
 	Ready string               `json:"ready"`
+	// Slots are the parts of the cat's day, in order
+	Slots []string `json:"slots"`
 }
 
 func readKit(t *testing.T, files fs.FS) kitFile {
@@ -197,6 +199,39 @@ func TestCatalogIsWhole(t *testing.T) {
 			if !strings.Contains(line, hole) {
 				t.Errorf("the name card's %q line must say %s", key, hole)
 			}
+		}
+	}
+}
+
+// The diary has a line for every part of the day and every souvenir, and
+// each line says what it is about.
+func TestTheDiaryIsWritten(t *testing.T) {
+	files := Bundle()
+	kit, diary := readKit(t, files), World().Words.Diary
+	if len(kit.Slots) == 0 {
+		t.Fatal("the kit has no parts of the day")
+	}
+	for _, slot := range kit.Slots {
+		if len(diary.Slots[slot]) == 0 {
+			t.Errorf("the diary has nothing for the %s", slot)
+		}
+		for _, line := range diary.Slots[slot] {
+			if strings.TrimSpace(line) == "" {
+				t.Errorf("an empty diary line for the %s", slot)
+			}
+		}
+	}
+	for kind := range souvenirItems {
+		if item := SouvenirItem(kind); diary.Brought[item] == "" {
+			t.Errorf("the diary cannot say it brought home a %s", item)
+		}
+	}
+	if diary.Title == "" || diary.Quiet == "" {
+		t.Error("the diary needs its title and a quiet line")
+	}
+	for line, hole := range map[string]string{diary.Days: "{n}", diary.Hobby: "{h}", diary.Out: "{p}", diary.Back: "{t}", diary.Learnt: "{h}"} {
+		if !strings.Contains(line, hole) {
+			t.Errorf("diary line %q must say %s", line, hole)
 		}
 	}
 }

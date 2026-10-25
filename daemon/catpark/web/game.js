@@ -29,6 +29,9 @@ function fmt(ts) { var d = new Date(ts); return (d.getMonth() + 1) + '/' + ('0' 
 var HOUR = parseFloat((location.search.match(/[?&]hour=([0-9.]+)/) || [])[1]);
 function hour() { if (HOUR >= 0 && HOUR < 24) return HOUR; var d = new Date(); return d.getHours() + d.getMinutes() / 60; }
 function isNight() { var h = hour(); return h >= 20 || h < 6; }
+/* the cat's day: each part starts at its hour (life.js lives by it, the diary remembers it) */
+var DAY = [[0, 'night'], [5.5, 'dawn'], [8, 'morning'], [12, 'noon'], [13.5, 'afternoon'], [17, 'dusk'], [19.5, 'evening'], [22.5, 'night']];
+function slotOf(h) { var s = DAY[0][1]; DAY.forEach(function (d) { if (h >= d[0]) s = d[1]; }); return s; }
 function emit(name, data) { (listeners[name] || []).forEach(function (fn) { try { fn(data); } catch (e) { /* one listener never stops the rest */ } }); }
 function food(k) { return 'a/t_' + k + '.webp'; }
 function bump(n) { if (!n) return; n.classList.remove('bump'); void n.offsetWidth; n.classList.add('bump'); }
@@ -50,7 +53,7 @@ function receive(msg) {
     // the host's tab is on or off screen: the room sleeps with it, and so do its sounds
     if (window.CatLife) window.CatLife.pause(!msg.on);
     if (window.CatSound) window.CatSound.pause(!msg.on);
-    if (msg.on && S) act('visit', '');
+    if (msg.on && S) visit();
   }
 }
 window.__catHost = receive;
@@ -103,7 +106,8 @@ function setState(next) {
     if (met.length) emit('learn', met);
   }
   emit('state', { first: first, prev: prev });
-  if (first) { act('visit', ''); setTimeout(askName, 6000); }
+  if (first) { visit(); setTimeout(askName, 6000); }
+  maybeDiary();
   if (first && unseen().length) setTimeout(maybeArrive, 2600);
   else if (fresh.length) setTimeout(maybeArrive, 350);
 }
@@ -208,6 +212,7 @@ function renderFrames() {
   var box = $('frames'); box.innerHTML = '';
   pick.forEach(function (c, i) {
     var f = K.frames[i], b = el('button', 'frame' + (before >= 0 && i >= before ? ' pop' : ''));
+    b.dataset.id = c.id;
     b.style.left = (f[0] * 100) + '%'; b.style.top = (f[1] * 100) + '%'; b.style.width = (f[2] * 100) + '%';
     b.style.setProperty('--r', f[3] + 'deg');
     b.setAttribute('aria-label', words().frame);
@@ -290,7 +295,7 @@ function postcardEl(card, cls, live) {
   return p;
 }
 
-function maybeArrive() { if (screen === 'house' && !overlayOpen() && unseen().length && !(window.CatGuide && window.CatGuide.holdMail())) showArrive(); }
+function maybeArrive() { if (screen === 'house' && !overlayOpen() && !diaryWaits() && unseen().length && !(window.CatGuide && window.CatGuide.holdMail())) showArrive(); }
 
 function showArrive() {
   var list = unseen();
@@ -377,10 +382,11 @@ function openZoomSouvenir(v) {
 }
 
 /* ---- its name: asked once you have met (after the first pet), until it has one ---- */
-var nameAsked = false;
+var nameAsked = false, nameHold = 0;
 function askName() {
   if (nameAsked || cat().name || !learnt('pet') || away()) return;
-  if (overlayOpen() || screen !== 'house' || document.hidden) { setTimeout(askName, 2500); return; }   // after the letter, back home
+  // after the letter or the diary, back home, once the cat has said hello
+  if (overlayOpen() || screen !== 'house' || document.hidden || diaryWaits() || Date.now() < nameHold) { setTimeout(askName, 2500); return; }
   nameAsked = true;
   var W = cwords().name;
   $('nameask').textContent = W.ask;
@@ -403,6 +409,156 @@ $('nameform').addEventListener('submit', function (e) {
   emit('did', 'name');
 });
 $('nametap').addEventListener('click', function () { $('namein').blur(); off('namesheet'); });
+
+/* ---- while you were away: on a new visit the cat's diary opens on the time you were gone,
+   from what the daemon remembers and the hours of its day. A reopen within minutes is the
+   same visit and shows nothing; the calendar on the wall opens the page again. ---- */
+var visits = null, visitAt = 0, diary = null, diaryDue = 0;
+function visit() { visitAt = Date.now(); act('visit', ''); }
+function diaryWaits() { return Date.now() < diaryDue; }
+function maybeDiary() {
+  var c = cat(), was = visits;
+  visits = c.visits;
+  // a visit counted just now, for this page (another device's visit opens nothing here)
+  if (was == null || !(c.visits > was) || Date.now() - visitAt > 5000) return;
+  var d = composeDiary();
+  diary = d;
+  $('calmark').classList.toggle('on', !!d.lines.length);
+  if (!c.since || !learnt('pet') || !(c.gap >= 3600e3 || d.events || d.cards.length)) return;
+  diaryDue = Date.now() + 3000;
+  setTimeout(function open() {
+    if (!diaryWaits()) return;
+    if (screen !== 'house' || overlayOpen() || document.hidden) { setTimeout(open, 500); return; }
+    openDiary(d, true);
+  }, 500);
+}
+function seeded(seed) { var x = (seed % 2147483647) || 1; return function () { x = x * 48271 % 2147483647; return x / 2147483647; }; }
+function clock(ts) {
+  var d = new Date(ts), h = d.getHours(), m = d.getMinutes();
+  return ((h + 11) % 12 + 1) + (m ? ':' + ('0' + m).slice(-2) : '') + (h < 12 ? ' am' : ' pm');
+}
+/* the parts of its day between two moments, each with when it began */
+function partsOf(from, to) {
+  var out = [], t = from;
+  while (t < to && out.length < 60) {
+    var d = new Date(t), h = d.getHours() + d.getMinutes() / 60, next = null;
+    for (var i = 0; i < DAY.length; i++) if (DAY[i][0] > h) { next = DAY[i][0]; break; }
+    var end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + (next == null ? 1 : 0), 0, 0, 0, 0);
+    end = end.getTime() + (next == null ? 0 : next * 3600e3);
+    var slot = slotOf(h), last = out[out.length - 1];
+    if (last && last.slot === slot) last.to = Math.min(end, to);   // the night runs over midnight
+    else out.push({ slot: slot, at: t, to: Math.min(end, to) });
+    t = end;
+  }
+  return out;
+}
+function composeDiary() {
+  var c = cat(), W = cwords().diary, P = cwords(), since = c.since || 0, now = Date.now() + skew;
+  var rand = seeded(Math.floor(since / 1000)), lines = [], events = 0;
+  var memory = (c.memory || []).filter(function (m) { return m.at > since; });
+  // where it went, and when it was back
+  memory.forEach(function (m, i) {
+    if (m.what !== 'leave') return;
+    var back = memory.slice(i + 1).filter(function (x) { return x.what === 'home' || x.what === 'back'; })[0];
+    var place = P.places[m.arg] || P.places.trail, today = back && new Date(back.at).toDateString() === new Date(now).toDateString();
+    lines.push({ at: m.at, text: W.out.replace('{p}', place) + (today ? ' ' + W.back.replace('{t}', clock(back.at)) : ''), pic: 'a/pl_' + (C.places[m.arg] ? m.arg : 'trail') + '.jpg', place: true });
+    events++;
+  });
+  // what it brought home, and where it put it
+  var brought = {};
+  souvenirs().forEach(function (v) {
+    if (v.at <= since || brought[v.item] || !W.brought[v.item]) return;
+    brought[v.item] = v;
+    lines.push({ at: v.at, text: W.brought[v.item], pic: 'a/sv_' + v.item + '.webp', sv: v.item });
+    events++;
+  });
+  memory.forEach(function (m) {
+    if (m.what !== 'learn' || !P.hobbies[m.arg]) return;
+    var pic = K.props[m.arg] || (K.yard[m.arg] && K.yard[m.arg].a);
+    lines.push({ at: m.at, text: W.learnt.replace('{h}', P.hobbies[m.arg]), pic: pic ? 'a/' + pic + '.webp' : null });
+    events++;
+  });
+  // its day at home: the parts that went by while you were gone, the last few
+  var parts = partsOf(since, now).filter(function (x) { return x.to - x.at >= 3600e3 && x.to < now; }).slice(-3);
+  var doing = (c.hobbies || []).filter(function (h) { return h !== 'stargaze' && /ing$/.test(P.hobbies[h] || ''); });
+  parts.forEach(function (x) {
+    var list = W.slots[x.slot] || [], text = list[Math.floor(rand() * list.length)];
+    if (x.slot === 'afternoon' && doing.length && rand() < 0.6) text = W.hobby.replace('{h}', P.hobbies[doing[Math.floor(rand() * doing.length)]]);
+    if (text) lines.push({ at: x.at, text: text });
+  });
+  lines.sort(function (a, b) { return a.at - b.at; });
+  // a few lines: what happened comes before what it always does
+  while (lines.length > 6) {
+    var plain = -1;
+    for (var i = 0; i < lines.length; i++) if (!lines[i].pic) { plain = i; break; }
+    lines.splice(plain < 0 ? 0 : plain, 1);
+  }
+  var days = Math.floor((now - since) / 86400e3);
+  if (days >= 2) lines.unshift({ at: since, text: W.days.replace('{n}', days) });
+  var cards = postcards().filter(function (p) { return p.at > since; }).sort(function (a, b) { return a.at - b.at; }).slice(-3);
+  return { since: since, lines: lines, events: events, cards: cards, brought: brought };
+}
+function openDiary(d, arrival) {
+  var W = cwords().diary, page = $('diarypage'), now = new Date(Date.now() + skew);
+  page.innerHTML = '';
+  var head = el('div', 'dhead');
+  head.appendChild(el('b', 'dday', String(now.getDate())));
+  var wk = el('span', 'dwk');
+  wk.appendChild(el('i', '', now.toLocaleDateString('en-GB', { weekday: 'long' })));
+  wk.appendChild(el('i', '', now.toLocaleDateString('en-GB', { month: 'long' })));
+  head.appendChild(wk);
+  page.appendChild(head);
+  page.appendChild(el('h3', 'dtitle')).textContent = W.title;
+  var ul = el('ul', 'dlines');
+  (d.lines.length ? d.lines : [{ text: W.quiet }]).forEach(function (l) {
+    var li = el('li', l.pic ? 'pic' + (l.place ? ' place' : '') : '');
+    if (l.pic) li.appendChild(img(l.pic));
+    li.appendChild(el('span')).textContent = l.text;
+    ul.appendChild(li);
+  });
+  page.appendChild(ul);
+  if (d.cards.length) {
+    var row = el('div', 'dcards');
+    d.cards.forEach(function (card, i) {
+      var b = el('button', 'dcard' + (card.seen ? '' : ' fresh'));
+      b.style.setProperty('--r', [-4, 3, -2][i % 3] + 'deg');
+      b.appendChild(window.CatCard.scene(card));
+      b.setAttribute('aria-label', words().frame);
+      b.addEventListener('click', function () {
+        if (window.CatSound) window.CatSound.paper();
+        if (!card.seen) { markSeen('postcard', card.id); b.classList.remove('fresh'); count('read'); }
+        openZoomCard(card);
+      });
+      row.appendChild(b);
+    });
+    page.appendChild(row);
+  }
+  if (cat().name) page.appendChild(el('span', 'sig')).textContent = cwords().name.sign.replace('{n}', cat().name);
+  page.dataset.arrival = arrival ? '1' : '';
+  on('diary');
+  if (window.CatSound) window.CatSound.paper();
+}
+/* closed: the things it wrote about are there in the room, and each gives one little shine */
+function closeDiary() {
+  var page = $('diarypage'), d = diary, arrival = page.dataset.arrival === '1';
+  off('diary');
+  diaryDue = 0;
+  $('calmark').classList.add('on');
+  if (!arrival || !d) return;
+  page.dataset.arrival = '';
+  nameHold = Date.now() + 8000;
+  setTimeout(function () {
+    var shine = [];
+    Object.keys(d.brought).forEach(function (item) { if (svShown[item]) shine.push(svShown[item]); });
+    document.querySelectorAll('#frames .frame').forEach(function (f) { if (d.cards.some(function (c) { return c.id === f.dataset.id; })) shine.push(f); });
+    shine.forEach(function (n, i) { setTimeout(function () { n.classList.remove('pop', 'glint'); void n.offsetWidth; n.classList.add('glint'); }, i * 260); });
+  }, 450);
+}
+$('diarytap').addEventListener('click', closeDiary);
+$('hot-cal').addEventListener('click', function () {
+  if (window.CatSound) window.CatSound.paper();
+  openDiary(diary || composeDiary(), false);
+});
 
 /* ---- the food tray (from the bowl) and the bag ---- */
 function trayItem(k, n, fn) {
@@ -576,7 +732,7 @@ document.addEventListener('touchend', function (e) {
 
 /* ---- day turns to night while the page is open ---- */
 setInterval(function () { if (S) { renderHouse(false); if (screen === 'yard') renderYard(); } }, 60000);
-document.addEventListener('visibilitychange', function () { if (!document.hidden && S) { renderHouse(false); act('visit', ''); } });
+document.addEventListener('visibilitychange', function () { if (!document.hidden && S) { renderHouse(false); visit(); } });
 
 window.CatShell = {
   words: words, cwords: cwords, renderHouse: renderHouse, renderAway: renderAway, cat: cat, yard: yard, away: away, postcards: postcards, unseen: unseen,
@@ -589,7 +745,7 @@ window.CatShell = {
     if (x == null) { c.style.display = 'none'; return; }
     c.style.display = ''; c.style.left = (x * 100) + '%'; c.style.top = (y * 100) + '%'; c.style.width = (w * 100) + '%'; c.style.height = (h * 100) + '%';
   },
-  openFood: openFood, play: play, hobby: hobby, yardNew: yardNew, learnt: learnt, markLearnt: markLearnt, showArrive: showArrive, maybeArrive: maybeArrive, act: act, hour: hour
+  openFood: openFood, play: play, hobby: hobby, yardNew: yardNew, learnt: learnt, markLearnt: markLearnt, showArrive: showArrive, maybeArrive: maybeArrive, act: act, hour: hour, slotOf: slotOf
 };
 /* audio starts with the first touch, as the browser demands */
 ['touchend', 'click'].forEach(function (name) { document.addEventListener(name, function () { if (window.CatSound) window.CatSound.unlock(); }, { passive: true }); });

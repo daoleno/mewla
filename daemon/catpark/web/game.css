@@ -287,3 +287,29 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 /* how the cat signs what it writes */
 .postcard .sig{position:absolute;right:16px;bottom:4px;font:15px/1 var(--hand);color:#7a6a58}
 .postcard{padding-bottom:14px}
+/* the diary: a page off the calendar on the wall, in the cat's hand */
+#diary .diarypage{position:absolute;left:50%;top:max(18px,env(safe-area-inset-top));margin-top:7vh;z-index:3;width:min(86vw,340px);max-height:calc(100% - 13vh - 24px);overflow:auto;padding:30px 20px 26px;transform:translate(-50%,0) rotate(-1deg) scale(.92);opacity:0;transition:transform .4s cubic-bezier(.3,1.4,.5,1),opacity .3s;background:#fbf3e2 repeating-linear-gradient(180deg,transparent 0 30px,rgba(120,150,190,.15) 30px 31px);background-position:0 92px;border-radius:3px 3px 5px 5px;box-shadow:0 12px 30px rgba(30,15,5,.45);text-align:left}
+#diary.on .diarypage{transform:translate(-50%,0) rotate(-1deg);opacity:1}
+#diary .diarypage::before{content:"";position:absolute;left:0;right:0;top:0;height:18px;border-radius:3px 3px 0 0;background:linear-gradient(#a8703f,#7d4f2a);box-shadow:0 2px 0 rgba(60,35,15,.35)}
+#diary .diarypage::after{content:"";position:absolute;left:50%;top:4px;width:10px;height:10px;margin-left:-5px;border-radius:50%;background:#3e2412;box-shadow:inset 0 1px 1px rgba(0,0,0,.6)}
+.dhead{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.dday{font:600 48px/1 var(--hand);color:var(--red)}
+.dwk{display:flex;flex-direction:column;gap:2px}
+.dwk i{font:18px/1.1 var(--hand);color:#7a6a58;font-style:normal}
+.dwk i:first-child{color:var(--ink);font-size:20px}
+.dtitle{margin:4px 0 8px;font:22px/1.3 var(--hand);color:#3b4a6b;font-weight:normal}
+.dlines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.dlines li{display:flex;align-items:center;gap:10px;min-height:31px;padding:2px 0;font:19px/1.35 var(--hand);color:#3b4a6b;text-wrap:pretty}
+.dlines li img{position:static;flex:none;width:36px;height:36px;object-fit:contain;filter:drop-shadow(0 1px 1px rgba(60,40,20,.3))}
+.dlines li.place img{width:44px;height:30px;object-fit:cover;border:2px solid #fffaf0;border-radius:2px;box-shadow:0 1px 3px rgba(60,40,20,.35);transform:rotate(-3deg)}
+.dcards{display:flex;justify-content:center;gap:12px;margin:14px 0 6px;flex-wrap:wrap}
+.dcard{position:relative;width:29%;padding:4px;background:#fffaf0;border-radius:2px;box-shadow:0 2px 6px rgba(60,40,20,.35);transform:rotate(var(--r,0deg));outline:none}
+.dcard.fresh::after{content:"";position:absolute;right:-5px;top:-5px;width:12px;height:12px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px #fffaf0}
+#diary .sig{display:block;margin-top:8px;text-align:right;font:17px/1 var(--hand);color:#7a6a58}
+/* after the diary, the red ring on the calendar keeps today's page */
+.calmark{position:absolute;left:73%;top:17%;width:3.2%;aspect-ratio:1;transform:translate(-50%,-50%) rotate(-12deg);border:2.5px solid var(--red);border-radius:50% 46% 52% 44%;opacity:0;transition:opacity .6s;pointer-events:none;z-index:2}
+.calmark.on{opacity:.85}
+/* a thing that came while you were away shines once, the first time you see it */
+.glint{animation:glint 1.5s ease-in-out 2}
+@keyframes glint{0%,100%{filter:none}45%{filter:brightness(1.35) drop-shadow(0 0 7px rgba(255,214,120,.95))}}
+@media (prefers-reduced-motion:reduce){.glint{animation:none}#diary .diarypage{transition:opacity .3s}}

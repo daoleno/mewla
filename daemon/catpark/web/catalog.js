@@ -59,6 +59,25 @@ window.CAT_CATALOG = {
     "hobbies": {"tinker": "mending", "fish": "fishing", "paint": "painting", "paper": "the paper", "garden": "gardening", "stargaze": "stargazing", "cook": "cooking", "letters": "letters", "music": "music", "camp": "camping"},
     "welcome": "You're here! This is my home.",
     "away": {"note": "At {p}", "in": "Back in {n} min", "soon": "Back soon", "line": "Out at {p}. Back in about {n} minutes.", "line_soon": "Out at {p}. Back any minute now."}, "name": {"ask": "What's my name?", "hint": "Name", "ok": "That's me", "sign": "— {n}"},
+    "diary": {
+      "title": "While you were away",
+      "quiet": "Nothing much. I was right here.",
+      "days": "{n} days since you came by.",
+      "slots": {
+        "dawn": ["Had tea by the window.", "Watched the garden wake up over tea."],
+        "morning": ["Wrote at my desk all morning.", "Wrote you a letter. Then another one."],
+        "noon": ["Had a big lunch.", "Lunch! Fish soup, my favourite."],
+        "afternoon": ["Napped in the afternoon sun.", "A long nap after lunch."],
+        "dusk": ["Cooked a little soup.", "Made supper at the stove."],
+        "evening": ["Read by the lamp.", "Read until the lamp got warm."],
+        "night": ["Slept like a loaf.", "Slept all night, curled up tight."]
+      },
+      "hobby": "Spent the afternoon {h}.",
+      "out": "Went to {p}.",
+      "back": "Back by {t}.",
+      "learnt": "Took up {h}!",
+      "brought": {"palette": "Brought home a palette. It's by the tea table.", "bottle": "Brought home a bottle. It's on the table.", "book": "Brought home a book. It's by the rug.", "wrench": "Brought home a wrench. It's by the table.", "lantern": "Brought home a lantern. It's by the bed.", "pot": "Brought home a little pot. It's on the floor.", "telescope": "Brought home a telescope. It's by the desk.", "bell": "Brought home a bell. It's on the peg.", "teapot": "Brought home a teapot. It's on the stove.", "stamp": "Brought home a stamp. It's on my desk.", "compass": "Brought home a compass. It's on the floor.", "pinecone": "Brought home a pinecone. It's by the table."}
+    },
     "letter": ["Missed you today.", "Thank you for the {t}. Yum.", "I learned {h}!", "A bird came to the window. I wanted you to see."]
   }
 };

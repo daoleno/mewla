@@ -73,6 +73,27 @@ Each step is shown once, and the daemon remembers which ones you have done and
 which new things you have already met, so another device does not show them
 again. A hobby's prop that is new later introduces itself the same way.
 
+## While you were away
+
+Each time you come back, the cat has kept a diary. If you were gone an hour or
+more, or something happened meanwhile, a page from the calendar on its wall
+opens first, in its hand, with a few lines:
+
+- what it did at home in the parts of the day that went by (tea at dawn, the
+  desk in the morning, lunch, an afternoon at a hobby it knows, supper, the
+  lamp, sleep);
+- where it went and, if it was today, when it was back;
+- what it brought home and where in the room it put it;
+- a hobby it took up;
+- the postcards that came, as small photos: tap one to read it.
+
+Close the page and the room shows what it wrote about: each new souvenir and
+framed card shines once, and the letters on the doormat glow. A red ring stays
+on the calendar; tap the calendar to read the page again. Opening the cat again
+within a few minutes is the same visit and shows no page. The page is written
+in the browser from what the daemon already keeps (when you were last here, the
+cat's moments, its postcards and souvenirs), so it needs no state of its own.
+
 ## What you can tap
 
 - **The cat** answers every tap: a purr, a look, a little hop. Busy at one of
@@ -99,6 +120,7 @@ again. A hobby's prop that is new later introduces itself the same way.
   stands there at night.
 - **The picture frames** on the wall show its latest postcards.
 - **The bed** asks it for a nap.
+- **The calendar** opens its diary page for this visit.
 - **A visiting bird** now and then lands on the round window and leaves a berry
   or a fish for the pantry.
 
