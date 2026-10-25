@@ -124,3 +124,46 @@ func TestDamagedStateIsSetAside(t *testing.T) {
 		t.Fatal("the damaged file should be kept aside")
 	}
 }
+
+func TestServiceStyleIsChosenPersistedAndAllowlisted(t *testing.T) {
+	dir := t.TempDir()
+	c := &clock{at: t0}
+	var views []View
+	s := openTest(t, dir, c, func(string) Outcome { return OutcomeOpen }, &views)
+	if got := s.View().Style; got != DefaultStyle {
+		t.Fatalf("an unchosen style reads as %q, got %q", DefaultStyle, got)
+	}
+	s.SetStyle("not-a-style")
+	s.SetStyle("../crayon")
+	if len(views) != 0 || s.View().Style != DefaultStyle {
+		t.Fatalf("unknown styles must be ignored: %q after %d broadcasts", s.View().Style, len(views))
+	}
+	s.SetStyle("pixel")
+	if len(views) != 1 || views[0].Style != "pixel" {
+		t.Fatalf("a choice is broadcast once: %+v", views)
+	}
+	s.SetStyle("pixel")
+	if len(views) != 1 {
+		t.Fatalf("choosing the same style again is quiet, got %d broadcasts", len(views))
+	}
+	reopened := openTest(t, dir, c, func(string) Outcome { return OutcomeOpen }, &views)
+	if got := reopened.View().Style; got != "pixel" {
+		t.Fatalf("the choice must survive a restart, got %q", got)
+	}
+}
+
+func TestStateWithoutStyleStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	folder := filepath.Join(dir, "catpark")
+	if err := os.MkdirAll(folder, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(folder, "state.json"), []byte(`{"version":1,"seeded":true,"trips":[],"postcards":[],"souvenirs":[],"yard":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var views []View
+	s := openTest(t, dir, &clock{at: t0}, func(string) Outcome { return OutcomeOpen }, &views)
+	if got := s.View().Style; got != DefaultStyle {
+		t.Fatalf("an older state reads as %q, got %q", DefaultStyle, got)
+	}
+}

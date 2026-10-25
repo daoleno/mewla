@@ -96,6 +96,8 @@ type State struct {
 	// LastPostcardAt is the newest postcard's time, for the quiet gap.
 	LastPostcardAt int64 `json:"last_postcard_at,omitempty"`
 	Yard           Yard  `json:"yard"`
+	// Style is the person's chosen art; empty until they choose.
+	Style string `json:"style,omitempty"`
 }
 
 // RunningWork is a delegated Work the snapshot shows running.
