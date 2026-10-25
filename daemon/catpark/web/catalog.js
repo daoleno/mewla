@@ -83,7 +83,7 @@ window.CAT_CATALOG = {
       "friends": {"frog": "A little frog kept me company.", "snail": "A snail came slowly to see.", "rabbit": "A rabbit sat beside me.", "owl": "An owl blinked at me.", "hedgehog": "A hedgehog joined in.", "bird": "A bird landed next to me."},
       "weathers": {"cloudy": "Thick clouds, nice and cool.", "rain": "It's raining, pitter-patter.", "wind": "So windy my whiskers bent.", "snow": "It's snowing!"},
       "times": {"dawn": "The sun is just up.", "dusk": "The sun is going down.", "night": "It's late now."},
-      "treat": "The {t} you packed was lovely.",
+      "treat": "I loved the {t} you packed.",
       "foods": {"fish": "fish", "berry": "berries", "catnip": "catnip"},
       "hobbies": {"tinker": "mending", "fish": "fishing", "paint": "painting", "paper": "the paper", "garden": "gardening", "stargaze": "stargazing", "cook": "cooking", "letters": "letters", "music": "music", "camp": "camping"},
       "welcome": "You're here! This is my home.",
