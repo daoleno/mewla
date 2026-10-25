@@ -112,3 +112,81 @@ func TestWeatherIsOneADayAndSnowOnlyInWinter(t *testing.T) {
 		}
 	}
 }
+
+func TestEverySnackHasAFriendDayAndNight(t *testing.T) {
+	world := World()
+	for _, friend := range world.Friends {
+		if !contains(world.Foods, world.Likes[friend]) {
+			t.Errorf("%s likes no food the cat has: %q", friend, world.Likes[friend])
+		}
+	}
+	for _, food := range world.Foods {
+		for _, hour := range []string{"day", "night"} {
+			found := false
+			for _, friend := range world.Friends {
+				found = found || world.Likes[friend] == food && friendFits(friend, hour)
+			}
+			if !found {
+				t.Errorf("no friend comes for %s by %s", food, hour)
+			}
+		}
+	}
+}
+
+func TestTheSnackItTakesBringsAFriendWhoLikesIt(t *testing.T) {
+	world := World()
+	s := seeded(t) // a new cat: friends would otherwise wait for level 4
+	at := t0.Add(3 * time.Hour)
+	fond := 0
+	for i := 0; i < 40; i++ {
+		trip := &Trip{WorkID: fmt.Sprintf("s%02d", i), Kind: KindHarbour, Packed: "berry"}
+		card := s.compose(trip, PhaseStart, at, world)
+		if card.Friend == "" {
+			continue
+		}
+		if world.Likes[card.Friend] != "berry" {
+			t.Fatalf("%s came for berries but likes %s", card.Friend, world.Likes[card.Friend])
+		}
+		fond++
+	}
+	if fond < 15 || fond == 40 {
+		t.Fatalf("a packed berry should often, not always, bring its friend: %d of 40", fond)
+	}
+}
+
+func TestAFriendDropsByWhileYouAreAway(t *testing.T) {
+	world := World()
+	visitAfter := func(level int, away time.Duration, n int) (came int, pantry int) {
+		for i := 0; i < n; i++ {
+			s := seeded(t)
+			s.Care.Stars = world.Levels[level-1]
+			at := t0.Add(time.Duration(i) * 7 * time.Hour)
+			s.Act("visit", "", at)
+			s.Act("visit", "", at.Add(away))
+			for _, m := range s.Care.Memory {
+				if m.What == "friend" {
+					came++
+					if m.At <= at.UnixMilli() || m.At >= at.Add(away).UnixMilli() {
+						t.Fatalf("a friend came at %d, outside the time away", m.At)
+					}
+					if !friendFits(m.Arg, timeOfDay(time.UnixMilli(m.At))) {
+						t.Fatalf("%s came at the wrong hour", m.Arg)
+					}
+				}
+			}
+			for _, count := range s.Yard.Pantry {
+				pantry += count
+			}
+		}
+		return
+	}
+	if came, _ := visitAfter(4, 6*time.Hour, 30); came < 5 || came == 30 {
+		t.Fatalf("a close cat's friends drop by now and then: %d of 30", came)
+	}
+	if came, _ := visitAfter(4, time.Hour, 20); came != 0 {
+		t.Fatalf("an hour away is too short for a visitor: %d", came)
+	}
+	if came, _ := visitAfter(2, 6*time.Hour, 20); came != 0 {
+		t.Fatalf("friends come from level 4: %d", came)
+	}
+}

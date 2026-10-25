@@ -199,10 +199,10 @@ function renderSouvenirs(pop) {
   });
 }
 
-/* the wall fills up as you grow close: one framed postcard per level from 2, the newest ones */
+/* the wall fills up as you grow close: a framed postcard at each of the kit's levels, the newest ones */
 var framesKey = '';
 function renderFrames() {
-  var n = Math.min(Math.max(cat().level - 1, 0), K.frames.length);
+  var n = K.framelv.filter(function (lv) { return cat().level >= lv; }).length;
   var list = postcards().filter(function (c) { return c.phase !== 'letter'; });
   var pick = list.slice().sort(function (a, b) { return b.at - a.at; }).slice(0, n);
   var key = pick.map(function (c) { return c.id; }).join(',') + '|' + n;
@@ -480,6 +480,17 @@ function composeDiary() {
     lines.push({ at: v.at, text: W.brought[v.item], pic: 'a/sv_' + v.item + '.webp', sv: v.item });
     events++;
   });
+  // what it made for its home as you grew close, and the friends who came by
+  var grew = [];
+  memory.forEach(function (m) {
+    if (m.what === 'level') {
+      // a thing it made is a corner of the room: a little photo of it
+      var lv = m.arg * 1, g = K.grow.filter(function (x) { return x.lv === lv; })[0];
+      if (g && W.grew[g.id]) { grew.push(g.id); lines.push({ at: m.at, text: W.grew[g.id], pic: 'a/' + (g.t || g.d) + '.webp', place: true }); events++; }
+      else if (K.framelv.indexOf(lv) >= 0 && W.grew.frame) { lines.push({ at: m.at, text: W.grew.frame }); events++; }
+    }
+    if (m.what === 'friend' && W.friend[m.arg]) { lines.push({ at: m.at, text: W.friend[m.arg], pic: 'a/f_' + m.arg + '.webp' }); events++; }
+  });
   memory.forEach(function (m) {
     if (m.what !== 'learn' || !P.hobbies[m.arg]) return;
     var pic = K.props[m.arg] || (K.yard[m.arg] && K.yard[m.arg].a);
@@ -504,7 +515,7 @@ function composeDiary() {
   var days = Math.floor((now - since) / 86400e3);
   if (days >= 2) lines.unshift({ at: since, text: W.days.replace('{n}', days) });
   var cards = postcards().filter(function (p) { return p.at > since; }).sort(function (a, b) { return a.at - b.at; }).slice(-3);
-  return { since: since, lines: lines, events: events, cards: cards, brought: brought };
+  return { since: since, lines: lines, events: events, cards: cards, brought: brought, grew: grew };
 }
 function openDiary(d, arrival) {
   var W = cwords().diary, page = $('diarypage'), now = new Date(Date.now() + skew);
@@ -557,6 +568,7 @@ function closeDiary() {
   setTimeout(function () {
     var shine = [];
     Object.keys(d.brought).forEach(function (item) { if (svShown[item]) shine.push(svShown[item]); });
+    (d.grew || []).forEach(function (id) { var g = window.CatLife && window.CatLife.grown(id); if (g) shine.push(g); });
     document.querySelectorAll('#frames .frame').forEach(function (f) { if (d.cards.some(function (c) { return c.id === f.dataset.id; })) shine.push(f); });
     shine.forEach(function (n, i) { setTimeout(function () { n.classList.remove('pop', 'glint'); void n.offsetWidth; n.classList.add('glint'); }, i * 260); });
   }, 450);

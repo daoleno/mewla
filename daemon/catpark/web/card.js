@@ -23,18 +23,20 @@ function scene(card, live) {
   var spot = place.spot, d = K.cards[card.act] || K.cards.read;
   if (d) {
     // spot[2] is how tall the cat itself stands there; a pose with a big prop is taller than the cat
-    var h = spot[2] * d.k, w = h * d.ar / 1.5;
+    // a candid one walking off is caught close up at the right edge, its face already out of the picture
+    var h = d.edge ? Math.min(0.5, spot[2] * d.k) : spot[2] * d.k, w = h * d.ar / 1.5;
+    var cx = d.edge ? 1 - w * 0.2 : spot[0], foot = d.edge ? 0.98 : spot[1];
     var cat = pic('a/' + d.f + '.webp', 'who');
-    cat.style.left = pct(spot[0] - w / 2); cat.style.top = pct(spot[1] - h); cat.style.width = pct(w);
+    cat.style.left = pct(cx - w / 2); cat.style.top = pct(foot - h); cat.style.width = pct(w);
     box.appendChild(cat);
     if (card.friend) {
       var f = pic('a/f_' + card.friend + '.webp', 'friend');
-      var fh = spot[2] * 0.5, fw = fh / 1.5, side = spot[0] < 0.6 ? 1 : -1;
-      f.style.left = pct(spot[0] + side * (w / 2 + 0.01) - (side < 0 ? fw : 0)); f.style.top = pct(spot[1] - fh); f.style.width = pct(fw);
+      var fh = (d.edge ? h : spot[2]) * 0.5, fw = fh / 1.5, side = cx < 0.6 ? 1 : -1;
+      f.style.left = pct(cx + side * (w / 2 + 0.01) - (side < 0 ? fw : 0)); f.style.top = pct(foot - fh); f.style.width = pct(fw);
       if (side < 0) f.classList.add('flip');
       box.appendChild(f);
     }
-    if (card.time === 'night') { var glow = el('i', 'glow'); glow.style.left = pct(spot[0]); glow.style.top = pct(spot[1] - h / 2); box.appendChild(glow); }
+    if (card.time === 'night') { var glow = el('i', 'glow'); glow.style.left = pct(cx); glow.style.top = pct(foot - h / 2); box.appendChild(glow); }
   }
   // indoors the weather is only in the words; rain is not drawn across a room
   if (!place.indoor) box.appendChild(el('i', 'weather'));
