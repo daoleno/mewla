@@ -85,6 +85,7 @@ import {
 } from "../components/ui";
 import { MewlaMark } from "../components/mewla/MewlaMark";
 import { PetPicker } from "../components/settings/PetPicker";
+import { LabsSection } from "../components/settings/LabsSection";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
 import { RisingSheet } from "../components/ui/RisingSheet";
@@ -459,6 +460,9 @@ export default function SettingsScreen() {
 
           <SettingsSectionHeader>Pet</SettingsSectionHeader>
           <PetPicker animate={screenFocused} />
+
+          <SettingsSectionHeader>Labs</SettingsSectionHeader>
+          <LabsSection />
 
           <SettingsSectionHeader>About</SettingsSectionHeader>
           <ListSection>

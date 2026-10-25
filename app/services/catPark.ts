@@ -67,6 +67,8 @@ export interface CatSelf {
 
 /** What the daemon says the cat is doing and has collected. */
 export interface CatView {
+  /** The Settings → Labs switch, kept on the computer: off, there is no Cat tab. */
+  enabled: boolean;
   presence: { away: boolean; waiting: boolean; kind?: CatKind };
   postcards: CatPostcard[];
   souvenirs: CatSouvenir[];
@@ -203,9 +205,14 @@ export function catCacheKey(serverKey: string): string {
   return `mewla.cat.view.v2:${serverKey}`;
 }
 
+/** Where the App remembers each computer's Labs switch, so the tab does not flicker on launch. */
+export function catLabsKey(serverKey: string): string {
+  return `mewla.cat.labs.v1:${serverKey}`;
+}
+
 export function parseCatView(raw: unknown): CatView | null {
   if (typeof raw !== "object" || raw === null) return null;
   const view = raw as Partial<CatView>;
   if (!view.presence || typeof view.presence !== "object" || !Array.isArray(view.postcards) || !Array.isArray(view.souvenirs) || !view.yard || !view.cat) return null;
-  return view as CatView;
+  return { ...view, enabled: view.enabled === true } as CatView;
 }

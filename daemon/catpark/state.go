@@ -97,7 +97,10 @@ type Souvenir struct {
 
 // State is everything the cat remembers. It is the persisted document.
 type State struct {
-	Version   int        `json:"version"`
+	Version int `json:"version"`
+	// Enabled is the person's Settings → Labs switch for the cat. It lives
+	// here, on the computer, so the App and the web UI agree; it starts off.
+	Enabled   bool       `json:"enabled,omitempty"`
 	Seeded    bool       `json:"seeded"`
 	Trips     []Trip     `json:"trips"`
 	Postcards []Postcard `json:"postcards"`

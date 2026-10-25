@@ -14,6 +14,7 @@ import { Typography, useAppTheme } from "../../constants/tokens";
 import { useWorkers } from "../../store/workers";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { useCurrentServer } from "../../store/currentServer";
+import { useCatLabs } from "../../store/catLabs";
 import { Icon, type IconName } from "../icons/Icon";
 import { MewlaMark } from "../mewla/MewlaMark";
 import {
@@ -266,6 +267,7 @@ export function PrimaryDrawerPanel({
   const { colors } = useAppTheme();
   const { state: workersState } = useWorkers();
   const { currentServer, servers, switchCurrentServer } = useCurrentServer();
+  const { enabled: catOn } = useCatLabs();
   const attention = useConnectionAttention();
   const toast = useToast();
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -371,9 +373,10 @@ export function PrimaryDrawerPanel({
       >
         {/* One home per layout: the phone's app bar switches Brain, Sessions
             and Cat, so only the docked sidebar lists them. The desktop web
-            sidebar (selectedKey set) has no Cat page. */}
+            sidebar (selectedKey set) has no Cat page, and the Cat is listed
+            only when it is switched on in Labs. */}
         {docked ? <View accessibilityRole="tablist" style={styles.drawerList}>
-          {PRIMARY_DRAWER_PLACES.filter((place) => selectedKey === undefined || place.route !== "cat").map((place) => (
+          {PRIMARY_DRAWER_PLACES.filter((place) => place.route !== "cat" || (catOn && selectedKey === undefined)).map((place) => (
             <PrimaryPlaceRow
               key={place.key}
               drawerVisible={drawerVisible}

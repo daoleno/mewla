@@ -109,6 +109,15 @@ func TestCatActMessageAppliesKnownActsOnly(t *testing.T) {
 		}
 		return reply.Cat.Cat.Stars
 	}
+	if got := stars(`{"type":"cat_act","request_id":"r0","act":"pet"}`); got != 0 {
+		t.Fatalf("switched off in Labs, the cat keeps no care, got %d", got)
+	}
+	if got := stars(`{"type":"cat_labs","request_id":"r00","on":true}`); got != 0 {
+		t.Fatalf("switching on changes no stars, got %d", got)
+	}
+	if !s.cat.service.View().Enabled {
+		t.Fatal("cat_labs switches the cat on")
+	}
 	if got := stars(`{"type":"cat_act","request_id":"r1","act":"pet"}`); got != 1 {
 		t.Fatalf("petting drops a star, got %d", got)
 	}
