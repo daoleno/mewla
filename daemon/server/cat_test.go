@@ -53,14 +53,17 @@ func TestCatBundleServesLoopbackWithFrameLimits(t *testing.T) {
 	}
 }
 
-func TestCatBundleServesOneArchiveToTheWebUIOnly(t *testing.T) {
+func TestCatBundleServesArchiveParts(t *testing.T) {
 	s := webUITestServer(t)
-	archive := serveCat(s, "127.0.0.1:9876", "127.0.0.1:50000", "/cat/"+catpark.ArchiveName)
-	if archive.Code != http.StatusOK || archive.Header().Get("Content-Type") != "application/x-tar" || archive.Body.Len() < 1<<20 {
-		t.Fatalf("status=%d type=%q size=%d", archive.Code, archive.Header().Get("Content-Type"), archive.Body.Len())
+	part := serveCat(s, "127.0.0.1:9876", "127.0.0.1:50000", "/cat/"+catpark.ArchivePartName(1, 8))
+	if part.Code != http.StatusOK || part.Header().Get("Content-Type") != "application/x-tar" || part.Body.Len() < 1024 {
+		t.Fatalf("status=%d type=%q size=%d", part.Code, part.Header().Get("Content-Type"), part.Body.Len())
 	}
-	if r := serveCat(s, "192.168.1.5:9876", "192.168.1.9:50000", "/cat/"+catpark.ArchiveName); r.Code != http.StatusNotFound {
-		t.Fatalf("a stranger must not get the archive: %d", r.Code)
+	if r := serveCat(s, "127.0.0.1:9876", "127.0.0.1:50000", "/cat/bundle-9-8.tar"); r.Code != http.StatusNotFound {
+		t.Fatalf("a part past the end is not a file: %d", r.Code)
+	}
+	if r := serveCat(s, "192.168.1.5:9876", "192.168.1.9:50000", "/cat/"+catpark.ArchivePartName(1, 8)); r.Code != http.StatusNotFound {
+		t.Fatalf("a stranger must not get a part: %d", r.Code)
 	}
 }
 

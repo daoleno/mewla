@@ -250,12 +250,15 @@ The game is one web page the daemon carries (`/cat/`). The phone cannot open a
 daemon URL in a WebView (its connection is a pinned tunnel on a port that
 changes per launch), so the app downloads the page with signed requests into a
 cache keyed by its version, checks each file against the manifest's digest, and
-opens it from disk. What is missing arrives as one tar (`/cat/bundle.tar`, built
-from the same manifest) because every round trip over a tunnel costs a second
-or more and the bundle is over a hundred files; a computer without the archive
-is read file by file, and every entry is checked against the manifest either
-way. The first open shows a progress line and always ends, in the house or in a
-retry, within two minutes. The page holds no credentials and has no network access; it
+opens it from disk. What is missing arrives as eight small tars
+(`/cat/bundle-<part>-8.tar`: file i of the manifest is in part i mod 8, about
+650 KB each) because every round trip over a tunnel costs a second or more and
+the bundle is over a hundred files. Four parts load at a time, each is written
+as it lands, so the first open shows a percentage and a dropped connection
+costs one part: a retry asks only for what is still missing. A computer without
+the parts is read file by file, and every entry is checked against the manifest
+either way. The first open always ends, in the house or in a retry, within two
+minutes. The page holds no credentials and has no network access; it
 can ask the app only for the acts above. After the first visit it opens offline
 with the last state it knew. The web UI frames the same page from `/cat/`: the
 web UI's content security policy allows `frame-src 'self'`, and only `/cat/`

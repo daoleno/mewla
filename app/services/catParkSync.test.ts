@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
 import type { CatManifest, CatManifestFile } from "./catPark";
-import { ARCHIVE_MIN_FILES, CatSyncTimeout, readTar, runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
+import { ARCHIVE_MIN_FILES, ARCHIVE_PARTS, CatSyncTimeout, readTar, runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
 
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 const text = (value: string) => new TextEncoder().encode(value);
@@ -41,26 +41,36 @@ function bundle(count: number) {
 
 interface Harness {
   deps: CatSyncDeps;
-  calls: { archive: number; files: string[] };
+  calls: { parts: number[]; files: string[] };
   written: Map<string, Uint8Array>;
 }
 
-function harness(count: number, override: Partial<CatSyncDeps> = {}, archiveEntries?: (contents: Map<string, Uint8Array>) => Uint8Array | null): Harness {
+/** What the daemon serves for one part: the manifest's files whose position is part modulo of. */
+function partOf(contents: Map<string, Uint8Array>, part: number, of: number) {
+  return [...contents].filter((_, index) => index % of === part).map(([path, data]) => ({ path, data }));
+}
+
+function harness(
+  count: number,
+  override: Partial<CatSyncDeps> = {},
+  archivePart?: (entries: { path: string; data: Uint8Array }[], part: number) => Uint8Array | null,
+  written = new Map<string, Uint8Array>(),
+): Harness {
   const { manifest, contents } = bundle(count);
-  const calls = { archive: 0, files: [] as string[] };
-  const written = new Map<string, Uint8Array>();
+  const calls = { parts: [] as number[], files: [] as string[] };
   const deps: CatSyncDeps = {
     manifest: async () => manifest,
-    archive: async () => {
-      calls.archive++;
-      return archiveEntries ? archiveEntries(contents) : tarOf([...contents].map(([path, data]) => ({ path, data })));
+    archive: async (part, of) => {
+      calls.parts.push(part);
+      const entries = partOf(contents, part, of);
+      return archivePart ? archivePart(entries, part) : tarOf(entries);
     },
     file: async (file) => {
       calls.files.push(file.path);
       return contents.get(file.path)!;
     },
     sha256Hex: async (bytes) => sha(bytes),
-    present: () => new Map(),
+    present: () => new Map([...written].map(([path, data]) => [path, data.byteLength])),
     write: (_manifest, file, bytes) => void written.set(file.path, bytes),
     ...override,
   };
@@ -96,22 +106,42 @@ describe("readTar", () => {
 });
 
 describe("first open", () => {
-  test("a bundle with much missing arrives as one request, every file checked", async () => {
-    const { deps, calls, written } = harness(40);
+  test("a bundle with much missing arrives as a few parts, never file by file, every file checked", async () => {
+    const { deps, calls, written } = harness(123);
     const progress: CatSyncProgress[] = [];
     const manifest = await runCatSync(deps, options({ onProgress: (next: CatSyncProgress) => progress.push(next) }));
-    expect(calls.archive).toBe(1);
+    expect([...calls.parts].sort()).toEqual(Array.from({ length: ARCHIVE_PARTS }, (_, part) => part));
     expect(calls.files).toEqual([]);
     expect(written.size).toBe(manifest.files.length);
-    expect(progress.at(-1)).toEqual({ done: 40, total: 40 });
+    expect(progress.length).toBeGreaterThan(ARCHIVE_PARTS);
+    expect(progress.at(-1)).toEqual({ done: 123, total: 123 });
+  });
+
+  test("a part that fails keeps what the others brought, and a retry asks only for what is missing", async () => {
+    const written = new Map<string, Uint8Array>();
+    const failing = harness(40, {}, (entries, part) => {
+      if (part === 3) throw new Error("connection dropped");
+      return tarOf(entries);
+    }, written);
+    await expect(runCatSync(failing.deps, options())).rejects.toThrow("connection dropped");
+    expect(written.size).toBeGreaterThan(0);
+    expect(written.size).toBeLessThan(40);
+
+    const retry = harness(40, {}, undefined, written);
+    await runCatSync(retry.deps, options());
+    expect(retry.calls.parts).toContain(3);
+    for (const landed of failing.calls.parts.filter((part) => part !== 3 && part < 3)) expect(retry.calls.parts).not.toContain(landed);
+    expect(retry.calls.parts.length).toBeLessThan(ARCHIVE_PARTS);
+    expect(retry.calls.files).toEqual([]);
+    expect(written.size).toBe(40);
   });
 
   test("an entry that does not match its digest is fetched on its own", async () => {
-    const { deps, calls, written } = harness(12, {}, (contents) =>
-      tarOf([...contents].map(([path, data]) => ({ path, data: path === "a/pic3.webp" ? text("tampered") : data }))),
+    const { deps, calls, written } = harness(12, {}, (entries) =>
+      tarOf(entries.map((entry) => (entry.path === "a/pic3.webp" ? { path: entry.path, data: text("tampered") } : entry))),
     );
     await runCatSync(deps, options());
-    expect(calls.archive).toBe(1);
+    expect(calls.parts.length).toBeGreaterThan(0);
     expect(calls.files).toEqual(["a/pic3.webp"]);
     expect(written.size).toBe(12);
   });
@@ -124,7 +154,7 @@ describe("first open", () => {
   });
 
   test("a damaged archive costs only what it did not deliver", async () => {
-    const { deps, calls, written } = harness(20, {}, (contents) => tarOf([...contents].map(([path, data]) => ({ path, data }))).subarray(0, 4000));
+    const { deps, calls, written } = harness(20, {}, (entries) => tarOf(entries).subarray(0, 700));
     await runCatSync(deps, options());
     expect(calls.files.length).toBeGreaterThan(0);
     expect(calls.files.length).toBeLessThan(20);
@@ -134,7 +164,7 @@ describe("first open", () => {
   test("a few missing files are not worth the whole archive", async () => {
     const { deps, calls } = harness(ARCHIVE_MIN_FILES - 1);
     await runCatSync(deps, options());
-    expect(calls.archive).toBe(0);
+    expect(calls.parts).toEqual([]);
     expect(calls.files.length).toBe(ARCHIVE_MIN_FILES - 1);
   });
 

@@ -33,16 +33,12 @@ type catHub struct {
 	initErr  error
 	manifest catpark.Manifest
 	manErr   error
-	archive  []byte
 }
 
 func (s *Server) catRuntime() *catHub {
 	hub := &s.cat
 	hub.once.Do(func() {
 		hub.manifest, hub.manErr = catpark.BuildManifest(catpark.Bundle())
-		if hub.manErr == nil {
-			hub.archive, hub.manErr = catpark.Archive(catpark.Bundle(), hub.manifest)
-		}
 		dir := ""
 		if s.auth != nil {
 			dir = s.auth.StorageDir()
@@ -184,14 +180,19 @@ func (s *Server) handleCatBundle(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(hub.manifest)
 		return
 	}
-	if name == catpark.ArchiveName {
+	if part, of, ok := catpark.ParseArchivePart(name); ok {
 		if hub.manErr != nil {
+			http.Error(w, "cat bundle unavailable", http.StatusInternalServerError)
+			return
+		}
+		packed, err := catpark.ArchivePart(catpark.Bundle(), hub.manifest, part, of)
+		if err != nil {
 			http.Error(w, "cat bundle unavailable", http.StatusInternalServerError)
 			return
 		}
 		header.Set("Content-Type", "application/x-tar")
 		if r.Method == http.MethodGet {
-			_, _ = w.Write(hub.archive)
+			_, _ = w.Write(packed)
 		}
 		return
 	}

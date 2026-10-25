@@ -1,7 +1,9 @@
 import { filesToFetch, type CatManifest, type CatManifestFile } from "./catPark";
 
-/** Fewer missing files than this are cheaper one by one than as the whole archive. */
+/** Fewer missing files than this are cheaper one by one than as archive parts. */
 export const ARCHIVE_MIN_FILES = 8;
+/** The bundle is read in this many slices (about 650 KB each): small enough to survive a dropped connection. */
+export const ARCHIVE_PARTS = 8;
 export const FETCH_PARALLEL = 4;
 
 export interface CatSyncProgress {
@@ -12,8 +14,8 @@ export interface CatSyncProgress {
 /** What a sync needs from the outside world; the App wires it to signed requests and the file system. */
 export interface CatSyncDeps {
   manifest(): Promise<CatManifest>;
-  /** The whole bundle as one tar, or null when this computer predates the archive. */
-  archive(): Promise<Uint8Array | null>;
+  /** Slice `part` of `of` of the bundle as a tar (file i of the manifest is in slice i % of), or null when this computer predates the archive. */
+  archive(part: number, of: number): Promise<Uint8Array | null>;
   file(file: CatManifestFile): Promise<Uint8Array>;
   sha256Hex(bytes: Uint8Array): Promise<string>;
   /** Path to size of what the phone already holds for this manifest's version. */
@@ -67,9 +69,9 @@ export function* readTar(bytes: Uint8Array): Generator<{ path: string; data: Uin
 }
 
 /**
- * Brings the phone's files up to the manifest: the whole archive in one request
- * when much is missing (every round trip costs a second or more over a tunnel),
- * the rest file by file. Every file is checked against its manifest digest
+ * Brings the phone's files up to the manifest: archive parts, a few requests
+ * and a few at a time, when much is missing (every round trip costs a second or
+ * more over a tunnel), the rest file by file. Every file is checked against its manifest digest
  * before it is written, and the sync as a whole always ends by its deadline.
  */
 export async function runCatSync(deps: CatSyncDeps, options: CatSyncOptions): Promise<CatManifest> {
@@ -95,24 +97,43 @@ export async function runCatSync(deps: CatSyncDeps, options: CatSyncOptions): Pr
 
     let pending = missing;
     if (pending.length >= ARCHIVE_MIN_FILES) {
-      const packed = await deps.archive();
-      if (packed) {
-        const wanted = new Map(pending.map((file) => [file.path, file]));
-        try {
-          for (const entry of readTar(packed)) {
-            if (over) break;
-            const file = wanted.get(entry.path);
-            if (!file || entry.data.byteLength !== file.size) continue;
-            if ((await deps.sha256Hex(entry.data)) !== file.sha256) continue;
-            deps.write(manifest, file, entry.data);
-            wanted.delete(entry.path);
-            settled();
+      const wanted = new Map(pending.map((file) => [file.path, file]));
+      const position = new Map(manifest.files.map((file, index) => [file.path, index]));
+      const parts = [...new Set(pending.map((file) => position.get(file.path)! % ARCHIVE_PARTS))];
+      let nextPart = 0;
+      let unsupported = false;
+      let failed = false;
+      const partWorker = async () => {
+        while (nextPart < parts.length && !over && !failed && !unsupported) {
+          let packed: Uint8Array | null;
+          try {
+            packed = await deps.archive(parts[nextPart++], ARCHIVE_PARTS);
+          } catch (error) {
+            // What other parts bring stays written: a retry asks only for the rest.
+            failed = true;
+            throw error;
           }
-        } catch {
-          // A damaged archive costs only what it did not deliver: fetched singly below.
+          if (!packed) {
+            unsupported = true;
+            return;
+          }
+          try {
+            for (const entry of readTar(packed)) {
+              if (over) break;
+              const file = wanted.get(entry.path);
+              if (!file || entry.data.byteLength !== file.size) continue;
+              if ((await deps.sha256Hex(entry.data)) !== file.sha256) continue;
+              deps.write(manifest, file, entry.data);
+              wanted.delete(entry.path);
+              settled();
+            }
+          } catch {
+            // A damaged part costs only what it did not deliver: fetched singly below.
+          }
         }
-        pending = [...wanted.values()];
-      }
+      };
+      await Promise.all(Array.from({ length: Math.min(FETCH_PARALLEL, parts.length) }, partWorker));
+      pending = [...wanted.values()];
     }
 
     let next = 0;

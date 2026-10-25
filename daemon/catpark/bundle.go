@@ -6,13 +6,35 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"fmt"
 	"io/fs"
+	"regexp"
 	"sort"
+	"strconv"
 )
 
-// ArchiveName is where the whole bundle is served as one tar, so a phone on a
-// slow link pays one round trip instead of one per file.
-const ArchiveName = "bundle.tar"
+// MaxArchiveParts bounds how finely a client may slice the bundle.
+const MaxArchiveParts = 32
+
+var archivePartName = regexp.MustCompile(`^bundle-(\d{1,2})-(\d{1,2})\.tar$`)
+
+// ArchivePartName is where one slice of the bundle is served as a tar, so a
+// phone on a slow link pays a few round trips instead of one per file, and a
+// dropped connection costs one slice, not the whole bundle.
+func ArchivePartName(part, of int) string {
+	return fmt.Sprintf("bundle-%d-%d.tar", part, of)
+}
+
+// ParseArchivePart reads a name made by ArchivePartName.
+func ParseArchivePart(name string) (part, of int, ok bool) {
+	match := archivePartName.FindStringSubmatch(name)
+	if match == nil {
+		return 0, 0, false
+	}
+	part, _ = strconv.Atoi(match[1])
+	of, _ = strconv.Atoi(match[2])
+	return part, of, of >= 1 && of <= MaxArchiveParts && part < of
+}
 
 //go:embed all:web
 var embedded embed.FS
@@ -68,13 +90,18 @@ func BuildManifest(files fs.FS) (Manifest, error) {
 	return manifest, nil
 }
 
-// Archive packs every file of the manifest, in its order, into one tar. The
-// phone still checks each entry against the manifest's digest, so the archive
-// carries no authority of its own.
-func Archive(files fs.FS, manifest Manifest) ([]byte, error) {
+// ArchivePart packs the manifest's files whose position is part modulo of into
+// one tar, in manifest order: slices are about the same size, and a client
+// that holds the manifest knows which slice carries which file. The phone still
+// checks each entry against the manifest's digest, so a slice carries no
+// authority of its own.
+func ArchivePart(files fs.FS, manifest Manifest, part, of int) ([]byte, error) {
 	var out bytes.Buffer
 	writer := tar.NewWriter(&out)
-	for _, file := range manifest.Files {
+	for i, file := range manifest.Files {
+		if i%of != part {
+			continue
+		}
 		data, err := fs.ReadFile(files, file.Path)
 		if err != nil {
 			return nil, err
