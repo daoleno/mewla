@@ -5,6 +5,7 @@ import { useIsFocused, useRouter } from "expo-router";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { catFocusScript, catStateScript, parseCatBridgeMessage } from "../../services/catPark";
 import { cachedCatBundle, syncCatBundle, type CatBundle } from "../../services/catParkBundle";
+import type { CatSyncProgress } from "../../services/catParkSync";
 import { resolvePrimaryAppBarGeometry } from "../navigation/primaryAppBarGeometry";
 import { useCatPark } from "./useCatPark";
 
@@ -25,6 +26,7 @@ export function CatParkScreen() {
   const serverKey = server?.id ?? "";
   const [bundle, setBundle] = useState<CatBundle | null>(null);
   const [failed, setFailed] = useState(false);
+  const [progress, setProgress] = useState<CatSyncProgress | null>(null);
   const [attempt, setAttempt] = useState(0);
   const web = useRef<WebView>(null);
   const ready = useRef(false);
@@ -51,6 +53,7 @@ export function CatParkScreen() {
     ready.current = false;
     setBundle(null);
     setFailed(false);
+    setProgress(null);
     if (!server) return;
     let cancelled = false;
     void (async () => {
@@ -62,7 +65,9 @@ export function CatParkScreen() {
         return;
       }
       try {
-        const fresh = await syncCatBundle(server);
+        const fresh = await syncCatBundle(server, (next) => {
+          if (!cancelled) setProgress(next);
+        });
         if (!cancelled) setBundle(fresh);
       } catch {
         if (!cancelled) setFailed(true);
@@ -116,6 +121,11 @@ export function CatParkScreen() {
     return (
       <View style={[styles.fill, styles.center]}>
         <ActivityIndicator color="#f3e9d8" />
+        <Text style={styles.status}>
+          {progress && progress.total > 0 && progress.done > 0
+            ? `Bringing the house over… ${Math.round((progress.done / progress.total) * 100)}%`
+            : "Bringing the house over…"}
+        </Text>
       </View>
     );
   }
@@ -156,5 +166,6 @@ const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: GROUND },
   center: { alignItems: "center", justifyContent: "center" },
   retry: { minHeight: 48, paddingHorizontal: 20, justifyContent: "center" },
+  status: { color: "#f3e9d8", fontSize: 13, opacity: 0.7, marginTop: 14 },
   retryText: { color: "#f3e9d8", fontSize: 15 },
 });

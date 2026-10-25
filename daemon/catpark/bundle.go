@@ -1,12 +1,18 @@
 package catpark
 
 import (
+	"archive/tar"
+	"bytes"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"io/fs"
 	"sort"
 )
+
+// ArchiveName is where the whole bundle is served as one tar, so a phone on a
+// slow link pays one round trip instead of one per file.
+const ArchiveName = "bundle.tar"
 
 //go:embed all:web
 var embedded embed.FS
@@ -60,4 +66,28 @@ func BuildManifest(files fs.FS) (Manifest, error) {
 	}
 	manifest.Version = hex.EncodeToString(whole.Sum(nil))[:16]
 	return manifest, nil
+}
+
+// Archive packs every file of the manifest, in its order, into one tar. The
+// phone still checks each entry against the manifest's digest, so the archive
+// carries no authority of its own.
+func Archive(files fs.FS, manifest Manifest) ([]byte, error) {
+	var out bytes.Buffer
+	writer := tar.NewWriter(&out)
+	for _, file := range manifest.Files {
+		data, err := fs.ReadFile(files, file.Path)
+		if err != nil {
+			return nil, err
+		}
+		if err := writer.WriteHeader(&tar.Header{Name: file.Path, Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg, Format: tar.FormatUSTAR}); err != nil {
+			return nil, err
+		}
+		if _, err := writer.Write(data); err != nil {
+			return nil, err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }

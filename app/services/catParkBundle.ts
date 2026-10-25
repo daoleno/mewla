@@ -2,17 +2,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Crypto from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
-import {
-  CAT_BUNDLE_PURPOSE,
-  CAT_INDEX,
-  filesToFetch,
-  parseCatManifest,
-  staleVersions,
-  type CatManifest,
-  type CatManifestFile,
-} from "./catPark";
+import { CAT_ARCHIVE, CAT_BUNDLE_PURPOSE, CAT_INDEX, parseCatManifest, staleVersions } from "./catPark";
+import { runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
 import { bytesToHex } from "./protocolCrypto";
-import { requestFailure, signedFetch } from "./signedRequest";
+import { requestFailure, signedFetchBytes } from "./signedRequest";
 import type { StoredServer } from "./storage";
 
 /** The cat's page on disk, ready for a WebView to open. */
@@ -22,7 +15,6 @@ export interface CatBundle {
   indexUri: string;
 }
 
-const FETCH_PARALLEL = 4;
 const KEEP_VERSIONS = 2;
 const lastKey = (serverId: string) => `mewla.cat.bundle.last.v1:${serverId}`;
 const orderKey = "mewla.cat.bundle.order.v1";
@@ -57,53 +49,82 @@ export async function cachedCatBundle(serverId: string): Promise<CatBundle | nul
   return new File(bundle.indexUri).exists ? bundle : null;
 }
 
-async function fetchOne(server: StoredServer, directory: Directory, file: CatManifestFile): Promise<void> {
+const MANIFEST_TIMEOUT_MS = 30_000;
+const FILE_TIMEOUT_MS = 30_000;
+const ARCHIVE_TIMEOUT_MS = 90_000;
+/** However slow the link, the first open ends here, with a retry. */
+const SYNC_DEADLINE_MS = 120_000;
+
+async function fetchBytes(server: StoredServer, pathname: string, timeoutMs: number): Promise<{ response: Response; bytes: Uint8Array | null }> {
   const identity = await getOrCreateLocalDeviceIdentity();
-  const response = await signedFetch(server, "GET", `/cat/${file.path}`, CAT_BUNDLE_PURPOSE, undefined, identity);
-  if (!response.ok) throw await requestFailure(server, response);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength !== file.size) throw new Error(`The cat's ${file.path} arrived incomplete.`);
-  const digest = bytesToHex(new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes)));
-  if (digest !== file.sha256) throw new Error(`The cat's ${file.path} did not match its digest.`);
-  const target = new File(directory, ...file.path.split("/"));
-  target.parentDirectory.create({ intermediates: true, idempotent: true });
-  if (target.exists) target.delete();
-  target.create({ intermediates: true });
-  target.write(bytes);
+  return signedFetchBytes(server, pathname, CAT_BUNDLE_PURPOSE, identity, timeoutMs);
 }
 
-async function fetchManifest(server: StoredServer): Promise<CatManifest> {
-  const identity = await getOrCreateLocalDeviceIdentity();
-  const response = await signedFetch(server, "GET", "/cat/manifest.json", CAT_BUNDLE_PURPOSE, undefined, identity);
-  if (!response.ok) throw await requestFailure(server, response);
-  const manifest = parseCatManifest(await response.json());
-  if (!manifest) throw new Error(`${server.name} sent a cat bundle this app cannot use.`);
-  return manifest;
+function depsFor(server: StoredServer): CatSyncDeps {
+  return {
+    async manifest() {
+      const { response, bytes } = await fetchBytes(server, "/cat/manifest.json", MANIFEST_TIMEOUT_MS);
+      if (!bytes) throw await requestFailure(server, response);
+      const manifest = parseCatManifest(JSON.parse(new TextDecoder().decode(bytes)));
+      if (!manifest) throw new Error(`${server.name} sent a cat bundle this app cannot use.`);
+      return manifest;
+    },
+    async archive() {
+      const { response, bytes } = await fetchBytes(server, `/cat/${CAT_ARCHIVE}`, ARCHIVE_TIMEOUT_MS);
+      if (response.status === 404) return null;
+      if (!bytes) throw await requestFailure(server, response);
+      return bytes;
+    },
+    async file(file) {
+      const { response, bytes } = await fetchBytes(server, `/cat/${file.path}`, FILE_TIMEOUT_MS);
+      if (!bytes) throw await requestFailure(server, response);
+      return bytes;
+    },
+    sha256Hex: async (bytes) => bytesToHex(new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes as Uint8Array<ArrayBuffer>))),
+    present(manifest) {
+      const directory = versionDirectory(manifest.version);
+      directory.create({ intermediates: true, idempotent: true });
+      return sizesIn(directory);
+    },
+    write(manifest, file, bytes) {
+      const target = new File(versionDirectory(manifest.version), ...file.path.split("/"));
+      target.parentDirectory.create({ intermediates: true, idempotent: true });
+      if (target.exists) target.delete();
+      target.create({ intermediates: true });
+      target.write(bytes);
+    },
+  };
 }
+
+const running = new Map<string, { done: Promise<CatBundle>; listeners: Set<(progress: CatSyncProgress) => void> }>();
 
 /**
  * Brings the phone's copy of the computer's bundle up to date: the manifest
- * names every file with its digest, only missing files are fetched (signed,
- * a few at a time) and each is checked against its digest before it is
- * written. The version is remembered only once every file is in place.
+ * names every file with its digest, what is missing arrives as one archive (or
+ * file by file from a computer that has none), and each file is checked against
+ * its digest before it is written. The version is remembered only once every
+ * file is in place. A sync already running for this computer is joined, not
+ * repeated, and none runs past its deadline.
  */
-export async function syncCatBundle(server: StoredServer): Promise<CatBundle> {
-  const manifest = await fetchManifest(server);
-  const directory = versionDirectory(manifest.version);
-  directory.create({ intermediates: true, idempotent: true });
-  const missing = filesToFetch(manifest, sizesIn(directory));
-  let next = 0;
-  const worker = async () => {
-    while (next < missing.length) {
-      const file = missing[next++];
-      await fetchOne(server, directory, file);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(FETCH_PARALLEL, missing.length) }, worker));
-
-  await AsyncStorage.setItem(lastKey(server.id), manifest.version);
-  await prune(manifest.version);
-  return bundleOf(manifest.version);
+export function syncCatBundle(server: StoredServer, onProgress?: (progress: CatSyncProgress) => void): Promise<CatBundle> {
+  const current = running.get(server.id);
+  if (current) {
+    if (onProgress) current.listeners.add(onProgress);
+    return current.done;
+  }
+  const listeners = new Set<(progress: CatSyncProgress) => void>();
+  if (onProgress) listeners.add(onProgress);
+  const done = (async () => {
+    const manifest = await runCatSync(depsFor(server), {
+      deadlineMs: SYNC_DEADLINE_MS,
+      onProgress: (progress) => listeners.forEach((listener) => listener(progress)),
+    });
+    await AsyncStorage.setItem(lastKey(server.id), manifest.version);
+    await prune(manifest.version);
+    return bundleOf(manifest.version);
+  })().finally(() => running.delete(server.id));
+  running.set(server.id, { done, listeners });
+  return done;
 }
 
 async function prune(inUse: string): Promise<void> {
