@@ -69,7 +69,8 @@ export interface CatSelf {
 export interface CatView {
   /** The Settings → Labs switch, kept on the computer: off, there is no Cat tab. */
   enabled: boolean;
-  presence: { away: boolean; waiting: boolean; kind?: CatKind };
+  /** While the cat is out: where it went, when it is back (ms) and the postcard the outing sent. */
+  presence: { away: boolean; waiting: boolean; kind?: CatKind; back?: number; card?: string };
   postcards: CatPostcard[];
   souvenirs: CatSouvenir[];
   yard: CatYard;

@@ -294,3 +294,15 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .jarcard .u-frame{display:block;width:56px;height:40px;border:5px solid #c9b79a;border-radius:3px;background:#efe6d6}
 #life .act,#life .walker{z-index:4}
 #life .top,#life .think{z-index:6}
+
+/* the note the cat leaves on its rug while it is out */
+.awaynote{position:absolute;z-index:7;left:50%;top:79%;width:56%;display:none;align-items:center;gap:8px;padding:7px 10px 7px 7px;background:#fbf3e2;border-radius:3px;box-shadow:0 4px 12px rgba(60,40,20,.3);transform:translate(-50%,-50%) rotate(-3deg);text-align:left}
+.awaynote.on{display:flex;animation:notein .5s cubic-bezier(.3,1.5,.5,1)}
+.awaynote::before{content:"";position:absolute;left:22%;top:-5px;width:11px;height:11px;margin-left:-5px;z-index:1;border-radius:50%;background:var(--red);box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.awaynote img{position:static;transform:none;width:38%;aspect-ratio:3/2;object-fit:cover;border-radius:2px;flex:none}
+.awaynote span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.awaynote b{font:17px/1.15 var(--hand);color:#3b4a6b;font-weight:normal}
+.awaynote i{font:15px/1.2 var(--hand);color:#7a6a58;font-style:normal;white-space:nowrap}
+@keyframes notein{from{opacity:0;transform:translate(-50%,-30%) rotate(-8deg)}}
+.postcard.away .scene{aspect-ratio:3/2}
+@media (prefers-reduced-motion:reduce){.awaynote.on{animation:none}}

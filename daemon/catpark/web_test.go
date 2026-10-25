@@ -173,6 +173,17 @@ func TestCatalogIsWhole(t *testing.T) {
 	if words.Welcome == "" || len(words.Letter) == 0 || !strings.Contains(words.Treat, "{t}") {
 		t.Errorf("the welcome note, letters and treat line must be written")
 	}
+	for key, needs := range map[string][]string{"note": {"{p}"}, "in": {"{n}"}, "soon": nil, "line": {"{p}", "{n}"}, "line_soon": {"{p}"}} {
+		line := words.Away[key]
+		if strings.TrimSpace(line) == "" {
+			t.Errorf("the away note's %q line must be written", key)
+		}
+		for _, hole := range needs {
+			if !strings.Contains(line, hole) {
+				t.Errorf("the away note's %q line must say %s", key, hole)
+			}
+		}
+	}
 }
 
 // The room draws the cat in layers: every pose the house uses must be drawn,

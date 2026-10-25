@@ -8,17 +8,27 @@ import (
 	"time"
 )
 
-// Tunables. The cat is gentle: a postcard is rare, never a feed.
+// Tunables. The cat is gentle: a postcard is rare, never a feed. It follows
+// every Work, but it goes out only now and then and never for long, so it is
+// home on most visits even when Brain is busy all day.
 const (
-	// StartDelay keeps a Work that ends within moments from sending anything.
+	// StartDelay keeps a Work that ends within moments from taking the cat
+	// out, and is how long an outing runs before its postcard comes.
 	StartDelay = 15 * time.Second
-	// LongAfter is how long a trip lasts before one more postcard may come.
+	// OutingLength is how long the cat is out on one outing; it comes home on
+	// its own after that, the Work still running.
+	OutingLength = 15 * time.Minute
+	// RestLength is how long it stays home after an outing before it goes out
+	// again: under nonstop Work it is home three quarters of the time.
+	RestLength = 45 * time.Minute
+	// LongAfter is how long a Work runs before the cat may go out on it once
+	// more, for one more postcard.
 	LongAfter = 45 * time.Minute
 	// MinInterval is the global quiet gap between any two trip postcards, so
 	// many Works starting at once cannot flood the album.
 	MinInterval = 10 * time.Minute
-	// DeferLimit drops a start postcard still held back by the quiet gap after
-	// this long: by then it is no longer news.
+	// DeferLimit drops a start outing still held back (the cat resting, or the
+	// quiet gap) after this long: by then the Work is no longer news.
 	DeferLimit = 30 * time.Minute
 
 	maxPostcards  = 2000
@@ -47,15 +57,30 @@ const (
 	OutcomeMissing Outcome = "missing"
 )
 
-// Trip is the cat away on one Work.
+// Trip is the cat following one Work, from when it first sees it until the
+// Work is accepted (a souvenir) or dropped. The cat is not away for all of
+// it: see Outing.
 type Trip struct {
-	WorkID    string `json:"work_id"`
-	Kind      Kind   `json:"kind"`
-	Title     string `json:"title,omitempty"`
-	OpenedAt  int64  `json:"opened_at"`
-	Packed    string `json:"packed,omitempty"`
-	StartDone bool   `json:"start_done,omitempty"`
-	LongDone  bool   `json:"long_done,omitempty"`
+	WorkID   string `json:"work_id"`
+	Kind     Kind   `json:"kind"`
+	Title    string `json:"title,omitempty"`
+	OpenedAt int64  `json:"opened_at"`
+	// Packed is the treat that went out with the cat on this Work's outing.
+	Packed string `json:"packed,omitempty"`
+	// StartDone and LongDone are this Work's two outings, gone or let go.
+	StartDone bool `json:"start_done,omitempty"`
+	LongDone  bool `json:"long_done,omitempty"`
+}
+
+// Outing is the cat actually out of the house, on one Work, for a while.
+type Outing struct {
+	WorkID string `json:"work_id"`
+	Kind   Kind   `json:"kind"`
+	Phase  string `json:"phase"`
+	Since  int64  `json:"since"`
+	Until  int64  `json:"until"`
+	// Card is the postcard this outing sent, once it has.
+	Card string `json:"card,omitempty"`
 }
 
 // Postcard is one composed scene and one short line. The daemon chooses what
@@ -100,9 +125,13 @@ type State struct {
 	Version int `json:"version"`
 	// Enabled is the person's Settings → Labs switch for the cat. It lives
 	// here, on the computer, so the App and the web UI agree; it starts off.
-	Enabled   bool       `json:"enabled,omitempty"`
-	Seeded    bool       `json:"seeded"`
-	Trips     []Trip     `json:"trips"`
+	Enabled bool   `json:"enabled,omitempty"`
+	Seeded  bool   `json:"seeded"`
+	Trips   []Trip `json:"trips"`
+	// Out is the outing the cat is on; nil, it is home.
+	Out *Outing `json:"out,omitempty"`
+	// HomeAt is when it last came home from an outing; it rests after one.
+	HomeAt    int64      `json:"home_at,omitempty"`
 	Postcards []Postcard `json:"postcards"`
 	Souvenirs []Souvenir `json:"souvenirs"`
 	// LastPostcardAt is the newest trip postcard's time, for the quiet gap.
@@ -132,19 +161,25 @@ type Observation struct {
 type Presence struct {
 	Away    bool `json:"away"`
 	Waiting bool `json:"waiting"`
-	// Kind is the place of the newest open trip.
+	// Kind is where the cat went.
 	Kind Kind `json:"kind,omitempty"`
+	// Back is when it will be home (ms); the room says so while it is out.
+	Back int64 `json:"back,omitempty"`
+	// Card is the postcard the outing sent, once it has.
+	Card string `json:"card,omitempty"`
 }
 
 // Presence derives from state and the observed waiting flag.
 func (s *State) Presence(waiting bool) Presence {
 	presence := Presence{Waiting: waiting}
-	if len(s.Trips) > 0 {
-		presence.Away = true
-		presence.Kind = s.Trips[len(s.Trips)-1].Kind
+	if out := s.Out; out != nil {
+		presence.Away, presence.Kind, presence.Back, presence.Card = true, out.Kind, out.Until, out.Card
 	}
 	return presence
 }
+
+// home reports whether the cat is in the house.
+func (s *State) home() bool { return s.Out == nil }
 
 // Apply folds one observation into the state and reports whether anything
 // the person could see changed. It is pure: no clock, no I/O.
@@ -156,23 +191,44 @@ func (s *State) Apply(obs Observation) bool {
 		changed = true
 	}
 
-	// Close trips first: a Work accepted since the last look brings the cat
-	// home before a new trip could take its place.
+	// Close trips first: a Work accepted since the last look brings its
+	// souvenir home, and the cat with it if it was out on that Work.
 	kept := s.Trips[:0:0]
 	for _, trip := range s.Trips {
-		switch obs.Outcomes[trip.WorkID] {
-		case OutcomeOpen:
+		outcome := obs.Outcomes[trip.WorkID]
+		if outcome == OutcomeOpen {
 			kept = append(kept, trip)
-		case OutcomeDone:
-			changed = true
+			continue
+		}
+		changed = true
+		onIt := s.Out != nil && s.Out.WorkID == trip.WorkID
+		if onIt {
+			s.comeHome(now)
+		}
+		if outcome == OutcomeDone {
 			s.homecoming(trip, now, world)
-		default:
-			changed = true
+		} else if onIt {
 			s.Care.remember(now, "home", "")
 		}
 	}
 	s.Trips = kept
-	if len(s.Trips) == 0 && s.Care.Bowl != "" {
+	// The outing's postcard comes a little after it leaves, if the album has
+	// been quiet long enough; an outing that cannot send one by the time it
+	// is over sends none.
+	if out := s.Out; out != nil && out.Card == "" && now.Sub(time.UnixMilli(out.Since)) >= StartDelay && s.quietEnough(now) {
+		if trip := s.trip(out.WorkID); trip != nil && !s.hasPostcard(postcardID(trip.WorkID, out.Phase)) {
+			s.addPostcard(trip, out.Phase, now, world)
+			out.Card = postcardID(trip.WorkID, out.Phase)
+			changed = true
+		}
+	}
+	// An outing is short: the cat comes home on its own while the Work runs.
+	if s.Out != nil && now.UnixMilli() >= s.Out.Until {
+		s.comeHome(time.UnixMilli(s.Out.Until))
+		s.Care.remember(now, "home", "")
+		changed = true
+	}
+	if s.home() && s.Care.Bowl != "" {
 		// The cat is home: whatever was left in its bowl gets eaten.
 		food := s.Care.Bowl
 		s.Care.Bowl = ""
@@ -191,8 +247,6 @@ func (s *State) Apply(obs Observation) bool {
 		if s.Seeded {
 			trip.StartDone = s.hasPostcard(postcardID(work.ID, PhaseStart))
 			trip.LongDone = s.hasPostcard(postcardID(work.ID, PhaseLong))
-			trip.Packed = s.takeBag()
-			s.Care.remember(now, "leave", string(trip.Kind))
 		} else {
 			// Work already running when the cat first learns of it is not
 			// news: no postcards are backfilled for history.
@@ -207,24 +261,8 @@ func (s *State) Apply(obs Observation) bool {
 		changed = true
 	}
 
-	for index := range s.Trips {
-		trip := &s.Trips[index]
-		age := now.Sub(time.UnixMilli(trip.OpenedAt))
-		if !trip.StartDone && age >= StartDelay {
-			if s.quietEnough(now) {
-				s.addPostcard(trip, PhaseStart, now, world)
-				trip.StartDone = true
-				changed = true
-			} else if age >= DeferLimit {
-				trip.StartDone = true
-				changed = true
-			}
-		}
-		if !trip.LongDone && age >= LongAfter && s.quietEnough(now) {
-			s.addPostcard(trip, PhaseLong, now, world)
-			trip.LongDone = true
-			changed = true
-		}
+	if s.goOut(now) {
+		changed = true
 	}
 
 	if s.Yard.grow(now, s.Care.Level(world)) {
@@ -232,6 +270,67 @@ func (s *State) Apply(obs Observation) bool {
 	}
 	s.trim()
 	return changed
+}
+
+// goOut takes the cat out on a Work when it may go: its person has met it
+// (petted and fed it once, the first visit's two steps at home), it is home
+// and rested, and a Work is fresh (just begun) or long (running
+// for a while) and has not had that outing yet. A fresh Work missed while the
+// cat rested is let go once it is no longer news.
+func (s *State) goOut(now time.Time) bool {
+	changed := false
+	var pick *Trip
+	phase := ""
+	for index := range s.Trips {
+		trip := &s.Trips[index]
+		age := now.Sub(time.UnixMilli(trip.OpenedAt))
+		if !trip.StartDone && age >= DeferLimit {
+			trip.StartDone = true
+			changed = true
+		}
+		switch {
+		case !trip.StartDone && age >= StartDelay:
+			// the newest fresh Work is the best news
+			if phase != PhaseStart || trip.OpenedAt > pick.OpenedAt {
+				pick, phase = trip, PhaseStart
+			}
+		case phase == "" && trip.StartDone && !trip.LongDone && age >= LongAfter:
+			pick, phase = trip, PhaseLong
+		}
+	}
+	if pick == nil || !s.home() || !s.met() || now.Sub(time.UnixMilli(s.HomeAt)) < RestLength {
+		return changed
+	}
+	if phase == PhaseStart {
+		pick.StartDone = true
+	} else {
+		pick.LongDone = true
+	}
+	if pick.Packed == "" {
+		pick.Packed = s.takeBag()
+	}
+	s.Out = &Outing{WorkID: pick.WorkID, Kind: pick.Kind, Phase: phase, Since: now.UnixMilli(), Until: now.Add(OutingLength).UnixMilli()}
+	s.Care.remember(now, "leave", string(pick.Kind))
+	return true
+}
+
+// met reports whether the first visit's steps at home are done; until then
+// the cat stays in, so a first visit always finds it.
+func (s *State) met() bool { return s.Care.Learned["pet"] && s.Care.Learned["feed"] }
+
+// comeHome ends the outing; the cat rests before the next one.
+func (s *State) comeHome(now time.Time) {
+	s.Out = nil
+	s.HomeAt = now.UnixMilli()
+}
+
+func (s *State) trip(workID string) *Trip {
+	for index := range s.Trips {
+		if s.Trips[index].WorkID == workID {
+			return &s.Trips[index]
+		}
+	}
+	return nil
 }
 
 // homecoming closes an accepted trip: a souvenir, stars, and the hobby the

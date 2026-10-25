@@ -6,20 +6,22 @@ import (
 	"time"
 )
 
-// cards runs n Works of one kind back to back, each long enough to send both
-// postcards, and returns every trip postcard.
+// cards runs n Works of one kind back to back, each long enough for both
+// outings (with the rest between them), and returns every trip postcard.
 func cards(s *State, n int, title string, from time.Time) []Postcard {
 	at := from
 	for i := 0; i < n; i++ {
 		id := fmt.Sprintf("w%03d", i)
-		s.Apply(Observation{Now: at, Running: []RunningWork{{ID: id, Title: title}}})
-		at = at.Add(StartDelay)
-		s.Apply(Observation{Now: at, Running: []RunningWork{{ID: id, Title: title}}})
-		at = at.Add(LongAfter)
-		s.Apply(Observation{Now: at, Running: []RunningWork{{ID: id, Title: title}}})
-		at = at.Add(time.Minute)
+		run := func(after time.Duration) {
+			s.Apply(Observation{Now: at.Add(after), Running: []RunningWork{{ID: id, Title: title}}})
+		}
+		long := LongAfter + RestLength
+		for _, after := range []time.Duration{0, StartDelay, 2 * StartDelay, long, long + StartDelay} {
+			run(after)
+		}
+		at = at.Add(long + StartDelay + time.Minute)
 		s.Apply(Observation{Now: at, Outcomes: map[string]Outcome{id: OutcomeDone}})
-		at = at.Add(MinInterval)
+		at = at.Add(RestLength)
 	}
 	return tripCards(s)
 }

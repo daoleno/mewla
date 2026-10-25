@@ -21,7 +21,7 @@ func (s *State) Act(act, arg string, now time.Time) bool {
 	if s.Yard.grow(now, s.Care.Level(world)) {
 		changed = true
 	}
-	home := len(s.Trips) == 0
+	home := s.home()
 	c := &s.Care
 	switch act {
 	case "visit":
