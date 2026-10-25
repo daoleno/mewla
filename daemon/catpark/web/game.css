@@ -119,13 +119,16 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #life .act .in{position:relative;transform-origin:50% 100%;animation:breathe 4.6s ease-in-out infinite}
 #life .act.still .in{animation:none}
 #life .act .fa{position:static;width:100%;height:auto}
-#life .act .fb{position:absolute;height:auto;opacity:0;transition:opacity .22s ease}
-#life .act .fb.on{opacity:1}
+#life .act .fb{position:absolute;height:auto;opacity:0}
+#life .act .in.b .fb{opacity:1}
+#life .act .in.b .fa{opacity:0}
+/* a pose swap is a cut: two poses of the one cat never show at once */
+#life .act.fx,#life .walker.fx{transition:none}
 #life .act .sh{position:absolute;left:6%;right:2%;bottom:-3%;height:12%;border-radius:50%;background:radial-gradient(ellipse at center,rgba(50,30,12,.4),rgba(50,30,12,0) 70%)}
 #life.is-night .act .sh{background:radial-gradient(ellipse at center,rgba(6,8,28,.55),rgba(6,8,28,0) 70%)}
 #life .walker{position:absolute;transform:translate(-50%,-100%);transform-origin:50% 100%}
-#life .walker .sit{position:static;width:100%;height:auto;opacity:0;transition:opacity .25s ease}
-#life .walker .ready{position:absolute;left:7.8%;bottom:0;width:84.3%;height:auto;opacity:0;transition:opacity .25s ease}
+#life .walker .sit{position:static;width:100%;height:auto;opacity:0}
+#life .walker .ready{position:absolute;left:7.8%;bottom:0;width:84.3%;height:auto;opacity:0}
 #life .walker .on{opacity:1}
 #life .walker.lit img{filter:brightness(.72) saturate(.9)}
 #life .bag{transition:opacity .35s ease;transform-origin:50% 8%}
