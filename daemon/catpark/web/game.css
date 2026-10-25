@@ -206,19 +206,21 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #life .think .icon{width:66%;height:auto;max-height:66%;object-fit:contain}
 #life .think .icon svg{display:block;width:100%;height:auto}
 /* the next thing to try glows */
-.hot.glow::after,#life .prop.glow::after,.it.glow::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid rgba(255,214,110,.95);box-shadow:0 0 14px rgba(255,214,110,.8);animation:ring 1.6s ease-out infinite;pointer-events:none}
+.hot.glow::after,#life .prop.glow::after,.it.glow::after{content:"";position:absolute;inset:-10px;border-radius:50%;border:4px solid #f7b733;box-shadow:0 0 0 1.5px rgba(150,90,20,.5),inset 0 0 0 1.5px rgba(150,90,20,.35),0 0 18px 5px rgba(255,185,60,.85);animation:ring 1.6s ease-in-out infinite;pointer-events:none}
 .hot.glow::before,#life .prop.glow::before{content:"";position:absolute;inset:-4px;border-radius:50%;background:radial-gradient(ellipse,rgba(255,226,140,.55),rgba(255,226,140,0) 70%);animation:breathglow 1.6s ease-in-out infinite;pointer-events:none}
 #life .prop.glow::before{inset:-25%}
 @keyframes breathglow{0%,100%{opacity:.5}50%{opacity:1}}
 #life .prop.glow::after{inset:-30%}
-@keyframes ring{0%{transform:scale(.85);opacity:1}100%{transform:scale(1.25);opacity:0}}
+#hot-window.glow::after{inset:-19%}   /* round the painted frame, not inside it */
+/* it beckons and never fades out: a ring that fades is missed on a busy painted wall */
+@keyframes ring{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.07);opacity:.65}}
 .catring{position:absolute;z-index:2;width:30%;aspect-ratio:3/1;transform:translate(-50%,-50%);border-radius:50%;border:3px solid rgba(255,214,110,.9);box-shadow:0 0 16px rgba(255,214,110,.7);opacity:0;pointer-events:none;transition:opacity .4s}
 .catring.on{opacity:1;animation:catring 1.8s ease-out infinite}
 @keyframes catring{0%{transform:translate(-50%,-50%) scale(.8);opacity:1}100%{transform:translate(-50%,-50%) scale(1.25);opacity:0}}
-.guide-yard #treats .tt::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:3px solid rgba(255,214,110,.95);animation:ring 1.6s ease-out infinite}
+.guide-yard #treats .tt::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:3px solid rgba(255,214,110,.95);animation:ring 1.6s ease-in-out infinite}
 .guide-back #back{animation:backglow 1.6s ease-in-out infinite}
 @keyframes backglow{0%,100%{box-shadow:0 2px 8px rgba(60,40,20,.25),0 0 0 0 rgba(255,214,110,.9)}50%{box-shadow:0 2px 8px rgba(60,40,20,.25),0 0 0 8px rgba(255,214,110,.35)}}
-.guide-pack #bagtray .it:not(.bag)::after,.guide-feed #foodtray .it::after{content:"";position:absolute;inset:-5px;border-radius:16px;border:3px solid rgba(255,214,110,.95);animation:ring 1.6s ease-out infinite}
+.guide-pack #bagtray .it:not(.bag)::after,.guide-feed #foodtray .it::after{content:"";position:absolute;inset:-5px;border-radius:16px;border:3px solid rgba(255,214,110,.95);animation:ring 1.6s ease-in-out infinite}
 .tray .it.empty svg{width:34px;height:34px}
 .tray .it .fav{position:absolute;right:-4px;top:-4px;width:16px;height:16px;border-radius:50%;background:var(--red);box-shadow:0 0 0 2px #fffaf0}
 .tray .it .fav::after{content:"";position:absolute;inset:4px;background:#fffaf0;clip-path:path("M4 7.5C1.5 5.5 0 4.2 0 2.6 0 1.2 1 .2 2.2.2c.8 0 1.4.4 1.8 1 .4-.6 1-1 1.8-1C7 .2 8 1.2 8 2.6 8 4.2 6.5 5.5 4 7.5z")}
@@ -233,10 +235,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 @keyframes framepop{0%{transform:translate(-50%,-50%) rotate(var(--r,0deg)) translateY(-30px) scale(.3);opacity:0}100%{transform:translate(-50%,-50%) rotate(var(--r,0deg));opacity:1}}
 /* the yard: the cat fishing or camping, the pond */
 #yardlife{position:absolute;inset:0;pointer-events:none}
-.ycat{position:absolute;background:none;border:0;padding:0;margin:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.ycat.glow::after{content:"";position:absolute;inset:-18%;border-radius:50%;border:3px solid rgba(255,214,110,.95);box-shadow:0 0 14px rgba(255,214,110,.8);animation:ring 1.6s ease-out infinite;pointer-events:none}
+.ycat{position:absolute;background:none;border:0;padding:0;margin:0;cursor:pointer;-webkit-tap-highlight-color:transparent;pointer-events:auto}   /* #yardlife lets taps through; the cat takes them */
+.ycat.glow::after{content:"";position:absolute;inset:-18%;border-radius:50%;border:4px solid #f7b733;box-shadow:0 0 0 1.5px rgba(150,90,20,.5),inset 0 0 0 1.5px rgba(150,90,20,.35),0 0 18px 5px rgba(255,185,60,.85);animation:ring 1.6s ease-in-out infinite;pointer-events:none}
 .ycat.glow .fa{animation:newglint 1.8s ease-in-out infinite}
-.ycat img{position:absolute;left:0;top:0;width:100%;height:auto;transition:opacity .25s}
+.ycat img{position:absolute;left:0;top:0;width:100%;height:auto}   /* a cut, like indoors */
 .ycat .fa{position:static}
 .ycat .fb{opacity:0}
 .ycat.b .fb{opacity:1}

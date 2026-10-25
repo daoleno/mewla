@@ -112,7 +112,7 @@ function introduce(hobbies) {
    the window glows (evaluate keeps it glowing) and in the yard the cat glows */
 function introduceYard(h) {
   if (Sh.yardNew() !== h) return; // fishing waits for day, camping for night: the window glows then
-  var i = new Image(); i.src = 'a/' + K.yard[h].a + '.webp'; i.alt = ''; i.className = 'icon';
+  var i = new Image(); i.src = 'a/' + (K.yard[h].b || K.yard[h].a) + '.webp'; i.alt = ''; i.className = 'icon';   // the catch reads as the hobby
   G.intro = h; G.introGlow = $('hot-window');
   Life.attend(STEPS[3].spot, i);
   setGlow(G.introGlow);
