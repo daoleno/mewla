@@ -174,27 +174,26 @@ function firstPick() {
 }
 function headOf(a) { var m = M[a.a], P = stagePx(); return [a.foot[0], a.foot[1] - Math.min(m[3], a.bw * 0.95 * P.w / P.h)]; }
 
-function showAct(a, instant) {
+function showAct(a) {
   var o = ensureAct(a);
   L.cur = a; remember(a);
-  o.root.classList.toggle('instant', !!instant);
-  void o.root.offsetWidth;
   o.root.classList.add('on');
-  if (o.fb) o.fb.classList.remove('on');
+  o.inner.classList.remove('b');
+  yarnEl.style.visibility = a.id === 'yarn' ? 'hidden' : '';  // the yarn is in its paws
   // the cat's own hotspot follows where it sits
   var P = stagePx(), bh = a.bw * 0.95 * P.w / P.h;
   Sh.hotCat(a.foot[0], a.foot[1] - bh / 2, Math.max(a.bw * 1.15, 0.2), Math.max(bh, 0.1));
   scheduleGlance();
   if (a.hobby) { Snd.hobby(a.hobby); renderProps(); }
 }
-function hideAct(a) { var o = L.acts[a.id]; if (o) { o.root.classList.remove('on'); o.root.classList.remove('instant'); } clearTimeout(L.timers.glance); if (a.hobby) setTimeout(renderProps, 0); }
+function hideAct(a) { var o = L.acts[a.id]; if (o) o.root.classList.remove('on'); if (a.id === 'yarn') yarnEl.style.visibility = ''; clearTimeout(L.timers.glance); if (a.hobby) setTimeout(renderProps, 0); }
 
 function showB(ms) {
   var a = L.cur; if (!a) return;
   var o = L.acts[a.id]; if (!o || !o.fb) return;
-  o.fb.classList.add('on');
+  o.inner.classList.add('b');
   clearTimeout(o.bt);
-  o.bt = setTimeout(function () { o.fb.classList.remove('on'); }, ms);
+  o.bt = setTimeout(function () { o.inner.classList.remove('b'); }, ms);
 }
 function scheduleGlance() {
   clearTimeout(L.timers.glance);
@@ -208,7 +207,8 @@ function scheduleGlance() {
 function scheduleNext() {
   clearTimeout(L.timers.next);
   L.timers.next = setTimeout(function () {
-    if (L.away || L.paused || L.busy || L.attending || Date.now() < L.holdUntil || !Sh.onHouse()) { scheduleNext(); return; }
+    var waiting = window.CatGuide && window.CatGuide.step === 'pet';   // it stays put while you learn to pet it
+    if (L.away || L.paused || L.busy || L.attending || waiting || Date.now() < L.holdUntil || !Sh.onHouse()) { scheduleNext(); return; }
     queue(function () { return changeAct(pick()); });
     scheduleNext();
   }, rnd(24, 55) * 1000);
@@ -267,10 +267,8 @@ async function changeAct(next) {
       var h = hopsFor(from.x, from.y, next.foot[0], next.foot[1]);
       await hopTo(from.x, from.y, from.bw, next.foot[0], next.foot[1], next.bw, h.ms, h.hops);
     }
-    showAct(next);
-    await wait(160);
-    walker.classList.remove('on');
-    await wait(300);
+    showAct(next); walker.classList.remove('on');
+    await wait(460);
   } finally { L.busy = false; }
 }
 
@@ -430,8 +428,7 @@ async function doReturn() {
     await wait(900);
     var next = Sh.cat().bowl ? ACT.eat : pick(), h = hopsFor(rug[0], rug[1], next.foot[0], next.foot[1]);
     await hopTo(rug[0], rug[1], 0.3, next.foot[0], next.foot[1], next.bw, h.ms, h.hops);
-    showAct(next);
-    await wait(160); walker.classList.remove('on');
+    showAct(next); walker.classList.remove('on');
   } finally { L.busy = false; L.returning = false; }
 }
 
@@ -573,7 +570,7 @@ function sync(view) {
     ensureOn();
     L.away = !!p.away;
     if (L.away) { bagEl.classList.add('off'); Sh.hotCat(null); }
-    else { bagEl.classList.remove('off'); showAct(firstPick(), false); }
+    else { bagEl.classList.remove('off'); showAct(firstPick()); }
     renderProps();
     scheduleNext(); scheduleVisit(); scheduleButterfly();
     setTimeout(greet, 400);
