@@ -224,8 +224,8 @@ func newKeepalivePair(t *testing.T, ended chan<- error) keepalivePair {
 			return
 		}
 		defer conn.Close()
-		stop := keepWebSocketAlive(conn)
-		defer stop()
+		link := keepWebSocketAlive(conn)
+		defer link.stop()
 		for {
 			if _, _, err := conn.ReadMessage(); err != nil {
 				ended <- err
