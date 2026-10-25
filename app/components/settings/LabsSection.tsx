@@ -10,7 +10,7 @@ export function LabsSection() {
     <ListSection>
       <ListRow
         title="Cat"
-        subtitle={available ? "A tab where Brain's cat lives" : "Connect a computer first"}
+        subtitle={available ? "Brain's cat. It travels while your Workers run" : "Connect a computer first"}
         icon="paw"
         disabled={!available}
         accessibilityRole="switch"
