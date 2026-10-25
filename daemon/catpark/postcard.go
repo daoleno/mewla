@@ -36,7 +36,7 @@ func (s *State) compose(trip *Trip, phase string, now time.Time, world *Catalog)
 	}
 	for attempt := 0; attempt < 32; attempt++ {
 		card.Act = s.pickAct(world.Places[card.Place], taught, world, rng)
-		card.Friend = pickFriend(level, card.Time, world, rng, attempt)
+		card.Friend = pickFriend(level, card.Time, card.Treat, world, rng, attempt)
 		if !seen[card.scene()] {
 			break
 		}
@@ -84,9 +84,20 @@ func (s *State) pickAct(place Place, taught string, world *Catalog, rng *rand.Ra
 	return place.Acts[0]
 }
 
-// pickFriend: friends join from level 4, more often the closer you are.
-// An owl only comes at night and a bird only by day.
-func pickFriend(level int, hour string, world *Catalog, rng *rand.Rand, attempt int) string {
+// pickFriend: the snack the cat took brings a friend who likes it, at any
+// level; otherwise friends join from level 4, more often the closer you are.
+func pickFriend(level int, hour, treat string, world *Catalog, rng *rand.Rand, attempt int) string {
+	if treat != "" {
+		var fond []string
+		for _, friend := range world.Friends {
+			if world.Likes[friend] == treat && friendFits(friend, hour) {
+				fond = append(fond, friend)
+			}
+		}
+		if len(fond) > 0 && rng.Float64() < 0.6+0.1*float64(attempt) {
+			return fond[rng.IntN(len(fond))]
+		}
+	}
 	chance := 0.15 * float64(level-3)
 	if attempt > 4 {
 		chance += 0.3 // a crowded album wants company to tell cards apart
@@ -95,14 +106,45 @@ func pickFriend(level int, hour string, world *Catalog, rng *rand.Rand, attempt 
 		return ""
 	}
 	for tries := 0; tries < 8; tries++ {
-		friend := world.Friends[rng.IntN(len(world.Friends))]
-		if friend == "owl" && hour != "night" || friend == "bird" && hour == "night" {
-			continue
+		if friend := world.Friends[rng.IntN(len(world.Friends))]; friendFits(friend, hour) {
+			return friend
 		}
-		return friend
 	}
 	return ""
 }
+
+// friendFits: an owl only comes at night and a bird only by day.
+func friendFits(friend, hour string) bool {
+	return !(friend == "owl" && hour != "night" || friend == "bird" && hour == "night")
+}
+
+// friendCame: from level 4, when you have been away a few hours, a friend may
+// have dropped by meanwhile and left the snack it likes in the pantry. The
+// diary tells you who.
+func (s *State) friendCame(prev, now time.Time, world *Catalog) bool {
+	if prev.IsZero() || now.Sub(prev) < friendGap || s.Care.Level(world) < 4 || len(world.Friends) == 0 {
+		return false
+	}
+	seed := uint64(hashOf("friend/" + now.Format(time.RFC3339Nano)))
+	rng := rand.New(rand.NewPCG(seed, seed<<7|1))
+	if rng.Float64() >= 0.5 {
+		return false
+	}
+	at := prev.Add(time.Duration(float64(now.Sub(prev)) * (0.3 + 0.6*rng.Float64())))
+	for tries := 0; tries < 8; tries++ {
+		friend := world.Friends[rng.IntN(len(world.Friends))]
+		if !friendFits(friend, timeOfDay(at)) {
+			continue
+		}
+		s.Yard.add(world.Likes[friend]) // a full pantry: it came all the same
+		s.Care.remember(at, "friend", friend)
+		return true
+	}
+	return false
+}
+
+// friendGap is how long you must be away for a friend to have come by.
+const friendGap = 3 * time.Hour
 
 func timeOfDay(now time.Time) string {
 	switch hour := now.Hour(); {

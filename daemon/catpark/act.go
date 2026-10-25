@@ -29,7 +29,11 @@ func (s *State) Act(act, arg string, now time.Time) bool {
 	c := &s.Care
 	switch act {
 	case "visit":
+		prev := c.LastVisit
 		if c.visit(now) {
+			if prev != 0 {
+				s.friendCame(time.UnixMilli(prev), now, world)
+			}
 			changed = true
 		}
 	case "pet":

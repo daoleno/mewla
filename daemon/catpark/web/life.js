@@ -14,6 +14,7 @@
 
 var K = window.CAT_KIT;
 var Sh = window.CatShell;
+var C = window.CAT_CATALOG;
 var noop = function () {};
 var Snd = window.CatSound || { unlock: noop, pause: noop, setNight: noop, purr: noop, paper: noop, pop: noop, chime: noop, thump: noop, chirp: noop, clink: noop, hobby: noop, munch: noop, meow: noop };
 if (!K || !Sh) return;
@@ -21,8 +22,8 @@ if (!K || !Sh) return;
 var BASE = 'a/';
 var stage = document.getElementById('stage');
 var M = K.meta;
-var L = { built: false, on: false, away: null, cur: null, busy: false, paused: false, walking: false, returning: false, last: [], timers: {}, acts: {}, np: 0, chain: Promise.resolve(), gift: null, visiting: false, pokeUntil: 0, holdUntil: 0, props: {}, greeted: false, attending: null };
-var layer, walker, pegEl, mailEl, tint, beam, topLayer, propLayer, bowlEl, bowlFood, yarnEl, think;
+var L = { grow: {}, grown: false, built: false, on: false, away: null, cur: null, busy: false, paused: false, walking: false, returning: false, last: [], timers: {}, acts: {}, np: 0, chain: Promise.resolve(), gift: null, visiting: false, pokeUntil: 0, holdUntil: 0, props: {}, greeted: false, attending: null };
+var layer, walker, pegEl, mailEl, growLayer, tint, beam, topLayer, propLayer, bowlEl, bowlFood, yarnEl, think;
 var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 var ACT = {}; K.acts.forEach(function (a) { ACT[a.id] = a; });
 
@@ -87,6 +88,10 @@ function build() {
   yarnEl.addEventListener('click', function () { Snd.pop(); Sh.play(); });
   [[bowlEl, 'p_bowl'], [yarnEl, 't_yarn']].forEach(function (b) { b[0].style.height = pct(M[b[1]][3]); b[0].setAttribute('aria-label', Sh.words()[b[0].classList[1]] || ''); propLayer.appendChild(b[0]); });
 
+  // what it adds to its home as you grow close, each from its level: above the corners with the cat in them
+  growLayer = el('div', 'grow'); layer.appendChild(growLayer);
+  K.grow.forEach(function (g) { var e = pair(g.d, g.d, g.n, 'corner'); growLayer.appendChild(e); L.grow[g.id] = e; });
+
   walker = el('div', 'walker fx');
   walker.appendChild(pic('cat_' + K.sit + '.webp', 'w sit on')); walker.appendChild(pic('cat_' + K.ready + '.webp', 'w ready'));
   layer.appendChild(walker);
@@ -126,6 +131,18 @@ function renderProps() {
   bowlFood.classList.toggle('on', !!c.bowl);
   if (c.bowl) bowlFood.src = BASE + 't_' + c.bowl + '.webp';
   mailEl.classList.toggle('on', Sh.unseen().length > 0);
+  renderGrow();
+}
+/* a thing it made while you are here shines once as it appears */
+function renderGrow() {
+  var lv = Sh.cat().level || 1;
+  K.grow.forEach(function (g) {
+    var e = L.grow[g.id], want = lv >= g.lv;
+    if (want === e.classList.contains('on')) return;
+    e.classList.toggle('on', want);
+    if (want && L.grown) setTimeout(function () { e.classList.remove('glint'); void e.offsetWidth; e.classList.add('glint'); }, 400);
+  });
+  L.grown = true;
 }
 
 function ensureAct(a) {
@@ -136,7 +153,7 @@ function ensureAct(a) {
     var corner = pair(a.a, 'cat_' + a.a, 'cat_' + a.n, 'act patch fx');
     if (a.steam) for (var k = 0; k < 3; k++) { var st = el('i', 'steam'); st.style.left = pct(a.steam[0]); st.style.top = pct(a.steam[1]); st.style.animationDelay = (k * 1.1) + 's'; corner.appendChild(st); }
     addZz(corner, a);
-    layer.insertBefore(corner, walker);
+    layer.insertBefore(corner, growLayer);
     o = L.acts[a.id] = { a: a, root: corner, inner: corner, fb: null };
     return o;
   }
@@ -514,7 +531,48 @@ function flightPath(from, to, ms, w, arc, flip) {
   for (var i = 0; i <= 16; i++) { var u = i / 16, e = u * u * (3 - 2 * u); kf.push({ offset: u, transform: 'translate(-50%,-100%) translate(' + (dx * e).toFixed(1) + 'px,' + (dy * e - Math.sin(Math.PI * u) * arc * P.w).toFixed(1) + 'px) scaleX(' + (flip ? -1 : 1) + ')' }); }
   return kf;
 }
-async function visit() {
+/* from level 4 a friend may come to the door instead of the bird, and leave the snack it likes */
+function visit() {
+  var night = L.np > 0.55, walkers = C.friends.filter(function (f) { return f !== 'bird' && (f !== 'owl' || night); });
+  if ((Sh.cat().level || 1) >= 4 && walkers.length && Math.random() < 0.45) return friendVisit(walkers[Math.floor(Math.random() * walkers.length)]);
+  return birdVisit();
+}
+async function friendVisit(who) {
+  L.visiting = true;
+  try {
+    var f = el('div', 'friendv' + (L.np > 0.55 ? ' lit' : '')), at = [K.door[0] + 0.06, K.door[1] + 0.01];
+    f.appendChild(pic('f_' + who + '.webp'));
+    f.style.left = pct(K.door[0]); f.style.top = pct(K.door[1]); f.style.width = pct(0.075);
+    layer.insertBefore(f, walker);
+    var P = stagePx(), dx = ((at[0] - K.door[0]) * P.w).toFixed(0), dy = ((at[1] - K.door[1]) * P.h).toFixed(0);
+    Snd.pop();
+    await anim(f, [{ opacity: 0, transform: 'translate(-50%,-100%)' }, { opacity: 1, transform: 'translate(-50%,-100%) translate(' + dx / 2 + 'px,' + (dy / 2 - 6) + 'px)', offset: 0.5 }, { opacity: 1, transform: 'translate(-50%,-100%) translate(' + dx + 'px,' + dy + 'px)' }], { duration: 1400, easing: 'ease-out', fill: 'forwards' }).finished;
+    f.style.left = pct(at[0]); f.style.top = pct(at[1]); f.getAnimations().forEach(function (a) { a.cancel(); });
+    f.style.transform = 'translate(-50%,-100%)';
+    if (L.cur && !L.busy) showB(1800);
+    await anim(f, [{ transform: 'translate(-50%,-100%)' }, { transform: 'translate(-50%,-100%) translateY(-7px)' }, { transform: 'translate(-50%,-100%)' }], { duration: 520, iterations: 2 }).finished;
+    await wait(1600);
+    var kind = C.likes[who] || 'berry';
+    leaveGift(kind, [at[0] + 0.05, at[1] - 0.01], [at[0] + rnd(0.07, 0.12), at[1] + rnd(0.015, 0.035)]);
+    await wait(900);
+    await anim(f, [{ opacity: 1, transform: 'translate(-50%,-100%)' }, { opacity: 0, transform: 'translate(-50%,-100%) translate(' + (-dx) + 'px,' + (-dy) + 'px) scale(.92)' }], { duration: 1200, easing: 'ease-in', fill: 'forwards' }).finished;
+    f.remove();
+  } finally { L.visiting = false; scheduleVisit(); }
+}
+function leaveGift(kind, from, to) {
+  var g = el('button', 'hot gift'), P = stagePx();
+  g.appendChild(pic('t_' + kind + '.webp')); g.setAttribute('aria-label', Sh.words().gift);
+  g.style.left = pct(from[0]); g.style.top = pct(from[1]);
+  stage.appendChild(g);
+  anim(g, [{ transform: 'translate(-50%,-50%) scale(.6)', opacity: 1 }, { transform: 'translate(-50%,-50%) translate(' + ((to[0] - from[0]) * P.w * 0.5).toFixed(0) + 'px,' + ((to[1] - from[1]) * P.h * 0.4).toFixed(0) + 'px) rotate(25deg) scale(1)', offset: 0.45 }, { transform: 'translate(-50%,-50%) translate(' + ((to[0] - from[0]) * P.w).toFixed(0) + 'px,' + ((to[1] - from[1] - 0.02) * P.h).toFixed(0) + 'px) rotate(-8deg) scale(1)' }], { duration: 1100, easing: 'ease-in', fill: 'forwards' }).finished.then(function () {
+    g.style.left = pct(to[0]); g.style.top = pct(to[1] - 0.02); g.getAnimations().forEach(function (a) { a.cancel(); });
+    g.classList.add('landed');
+  });
+  g.addEventListener('click', function () { collectGift(g, kind); });
+  if (L.gift) L.gift.remove();
+  L.gift = g;
+}
+async function birdVisit() {
   L.visiting = true;
   try {
     var bird = el('div', 'bird'); bird.style.width = pct(0.055);
@@ -533,20 +591,8 @@ async function visit() {
     await wait(900); Snd.chirp();
     await anim(bird, [{ transform: 'translate(-50%,-100%) scaleX(-1) rotate(0)' }, { transform: 'translate(-50%,-100%) scaleX(-1) rotate(-10deg)' }, { transform: 'translate(-50%,-100%) scaleX(-1) rotate(8deg)' }, { transform: 'translate(-50%,-100%) scaleX(-1) rotate(0)' }], { duration: 1500 }).finished;
     await wait(500);
-    // a little gift, left on the floor under the window: a berry or a fish, for the pantry
-    var kind = Math.random() < 0.6 ? 'berry' : 'fish', g = el('button', 'hot gift');
-    g.appendChild(pic('t_' + kind + '.webp')); g.setAttribute('aria-label', Sh.words().gift);
-    var gx = rnd(0.45, 0.62), gy = rnd(0.64, 0.7);
-    g.style.left = pct(spot[0]); g.style.top = pct(spot[1] + 0.02);
-    stage.appendChild(g);
-    var P = stagePx();
-    anim(g, [{ transform: 'translate(-50%,-50%) scale(.6)', opacity: 1 }, { transform: 'translate(-50%,-50%) translate(' + ((gx - spot[0]) * P.w * 0.5).toFixed(0) + 'px,' + ((gy - spot[1]) * P.h * 0.4).toFixed(0) + 'px) rotate(25deg) scale(1)', offset: 0.45 }, { transform: 'translate(-50%,-50%) translate(' + ((gx - spot[0]) * P.w).toFixed(0) + 'px,' + ((gy - spot[1] - 0.02) * P.h).toFixed(0) + 'px) rotate(-8deg) scale(1)' }], { duration: 1100, easing: 'ease-in', fill: 'forwards' }).finished.then(function () {
-      g.style.left = pct(gx); g.style.top = pct(gy); g.getAnimations().forEach(function (a) { a.cancel(); });
-      g.classList.add('landed');
-    });
-    g.addEventListener('click', function () { collectGift(g, kind); });
-    if (L.gift) L.gift.remove();
-    L.gift = g;
+    // a little gift, left on the floor under the window: the berry a bird likes, for the pantry
+    leaveGift(C.likes.bird || 'berry', [spot[0], spot[1] + 0.02], [rnd(0.45, 0.62), rnd(0.64, 0.7)]);
     fly.classList.add('on'); perch.classList.remove('on');
     Snd.chirp();
     await anim(bird, flightPath(spot, [-0.08, 0.06], 1500, 0, 0.05, false), { duration: 1500, easing: 'ease-in', fill: 'forwards' }).finished;
@@ -642,7 +688,7 @@ function levelUp() {
   if (!L.away) setTimeout(function () { react('greet', 2200).then(function () { hearts(3); }); }, 700);
 }
 
-window.CatLife = { sync: sync, poke: poke, pause: pause, holding: holding, doAct: doAct, react: react, eat: eat, nap: nap, attend: attend, release: release, greet: greet,
+window.CatLife = { grown: function (id) { return L.grow[id]; }, sync: sync, poke: poke, pause: pause, holding: holding, doAct: doAct, react: react, eat: eat, nap: nap, attend: attend, release: release, greet: greet,
   catPoint: catPoint, levelUp: levelUp, hearts: hearts,
   bowlFill: function (k) { bowlFood.src = BASE + 't_' + k + '.webp'; bowlFood.classList.add('on'); bounce(bowlEl); },
   bowlWiggle: function () { bounce(bowlEl); },

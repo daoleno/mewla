@@ -84,11 +84,14 @@ opens first, in its hand, with a few lines:
   lamp, sleep);
 - where it went and, if it was today, when it was back;
 - what it brought home and where in the room it put it;
+- a friend who dropped by and the snack it left;
+- what it added to the room as you grew closer (a framed postcard, a painting,
+  a cushion, bunting), with a small picture of it;
 - a hobby it took up;
 - the postcards that came, as small photos: tap one to read it.
 
-Close the page and the room shows what it wrote about: each new souvenir and
-framed card shines once, and the letters on the doormat glow. A red ring stays
+Close the page and the room shows what it wrote about: each new souvenir,
+framed card and new piece of the room shines once, and the letters on the doormat glow. A red ring stays
 on the calendar; tap the calendar to read the page again. Opening the cat again
 within a few minutes is the same visit and shows no page. The page is written
 in the browser from what the daemon already keeps (when you were last here, the
@@ -121,13 +124,15 @@ cat's moments, its postcards and souvenirs), so it needs no state of its own.
 - **The picture frames** on the wall show its latest postcards.
 - **The bed** asks it for a nap.
 - **The calendar** opens its diary page for this visit.
-- **A visiting bird** now and then lands on the round window and leaves a berry
-  or a fish for the pantry.
+- **Visitors** come now and then while you watch: a bird lands on the round
+  window, and from level 4 a friend (a frog, a rabbit, a hedgehog, a snail, an
+  owl at night) walks in at the door. Each leaves the snack it likes for the
+  pantry.
 
 ## The bond
 
-The bond shows only in the home: more frames on the wall, more hobbies, more
-souvenirs. There are no numbers on screen. Underneath, care counts stars, a few
+The bond shows only in the home: more frames on the wall, more things in the
+room, more hobbies, more souvenirs, friends at the door. There are no numbers on screen. Underneath, care counts stars, a few
 a day for each kind so it cannot be ground:
 
 | Care | Stars |
@@ -141,9 +146,11 @@ a day for each kind so it cannot be ground:
 | An accepted Work | 3 when it comes home, 2 more if you packed it a snack |
 
 There are ten levels (at 0, 6, 16, 30, 48, 70, 96, 126, 160 and 200 stars). A
-level lets the cat hold one more hobby, hangs one more picture frame (at levels
-2, 3 and 4), grows one more treat in the yard (at levels 3 and 6), and from level 4 it
-meets friends on its trips and now and then finds a rare place. Days you miss
+level lets the cat hold one more hobby and adds something to its home: a
+picture frame at levels 2 and 6, its own painting at 3, a cushion for friends
+at 5, bunting at 7. It grows one more treat in the yard at levels 3 and 6, and
+from level 4 it meets friends on its trips, friends drop by at home, and now
+and then it finds a rare place. Days you miss
 cost nothing: nothing decays, and a new day simply allows new stars.
 
 ### Hobbies
@@ -181,13 +188,20 @@ so a card looks the same every time it is opened, on every device.
   lighthouse, a snowy hot spring, the flower hills, a moonlit lake.
 - **What it does** is one of the place's own things. It favours the hobby the
   place teaches, then hobbies it knows; it never shows another hobby it has not
-  met.
+  met. Some cards are candid, as if a friend took the photo: the cat seen from
+  behind, looking out at the view, or caught close up walking off with its
+  bundle.
 - **The hour** is when the card was sent (dawn, day, dusk, night); the
   observatory, the night desk and the lake are only ever at night and the
   lighthouse at dusk. **The weather** is one per day; snow falls only from
   December to February, and indoors it is only in the words.
 - **Friends** (a frog, a snail, a rabbit, a hedgehog, a bird by day, an owl at
-  night) join from level 4, more often as the bond grows.
+  night) join from level 4, more often as the bond grows. Each has a snack it
+  likes (the frog and the owl fish, the bird and the hedgehog berries, the
+  rabbit and the snail catnip): pack that snack and that friend is likely to
+  come along. While the cat is home, after you have been away three hours or
+  more, a friend may drop by and leave its snack in the pantry; the diary says
+  who came.
 
 No two cards in the album show the same scene (place, doing, hour, weather and
 friend): a crowded album varies the weather and brings friends to keep them

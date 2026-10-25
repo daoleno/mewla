@@ -13,15 +13,18 @@ import (
 // daemon read one file; the daemon only chooses ids, the page owns the words
 // and the pictures.
 type Catalog struct {
-	Levels   []int            `json:"levels"`
-	Foods    []string         `json:"foods"`
-	Hobbies  []string         `json:"hobbies"`
-	Kinds    map[Kind]string  `json:"kinds"`
-	Places   map[string]Place `json:"places"`
-	Rare     []string         `json:"rare"`
-	Friends  []string         `json:"friends"`
-	Weathers []string         `json:"weathers"`
-	Words    Words            `json:"words"`
+	Levels  []int            `json:"levels"`
+	Foods   []string         `json:"foods"`
+	Hobbies []string         `json:"hobbies"`
+	Kinds   map[Kind]string  `json:"kinds"`
+	Places  map[string]Place `json:"places"`
+	Rare    []string         `json:"rare"`
+	Friends []string         `json:"friends"`
+	// Likes is the snack each friend is fond of: packed for a trip, it brings
+	// that friend along; a friend who drops by leaves one.
+	Likes    map[string]string `json:"likes"`
+	Weathers []string          `json:"weathers"`
+	Words    Words             `json:"words"`
 }
 
 // Place is where a postcard happens and what the cat can be doing there.
@@ -67,6 +70,11 @@ type Diary struct {
 	Back    string              `json:"back"`
 	Learnt  string              `json:"learnt"`
 	Brought map[string]string   `json:"brought"`
+	// Friend is a line for each friend who dropped by, naming what it left.
+	Friend map[string]string `json:"friend"`
+	// Grew is a line for each thing it adds to its home as you grow close
+	// (kit grow), and "frame" for a postcard framed on the wall.
+	Grew map[string]string `json:"grew"`
 }
 
 var (

@@ -50,6 +50,18 @@ type kitFile struct {
 	Ready string               `json:"ready"`
 	// Slots are the parts of the cat's day, in order
 	Slots []string `json:"slots"`
+	// Frames are where postcards get framed on the wall, FrameLv the level each comes at
+	Frames  [][]float64 `json:"frames"`
+	FrameLv []int       `json:"framelv"`
+	// Grow is what the cat adds to its home as you grow close
+	Grow []struct {
+		ID string `json:"id"`
+		Lv int    `json:"lv"`
+		D  string `json:"d"`
+		N  string `json:"n"`
+		// T is the diary's little photo of it, when the corner itself is too thin to read
+		T string `json:"t"`
+	} `json:"grow"`
 }
 
 func readKit(t *testing.T, files fs.FS) kitFile {
@@ -226,6 +238,21 @@ func TestTheDiaryIsWritten(t *testing.T) {
 			t.Errorf("the diary cannot say it brought home a %s", item)
 		}
 	}
+	world := World()
+	for _, friend := range world.Friends {
+		food, line := world.Likes[friend], strings.ToLower(diary.Friend[friend])
+		if line == "" || !strings.Contains(line, food) && !strings.Contains(line, world.Words.Foods[food]) {
+			t.Errorf("the diary cannot say %s dropped by with its %s: %q", friend, food, diary.Friend[friend])
+		}
+	}
+	for _, g := range kit.Grow {
+		if diary.Grew[g.ID] == "" {
+			t.Errorf("the diary cannot say it made the %s", g.ID)
+		}
+	}
+	if len(kit.FrameLv) > 0 && diary.Grew["frame"] == "" {
+		t.Error("the diary cannot say it framed a postcard")
+	}
 	if diary.Title == "" || diary.Quiet == "" {
 		t.Error("the diary needs its title and a quiet line")
 	}
@@ -263,6 +290,29 @@ func TestHouseHasEveryPose(t *testing.T) {
 	}
 	exists("a/cat_" + kit.Sit + ".webp")
 	exists("a/cat_" + kit.Ready + ".webp")
+	// the home grows one thing per level, never two at once, nor on a level that frames a postcard
+	levels := map[int]string{}
+	for _, lv := range kit.FrameLv {
+		levels[lv] = "a frame"
+	}
+	if len(kit.FrameLv) != len(kit.Frames) {
+		t.Errorf("%d frame levels for %d frames", len(kit.FrameLv), len(kit.Frames))
+	}
+	for _, g := range kit.Grow {
+		if other, ok := levels[g.Lv]; ok || g.Lv < 2 || g.Lv > len(World().Levels) {
+			t.Errorf("%s comes at level %d (%s)", g.ID, g.Lv, other)
+		}
+		levels[g.Lv] = g.ID
+		for _, frame := range []string{g.D, g.N} {
+			if kit.Meta[frame] == nil {
+				t.Errorf("%s has no place for %s", g.ID, frame)
+			}
+			exists("a/" + frame + ".webp")
+		}
+		if g.T != "" {
+			exists("a/" + g.T + ".webp")
+		}
+	}
 	for _, name := range []string{"index.html", "game.js", "game.css", "life.js", "guide.js", "card.js", "sound.js", "catalog.js", "lines.js",
 		"hand.woff2", "a/room_day.jpg", "a/room_night.jpg", "a/yard_day.jpg", "a/yard_night.jpg", "a/sign_bubble.webp"} {
 		exists(name)

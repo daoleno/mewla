@@ -151,6 +151,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #life .bird{position:absolute;aspect-ratio:1;transform:translate(-50%,-100%)}
 #life .bird img{position:absolute;left:0;bottom:0;width:100%;height:auto;opacity:0}
 #life .bird img.on{opacity:1}
+/* a friend at the door */
+#life .friendv{position:absolute;transform:translate(-50%,-100%);pointer-events:none}
+#life .friendv img{display:block;width:100%;height:auto}
+#life .friendv.lit img{filter:brightness(.72) saturate(.9)}
 #life .heart{position:absolute;width:4.5%}
 #life .heart svg{display:block;width:100%;height:auto}
 #life .puff{position:absolute;width:6%;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(255,250,235,.95),rgba(255,250,235,0) 70%)}
