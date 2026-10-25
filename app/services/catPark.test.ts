@@ -60,15 +60,14 @@ describe("bridge", () => {
   test("accepts the page's actions and nothing else", () => {
     expect(parseCatBridgeMessage('{"cat":1,"type":"ready"}')).toEqual({ type: "ready" });
     expect(parseCatBridgeMessage('{"cat":1,"type":"open_brain"}')).toEqual({ type: "open_brain" });
-    expect(parseCatBridgeMessage('{"cat":1,"type":"collect","slot":2}')).toEqual({ type: "collect", slot: 2 });
-    expect(parseCatBridgeMessage('{"cat":1,"type":"pack","treat":"fish"}')).toEqual({ type: "pack", treat: "fish" });
-    expect(parseCatBridgeMessage('{"cat":1,"type":"pack","treat":""}')).toEqual({ type: "pack", treat: "" });
-    expect(parseCatBridgeMessage('{"cat":1,"type":"style","style":"watercolor"}')).toEqual({ type: "style", style: "watercolor" });
-    expect(parseCatBridgeMessage('{"cat":1,"type":"seen","what":"postcard","id":"pc:w1:start"}')).toEqual({ type: "seen", what: "postcard", id: "pc:w1:start" });
+    expect(parseCatBridgeMessage('{"cat":1,"type":"act","act":"feed","arg":"fish"}')).toEqual({ type: "act", act: "feed", arg: "fish" });
+    expect(parseCatBridgeMessage('{"cat":1,"type":"act","act":"pack","arg":""}')).toEqual({ type: "act", act: "pack", arg: "" });
+    expect(parseCatBridgeMessage('{"cat":1,"type":"act","act":"seen","arg":"postcard:pc:w1:start"}')).toEqual({ type: "act", act: "seen", arg: "postcard:pc:w1:start" });
     for (const bad of [
       "not json", "null", "[]", '{"type":"ready"}', '{"cat":1,"type":"eval","code":"x"}',
-      '{"cat":1,"type":"collect","slot":-1}', '{"cat":1,"type":"collect","slot":1.5}', '{"cat":1,"type":"collect","slot":"1"}',
-      '{"cat":1,"type":"pack","treat":"../x"}', '{"cat":1,"type":"style","style":"../crayon"}', '{"cat":1,"type":"style","style":7}', '{"cat":1,"type":"seen","what":"work","id":"x"}', '{"cat":1,"type":"seen","what":"postcard","id":""}',
+      '{"cat":1,"type":"collect","slot":1}', '{"cat":1,"type":"act","act":"feed"}', '{"cat":1,"type":"act","act":"Feed","arg":""}',
+      '{"cat":1,"type":"act","act":"pack","arg":"../x"}', '{"cat":1,"type":"act","act":"pack","arg":"a b"}', '{"cat":1,"type":"act","act":7,"arg":""}',
+      `{"cat":1,"type":"act","act":"seen","arg":"${"x".repeat(201)}"}`,
       "x".repeat(5000),
     ]) {
       expect(parseCatBridgeMessage(bad)).toBeNull();
@@ -76,10 +75,8 @@ describe("bridge", () => {
   });
 
   test("only the actions that change state reach the daemon", () => {
-    expect(catSocketMessage({ type: "collect", slot: 1 })).toEqual({ type: "cat_collect", slot: 1 });
-    expect(catSocketMessage({ type: "pack", treat: "yarn" })).toEqual({ type: "cat_pack", treat: "yarn" });
-    expect(catSocketMessage({ type: "style", style: "pixel" })).toEqual({ type: "cat_style", style: "pixel" });
-    expect(catSocketMessage({ type: "seen", what: "souvenir", id: "sv:w" })).toEqual({ type: "cat_seen", what: "souvenir", id: "sv:w" });
+    expect(catSocketMessage({ type: "act", act: "pet", arg: "" })).toEqual({ type: "cat_act", act: "pet", arg: "" });
+    expect(catSocketMessage({ type: "act", act: "seen", arg: "souvenir:sv:w" })).toEqual({ type: "cat_act", act: "seen", arg: "souvenir:sv:w" });
     expect(catSocketMessage({ type: "back" })).toBeNull();
     expect(catSocketMessage({ type: "open_brain" })).toBeNull();
     expect(catSocketMessage({ type: "ready" })).toBeNull();
@@ -89,6 +86,7 @@ describe("bridge", () => {
     const view: CatView = {
       presence: { away: true, waiting: false },
       postcards: [], yard: { day: "d", treats: [], pantry: {} }, now: 1,
+      cat: { level: 1, stars: 0, need: 6, hobbies: [], pending: [], mood: "calm", today: {}, learned: {}, gap: 0, visits: 1, memory: [] },
       souvenirs: [{ id: "sv:1", work_id: "1", kind: "trail", item: "pinecone", title: "x" + String.fromCharCode(0x2028) + "</script>');alert(1);//", at: 1 }],
     };
     const script = catStateScript(view, "zh-CN");
@@ -113,7 +111,8 @@ describe("cached state", () => {
     expect(catCacheKey("a")).not.toBe(catCacheKey("b"));
   });
   test("a cached document must look like a cat view", () => {
-    expect(parseCatView({ presence: {}, postcards: [], souvenirs: [], yard: {} })).not.toBeNull();
+    expect(parseCatView({ presence: {}, postcards: [], souvenirs: [], yard: {}, cat: {} })).not.toBeNull();
+    expect(parseCatView({ presence: {}, postcards: [], souvenirs: [], yard: {} })).toBeNull();
     expect(parseCatView({ presence: {} })).toBeNull();
     expect(parseCatView("x")).toBeNull();
   });

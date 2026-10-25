@@ -61,6 +61,15 @@ function blip(freq, to, ms, vol, type) {
   o.connect(g); g.connect(master); o.start(t); o.stop(t + ms / 1000 + 0.05);
 }
 
+/* a short filtered hiss: paper, cloth, a sizzle, a crunch */
+function burst(seconds, freq, vol) {
+  if (!ctx || paused || ctx.state !== 'running') return;
+  var t = ctx.currentTime, src = ctx.createBufferSource(); src.buffer = noise(seconds + 0.05);
+  var f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.8;
+  var g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.02); g.gain.linearRampToValueAtTime(0, t + seconds);
+  src.connect(f); f.connect(g); g.connect(master); src.start(t); src.stop(t + seconds + 0.05);
+}
+
 var Sound = {
   /* called from every touch; the first one wakes the page's audio */
   unlock: function () {
@@ -99,6 +108,29 @@ var Sound = {
   chime: function () { blip(880, 1320, 420, 0.1, 'sine'); setTimeout(function () { blip(1320, 1760, 520, 0.07, 'sine'); }, 110); },
   thump: function () { blip(150, 70, 110, 0.14, 'sine'); },
   chirp: function () { blip(2400, 3300, 90, 0.05, 'sine'); setTimeout(function () { blip(2900, 2300, 120, 0.04, 'sine'); }, 130); },
+  clink: function () { blip(1650, 2100, 260, 0.07, 'triangle'); setTimeout(function () { blip(2480, 2600, 300, 0.05, 'sine'); }, 70); },
+  munch: function () { [0, 160, 330].forEach(function (d) { setTimeout(function () { burst(0.06, 900, 0.12); }, d); }); },
+  wood: function () { blip(240, 180, 120, 0.13, 'triangle'); setTimeout(function () { blip(330, 260, 90, 0.08, 'triangle'); }, 90); },
+  cloth: function () { burst(0.22, 2400, 0.07); },
+  plop: function () { blip(700, 180, 220, 0.12, 'sine'); setTimeout(function () { blip(1200, 600, 120, 0.04, 'sine'); }, 120); },
+  /* a small meow, made from a sliding tone with a soft vowel */
+  meow: function (v) {
+    if (!ctx || paused || ctx.state !== 'running') return;
+    var t = ctx.currentTime, o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(), vol = 0.07 * (v || 1);
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(520, t); o.frequency.linearRampToValueAtTime(760, t + 0.16); o.frequency.linearRampToValueAtTime(480, t + 0.5);
+    f.type = 'bandpass'; f.frequency.setValueAtTime(900, t); f.frequency.linearRampToValueAtTime(1500, t + 0.2); f.Q.value = 3;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.05); g.gain.linearRampToValueAtTime(vol * 0.8, t + 0.3); g.gain.linearRampToValueAtTime(0, t + 0.55);
+    o.connect(f); f.connect(g); g.connect(master); o.start(t); o.stop(t + 0.6);
+  },
+  /* each hobby has its own little sound */
+  hobby: function (id) {
+    var notes = { music: [523, 659, 784, 659], letters: null, paint: null, cook: null, tinker: [1800, 2200, 1800], fish: null, paper: null, garden: null, stargaze: [880, 1175, 1568], camp: null }[id];
+    if (notes) notes.forEach(function (n, i) { setTimeout(function () { blip(n, n * 1.01, id === 'music' ? 520 : 160, id === 'music' ? 0.06 : 0.04, id === 'music' ? 'triangle' : 'sine'); }, i * (id === 'music' ? 190 : 120)); });
+    else if (id === 'cook') burst(1.2, 3200, 0.04);
+    else if (id === 'paint' || id === 'letters') [0, 220, 470].forEach(function (d) { setTimeout(function () { burst(0.18, 3800, 0.05); }, d); });
+    else if (id === 'paper') burst(0.35, 2600, 0.08);
+    else if (id === 'garden') [0, 90, 170, 260].forEach(function (d) { setTimeout(function () { blip(1400 + Math.random() * 600, 900, 70, 0.04, 'sine'); }, d); });
+  },
   get state() { return ctx ? ctx.state : 'none'; }
 };
 window.CatSound = Sound;

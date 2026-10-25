@@ -83,17 +83,16 @@ func (s *Server) observeCat(snapshot brain.Snapshot) {
 
 type catClientMessage struct {
 	RequestID string `json:"request_id"`
-	Slot      int    `json:"slot"`
-	Treat     string `json:"treat"`
-	What      string `json:"what"`
-	ID        string `json:"id"`
-	Style     string `json:"style"`
+	// Act is one thing the person did in the house (catpark.Acts); the
+	// daemon ignores anything it does not know.
+	Act string `json:"act"`
+	Arg string `json:"arg"`
 }
 
 // handleCatMessage serves the cat_* messages and reports whether it did.
 func (s *Server) handleCatMessage(conn *websocket.Conn, msg []byte, raw clientMessage) bool {
 	switch raw.Type {
-	case "cat_get", "cat_collect", "cat_pack", "cat_seen", "cat_style":
+	case "cat_get", "cat_act":
 	default:
 		return false
 	}
@@ -107,14 +106,8 @@ func (s *Server) handleCatMessage(conn *websocket.Conn, msg []byte, raw clientMe
 		return true
 	}
 	switch raw.Type {
-	case "cat_collect":
-		hub.service.Collect(message.Slot)
-	case "cat_pack":
-		hub.service.Pack(message.Treat)
-	case "cat_seen":
-		hub.service.MarkSeen(message.What, message.ID)
-	case "cat_style":
-		hub.service.SetStyle(message.Style)
+	case "cat_act":
+		hub.service.Act(message.Act, message.Arg)
 	case "cat_get":
 		if snapshot, err := s.liveSnapshot(); err == nil {
 			hub.service.Observe(snapshot)

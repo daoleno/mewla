@@ -1,16 +1,21 @@
 package catpark
 
-import "time"
-
-// TreatKinds are the small things that grow in the yard.
-var TreatKinds = []string{"fish", "yarn", "leaf"}
+import (
+	"strconv"
+	"time"
+)
 
 const (
-	// TreatsPerDay is how many treats a new day brings. Yesterday's that were
-	// not picked just fade: missing a day costs nothing.
+	// TreatsPerDay is how many things a new day brings to the yard; a closer
+	// cat's yard brings a little more. Yesterday's that were not picked just
+	// fade: missing a day costs nothing.
 	TreatsPerDay = 3
 	pantryCap    = 9
+	starterFish  = 2
 )
+
+// yardGrows is what the yard grows, catnip the rarest.
+var yardGrows = []string{"fish", "fish", "berry", "berry", "catnip"}
 
 // Treat is one thing in the yard to pick up.
 type Treat struct {
@@ -19,29 +24,32 @@ type Treat struct {
 	Taken bool   `json:"taken,omitempty"`
 }
 
-// Yard is the garden: today's treats, what has been picked, and what the cat
-// will take along on its next trip. It is affection only and changes nothing
-// about the Work.
+// Yard is the garden: today's treats, the pantry of what has been picked, and
+// the snack packed for the next trip.
 type Yard struct {
 	Day    string         `json:"day"`
 	Treats []Treat        `json:"treats"`
 	Pantry map[string]int `json:"pantry"`
-	// Bag is the treat packed for the next trip.
+	// Bag is the snack packed for the next trip.
 	Bag string `json:"bag,omitempty"`
 }
 
-func (y *Yard) grow(now time.Time) bool {
+func (y *Yard) grow(now time.Time, level int) bool {
 	day := now.Format("2006-01-02")
 	if y.Day == day {
 		return false
 	}
 	y.Day = day
 	y.Treats = y.Treats[:0:0]
-	for slot := 0; slot < TreatsPerDay; slot++ {
-		y.Treats = append(y.Treats, Treat{Slot: slot, Kind: TreatKinds[variantOf(day+"/"+string(rune('0'+slot)), len(TreatKinds))]})
+	count := TreatsPerDay
+	if level >= 3 {
+		count++
 	}
-	if y.Pantry == nil {
-		y.Pantry = map[string]int{}
+	if level >= 6 {
+		count++
+	}
+	for slot := 0; slot < count; slot++ {
+		y.Treats = append(y.Treats, Treat{Slot: slot, Kind: yardGrows[variantOf(day+"/"+strconv.Itoa(slot), len(yardGrows))]})
 	}
 	return true
 }
@@ -53,20 +61,35 @@ func (y *Yard) Collect(slot int) bool {
 		if treat.Slot != slot || treat.Taken {
 			continue
 		}
-		if y.Pantry == nil {
-			y.Pantry = map[string]int{}
-		}
-		if y.Pantry[treat.Kind] >= pantryCap {
+		if !y.add(treat.Kind) {
 			return false
 		}
 		treat.Taken = true
-		y.Pantry[treat.Kind]++
 		return true
 	}
 	return false
 }
 
-// Pack puts one treat from the pantry in the bag (a treat already there goes
+func (y *Yard) add(food string) bool {
+	if y.Pantry == nil {
+		y.Pantry = map[string]int{}
+	}
+	if y.Pantry[food] >= pantryCap {
+		return false
+	}
+	y.Pantry[food]++
+	return true
+}
+
+func (y *Yard) take(food string) bool {
+	if y.Pantry[food] <= 0 {
+		return false
+	}
+	y.Pantry[food]--
+	return true
+}
+
+// Pack puts one snack from the pantry in the bag (a snack already there goes
 // back). An empty kind unpacks.
 func (y *Yard) Pack(kind string) bool {
 	if y.Pantry == nil {
