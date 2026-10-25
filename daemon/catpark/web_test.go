@@ -122,6 +122,9 @@ func TestCatalogIsWhole(t *testing.T) {
 		if len(place.Spot) != 3 || len(place.Acts) == 0 {
 			t.Errorf("place %s needs a spot and acts", id)
 		}
+		if place.Friend != "" && place.Friend != "left" && place.Friend != "right" {
+			t.Errorf("place %s friend side %q is neither left nor right", id, place.Friend)
+		}
 		for _, v := range place.Spot {
 			if v <= 0 || v >= 1 {
 				t.Errorf("place %s spot %v is off the picture", id, place.Spot)
