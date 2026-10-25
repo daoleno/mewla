@@ -3,7 +3,7 @@ import * as Crypto from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
 import { CAT_BUNDLE_PURPOSE, CAT_INDEX, catArchivePartName, parseCatManifest, staleVersions } from "./catPark";
-import { CatRequestError, runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
+import { CatRequestError, askArchive, catRefusalPolicy, runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
 import { bytesToHex } from "./protocolCrypto";
 import { requestFailure, signedFetchBytes } from "./signedRequest";
 import type { StoredServer } from "./storage";
@@ -58,19 +58,12 @@ const PART_TIMEOUT_MS = 25_000;
 /** However slow the link, one sync ends here; what arrived stays, and the next run asks only for the rest. */
 const SYNC_DEADLINE_MS = 120_000;
 
-/**
- * What the computer said no with; a server error may pass on its own, the rest will not.
- * A 404 for a file the manifest named is not "older Mewla": the computer also
- * answers 404 to a signed request it will not honour, and a link that cut a
- * response and was retried underneath us sends the same signature twice, which
- * it takes for a replay. Asking again signs afresh. (A computer too old to
- * have /cat/ says 404 every time, so the manifest's last answer still reads
- * "update it first".)
- */
+/** What the computer said no with; see catRefusalPolicy for which refusals are asked again. */
 async function refusal(server: StoredServer, response: Response, named = false): Promise<CatRequestError> {
-  if (named && response.status === 404) return new CatRequestError(`${server.name} turned a request away (404)`, true);
+  const { retryable, turnedAway } = catRefusalPolicy(response.status, named);
+  if (turnedAway) return new CatRequestError(`${server.name} turned a request away (404)`, retryable);
   const error = await requestFailure(server, response);
-  return new CatRequestError(error.message, response.status >= 500 || response.status === 404);
+  return new CatRequestError(error.message, retryable);
 }
 
 async function fetchBytes(server: StoredServer, pathname: string, timeoutMs: number): Promise<{ response: Response; bytes: Uint8Array | null }> {
@@ -88,14 +81,13 @@ function depsFor(server: StoredServer): CatSyncDeps {
       return manifest;
     },
     async archive(part, of) {
-      // A computer without archives says 404 every time; one that merely turned a request away does not.
-      for (let ask = 0; ; ask++) {
+      const answer = await askArchive(async () => {
         const { response, bytes } = await fetchBytes(server, `/cat/${catArchivePartName(part, of)}`, PART_TIMEOUT_MS);
-        if (response.status === 404 && ask >= 1) return null;
-        if (response.status === 404) continue;
-        if (!bytes) throw await refusal(server, response);
-        return bytes;
-      }
+        return { status: response.status, response, bytes };
+      });
+      if (!answer) return null;
+      if (!answer.bytes) throw await refusal(server, answer.response);
+      return answer.bytes;
     },
     async file(file) {
       const { response, bytes } = await fetchBytes(server, `/cat/${file.path}`, FILE_TIMEOUT_MS);

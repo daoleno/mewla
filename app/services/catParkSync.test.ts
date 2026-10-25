@@ -8,7 +8,9 @@ import {
   CatRequestError,
   CatSyncError,
   CatSyncTimeout,
+  askArchive,
   catFailureCause,
+  catRefusalPolicy,
   readTar,
   runCatSync,
   type CatSyncDeps,
@@ -283,5 +285,33 @@ describe("failure causes", () => {
     expect(catFailureCause(Object.assign(new Error("Aborted"), { name: "AbortError" }))).toBe("timed out");
     expect(catFailureCause(new Error("GET https://example.test/cat/x failed badly"))).toBe("GET <url> failed badly");
     expect(catFailureCause(new Error("x".repeat(200))).length).toBeLessThanOrEqual(80);
+  });
+});
+
+describe("a refusal", () => {
+  test("a 404 or a server error is asked again; a 401 or 403 is not", () => {
+    expect(catRefusalPolicy(404, true)).toEqual({ retryable: true, turnedAway: true });
+    expect(catRefusalPolicy(404, false)).toEqual({ retryable: true, turnedAway: false });
+    expect(catRefusalPolicy(502, true).retryable).toBe(true);
+    expect(catRefusalPolicy(401, true)).toEqual({ retryable: false, turnedAway: false });
+    expect(catRefusalPolicy(403, false).retryable).toBe(false);
+  });
+
+  test("an archive part that is turned away once is not taken for a missing archive", async () => {
+    const answers = [404, 200];
+    expect(await askArchive(async () => ({ status: answers.shift()! }))).toEqual({ status: 200 });
+    expect(answers).toEqual([]);
+  });
+
+  test("a computer that says 404 twice has no archive", async () => {
+    let asked = 0;
+    expect(await askArchive(async () => (asked++, { status: 404 }))).toBeNull();
+    expect(asked).toBe(2);
+  });
+
+  test("a part that arrives at once is asked for once", async () => {
+    let asked = 0;
+    expect(await askArchive(async () => (asked++, { status: 200 }))).toEqual({ status: 200 });
+    expect(asked).toBe(1);
   });
 });
