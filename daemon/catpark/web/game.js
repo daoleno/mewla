@@ -381,7 +381,7 @@ function chooseStyle(k) {
   changeStyle(k, true);
   send({ type: 'style', style: k });
 }
-function openStyles() { renderStyleRow(); on('styles'); var s = document.querySelector('#stylerow .stile.on'); if (s && s.scrollIntoView) s.scrollIntoView({ inline: 'center', block: 'nearest' }); }
+function openStyles() { renderStyleRow(); on('styles'); }
 $('stylestap').addEventListener('click', function () { off('styles'); });
 
 /* ---- the one back button ---- */
