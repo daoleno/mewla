@@ -3,7 +3,7 @@ import * as Crypto from "expo-crypto";
 import { Directory, File, Paths } from "expo-file-system";
 import { getOrCreateLocalDeviceIdentity } from "./auth";
 import { CAT_BUNDLE_PURPOSE, CAT_INDEX, catArchivePartName, parseCatManifest, staleVersions } from "./catPark";
-import { runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
+import { CatRequestError, runCatSync, type CatSyncDeps, type CatSyncProgress } from "./catParkSync";
 import { bytesToHex } from "./protocolCrypto";
 import { requestFailure, signedFetchBytes } from "./signedRequest";
 import type { StoredServer } from "./storage";
@@ -49,11 +49,29 @@ export async function cachedCatBundle(serverId: string): Promise<CatBundle | nul
   return new File(bundle.indexUri).exists ? bundle : null;
 }
 
-const MANIFEST_TIMEOUT_MS = 30_000;
-const FILE_TIMEOUT_MS = 30_000;
-const PART_TIMEOUT_MS = 45_000;
-/** However slow the link, the first open ends here, with a retry. */
+// Short, because each request is tried again: a link that went silent costs
+// seconds, not the better part of a minute (a phone's link has gone quiet for
+// 26 s at a time).
+const MANIFEST_TIMEOUT_MS = 12_000;
+const FILE_TIMEOUT_MS = 15_000;
+const PART_TIMEOUT_MS = 25_000;
+/** However slow the link, one sync ends here; what arrived stays, and the next run asks only for the rest. */
 const SYNC_DEADLINE_MS = 120_000;
+
+/**
+ * What the computer said no with; a server error may pass on its own, the rest will not.
+ * A 404 for a file the manifest named is not "older Mewla": the computer also
+ * answers 404 to a signed request it will not honour, and a link that cut a
+ * response and was retried underneath us sends the same signature twice, which
+ * it takes for a replay. Asking again signs afresh. (A computer too old to
+ * have /cat/ says 404 every time, so the manifest's last answer still reads
+ * "update it first".)
+ */
+async function refusal(server: StoredServer, response: Response, named = false): Promise<CatRequestError> {
+  if (named && response.status === 404) return new CatRequestError(`${server.name} turned a request away (404)`, true);
+  const error = await requestFailure(server, response);
+  return new CatRequestError(error.message, response.status >= 500 || response.status === 404);
+}
 
 async function fetchBytes(server: StoredServer, pathname: string, timeoutMs: number): Promise<{ response: Response; bytes: Uint8Array | null }> {
   const identity = await getOrCreateLocalDeviceIdentity();
@@ -64,20 +82,24 @@ function depsFor(server: StoredServer): CatSyncDeps {
   return {
     async manifest() {
       const { response, bytes } = await fetchBytes(server, "/cat/manifest.json", MANIFEST_TIMEOUT_MS);
-      if (!bytes) throw await requestFailure(server, response);
+      if (!bytes) throw await refusal(server, response);
       const manifest = parseCatManifest(JSON.parse(new TextDecoder().decode(bytes)));
       if (!manifest) throw new Error(`${server.name} sent a cat bundle this app cannot use.`);
       return manifest;
     },
     async archive(part, of) {
-      const { response, bytes } = await fetchBytes(server, `/cat/${catArchivePartName(part, of)}`, PART_TIMEOUT_MS);
-      if (response.status === 404) return null;
-      if (!bytes) throw await requestFailure(server, response);
-      return bytes;
+      // A computer without archives says 404 every time; one that merely turned a request away does not.
+      for (let ask = 0; ; ask++) {
+        const { response, bytes } = await fetchBytes(server, `/cat/${catArchivePartName(part, of)}`, PART_TIMEOUT_MS);
+        if (response.status === 404 && ask >= 1) return null;
+        if (response.status === 404) continue;
+        if (!bytes) throw await refusal(server, response);
+        return bytes;
+      }
     },
     async file(file) {
       const { response, bytes } = await fetchBytes(server, `/cat/${file.path}`, FILE_TIMEOUT_MS);
-      if (!bytes) throw await requestFailure(server, response);
+      if (!bytes) throw await refusal(server, response, true);
       return bytes;
     },
     sha256Hex: async (bytes) => bytesToHex(new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes as Uint8Array<ArrayBuffer>))),
