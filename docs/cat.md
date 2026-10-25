@@ -1,9 +1,17 @@
 # The cat's house
 
-Brain's cat has a small house. It is a tab of its own, **Cat**, beside Brain and
-Sessions at the top of the App: tap it and you are there. It needs no setup and
-has no menus: you tap things in the picture. Swipe to Brain or Sessions, or tap
-their tabs, to leave.
+Brain's cat has a small house. It is a Labs feature: turn on **Settings → Labs →
+Cat** and a tab of its own, **Cat**, appears beside Brain and Sessions at the top
+of the App; turn it off and the tab goes away. Tap the tab and you are there. It
+needs no other setup and has no menus: you tap things in the picture. Swipe to
+Brain or Sessions, or tap their tabs, to leave.
+
+The switch belongs to the computer, not the phone: it is kept with the cat's own
+state in the daemon, so the App and the web UI on that computer always agree,
+and switching computers shows that computer's choice. It starts off. While it is
+off the cat stays home and does not follow Brain's Work; turned on, it joins the
+Work running then, and Work that came and went while it was off sends no
+postcards.
 
 The house is painted as a gouache storybook. The cat is one round, striped
 silhouette; it only changes pose.
@@ -92,8 +100,9 @@ stargazing, the market and the kitchen cooking, the post office and the night
 desk letters, the station music, and the trail camping. An accepted Work teaches
 its place's hobby if the bond has room for one more; otherwise the cat keeps it
 in mind and takes it up at the next level. A new hobby brings its prop into the
-room (fishing and camping happen in the yard), and once the cat knows it, it
-also does it on its own and on its postcards.
+room (fishing and camping happen in the yard, so the window glows until you
+look), and once the cat knows it, it also does it on its own and on its
+postcards.
 
 ### Memory and mood
 
@@ -128,10 +137,9 @@ so a card looks the same every time it is opened, on every device.
 
 No two cards in the album show the same scene (place, doing, hour, weather and
 friend): a crowded album varies the weather and brings friends to keep them
-apart. The line is written from the same pieces in the phone's language, chosen
-the way the rest of the App does: the device locale, Chinese when it starts with
-`zh` and English otherwise. Besides trip cards, the cat writes a welcome note on
-the first visit and, once it has taken up letters, a letter from home.
+apart. The line is written in English from the same pieces. Besides trip
+cards, the cat writes a welcome note on the first visit and, once it has taken
+up letters, a letter from home.
 
 At most one postcard comes when a Work starts and one when it runs long (45
 minutes), and at least 10 minutes pass between any two, so many Works starting
@@ -176,11 +184,11 @@ allows being framed, by the web UI itself.
 
 The cat's world is one file, `daemon/catpark/web/catalog.js`: the levels, foods,
 hobbies, places with where the cat stands in each picture, rare places, friends,
-weathers, and every word in both languages. The page draws from it and the
-daemon reads the same file to compose postcards. A new language is a new set of
-words there; tests fail if any place, act, friend, food or hobby lacks a picture
-or a word in either language. The pictures are generated art in the page's `a/`
-folder.
+weathers, and every word the cat writes. The page draws from it and the daemon
+reads the same file to compose postcards. Like the rest of the product it is
+English only; tests fail if any place, act, friend, food or hobby lacks a picture
+or a word, or if another language creeps into the page. The pictures are
+generated art in the page's `a/` folder.
 
 The handwritten line uses a subset of LXGW WenKai (SIL OFL 1.1); its notice is in
 the repository's third-party assets list.
