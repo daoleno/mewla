@@ -58,7 +58,7 @@ window.CAT_CATALOG = {
     "foods": {"fish": "fish", "berry": "berries", "catnip": "catnip"},
     "hobbies": {"tinker": "mending", "fish": "fishing", "paint": "painting", "paper": "the paper", "garden": "gardening", "stargaze": "stargazing", "cook": "cooking", "letters": "letters", "music": "music", "camp": "camping"},
     "welcome": "You're here! This is my home.",
-    "away": {"note": "At {p}", "in": "Back in {n} min", "soon": "Back soon", "line": "Out at {p}. Back in about {n} minutes.", "line_soon": "Out at {p}. Back any minute now."},
+    "away": {"note": "At {p}", "in": "Back in {n} min", "soon": "Back soon", "line": "Out at {p}. Back in about {n} minutes.", "line_soon": "Out at {p}. Back any minute now."}, "name": {"ask": "What's my name?", "hint": "Name", "ok": "That's me", "sign": "— {n}"},
     "letter": ["Missed you today.", "Thank you for the {t}. Yum.", "I learned {h}!", "A bird came to the window. I wanted you to see."]
   }
 };

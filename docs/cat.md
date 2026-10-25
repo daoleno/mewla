@@ -13,8 +13,12 @@ off the cat stays home and does not follow Brain's Work; turned on, it joins the
 Work running then, and Work that came and went while it was off sends no
 postcards.
 
-The house is painted as a gouache storybook. The cat is one round, striped
-silhouette; it only changes pose.
+The house is one lived-in room painted in gouache: a round door with a doormat,
+a peg with its satchel, a desk, a tea table, a stove, a dining table, a bed and
+a rug, with a day and a night picture that fade into each other with the clock.
+The cat is one round, striped silhouette; it only changes pose. The room is
+taller and wider than a phone, and the view drifts sideways to keep the cat in
+sight.
 
 ## The loop
 
@@ -23,11 +27,11 @@ the bond that grows changes what it does and what it brings back.
 
 | Brain | The cat |
 | --- | --- |
-| Idle | At home, doing its own things. The light follows the phone's clock (dusk from about 6 pm, night by 8:30 pm, dawn from about 5:30 am) |
-| A Worker starts a Work | The bag flies from its hook, the cat hops to the window and slips out, taking the snack you packed |
+| Idle | At home, living its day by the phone's clock (see below) |
+| A Worker starts a Work | It takes its satchel off the peg and leaves by the door, taking the snack you packed |
 | The Work runs | A postcard shortly after it leaves; it comes home on its own after a short outing, and may go out once more if the Work runs long |
-| The Work is accepted | A souvenir for the shelf, stars for the jar and often a new hobby; if the cat is out on that Work, it comes home with it |
-| Something waits on you | A small sign hangs by the cat, or on its empty hook while it is away. Tap it to go back to Brain |
+| The Work is accepted | A souvenir, which it puts somewhere in the room, and often a new hobby; if the cat is out on that Work, it comes home with it |
+| Something waits on you | A small sign hangs on the door. Tap it to go back to Brain |
 
 A Work that is cancelled brings nothing home.
 
@@ -56,44 +60,54 @@ Nothing explains itself in words. The cat greets you, then shows you one thing
 at a time by walking over to it and thinking of it while it glows:
 
 1. a ring around the cat: pet it;
-2. the mailbox: its welcome note;
-3. the bowl: feed it (it starts with two fish to share);
+2. the letters on the doormat: its welcome note;
+3. the bowl on the dining table: feed it (it starts with two fish to share);
 4. the window: the yard, where today's treats are waiting;
-5. the bag: pack a snack for its next trip.
+5. the satchel on the peg: pack a snack for its next trip.
+
+After you first pet it, a card asks its name. The name is yours to give, up to
+16 letters, given once; it signs its letters and postcards with it. Close the
+card and it asks again later.
 
 Each step is shown once, and the daemon remembers which ones you have done and
 which new things you have already met, so another device does not show them
 again. Anything new later introduces itself
-the same way: a hobby's prop, the jar's first star, a level.
+the same way: a hobby's prop, a new picture frame.
 
 ## What you can tap
 
-- **The cat** answers every tap: a purr, a look, a little hop. When you come
-  back after a while it greets you, more warmly after a long gap or as the bond
-  grows, and it may ask for the food you gave it last.
+- **The cat** answers every tap: a purr, a look, a little hop. Busy at one of
+  its places, it turns round and comes over. When you come back after a while
+  it does not notice you at once: it finishes what it is doing, then greets
+  you, sooner after a long gap, and it may ask for the food you gave it last.
+  Asleep, it sleeps on.
 - **The bowl** opens the pantry. It eats two meals a day and then shakes its head.
   Food left while it is away waits in the bowl, and it eats it when it is home.
   The food it has been given most becomes its favourite.
 - **The yarn** is a game it loves.
-- **A hobby's prop** (the toolbox, easel, newspaper, stove, ukulele, watering
-  can, letters, telescope) asks it to do that hobby. Once a day gardening brings
-  a berry to the pantry and letters bring a letter to the mailbox.
-- **The mailbox** shows a new postcard and keeps it in the **album**; with none
-  waiting it opens the album.
-- **The shelf** holds the souvenirs. Tap one to see the Work it came from and the
-  hobby that trip taught.
+- **A hobby's prop** (the toolbox, easel, newspaper, ukulele, watering can,
+  letters, telescope), or the stove for cooking, asks it to do that hobby. Once
+  a day gardening brings a berry to the pantry and letters bring a letter to
+  the doormat.
+- **The letters on the doormat** show a new postcard and keep it in the
+  **album**; with none waiting they open the album.
+- **The souvenirs** stand where it put them around the room: a lantern by the
+  bed, a teapot on the stove, a bell on the peg. Tap one to see the Work it came
+  from and the hobby that trip taught. **The shelf** lists them all.
 - **The window** is the yard. A few treats grow each day: pick them up, and tap
   one in the bag to pack it before the cat leaves. Once it fishes, it sits by
   the pond by day (tap it: once a day it catches a fish); once it camps, its tent
   stands there at night.
-- **The jar** shows the stars and the shape of what the next level brings.
 - **The picture frames** on the wall show its latest postcards.
-- **A visiting bird** now and then lands on the sill and leaves a berry or a fish
-  for the pantry.
+- **The bed** asks it for a nap.
+- **A visiting bird** now and then lands on the round window and leaves a berry
+  or a fish for the pantry.
 
 ## The bond
 
-Care drops stars into the jar, a few a day for each kind so it cannot be ground:
+The bond shows only in the home: more frames on the wall, more hobbies, more
+souvenirs. There are no numbers on screen. Underneath, care counts stars, a few
+a day for each kind so it cannot be ground:
 
 | Care | Stars |
 | --- | --- |
@@ -169,13 +183,19 @@ The souvenir keeps the title of your own Work, on your own shelf only.
 
 ## The living room
 
-- **At home** it reads, writes, has tea, eats, plays with yarn, naps on its bed,
-  and does the hobbies it knows; at night it sleeps on its cushion or watches the
-  stars. What it picks follows the hour, chance and what you ask of it most.
-- **Small life**: clouds, a butterfly, a lamp that flickers at night with
-  crickets, and the visiting bird.
+- **At home** it keeps a day like a person's, by the phone's clock: tea at dawn
+  (from about 5:30), writing at its desk in the morning, lunch at noon, a nap or
+  a hobby in the afternoon, supper at the stove from 5 pm, reading by the lamp
+  in the evening, and bed from 10:30 pm. Each is painted into the room, often
+  with its back to you. Between them it sits on the rug to read, play with
+  yarn, or do a hobby it knows. What it picks follows the hour, chance and what
+  you ask of it most.
+- **Light**: dusk from about 6 pm, night by 8:30 pm, dawn from about 5:30 am;
+  sunlight falls through the window by day.
+- **Small life**: dust in the sunbeam, a butterfly, crickets at night, and the
+  visiting bird.
 - **Sound** is made in the page, with no audio files: a quiet room tone, paper,
-  a purr, a clink for each star, small sounds for each hobby. It starts with the
+  a purr, a chime, small sounds for each hobby. It starts with the
   first tap and stops whenever the tab is not on screen. There is no switch.
 
 ## Where it lives
@@ -187,7 +207,7 @@ announced, so a restart repeats nothing. App and web UI show the same state
 because both read it from the daemon over the connection they already have:
 `cat_get` and `cat_state`, and `cat_act` with one of a fixed list of acts
 (`visit`, `pet`, `feed`, `play`, `hobby`, `collect`, `pack`, `seen`, `gift`,
-`learn`); the daemon checks every act and its argument and ignores the rest.
+`learn`, `name`); the daemon checks every act and its argument and ignores the rest.
 A state written by an older version of the game is kept beside it
 (`state.json.v1`) and a new cat starts.
 
@@ -211,3 +231,7 @@ generated art in the page's `a/` folder.
 
 The handwritten line uses a subset of LXGW WenKai (SIL OFL 1.1); its notice is in
 the repository's third-party assets list.
+
+To look at the room at another hour, open the page with `?hour=` and an hour
+from 0 to 23 (for example `/cat/?hour=19`); it changes only what the page
+shows.

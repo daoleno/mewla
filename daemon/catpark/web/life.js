@@ -1,12 +1,16 @@
 (function () {
 'use strict';
-/* The house is alive. The room is two empty pictures (day, night) that fade
-   into each other with the real hour; the cat is its own picture on top, one
-   pose per thing it does, so it can go from one thing to another, hop across
-   the room, leave through the window with its bag, and come home. Things it
-   has taken up stand in the room as props you can tap; the jar fills with
-   stars; the bowl takes food. All motion is transform and opacity only, and
-   every timer sleeps while the page is off screen. */
+/* The house is alive. The room is two pictures of the cat's home (day, night)
+   that fade into each other with the real hour. The cat keeps a day like a
+   person: tea at dawn, the desk in the morning, lunch, a nap or a hobby, the
+   stove at dusk, the lamp in the evening, bed. At each of its places it is
+   painted into that corner of the room, mostly with its back to you, as a day
+   and a night picture that fade with the room; between places, and for what
+   it does on the rug, it is its own picture on top. It notices you after a
+   while, goes out by the door with its satchel and comes home the same way.
+   Things it has taken up stand in the room as props you can tap; letters wait
+   on the doormat; the bowl on the table takes food. All motion is transform
+   and opacity only, and every timer sleeps while the page is off screen. */
 
 var K = window.CAT_KIT;
 var Sh = window.CatShell;
@@ -18,7 +22,7 @@ var BASE = 'a/';
 var stage = document.getElementById('stage');
 var M = K.meta;
 var L = { built: false, on: false, away: null, cur: null, busy: false, paused: false, walking: false, returning: false, last: [], timers: {}, acts: {}, np: 0, chain: Promise.resolve(), gift: null, visiting: false, pokeUntil: 0, holdUntil: 0, props: {}, greeted: false, attending: null };
-var layer, sky, walker, bagEl, tint, lampEl, beam, mullDay, mullNight, topLayer, propLayer, jarEl, jarStars, bowlEl, bowlFood, yarnEl, think;
+var layer, walker, pegEl, mailEl, tint, beam, topLayer, propLayer, bowlEl, bowlFood, yarnEl, think;
 var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 var ACT = {}; K.acts.forEach(function (a) { ACT[a.id] = a; });
 
@@ -30,17 +34,33 @@ function rnd(a, b) { return a + Math.random() * (b - a); }
 function stagePx() { return { w: stage.offsetWidth || 400, h: stage.offsetHeight || 711 }; }
 function place(e, name) { var m = M[name]; e.style.left = pct(m[0]); e.style.top = pct(m[1]); e.style.width = pct(m[2]); }
 function anim(e, kf, o) { try { return e.animate(kf, o); } catch (err) { return { finished: Promise.resolve(), cancel: function () {} }; } }
-function center(name) { var m = M[name]; return [m[0] + m[2] / 2, m[1] + m[3] / 2]; }
 function knows(h) { return Sh.cat().hobbies.indexOf(h) >= 0; }
+/* on a narrow screen the room is wider than the view: it slides gently so the cat at the bed or the table is not cut off */
+function follow(x) {
+  var W = stage.offsetWidth, V = (stage.parentNode && stage.parentNode.offsetWidth) || window.innerWidth, room = (W - V) / 2;
+  if (room < 4) { stage.style.setProperty('--pan', '0px'); return; }
+  var pan = parseFloat(stage.style.getPropertyValue('--pan')) || 0, m = V * 0.16;
+  var sx = x * W - (W - V) / 2 + pan;   // where x is on screen now
+  if (sx < m) pan += m - sx; else if (sx > V - m) pan -= sx - (V - m); else return;
+  pan = Math.max(-room, Math.min(room, pan));
+  stage.style.setProperty('--pan', pan.toFixed(0) + 'px');
+}
+/* a corner of the room in its day and night pictures; the night one fades in with the hour */
+function pair(box, day, night, cls) {
+  var d = el('div', cls); place(d, box);
+  d.appendChild(pic(day + '.webp', 'd')); d.appendChild(pic(night + '.webp', 'n'));
+  return d;
+}
 
 /* ---- the hour ---- */
-function hourNow() { var d = new Date(); return d.getHours() + d.getMinutes() / 60; }
+function hourNow() { return Sh.hour(); }
 function nightAmount(h) {
   if (h >= 20.5 || h < 5.5) return 1;
   var t = h >= 17.5 ? (h - 17.5) / 3 : h < 7.5 ? 1 - (h - 5.5) / 2 : 0;
   return t * t * (3 - 2 * t);
 }
-function periodOf(h, np) { return np > 0.55 ? 'night' : h < 10 ? 'morning' : h < 17 ? 'day' : 'evening'; }
+/* the cat's day, by the clock: what part of it this is */
+function slotOf(h) { return h < 5.5 ? 'night' : h < 8 ? 'dawn' : h < 12 ? 'morning' : h < 13.5 ? 'noon' : h < 17 ? 'afternoon' : h < 19.5 ? 'dusk' : h < 22.5 ? 'evening' : 'night'; }
 function warmth(h) { return Math.max(0, 1 - Math.abs(h - 18.7) / 1.6) * 0.2 + Math.max(0, 1 - Math.abs(h - 6.4) / 1.0) * 0.13; }
 
 /* ---- build the layer once ---- */
@@ -49,41 +69,23 @@ function build() {
   L.built = true;
   layer = el('div'); layer.id = 'life';
   stage.insertBefore(layer, document.getElementById('frames'));
-  var g = K.glass, b = K.box;
 
-  // the window: sky things live inside the glass, the painted bars sit over them
-  sky = el('div', 'sky');
-  sky.style.left = pct(g[0] - g[2]); sky.style.top = pct(g[1] - g[3]); sky.style.width = pct(2 * g[2]); sky.style.height = pct(2 * g[3]);
-  [['a', 8, 36], ['b', 34, 26]].forEach(function (c) {
-    var cl = pic('cloud.webp', 'cloud ' + c[0]); cl.style.top = c[1] + '%'; cl.style.width = c[2] + '%'; sky.appendChild(cl);
-  });
-  K.stars.slice(0, 6).forEach(function (s, i) {
-    var px = b[0] + s[0] * b[2], py = b[1] + s[1] * b[3];
-    var d = el('i', 'star'); d.style.left = pct((px - (g[0] - g[2])) / (2 * g[2])); d.style.top = pct((py - (g[1] - g[3])) / (2 * g[3])); d.style.animationDelay = (i * 0.7) + 's'; sky.appendChild(d);
-  });
-  layer.appendChild(sky);
-  mullDay = pic('mullion_day.webp', 'mull'); mullNight = pic('mullion_night.webp', 'mull');
-  [mullDay, mullNight].forEach(function (m) { m.style.left = pct(b[0]); m.style.top = pct(b[1]); m.style.width = pct(b[2]); layer.appendChild(m); });
-
-  // light that follows the hour
+  // light through the round window, by day
   beam = el('div', 'beam'); layer.appendChild(beam);
-  for (var i = 0; i < 7; i++) { var mo = el('i', 'mote'); mo.style.left = (20 + Math.random() * 34) + '%'; mo.style.top = (52 + Math.random() * 34) + '%'; mo.style.animationDelay = (-Math.random() * 14) + 's'; mo.style.animationDuration = (11 + Math.random() * 8) + 's'; beam.appendChild(mo); }
-  lampEl = el('div', 'lamp'); lampEl.style.left = pct(K.lamp[0]); lampEl.style.top = pct(K.lamp[1]); lampEl.appendChild(el('i')); layer.appendChild(lampEl);
+  for (var i = 0; i < 7; i++) { var mo = el('i', 'mote'); mo.style.left = (40 + Math.random() * 30) + '%'; mo.style.top = (42 + Math.random() * 30) + '%'; mo.style.animationDelay = (-Math.random() * 14) + 's'; mo.style.animationDuration = (11 + Math.random() * 8) + 's'; beam.appendChild(mo); }
 
-  bagEl = pic('bag.webp', 'bag'); place(bagEl, 'bag'); layer.appendChild(bagEl);
+  // the satchel is painted on its peg; while it is out, the peg is empty. Letters wait on the doormat.
+  pegEl = pair('h_peg_d', 'h_peg_d', 'h_peg_n', 'corner peg'); layer.appendChild(pegEl);
+  mailEl = pair('h_mail_d', 'h_mail_d', 'h_mail_n', 'corner mail'); layer.appendChild(mailEl);
 
-  // things you can tap: the props of its hobbies, the jar, the bowl, the yarn
+  // things you can tap: the props of its hobbies, the bowl on the table, the yarn in its basket
   propLayer = el('div', 'props'); layer.appendChild(propLayer);
-  jarEl = el('button', 'prop jar'); place(jarEl, 'p_jar'); jarEl.appendChild(pic('p_jar.webp'));
-  jarStars = el('div', 'jarstars'); jarEl.appendChild(jarStars);
-  jarEl.addEventListener('click', function () { bounce(jarEl); Sh.openJar(); });
-  bowlEl = el('button', 'prop bowl'); place(bowlEl, 'p_bowl'); bowlEl.appendChild(pic('p_bowl.webp'));
+  bowlEl = el('button', 'prop bowl'); place(bowlEl, 'p_bowl');
   bowlFood = el('img', 'food'); bowlEl.appendChild(bowlFood);
-  bowlEl.addEventListener('click', function () { bounce(bowlEl); Snd.pop(); Sh.openFood(); });
+  bowlEl.addEventListener('click', function () { Snd.pop(); Sh.openFood(); });
   yarnEl = el('button', 'prop yarn'); place(yarnEl, 't_yarn');
-  yarnEl.appendChild(pic('t_yarn.webp'));
-  yarnEl.addEventListener('click', function () { bounce(yarnEl); Snd.pop(); Sh.play(); });
-  [jarEl, bowlEl, yarnEl].forEach(function (p) { p.setAttribute('aria-label', Sh.words()[p.classList[1]] || ''); propLayer.appendChild(p); });
+  yarnEl.addEventListener('click', function () { Snd.pop(); Sh.play(); });
+  [[bowlEl, 'p_bowl'], [yarnEl, 't_yarn']].forEach(function (b) { b[0].style.height = pct(M[b[1]][3]); b[0].setAttribute('aria-label', Sh.words()[b[0].classList[1]] || ''); propLayer.appendChild(b[0]); });
 
   walker = el('div', 'walker fx');
   walker.appendChild(pic('cat_' + K.sit + '.webp', 'w sit on')); walker.appendChild(pic('cat_' + K.ready + '.webp', 'w ready'));
@@ -92,44 +94,52 @@ function build() {
 
   topLayer = el('div', 'top'); layer.appendChild(topLayer);
   tint = el('div', 'tint'); layer.appendChild(tint);
-  K.acts.forEach(function (a) { var s = new Image(); s.src = BASE + 'cat_' + a.a + '.webp'; if (a.b) { var t = new Image(); t.src = BASE + 'cat_' + a.b + '.webp'; } });
+  K.acts.forEach(function (a) { [a.a, a.b, a.n].forEach(function (f) { if (f) { var s = new Image(); s.src = BASE + 'cat_' + f + '.webp'; } }); });
+}
+function addZz(root, a) {
+  if (a.zz) for (var z = 0; z < 2; z++) { var zz = el('i', 'zz'); zz.style.left = pct(a.zz[0]); zz.style.top = pct(a.zz[1]); zz.style.animationDelay = (z * 2.2) + 's'; zz.innerHTML = '<svg viewBox="0 0 20 20"><path d="M4 4h11L4 16h12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'; root.appendChild(zz); }
 }
 function bounce(n) { anim(n, [{ transform: 'scale(1)' }, { transform: 'scale(1.12,.9)' }, { transform: 'scale(.95,1.08)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'ease-out' }); }
 
-/* the props of the hobbies it knows; a new one glows until it has been tapped */
+/* the props of the hobbies it knows; a new one glows until it has been tapped.
+   A hobby done at something painted in the room (the stove) is a spot there instead. */
 function renderProps() {
-  var c = Sh.cat(), night = L.np > 0.55;
-  Object.keys(K.props).forEach(function (h) {
+  var c = Sh.cat(), night = L.np > 0.55, spots = K.spots || {};
+  Object.keys(K.props).concat(Object.keys(spots)).forEach(function (h) {
     var want = c.hobbies.indexOf(h) >= 0 && !L.away, p = L.props[h];
     if (want && !p) {
-      p = el('button', 'prop hob'); p.dataset.h = h; place(p, K.props[h]); p.appendChild(pic(K.props[h] + '.webp'));
+      if (spots[h]) {
+        var s = spots[h];
+        p = el('button', 'prop hob spot'); p.dataset.h = h;
+        p.style.left = pct(s[0] - s[2] / 2); p.style.top = pct(s[1] - s[3] / 2); p.style.width = pct(s[2]); p.style.height = pct(s[3]);
+      } else { p = el('button', 'prop hob'); p.dataset.h = h; place(p, K.props[h]); p.appendChild(pic(K.props[h] + '.webp')); }
       p.setAttribute('aria-label', (Sh.cwords().hobbies || {})[h] || h);
-      p.addEventListener('click', function () { bounce(p); p.classList.remove('new'); Sh.markLearnt('prop:' + h); Sh.hobby(h); });
-      if (!Sh.learnt('prop:' + h)) p.classList.add('new');
+      p.addEventListener('click', function () { if (!spots[h]) bounce(p); p.classList.remove('new'); Sh.markLearnt('prop:' + h); Sh.hobby(h); });
+      if (!Sh.learnt('prop:' + h) && !spots[h]) p.classList.add('new');
       propLayer.insertBefore(p, propLayer.firstChild); L.props[h] = p;
       void p.offsetWidth; p.classList.add('in');
     } else if (!want && p) { p.remove(); delete L.props[h]; }
     if (p) p.classList.toggle('busy', !!(L.cur && L.cur.hobby === h));
   });
-  [jarEl, bowlEl, yarnEl].concat(Object.keys(L.props).map(function (k) { return L.props[k]; })).forEach(function (p) { p.classList.toggle('lit', night); });
+  Object.keys(L.props).forEach(function (k) { L.props[k].classList.toggle('lit', night); });
   yarnEl.style.display = L.away ? 'none' : '';
   bowlFood.classList.toggle('on', !!c.bowl);
   if (c.bowl) bowlFood.src = BASE + 't_' + c.bowl + '.webp';
-  renderJar();
-}
-
-/* the jar shows the stars toward the next level as little lights inside */
-function renderJar() {
-  var c = Sh.cat(), n = c.need ? Math.round(Math.min(1, c.stars / c.need) * 9) : 9;
-  if (jarStars.childElementCount !== n) {
-    jarStars.innerHTML = '';
-    for (var i = 0; i < n; i++) { var s = el('i'); s.style.left = (18 + ((i * 37) % 64)) + '%'; s.style.bottom = (8 + Math.floor(i / 3) * 18 + (i % 2) * 5) + '%'; s.style.animationDelay = (i * 0.4) + 's'; jarStars.appendChild(s); }
-  }
+  mailEl.classList.toggle('on', Sh.unseen().length > 0);
 }
 
 function ensureAct(a) {
   var o = L.acts[a.id];
   if (o) return o;
+  if (a.patch) {
+    // a corner of the room with the cat painted in it
+    var corner = pair(a.a, 'cat_' + a.a, 'cat_' + a.n, 'act patch fx');
+    if (a.steam) for (var k = 0; k < 3; k++) { var st = el('i', 'steam'); st.style.left = pct(a.steam[0]); st.style.top = pct(a.steam[1]); st.style.animationDelay = (k * 1.1) + 's'; corner.appendChild(st); }
+    addZz(corner, a);
+    layer.insertBefore(corner, walker);
+    o = L.acts[a.id] = { a: a, root: corner, inner: corner, fb: null };
+    return o;
+  }
   var root = el('div', 'act fx' + (a.still ? ' still' : '')), inner = el('div', 'in');
   place(root, a.a);
   var m = M[a.a];
@@ -144,17 +154,18 @@ function ensureAct(a) {
   }
   root.appendChild(inner);
   if (a.steam) for (var i = 0; i < 3; i++) { var s = el('i', 'steam'); s.style.left = pct(a.steam[0]); s.style.top = pct(a.steam[1]); s.style.animationDelay = (i * 1.1) + 's'; root.appendChild(s); }
-  if (a.zz) for (var z = 0; z < 2; z++) { var zz = el('i', 'zz'); zz.style.left = pct(a.zz[0]); zz.style.top = pct(a.zz[1]); zz.style.animationDelay = (z * 2.2) + 's'; zz.innerHTML = '<svg viewBox="0 0 20 20"><path d="M4 4h11L4 16h12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'; root.appendChild(zz); }
+  addZz(root, a);
   layer.insertBefore(root, walker);
   o = L.acts[a.id] = { a: a, root: root, inner: inner, fb: fb };
   return o;
 }
 
-/* ---- what the cat does on its own: by the hour, by habit, never twice running ---- */
+/* ---- what the cat does on its own: what this part of its day is for, by habit.
+   It stays at its place for the hour; a thing on the rug is never done twice running ---- */
 function pick() {
-  var h = hourNow(), p = periodOf(h, L.np), c = Sh.cat();
+  var p = slotOf(hourNow()), c = Sh.cat();
   var list = K.acts.filter(function (a) { return !a.react && a.when[p] && (!a.hobby || knows(a.hobby)); });
-  var fresh = list.filter(function (a) { return L.last.indexOf(a.id) < 0; });
+  var fresh = list.filter(function (a) { return a.patch || L.last.indexOf(a.id) < 0; });
   if (fresh.length) list = fresh;
   var weight = function (a) { return a.when[p] * (a.hobby ? (a.hobby === c.fav_hobby ? 3 : 1.6) : 1); };
   var sum = 0; list.forEach(function (a) { sum += weight(a); });
@@ -172,21 +183,22 @@ function firstPick() {
   if (before) L.last = [before];
   return pick();
 }
-function headOf(a) { var m = M[a.a], P = stagePx(); return [a.foot[0], a.foot[1] - Math.min(m[3], a.bw * 0.95 * P.w / P.h)]; }
+function headOf(a) { if (a.head) return a.head; var m = M[a.a], P = stagePx(); return [a.foot[0], a.foot[1] - Math.min(m[3], a.bw * 0.95 * P.w / P.h)]; }
+function fits(a) { return !!a.when[slotOf(hourNow())]; }
 
 function showAct(a) {
   var o = ensureAct(a);
   L.cur = a; remember(a);
+  follow(headOf(a)[0]);
   o.root.classList.add('on');
   o.inner.classList.remove('b');
-  yarnEl.style.visibility = a.id === 'yarn' ? 'hidden' : '';  // the yarn is in its paws
   // the cat's own hotspot follows where it sits
-  var P = stagePx(), bh = a.bw * 0.95 * P.w / P.h;
-  Sh.hotCat(a.foot[0], a.foot[1] - bh / 2, Math.max(a.bw * 1.15, 0.2), Math.max(bh, 0.1));
+  if (a.patch) Sh.hotCat(a.head[0], a.head[1] + 0.045, 0.17, 0.13);
+  else { var P = stagePx(), bh = a.bw * 0.95 * P.w / P.h; Sh.hotCat(a.foot[0], a.foot[1] - bh / 2, Math.max(a.bw * 1.15, 0.2), Math.max(bh, 0.1)); }
   scheduleGlance();
   if (a.hobby) { Snd.hobby(a.hobby); renderProps(); }
 }
-function hideAct(a) { var o = L.acts[a.id]; if (o) o.root.classList.remove('on'); if (a.id === 'yarn') yarnEl.style.visibility = ''; clearTimeout(L.timers.glance); if (a.hobby) setTimeout(renderProps, 0); }
+function hideAct(a) { var o = L.acts[a.id]; if (o) o.root.classList.remove('on'); clearTimeout(L.timers.glance); if (a.hobby) setTimeout(renderProps, 0); }
 
 function showB(ms) {
   var a = L.cur; if (!a) return;
@@ -197,7 +209,7 @@ function showB(ms) {
 }
 function scheduleGlance() {
   clearTimeout(L.timers.glance);
-  var a = L.cur; if (!a) return;
+  var a = L.cur; if (!a || a.patch) return;   // at its places it has its back to you
   var held = Date.now() < L.holdUntil;
   L.timers.glance = setTimeout(function () {
     if (!L.paused && !L.busy && L.cur === a && Date.now() > L.pokeUntil) showB(a.night ? 2200 : 1300);
@@ -211,7 +223,7 @@ function scheduleNext() {
     if (L.away || L.paused || L.busy || L.attending || waiting || Date.now() < L.holdUntil || !Sh.onHouse()) { scheduleNext(); return; }
     queue(function () { return changeAct(pick()); });
     scheduleNext();
-  }, rnd(24, 55) * 1000);
+  }, (L.cur && L.cur.patch ? rnd(70, 150) : rnd(30, 60)) * 1000);
 }
 
 /* ---- movement ---- */
@@ -249,12 +261,12 @@ function hopsFor(x1, y1, x2, y2) {
 function whereNow() {
   if (L.cur) return { x: L.cur.foot[0], y: L.cur.foot[1], bw: L.cur.bw };
   if (L.attending) return L.attending;
-  return { x: K.rug[0], y: K.rug[1], bw: 0.3 };
+  return { x: K.rug[0], y: K.rug[1], bw: K.bw };
 }
 
 async function changeAct(next) {
   var cur = L.cur;
-  if (cur === next) return;
+  if (cur === next || L.away) return;   // a change queued before it went out is dropped
   L.busy = true;
   try {
     var from = whereNow();
@@ -264,6 +276,7 @@ async function changeAct(next) {
     L.attending = null;
     await wait(220);
     if (Math.hypot(from.x - next.foot[0], from.y - next.foot[1]) > 0.01) {
+      follow(next.foot[0]);
       var h = hopsFor(from.x, from.y, next.foot[0], next.foot[1]);
       await hopTo(from.x, from.y, from.bw, next.foot[0], next.foot[1], next.bw, h.ms, h.hops);
     }
@@ -275,7 +288,6 @@ async function changeAct(next) {
 /* the person asked for this: do it for a while, looking up now and then */
 function doAct(id, ms) {
   var a = ACT[id]; if (!a || L.away) return Promise.resolve();
-  if (a.night && L.np < 0.55 && ACT[id + '_day']) a = ACT[id + '_day'];
   L.holdUntil = Date.now() + (ms || 15000);
   return queue(function () { return changeAct(a); }).then(function () { scheduleGlance(); });
 }
@@ -289,7 +301,7 @@ function react(id, ms) {
     showB(900);
     return wait(ms || 2600);
   }).then(function () {
-    if (L.cur === a) return queue(function () { return changeAct(back && (!back.night === !(L.np > 0.55)) ? back : pick()); });
+    if (L.cur === a) return queue(function () { return changeAct(back && fits(back) ? back : pick()); });
   });
 }
 function eat(food) {
@@ -308,6 +320,7 @@ function nap() {
 function attend(spot, icon) {
   if (L.away) return Promise.resolve();
   return queue(async function () {
+    if (L.away) return;
     L.busy = true;
     try {
       var from = whereNow();
@@ -315,9 +328,10 @@ function attend(spot, icon) {
       if (L.cur) { hideAct(L.cur); L.cur = null; }
       await wait(200);
       var h = hopsFor(from.x, from.y, spot[0], spot[1]);
-      await hopTo(from.x, from.y, from.bw, spot[0], spot[1], 0.24, h.ms, h.hops);
-      L.attending = { x: spot[0], y: spot[1], bw: 0.24 };
-      Sh.hotCat(spot[0], spot[1] - 0.05, 0.26, 0.1);
+      follow(spot[0]);
+      await hopTo(from.x, from.y, from.bw, spot[0], spot[1], K.bw, h.ms, h.hops);
+      L.attending = { x: spot[0], y: spot[1], bw: K.bw };
+      Sh.hotCat(spot[0], spot[1] - 0.04, 0.2, 0.09);
       showThink(icon, spot);
     } finally { L.busy = false; }
   });
@@ -328,7 +342,7 @@ function showThink(icon, spot) {
   var P = stagePx();
   icon.classList.add('icon');   // whatever it thinks of fits inside the bubble
   think.appendChild(icon);
-  think.style.left = pct(spot[0]); think.style.top = pct(spot[1] - 0.24 * 0.95 * P.w / P.h - 0.01);
+  think.style.left = pct(spot[0]); think.style.top = pct(spot[1] - K.bw * 0.95 * P.w / P.h - 0.01);
   think.classList.remove('on'); void think.offsetWidth; think.classList.add('on');
 }
 function hideThink() { think.classList.remove('on'); }
@@ -339,21 +353,26 @@ function release() {
   queue(function () { return changeAct(pick()); });
 }
 
-/* ---- the greeting: how long you were away decides how glad it is ---- */
+/* ---- the greeting: it is busy with its day and notices you after a while;
+   how long you were away decides how soon and how glad ---- */
 function greet() {
   if (L.away || L.greeted) return;
   L.greeted = true;
   var c = Sh.cat(), gap = c.gap || 0, level = c.level || 1;
-  if (L.np > 0.55 && L.cur && L.cur.still) { showB(2400); return; }   // asleep at night: one sleepy look
+  if (L.cur && L.cur.still) return;   // asleep: it does not stir until you touch it
   var big = gap > 20 * 3600e3 || c.visits <= 1, warm = gap > 3600e3 || level >= 3;
-  if (!big && !warm) { setTimeout(function () { showB(1600); Snd.meow(0.6); }, 900); return; }
+  if (!big && !warm) {   // you were only just here: it carries on, and sometimes looks round
+    if (L.cur && !L.cur.patch) setTimeout(function () { showB(1600); Snd.meow(0.6); }, rnd(3, 6) * 1000);
+    return;
+  }
   setTimeout(function () {
+    if (L.away || L.busy || !Sh.onHouse()) return;
     react('greet', big ? 3600 : 2200).then(function () { hearts(big ? 3 : 1); });
     if (big) setTimeout(function () { hearts(2); }, 1200);
     // it remembers what you last did together, and asks for it again
     var lastFeed = (c.memory || []).filter(function (m) { return m.what === 'feed'; }).pop();
     if (!big && lastFeed && (c.today.feed || 0) < 2 && (Sh.yard().pantry[lastFeed.arg] || 0) > 0) setTimeout(function () { wantFood(lastFeed.arg); }, 4600);
-  }, 700);
+  }, (big ? rnd(1.8, 2.6) : rnd(4.5, 7.5)) * 1000);
 }
 function wantFood(food) {
   react('want', 3800);
@@ -383,28 +402,31 @@ function puff(x, y) {
   var p = el('i', 'puff'); p.style.left = pct(x); p.style.top = pct(y); topLayer.appendChild(p);
   anim(p, [{ opacity: 0.7, transform: 'translate(-50%,-50%) scale(.3)' }, { opacity: 0, transform: 'translate(-50%,-70%) scale(1.6)' }], { duration: 700, easing: 'ease-out' }).finished.then(function () { p.remove(); }, function () { p.remove(); });
 }
+/* the empty peg shows while the satchel is off it */
+function bagOff(off) { pegEl.classList.toggle('on', !!off); }
 
+/* it takes its satchel off the peg, goes to the door and out */
 async function doLeave() {
   L.busy = true;
   try {
     clearTimeout(L.timers.glance); hideThink();
-    var from = whereNow(), rug = K.rug;
+    var from = whereNow(), door = K.door, by = [door[0] + 0.1, door[1] + 0.07];   // just in front of the door
     placeWalker(from.x, from.y, from.bw, 'sit'); walker.classList.add('on');
     if (L.cur) { hideAct(L.cur); L.cur = null; Sh.hotCat(null); }
     L.attending = null;
     await wait(300);
-    if (Math.hypot(from.x - rug[0], from.y - rug[1]) > 0.05) { var h = hopsFor(from.x, from.y, rug[0], rug[1]); await hopTo(from.x, from.y, from.bw, rug[0], rug[1], 0.3, h.ms, h.hops); }
-    else placeWalker(rug[0], rug[1], 0.3, 'sit');
-    // the bag comes off its hook and onto the cat
-    bagEl.classList.add('off');
-    await flyBag(hookSpot(), [rug[0], rug[1] - 0.06], 760, 0.9);
+    var h = hopsFor(from.x, from.y, by[0], by[1]);
+    follow(door[0]);
+    await hopTo(from.x, from.y, from.bw, by[0], by[1], K.bw * 0.85, h.ms, h.hops);
+    // the satchel comes off its peg and onto the cat
+    bagOff(true);
+    await flyBag(hookSpot(), [by[0], by[1] - 0.05], 760, 0.8);
     walker.querySelector('.sit').classList.remove('on'); walker.querySelector('.ready').classList.add('on');
     Snd.pop();
     anim(walker, [{ transform: 'translate(-50%,-100%) scale(1.08,.9)' }, { transform: 'translate(-50%,-100%) scale(.96,1.06)' }, { transform: 'translate(-50%,-100%)' }], { duration: 420, easing: 'ease-out' });
     await wait(700);
-    var w = K.windowspot;
-    await hopTo(rug[0], rug[1], 0.3, w[0], w[1], 0.1, 1300, 3, 'out');
-    puff(w[0], w[1] - 0.01);
+    await hopTo(by[0], by[1], K.bw * 0.85, door[0], door[1], K.bw * 0.7, 900, 2, 'out');
+    puff(door[0], door[1] - 0.03);
     walker.classList.remove('on'); walker.querySelector('.ready').classList.remove('on');
     walker.querySelector('.sit').classList.add('on');
     L.away = true;
@@ -413,23 +435,27 @@ async function doLeave() {
   } finally { L.busy = false; }
 }
 
+/* it comes in by the door, hangs the satchel back on its peg and goes to its place for the hour */
 async function doReturn() {
   L.busy = true; L.returning = true;
   try {
-    var w = K.windowspot, rug = K.rug;
+    var door = K.door, by = [door[0] + 0.1, door[1] + 0.07];
     walker.querySelector('.sit').classList.remove('on'); walker.querySelector('.ready').classList.add('on');
-    placeWalker(w[0], w[1], 0.1, 'ready'); walker.classList.add('on');
-    await hopTo(w[0], w[1], 0.1, rug[0], rug[1], 0.3, 1400, 3, 'in');
+    placeWalker(door[0], door[1], K.bw * 0.7, 'ready'); walker.classList.add('on');
+    follow(door[0]);
+    puff(door[0], door[1] - 0.03);
+    await hopTo(door[0], door[1], K.bw * 0.7, by[0], by[1], K.bw * 0.85, 1000, 2, 'in');
     await wait(300);
-    await flyBag([rug[0], rug[1] - 0.06], hookSpot(), 760, 1);
-    bagEl.classList.remove('off'); bagEl.classList.add('swing'); setTimeout(function () { bagEl.classList.remove('swing'); }, 1600);
+    await flyBag([by[0], by[1] - 0.05], hookSpot(), 760, 1);
+    bagOff(false);
     Snd.pop();
     walker.querySelector('.ready').classList.remove('on'); walker.querySelector('.sit').classList.add('on');
-    L.returning = false; L.away = false; Sh.renderHouse(true);        // the souvenir comes onto the shelf, the props come back
+    L.returning = false; L.away = false; Sh.renderHouse(true);        // the souvenir finds its place in the room, the props come back
     renderProps();
     await wait(900);
-    var next = Sh.cat().bowl ? ACT.eat : pick(), h = hopsFor(rug[0], rug[1], next.foot[0], next.foot[1]);
-    await hopTo(rug[0], rug[1], 0.3, next.foot[0], next.foot[1], next.bw, h.ms, h.hops);
+    var next = Sh.cat().bowl ? ACT.eat : pick(), h = hopsFor(by[0], by[1], next.foot[0], next.foot[1]);
+    follow(next.foot[0]);
+    await hopTo(by[0], by[1], K.bw * 0.85, next.foot[0], next.foot[1], next.bw, h.ms, h.hops);
     showAct(next); walker.classList.remove('on');
   } finally { L.busy = false; L.returning = false; }
 }
@@ -453,6 +479,14 @@ function poke() {
     return;
   }
   var a = L.cur, o = L.acts[a.id];
+  if (a.patch) {
+    // at its place it has its back to you: a touch makes it turn round and come over, unless it is asleep
+    var hp = headOf(a);
+    heart(hp[0] + (Math.random() - 0.5) * 0.04, hp[1]);
+    Snd.purr();
+    if (!a.still && !L.busy && Date.now() > L.pokeUntil) { L.pokeUntil = Date.now() + 8000; react('greet', 2400).then(function () { hearts(2); }); }
+    return;
+  }
   L.pokeUntil = Date.now() + 2600;
   showB(1900);
   if (!a.still) anim(o.inner, [{ transform: 'none' }, { transform: 'scale(1.08,.9)', offset: 0.22 }, { transform: 'translateY(-' + (P.w * 0.03).toFixed(1) + 'px) scale(.96,1.07)', offset: 0.55 }, { transform: 'scale(1.04,.96)', offset: 0.8 }, { transform: 'none' }], { duration: 640, easing: 'ease-out' });
@@ -477,10 +511,10 @@ function flightPath(from, to, ms, w, arc, flip) {
 async function visit() {
   L.visiting = true;
   try {
-    var bird = el('div', 'bird'); bird.style.width = pct(0.07);
+    var bird = el('div', 'bird'); bird.style.width = pct(0.055);
     var fly = pic('bird_fly.webp', 'on'), perch = pic('bird_perch.webp');
     bird.appendChild(fly); bird.appendChild(perch);
-    var spot = [K.glass[0], K.glass[1] - K.glass[3] - 0.012], from = [1.06, 0.1];
+    var spot = K.perch, from = [1.06, 0.1];
     bird.style.left = pct(from[0]); bird.style.top = pct(from[1]);
     topLayer.appendChild(bird);
     Snd.chirp();
@@ -496,7 +530,7 @@ async function visit() {
     // a little gift, left on the floor under the window: a berry or a fish, for the pantry
     var kind = Math.random() < 0.6 ? 'berry' : 'fish', g = el('button', 'hot gift');
     g.appendChild(pic('t_' + kind + '.webp')); g.setAttribute('aria-label', Sh.words().gift);
-    var gx = rnd(0.56, 0.68), gy = rnd(0.62, 0.68);
+    var gx = rnd(0.45, 0.62), gy = rnd(0.64, 0.7);
     g.style.left = pct(spot[0]); g.style.top = pct(spot[1] + 0.02);
     stage.appendChild(g);
     var P = stagePx();
@@ -520,7 +554,7 @@ function collectGift(g, kind) {
   var at = [(r.left + r.width / 2 - s.left) / P.w, (r.top - s.top) / P.h];
   heart(at[0], at[1]);
   var y = Sh.yard(), t = Sh.cat().today || {};
-  if ((t.gift || 0) < 2) { Sh.act('gift', kind); y.pantry[kind] = (y.pantry[kind] || 0) + 1; t.gift = (t.gift || 0) + 1; Sh.flyStar(at); }
+  if ((t.gift || 0) < 2) { Sh.act('gift', kind); y.pantry[kind] = (y.pantry[kind] || 0) + 1; t.gift = (t.gift || 0) + 1; }
   setTimeout(function () { g.remove(); if (L.gift === g) L.gift = null; }, 420);
 }
 function scheduleButterfly() {
@@ -546,21 +580,20 @@ function tick() {
   document.getElementById('p-night').style.opacity = np;
   layer.classList.toggle('is-night', night);
   layer.style.setProperty('--np', np);
-  mullNight.style.opacity = np; mullDay.style.opacity = 1 - np;
-  lampEl.style.opacity = Math.max(0, (np - 0.35) / 0.65);
   beam.style.opacity = Math.max(0, 1 - np * 1.6) * (1 - warmth(h) * 1.5);
   tint.style.opacity = warmth(h) * 1.2;
-  bagEl.classList.toggle('lit', night);
+  walker.classList.toggle('lit', night);
   Snd.setNight(night);
   renderProps();
-  // the cat does what the hour suits: at dusk a day thing gives way to a night thing, and back
-  if (L.cur && !L.away && !L.busy && !L.cur.react && !!L.cur.night !== night && Date.now() > L.holdUntil) queue(function () { return changeAct(pick()); });
+  // the cat keeps its day: when the hour turns, it goes on to what the next part of the day is for
+  if (L.cur && !L.away && !L.busy && !L.cur.react && !fits(L.cur) && Date.now() > L.holdUntil) queue(function () { return changeAct(pick()); });
   return before;
 }
 
 /* ---- host side ---- */
 function ensureOn() {
   build(); L.on = true; layer.style.display = '';
+  window.addEventListener('resize', function () { stage.style.setProperty('--pan', '0px'); if (L.cur) follow(headOf(L.cur)[0]); });
   tick();
   clearInterval(L.timers.tick); L.timers.tick = setInterval(tick, 30000);
 }
@@ -571,8 +604,8 @@ function sync(view) {
   if (!L.on) {
     ensureOn();
     L.away = !!p.away;
-    if (L.away) { bagEl.classList.add('off'); Sh.hotCat(null); }
-    else { bagEl.classList.remove('off'); showAct(firstPick()); }
+    bagOff(L.away);
+    if (L.away) Sh.hotCat(null); else showAct(firstPick());
     renderProps();
     scheduleNext(); scheduleVisit(); scheduleButterfly();
     setTimeout(greet, 400);
@@ -595,33 +628,24 @@ function pause(on) {
   try { stage.getAnimations({ subtree: true }).forEach(function (a) { if (on) a.pause(); else a.play(); }); } catch (e) { /* older engine: CSS pause still holds */ }
   if (!on) { tick(); L.greeted = false; setTimeout(greet, 600); }
 }
-function holding() { return L.returning || (L.on && L.away && !Sh.away()); }   // home in the state, not yet through the window
+function holding() { return L.returning || (L.on && L.away && !Sh.away()); }   // home in the state, not yet through the door
 function catPoint() { var a = L.cur; if (a) return headOf(a); var w = whereNow(); return [w.x, w.y - 0.08]; }
-function jarPoint() { return center('p_jar'); }
-function jarClink() {
-  if (!jarEl) return;
-  jarEl.classList.remove('clink'); void jarEl.offsetWidth; jarEl.classList.add('clink');
-  setTimeout(renderJar, 200);
-}
+/* a new level: the home has grown (a picture on the wall); the cat comes over glad */
 function levelUp() {
-  if (!jarEl) return;
-  jarEl.classList.remove('burst'); void jarEl.offsetWidth; jarEl.classList.add('burst');
-  var c = center('p_jar');
-  for (var i = 0; i < 8; i++) (function (k) {
-    var s = el('i', 'spark'); s.style.left = pct(c[0]); s.style.top = pct(c[1]); topLayer.appendChild(s);
-    var ang = k / 8 * Math.PI * 2, P = stagePx(), d = P.w * 0.12;
-    anim(s, [{ transform: 'translate(-50%,-50%) scale(.4)', opacity: 1 }, { transform: 'translate(-50%,-50%) translate(' + (Math.cos(ang) * d).toFixed(0) + 'px,' + (Math.sin(ang) * d).toFixed(0) + 'px) scale(1)', opacity: 0 }], { duration: 900, easing: 'ease-out' }).finished.then(function () { s.remove(); }, function () { s.remove(); });
-  })(i);
   Snd.chime();
   if (!L.away) setTimeout(function () { react('greet', 2200).then(function () { hearts(3); }); }, 700);
 }
 
 window.CatLife = { sync: sync, poke: poke, pause: pause, holding: holding, doAct: doAct, react: react, eat: eat, nap: nap, attend: attend, release: release, greet: greet,
-  catPoint: catPoint, jarPoint: jarPoint, jarClink: jarClink, levelUp: levelUp, hearts: hearts,
+  catPoint: catPoint, levelUp: levelUp, hearts: hearts,
   bowlFill: function (k) { bowlFood.src = BASE + 't_' + k + '.webp'; bowlFood.classList.add('on'); bounce(bowlEl); },
   bowlWiggle: function () { bounce(bowlEl); },
-  bagBounce: function () { bagEl.classList.remove('swing'); void bagEl.offsetWidth; bagEl.classList.add('swing'); },
-  prop: function (h) { return L.props[h]; }, propSpot: function (h) { var m = M[K.props[h]]; return m ? [m[0] + m[2] / 2, Math.min(0.88, m[1] + m[3] + 0.02)] : null; },
+  bagBounce: function () { var hs = hookSpot(); puff(hs[0], hs[1]); },
+  prop: function (h) { return L.props[h]; },
+  propSpot: function (h) {
+    var sp = K.spots && K.spots[h]; if (sp) return [sp[0] - sp[2] * 0.6, Math.min(0.88, sp[1] + sp[3] / 2 + 0.03)];
+    var m = M[K.props[h]]; return m ? [m[0] + m[2] / 2, Math.min(0.88, m[1] + m[3] + 0.02)] : null;
+  },
   collect: function () { if (L.gift) L.gift.click(); }, visit: function () { if (!L.visiting) visit(); },
   get away() { return L.away; }, get cur() { return L.cur && L.cur.id; }, get np() { return L.np; }, get busy() { return L.busy; }, get held() { return Date.now() < L.holdUntil; }, get attending() { return !!L.attending; },
   act: function (id) { doAct(id, 15000); } };

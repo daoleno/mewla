@@ -46,7 +46,9 @@ type Words struct {
 	Treat    string              `json:"treat"`
 	Welcome  string              `json:"welcome"`
 	// Away is the note the room leaves while the cat is out: where, and when back.
-	Away   map[string]string `json:"away"`
+	Away map[string]string `json:"away"`
+	// Name is the card that asks the cat's name, and how it signs what it writes.
+	Name   map[string]string `json:"name"`
 	Letter []string          `json:"letter"`
 }
 
