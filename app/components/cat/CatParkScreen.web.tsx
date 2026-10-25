@@ -27,7 +27,7 @@ export function CatParkScreen() {
     const target = frame.current?.contentWindow;
     if (!ready.current || !current || !target) return;
     // The state script's payload is the message itself: same shape as native.
-    const script = catStateScript(current, navigator.language);
+    const script = catStateScript(current);
     const start = script.indexOf("(") + 1;
     const message = JSON.parse(script.slice(start, script.lastIndexOf(");true;")));
     target.postMessage(message, window.location.origin);

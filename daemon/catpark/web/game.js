@@ -9,7 +9,6 @@
 
 var $ = function (id) { return document.getElementById(id); };
 var C = window.CAT_CATALOG, K = window.CAT_KIT;
-var LANG = /^zh/i.test(navigator.language || '') ? 'zh' : 'en';
 var SV_ORDER = ['palette', 'bottle', 'book', 'wrench', 'lantern', 'pot', 'telescope', 'bell', 'teapot', 'stamp', 'compass', 'pinecone'];
 var SLOTS = [[30, 63], [48, 69], [66, 62], [40, 75], [60, 76]];   // yard treat spots on the bed of soil, % of the picture
 var SHELF_X = [16.5, 25, 33.5, 42];
@@ -44,7 +43,7 @@ function receive(msg) {
   if (!msg || msg.cat !== 1) return;
   if (msg.type === 'state' && msg.state) {
     if (msg.tab && !TAB) { TAB = true; renderBack(); }
-    setState(msg.state, msg.locale);
+    setState(msg.state);
   } else if (msg.type === 'focus') {
     // the host's tab is on or off screen: the room sleeps with it, and so do its sounds
     if (window.CatLife) window.CatLife.pause(!msg.on);
@@ -75,17 +74,15 @@ function overlayOpen() { return !!document.querySelector('.ov.on'); }
 function earns(what) { var t = cat().today || {}; return (t[what] || 0) < (CAPS[what] || 0); }
 function count(what) { var c = cat(); c.today = c.today || {}; c.today[what] = (c.today[what] || 0) + 1; }
 
-function words() { return window.CAT_UI[LANG] || window.CAT_UI.en; }
-function cwords() { return C.words[LANG] || C.words.en; }
+function words() { return window.CAT_UI; }
+function cwords() { return C.words; }
 function applyWords() {
   var w = words();
   Object.keys(w).forEach(function (id) { var n = $(id); if (n && id !== 'home') n.setAttribute('aria-label', w[id]); });
-  document.documentElement.lang = LANG;
 }
 applyWords();
 
-function setState(next, locale) {
-  if (locale) { LANG = /^zh/i.test(locale) ? 'zh' : 'en'; applyWords(); }
+function setState(next) {
   var first = known === null, prev = S;
   var fresh = [], freshSv = [];
   if (!first) {
@@ -264,7 +261,7 @@ function postcardEl(card, cls, live) {
   var p = el('div', 'postcard ' + (cls || '') + (home ? ' letter' : ''));
   p.appendChild(window.CatCard.scene(card, live));
   var strip = el('div', 'strip'), line = el('span', 'line');
-  line.textContent = window.CatCard.line(card, LANG);
+  line.textContent = window.CatCard.line(card);
   strip.appendChild(line);
   if (card.treat && !home) strip.appendChild(img(food(card.treat), 'tr'));
   p.appendChild(strip);
@@ -571,7 +568,7 @@ document.addEventListener('visibilitychange', function () { if (!document.hidden
 
 window.CatShell = {
   words: words, cwords: cwords, renderHouse: renderHouse, cat: cat, yard: yard, away: away, postcards: postcards, unseen: unseen,
-  lang: function () { return LANG; }, isNight: isNight, screen: function () { return screen; },
+  isNight: isNight, screen: function () { return screen; },
   onHouse: function () { return screen === 'house' && !overlayOpen() && !document.hidden; },
   overlayOpen: overlayOpen, arriving: function () { return arriving; },
   on: function (name, fn) { (listeners[name] = listeners[name] || []).push(fn); },

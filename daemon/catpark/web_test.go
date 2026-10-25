@@ -63,7 +63,7 @@ func existsIn(t *testing.T, files fs.FS) func(string) {
 	}
 }
 
-// Every id in the catalog has its pictures and its words in both languages,
+// Every id in the catalog has its pictures and its words,
 // so no postcard, prop or line can come out blank.
 func TestCatalogIsWhole(t *testing.T) {
 	files := Bundle()
@@ -129,54 +129,49 @@ func TestCatalogIsWhole(t *testing.T) {
 	for _, food := range world.Foods {
 		exists("a/t_" + food + ".webp")
 	}
-	for _, language := range []string{"zh", "en"} {
-		words, ok := world.Words[language]
-		if !ok {
-			t.Fatalf("no %s words", language)
+	words := world.Words
+	for id, place := range world.Places {
+		if strings.TrimSpace(words.Places[id]) == "" {
+			t.Errorf("place %s has no name", id)
 		}
-		for id, place := range world.Places {
-			if strings.TrimSpace(words.Places[id]) == "" {
-				t.Errorf("%s: place %s has no name", language, id)
+		for _, act := range place.Acts {
+			if len(words.Acts[act]) == 0 {
+				t.Errorf("act %s has no line", act)
 			}
-			for _, act := range place.Acts {
-				if len(words.Acts[act]) == 0 {
-					t.Errorf("%s: act %s has no line", language, act)
-				}
-				for _, line := range words.Acts[act] {
-					if !strings.Contains(line, "{p}") {
-						t.Errorf("%s: %q does not say where", language, line)
-					}
+			for _, line := range words.Acts[act] {
+				if !strings.Contains(line, "{p}") {
+					t.Errorf("%q does not say where", line)
 				}
 			}
 		}
-		for _, friend := range world.Friends {
-			if words.Friends[friend] == "" {
-				t.Errorf("%s: friend %s says nothing", language, friend)
-			}
+	}
+	for _, friend := range world.Friends {
+		if words.Friends[friend] == "" {
+			t.Errorf("friend %s says nothing", friend)
 		}
-		for _, weather := range world.Weathers {
-			if weather != "clear" && words.Weathers[weather] == "" {
-				t.Errorf("%s: weather %s says nothing", language, weather)
-			}
+	}
+	for _, weather := range world.Weathers {
+		if weather != "clear" && words.Weathers[weather] == "" {
+			t.Errorf("weather %s says nothing", weather)
 		}
-		for _, hour := range []string{"dawn", "dusk", "night"} {
-			if words.Times[hour] == "" {
-				t.Errorf("%s: no line for %s", language, hour)
-			}
+	}
+	for _, hour := range []string{"dawn", "dusk", "night"} {
+		if words.Times[hour] == "" {
+			t.Errorf("no line for %s", hour)
 		}
-		for _, food := range world.Foods {
-			if words.Foods[food] == "" {
-				t.Errorf("%s: food %s has no name", language, food)
-			}
+	}
+	for _, food := range world.Foods {
+		if words.Foods[food] == "" {
+			t.Errorf("food %s has no name", food)
 		}
-		for _, hobby := range world.Hobbies {
-			if words.Hobbies[hobby] == "" {
-				t.Errorf("%s: hobby %s has no name", language, hobby)
-			}
+	}
+	for _, hobby := range world.Hobbies {
+		if words.Hobbies[hobby] == "" {
+			t.Errorf("hobby %s has no name", hobby)
 		}
-		if words.Welcome == "" || len(words.Letter) == 0 || !strings.Contains(words.Treat, "{t}") {
-			t.Errorf("%s: the welcome note, letters and treat line must be written", language)
-		}
+	}
+	if words.Welcome == "" || len(words.Letter) == 0 || !strings.Contains(words.Treat, "{t}") {
+		t.Errorf("the welcome note, letters and treat line must be written")
 	}
 }
 
@@ -218,9 +213,9 @@ func TestHouseHasEveryPose(t *testing.T) {
 	}
 }
 
-func TestEveryNameIsSpokenInBothLanguages(t *testing.T) {
+func TestEveryNameIsSpoken(t *testing.T) {
 	files := Bundle()
-	var words map[string]map[string]string
+	var words map[string]string
 	script(t, files, "lines.js", "window.CAT_UI", &words)
 	page, err := fs.ReadFile(files, "index.html")
 	if err != nil {
@@ -231,17 +226,28 @@ func TestEveryNameIsSpokenInBothLanguages(t *testing.T) {
 		t.Fatalf("the page has too few buttons: %d", len(ids))
 	}
 	for _, match := range ids {
-		for _, language := range []string{"zh", "en"} {
-			if strings.TrimSpace(words[language][match[1]]) == "" {
-				t.Errorf("%s has no %s name", match[1], language)
-			}
+		if strings.TrimSpace(words[match[1]]) == "" {
+			t.Errorf("%s has no name", match[1])
 		}
 	}
 	for _, key := range []string{"home", "jar", "bowl", "yarn", "frame", "gift"} {
-		for _, language := range []string{"zh", "en"} {
-			if words[language][key] == "" {
-				t.Errorf("no %s name for %s", language, key)
-			}
+		if words[key] == "" {
+			t.Errorf("no name for %s", key)
+		}
+	}
+}
+
+// The product speaks English only: no other language is left in the page.
+func TestThePageIsEnglishOnly(t *testing.T) {
+	files := Bundle()
+	han := regexp.MustCompile(`\p{Han}`)
+	for _, name := range []string{"index.html", "game.js", "life.js", "guide.js", "card.js", "catalog.js", "lines.js"} {
+		data, err := fs.ReadFile(files, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if han.Match(data) {
+			t.Errorf("%s still has Chinese text", name)
 		}
 	}
 }

@@ -89,11 +89,11 @@ describe("bridge", () => {
       cat: { level: 1, stars: 0, need: 6, hobbies: [], pending: [], mood: "calm", today: {}, learned: {}, gap: 0, visits: 1, memory: [] },
       souvenirs: [{ id: "sv:1", work_id: "1", kind: "trail", item: "pinecone", title: "x" + String.fromCharCode(0x2028) + "</script>');alert(1);//", at: 1 }],
     };
-    const script = catStateScript(view, "zh-CN");
+    const script = catStateScript(view);
     expect(script.startsWith("window.__catHost&&window.__catHost(")).toBe(true);
     expect(script.endsWith(");true;")).toBe(true);
     expect(script.includes(String.fromCharCode(0x2028))).toBe(false);
-    expect(JSON.parse(catStateScript(view, "en", true).slice("window.__catHost&&window.__catHost(".length, -");true;".length)).tab).toBe(true);
+    expect(JSON.parse(catStateScript(view, true).slice("window.__catHost&&window.__catHost(".length, -");true;".length)).tab).toBe(true);
     const literal = script.slice("window.__catHost&&window.__catHost(".length, -");true;".length);
     expect(JSON.parse(literal).state.souvenirs[0].title).toContain("alert(1)");
   });

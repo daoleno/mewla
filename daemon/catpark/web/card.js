@@ -11,7 +11,7 @@ var C = window.CAT_CATALOG, K = window.CAT_KIT;
 function el(tag, cls) { var e = document.createElement(tag); if (cls) e.className = cls; return e; }
 function pic(src, cls) { var i = new Image(); i.src = src; i.alt = ''; i.draggable = false; if (cls) i.className = cls; return i; }
 function pct(v) { return (v * 100).toFixed(2) + '%'; }
-function words(lang) { return C.words[lang] || C.words.en; }
+function words() { return C.words; }
 
 /* the scene: a 3:2 box of layers */
 function scene(card, live) {
@@ -49,8 +49,8 @@ function note(box, card) {
   return box;
 }
 
-function lineFor(card, lang) {
-  var W = words(lang), seed = card.seed >>> 0;
+function lineFor(card) {
+  var W = words(), seed = card.seed >>> 0;
   if (card.phase === 'welcome') return W.welcome;
   if (card.phase === 'letter') {
     var ok = W.letter.filter(function (l) { return (l.indexOf('{t}') < 0 || card.treat) && (l.indexOf('{h}') < 0 || card.hobby); });
@@ -66,7 +66,7 @@ function lineFor(card, lang) {
   if (W.times[card.time]) tails.push(W.times[card.time]);
   if (!tails.length) return first;
   var tail = tails[(seed >>> 8) % tails.length];
-  return first + (lang === 'zh' ? '' : ' ') + tail;
+  return first + ' ' + tail;
 }
 
 window.CatCard = { scene: scene, line: lineFor };

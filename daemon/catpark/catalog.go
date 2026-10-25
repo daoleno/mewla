@@ -21,7 +21,7 @@ type Catalog struct {
 	Rare     []string         `json:"rare"`
 	Friends  []string         `json:"friends"`
 	Weathers []string         `json:"weathers"`
-	Words    map[string]Words `json:"words"`
+	Words    Words            `json:"words"`
 }
 
 // Place is where a postcard happens and what the cat can be doing there.
@@ -34,7 +34,7 @@ type Place struct {
 	Acts   []string  `json:"acts"`
 }
 
-// Words are one language's lines; the daemon only checks they exist.
+// Words are the cat's lines; the daemon only checks they exist.
 type Words struct {
 	Places   map[string]string   `json:"places"`
 	Acts     map[string][]string `json:"acts"`
