@@ -1,8 +1,9 @@
 # The cat's house
 
-Brain's cat has a small house. Tap the house mark at the end of the cat's row
-on the Brain screen and you are there. It needs no setup and has no menus: you
-tap things in the picture, and the one back button leaves.
+Brain's cat has a small house. It is a tab of its own, **Cat**, beside Brain and
+Sessions at the top of the App: tap it and you are there. It needs no setup and
+has no menus: you tap things in the picture. Swipe to Brain or Sessions, or tap
+their tabs, to leave.
 
 The cat's life is Brain's real Work, nothing invented:
 
@@ -22,6 +23,13 @@ A Work that is cancelled brings the cat home with nothing.
 - **The shelf** opens every souvenir the cat can bring. Tap one to see the Work it came from.
 - **The window** is the yard. A few treats grow each day: pick them up, and tap one in the tray to pack it in the bag before the cat leaves. The treat only changes the postcard's mood. Days you miss cost nothing.
 - **The cat** answers a poke.
+- **The picture frame** on the wall opens the pictures: six ways to draw the same
+  house (crayon, watercolour, gouache, paper cut-out, pixel, clay). Tap one and
+  the whole room, home, away and night, changes in place, so you compare it
+  where you live. The choice is remembered per user on the daemon, so every
+  device shows the same house. The album and the cat's own postcards stay in
+  crayon for now. In the other styles the cat is drawn into the room picture, so
+  its cut-out is hidden and the poke is a small nudge of the room.
 
 ## Postcards
 
@@ -50,7 +58,7 @@ directory) and derives it from Brain's snapshots and the Work record. Every
 postcard and souvenir is keyed by Work and written to disk before it is
 announced, so a restart repeats nothing. App and web UI show the same state
 because both read it from the daemon over the connection they already have
-(`cat_get`, `cat_state`, `cat_collect`, `cat_pack`, `cat_seen`).
+(`cat_get`, `cat_state`, `cat_collect`, `cat_pack`, `cat_seen`, `cat_style`).
 
 The game is one web page the daemon carries (`/cat/`). The phone cannot open a
 daemon URL in a WebView (its connection is a pinned tunnel on a port that
@@ -61,6 +69,11 @@ can ask the app only for the few actions above. After the first visit it opens
 offline with the last state it knew. The web UI frames the same page from
 `/cat/`: the web UI's content security policy allows `frame-src 'self'`, and
 only `/cat/` allows being framed, by the web UI itself.
+
+The state also carries the chosen `style`; an unknown name is ignored and a
+state saved before styles existed reads as crayon. The pictures are generated
+art kept in the page's `a/` folder, one folder per style under `a/s/`, and a
+test fails if a style lacks home, away, night or its card.
 
 The handwritten line uses a subset of LXGW WenKai (SIL OFL 1.1); its notice is in the
 repository's third-party assets list.
