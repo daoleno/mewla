@@ -12,7 +12,6 @@ import { Typography, useAppColors } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
 import { useBrain } from "../../store/brain";
-import { useCatLabs } from "../../store/catLabs";
 import { brainNeedsYou, sessionsNeedYou } from "./primarySessionsAttention";
 import {
   beginInteraction,
@@ -27,8 +26,7 @@ import {
   reconcilePrimarySwitchPending,
 } from "./primarySwitchSelection";
 
-// Two tabs breathe wider; the Labs cat makes three.
-const SWITCH_OPTION_WIDTH = { two: 92, three: 84 } as const;
+const SWITCH_OPTION_WIDTH = 92;
 /** The selected tab's ink underline. */
 const SWITCH_UNDERLINE_WIDTH = 28;
 const SWITCH_TRACK_PADDING = 3;
@@ -146,7 +144,6 @@ export function PrimaryTopSwitch({
   const position = pagerPosition ?? fallbackPosition;
   const brainSelected = activeRoute === "brain";
   const listSelected = activeRoute === "list";
-  const catSelected = activeRoute === "cat";
   const pendingRouteRef = useRef<PrimaryRouteName | null>(null);
   const pendingTraceRef = useRef<PendingSwitchTrace | null>(null);
   const outerFrameRef = useRef<number | null>(null);
@@ -159,16 +156,12 @@ export function PrimaryTopSwitch({
     fallbackPosition.setValue(primaryRoutePagerIndex(activeRoute));
   }, [activeRoute, fallbackPosition, pagerPosition]);
 
-  // Off in Labs, the cat has no page: the pager holds Brain and Sessions only.
-  const { enabled: catOn } = useCatLabs();
-  const optionWidth = catOn ? SWITCH_OPTION_WIDTH.three : SWITCH_OPTION_WIDTH.two;
-  const pages = catOn ? [0, 1, 2] : [0, 1];
+  const optionWidth = SWITCH_OPTION_WIDTH;
   const along = (values: number[]) =>
-    position.interpolate({ inputRange: pages, outputRange: values.slice(0, pages.length), extrapolate: "clamp" });
-  const indicatorTranslateX = along([0, optionWidth, optionWidth * 2]);
-  const brainActiveOpacity = along([1, 0, 0]);
-  const listActiveOpacity = along([0, 1, 0]);
-  const catActiveOpacity = along([0, 0, 1]);
+    position.interpolate({ inputRange: [0, 1], outputRange: values, extrapolate: "clamp" });
+  const indicatorTranslateX = along([0, optionWidth]);
+  const brainActiveOpacity = along([1, 0]);
+  const listActiveOpacity = along([0, 1]);
 
   const cancelAfterPaintFrames = useCallback(() => {
     if (outerFrameRef.current != null) {
@@ -293,7 +286,7 @@ export function PrimaryTopSwitch({
 
   return (
     <View accessibilityRole="tablist" style={styles.switchRoot}>
-      <View style={[styles.switchTrack, { width: optionWidth * pages.length + SWITCH_TRACK_PADDING * 2 }]}>
+      <View style={[styles.switchTrack, { width: optionWidth * 2 + SWITCH_TRACK_PADDING * 2 }]}>
         <Animated.View
           pointerEvents="none"
           style={[
@@ -345,25 +338,6 @@ export function PrimaryTopSwitch({
             selectRoute("list");
           }}
         />
-        {catOn ? (
-          <PrimarySwitchOption
-            href="/cat"
-            isSelected={catSelected}
-            label="Cat"
-            activeOpacity={catActiveOpacity}
-            inactiveColor={colors.textTertiary}
-            primaryColor={colors.textPrimary}
-            width={optionWidth}
-            onPressIn={() => beginSwitch("cat")}
-            onPress={(event) => {
-              event.preventDefault?.();
-              selectRoute("cat");
-            }}
-            onLongPress={() => {
-              selectRoute("cat");
-            }}
-          />
-        ) : null}
       </View>
     </View>
   );

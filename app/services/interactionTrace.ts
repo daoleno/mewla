@@ -1,4 +1,4 @@
-export type PrimaryRouteName = "brain" | "list" | "cat";
+export type PrimaryRouteName = "brain" | "list";
 export type DrawerTraceSource =
   | "back"
   | "close-button"

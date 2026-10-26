@@ -20,7 +20,7 @@ import {
   useWorkerDispatch,
 } from "../store/workers";
 import { BrainProvider, useBrainDispatch } from "../store/brain";
-import { CatLabsProvider } from "../store/catLabs";
+import { removeCatGameData } from "../services/catGameCleanup";
 import { WorkProvider, useWorkDispatch } from "../store/work";
 import { CalendarProvider, useCalendarDispatch } from "../store/calendar";
 import {
@@ -150,6 +150,9 @@ function LiveAppRuntime() {
     setDestination(next);
   }, []);
   const handleLaunched = useCallback(() => setLaunched(true), []);
+  useEffect(() => {
+    void removeCatGameData();
+  }, []);
 
   return (
     <>
@@ -746,25 +749,23 @@ export default function RootLayout() {
         <KeyboardProvider>
           <WorkerProvider>
             <CurrentServerProvider>
-              <CatLabsProvider>
-                <CurrentSessionProvider>
-                  <BrainProvider>
-                    <WorkProvider>
-                      <CalendarProvider>
-                        <SafeAreaProvider>
-                          <ToastProvider>
-                            <ThemedStatusBar />
-                            <MermaidEngineHost />
-                            <AppRuntime />
-                            <LiveSurfaceBridge />
-                            <AlertHost />
-                          </ToastProvider>
-                        </SafeAreaProvider>
-                      </CalendarProvider>
-                    </WorkProvider>
-                  </BrainProvider>
-                </CurrentSessionProvider>
-              </CatLabsProvider>
+              <CurrentSessionProvider>
+                <BrainProvider>
+                  <WorkProvider>
+                    <CalendarProvider>
+                      <SafeAreaProvider>
+                        <ToastProvider>
+                          <ThemedStatusBar />
+                          <MermaidEngineHost />
+                          <AppRuntime />
+                          <LiveSurfaceBridge />
+                          <AlertHost />
+                        </ToastProvider>
+                      </SafeAreaProvider>
+                    </CalendarProvider>
+                  </WorkProvider>
+                </BrainProvider>
+              </CurrentSessionProvider>
             </CurrentServerProvider>
           </WorkerProvider>
         </KeyboardProvider>
