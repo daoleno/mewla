@@ -29,14 +29,13 @@ export default function PluginServiceScreen() {
   const github = plugin.id === "github" ? () => void flow.useServerGitHub() : undefined;
   // A form brings its details; only a custom service's own sign-in opens a browser.
   const submit = (input: NonNullable<ConnectionRequest["input"]>, signIn = false) => flow.connect(plugin.id, { input, signIn });
-  // Hyperliquid reads with no setup; its one form is the API wallet key that lets Brain trade.
+  // Hyperliquid's reading is its account above; the form below is the optional API wallet key for trading.
   const trading = plugin.id === "hyperliquid";
   const form = trading
-    ? <HyperliquidForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />
+    ? <HyperliquidForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} defaultOpen={adding} onConnect={submit} />
     : <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />;
   const addAnother = (label: string) => <Button label={label} icon="add" variant="tinted" block onPress={() => setAdding(true)} />;
   const tail = trading
-    // Reading needs no account of its own; only a trading key is added.
     ? accounts.some((account) => account.signer) ? adding ? form : addAnother("Add another key") : form
     : custom
       ? !accounts.length || adding ? form : addAnother(plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service")

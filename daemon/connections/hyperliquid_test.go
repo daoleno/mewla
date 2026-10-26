@@ -245,7 +245,7 @@ func TestHyperliquidReadsNeedNoSetup(t *testing.T) {
 	if len(f.posts) != 0 {
 		t.Fatalf("seeding made requests: %v", f.posts)
 	}
-	if reader.Name != "Hyperliquid" || reader.Network != "mainnet" || reader.Address != "" || reader.Status != "connected" || reader.Identity != "Read only" {
+	if reader.Name != "Hyperliquid" || reader.Network != "mainnet" || reader.Address != "" || reader.Status != "connected" || !reader.Enabled || reader.Identity != "Read only" {
 		t.Fatalf("%+v", reader)
 	}
 	for _, tool := range reader.Tools {
@@ -278,10 +278,76 @@ func TestHyperliquidReadsNeedNoSetup(t *testing.T) {
 	if _, err := hlInvoke(t, m, reader.ID, "place_order", `{"coin":"BTC","side":"buy","size":"0.001","price":"50000"}`); err == nil {
 		t.Fatal("the reader placed an order")
 	}
-	// Disconnecting the reader itself sticks.
-	mustHandle(t, m, Request{Action: "disconnect", ID: reader.ID})
+	// Reading is not something to sign out of: the reader refuses to disconnect.
+	if _, err := m.Handle(context.Background(), Request{Action: "disconnect", ID: reader.ID}); err == nil {
+		t.Fatal("the reader disconnected")
+	}
+	if r := m.records[reader.ID]; r.Account.Status != "connected" || !r.Account.Enabled {
+		t.Fatalf("%+v", r.Account)
+	}
+}
+
+// A reader that an earlier version let the person disconnect has nothing but a
+// key form on its page. The daemon brings it back in place, on.
+func TestHyperliquidDisconnectedReaderComesBackOn(t *testing.T) {
+	f := &hlFake{t: t}
+	m := testManager(t, f.transport)
+	id := "11111111-2222-4333-8444-555555555555"
+	m.records[id] = &record{Account: Account{ID: id, Integration: "hyperliquid", Name: "Hyperliquid", Identity: "Mainnet · read only", Network: "mainnet", Enabled: false, Status: "disconnected", History: []Event{}}, Grants: map[string]string{}}
 	if err := m.ensureHyperliquidReader(); err != nil || len(m.records) != 1 {
-		t.Fatalf("a disconnected reader came back: %v %d", err, len(m.records))
+		t.Fatalf("%v %d accounts", err, len(m.records))
+	}
+	reader := hlReader(t, m)
+	if reader.ID != id || !reader.Enabled || reader.Status != "connected" || reader.Identity != "Read only" || len(reader.Tools) == 0 {
+		t.Fatalf("%+v", reader)
+	}
+	for _, tool := range reader.Tools {
+		if tool.Group != "read" || !tool.Allowed {
+			t.Fatalf("%s group=%s allowed=%v", tool.Name, tool.Group, tool.Allowed)
+		}
+	}
+	if _, err := hlInvoke(t, m, id, "get_book", `{"coin":"BTC"}`); err != nil {
+		t.Fatal(err)
+	}
+	// It is kept across restarts of the manager's defaults, and a switched-off reader stays off.
+	mustHandle(t, m, Request{Action: "disable", ID: id})
+	if err := m.ensureHyperliquidReader(); err != nil || m.records[id].Account.Enabled {
+		t.Fatalf("a switched-off reader was turned on: %v", err)
+	}
+}
+
+// The trading key is added and removed without touching reading: the same
+// account, its switch and its read permissions stay as they were.
+func TestHyperliquidKeyIsIndependentOfReading(t *testing.T) {
+	key, _ := hlParseKey(hlTestKey)
+	f := &hlFake{t: t, signer: hlAddress(key), approved: true}
+	m := testManager(t, f.transport)
+	reader := hlReader(t, m)
+	grants := map[string]string{}
+	for name, g := range m.records[reader.ID].Grants {
+		grants[name] = g
+	}
+	acct, err := hlConnect(t, m, hlTestKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.ID != reader.ID || !acct.Enabled {
+		t.Fatalf("%+v", acct)
+	}
+	// Removing the key changes nothing about reading, switched off or on.
+	mustHandle(t, m, Request{Action: "disable", ID: acct.ID})
+	removed := mustHandle(t, m, Request{Action: "remove_key", ID: acct.ID}).Account
+	if removed.ID != reader.ID || removed.Enabled || removed.Status != "connected" || len(m.records) != 1 {
+		t.Fatalf("%+v (%d accounts)", removed, len(m.records))
+	}
+	for name, g := range grants {
+		if m.records[reader.ID].Grants[name] != g {
+			t.Fatalf("read grant %s changed", name)
+		}
+	}
+	// With the key gone the account cannot be disconnected either; reading stays.
+	if _, err := m.Handle(context.Background(), Request{Action: "disconnect", ID: acct.ID}); err == nil {
+		t.Fatal("the mainnet account disconnected")
 	}
 }
 
@@ -307,14 +373,16 @@ func TestHyperliquidReaderIsSeededOnStartAndTradingKeyUpgradesIt(t *testing.T) {
 	if err != nil || out["address"] != hlMaster {
 		t.Fatalf("%v %s", err, mustJSON(out))
 	}
-	// Disconnecting the trading account brings the reader back.
-	mustHandle(t, m, Request{Action: "disconnect", ID: acct.ID})
-	again := hlReader(t, m)
-	if again.ID == acct.ID || again.Address != "" {
-		t.Fatalf("%+v", again)
+	// The key leaves by Remove key, which keeps the account reading; Disconnect is refused.
+	if _, err := m.Handle(context.Background(), Request{Action: "disconnect", ID: acct.ID}); err == nil {
+		t.Fatal("the trading account disconnected")
+	}
+	removed := mustHandle(t, m, Request{Action: "remove_key", ID: acct.ID}).Account
+	if removed.ID != reader.ID || !removed.Enabled || removed.Signer != "" || len(m.records) != 1 {
+		t.Fatalf("%+v", removed)
 	}
 	if _, ok, _ := m.vault.Get("integration:" + acct.ID); ok {
-		t.Fatal("the key survived disconnect")
+		t.Fatal("the key survived remove_key")
 	}
 }
 
