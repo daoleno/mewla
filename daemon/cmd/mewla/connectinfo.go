@@ -225,7 +225,7 @@ type pairingStatus struct {
 
 func pairingStatusFor(stateDir string, devices int) pairingStatus {
 	status := pairingStatus{devices: devices}
-	if config, ok, err := remote.LoadConfig(stateDir); err == nil && ok {
+	if config, ok, err := remote.LoadRemote(stateDir); err == nil && ok {
 		status.remoteURL = config.URL()
 	}
 	return status

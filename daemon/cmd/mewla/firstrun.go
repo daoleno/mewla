@@ -75,7 +75,7 @@ func firstRunPromptAllowed(args []string, stateDir string, interactive bool) boo
 	if _, chosen := loadStartupChoice(stateDir); chosen {
 		return false
 	}
-	if _, signedIn, _ := remote.LoadConfig(stateDir); signedIn {
+	if _, signedIn, _ := remote.LoadRemote(stateDir); signedIn {
 		return false
 	}
 	return true
@@ -148,7 +148,7 @@ func runFirstRunChoice(ctx context.Context, reader *bufio.Reader, w io.Writer, s
 
 // remoteHint is the one line non-interactive starts print while signed out.
 func remoteHint(stateDir string) string {
-	if _, ok, _ := remote.LoadConfig(stateDir); ok {
+	if _, ok, _ := remote.LoadRemote(stateDir); ok {
 		return ""
 	}
 	return "Reach this computer from anywhere: mewla login"
@@ -202,7 +202,7 @@ func applyStartupChoice(cfg *daemonConfig, args []string, stderr io.Writer) erro
 		}
 	} else {
 		if !chosen {
-			if _, signedIn, _ := remote.LoadConfig(stateDir); signedIn {
+			if _, signedIn, _ := remote.LoadRemote(stateDir); signedIn {
 				_ = saveStartupChoice(stateDir, choiceRemote)
 			}
 		}

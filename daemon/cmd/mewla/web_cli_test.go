@@ -57,7 +57,7 @@ func webTestState(t *testing.T, signedIn bool, addresses ...string) string {
 		t.Fatal(err)
 	}
 	if signedIn {
-		if err := remote.SaveConfig(stateDir, remote.Config{ServiceURL: "https://service.example", Machine: remote.Machine{
+		if err := remote.SaveConfig(stateDir, remote.Config{ServiceURL: "https://service.example", RemoteAccess: true, Machine: remote.Machine{
 			MachineID: "mach_1", AccountLogin: "octo", Provider: "github", Hostname: "quiet-otter-1a2b.m.mewla.ai",
 			Label: "quiet-otter-1a2b", RouteID: strings.Repeat("ab", 16), Grant: "grant",
 			GrantExpiresAtMS: time.Now().Add(time.Hour).UnixMilli(),

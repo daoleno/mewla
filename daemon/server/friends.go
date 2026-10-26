@@ -52,9 +52,12 @@ type friendsAction struct {
 }
 
 type friendsStatus struct {
-	// SignedIn is whether this computer is signed in to a Mewla account.
+	// SignedIn is whether this computer is signed in to a Mewla account, which
+	// is all Friends needs. RemoteAccess is separate: it is whether this
+	// computer is also reachable through the relay.
 	SignedIn     bool            `json:"signed_in"`
 	Account      string          `json:"account,omitempty"`
+	RemoteAccess bool            `json:"remote_access"`
 	Enabled      bool            `json:"enabled"`
 	Handle       string          `json:"handle,omitempty"`
 	Me           *friends.Me     `json:"me,omitempty"`
@@ -160,8 +163,8 @@ func (s *Server) writeFriendsStatus(w http.ResponseWriter, ctx context.Context) 
 func (s *Server) friendsStatusNow(ctx context.Context) friendsStatus {
 	local := s.friendsLocal()
 	status := friendsStatus{Drafts: []friends.Draft{}, MaxDrafts: friends.MaxPendingDrafts}
-	if config, ok, _ := remote.LoadConfig(local.StateDir); ok {
-		status.SignedIn, status.Account = true, config.Machine.AccountLogin
+	if config, ok, _ := remote.LoadAccount(local.StateDir); ok {
+		status.SignedIn, status.Account, status.RemoteAccess = true, config.Machine.AccountLogin, config.RemoteAccess
 	}
 	state, enabled := local.Enabled()
 	if !enabled {
@@ -275,10 +278,11 @@ func (s *Server) friendsAction(w http.ResponseWriter, r *http.Request, action fr
 }
 
 // friendsLoginStart begins the same device sign-in `mewla login` does, so the
-// phone can show the code and open the page.
+// phone can show the code and open the page. It signs in to the Mewla account
+// only: remote access stays off until `mewla login` turns it on.
 func (s *Server) friendsLoginStart(w http.ResponseWriter, ctx context.Context, stateDir string) {
 	serviceURL, caPEM := remote.ServiceURL(), ""
-	if current, ok, _ := remote.LoadConfig(stateDir); ok {
+	if current, ok, _ := remote.LoadAccount(stateDir); ok {
 		serviceURL, caPEM = current.ServiceURL, current.ServiceCAPEM
 	}
 	identity, err := link.LoadOrCreateTransportIdentity(stateDir, nil)
@@ -327,7 +331,10 @@ func (s *Server) friendsLoginPoll(w http.ResponseWriter, ctx context.Context, st
 		friendsFail(w, err)
 		return
 	}
-	if err := remote.SaveConfig(stateDir, remote.Config{ServiceURL: login.serviceURL, ServiceCAPEM: login.caPEM, Machine: machine}); err != nil {
+	// A computer that already has remote access keeps it; a new sign-in from
+	// here is the account alone.
+	_, remoteOn, _ := remote.LoadRemote(stateDir)
+	if err := remote.SaveConfig(stateDir, remote.Config{ServiceURL: login.serviceURL, ServiceCAPEM: login.caPEM, RemoteAccess: remoteOn, Machine: machine}); err != nil {
 		friendsFail(w, &localError{fmt.Errorf("save sign-in: %w", err)})
 		return
 	}

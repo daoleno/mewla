@@ -72,8 +72,11 @@ export interface FriendsDraft {
 
 /** What the paired computer says about Friends. */
 export interface FriendsStatus {
+  /** Signed in to a Mewla account, which is all Friends needs. */
   signed_in: boolean;
   account?: string;
+  /** Whether the computer is also reachable through the relay; Friends never turns it on. Computers older than this field omit it. */
+  remote_access?: boolean;
   enabled: boolean;
   handle?: string;
   me?: FriendsMe;

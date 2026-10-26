@@ -20,7 +20,7 @@ import (
 
 // ErrSignedOut means the service no longer knows this computer: it was
 // signed out elsewhere or its account was disabled.
-var ErrSignedOut = errors.New("this computer is no longer signed in to remote access")
+var ErrSignedOut = errors.New("this computer is no longer signed in to its Mewla account")
 
 // ErrLoginPending is returned by PollLogin until the person finishes in the browser.
 var ErrLoginPending = errors.New("sign-in is not finished yet")

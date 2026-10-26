@@ -8,9 +8,12 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +25,8 @@ import (
 
 func testConfig(serviceURL string) Config {
 	return Config{
-		ServiceURL: serviceURL,
+		ServiceURL:   serviceURL,
+		RemoteAccess: true,
 		Machine: Machine{
 			MachineID: "mach_1", AccountLogin: "octo", Hostname: "studio-3f9a2c.mewla.test",
 			Label: "studio-3f9a2c", RouteID: strings.Repeat("ab", 16),
@@ -34,14 +38,14 @@ func testConfig(serviceURL string) Config {
 
 func TestConfigRoundTripAndURL(t *testing.T) {
 	dir := t.TempDir()
-	if _, ok, err := LoadConfig(dir); ok || err != nil {
+	if _, ok, err := LoadRemote(dir); ok || err != nil {
 		t.Fatalf("signed-out load ok=%v err=%v", ok, err)
 	}
 	config := testConfig("https://svc.test")
 	if err := SaveConfig(dir, config); err != nil {
 		t.Fatal(err)
 	}
-	loaded, ok, err := LoadConfig(dir)
+	loaded, ok, err := LoadRemote(dir)
 	if !ok || err != nil || loaded.Machine.Label != "studio-3f9a2c" {
 		t.Fatalf("load = %#v ok=%v err=%v", loaded, ok, err)
 	}
@@ -51,8 +55,79 @@ func TestConfigRoundTripAndURL(t *testing.T) {
 	if err := RemoveSignIn(dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, _ := LoadConfig(dir); ok {
+	if _, ok, _ := LoadRemote(dir); ok {
 		t.Fatal("sign-in survived RemoveSignIn")
+	}
+}
+
+func TestAccountSignInIsNotRemoteAccess(t *testing.T) {
+	dir := t.TempDir()
+	config := testConfig("https://svc.test")
+	config.RemoteAccess = false
+	if err := SaveConfig(dir, config); err != nil {
+		t.Fatal(err)
+	}
+	if account, ok, err := LoadAccount(dir); !ok || err != nil || account.RemoteAccess {
+		t.Fatalf("account = %#v ok=%v err=%v; want a signed-in account with remote access off", account, ok, err)
+	}
+	if _, ok, err := LoadRemote(dir); ok || err != nil {
+		t.Fatalf("a Friends-only sign-in loaded as remote access (ok=%v err=%v)", ok, err)
+	}
+
+	for _, name := range []string{statusFileName, certFileName, acmeKeyFile} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	config.RemoteAccess = true
+	if err := SaveConfig(dir, config); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := LoadRemote(dir); !ok {
+		t.Fatal("remote access did not turn on")
+	}
+	if err := StopRemote(dir); err != nil {
+		t.Fatal(err)
+	}
+	if account, ok, _ := LoadAccount(dir); !ok || account.RemoteAccess || account.Machine.AccountLogin != "octo" {
+		t.Fatalf("StopRemote lost the account: %#v ok=%v", account, ok)
+	}
+	if _, ok, _ := LoadRemote(dir); ok {
+		t.Fatal("remote access stayed on after StopRemote")
+	}
+	for _, name := range []string{statusFileName, certFileName, acmeKeyFile} {
+		if _, err := os.Stat(filepath.Join(dir, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s survived StopRemote (%v)", name, err)
+		}
+	}
+}
+
+// A version 1 file is what `mewla login` wrote before Friends could sign in on
+// its own, so it means remote access is on.
+func TestVersionOneConfigMeansRemoteAccessIsOn(t *testing.T) {
+	dir := t.TempDir()
+	legacy := testConfig("https://svc.test")
+	legacy.Version, legacy.RemoteAccess = 1, false
+	raw, err := json.Marshal(struct {
+		Version    int     `json:"version"`
+		ServiceURL string  `json:"service_url"`
+		Machine    Machine `json:"machine"`
+	}{1, legacy.ServiceURL, legacy.Machine})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ConfigPath(dir), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config, ok, err := LoadRemote(dir)
+	if err != nil || !ok || config.Machine.Label != "studio-3f9a2c" {
+		t.Fatalf("version 1 file: %#v ok=%v err=%v; want remote access on", config, ok, err)
+	}
+	if err := SaveConfig(dir, config); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(ConfigPath(dir)); !strings.Contains(string(raw), `"version": 2`) || !strings.Contains(string(raw), `"remote_access": true`) {
+		t.Fatalf("saved file is not version 2 with remote access on:\n%s", raw)
 	}
 }
 
@@ -131,7 +206,7 @@ func TestGrantSourceRefreshesPastHalfLifeAndSaves(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("service calls = %d, want 1", calls)
 	}
-	saved, _, _ := LoadConfig(dir)
+	saved, _, _ := LoadRemote(dir)
 	if saved.Machine.Grant != fresh.Grant {
 		t.Fatal("refreshed grant was not saved")
 	}

@@ -23,11 +23,12 @@ import (
 const MountPrefix = "/friends"
 
 // ErrSignedOut means this computer is not signed in to a Mewla account, so it
-// has no identity to use Friends with.
-var ErrSignedOut = errors.New("this computer is not signed in to a Mewla account; run mewla login")
+// has no identity to use Friends with. Turning on Friends in the App signs it
+// in without turning on remote access.
+var ErrSignedOut = errors.New("this computer is not signed in to a Mewla account; turn on Friends in the App to sign in")
 
 // Client calls the hosted Friends service as this computer's Mewla account:
-// every request is signed with the machine credential `mewla login` made.
+// every request is signed with the machine credential the account sign-in made.
 type Client struct {
 	// BaseURL includes the mount prefix, for example https://host/friends.
 	BaseURL string
@@ -35,9 +36,10 @@ type Client struct {
 	HTTP    *http.Client
 }
 
-// NewClient builds a client from this computer's remote sign-in.
+// NewClient builds a client from this computer's Mewla account sign-in, which
+// works whether or not remote access is on.
 func NewClient(stateDir string, authManager *auth.Manager) (*Client, error) {
-	config, ok, err := remote.LoadConfig(stateDir)
+	config, ok, err := remote.LoadAccount(stateDir)
 	if err != nil {
 		return nil, err
 	}

@@ -4,11 +4,13 @@ Friends is a Labs feature, off by default: a small public timeline where people'
 
 ## One identity
 
-A Friends person is a Mewla account: the GitHub identity `mewla login` made. There is no Friends sign-in, callback, client secret or phone credential.
+A Friends person is a Mewla account: the GitHub identity a device sign-in made. There is no Friends sign-in, callback, client secret or phone credential.
 
 - The daemon signs Friends requests with its machine credential (`reqsign.AccountScheme`, the same bytes as every account-service request). The service maps the signing key to the account through `account.Store.IdentityForKey`.
 - The phone never talks to Friends. It talks to its paired computer's `/friends` endpoint (device-signed, body-bound like `/agent-use`), and the computer speaks to Friends as its account. So the current computer is the only owner of the state (Product Invariants), and several computers on one account are one person and one agent.
 - If the computer is not signed in to a Mewla account, the Labs toggle starts the same device sign-in `mewla login` does (`login_start` / `login_poll` ops), shows the code and opens the page, then creates the person.
+- **The account is not remote access.** `remote.json` is the account sign-in (service, account, the machine row the service made). Its `remote_access` flag says whether the daemon also connects to the relay, requests the hostname certificate and publishes the address; only `mewla login` sets it. Friends' sign-in writes it off, so a computer reached over Tailscale or a tunnel gets Friends without a public route. Code picks deliberately: `remote.LoadAccount` (Friends, status, login, logout) or `remote.LoadRemote` (runtime, address book, pairing, doctor). A version 1 file is read as remote access on, the one-time compatibility read.
+- What the service needs to verify a Friends request is a daemon key bound to an account: `IdentityForKey` joins `machines` to `accounts`. A machine row carries a hostname label and route id, but they are only rows: nothing is published until the daemon fetches a grant and asks for a certificate, and sign-in itself publishes no DNS (only ACME TXT records do). So the daemon-only split needs no service change. The cost is that `DELETE /v1/machine` (logout's sign-out) would unbind the key, so `mewla logout` keeps the machine while Friends is on, and turning Friends off does not sign the computer out.
 
 ## Pieces
 
@@ -36,7 +38,7 @@ It cannot catch people's names that are not in the vocabulary, clients that neve
 
 ## Running it isolated
 
-An isolated `mewla-account` (`-friends-db`, a dummy `-relay`, `-dev-fake-login`, `-dns-provider challtestsrv`) and one isolated daemon per account (own HOME, `-state-dir`, `TMUX_TMPDIR`, port). `mewla login -service http://127.0.0.1:<port>` signs a daemon in through the fake provider; the daemon's Friends client uses that service URL plus `/friends`. `-dev-fake-login` trusts any claimed login: never use it in production.
+An isolated `mewla-account` (`-friends-db`, a dummy `-relay`, `-dev-fake-login`, `-dns-provider challtestsrv`) and one isolated daemon per account (own HOME, `-state-dir`, `TMUX_TMPDIR`, port). Set `MEWLA_REMOTE_SERVICE_URL=http://127.0.0.1:<port>` on each daemon so the App's Friends sign-in cannot reach production. `mewla login -service http://127.0.0.1:<port>` signs a daemon in through the fake provider; the daemon's Friends client uses that service URL plus `/friends`. `-dev-fake-login` trusts any claimed login: never use it in production.
 
 ## Not built
 

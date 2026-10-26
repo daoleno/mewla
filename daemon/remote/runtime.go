@@ -51,9 +51,10 @@ func LoadStatus(stateDir string) (Status, bool) {
 	return status, true
 }
 
-// Runtime follows remote.json: while it exists this computer stays connected
-// to its relay with a fresh grant and certificate; when it disappears
-// (mewla logout) the connection stops.
+// Runtime follows remote.json: while remote access is on this computer stays
+// connected to its relay with a fresh grant and certificate; when it is turned
+// off or the sign-in disappears (mewla logout) the connection stops. A computer
+// signed in only for Friends never connects.
 type Runtime struct {
 	StateDir    string
 	Auth        *auth.Manager
@@ -78,7 +79,7 @@ func (runtime *Runtime) Run(ctx context.Context) error {
 	ticker := time.NewTicker(configPollInterval)
 	defer ticker.Stop()
 	for {
-		config, ok, err := LoadConfig(runtime.StateDir)
+		config, ok, err := LoadRemote(runtime.StateDir)
 		key := ""
 		if err != nil {
 			runtime.logf("Remote access is off: %v", err)
@@ -269,7 +270,7 @@ func (source *grantSource) Grant(ctx context.Context) (string, error) {
 		return "", err
 	}
 	source.config.Machine = refreshed
-	if current, ok, loadErr := LoadConfig(source.stateDir); loadErr == nil && ok &&
+	if current, ok, loadErr := LoadAccount(source.stateDir); loadErr == nil && ok &&
 		current.Machine.MachineID == refreshed.MachineID {
 		current.Machine = refreshed
 		_ = SaveConfig(source.stateDir, current)
