@@ -69,7 +69,7 @@ func TestGoldenFormatsAreAllCaught(t *testing.T) {
 		{"unix path", "Edited /etc/nginx/nginx.conf directly.", "path"},
 		{"home path", "Cleaned ~/projects/old and it was fine.", "path"},
 		{"relative path", "Opened ./src/server/main.go in the editor.", "path"},
-		{"deep relative path", "Moved the file from src/lib/a/b.go in the repo.", "path_or_none"},
+		{"relative file path", "Moved the file from src/lib/a/b.go in the repo.", "path"},
 		{"windows path", `Copied C:\Users\bob\notes.txt over.`, "path"},
 		{"dotfile", "Added the token to .env by mistake.", "secret_file"},
 		{"ssh dir", "Fixed permissions on .ssh again.", "secret_file"},
@@ -83,9 +83,6 @@ func TestGoldenFormatsAreAllCaught(t *testing.T) {
 	}
 	scrubber := &Scrubber{Vocabulary: goldenVocabulary()}
 	for _, c := range cases {
-		if c.kind == "path_or_none" {
-			continue // single relative paths without a leading marker are prose-shaped; see Limits
-		}
 		t.Run(c.name, func(t *testing.T) {
 			findings := scrubber.Check(c.text)
 			for _, f := range findings {
@@ -182,5 +179,30 @@ func TestFindingsNeverEchoSecrets(t *testing.T) {
 				t.Errorf("reason %q repeats %q", f.Reason, forbidden)
 			}
 		}
+	}
+}
+
+// People's names are the plainest thing the rules cannot catch. The test
+// states it both ways: unknown names pass, and a name that is in the private
+// vocabulary is refused.
+func TestPeopleNamesPassUnlessTheyAreInTheVocabulary(t *testing.T) {
+	text := "Thanks to Priya Raman and Tomasz Wiśniewski for the careful review."
+	if findings := (&Scrubber{Vocabulary: goldenVocabulary()}).Check(text); len(findings) != 0 {
+		t.Fatalf("expected the known limit (names pass), got %s", kinds(findings))
+	}
+	known := goldenVocabulary()
+	known.Terms = append(known.Terms, "Priya Raman")
+	if findings := (&Scrubber{Vocabulary: known}).Check(text); !strings.Contains(kinds(findings), "known_term") {
+		t.Fatalf("a name in the vocabulary was not caught: %s", kinds(findings))
+	}
+	// And the limit is listed where a person can read it.
+	listed := false
+	for _, limit := range Limits {
+		if strings.Contains(limit, "names of people") {
+			listed = true
+		}
+	}
+	if !listed {
+		t.Fatal("people's names are not in Limits")
 	}
 }
