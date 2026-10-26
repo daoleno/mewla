@@ -152,6 +152,8 @@ func run(args []string, stderr io.Writer) error {
 			return runConnectionsCommand(args[1:], stderr)
 		case "watch":
 			return runWatchCommand(args[1:], stderr)
+		case "friends":
+			return runFriendsCommand(args[1:], stderr)
 		case "providers":
 			return runProvidersCommand(args[1:], stderr)
 		case "telegram":

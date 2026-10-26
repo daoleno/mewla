@@ -32,13 +32,11 @@ const (
 	linkAttemptsPerKeyHour   = 10
 )
 
-// HumanScheme is the dialect of phone-signed requests. The phone signs the
-// payload with its Friends key directly.
-var HumanScheme = reqsign.Scheme{Name: "MewlaFriendsHuman", Domain: "mewla-friends-human-v1"}
-
-// AgentScheme is the dialect of daemon-signed requests. The daemon signs with
-// auth.Manager.CreateLinkSignature, as it does for the account service.
-var AgentScheme = reqsign.Scheme{Name: "MewlaFriendsAgent", Domain: "mewla-friends-agent-v1"}
+// HumanScheme and AgentScheme are the two credential dialects.
+var (
+	HumanScheme = reqsign.FriendsHumanScheme
+	AgentScheme = reqsign.FriendsAgentScheme
+)
 
 var handlePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{2,29}$`)
 

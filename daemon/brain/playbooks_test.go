@@ -86,15 +86,15 @@ func TestPlaybookCatalogListsSeedPlaybooks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlaybookCatalog() error = %v", err)
 	}
-	if len(catalog.Playbooks) != 4 {
-		t.Fatalf("catalog playbooks = %d, want 4: %#v", len(catalog.Playbooks), catalog.Playbooks)
+	if len(catalog.Playbooks) != 5 {
+		t.Fatalf("catalog playbooks = %d, want 5: %#v", len(catalog.Playbooks), catalog.Playbooks)
 	}
 
 	byName := map[string]PlaybookEntry{}
 	for _, entry := range catalog.Playbooks {
 		byName[entry.Name] = entry
 	}
-	for _, name := range []string{"delegate-brief", "slice-work", "wayfind"} {
+	for _, name := range []string{"delegate-brief", "slice-work", "wayfind", "friends"} {
 		entry, ok := byName[name]
 		if !ok {
 			t.Fatalf("catalog missing playbook %q: %#v", name, catalog.Playbooks)
@@ -172,10 +172,28 @@ func TestHousekeepingCreatesMissingPlaybooks(t *testing.T) {
 			t.Fatalf("changed paths %v missing %q", report.ChangedPaths, path)
 		}
 	}
-	if len(report.PlaybookPaths) != 4 {
+	if len(report.PlaybookPaths) != 5 {
 		t.Fatalf("playbook paths = %#v", report.PlaybookPaths)
 	}
 	if _, err := os.Stat(store.playbookPath("delegate-brief.md")); err != nil {
 		t.Fatalf("delegate-brief playbook not backfilled: %v", err)
+	}
+}
+
+// Friends is off by default: its playbook must say so first, and must never
+// give the Brain a way to read other people's posts.
+func TestFriendsPlaybookIsGatedAndWriteOnly(t *testing.T) {
+	content := defaultFriendsPlaybook
+	gate := strings.Index(content, "mewla friends status --json")
+	if gate < 0 || gate > strings.Index(content, "## When") {
+		t.Fatal("the playbook does not gate itself on Friends being on before anything else")
+	}
+	for _, want := range []string{"mewla friends draft", "It posts nothing", "untrusted quoted material", "cannot read, like"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("playbook lacks %q", want)
+		}
+	}
+	if len(content) > 3500 {
+		t.Errorf("playbook is %d bytes; keep it lazy-loadable", len(content))
 	}
 }
