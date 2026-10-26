@@ -103,7 +103,9 @@ func (p *FakeProvider) complete(userCode, username string) bool {
 	for _, login := range p.pending {
 		if login.userCode == userCode && !login.done && now.Before(login.expiresAt) {
 			login.done = true
-			login.subject = Subject{ID: username, Login: username}
+			// A development account claims to be a year old, so features that
+			// need an established account can be tried.
+			login.subject = Subject{ID: username, Login: username, CreatedAt: now.Add(-365 * 24 * time.Hour)}
 			return true
 		}
 	}

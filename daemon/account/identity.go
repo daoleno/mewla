@@ -32,6 +32,9 @@ const (
 type Subject struct {
 	ID    string
 	Login string
+	// CreatedAt is when the provider account was made, when the provider says;
+	// zero when unknown.
+	CreatedAt time.Time
 }
 
 // PollResult reports one device authorization poll. SlowDown on a pending

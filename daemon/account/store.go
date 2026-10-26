@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -123,10 +124,73 @@ func OpenStore(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate account database: %w", err)
 	}
+	if err := addColumn(db, "accounts", "provider_created_at", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate account database: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+// addColumn adds a column to an existing table when it is not there yet.
+func addColumn(db *sql.DB, table, column, definition string) error {
+	rows, err := db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
+	_, err = db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + definition)
+	return err
+}
+
+// Identity is a signed-in account as other services on the same host see it.
+type Identity struct {
+	ID    string
+	Login string
+	// ProviderCreatedAt is when the identity provider account was made; zero
+	// when the provider did not say (accounts that signed in earlier).
+	ProviderCreatedAt time.Time
+	// CreatedAt is when this Mewla account was made.
+	CreatedAt time.Time
+	Disabled  bool
+}
+
+// IdentityForKey returns the account a computer's daemon key is signed in
+// to. The bool is false when the key belongs to no machine.
+func (s *Store) IdentityForKey(ctx context.Context, key string) (Identity, bool, error) {
+	var record Identity
+	var disabled, providerCreated, created int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT a.id, a.login, a.disabled, a.provider_created_at, a.created_at
+		 FROM machines m JOIN accounts a ON a.id = m.account_id WHERE m.daemon_public_key = ?`, key,
+	).Scan(&record.ID, &record.Login, &disabled, &providerCreated, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Identity{}, false, nil
+	}
+	if err != nil {
+		return Identity{}, false, err
+	}
+	record.Disabled = disabled != 0
+	if providerCreated > 0 {
+		record.ProviderCreatedAt = time.UnixMilli(providerCreated)
+	}
+	record.CreatedAt = time.UnixMilli(created)
+	return record, true, nil
+}
 
 // SetAccountDisabled bans or unbans an account. A ban takes effect for a
 // running daemon when its current route grant expires (at most the grant TTL).
@@ -493,6 +557,13 @@ type completeLoginParams struct {
 	NewLabel    func(name string) (string, error)
 }
 
+func providerCreatedMS(subject Subject) int64 {
+	if subject.CreatedAt.IsZero() {
+		return 0
+	}
+	return subject.CreatedAt.UnixMilli()
+}
+
 // completeLogin upserts the account, binds the login's daemon key to one
 // machine and marks the login complete, atomically. created reports whether
 // a new machine row was inserted.
@@ -518,12 +589,13 @@ func (s *Store) completeLogin(ctx context.Context, p completeLoginParams) (machi
 		account = accountRecord{ID: id, Provider: p.Provider, Subject: subject, Login: login}
 		if _, err := tx.ExecContext(
 			ctx,
-			`INSERT INTO accounts (id, provider, subject, login, disabled, created_at) VALUES (?, ?, ?, ?, 0, ?)`,
+			`INSERT INTO accounts (id, provider, subject, login, disabled, created_at, provider_created_at) VALUES (?, ?, ?, ?, 0, ?, ?)`,
 			account.ID,
 			account.Provider,
 			account.Subject,
 			account.Login,
 			p.NowMS,
+			providerCreatedMS(p.Subject),
 		); err != nil {
 			return machineRecord{}, accountRecord{}, false, err
 		}
@@ -533,6 +605,11 @@ func (s *Store) completeLogin(ctx context.Context, p completeLoginParams) (machi
 		if account.Login != login {
 			account.Login = login
 			if _, err := tx.ExecContext(ctx, `UPDATE accounts SET login = ? WHERE id = ?`, login, account.ID); err != nil {
+				return machineRecord{}, accountRecord{}, false, err
+			}
+		}
+		if created := providerCreatedMS(p.Subject); created > 0 {
+			if _, err := tx.ExecContext(ctx, `UPDATE accounts SET provider_created_at = ? WHERE id = ?`, created, account.ID); err != nil {
 				return machineRecord{}, accountRecord{}, false, err
 			}
 		}
