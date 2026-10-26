@@ -99,17 +99,31 @@ func (v *Verifier) now() time.Time {
 	return time.Now()
 }
 
-// Authenticate reads the body, verifies the signature and clock window, and
-// spends the nonce. The caller restores the body for its handler.
-func (v *Verifier) Authenticate(w http.ResponseWriter, r *http.Request) (Result, *Rejection) {
+// ReadBody reads a signed request body within MaxSignedBodyBytes.
+func ReadBody(w http.ResponseWriter, r *http.Request) ([]byte, *Rejection) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxSignedBodyBytes))
 	if err != nil {
 		var maxBytes *http.MaxBytesError
 		if errors.As(err, &maxBytes) {
-			return Result{}, &Rejection{http.StatusRequestEntityTooLarge, "request too large"}
+			return nil, &Rejection{http.StatusRequestEntityTooLarge, "request too large"}
 		}
-		return Result{}, &Rejection{http.StatusBadRequest, "unreadable request"}
+		return nil, &Rejection{http.StatusBadRequest, "unreadable request"}
 	}
+	return body, nil
+}
+
+// Authenticate reads the body, verifies the signature and clock window, and
+// spends the nonce. The caller restores the body for its handler.
+func (v *Verifier) Authenticate(w http.ResponseWriter, r *http.Request) (Result, *Rejection) {
+	body, rejection := ReadBody(w, r)
+	if rejection != nil {
+		return Result{}, rejection
+	}
+	return v.AuthenticateBody(r, body)
+}
+
+// AuthenticateBody is Authenticate for a body already read.
+func (v *Verifier) AuthenticateBody(r *http.Request, body []byte) (Result, *Rejection) {
 	key, nonce, ok := v.verify(r, body)
 	if !ok {
 		return Result{}, &Rejection{http.StatusUnauthorized, "unauthorized"}
@@ -122,6 +136,14 @@ func (v *Verifier) Authenticate(w http.ResponseWriter, r *http.Request) (Result,
 		return Result{}, &Rejection{http.StatusUnauthorized, "unauthorized"}
 	}
 	return Result{Key: key, Body: body}, nil
+}
+
+// Valid reports whether r carries a correct, fresh signature of this scheme,
+// without spending the nonce. Callers use it to tell a wrong-credential-class
+// request (403) from a bad one (401).
+func (v *Verifier) Valid(r *http.Request, body []byte) (string, bool) {
+	key, _, ok := v.verify(r, body)
+	return key, ok
 }
 
 func (v *Verifier) verify(r *http.Request, body []byte) (string, string, bool) {
