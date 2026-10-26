@@ -180,7 +180,8 @@ Folder trust follows the same rule. Codex is trusted for a Worker's folder by
 the Worker's own command line, so Mewla leaves your Codex config alone. Claude Code
 has no per-launch way to do that, so for Claude Workers Mewla sets that one
 folder's `hasTrustDialogAccepted` in Claude's own config, which is the key
-Claude itself names for it.
+Claude itself names for it. A Claude Brain host gets the same for the Brain
+workspace, so a first launch on a new machine does not wait at the dialog.
 
 Cursor and Grok can only be hooked through the user's own global
 configuration, and Mewla never writes to it. They stay on the transcript and the
