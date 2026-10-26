@@ -243,7 +243,7 @@ account on it is off.
 ## Disconnect
 
 On the service's page, tap **Disconnect** on the account and confirm on the same
-card. Mewla disables the account first, so later calls fail even if revoking it
+card. (Hyperliquid's mainnet account has none; it is switched off instead.) Mewla disables the account first, so later calls fail even if revoking it
 at the provider needs a retry. Some providers do not support revocation from
 Mewla; in that case also remove Mewla's access in the provider's settings.
 
