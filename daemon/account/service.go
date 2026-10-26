@@ -23,12 +23,12 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/account/dns"
 	"github.com/daoleno/mewla/daemon/clientaddr"
 	"github.com/daoleno/mewla/daemon/linkproto"
+	"github.com/daoleno/mewla/daemon/reqsign"
 )
 
 const (
@@ -88,14 +88,14 @@ type Config struct {
 
 // Service serves the account HTTP API.
 type Service struct {
-	config Config
-	nonces nonceCache
-	acme   rateLimiter
+	config   Config
+	verifier *reqsign.Verifier
+	acme     reqsign.RateLimiter
 	// renames limits address changes per account: every new label costs a
 	// certificate from the domain's shared weekly issuance budget.
-	renames rateLimiter
+	renames reqsign.RateLimiter
 	// loginStarts limits sign-in attempts per client address.
-	loginStarts rateLimiter
+	loginStarts reqsign.RateLimiter
 }
 
 // MachineInfo is the daemon's view of its machine.
@@ -204,10 +204,10 @@ func New(config Config) (*Service, error) {
 	if config.Logf == nil {
 		config.Logf = log.Printf
 	}
-	service := &Service{config: config}
-	service.acme = rateLimiter{limit: config.ACMEOpsPerHour, window: time.Hour}
-	service.renames = rateLimiter{limit: renamesPerDay, window: 24 * time.Hour}
-	service.loginStarts = rateLimiter{limit: loginStartsPerIPHour, window: time.Hour}
+	service := &Service{config: config, verifier: newVerifier(config.Now)}
+	service.acme = reqsign.RateLimiter{Limit: config.ACMEOpsPerHour, Window: time.Hour}
+	service.renames = reqsign.RateLimiter{Limit: renamesPerDay, Window: 24 * time.Hour}
+	service.loginStarts = reqsign.RateLimiter{Limit: loginStartsPerIPHour, Window: time.Hour}
 	return service, nil
 }
 
@@ -241,7 +241,7 @@ func (s *Service) Handler() http.Handler {
 // not. Behind the relay, the address comes from its PROXY header.
 func (s *Service) limitLoginStarts(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.loginStarts.allow("ip:"+clientaddr.Key(clientaddr.IP(r)), s.now()) {
+		if !s.loginStarts.Allow("ip:"+clientaddr.Key(clientaddr.IP(r)), s.now()) {
 			writeError(w, http.StatusTooManyRequests, "too many sign-ins from this address; try again later")
 			return
 		}
@@ -548,7 +548,7 @@ func (s *Service) handleRenameMachine(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.renames.allow(current.AccountID, s.now()) {
+	if !s.renames.Allow(current.AccountID, s.now()) {
 		writeError(w, http.StatusTooManyRequests, "too many renames today; try again tomorrow")
 		return
 	}
@@ -580,7 +580,7 @@ func (s *Service) handleDeleteMachine(w http.ResponseWriter, r *http.Request) {
 		s.internalError(w, "delete machine", err)
 		return
 	}
-	s.acme.forget(machine.ID)
+	s.acme.Forget(machine.ID)
 	s.config.Logf(
 		"account: machine deleted: machine=%s account=%s label=%s",
 		machine.ID,
@@ -608,7 +608,7 @@ func (s *Service) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, machine := range machines {
-		s.acme.forget(machine.ID)
+		s.acme.Forget(machine.ID)
 	}
 	s.config.Logf("account: account deleted: account=%s machines=%d", account.ID, len(machines))
 	w.WriteHeader(http.StatusNoContent)
@@ -637,7 +637,7 @@ func (s *Service) handleACMEChallenge(w http.ResponseWriter, r *http.Request) {
 	if set {
 		operation = "set"
 	}
-	if !s.acme.allow(machine.ID+":"+operation, s.now()) {
+	if !s.acme.Allow(machine.ID+":"+operation, s.now()) {
 		writeError(w, http.StatusTooManyRequests, "rate limited")
 		return
 	}
@@ -843,51 +843,4 @@ func shortKey(key string) string {
 		return key[:12]
 	}
 	return key
-}
-
-// rateLimiter is a per-key sliding window counter.
-type rateLimiter struct {
-	limit  int
-	window time.Duration
-
-	mu     sync.Mutex
-	events map[string][]time.Time
-}
-
-func (l *rateLimiter) allow(key string, now time.Time) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.events == nil {
-		l.events = make(map[string][]time.Time)
-	}
-	cutoff := now.Add(-l.window)
-	kept := l.events[key][:0]
-	for _, at := range l.events[key] {
-		if at.After(cutoff) {
-			kept = append(kept, at)
-		}
-	}
-	if len(kept) >= l.limit {
-		l.events[key] = kept
-		return false
-	}
-	l.events[key] = append(kept, now)
-	if len(l.events) > 4096 {
-		for entry, times := range l.events {
-			if len(times) == 0 || !times[len(times)-1].After(cutoff) {
-				delete(l.events, entry)
-			}
-		}
-	}
-	return true
-}
-
-func (l *rateLimiter) forget(machineID string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	for entry := range l.events {
-		if strings.HasPrefix(entry, machineID+":") {
-			delete(l.events, entry)
-		}
-	}
 }
