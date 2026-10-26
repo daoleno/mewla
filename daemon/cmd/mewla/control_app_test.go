@@ -1943,7 +1943,7 @@ func TestControlAppBrainContextReturnsStructuredContext(t *testing.T) {
 	if context.ThreadID != "thread-main" || len(context.Notes) != 4 || context.Notes[3].Path != "routing.md" || context.Notes[0].Path != "current.md" || context.Notes[0].Bytes == 0 {
 		t.Fatalf("context = %#v", context)
 	}
-	if len(context.Playbooks) != 4 {
+	if len(context.Playbooks) != 5 {
 		t.Fatalf("playbooks = %#v", context.Playbooks)
 	}
 }
@@ -1964,7 +1964,7 @@ func TestControlAppBrainPlaybooksReturnsCatalog(t *testing.T) {
 	if !ok {
 		t.Fatalf("playbooks type = %T", resp.Playbooks)
 	}
-	if len(catalog.Playbooks) != 4 {
+	if len(catalog.Playbooks) != 5 {
 		t.Fatalf("catalog = %#v", catalog)
 	}
 	foundWayfind := false
