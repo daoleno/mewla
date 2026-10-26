@@ -1,6 +1,7 @@
 package watcher
 
 import (
+	"regexp"
 	"strings"
 	"time"
 )
@@ -101,6 +102,19 @@ func isWorkerInputReady(command, content string) bool {
 		return isOpenCodeInputReady(content)
 	}
 	return strings.TrimSpace(content) != ""
+}
+
+// zshNewUserQuitKey is the zsh-newuser-install answer that quits and changes
+// nothing; it never writes ~/.zshrc, and the prompt returns on the next launch.
+const zshNewUserQuitKey = "q"
+
+var zshNewUserQuitRe = regexp.MustCompile(`\(q\)\s+Quit and do nothing`)
+
+// isZshNewUserPrompt reports whether the pane is zsh's first-run wizard, which
+// a login shell without any zsh startup file shows and then waits on, so the
+// launch command behind it never runs.
+func isZshNewUserPrompt(content string) bool {
+	return strings.Contains(content, "zsh-newuser-install") && zshNewUserQuitRe.MatchString(content)
 }
 
 func isCodexStartupReady(content string) bool {

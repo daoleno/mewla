@@ -180,9 +180,31 @@ func resolveTargetIdentityWhenReadyTimeout(
 	commandHint string,
 	timeout time.Duration,
 ) (targetProcessIdentity, bool) {
+	identity, known, _ := resolveTargetIdentityLaunching(resolver, target, commandHint, timeout, nil)
+	return identity, known
+}
+
+// launchShellPromptInterval bounds how often a pane still in its launch shell
+// is inspected for a prompt that would hold the launch.
+const launchShellPromptInterval = 250 * time.Millisecond
+
+// resolveTargetIdentityLaunching is resolveTargetIdentityWhenReadyTimeout that
+// also reports whether the wait ended with the pane still in its transient
+// launch shell. That shell has not reached the provider yet, which makes the
+// outcome a not-ready one rather than an unprovable identity. onLaunchShell,
+// when set, sees each launch-shell observation at most every
+// launchShellPromptInterval so the caller can clear a prompt holding the shell.
+func resolveTargetIdentityLaunching(
+	resolver func(string) (targetProcessIdentity, bool),
+	target string,
+	commandHint string,
+	timeout time.Duration,
+	onLaunchShell func(targetProcessIdentity),
+) (identity targetProcessIdentity, known bool, stillLaunching bool) {
 	deadline := time.Now().Add(timeout)
 	expectedExecutable := commandExecutableBase(strings.TrimSpace(commandHint))
 	var previous targetProcessIdentity
+	var lastLaunchShellCheck time.Time
 	stable := 0
 	for {
 		if identity, ok := resolver(target); ok {
@@ -192,12 +214,18 @@ func resolveTargetIdentityWhenReadyTimeout(
 				isTransientLaunchShell(resolvedExecutable) {
 				previous = targetProcessIdentity{}
 				stable = 0
+				stillLaunching = true
+				if onLaunchShell != nil && time.Since(lastLaunchShellCheck) >= launchShellPromptInterval {
+					lastLaunchShellCheck = time.Now()
+					onLaunchShell(identity)
+				}
 				if !time.Now().Before(deadline) {
-					return targetProcessIdentity{}, false
+					return targetProcessIdentity{}, false, true
 				}
 				time.Sleep(25 * time.Millisecond)
 				continue
 			}
+			stillLaunching = false
 			if identity.equal(previous) {
 				stable++
 			} else {
@@ -205,17 +233,67 @@ func resolveTargetIdentityWhenReadyTimeout(
 				stable = 1
 			}
 			if stable >= 2 {
-				return identity, true
+				return identity, true, false
 			}
 		} else {
+			// A momentary gap (the shell exec'ing the provider) leaves the
+			// pane's launch state as last observed.
 			previous = targetProcessIdentity{}
 			stable = 0
 		}
 		if !time.Now().Before(deadline) {
-			return targetProcessIdentity{}, false
+			return targetProcessIdentity{}, false, stillLaunching
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+}
+
+// resolveLaunchIdentity waits for a newly launched provider's identity. A pane
+// held by a launch-shell prompt (a login shell asking its new-user questions,
+// say) is cleared so the launch can proceed. When the budget ends with the
+// pane still in its launch shell the returned error is the retryable
+// not-ready outcome; the provider never ran, so nothing may be typed into it.
+func (w *Watcher) resolveLaunchIdentity(
+	sessionID, command, receipt string,
+	timeout time.Duration,
+) (targetProcessIdentity, error) {
+	resolver := w.targetForSession
+	dismissed := false
+	identity, known, stillLaunching := resolveTargetIdentityLaunching(
+		resolver, sessionID, command, timeout,
+		func(shell targetProcessIdentity) {
+			if dismissed {
+				return
+			}
+			dismissed = w.dismissLaunchShellPrompt(w.socketPathFor(sessionID), sessionID, shell, resolver)
+		},
+	)
+	if known {
+		return identity, nil
+	}
+	if stillLaunching {
+		return targetProcessIdentity{}, workerInputNotReadyFor(receipt, command)
+	}
+	return targetProcessIdentity{}, definitelyNotSubmitted(receipt, fmt.Errorf("target provider could not be proven"))
+}
+
+// dismissLaunchShellPrompt answers a zsh new-user prompt that holds the launch
+// shell, with the key that quits and changes nothing. It reports whether the
+// key was sent.
+func (w *Watcher) dismissLaunchShellPrompt(
+	socket, sessionID string,
+	shell targetProcessIdentity,
+	resolver func(string) (targetProcessIdentity, bool),
+) bool {
+	_, capturePane, _ := w.pollReaders()
+	content, alive, _ := capturePane(sessionID)
+	if !alive || !isZshNewUserPrompt(content) {
+		return false
+	}
+	if guardTargetIdentity(resolver, sessionID, shell) != nil {
+		return false
+	}
+	return tmuxCommand(socket, "send-keys", "-t", sessionID, zshNewUserQuitKey).Run() == nil
 }
 
 func isTransientLaunchShell(command string) bool {
@@ -3068,9 +3146,8 @@ func (w *Watcher) SendInputWithReceiptWhenReadyResult(
 		return InputResult{Outcome: InputNotSubmitted}, OwnedGeneration{}, err
 	}
 	resolver := w.targetForSession
-	identity, known := resolveTargetIdentityWhenReady(resolver, sessionID, command)
-	if !known {
-		err := definitelyNotSubmitted("", fmt.Errorf("target provider could not be proven"))
+	identity, err := w.resolveLaunchIdentity(sessionID, command, "", inputReadyTimeout(strings.TrimSpace(command)))
+	if err != nil {
 		return InputResult{Outcome: InputNotSubmitted}, OwnedGeneration{}, err
 	}
 	if !w.waitForInputReadyGuarded(
@@ -3185,9 +3262,9 @@ func (w *Watcher) sendInputWhenReadyAttempt(
 	if perAttempt := inputReadyTimeout(command); perAttempt < identityTimeout {
 		identityTimeout = perAttempt
 	}
-	identity, known := resolveTargetIdentityWhenReadyTimeout(resolver, sessionID, command, identityTimeout)
-	if !known {
-		return definitelyNotSubmitted("", fmt.Errorf("target provider could not be proven"))
+	identity, err := w.resolveLaunchIdentity(sessionID, command, "", identityTimeout)
+	if err != nil {
+		return err
 	}
 	command = identity.Command
 	guard := func() error {
@@ -3264,10 +3341,9 @@ func (w *Watcher) submitDelegatedInputWhenReadyAttempt(
 	if perAttempt := inputReadyTimeout(command); perAttempt < identityTimeout {
 		identityTimeout = perAttempt
 	}
-	identity, known := resolveTargetIdentityWhenReadyTimeout(resolver, sessionID, command, identityTimeout)
-	if !known {
-		return InputResult{Outcome: InputNotSubmitted, Receipt: turnID},
-			definitelyNotSubmitted(turnID, fmt.Errorf("target provider could not be proven"))
+	identity, err := w.resolveLaunchIdentity(sessionID, command, turnID, identityTimeout)
+	if err != nil {
+		return InputResult{Outcome: InputNotSubmitted, Receipt: turnID}, err
 	}
 	if !w.waitForInputReadyGuarded(w.socketPathFor(sessionID), sessionID, identity.Command, timeout, func() error {
 		return guardTargetIdentity(resolver, sessionID, identity)
