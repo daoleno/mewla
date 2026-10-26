@@ -479,6 +479,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/computers/invite", s.handleComputersInvite)
 	mux.HandleFunc("/computers", s.handleComputers)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
+	mux.HandleFunc("/friends", s.handleFriends)
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)
 	mux.HandleFunc("/session-file", s.handleSessionFileBinary)
