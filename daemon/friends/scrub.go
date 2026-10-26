@@ -18,6 +18,7 @@ var Limits = []string{
 	"anything private by meaning rather than by form (a plan, a dispute, a diagnosis)",
 	"identifiers written to dodge pattern matching, such as an address spelled out in words",
 	"private terms shorter than four letters and generic words such as app, daemon or work",
+	"directories written as plain words without a leading ./ or / and without a file name (src/lib/a)",
 }
 
 // Finding is one reason a draft was refused.
@@ -201,6 +202,7 @@ var rules = []rule{
 	{kind: "hex", reason: "contains a long hex string (hash or key)", re: regexp.MustCompile(`\b[0-9a-fA-F]{16,}\b`)},
 	{kind: "path", reason: "contains a file path", re: regexp.MustCompile(
 		`(?:^|[\s("'\x60=])(?:~|\.{1,2})?/(?:[^\s/"'\x60)]+/)+[^\s/"'\x60)]*|(?:^|[\s("'\x60=])(?:~|\.{1,2})/[^\s"'\x60)]*|(?:^|[\s("'\x60=])/(?:etc|usr|var|home|tmp|opt|mnt|root|Users|proc|dev|srv|bin|sbin|lib|Volumes)\b[^\s]*|\b[A-Za-z]:\\\S+`)},
+	{kind: "path", reason: "contains a file path", re: regexp.MustCompile(`\b[\w.-]+(?:/[\w.-]+)+\.[A-Za-z][A-Za-z0-9]{0,4}\b`)},
 	{kind: "secret_file", reason: "mentions a credentials file", re: regexp.MustCompile(`(?i)(?:^|[\s/])\.(?:env|ssh|aws|npmrc|netrc|gnupg)\b|\bid_(?:rsa|ed25519|ecdsa)\b|\bcredentials\.json\b`)},
 	{kind: "mention", reason: "contains an @mention", re: regexp.MustCompile(`(?:^|[^\w@.])@[A-Za-z0-9_][\w-]*`)},
 }

@@ -23,6 +23,9 @@ func TestCollectVocabularyReadsOnlyNamesAndCatchesThem(t *testing.T) {
 	write(t, filepath.Join(state, "work", "krakenfarm", "x"), "")
 	write(t, filepath.Join(projects, "nightowl-api", ".git", "config"),
 		"[remote \"origin\"]\n\turl = git@github.com:hollowtree-labs/nightowl-api.git\n")
+	// A project Watch knows about outside every usual root.
+	write(t, filepath.Join(state, "watch", "projects.json"),
+		`[{"id":"p1","name":"Quartz Lantern","root":"/elsewhere/deep/saffron-rig","remotes":[{"name":"origin","url":"https://github.com/mossbank-co/saffron-rig.git"}],"github":{"owner":"mossbank-co","repo":"saffron-rig"}}]`)
 	write(t, filepath.Join(state, "integrations.json"),
 		`{"a":{"account":{"name":"Hollowtree Linear","identity":"wren-example"},"grants":{"x":"y"}}}`)
 	write(t, filepath.Join(state, "computers", "computers.json"),
@@ -34,7 +37,7 @@ func TestCollectVocabularyReadsOnlyNamesAndCatchesThem(t *testing.T) {
 		StateDir: state, HomeDir: filepath.Join(root, "luna-home"), ProjectRoots: []string{projects},
 		Hostname: func() (string, error) { return "orchard-9.example.test", nil }, Owner: "wren-example",
 	})
-	for _, want := range []string{"krakenfarm", "nightowl-api", "hollowtree-labs", "Hollowtree Linear", "Studio Rack", "rack7", "orchard-9", "luna-home", "tailnet-xyz"} {
+	for _, want := range []string{"krakenfarm", "nightowl-api", "hollowtree-labs", "Hollowtree Linear", "Studio Rack", "rack7", "orchard-9", "luna-home", "tailnet-xyz", "Quartz Lantern", "saffron-rig", "mossbank-co"} {
 		found := false
 		for _, term := range v.Terms {
 			if term == want {
@@ -54,6 +57,7 @@ func TestCollectVocabularyReadsOnlyNamesAndCatchesThem(t *testing.T) {
 	for _, text := range []string{
 		"Moved krakenfarm to the new box.", "Fixed nightowl API tests.", "Synced Studio Rack.",
 		"hollowtree labs wanted it Friday.", "ssh to orchard 9 failed.",
+		"Rebuilt saffron rig overnight.", "mossbank co asked for a demo.", "Quartz Lantern shipped.",
 	} {
 		if len(scrubber.Check(text)) == 0 {
 			t.Errorf("not caught: %q", text)

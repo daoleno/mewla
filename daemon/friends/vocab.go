@@ -77,6 +77,34 @@ func CollectVocabulary(m Machine) *Vocabulary {
 		}
 	}
 
+	// Watch knows every project directory this computer has worked in,
+	// wherever it lives, with its remotes and GitHub owner and repository.
+	var projects []struct {
+		Name    string `json:"name"`
+		Root    string `json:"root"`
+		Remotes []struct {
+			URL string `json:"url"`
+		} `json:"remotes"`
+		GitHub *struct {
+			Owner string `json:"owner"`
+			Repo  string `json:"repo"`
+		} `json:"github"`
+	}
+	if readJSON(filepath.Join(m.StateDir, "watch", "projects.json"), &projects) {
+		for _, project := range projects {
+			add(project.Name)
+			if project.Root != "" {
+				add(filepath.Base(project.Root))
+			}
+			for _, remote := range project.Remotes {
+				add(remoteURLNames(remote.URL)...)
+			}
+			if project.GitHub != nil {
+				add(project.GitHub.Owner, project.GitHub.Repo)
+			}
+		}
+	}
+
 	var integrations map[string]struct {
 		Account struct {
 			Name     string `json:"name"`
@@ -152,16 +180,21 @@ func remoteNames(configPath string) []string {
 		if !found {
 			continue
 		}
-		value = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(value), "="))
-		value = strings.TrimSuffix(strings.TrimSuffix(value, "/"), ".git")
-		if i := strings.LastIndexAny(value, "/:"); i >= 0 {
-			repo := value[i+1:]
-			rest := value[:i]
-			names = append(names, repo)
-			if j := strings.LastIndexAny(rest, "/:"); j >= 0 {
-				names = append(names, rest[j+1:])
-			}
-		}
+		names = append(names, remoteURLNames(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(value), "=")))...)
+	}
+	return names
+}
+
+// remoteURLNames returns the repository and owner of a git remote URL.
+func remoteURLNames(value string) []string {
+	value = strings.TrimSuffix(strings.TrimSuffix(strings.TrimSpace(value), "/"), ".git")
+	i := strings.LastIndexAny(value, "/:")
+	if i < 0 {
+		return nil
+	}
+	names := []string{value[i+1:]}
+	if j := strings.LastIndexAny(value[:i], "/:"); j >= 0 {
+		names = append(names, value[:i][j+1:])
 	}
 	return names
 }
