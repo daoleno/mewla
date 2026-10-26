@@ -23,6 +23,7 @@ import { BrainProvider, useBrainDispatch } from "../store/brain";
 import { removeCatGameData } from "../services/catGameCleanup";
 import { WorkProvider, useWorkDispatch } from "../store/work";
 import { CalendarProvider, useCalendarDispatch } from "../store/calendar";
+import { FriendsLabsProvider } from "../store/friendsLabs";
 import {
   CurrentSessionProvider,
 } from "../store/currentSession";
@@ -749,6 +750,7 @@ export default function RootLayout() {
         <KeyboardProvider>
           <WorkerProvider>
             <CurrentServerProvider>
+              <FriendsLabsProvider>
               <CurrentSessionProvider>
                 <BrainProvider>
                   <WorkProvider>
@@ -766,6 +768,7 @@ export default function RootLayout() {
                   </WorkProvider>
                 </BrainProvider>
               </CurrentSessionProvider>
+              </FriendsLabsProvider>
             </CurrentServerProvider>
           </WorkerProvider>
         </KeyboardProvider>
