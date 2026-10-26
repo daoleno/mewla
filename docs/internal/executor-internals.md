@@ -50,10 +50,11 @@ reviews an individual action.
   warning that waits for a keypress. `skipDangerousModePermissionPrompt` in the
   `--settings` JSON suppresses it (checked on a fresh HOME: without the key the
   dialog appears, with it the TUI starts in `bypass permissions on`). Mewla
-  puts the key in the hook file it passes with `--settings` for every Claude it
-  launches (`agentevents/claude`), so Brain host, Workers and scheduled actions
-  all carry it, and in the routed payload above. A command with its own
-  `--settings` is left alone, as it is for the hook file.
+  carries the key in three places: the hook file it passes with `--settings` to
+  every visible Claude (`agentevents/claude`: Workers, scheduled actions); an
+  inline `--settings` on the Brain host command (`HardenClaudeCommand`: the host
+  is a hidden Session, which gets no hook file); and the routed payload above.
+  A command with its own `--settings` is left alone, as it is for the hook file.
 - **Root.** Claude refuses bypass mode for uid 0 unless it runs in a container
   or sandbox (`IS_SANDBOX=1`, Docker, bubblewrap). The daemon is documented as
   not supported as root, and Mewla does not set `IS_SANDBOX`.

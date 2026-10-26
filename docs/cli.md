@@ -74,7 +74,8 @@ mewla worker close -id <session>
 ```
 
 `approvals` and `approve` answer the permission prompts of a Claude or Codex
-Worker that Mewla started and that is not in bypass mode. The answer goes
+Worker that Mewla started. Claude Workers run in bypass mode by default, so
+these are rare: an `ask` rule, organization policy or a mode you chose. The answer goes
 through Claude's own hook or Codex's app-server, so no keys are sent; with no
 answer the agent's own prompt decides. The phone answers the same requests.
 

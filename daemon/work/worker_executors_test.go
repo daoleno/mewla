@@ -16,40 +16,41 @@ func TestHardenClaudeCommandAppendsBypassPermission(t *testing.T) {
 		{
 			name: "plain claude",
 			in:   "claude",
-			want: "claude " + ClaudeBypassPermissionFlag,
+			want: "claude " + ClaudeBypassPermissionFlag + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
 			name: "claude with profile",
 			in:   "claude --profile my-profile",
-			want: "claude --profile my-profile " + ClaudeBypassPermissionFlag,
+			want: "claude --profile my-profile " + ClaudeBypassPermissionFlag + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
 			name: "explicit auto preserved",
 			in:   "claude --permission-mode auto",
-			want: "claude --permission-mode auto",
+			want: "claude --permission-mode auto" + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
 			name: "already authorized dontAsk",
 			in:   "claude --permission-mode dontAsk",
-			want: "claude --permission-mode dontAsk",
+			want: "claude --permission-mode dontAsk" + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
 			name: "already authorized bypassPermissions",
 			in:   "claude --permission-mode bypassPermissions",
-			want: "claude --permission-mode bypassPermissions",
+			want: "claude --permission-mode bypassPermissions" + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
 			name: "absolute path",
 			in:   "/usr/local/bin/claude --profile test",
-			want: "/usr/local/bin/claude --profile test " + ClaudeBypassPermissionFlag,
+			want: "/usr/local/bin/claude --profile test " + ClaudeBypassPermissionFlag + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
 			name: "dangerously-skip-permissions preserved",
 			in:   "claude --dangerously-skip-permissions",
-			want: "claude --dangerously-skip-permissions",
+			want: "claude --dangerously-skip-permissions" + " " + ClaudeSkipBypassWarningSettings,
 		},
-		{"env value containing option unchanged", "env MODE=--permission-mode VALUE=bypassPermissions claude", "env MODE=--permission-mode VALUE=bypassPermissions claude"},
-		{"quoted equals", `claude "--permission-mode=bypassPermissions"`, `claude "--permission-mode=bypassPermissions"`},
+		{"env value containing option unchanged", "env MODE=--permission-mode VALUE=bypassPermissions claude", "env MODE=--permission-mode VALUE=bypassPermissions claude " + ClaudeSkipBypassWarningSettings},
+		{"quoted equals", `claude "--permission-mode=bypassPermissions"`, `claude "--permission-mode=bypassPermissions" ` + ClaudeSkipBypassWarningSettings},
+		{"own settings kept", "claude --settings /my/settings.json", "claude --settings /my/settings.json " + ClaudeBypassPermissionFlag},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

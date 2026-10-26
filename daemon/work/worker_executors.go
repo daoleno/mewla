@@ -38,6 +38,13 @@ const (
 	// explains what still stops a Worker.
 	ClaudeBypassPermissionFlag = "--permission-mode bypassPermissions"
 
+	// ClaudeSkipBypassWarningSettings acknowledges Claude's one-time warning for
+	// bypass mode, which would otherwise wait for a keypress. The Brain host is a
+	// hidden Session and gets no hook file (which carries the same key), so its
+	// command carries the key itself; a routed launch's own --settings payload,
+	// appended later, replaces this one and carries the key too.
+	ClaudeSkipBypassWarningSettings = `--settings '{"skipDangerousModePermissionPrompt":true}'`
+
 	// OpenCodeAutoFlag auto-approves permissions that are not explicitly denied.
 	// Brain-delegated and Calendar OpenCode sessions use this so unattended
 	// turns do not stall on interactive permission prompts.
@@ -55,20 +62,24 @@ var ErrScheduledActionUnattended = errors.New("scheduled_action executor cannot 
 
 // HardenClaudeCommand returns a Claude launch command configured for
 // autonomous execution. When command does not already declare an explicit
-// authorization mode, ClaudeBypassPermissionFlag is appended. Commands that
+// authorization mode, ClaudeBypassPermissionFlag is appended; commands that
 // already include --permission-mode (any value) or --dangerously-skip-permissions
-// are returned unchanged so explicit user-provided authorization configuration
-// is preserved.
+// keep their own choice. A command without its own --settings also gets
+// ClaudeSkipBypassWarningSettings, so a first launch never waits at Claude's
+// bypass-mode warning.
 func HardenClaudeCommand(command string) string {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		command = WorkerProviderClaude
 	}
-	if strings.Contains(command, "--permission-mode") ||
-		strings.Contains(command, "--dangerously-skip-permissions") {
-		return command
+	if !strings.Contains(command, "--permission-mode") &&
+		!strings.Contains(command, "--dangerously-skip-permissions") {
+		command += " " + ClaudeBypassPermissionFlag
 	}
-	return command + " " + ClaudeBypassPermissionFlag
+	if !strings.Contains(command, "--settings") {
+		command += " " + ClaudeSkipBypassWarningSettings
+	}
+	return command
 }
 
 // PrepareDelegatedCommand applies the provider adapter's launch contract for
