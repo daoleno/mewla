@@ -117,7 +117,9 @@ See [Connect and pair](connect-and-pair.md) for each route.
 ## Agents and model providers
 
 Agents run with your user's permissions, and some run without approval prompts.
-That is a choice about your computer, not something Mewla's network layer can
+Claude Code, when Brain or a scheduled action launches it, runs in
+`bypassPermissions` by default: no per-action approval and no classifier. That
+is a choice about your computer, not something Mewla's network layer can
 contain. Read [Permission bypass risks](executors.md#permission-bypass-risks).
 
 Model providers see whatever the agents send them. Mewla reads agent transcripts

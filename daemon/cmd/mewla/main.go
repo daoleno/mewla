@@ -562,7 +562,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
 	agentEvents.gate = permissionGateHooks(w, brainStore, brainService, srv.WorkerApprovalsChanged)
-	w.SetProgressAnnotator(agentEvents.RefusalNote)
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize address book: %w", err)

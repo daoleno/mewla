@@ -141,13 +141,10 @@ type Approval struct {
 	// ConversationID is the conversation that asked. An answer resolves the
 	// request only while the Worker is still in that conversation.
 	ConversationID string
-	Kind           string // command, file_change, permission, question, auto_denied
+	Kind           string // command, file_change, permission, question
 	Tool           string
 	Summary        string
-	// Reason says why the agent is asking: for auto_denied, the rule the Auto
-	// mode classifier named when it refused the action.
-	Reason  string
-	Options []ApprovalOption
+	Options        []ApprovalOption
 }
 
 // ApprovalOption is one answer the agent offers, with the agent's own id.

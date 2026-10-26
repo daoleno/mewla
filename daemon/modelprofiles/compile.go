@@ -212,7 +212,7 @@ func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRou
 	// The CLI --settings payload is Mewla's per-Session default: it carries the
 	// loopback route env (only when the Provider does not use the user's native
 	// credentials) plus the starting Claude Code permission mode. Mewla defaults
-	// routed sessions to Auto. An explicit --permission-mode or
+	// routed sessions to bypassPermissions. An explicit --permission-mode or
 	// --dangerously-skip-permissions flag on the base command still outranks a
 	// settings file, so explicit authorization choices are preserved. The
 	// --settings env outranks the machine-level gateway projection in the
@@ -224,8 +224,9 @@ func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRou
 		settingsEnv = env
 	}
 	settings, err := json.Marshal(ClaudeLaunchSettings{
-		Env:         settingsEnv,
-		Permissions: ClaudeLaunchPermissions{DefaultMode: ClaudeDefaultPermissionMode},
+		Env:                               settingsEnv,
+		Permissions:                       ClaudeLaunchPermissions{DefaultMode: ClaudeDefaultPermissionMode},
+		SkipDangerousModePermissionPrompt: true,
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("%w: encode Claude route settings: %v", ErrInvalid, err)
@@ -236,16 +237,19 @@ func compileClaude(baseCommand, clientModel string, profile Profile, loopbackRou
 
 // ClaudeDefaultPermissionMode is the starting Claude Code permission mode Mewla
 // configures for a routed Session when the launch command does not already
-// choose one. "auto" is the documented value for permissions.defaultMode in a
-// settings file; an explicit --permission-mode/--dangerously-skip-permissions
+// choose one; an explicit --permission-mode/--dangerously-skip-permissions
 // flag still takes precedence.
-const ClaudeDefaultPermissionMode = "auto"
+const ClaudeDefaultPermissionMode = "bypassPermissions"
 
 // ClaudeLaunchSettings is the CLI --settings JSON Mewla passes to Claude Code for
-// a routed Session. It is secret-free and scoped to that Session.
+// a routed Session. It is secret-free and scoped to that Session. Claude keeps
+// only the last --settings on a command line, so this payload carries
+// everything the Session needs, including the acknowledgement of Claude's
+// one-time bypass-mode warning, which would otherwise wait for a keypress.
 type ClaudeLaunchSettings struct {
-	Env         map[string]string       `json:"env,omitempty"`
-	Permissions ClaudeLaunchPermissions `json:"permissions"`
+	Env                               map[string]string       `json:"env,omitempty"`
+	Permissions                       ClaudeLaunchPermissions `json:"permissions"`
+	SkipDangerousModePermissionPrompt bool                    `json:"skipDangerousModePermissionPrompt"`
 }
 
 // ClaudeLaunchPermissions mirrors the permissions block of Claude Code settings.

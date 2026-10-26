@@ -46,20 +46,17 @@ type agentEventService struct {
 	// waiting on an answer does not hold the shutdown (or a hot reload) up.
 	stop <-chan struct{}
 	// mu guards the maps below.
-	mu       sync.Mutex
-	routes   map[string]string        // approval id -> brain or user
-	raised   map[string]bool          // approval id -> Brain was told
-	told     map[string]chan struct{} // approval id -> closed once Brain was told or could not be
-	notes    map[string]string        // approval id -> what the answer relied on
-	grants   map[string]time.Time     // worker + action -> retry allowed until
-	refusals map[string][]*refusal
+	mu     sync.Mutex
+	routes map[string]string        // approval id -> brain or user
+	raised map[string]bool          // approval id -> Brain was told
+	told   map[string]chan struct{} // approval id -> closed once Brain was told or could not be
+	notes  map[string]string        // approval id -> what the answer relied on
 }
 
 func newAgentEventService(hub *agentevents.Hub, workers func() []*classifier.Worker) *agentEventService {
 	return &agentEventService{
 		hub: hub, workers: workers, approvalWait: agentApprovalWait, brainWait: agentBrainWait, now: time.Now,
 		routes: map[string]string{}, raised: map[string]bool{}, told: map[string]chan struct{}{}, notes: map[string]string{},
-		grants: map[string]time.Time{}, refusals: map[string][]*refusal{},
 	}
 }
 
@@ -84,17 +81,8 @@ func (s *agentEventService) handleClaude(ctx context.Context, req control.AgentE
 		// let Claude proceed.
 		return control.Response{OK: true}
 	}
-	switch payload.HookEvent {
-	case "PermissionRequest":
+	if payload.HookEvent == "PermissionRequest" {
 		return s.askPrompt(ctx, workerID, payload)
-	case "PermissionDenied":
-		return s.askDenied(ctx, workerID, payload)
-	case "PreToolUse":
-		return s.grantFor(workerID, payload)
-	case "UserPromptSubmit":
-		s.clearRefusals(workerID)
-	case "PostToolUse":
-		s.markRan(workerID, payload)
 	}
 	now := s.now().UTC()
 	if event, ok := s.rebind(workerID, payload, now); ok {
@@ -302,7 +290,7 @@ func (s *agentEventService) approvals(workerID string, forApp bool) []control.Ap
 			if forApp && route == routeBrain {
 				continue
 			}
-			item := control.Approval{ID: a.ID, WorkerID: id, Kind: a.Kind, Tool: a.Tool, Summary: a.Summary, Reason: a.Reason, Route: route, Options: []control.ApprovalOption{}}
+			item := control.Approval{ID: a.ID, WorkerID: id, Kind: a.Kind, Tool: a.Tool, Summary: a.Summary, Route: route, Options: []control.ApprovalOption{}}
 			for _, o := range a.Options {
 				item.Options = append(item.Options, control.ApprovalOption{ID: o.ID, Label: o.Label, Scope: o.Scope})
 			}
@@ -452,11 +440,7 @@ func (a appApprovals) Pending(workerID string) []server.ApprovalWire {
 	}
 	out := make([]server.ApprovalWire, 0, len(pending))
 	for _, item := range pending {
-		summary := item.Summary
-		if item.Reason != "" {
-			summary += "\n(blocked by Auto mode: " + item.Reason + ")"
-		}
-		wire := server.ApprovalWire{ID: item.ID, Kind: item.Kind, Tool: item.Tool, Summary: summary, Options: []server.ApprovalOptionWire{}}
+		wire := server.ApprovalWire{ID: item.ID, Kind: item.Kind, Tool: item.Tool, Summary: item.Summary, Options: []server.ApprovalOptionWire{}}
 		for _, o := range item.Options {
 			wire.Options = append(wire.Options, server.ApprovalOptionWire{ID: o.ID, Label: o.Label, Scope: o.Scope})
 		}

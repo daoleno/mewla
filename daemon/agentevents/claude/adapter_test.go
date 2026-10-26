@@ -59,13 +59,14 @@ func TestPrepareLaunchGivesAFreshLaunchItsOwnSession(t *testing.T) {
 	}
 }
 
-func TestSettingsJSONRegistersEveryHookAndAllowsPermissionToWait(t *testing.T) {
+func TestSettingsJSONRegistersEveryHookAcknowledgesBypassAndAllowsPermissionToWait(t *testing.T) {
 	raw, err := SettingsJSON(`'/bin/mewla' agent-event claude`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var parsed struct {
-		Hooks map[string][]struct {
+		SkipDangerousModePermissionPrompt bool `json:"skipDangerousModePermissionPrompt"`
+		Hooks                             map[string][]struct {
 			Hooks []struct {
 				Type    string `json:"type"`
 				Command string `json:"command"`
@@ -79,12 +80,18 @@ func TestSettingsJSONRegistersEveryHookAndAllowsPermissionToWait(t *testing.T) {
 	if len(parsed.Hooks) != len(HookEvents) {
 		t.Fatalf("hooks = %v", parsed.Hooks)
 	}
+	if !parsed.SkipDangerousModePermissionPrompt {
+		t.Fatalf("settings do not acknowledge Claude's bypass-mode warning: %s", raw)
+	}
+	if _, ok := parsed.Hooks["PermissionDenied"]; ok {
+		t.Fatal("PermissionDenied only existed for Auto mode's classifier and is not registered")
+	}
 	for _, name := range HookEvents {
 		entry := parsed.Hooks[name][0].Hooks[0]
 		if entry.Type != "command" || !strings.Contains(entry.Command, "agent-event claude") {
 			t.Fatalf("%s = %+v", name, entry)
 		}
-		if (name == "PermissionRequest" || name == "PermissionDenied") != (entry.Timeout == 600) {
+		if (name == "PermissionRequest") != (entry.Timeout == 600) {
 			t.Fatalf("%s timeout = %d", name, entry.Timeout)
 		}
 	}

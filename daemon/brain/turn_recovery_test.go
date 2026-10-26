@@ -272,7 +272,7 @@ func TestAnsweredWorkerBlockResolvesTheReviewAndLeavesNoReconcile(t *testing.T) 
 		}
 		for _, fact := range []watcher.TurnFact{
 			{Kind: "running", SourceID: "r1"},
-			{Kind: "attention", SourceID: "blocked-1", Summary: "Blocked by Auto mode: git push", LeaseSeconds: 900},
+			{Kind: "attention", SourceID: "blocked-1", Summary: "Waiting on a permission prompt: git push", LeaseSeconds: 900},
 		} {
 			fact.SessionID, fact.TurnID, fact.Class, fact.At = "worker", "turn:first", watcher.EvidenceControl, time.Now()
 			if _, err := service.ApplyDelegatedTurnProgress(fact); err != nil {

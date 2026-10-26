@@ -30,7 +30,7 @@ func PermissionExplanation() []string {
 		lines = append(lines,
 			"",
 			"Brain limitation (current runtime):",
-			"  Brain host sessions are hardened in code: Codex bypasses approvals and Claude runs in Auto mode.",
+			"  Brain host sessions are hardened in code: Codex and Claude both run without per-action approval.",
 			"  Safe profile therefore leaves Brain host unconfigured and does not claim a safe Brain mode.",
 			"  Choosing Autonomous with explicit confirmation configures Brain host and accepts that risk.",
 		)

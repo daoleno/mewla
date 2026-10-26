@@ -20,7 +20,7 @@ func TestResolveWorkerCommandAppliesPerLaunchModelAndReasoning(t *testing.T) {
 		absent                     []string
 	}{
 		{"codex", "gpt-6-astra", "high", []string{"codex --model gpt-6-astra -c 'model_reasoning_effort=\"high\"'", CodexFullAuthorizationFlag}, nil},
-		{"claude", "claude-opus-5-5", "high", []string{"claude --model claude-opus-5-5 --effort high", ClaudeAutoPermissionFlag}, []string{"sonnet", "low"}},
+		{"claude", "claude-opus-5-5", "high", []string{"claude --model claude-opus-5-5 --effort high", ClaudeBypassPermissionFlag}, []string{"sonnet", "low"}},
 		{"pi", "opencode-go/deepseek-v4.1-flash", "high", []string{"pi --model opencode-go/deepseek-v4.1-flash --thinking high", "--session /"}, []string{"low"}},
 		{"grok", "grok-5", "", []string{"grok --model grok-5"}, []string{"old"}},
 		{"opencode", "", "", []string{"opencode --auto --session ses_"}, nil},

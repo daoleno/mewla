@@ -243,8 +243,6 @@ type Approval struct {
 	Kind     string `json:"kind,omitempty"`
 	Tool     string `json:"tool,omitempty"`
 	Summary  string `json:"summary,omitempty"`
-	// Reason is why the agent asks; for an Auto-mode refusal, the rule named.
-	Reason string `json:"reason,omitempty"`
 	// Route says who answers now: "brain" first for a delegated Worker's
 	// blocked action, "user" once Brain escalated or did not answer.
 	Route   string           `json:"route,omitempty"`

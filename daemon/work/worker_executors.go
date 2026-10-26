@@ -32,23 +32,11 @@ const (
 	// outside the Codex sandbox).
 	CodexFullAuthorizationFlag = "--dangerously-bypass-approvals-and-sandbox"
 
-	// ClaudeAutoPermissionFlag starts Claude Code in Auto permission mode: a
-	// classifier reviews every non-read-only action and blocks the dangerous
-	// ones (force push, exfiltrating secrets, production deploys), instead of
-	// bypassPermissions, which checks nothing. Every Mewla-launched Claude uses
-	// it by default; docs/internal/executor-internals.md explains the
-	// blocked-action behavior.
-	ClaudeAutoPermissionFlag = "--permission-mode auto"
-
-	// ClaudeBrainApproveAllow lets the Brain host run `mewla worker approve`
-	// without Auto mode's classifier second-guessing it. Approving a delegated
-	// Worker's blocked action looks like lifting a security control to the
-	// classifier (a real Brain run was refused as Data Exfiltration), but it is
-	// the job the user gave Brain: Mewla requires the brief sentence that
-	// authorizes it, records it on the Work, and hands anything the brief does
-	// not cover to the user. A narrow rule survives Auto mode; the second form
-	// covers a Brain that calls the CLI by absolute path.
-	ClaudeBrainApproveAllow = "--allowedTools 'Bash(mewla worker approve *)' 'Bash(*/mewla worker approve *)'"
+	// ClaudeBypassPermissionFlag starts Claude Code in bypassPermissions mode:
+	// no per-action approval. Every Mewla-launched Claude uses it unless the
+	// executor command already chooses a mode; docs/internal/executor-internals.md
+	// explains what still stops a Worker.
+	ClaudeBypassPermissionFlag = "--permission-mode bypassPermissions"
 
 	// OpenCodeAutoFlag auto-approves permissions that are not explicitly denied.
 	// Brain-delegated and Calendar OpenCode sessions use this so unattended
@@ -67,11 +55,10 @@ var ErrScheduledActionUnattended = errors.New("scheduled_action executor cannot 
 
 // HardenClaudeCommand returns a Claude launch command configured for
 // autonomous execution. When command does not already declare an explicit
-// authorization mode, ClaudeAutoPermissionFlag is appended so Brain-host
-// Claude sessions run under the Auto classifier, with ClaudeBrainApproveAllow
-// so Brain can answer a Worker's blocked action. Commands that already include
-// --permission-mode (any value) or --dangerously-skip-permissions are returned
-// unchanged so explicit user-provided authorization configuration is preserved.
+// authorization mode, ClaudeBypassPermissionFlag is appended. Commands that
+// already include --permission-mode (any value) or --dangerously-skip-permissions
+// are returned unchanged so explicit user-provided authorization configuration
+// is preserved.
 func HardenClaudeCommand(command string) string {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -81,7 +68,7 @@ func HardenClaudeCommand(command string) string {
 		strings.Contains(command, "--dangerously-skip-permissions") {
 		return command
 	}
-	return command + " " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow
+	return command + " " + ClaudeBypassPermissionFlag
 }
 
 // PrepareDelegatedCommand applies the provider adapter's launch contract for
@@ -275,7 +262,7 @@ func ScheduledActionCommand(executorID string, executor Executor) (string, error
 		if permissionPresent || skipEnabled {
 			return command, nil
 		}
-		return appendScheduledOptions(executorID, command, options, "--permission-mode", "auto")
+		return appendScheduledOptions(executorID, command, options, "--permission-mode", "bypassPermissions")
 	case WorkerProviderCursor:
 		autoReviewPresent, _ := options.option("", "--auto-review")
 		planPresent, _ := options.option("", "--plan")
