@@ -59,7 +59,7 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 		policy := response.Header().Get("Content-Security-Policy")
 		if !strings.Contains(policy, "connect-src 'self' ws://"+host+" wss://"+host) ||
 			!strings.Contains(policy, "frame-ancestors 'none'") ||
-			!strings.Contains(policy, "frame-src 'self'") {
+			!strings.Contains(policy, "frame-src 'none'") {
 			t.Fatalf("%s: policy = %q", host, policy)
 		}
 	}

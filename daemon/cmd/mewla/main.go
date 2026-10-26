@@ -272,6 +272,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	defer brainOwner.Close()
 
 	stateDir := authManager.StorageDir()
+	// The cat game was removed; its state goes with it, and only here.
+	if err := os.RemoveAll(filepath.Join(stateDir, "catpark")); err != nil {
+		log.Printf("WARN removing the old cat state: %v", err)
+	}
 	// Problem lines also go to a size-rotated file so they outlive the
 	// terminal; Watch reads it as the runtime source.
 	if logWriter, logErr := logfile.Open(logfile.Path(stateDir), logfile.DefaultMaxBytes); logErr != nil {

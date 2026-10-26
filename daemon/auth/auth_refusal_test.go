@@ -49,7 +49,7 @@ func TestVerifyAuthorizationNamesWhyARequestWasRefused(t *testing.T) {
 		{"clock behind", sign(privateKey, "device-1", daemonID, "mewla-probe", now.Add(-time.Hour)), "mewla-probe", ErrUnauthorized, "clock-skew", "-3", ""},
 		{"unknown device", sign(privateKey, "device-9", daemonID, "mewla-probe", now), "mewla-probe", ErrUnknownDevice, "unknown-device", "", ""},
 		{"someone else's key", sign(strangerKey, "device-1", daemonID, "mewla-probe", now), "mewla-probe", ErrUnauthorized, "bad-signature", "", ""},
-		{"signed for another purpose", sign(privateKey, "device-1", daemonID, "mewla-cat", now), "mewla-probe", ErrUnauthorized, "bad-signature", "", ""},
+		{"signed for another purpose", sign(privateKey, "device-1", daemonID, "mewla-other", now), "mewla-probe", ErrUnauthorized, "bad-signature", "", ""},
 		{"computer purpose from a phone", sign(privateKey, "device-1", daemonID, ComputerPurpose, now), ComputerPurpose, ErrUnauthorized, "wrong-purpose", "", ""},
 	}
 	for _, tc := range cases {
