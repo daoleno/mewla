@@ -40,7 +40,6 @@ import { choiceCardMaxHeight, type InterfaceChoicePrompt } from "./claudeChoiceM
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
 import { InterfaceTimelineJumpButton } from "./InterfaceTimelineJumpButton";
-import type { QuickRepliesRow } from "../brain/brainQuickReplies";
 import type { PendingUserMessageAction } from "./pendingUserMessageLifecycle";
 
 export interface InterfaceChatBodyProps {
@@ -139,8 +138,6 @@ export interface InterfaceChatBodyProps {
   onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
   onTerminalActionAnswer(option: TerminalActionPromptOption): Promise<void> | void;
   composerAccessory?: React.ReactNode;
-  /** Brain only: answers to its last message, as a row after that message. */
-  quickReplies?: QuickRepliesRow;
   composerEditBar?: React.ReactNode;
   skillsSheet?: React.ReactNode;
 }
@@ -225,7 +222,6 @@ export function InterfaceChatBody({
   onPendingUserMessageAction,
   onTerminalActionAnswer,
   composerAccessory,
-  quickReplies,
   composerEditBar,
   skillsSheet,
 }: InterfaceChatBodyProps) {
@@ -362,7 +358,6 @@ export function InterfaceChatBody({
           showUnavailableAction={showUnavailableAction}
           emptyTitle={emptyTitle}
           emptyBody={emptyBody}
-          quickReplies={quickReplies}
         />
       )}
     />

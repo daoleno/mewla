@@ -547,7 +547,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 		InputReadyBudget: work.DefaultScheduledInputReadyBudget,
 	}, execs)
 	srv := server.New(authManager, w, pusher, sc, workStore, execs, brainService)
-	controlHandler.notifyBrain = pusher.BrainNotifier(push.KindBrainReply)
 	srv.SetResourceSampler(resourceSampler)
 	w.SetExecutorResolver(execs.IDForCommand)
 	w.SetLaunchAdapter(launchAdapterFor(execs, adapters))
@@ -1179,8 +1178,6 @@ func runBrainCommand(args []string, stderr io.Writer) error {
 		return runBrainUse(args[1:], stderr)
 	case "objective":
 		return runBrainObjective(args[1:], stderr)
-	case "replies":
-		return runBrainReplies(args[1:], stderr)
 	default:
 		return fmt.Errorf("unknown brain command: %s", args[0])
 	}
@@ -1351,7 +1348,7 @@ func printWorkerUsage(w io.Writer) {
 }
 
 func printBrainUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: mewla brain <workspace|context|playbooks|gc|work|objective|replies|executors|use> [flags]")
+	fmt.Fprintln(w, "Usage: mewla brain <workspace|context|playbooks|gc|work|objective|executors|use> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  workspace      Print the Brain workspace path")
@@ -1360,7 +1357,6 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  gc             Reconcile product-owned Brain workspace blocks while preserving user content")
 	fmt.Fprintln(w, "  work           List, create, update, or append an event to durable Active work")
 	fmt.Fprintln(w, "  objective      Show, set, or clear the current chat's objective (the App's goal line)")
-	fmt.Fprintln(w, "  replies        Set tap-to-answer chips under your latest message")
 	fmt.Fprintln(w, "  executors      List configured executors and the Brain host")
 	fmt.Fprintln(w, "  use            Switch the Brain host executor")
 	fmt.Fprintln(w, "")
@@ -2104,63 +2100,6 @@ func runBrainObjective(args []string, stderr io.Writer) error {
 	default:
 		fs.Usage()
 		return fmt.Errorf("unknown objective action: %s", action)
-	}
-	resp, err := callControl(cfg, req)
-	if err != nil {
-		return err
-	}
-	return writeControlResponse(os.Stdout, resp, cfg.json)
-}
-
-// repeatedFlag collects a flag that may be given more than once.
-type repeatedFlag []string
-
-func (f *repeatedFlag) String() string     { return strings.Join(*f, ";") }
-func (f *repeatedFlag) Set(v string) error { *f = append(*f, v); return nil }
-
-func runBrainReplies(args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("mewla brain replies", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	cfg := cliConfig{json: true}
-	var rows repeatedFlag
-	var notify string
-	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
-	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
-	fs.Var(&rows, "row", "one row of chips, separated by | (repeat for more rows)")
-	fs.StringVar(&notify, "push", "", "also push this one line to the phone")
-	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla brain replies [show | set -row \"a|b|c\" [-row ...] [-push \"line\"] | clear] [flags]")
-		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Tap-to-answer chips under your latest message. A tap sends the chip's text as")
-		fmt.Fprintln(stderr, "the user's reply, so word each chip as the answer you want to read back.")
-		fmt.Fprintln(stderr, "Set them after the message they answer; any user message clears them.")
-		fmt.Fprintln(stderr, "")
-		fs.PrintDefaults()
-	}
-	action := "show"
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		action, args = args[0], args[1:]
-	}
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	req := control.Request{Type: "brain_replies"}
-	switch action {
-	case "show":
-	case "set":
-		req.Type = "brain_replies_set"
-		for _, row := range rows {
-			req.QuickReplies = append(req.QuickReplies, strings.Split(row, "|"))
-		}
-		req.Text = notify
-		if len(req.QuickReplies) == 0 {
-			return fmt.Errorf("usage: mewla brain replies set -row \"a|b|c\" [-row ...]")
-		}
-	case "clear":
-		req.Type = "brain_replies_clear"
-	default:
-		fs.Usage()
-		return fmt.Errorf("unknown replies action: %s", action)
 	}
 	resp, err := callControl(cfg, req)
 	if err != nil {

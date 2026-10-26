@@ -132,20 +132,6 @@ mewla brain work update -id <work-id> -status waiting \
   -question "Keep both copies, or the newest edit?" -choice "Keep both" -choice "Newest wins"
 ```
 
-## Quick replies
-
-When Brain asks you something with a short answer, it can add a line of
-tap-to-answer chips after its message. They are small text buttons on one line
-that scrolls sideways, never a second row, and they sit with the message they
-answer. A tap sends the chip's text as if you typed it, so you can always
-answer in your own words instead. The chips go while you are writing (the
-composer has focus or text), once you send anything, when you start a new chat
-or after a day. Brain sets them with `mewla brain replies set -row "Yes|No"`
-after the message they answer (rows flatten into the one line), and can add
-`-push "one line"` to send the question to your phone. Brain offers at most 3,
-only for a real decision, and never for "skip" or "later": not answering
-already means that.
-
 ## Who decides that Work is done
 
 Brain, after it reviews the result, or you. A Worker saying "done", a process

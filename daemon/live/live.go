@@ -28,11 +28,8 @@ const (
 	KindNeedsYou = "needs_you"
 )
 
-// Question kinds say which path answers it.
-const (
-	QuestionWork = "work"
-	QuestionChat = "chat"
-)
+// QuestionWork is the kind of a Work's own question, answered through the Work.
+const QuestionWork = "work"
 
 const (
 	maxWorkers      = 3
@@ -193,8 +190,7 @@ func workTitle(current []brain.CurrentWork, workID string) string {
 }
 
 // questionFor returns how many things wait on the person and the one to show.
-// A Work's own question (structured, answered through the Work) wins over the
-// chat chips; among Work questions the one that has waited the least shows.
+// Among Work questions the one that has waited the least shows.
 func questionFor(snapshot brain.Snapshot) (int, *Question) {
 	count := 0
 	var newest *brain.CurrentWork
@@ -213,10 +209,6 @@ func questionFor(snapshot brain.Snapshot) (int, *Question) {
 			newest, newestAt = item, at
 		}
 	}
-	chat := snapshot.QuickReplies != nil && len(flattenChoices(snapshot.QuickReplies.Rows)) > 0
-	if chat {
-		count++
-	}
 	if newest != nil {
 		full := firstChoices(newest.Choices)
 		since := ""
@@ -232,28 +224,7 @@ func questionFor(snapshot brain.Snapshot) (int, *Question) {
 			full:    full,
 		}
 	}
-	if chat {
-		full := firstChoices(flattenChoices(snapshot.QuickReplies.Rows))
-		return count, &Question{
-			ID:      questionID(QuestionChat, "", snapshot.QuickReplies.At.UTC().Format(time.RFC3339Nano), "", strings.Join(full, "\x00")),
-			Kind:    QuestionChat,
-			Choices: clipAll(full),
-			full:    full,
-		}
-	}
 	return count, nil
-}
-
-func flattenChoices(rows [][]string) []string {
-	var out []string
-	for _, row := range rows {
-		for _, chip := range row {
-			if chip = strings.TrimSpace(chip); chip != "" {
-				out = append(out, chip)
-			}
-		}
-	}
-	return out
 }
 
 func firstChoices(values []string) []string {
