@@ -25,6 +25,7 @@ servers:
       /usr/local/bin/mewla-account
       -addr=:8080
       -db=/var/lib/mewla-account/account.db
+      -friends-db=/var/lib/mewla-account/friends.db
       -grant-key-file=/var/lib/mewla-account/grant-key.pem
       -public-url=https://connect.mewla.ai
       -client-domain=m.mewla.ai
@@ -60,7 +61,8 @@ env:
     - MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY
 
 volumes:
-  # SQLite database and the grant signing key. Back it up (see the runbook).
+  # SQLite databases (accounts, Friends) and the grant signing key. Back it up
+  # (see the runbook).
   - mewla-link-account:/var/lib/mewla-account
   # The relay's self-signed control certificate, uploaded with the relay.
   - /home/ubuntu/mewla-link-relay/run/mewla-link/relay.crt:/run/mewla-link/relay.crt:ro
