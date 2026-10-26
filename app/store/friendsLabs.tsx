@@ -1,172 +1,192 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Linking from "expo-linking";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AppState, Linking } from "react-native";
+import { PET_PACKS, DEFAULT_PET_ID } from "../components/pets/petPacks";
+import { findPetPack } from "../components/pets/petModel";
 import {
-  FRIENDS_SIGN_IN_CANCELLED,
-  finishFriendsSignIn,
-  getComputerFriends,
-  linkComputer,
-  startFriendsSignIn,
-  unlinkComputer,
-  type ComputerFriends,
+  disableFriends,
+  enableFriends,
+  getFriendsStatus,
+  pollComputerSignIn,
+  setAutoPost,
+  startComputerSignIn,
+  type LoginStart,
 } from "../services/friendsAccount";
-import { isFriendsReturnUrl } from "../services/friendsContract";
+import type { FriendsStatus } from "../services/friendsApi";
+import { useThemeContext } from "../theme";
 import { useCurrentServer } from "./currentServer";
 
-const ENABLED_KEY = "mewla.friends.enabled";
-
-export type FriendsLabsPhase = "off" | "working" | "on";
+export type FriendsLabsPhase = "off" | "signing_in" | "working" | "on";
 
 interface FriendsLabsValue {
   phase: FriendsLabsPhase;
-  /** The handle of the signed-in account. */
-  handle: string | null;
-  /** Whether the current computer's Brain is this account's agent. Unknown until read. */
-  linked: boolean | null;
+  /** What the current computer says. Null until it has answered. */
+  status: FriendsStatus | null;
+  /** The code to enter while this computer signs in to its Mewla account. */
+  signIn: LoginStart | null;
   error: string | null;
-  /** The current computer; Friends needs one to link. */
+  /** There is a current computer to turn Friends on for. */
   available: boolean;
-  setEnabled(enabled: boolean): Promise<void>;
-  /** Makes the current computer's Brain the agent, replacing the one before. */
-  useThisComputer(): Promise<void>;
+  enabled: boolean;
+  draftCount: number;
+  unread: number;
+  refresh(): Promise<void>;
+  /** On: signs the computer in first when it is not, then creates the Friends person. */
+  turnOn(): Promise<void>;
+  /** Off: deletes the Friends account and the computer's drafts. Ask first. */
+  turnOff(): Promise<boolean>;
+  setAutoPost(enabled: boolean): Promise<void>;
+  cancelSignIn(): void;
+  openSignInPage(): void;
 }
 
 const FriendsLabsContext = createContext<FriendsLabsValue | null>(null);
 
 /**
- * The Friends switch in Labs. Off by default. Turning it on signs in with
- * GitHub and links the current computer; the current computer is the only one
- * that is ever the agent, so a server switch asks to rebind rather than
- * keeping the old link.
+ * The Friends switch in Labs, and what every Friends screen reads. The
+ * current computer is the only truth: it holds the sign-in, the drafts and
+ * the link to the person, so a server switch drops what was known and reads
+ * the new computer.
  */
 export function FriendsLabsProvider({ children }: { children: ReactNode }) {
   const { currentServer } = useCurrentServer();
-  const [enabled, setEnabledState] = useState(false);
+  const petId = useThemeContext().petId;
+  const [status, setStatus] = useState<FriendsStatus | null>(null);
   const [working, setWorking] = useState(false);
-  const [handle, setHandle] = useState<string | null>(null);
-  const [computer, setComputer] = useState<ComputerFriends | null>(null);
+  const [signIn, setSignIn] = useState<LoginStart | null>(null);
   const [error, setError] = useState<string | null>(null);
   const serverRef = useRef(currentServer);
   serverRef.current = currentServer;
+  const signInToken = useRef(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.getItem(ENABLED_KEY)
-      .then((value) => {
-        if (!cancelled) setEnabledState(value === "1");
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+  const refresh = useCallback(async () => {
+    const server = serverRef.current;
+    if (!server) return;
+    try {
+      const next = await getFriendsStatus(server);
+      if (serverRef.current?.id === server.id) setStatus(next);
+    } catch {
+      // The old status stays: a computer that does not answer is not "off".
+    }
   }, []);
 
-  // Rebind on a server switch: what this computer says is the only truth.
   const serverId = currentServer?.id ?? null;
   useEffect(() => {
-    setComputer(null);
-    if (!enabled || !currentServer) return;
-    let cancelled = false;
-    getComputerFriends(currentServer)
-      .then((status) => {
-        if (cancelled) return;
-        setComputer(status);
-        if (status.handle) setHandle(status.handle);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, serverId]);
+    signInToken.current += 1;
+    setStatus(null);
+    setSignIn(null);
+    setError(null);
+    setWorking(false);
+    if (serverId) void refresh();
+  }, [serverId, refresh]);
 
-  // The return link may arrive on a freshly started app, so it is handled by
-  // whatever hears it, once per ticket, as soon as there is a computer to link.
-  const [returnURL, setReturnURL] = useState<string | null>(null);
-  const handled = useRef(new Set<string>());
   useEffect(() => {
-    const take = (url: string | null) => {
-      if (url && isFriendsReturnUrl(url) && !handled.current.has(url)) setReturnURL(url);
-    };
-    Linking.getInitialURL().then(take).catch(() => undefined);
-    const subscription = Linking.addEventListener("url", ({ url }) => take(url));
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void refresh();
+    });
     return () => subscription.remove();
-  }, []);
-  useEffect(() => {
-    if (!returnURL || !currentServer) return;
-    const url = returnURL;
-    handled.current.add(url);
-    setReturnURL(null);
-    setError(null);
-    setWorking(true);
-    (async () => {
-      try {
-        const me = await finishFriendsSignIn(url);
-        const status = await linkComputer(currentServer);
-        setHandle(me.person.handle);
-        setComputer(status);
-        setEnabledState(true);
-        await AsyncStorage.setItem(ENABLED_KEY, "1").catch(() => undefined);
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : "Friends did not turn on");
-      } finally {
-        setWorking(false);
-      }
-    })();
-  }, [returnURL, currentServer]);
+  }, [refresh]);
 
-  const setEnabled = useCallback(async (next: boolean) => {
+  const createPerson = useCallback(
+    async (server: NonNullable<typeof currentServer>) => {
+      const pack = findPetPack(PET_PACKS, petId, DEFAULT_PET_ID);
+      setStatus(await enableFriends(server, pack.name.en, pack.id));
+    },
+    [petId],
+  );
+
+  const turnOn = useCallback(async () => {
     const server = serverRef.current;
-    setError(null);
-    if (!next) {
-      setEnabledState(false);
-      await AsyncStorage.removeItem(ENABLED_KEY).catch(() => undefined);
-      setComputer(null);
-      if (server) await unlinkComputer(server).catch(() => undefined);
-      return;
-    }
     if (!server) {
       setError("Connect a computer first");
       return;
     }
+    setError(null);
     setWorking(true);
+    const token = ++signInToken.current;
     try {
-      const url = await startFriendsSignIn();
-      if (url) setReturnURL(url);
-      else setError(FRIENDS_SIGN_IN_CANCELLED);
+      const current = await getFriendsStatus(server);
+      setStatus(current);
+      if (!current.signed_in) {
+        const start = await startComputerSignIn(server);
+        setSignIn(start);
+        const interval = Math.max(2, start.interval_seconds || 5) * 1000;
+        for (;;) {
+          await new Promise((resolve) => setTimeout(resolve, interval));
+          if (signInToken.current !== token) return;
+          if (start.expires_at_ms && Date.now() > start.expires_at_ms) throw new Error("The sign-in code expired; try again");
+          if (await pollComputerSignIn(server, start.login_id)) break;
+        }
+        setSignIn(null);
+      }
+      if (signInToken.current !== token) return;
+      await createPerson(server);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Friends did not turn on");
+      if (signInToken.current === token) setError(reason instanceof Error ? reason.message : "Friends did not turn on");
     } finally {
-      // A return link, when there is one, takes the working state back.
-      setWorking(false);
+      if (signInToken.current === token) {
+        setSignIn(null);
+        setWorking(false);
+      }
     }
-  }, []);
+  }, [createPerson]);
 
-  const useThisComputer = useCallback(async () => {
+  const turnOff = useCallback(async () => {
     const server = serverRef.current;
-    if (!server) return;
+    if (!server) return false;
     setError(null);
     setWorking(true);
     try {
-      setComputer(await linkComputer(server));
+      setStatus(await disableFriends(server));
+      return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not link this computer");
+      setError(reason instanceof Error ? reason.message : "Friends did not turn off");
+      return false;
     } finally {
       setWorking(false);
     }
   }, []);
 
+  const changeAutoPost = useCallback(async (enabled: boolean) => {
+    const server = serverRef.current;
+    if (!server) return;
+    setError(null);
+    try {
+      setStatus(await setAutoPost(server, enabled));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not change auto-post");
+    }
+  }, []);
+
+  const cancelSignIn = useCallback(() => {
+    signInToken.current += 1;
+    setSignIn(null);
+    setWorking(false);
+  }, []);
+
+  const openSignInPage = useCallback(() => {
+    const url = signIn?.verification_uri_complete || signIn?.verification_uri;
+    if (url) void Linking.openURL(url).catch(() => undefined);
+  }, [signIn]);
+
+  const enabled = status?.enabled === true;
   const value = useMemo<FriendsLabsValue>(
     () => ({
-      phase: working ? "working" : enabled ? "on" : "off",
-      handle,
-      linked: computer ? computer.linked : null,
+      phase: signIn ? "signing_in" : working ? "working" : enabled ? "on" : "off",
+      status,
+      signIn,
       error,
       available: currentServer !== null,
-      setEnabled,
-      useThisComputer,
+      enabled,
+      draftCount: status?.drafts.length ?? 0,
+      unread: status?.me?.unread ?? 0,
+      refresh,
+      turnOn,
+      turnOff,
+      setAutoPost: changeAutoPost,
+      cancelSignIn,
+      openSignInPage,
     }),
-    [working, enabled, handle, computer, error, currentServer, setEnabled, useThisComputer],
+    [signIn, working, enabled, status, error, currentServer, refresh, turnOn, turnOff, changeAutoPost, cancelSignIn, openSignInPage],
   );
   return <FriendsLabsContext.Provider value={value}>{children}</FriendsLabsContext.Provider>;
 }

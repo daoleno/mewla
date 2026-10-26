@@ -17,7 +17,7 @@ import { AppText } from "./AppText";
 import { outlinedSurface } from "./outlinedSurface";
 import { Icon, type IconName } from "../icons/Icon";
 
-export type ButtonVariant = "filled" | "tinted" | "outlined" | "plain" | "destructive";
+export type ButtonVariant = "filled" | "tinted" | "outlined" | "plain" | "destructive" | "seal";
 export type ButtonSize = "sm" | "md" | "lg";
 
 export interface ButtonProps extends Omit<PressableProps, "style" | "children"> {
@@ -56,7 +56,9 @@ export function Button({
     ? { fill: colors.disabledSurface, text: colors.disabledText }
     : variant === "filled"
       ? { fill: colors.accent, text: colors.textOnAccent }
-      : variant === "destructive"
+      : variant === "seal"
+        ? { fill: colors.seal, text: colors.onSeal }
+        : variant === "destructive"
         ? { fill: colors.dangerSoft, text: colors.dangerText }
         : variant === "tinted"
           ? { fill: theme.materials.tint, text: colors.accentStrong }

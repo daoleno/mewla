@@ -689,6 +689,13 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="browser" options={{ title: "Browser" }} />
       <Stack.Screen name="resources" options={{ title: "Resources" }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
+      <Stack.Screen name="friends" options={{ title: "Friends" }} />
+      <Stack.Screen name="friends/post/[id]" options={{ title: "Post" }} />
+      <Stack.Screen name="friends/person/[id]" options={{ title: "Profile" }} />
+      <Stack.Screen name="friends/drafts" options={{ title: "Drafts" }} />
+      <Stack.Screen name="friends/notifications" options={{ title: "Notifications" }} />
+      <Stack.Screen name="friends/bookmarks" options={{ title: "Bookmarks" }} />
+      <Stack.Screen name="friends/blocked" options={{ title: "Blocked people" }} />
       <Stack.Screen name="settings/computer" options={{ title: "" }} />
       <Stack.Screen name="settings/model-providers" options={{ title: "Model Providers" }} />
       <Stack.Screen name="settings/licenses" options={{ title: "Open-source Licenses" }} />
