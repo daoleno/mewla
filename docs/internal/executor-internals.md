@@ -123,6 +123,10 @@ per-launch way to trust a folder (`--settings` with a `projects` map was tried o
 `projects[<cwd>].hasTrustDialogAccepted = true` (the key Claude's own errors tell
 a person to set), independently of `bypassPermissions`; that is the one write to
 another tool's configuration that remains, and unrelated settings are retained.
+The Claude Brain host is a hidden Session, which the watcher does not prepare, so
+the Brain service makes the same write for the Brain workspace before it creates
+the host (`trustHostWorkspace`; Claude only, and a failed write is logged while the
+host still starts).
 Claude's undocumented `CLAUDE_CODE_SANDBOXED` environment variable also skips the
 dialog but is Anthropic's internal switch for its own hosted sandboxes and widens
 more than trust, so it is deliberately not used. Mewla never answers a Codex trust

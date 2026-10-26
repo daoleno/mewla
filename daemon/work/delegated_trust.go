@@ -20,7 +20,8 @@ var errTrustConfigChanged = errors.New("provider config changed while preparing 
 // PrepareDelegatedWorkspace answers the native folder trust gate for a delegated
 // provider before it starts. Approval bypass does not bypass folder trust. Trust
 // is limited to the actual cwd (and its canonical spelling), never HOME or every
-// ancestor. Manual Sessions do not call this function.
+// ancestor. Manual Sessions do not call this function; the Brain service calls it
+// for a Claude Brain host, which is hidden and so not prepared by the watcher.
 //
 // Codex is told on its own command line and Mewla writes nothing to the user's
 // Codex config. Claude Code has no per-launch way to say it: its own errors name

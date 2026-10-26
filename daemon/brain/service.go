@@ -2790,6 +2790,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	command = prepared.command
 	sessionEnv := prepared.env
 	provisionalID := prepared.provisionalID
+	s.trustHostWorkspace(command, sessionEnv)
 
 	workerID, err := s.watcher.CreateSession("", watcher.CreateSessionOptions{
 		Cwd:         s.brainWorkspace(),
@@ -3810,6 +3811,23 @@ func workerRefFromClassifier(worker *classifier.Worker) WorkerRef {
 		Updated:   worker.UpdatedAt,
 		Hidden:    worker.Hidden,
 		Delegated: worker.Delegated,
+	}
+}
+
+// trustHostWorkspace answers Claude's folder trust dialog for the Brain
+// workspace before the Host starts. The Host is a hidden Session, so the watcher
+// does not prepare its workspace the way it does for a delegated Worker, and a
+// new person's first Host would otherwise stop at the dialog until the daemon
+// reports its input not ready. Only Claude is prepared here: the helper would
+// also rewrite a Codex Host command, which the Host matches and resumes by. A
+// failed write is logged and the Host still starts, as it did before.
+func (s *Service) trustHostWorkspace(command string, env map[string]string) {
+	workspace := s.brainWorkspace()
+	if workspace == "" || work.InferWorkerProvider(command) != work.WorkerProviderClaude {
+		return
+	}
+	if _, err := work.PrepareDelegatedWorkspace(command, workspace, env); err != nil {
+		log.Printf("WARN brain host folder trust: %v", err)
 	}
 }
 
