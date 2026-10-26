@@ -51,6 +51,8 @@ describe("friends presentation", () => {
   test("service codes become sentences", () => {
     expect(friendsErrorMessage("account_too_new")).toContain("30 days");
     expect(friendsErrorMessage("weird_code")).toBe("Friends answered: weird_code");
+    expect(friendsErrorMessage("refused", "It contains an email address")).toBe("It contains an email address");
+    expect(friendsErrorMessage("refused")).toBe("Friends will not post that");
     expect(friendsErrorMessage(undefined)).toBe("Friends did not answer");
   });
 });

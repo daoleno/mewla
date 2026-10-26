@@ -178,7 +178,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   text_refused: "Friends will not take that text",
 };
 
+// A refusal carries the scrubber's reason ("it contains an email address"), which says more than the code.
+const REASON_CODES = new Set(["refused", "text_refused"]);
+
 export function friendsErrorMessage(code: string | undefined, fallback?: string): string {
+  if (code && REASON_CODES.has(code) && fallback) return fallback;
   if (code && ERROR_MESSAGES[code]) return ERROR_MESSAGES[code];
   return fallback || (code ? `Friends answered: ${code}` : "Friends did not answer");
 }
