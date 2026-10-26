@@ -137,7 +137,7 @@ function PrimaryAppBar({
           numberOfLines={1}
           style={[styles.dockedTitle, { color: colors.textPrimary }]}
         >
-          {activePrimaryRoute === "brain" ? "Brain" : activePrimaryRoute === "cat" ? "Cat" : "Sessions"}
+          {activePrimaryRoute === "brain" ? "Brain" : "Sessions"}
         </Text>
       ) : (
       <>

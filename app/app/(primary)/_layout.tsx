@@ -3,7 +3,6 @@ import { Animated, StyleSheet } from "react-native";
 import TopTabs from "expo-router/js-top-tabs";
 import { PrimaryDrawerShell } from "../../components/navigation/PrimaryDrawerShell";
 import { useDesktopWeb } from "../../components/navigation/useDesktopWeb";
-import { useCatLabs } from "../../store/catLabs";
 import {
   PrimaryPagerPositionBridge,
   PrimaryPagerPositionProvider,
@@ -12,7 +11,7 @@ import {
 interface PrimaryTabsLayoutProps {
   children: ReactNode;
   navigation: {
-    navigate(route: "index" | "list" | "cat"): void;
+    navigate(route: "index" | "list"): void;
   };
   state: {
     index: number;
@@ -30,7 +29,7 @@ const renderPrimaryTabsLayout = ({
   state,
 }: PrimaryTabsLayoutProps) => {
   const name = state.routes[state.index]?.name;
-  const activeRoute = name === "list" ? "list" : name === "cat" ? "cat" : "brain";
+  const activeRoute = name === "list" ? "list" : "brain";
   return (
     <PrimaryPagerPositionProvider>
       <PrimaryDrawerShell
@@ -53,8 +52,6 @@ export default function PrimaryLayout() {
   // Desktop web: Brain and Sessions are pages with history, not a pager. No
   // swipe either, so dragging across a chat selects its text.
   const desktopWeb = useDesktopWeb();
-  // The cat is a Labs feature: off, its page is not in the pager at all.
-  const { enabled: catOn } = useCatLabs();
   return (
     <TopTabs
       backBehavior={desktopWeb ? "history" : "none"}
@@ -69,10 +66,6 @@ export default function PrimaryLayout() {
     >
       <TopTabs.Screen name="index" options={{ title: "Brain" }} />
       <TopTabs.Screen name="list" options={{ title: "Sessions" }} />
-      <TopTabs.Protected guard={catOn}>
-        {/* The house loads its bundle and a WebView: only when first opened. */}
-        <TopTabs.Screen name="cat" options={{ title: "Cat", lazy: true }} />
-      </TopTabs.Protected>
     </TopTabs>
   );
 }
