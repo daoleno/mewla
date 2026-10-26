@@ -5,6 +5,7 @@ import {
   accountRecovery,
   accountTone,
   bulkToolNames,
+  canDisconnect,
   connectsWithForm,
   connectSteps,
   enabledRequest,
@@ -229,6 +230,11 @@ describe("hyperliquid accounts", () => {
   test("Hyperliquid has a form, for its trading key", () => {
     expect(connectsWithForm("hyperliquid")).toBe(true);
     expect(connectsWithForm("github")).toBe(false);
+  });
+  test("reading stays: the mainnet account is switched off or loses its key, never disconnected", () => {
+    expect(canDisconnect(account({ integration: "hyperliquid", network: "mainnet" }))).toBe(false);
+    expect(canDisconnect(account({ integration: "hyperliquid", network: "testnet" }))).toBe(true);
+    expect(canDisconnect(account({ integration: "github" }))).toBe(true);
   });
   test("every account names its network", () => {
     expect(networkLabel("mainnet")).toBe("Mainnet");

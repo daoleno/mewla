@@ -12,6 +12,7 @@ import {
   toolUpdates,
   accountTone,
   allowedToolCount,
+  canDisconnect,
   connectsWithForm,
   networkLabel,
   serviceOff,
@@ -463,8 +464,6 @@ export function AccountCard({
   const recovery = accountRecovery(account, plugin.name);
   const tools = allowedToolCount(account);
   const custom = plugin.id === "mcp" || plugin.id === "openapi";
-  // Hyperliquid's keyless reader has nothing to sign out of; its switch turns it off.
-  const keylessReader = plugin.id === "hyperliquid" && !account.address;
   const busy = running !== null;
   const recovering = running === `recover:${account.id}` || recovery?.action === "reconnect" && running === `connect:${plugin.id}` || recovery?.action === "disconnect" && running === `disconnect:${account.id}`;
   const removing = running === `disconnect:${account.id}`;
@@ -544,7 +543,7 @@ export function AccountCard({
             <Button label="Disconnect" variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then((done) => { if (!done) setConfirming(false); })} />
           </View>
         </View>
-      ) : keylessReader ? null : (
+      ) : !canDisconnect(account) ? null : (
         <ListRow icon="remove-circle" title="Disconnect" destructive disabled={busy} onPress={() => setConfirming(true)} />
       )}
     </ListSection>

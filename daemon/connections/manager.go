@@ -286,6 +286,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	case "disable":
 		r.Account.Enabled = false
 	case "disconnect":
+		if r.Account.Integration == "hyperliquid" && r.Account.Network == "mainnet" {
+			// Reading does not depend on a key: this account is turned off, or loses its key.
+			return Response{}, errors.New("the mainnet Hyperliquid account stays; turn it off, or remove its trading key")
+		}
 		// Commit the disabled tombstone before deleting its secret. A crash or vault
 		// failure can never restore execution on the next startup.
 		r.Account.Enabled = false
@@ -350,12 +354,6 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		r.Account.CredentialRemovalPending = false
 		if err := m.save(); err != nil {
 			return Response{}, err
-		}
-		// Disconnecting a trading account leaves reading as it was.
-		if r.Account.Integration == "hyperliquid" {
-			if err := m.ensureHyperliquidReader(); err != nil {
-				log.Printf("plugins: restoring the Hyperliquid reader: %v", err)
-			}
 		}
 	}
 	a := m.projection(r)

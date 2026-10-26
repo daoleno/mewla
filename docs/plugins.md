@@ -169,12 +169,14 @@ permissions there.
 
 Hyperliquid needs no setup to read. Every server has one **Hyperliquid** account
 (mainnet, **Read only**) from the start, so Brain can read markets, prices,
-order books and any address's positions, orders, fills and PnL right away. It
+order books and an account's positions, orders, fills and PnL right away. It
 takes the address from your conversation and can remember it itself; positions
-and balances on Hyperliquid are public, so no key is involved. You can switch
-the account off, and it comes back only if you disconnect a trading account.
+and balances on Hyperliquid are public, so no key is involved. The account
+stays: you can switch it off, and a trading key comes and goes without
+touching it.
 
-To let Brain trade, open **Hyperliquid** in Extensions and paste one **API
+Trading is a separate, optional step. To let Brain trade, open **Hyperliquid**
+in Extensions, tap **Add API wallet key** under **Trading**, and paste one **API
 wallet key**. Create the API wallet on Hyperliquid's own site
 (`app.hyperliquid.xyz/API`; **Create an API wallet** opens it), approve it, and
 paste its private key once. Never paste your main wallet's key: Mewla refuses
@@ -193,7 +195,8 @@ leaked API wallet can still trade, and Hyperliquid also lets an API wallet
 deposit into a vault, so it can move value that way; use a fresh one, and remove
 it on Hyperliquid's site if it is ever exposed. The key stays on the server in the
 private vault, is never shown or logged, and **Remove trading key** on the
-account (or **Disconnect**) deletes it.
+account deletes it and leaves the account reading as it was. The mainnet account
+has no Disconnect; only a testnet account does.
 
 Adding a key for an account that is already connected updates that account.
 

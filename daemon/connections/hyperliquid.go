@@ -1206,26 +1206,50 @@ func (m *Manager) addHyperliquid(ctx context.Context, in *Input) (Response, erro
 }
 
 // ensureHyperliquidReader keeps one keyless mainnet account, so reading
-// Hyperliquid works with nothing configured. It makes no request. It adds
-// none while a mainnet account is active, and none after the person
-// disconnected the reader itself.
+// Hyperliquid works with nothing configured and does not depend on a key.
+// It makes no request. It adds none while a mainnet account is active. A
+// reader an earlier version let the person disconnect comes back in place,
+// switched on, with its id; a trading account that was disconnected leaves
+// the reader to be added fresh.
 func (m *Manager) ensureHyperliquidReader() error {
+	var tombstone *record
 	for _, r := range m.records {
 		a := r.Account
 		if a.Integration != "hyperliquid" || a.Network != "mainnet" {
 			continue
 		}
-		if a.Status != "disconnected" || a.Address == "" {
+		if a.Status != "disconnected" {
 			return nil
 		}
+		if a.Address == "" {
+			tombstone = r
+		}
 	}
-	r := &record{Account: Account{ID: uuid.NewString(), Integration: "hyperliquid", Name: "Hyperliquid", Network: "mainnet", Endpoint: hlEndpoint("mainnet"), Identity: hlIdentity("mainnet", "", false), Enabled: true, Status: "connected", Tools: hlReadTools(), History: []Event{}}, Grants: map[string]string{}}
+	r := tombstone
+	var saved record
+	if r == nil {
+		r = &record{Account: Account{ID: uuid.NewString(), Integration: "hyperliquid", Network: "mainnet", History: []Event{}}}
+	} else {
+		saved = *r
+	}
+	r.Account.Name = "Hyperliquid"
+	r.Account.Endpoint = hlEndpoint("mainnet")
+	r.Account.Identity = hlIdentity("mainnet", "", false)
+	r.Account.Enabled = true
+	r.Account.Status = "connected"
+	r.Account.CredentialRemovalPending = false
+	r.Account.Tools = hlReadTools()
+	r.Grants = map[string]string{}
 	for _, t := range r.Account.Tools {
 		r.Grants[t.Name] = fingerprint(t)
 	}
 	m.records[r.Account.ID] = r
 	if err := m.save(); err != nil {
-		delete(m.records, r.Account.ID)
+		if tombstone == nil {
+			delete(m.records, r.Account.ID)
+		} else {
+			*r = saved
+		}
 		return err
 	}
 	return nil
