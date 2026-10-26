@@ -10,15 +10,19 @@ import (
 )
 
 // brainHostContinuityRetryDelays bounds re-runs after a transient ownership
-// probe failure (for example a Host still launching its first children).
+// probe failure or a Host still launching (its first children, or a login
+// shell that has not yet started the provider).
 var brainHostContinuityRetryDelays = []time.Duration{
 	2 * time.Second, 5 * time.Second, 15 * time.Second, 30 * time.Second, time.Minute,
 }
 
 // brainHostContinuityRetryDelay returns the wait before the next attempt, or
-// false when err is not transient or the bounded schedule is exhausted.
+// false when err is not transient or the bounded schedule is exhausted. A Host
+// whose launch shell has not yet reached the provider is transient too: the
+// activation was held back, not lost.
 func brainHostContinuityRetryDelay(attempt int, err error) (time.Duration, bool) {
-	if !errors.Is(err, watcher.ErrOwnershipProbeUnavailable) || attempt >= len(brainHostContinuityRetryDelays) {
+	transient := errors.Is(err, watcher.ErrOwnershipProbeUnavailable) || errors.Is(err, watcher.ErrWorkerInputNotReady)
+	if !transient || attempt >= len(brainHostContinuityRetryDelays) {
 		return 0, false
 	}
 	return brainHostContinuityRetryDelays[attempt], true

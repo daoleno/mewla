@@ -391,3 +391,63 @@ func TestLiveHostActivationAmbiguousReceiptIsNeverReplayed(t *testing.T) {
 		t.Fatalf("ambiguous receipt was falsely marked accepted: %+v", activation)
 	}
 }
+
+// holdsFirstReadyDelivery refuses the first provider-ready delivery the way a
+// launch shell that has not reached the provider does.
+type holdsFirstReadyDelivery struct {
+	*fakeWatcher
+	held int
+}
+
+func (w *holdsFirstReadyDelivery) SendInputWithReceiptWhenReadyResult(
+	id, command, text string,
+	receiptFor watcher.InputReceiptForGeneration,
+) (watcher.InputResult, watcher.OwnedGeneration, error) {
+	if w.held == 0 {
+		w.held++
+		w.readyInputCalls++
+		return watcher.InputResult{Outcome: watcher.InputNotSubmitted}, watcher.OwnedGeneration{},
+			fmt.Errorf("agent input not ready: %w", watcher.ErrWorkerInputNotReady)
+	}
+	return w.fakeWatcher.SendInputWithReceiptWhenReadyResult(id, command, text, receiptFor)
+}
+
+func TestLaunchedHostActivationRetryWaitsForProviderInputAfterNotReady(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw := &holdsFirstReadyDelivery{fakeWatcher: &fakeWatcher{}}
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+		"codex": {Name: "codex", Command: "codex", Kind: "codex"},
+	}))
+
+	if _, err := service.EnsureHostSnapshot(); !errors.Is(err, watcher.ErrWorkerInputNotReady) {
+		t.Fatalf("first activation error = %v, want the retryable not-ready outcome", err)
+	}
+	if len(fw.sentCalls) != 0 {
+		t.Fatalf("activation was typed into a Host that was not ready: %+v", fw.sentCalls)
+	}
+	// The retry reaches the same launched Session through the live path. It
+	// must wait for provider input again, not queue the prompt at once.
+	if _, err := service.EnsureHostSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if fw.readyInputCalls != 2 || len(fw.sentCalls) != 1 {
+		t.Fatalf("retry ready_calls=%d sends=%+v, want one provider-ready delivery", fw.readyInputCalls, fw.sentCalls)
+	}
+	activation, err := store.HostActivation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if activation.SessionID == "" || activation.Receipt == "" {
+		t.Fatalf("retried activation not recorded: %+v", activation)
+	}
+	// Once accepted the Host is established: no further delivery.
+	if _, err := service.EnsureHostSnapshot(); err != nil {
+		t.Fatal(err)
+	}
+	if fw.readyInputCalls != 2 || len(fw.sentCalls) != 1 {
+		t.Fatalf("accepted activation redelivered: ready_calls=%d sends=%+v", fw.readyInputCalls, fw.sentCalls)
+	}
+}

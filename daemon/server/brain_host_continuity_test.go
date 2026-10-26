@@ -161,6 +161,11 @@ func TestHostContinuityRetriesOnlyTransientProbeFailureOnABoundedSchedule(t *tes
 	if _, ok := brainHostContinuityRetryDelay(len(brainHostContinuityRetryDelays), transient); ok {
 		t.Fatal("retry schedule is unbounded")
 	}
+	// A Host still in its launch shell had its activation held back, not lost.
+	launching := fmt.Errorf("deliver Brain Host activation: %w", watcher.ErrWorkerInputNotReady)
+	if got, ok := brainHostContinuityRetryDelay(0, launching); !ok || got != brainHostContinuityRetryDelays[0] {
+		t.Fatalf("launch-shell not-ready delay=%s ok=%v, want %s", got, ok, brainHostContinuityRetryDelays[0])
+	}
 	for _, err := range []error{nil, errors.New("launch failed")} {
 		if _, ok := brainHostContinuityRetryDelay(0, err); ok {
 			t.Fatalf("non-transient %v was retried", err)

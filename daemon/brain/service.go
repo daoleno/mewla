@@ -99,7 +99,10 @@ type Service struct {
 
 	reconcileMu      sync.Mutex
 	hostActivationMu sync.Mutex
-	hostMu           sync.Mutex
+	// hostLaunching holds the Sessions this daemon launched whose first
+	// activation has not been accepted. Guarded by hostActivationMu.
+	hostLaunching map[string]bool
+	hostMu        sync.Mutex
 
 	routeMu sync.Mutex
 	routes  SessionRouteLifecycle
@@ -2823,6 +2826,9 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		}
 		return WorkerRef{}, err
 	}
+	// Mark the launch before the Session is recorded as the Host, so no Host
+	// state event can reach it on the queued path first.
+	s.markHostLaunching(workerID)
 	if provisionalID != "" && routes != nil {
 		_, _, persist, commitErr := routes.CommitLaunch(provisionalID, workerID)
 		if !persist.Applied {
@@ -2920,6 +2926,17 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	return WorkerRef{}, fmt.Errorf("Brain Host Session %s is not observable after activation", workerID)
 }
 
+// markHostLaunching keeps a Session this daemon just launched on the
+// provider-ready activation path until its first activation is accepted.
+func (s *Service) markHostLaunching(sessionID string) {
+	s.hostActivationMu.Lock()
+	defer s.hostActivationMu.Unlock()
+	if s.hostLaunching == nil {
+		s.hostLaunching = map[string]bool{}
+	}
+	s.hostLaunching[sessionID] = true
+}
+
 func (s *Service) ensureHostActivation(sessionID, command string, executor work.WorkerExecutor, startup, bootstrap bool) error {
 	if s == nil || s.store == nil || s.watcher == nil {
 		return nil
@@ -2938,7 +2955,21 @@ func (s *Service) ensureHostActivation(sessionID, command string, executor work.
 	if strings.TrimSpace(prompt) == "" {
 		return fmt.Errorf("Brain Host activation prompt is empty")
 	}
+	// A Session this daemon launched stays on the provider-ready path until
+	// its first activation is accepted: a startup attempt that ran out of
+	// budget leaves it launching, and a retry or Host state event must wait for
+	// the provider's input just as the launch did. Pasting at once would land
+	// in whatever still holds the pane (a login shell, a half-drawn provider
+	// screen) and leave the prompt unsubmitted. An established live Host, which
+	// this daemon did not launch, keeps the queued path below.
+	if startup && s.hostLaunching == nil {
+		s.hostLaunching = map[string]bool{}
+	}
 	if startup {
+		s.hostLaunching[sessionID] = true
+	}
+	firstDelivery := s.hostLaunching[sessionID]
+	if firstDelivery {
 		result, owned, err := s.watcher.SendInputWithReceiptWhenReadyResult(
 			sessionID,
 			command,
@@ -2948,11 +2979,20 @@ func (s *Service) ensureHostActivation(sessionID, command string, executor work.
 			},
 		)
 		if err != nil {
-			return hostActivationDeliveryError(result, err)
+			err = hostActivationDeliveryError(result, err)
+			if errors.Is(err, ErrHostActivationAmbiguous) {
+				// Never replay an ambiguous receipt: later attempts settle it
+				// through the receipt ledger below.
+				delete(s.hostLaunching, sessionID)
+			}
+			return err
 		}
 		if result.Outcome != watcher.InputAccepted {
 			return fmt.Errorf("deliver Brain Host activation: receipt outcome %q", result.Outcome)
 		}
+		// Accepted: whatever happens to the persisted record, the receipt now
+		// settles through the ledger below and is never delivered again.
+		delete(s.hostLaunching, sessionID)
 		return s.markHostActivation(sessionID, result.Receipt, owned)
 	}
 

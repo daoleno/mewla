@@ -2315,3 +2315,70 @@ func TestCodexTrustScreenIsNeverAnsweredByMewla(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveTargetIdentityReportsPaneStillInLaunchShell(t *testing.T) {
+	shell := targetProcessIdentity{
+		Command: "zsh", PanePID: 10, PaneStart: 100,
+		ForegroundID: 10, ForegroundStart: 100, ProcessID: 10, ProcessStart: 100,
+	}
+	var seen int
+	_, known, launching := resolveTargetIdentityLaunching(
+		func(string) (targetProcessIdentity, bool) { return shell, true },
+		"session:@1", "claude --session-id x", 400*time.Millisecond,
+		func(got targetProcessIdentity) {
+			seen++
+			if !got.equal(shell) {
+				t.Fatalf("hook saw %+v, want the launch shell", got)
+			}
+		},
+	)
+	if known || !launching {
+		t.Fatalf("known=%v launching=%v, want unknown identity still in launch shell", known, launching)
+	}
+	if seen == 0 {
+		t.Fatal("launch-shell hook never ran")
+	}
+
+	// A resolver that never answers is unprovable, not a launching pane.
+	_, known, launching = resolveTargetIdentityLaunching(
+		func(string) (targetProcessIdentity, bool) { return targetProcessIdentity{}, false },
+		"session:@1", "claude --session-id x", 100*time.Millisecond, nil,
+	)
+	if known || launching {
+		t.Fatalf("known=%v launching=%v, want an unprovable identity", known, launching)
+	}
+}
+
+func TestResolveLaunchIdentityIsRetryableNotReadyInLaunchShell(t *testing.T) {
+	shell := targetProcessIdentity{
+		Command: "zsh", PanePID: 10, PaneStart: 100,
+		ForegroundID: 10, ForegroundStart: 100, ProcessID: 10, ProcessStart: 100,
+	}
+	w := New(time.Second)
+	w.workers["session:@1"] = &classifier.Worker{ID: "session:@1", Delegated: true}
+	w.workerOrder = append(w.workerOrder, "session:@1")
+	w.targetOwnershipResolver = func(string) (bool, error) { return true, nil }
+	w.targetProcessResolver = func(string) (targetProcessIdentity, bool) { return shell, true }
+	_, err := w.resolveLaunchIdentity("session:@1", "claude --session-id x", "r1", 200*time.Millisecond)
+	if !errors.Is(err, ErrWorkerInputNotReady) {
+		t.Fatalf("err=%v, want retryable not-ready while the launch shell runs", err)
+	}
+	if got := InputOutcomeFromError(err); got != InputNotSubmitted {
+		t.Fatalf("outcome=%v, want not submitted", got)
+	}
+}
+
+func TestZshNewUserPromptIsRecognisedAndOnlyThatPrompt(t *testing.T) {
+	prompt := "This is the Z Shell configuration function for new users,\nzsh-newuser-install.\nYou can:\n(q)  Quit and do nothing.  The function will be run again next time.\n(0)  Exit, creating the file ~/.zshrc containing just a comment.\n--- Type one of the keys in parentheses ---\n"
+	if !isZshNewUserPrompt(prompt) {
+		t.Fatal("zsh-newuser-install prompt not recognised")
+	}
+	if zshNewUserQuitKey != "q" {
+		t.Fatalf("quit key=%q; the 0 key would write ~/.zshrc", zshNewUserQuitKey)
+	}
+	for _, content := range []string{"", "user@host ~ % ", "❯ \n  ⏵⏵ bypass permissions on", "(q) Quit and do nothing"} {
+		if isZshNewUserPrompt(content) {
+			t.Fatalf("%q recognised as the zsh new-user prompt", content)
+		}
+	}
+}

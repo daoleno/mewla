@@ -1615,7 +1615,11 @@ func definitelyNotSubmitted(receipt string, cause error) error {
 var ErrWorkerInputNotReady = errors.New("agent input not ready")
 
 func workerInputNotReady(command string) error {
-	return definitelyNotSubmitted("", fmt.Errorf("%w for %q", ErrWorkerInputNotReady, command))
+	return workerInputNotReadyFor("", command)
+}
+
+func workerInputNotReadyFor(receipt, command string) error {
+	return definitelyNotSubmitted(receipt, fmt.Errorf("%w for %q", ErrWorkerInputNotReady, command))
 }
 
 func ambiguousSubmission(receipt string, cause error) error {
