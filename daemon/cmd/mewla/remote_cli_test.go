@@ -136,8 +136,10 @@ func TestLogoutDeleteAccountConfirmsThenDeletes(t *testing.T) {
 	if err := runLogout([]string{"-state-dir", stateDir, "-delete-account"}, strings.NewReader("Octo\n"), true, &out); err != nil {
 		t.Fatalf("confirmed deletion: %v\n%s", err, out.String())
 	}
-	if len(calls) != 1 || calls[0] != "DELETE /v1/account" || signedIn(stateDir) {
-		t.Fatalf("calls=%q signedIn=%v; want one account deletion and a local sign-out", calls, signedIn(stateDir))
+	// Friends data goes first, while the computer can still speak for the
+	// account; a service without Friends (404) has nothing to delete.
+	if len(calls) != 2 || calls[0] != "DELETE /friends/v1/me" || calls[1] != "DELETE /v1/account" || signedIn(stateDir) {
+		t.Fatalf("calls=%q signedIn=%v; want Friends data, then the account, and a local sign-out", calls, signedIn(stateDir))
 	}
 	if !strings.Contains(out.String(), "Deleted the remote access account octo (github)") {
 		t.Fatalf("output:\n%s", out.String())
@@ -147,7 +149,7 @@ func TestLogoutDeleteAccountConfirmsThenDeletes(t *testing.T) {
 	if err := runLogout([]string{"-state-dir", stateDir, "-delete-account", "-yes"}, strings.NewReader(""), false, &out); err != nil {
 		t.Fatalf("-yes deletion: %v", err)
 	}
-	if len(calls) != 2 || signedIn(stateDir) {
+	if len(calls) != 4 || signedIn(stateDir) {
 		t.Fatalf("calls=%q after -yes", calls)
 	}
 	if err := runLogout([]string{"-state-dir", t.TempDir(), "-delete-account", "-yes"}, nil, false, &out); err == nil {

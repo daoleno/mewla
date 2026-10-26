@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/addressbook"
 	"github.com/daoleno/mewla/daemon/auth"
+	"github.com/daoleno/mewla/daemon/friends"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/remote"
 	"golang.org/x/term"
@@ -266,6 +268,11 @@ func runLogout(args []string, stdin io.Reader, interactive bool, stderr io.Write
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	if *deleteAccount {
+		// Friends people are Mewla accounts: they go first, while this
+		// computer can still speak for the account.
+		if err := deleteFriendsData(ctx, resolvedStateDir, authManager, stderr); err != nil {
+			return fmt.Errorf("delete your Friends data first: %w (nothing changed; try again)", err)
+		}
 		if err := client.DeleteAccount(ctx); err != nil {
 			if errors.Is(err, remote.ErrSignedOut) {
 				return errors.New("the service no longer knows this computer, so it cannot tell which account to delete; sign in again (mewla login), then run mewla logout -delete-account")
@@ -306,7 +313,8 @@ func confirmAccountDeletion(stdin io.Reader, interactive bool, w io.Writer, mach
 	}
 	fmt.Fprintf(w, "This deletes the remote access account %s:\n", accountName(machine))
 	fmt.Fprintln(w, "  - the service forgets your GitHub id and login;")
-	fmt.Fprintln(w, "  - every computer signed in with it loses its address and is signed out.")
+	fmt.Fprintln(w, "  - every computer signed in with it loses its address and is signed out;")
+	fmt.Fprintln(w, "  - your Friends account, posts, comments and follows, if you turned Friends on, are deleted.")
 	fmt.Fprintln(w, "Phones stay paired, and work on this network or another address you set up.")
 	fmt.Fprintf(w, "Type %s to delete the account: ", machine.AccountLogin)
 	line, err := bufio.NewReader(stdin).ReadString('\n')
@@ -389,4 +397,20 @@ func writeRemoteStatus(w io.Writer, stateDir string) {
 	case !status.CertNotAfter.IsZero():
 		fmt.Fprintf(w, "  Certificate valid until %s.\n", status.CertNotAfter.Local().Format("2006-01-02"))
 	}
+}
+
+// deleteFriendsData deletes this account's Friends person, if it has one.
+// A service that does not serve Friends has nothing to delete.
+func deleteFriendsData(ctx context.Context, stateDir string, authManager *auth.Manager, stderr io.Writer) error {
+	local := &friends.Local{StateDir: stateDir, Auth: authManager}
+	_, wasOn := local.Enabled()
+	err := local.Disable(ctx)
+	var refused *friends.ServiceError
+	if errors.As(err, &refused) && refused.Status == http.StatusNotFound {
+		return nil
+	}
+	if err == nil && wasOn {
+		fmt.Fprintln(stderr, "Deleted your Friends account and everything you posted there.")
+	}
+	return err
 }
