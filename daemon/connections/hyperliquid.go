@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"sort"
@@ -1237,6 +1238,12 @@ func (m *Manager) ensureHyperliquidReader() error {
 	r.Account.Identity = hlIdentity("mainnet", "", false)
 	r.Account.Enabled = true
 	r.Account.Status = "connected"
+	if tombstone != nil && tombstone.Account.CredentialRemovalPending {
+		// The key it was disconnected from may still be in the vault.
+		if err := m.vault.Delete("integration:" + r.Account.ID); err != nil {
+			log.Printf("plugins: removing the old Hyperliquid key: %v", err)
+		}
+	}
 	r.Account.CredentialRemovalPending = false
 	r.Account.Tools = hlReadTools()
 	r.Grants = map[string]string{}
