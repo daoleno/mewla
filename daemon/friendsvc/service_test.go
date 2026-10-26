@@ -462,6 +462,7 @@ func TestBlockingHidesBothWaysAndDropsFollows(t *testing.T) {
 	a.ok("PUT", "/people/"+b.me.ID+"/follow", nil, nil)
 	var comment commentView
 	b.ok("POST", "/posts/"+aPost.ID+"/comments", map[string]string{"text": "hello alice"}, &comment)
+	b.ok("PUT", "/posts/"+aPost.ID+"/like", nil, nil)
 
 	b.ok("PUT", "/people/"+a.me.ID+"/block", nil, nil)
 
@@ -479,13 +480,18 @@ func TestBlockingHidesBothWaysAndDropsFollows(t *testing.T) {
 	b.expect(http.StatusNotFound, "GET", "/posts/"+aPost.ID, nil)
 	b.expect(http.StatusNotFound, "POST", "/posts/"+aPost.ID+"/comments", map[string]string{"text": "again"})
 	b.expect(http.StatusNotFound, "PUT", "/people/"+a.me.ID+"/follow", nil)
-	// B's earlier comment is gone from A's view of her own post.
+	// B's earlier comment and like are gone from A's view of her own post, and
+	// the counters say so too.
 	var detail struct {
+		Post     postView      `json:"post"`
 		Comments []commentView `json:"comments"`
 	}
 	a.ok("GET", "/posts/"+aPost.ID, nil, &detail)
 	if len(detail.Comments) != 0 {
 		t.Fatalf("A sees blocked comment: %+v", detail.Comments)
+	}
+	if detail.Post.Comments != 0 || detail.Post.Likes != 0 {
+		t.Fatalf("A's counters include the blocked: %+v", detail.Post)
 	}
 	// The follows are gone both ways, and notifications from the blocked vanish.
 	if got := a.feed("?scope=following"); len(got) != 0 {
