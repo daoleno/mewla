@@ -135,8 +135,9 @@ func (p *GitHubProvider) user(ctx context.Context, token string) (Subject, error
 		return Subject{}, fmt.Errorf("github user returned %s", response.Status)
 	}
 	var user struct {
-		ID    int64  `json:"id"`
-		Login string `json:"login"`
+		ID        int64  `json:"id"`
+		Login     string `json:"login"`
+		CreatedAt string `json:"created_at"`
 	}
 	if err := json.NewDecoder(io.LimitReader(response.Body, maxIdentityBodyBytes)).Decode(&user); err != nil {
 		return Subject{}, errors.New("github user: malformed response")
@@ -144,7 +145,11 @@ func (p *GitHubProvider) user(ctx context.Context, token string) (Subject, error
 	if user.ID <= 0 {
 		return Subject{}, errors.New("github user: missing id")
 	}
-	return Subject{ID: strconv.FormatInt(user.ID, 10), Login: user.Login}, nil
+	subject := Subject{ID: strconv.FormatInt(user.ID, 10), Login: user.Login}
+	if created, err := time.Parse(time.RFC3339, user.CreatedAt); err == nil {
+		subject.CreatedAt = created
+	}
+	return subject, nil
 }
 
 func (p *GitHubProvider) postForm(ctx context.Context, path string, form url.Values, out any) error {

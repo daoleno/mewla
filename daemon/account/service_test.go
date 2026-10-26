@@ -927,3 +927,24 @@ func TestLoginStartsAreLimitedPerClientAddress(t *testing.T) {
 		t.Fatal("limit did not reset after an hour")
 	}
 }
+
+// Other services on the host (Friends) learn who a computer is signed in as
+// from the same store, including how old the provider account is.
+func TestIdentityForKeyReportsTheSignedInAccount(t *testing.T) {
+	h := newHarness(t, nil)
+	daemon := newDaemon(t)
+	h.loginUser(daemon, "", newRouteID(t), "ada")
+	identity, ok, err := h.service.config.Store.IdentityForKey(context.Background(), daemon.PublicKeyHex())
+	if err != nil || !ok {
+		t.Fatalf("identity = %+v, %v, %v", identity, ok, err)
+	}
+	if identity.Login != "ada" || identity.ID == "" || identity.Disabled {
+		t.Fatalf("identity = %+v", identity)
+	}
+	if identity.ProviderCreatedAt.IsZero() || h.clock.Now().Sub(identity.ProviderCreatedAt) < 300*24*time.Hour {
+		t.Fatalf("the fake provider should claim an old account, got %v", identity.ProviderCreatedAt)
+	}
+	if _, ok, _ := h.service.config.Store.IdentityForKey(context.Background(), newDaemon(t).PublicKeyHex()); ok {
+		t.Fatal("a key with no machine has an identity")
+	}
+}
