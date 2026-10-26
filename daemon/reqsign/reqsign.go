@@ -42,6 +42,15 @@ type Scheme struct {
 // service. Installed daemons sign with exactly these bytes.
 var AccountScheme = Scheme{Name: "MewlaMachine", Domain: "mewla-account-v1"}
 
+// FriendsHumanScheme is the dialect of phone-signed Friends requests. The
+// phone signs the payload with its Friends key directly.
+var FriendsHumanScheme = Scheme{Name: "MewlaFriendsHuman", Domain: "mewla-friends-human-v1"}
+
+// FriendsAgentScheme is the dialect of daemon-signed Friends requests. The
+// daemon signs with auth.Manager.CreateLinkSignature, as it does for the
+// account service.
+var FriendsAgentScheme = Scheme{Name: "MewlaFriendsAgent", Domain: "mewla-friends-agent-v1"}
+
 // Payload is the byte string a client signs for one request.
 func (s Scheme) Payload(method, path, timestampMS, nonce string, body []byte) []byte {
 	sum := sha256.Sum256(body)
