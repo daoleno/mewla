@@ -26,6 +26,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/account"
 	"github.com/daoleno/mewla/daemon/account/dns"
+	"github.com/daoleno/mewla/daemon/friendsvc"
 	"github.com/daoleno/mewla/daemon/googleauth"
 	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/daoleno/mewla/daemon/proxyproto"
@@ -64,6 +65,8 @@ func run(args []string) error {
 	var tlsAddress string
 	var tlsCacheDir string
 	var proxyProtocol bool
+	var friendsDB string
+	var friendsFakeGitHub bool
 
 	flags := flag.NewFlagSet("mewla-account", flag.ContinueOnError)
 	flags.StringVar(&address, "addr", ":8080", "HTTP listen address")
@@ -88,6 +91,8 @@ func run(args []string) error {
 	flags.StringVar(&tlsAddress, "tls-addr", "", "HTTPS listen address for -public-url's host, certificate from Let's Encrypt by TLS-ALPN-01 (off when empty; /healthz stays on -addr)")
 	flags.StringVar(&tlsCacheDir, "tls-cache", "", "certificate cache directory for -tls-addr (default: acme/ next to -db)")
 	flags.BoolVar(&proxyProtocol, "proxy-protocol", false, "require a PROXY protocol v1 header on -tls-addr connections (only behind the relay's -sni-route-proxy-protocol)")
+	flags.StringVar(&friendsDB, "friends-db", "", "SQLite database of Mewla Friends, mounted under "+friendsvc.PathPrefix+" (off when empty; needs $MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_ID and _SECRET)")
+	flags.BoolVar(&friendsFakeGitHub, "friends-dev-fake-github", false, "DEVELOPMENT ONLY: Friends sign-in accepts any GitHub login without GitHub")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -190,13 +195,23 @@ func run(args []string) error {
 		return err
 	}
 
+	handler := http.Handler(service.Handler())
+	friends, closeFriends, err := friendsHandler(friendsDB, friendsFakeGitHub, publicURL, os.Getenv)
+	if err != nil {
+		return err
+	}
+	defer closeFriends()
+	if friends != nil {
+		handler = withFriends(handler, friends)
+	}
+
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
 	defer listener.Close()
 	server := &http.Server{
-		Handler:           service.Handler(),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -214,7 +229,7 @@ func run(args []string) error {
 		if tlsCacheDir == "" {
 			tlsCacheDir = filepath.Join(filepath.Dir(databasePath), "acme")
 		}
-		publicServer, publicListener, err = listenPublicTLS(tlsAddress, publicURL, tlsCacheDir, proxyProtocol, service.Handler(), google)
+		publicServer, publicListener, err = listenPublicTLS(tlsAddress, publicURL, tlsCacheDir, proxyProtocol, handler, google)
 		if err != nil {
 			return err
 		}
@@ -259,6 +274,54 @@ func run(args []string) error {
 		_ = publicServer.Shutdown(shutdownContext)
 	}
 	return nil
+}
+
+// friendsHandler is Mewla Friends, mounted under friendsvc.PathPrefix. It runs
+// only when -friends-db is set, and a half-set configuration stops the service
+// rather than starting without it. The returned func closes its database.
+func friendsHandler(databasePath string, devFake bool, publicURL string, env func(string) string) (http.Handler, func(), error) {
+	none := func() {}
+	clientID := strings.TrimSpace(env("MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_ID"))
+	clientSecret := strings.TrimSpace(env("MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_SECRET"))
+	if strings.TrimSpace(databasePath) == "" {
+		if devFake || clientID != "" || clientSecret != "" {
+			return nil, none, errors.New("Friends settings are set without -friends-db")
+		}
+		return nil, none, nil
+	}
+	var oauth friendsvc.OAuth
+	switch {
+	case devFake && (clientID != "" || clientSecret != ""):
+		return nil, none, errors.New("choose one Friends sign-in: -friends-dev-fake-github or the GitHub client")
+	case devFake:
+		oauth = &friendsvc.FakeOAuth{DefaultLogin: "tester", DefaultAgeDays: 400}
+		log.Printf("WARNING: -friends-dev-fake-github is enabled: Friends sign-in trusts the client's claimed GitHub login. Never use this in production.")
+	case clientID != "" && clientSecret != "":
+		oauth = &friendsvc.GitHubWeb{ClientID: clientID, ClientSecret: clientSecret}
+	default:
+		return nil, none, errors.New("Friends needs $MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_ID and $MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_SECRET (or -friends-dev-fake-github)")
+	}
+	if err := os.MkdirAll(filepath.Dir(databasePath), 0o700); err != nil {
+		return nil, none, fmt.Errorf("create friends database directory: %w", err)
+	}
+	store, err := friendsvc.OpenStore(databasePath)
+	if err != nil {
+		return nil, none, err
+	}
+	service, err := friendsvc.New(friendsvc.Config{Store: store, OAuth: oauth, PublicURL: publicURL})
+	if err != nil {
+		_ = store.Close()
+		return nil, none, err
+	}
+	return service.Handler(), func() { _ = store.Close() }, nil
+}
+
+// withFriends serves Friends under its prefix and everything else as before.
+func withFriends(base, friends http.Handler) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle(friendsvc.PathPrefix+"/", friends)
+	mux.Handle("/", base)
+	return mux
 }
 
 // googleExchange is the sign-in service behind the Google Calendar and Gmail
