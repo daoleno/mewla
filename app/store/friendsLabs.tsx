@@ -1,12 +1,16 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Linking from "expo-linking";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  FRIENDS_SIGN_IN_CANCELLED,
+  finishFriendsSignIn,
   getComputerFriends,
   linkComputer,
-  signInToFriends,
+  startFriendsSignIn,
   unlinkComputer,
   type ComputerFriends,
 } from "../services/friendsAccount";
+import { isFriendsReturnUrl } from "../services/friendsContract";
 import { useCurrentServer } from "./currentServer";
 
 const ENABLED_KEY = "mewla.friends.enabled";
@@ -76,6 +80,41 @@ export function FriendsLabsProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, serverId]);
 
+  // The return link may arrive on a freshly started app, so it is handled by
+  // whatever hears it, once per ticket, as soon as there is a computer to link.
+  const [returnURL, setReturnURL] = useState<string | null>(null);
+  const handled = useRef(new Set<string>());
+  useEffect(() => {
+    const take = (url: string | null) => {
+      if (url && isFriendsReturnUrl(url) && !handled.current.has(url)) setReturnURL(url);
+    };
+    Linking.getInitialURL().then(take).catch(() => undefined);
+    const subscription = Linking.addEventListener("url", ({ url }) => take(url));
+    return () => subscription.remove();
+  }, []);
+  useEffect(() => {
+    if (!returnURL || !currentServer) return;
+    const url = returnURL;
+    handled.current.add(url);
+    setReturnURL(null);
+    setError(null);
+    setWorking(true);
+    (async () => {
+      try {
+        const me = await finishFriendsSignIn(url);
+        const status = await linkComputer(currentServer);
+        setHandle(me.person.handle);
+        setComputer(status);
+        setEnabledState(true);
+        await AsyncStorage.setItem(ENABLED_KEY, "1").catch(() => undefined);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Friends did not turn on");
+      } finally {
+        setWorking(false);
+      }
+    })();
+  }, [returnURL, currentServer]);
+
   const setEnabled = useCallback(async (next: boolean) => {
     const server = serverRef.current;
     setError(null);
@@ -92,15 +131,13 @@ export function FriendsLabsProvider({ children }: { children: ReactNode }) {
     }
     setWorking(true);
     try {
-      const me = await signInToFriends();
-      const status = await linkComputer(server);
-      setHandle(me.person.handle);
-      setComputer(status);
-      setEnabledState(true);
-      await AsyncStorage.setItem(ENABLED_KEY, "1").catch(() => undefined);
+      const url = await startFriendsSignIn();
+      if (url) setReturnURL(url);
+      else setError(FRIENDS_SIGN_IN_CANCELLED);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Friends did not turn on");
     } finally {
+      // A return link, when there is one, takes the working state back.
       setWorking(false);
     }
   }, []);

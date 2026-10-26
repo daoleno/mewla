@@ -95,15 +95,22 @@ function friendlyServiceError(status: number, code: string | undefined): string 
 }
 
 /**
- * Signs in with GitHub in the system browser, then proves this phone holds its
- * key by answering the service's challenge. Returns the account.
+ * Opens GitHub sign-in in the system browser. The answer comes back on the
+ * app's return link, which may reach a freshly started app (Android can drop
+ * the app while the browser is in front), so the finish is a separate step
+ * driven by whatever receives that link. Returns the link when the browser
+ * session hands it back directly.
  */
-export async function signInToFriends(): Promise<FriendsMe> {
+export async function startFriendsSignIn(): Promise<string | null> {
   const key = await getOrCreateFriendsKey();
   const startURL = friendsEnrollStartURL(friendsServiceURL(), key.publicKeyHex);
   const result = await WebBrowser.openAuthSessionAsync(startURL, FRIENDS_RETURN_URL);
-  if (result.type !== "success") throw new FriendsError(SIGN_IN_MESSAGES.denied, "denied");
-  const parsed = parseFriendsEnrollReturn(result.url);
+  return result.type === "success" ? result.url : null;
+}
+
+/** Answers the service's challenge with the phone's key, from the return link. Returns the account. */
+export async function finishFriendsSignIn(returnURL: string): Promise<FriendsMe> {
+  const parsed = parseFriendsEnrollReturn(returnURL);
   if (!parsed.ok) throw new FriendsError(SIGN_IN_MESSAGES[parsed.error], parsed.error);
   await friendsRequest("POST", "/v1/enroll/finish", {
     ticket: parsed.ticket,
@@ -112,6 +119,8 @@ export async function signInToFriends(): Promise<FriendsMe> {
   });
   return friendsMe();
 }
+
+export const FRIENDS_SIGN_IN_CANCELLED = SIGN_IN_MESSAGES.denied;
 
 export function friendsMe(): Promise<FriendsMe> {
   return friendsRequest<FriendsMe>("GET", "/v1/me");
