@@ -38,7 +38,6 @@ type Snapshot struct {
 	CurrentWork  []CurrentWork         `json:"current_work"`
 	WorkBacklog  WorkBacklog           `json:"work_backlog"`
 	Objective    *Objective            `json:"objective,omitempty"`
-	QuickReplies *QuickReplies         `json:"quick_replies,omitempty"`
 	Workers      []WorkerRef           `json:"workers"`
 	HostWorker   *WorkerRef            `json:"host_worker,omitempty"`
 	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`

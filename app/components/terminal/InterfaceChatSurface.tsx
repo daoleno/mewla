@@ -45,19 +45,7 @@ interface InterfaceChatSurfaceProps {
   renderComposerAccessory?: (args: {
     draft: string;
     setDraft: (value: string) => void;
-    /** Sends text as if typed (live answers). */
-    sendText: (text: string) => void;
   }) => React.ReactNode;
-  /** Brain only: the answers to its last message, or none, as the chat stands. */
-  resolveQuickReplies?: (args: {
-    draft: string;
-    /** Whether the composer has focus. */
-    focused: boolean;
-    /** When the person last wrote in this conversation, in ms; 0 if never. */
-    lastUserMessageAt: number;
-    /** Whether a message of the conversation is on screen to answer. */
-    hasMessage: boolean;
-  }) => readonly string[] | null;
   composerModelControl?: ComposerModelControlPresentation | null;
   onComposerModelControlPress?: () => void;
   onSwitchToTerminal?: () => void;
@@ -91,7 +79,6 @@ function InterfaceChatSurfaceImpl({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
-  resolveQuickReplies,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -123,8 +110,7 @@ function InterfaceChatSurfaceImpl({
     composerAccessory,
     onDraftChange,
     renderComposerAccessory,
-    resolveQuickReplies,
-    composerModelControl,
+      composerModelControl,
     onComposerModelControlPress,
     onSwitchToTerminal,
     onConsumeInitialComposerFocus,

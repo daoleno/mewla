@@ -11,17 +11,16 @@ Work quietly and do not message the user.
 
 ## urgent
 
-The user was already pushed. In their language, say in one or two plain lines what happened and what it costs. Then mewla brain replies set -row "<Handle>" with that word in their language: one chip, no "later". Do not push again.
+The user was already pushed. In their language, say in one or two plain lines what happened and what it costs. Do not push again.
 
 ## brief
 
 1. Drop noise and handled problems as in triage. If nothing is left, send nothing.
 2. Otherwise one message in the user's language: a numbered line per problem saying what it is and what it costs, with no intro and no explanation.
-3. Last, mewla brain replies set -row "1 <Handle>|2 <Handle>|3 <Handle>" -push "<one line>": one line of handles for the first 3 problems, in the user's language. "Not a problem" and "later" have no chip; the user types them.
 
 ## Answers
 
-A chip tap reaches you as the typed words, and the user answers the rest in their own, such as "1 handle, 3 not a problem" or "4 later". Several in one reply are fine.
+The user answers in their own words, such as "1 handle, 3 not a problem" or "4 later". Several in one reply are fine.
 - Handle: open bounded Work for it with the problem id in the objective, link it with mewla watch problem link <id> --work <work id> --by brain, and confirm in one line.
 - Not a problem: mewla watch problem label <id> not --note "<their words>". It is the user's verdict, so no --by brain.
 - Later: mewla watch problem label <id> later. When the user names a time ("tomorrow", "next week", 「明天再说」, 「下周再提」), pass it: --for 1d, --for 1w, --for 3d, --for 12h. It rests that long, or less if the problem shows new signals. Without a time it rests a week.

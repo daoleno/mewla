@@ -48,5 +48,5 @@ When Brain executes directly, it follows the Worker workspace rules: edit the su
 - Before guessing what the user said or decided, run mewla memory search "<phrase>" (--from user, --since) and mewla memory show <id>; quote the hit.
 - Name a multi-Work goal with mewla brain objective set "<goal>"; clear it when done.
 - mewla calendar: explicit time intent (policies/calendar.md); mewla computers: other computers (policies/computers.md).
-- mewla watch: problems Watch raised (policies/watch.md). mewla brain replies set adds one line of tap chips (a tap is typed words): only for a real decision, short answers, max 3, no "skip"/"later".
+- mewla watch: problems Watch raised (policies/watch.md).
 - mewla connections --help lists shared tools; use them within the user's authority.

@@ -2666,7 +2666,7 @@ export class WebSocketClient {
 
   /**
    * Answers the question on a live notification. The daemon checks that the question is still
-   * the current one; a Work question is answered there, a chat chip comes back as text to send.
+   * the current one; a Work question is answered there.
    */
   answerLive(
     serverId: string,

@@ -7,19 +7,17 @@ import { useCurrentServer } from "../../store/currentServer";
 import { useToast } from "../ui/Toast";
 
 /**
- * Headless. A tap on a live notification, chip or widget opens Brain with the question and
+ * Headless. A tap on a live notification or widget opens Brain with the question and
  * choice in the route; this sends that one answer. The daemon refuses a question that is
  * no longer open, and the same tap twice is the same request, so a re-delivered intent
- * cannot answer twice. A chat chip is sent through the composer's own outbox.
+ * cannot answer twice.
  */
-export function LiveAnswer({ sendText }: { sendText: (text: string) => void }) {
+export function LiveAnswer() {
   const router = useRouter();
   const toast = useToast();
   const { currentServer } = useCurrentServer();
   const params = useGlobalSearchParams<{ liveAnswer?: string; liveChoice?: string }>();
   const handled = useRef<Set<string>>(new Set());
-  const sendTextRef = useRef(sendText);
-  sendTextRef.current = sendText;
 
   const target = parseLiveAnswerParams(params.liveAnswer, params.liveChoice);
   const serverId = currentServer?.id ?? "";
@@ -32,11 +30,7 @@ export function LiveAnswer({ sendText }: { sendText: (text: string) => void }) {
     // Consume the route params first so a recreated screen does not see them again.
     router.setParams({ liveAnswer: undefined, liveChoice: undefined });
     wsClient.answerLive(serverId, { ...target, requestId }).then(
-      (result) => {
-        if (result.kind === "chat" && result.text && !result.duplicate) {
-          sendTextRef.current(result.text);
-        }
-      },
+      () => undefined,
       (error: Error) =>
         toast.show({
           title: "Couldn't send that answer",

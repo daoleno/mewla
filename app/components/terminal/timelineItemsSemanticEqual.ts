@@ -74,12 +74,6 @@ export function timelineItemsSemanticEqual(
   ) {
     return taskNotificationItemsEqual(left, right);
   }
-  if (left.type === "quick-replies" && right.type === "quick-replies") {
-    return (
-      left.onSelect === right.onSelect &&
-      stringArraysEqual(left.chips, right.chips)
-    );
-  }
   if (left.type === "computer-message" && right.type === "computer-message") {
     return (
       left.kindLabel === right.kindLabel &&

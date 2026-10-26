@@ -247,9 +247,7 @@ func (s *Server) handleWidgetTokenIssue(conn *websocket.Conn, message liveClient
 
 // handleLiveAnswer answers the question on the phone's notification. The
 // question id must still be the CURRENT one; a stale tap changes nothing.
-// A Work's question is answered through the Work (the existing reply path); a
-// chat chip has no daemon-side send, so the daemon only vouches for it and
-// the app sends the text through its own outbox.
+// A Work's question is answered through the Work (the existing reply path).
 func (s *Server) handleLiveAnswer(conn *websocket.Conn, message liveClientMessage) {
 	hub := s.liveRuntime()
 	requestID := strings.TrimSpace(message.RequestID)
@@ -288,23 +286,19 @@ func (s *Server) handleLiveAnswer(conn *websocket.Conn, message liveClientMessag
 		"type": "live_answer", "request_id": requestID, "ok": true,
 		"kind": question.Kind, "question_id": question.ID, "text": choice,
 	}
-	if question.Kind == live.QuestionWork {
-		result, err := s.liveReply(brain.WorkUserActionRequest{
-			WorkID: question.WorkID, Kind: brain.WorkUserReply, Text: choice, RequestID: requestID,
-		})
-		if err != nil && !errors.Is(err, brain.ErrWorkCleanupPending) {
-			s.sendErrorWithRequestID(conn, requestID, "live_answer_failed", brainWorkActionMessage(err))
-			return
-		}
-		reply["work_id"] = question.WorkID
-		reply["status"] = result.Work.Status
-		reply["admission"] = result.Admission
+	result, err := s.liveReply(brain.WorkUserActionRequest{
+		WorkID: question.WorkID, Kind: brain.WorkUserReply, Text: choice, RequestID: requestID,
+	})
+	if err != nil && !errors.Is(err, brain.ErrWorkCleanupPending) {
+		s.sendErrorWithRequestID(conn, requestID, "live_answer_failed", brainWorkActionMessage(err))
+		return
 	}
+	reply["work_id"] = question.WorkID
+	reply["status"] = result.Work.Status
+	reply["admission"] = result.Admission
 	hub.remember(requestID, reply)
 	s.sendJSON(conn, reply)
-	if question.Kind == live.QuestionWork {
-		s.broadcastBrainSnapshot()
-	}
+	s.broadcastBrainSnapshot()
 }
 
 func (s *Server) liveReply(request brain.WorkUserActionRequest) (brain.WorkUserActionResult, error) {

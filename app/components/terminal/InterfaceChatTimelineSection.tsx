@@ -24,7 +24,6 @@ import type { PendingUserMessage } from "./InterfaceChatSession";
 import { InterfaceTimelineView } from "./InterfaceTimelineView";
 import { patchDisplayPath, truncateRunes } from "./InterfaceTimelineModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
-import type { QuickRepliesRow } from "../brain/brainQuickReplies";
 import { useInterfaceTimelineItems } from "./useInterfaceTimelineItems";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
 import type { StructuredChatKeyboardLifecycleGate } from "./chatKeyboardOverlayPolicy";
@@ -73,8 +72,6 @@ interface InterfaceChatTimelineSectionProps {
   topChromeInset: number;
   emptyTitle?: string;
   emptyBody?: string;
-  /** Brain only: answers to its last message, as a row after that message. */
-  quickReplies?: QuickRepliesRow;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   onLayout(event: LayoutChangeEvent): void;
@@ -136,7 +133,6 @@ export function InterfaceChatTimelineSection({
   topChromeInset,
   emptyTitle,
   emptyBody,
-  quickReplies,
   chrome,
   theme,
   onLayout,
@@ -202,7 +198,6 @@ export function InterfaceChatTimelineSection({
     onBrainWorkEventActivate,
     openSessionIds,
     brainCurrentWork,
-    quickReplies,
     onPendingUserMessageAction,
   });
   const loadAssetPreview = useCallback(

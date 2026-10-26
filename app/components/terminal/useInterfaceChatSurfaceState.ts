@@ -6,7 +6,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { latestUserMessageAt } from "./latestUserMessageAt";
 import { AppState } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
@@ -100,19 +99,7 @@ interface UseInterfaceChatSurfaceStateInput {
   renderComposerAccessory?: (args: {
     draft: string;
     setDraft: (value: string) => void;
-    /** Sends text as if typed (live answers). */
-    sendText: (text: string) => void;
   }) => ReactNode;
-  /** Brain only: the answers to its last message, or none, as the chat stands. */
-  resolveQuickReplies?: (args: {
-    draft: string;
-    /** Whether the composer has focus. */
-    focused: boolean;
-    /** When the person last wrote in this conversation, in ms; 0 if never. */
-    lastUserMessageAt: number;
-    /** Whether a message of the conversation is on screen to answer. */
-    hasMessage: boolean;
-  }) => readonly string[] | null;
   composerModelControl?:
     | import("../../services/providers/sessionModelHelpers").ComposerModelControlPresentation
     | null;
@@ -157,7 +144,6 @@ export function useInterfaceChatSurfaceState({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
-  resolveQuickReplies,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -232,34 +218,15 @@ export function useInterfaceChatSurfaceState({
     },
     [onDraftChange, restoreDraft],
   );
-  const sendTextRef = useRef<(text: string) => void>(() => undefined);
-  const sendQuickText = useCallback((text: string) => sendTextRef.current(text), []);
-  const lastUserMessageAt = latestUserMessageAt(
-    conversation?.events,
-    pendingUserMessages,
-  );
   const renderedComposerAccessory = renderComposerAccessory
     ? renderComposerAccessory({
         draft,
         setDraft: setObservedDraft,
-        sendText: sendQuickText,
       })
     : composerAccessory;
   const composerInput = useInterfaceComposerInput({
     enabled: active && connectionState === "connected",
   });
-  const quickReplyChips = resolveQuickReplies?.({
-    draft,
-    focused: composerInput.focused,
-    lastUserMessageAt,
-    hasMessage: Boolean(
-      conversation?.events.some((event) => event.kind === "assistant_message"),
-    ),
-  });
-  const quickReplies = useMemo(
-    () => (quickReplyChips ? { chips: quickReplyChips, onSelect: sendQuickText } : undefined),
-    [quickReplyChips, sendQuickText],
-  );
   useEffect(() => {
     const routeSessionKey = makeSessionKey(serverId, workerId);
     const effect = resolveInterfaceComposerInitialFocusEffect({
@@ -428,7 +395,6 @@ export function useInterfaceChatSurfaceState({
     openSkillsSheet,
     onSwitchToTerminal,
   });
-  sendTextRef.current = controller.sendText;
 
   const desktopWeb = useDesktopWeb();
   const replyIds = useMemo(() => finalReplyIdsOf(events), [events]);
@@ -689,7 +655,6 @@ export function useInterfaceChatSurfaceState({
     onKeyboardLifecycleInvalidate: handleKeyboardLifecycleInvalidate,
     showUnavailableAction,
     composerAccessory: renderedComposerAccessory,
-    quickReplies,
     composerEditBar: messageActions.accessory,
     skillsSheet: sheets,
   });

@@ -196,22 +196,7 @@ Brain has one Work surface, built from the daemon's `current_work`
   Brain's chat never goes back to that screen over messages it has
   already shown: when it remounts or its thread key flaps (a reconnect after
   a daemon restart) it starts from the messages it last showed, without
-  Activity, and the next snapshot replaces them in place. The quick-reply
-  chips belong to Brain's last message, so they show only while a message is
-  on screen (`quickRepliesVisible`'s `hasMessage`).
-- **Quick replies are quiet.** They are optional answers that continue
-  Brain's last message, never a control panel. One line only: the daemon's
-  rows flatten (`quickReplyLine`) into a single horizontally scrolling line
-  that never wraps into a second row. Each chip is plain `label` text in
-  `textMuted` (`text` while pressed), with no outline or fill. The line sits
-  in the timeline as its own row, right after Brain's last message (below
-  its copy / more action row, above the cat's status row), so it reads as
-  that message's possible answers and scrolls with it, not above the
-  composer (`mergeQuickRepliesIntoTimeline`). It is hidden while the composer has focus
-  or text and gone once the person sends anything. The touch target is 44 px
-  through the chip's own padded box (Android clips `hitSlop` to the scroll
-  view), not through its looks. Brain offers at most 3, only for a real
-  decision, and never "skip" or "later". A tap sends the text as typed.
+  Activity, and the next snapshot replaces them in place.
   The cat's tail row says "Waking up" only while Brain is not hydrated; a
   Brain already known that is reconnecting keeps its state until the
   reconnect stalls, then reads "Reconnecting".

@@ -67,7 +67,7 @@ func TestProjectRunningMultiCollapsesToCountAndIgnoresNonRunning(t *testing.T) {
 	}
 }
 
-func TestProjectNeedsYouWorkQuestionOutranksRunningAndChat(t *testing.T) {
+func TestProjectNeedsYouWorkQuestionOutranksRunning(t *testing.T) {
 	since := t0.Add(-time.Minute)
 	snapshot := brain.Snapshot{
 		Workers: []brain.WorkerRef{worker("w1", "x", "running", "working", t0.Add(-time.Hour))},
@@ -75,7 +75,6 @@ func TestProjectNeedsYouWorkQuestionOutranksRunningAndChat(t *testing.T) {
 			{ID: "old", Title: "Old", Question: "old?", Choices: []string{"a"}, AttentionSince: ptr(since.Add(-time.Hour))},
 			{ID: "new", Title: "Ship v0.2.39", Question: "Ship v0.2.39 to everyone?", Choices: []string{"Ship", "Wait", "Cancel", "Fourth"}, AttentionSince: &since},
 		},
-		QuickReplies: &brain.QuickReplies{Rows: [][]string{{"Yes", "No"}}, At: t0},
 	}
 	state := Project(snapshot, t0)
 	if state.Kind != KindNeedsYou || state.Question == nil || state.Question.Kind != QuestionWork || state.Question.WorkID != "new" {
@@ -84,30 +83,14 @@ func TestProjectNeedsYouWorkQuestionOutranksRunningAndChat(t *testing.T) {
 	if got := state.Question.Choices; len(got) != 3 || got[0] != "Ship" {
 		t.Fatalf("choices = %v (max 3)", got)
 	}
-	if state.NeedsCount != 3 {
-		t.Fatalf("needs_count = %d, want 2 Work questions + chat chips", state.NeedsCount)
+	if state.NeedsCount != 2 {
+		t.Fatalf("needs_count = %d, want 2 Work questions", state.NeedsCount)
 	}
 	if state.RunKey != "ask:"+state.Question.ID {
 		t.Fatalf("run key = %q", state.RunKey)
 	}
 	if choice, ok := state.Question.FullChoice(1); !ok || choice != "Wait" {
 		t.Fatalf("full choice = %q %v", choice, ok)
-	}
-}
-
-func TestProjectNeedsYouChatChips(t *testing.T) {
-	snapshot := brain.Snapshot{QuickReplies: &brain.QuickReplies{Rows: [][]string{{"Yes", "No"}, {"Later"}}, At: t0}}
-	state := Project(snapshot, t0)
-	if state.Kind != KindNeedsYou || state.Question.Kind != QuestionChat || state.Question.Text != "" {
-		t.Fatalf("state = %+v", state)
-	}
-	if len(state.Question.Choices) != 3 || state.Question.Choices[2] != "Later" || state.NeedsCount != 1 {
-		t.Fatalf("state = %+v", state)
-	}
-	// A different set of chips is a different question.
-	other := Project(brain.Snapshot{QuickReplies: &brain.QuickReplies{Rows: [][]string{{"Yes", "No"}}, At: t0.Add(time.Second)}}, t0)
-	if other.Question.ID == state.Question.ID {
-		t.Fatal("question id must change with the chips")
 	}
 }
 
@@ -181,7 +164,7 @@ func TestProjectorSequenceOrdersAcrossRestarts(t *testing.T) {
 	first := &sink{}
 	a := NewProjector(1000, 0, first.add)
 	a.Observe(brain.Snapshot{})
-	a.Observe(brain.Snapshot{QuickReplies: &brain.QuickReplies{Rows: [][]string{{"Y"}}, At: t0}})
+	a.Observe(brain.Snapshot{CurrentWork: []brain.CurrentWork{{ID: "w", Title: "t", Question: "go?", Choices: []string{"Y"}}}})
 	second := &sink{}
 	b := NewProjector(2000, 0, second.add)
 	b.Observe(brain.Snapshot{})

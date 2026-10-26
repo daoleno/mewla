@@ -20,7 +20,6 @@ import type {
   TerminalActionPromptOption,
 } from "./TerminalActionPromptModel";
 import type { InterfaceChoicePrompt } from "./claudeChoiceModel";
-import type { QuickRepliesRow } from "../brain/brainQuickReplies";
 import type { useInterfaceChatController } from "./InterfaceChatController";
 import type {
   useInterfaceComposerInput,
@@ -75,8 +74,6 @@ interface UseInterfaceChatBodyPropsInput {
   ): void;
   showUnavailableAction?: boolean;
   composerAccessory?: ReactNode;
-  /** Brain only: answers to its last message, as a row after that message. */
-  quickReplies?: QuickRepliesRow;
   /** The edit bar: above the composer, but not a picker that holds Enter. */
   composerEditBar?: ReactNode;
   skillsSheet?: ReactNode;
@@ -125,7 +122,6 @@ export function useInterfaceChatBodyProps({
   onKeyboardLifecycleInvalidate,
   showUnavailableAction,
   composerAccessory,
-  quickReplies,
   composerEditBar,
   skillsSheet,
 }: UseInterfaceChatBodyPropsInput): InterfaceChatBodyProps {
@@ -223,7 +219,6 @@ export function useInterfaceChatBodyProps({
       onPendingUserMessageAction: controller.actOnPendingUserMessage,
       onTerminalActionAnswer,
       composerAccessory,
-      quickReplies,
       composerEditBar,
       skillsSheet,
     }),
@@ -278,7 +273,6 @@ export function useInterfaceChatBodyProps({
       onTerminalActionAnswer,
       onKeyboardLifecycleInvalidate,
       composerAccessory,
-      quickReplies,
       composerEditBar,
       screenFocused,
       showUnavailableAction,

@@ -15,8 +15,6 @@ import type {
 import { PlanUpdate } from "./InterfaceTimelinePlan";
 import type { PlanTimelineItem } from "./InterfaceTimelinePlanTypes";
 import type { MessagePresentation } from "./InterfaceTimelineGrouping";
-import { QuickReplies } from "../brain/QuickReplies";
-import type { QuickRepliesTimelineItem } from "../brain/brainQuickReplies";
 import { TaskNotificationCard } from "./TaskNotificationCard";
 import { ComputerMessageCard } from "./ComputerMessageCard";
 import {
@@ -40,8 +38,7 @@ export type TimelineItem =
   | PlanTimelineItem
   | BrainWorkEventTimelineItem
   | TaskNotificationTimelineItem
-  | ComputerMessageTimelineItem
-  | QuickRepliesTimelineItem;
+  | ComputerMessageTimelineItem;
 
 interface TimelineItemViewProps {
   item: TimelineItem;
@@ -101,9 +98,6 @@ function TimelineItemViewImpl({
         theme={theme}
       />
     );
-  }
-  if (item.type === "quick-replies") {
-    return <QuickReplies chips={item.chips} chrome={chrome} onSelect={item.onSelect} />;
   }
   if (item.type === "computer-message") {
     return <ComputerMessageCard item={item} chrome={chrome} theme={theme} />;

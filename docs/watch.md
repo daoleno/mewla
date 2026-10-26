@@ -220,9 +220,8 @@ stays out of the thread. The rules live in Brain's `policies/watch.md`.
   in your phone's timezone (the phone tells the daemon; the computer's
   timezone if it never has). When it is due,
   Brain posts one message listing the three to five problems nobody is
-  handling, one plain line each: what it is and what it costs. Under it are
-  tap-to-answer chips for each: handle, not a problem, later. A tap is the same
-  as typing it, so "1 handle, 3 not a problem" works too. Handle opens Work for
+  handling, one plain line each: what it is and what it costs. Answer by
+  typing, such as "1 handle, 3 not a problem". Handle opens Work for
   it, not a problem labels it `not`, later labels it `later`. A problem a brief
   showed rests for three days; `later` rests until it gets new signals or its
   time (a week unless you named one) passes. With nothing to say there is no brief, and the phone shows no
@@ -246,11 +245,6 @@ stays out of the thread. The rules live in Brain's `policies/watch.md`.
 mewla watch triage --backlog       # hand Brain every problem still waiting, once
 mewla watch brief                  # hand Brain the brief now, whatever Calendar says
 ```
-
-The chips are not Watch's: any Brain question can use them
-(`mewla brain replies set -row "Yes|No"`; see [Brain and Work](brain-and-work.md)).
-Watch keeps them light: an urgent problem gets one "Handle" chip and a brief
-one line of "1 Handle|2 Handle|3 Handle". "Not a problem" and "later" are typed.
 
 ## Storage
 

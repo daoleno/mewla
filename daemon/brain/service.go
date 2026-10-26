@@ -570,9 +570,6 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snapshot.Objective = objective
-	if snapshot.QuickReplies, err = s.store.DisplayedQuickReplies(); err != nil {
-		return Snapshot{}, err
-	}
 	snapshot.WorklogPath = s.store.WorklogPath()
 	return snapshot, nil
 }
@@ -619,9 +616,6 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snapshot.Objective = objective
-	if snapshot.QuickReplies, err = s.store.DisplayedQuickReplies(); err != nil {
-		return Snapshot{}, err
-	}
 	return snapshot, nil
 }
 

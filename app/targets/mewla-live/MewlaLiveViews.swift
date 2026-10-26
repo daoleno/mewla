@@ -91,7 +91,7 @@ struct WorkerNamesView: View {
   }
 }
 
-/// Neutral quick-reply chips: Brain does not rank them. Each one opens the app on that answer.
+/// Neutral choice chips for a Work's question: Brain does not rank them. Each one opens the app on that answer.
 struct ChoiceChips: View {
   let question: MewlaLiveQuestion
   var compact = false

@@ -153,9 +153,9 @@ func TestLiveAnswerRejectsAStaleQuestionAndRepliesThroughTheWork(t *testing.T) {
 	}
 }
 
-func TestLiveAnswerValidatesChoiceAndChatChipsAreNotSentByTheDaemon(t *testing.T) {
+func TestLiveAnswerValidatesTheChoice(t *testing.T) {
 	f := newLiveFixture(t)
-	f.set(brain.Snapshot{QuickReplies: &brain.QuickReplies{Rows: [][]string{{"Yes", "No"}}, At: time.Now()}})
+	f.set(askingSnapshot())
 	question := live.Project(f.snapshot, time.Now()).Question
 
 	f.send(t, map[string]any{"type": "live_answer", "request_id": "bad", "question_id": question.ID, "choice_index": 7})
@@ -165,11 +165,6 @@ func TestLiveAnswerValidatesChoiceAndChatChipsAreNotSentByTheDaemon(t *testing.T
 	f.send(t, map[string]any{"type": "live_answer", "request_id": "missing", "question_id": question.ID})
 	if got := readWebSocketType(t, f.conn, "error"); got["code"] != "invalid_answer" {
 		t.Fatalf("error = %v", got)
-	}
-	f.send(t, map[string]any{"type": "live_answer", "request_id": "chat", "question_id": question.ID, "choice_index": 1})
-	ok := readWebSocketType(t, f.conn, "live_answer")
-	if ok["kind"] != "chat" || ok["text"] != "No" || f.replyCount() != 0 {
-		t.Fatalf("chat answer = %v replies=%d (the app sends chat text itself)", ok, f.replyCount())
 	}
 }
 

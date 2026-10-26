@@ -81,12 +81,6 @@ export type BrainObjective = {
   back: number;
 };
 
-/** Tap-to-answer chips under Brain's last message; a tap is a typed reply. */
-export type BrainQuickReplies = {
-  rows: string[][];
-  at: string;
-};
-
 export type BrainWorkBacklog = {
   total: number;
   queued_attention: number;
@@ -139,7 +133,6 @@ export type BrainSnapshot = {
   current_work?: BrainCurrentWork[];
   work_backlog?: BrainWorkBacklog;
   objective?: BrainObjective;
-  quick_replies?: BrainQuickReplies;
   workspace?: string;
   worklog_path?: string;
   generated_at?: string;
@@ -162,9 +155,8 @@ export const initialBrainState: BrainState = {
 
 type RawBrainSnapshot = Omit<
   Partial<BrainSnapshot>,
-  "current_work" | "work_backlog" | "objective" | "quick_replies"
+  "current_work" | "work_backlog" | "objective"
 > & {
-  quick_replies?: unknown;
   current_work?: unknown[];
   work_backlog?: unknown;
   objective?: unknown;
@@ -214,7 +206,6 @@ function normalizeSnapshot(
       : [],
     work_backlog: normalizeWorkBacklog(raw?.work_backlog),
     objective: normalizeObjective(raw?.objective),
-    quick_replies: normalizeQuickReplies(raw?.quick_replies),
     workspace: typeof raw?.workspace === "string" ? raw.workspace : undefined,
     worklog_path:
       typeof raw?.worklog_path === "string" ? raw.worklog_path : undefined,
@@ -302,22 +293,6 @@ function normalizeWorkUserAction(raw: unknown): BrainWorkUserAction | undefined 
     return undefined;
   }
   return { kind, at, text: optionalText(value?.text), admission: optionalText(value?.admission) };
-}
-
-function normalizeQuickReplies(raw: unknown): BrainQuickReplies | undefined {
-  const value =
-    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
-  if (!value || typeof value.at !== "string" || !Array.isArray(value.rows)) {
-    return undefined;
-  }
-  const rows = value.rows
-    .map((row) =>
-      Array.isArray(row)
-        ? row.filter((chip): chip is string => typeof chip === "string" && chip.trim() !== "")
-        : [],
-    )
-    .filter((row) => row.length > 0);
-  return rows.length > 0 ? { rows, at: value.at } : undefined;
 }
 
 function normalizeObjective(raw: unknown): BrainObjective | undefined {
@@ -593,8 +568,7 @@ function brainServerStatesEqual(
     workBacklogEqual(left.work_backlog, right.work_backlog) &&
     left.objective?.title === right.objective?.title &&
     left.objective?.total === right.objective?.total &&
-    left.objective?.back === right.objective?.back &&
-    JSON.stringify(left.quick_replies) === JSON.stringify(right.quick_replies)
+    left.objective?.back === right.objective?.back
   );
 }
 
