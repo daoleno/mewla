@@ -3,10 +3,8 @@ package remote
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +15,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/linkproto"
+	"github.com/daoleno/mewla/daemon/reqsign"
 )
 
 // ErrSignedOut means the service no longer knows this computer: it was
@@ -174,12 +173,8 @@ func (client *Client) do(ctx context.Context, method, path string, body any, out
 func (client *Client) authorization(method, path string, body []byte) string {
 	timestamp := fmt.Sprintf("%d", time.Now().UnixMilli())
 	nonce, _ := linkproto.RandomID(16)
-	digest := sha256.Sum256(body)
-	payload := strings.Join([]string{
-		"mewla-account-v1", method, path, timestamp, nonce, hex.EncodeToString(digest[:]),
-	}, "\n")
-	signature := client.Auth.CreateLinkSignature([]byte(payload))
-	return "MewlaMachine v1:" + client.Auth.PublicKeyHex() + ":" + timestamp + ":" + nonce + ":" + signature
+	signature := client.Auth.CreateLinkSignature(reqsign.AccountScheme.Payload(method, path, timestamp, nonce, body))
+	return reqsign.AccountScheme.Header(client.Auth.PublicKeyHex(), timestamp, nonce, signature)
 }
 
 // ServiceError is a non-success answer from the service.

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/daoleno/mewla/daemon/reqsign"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -166,12 +167,12 @@ func (h *harness) signedRequest(daemon *auth.Manager, method, path string, body 
 		signer = daemon
 	}
 	timestampMS := strconv.FormatInt(timestamp.UnixMilli(), 10)
-	signature := signer.CreateLinkSignature(SignaturePayload(method, path, timestampMS, nonce, raw))
+	signature := signer.CreateLinkSignature(reqsign.AccountScheme.Payload(method, path, timestampMS, nonce, raw))
 	request, err := http.NewRequest(method, h.server.URL+path, bytes.NewReader(raw))
 	if err != nil {
 		h.t.Fatal(err)
 	}
-	request.Header.Set("Authorization", AuthorizationHeader(daemon.PublicKeyHex(), timestampMS, nonce, signature))
+	request.Header.Set("Authorization", reqsign.AccountScheme.Header(daemon.PublicKeyHex(), timestampMS, nonce, signature))
 	request.Header.Set("Content-Type", "application/json")
 	return request
 }
@@ -309,7 +310,7 @@ func TestSignatureMiddleware(t *testing.T) {
 	}
 
 	large := h.signedRequest(daemon, http.MethodPost, "/v1/login/start",
-		map[string]string{"pad": strings.Repeat("x", maxSignedBodyBytes)}, signOptions{})
+		map[string]string{"pad": strings.Repeat("x", reqsign.MaxSignedBodyBytes)}, signOptions{})
 	if status, _ := h.send(large); status != http.StatusRequestEntityTooLarge {
 		t.Fatalf("large body = %d, want 413", status)
 	}
