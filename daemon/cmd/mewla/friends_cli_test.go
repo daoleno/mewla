@@ -36,7 +36,7 @@ func TestFriendsDraftScrubsAndNeedsALinkToKeep(t *testing.T) {
 	}
 
 	// Linked: a clean draft is kept; a leaky one is not.
-	if err := friends.NewStore(dir).SaveLink(friends.Link{Handle: "owner"}); err != nil {
+	if err := friends.NewStore(dir).SaveState(friends.State{Handle: "owner"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := runFriendsForTest(t, dir, "Short and clean post from stdin.", "draft", "-source", "A work title", "-"); err != nil {
@@ -53,9 +53,22 @@ func TestFriendsDraftScrubsAndNeedsALinkToKeep(t *testing.T) {
 }
 
 func TestFriendsHasNoSocialCommands(t *testing.T) {
-	for _, name := range []string{"like", "comment", "follow", "bookmark", "feed", "post", "timeline"} {
+	for _, name := range []string{"like", "comment", "follow", "bookmark", "feed", "post", "timeline", "link", "block", "report", "unfollow"} {
 		if _, err := runFriendsForTest(t, t.TempDir(), "", name); err == nil || !strings.Contains(err.Error(), "unknown friends command") {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestFriendsUsageOffersNoSocialAbilities(t *testing.T) {
+	for _, word := range []string{"like", "comment ", "follow ", "bookmark"} {
+		for _, line := range strings.Split(friendsUsage, "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "There are no commands") || strings.HasPrefix(strings.TrimSpace(line), "like, follow") {
+				continue
+			}
+			if strings.HasPrefix(line, "  ") && strings.Contains(line, word) {
+				t.Errorf("usage offers %q: %s", word, line)
+			}
 		}
 	}
 }

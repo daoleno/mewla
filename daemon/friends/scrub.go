@@ -217,8 +217,29 @@ type Scrubber struct {
 // Check returns every reason text may not be posted. An empty result means it
 // passed the rules; it does not mean it is safe (see Limits).
 func (s *Scrubber) Check(text string) []Finding {
+	return s.check(text, nil)
+}
+
+// basicKinds are the rules the hosted service applies to every post and
+// comment: it knows no private vocabulary, so it only refuses secrets, contact
+// details, links and mentions.
+var basicKinds = map[string]bool{
+	"pem": true, "secret": true, "jwt": true, "assignment": true, "email": true,
+	"url": true, "phone": true, "mention": true, "hidden": true, "empty": true,
+}
+
+// CheckBasic is the hosted service's weaker check: form rules only.
+func CheckBasic(text string) []Finding {
+	return (&Scrubber{}).check(text, basicKinds)
+}
+
+// check runs every rule, or only the kinds in keep when keep is set.
+func (s *Scrubber) check(text string, keep map[string]bool) []Finding {
 	var findings []Finding
 	add := func(kind, reason string) {
+		if keep != nil && !keep[kind] {
+			return
+		}
 		for _, f := range findings {
 			if f.Kind == kind && f.Reason == reason {
 				return

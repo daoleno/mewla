@@ -206,3 +206,15 @@ func TestPeopleNamesPassUnlessTheyAreInTheVocabulary(t *testing.T) {
 		t.Fatal("people's names are not in Limits")
 	}
 }
+
+func TestCheckBasicIsTheHostedServicesWeakerLayer(t *testing.T) {
+	for _, text := range []string{"mail bob@example.com", "see https://example.org/x", "thanks @someone", "call +1 (555) 010-9999", "key " + "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789"} {
+		if len(CheckBasic(text)) == 0 {
+			t.Errorf("basic check passed %q", text)
+		}
+	}
+	// It does not know private names or paths: those are the daemon's job.
+	if findings := CheckBasic("Edited ./src/server/main.go on 192.0.2.7 for buildbox-07"); len(findings) != 0 {
+		t.Errorf("basic check refused what only the daemon checks: %s", kinds(findings))
+	}
+}

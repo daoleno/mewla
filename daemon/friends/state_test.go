@@ -14,7 +14,7 @@ func TestDraftsNeedALinkAreCappedAndExpire(t *testing.T) {
 	if _, err := store.AddDraft("hello", ""); err != ErrNotLinked {
 		t.Fatalf("unlinked draft = %v", err)
 	}
-	if err := store.SaveLink(Link{Handle: "me", ServiceURL: "https://x.example/friends", LinkedAt: now}); err != nil {
+	if err := store.SaveState(State{Handle: "me", EnabledAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < MaxPendingDrafts; i++ {
@@ -33,14 +33,14 @@ func TestDraftsNeedALinkAreCappedAndExpire(t *testing.T) {
 	if _, err := store.AddDraft("fresh", ""); err != nil {
 		t.Fatalf("after expiry: %v", err)
 	}
-	info, _ := os.Stat(filepath.Join(store.Dir, "link.json"))
+	info, _ := os.Stat(filepath.Join(store.Dir, "state.json"))
 	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("link mode %v", info.Mode().Perm())
+		t.Fatalf("state mode %v", info.Mode().Perm())
 	}
 	if err := store.Clear(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Link(); err != ErrNotLinked {
+	if _, err := store.State(); err != ErrNotLinked {
 		t.Fatalf("after clear = %v", err)
 	}
 }

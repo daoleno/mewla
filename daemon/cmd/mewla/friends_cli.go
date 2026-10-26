@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,14 +17,13 @@ import (
 
 const friendsUsage = `Usage: mewla friends <command>
 
-  status [-json]                        is Friends set up on this computer
-  link -code <code> [-name <name>]      link this computer to the owner's Friends account
-  draft [-check] [-source <text>] <text|->   scrub a post and keep it for the owner
+  status [-json]                        is Friends on for this computer
+  draft [-check] [-source <text>] <text|->   scrub a post, then post it (auto-post on) or keep it for the owner
   drafts [-json]                        posts waiting for the owner
+  delete-post <id>                      delete one of your own posts
 
 Friends is off unless the owner turned it on in the app (Settings, Labs).
-There are no commands to read, like, follow or comment: an agent only writes
-drafts.`
+There are no commands to read, like, follow or comment: an agent only writes.`
 
 func runFriendsCommand(args []string, stderr io.Writer) error {
 	return runFriends(args, os.Stdin, os.Stdout, stderr)
@@ -39,8 +37,8 @@ func runFriends(args []string, stdin io.Reader, stdout, stderr io.Writer) error 
 	switch args[0] {
 	case "status":
 		return friendsStatus(args[1:], stdout, stderr)
-	case "link":
-		return friendsLink(args[1:], stdout, stderr)
+	case "delete-post":
+		return friendsDeletePost(args[1:], stdout, stderr)
 	case "draft":
 		return friendsDraft(args[1:], stdin, stdout, stderr)
 	case "drafts":
@@ -56,11 +54,16 @@ func friendsFlags(name string, stderr io.Writer) (*flag.FlagSet, *string) {
 	return fs, stateDir
 }
 
-func friendsServiceURL() string {
-	if value := strings.TrimSpace(os.Getenv("MEWLA_FRIENDS_URL")); value != "" {
-		return strings.TrimRight(value, "/")
+func friendsLocal(stateDir string) (*friends.Local, error) {
+	dir, err := auth.ResolveStorageDir(stateDir)
+	if err != nil {
+		return nil, err
 	}
-	return friends.DefaultServiceURL
+	manager, err := auth.NewManager(dir)
+	if err != nil {
+		return nil, err
+	}
+	return &friends.Local{StateDir: dir, Auth: manager}, nil
 }
 
 func friendsStatus(args []string, stdout, stderr io.Writer) error {
@@ -74,78 +77,21 @@ func friendsStatus(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	store := friends.NewStore(dir)
-	link, linkErr := store.Link()
+	state, stateErr := store.State()
 	drafts, _ := store.Drafts()
-	status := map[string]any{"linked": linkErr == nil, "drafts": len(drafts), "max_drafts": friends.MaxPendingDrafts}
-	if linkErr == nil {
-		status["handle"] = link.Handle
+	status := map[string]any{"linked": stateErr == nil, "drafts": len(drafts), "max_drafts": friends.MaxPendingDrafts}
+	if stateErr == nil {
+		status["handle"] = state.Handle
 	}
 	if *asJSON {
 		return json.NewEncoder(stdout).Encode(status)
 	}
-	if linkErr != nil {
+	if stateErr != nil {
 		fmt.Fprintln(stdout, "Friends is off on this computer.")
 		return nil
 	}
-	fmt.Fprintf(stdout, "Friends is on for @%s. %d of %d drafts waiting.\n", link.Handle, len(drafts), friends.MaxPendingDrafts)
+	fmt.Fprintf(stdout, "Friends is on for @%s. %d of %d drafts waiting.\n", state.Handle, len(drafts), friends.MaxPendingDrafts)
 	return nil
-}
-
-func friendsLink(args []string, stdout, stderr io.Writer) error {
-	fs, stateDir := friendsFlags("link", stderr)
-	code := fs.String("code", "", "link code from the app")
-	name := fs.String("name", "", "the agent's display name")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if strings.TrimSpace(*code) == "" {
-		return errors.New("-code is required")
-	}
-	dir, err := auth.ResolveStorageDir(*stateDir)
-	if err != nil {
-		return err
-	}
-	manager, err := auth.NewManager(dir)
-	if err != nil {
-		return err
-	}
-	service := friendsServiceURL()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	result, err := (&friends.Client{BaseURL: service, Auth: manager}).Link(ctx, strings.TrimSpace(*code), *name)
-	if err != nil {
-		return err
-	}
-	store := friends.NewStore(dir)
-	if result.Replaced {
-		// A new computer took over: drafts written for the old link stay here
-		// no longer.
-		_ = store.Clear()
-	}
-	if err := store.SaveLink(friends.Link{Handle: result.Handle, ServiceURL: service, LinkedAt: time.Now().UTC()}); err != nil {
-		return err
-	}
-	fmt.Fprintf(stdout, "Linked to @%s.\n", result.Handle)
-	return nil
-}
-
-// projectRoots are the places where this person keeps projects.
-func projectRoots(home string) []string {
-	roots := []string{}
-	if extra := strings.TrimSpace(os.Getenv("MEWLA_FRIENDS_PROJECT_ROOTS")); extra != "" {
-		roots = append(roots, filepath.SplitList(extra)...)
-	}
-	for _, name := range []string{"workspace", "src", "code", "projects", "dev", "work", "repos"} {
-		roots = append(roots, filepath.Join(home, name))
-	}
-	return roots
-}
-
-func friendsVocabulary(stateDir, owner string) *friends.Vocabulary {
-	home, _ := os.UserHomeDir()
-	return friends.CollectVocabulary(friends.Machine{
-		StateDir: stateDir, HomeDir: home, ProjectRoots: projectRoots(home), Owner: owner,
-	})
 }
 
 func friendsDraft(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -164,44 +110,47 @@ func friendsDraft(args []string, stdin io.Reader, stdout, stderr io.Writer) erro
 		}
 		text = strings.TrimSpace(string(raw))
 	}
-	dir, err := auth.ResolveStorageDir(*stateDir)
+	local, err := friendsLocal(*stateDir)
 	if err != nil {
 		return err
 	}
-	store := friends.NewStore(dir)
-	owner := ""
-	if link, err := store.Link(); err == nil {
-		owner = link.Handle
-	} else if !*check {
+	refusal := func(err error) error {
+		var refused *friends.RefusedError
+		if errors.As(err, &refused) && *asJSON {
+			_ = json.NewEncoder(stdout).Encode(map[string]any{"accepted": false, "findings": refused.Findings})
+		}
 		return err
 	}
-	scrubber := &friends.Scrubber{Vocabulary: friendsVocabulary(dir, owner)}
-	findings := scrubber.Check(text)
-	if len(findings) > 0 {
-		if *asJSON {
-			_ = json.NewEncoder(stdout).Encode(map[string]any{"accepted": false, "findings": findings})
-		}
-		reasons := make([]string, len(findings))
-		for i, finding := range findings {
-			reasons[i] = finding.Reason
-		}
-		return fmt.Errorf("draft refused, rewrite it without these: %s", strings.Join(reasons, "; "))
-	}
 	if *check {
+		if err := local.Check(text); err != nil {
+			return refusal(err)
+		}
 		if *asJSON {
 			return json.NewEncoder(stdout).Encode(map[string]any{"accepted": true})
 		}
 		fmt.Fprintln(stdout, "Passes the checks. Nothing was kept.")
 		return nil
 	}
-	draft, err := store.AddDraft(text, *source)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	outcome, err := local.Submit(ctx, text, *source)
 	if err != nil {
-		return err
+		return refusal(err)
 	}
 	if *asJSON {
-		return json.NewEncoder(stdout).Encode(map[string]any{"accepted": true, "id": draft.ID})
+		return json.NewEncoder(stdout).Encode(map[string]any{
+			"accepted": true, "posted": outcome.Posted, "post_id": outcome.PostID, "id": outcome.DraftID, "why": outcome.Why,
+		})
 	}
-	fmt.Fprintf(stdout, "Draft %s kept for the owner to read. It is not posted.\n", draft.ID)
+	if outcome.Posted {
+		fmt.Fprintf(stdout, "Posted (%s). Auto-post is on; the owner can delete it.\n", outcome.PostID)
+		return nil
+	}
+	fmt.Fprintf(stdout, "Draft %s kept for the owner to read. It is not posted.", outcome.DraftID)
+	if outcome.Why != "" {
+		fmt.Fprintf(stdout, " (Auto-post could not send it: %s.)", outcome.Why)
+	}
+	fmt.Fprintln(stdout)
 	return nil
 }
 
@@ -225,5 +174,33 @@ func friendsDrafts(args []string, stdout, stderr io.Writer) error {
 	for _, draft := range drafts {
 		fmt.Fprintf(stdout, "%s  %s\n", draft.ID, draft.Text)
 	}
+	return nil
+}
+
+func friendsDeletePost(args []string, stdout, stderr io.Writer) error {
+	fs, stateDir := friendsFlags("delete-post", stderr)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		return errors.New("usage: mewla friends delete-post <post id>")
+	}
+	local, err := friendsLocal(*stateDir)
+	if err != nil {
+		return err
+	}
+	if _, ok := local.Enabled(); !ok {
+		return friends.ErrNotLinked
+	}
+	client, err := local.Client()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := client.DeletePost(ctx, fs.Arg(0)); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "Deleted.")
 	return nil
 }
