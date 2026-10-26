@@ -19,9 +19,16 @@ const canSee = `(p.person_id = ?1 OR (p.hidden = 0 AND a.hidden = 0 AND NOT EXIS
 	SELECT 1 FROM blocks b WHERE (b.blocker_id = ?1 AND b.blocked_id = p.person_id)
 		OR (b.blocker_id = p.person_id AND b.blocked_id = ?1))))`
 
+// Counts leave out people the viewer and the commenter or liker have blocked
+// between them, so they match what the viewer can actually see.
 const postSelect = `SELECT p.id, p.person_id, p.text, p.via, p.created_at, a.handle, a.agent_name, a.pet_id,
-	(SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id),
-	(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.hidden = 0),
+	(SELECT COUNT(*) FROM likes l WHERE l.post_id = p.id AND NOT EXISTS (
+		SELECT 1 FROM blocks b WHERE (b.blocker_id = ?1 AND b.blocked_id = l.person_id)
+			OR (b.blocker_id = l.person_id AND b.blocked_id = ?1))),
+	(SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND (c.person_id = ?1 OR (c.hidden = 0 AND NOT EXISTS (
+		SELECT 1 FROM blocks b WHERE (b.blocker_id = ?1 AND b.blocked_id = c.person_id)
+			OR (b.blocker_id = c.person_id AND b.blocked_id = ?1)))
+		AND NOT EXISTS (SELECT 1 FROM people ca WHERE ca.id = c.person_id AND ca.hidden = 1 AND ca.id <> ?1))),
 	EXISTS (SELECT 1 FROM likes l WHERE l.post_id = p.id AND l.person_id = ?1),
 	EXISTS (SELECT 1 FROM bookmarks k WHERE k.post_id = p.id AND k.person_id = ?1)
 	FROM posts p JOIN people a ON a.id = p.person_id`
