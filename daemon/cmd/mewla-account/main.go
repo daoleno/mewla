@@ -66,7 +66,6 @@ func run(args []string) error {
 	var tlsCacheDir string
 	var proxyProtocol bool
 	var friendsDB string
-	var friendsFakeGitHub bool
 
 	flags := flag.NewFlagSet("mewla-account", flag.ContinueOnError)
 	flags.StringVar(&address, "addr", ":8080", "HTTP listen address")
@@ -91,8 +90,7 @@ func run(args []string) error {
 	flags.StringVar(&tlsAddress, "tls-addr", "", "HTTPS listen address for -public-url's host, certificate from Let's Encrypt by TLS-ALPN-01 (off when empty; /healthz stays on -addr)")
 	flags.StringVar(&tlsCacheDir, "tls-cache", "", "certificate cache directory for -tls-addr (default: acme/ next to -db)")
 	flags.BoolVar(&proxyProtocol, "proxy-protocol", false, "require a PROXY protocol v1 header on -tls-addr connections (only behind the relay's -sni-route-proxy-protocol)")
-	flags.StringVar(&friendsDB, "friends-db", "", "SQLite database of Mewla Friends, mounted under "+friendsvc.PathPrefix+" (off when empty; needs $MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_ID and _SECRET)")
-	flags.BoolVar(&friendsFakeGitHub, "friends-dev-fake-github", false, "DEVELOPMENT ONLY: Friends sign-in accepts any GitHub login without GitHub")
+	flags.StringVar(&friendsDB, "friends-db", "", "SQLite database of Mewla Friends, mounted under "+friendsvc.PathPrefix+" (off when empty; people are the signed-in Mewla accounts)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -196,7 +194,7 @@ func run(args []string) error {
 	}
 
 	handler := http.Handler(service.Handler())
-	friends, closeFriends, err := friendsHandler(friendsDB, friendsFakeGitHub, publicURL, os.Getenv)
+	friends, closeFriends, err := friendsHandler(friendsDB, accountDirectory{store})
 	if err != nil {
 		return err
 	}
@@ -277,29 +275,11 @@ func run(args []string) error {
 }
 
 // friendsHandler is Mewla Friends, mounted under friendsvc.PathPrefix. It runs
-// only when -friends-db is set, and a half-set configuration stops the service
-// rather than starting without it. The returned func closes its database.
-func friendsHandler(databasePath string, devFake bool, publicURL string, env func(string) string) (http.Handler, func(), error) {
+// only when -friends-db is set. The returned func closes its database.
+func friendsHandler(databasePath string, accounts friendsvc.Accounts) (http.Handler, func(), error) {
 	none := func() {}
-	clientID := strings.TrimSpace(env("MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_ID"))
-	clientSecret := strings.TrimSpace(env("MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_SECRET"))
 	if strings.TrimSpace(databasePath) == "" {
-		if devFake || clientID != "" || clientSecret != "" {
-			return nil, none, errors.New("Friends settings are set without -friends-db")
-		}
 		return nil, none, nil
-	}
-	var oauth friendsvc.OAuth
-	switch {
-	case devFake && (clientID != "" || clientSecret != ""):
-		return nil, none, errors.New("choose one Friends sign-in: -friends-dev-fake-github or the GitHub client")
-	case devFake:
-		oauth = &friendsvc.FakeOAuth{DefaultLogin: "tester", DefaultAgeDays: 400}
-		log.Printf("WARNING: -friends-dev-fake-github is enabled: Friends sign-in trusts the client's claimed GitHub login. Never use this in production.")
-	case clientID != "" && clientSecret != "":
-		oauth = &friendsvc.GitHubWeb{ClientID: clientID, ClientSecret: clientSecret}
-	default:
-		return nil, none, errors.New("Friends needs $MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_ID and $MEWLA_ACCOUNT_FRIENDS_GITHUB_CLIENT_SECRET (or -friends-dev-fake-github)")
 	}
 	if err := os.MkdirAll(filepath.Dir(databasePath), 0o700); err != nil {
 		return nil, none, fmt.Errorf("create friends database directory: %w", err)
@@ -308,12 +288,30 @@ func friendsHandler(databasePath string, devFake bool, publicURL string, env fun
 	if err != nil {
 		return nil, none, err
 	}
-	service, err := friendsvc.New(friendsvc.Config{Store: store, OAuth: oauth, PublicURL: publicURL})
+	service, err := friendsvc.New(friendsvc.Config{Store: store, Accounts: accounts})
 	if err != nil {
 		_ = store.Close()
 		return nil, none, err
 	}
 	return service.Handler(), func() { _ = store.Close() }, nil
+}
+
+// accountDirectory tells Friends who a signed-in computer is. Friends has no
+// sign-in of its own: a person is a Mewla account.
+type accountDirectory struct{ store *account.Store }
+
+func (d accountDirectory) AccountForKey(ctx context.Context, key string) (friendsvc.Account, bool, error) {
+	identity, ok, err := d.store.IdentityForKey(ctx, key)
+	if err != nil || !ok {
+		return friendsvc.Account{}, false, err
+	}
+	// The age that counts is the provider account's when it is known, and
+	// otherwise how long the Mewla account has existed.
+	created := identity.CreatedAt
+	if !identity.ProviderCreatedAt.IsZero() {
+		created = identity.ProviderCreatedAt
+	}
+	return friendsvc.Account{ID: identity.ID, Login: identity.Login, CreatedAt: created, Disabled: identity.Disabled}, true, nil
 }
 
 // withFriends serves Friends under its prefix and everything else as before.

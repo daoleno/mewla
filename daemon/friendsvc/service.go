@@ -2,50 +2,65 @@ package friendsvc
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/auth"
-	"github.com/daoleno/mewla/daemon/clientaddr"
+	"github.com/daoleno/mewla/daemon/friends"
 	"github.com/daoleno/mewla/daemon/reqsign"
 )
 
+// PathPrefix is where mewla-account mounts the service. Signatures cover the
+// full request path, so handlers are registered with it in place.
+const PathPrefix = "/friends"
+
+const apiPrefix = PathPrefix + "/v1"
+
 const (
 	defaultMinAccountAge = 30 * 24 * time.Hour
-	enrollTTL            = 10 * time.Minute
-	linkCodeTTL          = 10 * time.Minute
-	maxDeviceLabel       = 40
-	maxAgentName         = 40
-
-	enrollStartsPerIPHour    = 10
-	enrollCallbacksPerIPHour = 30
-	linkCodesPerPersonHour   = 5
-	linkAttemptsPerKeyHour   = 10
-)
-
-// HumanScheme and AgentScheme are the two credential dialects.
-var (
-	HumanScheme = reqsign.FriendsHumanScheme
-	AgentScheme = reqsign.FriendsAgentScheme
+	maxPostRunes         = friends.MaxPostRunes
+	maxCommentRunes      = 280
+	maxBioRunes          = 160
+	maxAgentNameRunes    = 40
+	defaultDailyCap      = 3
+	// hardDailyPosts bounds every kind of post a person can make in a day.
+	hardDailyPosts = 10
+	pageSize       = 30
+	// reportsToHide is how many different people must report an item before
+	// it is hidden until an operator looks.
+	reportsToHide = 3
 )
 
 var handlePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{2,29}$`)
 
+// Account is who a computer is signed in as.
+type Account struct {
+	ID    string
+	Login string
+	// CreatedAt is the age basis of the account: when the provider account
+	// was made, or when the Mewla account was when the provider did not say.
+	CreatedAt time.Time
+	Disabled  bool
+}
+
+// Accounts resolves a daemon key to its account. The bool is false when the
+// key is not signed in to any account.
+type Accounts interface {
+	AccountForKey(ctx context.Context, daemonKeyHex string) (Account, bool, error)
+}
+
 // Config configures a Service.
 type Config struct {
-	Store *Store
-	OAuth OAuth
-	// PublicURL is the base URL of mewla-account as clients reach it.
-	PublicURL string
+	Store    *Store
+	Accounts Accounts
 	// MinAccountAge defaults to 30 days.
 	MinAccountAge time.Duration
 	Now           func() time.Time
@@ -54,30 +69,24 @@ type Config struct {
 
 // Service serves the Friends API.
 type Service struct {
-	config Config
-	human  *reqsign.Verifier
-	agent  *reqsign.Verifier
-	routes []Route
+	config   Config
+	verifier *reqsign.Verifier
 
-	enrollStarts    reqsign.RateLimiter
-	enrollCallbacks reqsign.RateLimiter
-	linkCodes       reqsign.RateLimiter
-	linkAttempts    reqsign.RateLimiter
+	comments reqsign.RateLimiter
+	likes    reqsign.RateLimiter
+	follows  reqsign.RateLimiter
+	reports  reqsign.RateLimiter
+	reads    reqsign.RateLimiter
 }
 
-// New validates config and builds the route table.
+// New validates config and builds the service.
 func New(config Config) (*Service, error) {
 	if config.Store == nil {
 		return nil, errors.New("friends store is required")
 	}
-	if config.OAuth == nil {
-		return nil, errors.New("friends oauth provider is required")
+	if config.Accounts == nil {
+		return nil, errors.New("friends needs an account resolver")
 	}
-	u, err := url.Parse(config.PublicURL)
-	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
-		return nil, errors.New("friends public url must be an absolute http(s) URL")
-	}
-	config.PublicURL = strings.TrimRight(config.PublicURL, "/")
 	if config.MinAccountAge <= 0 {
 		config.MinAccountAge = defaultMinAccountAge
 	}
@@ -87,303 +96,306 @@ func New(config Config) (*Service, error) {
 	if config.Logf == nil {
 		config.Logf = log.Printf
 	}
-	s := &Service{config: config}
-	s.human = &reqsign.Verifier{Scheme: HumanScheme, Verify: verifyPlain, Now: config.Now, KeyBytes: ed25519.PublicKeySize}
-	s.agent = &reqsign.Verifier{Scheme: AgentScheme, Verify: auth.VerifyLinkSignature, Now: config.Now, KeyBytes: ed25519.PublicKeySize}
-	s.enrollStarts = reqsign.RateLimiter{Limit: enrollStartsPerIPHour, Window: time.Hour}
-	s.enrollCallbacks = reqsign.RateLimiter{Limit: enrollCallbacksPerIPHour, Window: time.Hour}
-	s.linkCodes = reqsign.RateLimiter{Limit: linkCodesPerPersonHour, Window: time.Hour}
-	s.linkAttempts = reqsign.RateLimiter{Limit: linkAttemptsPerKeyHour, Window: time.Hour}
-	s.routes = s.routeTable()
-	if err := validateRoutes(s.routes); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
-
-func verifyPlain(publicKeyHex string, payload []byte, signatureHex string) bool {
-	key, err := hex.DecodeString(publicKeyHex)
-	if err != nil || len(key) != ed25519.PublicKeySize {
-		return false
-	}
-	signature, err := hex.DecodeString(signatureHex)
-	if err != nil || len(signature) != ed25519.SignatureSize {
-		return false
-	}
-	return ed25519.Verify(key, payload, signature)
-}
-
-// Routes lists the route table.
-func (s *Service) Routes() []Route { return append([]Route(nil), s.routes...) }
-
-func (s *Service) routeTable() []Route {
-	return []Route{
-		{http.MethodGet, apiPrefix + "/enroll/start", ClassPublic, s.handleEnrollStart},
-		{http.MethodGet, apiPrefix + "/enroll/callback", ClassPublic, s.handleEnrollCallback},
-		{http.MethodPost, apiPrefix + "/enroll/finish", ClassEnroll, s.handleEnrollFinish},
-		{http.MethodGet, apiPrefix + "/me", ClassHuman, s.handleMe},
-		{http.MethodPut, apiPrefix + "/me/handle", ClassHuman, s.handleSetHandle},
-		{http.MethodPost, apiPrefix + "/me/link-code", ClassHuman, s.handleLinkCode},
-		{http.MethodPost, apiPrefix + "/agent/link", ClassAgentLink, s.handleAgentLink},
-		{http.MethodGet, apiPrefix + "/agent/status", ClassAgent, s.handleAgentStatus},
-	}
-}
-
-// Handler serves every route under PathPrefix.
-func (s *Service) Handler() http.Handler {
-	mux := http.NewServeMux()
-	for _, route := range s.routes {
-		mux.HandleFunc(route.Pattern(), s.guard(route))
-	}
-	return mux
+	return &Service{
+		config:   config,
+		verifier: &reqsign.Verifier{Scheme: reqsign.AccountScheme, Verify: auth.VerifyLinkSignature, Now: config.Now, KeyBytes: 32},
+		comments: reqsign.RateLimiter{Limit: 30, Window: time.Hour},
+		likes:    reqsign.RateLimiter{Limit: 300, Window: time.Hour},
+		follows:  reqsign.RateLimiter{Limit: 100, Window: 24 * time.Hour},
+		reports:  reqsign.RateLimiter{Limit: 20, Window: 24 * time.Hour},
+		reads:    reqsign.RateLimiter{Limit: 240, Window: time.Minute},
+	}, nil
 }
 
 func (s *Service) now() time.Time { return s.config.Now() }
 
-// guard authenticates a request as its route's class, then calls the handler.
-func (s *Service) guard(route Route) http.HandlerFunc {
+type handlerFunc func(w http.ResponseWriter, r *http.Request, me personRecord)
+
+// Handler serves every route under PathPrefix.
+func (s *Service) Handler() http.Handler {
+	mux := http.NewServeMux()
+	v1 := func(method, path string, h handlerFunc) {
+		mux.HandleFunc(method+" "+apiPrefix+path, s.person(h))
+	}
+	mux.HandleFunc("POST "+apiPrefix+"/me/enable", s.signed(s.handleEnable))
+	v1("GET", "/me", s.handleMe)
+	v1("DELETE", "/me", s.handleDeleteMe)
+	v1("PATCH", "/me/profile", s.handlePatchProfile)
+	v1("PUT", "/me/auto-post", s.handleAutoPost)
+
+	v1("GET", "/feed", s.handleFeed)
+	v1("POST", "/posts", s.handleCreatePost)
+	v1("GET", "/posts/{id}", s.handleGetPost)
+	v1("DELETE", "/posts/{id}", s.handleDeletePost)
+	v1("PUT", "/posts/{id}/like", s.handleLike)
+	v1("DELETE", "/posts/{id}/like", s.handleUnlike)
+	v1("PUT", "/posts/{id}/bookmark", s.handleBookmark)
+	v1("DELETE", "/posts/{id}/bookmark", s.handleUnbookmark)
+	v1("GET", "/bookmarks", s.handleBookmarks)
+	v1("POST", "/posts/{id}/comments", s.handleComment)
+	v1("DELETE", "/comments/{id}", s.handleDeleteComment)
+
+	v1("GET", "/people/{id}", s.handleGetPerson)
+	v1("GET", "/people/{id}/posts", s.handlePersonPosts)
+	v1("PUT", "/people/{id}/follow", s.handleFollow)
+	v1("DELETE", "/people/{id}/follow", s.handleUnfollow)
+	v1("PUT", "/people/{id}/block", s.handleBlock)
+	v1("DELETE", "/people/{id}/block", s.handleUnblock)
+	v1("GET", "/blocks", s.handleBlocks)
+	v1("POST", "/reports", s.handleReport)
+
+	v1("GET", "/notifications", s.handleNotifications)
+	v1("POST", "/notifications/read", s.handleNotificationsRead)
+	return mux
+}
+
+// signed authenticates the request as a signed-in computer and resolves its
+// account, whether or not that account has turned Friends on.
+func (s *Service) signed(next func(w http.ResponseWriter, r *http.Request, account Account)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !route.Class.signed() {
-			route.Handler(w, r, Principal{})
-			return
-		}
-		body, rejection := reqsign.ReadBody(w, r)
+		result, rejection := s.verifier.Authenticate(w, r)
 		if rejection != nil {
 			writeError(w, rejection.Status, rejection.Message)
 			return
 		}
-		verifier, other := s.agent, s.human
-		if route.Class.human() {
-			verifier, other = s.human, s.agent
-		}
-		result, rejection := verifier.AuthenticateBody(r, body)
-		if rejection != nil {
-			// A correct signature of the other credential class is a
-			// refusal, not a bad request.
-			if rejection.Status == http.StatusUnauthorized {
-				if _, ok := other.Valid(r, body); ok {
-					writeError(w, http.StatusForbidden, "wrong credential")
-					return
-				}
-			}
-			writeError(w, rejection.Status, rejection.Message)
+		account, ok, err := s.config.Accounts.AccountForKey(r.Context(), strings.ToLower(strings.TrimSpace(result.Key)))
+		if err != nil {
+			s.internalError(w, "resolve account", err)
 			return
 		}
-		who, status, message := s.principal(r.Context(), route.Class, result.Key)
-		if status != 0 {
-			writeError(w, status, message)
+		if !ok {
+			// Signed by a key that is not signed in to any account.
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		who.Body = result.Body
-		r = reqsign.WithBody(r, r.Context(), result.Body)
-		route.Handler(w, r, who)
+		if account.Disabled {
+			writeError(w, http.StatusForbidden, "account disabled")
+			return
+		}
+		next(w, reqsign.WithBody(r, r.Context(), result.Body), account)
 	}
 }
 
-// principal maps a verified key to its owner for a class. A key registered
-// as the other class is a 403; an unknown key is a 401.
-func (s *Service) principal(ctx context.Context, class Class, key string) (Principal, int, string) {
-	nowMS := s.now().UnixMilli()
-	fail := func(err error) (Principal, int, string) {
-		s.config.Logf("friends: key lookup failed: %v", err)
-		return Principal{}, http.StatusInternalServerError, "internal error"
-	}
-	isHuman, err := s.config.Store.isHumanKey(ctx, key)
-	if err != nil {
-		return fail(err)
-	}
-	isAgent, err := s.config.Store.isAgentKey(ctx, key)
-	if err != nil {
-		return fail(err)
-	}
-	switch class {
-	case ClassEnroll:
-		if isAgent {
-			return Principal{}, http.StatusForbidden, "wrong credential"
-		}
-		return Principal{Key: key}, 0, ""
-	case ClassAgentLink:
-		if isHuman {
-			return Principal{}, http.StatusForbidden, "wrong credential"
-		}
-		return Principal{Key: key}, 0, ""
-	case ClassHuman, ClassAgent:
-		if (class == ClassHuman && isAgent) || (class == ClassAgent && isHuman) {
-			return Principal{}, http.StatusForbidden, "wrong credential"
-		}
-		var person personRecord
-		if class == ClassHuman {
-			person, err = s.config.Store.humanPerson(ctx, key, nowMS)
-		} else {
-			person, err = s.config.Store.agentPerson(ctx, key, nowMS)
-		}
+// person additionally needs the account to have turned Friends on.
+func (s *Service) person(next handlerFunc) http.HandlerFunc {
+	return s.signed(func(w http.ResponseWriter, r *http.Request, account Account) {
+		me, err := s.config.Store.personByAccount(r.Context(), account.ID)
 		if errors.Is(err, errNotFound) {
-			return Principal{}, http.StatusUnauthorized, "unauthorized"
+			writeError(w, http.StatusNotFound, "not_enabled")
+			return
 		}
 		if err != nil {
-			return fail(err)
+			s.internalError(w, "load person", err)
+			return
 		}
-		if person.Disabled {
-			return Principal{}, http.StatusForbidden, "account disabled"
+		if r.Method == http.MethodGet && !s.reads.Allow("r:"+me.ID, s.now()) {
+			writeError(w, http.StatusTooManyRequests, "slow down")
+			return
 		}
-		return Principal{Key: key, PersonID: person.ID}, 0, ""
-	}
-	return Principal{}, http.StatusInternalServerError, "internal error"
+		next(w, r, me)
+	})
 }
 
-// ---- enrollment -----------------------------------------------------------
+// ---- me -------------------------------------------------------------------
 
-// returnAllowed reports whether url is an app return link the service will
-// redirect to: only the app's own scheme and path.
-func returnAllowed(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "mewla" || u.Host != "friends" || u.Path != "/enroll" {
-		return false
-	}
-	return u.RawQuery == "" && u.Fragment == ""
+type meView struct {
+	ID            string `json:"id"`
+	Handle        string `json:"handle"`
+	HandleChanged bool   `json:"handle_changed"`
+	AgentName     string `json:"agent_name"`
+	PetID         string `json:"pet_id"`
+	Bio           string `json:"bio"`
+	AutoPost      bool   `json:"auto_post"`
+	DailyCap      int    `json:"daily_cap"`
+	AutoToday     int    `json:"auto_today"`
+	Unread        int    `json:"unread"`
 }
 
-func (s *Service) callbackURL() string { return s.config.PublicURL + apiPrefix + "/enroll/callback" }
-
-func (s *Service) handleEnrollStart(w http.ResponseWriter, r *http.Request, _ Principal) {
-	if !s.enrollStarts.Allow("ip:"+clientaddr.Key(clientaddr.IP(r)), s.now()) {
-		writeError(w, http.StatusTooManyRequests, "too many sign-ins from this address; try again later")
-		return
-	}
-	query := r.URL.Query()
-	key := strings.ToLower(query.Get("key"))
-	if !isHex(key, ed25519.PublicKeySize) {
-		writeError(w, http.StatusBadRequest, "invalid key")
-		return
-	}
-	returnURL := query.Get("return")
-	if !returnAllowed(returnURL) {
-		writeError(w, http.StatusBadRequest, "invalid return")
-		return
-	}
-	state, err := randomHex(16)
+func (s *Service) meView(ctx context.Context, p personRecord) (meView, error) {
+	autoToday, err := s.countToday(ctx, p, true)
 	if err != nil {
-		s.internalError(w, "state", err)
-		return
+		return meView{}, err
 	}
-	now := s.now()
-	if err := s.config.Store.createEnrollSession(r.Context(), state, key, returnURL, now.UnixMilli(), now.Add(enrollTTL).UnixMilli()); err != nil {
-		s.internalError(w, "create enroll session", err)
-		return
+	var unread int
+	if err := s.config.Store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notifications WHERE person_id = ? AND read_at IS NULL`, p.ID).Scan(&unread); err != nil {
+		return meView{}, err
 	}
-	http.Redirect(w, r, s.config.OAuth.AuthorizeURL(state, s.callbackURL(), query), http.StatusFound)
+	return meView{p.ID, p.Handle, p.HandleChanged, p.AgentName, p.PetID, p.Bio, p.AutoPost, p.DailyCap, autoToday, unread}, nil
 }
 
-func (s *Service) handleEnrollCallback(w http.ResponseWriter, r *http.Request, _ Principal) {
-	if !s.enrollCallbacks.Allow("ip:"+clientaddr.Key(clientaddr.IP(r)), s.now()) {
-		writeError(w, http.StatusTooManyRequests, "too many sign-ins from this address; try again later")
-		return
+func (s *Service) handleEnable(w http.ResponseWriter, r *http.Request, account Account) {
+	var request struct {
+		TZ        string `json:"tz"`
+		AgentName string `json:"agent_name"`
+		PetID     string `json:"pet_id"`
 	}
-	query := r.URL.Query()
-	session, err := s.config.Store.enrollByState(r.Context(), query.Get("state"))
-	if errors.Is(err, errNotFound) || (err == nil && (session.Used || session.Ticket != "" || session.ExpiresAtMS < s.now().UnixMilli())) {
-		writeError(w, http.StatusBadRequest, "sign-in expired; start again")
-		return
-	}
-	if err != nil {
-		s.internalError(w, "enroll session", err)
-		return
-	}
-	back := func(values url.Values) {
-		http.Redirect(w, r, session.ReturnURL+"?"+values.Encode(), http.StatusFound)
-	}
-	code := query.Get("code")
-	if code == "" || query.Get("error") != "" {
-		back(url.Values{"error": {"denied"}})
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
-	defer cancel()
-	identity, err := s.config.OAuth.Exchange(ctx, code, s.callbackURL())
-	if err != nil {
-		s.config.Logf("friends: github exchange failed: %v", err)
-		back(url.Values{"error": {"provider"}})
-		return
-	}
-	if s.now().Sub(identity.CreatedAt) < s.config.MinAccountAge {
-		back(url.Values{"error": {"account_too_new"}})
-		return
-	}
-	ticket, err1 := randomHex(16)
-	challenge, err2 := randomHex(16)
-	if err1 != nil || err2 != nil {
-		s.internalError(w, "ticket", errors.Join(err1, err2))
-		return
-	}
-	ok, err := s.config.Store.completeEnrollSession(r.Context(), session.State, ticket, challenge, identity)
-	if err != nil || !ok {
-		s.internalError(w, "complete enroll session", err)
-		return
-	}
-	back(url.Values{"ticket": {ticket}, "challenge": {challenge}})
-}
-
-type enrollFinishRequest struct {
-	Ticket      string `json:"ticket"`
-	Challenge   string `json:"challenge"`
-	DeviceLabel string `json:"device_label"`
-}
-
-type personView struct {
-	ID          string `json:"id"`
-	Handle      string `json:"handle"`
-	GitHubLogin string `json:"github_login"`
-}
-
-func (s *Service) handleEnrollFinish(w http.ResponseWriter, r *http.Request, who Principal) {
-	var request enrollFinishRequest
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	session, err := s.config.Store.enrollByTicket(r.Context(), strings.ToLower(request.Ticket))
-	if errors.Is(err, errNotFound) || (err == nil && (session.Used || session.HumanKey != who.Key ||
-		session.Challenge == "" || session.Challenge != strings.ToLower(request.Challenge) ||
-		session.ExpiresAtMS < s.now().UnixMilli())) {
-		writeError(w, http.StatusBadRequest, "invalid or expired sign-in")
-		return
-	}
-	if err != nil {
-		s.internalError(w, "enroll ticket", err)
-		return
-	}
-	label := strings.TrimSpace(request.DeviceLabel)
-	if len(label) > maxDeviceLabel {
-		label = label[:maxDeviceLabel]
-	}
-	personID, err1 := randomHex(16)
-	handle, err2 := s.chooseHandle(r.Context(), session.GitHubLogin)
-	if err1 != nil || err2 != nil {
-		s.internalError(w, "new person", errors.Join(err1, err2))
-		return
-	}
-	person, err := s.config.Store.finishEnroll(r.Context(), session, personID, handle, label, s.now().UnixMilli())
+	existing, err := s.config.Store.personByAccount(r.Context(), account.ID)
 	switch {
-	case errors.Is(err, errAlreadyLinked):
-		writeError(w, http.StatusConflict, "already_enrolled")
-	case errors.Is(err, errKeyInUse):
-		writeError(w, http.StatusForbidden, "wrong credential")
-	case errors.Is(err, errHandleTaken):
-		writeError(w, http.StatusConflict, "handle_taken")
-	case err != nil:
-		s.internalError(w, "finish enroll", err)
-	default:
-		writeJSON(w, http.StatusOK, map[string]any{"person": personView{person.ID, person.Handle, person.GitHubLogin}})
+	case err == nil:
+		s.writeMe(w, r, existing)
+		return
+	case !errors.Is(err, errNotFound):
+		s.internalError(w, "load person", err)
+		return
 	}
+	if s.now().Sub(account.CreatedAt) < s.config.MinAccountAge {
+		writeError(w, http.StatusForbidden, "account_too_new")
+		return
+	}
+	id, err1 := randomHex(16)
+	handle, err2 := s.chooseHandle(r.Context(), account.Login)
+	if err := errors.Join(err1, err2); err != nil {
+		s.internalError(w, "new person", err)
+		return
+	}
+	person := personRecord{
+		ID: id, AccountID: account.ID, Handle: handle,
+		AgentName: clip(strings.TrimSpace(request.AgentName), maxAgentNameRunes),
+		PetID:     clip(strings.TrimSpace(request.PetID), 40),
+		TZ:        validTZ(request.TZ), CreatedAt: s.now().UnixMilli(),
+	}
+	if err := s.config.Store.createPerson(r.Context(), person); err != nil {
+		s.internalError(w, "create person", err)
+		return
+	}
+	created, err := s.config.Store.personByID(r.Context(), id)
+	if err != nil {
+		s.internalError(w, "load person", err)
+		return
+	}
+	s.writeMe(w, r, created)
 }
 
-// chooseHandle starts from the GitHub login and, when it is unusable or taken
-// by someone else, adds a short random suffix.
+func (s *Service) writeMe(w http.ResponseWriter, r *http.Request, p personRecord) {
+	view, err := s.meView(r.Context(), p)
+	if err != nil {
+		s.internalError(w, "load me", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, me personRecord) {
+	s.writeMe(w, r, me)
+}
+
+// handleDeleteMe is turning Friends off: the person and everything that
+// hangs on them are deleted in one transaction.
+func (s *Service) handleDeleteMe(w http.ResponseWriter, r *http.Request, me personRecord) {
+	if err := s.config.Store.deletePerson(r.Context(), me.ID); err != nil {
+		s.internalError(w, "delete person", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+}
+
+func (s *Service) handlePatchProfile(w http.ResponseWriter, r *http.Request, me personRecord) {
+	var request struct {
+		Handle    *string `json:"handle"`
+		AgentName *string `json:"agent_name"`
+		Bio       *string `json:"bio"`
+		PetID     *string `json:"pet_id"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	db := s.config.Store.db
+	if request.Handle != nil {
+		handle := strings.ToLower(strings.TrimSpace(*request.Handle))
+		if handle != me.Handle {
+			if !handlePattern.MatchString(handle) {
+				writeError(w, http.StatusBadRequest, "invalid_handle")
+				return
+			}
+			if me.HandleChanged {
+				writeError(w, http.StatusConflict, "handle_already_changed")
+				return
+			}
+			taken, err := s.config.Store.handleTaken(r.Context(), handle)
+			if err != nil {
+				s.internalError(w, "handle", err)
+				return
+			}
+			if taken {
+				writeError(w, http.StatusConflict, "handle_taken")
+				return
+			}
+			if _, err := db.ExecContext(r.Context(), `UPDATE people SET handle = ?, handle_changed = 1 WHERE id = ?`, handle, me.ID); err != nil {
+				s.internalError(w, "set handle", err)
+				return
+			}
+		}
+	}
+	if request.AgentName != nil {
+		if _, err := db.ExecContext(r.Context(), `UPDATE people SET agent_name = ? WHERE id = ?`, clip(strings.TrimSpace(*request.AgentName), maxAgentNameRunes), me.ID); err != nil {
+			s.internalError(w, "set agent name", err)
+			return
+		}
+	}
+	if request.PetID != nil {
+		if _, err := db.ExecContext(r.Context(), `UPDATE people SET pet_id = ? WHERE id = ?`, clip(strings.TrimSpace(*request.PetID), 40), me.ID); err != nil {
+			s.internalError(w, "set pet", err)
+			return
+		}
+	}
+	if request.Bio != nil {
+		bio := strings.TrimSpace(*request.Bio)
+		if len([]rune(bio)) > maxBioRunes || len(friends.CheckBasic(bio)) > 0 {
+			writeError(w, http.StatusBadRequest, "invalid_bio")
+			return
+		}
+		if _, err := db.ExecContext(r.Context(), `UPDATE people SET bio = ? WHERE id = ?`, bio, me.ID); err != nil {
+			s.internalError(w, "set bio", err)
+			return
+		}
+	}
+	updated, err := s.config.Store.personByID(r.Context(), me.ID)
+	if err != nil {
+		s.internalError(w, "load person", err)
+		return
+	}
+	s.writeMe(w, r, updated)
+}
+
+func (s *Service) handleAutoPost(w http.ResponseWriter, r *http.Request, me personRecord) {
+	var request struct {
+		Enabled bool   `json:"enabled"`
+		TZ      string `json:"tz"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	tz := me.TZ
+	if request.TZ != "" {
+		tz = validTZ(request.TZ)
+	}
+	enabled := 0
+	if request.Enabled {
+		enabled = 1
+	}
+	if _, err := s.config.Store.db.ExecContext(r.Context(), `UPDATE people SET auto_post = ?, tz = ? WHERE id = ?`, enabled, tz, me.ID); err != nil {
+		s.internalError(w, "set auto-post", err)
+		return
+	}
+	updated, err := s.config.Store.personByID(r.Context(), me.ID)
+	if err != nil {
+		s.internalError(w, "load person", err)
+		return
+	}
+	s.writeMe(w, r, updated)
+}
+
+// chooseHandle starts from the account login and, when it is unusable or
+// taken, adds a short random suffix.
 func (s *Service) chooseHandle(ctx context.Context, login string) (string, error) {
 	base := sanitizeHandle(login)
 	candidate := base
 	for attempt := 0; attempt < 8; attempt++ {
-		if candidate != "" && handlePattern.MatchString(candidate) {
-			taken, err := s.config.Store.handleIsTaken(ctx, candidate)
+		if handlePattern.MatchString(candidate) {
+			taken, err := s.config.Store.handleTaken(ctx, candidate)
 			if err != nil {
 				return "", err
 			}
@@ -422,130 +434,24 @@ func sanitizeHandle(login string) string {
 	return out
 }
 
-// ---- human routes ---------------------------------------------------------
-
-func (s *Service) loadPerson(w http.ResponseWriter, r *http.Request, who Principal) (personRecord, bool) {
-	person, err := s.config.Store.humanPerson(r.Context(), who.Key, s.now().UnixMilli())
-	if err != nil {
-		s.internalError(w, "load person", err)
-		return personRecord{}, false
+// validTZ keeps a time zone name that Go knows, and drops anything else.
+func validTZ(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
 	}
-	return person, true
+	if _, err := time.LoadLocation(name); err != nil {
+		return ""
+	}
+	return name
 }
 
-func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, who Principal) {
-	person, ok := s.loadPerson(w, r, who)
-	if !ok {
-		return
+func clip(text string, runes int) string {
+	r := []rune(text)
+	if len(r) > runes {
+		return string(r[:runes])
 	}
-	devices, err1 := s.config.Store.deviceCount(r.Context(), person.ID)
-	agentName, linked, err2 := s.config.Store.agentName(r.Context(), person.ID)
-	if err := errors.Join(err1, err2); err != nil {
-		s.internalError(w, "load me", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"person":         personView{person.ID, person.Handle, person.GitHubLogin},
-		"handle_changed": person.HandleChanged,
-		"auto_post":      person.AutoPost,
-		"daily_cap":      person.DailyCap,
-		"devices":        devices,
-		"agent":          map[string]any{"linked": linked, "name": agentName},
-	})
-}
-
-func (s *Service) handleSetHandle(w http.ResponseWriter, r *http.Request, who Principal) {
-	var request struct {
-		Handle string `json:"handle"`
-	}
-	if !decodeJSON(w, r, &request) {
-		return
-	}
-	handle := strings.ToLower(strings.TrimSpace(request.Handle))
-	if !handlePattern.MatchString(handle) {
-		writeError(w, http.StatusBadRequest, "invalid_handle")
-		return
-	}
-	err := s.config.Store.changeHandle(r.Context(), who.PersonID, handle)
-	switch {
-	case errors.Is(err, errHandleTaken):
-		writeError(w, http.StatusConflict, "handle_taken")
-	case errors.Is(err, errHandleChanged):
-		writeError(w, http.StatusConflict, "handle_already_changed")
-	case err != nil:
-		s.internalError(w, "change handle", err)
-	default:
-		writeJSON(w, http.StatusOK, map[string]string{"handle": handle})
-	}
-}
-
-func (s *Service) handleLinkCode(w http.ResponseWriter, r *http.Request, who Principal) {
-	if !s.linkCodes.Allow("person:"+who.PersonID, s.now()) {
-		writeError(w, http.StatusTooManyRequests, "too many link codes; try again later")
-		return
-	}
-	code, err := randomHex(16)
-	if err != nil {
-		s.internalError(w, "link code", err)
-		return
-	}
-	now := s.now()
-	expires := now.Add(linkCodeTTL)
-	if err := s.config.Store.createLinkCode(r.Context(), who.PersonID, code, now.UnixMilli(), expires.UnixMilli()); err != nil {
-		s.internalError(w, "store link code", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"code": code, "expires_at_ms": expires.UnixMilli()})
-}
-
-// ---- agent routes ---------------------------------------------------------
-
-func (s *Service) handleAgentLink(w http.ResponseWriter, r *http.Request, who Principal) {
-	if !s.linkAttempts.Allow("key:"+who.Key, s.now()) {
-		writeError(w, http.StatusTooManyRequests, "too many link attempts; try again later")
-		return
-	}
-	var request struct {
-		Code string `json:"code"`
-		Name string `json:"name"`
-	}
-	if !decodeJSON(w, r, &request) {
-		return
-	}
-	code := strings.ToLower(strings.TrimSpace(request.Code))
-	if !isHex(code, 16) {
-		writeError(w, http.StatusBadRequest, "invalid_code")
-		return
-	}
-	name := strings.TrimSpace(request.Name)
-	if len(name) > maxAgentName {
-		name = name[:maxAgentName]
-	}
-	person, replaced, err := s.config.Store.consumeLinkCode(r.Context(), code, who.Key, name, s.now().UnixMilli())
-	switch {
-	case errors.Is(err, errNotFound):
-		writeError(w, http.StatusBadRequest, "invalid_code")
-	case errors.Is(err, errKeyInUse):
-		writeError(w, http.StatusConflict, "key_in_use")
-	case err != nil:
-		s.internalError(w, "link agent", err)
-	default:
-		writeJSON(w, http.StatusOK, map[string]any{"handle": person.Handle, "replaced": replaced})
-	}
-}
-
-func (s *Service) handleAgentStatus(w http.ResponseWriter, r *http.Request, who Principal) {
-	person, err := s.config.Store.agentPerson(r.Context(), who.Key, s.now().UnixMilli())
-	if err != nil {
-		s.internalError(w, "agent status", err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"handle":    person.Handle,
-		"auto_post": person.AutoPost,
-		"daily_cap": person.DailyCap,
-		"remaining": person.DailyCap,
-	})
+	return text
 }
 
 // ---- helpers --------------------------------------------------------------
@@ -556,7 +462,8 @@ func (s *Service) internalError(w http.ResponseWriter, operation string, err err
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
-	if err := json.NewDecoder(r.Body).Decode(out); err != nil {
+	err := json.NewDecoder(r.Body).Decode(out)
+	if err != nil && !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return false
 	}
@@ -580,12 +487,4 @@ func randomHex(size int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(raw), nil
-}
-
-func isHex(value string, bytes int) bool {
-	if len(value) != bytes*2 {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
 }
