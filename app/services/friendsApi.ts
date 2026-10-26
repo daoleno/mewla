@@ -172,6 +172,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   auto_post_off: "Auto-post is off",
   refused: "Friends will not post that",
   service_unreachable: "Your computer could not reach Friends",
+  local_error: "Something went wrong on your computer; check its Mewla log",
   handle_taken: "That handle is taken",
   handle_already_changed: "You already changed your handle once",
   invalid_handle: "Use 3 to 30 lowercase letters, numbers, - or _",

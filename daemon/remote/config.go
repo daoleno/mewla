@@ -24,13 +24,12 @@ const (
 	acmeKeyFile    = "remote-acme-account.pem"
 )
 
-// DefaultServiceURL is the hosted service a plain `mewla login` uses. Release
-// builds set it with -ldflags "-X github.com/daoleno/mewla/daemon/remote.DefaultServiceURL=…";
-// MEWLA_REMOTE_SERVICE_URL overrides it.
-var DefaultServiceURL = ""
+// DefaultServiceURL is the hosted service a plain `mewla login` uses, the same
+// for release and dev builds. MEWLA_REMOTE_SERVICE_URL overrides it (isolated
+// tests, -dev-fake-login setups).
+const DefaultServiceURL = "https://connect.mewla.ai"
 
-// ServiceURL returns the service a new login should use, or "" when this
-// build has none.
+// ServiceURL returns the service a new login should use.
 func ServiceURL() string {
 	if value := strings.TrimSpace(os.Getenv("MEWLA_REMOTE_SERVICE_URL")); value != "" {
 		return strings.TrimSuffix(value, "/")

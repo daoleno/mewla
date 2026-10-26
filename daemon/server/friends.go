@@ -121,11 +121,21 @@ func writeFriendsJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
+// localError marks a failure on this computer (state, identity, config) so it is
+// not reported as the hosted service being unreachable.
+type localError struct{ err error }
+
+func (e *localError) Error() string { return e.err.Error() }
+func (e *localError) Unwrap() error { return e.err }
+
 func friendsFail(w http.ResponseWriter, err error) {
 	status, code := http.StatusBadGateway, "service_unreachable"
 	var refused *friends.RefusedError
 	var service *friends.ServiceError
+	var local *localError
 	switch {
+	case errors.As(err, &local):
+		status, code = http.StatusInternalServerError, "local_error"
 	case errors.Is(err, friends.ErrSignedOut):
 		status, code = http.StatusConflict, "signed_out"
 	case errors.Is(err, friends.ErrNotLinked):
@@ -271,18 +281,14 @@ func (s *Server) friendsLoginStart(w http.ResponseWriter, ctx context.Context, s
 	if current, ok, _ := remote.LoadConfig(stateDir); ok {
 		serviceURL, caPEM = current.ServiceURL, current.ServiceCAPEM
 	}
-	if serviceURL == "" {
-		friendsFail(w, errors.New("this Mewla build has no sign-in service yet"))
-		return
-	}
 	identity, err := link.LoadOrCreateTransportIdentity(stateDir, nil)
 	if err != nil {
-		friendsFail(w, fmt.Errorf("initialize transport identity: %w", err))
+		friendsFail(w, &localError{fmt.Errorf("initialize transport identity: %w", err)})
 		return
 	}
 	client, err := remote.NewClient(serviceURL, caPEM, s.auth)
 	if err != nil {
-		friendsFail(w, err)
+		friendsFail(w, &localError{err})
 		return
 	}
 	start, err := client.StartLogin(ctx, "", identity.RouteID)
@@ -322,7 +328,7 @@ func (s *Server) friendsLoginPoll(w http.ResponseWriter, ctx context.Context, st
 		return
 	}
 	if err := remote.SaveConfig(stateDir, remote.Config{ServiceURL: login.serviceURL, ServiceCAPEM: login.caPEM, Machine: machine}); err != nil {
-		friendsFail(w, fmt.Errorf("save sign-in: %w", err))
+		friendsFail(w, &localError{fmt.Errorf("save sign-in: %w", err)})
 		return
 	}
 	friendsLogins.Lock()

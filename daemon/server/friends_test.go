@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -160,16 +161,17 @@ func TestFriendsLoginSignsTheComputerIn(t *testing.T) {
 	_ = privateKey
 	_ = deviceID
 	srv := New(manager, nil, nil, nil, nil, nil, nil)
-	// No sign-in service in this build or environment: a clear answer, no crash.
-	t.Setenv("MEWLA_REMOTE_SERVICE_URL", "")
 	recorder := httptest.NewRecorder()
-	srv.friendsLoginStart(recorder, context.Background(), manager.StorageDir())
-	if recorder.Code == http.StatusOK {
-		t.Fatalf("login started without a service: %s", recorder.Body)
-	}
-	recorder = httptest.NewRecorder()
 	srv.friendsLoginPoll(recorder, context.Background(), manager.StorageDir(), "nope")
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("poll of an unknown login = %d", recorder.Code)
+	}
+}
+
+func TestFriendsFailLocalErrorIsNotBadGateway(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	friendsFail(recorder, &localError{errors.New("disk full")})
+	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), `"local_error"`) {
+		t.Fatalf("local error = %d %s", recorder.Code, recorder.Body)
 	}
 }
