@@ -85,7 +85,6 @@ func (s *Server) liveRuntime() *liveHub {
 // the safety-net ticker that catches changes no broadcast announced.
 func (s *Server) startLive(ctx context.Context) {
 	hub := s.liveRuntime()
-	s.startCat(ctx)
 	go func() {
 		ticker := time.NewTicker(liveSafetyNetInterval)
 		defer ticker.Stop()
@@ -102,7 +101,6 @@ func (s *Server) startLive(ctx context.Context) {
 			case <-ticker.C:
 				if snapshot, err := s.liveSnapshot(); err == nil {
 					hub.projector.Observe(snapshot)
-					s.observeCat(snapshot)
 				}
 			}
 		}
@@ -122,7 +120,6 @@ func (s *Server) liveSnapshot() (brain.Snapshot, error) {
 // observeLive is called wherever a Brain snapshot is broadcast.
 func (s *Server) observeLive(snapshot brain.Snapshot) {
 	s.liveRuntime().projector.Observe(snapshot)
-	s.observeCat(snapshot) // the cat reads the same stream
 }
 
 // onLiveChange reports one new state to connected phones and, for a phone that
@@ -178,9 +175,6 @@ type liveClientMessage struct {
 // consumed the message; register_push is only observed (for its live_state
 // capability) and still reaches its own handler.
 func (s *Server) handleLiveMessage(conn *websocket.Conn, msg []byte, raw clientMessage) bool {
-	if s.handleCatMessage(conn, msg, raw) {
-		return true
-	}
 	switch raw.Type {
 	case "register_push", "live_state_get", "widget_token_issue", "widget_token_revoke", "live_answer":
 	default:

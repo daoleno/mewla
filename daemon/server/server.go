@@ -149,7 +149,6 @@ type Server struct {
 	codexLiveDial              func(ctx context.Context, socketPath string) (codexctl.LiveControl, error)
 	brainSnapshotBroadcastHook func(payload map[string]any)
 	live                       liveHub // live state, see live_state.go
-	cat                        catHub  // the cat, see cat.go
 	uploadDir                  string
 	uploadStore                *attachment.Store
 	sessionFileWorkerLoader    func(workerID string) *classifier.Worker
@@ -468,7 +467,6 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.Handle("/resources", s.appRoute(webUI, http.HandlerFunc(s.handleResourceTelemetryHTTP)))
 	mux.HandleFunc(widgetSnapshotPath, s.handleWidgetSnapshot) // live: read-only widget snapshot
-	mux.HandleFunc(catBundlePrefix, s.handleCatBundle)         // the cat's game page
 	mux.HandleFunc("/pair", s.handlePair)
 	mux.HandleFunc("/p/", s.handleShortPairLink)
 	mux.HandleFunc("/enrollment/request", s.handleEnrollmentRequest)

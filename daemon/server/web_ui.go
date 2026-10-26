@@ -109,7 +109,7 @@ func (s *Server) webUIHandler() http.Handler {
 			"media-src 'self' data: blob:",
 			"connect-src 'self' ws://" + host + " wss://" + host,
 			"worker-src 'self' blob:",
-			"frame-src 'self'", // only the cat's own page (/cat/ allows the web UI as its sole ancestor)
+			"frame-src 'none'",
 			"object-src 'none'",
 			"base-uri 'none'",
 			"form-action 'none'",

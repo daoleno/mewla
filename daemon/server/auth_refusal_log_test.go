@@ -48,7 +48,7 @@ func getWithHeader(t *testing.T, url, header string) *http.Response {
 
 // A phone whose request was refused leaves a line saying why. The case behind
 // it: a request resent after a dropped connection carries the signature the
-// daemon already accepted, is refused as a replay, and /cat/ answers 404.
+// daemon already accepted, is refused as a replay, and /auth-check answers 401.
 func TestRefusedSignedRequestIsLoggedWithItsReason(t *testing.T) {
 	buf := captureLog(t)
 	manager, privateKey, deviceID := sessionFileAuthFixture(t)
@@ -56,20 +56,20 @@ func TestRefusedSignedRequestIsLoggedWithItsReason(t *testing.T) {
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
-	t.Run("a resent request is a replay, and the cat's 404 says so in the log", func(t *testing.T) {
-		header := calendarAuthHeader(privateKey, manager.DaemonID(), deviceID, catBundlePurpose)
-		if resp := getWithHeader(t, httpServer.URL+"/cat/manifest.json", header); resp.StatusCode == http.StatusNotFound {
+	t.Run("a resent request is a replay, and the log says so", func(t *testing.T) {
+		header := calendarAuthHeader(privateKey, manager.DaemonID(), deviceID, "mewla-probe")
+		if resp := getWithHeader(t, httpServer.URL+"/auth-check", header); resp.StatusCode == http.StatusUnauthorized {
 			t.Fatalf("the first request was refused: %d", resp.StatusCode)
 		}
 		time.Sleep(20 * time.Millisecond)
-		if resp := getWithHeader(t, httpServer.URL+"/cat/manifest.json", header); resp.StatusCode != http.StatusNotFound {
-			t.Fatalf("the resent request got %d, want the cat's 404", resp.StatusCode)
+		if resp := getWithHeader(t, httpServer.URL+"/auth-check", header); resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("the resent request got %d, want 401", resp.StatusCode)
 		}
 		lines := refusedLines(buf)
 		if len(lines) != 1 {
 			t.Fatalf("log lines = %q", lines)
 		}
-		for _, want := range []string{"GET /cat/manifest.json", "purpose=mewla-cat", "reason=replay", "device=" + deviceID, "first accepted"} {
+		for _, want := range []string{"GET /auth-check", "purpose=mewla-probe", "reason=replay", "device=" + deviceID, "first accepted"} {
 			if !strings.Contains(lines[0], want) {
 				t.Errorf("line %q lacks %q", lines[0], want)
 			}

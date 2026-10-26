@@ -1,3 +1,0 @@
-// The few words that only a screen reader hears: names of the things in the picture.
-// Everything the cat writes lives in catalog.js.
-window.CAT_UI = {"hot-mail": "Letters", "hot-shelf": "Shelf", "hot-window": "Window", "hot-bag": "Bag", "hot-sign": "Sign", "hot-cat": "Cat", "hot-bed": "Bed", "hot-cal": "Diary", "hot-pond": "Pond", "hot-dog": "Little house", "bowl": "Bowl", "yarn": "Yarn", "frame": "Picture", "gift": "A little gift", "back": "Back", "home": "Home", "arrivetap": "Keep", "zoomtap": "Close", "sheettap": "Close", "bagtap": "Close", "foodtap": "Close", "nametap": "Close", "diarytap": "Close", "souvenir": "Something it brought home"};
