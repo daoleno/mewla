@@ -45,7 +45,7 @@ func TestFirstRunPromptOnlyForAFreshManualStart(t *testing.T) {
 	if !firstRunPromptAllowed(nil, existing, true) {
 		t.Fatal("an existing install without a saved answer was not asked")
 	}
-	if err := remote.SaveConfig(existing, remote.Config{ServiceURL: "https://service.example", Machine: remote.Machine{
+	if err := remote.SaveConfig(existing, remote.Config{ServiceURL: "https://service.example", RemoteAccess: true, Machine: remote.Machine{
 		MachineID: "mach_1", AccountLogin: "octo", Provider: "github", Hostname: "quiet-otter-1a2b.mewla.test",
 		Label: "quiet-otter-1a2b", RouteID: strings.Repeat("ab", 16), Grant: "grant",
 		GrantExpiresAtMS: time.Now().Add(time.Hour).UnixMilli(),

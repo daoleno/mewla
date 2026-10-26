@@ -106,7 +106,7 @@ func TestFriendsThroughThePairedPhone(t *testing.T) {
 	if code, raw := act(map[string]any{"op": "enable", "agent_name": "Mochi", "pet_id": "cat", "tz": "UTC"}); code != http.StatusOK {
 		t.Fatalf("enable: %d %s", code, raw)
 	}
-	if st := status(); !st.SignedIn || !st.Enabled || st.Handle != "owner" || st.Me == nil || st.Me.AgentName != "Mochi" {
+	if st := status(); !st.SignedIn || st.RemoteAccess || !st.Enabled || st.Handle != "owner" || st.Me == nil || st.Me.AgentName != "Mochi" {
 		t.Fatalf("after enable: %+v", st)
 	}
 
@@ -165,6 +165,60 @@ func TestFriendsLoginSignsTheComputerIn(t *testing.T) {
 	srv.friendsLoginPoll(recorder, context.Background(), manager.StorageDir(), "nope")
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("poll of an unknown login = %d", recorder.Code)
+	}
+}
+
+// Signing in for Friends is the Mewla account alone: it must not turn on the
+// relay connection, the certificate or the public address. A computer that
+// already has remote access keeps it.
+func TestFriendsLoginDoesNotTurnOnRemoteAccess(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/login/start":
+			_ = json.NewEncoder(w).Encode(map[string]any{"login_id": "l1", "user_code": "ABCD-EFGH", "verification_uri": "https://example.test/device", "interval_seconds": 1})
+		case "/v1/login/poll":
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "complete", "machine": remote.Machine{
+				MachineID: "m1", AccountLogin: "owner", Hostname: "quiet-otter-1a2b.mewla.test", Label: "quiet-otter-1a2b", RouteID: strings.Repeat("ab", 16),
+				Relays: []remote.Relay{{Name: "r1", ControlAddress: "127.0.0.1:1", ControlServerName: "relay.test", ClientDomain: "mewla.test", ClientPort: 443}}}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer service.Close()
+	t.Setenv("MEWLA_REMOTE_SERVICE_URL", service.URL)
+
+	signIn := func(manager *auth.Manager) {
+		t.Helper()
+		srv := New(manager, nil, nil, nil, nil, nil, nil)
+		start := httptest.NewRecorder()
+		srv.friendsLoginStart(start, context.Background(), manager.StorageDir())
+		if start.Code != http.StatusOK {
+			t.Fatalf("login start = %d %s", start.Code, start.Body)
+		}
+		poll := httptest.NewRecorder()
+		srv.friendsLoginPoll(poll, context.Background(), manager.StorageDir(), "l1")
+		if poll.Code != http.StatusOK || !strings.Contains(poll.Body.String(), `"done"`) {
+			t.Fatalf("login poll = %d %s", poll.Code, poll.Body)
+		}
+	}
+
+	fresh, _, _ := sessionFileAuthFixture(t)
+	signIn(fresh)
+	if account, ok, err := remote.LoadAccount(fresh.StorageDir()); err != nil || !ok || account.Machine.AccountLogin != "owner" || account.RemoteAccess {
+		t.Fatalf("account = %+v ok=%v err=%v; want signed in with remote access off", account, ok, err)
+	}
+	if _, on, _ := remote.LoadRemote(fresh.StorageDir()); on {
+		t.Fatal("signing in for Friends turned on remote access")
+	}
+
+	connected, _, _ := sessionFileAuthFixture(t)
+	if err := remote.SaveConfig(connected.StorageDir(), remote.Config{ServiceURL: service.URL, RemoteAccess: true, Machine: remote.Machine{
+		AccountLogin: "owner", Hostname: "h.example.test", Label: "h", RouteID: "r", Relays: []remote.Relay{{Name: "x"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	signIn(connected)
+	if _, on, _ := remote.LoadRemote(connected.StorageDir()); !on {
+		t.Fatal("a Friends sign-in switched remote access off")
 	}
 }
 

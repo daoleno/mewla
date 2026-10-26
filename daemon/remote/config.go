@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ConfigVersion  = 1
+	ConfigVersion  = 2
 	configFileName = "remote.json"
 	statusFileName = "remote-status.json"
 	certFileName   = "remote-cert.pem"
@@ -67,10 +67,15 @@ type Machine struct {
 }
 
 // Config is remote.json in the daemon state directory. It exists only while
-// this computer is signed in.
+// this computer is signed in to a Mewla account, and holds that sign-in. Friends
+// needs only the sign-in; remote access (the relay connection, the certificate
+// and the public address) runs only while RemoteAccess is true, which only
+// `mewla login` turns on.
 type Config struct {
 	Version    int    `json:"version"`
 	ServiceURL string `json:"service_url"`
+	// RemoteAccess is whether this computer is reachable through the relay.
+	RemoteAccess bool `json:"remote_access"`
 	// ServiceCAPEM is an extra root for the service's HTTPS, used by local
 	// development deployments only.
 	ServiceCAPEM string  `json:"service_ca_pem,omitempty"`
@@ -92,8 +97,10 @@ func ConfigPath(stateDir string) string {
 	return filepath.Join(stateDir, configFileName)
 }
 
-// LoadConfig returns the saved sign-in, or ok=false when signed out.
-func LoadConfig(stateDir string) (Config, bool, error) {
+// LoadAccount returns the saved Mewla account sign-in, whether or not remote
+// access is on, or ok=false when this computer is signed out. Friends and
+// everything else that only needs the account use it.
+func LoadAccount(stateDir string) (Config, bool, error) {
 	raw, err := os.ReadFile(ConfigPath(stateDir))
 	if errors.Is(err, os.ErrNotExist) {
 		return Config{}, false, nil
@@ -105,10 +112,26 @@ func LoadConfig(stateDir string) (Config, bool, error) {
 	if err := json.Unmarshal(raw, &config); err != nil {
 		return Config{}, false, fmt.Errorf("decode remote access config: %w", err)
 	}
-	if config.Version != ConfigVersion {
+	switch config.Version {
+	case ConfigVersion:
+	case 1:
+		// Version 1 had no Friends-only sign-in: a saved sign-in was `mewla
+		// login`, which turned remote access on. The next save writes version 2.
+		config.RemoteAccess = true
+	default:
 		return Config{}, false, fmt.Errorf("unsupported remote access config version %d", config.Version)
 	}
 	if err := config.validate(); err != nil {
+		return Config{}, false, err
+	}
+	return config, true, nil
+}
+
+// LoadRemote returns the sign-in only while remote access is on. The relay
+// connection, the public address and the pairing links use it.
+func LoadRemote(stateDir string) (Config, bool, error) {
+	config, ok, err := LoadAccount(stateDir)
+	if err != nil || !ok || !config.RemoteAccess {
 		return Config{}, false, err
 	}
 	return config, true, nil
@@ -126,10 +149,29 @@ func SaveConfig(stateDir string, config Config) error {
 	return atomicfile.Write(ConfigPath(stateDir), raw, 0o600)
 }
 
-// RemoveSignIn deletes everything this computer keeps for remote access.
+// StopRemote turns remote access off and keeps the account sign-in. It forgets
+// the hostname certificate, which belongs to the address that goes away.
+func StopRemote(stateDir string) error {
+	config, ok, err := LoadAccount(stateDir)
+	if err != nil || !ok {
+		return err
+	}
+	config.RemoteAccess = false
+	if err := SaveConfig(stateDir, config); err != nil {
+		return err
+	}
+	return removeFiles(stateDir, statusFileName, certFileName, acmeKeyFile)
+}
+
+// RemoveSignIn deletes everything this computer keeps for its Mewla account
+// and remote access.
 func RemoveSignIn(stateDir string) error {
+	return removeFiles(stateDir, configFileName, statusFileName, certFileName, acmeKeyFile)
+}
+
+func removeFiles(stateDir string, names ...string) error {
 	var first error
-	for _, name := range []string{configFileName, statusFileName, certFileName, acmeKeyFile} {
+	for _, name := range names {
 		if err := os.Remove(filepath.Join(stateDir, name)); err != nil && !errors.Is(err, os.ErrNotExist) && first == nil {
 			first = err
 		}

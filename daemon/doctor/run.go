@@ -235,11 +235,14 @@ func (e env) checkAddresses(stateDir string) []AddressCheck {
 
 // checkRemote never blocks readiness: remote access is optional.
 func (e env) checkRemote(stateDir string) RemoteCheck {
-	config, ok, err := remote.LoadConfig(stateDir)
+	config, ok, err := remote.LoadRemote(stateDir)
 	switch {
 	case err != nil:
 		return RemoteCheck{Status: StatusWarn, Summary: "remote access config is unreadable: " + err.Error()}
 	case !ok:
+		if account, _, _ := remote.LoadAccount(stateDir); account.Machine.AccountLogin != "" {
+			return RemoteCheck{Status: StatusOK, Summary: "off (signed in as " + account.Machine.AccountLogin + " for Friends; turn on with mewla login)"}
+		}
 		return RemoteCheck{Status: StatusOK, Summary: "off (turn on with mewla login)"}
 	}
 	check := RemoteCheck{SignedIn: true, URL: config.URL(), Account: config.Machine.AccountLogin}

@@ -100,7 +100,7 @@
 <ul>
 <li><strong>远程访问账号。</strong>在任意一台还用这个账号登录着的电脑上运行 <code>mewla logout -delete-account</code>，输入账号名确认。这会删除你的 GitHub id 和用户名，以及这个账号下的所有电脑；其他电脑会在一小时内掉线。如果已经没有登录着的电脑，用同一个 GitHub 账号登录一次（<code>mewla login</code>）再运行这个命令，或者用你 GitHub 账号的邮箱写信到 <a href="mailto:support@mewla.ai">support@mewla.ai</a>。</li>
 <li><strong>Friends。</strong>在 App 的设置 Labs 中关闭 Friends，会删除你的 Friends 账号及其上的所有内容；删除远程访问账号也会同时删除。</li>
-<li><strong>只移除一台电脑。</strong><code>mewla logout</code> 会把这台电脑从账号里移除。</li>
+<li><strong>只移除一台电脑。</strong><code>mewla logout</code> 会关闭远程访问；Friends 关闭时，还会把这台电脑从账号里移除。Friends 开着时这台电脑会保持登录，因为 Friends 就是这个账号；先在 App 里关掉 Friends，再运行一次即可。</li>
 <li><strong>GitHub。</strong>如果也想撤销 Mewla 在 GitHub 上的授权，到 <a href="https://github.com/settings/applications">github.com/settings/applications</a> 撤销。</li>
 <li><strong>其他数据</strong>都在你自己的设备上：卸载 App，并删除电脑上的状态文件夹（<code>~/.mewla</code>）。</li>
 </ul>

@@ -142,7 +142,7 @@ func runWeb(cfg webConfig, w io.Writer, env webEnv) error {
 // other HTTPS addresses and the phone-only plain HTTP addresses.
 func buildWebView(entries []addressbook.Entry, pairingInfo *control.PairingInfo, stateDir string) webView {
 	view := webView{expiresAt: pairingInfo.ExpiresAt}
-	if config, ok, err := remote.LoadConfig(stateDir); err == nil && ok {
+	if config, ok, err := remote.LoadRemote(stateDir); err == nil && ok {
 		view.remoteURL = strings.TrimRight(config.URL(), "/")
 	}
 	pairing := auth.PairingToken{Value: pairingInfo.Token, ExpiresAt: pairingInfo.ExpiresAt}

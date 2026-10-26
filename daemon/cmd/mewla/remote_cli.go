@@ -35,8 +35,10 @@ func runLoginCommand(args []string, stderr io.Writer) error {
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla login [flags]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Sign this computer in to remote access, so your phone and any browser")
+		fmt.Fprintln(stderr, "Turn on remote access for this computer, so your phone and any browser")
 		fmt.Fprintln(stderr, "reach it from any network. No Tailscale, port forwarding or domain needed.")
+		fmt.Fprintln(stderr, "A computer already signed in to a Mewla account (turning on Friends does that)")
+		fmt.Fprintln(stderr, "turns it on without a second sign-in.")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -53,7 +55,7 @@ func runLoginCommand(args []string, stderr io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if strings.TrimSpace(*name) != "" && strings.TrimSpace(*service) == "" {
-		if current, ok, err := remote.LoadConfig(resolvedStateDir); err != nil {
+		if current, ok, err := remote.LoadAccount(resolvedStateDir); err != nil {
 			return err
 		} else if ok {
 			return remoteRename(ctx, stderr, resolvedStateDir, current, *name)
@@ -79,18 +81,18 @@ type remoteLoginOptions struct {
 	openBrowser   bool
 }
 
-// remoteLogin signs this computer in with a device code: the person approves
-// in a browser on any device, and the service assigns this computer its
-// address. The account only finds the computer; every phone or browser still
-// pairs with a code or a number confirmed here.
+// remoteLogin turns remote access on. A computer already signed in to a Mewla
+// account (Friends does that) keeps that sign-in; otherwise the person signs in
+// with a device code, approving in a browser on any device, and the service
+// assigns this computer its address. The account only finds the computer; every
+// phone or browser still pairs with a code or a number confirmed here.
 func remoteLogin(ctx context.Context, w io.Writer, stateDir string, options remoteLoginOptions) (remote.Config, error) {
 	serviceURL := strings.TrimSuffix(strings.TrimSpace(options.serviceURL), "/")
 	caPEM := ""
-	if serviceURL == "" {
+	current, signedIn, _ := remote.LoadAccount(stateDir)
+	if serviceURL == "" && signedIn {
 		// Signing in again keeps the service this computer already uses.
-		if current, ok, _ := remote.LoadConfig(stateDir); ok {
-			serviceURL, caPEM = current.ServiceURL, current.ServiceCAPEM
-		}
+		serviceURL, caPEM = current.ServiceURL, current.ServiceCAPEM
 	}
 	if serviceURL == "" {
 		serviceURL = remote.ServiceURL()
@@ -109,13 +111,29 @@ func remoteLogin(ctx context.Context, w io.Writer, stateDir string, options remo
 	if err != nil {
 		return remote.Config{}, fmt.Errorf("initialize auth manager: %w", err)
 	}
-	identity, err := link.LoadOrCreateTransportIdentity(stateDir, nil)
-	if err != nil {
-		return remote.Config{}, fmt.Errorf("initialize transport identity: %w", err)
-	}
 	client, err := remote.NewClient(serviceURL, caPEM, authManager)
 	if err != nil {
 		return remote.Config{}, err
+	}
+	if signedIn && serviceURL == current.ServiceURL {
+		machine, err := client.Machine(ctx)
+		switch {
+		case err == nil:
+			config := remote.Config{ServiceURL: serviceURL, ServiceCAPEM: caPEM, RemoteAccess: true, Machine: machine}
+			if err := remote.SaveConfig(stateDir, config); err != nil {
+				return remote.Config{}, fmt.Errorf("save remote access sign-in: %w", err)
+			}
+			fmt.Fprintf(w, "Signed in as %s.\n", accountName(machine))
+			fmt.Fprintf(w, "This computer's address: %s\n", config.URL())
+			return config, nil
+		case !errors.Is(err, remote.ErrSignedOut):
+			return remote.Config{}, fmt.Errorf("reach the service: %w", err)
+		}
+		// The service forgot this computer: sign in again below.
+	}
+	identity, err := link.LoadOrCreateTransportIdentity(stateDir, nil)
+	if err != nil {
+		return remote.Config{}, fmt.Errorf("initialize transport identity: %w", err)
 	}
 	// An empty name lets the service pick random words: the address lands in
 	// public certificate logs, so it never defaults to the hostname.
@@ -158,23 +176,19 @@ func remoteLogin(ctx context.Context, w io.Writer, stateDir string, options remo
 		if err != nil {
 			return remote.Config{}, err
 		}
-		config := remote.Config{ServiceURL: serviceURL, ServiceCAPEM: caPEM, Machine: machine}
+		config := remote.Config{ServiceURL: serviceURL, ServiceCAPEM: caPEM, RemoteAccess: true, Machine: machine}
 		if err := remote.SaveConfig(stateDir, config); err != nil {
 			return remote.Config{}, fmt.Errorf("save remote access sign-in: %w", err)
 		}
-		account := machine.AccountLogin
-		if machine.Provider != "" {
-			account += " (" + machine.Provider + ")"
-		}
-		fmt.Fprintf(w, "\nSigned in as %s.\n", account)
+		fmt.Fprintf(w, "\nSigned in as %s.\n", accountName(machine))
 		fmt.Fprintf(w, "This computer's address: %s\n", config.URL())
 		return config, nil
 	}
 }
 
-// remoteRename moves a signed-in computer to a new address. Paired phones
-// keep working; a browser pairs again at the new address because its key
-// belongs to the old one.
+// remoteRename moves a signed-in computer to a new address, and turns remote
+// access on if it was off. Paired phones keep working; a browser pairs again at
+// the new address because its key belongs to the old one.
 func remoteRename(ctx context.Context, w io.Writer, stateDir string, config remote.Config, name string) error {
 	authManager, err := auth.NewManager(stateDir)
 	if err != nil {
@@ -186,22 +200,24 @@ func remoteRename(ctx context.Context, w io.Writer, stateDir string, config remo
 	}
 	machine, err := client.Rename(ctx, strings.TrimSpace(name))
 	if errors.Is(err, remote.ErrSignedOut) {
-		return errors.New("this computer is no longer signed in; run mewla login without -name first")
+		return errors.New("this computer is no longer signed in to its Mewla account; run mewla login without -name first")
 	}
 	if err != nil {
 		return fmt.Errorf("rename at the service: %w", err)
 	}
-	previous := config.URL()
-	config.Machine = machine
+	previous, wasOn := config.URL(), config.RemoteAccess
+	config.Machine, config.RemoteAccess = machine, true
 	if err := remote.SaveConfig(stateDir, config); err != nil {
 		return fmt.Errorf("save remote access sign-in: %w", err)
 	}
-	if book, err := addressbook.New(stateDir); err == nil && previous != config.URL() {
-		_ = book.Remove(previous)
+	if book, err := addressbook.New(stateDir); err == nil {
+		if wasOn && previous != config.URL() {
+			_ = book.Remove(previous)
+		}
 		_, _ = book.Add(config.URL(), addressbook.SourceRemote)
 	}
 	fmt.Fprintf(w, "This computer's address: %s\n", config.URL())
-	if previous != config.URL() {
+	if wasOn && previous != config.URL() {
 		fmt.Fprintf(w, "%s no longer reaches it. Paired phones keep working; browsers pair again at the new address.\n", previous)
 	}
 	return nil
@@ -211,9 +227,11 @@ func runLogoutCommand(args []string, stderr io.Writer) error {
 	return runLogout(args, os.Stdin, term.IsTerminal(int(os.Stdin.Fd())), stderr)
 }
 
-// runLogout signs this computer out of remote access. With -delete-account
-// it deletes the whole account at the service, after the person types the
-// account name (or passes -yes when no one is at a terminal).
+// runLogout turns remote access off. While Friends is on, the Mewla account
+// stays signed in, because Friends is that account; otherwise the computer
+// signs out completely. With -delete-account it deletes the whole account at
+// the service, after the person types the account name (or passes -yes when no
+// one is at a terminal).
 func runLogout(args []string, stdin io.Reader, interactive bool, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla logout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -223,7 +241,8 @@ func runLogout(args []string, stdin io.Reader, interactive bool, stderr io.Write
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla logout [-delete-account [-yes]] [flags]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Turn remote access off for this computer. With -delete-account, also delete")
+		fmt.Fprintln(stderr, "Turn remote access off for this computer. Friends keeps working: while it is on,")
+		fmt.Fprintln(stderr, "this computer stays signed in to its Mewla account. With -delete-account, delete")
 		fmt.Fprintln(stderr, "the account (your GitHub id and login) and every computer signed in with it.")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
@@ -241,16 +260,19 @@ func runLogout(args []string, stdin io.Reader, interactive bool, stderr io.Write
 	if err != nil {
 		return err
 	}
-	config, ok, err := remote.LoadConfig(resolvedStateDir)
+	config, ok, err := remote.LoadAccount(resolvedStateDir)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		if *deleteAccount {
-			return errors.New("this computer is not signed in to remote access; sign in with the account to delete (mewla login), then run mewla logout -delete-account")
+			return errors.New("this computer is not signed in to a Mewla account; sign in with the account to delete (mewla login), then run mewla logout -delete-account")
 		}
-		fmt.Fprintln(stderr, "This computer is not signed in to remote access.")
+		fmt.Fprintln(stderr, "This computer is not signed in to a Mewla account.")
 		return nil
+	}
+	if _, friendsOn := (&friends.Local{StateDir: resolvedStateDir}).Enabled(); friendsOn && !*deleteAccount {
+		return stopRemoteKeepAccount(stderr, resolvedStateDir, config)
 	}
 	if *deleteAccount && !*yes {
 		if err := confirmAccountDeletion(stdin, interactive, stderr, config.Machine); err != nil {
@@ -289,13 +311,39 @@ func runLogout(args []string, stdin io.Reader, interactive bool, stderr io.Write
 		_ = book.Remove(config.URL())
 	}
 	if *deleteAccount {
-		fmt.Fprintf(stderr, "Deleted the remote access account %s.\n", accountName(config.Machine))
-		fmt.Fprintf(stderr, "%s no longer reaches this computer. Other computers on the account drop off within an hour.\n", config.URL())
+		fmt.Fprintf(stderr, "Deleted the Mewla account %s.\n", accountName(config.Machine))
+		if config.RemoteAccess {
+			fmt.Fprintf(stderr, "%s no longer reaches this computer. ", config.URL())
+		}
+		fmt.Fprintln(stderr, "Other computers on the account drop off within an hour.")
 		fmt.Fprintln(stderr, "To also remove Mewla's access on GitHub: https://github.com/settings/applications")
+		return nil
+	}
+	if !config.RemoteAccess {
+		fmt.Fprintf(stderr, "Signed out of the Mewla account %s.\n", accountName(config.Machine))
 		return nil
 	}
 	fmt.Fprintf(stderr, "Signed out. %s no longer reaches this computer.\n", config.URL())
 	fmt.Fprintln(stderr, "Phones and browsers stay paired; they reach this computer again after mewla login.")
+	return nil
+}
+
+// stopRemoteKeepAccount turns remote access off and leaves the Mewla account
+// signed in at the service, because Friends is that account.
+func stopRemoteKeepAccount(w io.Writer, stateDir string, config remote.Config) error {
+	if !config.RemoteAccess {
+		fmt.Fprintf(w, "Remote access is already off. This computer stays signed in as %s for Friends.\n", accountName(config.Machine))
+		return nil
+	}
+	if err := remote.StopRemote(stateDir); err != nil {
+		return err
+	}
+	if book, err := addressbook.New(stateDir); err == nil {
+		_ = book.Remove(config.URL())
+	}
+	fmt.Fprintf(w, "Remote access is off. %s no longer reaches this computer.\n", config.URL())
+	fmt.Fprintf(w, "Friends keeps working: this computer stays signed in as %s. Turn Friends off in the App, then run mewla logout again to sign out.\n", accountName(config.Machine))
+	fmt.Fprintln(w, "Phones and browsers stay paired; they reach this computer again after mewla login.")
 	return nil
 }
 
@@ -348,7 +396,7 @@ func openURL(target string) error {
 // buildRemotePairingLink pairs a phone through this computer's remote access
 // relay with the pinned transport, or returns "" when signed out.
 func buildRemotePairingLink(stateDir, daemonID, daemonPublicKey string, pairing auth.PairingToken) (string, string, error) {
-	config, ok, err := remote.LoadConfig(stateDir)
+	config, ok, err := remote.LoadRemote(stateDir)
 	if err != nil || !ok {
 		return "", "", err
 	}
@@ -372,8 +420,12 @@ func buildRemotePairingLink(stateDir, daemonID, daemonPublicKey string, pairing 
 
 // writeRemoteStatus prints the remote access line under mewla address list.
 func writeRemoteStatus(w io.Writer, stateDir string) {
-	config, ok, err := remote.LoadConfig(stateDir)
+	config, ok, err := remote.LoadRemote(stateDir)
 	if err != nil || !ok {
+		if account, signedIn, _ := remote.LoadAccount(stateDir); signedIn {
+			fmt.Fprintf(w, "\nRemote access is off. Signed in as %s for Friends only. Reach this computer from anywhere: mewla login\n", accountName(account.Machine))
+			return
+		}
 		fmt.Fprintln(w, "\nRemote access is off. Reach this computer from anywhere: mewla login")
 		return
 	}

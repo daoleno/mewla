@@ -287,6 +287,15 @@ mewla logout    # turn it off
 mewla logout -delete-account   # turn it off and delete your account
 ```
 
+Remote access is its own choice. Signing in to a Mewla account does not turn it
+on: turning on Friends in the app signs this computer in to the account and
+nothing else, so a computer you reach over Tailscale, a Cloudflare tunnel or the
+same network gets Friends without a public address. If the computer is already
+signed in that way, `mewla login` turns remote access on without a second
+sign-in. `mewla logout` turns it off; while Friends is on the computer stays
+signed in to the account, because Friends is that account, and a second
+`mewla logout` after turning Friends off signs it out.
+
 The address starts with two random words, never your computer's hostname,
 because every certificate is published (see below). Rename it with
 `mewla login -name <word>`; a short random suffix keeps it unique. Paired
@@ -311,7 +320,8 @@ public certificate logs, and you can rename three times a day.
   connection and the certificate.
 
 The service keeps your GitHub id and login, and each signed-in computer's
-address and name. `mewla logout` forgets this computer.
+address and name. `mewla logout` forgets this computer unless Friends is on
+(see above).
 `mewla logout -delete-account` asks you to type the account name, then deletes
 the account and every computer signed in with it; the others drop off within
 an hour. Run it from any computer still signed in with that account. See the

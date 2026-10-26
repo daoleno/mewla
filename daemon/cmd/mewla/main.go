@@ -572,7 +572,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	// Record the remote address before the first-device pairing prints, so
 	// its QR can use it; the remote runtime keeps it current afterwards.
-	if remoteConfig, signedIn, _ := remote.LoadConfig(authManager.StorageDir()); signedIn {
+	if remoteConfig, signedIn, _ := remote.LoadRemote(authManager.StorageDir()); signedIn {
 		if _, err := book.Add(remoteConfig.URL(), addressbook.SourceRemote); err != nil {
 			log.Printf("WARN could not record the remote access address: %v", err)
 		}
