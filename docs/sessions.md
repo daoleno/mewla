@@ -16,7 +16,7 @@ directory and tap what to run:
 | DSH | The DSH harness, opened as a web page rather than a terminal |
 
 **Advanced** lets you set the working directory, any command (for example
-`claude --permission-mode auto`) and a window title.
+`claude --model opus`) and a window title.
 
 The agent must already be installed and signed in on the computer; Mewla never
 signs in for you.

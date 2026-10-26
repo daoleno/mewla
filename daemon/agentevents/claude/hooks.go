@@ -20,7 +20,7 @@ import (
 // HookEvents are the hooks Mewla registers. Only these fire a process, so the
 // list is the whole cost of watching a Claude Worker.
 var HookEvents = []string{
-	"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "PermissionDenied", "Stop", "StopFailure", "SessionEnd",
+	"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest", "Stop", "StopFailure", "SessionEnd",
 }
 
 // Payload is the part of a hook payload Mewla reads. Prompt text is hashed
@@ -34,11 +34,8 @@ type Payload struct {
 	Source         string          `json:"source"`
 	ToolName       string          `json:"tool_name"`
 	ToolInput      json.RawMessage `json:"tool_input"`
-	// Reason is PermissionDenied's denial reason; for a classifier verdict it
-	// names the matched rule in square brackets.
-	Reason       string `json:"reason"`
-	Error        string `json:"error"`
-	ErrorDetails string `json:"error_details"`
+	Error          string          `json:"error"`
+	ErrorDetails   string          `json:"error_details"`
 }
 
 // Parse decodes a hook payload.
@@ -136,48 +133,6 @@ func Approval(id string, p Payload) agentevents.Approval {
 	}
 }
 
-// AutoDenied is the request a PermissionDenied hook stands for: Auto mode
-// refused the action and nothing runs unless it is approved and retried.
-func AutoDenied(id string, p Payload) agentevents.Approval {
-	return agentevents.Approval{
-		ID:             id,
-		ConversationID: p.SessionID,
-		Kind:           "auto_denied",
-		Tool:           p.ToolName,
-		Summary:        summarizeToolInput(p.ToolName, p.ToolInput),
-		Reason:         strings.TrimSpace(p.Reason),
-		Options: []agentevents.ApprovalOption{
-			{ID: "allow", Label: "Allow once", Scope: "once"},
-			{ID: "deny", Label: "Keep blocked", Scope: "deny"},
-		},
-	}
-}
-
-// DeniedDecision is the PermissionDenied hook output for an answer. Approving
-// cannot reverse the refusal: it tells the agent it may retry, and the retry
-// passes only through ToolGrant. A refusal that stands prints nothing.
-func DeniedDecision(optionID string) (output string, ok bool) {
-	if optionID != "allow" {
-		return "", false
-	}
-	raw, _ := json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{
-		"hookEventName": "PermissionDenied",
-		"retry":         true,
-	}})
-	return string(raw), true
-}
-
-// ToolGrant is the PreToolUse hook output that lets one approved call run past
-// Auto mode's refusal.
-func ToolGrant(reason string) string {
-	raw, _ := json.Marshal(map[string]any{"hookSpecificOutput": map[string]any{
-		"hookEventName":            "PreToolUse",
-		"permissionDecision":       "allow",
-		"permissionDecisionReason": reason,
-	}})
-	return string(raw)
-}
-
 // DenyPrompt is the PermissionRequest hook output that refuses a prompt nobody
 // is there to answer, so a delegated Worker is told why and moves on instead
 // of waiting at a terminal prompt.
@@ -187,25 +142,6 @@ func DenyPrompt(message string) string {
 		"decision":      map[string]any{"behavior": "deny", "message": message},
 	}})
 	return string(raw)
-}
-
-// ActionKey identifies one tool call independently of fields that vary between
-// attempts (a Bash call's description or timeout): the command for a shell
-// call, otherwise the whole input.
-func ActionKey(tool string, input json.RawMessage) string {
-	var fields struct {
-		Command string `json:"command"`
-	}
-	_ = json.Unmarshal(input, &fields)
-	if strings.TrimSpace(fields.Command) != "" {
-		return tool + "\x00" + strings.TrimSpace(fields.Command)
-	}
-	var generic any
-	if err := json.Unmarshal(input, &generic); err != nil {
-		return tool + "\x00" + string(input)
-	}
-	canonical, _ := json.Marshal(generic)
-	return tool + "\x00" + string(canonical)
 }
 
 // Decision is the hook output that answers a PermissionRequest with the

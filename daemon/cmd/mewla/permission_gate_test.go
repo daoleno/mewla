@@ -64,8 +64,7 @@ func (r *gateRecorder) snapshot() (told, audits, resumed []string, changed int) 
 	return append([]string(nil), r.told...), append([]string(nil), r.audits...), append([]string(nil), r.resumed...), r.changed
 }
 
-const deniedPush = `{"hook_event_name":"PermissionDenied","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"git push origin main","description":"push"},"reason":"[Data Exfiltration]"}`
-const retriedPush = `{"hook_event_name":"PreToolUse","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"git push origin main"}}`
+const askedPush = `{"hook_event_name":"PermissionRequest","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"git push origin main","description":"push"}}`
 
 func gateService(t *testing.T, delegated bool) (*agentEventService, *gateRecorder) {
 	t.Helper()
@@ -108,12 +107,12 @@ func waitUntil(t *testing.T, what string, ok func() bool) {
 	}
 }
 
-func TestABlockedActionReachesBrainFirstAndStaysOffThePhone(t *testing.T) {
+func TestAPermissionPromptReachesBrainFirstAndStaysOffThePhone(t *testing.T) {
 	s, rec := gateService(t, true)
-	done := start(s, deniedPush)
+	done := start(s, askedPush)
 
 	asked := pending(t, s, false, 1)[0]
-	if asked.Route != routeBrain || asked.Kind != "auto_denied" || asked.Summary != "git push origin main" || asked.Reason != "[Data Exfiltration]" {
+	if asked.Route != routeBrain || asked.Kind != "permission" || asked.Summary != "git push origin main" {
 		t.Fatalf("approval = %+v", asked)
 	}
 	if shown := s.approvals("%4", true); len(shown) != 0 {
@@ -121,7 +120,7 @@ func TestABlockedActionReachesBrainFirstAndStaysOffThePhone(t *testing.T) {
 	}
 	waitUntil(t, "Brain to be told", func() bool { told, _, _, _ := rec.snapshot(); return len(told) == 1 })
 	told, _, _, _ := rec.snapshot()
-	for _, want := range []string{"Blocked by Auto mode", "git push origin main", "[Data Exfiltration]"} {
+	for _, want := range []string{"Waiting on a permission prompt", "git push origin main"} {
 		if !strings.Contains(told[0], want) {
 			t.Fatalf("Brain was told %q, missing %q", told[0], want)
 		}
@@ -129,7 +128,7 @@ func TestABlockedActionReachesBrainFirstAndStaysOffThePhone(t *testing.T) {
 	rec.mu.Lock()
 	details := rec.details[0]
 	rec.mu.Unlock()
-	if details["approval_id"] != asked.ID || details["rule"] != "[Data Exfiltration]" || !strings.Contains(details["answer_with"].(string), asked.ID) {
+	if details["approval_id"] != asked.ID || details["event"] != "permission_blocked" || !strings.Contains(details["answer_with"].(string), asked.ID) {
 		t.Fatalf("details = %+v", details)
 	}
 
@@ -144,7 +143,7 @@ func TestABlockedActionReachesBrainFirstAndStaysOffThePhone(t *testing.T) {
 		t.Fatalf("decide: %+v", resp)
 	}
 	resp := <-done
-	if !resp.OK || !strings.Contains(resp.HookOutput, `"retry":true`) {
+	if !resp.OK || !strings.Contains(resp.HookOutput, `"behavior":"allow"`) {
 		t.Fatalf("hook output = %+v", resp)
 	}
 
@@ -155,45 +154,17 @@ func TestABlockedActionReachesBrainFirstAndStaysOffThePhone(t *testing.T) {
 	if len(resumed) != 1 {
 		t.Fatalf("the Worker stayed marked as needing input: %q", resumed)
 	}
-
-	// The retry passes once, with a description that differs from the first try.
-	granted := s.Handle(context.Background(), hook("claude", "%4", retriedPush))
-	if !strings.Contains(granted.HookOutput, `"permissionDecision":"allow"`) {
-		t.Fatalf("the approved retry was not let through: %+v", granted)
-	}
-	if again := s.Handle(context.Background(), hook("claude", "%4", retriedPush)); again.HookOutput != "" {
-		t.Fatalf("a grant was used twice: %+v", again)
-	}
 }
 
-func TestAGrantIsForTheApprovedActionOnly(t *testing.T) {
-	s, _ := gateService(t, true)
-	done := start(s, deniedPush)
-	asked := pending(t, s, false, 1)[0]
-	s.decide("%4", asked.ID, "allow", answeredByOperator, "brief says push main")
-	<-done
-	other := `{"hook_event_name":"PreToolUse","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}`
-	if resp := s.Handle(context.Background(), hook("claude", "%4", other)); resp.HookOutput != "" {
-		t.Fatalf("another action rode on the grant: %+v", resp)
-	}
-	s.now = func() time.Time { return time.Now().Add(grantLifetime + time.Minute) }
-	if resp := s.Handle(context.Background(), hook("claude", "%4", retriedPush)); resp.HookOutput != "" {
-		t.Fatalf("an expired grant was honored: %+v", resp)
-	}
-}
-
-func TestBrainRefusingKeepsTheActionBlockedAndGrantsNothing(t *testing.T) {
+func TestBrainRefusingAPromptDeniesItAndAllowsNothing(t *testing.T) {
 	s, rec := gateService(t, true)
-	done := start(s, deniedPush)
+	done := start(s, askedPush)
 	asked := pending(t, s, false, 1)[0]
 	if resp := s.decide("%4", asked.ID, "deny", answeredByOperator, "The brief does not cover pushing."); !resp.OK {
 		t.Fatalf("decide: %+v", resp)
 	}
-	if resp := <-done; resp.HookOutput != "" {
-		t.Fatalf("a refused action printed %q", resp.HookOutput)
-	}
-	if resp := s.Handle(context.Background(), hook("claude", "%4", retriedPush)); resp.HookOutput != "" {
-		t.Fatalf("a refused action was let through: %+v", resp)
+	if resp := <-done; strings.Contains(resp.HookOutput, `"behavior":"allow"`) {
+		t.Fatalf("a refused action was let through: %q", resp.HookOutput)
 	}
 	_, audits, _, _ := rec.snapshot()
 	if len(audits) != 1 || !strings.HasPrefix(audits[0], "denied: Brain refused") {
@@ -203,7 +174,7 @@ func TestBrainRefusingKeepsTheActionBlockedAndGrantsNothing(t *testing.T) {
 
 func TestBrainHandsWhatIsOutsideTheBriefToTheUser(t *testing.T) {
 	s, rec := gateService(t, true)
-	done := start(s, deniedPush)
+	done := start(s, askedPush)
 	asked := pending(t, s, false, 1)[0]
 	if resp := s.decide("%4", asked.ID, "escalate", answeredByApp, ""); resp.OK {
 		t.Fatal("the app escalated a question for Brain")
@@ -224,7 +195,7 @@ func TestBrainHandsWhatIsOutsideTheBriefToTheUser(t *testing.T) {
 	if resp := s.decide("%4", asked.ID, "allow", answeredByApp, ""); !resp.OK {
 		t.Fatalf("the user's answer was refused: %+v", resp)
 	}
-	if resp := <-done; !strings.Contains(resp.HookOutput, `"retry":true`) {
+	if resp := <-done; !strings.Contains(resp.HookOutput, `"behavior":"allow"`) {
 		t.Fatalf("resp = %+v", resp)
 	}
 	if _, audits, resumed, _ := rec.snapshot(); len(audits) != 2 || !strings.HasPrefix(audits[1], "approved: the user approved") || len(resumed) != 1 {
@@ -235,7 +206,7 @@ func TestBrainHandsWhatIsOutsideTheBriefToTheUser(t *testing.T) {
 func TestABlockedActionBrainDoesNotAnswerGoesToTheUser(t *testing.T) {
 	s, rec := gateService(t, true)
 	s.brainWait = 20 * time.Millisecond
-	done := start(s, deniedPush)
+	done := start(s, askedPush)
 	card := pending(t, s, true, 1)[0]
 	if card.Route != routeUser {
 		t.Fatalf("card = %+v", card)
@@ -250,7 +221,7 @@ func TestABlockedActionBrainDoesNotAnswerGoesToTheUser(t *testing.T) {
 func TestABlockedActionIsNotLostWhenBrainCannotBeTold(t *testing.T) {
 	s, rec := gateService(t, true)
 	rec.tellErr = context.DeadlineExceeded
-	done := start(s, deniedPush)
+	done := start(s, askedPush)
 	card := pending(t, s, true, 1)[0]
 	if card.Route != routeUser {
 		t.Fatalf("card = %+v", card)
@@ -271,27 +242,6 @@ func TestAWorkerWithoutBrainBehindItAsksTheUserDirectly(t *testing.T) {
 	}
 	s.decide("%4", card.ID, "allow", answeredByApp, "")
 	<-done
-}
-
-func TestAPersonsOwnSessionIsNotHeldUpByAnAutoModeRefusal(t *testing.T) {
-	s, rec := gateService(t, false)
-	s.approvalWait = time.Minute
-	finished := make(chan control.Response, 1)
-	go func() { finished <- s.Handle(context.Background(), hook("claude", "%4", deniedPush)) }()
-	select {
-	case resp := <-finished:
-		if !resp.OK || resp.HookOutput != "" {
-			t.Fatalf("resp = %+v", resp)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("a refusal in a person's own session waited for an answer")
-	}
-	if got := s.approvals("%4", false); len(got) != 0 {
-		t.Fatalf("a question was opened for a session nobody delegated: %+v", got)
-	}
-	if told, _, _, _ := rec.snapshot(); len(told) != 0 {
-		t.Fatalf("Brain was told: %q", told)
-	}
 }
 
 func TestAnUnansweredPromptOnADelegatedWorkerIsRefusedWithAReasonNotLeftOpen(t *testing.T) {
@@ -338,55 +288,21 @@ func TestBrainsReasonReachesTheWorkerWhenItRefusesAPrompt(t *testing.T) {
 	}
 }
 
-func TestARefusedActionThatNeverRanIsNamedInTheWorkersReport(t *testing.T) {
-	s, _ := gateService(t, true)
-	s.approvalWait = 20 * time.Millisecond
-	s.brainWait = 5 * time.Millisecond
-	if note := s.RefusalNote("%4"); note != "" {
-		t.Fatalf("note = %q", note)
-	}
-	s.Handle(context.Background(), hook("claude", "%4", deniedPush))
-	note := s.RefusalNote("%4")
-	for _, want := range []string{"1 refused action", "git push origin main", "[Data Exfiltration]"} {
-		if !strings.Contains(note, want) {
-			t.Fatalf("note = %q, missing %q", note, want)
-		}
-	}
-	// Doing the same thing later settles it.
-	s.Handle(context.Background(), hook("claude", "%4", `{"hook_event_name":"PostToolUse","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"git push origin main"}}`))
-	if note := s.RefusalNote("%4"); note != "" {
-		t.Fatalf("a refusal that was later carried out is still reported: %q", note)
-	}
-	// A new prompt starts a clean report.
-	s.Handle(context.Background(), hook("claude", "%4", deniedPush))
-	s.Handle(context.Background(), hook("claude", "%4", `{"hook_event_name":"UserPromptSubmit","session_id":"s-1","prompt_id":"p-2","prompt":"next"}`))
-	if note := s.RefusalNote("%4"); note != "" {
-		t.Fatalf("a refusal from an earlier prompt leaked into the next: %q", note)
-	}
-}
-
 func TestAQuestionStillWaitingDoesNotHoldTheDaemonsShutdownUp(t *testing.T) {
 	s, rec := gateService(t, true)
 	stop := make(chan struct{})
 	s.stop = stop
 	s.approvalWait = time.Minute
-	for name, payload := range map[string]string{
-		"blocked action": deniedPush,
-		"prompt":         `{"hook_event_name":"PermissionRequest","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"touch x"}}`,
-	} {
-		done := start(s, payload)
-		pending(t, s, false, 1)
-		close(stop)
-		select {
-		case resp := <-done:
-			if !resp.OK || resp.HookOutput != "" {
-				t.Fatalf("%s: shutting down must not refuse or approve anything: %+v", name, resp)
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("%s: the question held the shutdown up", name)
+	done := start(s, askedPush)
+	pending(t, s, false, 1)
+	close(stop)
+	select {
+	case resp := <-done:
+		if !resp.OK || resp.HookOutput != "" {
+			t.Fatalf("shutting down must not refuse or approve anything: %+v", resp)
 		}
-		stop = make(chan struct{})
-		s.stop = stop
+	case <-time.After(2 * time.Second):
+		t.Fatal("the question held the shutdown up")
 	}
 	if _, audits, _, _ := rec.snapshot(); len(audits) != 0 {
 		t.Fatalf("a shutdown was recorded as an answer or a timeout: %q", audits)
@@ -401,11 +317,11 @@ func (r *gateRecorder) answered() int {
 
 // Brain's answer is its disposition of the review that raised the question;
 // the user's answer, a refused answer and an unanswered question are not.
-func TestOnlyBrainsAnswerCountsAsItsDispositionOfTheBlockedAction(t *testing.T) {
+func TestOnlyBrainsAnswerCountsAsItsDispositionOfThePrompt(t *testing.T) {
 	for _, option := range []string{"allow", "deny", "escalate"} {
 		t.Run("brain "+option, func(t *testing.T) {
 			s, rec := gateService(t, true)
-			done := start(s, deniedPush)
+			done := start(s, askedPush)
 			asked := pending(t, s, false, 1)[0]
 			if resp := s.decide("%4", asked.ID, option, answeredByApp, ""); resp.OK || rec.answered() != 0 {
 				t.Fatalf("the app's attempt counted: %+v answers=%d", resp, rec.answered())
@@ -427,5 +343,22 @@ func TestOnlyBrainsAnswerCountsAsItsDispositionOfTheBlockedAction(t *testing.T) 
 			}
 			<-done
 		})
+	}
+}
+
+// A Claude started before an upgrade still has the old hook file and keeps
+// sending PermissionDenied, which only Auto mode produced.
+func TestALegacyPermissionDeniedHookIsAnsweredWithNothing(t *testing.T) {
+	s, rec := gateService(t, true)
+	resp := s.Handle(context.Background(), hook("claude", "%4",
+		`{"hook_event_name":"PermissionDenied","session_id":"s-1","tool_name":"Bash","tool_input":{"command":"git push origin main"},"reason":"[Data Exfiltration]"}`))
+	if !resp.OK || resp.HookOutput != "" || resp.Error != nil {
+		t.Fatalf("resp = %+v", resp)
+	}
+	if got := s.approvals("%4", false); len(got) != 0 {
+		t.Fatalf("a question was opened: %+v", got)
+	}
+	if told, _, _, _ := rec.snapshot(); len(told) != 0 {
+		t.Fatalf("Brain was told: %q", told)
 	}
 }

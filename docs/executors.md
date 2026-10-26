@@ -66,11 +66,26 @@ adds these flags whatever the configuration says:
 | Agent | Added for unattended work |
 | --- | --- |
 | Codex | `--dangerously-bypass-approvals-and-sandbox` |
-| Claude Code | `--permission-mode auto`: a classifier reviews each action and blocks dangerous ones such as force pushes and deploys. An explicit `bypassPermissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected |
+| Claude Code | `--permission-mode bypassPermissions`: no per-action approval, and nothing reviews what it runs. An explicit `auto`, `bypassPermissions` or `--dangerously-skip-permissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected |
 | Cursor Agent | `--force --sandbox disabled --trust --approve-mcps` |
 | Grok | `--permission-mode bypassPermissions --sandbox off` |
 | OpenCode | `--auto` |
 | Pi | Nothing. Calendar may add `--no-extensions` |
+
+Claude Code asks you to accept a one-time warning the first time it runs in
+bypass mode. Mewla answers it for the Claude it launches, through a settings
+file it passes with `--settings`; it does not edit your `~/.claude` files. A
+Claude command that carries its own `--settings` is left alone, so put
+`"skipDangerousModePermissionPrompt": true` in that settings yourself. Claude
+refuses bypass mode for root outside a container, one more reason not to run
+the daemon as root.
+
+What stays: Mewla's own boundaries (pairing, device signatures, file and
+upload limits), Brain not treating a message relayed from another computer as
+your consent, and prompts the agent still raises on its own, such as an `ask`
+rule in your Claude settings or an organization policy. A delegated Worker's
+prompt goes to Brain first, then to your phone, and is refused with a reason if
+nobody answers. Nothing else checks an action before it runs.
 
 So:
 

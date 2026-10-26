@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestHardenClaudeCommandAppendsAutoPermission(t *testing.T) {
+func TestHardenClaudeCommandAppendsBypassPermission(t *testing.T) {
 	cases := []struct {
 		name string
 		in   string
@@ -16,12 +16,17 @@ func TestHardenClaudeCommandAppendsAutoPermission(t *testing.T) {
 		{
 			name: "plain claude",
 			in:   "claude",
-			want: "claude " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow,
+			want: "claude " + ClaudeBypassPermissionFlag,
 		},
 		{
 			name: "claude with profile",
 			in:   "claude --profile my-profile",
-			want: "claude --profile my-profile " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow,
+			want: "claude --profile my-profile " + ClaudeBypassPermissionFlag,
+		},
+		{
+			name: "explicit auto preserved",
+			in:   "claude --permission-mode auto",
+			want: "claude --permission-mode auto",
 		},
 		{
 			name: "already authorized dontAsk",
@@ -36,7 +41,7 @@ func TestHardenClaudeCommandAppendsAutoPermission(t *testing.T) {
 		{
 			name: "absolute path",
 			in:   "/usr/local/bin/claude --profile test",
-			want: "/usr/local/bin/claude --profile test " + ClaudeAutoPermissionFlag + " " + ClaudeBrainApproveAllow,
+			want: "/usr/local/bin/claude --profile test " + ClaudeBypassPermissionFlag,
 		},
 		{
 			name: "dangerously-skip-permissions preserved",
@@ -61,7 +66,7 @@ func TestHardenClaudeCommandDefaultsToClaude(t *testing.T) {
 	if !strings.HasPrefix(got, "claude ") {
 		t.Fatalf("empty input should default to claude, got %q", got)
 	}
-	if !strings.Contains(got, ClaudeAutoPermissionFlag) {
+	if !strings.Contains(got, ClaudeBypassPermissionFlag) {
 		t.Fatalf("default claude command should be hardened: %q", got)
 	}
 }
@@ -73,7 +78,7 @@ func TestPrepareDelegatedCommandUsesOneProviderAdapterBoundary(t *testing.T) {
 		want     string
 	}{
 		{WorkerProviderCodex, "codex", "codex " + CodexFullAuthorizationFlag},
-		{WorkerProviderClaude, "claude", "claude " + ClaudeAutoPermissionFlag},
+		{WorkerProviderClaude, "claude", "claude " + ClaudeBypassPermissionFlag},
 	}
 	for _, tc := range cases {
 		got, err := PrepareDelegatedCommand(tc.provider, tc.command)
@@ -104,7 +109,7 @@ func TestScheduledActionCommandRecognizesExactUnattendedArgv(t *testing.T) {
 		{"Claude quoted equals", "claude", `claude "--permission-mode=bypassPermissions"`, "", `claude "--permission-mode=bypassPermissions"`},
 		{"Claude explicit auto", "claude", "claude --permission-mode auto", "", "claude --permission-mode auto"},
 		{"Claude explicit auto equals", "claude", "claude --permission-mode=auto --model m", "", "claude --permission-mode=auto --model m"},
-		{"Claude default is auto", "claude", "claude --model m", "", "claude --model m --permission-mode auto"},
+		{"Claude default is bypassPermissions", "claude", "claude --model m", "", "claude --model m --permission-mode bypassPermissions"},
 		{"Cursor substrings", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra --force --trust --approve-mcps"},
 		{"Cursor quoted exact", "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`, "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`},
 		{"Grok env spoof", "grok", "env APPROVAL=--always-approve grok --sandbox=off", "", "env APPROVAL=--always-approve grok --sandbox=off --permission-mode bypassPermissions"},

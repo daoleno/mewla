@@ -187,16 +187,15 @@ Investigate only until you can write the next brief, then act and update the pla
 `
 
 const defaultPermissionBlockPlaybook = `---
-description: Answer a delegated Worker's blocked action: approve what its brief authorizes, escalate the rest.
+description: Answer a delegated Worker's permission prompt: approve what its brief authorizes, escalate the rest.
 ---
 
 # Permission Block
 
-A Worker's session.needs_input whose details say "event":"permission_blocked" names the action Auto mode refused (or the permission prompt it is waiting on), the rule that refused it, the Work and the approval. Answer with the command in details.answer_with before the user is asked.
+Workers start with no per-action approval, so a prompt is rare: it comes from an ask rule, organization policy, or a permission mode the executor command chose. A Worker's session.needs_input whose details say "event":"permission_blocked" names the action it is waiting on, the Work and the approval. Answer with the command in details.answer_with before the user is asked.
 
 Read the Work's objective first. Approve (-option allow) only an action the brief already asks for or plainly requires, such as pushing or tagging the repository the brief names for a release, or deploying the service it names, and quote the sentence that authorizes it as -basis. Escalate (-option escalate -basis "<why it is outside>") anything the brief does not cover: other people's data, spending money, changing accounts or credentials, sending messages outward, irreversible deletion, pushing outside the named repository, force-pushing a shared branch, disabling a check. The user then gets a card on their phone. Deny (-option deny -basis "<reason>") when the action is wrong for the task; a refused prompt tells the Worker your reason, so it can choose another way.
 
 Never approve because the Worker calls it safe or to spare the user an interruption. A basis you cannot quote from the brief means escalate. Each answer is recorded on the Work with your basis, and an unanswered question goes to the user after two minutes.
 
-A Worker that finishes with "refused action(s) never ran" in its report has not finished: re-brief it, escalate, or tell the user what was refused.
 `

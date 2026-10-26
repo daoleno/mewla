@@ -22,50 +22,57 @@ Delete them at any time. The `mewla worker defaults` and `mewla brain set-delega
 commands and the `MEWLA_DELEGATED_EXECUTOR` lock no longer exist.
 
 Claude, Cursor and Grok delegated launches reuse the existing unattended client
-adapters. Claude runs in `--permission-mode auto` by default for Brain host,
-delegated Workers and Calendar `scheduled_action`; an explicit
-`--permission-mode bypassPermissions` or `--dangerously-skip-permissions` in the
-executor command is the person's own choice and is kept. `default`,
-`acceptEdits`, `dontAsk` and `plan` can stop at a prompt, so they are rejected
-for delegated work. Pi/DSH retain their native client behavior; extensions and
-authentication may still require setup.
+adapters. Claude runs in `--permission-mode bypassPermissions` by default for Brain
+host, delegated Workers and Calendar `scheduled_action`. An explicit
+`--permission-mode auto`, `--permission-mode bypassPermissions` or
+`--dangerously-skip-permissions` in the executor command is the person's own
+choice and is kept. `default`, `acceptEdits`, `dontAsk` and `plan` can stop at a
+prompt, so they are rejected for delegated work. Pi/DSH retain their native
+client behavior; extensions and authentication may still require setup.
 
-### Why Claude defaults to Auto
+### Why Claude defaults to bypassPermissions
 
-Auto lets a classifier review each non-read-only action before it runs, where
-`bypassPermissions` checks nothing. Routine work (editing files, running tests,
-committing, calling the progress command) is allowed without a prompt; risky
-actions (force push, sending secrets out, production deploys, `git reset --hard`,
-`rm -rf /`) are denied. A denied action returns its reason to the agent, which
-carries on with the rest of the task or stops to ask the person. This is
-Anthropic's documented behavior (permission modes, "when auto mode falls back").
+Mewla used to start Claude in Auto mode, where a classifier reviews each
+non-read-only action. It blocked authorized work (production deploys and read-only
+checks, writes to outside services, a Worker's tunnel, Tailscale changes), and a
+Brain-relayed approval never reached a Worker's classifier, so the Worker stalled
+and Brain did the job itself. `bypassPermissions` checks nothing, so a Worker
+carries out its brief without asking. What still limits it is the brief, Brain's
+review of the result, and the boundaries Mewla itself enforces; no component
+reviews an individual action.
 
-- **Blocked action.** Only that action does not run. Claude's own rule is that
-  a non-interactive `-p` run carries on after a block, but a Worker is an
-  interactive terminal: after 3 blocks in a row or 20 in total Claude falls back
-  to a real permission prompt, and an `ask` rule opens one at once. Nobody sits at
-  a delegated Worker's terminal, so Mewla answers these itself (below).
-- **Broad allow rules are dropped.** Entering Auto drops blanket `Bash(*)`,
-  wildcarded interpreters, package-manager run commands, `Agent` and `Monitor`
-  allow rules; narrow rules such as `Bash(git push *)` stay (a push to a
-  hard-denied remote was refused without the rule and ran with it).
-- **Never auto-approved.** Whatever the classifier judges dangerous is denied
-  (force push, sending secrets out, production deploys); the verdict depends on
-  the whole conversation, so the same push can pass in one task and be refused
-  in another. `ask` rules and organization policy apply in every mode.
+- **Settings payload.** A routed (Model Profile) launch carries
+  `{"permissions":{"defaultMode":"bypassPermissions"},"skipDangerousModePermissionPrompt":true}`
+  in its `--settings` JSON next to the loopback route env. Claude keeps only the
+  last `--settings` on a command line (tried on 2.1.310: two payloads are not
+  merged), so that one payload carries everything.
+- **First-run dialog.** The first bypass-mode launch of a Claude home shows a
+  warning that waits for a keypress. `skipDangerousModePermissionPrompt` in the
+  `--settings` JSON suppresses it (checked on a fresh HOME: without the key the
+  dialog appears, with it the TUI starts in `bypass permissions on`). Mewla
+  puts the key in the hook file it passes with `--settings` for every Claude it
+  launches (`agentevents/claude`), so Brain host, Workers and scheduled actions
+  all carry it, and in the routed payload above. A command with its own
+  `--settings` is left alone, as it is for the hook file.
+- **Root.** Claude refuses bypass mode for uid 0 unless it runs in a container
+  or sandbox (`IS_SANDBOX=1`, Docker, bubblewrap). The daemon is documented as
+  not supported as root, and Mewla does not set `IS_SANDBOX`.
+- **An explicit `auto`** still works as a person's own choice. Its refusals are
+  Claude's: Mewla no longer answers a classifier refusal for a Worker.
 
-### Blocked actions of a delegated Worker
+### Permission prompts of a delegated Worker
 
-The hook file registers `PermissionDenied`, `PermissionRequest` and `PreToolUse`
-besides the events it already followed. For a Worker that Brain delegated (it has
-a Work and a turn; `cmd/mewla/permission_gate.go`) a refusal takes this path:
+A bypassing Worker rarely prompts, but an `ask` rule or organization policy
+applies in every mode, and a command that chose a mode which can ask still does.
+The hook file registers `PermissionRequest` besides the events it already
+followed. For a Worker that Brain delegated (it has a Work and a turn;
+`cmd/mewla/permission_gate.go`) a prompt takes this path:
 
-1. **Brain first.** The daemon opens an approval (`auto_denied` for a classifier
-   refusal, `permission` for a prompt) and raises `needs_input` on the Worker's
-   turn through the ordinary progress path, so Brain is woken by a normal
-   `session.needs_input`. Its details carry the action, the rule the classifier
-   named, the approval id, the Work and the command to answer with. The app does
-   not list the approval yet.
+1. **Brain first.** The daemon opens a `permission` approval and raises
+   `needs_input` on the Worker's turn through the ordinary progress path, so Brain
+   is woken by a normal `session.needs_input` with `"event":"permission_blocked"`.
+   Its details carry the action, the approval id, the Work and the command to
+   answer with. The app does not list the approval yet.
 2. **Brain answers** with `mewla worker approve -id W -approval A -option
    allow|deny|escalate -basis "<brief sentence>"`. `allow` requires the basis: the
    sentence of the brief that authorizes the action (`playbooks/permission-block.md`
@@ -77,32 +84,21 @@ a Work and a turn; `cmd/mewla/permission_gate.go`) a refusal takes this path:
 3. **The user, only if needed.** On `escalate`, or if Brain does not answer within
    two minutes, the approval becomes an ordinary approval card in the app.
 4. **No Worker waits at a prompt.** If nobody answers before the hook's own
-   timeout (590 s), a refused prompt is denied with a message saying so, and a
-   blocked action simply stays blocked. A daemon that is stopping ends pending
-   questions at once instead of holding the shutdown.
-5. **Approving a refusal.** Claude cannot reverse an Auto-mode refusal, so
-   `PermissionDenied` answers `retry: true` and the daemon remembers the exact
-   action (the shell command, otherwise the whole input) for ten minutes; the
-   Worker's retry passes once through a `PreToolUse` allow. `PreToolUse` allow is
-   documented not to approve critical-path `rm` or network reads.
-6. **Record.** Every answer (approved, refused, escalated, timed out) is written
+   timeout (590 s), the prompt is denied with a message saying so. A daemon that
+   is stopping ends pending questions at once instead of holding the shutdown.
+5. **Record.** Every answer (approved, refused, escalated, timed out) is written
    to the Work as `permission.*` with who answered and the basis, and the
    Worker's `needs_input` is cleared.
 
 A session that is not a delegated Worker keeps its old behavior: a prompt becomes
-an approval card at once and an Auto-mode refusal never waits.
+an approval card at once.
 
-The Brain host is launched with a narrow allow rule, `Bash(mewla worker approve
-*)` (and the absolute-path form), because Auto mode's classifier refuses a
-Brain's own `allow` as lifting a security control (`[Data Exfiltration]` in a real
-run). The rule is deliberate: the basis requirement, the playbook, the escalation
-path and the Work record are what bound Brain's authority, and a host command that
-sets its own `--permission-mode` does not get it.
-
-When a Worker reports `done`, the daemon puts `⚠ N refused action(s) never ran:
-…` in front of its summary if any action Auto mode refused did not later run, so a
-blocked push cannot read as success. The Worker protocol also tells a Worker that
-is blocked by a refusal to report `blocked`, not `done`.
+The `PermissionDenied` hook and the `PreToolUse` retry grant that answered
+Auto-mode refusals are gone, and so is the Brain host's `Bash(mewla worker approve
+*)` allow rule: with nothing reviewing Brain's commands it needs no exception. A
+hook file written by an older daemon is rewritten at the next daemon start; a
+Claude still running with the old file keeps sending `PermissionDenied`, which the
+daemon answers with an empty OK.
 
 All delegated Codex launches, including explicit commands and resume, use the
 same client adapter and run autonomously by default. Explicit interactive

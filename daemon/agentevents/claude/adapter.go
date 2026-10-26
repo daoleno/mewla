@@ -62,21 +62,23 @@ func hasSettingsFlag(command string) bool {
 }
 
 // SettingsJSON is the hook file for hookCommand, the command line Claude runs
-// for each hook (it receives the payload on stdin). PermissionRequest and
-// PermissionDenied may wait on Brain or a person, so they get the longest
-// timeout Claude allows by default.
+// for each hook (it receives the payload on stdin). PermissionRequest may
+// wait on Brain or a person, so it gets the longest timeout Claude allows by
+// default. The file also acknowledges Claude's one-time bypass-mode warning,
+// which every Mewla-launched Claude starts in, so a first Worker on a fresh
+// install is never left at that dialog.
 func SettingsJSON(hookCommand string) ([]byte, error) {
 	hooks := map[string]any{}
 	for _, name := range HookEvents {
 		entry := map[string]any{"type": "command", "command": hookCommand}
-		if name == "PermissionRequest" || name == "PermissionDenied" {
+		if name == "PermissionRequest" {
 			entry["timeout"] = 600
 		} else {
 			entry["timeout"] = 10
 		}
 		hooks[name] = []any{map[string]any{"hooks": []any{entry}}}
 	}
-	return json.MarshalIndent(map[string]any{"hooks": hooks}, "", "  ")
+	return json.MarshalIndent(map[string]any{"hooks": hooks, "skipDangerousModePermissionPrompt": true}, "", "  ")
 }
 
 // WriteSettings writes the hook file when its content changed, so concurrent

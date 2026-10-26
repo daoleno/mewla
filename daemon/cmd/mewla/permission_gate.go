@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -15,15 +14,17 @@ import (
 	"github.com/google/uuid"
 )
 
-// A delegated Worker runs in Claude's Auto mode, so some of its actions are
-// refused (the classifier names a rule) and an `ask` rule or repeated refusals
-// open a permission prompt that nobody is sitting at. This file is the path
-// those take: Brain is told first, as a needs_input on the Worker's turn that
-// carries the action and the rule, and answers through `mewla worker approve`
-// with the sentence of the brief that authorizes it. Brain can hand the
-// question to the user (an approval card in the app) and, if nobody answers in
-// time, the action is refused with a reason, so the Worker is never left
-// waiting at a prompt. Every answer is written to the Work.
+// A delegated Worker starts in bypassPermissions, so it rarely stops at a
+// permission prompt. One still opens when an `ask` rule or organization policy
+// requires it, or when the executor command chose a mode that can ask (an
+// explicit `auto` that fell back to a prompt). Nobody sits at a delegated
+// Worker's terminal, so this file is the path those prompts take: Brain is told
+// first, as a needs_input on the Worker's turn that carries the action, and
+// answers through `mewla worker approve` with the sentence of the brief that
+// authorizes it. Brain can hand the question to the user (an approval card in
+// the app) and, if nobody answers in time, the prompt is refused with a reason,
+// so the Worker is never left waiting at it. Every answer is written to the
+// Work.
 
 const (
 	routeBrain = "brain"
@@ -37,10 +38,7 @@ const (
 	// agentBrainWait is how long Brain holds a blocked action before it goes
 	// to the user's phone.
 	agentBrainWait = 120 * time.Second
-	// grantLifetime bounds how long an approved action may be retried.
-	grantLifetime = 10 * time.Minute
 
-	maxRefusalsKept = 50
 	actionRunes     = 600
 	noAnswerMessage = "Nobody answered this request in time, so it was refused. Do not retry it. Carry on with what does not need it, or stop and report that you were blocked and what you needed."
 )
@@ -63,14 +61,6 @@ type permissionGate struct {
 	audit func(workerID, outcome, summary string, details map[string]any)
 	// changed tells the app which approvals it may show have changed.
 	changed func(workerID string)
-}
-
-// refusal is one action Auto mode refused for a Worker.
-type refusal struct {
-	key     string
-	summary string
-	reason  string
-	ran     bool
 }
 
 func (s *agentEventService) isDelegated(workerID string) bool {
@@ -231,11 +221,7 @@ func (s *agentEventService) finishQuestion(workerID string, a agentevents.Approv
 }
 
 func describeAction(a agentevents.Approval) string {
-	text := fmt.Sprintf("%s %s", a.Tool, truncateRunes(a.Summary, actionRunes))
-	if a.Reason != "" {
-		text += " " + a.Reason
-	}
-	return strings.TrimSpace(text)
+	return strings.TrimSpace(fmt.Sprintf("%s %s", a.Tool, truncateRunes(a.Summary, actionRunes)))
 }
 
 func actionDetails(workerID string, a agentevents.Approval) map[string]any {
@@ -245,18 +231,13 @@ func actionDetails(workerID string, a agentevents.Approval) map[string]any {
 		"kind":        a.Kind,
 		"tool":        a.Tool,
 		"action":      truncateRunes(a.Summary, actionRunes),
-		"rule":        a.Reason,
 	}
 }
 
-// brainRequest is what Brain reads: the blocked action, the rule, and how to
+// brainRequest is what Brain reads: the action the Worker waits on and how to
 // answer. The Work and its brief are added where the Work is known.
 func brainRequest(workerID string, a agentevents.Approval) (string, map[string]any) {
-	what := "Blocked by Auto mode"
-	if a.Kind == "permission" {
-		what = "Waiting on a permission prompt"
-	}
-	summary := truncateRunes(fmt.Sprintf("%s: %s %s %s", what, a.Tool, strings.Join(strings.Fields(a.Summary), " "), a.Reason), 150)
+	summary := truncateRunes(fmt.Sprintf("Waiting on a permission prompt: %s %s", a.Tool, strings.Join(strings.Fields(a.Summary), " ")), 150)
 	details := actionDetails(workerID, a)
 	details["event"] = "permission_blocked"
 	details["answer_with"] = fmt.Sprintf(`mewla worker approve -id %s -approval %s -option allow|deny|escalate -basis "<the sentence of the brief that authorizes it>"`, workerID, a.ID)
@@ -297,127 +278,10 @@ func (s *agentEventService) askPrompt(ctx context.Context, workerID string, payl
 	return control.Response{OK: true, HookOutput: output}
 }
 
-// askDenied answers a PermissionDenied hook: Auto mode refused an action.
-// Approving it lets the agent retry once; the refusal itself stands otherwise.
-func (s *agentEventService) askDenied(ctx context.Context, workerID string, payload claude.Payload) control.Response {
-	s.recordRefusal(workerID, payload)
-	if !s.isDelegated(workerID) {
-		// A person's own session has always carried on after a refusal; the
-		// question exists for a Worker nobody is sitting at.
-		return control.Response{OK: true}
-	}
-	a := claude.AutoDenied(uuid.NewString(), payload)
-	decision, answered, _ := s.ask(ctx, workerID, a)
-	if !answered {
-		return control.Response{OK: true}
-	}
-	output, ok := claude.DeniedDecision(decision.OptionID)
-	if !ok {
-		return control.Response{OK: true}
-	}
-	s.mu.Lock()
-	s.grants[workerID+"\x00"+claude.ActionKey(payload.ToolName, payload.ToolInput)] = s.now().Add(grantLifetime)
-	s.mu.Unlock()
-	return control.Response{OK: true, HookOutput: output}
-}
-
-// grantFor answers a PreToolUse hook. It lets through the one retry of an
-// action that was approved; everything else is left to the permission system.
-func (s *agentEventService) grantFor(workerID string, payload claude.Payload) control.Response {
-	key := workerID + "\x00" + claude.ActionKey(payload.ToolName, payload.ToolInput)
-	s.mu.Lock()
-	expires, granted := s.grants[key]
-	delete(s.grants, key)
-	s.mu.Unlock()
-	if !granted || s.now().After(expires) {
-		return control.Response{OK: true}
-	}
-	return control.Response{OK: true, HookOutput: claude.ToolGrant("approved through Mewla")}
-}
-
 func (s *agentEventService) takeNote(approvalID string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	note := s.notes[approvalID]
 	delete(s.notes, approvalID)
 	return note
-}
-
-func (s *agentEventService) recordRefusal(workerID string, p claude.Payload) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	list := append(s.refusals[workerID], &refusal{
-		key:     claude.ActionKey(p.ToolName, p.ToolInput),
-		summary: strings.Join(strings.Fields(truncateRunes(summaryOf(p), actionRunes)), " "),
-		reason:  strings.TrimSpace(p.Reason),
-	})
-	if len(list) > maxRefusalsKept {
-		list = list[len(list)-maxRefusalsKept:]
-	}
-	s.refusals[workerID] = list
-}
-
-func summaryOf(p claude.Payload) string {
-	return claude.AutoDenied("", p).Summary
-}
-
-// markRan notes that an action ran, which settles any earlier refusal of it.
-func (s *agentEventService) markRan(workerID string, p claude.Payload) {
-	if p.ToolName == "" {
-		return
-	}
-	key := claude.ActionKey(p.ToolName, p.ToolInput)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, r := range s.refusals[workerID] {
-		if r.key == key {
-			r.ran = true
-		}
-	}
-}
-
-func (s *agentEventService) clearRefusals(workerID string) {
-	s.mu.Lock()
-	delete(s.refusals, workerID)
-	s.mu.Unlock()
-}
-
-// RefusalNote is a short line for a Worker's report when actions Auto mode
-// refused never ran. It is empty when everything it refused was done another
-// way or approved and run.
-func (s *agentEventService) RefusalNote(workerID string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	open := 0
-	var first *refusal
-	for _, r := range s.refusals[workerID] {
-		if !r.ran {
-			open++
-			if first == nil {
-				first = r
-			}
-		}
-	}
-	if open == 0 {
-		return ""
-	}
-	note := fmt.Sprintf("⚠ %d refused action(s) never ran: %s", open, truncateRunes(first.summary, 50))
-	if first.reason != "" {
-		note += " " + first.reason
-	}
-	return note
-}
-
-// refusalJSON is the refusals still open, for the Work record.
-func (s *agentEventService) refusalJSON(workerID string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var open []map[string]string
-	for _, r := range s.refusals[workerID] {
-		if !r.ran {
-			open = append(open, map[string]string{"action": r.summary, "rule": r.reason})
-		}
-	}
-	raw, _ := json.Marshal(open)
-	return string(raw)
 }

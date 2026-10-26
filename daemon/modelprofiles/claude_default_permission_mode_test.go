@@ -39,12 +39,12 @@ func compileClaudeLaunch(t *testing.T, baseCommand string, authMode string) (com
 	return resolved.Command, resolved.Env
 }
 
-func TestClaudeLaunchDefaultsToAutoPermissionMode(t *testing.T) {
+func TestClaudeLaunchDefaultsToBypassPermissionMode(t *testing.T) {
 	command, env := compileClaudeLaunch(t, "claude", AuthModeNone)
 	if env[EnvAnthropicBaseURL] == "" {
 		t.Fatalf("loopback route env missing: %#v", env)
 	}
-	if ClaudeDefaultPermissionMode != "auto" {
+	if ClaudeDefaultPermissionMode != "bypassPermissions" {
 		t.Fatalf("Mewla Claude default mode changed without a protocol review: %q", ClaudeDefaultPermissionMode)
 	}
 	settings := decodeClaudeSettings(t, command)
@@ -53,6 +53,9 @@ func TestClaudeLaunchDefaultsToAutoPermissionMode(t *testing.T) {
 	}
 	if settings.Env[EnvAnthropicBaseURL] == "" {
 		t.Fatalf("loopback env must be part of the settings payload: %#v", settings.Env)
+	}
+	if !settings.SkipDangerousModePermissionPrompt {
+		t.Fatal("a routed session must acknowledge Claude's bypass-mode warning in its settings payload")
 	}
 	if strings.Contains(command, "--permission-mode") || strings.Contains(command, "--dangerously-skip-permissions") {
 		t.Fatalf("default launch must not force a permission flag: %q", command)
@@ -65,16 +68,19 @@ func TestClaudeLaunchExplicitPermissionModeIsPreserved(t *testing.T) {
 		t.Fatalf("explicit permission mode was dropped: %q", command)
 	}
 	settings := decodeClaudeSettings(t, command)
-	if settings.Permissions.DefaultMode != "auto" {
-		t.Fatalf("settings default = %q, want auto", settings.Permissions.DefaultMode)
+	if settings.Permissions.DefaultMode != "bypassPermissions" {
+		t.Fatalf("settings default = %q, want bypassPermissions", settings.Permissions.DefaultMode)
 	}
 }
 
-func TestClaudeLaunchNativePassthroughStillGetsAutoDefault(t *testing.T) {
+func TestClaudeLaunchNativePassthroughStillGetsBypassDefault(t *testing.T) {
 	command, _ := compileClaudeLaunch(t, "claude", AuthModeNativePassthrough)
 	settings := decodeClaudeSettings(t, command)
-	if settings.Permissions.DefaultMode != "auto" {
-		t.Fatalf("passthrough default = %q, want auto", settings.Permissions.DefaultMode)
+	if settings.Permissions.DefaultMode != "bypassPermissions" {
+		t.Fatalf("passthrough default = %q, want bypassPermissions", settings.Permissions.DefaultMode)
+	}
+	if !settings.SkipDangerousModePermissionPrompt {
+		t.Fatal("passthrough must acknowledge Claude's bypass-mode warning too")
 	}
 	if len(settings.Env) != 0 {
 		t.Fatalf("native passthrough must not inject route env into settings: %#v", settings.Env)

@@ -74,7 +74,7 @@ export function NewTerminalAdvancedForm({
         style={styles.input}
         value={command}
         onChangeText={onCommandChange}
-        placeholder="e.g. claude --permission-mode auto"
+        placeholder="e.g. claude --model opus"
         placeholderTextColor={colors.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
