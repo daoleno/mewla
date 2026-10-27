@@ -153,8 +153,13 @@ phone web and native, tablets included, keep the model above. Rules:
 4. **One chat layout.** Brain and Session chats sit in the main pane at the
    820 pt reading width. Brain's Work column is a resizable side panel; the
    sidebar is resizable too, and both widths persist.
-5. **Sheets become dialogs.** `BottomSheetFrame` renders a centered dialog
-   without a grabber; Esc and the backdrop close it.
+5. **Sheets become dialogs; menus become popovers.** `BottomSheetFrame`
+   renders a centered dialog without a grabber, with one inset of at least
+   `Spacing.xl` whatever the phone sheet uses (`dialogCardInset`); Esc and the
+   backdrop close it. An `ActionMenu` opens as a 280 pt popover beside the
+   button that opened it (`menuAnchor.ts`), below it unless there is no room;
+   Esc and a click outside close it. Confirmations (`Alert.alert`) are a
+   hairline card with the float shadow.
 6. **Keyboard first.** Enter sends and Shift+Enter is a new line (Ctrl/⌘+Enter
    always sends); nothing sends during IME composition. ⌘K / Ctrl+K opens the
    command palette, `?` lists every shortcut, Esc closes the top overlay, and
@@ -164,6 +169,14 @@ phone web and native, tablets included, keep the model above. Rules:
    arrows) and keeps Attach; phones, tablets and touch laptops keep them.
 7. **Desktop affordances.** Rows show hover and a pointer, chats are
    selectable, and each tab has a title ("Calendar · Mewla").
+8. **One page header, aligned to its content.** Every page has a 52 pt header
+   with its title in `TypeScale.pageTitle`; the title starts where the content
+   column starts and actions end where it ends (`DesktopPageHeader`,
+   `desktopPageColumn`). Content widths are tokens, never literals:
+   `ContentWidth.page` (760: Settings, Stats, Sessions, Extensions),
+   `ContentWidth.wide` (1080: Calendar, Resources) and `ContentWidth.reading`
+   (820: chats). Header actions are `IconButton`s at 40 pt. A Session's header
+   is flat (Back, avatar, name, git, ⋮), not the phone's floating pills.
 
 ## Brain and its Work
 
@@ -285,6 +298,9 @@ chats keep every row). The composer says "Tell Brain…".
   which is Source Han's design); no CJK UI face is bundled. Line heights are
   fixed per role, so fallback glyphs never change a row's height. **Native
   CJK rendering is not yet verified on a device.**
+- **Numbers are not code.** Costs, counts and percentages use the UI face
+  with `fontVariant: ["tabular-nums"]`; mono is for identifiers a person
+  might type (model ids, commands, paths) and for code.
 - **Mono.** JetBrains Mono is the landing's mono, but the app keeps Maple Mono:
   its 0.6em cell, box drawing, braille and Powerline glyphs set the terminal
   grid. The bundled files are the Maple Mono CN build with every CJK
