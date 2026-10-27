@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { Platform } from "react-native";
-import { ContentWidth, Typography, useAppTheme } from "../../constants/tokens";
+import { ContentWidth, DESKTOP_PAGE_GUTTER, Spacing, Typography, useAppTheme } from "../../constants/tokens";
 import { DesktopPageHeader } from "./DesktopPageHeader";
 import { HeaderBackButton } from "./HeaderBackButton";
 import { screenBackParent, type ScreenBackParent } from "./screenBack";
@@ -83,7 +83,13 @@ export function useStackScreenOptions() {
         contentStyle: column
           ? [
               { backgroundColor: colors.bgPrimary },
-              { width: "100%" as const, maxWidth: ContentWidth[column], alignSelf: "center" as const },
+              {
+                width: "100%" as const,
+                maxWidth: ContentWidth[column],
+                // Anchored at the page gutter; pages pad their own content by Spacing.lg.
+                alignSelf: "flex-start" as const,
+                marginLeft: DESKTOP_PAGE_GUTTER - Spacing.lg,
+              },
             ]
           : { backgroundColor: colors.bgPrimary },
         animation: desktopWeb ? ("none" as const) : ("slide_from_right" as const),

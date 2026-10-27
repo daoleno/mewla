@@ -6,8 +6,9 @@ plain `tmux`, the same Session is there when you sit down at the desk.
 
 ## Start a Session
 
-In **Sessions**, tap the **New session** pill (or ⋮ > **New session**), pick a
-directory and tap what to run:
+In **Sessions**, tap the **New session** pill (or ⋮ > **New session**; in a
+desktop browser, the **+** at the top or the N key), pick a directory and tap
+what to run:
 
 | Choice | Runs |
 | --- | --- |

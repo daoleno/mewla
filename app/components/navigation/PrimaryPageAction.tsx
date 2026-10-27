@@ -5,6 +5,7 @@ import React, {
   useId,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -15,7 +16,8 @@ import {
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { useAppColors } from "../../constants/tokens";
-import { Icon } from "../icons/Icon";
+import { Icon, type IconName } from "../icons/Icon";
+import { useWebTooltip } from "../ui/useWebTooltip";
 import { PrimaryChromeButton } from "./PrimaryChromeButton";
 import {
   clearPrimaryPageAction,
@@ -37,6 +39,20 @@ export interface PrimaryPageActionDescriptor {
   /** Defaults to the shared vertical overflow glyph. */
   icon?: ReactNode;
   onAccessibilityAction?: PressableProps["onAccessibilityAction"];
+  onPress(): void;
+  /**
+   * The page's one main action, drawn before the overflow button (desktop
+   * web's "New session"); the overflow keeps the rest.
+   */
+  primary?: PrimaryPageMainAction;
+}
+
+export interface PrimaryPageMainAction {
+  icon: IconName;
+  accessibilityLabel: string;
+  /** Tooltip, with its shortcut ("New session (N)"). */
+  tooltip?: string;
+  disabled?: boolean;
   onPress(): void;
 }
 
@@ -222,6 +238,32 @@ function DescriptorActionButton({
   );
 }
 
+function MainActionButton({
+  action,
+  drawerVisible,
+}: {
+  action: PrimaryPageMainAction;
+  drawerVisible: boolean;
+}) {
+  const colors = useAppColors();
+  const ref = useRef<View>(null);
+  useWebTooltip(ref, action.tooltip ?? action.accessibilityLabel);
+  const disabled = Boolean(action.disabled);
+  return (
+    <PrimaryChromeButton
+      ref={ref}
+      accessibilityRole="button"
+      accessibilityLabel={action.accessibilityLabel}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={action.onPress}
+      tabIndex={drawerVisible ? -1 : 0}
+    >
+      <Icon name={action.icon} color={disabled ? colors.disabledText : colors.textPrimary} size={20} />
+    </PrimaryChromeButton>
+  );
+}
+
 /** Renders the registered page action, or an empty 52px spacer. */
 export function PrimaryAppBarPageAction({
   drawerVisible,
@@ -233,8 +275,10 @@ export function PrimaryAppBarPageAction({
   if (entry.content.kind === "node") {
     return <View style={styles.slot}>{entry.content.value}</View>;
   }
+  const primary = entry.content.value.primary;
   return (
-    <View style={styles.slot}>
+    <View style={[styles.slot, primary ? styles.slotWithMain : null]}>
+      {primary ? <MainActionButton action={primary} drawerVisible={drawerVisible} /> : null}
       <DescriptorActionButton
         descriptor={entry.content.value}
         drawerVisible={drawerVisible}
@@ -250,5 +294,11 @@ const styles = StyleSheet.create({
     minHeight: PRIMARY_PAGE_ACTION_SLOT_SIZE,
     alignItems: "center",
     justifyContent: "center",
+  },
+  slotWithMain: {
+    width: "auto",
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 6,
   },
 });

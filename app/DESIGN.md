@@ -168,14 +168,23 @@ phone web and native, tablets included, keep the model above. Rules:
    arrows) and keeps Attach; phones, tablets and touch laptops keep them.
 7. **Desktop affordances.** Rows show hover and a pointer, chats are
    selectable, and each tab has a title ("Calendar · Mewla").
-8. **One page header, aligned to its content.** Every page has a 52 pt header
-   with its title in `TypeScale.pageTitle`; the title starts where the content
-   column starts and actions end where it ends (`DesktopPageHeader`,
-   `desktopPageColumn`). Content widths are tokens, never literals:
-   `ContentWidth.page` (760: Settings, Stats, Sessions, Extensions),
-   `ContentWidth.wide` (1080: Calendar, Resources) and `ContentWidth.reading`
-   (820: chats). Header actions are `IconButton`s at 40 pt. A Session's header
-   is flat (Back, avatar, name, git, ⋮), not the phone's floating pills.
+8. **One title position.** Every page has a 52 pt header with its title in
+   `TypeScale.pageTitle` at the page gutter, `DESKTOP_PAGE_GUTTER` (24 pt
+   right of the sidebar), Brain and Sessions included, so switching pages
+   never moves the title. Content columns are anchored at that gutter and
+   extend right to their width; they never center (`DesktopPageHeader`,
+   `desktopPageColumn`, `sessionsColumnStyle`). Widths are tokens, never
+   literals: `ContentWidth.page` (760: Settings, Stats, Sessions,
+   Extensions), `ContentWidth.wide` (1080: Calendar, Resources) and
+   `ContentWidth.reading` (820: chats). Header actions are 40 pt buttons that
+   end where the column ends. Phones and tablets keep centered columns. A
+   Session's header is flat (Back, avatar, name, git, ⋮), not the phone's
+   floating pills.
+9. **One way to make a thing.** A page's main action is one header button
+   with its shortcut in the tooltip (Sessions: + "New session (N)"; Calendar:
+   + "Add calendar item"); desktop drops the phone's floating button and the
+   ⋮ menu does not repeat it. Desktop shows what a phone hides behind a
+   toggle when there is room: Calendar keeps its month beside the agenda.
 
 ## Brain and its Work
 
