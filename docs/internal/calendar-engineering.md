@@ -9,7 +9,7 @@ The daemon is the source of truth. It stores a private SQLite database at `~/.me
 - `event`: `start_at` and `end_at`
 - `reminder`: `notify_at`
 - `deadline`: `due_at`
-- `scheduled_action`: `due_at`, `action_instruction`, and the originating Brain conversation in `source_thread_id`
+- `scheduled_action`: `due_at`, `action_instruction`, and the originating Brain conversation in `source_thread_id`; optionally `summary`, one line (at most 120 characters) in the user's language that Calendar shows instead of the instruction
 
 The user-facing app and CLI accept a local date, local wall time, and IANA timezone; RFC 3339 instants are only the internal wire/storage representation. DST gaps are rejected explicitly. When a wall time occurs twice during fall-back, the user must choose the first or second occurrence. Recurrence (`none`, `daily`, `weekly`, or `weekdays`) advances in that timezone using calendar dates, preserving the intended local wall clock through daylight-saving changes.
 
@@ -25,7 +25,11 @@ Every `scheduled_action` requires `source_thread_id`. Claiming an occurrence fre
 
 Recurring actions advance to their next wall-clock occurrence after either success or failure; the failed run remains in history and does not disable the series. Editing the recurring item later cannot change a completed Run's title or destination thread. Rebuilt result projections count toward per-thread Brain unread state until that thread is viewed. Immediately after the first successful terminal Run commit, the daemon makes one best-effort remote-push attempt that deep-links to the captured Brain thread; it never includes the result or failure contents in the alert. There is no outbox or restart replay, so missing registration, delivery failure, an in-process event drop, or a crash after persistence may produce no OS alert without changing the durable Run. If the captured thread is no longer the live Host thread, the app displays it explicitly read-only so its composer cannot send to a different conversation.
 
-The durable claim is the idempotency boundary. After restart, Mewla reconciles a running claim and never launches the same occurrence again. If its linked Work and agent are no longer observable, the item fails with an uncertain-outcome explanation so the user can inspect and explicitly choose Run now.
+The durable claim is the idempotency boundary. After restart, Mewla reconciles a running claim and never launches the same occurrence again. If its linked Work and agent are no longer observable, the run fails with an uncertain-outcome explanation so the user can inspect and explicitly choose Run now.
+
+A failure belongs to its run. The item keeps `failure_reason` only while its own status is `failed` (a one-off action, or a running item with no durable run record); a series that goes on is `scheduled`. Items stored before this rule can still carry a run's failure while scheduled; lists, gets and the CLI drop it (`calendar.WithoutStaleFailure`).
+
+Lists and `calendar_item_changed` broadcasts carry each item's newest 10 runs, each with `result_preview` (its first readable line) in place of `result`; `get_calendar_item` returns every run in full. Brain's `current_work` and `open_work` entries for a Calendar occurrence carry `calendar: {item_id, run_id}`, and the occurrence's Work file carries `calendar_item_id` and `calendar_run_id`, so the app can name the schedule wherever that Work or its Session appears.
 
 The scheduler does not poll. It sleeps on one timer armed for the earliest instant any item is due (an item's time, an event's end, an owner's retry) and looks again when the Calendar store changes, an owner registers, the linked Work file changes, or a Worker changes state. A one-minute safety net re-checks everything in case the clock jumped or the machine slept. A failed store write (a status change, a terminal Run) is logged once per distinct cause and retried on the next pass.
 
