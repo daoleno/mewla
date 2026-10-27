@@ -13,6 +13,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import { Typography } from "../../constants/tokens";
 import type {
   TerminalThemeChrome,
@@ -32,6 +33,7 @@ import {
 import { PreformattedCodeWebView } from "./PreformattedCodeWebView";
 import { useTimelineSelectableTextProps } from "./TimelineTextSelectableContext";
 import { Icon } from "../icons/Icon";
+import { useNestedHorizontalScrollGesture } from "../ui/useNestedHorizontalScrollGesture";
 
 interface InterfaceMessageCodeBlockProps {
   text: string;
@@ -59,6 +61,7 @@ export function InterfaceMessageCodeBlock({
     active: false,
   });
   const selectableTextProps = useTimelineSelectableTextProps();
+  const horizontalScrollGesture = useNestedHorizontalScrollGesture();
   const copyFeedback = useMemo(
     () =>
       createCodeBlockCopyFeedback({
@@ -221,41 +224,43 @@ export function InterfaceMessageCodeBlock({
           compact={compact}
         />
       ) : (
-        <ScrollView
-          horizontal
-          nestedScrollEnabled
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            compact ? styles.scrollContentCompact : null,
-          ]}
-        >
-          <View style={styles.codeContent}>
-            {lines.map((line, index) => (
-              <Text key={index} {...selectableTextProps} style={codeTextStyle}>
-                {highlightCodeLineForLanguage(
-                  line || " ",
-                  prepared.language,
-                ).map((segment, segmentIndex) => (
-                  <Text
-                    key={`${segmentIndex}:${segment.kind}`}
-                    style={{
-                      color: syntaxColor(
-                        segment.kind,
-                        theme,
-                        chrome,
-                        baseColor,
-                      ),
-                      fontFamily: fontFamilyForSegment(segment.kind),
-                    }}
-                  >
-                    {segment.text}
-                  </Text>
-                ))}
-              </Text>
-            ))}
-          </View>
-        </ScrollView>
+        <GestureDetector gesture={horizontalScrollGesture}>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.scrollContent,
+              compact ? styles.scrollContentCompact : null,
+            ]}
+          >
+            <View style={styles.codeContent}>
+              {lines.map((line, index) => (
+                <Text key={index} {...selectableTextProps} style={codeTextStyle}>
+                  {highlightCodeLineForLanguage(
+                    line || " ",
+                    prepared.language,
+                  ).map((segment, segmentIndex) => (
+                    <Text
+                      key={`${segmentIndex}:${segment.kind}`}
+                      style={{
+                        color: syntaxColor(
+                          segment.kind,
+                          theme,
+                          chrome,
+                          baseColor,
+                        ),
+                        fontFamily: fontFamilyForSegment(segment.kind),
+                      }}
+                    >
+                      {segment.text}
+                    </Text>
+                  ))}
+                </Text>
+              ))}
+            </View>
+          </ScrollView>
+        </GestureDetector>
       )}
     </View>
   );

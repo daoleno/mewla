@@ -1,7 +1,8 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { GestureDetector } from "react-native-gesture-handler";
 import { Typography } from "../../constants/tokens";
+import { useNestedHorizontalScrollGesture } from "../ui/useNestedHorizontalScrollGesture";
 import type {
   TerminalThemeChrome,
   TerminalThemePalette,
@@ -43,14 +44,7 @@ export function InterfaceMessageBlock({
 }: InterfaceMessageBlockProps) {
   const selectableTextProps = useTimelineSelectableTextProps();
   const tableColors = messageTableSemanticColors(chrome);
-  const tableHorizontalGesture = useMemo(
-    () =>
-      Gesture.Simultaneous(
-        Gesture.Pan().activeOffsetX([-6, 6]).failOffsetY([-8, 8]),
-        Gesture.Native(),
-      ),
-    [],
-  );
+  const tableHorizontalGesture = useNestedHorizontalScrollGesture();
 
   switch (block.type) {
     case "heading":
