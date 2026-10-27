@@ -45,14 +45,14 @@ describe("Plugins list rows", () => {
   });
 
   test("the row offers Connect, Reconnect on the account that needs it, or the worst status", () => {
-    const rows = pluginCatalogRows([...catalog, { ...plugin("gmail", "Gmail"), available: false }], [
+    const rows = pluginCatalogRows([...catalog, { ...plugin("pending-service", "Pending service"), available: false }], [
       account({ id: "l1", integration: "linear", status: "authorization_required" }),
       account({ id: "g1" }),
       account({ id: "g2", status: "error" }),
-    ], { ...reviewed, gmail: {} });
+    ], { ...reviewed, "pending-service": {} });
     const state = (id: string) => rows.services.find((row) => row.plugin.id === id)!.state;
     expect(state("slack")).toEqual({ kind: "connect" });
-    expect(state("gmail").kind).toBe("unavailable");
+    expect(state("pending-service").kind).toBe("unavailable");
     expect(state("linear")).toMatchObject({ kind: "reconnect", account: { id: "l1" } });
     expect(state("github")).toMatchObject({ kind: "status", label: "Last call failed", tone: "danger" });
   });

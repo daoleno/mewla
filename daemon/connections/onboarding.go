@@ -50,7 +50,6 @@ type connectFlow struct {
 	interval    time.Duration
 	nextPoll    time.Time
 	allowWrites bool
-	google      *googlePending
 }
 
 func (m *Manager) isPending(id string) bool {
@@ -111,14 +110,6 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("Too many connections in progress. Try again shortly.")
 		}
 		in := *q.Input
-		// Google signs in through Mewla's exchange, which this daemon polls: no
-		// browser return reaches the daemon, so no web origin applies.
-		if e := lookup(in.Integration); e != nil && e.Google != nil {
-			if reason := m.unavailableReason(in.Integration); reason != "" {
-				return Response{}, errors.New(reason)
-			}
-			return m.startGoogleExchange(ctx, &in)
-		}
 		in.Mobile = true
 		in.callback = NativeCallback
 		if in.WebOrigin != "" {
@@ -156,17 +147,8 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		return Response{}, errors.New("This connection expired. Connect again.")
 	}
 	if q.Action == "connect_cancel" {
-		// The browser can close after the person approved on Google but before
-		// this daemon has collected the result. Collect it first: a completed
-		// consent is never undone by a late cancel.
-		if f.google != nil && f.Status == "waiting" {
-			_ = m.pollGoogleExchange(ctx, f)
-		}
 		if r := m.records[f.AccountID]; r != nil && r.Account.Status == "connected" && !m.isPending(r.Account.ID) {
 			return m.connectedFlow(f)
-		}
-		if f.google != nil {
-			_ = m.googleExchangeRequest(ctx, f.google.origin, "/google/cancel?id="+url.QueryEscape(f.google.session.ID), f.google.nonce, nil, nil)
 		}
 		if pending, ok := m.pending[f.state]; ok {
 			delete(m.records, pending.ID)
@@ -252,22 +234,6 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 				f.Message = "Authorization was declined or could not be verified. Connect again."
 			}
 			return flowResult(f), nil
-		}
-	}
-	if f.google != nil && f.Status == "waiting" {
-		if err := m.pollGoogleExchange(ctx, f); err != nil {
-			var unreachable exchangeUnreachable
-			if errors.As(err, &unreachable) || errors.Is(err, errNetwork) {
-				// The sign-in is intact on both ends; only this check failed. Say
-				// why and stay waiting: the app asks again, and an error here would
-				// make it forget a consent Google has already recorded.
-				f.Message = "Couldn't reach Google to confirm the account. Trying again."
-				if errors.As(err, &unreachable) {
-					f.Message = unreachable.Error() + " Trying again."
-				}
-				return flowResult(f), nil
-			}
-			return Response{}, err
 		}
 	}
 	if f.deviceCode != "" && f.Status == "waiting" {

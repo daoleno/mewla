@@ -8,11 +8,6 @@ import "encoding/json"
 var GitHubPublicClientID string
 var SlackPublicClientID string
 
-// GoogleExchangeOrigin is a product-owned HTTPS origin shipped in releases:
-// the account service (cmd/mewla-account) that runs Google sign-in for Google
-// Calendar and Gmail. It is never a caller-supplied callback or daemon.
-var GoogleExchangeOrigin string
-
 func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
 	if e := lookup(kind); e != nil && e.OAuth != nil && e.OAuth.Public != nil {
 		if client, ok := e.OAuth.Public(); ok {
@@ -34,14 +29,6 @@ func (m *Manager) clientConfig(kind string) (OAuthClientConfig, bool, error) {
 func (m *Manager) unavailableReason(kind string) string {
 	e := lookup(kind)
 	if e == nil {
-		return ""
-	}
-	if e.Google != nil {
-		// Google signs in only through Mewla's exchange, which holds the
-		// client secret; a daemon never has one.
-		if GoogleExchangeOrigin == "" {
-			return "Google sign-in is not set up yet."
-		}
 		return ""
 	}
 	if e.OAuth == nil || e.OAuth.Source != clientPublisher {

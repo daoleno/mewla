@@ -44,21 +44,8 @@ env:
   clear:
     # Public OAuth client ID (release/plugin-publishers.json), Device Flow on.
     MEWLA_ACCOUNT_GITHUB_CLIENT_ID: Ov23liBbGJrVUAJyzDHg
-    # Google: Calendar and Gmail share this one Web client until Gmail's own
-    # project is set up (see docs/internal/plugins-google-exchange.md, "Moving
-    # Gmail to its own project"). Its client ID is public.
-    MEWLA_ACCOUNT_GOOGLE_CLIENT_ID: 559015099660-8d5a9ihqqq9blsdq7s3ds2dhlcjo06an.apps.googleusercontent.com
   secret:
     - MEWLA_ACCOUNT_CLOUDFLARE_TOKEN
-    # Mewla's Google OAuth client secret and the key that signs refresh
-    # receipts. The exchange for Google Calendar and Gmail sign-in runs in the
-    # account service; the client ID is public and sits in `clear` above.
-    - MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET
-    # Optional: a second client for Gmail only, once it moves to its own Cloud
-    # project. Unset means Gmail signs in with the client above.
-    # - MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID
-    # - MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET
-    - MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY
 
 volumes:
   # SQLite databases (accounts, Friends) and the grant signing key. Back it up

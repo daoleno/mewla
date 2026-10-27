@@ -29,20 +29,18 @@ type OAuthClientConfig struct {
 	ResourceURL  string `json:"resource_url,omitempty"`
 }
 type oauthAccount struct {
-	ClientID       string           `json:"client_id"`
-	RedirectURL    string           `json:"redirect_url"`
-	Issuer         string           `json:"issuer"`
-	AuthURL        string           `json:"auth_url"`
-	TokenURL       string           `json:"token_url"`
-	RevokeURL      string           `json:"revoke_url,omitempty"`
-	Resource       string           `json:"resource,omitempty"`
-	GoogleExchange string           `json:"google_exchange,omitempty"`
-	AuthStyle      oauth2.AuthStyle `json:"auth_style"`
+	ClientID    string           `json:"client_id"`
+	RedirectURL string           `json:"redirect_url"`
+	Issuer      string           `json:"issuer"`
+	AuthURL     string           `json:"auth_url"`
+	TokenURL    string           `json:"token_url"`
+	RevokeURL   string           `json:"revoke_url,omitempty"`
+	Resource    string           `json:"resource,omitempty"`
+	AuthStyle   oauth2.AuthStyle `json:"auth_style"`
 }
 type oauthSecret struct {
-	Exchange     *googleExchangeSecret `json:"exchange,omitempty"`
-	Token        *oauth2.Token         `json:"token"`
-	ClientSecret string                `json:"client_secret,omitempty"`
+	Token        *oauth2.Token `json:"token"`
+	ClientSecret string        `json:"client_secret,omitempty"`
 }
 type oauthFlow struct {
 	ID           string
@@ -507,9 +505,6 @@ func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
 	}
 	if secret.Token.Valid() {
 		return secret.Token.AccessToken, nil
-	}
-	if secret.Exchange != nil {
-		return m.refreshGoogleExchange(ctx, r, &secret)
 	}
 	config := oauthConfig(r, secret.ClientSecret)
 	client := m.oauthHTTP(r)

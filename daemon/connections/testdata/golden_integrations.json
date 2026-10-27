@@ -154,50 +154,6 @@
         "requests": []
       }
     },
-    "gmail": {
-      "credential": {
-        "error": "Google uses browser authorization; start OAuth for this account",
-        "requests": []
-      },
-      "no_credential": {
-        "error": "Google uses browser authorization; start OAuth for this account",
-        "requests": []
-      },
-      "spec_on_other": {
-        "error": "only OpenAPI plugins accept a document",
-        "requests": []
-      },
-      "trusted": {
-        "error": "Google uses browser authorization; start OAuth for this account",
-        "requests": []
-      },
-      "unnamed": {
-        "error": "account name is required (up to 80 characters)",
-        "requests": []
-      }
-    },
-    "google-calendar": {
-      "credential": {
-        "error": "Google uses browser authorization; start OAuth for this account",
-        "requests": []
-      },
-      "no_credential": {
-        "error": "Google uses browser authorization; start OAuth for this account",
-        "requests": []
-      },
-      "spec_on_other": {
-        "error": "only OpenAPI plugins accept a document",
-        "requests": []
-      },
-      "trusted": {
-        "error": "Google uses browser authorization; start OAuth for this account",
-        "requests": []
-      },
-      "unnamed": {
-        "error": "account name is required (up to 80 characters)",
-        "requests": []
-      }
-    },
     "hyperliquid": {
       "credential": {
         "error": "an API wallet private key is 64 hexadecimal characters, with or without 0x",
@@ -568,20 +524,6 @@
       "description": "Pages, search and workspace content"
     },
     {
-      "id": "google-calendar",
-      "name": "Google Calendar",
-      "available": true,
-      "setup_url": "https://calendar.google.com",
-      "description": "Calendars, events and free time"
-    },
-    {
-      "id": "gmail",
-      "name": "Gmail",
-      "available": true,
-      "setup_url": "https://mail.google.com",
-      "description": "Search, read and draft email"
-    },
-    {
       "id": "slack",
       "name": "Slack",
       "available": true,
@@ -681,30 +623,6 @@
       "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
       "no_id_no_address": "this service requires a publisher-owned client ID",
       "no_id_valid": "this service requires a publisher-owned client ID"
-    },
-    "gmail": {
-      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_secret_valid": "OAuth is not supported for this plugin",
-      "id_valid": "OAuth is not supported for this plugin",
-      "mcp_resource": "OAuth is not supported for this plugin",
-      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "no_id_valid": "OAuth is not supported for this plugin"
-    },
-    "google-calendar": {
-      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_secret_valid": "OAuth is not supported for this plugin",
-      "id_valid": "OAuth is not supported for this plugin",
-      "mcp_resource": "OAuth is not supported for this plugin",
-      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "no_id_valid": "OAuth is not supported for this plugin"
     },
     "hyperliquid": {
       "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
@@ -1397,138 +1315,6 @@
         "pending": [],
         "requests": [
           "POST https://github.com/login/device/code"
-        ]
-      }
-    },
-    "gmail": {
-      "direct": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_custom": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_mobile": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_operator": {
-        "error": "OAuth is not supported for this plugin",
-        "requests": []
-      },
-      "direct_operator_other": {
-        "error": "OAuth is not supported for this plugin",
-        "requests": []
-      },
-      "direct_trusted": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_unnamed_long": {
-        "error": "maximum accounts reached or invalid account name",
-        "requests": []
-      },
-      "direct_writes": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "native": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "native_custom_endpoint": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "native_operator_secret": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "native_writes_publishers": {
-        "error": "Google authorization is temporarily unavailable. Try again.",
-        "requests": [
-          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"gmail\",\"writes\":true}"
-        ]
-      },
-      "web": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "web_bad_origin": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "web_writes_publishers": {
-        "error": "Google authorization is temporarily unavailable. Try again.",
-        "requests": [
-          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"gmail\",\"writes\":true}"
-        ]
-      }
-    },
-    "google-calendar": {
-      "direct": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_custom": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_mobile": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_operator": {
-        "error": "OAuth is not supported for this plugin",
-        "requests": []
-      },
-      "direct_operator_other": {
-        "error": "OAuth is not supported for this plugin",
-        "requests": []
-      },
-      "direct_trusted": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "direct_unnamed_long": {
-        "error": "maximum accounts reached or invalid account name",
-        "requests": []
-      },
-      "direct_writes": {
-        "error": "Sign-in is not set up for this service yet.",
-        "requests": []
-      },
-      "native": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "native_custom_endpoint": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "native_operator_secret": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "native_writes_publishers": {
-        "error": "Google authorization is temporarily unavailable. Try again.",
-        "requests": [
-          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"calendar\",\"writes\":true}"
-        ]
-      },
-      "web": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "web_bad_origin": {
-        "error": "Google sign-in is not set up yet.",
-        "requests": []
-      },
-      "web_writes_publishers": {
-        "error": "Google authorization is temporarily unavailable. Try again.",
-        "requests": [
-          "POST https://connect.example/google/start body={\"public_key\":\"\u003crandom\u003e\",\"nonce\":\"\u003crandom\u003e\",\"service\":\"calendar\",\"writes\":true}"
         ]
       }
     },
@@ -3360,16 +3146,6 @@
       "account_name": "GitHub",
       "service": "GitHub"
     },
-    "gmail": {
-      "account": "Gmail",
-      "account_name": "Gmail",
-      "service": "Gmail"
-    },
-    "google-calendar": {
-      "account": "Google Calendar",
-      "account_name": "Google Calendar",
-      "service": "Google Calendar"
-    },
     "hyperliquid": {
       "account": "Hyperliquid",
       "account_name": "Hyperliquid",
@@ -3785,16 +3561,6 @@
         "get_me": "",
         "notion-search": ""
       },
-      "gmail": {
-        "execute": "",
-        "get_me": "",
-        "notion-search": ""
-      },
-      "google-calendar": {
-        "execute": "",
-        "get_me": "",
-        "notion-search": ""
-      },
       "hyperliquid": {
         "execute": "",
         "get_me": "",
@@ -3821,8 +3587,6 @@
     "none": {
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3834,21 +3598,6 @@
     "operator_github": {
       "cloudflare": "",
       "github": "",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
-      "hyperliquid": "",
-      "linear": "",
-      "mcp": "",
-      "notion": "",
-      "onlora": "",
-      "openapi": "",
-      "slack": "Slack sign-in is not set up yet."
-    },
-    "operator_google": {
-      "cloudflare": "",
-      "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3860,8 +3609,6 @@
     "operator_notion": {
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3873,8 +3620,6 @@
     "operator_slack_app": {
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3886,8 +3631,6 @@
     "operator_slack_no_secret_callback": {
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3899,8 +3642,6 @@
     "operator_slack_relay": {
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3912,8 +3653,6 @@
     "operator_slack_secret_app": {
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3925,8 +3664,6 @@
     "operator_slack_secret_callback": {
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
-      "gmail": "Google sign-in is not set up yet.",
-      "google-calendar": "Google sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -3938,8 +3675,6 @@
     "publisher": {
       "cloudflare": "",
       "github": "",
-      "gmail": "",
-      "google-calendar": "",
       "hyperliquid": "",
       "linear": "",
       "mcp": "",
@@ -4310,190 +4045,6 @@
         "group_oauth": "write"
       }
     ],
-    "gmail": [
-      {
-        "name": "get_me",
-        "description": "Read the signed-in Google account (email and name)",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "6b05552be28e35cccd5cc03d81ba2392caad3ef125ca3522636002096b75aa2d",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "search_messages",
-        "description": "Search mail with Gmail's search syntax (from:, subject:, is:unread, newer_than:2d, label:, has:attachment). Returns up to 25 messages per page with sender, subject, date and snippet; pass next_page_token for more",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "addb92615fc5804a68f3f398e8ad77b60adef3bc7f2d65ee819cd745af74476e",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "read_message",
-        "description": "Read one message: headers, the body as readable text (long bodies are cut and flagged) and its attachment names",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "edc6ac737d5dab869152d1b011f6f86d01658df8500a1978676a6402c20df079",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "read_thread",
-        "description": "Read a conversation: up to 30 messages, oldest first, each with a shortened body",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "0546aaeab8115c0e74238739c03d722eb13ea1c5743004d81903914d9c8828b2",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_labels",
-        "description": "List the mailbox's labels with their ids (system labels such as INBOX and UNREAD included)",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "2e88e2e42c2790cee03d855863edb6a326bb6da79bac4e090c77abfa04f266bc",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "create_draft",
-        "description": "Save a draft in Gmail without sending it. Give to, subject and body; set reply_to_message_id to draft a reply in that conversation",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "4b669ab90b328af5e541755638858234c31989cf88ea1699d74e858ca535fea3",
-        "group": "write",
-        "group_oauth": "write"
-      },
-      {
-        "name": "send_message",
-        "description": "Send an email now. Only when the person asked for this exact message to be sent; otherwise create a draft",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "dcba88650a68f7b6fe769939b509d3bd6b0ebd397e287f5f31a21ce387207331",
-        "group": "write",
-        "group_oauth": "write"
-      },
-      {
-        "name": "send_draft",
-        "description": "Send an existing draft now. Only when the person asked for it to be sent",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "9e26bfb63ac61c9fbeb35d89ec353c47811a2976fdfcd8e3ecc12d5fd6185808",
-        "group": "write",
-        "group_oauth": "write"
-      },
-      {
-        "name": "update_labels",
-        "description": "Mark a message or a whole conversation read, archive it, or add and remove labels (names or ids from list_labels). Give message_id or thread_id",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "bea7dda9f351a2e7c433526def4b7a5a1e52daf08c2f1c300032a5da059fa6e5",
-        "group": "write",
-        "group_oauth": "write"
-      }
-    ],
-    "google-calendar": [
-      {
-        "name": "get_me",
-        "description": "Read the signed-in Google account (email and name)",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "6b05552be28e35cccd5cc03d81ba2392caad3ef125ca3522636002096b75aa2d",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_calendars",
-        "description": "List the calendars this account can see, with id, name, time zone and access role",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "bb40d59c3e1a1ee02f597ea229473dc014f9252eed66f3748bab1bb28ef64c5f",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_events",
-        "description": "List events between time_min and time_max (RFC 3339 with an offset such as 2026-10-23T00:00:00+08:00, or a date YYYY-MM-DD). Recurring events come as single occurrences in start order. Up to 100 per page; times are in the calendar's time zone unless time_zone is given",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "2062a7e8f89f7750f9b9847413ce4c7ec7bd888997346bf1c24bfdead7a27eac",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "get_event",
-        "description": "Read one event in full: guests and their replies, location, description and meeting link",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "0037e210448b51b87056473e6687418444bb4c77ea70e000e919fbfb432bde7b",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "check_availability",
-        "description": "Find when calendars are busy between time_min and time_max (RFC 3339 or a date). Defaults to the primary calendar; up to 20 calendar ids or people's email addresses",
-        "method": "",
-        "path": "",
-        "read": true,
-        "fingerprint": "fad84512b810a7d702ea08dfcc12aaf4ef55737c8c8c3557de43e0152adae962",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "create_event",
-        "description": "Create an event. start and end are RFC 3339 with an offset (or with time_zone, an IANA name such as Asia/Shanghai), or dates for an all-day event, where end is the day after the last day. Guests are not emailed unless send_updates is \"all\"",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "30145707155efd08fe6d4769446af7e9d05e8fab34427e304400d26f1c1e7376",
-        "group": "write",
-        "group_oauth": "write"
-      },
-      {
-        "name": "update_event",
-        "description": "Change an event. Only the fields given change. add_attendees and remove_attendees edit the guest list without touching other guests",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "15c8994834958d7ab604ca450322cf6c0c00ecff878a522eda6ddd91b23eb5c8",
-        "group": "write",
-        "group_oauth": "write"
-      },
-      {
-        "name": "delete_event",
-        "description": "Delete an event from a calendar. Guests are not emailed unless send_updates is \"all\"",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "fbcb7e7993112645f49b588b8bcc3329138ede809f7519dc8b1bf86687a630c2",
-        "group": "write",
-        "group_oauth": "write"
-      },
-      {
-        "name": "respond_to_event",
-        "description": "Reply to an invitation for this account: accepted, declined or tentative. The organizer is not emailed unless send_updates is \"all\"",
-        "method": "",
-        "path": "",
-        "read": false,
-        "fingerprint": "f8477f91f8d08699505fda63f716a17c6d7a646e4fa79711b2901f521c70d296",
-        "group": "write",
-        "group_oauth": "write"
-      }
-    ],
     "hyperliquid": [
       {
         "name": "get_me",
@@ -4822,16 +4373,6 @@
       "method:mcp_oauth": true,
       "method:oauth": false
     },
-    "gmail": {
-      "method:": false,
-      "method:mcp_oauth": true,
-      "method:oauth": false
-    },
-    "google-calendar": {
-      "method:": false,
-      "method:mcp_oauth": true,
-      "method:oauth": false
-    },
     "hyperliquid": {
       "method:": false,
       "method:mcp_oauth": true,
@@ -4870,93 +4411,59 @@
   },
   "write_consent": {
     "cloudflare": {
-      "all_goog": false,
       "chat": false,
       "no_oauth": false,
       "none": false,
       "read": false,
-      "read_goog": false,
       "write": false
     },
     "github": {
-      "all_goog": false,
       "chat": false,
       "no_oauth": false,
       "none": false,
       "read": false,
-      "read_goog": false,
       "write": false
     },
-    "gmail": {
-      "all_goog": false,
-      "chat": true,
-      "no_oauth": false,
-      "none": true,
-      "read": true,
-      "read_goog": true,
-      "write": true
-    },
-    "google-calendar": {
-      "all_goog": false,
-      "chat": true,
-      "no_oauth": false,
-      "none": true,
-      "read": true,
-      "read_goog": true,
-      "write": true
-    },
     "hyperliquid": {
-      "all_goog": false,
       "chat": false,
       "no_oauth": false,
       "none": false,
       "read": false,
-      "read_goog": false,
       "write": false
     },
     "linear": {
-      "all_goog": true,
       "chat": true,
       "no_oauth": false,
       "none": true,
       "read": true,
-      "read_goog": true,
       "write": false
     },
     "mcp": {
-      "all_goog": false,
       "chat": false,
       "no_oauth": false,
       "none": false,
       "read": false,
-      "read_goog": false,
       "write": false
     },
     "notion": {
-      "all_goog": false,
       "chat": false,
       "no_oauth": false,
       "none": false,
       "read": false,
-      "read_goog": false,
       "write": false
     },
     "onlora": {
-      "all_goog": false,
       "chat": false,
       "no_oauth": false,
       "none": false,
       "read": false,
-      "read_goog": false,
       "write": false
     },
     "slack": {
-      "all_goog": true,
       "chat": false,
       "no_oauth": false,
       "none": true,
       "read": true,
-      "read_goog": true,
       "write": true
     }
   }

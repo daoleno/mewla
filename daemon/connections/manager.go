@@ -90,13 +90,23 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 
 // retired integrations were removed from Mewla. Their accounts and stored
 // keys are deleted when the daemon starts; there is nothing to migrate to.
-var retired = map[string]bool{"fal": true, "image": true, "google": true}
+// Google Calendar and Gmail left with Mewla's Google sign-in.
+var retired = map[string]bool{"fal": true, "image": true, "google": true, "google-calendar": true, "gmail": true}
 
 func (m *Manager) removeRetired() error {
 	removed := false
 	for id, r := range m.records {
 		if !retired[r.Account.Integration] {
 			continue
+		}
+		// Hand a signed-in grant back to its service first, while the key is
+		// still stored. That is best effort: an offline start still removes it.
+		if r.OAuth != nil && r.OAuth.RevokeURL != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := m.revokeOAuth(ctx, r); err != nil {
+				log.Printf("plugins: revoking retired %s account: %v", r.Account.Integration, err)
+			}
+			cancel()
 		}
 		// An account whose key can't be deleted yet stays until the next start.
 		if err := m.vault.Delete("integration:" + id); err != nil {

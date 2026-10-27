@@ -23,13 +23,8 @@ func TestAccessSummary(t *testing.T) {
 		t.Fatalf("custom access %+v", a)
 	}
 	slack := &record{Account: Account{Integration: "slack", Scopes: []string{"channels:read"}}, OAuth: &oauthAccount{}}
-	google := &record{Account: Account{Integration: "gmail", Scopes: googleScopes("gmail", false)}, OAuth: &oauthAccount{}}
 	token := &record{Account: Account{Integration: "slack"}}
-	if !writeConsent(slack) || !writeConsent(google) || writeConsent(token) {
-		t.Fatal("write consent misreads Slack, Google or a token account")
-	}
-	google.Account.Scopes = googleScopes("gmail", true)
-	if writeConsent(google) {
-		t.Fatal("Google with write scopes still asks again")
+	if !writeConsent(slack) || writeConsent(token) {
+		t.Fatal("write consent misreads Slack or a token account")
 	}
 }

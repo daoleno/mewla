@@ -58,24 +58,6 @@ export async function finishPluginReturn(
   if (Date.parse(pending.flow.expires) <= Date.now()) throw new Error("This connection expired. Connect again.");
   return send(pending.serverId, { action: "connect_finish", flow_id: pending.flow.id, callback });
 }
-export const GOOGLE_DATA_USE_URL = "https://mewla.ai/privacy/#google";
-/** Google asks for this notice in the app, next to where access is offered. */
-export function dataUseNotice(integration: string): string | null {
-  return integration === "google-calendar" || integration === "gmail"
-    ? "Mewla's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements."
-    : null;
-}
-/**
- * Why a Google sign-in ended without access. Google's block page for an
- * account outside Mewla's early-access list never returns to the app, so the
- * dismissed browser or Google's refusal is the only sign there is.
- */
-export function googleBlockedDetail(integration: string | undefined, cancelled: boolean, message: string): string {
-  const google = integration === "google-calendar" || integration === "gmail";
-  return google && (cancelled || message === pluginReturnError("denied"))
-    ? "If Google blocked it, this account isn't on Mewla's early-access list yet."
-    : message;
-}
 /** What Brain can now do, in one line, from the service's read job. */
 export function brainCanNow(read: string | undefined, name: string): string {
   return read ? `Brain can now ${read.charAt(0).toLowerCase()}${read.slice(1)}.` : `Brain can read and search ${name}.`;
@@ -107,8 +89,6 @@ export const pluginJobs: Record<string, { read: string; write: string; example: 
   linear: { read: "Read issues, projects and team activity", write: "Create and update issues, projects and comments", example: "Ask Brain to summarize the issues assigned to you." },
   onlora: { read: "Search openly licensed images, fonts, sounds and video, and read projects, assets and files", write: "Generate and edit images, generate music, voice and video, add assets and write project files. Onlora counts generation against your quota", example: "Ask Brain to start a project and generate a character sheet." },
   cloudflare: { read: "Search Cloudflare’s API and docs, and see your account", write: "Call any Cloudflare API your sign-in allows, reads included, such as listing Workers, managing R2 buckets or editing DNS", example: "Allow changes, then ask Brain to list your Workers and R2 buckets." },
-  "google-calendar": { read: "List your calendars and events and check when you are free", write: "Create, change and delete events and reply to invitations", example: "Ask Brain what is on your calendar tomorrow and when you are free on Friday." },
-  gmail: { read: "Search and read your email and labels", write: "Draft and send email, mark messages read, archive and label them", example: "Ask Brain to find the latest email about your flight and summarize it." },
   hyperliquid: { read: "Read markets, order books, candles and funding, and account positions, orders, fills and PnL", write: "Place, change and cancel orders and set leverage, with an API wallet key you add. Never withdrawals or transfers", example: "Ask Brain for the BTC order book, or for an account's positions." },
   slack: { read: "Find conversations and read channel messages", write: "Send and update messages", example: "Ask Brain to summarize a channel’s recent discussion." },
 };

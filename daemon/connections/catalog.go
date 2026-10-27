@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/daoleno/mewla/daemon/googleauth"
 	"golang.org/x/oauth2"
 )
 
@@ -17,8 +16,8 @@ import (
 // the others: where it lives, how a person signs in, which tools Mewla has
 // reviewed and what class each one is, what the network layer adds to its
 // requests. The generic code reads an entry; it never asks "which service is
-// this". Behaviour that is code rather than data (Hyperliquid signing, Google
-// and Slack token details, MCP and OpenAPI discovery) is a driver or a token
+// this". Behaviour that is code rather than data (Hyperliquid signing, Slack
+// token details, MCP and OpenAPI discovery) is a driver or a token
 // codec, registered below and named by the entry that uses it.
 //
 // Adding an integration is adding one entry here, plus a driver or codec when
@@ -35,10 +34,6 @@ const (
 
 	hlMainnetAPI = "https://api.hyperliquid.xyz"
 	hlTestnetAPI = "https://api.hyperliquid-testnet.xyz"
-
-	googleScopeBase = "https://www.googleapis.com/auth/"
-	// Both Google services name the account at the same OpenID Connect host.
-	googleIdentityHost = "https://openidconnect.googleapis.com"
 )
 
 // Onlora registers Mewla's app as the public client "mewla", returning to
@@ -141,13 +136,6 @@ type queryDefault struct {
 	Value      string
 }
 
-type googleSpec struct {
-	// Service is the exchange service whose scopes a sign-in asks for.
-	Service      string
-	IdentityHost string
-	Ops          func() []googleTool
-}
-
 type entry struct {
 	Integration
 
@@ -179,7 +167,6 @@ type entry struct {
 	QueryDefaults []queryDefault
 	// Networks maps a network name to its API origin (Hyperliquid).
 	Networks map[string]string
-	Google   *googleSpec
 	MCP      *mcpSpec
 	OAuth    *oauthSpec
 }
@@ -207,7 +194,6 @@ func registerDrivers() {
 	drivers = map[string]driver{
 		"rest":        {discover: discoverREST, invoke: invokeREST},
 		"slack":       {discover: discoverSlack, invoke: invokeREST},
-		"google":      {discover: discoverGoogleDriver, invoke: invokeGoogleDriver},
 		"hyperliquid": {discover: discoverHyperliquidDriver, invoke: invokeHyperliquidDriver, add: addHyperliquidDriver, removeKey: removeHyperliquidKeyDriver},
 		"openapi":     {discover: discoverOpenAPI, invoke: invokeOpenAPI, unverified: true},
 		"mcp":         {discover: discoverMCPToken},
@@ -278,18 +264,6 @@ func buildCatalog() []*entry {
 				Identity: "notion-get-self",
 			},
 			OAuth: &oauthSpec{Source: clientRegistered, Configurable: true},
-		},
-		{
-			Integration: Integration{ID: "google-calendar", Name: "Google Calendar", Available: true, SetupURL: "https://calendar.google.com", Description: "Calendars, events and free time"},
-			Driver:      "google", Endpoint: "https://www.googleapis.com",
-			AddRefusal: "Google uses browser authorization; start OAuth for this account",
-			Google:     &googleSpec{Service: googleauth.Calendar, IdentityHost: googleIdentityHost, Ops: calendarTools},
-		},
-		{
-			Integration: Integration{ID: "gmail", Name: "Gmail", Available: true, SetupURL: "https://mail.google.com", Description: "Search, read and draft email"},
-			Driver:      "google", Endpoint: "https://gmail.googleapis.com",
-			AddRefusal: "Google uses browser authorization; start OAuth for this account",
-			Google:     &googleSpec{Service: googleauth.Gmail, IdentityHost: googleIdentityHost, Ops: gmailTools},
 		},
 		{
 			Integration: Integration{ID: "slack", Name: "Slack", Available: true, SetupURL: "https://api.slack.com/apps", Description: "Channels, conversations and messages"},
@@ -406,7 +380,7 @@ func (e *entry) validate() error {
 			return fmt.Errorf("endpoint %q: %v", origin, err)
 		}
 	}
-	if e.Custom && (e.Endpoint != "" || e.MCP != nil || e.Tools != nil || e.Google != nil) {
+	if e.Custom && (e.Endpoint != "" || e.MCP != nil || e.Tools != nil) {
 		return fmt.Errorf("a custom service has no fixed endpoint or reviewed tools")
 	}
 	if !e.Custom && e.Driver != "mcp" && e.Driver != "openapi" && e.Driver != "" && e.Endpoint == "" && len(e.Networks) == 0 {
@@ -420,17 +394,6 @@ func (e *entry) validate() error {
 	}
 	if e.Driver == "rest" && e.IdentityPath == "" {
 		return fmt.Errorf("the rest driver needs an identity path")
-	}
-	if (e.Driver == "google") != (e.Google != nil) {
-		return fmt.Errorf("the google driver and its spec go together")
-	}
-	if e.Google != nil {
-		if e.Google.Service == "" || e.Google.Ops == nil {
-			return fmt.Errorf("a google service needs its scopes name and operations")
-		}
-		if _, err := endpointURL(e.Google.IdentityHost); err != nil {
-			return fmt.Errorf("identity host: %v", err)
-		}
 	}
 	if e.MCP != nil {
 		if _, err := endpointURL(e.MCP.Endpoint); err != nil {
@@ -506,10 +469,7 @@ func (e *entry) reviewed() []Tool {
 	if e == nil {
 		return nil
 	}
-	switch {
-	case e.Google != nil:
-		return googleReviewedTools(e.ID)
-	case e.Tools != nil:
+	if e.Tools != nil {
 		return e.Tools()
 	}
 	return nil
@@ -538,21 +498,11 @@ func requestRule(host string) *entry {
 }
 
 // changeScopes lists the scopes a grant must hold before the service's
-// changes can be allowed. Google asks for them with the sign-in: they are the
-// write scopes the read-only sign-in lacks.
+// changes can be allowed.
 func (e *entry) changeScopes() []string {
 	switch {
 	case e == nil:
 		return nil
-	case e.Google != nil:
-		read := googleauth.Scopes(e.Google.Service, false)
-		var extra []string
-		for _, scope := range googleauth.Scopes(e.Google.Service, true) {
-			if !contains(read, scope) {
-				extra = append(extra, scope)
-			}
-		}
-		return extra
 	case e.OAuth != nil && e.OAuth.ChangeScopes != nil:
 		return e.OAuth.ChangeScopes()
 	}

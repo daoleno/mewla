@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, dataUseNotice, GOOGLE_DATA_USE_URL, pluginJobs, googleBlockedDetail, brainCanNow, pluginReturnError, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
+import { finishPluginReturn, isPluginCallbackUrl, isPluginReturnUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, brainCanNow, pluginReturnError, retainPluginReturn, type PendingConnection } from "./pluginOnboarding";
 const pending: PendingConnection = { serverId: "server-a", flow: { id: "flow-a", integration: "linear", status: "waiting", expires: new Date(Date.now() + 60000).toISOString(), authorization_url: "https://mcp.linear.app/authorize?state=secret-state" } };
 test("native return is bound to exact URI and original state", () => {
   expect(matchesPluginReturn("mewla://plugins?state=secret-state&code=one", pending.flow)).toBe(true);
@@ -45,33 +45,7 @@ test("bare Plugins callbacks are recognised only on the mewla scheme", () => {
   expect(isPluginCallbackUrl("other://plugins")).toBe(false);
   expect(isPluginCallbackUrl("mewla://plugins?state=abc")).toBe(false);
 });
-test("Google Calendar and Gmail each say what Brain can do, and have their own mark", async () => {
-  const { hasServiceMark } = await import("../components/plugins/serviceMarkPaths");
-  for (const id of ["google-calendar", "gmail"]) {
-    expect(pluginJobs[id]?.read).toBeTruthy();
-    expect(pluginJobs[id]?.write).toBeTruthy();
-    expect(hasServiceMark(id)).toBe(true);
-  }
-  expect(pluginJobs.google).toBeUndefined();
-});
-test("a Google sign-in that ends without access names the early-access list, other endings do not", () => {
-  const denied = pluginReturnError("denied") ?? "";
-  for (const id of ["gmail", "google-calendar"]) {
-    expect(googleBlockedDetail(id, true, "Sign-in cancelled. Nothing was connected.")).toContain("early-access list");
-    expect(googleBlockedDetail(id, false, denied)).toContain("early-access list");
-    expect(googleBlockedDetail(id, false, "The service didn’t accept the sign-in. Start again.")).toBe("The service didn’t accept the sign-in. Start again.");
-  }
-  expect(googleBlockedDetail("linear", true, "Sign-in cancelled. Nothing was connected.")).toBe("Sign-in cancelled. Nothing was connected.");
-  expect(googleBlockedDetail(undefined, false, denied)).toBe(denied);
-});
 test("once connected, one line says what Brain can now do", () => {
-  expect(brainCanNow(pluginJobs.gmail?.read, "Gmail")).toBe("Brain can now search and read your email and labels.");
-  expect(brainCanNow(undefined, "Gmail")).toBe("Brain can read and search Gmail.");
-});
-test("Google plugins carry the Limited Use notice in the app, other services do not", () => {
-  for (const id of ["gmail", "google-calendar"]) {
-    expect(dataUseNotice(id)).toContain("Google API Services User Data Policy, including the Limited Use requirements");
-  }
-  expect(dataUseNotice("slack")).toBeNull();
-  expect(GOOGLE_DATA_USE_URL).toBe("https://mewla.ai/privacy/#google");
+  expect(brainCanNow(pluginJobs.github?.read, "GitHub")).toBe("Brain can now read repositories, issues and pull requests.");
+  expect(brainCanNow(undefined, "GitHub")).toBe("Brain can read and search GitHub.");
 });

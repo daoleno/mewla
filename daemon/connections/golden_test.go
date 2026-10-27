@@ -24,11 +24,11 @@ import (
 //
 // Regenerate deliberately with MEWLA_UPDATE_GOLDEN=1.
 func TestGoldenIntegrationBehavior(t *testing.T) {
-	oldGitHub, oldSlack, oldGoogle := GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin
+	oldGitHub, oldSlack := GitHubPublicClientID, SlackPublicClientID
 	defer func() {
-		GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = oldGitHub, oldSlack, oldGoogle
+		GitHubPublicClientID, SlackPublicClientID = oldGitHub, oldSlack
 	}()
-	GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "", "", ""
+	GitHubPublicClientID, SlackPublicClientID = "", ""
 
 	ids := []string{}
 	for _, item := range Catalog() {
@@ -97,9 +97,9 @@ func goldenReadiness(t *testing.T) map[string]map[string]string {
 	}
 	run("none", func(*Manager) {})
 	run("publisher", func(*Manager) {
-		GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "gh", "sl", "https://connect.example"
+		GitHubPublicClientID, SlackPublicClientID = "gh", "sl"
 	})
-	GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "", "", ""
+	GitHubPublicClientID, SlackPublicClientID = "", ""
 	run("operator_github", func(m *Manager) { vault(m, "github", OAuthClientConfig{ClientID: "v"}) })
 	run("operator_slack_app", func(m *Manager) { vault(m, "slack", OAuthClientConfig{ClientID: "v", RedirectURL: NativeCallback}) })
 	run("operator_slack_relay", func(m *Manager) { vault(m, "slack", OAuthClientConfig{ClientID: "v", RedirectURL: NativeReturnRelay}) })
@@ -113,7 +113,6 @@ func goldenReadiness(t *testing.T) map[string]map[string]string {
 		vault(m, "slack", OAuthClientConfig{ClientID: "v", RedirectURL: "https://d.example/plugins/oauth/callback"})
 	})
 	run("operator_notion", func(m *Manager) { vault(m, "notion", OAuthClientConfig{ClientID: "v"}) })
-	run("operator_google", func(m *Manager) { vault(m, "gmail", OAuthClientConfig{ClientID: "v"}) })
 	return out
 }
 
@@ -130,7 +129,7 @@ type goldenTool struct {
 
 func goldenTools() map[string][]goldenTool {
 	out := map[string][]goldenTool{}
-	for _, id := range []string{"github", "notion", "slack", "hyperliquid", "google-calendar", "gmail"} {
+	for _, id := range []string{"github", "notion", "slack", "hyperliquid"} {
 		plain := &record{Account: Account{Integration: id}}
 		oauth := &record{Account: Account{Integration: id, AuthMethod: "oauth"}}
 		list := []goldenTool{}
@@ -183,14 +182,12 @@ func goldenOfficialGroups(ids []string) map[string]any {
 
 func goldenWriteConsent() map[string]map[string]bool {
 	out := map[string]map[string]bool{}
-	for _, id := range []string{"slack", "linear", "google-calendar", "gmail", "github", "notion", "onlora", "cloudflare", "mcp", "hyperliquid"} {
+	for _, id := range []string{"slack", "linear", "github", "notion", "onlora", "cloudflare", "mcp", "hyperliquid"} {
 		scopeSets := map[string][]string{
-			"none":      nil,
-			"read":      {"channels:read", "read", "openid"},
-			"chat":      {"chat:write"},
-			"write":     {"write"},
-			"read_goog": goldenGoogleScopes(id, false),
-			"all_goog":  goldenGoogleScopes(id, true),
+			"none":  nil,
+			"read":  {"channels:read", "read", "openid"},
+			"chat":  {"chat:write"},
+			"write": {"write"},
 		}
 		results := map[string]bool{}
 		for name, scopes := range scopeSets {
@@ -545,9 +542,9 @@ func goldenConnect(t *testing.T, ids []string) map[string]any {
 	for _, id := range append(append([]string{}, ids...), "bogus") {
 		byVariant := map[string]any{}
 		for name, v := range variants {
-			GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "", "", ""
+			GitHubPublicClientID, SlackPublicClientID = "", ""
 			if v.publishers {
-				GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "gh", "sl", "https://connect.example"
+				GitHubPublicClientID, SlackPublicClientID = "gh", "sl"
 			}
 			m, err := New(t.TempDir())
 			if err != nil {
@@ -600,6 +597,6 @@ func goldenConnect(t *testing.T, ids []string) map[string]any {
 		}
 		out[id] = byVariant
 	}
-	GitHubPublicClientID, SlackPublicClientID, GoogleExchangeOrigin = "", "", ""
+	GitHubPublicClientID, SlackPublicClientID = "", ""
 	return out
 }

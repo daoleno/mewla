@@ -21,7 +21,6 @@ and [third-party assets](../third-party-assets.md).
 - [Notification policy](notification-policy.md)
 - [Telegram channel](telegram.md)
 - [Plugins engineering](plugins-engineering.md), [publisher setup](plugins-publisher-setup.md),
-  [Google exchange](plugins-google-exchange.md), [Google options](plugins-google-options.md),
   [Slack manifest](plugins-slack-manifest.json)
 - [Usage and pricing details](usage-and-pricing.md) and [OpenCode local usage](opencode-local-usage.md)
 - [Web UI](web-ui.md)

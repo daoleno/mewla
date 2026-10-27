@@ -7,8 +7,5 @@
   "slack": {
     "workspace_id": "T0CA7628ECC",
     "client_id": "12347206286420.12343331081890"
-  },
-  "google": {
-    "exchange_origin": "https://connect.mewla.ai"
   }
 }

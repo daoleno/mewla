@@ -1,12 +1,12 @@
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Linking, StyleSheet, Switch, View, type SwitchProps } from "react-native";
+import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
-import { brainCanNow, dataUseNotice, GOOGLE_DATA_USE_URL, googleBlockedDetail, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
+import { brainCanNow, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 import {
   accessControl,
   accountRecovery,
@@ -239,7 +239,6 @@ export function ServiceHeader({ plugin, state }: { plugin: PluginIntegration; st
  */
 export function ConnectStatusCard({
   serviceName,
-  integration,
   phase,
   flow,
   error,
@@ -258,8 +257,6 @@ export function ConnectStatusCard({
 }: {
   /** Null for a return that names no service (a stale or replayed sign-in). */
   serviceName: string | null;
-  /** The service the sign-in was for, which a cancelled sign-in no longer has a flow to name. */
-  integration?: string;
   phase: ConnectPhase;
   flow: PendingConnection | null;
   error: string;
@@ -341,7 +338,7 @@ export function ConnectStatusCard({
   }
   if ((phase === "failed" || phase === "cancelled") && error) {
     return (
-      <StatusCard glyph={phase === "failed" ? "alert-circle-fill" : "info-fill"} glyphColor={phase === "failed" ? colors.dangerText : colors.textSecondary} title={phase === "failed" ? `Couldn't connect ${serviceName}` : "Sign-in cancelled"} detail={googleBlockedDetail(flow?.flow.integration ?? integration, phase === "cancelled", error)}>
+      <StatusCard glyph={phase === "failed" ? "alert-circle-fill" : "info-fill"} glyphColor={phase === "failed" ? colors.dangerText : colors.textSecondary} title={phase === "failed" ? `Couldn't connect ${serviceName}` : "Sign-in cancelled"} detail={error}>
         <Button label="Start again" icon="refresh" variant="tinted" block loading={starting} onPress={onRetry} />
         <Button label="Dismiss" variant="plain" block onPress={onDismiss} />
       </StatusCard>
@@ -388,21 +385,6 @@ export function ConnectOffer({ plugin, job, serverName, connecting, disabled, on
       <ListSection>
         <ListRow icon="info" title="Not yet available" subtitle={plugin.unavailable_reason || "Sign-in is not set up yet."} numberOfLines={3} />
       </ListSection>
-    );
-  }
-  // Google: connect, then the footnote Google's verification asks for, kept quiet.
-  const notice = dataUseNotice(plugin.id);
-  if (notice) {
-    return (
-      <>
-        <View style={styles.actions}>
-          <Button label={`Connect ${plugin.name}`} variant="filled" size="lg" block loading={connecting} disabled={disabled} onPress={onConnect} />
-        </View>
-        <AppText variant="caption" tone="tertiary" style={styles.footnote}>
-          {notice}{" "}
-          <AppText variant="caption" tone="accent" accessibilityRole="link" onPress={() => void Linking.openURL(GOOGLE_DATA_USE_URL)}>How Mewla uses your Google data</AppText>
-        </AppText>
-      </>
     );
   }
   return (
@@ -720,7 +702,6 @@ const styles = StyleSheet.create({
   card: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
   cardTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
   cardActions: { gap: 4, paddingTop: 4 },
-  footnote: { paddingHorizontal: 16 },
   code: { fontSize: 26, lineHeight: 34, letterSpacing: 2, paddingVertical: 4 },
   actions: { gap: 6, marginBottom: 26 },
   confirm: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },

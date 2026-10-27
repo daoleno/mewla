@@ -68,13 +68,6 @@ func TestCheckedDialerStillRefusesInternalAddresses(t *testing.T) {
 	}
 }
 
-func TestExchangeNamesAPrivateAddressAnswer(t *testing.T) {
-	wrapped := &net.OpError{Op: "dial", Err: errPrivateEndpoint}
-	if got := exchangeFailure(wrapped); got != "this network answers with a private address" {
-		t.Fatalf("cause %q", got)
-	}
-}
-
 // Clash Verge (mihomo) in TUN mode answers one name with both families:
 // 198.18.0.12 and 2001:2::5. Neither may poison the other, and both are tried.
 func TestCheckedDialerAcceptsBothFakeIPFamilies(t *testing.T) {
