@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Animated, StyleSheet } from "react-native";
+import { Animated, StyleSheet, type ViewStyle } from "react-native";
 import TopTabs from "expo-router/js-top-tabs";
 import { PrimaryDrawerShell } from "../../components/navigation/PrimaryDrawerShell";
 import { useDesktopWeb } from "../../components/navigation/useDesktopWeb";
@@ -56,12 +56,17 @@ export default function PrimaryLayout() {
     <TopTabs
       backBehavior={desktopWeb ? "history" : "none"}
       layout={renderPrimaryTabsLayout}
-      screenOptions={{
+      screenOptions={({ navigation }: { navigation: { isFocused(): boolean } }) => ({
         animationEnabled: !desktopWeb,
         lazy: false,
-        sceneStyle: styles.scene,
+        // The other page stays mounted beside this one; on desktop hide it so
+        // Tab and screen readers never land in a page that isn't showing.
+        sceneStyle:
+          desktopWeb && !navigation.isFocused()
+            ? [styles.scene, styles.offscreen]
+            : styles.scene,
         swipeEnabled: !desktopWeb,
-      }}
+      })}
       tabBar={renderPrimaryTabBar}
     >
       <TopTabs.Screen name="index" options={{ title: "Brain" }} />
@@ -75,4 +80,6 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
     flex: 1,
   },
+  // Web-only CSS: keeps layout and scroll, drops focus and accessibility.
+  offscreen: { visibility: "hidden" } as ViewStyle,
 });
