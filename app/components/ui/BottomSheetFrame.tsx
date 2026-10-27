@@ -23,6 +23,7 @@ import { Radii, useAppColors } from "../../constants/tokens";
 import { Spring } from "../../constants/motion";
 import { GlassSurface } from "./GlassSurface";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
+import { dialogCardInset } from "./dialogCardInset";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const DISMISS_DISTANCE = 96;
@@ -154,9 +155,9 @@ export function BottomSheetFrame({
         accessibilityViewIsModal
         style={[
           styles.card,
-          dialog && styles.dialogCard,
           fixedHeight != null && styles.cardFill,
           cardOverrides,
+          dialog && dialogCardInset(cardOverrides),
         ]}
       >
         {dialog ? null : dragToDismiss ? (
@@ -217,9 +218,6 @@ const styles = StyleSheet.create({
   dialogRoot: {
     justifyContent: "center",
     paddingVertical: 32,
-  },
-  dialogCard: {
-    paddingTop: 18,
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
