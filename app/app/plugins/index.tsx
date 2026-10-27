@@ -28,8 +28,10 @@ export default function ExtensionsScreen() {
     />)}
     <CatalogView
       rows={flow.rows}
-      loading={flow.running === "list" && !flow.catalog.length}
-      error={flow.catalog.length ? "" : flow.error}
+      // Until the first list answers, the page is loading, not failed; a
+      // server that can't be reached says so once the socket gives up.
+      loading={!flow.catalog.length && (flow.running === "list" || (!flow.loaded && flow.connection === "connecting"))}
+      error={flow.catalog.length ? "" : flow.error || (!flow.loaded && flow.connection === "offline" ? "Can't reach your computer." : "")}
       connecting={connecting}
       onRetry={() => void flow.send({ action: "list" })}
       onOpen={(plugin) => router.push(pluginServicePath(plugin.id))}
