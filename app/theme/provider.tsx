@@ -12,7 +12,6 @@ import {
   ThemeProvider as NavigationThemeProvider,
 } from "expo-router";
 import * as SystemUI from "expo-system-ui";
-import { useColorScheme } from "react-native";
 import {
   getPetPreference,
   getThemePreference,
@@ -23,6 +22,7 @@ import { DEFAULT_PET_ID, PET_PACKS } from "../components/pets/petPacks";
 import { navigationThemeFromTheme } from "./navigation";
 import { resolveTheme } from "./resolve";
 import { syncSystemRootBackground } from "./syncSystemRootBackground";
+import { useSystemColorScheme } from "./useSystemColorScheme";
 import type { ResolvedTheme, ThemePreference } from "./types";
 
 type ThemeContextValue = {
@@ -37,7 +37,7 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const systemScheme = useColorScheme();
+  const systemScheme = useSystemColorScheme();
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
   const [petId, setPetIdState] = useState(DEFAULT_PET_ID);
   const [hydrated, setHydrated] = useState(false);
