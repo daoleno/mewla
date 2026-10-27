@@ -30,9 +30,13 @@ export const MESSAGE_TABLE_CELL_LIMITS = {
   compact: { min: 64, max: 200, padding: 8 },
 } as const;
 
-/** Average advance of a 13 pt Inter glyph, and of a wide (CJK, emoji) one. */
+/** Advances of 13 pt Inter glyphs by class; digits and capitals run wider than lowercase. */
+const THIN_ADVANCE = 4;
 const NARROW_ADVANCE = 7.2;
+const BROAD_ADVANCE = 8.6;
 const WIDE_ADVANCE = 13.5;
+const THIN_CHAR = /[\s.,:;'"|!()[\]{}ilj]/;
+const BROAD_CHAR = /[0-9A-Zmw%$#@&]/;
 const WIDE_CHAR = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|[\u{1f300}-\u{1faff}]/u;
 
 /** What a cell shows, without the markdown that draws it. */
@@ -44,7 +48,12 @@ function visibleCellText(cell: string): string {
 
 function estimatedTextWidth(text: string): number {
   let width = 0;
-  for (const char of text) width += WIDE_CHAR.test(char) ? WIDE_ADVANCE : NARROW_ADVANCE;
+  for (const char of text) {
+    if (WIDE_CHAR.test(char)) width += WIDE_ADVANCE;
+    else if (BROAD_CHAR.test(char)) width += BROAD_ADVANCE;
+    else if (THIN_CHAR.test(char)) width += THIN_ADVANCE;
+    else width += NARROW_ADVANCE;
+  }
   return width;
 }
 
