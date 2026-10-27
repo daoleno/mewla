@@ -16,6 +16,7 @@ import { MermaidDiagram } from "../markdown/MermaidDiagram";
 import { isMermaidFenceLanguage } from "../markdown/mermaidFences";
 import { InterfaceMessageCodeBlock } from "./InterfaceMessageCodeBlock";
 import {
+  messageTableColumnWidths,
   messageTableRowTone,
   messageTableSemanticColors,
 } from "./InterfaceMessageTableModel";
@@ -158,7 +159,8 @@ export function InterfaceMessageBlock({
           ))}
         </View>
       );
-    case "table":
+    case "table": {
+      const columnWidths = messageTableColumnWidths(block.headers, block.rows, compact);
       return (
         <View
           style={[
@@ -202,7 +204,7 @@ export function InterfaceMessageBlock({
                         columnIndex === block.headers.length - 1
                           ? styles.messageTableCellLast
                           : null,
-                        { borderRightColor: chrome.border },
+                        { borderRightColor: chrome.border, width: columnWidths[columnIndex] },
                       ]}
                     >
                       <Text
@@ -257,7 +259,7 @@ export function InterfaceMessageBlock({
                             columnIndex === row.length - 1
                               ? styles.messageTableCellLast
                               : null,
-                            { borderRightColor: chrome.border },
+                            { borderRightColor: chrome.border, width: columnWidths[columnIndex] },
                           ]}
                         >
                           <Text
@@ -292,6 +294,7 @@ export function InterfaceMessageBlock({
           </GestureDetector>
         </View>
       );
+    }
     case "code": {
       const codeBlock = (
         <InterfaceMessageCodeBlock
@@ -518,16 +521,13 @@ const styles = StyleSheet.create({
   messageTableSectionRow: {
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  // Widths come per column from messageTableColumnWidths.
   messageTableCell: {
-    minWidth: 96,
-    maxWidth: 220,
     borderRightWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   messageTableCellCompact: {
-    minWidth: 88,
-    maxWidth: 190,
     paddingHorizontal: 8,
     paddingVertical: 6,
   },
