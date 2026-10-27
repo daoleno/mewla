@@ -112,7 +112,9 @@ function useDesktopWebStyles(enabled: boolean, focusRing: string) {
     const style = document.createElement("style");
     style.setAttribute("data-mewla", "desktop-web");
     style.textContent = [
-      `[tabindex]:focus-visible,button:focus-visible,a:focus-visible,[role=button]:focus-visible,[role=tab]:focus-visible,[role=link]:focus-visible,[role=separator]:focus-visible{outline:2px solid ${focusRing};outline-offset:2px}`,
+      `[tabindex]:focus-visible,button:focus-visible,a:focus-visible,[role=button]:focus-visible,[role=tab]:focus-visible,[role=link]:focus-visible,[role=separator]:focus-visible{outline:2px solid ${focusRing}}`,
+      // Zero specificity, so a control's own outlineOffset can pull its ring in.
+      `:where(:focus-visible){outline-offset:2px}`,
     ].join("\n");
     document.head.appendChild(style);
     return () => style.remove();

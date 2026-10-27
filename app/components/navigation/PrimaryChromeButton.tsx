@@ -69,6 +69,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
+    // Desktop web: the keyboard focus ring hugs the disc, not the square slot.
+    borderRadius: 26,
+    outlineOffset: -4,
   },
   disc: {
     width: PRIMARY_CHROME_BUTTON_SIZE,
