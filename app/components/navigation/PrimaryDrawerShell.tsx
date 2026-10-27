@@ -70,7 +70,6 @@ interface PrimaryAppBarProps {
   layout?: PrimaryAppBarLayout | null;
 }
 
-const PRIMARY_DRAWER_SWIPE_EDGE_WIDTH = 40;
 /** From this width the drawer docks as a permanent sidebar (tablet, desktop). */
 export const PRIMARY_SIDEBAR_BREAKPOINT = 1024;
 const PRIMARY_SIDEBAR_WIDTH = 264;
@@ -385,14 +384,13 @@ export function PrimaryDrawerShell({
             borderRightWidth: StyleSheet.hairlineWidth,
           }}
           drawerWidth={drawerWidth}
-          edgeWidth={PRIMARY_DRAWER_SWIPE_EDGE_WIDTH}
           onDragStart={beginOpenInteraction}
           overlayAccessibilityLabel="Close navigation drawer"
           overlayColor={colors.modalBackdrop}
           style={[styles.root, { backgroundColor: colors.bgPrimary }]}
-          // Brain is the pager's leading page, so a leading-edge swipe there
-          // can only mean the drawer; on Sessions it pages back to Brain.
-          // Closing swipes work on every page while the drawer is open.
+          // Brain is the pager's leading page, so a rightward swipe anywhere
+          // on it can only mean the drawer; on Sessions it pages back to
+          // Brain. Closing swipes work on every page while the drawer is open.
           swipeToOpenEnabled={routeFocused && activePrimaryRoute === "brain"}
           windowWidth={windowWidth}
         >
