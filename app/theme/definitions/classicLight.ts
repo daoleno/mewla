@@ -2,7 +2,6 @@ import type { ThemeDefinition } from '../types';
 import {
   LIGHT_APP_COLORS,
   LIGHT_CHAT_PALETTE,
-  LIGHT_DATA_VISUALIZATION,
   LIGHT_MATERIALS,
   LIGHT_SURFACE_PALETTE,
 } from '../primitives';
@@ -17,6 +16,5 @@ export const classicLightTheme: ThemeDefinition = {
   chat: LIGHT_CHAT_PALETTE,
   surfaces: LIGHT_SURFACE_PALETTE,
   materials: LIGHT_MATERIALS,
-  dataVisualization: LIGHT_DATA_VISUALIZATION,
   avatarColors: TELEGRAM_AVATAR_COLORS,
 };

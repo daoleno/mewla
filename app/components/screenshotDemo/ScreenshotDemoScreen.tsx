@@ -91,7 +91,8 @@ import {
 } from "../../services/providers/sessionModelHelpers";
 import type { ProvidersSnapshot } from "../../services/providers/types";
 import { StatsScreenshotDemo } from "../../app/stats";
-import type { StatsView } from "../../services/statsPayload";
+import type { DayCell, StatsView } from "../../services/statsPayload";
+import { STATS_RANGE_TABS, type StatsRange } from "../../services/statsTabs";
 import CalendarScreen from "../../app/calendar";
 import { OnboardingPresentation } from "../onboarding/OnboardingPresentation";
 import { EmptyState } from "../ui/EmptyState";
@@ -1527,11 +1528,56 @@ function SessionsDemoBody() {
   );
 }
 
+// Twelve fictional weeks ending today, so every range tab has a trend to draw.
+function screenshotStatsDays(): DayCell[] {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const days: DayCell[] = [];
+  for (let offset = 83; offset >= 0; offset -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    const weekend = date.getDay() === 0 || date.getDay() === 6;
+    const wave = 0.55 + 0.45 * Math.sin((83 - offset) / 9);
+    const jitter = ((offset * 37) % 23) / 23;
+    if (weekend && jitter < 0.45) continue;
+    const scale = (weekend ? 0.25 : 1) * (0.35 + wave * 0.8 + jitter * 0.35);
+    const totalTokens = Math.round(scale * 4_200_000);
+    const inputTokens = Math.round(totalTokens * 0.014);
+    const outputTokens = Math.round(totalTokens * 0.0034);
+    days.push({
+      date: `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, "0")}-${`${date.getDate()}`.padStart(2, "0")}`,
+      totalTokens,
+      inputTokens,
+      outputTokens,
+      reasoningTokens: Math.round(outputTokens * 0.7),
+      cacheRead: totalTokens - inputTokens - outputTokens,
+      cacheCreate: 0,
+      cost: Math.round(scale * 380) / 100,
+      sessions: Math.max(1, Math.round(scale * 14)),
+    });
+  }
+  return days;
+}
+
 function StatsDemo() {
   const colors = useAppColors();
-  const { fixture } = useLocalSearchParams<{ fixture?: string }>();
+  const { fixture, range: rangeParam } = useLocalSearchParams<{ fixture?: string; range?: string }>();
+  const range: StatsRange = STATS_RANGE_TABS.some((tab) => tab.key === rangeParam)
+    ? (rangeParam as StatsRange)
+    : "all";
   const data = useMemo(() => {
     const value = structuredClone(SCREENSHOT_STATS_FIXTURE) as unknown as StatsView;
+    const days = screenshotStatsDays();
+    const windows: Record<StatsRange, number> = { day: 1, week: 7, month: 31, all: days.length };
+    for (const key of Object.keys(windows) as StatsRange[]) {
+      const first = new Date();
+      first.setDate(first.getDate() - (windows[key] - 1));
+      const firstDate = `${first.getFullYear()}-${`${first.getMonth() + 1}`.padStart(2, "0")}-${`${first.getDate()}`.padStart(2, "0")}`;
+      value.ranges[key] = {
+        ...value.ranges.all,
+        days: key === "all" ? days : days.filter((day) => day.date >= firstDate),
+      };
+    }
     if (fixture === "unpriced") {
       for (const range of Object.values(value.ranges)) {
         range.costKnown = false;
@@ -1555,12 +1601,13 @@ function StatsDemo() {
             Stats
           </Text>
           <Text style={[styles.statsSubtitle, { color: colors.textTertiary }]}>
-            All activity · fictional demo
+            {STATS_RANGE_TABS.find((tab) => tab.key === range)?.label} · fictional demo
           </Text>
         </View>
       </View>
       <StatsScreenshotDemo
         statsData={data}
+        range={range}
       />
     </SafeAreaView>
   );

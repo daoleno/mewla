@@ -1,5 +1,5 @@
 import { DateStyle, formatDate, formatNumber } from '../services/dateFormat';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { unpricedReasonLabel } from '../services/unpricedReason';
 import { costEstimateMark, statsModelHeading, statsModelKey } from '../services/statsCostPresentation';
 import {
@@ -23,6 +23,8 @@ import Animated, {
   interpolate,
 } from 'react-native-reanimated';
 import { TabView } from 'react-native-tab-view';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Svg, { Circle, Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 import {
   ContentWidth,
   Radii,
@@ -56,6 +58,16 @@ import {
   statsRangeIndex,
   type StatsRange,
 } from '../services/statsTabs';
+import {
+  activityAreaPath,
+  activityChartPoints,
+  activityCurvePath,
+  activityIndexAt,
+  buildDailyActivitySeries,
+  dateOnlyString,
+  parseDateOnly,
+  type ActivityDay,
+} from '../services/statsActivity';
 import {
   EMPTY_RANGE,
   hasRangeStats,
@@ -91,14 +103,6 @@ const STATS_TAB_BAR_GAP = 4;
 const STATS_TAB_BAR_PADDING = 3;
 
 // ── Helpers ────────────────────────────────────────────────
-
-function barIntensity(value: number, maxValue: number): number {
-  if (value <= 0) return 0;
-  const ratio = value / maxValue;
-  if (ratio < 0.15) return 1;
-  if (ratio < 0.5) return 2;
-  return 3;
-}
 
 function fmtCompact(n: number, units: readonly [number, string][]): string {
   const absolute = Math.abs(n);
@@ -193,31 +197,11 @@ function sortByActivity<T extends ActivityStat>(items: T[]): T[] {
   );
 }
 
-function dayActivityIntensity(
-  day: DayCell,
-  maxActivity: number,
-  usesTokens: boolean,
-): number {
-  return barIntensity(activityValue(day, usesTokens), maxActivity);
-}
-
 function shortDate(dateStr: string): string {
   // "2026-04-04" -> "4/4"
   const parts = dateStr.split('-');
   if (parts.length < 3) return dateStr;
   return `${parseInt(parts[1])}/${parseInt(parts[2])}`;
-}
-
-function weekdayShort(dateStr: string): string {
-  const date = parseDateOnly(dateStr);
-  if (!date) return '';
-  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
-}
-
-function monthShort(dateStr: string): string {
-  const date = parseDateOnly(dateStr);
-  if (!date) return '';
-  return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getMonth()];
 }
 
 function accessibleDate(dateStr: string): string {
@@ -239,30 +223,6 @@ function dayAccessibilityValue(day: DayCell): string {
   ].join(', ');
 }
 
-function parseDateOnly(dateStr: string): Date | null {
-  const parts = dateStr.split('-').map((part) => Number(part));
-  if (parts.length < 3 || parts.some((part) => !Number.isFinite(part))) return null;
-  return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0, 0);
-}
-
-function dateOnlyString(date: Date): string {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function todayDateOnly(): Date {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
-}
-
 function topItems<T>(items: T[]): T[] {
   return items.slice(0, MAX_LIST_ITEMS);
 }
@@ -272,67 +232,6 @@ function fmtReset(value?: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return 'Reset time unavailable';
   return `Resets ${formatDate(date, DateStyle.dateTime)}`;
-}
-
-function dayOfWeekMon0(dateStr: string): number {
-  const d = new Date(`${dateStr}T12:00:00`);
-  return (d.getDay() + 6) % 7;
-}
-
-type ActivityDay = {
-  date: string;
-  day: DayCell | null;
-};
-
-function buildDailyActivitySeries(days: DayCell[], range: TimeRange): ActivityDay[] {
-  const byDate = new Map(days.map((day) => [day.date, day]));
-  const sortedDates = [...byDate.keys()].sort();
-  const latestDataDate = sortedDates.length > 0 ? parseDateOnly(sortedDates[sortedDates.length - 1]) : null;
-  const today = todayDateOnly();
-  const end =
-    latestDataDate && latestDataDate > today && range === 'all'
-      ? latestDataDate
-      : today;
-  let start: Date;
-  switch (range) {
-    case 'day':
-      start = end;
-      break;
-    case 'week':
-      start = addDays(end, -6);
-      break;
-    case 'month':
-      start = addDays(end, -30);
-      break;
-    case 'all':
-    default:
-      start = sortedDates.length > 0 ? parseDateOnly(sortedDates[0]) ?? end : end;
-      break;
-  }
-
-  const out: ActivityDay[] = [];
-  for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
-    const date = dateOnlyString(cursor);
-    out.push({ date, day: byDate.get(date) ?? null });
-  }
-  return out;
-}
-
-function buildActivityCalendarColumns(days: ActivityDay[]): (ActivityDay | null)[][] {
-  if (days.length === 0) return [];
-  const columns: (ActivityDay | null)[][] = [];
-  let col: (ActivityDay | null)[] = Array(7).fill(null);
-
-  for (const day of days) {
-    const row = dayOfWeekMon0(day.date);
-    if (row === 0 && col.some((cell) => cell !== null)) {
-      columns.push(col);
-      col = Array(7).fill(null);
-    }
-    col[row] = day;
-  }
-  if (col.some((cell) => cell !== null)) columns.push(col);
-  return columns;
 }
 
 // ── Component ──────────────────────────────────────────────
@@ -479,7 +378,6 @@ export default function StatsScreen() {
             onRetry={() => setReloadToken(token => token + 1)}
             expandedSections={expandedSections}
             toggleSection={toggleSection}
-            selectedDay={selectedDay}
             setSelectedDay={setSelectedDay}
             onSelectModel={model => setModelSelection({ serverId: currentServerId, range: route.key, key: statsModelKey(model) })}
             onNestedHorizontalGestureStart={beginNestedHorizontalGesture}
@@ -497,8 +395,10 @@ export default function StatsScreen() {
 
 export function StatsScreenshotDemo({
   statsData,
+  range = 'all',
 }: {
   statsData: StatsView;
+  range?: TimeRange;
 }) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(),
@@ -517,7 +417,7 @@ export function StatsScreenshotDemo({
   return (
     <View style={{ flex: 1 }}>
       <StatsRangeScene
-        range="all"
+        range={range}
         active
         statsData={statsData}
         loading={false}
@@ -525,7 +425,6 @@ export function StatsScreenshotDemo({
         onRetry={() => undefined}
         expandedSections={expandedSections}
         toggleSection={toggleSection}
-        selectedDay={selectedDay}
         setSelectedDay={setSelectedDay}
         onSelectModel={setSelectedModel}
         onNestedHorizontalGestureStart={() => undefined}
@@ -620,7 +519,6 @@ interface StatsRangeSceneProps {
   onRetry(): void;
   expandedSections: Set<string>;
   toggleSection(section: string): void;
-  selectedDay: DayCell | null;
   setSelectedDay(day: DayCell | null): void;
   onSelectModel(model: ModelStat): void;
   onNestedHorizontalGestureStart(): void;
@@ -636,16 +534,14 @@ function StatsRangeScene({
   onRetry,
   expandedSections,
   toggleSection,
-  selectedDay,
   setSelectedDay,
   onSelectModel,
   onNestedHorizontalGestureStart,
   onNestedHorizontalGestureEnd,
 }: StatsRangeSceneProps) {
-  const { colors, theme } = useAppTheme();
+  const { colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => createStyles(colors), [colors]);
-  const intensityColors = theme.dataVisualization.activityRamp;
 
   const data = statsData?.ranges?.[range] ?? EMPTY_RANGE;
   const allData = statsData?.ranges?.all ?? EMPTY_RANGE;
@@ -667,18 +563,11 @@ function StatsRangeScene({
   const visibleProjects = useMemo(() => topItems(rankedProjects), [rankedProjects]);
   const visibleSkills = useMemo(() => topItems(data.skills ?? []), [data.skills]);
   const visibleTools = useMemo(() => topItems(data.tools ?? []), [data.tools]);
-  const dayActivityUsesTokens = useMemo(() => activityUsesTokens(days), [days]);
-  const maxDayActivity = useMemo(
-    () => Math.max(...days.map(day => activityValue(day, dayActivityUsesTokens)), 1),
-    [dayActivityUsesTokens, days],
+  // One day has no trend, so the Day range charts the week that ends today.
+  const activityDays = useMemo(
+    () => buildDailyActivitySeries(range === 'day' ? allData.days ?? [] : days, range),
+    [allData.days, days, range],
   );
-  const activityDays = useMemo(() => buildDailyActivitySeries(days, range), [days, range]);
-  const compactDailyActivity = range === 'day' || range === 'week';
-  const activityStartLabel = activityDays[0]?.date ? shortDate(activityDays[0].date) : '';
-  const activityEndLabel = activityDays[activityDays.length - 1]?.date
-    ? shortDate(activityDays[activityDays.length - 1].date)
-    : '';
-  const heatmapColumns = useMemo(() => buildActivityCalendarColumns(activityDays), [activityDays]);
 
   const hasData = hasRangeStats(data);
   const codexSubscriptions = (statsData?.codexSubscriptions ?? [])
@@ -883,189 +772,14 @@ function StatsRangeScene({
               </View>
             )}
 
-            {/* ── Activity heatmap ── */}
+            {/* ── Activity ── */}
             {days.length > 0 && (
-              <View style={s.card}>
-                <Text style={s.label}>Activity</Text>
-                {compactDailyActivity ? (
-                  <>
-                    <View style={s.activityMonthRow}>
-                      <Text style={s.activityMonthText}>{monthShort(activityDays[0]?.date ?? '')}</Text>
-                      {activityDays.length > 10 && monthShort(activityDays[0]?.date ?? '') !== monthShort(activityDays[activityDays.length - 1]?.date ?? '') ? (
-                        <Text style={s.activityMonthText}>{monthShort(activityDays[activityDays.length - 1]?.date ?? '')}</Text>
-                      ) : null}
-                    </View>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      onTouchStart={onNestedHorizontalGestureStart}
-                      onTouchEnd={onNestedHorizontalGestureEnd}
-                      onTouchCancel={onNestedHorizontalGestureEnd}
-                    >
-                      <View style={[s.dailyActivityContent, range === 'week' && s.dailyWeekContent]}>
-                        <View style={s.dailyHeatmapRow}>
-                          {activityDays.map(({ date, day }) => {
-                            const intensity = day
-                              ? dayActivityIntensity(day, maxDayActivity, dayActivityUsesTokens)
-                              : 0;
-                            const backgroundColor = day ? intensityColors[intensity] : colors.borderSubtle;
-                            const selected = selectedDay?.date === date;
-                            return (
-                              <AnimatedPressable
-                                key={date}
-                                disabled={!day}
-                                style={[
-                                  s.dailyHeatCell,
-                                  {
-                                    backgroundColor,
-                                    opacity: day ? 1 : 0.38,
-                                  },
-                                  selected && s.heatCellSelected,
-                                ]}
-                                scale={day ? 0.96 : 1}
-                                accessibilityRole="button"
-                                accessibilityLabel={accessibleDate(date)}
-                                accessibilityValue={{
-                                  text: day ? dayAccessibilityValue(day) : 'No recorded activity',
-                                }}
-                                accessibilityState={{ selected, disabled: !day }}
-                                accessibilityHint={day ? 'Shows daily activity details' : undefined}
-                                onPress={() => {
-                                  if (!day) return;
-                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  setSelectedDay(day);
-                                }}
-                              />
-                            );
-                          })}
-                        </View>
-                        {range === 'week' ? (
-                          <View style={s.activityWeekdayRow}>
-                            {activityDays.map(({ date }) => (
-                              <Text key={date} style={s.activityWeekdayText}>
-                                {weekdayShort(date).slice(0, 1)}
-                              </Text>
-                            ))}
-                          </View>
-                        ) : (
-                          <View style={s.activityAxisRow}>
-                            <Text style={s.activityAxisLabel}>{activityStartLabel}</Text>
-                            <Text style={s.activityAxisLabel}>{activityEndLabel}</Text>
-                          </View>
-                        )}
-                      </View>
-                    </ScrollView>
-                  </>
-                ) : (
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    accessibilityLabel="Daily activity calendar"
-                    onTouchStart={onNestedHorizontalGestureStart}
-                    onTouchEnd={onNestedHorizontalGestureEnd}
-                    onTouchCancel={onNestedHorizontalGestureEnd}
-                  >
-                    <View>
-                      <View style={s.heatmapMonthRow}>
-                        {heatmapColumns.map((col, colIndex) => {
-                          const firstCell = col.find(Boolean);
-                          const previousFirstCell = colIndex > 0 ? heatmapColumns[colIndex - 1].find(Boolean) : null;
-                          const label = firstCell && (
-                            colIndex === 0 ||
-                            monthShort(firstCell.date) !== monthShort(previousFirstCell?.date ?? '')
-                          )
-                            ? monthShort(firstCell.date)
-                            : '';
-                          return (
-                            <Text key={`month-${colIndex}`} style={s.heatmapMonthLabel}>
-                              {label}
-                            </Text>
-                          );
-                        })}
-                      </View>
-                      <View style={s.heatmapWithAxis}>
-                        <View style={s.heatmapWeekdayColumn}>
-                          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((label, index) => (
-                            <Text key={`${label}-${index}`} style={s.heatmapWeekdayLabel}>
-                              {label}
-                            </Text>
-                          ))}
-                        </View>
-                        <View style={s.heatmapRow}>
-                          {heatmapColumns.map((col, colIndex) => (
-                            <View key={`col-${colIndex}`} style={s.heatmapColumn}>
-                              {col.map((cell, rowIndex) => {
-                                if (!cell) {
-                                  return (
-                                    <View
-                                      key={`empty-${colIndex}-${rowIndex}`}
-                                      style={s.heatCellTarget}
-                                    />
-                                  );
-                                }
-                                if (!cell.day) {
-                                  return (
-                                    <AnimatedPressable
-                                      key={cell.date}
-                                      disabled
-                                      style={s.heatCellTarget}
-                                      scale={1}
-                                      accessibilityRole="button"
-                                      accessibilityLabel={accessibleDate(cell.date)}
-                                      accessibilityValue={{ text: 'No recorded activity' }}
-                                      accessibilityState={{ disabled: true, selected: false }}
-                                    >
-                                      <View style={[s.heatCell, s.heatCellNoActivity]} />
-                                    </AnimatedPressable>
-                                  );
-                                }
-                                const day = cell.day;
-                                const intensity = dayActivityIntensity(
-                                  day,
-                                  maxDayActivity,
-                                  dayActivityUsesTokens,
-                                );
-                                const selected = selectedDay?.date === day.date;
-                                return (
-                                  <AnimatedPressable
-                                    key={day.date}
-                                    style={s.heatCellTarget}
-                                    scale={0.96}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={accessibleDate(day.date)}
-                                    accessibilityValue={{ text: dayAccessibilityValue(day) }}
-                                    accessibilityState={{ selected }}
-                                    accessibilityHint="Shows daily activity details"
-                                    onPress={() => {
-                                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                      setSelectedDay(day);
-                                    }}
-                                  >
-                                    <View
-                                      style={[
-                                        s.heatCell,
-                                        { backgroundColor: intensityColors[intensity] },
-                                        selected && s.heatCellSelected,
-                                      ]}
-                                    />
-                                  </AnimatedPressable>
-                                );
-                              })}
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    </View>
-                  </ScrollView>
-                )}
-                <View style={s.heatmapLegend}>
-                  <Text style={s.heatmapLegendLabel}>Less</Text>
-                  {intensityColors.map((c, i) => (
-                    <View key={i} style={[s.heatCellLegend, { backgroundColor: c }]} />
-                  ))}
-                  <Text style={s.heatmapLegendLabel}>More</Text>
-                </View>
-              </View>
+              <ActivityChart
+                days={activityDays}
+                onOpenDay={setSelectedDay}
+                onGestureStart={onNestedHorizontalGestureStart}
+                onGestureEnd={onNestedHorizontalGestureEnd}
+              />
             )}
 
             {/* ── Skills ── */}
@@ -1172,6 +886,176 @@ function ModelDetailSheet({ model, pricing, onClose }: {
         </ScrollView>
       </> : null}
     </RisingSheet>
+  );
+}
+
+const ACTIVITY_CHART_HEIGHT = 120;
+const ACTIVITY_CHART_INSET = 5;
+
+function chartDate(dateStr: string): string {
+  const date = parseDateOnly(dateStr);
+  return date ? formatDate(date, DateStyle.shortDate) : dateStr;
+}
+
+function activityReadout(day: DayCell | null, usesTokens: boolean): string {
+  if (usesTokens) return `${day ? fmtAvailableTokens(day.totalTokens, day.totalTokensKnown) : '0'} tokens`;
+  return sessionSummary(day?.sessions ?? 0);
+}
+
+/**
+ * Daily activity as one ink curve. The readout names today's value; touching,
+ * dragging or hovering moves it to that day, and a tap opens the day's detail.
+ */
+function ActivityChart({
+  days,
+  onOpenDay,
+  onGestureStart,
+  onGestureEnd,
+}: {
+  days: ActivityDay[];
+  onOpenDay(day: DayCell): void;
+  onGestureStart(): void;
+  onGestureEnd(): void;
+}) {
+  const { colors } = useAppTheme();
+  const s = useMemo(() => createStyles(colors), [colors]);
+  const gradientId = `activity-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const [width, setWidth] = useState(0);
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const usesTokens = useMemo(
+    () => activityUsesTokens(days.flatMap(item => (item.day ? [item.day] : []))),
+    [days],
+  );
+  const points = useMemo(
+    () => activityChartPoints(
+      days.map(item => (item.day ? activityValue(item.day, usesTokens) : 0)),
+      { width, height: ACTIVITY_CHART_HEIGHT, inset: ACTIVITY_CHART_INSET },
+    ),
+    [days, usesTokens, width],
+  );
+  const paths = useMemo(
+    () => ({ line: activityCurvePath(points), area: activityAreaPath(points, ACTIVITY_CHART_HEIGHT) }),
+    [points],
+  );
+  // A long history packs days under 3 pt apart; a thinner stroke keeps it an outline.
+  const dense = points.length > 1 && points[1].x - points[0].x < 3;
+  const lastIndex = days.length - 1;
+  const activeIndex = Math.min(focusIndex ?? lastIndex, lastIndex);
+  const active = days[activeIndex];
+  const activePoint = points[activeIndex];
+  const activeDate = active.date === dateOnlyString(new Date()) ? 'Today' : chartDate(active.date);
+
+  const gesture = useMemo(() => {
+    const focusAt = (x: number) => setFocusIndex(activityIndexAt(x, points));
+    const scrub = Gesture.Pan()
+      .runOnJS(true)
+      .activeOffsetX([-6, 6])
+      .failOffsetY([-10, 10])
+      .onTouchesDown(() => onGestureStart())
+      .onBegin(event => focusAt(event.x))
+      .onUpdate(event => focusAt(event.x))
+      .onFinalize(() => {
+        setFocusIndex(null);
+        onGestureEnd();
+      });
+    const tap = Gesture.Tap()
+      .runOnJS(true)
+      .onEnd((event, success) => {
+        const day = days[activityIndexAt(event.x, points)]?.day;
+        if (!success || !day) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onOpenDay(day);
+      });
+    const hover = Gesture.Hover()
+      .runOnJS(true)
+      .onBegin(event => focusAt(event.x))
+      .onUpdate(event => focusAt(event.x))
+      .onFinalize(() => setFocusIndex(null));
+    return Gesture.Simultaneous(hover, Gesture.Race(scrub, tap));
+  }, [days, onGestureEnd, onGestureStart, onOpenDay, points]);
+
+  return (
+    <View style={s.card}>
+      <View style={s.labelRow}>
+        <Text style={[s.label, s.activityLabel]}>Activity</Text>
+        <Text style={s.activityReadout} numberOfLines={1}>
+          <Text style={s.activityReadoutDate}>{activeDate}  </Text>
+          {activityReadout(active.day, usesTokens)}
+        </Text>
+      </View>
+      <GestureDetector gesture={gesture}>
+        <View
+          style={s.activityChart}
+          onLayout={event => {
+            const next = Math.round(event.nativeEvent.layout.width);
+            setWidth(previous => (previous === next ? previous : next));
+          }}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel="Daily activity"
+          accessibilityValue={{
+            text: `${accessibleDate(active.date)}, ${active.day ? dayAccessibilityValue(active.day) : 'No recorded activity'}`,
+          }}
+          accessibilityHint="Adjust to move between days; activate for the day's details"
+          accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }, { name: 'activate' }]}
+          onAccessibilityAction={event => {
+            if (event.nativeEvent.actionName === 'increment') setFocusIndex(Math.min(lastIndex, activeIndex + 1));
+            else if (event.nativeEvent.actionName === 'decrement') setFocusIndex(Math.max(0, activeIndex - 1));
+            else if (event.nativeEvent.actionName === 'activate' && active.day) onOpenDay(active.day);
+          }}
+        >
+          {width > 0 && activePoint ? (
+            <Svg width={width} height={ACTIVITY_CHART_HEIGHT}>
+              <Defs>
+                <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={colors.accent} stopOpacity={0.14} />
+                  <Stop offset="1" stopColor={colors.accent} stopOpacity={0} />
+                </LinearGradient>
+              </Defs>
+              <Line
+                x1={0}
+                x2={width}
+                y1={ACTIVITY_CHART_HEIGHT - 0.5}
+                y2={ACTIVITY_CHART_HEIGHT - 0.5}
+                stroke={colors.borderSubtle}
+                strokeWidth={1}
+              />
+              {paths.area ? <Path d={paths.area} fill={`url(#${gradientId})`} /> : null}
+              <Path
+                d={paths.line}
+                stroke={colors.accent}
+                strokeWidth={dense ? 1 : 1.75}
+                fill="none"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {focusIndex !== null ? (
+                <Line
+                  x1={activePoint.x}
+                  x2={activePoint.x}
+                  y1={0}
+                  y2={ACTIVITY_CHART_HEIGHT}
+                  stroke={colors.textTertiary}
+                  strokeWidth={StyleSheet.hairlineWidth}
+                />
+              ) : null}
+              <Circle
+                cx={activePoint.x}
+                cy={activePoint.y}
+                r={3.5}
+                fill={colors.accent}
+                stroke={colors.bgPrimary}
+                strokeWidth={1.5}
+              />
+            </Svg>
+          ) : null}
+        </View>
+      </GestureDetector>
+      <View style={s.activityAxisRow}>
+        <Text style={s.activityAxisLabel}>{chartDate(days[0].date)}</Text>
+        <Text style={s.activityAxisLabel}>{chartDate(days[lastIndex].date)}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -1511,117 +1395,26 @@ function createStyles(colors: AppColors, isLight = true) {
     codexReset: { ...TypeScale.caption, ...UiTextMetrics, color: colors.textTertiary },
     codexNotice: { ...TypeScale.compact, ...UiTextMetrics, color: colors.textSecondary, marginTop: 14 },
 
-    // Activity heatmap
-    activityMonthRow: {
-      minHeight: 20,
-      marginBottom: 6,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-    },
-    activityMonthText: {
-      ...TypeScale.micro,
+    // Activity chart
+    activityLabel: { marginBottom: 0 },
+    activityReadout: {
+      ...TypeScale.label,
       ...UiTextMetrics,
-      color: colors.textTertiary,
+      fontVariant: ['tabular-nums'],
+      color: colors.textPrimary,
+      flexShrink: 1,
     },
-    dailyActivityContent: { minWidth: '100%' },
-    dailyWeekContent: { minWidth: 338 },
-    dailyHeatmapRow: {
-      flexDirection: 'row',
-      alignItems: 'stretch',
-      gap: 5,
-    },
-    dailyHeatCell: {
-      flex: 1,
-      minWidth: 44,
-      height: 44,
-      borderRadius: Radii.xs,
-    },
+    activityReadoutDate: { color: colors.textTertiary },
+    activityChart: { height: ACTIVITY_CHART_HEIGHT },
     activityAxisRow: {
-      minHeight: 20,
       marginTop: 6,
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
     },
     activityAxisLabel: {
       ...TypeScale.micro,
       ...UiTextMetrics,
       color: colors.textTertiary,
-    },
-    activityWeekdayRow: {
-      flexDirection: 'row',
-      gap: 5,
-      marginTop: 6,
-    },
-    activityWeekdayText: {
-      ...TypeScale.micro,
-      ...UiTextMetrics,
-      flex: 1,
-      minWidth: 44,
-      color: colors.textTertiary,
-      textAlign: 'center',
-    },
-    heatmapWithAxis: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-    },
-    heatmapWeekdayColumn: { width: 32 },
-    heatmapWeekdayLabel: {
-      ...TypeScale.micro,
-      ...UiTextMetrics,
-      height: 44,
-      color: colors.textTertiary,
-      textAlignVertical: 'center',
-    },
-    heatmapMonthRow: {
-      flexDirection: 'row',
-      paddingLeft: 32,
-      marginBottom: 2,
-    },
-    heatmapMonthLabel: {
-      ...TypeScale.micro,
-      ...UiTextMetrics,
-      width: 44,
-      color: colors.textTertiary,
-    },
-    heatmapRow: { flexDirection: 'row' },
-    heatmapColumn: {},
-    heatCellTarget: {
-      width: 44,
-      height: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    heatCell: {
-      width: 16,
-      height: 16,
-      borderRadius: 3,
-    },
-    heatCellNoActivity: {
-      backgroundColor: colors.borderSubtle,
-      opacity: 0.55,
-    },
-    heatCellSelected: {
-      borderWidth: 2,
-      borderColor: colors.focusRing,
-    },
-    heatCellLegend: {
-      width: 12,
-      height: 12,
-      borderRadius: 3,
-    },
-    heatmapLegend: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'flex-end',
-      gap: 5,
-      marginTop: 8,
-    },
-    heatmapLegendLabel: {
-      ...TypeScale.micro,
-      ...UiTextMetrics,
-      color: colors.textTertiary,
-      marginHorizontal: 2,
     },
 
     // Rank rows

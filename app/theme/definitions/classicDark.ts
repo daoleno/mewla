@@ -2,7 +2,6 @@ import type { ThemeDefinition } from '../types';
 import {
   DARK_APP_COLORS,
   DARK_CHAT_PALETTE,
-  DARK_DATA_VISUALIZATION,
   DARK_MATERIALS,
   DARK_SURFACE_PALETTE,
 } from '../primitives';
@@ -17,6 +16,5 @@ export const classicDarkTheme: ThemeDefinition = {
   chat: DARK_CHAT_PALETTE,
   surfaces: DARK_SURFACE_PALETTE,
   materials: DARK_MATERIALS,
-  dataVisualization: DARK_DATA_VISUALIZATION,
   avatarColors: TELEGRAM_AVATAR_COLORS,
 };

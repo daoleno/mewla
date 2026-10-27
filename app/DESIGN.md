@@ -51,8 +51,7 @@ the six Work states, and ΔE > 0.15 between the seal and failure.
 | `--red-soft` | seal wash | `sealSoft` | `#FBEBE6` | `#3A1F1B` |
 
 `materials.tint` is a neutral ink wash (6% light, 8% dark), not a colour.
-Focus rings and text selection use the Running blue. The Stats heatmap ramps
-toward the Ready green, because activity is good news.
+Focus rings and text selection use the Running blue.
 
 **Chat.** Your messages sit on a quiet paper tint (`#F0ECE4`, dark
 `#2E2A25`) in ink; Brain's replies sit on the page. Links are ink and
@@ -581,10 +580,17 @@ row marks. Still to get a dedicated pass:
 mark (`calendarStatusMark`): a due reminder or deadline is Needs you,
 Scheduled has no mark. The Providers radio is an ink ring and dot, never the
 Ready check; the gateway reads Ready. Status colours are never decoration:
-Stats bars, folder icons, inline code and PSI charts are ink until a state
-calls for colour. Row Delete actions are soft ink; only the confirmation is
+Stats bars and the Activity curve, folder icons, inline code and PSI charts
+are ink until a state calls for colour. Row Delete actions are soft ink; only the confirmation is
 oxblood. Offline is a Warning, not a failure. Resources keeps Critical on the
 Failed mark because processes are about to be killed.
+
+**Stats Activity** is one ink curve with a faint fill, a baseline and the
+first and last dates; there are no gridlines or y-axis. The readout beside the
+heading names today's value ("Today  1.2M tokens", or sessions when tokens
+are unknown); hovering, touching or dragging moves it and a dot to that day,
+and a tap opens the day's detail sheet. Day draws the week ending today,
+because one day has no trend.
 
 **Resources** answers "what is using my machine, and is anything wrong". It
 leads with the pressure state (mark and word) and its freshness, never the

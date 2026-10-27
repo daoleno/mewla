@@ -108,7 +108,7 @@ Color lives in `app/theme/primitives.ts` and reaches components through `useThem
 - **Status.** Success is teal, not a second sage, so it stays distinct from every accent, danger and warning under common colour-vision deficiencies. Status is never conveyed by hue alone: worker rows also carry a status icon.
 - **Contrast.** Contrast is an acceptance gate. `app/theme/contrast.test.ts` checks every shipped text/background pairing in both schemes against WCAG AA:
   - 4.5:1 for text.
-  - 3:1 for focus rings, strong borders, status glyphs and the densest heatmap cell.
+  - 3:1 for focus rings, strong borders, and status glyphs.
   - Translucent materials and the selection colour are blended onto their real background before measuring.
   - Decorative hairlines (`border`, `borderSubtle`, material separators) are intentionally exempt.
 - **Radii.** One 4pt ladder (8/12/16/20/24/28). `Radii.card` is 20 for grouped sections, cards and menus. `Radii.sheet` is 28 for bottom sheets. Circular controls use half their size.

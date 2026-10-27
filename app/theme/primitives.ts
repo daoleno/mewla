@@ -1,7 +1,6 @@
 import type { AppColors } from './palette';
 import type {
   ChatPalette,
-  DataVisualizationPalette,
   MaterialPalette,
   SurfacePalette,
 } from './types';
@@ -351,13 +350,4 @@ export const DARK_MATERIALS: MaterialPalette = {
   stroke: 'rgba(255,255,255,0.08)',
   separator: 'rgba(255,255,255,0.10)',
   tint: 'rgba(255,255,255,0.08)',
-};
-
-// Activity is good news, so the heatmap ramps toward the Ready green.
-export const LIGHT_DATA_VISUALIZATION: DataVisualizationPalette = {
-  activityRamp: ['#E3EFE7', '#A9CDB6', '#5E9A76', '#2F6B4F'],
-};
-
-export const DARK_DATA_VISUALIZATION: DataVisualizationPalette = {
-  activityRamp: ['#1F3528', '#2E6045', '#4E9670', '#7FD0A5'],
 };
