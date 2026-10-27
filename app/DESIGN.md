@@ -166,12 +166,19 @@ preference.
   `useNestedHorizontalScrollGesture`. A rightward drag on a table already
   scrolled to its start therefore does nothing rather than open the menu.
   The terminal owns all its touches.
-- **Platforms.** All of this is shared code. The platform differences are
-  the system's: Android's Back gesture keeps the screen edge, and on iOS a
-  pager that is not on its first page (Skills, a later Stats range) takes a
-  rightward swipe as paging, so the stack's back swipe works from the first
-  page. Web is outside this rule: desktop web turns Brain · Sessions
-  swiping off, and Plugins · Skills stays a tap-only switch on web.
+- **Platforms.** The gestures are shared code. One piece is Android only:
+  when the menu takes a drag, `modules/touch-cancel` sends the page below
+  the cancel that gesture-handler's root does not, so selectable text does
+  not long-press into a word selection. iOS recognizers cancel the touches
+  they claim, so on iOS and web it is a no-op (not yet checked on an iOS
+  device). The other differences are the system's: Android's Back gesture
+  keeps the screen edge, and on iOS a pager that is not on its first page
+  (Skills, a later Stats range) takes a rightward swipe as paging, so the
+  stack's back swipe works from the first page. Claude Code and Codex with
+  no Plugins open straight on Skills, so there a rightward swipe shows
+  Plugins before it can go back. Web is outside this rule: desktop web
+  turns Brain · Sessions swiping off, and Plugins · Skills stays a
+  tap-only switch on web.
 
 ## Desktop web
 
