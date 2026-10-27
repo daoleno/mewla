@@ -18,7 +18,8 @@ import Animated, {
   interpolate,
 } from "react-native-reanimated";
 import { Spring } from "../../constants/motion";
-import { useAppColors } from "../../constants/tokens";
+import { ContinuousCorners, Radii, shadow, useAppColors } from "../../constants/tokens";
+import { useDesktopWeb } from "../navigation/useDesktopWeb";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -58,6 +59,7 @@ export function RisingSheet({
   children,
 }: RisingSheetProps) {
   const colors = useAppColors();
+  const desktop = useDesktopWeb();
   const progress = useSharedValue(0);
 
   useEffect(() => {
@@ -80,6 +82,32 @@ export function RisingSheet({
   }));
 
   const alignStyle = align === "bottom" ? styles.bottom : styles.center;
+
+  // Desktop web: a full-window sheet would cover the sidebar and stretch its
+  // fields across the window, so it is a dialog like every other sheet.
+  if (layout === "fullscreen" && desktop) {
+    return (
+      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+        <View style={[styles.root, styles.center, styles.dialogRoot]}>
+          <AnimatedPressable
+            accessibilityLabel="Close"
+            style={[styles.backdrop, { backgroundColor: colors.modalBackdrop }, backdropStyle]}
+            onPress={onClose}
+          />
+          <Animated.View
+            style={[
+              styles.dialog,
+              { borderColor: colors.border, ...shadow("float", colors.shadowColor) },
+              cardAnimStyle,
+              cardStyle,
+            ]}
+          >
+            {children}
+          </Animated.View>
+        </View>
+      </Modal>
+    );
+  }
 
   if (layout === "fullscreen") {
     return (
@@ -164,5 +192,20 @@ const styles = StyleSheet.create({
   bottom: {
     justifyContent: "flex-end",
     paddingBottom: 32,
+  },
+  dialogRoot: {
+    alignItems: "center",
+    padding: 32,
+  },
+  // BottomSheetFrame's dialog width, at a fixed height so flex content fills it.
+  dialog: {
+    width: "100%",
+    maxWidth: 720,
+    height: "85%",
+    maxHeight: 760,
+    borderRadius: Radii.sheet,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
+    ...ContinuousCorners,
   },
 });

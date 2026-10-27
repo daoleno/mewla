@@ -691,14 +691,14 @@ export default function SettingsScreen() {
             showsVerticalScrollIndicator={false}
           >
             <Text style={styles.modalTitle} accessibilityRole="header">
-              Pair a Computer
+              Pair a computer
             </Text>
 
             <Text style={styles.importLead}>
               On the computer, run mewla pair. Scan its QR code or paste the link it prints.
             </Text>
 
-            <Text style={styles.fieldLabel}>Pairing Link</Text>
+            <Text style={styles.fieldLabel}>Pairing link</Text>
             <TextInput
               style={[styles.input, styles.importInput]}
               value={draftImportValue}
@@ -726,7 +726,7 @@ export default function SettingsScreen() {
             </View>
 
             <Button
-              label="Scan QR Code"
+              label="Scan QR code"
               icon="qr-code"
               variant="tinted"
               block
