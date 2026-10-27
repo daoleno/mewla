@@ -11,6 +11,7 @@ import { InterfaceComposerAttachmentRail } from "./InterfaceComposerAttachmentRa
 import type { ComposerAttachment } from "./InterfaceChatSession";
 import { TerminalAccessoryControls } from "./TerminalAccessoryControls";
 import type { TerminalSurfaceHandle } from "./TerminalSurface";
+import { useKeyboardOnlyWeb } from "../navigation/useDesktopWeb";
 
 // Initial delay before repeat begins (matches system key-repeat feel)
 const REPEAT_DELAY_MS = 360;
@@ -42,6 +43,7 @@ export function TerminalAccessoryBar({
 }: TerminalAccessoryBarProps) {
   const uploadConfigured = !!buildUploadUrl(serverUrl) && !!daemonId.trim();
   const chrome = React.useMemo(() => buildTerminalChrome(theme), [theme]);
+  const keyboardOnly = useKeyboardOnlyWeb();
 
   const repeatDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const repeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -113,10 +115,11 @@ export function TerminalAccessoryBar({
     <View
       style={[
         styles.container,
-        {
-          backgroundColor: chrome.appBackground,
-          borderTopColor: chrome.border,
-        },
+        keyboardOnly
+          // Only Attach is left: it sits on the terminal's own canvas
+          // instead of a strip of its own.
+          ? { backgroundColor: "transparent", borderTopColor: "transparent" }
+          : { backgroundColor: chrome.appBackground, borderTopColor: chrome.border },
       ]}
     >
       <InterfaceComposerAttachmentRail attachments={attachments} activeUpload={null} chrome={chrome} onRemoveAttachment={removeAttachment} onCancelUpload={handleCancelUpload} />

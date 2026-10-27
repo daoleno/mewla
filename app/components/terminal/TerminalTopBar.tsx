@@ -5,6 +5,7 @@ import type { TerminalFlavor } from "../../services/terminalFlavor";
 import type { StoredInterfaceRenderMode } from "../../services/storage";
 import type { WorkerStatus } from "../../constants/tokens";
 import { TelegramChatHeader } from "./TelegramChatHeader";
+import { useDesktopWeb } from "../navigation/useDesktopWeb";
 
 export interface TerminalTopBarGitDiffPresentation {
   accessibilityLabel: string;
@@ -51,6 +52,8 @@ export function TerminalTopBar({
   onOpenGitDiff,
   onOpenMenu,
 }: TerminalTopBarProps) {
+  // Desktop web: the page header's flat bar, not floating phone capsules.
+  const desktopWeb = useDesktopWeb();
   const rightActions = useMemo(
     () => [
       {
@@ -90,6 +93,7 @@ export function TerminalTopBar({
       onBack={onBack}
       rightActions={rightActions}
       menuAnchorRef={menuAnchorRef}
+      flat={desktopWeb}
     />
   );
 }
