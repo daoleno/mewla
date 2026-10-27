@@ -145,8 +145,24 @@ export const TerminalSurface = forwardRef<
     const observer = new ResizeObserver(() => fit());
     observer.observe(host);
     fit();
+    // The first fit can run before the page settles (a route still laying
+    // out, the mono face still loading) and leave the grid at a stale width
+    // until the window resizes. Fit again once both have settled.
+    const frame = requestAnimationFrame(() => fit());
+    const settle = setTimeout(fit, 300);
+    void document.fonts?.load(`${WEB_TERMINAL_FONT_SIZE_PX}px ${Typography.terminalFont}`).then(() => {
+      if (termRef.current !== term) return;
+      // xterm measured its cell with the fallback face if the mono face
+      // arrived late (a cold load), spacing every glyph apart. Setting the
+      // family again makes it measure the real face.
+      term.options.fontFamily = "monospace";
+      term.options.fontFamily = Typography.terminalFont;
+      fit();
+    }).catch(() => undefined);
 
     return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(settle);
       observer.disconnect();
       dataSubscription.dispose();
       termRef.current = null;
