@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import {
+  ContentWidth,
   ContinuousCorners,
   Radii,
   TypeScale,
@@ -26,7 +27,9 @@ import { useWebTooltip } from "../ui/useWebTooltip";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 
 /** The Sessions column, shared by the list, its empty states and the button. */
-export const SESSIONS_COLUMN_MAX_WIDTH = 760;
+export const SESSIONS_COLUMN_MAX_WIDTH = ContentWidth.page;
+/** Where row text and section captions start inside the column. */
+export const SESSIONS_TEXT_INSET = 22;
 const NEW_SESSION_BUTTON_HEIGHT = 48;
 
 const workerKeyExtractor = (agent: Worker) => agent.key;
@@ -225,7 +228,7 @@ function createStyles(theme: ResolvedTheme) {
     sectionHeader: {
       paddingTop: 18,
       paddingBottom: 4,
-      paddingHorizontal: 22,
+      paddingHorizontal: SESSIONS_TEXT_INSET,
     },
     sectionTitle: {
       ...UiTextMetrics,

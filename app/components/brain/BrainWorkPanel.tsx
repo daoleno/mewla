@@ -3,7 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { ResizeHandle, useResizableWidth } from "../navigation/ResizeHandle";
 import { PRIMARY_APP_BAR_HEIGHT } from "../navigation/primaryAppBarGeometry";
-import { usePrimaryAppBarTrailingInset } from "../navigation/primaryAppBarInset";
+import { usePrimaryAppBarLayout } from "../navigation/primaryAppBarInset";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
@@ -182,7 +182,7 @@ export function BrainWorkColumn({
   const width = desktopWeb ? panel.width : BRAIN_WORK_COLUMN_WIDTH;
   // The app bar ends where this column starts; the column's own header takes
   // the bar's row, so "Work" sits level with the page title.
-  usePrimaryAppBarTrailingInset(width);
+  usePrimaryAppBarLayout("brain", { trailingInset: width });
   return (
     <View
       role="complementary"
