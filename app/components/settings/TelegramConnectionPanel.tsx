@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -179,8 +180,8 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
           status?.brain_thread_id ? copyableDetail("Brain conversation", status.brain_thread_id) : null,
           status?.brain_topic_id ? detail("Brain topic", String(status.brain_topic_id)) : null,
           detail("Delivery checks", String((status?.ambiguous_delivery_count || 0) + (status?.topic_ambiguous_ops_count || 0))),
-          status?.last_receive_at ? detail("Last received", new Date(status.last_receive_at).toLocaleString()) : null,
-          status?.last_send_at ? detail("Last sent", new Date(status.last_send_at).toLocaleString()) : null,
+          status?.last_receive_at ? detail("Last received", formatDate(status.last_receive_at, DateStyle.dateTime)) : null,
+          status?.last_send_at ? detail("Last sent", formatDate(status.last_send_at, DateStyle.dateTime)) : null,
         ])}
         {group([
           action("Refresh", "refresh", props.onRetry),

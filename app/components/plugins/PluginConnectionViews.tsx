@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Linking, StyleSheet, Switch, View, type SwitchProps } from "react-native";
@@ -477,7 +478,7 @@ export function AccountCard({
       <ListRow
         icon="person-circle"
         title={account.name}
-        subtitle={[custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${new Date(account.verified_at).toLocaleString()}` : ""].filter(Boolean).join(" · ") || undefined}
+        subtitle={[custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : ""].filter(Boolean).join(" · ") || undefined}
         numberOfLines={2}
         disabled={!account.enabled}
         trailing={
@@ -586,7 +587,7 @@ export function ToolsView({
         <ListRow
           icon="pulse"
           title="Check service and tools"
-          subtitle={account.verified_at ? `Last checked ${new Date(account.verified_at).toLocaleString()}` : undefined}
+          subtitle={account.verified_at ? `Last checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : undefined}
           loading={running === `recover:${account.id}`}
           disabled={busy}
           onPress={onRefresh}
@@ -623,7 +624,7 @@ export function ToolsView({
             <ListRow
               key={`${event.at}-${index}`}
               title={event.tool}
-              subtitle={event.message || new Date(event.at).toLocaleString()}
+              subtitle={event.message || formatDate(event.at, DateStyle.dateTime)}
               trailing={<StatusPill label={event.status} tone={callTone(event.status)} />}
               numberOfLines={2}
             />

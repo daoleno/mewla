@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useCallback, useMemo, useState } from "react";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -17,12 +18,7 @@ import {
 function sentAt(timestamp: string | undefined) {
   const date = timestamp ? new Date(timestamp) : null;
   if (!date || !Number.isFinite(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDate(date, DateStyle.dateTime);
 }
 
 /**

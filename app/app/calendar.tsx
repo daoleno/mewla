@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../services/dateFormat";
 import React, {
   useEffect,
   useLayoutEffect,
@@ -376,21 +377,8 @@ function AgendaHeading({
 }) {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const dateFormatter = new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone,
-  });
-  const date = dateFormatter.format(
-    selectedDate ? dateFromKey(selectedDate) : now,
-  );
-  const time = new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone,
-    timeZoneName: "short",
-  }).format(now);
+  const date = formatDate(selectedDate ? dateFromKey(selectedDate) : now, DateStyle.longDay, { timeZone });
+  const time = formatDate(now, DateStyle.time, { timeZone, timeZoneName: "short" });
   const isToday =
     selectedDate === null || selectedDate === calendarDateKey(now, timeZone);
   return (
@@ -443,12 +431,7 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
     >
       <View style={styles.timeRail}>
         <Text style={styles.rowTime}>
-          {new Date(itemInstant(item)).toLocaleTimeString(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: false,
-            timeZone: item.timezone,
-          })}
+          {formatDate(itemInstant(item), DateStyle.time, { timeZone: item.timezone })}
         </Text>
         <View style={styles.kindRail} />
       </View>
@@ -549,7 +532,7 @@ function MonthNavigator({
             <Pressable
               key={key}
               accessibilityRole="button"
-              accessibilityLabel={`${date.toLocaleDateString()}, ${count} items`}
+              accessibilityLabel={`${formatDate(date, DateStyle.day)}, ${count} items`}
               accessibilityState={{ selected }}
               onPress={() => onSelectDate(date, key)}
               style={[
@@ -598,10 +581,7 @@ function MonthHeader({
         <Icon name="chevron-left" size={20} color={colors.textPrimary} />
       </Pressable>
       <Text style={styles.monthTitle}>
-        {month.toLocaleDateString(undefined, {
-          month: "long",
-          year: "numeric",
-        })}
+        {formatDate(month, DateStyle.monthYear)}
       </Text>
       <Pressable
         accessibilityRole="button"
@@ -706,11 +686,7 @@ function DetailModal({
             {item.end_at ? (
               <Info
                 label="Ends"
-                value={new Intl.DateTimeFormat(undefined, {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                  timeZone: item.timezone,
-                }).format(new Date(item.end_at))}
+                value={formatDate(item.end_at, DateStyle.dateTime, { timeZone: item.timezone, timeZoneName: "short" })}
               />
             ) : null}
             <Info label="Timezone" value={item.timezone} />
@@ -1168,7 +1144,7 @@ function AmbiguityChoice({
           <Chip
             key={instant}
             selected={selected === index}
-            label={`${index === 0 ? "First" : "Second"} · ${new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", timeZone: timezone, timeZoneName: "short" }).format(new Date(instant))}`}
+            label={`${index === 0 ? "First" : "Second"} · ${formatDate(instant, DateStyle.time, { timeZone: timezone, timeZoneName: "short" })}`}
             onPress={() => onSelect(index as 0 | 1)}
           />
         ))}

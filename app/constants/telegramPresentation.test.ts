@@ -9,7 +9,7 @@ describe("formatTelegramListTime", () => {
     expect(formatTelegramListTime(Number.NaN)).toBe("");
   });
 
-  test("formats a same-day timestamp as HH:mm", () => {
+  test("formats a same-day timestamp as an English time", () => {
     const now = new Date();
     const sameDay = new Date(
       now.getFullYear(),
@@ -19,7 +19,7 @@ describe("formatTelegramListTime", () => {
       30,
     ).getTime();
     const label = formatTelegramListTime(sameDay);
-    expect(label).toMatch(/^\d{2}:\d{2}$/);
+    expect(label).toBe("9:30 AM");
   });
 
   test("never renders the current device time for invalid input", () => {

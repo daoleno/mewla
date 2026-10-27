@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useMemo } from "react";
 import {
   ScrollView,
@@ -247,7 +248,7 @@ function formatStatusTimestamp(value?: string) {
   if (!Number.isFinite(date.getTime())) {
     return undefined;
   }
-  return `Updated ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+  return `Updated ${formatDate(date, DateStyle.time)}`;
 }
 
 const styles = StyleSheet.create({

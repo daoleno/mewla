@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "./dateFormat";
 import type { CalendarItem, CalendarKind } from "../store/calendar";
 import type { WorkStatus } from "../components/ui/workStatus";
 export const kindLabel: Record<CalendarKind, string> = {
@@ -82,16 +83,11 @@ export function groupAgenda(
     }))
     .filter((section) => section.data.length > 0);
 }
-export function formatCalendarTime(item: CalendarItem, locale?: string) {
-  const value = new Date(itemInstant(item));
-  return new Intl.DateTimeFormat(locale, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+export function formatCalendarTime(item: CalendarItem) {
+  return formatDate(itemInstant(item), DateStyle.dateTime, {
     timeZone: item.timezone,
     timeZoneName: "short",
-  }).format(value);
+  });
 }
 export function executes(item: CalendarItem) {
   return item.kind === "scheduled_action";

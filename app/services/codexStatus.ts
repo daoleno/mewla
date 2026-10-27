@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "./dateFormat";
 import { codexWindowLabel, normalizeCodexUsedPercent } from "./codexSubscriptionStats";
 
 /** What Codex's own app-server reports about one chat's thread. */
@@ -268,14 +269,12 @@ export function formatTokenCount(value: number): string {
   return String(value);
 }
 
-/** "resets 14:05" within a day, "resets 25 Oct 14:05" beyond. */
+/** "resets 2:05 PM" within a day, "resets Oct 25, 2:05 PM" beyond. */
 export function formatReset(unixSeconds: number, now: Date): string {
   const at = new Date(unixSeconds * 1000);
   if (!Number.isFinite(at.getTime())) return "";
-  const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (Math.abs(at.getTime() - now.getTime()) < 24 * 60 * 60 * 1000) {
-    return `resets ${time}`;
+    return `resets ${formatDate(at, DateStyle.time)}`;
   }
-  const day = at.toLocaleDateString([], { day: "numeric", month: "short" });
-  return `resets ${day} ${time}`;
+  return `resets ${formatDate(at, DateStyle.dateTime)}`;
 }

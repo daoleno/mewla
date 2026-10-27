@@ -1,3 +1,4 @@
+import { DateStyle, formatDate, formatNumber } from '../services/dateFormat';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { unpricedReasonLabel } from '../services/unpricedReason';
 import { costEstimateMark, statsModelHeading, statsModelKey } from '../services/statsCostPresentation';
@@ -270,7 +271,7 @@ function fmtReset(value?: string): string {
   if (!value) return 'Reset time unavailable';
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return 'Reset time unavailable';
-  return `Resets ${date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+  return `Resets ${formatDate(date, DateStyle.dateTime)}`;
 }
 
 function dayOfWeekMon0(dateStr: string): number {
@@ -812,7 +813,7 @@ function StatsRangeScene({
                 <Text style={s.summaryNote}>
                   {statsData.pricing.source}
                   {statsData.pricing.updatedAt
-                    ? ` · ${new Date(statsData.pricing.updatedAt).toLocaleDateString()}`
+                    ? ` · ${formatDate(statsData.pricing.updatedAt, DateStyle.shortDate, { year: 'numeric' })}`
                     : ''}
                   {statsData.pricing.lastError
                     ? ' · Refresh failed'
@@ -1129,7 +1130,7 @@ function ModelDetailSheet({ model, pricing, onClose }: {
 }) {
   const { colors } = useAppTheme();
   const s = useMemo(() => createStyles(colors), [colors]);
-  const money = (value: number) => value.toLocaleString(undefined, {
+  const money = (value: number) => formatNumber(value, {
     style: 'currency', currency: 'USD', maximumFractionDigits: 6,
   });
   const reported = model?.costReported ?? model?.reportedCost;
@@ -1149,7 +1150,7 @@ function ModelDetailSheet({ model, pricing, onClose }: {
     ['Cache write', fmtAvailableTokens(model.cacheCreate, model.tokenBreakdownKnown)],
     ['Source', model.estimateSource],
     ['Reference provider', model.referenceProvider],
-    ['Updated', model.pricingUpdatedAt ? new Date(model.pricingUpdatedAt).toLocaleString() : undefined],
+    ['Updated', model.pricingUpdatedAt ? formatDate(model.pricingUpdatedAt, DateStyle.fullDateTime) : undefined],
   ] : [];
   return (
     <RisingSheet visible={model !== null} onClose={onClose} align="bottom" cardStyle={s.modelDetailCard}>
