@@ -128,6 +128,12 @@ preference.
   Work), Terminate. Sessions' ⋮ holds New session and Services. Contextual
   recovery links ("Open Settings" in a no-server empty state) are fine: they
   fix the screen you are on rather than navigate elsewhere.
+  So are links to one item, which is not the destination itself: a
+  Calendar run's Work and Session name their schedule (calendar glyph,
+  "运营：挖稿 · Oct 27") on the Work rail slip, the Work page, the Session
+  row and the Session header, and tapping it (the header's title, on a
+  Session) opens that item at that run, like Open Brain opens a Session's
+  Work.
 - **⋮ is a page's menu; ⋯ is an item's.** The header action of a page or
   sheet (Brain, Sessions, a Session, Screen, Browser, a Work, a diff) draws
   `more-vertical`. A menu on one thing in a list or under a reply (a message,
@@ -629,6 +635,16 @@ Stats bars and the Activity curve, folder icons, inline code and PSI charts
 are ink until a state calls for colour. Row Delete actions are soft ink; only the confirmation is
 oxblood. Offline is a Warning, not a failure. Resources keeps Critical on the
 Failed mark because processes are about to be killed.
+
+**Calendar item.** A Calendar item opens as a sheet (a 760 pt column on wide
+screens): the title, then its schedule in words ("Every day at 8:30 PM ·
+Next: tomorrow 8:30 PM", the zone only when it is not the device's), the
+one-line summary, a collapsed **Instructions**, and its runs newest first
+(date, state mark and word, the result's first line; five, then "Show all").
+A run opens in the same sheet: its full result, or its failure on the run,
+never on the item; a running run opens its Session. No ids anywhere: the
+thread, the Work and the run are taps. An agenda row reads "Running ·
+summary" on one line, and a running row opens the live Session.
 
 **Stats Activity** is one ink curve with a faint fill, a baseline and the
 first and last dates; there are no gridlines or y-axis. The readout beside the
