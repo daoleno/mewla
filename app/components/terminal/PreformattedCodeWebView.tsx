@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Dimensions, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import { WebView } from "react-native-webview";
+import { useNestedHorizontalScrollGesture } from "../ui/useNestedHorizontalScrollGesture";
 import { buildPreformattedBlockHtml } from "./preformattedBlockWebViewHtml";
 
 interface PreformattedCodeWebViewProps {
@@ -45,6 +47,7 @@ export function PreformattedCodeWebView({
   const paddingHorizontal = compact ? 10 : 12;
   const paddingVertical = compact ? 9 : 10;
   const fallbackWidth = Dimensions.get("window").width;
+  const horizontalScrollGesture = useNestedHorizontalScrollGesture();
   const [size, setSize] = useState({
     width: fallbackWidth,
     height: lineHeight + paddingVertical * 2,
@@ -83,32 +86,34 @@ export function PreformattedCodeWebView({
   }, []);
 
   return (
-    <ScrollView
-      horizontal
-      nestedScrollEnabled
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-    >
-      <View style={styles.content}>
-        <WebView
-          originWhitelist={["*"]}
-          source={{ html, baseUrl: "https://mewla.local/" }}
-          onMessage={onMessage}
-          javaScriptEnabled
-          domStorageEnabled
-          scrollEnabled={false}
-          bounces={false}
-          overScrollMode="never"
-          textInteractionEnabled
-          scalesPageToFit={false}
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={false}
-          style={[styles.webview, { width: size.width, height: size.height }]}
-          containerStyle={styles.webviewContainer}
-          {...(Platform.OS === "ios" ? { opaque: false } : null)}
-        />
-      </View>
-    </ScrollView>
+    <GestureDetector gesture={horizontalScrollGesture}>
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.content}>
+          <WebView
+            originWhitelist={["*"]}
+            source={{ html, baseUrl: "https://mewla.local/" }}
+            onMessage={onMessage}
+            javaScriptEnabled
+            domStorageEnabled
+            scrollEnabled={false}
+            bounces={false}
+            overScrollMode="never"
+            textInteractionEnabled
+            scalesPageToFit={false}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            style={[styles.webview, { width: size.width, height: size.height }]}
+            containerStyle={styles.webviewContainer}
+            {...(Platform.OS === "ios" ? { opaque: false } : null)}
+          />
+        </View>
+      </ScrollView>
+    </GestureDetector>
   );
 }
 
