@@ -656,6 +656,36 @@ function TurnFocusTimelineCell({
     },
     [item.id, measurementRef, onLayout, readingPositionRef],
   );
+  // react-native-web fires onLayout from a ResizeObserver on the cell itself,
+  // so a cell that only moves never reports again. The turn's anchor moves
+  // as the reply above it streams in, and without a fresh offset the spacer
+  // kept its first height: a long reply ended over a screen of blank space.
+  // On web, re-read the anchor's offset whenever the list's content resizes.
+  React.useEffect(() => {
+    if (Platform.OS !== "web" || typeof ResizeObserver === "undefined") return;
+    const node = cellRef.current as unknown as HTMLElement | null;
+    const content = node?.parentElement;
+    if (!node || !content) return;
+    const observer = new ResizeObserver(() => {
+      const measurement = measurementRef.current;
+      if (!measurement.onRowLayout) return;
+      const geometry = turnFocusRowGeometryFromCell(
+        measurement.pendingMessageId,
+        item.id,
+        { y: node.offsetTop, height: node.offsetHeight },
+        measurement.anchorItemId,
+      );
+      if (geometry) {
+        measurement.onRowLayout(
+          geometry.pendingMessageId,
+          geometry.height,
+          geometry.newestEdgeOffset,
+        );
+      }
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [item.id, measurementRef]);
 
   return (
     <View
