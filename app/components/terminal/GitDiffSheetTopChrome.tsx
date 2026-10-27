@@ -123,7 +123,7 @@ export function GitDiffSheetTopChrome({
       trailing={
         hasActions ? (
           <DiffIconButton
-            icon="more-horizontal"
+            icon="more-vertical"
             label="More actions"
             chrome={chrome}
             filled
@@ -178,7 +178,7 @@ export function GitDiffDetailHeader({
       loading={loading}
       trailing={
         <DiffIconButton
-          icon="more-horizontal"
+          icon="more-vertical"
           label="More actions"
           chrome={chrome}
           filled

@@ -84,7 +84,7 @@ preference.
 
 - **Phone.** The app bar has the menu (☰), the Brain · Sessions switch (text
   tabs with an ink underline; a seal dot on Brain when its Work needs you,
-  on Sessions when a Session needs you) and one ⋯ page action. The menu
+  on Sessions when a Session needs you) and one ⋮ page action. The menu
   slides over the page. Nothing else is pinned under the app bar: no status
   strip, no goal line, no connection banner.
 - **Wide (≥ 1024 pt).** The menu docks as a permanent sidebar and the app bar
@@ -121,14 +121,18 @@ preference.
   Appearance and About. Browser stays hidden from the menu.
 - **One home per destination.** Every screen you can go to (Calendar,
   Plugins, Skills, Stats, Resources, Settings) has exactly one entry point:
-  its menu row. A ⋯ menu, a header title tap or a page button never repeats
-  a menu destination. A ⋯ menu holds only actions on the current screen:
+  its menu row. A ⋮ menu, a header title tap or a page button never repeats
+  a menu destination. A ⋮ menu holds only actions on the current screen:
   Brain's is Work (phone only: the Work sheet, with the count line as its
   detail), New chat, Switch executor, Open terminal, Browse workspace; a
   Session's is New terminal, Rename, Model, Open Web, Open Brain (its linked
-  Work), Terminate. Sessions' ⋯ holds New session and Services. Contextual
+  Work), Terminate. Sessions' ⋮ holds New session and Services. Contextual
   recovery links ("Open Settings" in a no-server empty state) are fine: they
   fix the screen you are on rather than navigate elsewhere.
+- **⋮ is a page's menu; ⋯ is an item's.** The header action of a page or
+  sheet (Brain, Sessions, a Session, Screen, Browser, a Work, a diff) draws
+  `more-vertical`. A menu on one thing in a list or under a reply (a message,
+  a post, a provider row) draws `more-horizontal`.
 
 ## Desktop web
 
@@ -177,7 +181,7 @@ Brain has one Work surface, built from the daemon's `current_work`
 - **Phone.** The chat gets the whole screen. The same grouped list is a
   sheet, opened from the cat's tail row at the end of the conversation
   ("Waiting on 3 Workers", "Brought 2 things back", "2 need you") or from
-  ⋯ → Work. The sheet shows "Work", the goal line and the count line, and
+  ⋮ → Work. The sheet shows "Work", the goal line and the count line, and
   keeps the captions bare. Work that needs you also puts a seal dot on
   "Brain" and perches the cat on its slip in the conversation.
 - **Loading is not empty.** "Ready when you are" appears only once the

@@ -288,7 +288,7 @@ export function BrowserScreen() {
     <Stack.Screen options={{
       title: selected?.name ?? "Browser",
       headerRight: () => currentServer ? (
-        <IconButton icon="more-horizontal" size={40} accessibilityLabel="Browser options" onPress={() => setMenu(true)} />
+        <IconButton icon="more-vertical" size={40} accessibilityLabel="Browser options" onPress={() => setMenu(true)} />
       ) : null,
     }} />
   );

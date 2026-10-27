@@ -6,7 +6,7 @@ plain `tmux`, the same Session is there when you sit down at the desk.
 
 ## Start a Session
 
-In **Sessions**, tap the **New session** pill (or ⋯ > **New session**), pick a
+In **Sessions**, tap the **New session** pill (or ⋮ > **New session**), pick a
 directory and tap what to run:
 
 | Choice | Runs |
@@ -138,7 +138,7 @@ A file that is not really what its name says (an `.mp4` that is not an MP4
 container, say) is not played. A codec the device can't decode, such as HEVC
 in some browsers, shows "can't be played here"; download it instead.
 
-A Session's ⋯ menu holds:
+A Session's ⋮ menu holds:
 
 | Item | Does |
 | --- | --- |
@@ -230,7 +230,7 @@ the session the control client is attached to, and each Worker is its own
 
 ![Services: two ports from atlas-notes Sessions, one with a public Quick Tunnel, and a persistent postgres](assets/services.svg)
 
-Agents start dev servers, previews and APIs. **Services**, in the Sessions ⋯
+Agents start dev servers, previews and APIs. **Services**, in the Sessions ⋮
 menu, lists the ports they listen on, by project:
 
 | Source | Shown when |

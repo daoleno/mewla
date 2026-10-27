@@ -76,7 +76,7 @@ HTTPS address, are in [Connect and pair](connect-and-pair.md#choose-an-address).
 
 Open **Sessions**, tap **New session**, pick one of your repositories and tap
 an agent. Ask it something small. Switch between **Chat** and **Terminal** from
-the Session's ⋯ menu: both are the same `tmux` pane, which you can also attach
+the Session's ⋮ menu: both are the same `tmux` pane, which you can also attach
 to at your desk with `tmux attach`. More in [Sessions](sessions.md).
 
 ## 4. Give Brain a goal
@@ -96,7 +96,7 @@ machine with secrets, read [Permission bypass risks](executors.md#permission-byp
 
 | On a phone | On a wide screen (1024 pt and up) |
 | --- | --- |
-| ☰ opens the menu; the top bar switches **Brain · Sessions**; ⋯ holds the current page's actions | The menu is a sidebar with Brain and Sessions on top; ⋯ is the same |
+| ☰ opens the menu; the top bar switches **Brain · Sessions**; ⋮ holds the current page's actions | The menu is a sidebar with Brain and Sessions on top; ⋮ is the same |
 
 The menu holds everything else, each in exactly one place: Calendar,
 Extensions, Stats, Resources and Settings.
