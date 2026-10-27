@@ -126,29 +126,29 @@ export function ListRow({
       <Icon name={icon} size={20} color={tint} />
     </View>
   ) : null);
-  const content = (
-    <>
-      {leadingNode}
-      <View style={styles.copy}>
-        <AppText
-          variant="body"
-          numberOfLines={numberOfLines}
-          style={{ color: disabled ? colors.disabledText : destructive ? colors.dangerText : colors.textPrimary }}
-        >
-          {title}
-        </AppText>
-        {subtitle ? (
-          <AppText variant="caption" tone="tertiary" numberOfLines={2}>
-            {subtitle}
-          </AppText>
-        ) : null}
-      </View>
-      {value ? (
-        <AppText variant="compact" tone="tertiary" numberOfLines={1} style={styles.value}>
-          {value}
+  const copy = (
+    <View style={styles.copy}>
+      <AppText
+        variant="body"
+        numberOfLines={numberOfLines}
+        style={{ color: disabled ? colors.disabledText : destructive ? colors.dangerText : colors.textPrimary }}
+      >
+        {title}
+      </AppText>
+      {subtitle ? (
+        <AppText variant="caption" tone="tertiary" numberOfLines={2}>
+          {subtitle}
         </AppText>
       ) : null}
-      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+    </View>
+  );
+  const valueNode = value ? (
+    <AppText variant="compact" tone="tertiary" numberOfLines={1} style={styles.value}>
+      {value}
+    </AppText>
+  ) : null;
+  const accessoryNodes = loading || accessory !== "none" ? (
+    <>
       {loading ? <ActivityIndicator size="small" color={colors.textTertiary} /> : null}
       {accessory === "chevron" && !loading ? (
         <Icon name="chevron-right" size={17} color={colors.textTertiary} />
@@ -160,6 +160,15 @@ export function ListRow({
           color={selected ? colors.textPrimary : "transparent"}
         />
       ) : null}
+    </>
+  ) : null;
+  const content = (
+    <>
+      {leadingNode}
+      {copy}
+      {valueNode}
+      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+      {accessoryNodes}
     </>
   );
 
@@ -176,7 +185,7 @@ export function ListRow({
   }
 
   const role = accessibilityRole ?? (accessory === "check" ? "radio" : "button");
-  return (
+  const pressTarget = (style: StyleProp<ViewStyle>, children?: React.ReactNode) => (
     <Pressable
       onPress={() => {
         void Haptics.selectionAsync();
@@ -193,14 +202,34 @@ export function ListRow({
         ...(role === "radio" ? { checked: Boolean(selected) } : {}),
       }}
       android_ripple={{ color: colors.surfacePressed }}
-      style={({ pressed }) => [
-        styles.row,
-        pressed && { backgroundColor: colors.surfacePressed },
+      style={(state) => [
+        style,
+        // `hovered` exists on web only.
+        (state as { hovered?: boolean }).hovered && !disabled ? { backgroundColor: colors.surfaceSubtle } : null,
+        state.pressed && { backgroundColor: colors.surfacePressed },
       ]}
     >
-      {content}
+      {children}
     </Pressable>
   );
+  if (trailing) {
+    // A control in `trailing` (Connect, a switch) is its own button. Nesting it
+    // inside the row's button is invalid on web and hides it from screen
+    // readers on native, so the row's press target sits behind the content.
+    return (
+      <View style={styles.row}>
+        {pressTarget(StyleSheet.absoluteFill)}
+        <View pointerEvents="none" style={styles.rowContent}>
+          {leadingNode}
+          {copy}
+          {valueNode}
+        </View>
+        <View pointerEvents="box-none" style={styles.trailing}>{trailing}</View>
+        {accessoryNodes ? <View pointerEvents="none" style={styles.rowAccessory}>{accessoryNodes}</View> : null}
+      </View>
+    );
+  }
+  return pressTarget(styles.row, content);
 }
 
 const ICON_TILE = 30;
@@ -249,6 +278,17 @@ const styles = StyleSheet.create({
     ...ContinuousCorners,
     alignItems: "center",
     justifyContent: "center",
+  },
+  rowContent: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rowAccessory: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   copy: {
     flex: 1,
