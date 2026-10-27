@@ -14,6 +14,8 @@ import { Icon } from "../icons/Icon";
 import { StatusMark } from "../ui/StatusMark";
 import { workStatusTextInk } from "../ui/workStatus";
 import { MarkdownView } from "../work/MarkdownView";
+import { ImageOwnerContext } from "../terminal/AppImage";
+import { useBrainHostImageOwner } from "./useBrainHostImageOwner";
 import { wsClient } from "../../services/websocket";
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import {
@@ -66,6 +68,7 @@ export function CalendarItemSheet({
 }) {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const imageOwner = useBrainHostImageOwner(serverId);
   const [runId, setRunId] = useState<string | null>(initialRunId ?? null);
   const [showAll, setShowAll] = useState(false);
   const [instructionOpen, setInstructionOpen] = useState(false);
@@ -121,6 +124,7 @@ export function CalendarItemSheet({
         <SafeAreaView edges={["bottom"]} style={styles.sheet}>
           <View style={styles.handle} />
           {selectedRun ? (
+            <ImageOwnerContext.Provider value={imageOwner}>
             <RunView
               item={item}
               run={selectedRun}
@@ -130,6 +134,7 @@ export function CalendarItemSheet({
               onClose={onClose}
               onOpenSession={onOpenSession}
             />
+            </ImageOwnerContext.Provider>
           ) : (
             <>
               <View style={styles.header}>

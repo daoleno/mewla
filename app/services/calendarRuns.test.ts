@@ -9,6 +9,7 @@ import {
   calendarRunPreview,
   calendarRunsNewestFirst,
   calendarScheduleLine,
+  calendarWorkOwnsSession,
   firstSentence,
 } from "./calendarRuns";
 import type { CalendarItem, CalendarRun } from "../store/calendar";
@@ -117,5 +118,15 @@ describe("where Calendar Work came from", () => {
       calendarOriginLabel({ itemId: "gone" }, [yunying], { title: "每日论文速读", at: "2026-10-27T01:00:00Z" })?.label,
     ).toBe("每日论文速读 · Oct 27");
     expect(calendarOriginLabel({ itemId: "gone" }, [yunying])).toBeNull();
+  });
+});
+
+describe("a Calendar run's Session", () => {
+  test("is not a later Session that reused the run's pane id", () => {
+    const work = { frontmatter: { created: "2026-10-26T12:30:00Z" } };
+    const created = Date.parse("2026-10-26T12:30:00Z");
+    expect(calendarWorkOwnsSession(work, created + 2_000)).toBe(true);
+    expect(calendarWorkOwnsSession(work, created + 26 * 3600_000)).toBe(false);
+    expect(calendarWorkOwnsSession(work, undefined)).toBe(true);
   });
 });
