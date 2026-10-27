@@ -291,6 +291,30 @@ type CurrentWork struct {
 	// UserAction is the user's newest decision, while no newer result has
 	// come back since.
 	UserAction *WorkUserAction `json:"user_action,omitempty"`
+	// Calendar names the schedule and run a Calendar occurrence's Work came
+	// from, so the app can say which schedule it belongs to.
+	Calendar *WorkCalendarRef `json:"calendar,omitempty"`
+}
+
+// WorkCalendarRef is the Calendar item and run behind a Calendar occurrence's
+// Work.
+type WorkCalendarRef struct {
+	ItemID string `json:"item_id"`
+	RunID  string `json:"run_id"`
+}
+
+// workCalendarRef reads the Calendar item and run from a Calendar
+// occurrence's Work: its ID is derived from them and its context names them.
+func workCalendarRef(item Work) *WorkCalendarRef {
+	if !strings.HasPrefix(item.ID, calendarWorkPrefix) {
+		return nil
+	}
+	ids := strings.SplitN(strings.TrimPrefix(strings.TrimSpace(item.ContextRef), "calendar:"), ":", 2)
+	if !strings.HasPrefix(strings.TrimSpace(item.ContextRef), "calendar:") || len(ids) != 2 || ids[0] == "" || ids[1] == "" ||
+		calendarWorkID(ids[0], ids[1]) != item.ID {
+		return nil
+	}
+	return &WorkCalendarRef{ItemID: ids[0], RunID: ids[1]}
 }
 
 // WorkBacklog keeps durable history/repair truth explicit without projecting
@@ -314,6 +338,7 @@ type OpenWork struct {
 	WaitFor      string           `json:"wait_for,omitempty"`
 	Wake         *WorkWake        `json:"wake,omitempty"`
 	UpdatedAt    time.Time        `json:"updated_at,omitempty"`
+	Calendar     *WorkCalendarRef `json:"calendar,omitempty"`
 }
 
 type WorkInventory struct {
@@ -3193,6 +3218,7 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			Choices:          append([]string(nil), item.Choices...),
 			SnoozedUntil:     cloneTimePointer(item.SnoozedUntil),
 			UserAction:       userAction,
+			Calendar:         workCalendarRef(item),
 		})
 		s.projectWorkAttention(&current[len(current)-1], item)
 	}
@@ -3231,6 +3257,7 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			WaitFor:      item.WaitFor,
 			Wake:         cloneWorkWake(item.Wake),
 			UpdatedAt:    item.UpdatedAt.UTC(),
+			Calendar:     workCalendarRef(item),
 		})
 	}
 	sort.SliceStable(open, func(left, right int) bool {

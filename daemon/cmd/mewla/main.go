@@ -1246,7 +1246,7 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla calendar create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
-	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, instruction, cwd, sourceThread string
+	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, summary, instruction, cwd, sourceThread string
 	var revision int64
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon control socket")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
@@ -1262,6 +1262,7 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs.StringVar(&endOccurrence, "end-occurrence", "", "first or second when the event end occurs twice at DST fall-back")
 	fs.StringVar(&recurrence, "recurrence", "none", "none, daily, weekly, or weekdays")
 	fs.StringVar(&notes, "notes", "", "notes")
+	fs.StringVar(&summary, "summary", "", "scheduled action: one line, in the user's language, saying what it does (shown in Calendar)")
 	fs.StringVar(&instruction, "instruction", "", "scheduled action instruction")
 	fs.StringVar(&cwd, "cwd", "", "scheduled action working directory")
 	fs.StringVar(&sourceThread, "source-thread", "", "required for scheduled_action: source_thread_id for canonical Calendar result projection")
@@ -1285,7 +1286,7 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("resolve calendar time: %w", err)
 		}
-		item = calendar.Item{Title: title, Kind: calendar.Kind(kind), Timezone: timezone, Recurrence: calendar.Recurrence(recurrence), Notes: notes, ActionInstruction: instruction, ActionCwd: cwd, SourceThreadID: sourceThread}
+		item = calendar.Item{Title: title, Kind: calendar.Kind(kind), Timezone: timezone, Recurrence: calendar.Recurrence(recurrence), Notes: notes, Summary: summary, ActionInstruction: instruction, ActionCwd: cwd, SourceThreadID: sourceThread}
 		switch item.Kind {
 		case calendar.KindEvent:
 			item.StartAt = &at

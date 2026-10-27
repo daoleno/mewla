@@ -10,13 +10,29 @@ import (
 )
 
 // calendarItemWire is a calendar item as lists, broadcasts and mutation
-// replies carry it: without run history. Every run keeps its full result, so a
-// daily item grows by one deliverable a day; get_calendar_item still returns
-// the runs.
+// replies carry it: its newest runs, each with a one-line preview in place of
+// its result. Every run keeps its full result, so a daily item grows by one
+// deliverable a day; get_calendar_item still returns every run in full.
 func calendarItemWire(item calendar.Item) calendar.Item {
-	item.Runs = nil
+	item = calendar.WithoutStaleFailure(item)
+	runs := item.Runs
+	if len(runs) > calendarWireRuns {
+		runs = runs[len(runs)-calendarWireRuns:]
+	}
+	item.Runs = make([]calendar.Run, len(runs))
+	for index, run := range runs {
+		run.ResultPreview = calendar.ResultPreview(run.Result)
+		run.Result = ""
+		item.Runs[index] = run
+	}
+	if len(item.Runs) == 0 {
+		item.Runs = nil
+	}
 	return item
 }
+
+// calendarWireRuns is how many runs a list or broadcast carries per item.
+const calendarWireRuns = 10
 
 func (s *Server) sendCalendarSnapshot(conn *websocket.Conn, requestID string) {
 	if s.calendar == nil {
@@ -39,7 +55,7 @@ func (s *Server) handleGetCalendarItem(conn *websocket.Conn, raw clientMessage) 
 		s.sendCalendarError(conn, raw.RequestID, err)
 		return
 	}
-	s.sendJSON(conn, map[string]any{"type": "calendar_item", "request_id": raw.RequestID, "calendar_item": item})
+	s.sendJSON(conn, map[string]any{"type": "calendar_item", "request_id": raw.RequestID, "calendar_item": calendar.WithoutStaleFailure(item)})
 }
 func (s *Server) handleCreateCalendarItem(conn *websocket.Conn, raw clientMessage) {
 	if s.calendar == nil || raw.CalendarItem == nil {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Kind string
@@ -52,22 +53,25 @@ var (
 // Item is the canonical durable calendar series. Times are absolute instants;
 // Timezone preserves the wall-clock intent used to calculate recurrence.
 type Item struct {
-	ID                string     `json:"id"`
-	Title             string     `json:"title"`
-	Kind              Kind       `json:"kind"`
-	Status            Status     `json:"status"`
-	StartAt           *time.Time `json:"start_at,omitempty"`
-	EndAt             *time.Time `json:"end_at,omitempty"`
-	NotifyAt          *time.Time `json:"notify_at,omitempty"`
-	DueAt             *time.Time `json:"due_at,omitempty"`
-	Timezone          string     `json:"timezone"`
-	Recurrence        Recurrence `json:"recurrence"`
-	Notes             string     `json:"notes,omitempty"`
-	ActionInstruction string     `json:"action_instruction,omitempty"`
-	ActionCwd         string     `json:"action_cwd,omitempty"`
-	SourceThreadID    string     `json:"source_thread_id,omitempty"`
-	SourceMessageID   string     `json:"source_message_id,omitempty"`
-	LinkedWorkID      string     `json:"linked_work_id,omitempty"`
+	ID         string     `json:"id"`
+	Title      string     `json:"title"`
+	Kind       Kind       `json:"kind"`
+	Status     Status     `json:"status"`
+	StartAt    *time.Time `json:"start_at,omitempty"`
+	EndAt      *time.Time `json:"end_at,omitempty"`
+	NotifyAt   *time.Time `json:"notify_at,omitempty"`
+	DueAt      *time.Time `json:"due_at,omitempty"`
+	Timezone   string     `json:"timezone"`
+	Recurrence Recurrence `json:"recurrence"`
+	Notes      string     `json:"notes,omitempty"`
+	// Summary is one line in the user's language saying what a scheduled
+	// action does; ActionInstruction is the full prompt its agent receives.
+	Summary           string `json:"summary,omitempty"`
+	ActionInstruction string `json:"action_instruction,omitempty"`
+	ActionCwd         string `json:"action_cwd,omitempty"`
+	SourceThreadID    string `json:"source_thread_id,omitempty"`
+	SourceMessageID   string `json:"source_message_id,omitempty"`
+	LinkedWorkID      string `json:"linked_work_id,omitempty"`
 	// Owner names the part of Mewla that created and acts on this item. Only
 	// the daemon sets it; clients cannot create or change it. An owned item
 	// is an ordinary reminder the user can move, repeat differently or cancel.
@@ -93,14 +97,22 @@ type Run struct {
 	WorkID         string     `json:"work_id,omitempty"`
 	WorkerSession  string     `json:"worker_session,omitempty"`
 	Result         string     `json:"result,omitempty"`
-	FailureReason  string     `json:"failure_reason,omitempty"`
-	PreviousStatus Status     `json:"previous_status,omitempty"`
+	// ResultPreview is set only on the wire, where a run's Result is left out.
+	ResultPreview  string `json:"result_preview,omitempty"`
+	FailureReason  string `json:"failure_reason,omitempty"`
+	PreviousStatus Status `json:"previous_status,omitempty"`
 }
+
+// MaxSummaryRunes bounds Summary: it is a line, not a description.
+const MaxSummaryRunes = 120
 
 func (i Item) Validate() error {
 	i.Title = strings.TrimSpace(i.Title)
 	if i.Title == "" {
 		return fmt.Errorf("title is required")
+	}
+	if summary := strings.TrimSpace(i.Summary); utf8.RuneCountInString(summary) > MaxSummaryRunes || strings.ContainsAny(summary, "\r\n") {
+		return fmt.Errorf("summary must be one line of at most %d characters", MaxSummaryRunes)
 	}
 	switch i.Kind {
 	case KindEvent:
@@ -197,4 +209,36 @@ func cloneItem(item Item) Item {
 		item.Runs[index].FinishedAt = cloneTime(item.Runs[index].FinishedAt)
 	}
 	return item
+}
+
+// WithoutStaleFailure drops an item-level failure that belongs to one of its
+// runs: before failures stayed with their runs, a series that went on after a
+// failed run kept the run's failure on the item, scheduled and failed at once.
+func WithoutStaleFailure(item Item) Item {
+	if item.Status != StatusFailed {
+		item.FailureReason = ""
+	}
+	return item
+}
+
+const maxResultPreviewRunes = 160
+
+// ResultPreview is the first line of a run's result worth reading: markdown
+// headings, list markers and images are dropped, and it is cut to one line.
+func ResultPreview(result string) string {
+	for _, line := range strings.Split(result, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimSpace(strings.TrimLeft(line, "#>"))
+		for _, marker := range []string{"- ", "* ", "+ "} {
+			line = strings.TrimSpace(strings.TrimPrefix(line, marker))
+		}
+		if line == "" || strings.HasPrefix(line, "![") || strings.HasPrefix(line, "```") || strings.HasPrefix(line, "<!--") || strings.Trim(line, "-*_=|: ") == "" {
+			continue
+		}
+		if utf8.RuneCountInString(line) > maxResultPreviewRunes {
+			line = strings.TrimSpace(string([]rune(line)[:maxResultPreviewRunes-1])) + "…"
+		}
+		return line
+	}
+	return ""
 }

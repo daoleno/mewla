@@ -25,15 +25,17 @@ import (
 // daily scheduled action leaves a full result on its Calendar run and in a
 // Work file every day; months of that once made the connect snapshots several
 // megabytes, more than a phone or proxy link drains before its write deadline.
+// Calendar sends each item's newest runs as one-line previews, so past that
+// window the snapshot stays the same size.
 func TestConnectPayloadDoesNotGrowWithCalendarHistory(t *testing.T) {
-	few := connectPayloadBytes(t, 3)
+	few := connectPayloadBytes(t, calendarWireRuns)
 	many := connectPayloadBytes(t, 60)
 	for _, kind := range []string{"work_items_snapshot", "calendar_items_snapshot", "brain_snapshot"} {
 		if many[kind] == 0 {
 			t.Fatalf("%s did not arrive on connect", kind)
 		}
 		if growth := many[kind] - few[kind]; growth > 1<<10 {
-			t.Fatalf("%s grew by %d bytes from 3 to 60 finished runs (%d -> %d)", kind, growth, few[kind], many[kind])
+			t.Fatalf("%s grew by %d bytes from %d to 60 finished runs (%d -> %d)", kind, growth, calendarWireRuns, few[kind], many[kind])
 		}
 	}
 	if total := many["total"]; total > 64<<10 {
