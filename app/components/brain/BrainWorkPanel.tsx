@@ -21,6 +21,7 @@ import {
 import { PetSprite } from "../pets/PetSprite";
 import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
 import { Icon } from "../icons/Icon";
+import { composerNeutralFill } from "../terminal/composerMaterial";
 
 /** The slip's actions, built by the screen that can run them. */
 export type BrainWorkActionsFor = (slip: BrainWorkSlip, placement: "slip" | "sheet") => WorkSlipAction[];
@@ -326,6 +327,7 @@ export function BrainWorkDetailSheet({
   const workId = slip?.workId;
   useEffect(() => setDraft(""), [workId]);
   const canReply = Boolean(onReply && slip && !slip.closed);
+  const replyReady = Boolean(draft.trim()) && !replyBusy;
   const send = () => {
     const text = draft.trim();
     if (!text || !onReply) return;
@@ -376,11 +378,11 @@ export function BrainWorkDetailSheet({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Send reply"
-                  disabled={!draft.trim() || replyBusy}
+                  disabled={!replyReady}
                   onPress={send}
-                  style={[styles.replySend, !draft.trim() || replyBusy ? styles.replySendIdle : null]}
+                  style={[styles.replySend, replyReady ? null : styles.replySendIdle]}
                 >
-                  <Icon name="arrow-up" size={18} color={chrome.onSeal} />
+                  <Icon name="arrow-up" size={18} color={replyReady ? chrome.onSeal : chrome.textSubtle} />
                 </Pressable>
               </View>
             ) : null}
@@ -532,8 +534,9 @@ function createStyles(chrome: TerminalThemeChrome) {
       justifyContent: "center",
       backgroundColor: chrome.seal,
     },
+    // Like the Composer's Send: a quiet neutral disc until there is a reply.
     replySendIdle: {
-      opacity: 0.35,
+      backgroundColor: composerNeutralFill(chrome),
     },
   });
 }
