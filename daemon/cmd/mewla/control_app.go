@@ -248,7 +248,11 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		if a == nil || a.calendarStore == nil {
 			return control.ErrorResponse("calendar_unavailable", "Calendar is not configured.")
 		}
-		return control.Response{OK: true, CalendarItems: a.calendarStore.List()}
+		items := a.calendarStore.List()
+		for index := range items {
+			items[index] = calendar.WithoutStaleFailure(items[index])
+		}
+		return control.Response{OK: true, CalendarItems: items}
 	case "calendar_get":
 		return a.handleCalendarGet(req)
 	case "calendar_create":
@@ -491,7 +495,7 @@ func (a *controlApp) handleCalendarGet(req control.Request) control.Response {
 	if err != nil {
 		return calendarControlError(err)
 	}
-	return calendarControlResponse(item, "Found")
+	return calendarControlResponse(calendar.WithoutStaleFailure(item), "Found")
 }
 func (a *controlApp) handleCalendarCreate(req control.Request) control.Response {
 	if a == nil || a.calendarStore == nil || req.CalendarItem == nil {
