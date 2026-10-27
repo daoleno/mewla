@@ -146,7 +146,8 @@ export function DesktopWebShell({ children }: { children: ReactNode }) {
     SIDEBAR_MAX_WIDTH,
   );
 
-  useDesktopWebStyles(desktop, colors.focusRing);
+  // Pairing has no sidebar but still takes the keyboard: rings follow the width.
+  useDesktopWebStyles(desktopWidth, colors.focusRing);
 
   useEffect(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
