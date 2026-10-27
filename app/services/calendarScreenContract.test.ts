@@ -5,6 +5,10 @@ const source = readFileSync(
   join(import.meta.dir, "../app/calendar.tsx"),
   "utf8",
 );
+const sheet = readFileSync(
+  join(import.meta.dir, "../components/calendar/CalendarItemSheet.tsx"),
+  "utf8",
+);
 describe("Calendar screen contract", () => {
   test("uses one canonical Agenda stream with an inline month navigator", () => {
     expect(source).toContain("groupAgenda");
@@ -52,14 +56,29 @@ describe("Calendar screen contract", () => {
       "reminder",
       "deadline",
       "scheduled_action",
-      "Run now",
-      "Retry now",
-      "Linked Work",
       "Action instruction",
+      "Summary",
       "Timezone",
       "Recurrence",
     ])
       expect(source).toContain(value);
+    for (const value of ["Run now", "Retry now", "Instructions", "Runs", "Open Session"])
+      expect(sheet).toContain(value);
+  });
+  test("shows the schedule and its runs, never ids", () => {
+    // Links are taps: no thread id, Work id or raw recurrence enum on screen.
+    for (const raw of ["source_thread_id}", "linked_work_id}", "{item.recurrence}", "{item.timezone}", "Linked Work"]) {
+      expect(source).not.toContain(raw);
+      expect(sheet).not.toContain(raw);
+    }
+    expect(sheet).toContain("calendarScheduleLine");
+    expect(sheet).toContain("calendarNextLine");
+    expect(sheet).toContain("calendarItemSummary");
+    expect(sheet).toContain("calendarRunsNewestFirst");
+    // The open item is found by id, so its runs move on while it is open.
+    expect(source).toContain("items.find((item) => item.id === selected.id)");
+    // A back-link opens its item once, not again on every change.
+    expect(source).toContain("openedLinkRef");
   });
   test("has graceful notification denial and keyboard-safe editor", () => {
     expect(source).toContain("Reminders disabled");

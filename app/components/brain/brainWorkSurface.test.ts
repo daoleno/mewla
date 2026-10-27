@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainCurrentWork, BrainWorkerRef } from "../../store/brain";
-import { brainWorkGroup, brainWorkSummaryLine, brainWorkSurface } from "./brainWorkSurface";
+import { brainWorkCalendarOrigins, brainWorkGroup, brainWorkSummaryLine, brainWorkSurface } from "./brainWorkSurface";
+import type { CalendarItem } from "../../store/calendar";
 
 function work(overrides: Partial<BrainCurrentWork>): BrainCurrentWork {
   return {
@@ -146,5 +147,52 @@ describe("open Work on the rail", () => {
     );
     expect(surface.slips.map((slip) => slip.workId)).toEqual(["q1"]);
     expect(surface.slips[0].group).toBe("running");
+  });
+});
+
+describe("Calendar runs on the Work rail", () => {
+  const calendarWork = work({
+    work_id: "calendar-9f",
+    title: "运营：从今天的工作里挖稿",
+    status: "waiting",
+    progress_mode: "waiting",
+    wait_for: "Calendar occurrence 5e1b7a90-0000-4000-8000-000000000000",
+    wake: { kind: "calendar_result", ref: "calendar:43754e56:run-27" },
+    calendar: { item_id: "43754e56", run_id: "run-27" },
+  });
+  const item = (status: "running" | "completed"): CalendarItem => ({
+    id: "43754e56",
+    title: "运营：从今天的工作里挖稿",
+    kind: "scheduled_action",
+    status: status === "running" ? "running" : "scheduled",
+    timezone: "Asia/Shanghai",
+    recurrence: "daily",
+    next_at: "2026-10-27T20:30:00+08:00",
+    created_at: "2026-10-23T13:57:41Z",
+    updated_at: "2026-10-27T12:30:00Z",
+    revision: 13,
+    runs: [{ id: "run-27", status, scheduled_for: "2026-10-27T20:30:00+08:00", started_at: "2026-10-27T12:30:00Z", worker_session: "%217" }],
+  });
+
+  test("never shows the run's id as its summary", () => {
+    const [slip] = brainWorkSurface([calendarWork], []).slips;
+    expect(slip.calendar).toEqual({ itemId: "43754e56", runId: "run-27" });
+    expect(slip.summary ?? "").not.toContain("5e1b7a90");
+  });
+
+  test("names its schedule and run, and opens the run's Session while it runs", () => {
+    const surface = brainWorkCalendarOrigins(brainWorkSurface([calendarWork], []), [item("running")]);
+    const [slip] = surface.slips;
+    expect(slip.calendarLabel).toBe("Oct 27");
+    expect(slip.calendarLink).toBe("运营：从今天的工作里挖稿 · Oct 27");
+    expect(slip.sessionId).toBe("%217");
+    expect(slip.group).toBe("running");
+    expect(surface.counts.running).toBe(1);
+  });
+
+  test("a finished run keeps its name but no Session to open", () => {
+    const [slip] = brainWorkCalendarOrigins(brainWorkSurface([calendarWork], []), [item("completed")]).slips;
+    expect(slip.calendarLink).toBe("运营：从今天的工作里挖稿 · Oct 27");
+    expect(slip.sessionId).toBeUndefined();
   });
 });

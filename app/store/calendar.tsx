@@ -19,7 +19,10 @@ export interface CalendarRun {
   manual?: boolean;
   work_id?: string;
   worker_session?: string;
+  /** Only get_calendar_item carries the full result. */
   result?: string;
+  /** Lists and broadcasts carry this one line instead of the result. */
+  result_preview?: string;
   failure_reason?: string;
 }
 export interface CalendarItem {
@@ -34,6 +37,8 @@ export interface CalendarItem {
   timezone: string;
   recurrence: CalendarRecurrence;
   notes?: string;
+  /** One line in the user's language saying what a scheduled action does. */
+  summary?: string;
   action_instruction?: string;
   action_cwd?: string;
   source_thread_id?: string;
@@ -47,6 +52,7 @@ export interface CalendarItem {
   updated_at: string;
   cancelled_at?: string;
   revision: number;
+  /** Lists carry the newest runs, oldest first; get_calendar_item has them all. */
   runs?: CalendarRun[];
 }
 export interface ServerCalendar {

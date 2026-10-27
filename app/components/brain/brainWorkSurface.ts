@@ -1,4 +1,6 @@
 import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef } from "../../store/brain";
+import type { CalendarItem } from "../../store/calendar";
+import { calendarOriginLabel } from "../../services/calendarRuns";
 
 export type { BrainCurrentWork, BrainObjective, BrainOpenWork, BrainWorkerRef } from "../../store/brain";
 import type { WorkStatus } from "../ui/workStatus";
@@ -61,6 +63,12 @@ export type BrainWorkSlip = {
   replied?: { text?: string; at: string; uncertain: boolean };
   /** The Work has a terminal status but the result is unread. */
   closed?: boolean;
+  /** A Calendar run's Work: its schedule and run. */
+  calendar?: { itemId: string; runId: string };
+  /** The slip's meta: "Oct 27", or "运营：挖稿 · Oct 27" when the titles differ (brainWorkCalendarOrigins). */
+  calendarLabel?: string;
+  /** "运营：挖稿 · Oct 27", the link back to the schedule. */
+  calendarLink?: string;
 };
 
 export type BrainWorkSurface = {
@@ -188,6 +196,7 @@ export function brainWorkSurface(
       stuck,
       replied,
       closed: terminal || undefined,
+      calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
     });
   }
   const listed = new Set(slips.map((slip) => slip.workId));
@@ -203,9 +212,10 @@ export function brainWorkSurface(
       status: "blocked",
       statusLabel: BRAIN_WORK_GROUP_LABELS[group],
       title: brainWorkTitle(work.title),
-      summary: waiting ? readableLine(work.wait_for) : undefined,
+      summary: waiting && !work.calendar ? readableLine(work.wait_for) : undefined,
       updatedAt: work.updated_at,
       unread: false,
+      calendar: work.calendar ? { itemId: work.calendar.item_id, runId: work.calendar.run_id } : undefined,
     });
   }
   const rank = (group: BrainWorkGroup) => BRAIN_WORK_GROUP_ORDER.indexOf(group);
@@ -308,8 +318,9 @@ function slipSummary(
   group: BrainWorkGroup,
   worker: BrainWorkerRef | undefined,
 ): string | undefined {
-  // A wait owned by a Session ("Session %90") says nothing the slip doesn't.
-  const waitFor = work.wait_for && !work.wake && work.attempt_session_id
+  // A wait owned by a Session ("Session %90") or a Calendar run says nothing
+  // the slip doesn't.
+  const waitFor = (work.wait_for && !work.wake && work.attempt_session_id) || work.calendar
     ? undefined
     : work.wait_for;
   const candidates =
@@ -322,4 +333,36 @@ function slipSummary(
   return candidates
     .map((value) => value?.replace(/\s+/g, " ").trim())
     .find((value) => Boolean(value && value.includes(" ")));
+}
+
+/**
+ * Names each Calendar run's slip after its schedule ("运营：挖稿 · Oct 27")
+ * and, while the run works, gives it the run's Session to open: Calendar,
+ * not Brain, started that Worker, so Brain has no Attempt for it.
+ */
+export function brainWorkCalendarOrigins(
+  surface: BrainWorkSurface,
+  items: readonly CalendarItem[] | undefined,
+): BrainWorkSurface {
+  if (!surface.slips.some((slip) => slip.calendar)) return surface;
+  const slips = surface.slips.map((slip): BrainWorkSlip => {
+      if (!slip.calendar) return slip;
+      const item = items?.find((candidate) => candidate.id === slip.calendar!.itemId);
+      const run = item?.runs?.find((candidate) => candidate.id === slip.calendar!.runId);
+      const origin = calendarOriginLabel(slip.calendar, items ?? [], { title: slip.title });
+      const sessionId = run?.status === "running" ? run.worker_session : undefined;
+      return {
+        ...slip,
+        // The slip's title is the schedule's: the meta line adds the date.
+        calendarLabel: origin ? (origin.title === slip.title ? origin.date || origin.label : origin.label) : undefined,
+        calendarLink: origin?.label,
+        sessionId: slip.sessionId ?? sessionId,
+        ...(sessionId && slip.group !== "needs" ? { group: "running" as const, status: "running" as const, statusLabel: "Running" } : {}),
+      };
+  });
+  const counts = Object.fromEntries(BRAIN_WORK_GROUP_ORDER.map((group) => [group, 0])) as Record<BrainWorkGroup, number>;
+  for (const slip of slips) counts[slip.group] += 1;
+  const rank = (group: BrainWorkGroup) => BRAIN_WORK_GROUP_ORDER.indexOf(group);
+  slips.sort((left, right) => rank(left.group) - rank(right.group));
+  return { slips, counts };
 }

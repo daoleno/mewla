@@ -62,7 +62,11 @@ export type BrainCurrentWork = {
   snoozed_until?: string;
   /** Your newest decision on it, until a newer result comes back. */
   user_action?: BrainWorkUserAction;
+  /** The schedule and run a Calendar occurrence's Work came from. */
+  calendar?: BrainWorkCalendarRef;
 };
+
+export type BrainWorkCalendarRef = { item_id: string; run_id: string };
 
 /**
  * Unfinished Work outside current_work: no Worker has it yet, or it waits on
@@ -76,6 +80,7 @@ export type BrainOpenWork = {
   wait_for?: string;
   wake?: BrainWorkWake;
   updated_at?: string;
+  calendar?: BrainWorkCalendarRef;
 };
 
 export type BrainWorkUserActionKind = "reply" | "close" | "dismiss" | "stop" | "snooze";
@@ -250,6 +255,7 @@ function normalizeOpenWork(raw: unknown[]): BrainOpenWork[] {
       wait_for: typeof item.wait_for === "string" && item.wait_for.trim() ? item.wait_for.trim() : undefined,
       wake: normalizeWorkWake(item.wake),
       updated_at: typeof item.updated_at === "string" ? item.updated_at : undefined,
+      calendar: normalizeWorkCalendarRef(item.calendar),
     });
   }
   return out;
@@ -317,9 +323,17 @@ function normalizeCurrentWork(raw: unknown[]): BrainCurrentWork[] {
       attention_reason: optionalText(item.attention_reason),
       snoozed_until: optionalText(item.snoozed_until),
       user_action: normalizeWorkUserAction(item.user_action),
+      calendar: normalizeWorkCalendarRef(item.calendar),
     });
   });
   return Array.from(byId.values());
+}
+
+function normalizeWorkCalendarRef(raw: unknown): BrainWorkCalendarRef | undefined {
+  const value = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  const itemId = optionalText(value?.item_id);
+  const runId = optionalText(value?.run_id);
+  return itemId && runId ? { item_id: itemId, run_id: runId } : undefined;
 }
 
 function optionalText(value: unknown): string | undefined {
@@ -626,7 +640,8 @@ function openWorkArraysEqual(left: BrainOpenWork[], right: BrainOpenWork[]) {
         item.progress_mode === other.progress_mode &&
         item.wait_for === other.wait_for &&
         workWakeEqual(item.wake, other.wake) &&
-        item.updated_at === other.updated_at
+        item.updated_at === other.updated_at &&
+        item.calendar?.run_id === other.calendar?.run_id
       );
     })
   );
@@ -663,7 +678,8 @@ function currentWorkEqual(
     ) &&
     left.unread_result === right.unread_result &&
     left.summary === right.summary &&
-    left.updated_at === right.updated_at
+    left.updated_at === right.updated_at &&
+    left.calendar?.run_id === right.calendar?.run_id
   );
 }
 

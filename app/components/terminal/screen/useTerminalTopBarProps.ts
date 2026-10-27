@@ -15,6 +15,7 @@ import type { useTerminalNavigationActions } from "./useTerminalNavigationAction
 interface UseTerminalTopBarPropsInput {
   title: string;
   subtitle?: string;
+  calendarOrigin?: TerminalTopBarProps["calendarOrigin"];
   kind: AgentKind;
   terminalFlavor?: TerminalFlavor;
   terminalTheme: TerminalThemePalette;
@@ -40,6 +41,7 @@ interface UseTerminalTopBarPropsInput {
 export function useTerminalTopBarProps({
   title,
   subtitle,
+  calendarOrigin,
   kind,
   terminalFlavor,
   terminalTheme,
@@ -59,6 +61,7 @@ export function useTerminalTopBarProps({
     () => ({
       title,
       subtitle,
+      calendarOrigin,
       kind,
       terminalFlavor,
       backgroundColor: terminalTheme.background,
@@ -83,6 +86,7 @@ export function useTerminalTopBarProps({
     [
       title,
       subtitle,
+      calendarOrigin,
       kind,
       terminalFlavor,
       chrome,

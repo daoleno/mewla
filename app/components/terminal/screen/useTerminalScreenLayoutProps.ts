@@ -22,6 +22,7 @@ import type { useTerminalNavigationActions } from "./useTerminalNavigationAction
 import type { useTerminalViewportModel } from "./useTerminalViewportModel";
 import { useTerminalScreenOverlayProps } from "./useTerminalScreenOverlayProps";
 import { useTerminalTopBarProps } from "./useTerminalTopBarProps";
+import type { TerminalTopBarProps } from "../TerminalTopBar";
 import { useTerminalViewportProps } from "./useTerminalViewportProps";
 
 interface UseTerminalScreenLayoutPropsInput {
@@ -44,6 +45,8 @@ interface UseTerminalScreenLayoutPropsInput {
   handleAccessoryLayout(event: LayoutChangeEvent): void;
   handleCtrlArmedChange(next: boolean): void;
   hasLinkedWork: boolean;
+  /** Calendar-born Session: its schedule and run, and the way back to them. */
+  calendarOrigin?: TerminalTopBarProps["calendarOrigin"];
   hasTerminalRoute: boolean;
   isStructuredChatWorker: boolean;
   keyboardVisible: boolean;
@@ -110,6 +113,7 @@ export function useTerminalScreenLayoutProps({
   handleAccessoryLayout,
   handleCtrlArmedChange,
   hasLinkedWork,
+  calendarOrigin,
   hasTerminalRoute,
   isStructuredChatWorker,
   keyboardVisible,
@@ -180,6 +184,7 @@ export function useTerminalScreenLayoutProps({
     title: headerTitle,
     // Keep header compact: paths belong in resource details, not the chrome.
     subtitle: undefined,
+    calendarOrigin,
     kind: presentedWorker.kind,
     terminalFlavor: presentedWorker.terminalFlavor,
     terminalTheme,

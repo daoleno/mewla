@@ -44,6 +44,8 @@ interface TelegramChatHeaderProps {
   chrome?: TerminalThemeChrome;
   title: string;
   subtitle?: string;
+  /** A glyph before the subtitle, e.g. the calendar for Calendar-born work. */
+  subtitleIcon?: IconName;
   avatarLabel?: string;
   avatarSeed?: string;
   agentKind?: AgentKind;
@@ -51,6 +53,8 @@ interface TelegramChatHeaderProps {
   avatar?: React.ReactNode;
   onBack?: () => void;
   onPressTitle?: () => void;
+  /** What tapping the title does, for assistive tech ("Open in Calendar"). */
+  titleActionLabel?: string;
   rightActions?: TelegramChatHeaderAction[];
   menuAnchorRef?: React.RefObject<View | null>;
   flat?: boolean;
@@ -62,6 +66,7 @@ export function TelegramChatHeader({
   chrome,
   title,
   subtitle,
+  subtitleIcon,
   avatarLabel,
   avatarSeed,
   agentKind,
@@ -69,6 +74,7 @@ export function TelegramChatHeader({
   avatar,
   onBack,
   onPressTitle,
+  titleActionLabel,
   rightActions = [],
   menuAnchorRef,
   flat = false,
@@ -129,7 +135,8 @@ export function TelegramChatHeader({
           accessibilityLabel={[
             title,
             status ? workerStatusLabel(status) : null,
-            onPressTitle ? 'Server resources' : null,
+            subtitle ?? null,
+            onPressTitle ? titleActionLabel ?? null : null,
           ]
             .filter(Boolean)
             .join(', ')}
@@ -180,9 +187,14 @@ export function TelegramChatHeader({
               {title}
             </Text>
             {subtitle ? (
-              <Text style={styles.subtitle} numberOfLines={1}>
-                {subtitle}
-              </Text>
+              <View style={styles.subtitleRow}>
+                {subtitleIcon ? (
+                  <Icon name={subtitleIcon} size={12} color={styles.subtitle.color} />
+                ) : null}
+                <Text style={styles.subtitle} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+              </View>
             ) : null}
           </View>
         </AnimatedPressable>
@@ -403,7 +415,9 @@ function createStyles(colors: AppColors, chrome?: TerminalThemeChrome) {
       color: titleColor,
       fontFamily: Typography.uiFontMedium,
     },
+    subtitleRow: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
     subtitle: {
+      flexShrink: 1,
       ...UiTextMetrics,
       ...TypeScale.micro,
       color: subtitleColor,

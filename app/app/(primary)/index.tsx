@@ -40,9 +40,12 @@ import {
   BRAIN_WORK_GROUP_ORDER,
   brainWorkSlipStale,
   brainWorkSurface,
+  brainWorkCalendarOrigins,
   workerWho,
   type BrainWorkSlip,
 } from "../../components/brain/brainWorkSurface";
+import { selectCurrentServerCalendar, useCalendar } from "../../store/calendar";
+import { useCalendarOrigin } from "../../components/calendar/CalendarOriginLink";
 import { ActionMenu, EmptyState, InlineNotice } from "../../components/ui";
 import { setServerAutoConnect } from "../../services/storage";
 import { ChatCanvas } from "../../components/terminal/ChatCanvas";
@@ -202,9 +205,15 @@ export default function BrainScreen() {
   const { width: windowWidth } = useWindowDimensions();
   // Wide screens get the Work column; it holds the cat and Brain's presence.
   const workColumn = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
+  const calendarState = useCalendar();
+  const calendarItems = activeServer ? selectCurrentServerCalendar(calendarState, activeServer.id)?.items : undefined;
   const workSurface = useMemo(
-    () => brainWorkSurface(activeBrain?.current_work, activeBrain?.workers, Date.now(), activeBrain?.open_work),
-    [activeBrain?.current_work, activeBrain?.workers, activeBrain?.open_work],
+    () =>
+      brainWorkCalendarOrigins(
+        brainWorkSurface(activeBrain?.current_work, activeBrain?.workers, Date.now(), activeBrain?.open_work),
+        calendarItems,
+      ),
+    [activeBrain?.current_work, activeBrain?.workers, activeBrain?.open_work, calendarItems],
   );
   const [workSheetVisible, setWorkSheetVisible] = useState(false);
   const [workReveal, setWorkReveal] = useState<BrainWorkReveal | null>(null);
@@ -517,6 +526,7 @@ export default function BrainScreen() {
         wsClient.markBrainWorkRead(activeServer.id, slip.workId);
       }
       // A running Worker opens its Session; everything else opens the Work.
+      // (A Calendar run's slip is Running only while its run has a Session.)
       if (slip.sessionId && slip.group === "running" && !slip.replied) {
         openWorkerSession(slip.sessionId);
         return;
@@ -702,6 +712,11 @@ export default function BrainScreen() {
   const liveSelectedSlip = selectedWorkSlip
     ? workSurface.slips.find((slip) => slip.workId === selectedWorkSlip.workId) ?? selectedWorkSlip
     : null;
+  const selectedCalendar = useCalendarOrigin(
+    activeServer?.id,
+    liveSelectedSlip?.calendar ?? null,
+    { title: liveSelectedSlip?.title },
+  );
   return (
     <SafeAreaView
       style={[styles.screen, { backgroundColor: chrome.appBackground }]}
@@ -821,6 +836,7 @@ export default function BrainScreen() {
       <BrainWorkDetailSheet
         slip={liveSelectedSlip}
         waitFor={activeBrain?.current_work?.find((work) => work.work_id === selectedWorkSlip?.workId)?.wait_for}
+        onOpenCalendar={selectedCalendar?.open}
         chrome={chrome}
         actions={liveSelectedSlip ? workActionsFor(liveSelectedSlip, "sheet") : undefined}
         replyOpen={replyOpenFor === liveSelectedSlip?.workId}

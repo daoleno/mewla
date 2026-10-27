@@ -40,6 +40,8 @@ interface WorkerSessionRowProps {
   /** The Session waits on you: the seal mark replaces the status glyph. */
   needsYou?: boolean;
   brainDelegated?: boolean;
+  /** Started by a Calendar schedule: a calendar badge on the icon. */
+  fromCalendar?: boolean;
   onPress: () => void;
   onLongPress: () => void;
   /** Selection mode: taps toggle selection instead of opening the Session. */
@@ -65,6 +67,7 @@ export function WorkerSessionRow({
   status,
   needsYou = false,
   brainDelegated = false,
+  fromCalendar = false,
   onPress,
   onLongPress,
   selectionMode = false,
@@ -124,6 +127,7 @@ export function WorkerSessionRow({
         preview,
         timeLabel,
         brainDelegated,
+        fromCalendar,
       })}
       accessibilityHint={
         inSelectionMode
@@ -159,6 +163,15 @@ export function WorkerSessionRow({
             importantForAccessibility="no-hide-descendants"
           >
             <Icon name="git-network" size={9} color={colors.accentStrong} />
+          </View>
+        ) : fromCalendar ? (
+          <View
+            pointerEvents="none"
+            style={styles.brainOriginMarker}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            <Icon name="calendar" size={10} color={colors.accentStrong} />
           </View>
         ) : null}
       </View>
