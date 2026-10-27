@@ -64,6 +64,13 @@ export const ContentWidth = {
 /** Desktop web page header: one height for every page, Brain included. */
 export const DESKTOP_HEADER_HEIGHT = 52;
 
+/**
+ * Desktop web: every page's title, and the start of its content, sit this far
+ * right of the sidebar. Columns are anchored here and extend right to their
+ * width, never centered, so switching pages never moves the title.
+ */
+export const DESKTOP_PAGE_GUTTER = Spacing.xl;
+
 // One 4pt-aligned ladder. Named roles alias a step instead of sitting between
 // steps (the old 22/24/28/32 cluster read as noise, not hierarchy).
 export const Radii = {

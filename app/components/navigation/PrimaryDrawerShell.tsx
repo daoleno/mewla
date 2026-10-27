@@ -18,7 +18,7 @@ import {
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { TypeScale, useAppColors } from "../../constants/tokens";
+import { DESKTOP_PAGE_GUTTER, TypeScale, useAppColors } from "../../constants/tokens";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { Icon } from "../icons/Icon";
 import { PrimaryChromeButton } from "./PrimaryChromeButton";
@@ -140,9 +140,11 @@ function PrimaryAppBar({
         <View
           style={[
             styles.dockedRow,
+            // The title sits at the page gutter on every page; a column page's
+            // action ends where its column ends.
             layout?.column
-              ? { maxWidth: layout.column, paddingLeft: layout.columnInset ?? 0 }
-              : styles.dockedRowFull,
+              ? { maxWidth: DESKTOP_PAGE_GUTTER - APP_BAR_SIDE_PADDING - (layout.columnInset ?? 0) + layout.column }
+              : null,
           ]}
         >
           <Text
@@ -428,6 +430,8 @@ export function PrimaryDrawerShell({
   );
 }
 
+const APP_BAR_SIDE_PADDING = 4;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -444,7 +448,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     justifyContent: "space-between",
-    paddingHorizontal: 4,
+    paddingHorizontal: APP_BAR_SIDE_PADDING,
     borderBottomWidth: StyleSheet.hairlineWidth,
     zIndex: 2,
   },
@@ -476,10 +480,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     width: "100%",
-    marginHorizontal: "auto",
-  },
-  dockedRowFull: {
-    paddingLeft: 20,
+    // The bar already pads its sides.
+    paddingLeft: DESKTOP_PAGE_GUTTER - APP_BAR_SIDE_PADDING,
   },
   dockedTitle: {
     ...TypeScale.pageTitle,

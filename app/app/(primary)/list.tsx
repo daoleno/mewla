@@ -29,12 +29,14 @@ import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui"
 import { sessionEmptyCat, sessionEmptyState } from "../../services/sessionEmptyState";
 import { PetSprite } from "../../components/pets/PetSprite";
 import { usePrimaryAppBarLayout } from "../../components/navigation/primaryAppBarInset";
+import { useDesktopWeb } from "../../components/navigation/useDesktopWeb";
 import { useLoadingVeil } from "../../components/mewla/useLoadingVeil";
 import {
   NewSessionButton,
   SESSIONS_COLUMN_MAX_WIDTH,
   SESSIONS_TEXT_INSET,
   SessionsListView,
+  sessionsColumnStyle,
   type SessionsListRowState,
 } from "../../components/workers/SessionsListView";
 import { WorkerSessionSelectionBar } from "../../components/workers/WorkerSessionSelectionBar";
@@ -102,7 +104,8 @@ export default function InboxScreen() {
   const insets = useSafeAreaInsets();
   const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const desktop = useDesktopWeb();
+  const styles = useMemo(() => createStyles(theme, desktop), [theme, desktop]);
 
   const workerWorkMap = useMemo(() => {
     const map: Record<string, WorkItem> = {};
@@ -677,12 +680,28 @@ export default function InboxScreen() {
   const openHeaderMenu = useCallback(() => {
     setHeaderMenuVisible(true);
   }, []);
+  const newSessionDisabled = !anyConnected || Boolean(creatingServerId);
+  // A stable handle: the page action re-registers whenever its value changes.
+  const openCreateTerminalRef = useRef(openCreateTerminal);
+  openCreateTerminalRef.current = openCreateTerminal;
+  const openCreateFromHeader = useCallback(() => openCreateTerminalRef.current(), []);
+  // Desktop web: New session is the header's one main action, in place of
+  // the phone's floating button; ⋮ keeps the rest.
   const listPageAction = useMemo(
     () => ({
       accessibilityLabel: "Session options",
       onPress: openHeaderMenu,
+      primary: desktop
+        ? {
+            icon: "add" as const,
+            accessibilityLabel: "New session",
+            tooltip: "New session (N)",
+            disabled: newSessionDisabled,
+            onPress: openCreateFromHeader,
+          }
+        : undefined,
     }),
-    [openHeaderMenu],
+    [desktop, newSessionDisabled, openCreateFromHeader, openHeaderMenu],
   );
   usePrimaryPageAction(listPageAction);
 
@@ -847,7 +866,7 @@ export default function InboxScreen() {
           }}
         />
 
-        {sortedWorkers.length > 0 && !selectionMode ? (
+        {sortedWorkers.length > 0 && !selectionMode && !desktop ? (
           <NewSessionButton
             bottomInset={bottomInset}
             disabled={!anyConnected}
@@ -861,13 +880,17 @@ export default function InboxScreen() {
           title="Sessions"
           onClose={() => setHeaderMenuVisible(false)}
           items={[
-            {
-              key: "new",
-              label: "New session",
-              icon: "add-circle",
-              disabled: !anyConnected || Boolean(creatingServerId),
-              onPress: openCreateTerminal,
-            },
+            ...(desktop
+              ? []
+              : [
+                  {
+                    key: "new",
+                    label: "New session",
+                    icon: "add-circle" as const,
+                    disabled: newSessionDisabled,
+                    onPress: openCreateTerminal,
+                  },
+                ]),
             {
               key: "services",
               label: "Services",
@@ -883,7 +906,7 @@ export default function InboxScreen() {
   );
 }
 
-function createStyles(theme: ResolvedTheme) {
+function createStyles(theme: ResolvedTheme, desktop: boolean) {
   const colors = theme.colors;
 
   return StyleSheet.create({
@@ -896,18 +919,14 @@ function createStyles(theme: ResolvedTheme) {
     },
 
     loadingContainer: {
-      width: "100%",
-      maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
-      alignSelf: "center",
+      ...sessionsColumnStyle(desktop),
       flexGrow: 1,
       minHeight: 420,
       alignItems: "center",
       justifyContent: "center",
     },
     emptyScrollContent: {
-      width: "100%",
-      maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
-      alignSelf: "center",
+      ...sessionsColumnStyle(desktop),
       flexGrow: 1,
       paddingBottom: 44,
     },

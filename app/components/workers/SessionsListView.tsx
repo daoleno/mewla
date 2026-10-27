@@ -10,6 +10,7 @@ import {
 import {
   ContentWidth,
   ContinuousCorners,
+  DESKTOP_PAGE_GUTTER,
   Radii,
   TypeScale,
   UiTextMetrics,
@@ -30,6 +31,19 @@ import { useDesktopWeb } from "../navigation/useDesktopWeb";
 export const SESSIONS_COLUMN_MAX_WIDTH = ContentWidth.page;
 /** Where row text and section captions start inside the column. */
 export const SESSIONS_TEXT_INSET = 22;
+
+/**
+ * The column's place: centered on phones and tablets; on desktop web anchored
+ * so its rows start at the page gutter, under the title.
+ */
+export function sessionsColumnStyle(desktop: boolean) {
+  return {
+    width: "100%" as const,
+    maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
+    alignSelf: desktop ? ("flex-start" as const) : ("center" as const),
+    marginLeft: desktop ? DESKTOP_PAGE_GUTTER - SESSIONS_TEXT_INSET : 0,
+  };
+}
 const NEW_SESSION_BUTTON_HEIGHT = 48;
 
 const workerKeyExtractor = (agent: Worker) => agent.key;
@@ -70,7 +84,8 @@ export function SessionsListView({
   onToggleSelection,
 }: SessionsListViewProps) {
   const { theme } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const desktop = useDesktopWeb();
+  const styles = useMemo(() => createStyles(theme, desktop), [theme, desktop]);
   const useSectionHeaders = sections.length > 1;
 
   const renderItem = useCallback<ListRenderItem<Worker>>(
@@ -177,11 +192,12 @@ export function NewSessionButton({
 }: NewSessionButtonProps) {
   const { theme } = useAppTheme();
   const colors = theme.colors;
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const desktop = useDesktopWeb();
+  const styles = useMemo(() => createStyles(theme, desktop), [theme, desktop]);
   const inactive = disabled || busy;
   const ink = inactive ? colors.disabledText : colors.textOnAccent;
   const buttonRef = useRef<View>(null);
-  useWebTooltip(buttonRef, useDesktopWeb() ? "New session (N)" : "New session");
+  useWebTooltip(buttonRef, desktop ? "New session (N)" : "New session");
   return (
     <View
       pointerEvents="box-none"
@@ -208,14 +224,12 @@ export function NewSessionButton({
   );
 }
 
-function createStyles(theme: ResolvedTheme) {
+function createStyles(theme: ResolvedTheme, desktop: boolean) {
   const colors = theme.colors;
   const { sectionLabel } = surfacesFromTheme(theme);
   return StyleSheet.create({
     content: {
-      width: "100%",
-      maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
-      alignSelf: "center",
+      ...sessionsColumnStyle(desktop),
       paddingTop: 4,
     },
     rowWrap: {

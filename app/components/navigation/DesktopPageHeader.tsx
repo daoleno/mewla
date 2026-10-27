@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import {
   ContentWidth,
   DESKTOP_HEADER_HEIGHT,
+  DESKTOP_PAGE_GUTTER,
   Spacing,
   TypeScale,
   useAppColors,
@@ -20,9 +21,9 @@ interface DesktopPageHeaderProps {
 }
 
 /**
- * The one desktop web page header. Its title sits on the content column's
- * left edge, so a page reads as one column instead of a title floating at the
- * window edge over centered content.
+ * The one desktop web page header. Its title sits at the page gutter, where
+ * every page's content starts, so switching pages never moves it; the
+ * actions end where the content column ends.
  */
 export function DesktopPageHeader({ title, column, leading, trailing }: DesktopPageHeaderProps) {
   const colors = useAppColors();
@@ -31,7 +32,9 @@ export function DesktopPageHeader({ title, column, leading, trailing }: DesktopP
       <View
         style={[
           styles.row,
-          column ? { maxWidth: ContentWidth[column], paddingHorizontal: Spacing.lg } : styles.fullRow,
+          column
+            ? { maxWidth: ContentWidth[column], marginLeft: DESKTOP_PAGE_GUTTER - Spacing.lg, paddingHorizontal: Spacing.lg }
+            : styles.fullRow,
         ]}
       >
         {leading}
@@ -56,7 +59,6 @@ const styles = StyleSheet.create({
   bar: {
     height: DESKTOP_HEADER_HEIGHT,
     flexDirection: "row",
-    justifyContent: "center",
   },
   row: {
     flex: 1,
@@ -65,7 +67,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   fullRow: {
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: DESKTOP_PAGE_GUTTER,
   },
   title: {
     ...TypeScale.pageTitle,
