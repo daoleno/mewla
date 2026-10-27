@@ -481,12 +481,12 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
         <Text style={styles.rowTitle} numberOfLines={2}>
           {item.title}
         </Text>
-        <View style={styles.meta}>
+        <View style={styles.rowMeta}>
+          <CalendarStatus status={item.status} />
+          <Text style={styles.metaDot}>·</Text>
           <Text style={[styles.metaText, styles.metaSummary]} numberOfLines={1}>
             {summary || kindLabel[item.kind]}
           </Text>
-          <Text style={styles.metaDot}>·</Text>
-          <CalendarStatus status={item.status} />
         </View>
       </View>
       <Icon name="chevron-right" size={17} color={colors.textTertiary} />
@@ -1175,6 +1175,8 @@ function createStyles(colors: any) {
     },
     metaText: { ...TypeScale.caption, color: colors.textTertiary },
     metaSummary: { flexShrink: 1 },
+    // One line: the state, then what the item does, cut to fit.
+    rowMeta: { flexDirection: "row", alignItems: "center", gap: 4 },
     metaDot: { color: colors.textTertiary },
     empty: {
       minHeight: 52,
