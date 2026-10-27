@@ -42,6 +42,7 @@ import {
   useAppTheme,
   shadow,
   type AppColors,
+  ContentWidth,
 } from "../constants/tokens";
 import { useThemeContext, type ResolvedTheme } from "../theme";
 import { DARK_APP_COLORS } from "../theme/primitives";
@@ -1132,7 +1133,7 @@ function createStyles(theme: ResolvedTheme) {
     },
     contentInner: {
       width: "100%",
-      maxWidth: 760,
+      maxWidth: ContentWidth.page,
       alignSelf: "center",
     },
     serverGlyph: {

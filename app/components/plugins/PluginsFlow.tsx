@@ -6,7 +6,7 @@ import * as Clipboard from "expo-clipboard";
 import { openPluginAuthorization } from "../../services/pluginBrowser";
 import { secureStorage } from "../../services/secureStorage";
 import { useCurrentServer } from "../../store/currentServer";
-import { Spacing, useAppColors } from "../../constants/tokens";
+import { ContentWidth, Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
@@ -388,4 +388,4 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
     </KeyboardAwareScrollView>
   </View>;
 }
-const styles = StyleSheet.create({ content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16, width: "100%", maxWidth: 760, alignSelf: "center" } });
+const styles = StyleSheet.create({ content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 48, gap: 16, width: "100%", maxWidth: ContentWidth.page, alignSelf: "center" } });

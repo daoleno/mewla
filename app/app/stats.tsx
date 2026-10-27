@@ -23,7 +23,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { TabView } from 'react-native-tab-view';
 import {
+  ContentWidth,
   Radii,
+  Spacing,
   TypeScale,
   UiTextMetrics,
   useAppTheme,
@@ -83,7 +85,7 @@ const STATS_TAB_ROUTES: Array<{ key: TimeRange; label: string }> = [
 const MAX_LIST_ITEMS = 5;
 const EMPTY_STATS_RETRY_MS = 700;
 const EMPTY_STATS_MAX_RETRIES = 3;
-const STATS_CONTENT_MAX_WIDTH = 760;
+const STATS_CONTENT_MAX_WIDTH = ContentWidth.page;
 const STATS_TAB_BAR_GAP = 4;
 const STATS_TAB_BAR_PADDING = 3;
 
@@ -335,8 +337,8 @@ function buildActivityCalendarColumns(days: ActivityDay[]): (ActivityDay | null)
 // ── Component ──────────────────────────────────────────────
 
 export default function StatsScreen() {
-  const { colors } = useAppTheme();
-  const s = useMemo(() => createStyles(colors), [colors]);
+  const { colors, isLight } = useAppTheme();
+  const s = useMemo(() => createStyles(colors, isLight), [colors, isLight]);
   const { width } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
   const { state: agentsState } = useWorkers();
@@ -1328,7 +1330,7 @@ function ExpandToggle({
 
 // ── Styles ─────────────────────────────────────────────────
 
-function createStyles(colors: AppColors) {
+function createStyles(colors: AppColors, isLight = true) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.bgPrimary },
     pager: { flex: 1 },
@@ -1337,43 +1339,44 @@ function createStyles(colors: AppColors) {
       width: '100%',
       maxWidth: STATS_CONTENT_MAX_WIDTH,
       alignSelf: 'center',
-      paddingHorizontal: 18,
+      paddingHorizontal: Spacing.lg,
       paddingTop: 12,
       paddingBottom: 10,
       backgroundColor: colors.bgPrimary,
       zIndex: 2,
     },
+    // The same track and thumb as SegmentedControl.
     rangeRow: {
       flexDirection: 'row',
       gap: STATS_TAB_BAR_GAP,
       padding: STATS_TAB_BAR_PADDING,
-      borderRadius: Radii.md,
-      backgroundColor: colors.bgSurface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderSubtle,
+      borderRadius: Radii.pill,
+      backgroundColor: colors.surfaceSubtle,
     },
     rangeTabIndicator: {
       position: 'absolute',
       left: STATS_TAB_BAR_PADDING,
       top: STATS_TAB_BAR_PADDING,
       bottom: STATS_TAB_BAR_PADDING,
-      borderRadius: Radii.sm,
-      backgroundColor: colors.surfaceActive,
+      borderRadius: Radii.pill,
+      backgroundColor: isLight ? colors.bgSurface : colors.surfaceActive,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isLight ? colors.border : 'transparent',
     },
     rangeTab: {
       flex: 1,
       minWidth: 0,
-      minHeight: 44,
+      minHeight: 38,
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 4,
-      borderRadius: Radii.sm,
+      borderRadius: Radii.pill,
       zIndex: 1,
     },
     rangeTabText: {
       ...TypeScale.label,
       ...UiTextMetrics,
-      color: colors.textTertiary,
+      color: colors.textSecondary,
       textAlign: 'center',
     },
     rangeTabTextActive: { position: 'absolute', color: colors.textPrimary },
@@ -1382,7 +1385,7 @@ function createStyles(colors: AppColors) {
       width: '100%',
       maxWidth: STATS_CONTENT_MAX_WIDTH,
       alignSelf: 'center',
-      paddingHorizontal: 18,
+      paddingHorizontal: Spacing.lg,
       gap: 12,
       paddingTop: 6,
     },

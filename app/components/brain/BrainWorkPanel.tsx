@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { ResizeHandle, useResizableWidth } from "../navigation/ResizeHandle";
+import { PRIMARY_APP_BAR_HEIGHT } from "../navigation/primaryAppBarGeometry";
+import { usePrimaryAppBarTrailingInset } from "../navigation/primaryAppBarInset";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
@@ -177,14 +179,17 @@ export function BrainWorkColumn({
     BRAIN_WORK_COLUMN_MIN_WIDTH,
     BRAIN_WORK_COLUMN_MAX_WIDTH,
   );
+  const width = desktopWeb ? panel.width : BRAIN_WORK_COLUMN_WIDTH;
+  // The app bar ends where this column starts; the column's own header takes
+  // the bar's row, so "Work" sits level with the page title.
+  usePrimaryAppBarTrailingInset(width);
   return (
     <View
       role="complementary"
       accessibilityLabel="Work"
       style={[
         styles.column,
-        { paddingTop: topInset },
-        desktopWeb ? { width: panel.width } : null,
+        { paddingTop: Math.max(0, topInset - PRIMARY_APP_BAR_HEIGHT), width },
       ]}
     >
       {desktopWeb ? (
@@ -199,8 +204,12 @@ export function BrainWorkColumn({
       ) : null}
       <View style={styles.columnHeader}>
         <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
-        {objective ? <BrainGoalLine objective={objective} chrome={chrome} /> : null}
       </View>
+      {objective ? (
+        <View style={styles.columnGoal}>
+          <BrainGoalLine objective={objective} chrome={chrome} />
+        </View>
+      ) : null}
       <ScrollView ref={scrollRef} contentContainerStyle={styles.columnContent}>
         <BrainWorkList
           surface={surface}
@@ -422,15 +431,17 @@ function createStyles(chrome: TerminalThemeChrome) {
       backgroundColor: chrome.appBackground,
     },
     columnHeader: {
+      height: PRIMARY_APP_BAR_HEIGHT,
+      justifyContent: "center",
       paddingHorizontal: 20,
-      paddingTop: 8,
-      paddingBottom: 10,
-      gap: 2,
     },
     columnTitle: {
-      ...TypeScale.label,
-      fontFamily: Typography.uiFontSemibold,
+      ...TypeScale.heading,
       color: chrome.text,
+    },
+    columnGoal: {
+      paddingHorizontal: 20,
+      paddingBottom: 10,
     },
     columnSummary: {
       ...TypeScale.caption,

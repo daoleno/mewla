@@ -59,7 +59,11 @@ export function SegmentedControl<T extends string>({
                 ? [
                     styles.selected,
                     {
-                      backgroundColor: theme.isLight ? colors.bgElevated : colors.surfaceActive,
+                      // Paper on the tinted track; the hairline keeps the
+                      // thumb visible where the shadow does not draw (web,
+                      // Android).
+                      backgroundColor: theme.isLight ? colors.bgSurface : colors.surfaceActive,
+                      borderColor: theme.isLight ? colors.border : "transparent",
                       ...shadow("card", colors.shadowColor),
                     },
                   ]
@@ -87,6 +91,8 @@ const styles = StyleSheet.create({
   },
   segment: {
     flex: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "transparent",
     minHeight: TouchTarget - 6,
     flexDirection: "row",
     alignItems: "center",

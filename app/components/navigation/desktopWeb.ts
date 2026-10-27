@@ -124,12 +124,16 @@ export function isDesktopTopLevelRoute(routeName: string): boolean {
   }
 }
 
+/** A desktop page's content column (see ContentWidth). */
+export type DesktopPageColumn = "page" | "wide";
+
 /**
- * Pages that hold a readable maximum width on desktop web. Brain, Sessions
- * and a Session lay out their own chat width; the terminal grid and pairing
- * stay full width.
+ * The content column each page holds on desktop web, so its header title and
+ * its content share one left edge. Brain, Sessions and a Session lay out
+ * their own chat width; the terminal grid, the browser and pairing stay full
+ * width (null).
  */
-export function desktopReadableRoute(routeName: string): boolean {
+export function desktopPageColumn(routeName: string): DesktopPageColumn | null {
   switch (routeName) {
     case "(primary)":
     case "plugins":
@@ -137,10 +141,19 @@ export function desktopReadableRoute(routeName: string): boolean {
     case "onboarding":
     case "screenshot-demo":
     case "browser":
-      return false;
+    case "screen":
+      return null;
+    case "calendar":
+    case "resources":
+      return "wide";
     default:
-      return true;
+      return "page";
   }
+}
+
+/** Pages that hold a readable maximum width on desktop web. */
+export function desktopReadableRoute(routeName: string): boolean {
+  return desktopPageColumn(routeName) !== null;
 }
 
 /** The root Stack route that hosts each sidebar row. */
