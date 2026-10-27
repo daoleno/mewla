@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { formatChatBubbleTime } from "../../constants/telegramPresentation";
@@ -62,7 +63,7 @@ export function BrainWorkEventCard({
   const accessibilityLabel = brainWorkEventAccessibilityLabel({
     event: item.event,
     statusLabel: presentation.label,
-    occurredAtLabel: new Date(item.event.occurred_at).toLocaleString(),
+    occurredAtLabel: formatDate(item.event.occurred_at, DateStyle.dateTime),
     description: [card.summary, ...card.facts].filter(
       (value): value is string => Boolean(value),
     ),

@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from '../services/dateFormat';
 import { TELEGRAM_AVATAR_COLORS } from '../theme/definitions/shared';
 
 export function avatarColorForSeed(
@@ -53,11 +54,7 @@ export function formatTelegramListTime(timestamp?: number): string {
   const now = new Date();
   const sameDay = date.toDateString() === now.toDateString();
   if (sameDay) {
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
+    return formatDate(date, DateStyle.time);
   }
 
   const yesterday = new Date(now);
@@ -68,16 +65,11 @@ export function formatTelegramListTime(timestamp?: number): string {
 
   const diffMs = now.getTime() - date.getTime();
   if (diffMs < 7 * 86_400_000) {
-    return date.toLocaleDateString([], { weekday: 'short' });
+    return formatDate(date, DateStyle.weekday);
   }
 
   const sameYear = date.getFullYear() === now.getFullYear();
-  return date.toLocaleDateString(
-    [],
-    sameYear
-      ? { month: 'short', day: '2-digit' }
-      : { month: 'short', day: '2-digit', year: '2-digit' },
-  );
+  return formatDate(date, DateStyle.shortDate, sameYear ? undefined : { year: 'numeric' });
 }
 
 export function formatDateDividerLabel(timestamp?: string): string | null {
@@ -101,12 +93,7 @@ export function formatDateDividerLabel(timestamp?: string): string | null {
   }
 
   const sameYear = date.getFullYear() === now.getFullYear();
-  return date.toLocaleDateString(
-    [],
-    sameYear
-      ? { month: 'long', day: 'numeric' }
-      : { month: 'long', day: 'numeric', year: 'numeric' },
-  );
+  return formatDate(date, DateStyle.longDate, sameYear ? undefined : { year: 'numeric' });
 }
 
 export function dayKeyFromTimestamp(timestamp?: string): string | null {

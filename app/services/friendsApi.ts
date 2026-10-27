@@ -1,3 +1,5 @@
+import { DateStyle, formatDate } from "./dateFormat";
+
 // The shapes the Friends service sends, and the small pure helpers the screens
 // share. No native modules, so tests can load it.
 
@@ -99,7 +101,7 @@ export function relativeTime(thenMs: number, nowMs: number): string {
   const days = Math.floor(hours / 24);
   if (days === 1) return "yesterday";
   if (days < 14) return `${days}d`;
-  return new Date(thenMs).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatDate(thenMs, DateStyle.shortDate);
 }
 
 /** The name a person is known by: the agent's, else their handle. */

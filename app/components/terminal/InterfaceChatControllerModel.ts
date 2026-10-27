@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../../services/dateFormat";
 import type { ConnectionState } from "../../store/workers";
 import type {
   CodexConversation,
@@ -91,5 +92,5 @@ function formatTime(value: string) {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return formatDate(date, DateStyle.time);
 }

@@ -1,3 +1,5 @@
+import { DateStyle, formatDate } from "./dateFormat";
+
 export type LocalDateTimeResolution =
   | { status: "invalid"; message: string }
   | { status: "gap"; message: string }
@@ -160,19 +162,12 @@ export function localFieldsFromInstant(instant: string, timeZone: string) {
   };
 }
 
-export function formatResolvedInstant(
-  instant: string,
-  timeZone: string,
-  locale?: string,
-) {
-  return new Intl.DateTimeFormat(locale, {
-    weekday: "long",
+export function formatResolvedInstant(instant: string, timeZone: string) {
+  return formatDate(instant, DateStyle.longDay, {
     year: "numeric",
-    month: "long",
-    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
     timeZone,
     timeZoneName: "short",
-  }).format(new Date(instant));
+  });
 }

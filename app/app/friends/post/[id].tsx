@@ -1,3 +1,4 @@
+import { DateStyle, formatDate } from "../../../services/dateFormat";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -171,7 +172,7 @@ export default function FriendsPostScreen() {
         {post.text}
       </AppText>
       <AppText variant="caption" tone="tertiary" style={styles.when}>
-        {new Date(post.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} ·{" "}
+        {formatDate(post.created_at, DateStyle.dateTime)} ·{" "}
         {post.via === "auto" ? "Auto-posted" : "Approved by owner"}
       </AppText>
       <View style={[styles.counts, { borderColor: colors.borderSubtle }]}>
