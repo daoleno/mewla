@@ -259,7 +259,10 @@ export default function StatsScreen() {
     : null;
   useEffect(() => setModelSelection(null), [currentServerId, range]);
   const selectedDay = daySelection?.serverId === currentServerId ? daySelection?.day ?? null : null;
-  const setSelectedDay = (day: DayCell | null) => setDaySelection(day ? { serverId: currentServerId, day } : null);
+  const setSelectedDay = useCallback(
+    (day: DayCell | null) => setDaySelection(day ? { serverId: currentServerId, day } : null),
+    [currentServerId],
+  );
   const [nestedHorizontalScrollActive, setNestedHorizontalScrollActive] = useState(false);
   const [rangeTabBarWidth, setRangeTabBarWidth] = useState(0);
   const statsSnapshotRef = useRef(statsSnapshot);
@@ -952,8 +955,11 @@ function ActivityChart({
       .runOnJS(true)
       .activeOffsetX([-6, 6])
       .failOffsetY([-10, 10])
-      .onTouchesDown(() => onGestureStart())
       .onBegin(event => focusAt(event.x))
+      // Pause the range pager only for a real scrub. Pausing on touch-down
+      // re-rendered every range while a vertical scroll began, and the
+      // readout's reset waited behind that work.
+      .onStart(() => onGestureStart())
       .onUpdate(event => focusAt(event.x))
       .onFinalize(() => {
         setFocusIndex(null);
