@@ -26,7 +26,7 @@
   <article class="d-doc">
 <h1>隐私政策</h1>
 <p>Mewla 让你在自己的电脑上运行 AI Agent，并在手机上使用它们。你的工作只在你的设备和你的电脑之间流动。</p>
-<p class="d-updated">最后更新：2026 年 10 月 26 日。如与英文版不一致，以英文版为准。</p>
+<p class="d-updated">最后更新：2026 年 10 月 27 日。如与英文版不一致，以英文版为准。</p>
 
 <div class="callout callout-short">
 <ul>
@@ -78,7 +78,9 @@
 <h2 id="google">Google Calendar 和 Gmail（可选）</h2>
 <p>如果你在「插件」里连接 Google Calendar 或 Gmail，你的电脑会通过 Google 的 API，按你在 Google 自己页面上批准的权限读取日历事件或邮件：Calendar 用于事件和空闲时间（允许修改后还能创建、编辑事件）；Gmail 用于搜索和阅读邮件（允许修改后还能写草稿、发送、打标签和归档）。每个插件只申请自己的权限。</p>
 <ul>
-<li><strong>数据去向。</strong>Google 返回的内容只到你的电脑，由 Brain 和你的 Agent 用于你交给它们的任务，且仅用于提供你在 Mewla 里用到的功能（例如总结你问到的那封邮件，或添加你要求的事件）。如果 Agent 把它放进提示词，会按上文所述发给你选择的模型服务，用的是你自己在那家服务的账号。Mewla 不会把它发给我们，也不会用它（或通过 Mewla 让模型服务用它）来开发、改进或训练通用的 AI 或机器学习模型。</li>
+<li><strong>数据去向。</strong>Google 返回的内容只到你的电脑，由 Brain 和你的 Agent 用于你交给它们的任务，且仅用于提供你在 Mewla 里用到的功能（例如总结你问到的那封邮件，或添加你要求的事件）。Mewla 不会把它发给我们。</li>
+<li><strong>AI 服务。</strong>当你询问日历或邮件时，Agent 需要的那部分内容（例如一封邮件或一份事件列表）会从你的电脑发给你为该 Agent 选择的模型服务，例如 Anthropic（Claude）或 OpenAI（Codex），用的是你自己的账号或 API 密钥。Mewla 不会把它发到别处，不会出售，也不会用它来开发、改进或训练通用的 AI 或机器学习模型。你账号下的模型服务如何处理数据，我们无法控制。Anthropic 和 OpenAI 表示默认不会用<a href="https://privacy.claude.com/en/articles/7996868-is-my-data-used-for-model-training">商业版</a>或 <a href="https://developers.openai.com/api/docs/guides/your-data">API</a> 数据训练，但个人订阅可能允许：Anthropic <a href="https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training">在你选择加入时</a>会把 Free、Pro、Max 的对话和编程会话用于训练。请检查你登录各个 Agent 的账号里的数据设置。</li>
+<li><strong>人员。</strong>Mewla 没有人会查看你的 Google 数据，除非经你同意、出于安全需要，或法律要求。</li>
 <li><strong>登录。</strong>这两个插件的 Google 登录和令牌交换运行在 Mewla 的账号服务 <code>connect.mewla.ai</code> 上，因为 Google 的 client secret 不能放在你的电脑上。Google 的令牌只经过它一次，并被加密成只有发起登录的那台电脑才能打开。服务只在内存里保存最多十分钟，等那台电脑取走，不做存储。你的电脑刷新令牌时，请求也同样经过这个服务。这个服务从不调用 Gmail 或 Calendar 的 API，也收不到你的邮件或事件。令牌只保存在你电脑的凭据库里。</li>
 <li><strong>我们不做什么。</strong>我们不读取、不保存、不出售、不分享你的日历或邮件，除上文所述为提供你用到的功能之外也不转让给任何人，也不用于广告。Mewla 的任何人都看不到。你的 Agent 读到的邮件和事件被当作不可信内容，而不是指令；发送邮件、创建或修改事件等一切改动，在你允许改动并提出要求之前都保持关闭。</li>
 <li><strong>Google API 服务用户数据政策。</strong>Mewla 对从 Google API 获得的信息的使用，以及向任何其他应用的转让，将遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API 服务用户数据政策</a>，包括其中的有限使用（Limited Use）要求。</li>
