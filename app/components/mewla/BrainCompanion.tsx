@@ -127,7 +127,7 @@ export function useCatSays(companion: BrainCompanion | null, turnRunning: boolea
 const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     gap: 10,
     paddingVertical: 6,
   },
@@ -136,7 +136,6 @@ const styles = StyleSheet.create({
   },
   copy: {
     flexShrink: 1,
-    paddingBottom: 4,
   },
   label: {
     ...TypeScale.label,
