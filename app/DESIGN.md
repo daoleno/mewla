@@ -180,13 +180,17 @@ phone web and native, tablets included, keep the model above. Rules:
 
 ## Brain and its Work
 
-Brain has one Work surface, built from the daemon's `current_work`
-(`components/brain/brainWorkSurface.ts`, pure and tested):
+Brain has one Work surface, built from the daemon's `current_work`, then its
+`open_work` (unfinished Work outside the current window: no Worker yet, or
+waiting on something not live) (`components/brain/brainWorkSurface.ts`, pure
+and tested):
 
 - **Wide (≥ 1024 pt).** A 360 pt Work column to the right of the conversation
   (`BrainWorkColumn`): "Work", the goal line when there is one, a count
   line, then slips grouped Needs you ·
-  Running · Back · Waiting. The count line is the only count: the group
+  Running · Back · Waiting · Queued. Queued and Waiting slips carry no
+  buttons: nothing there needs you. Empty is "No open Work", nothing more.
+  The count line is the only count: the group
   captions are bare ("Running", never "Running · 6"). The cat sits on the
   first Needs-you slip there,
   and the conversation drops its between-turn tail row. While Brain's turn

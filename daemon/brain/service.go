@@ -564,6 +564,7 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snapshot.CurrentWork = inventory.Current
+	snapshot.OpenWork = inventory.Open
 	snapshot.WorkBacklog = inventory.Backlog
 	objective, err := s.store.DisplayedObjective()
 	if err != nil {
@@ -610,6 +611,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	snapshot.CurrentWork = inventory.Current
+	snapshot.OpenWork = inventory.Open
 	snapshot.WorkBacklog = inventory.Backlog
 	objective, err := s.store.DisplayedObjective()
 	if err != nil {
