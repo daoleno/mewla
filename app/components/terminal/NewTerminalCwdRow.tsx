@@ -42,8 +42,9 @@ export function NewTerminalCwdRow({
       </View>
       <AppText
         variant="body"
-        tone="primary"
-        style={styles.path}
+        tone={cwd.trim() ? "primary" : "secondary"}
+        // A real path reads in mono; the default is a word, in the UI face.
+        style={[styles.path, cwd.trim() ? styles.pathMono : null]}
         numberOfLines={1}
         ellipsizeMode="head"
       >
@@ -94,6 +95,8 @@ function createStyles(colors: AppColors) {
     path: {
       flex: 1,
       minWidth: 0,
+    },
+    pathMono: {
       fontFamily: Typography.terminalFont,
       fontSize: 13,
     },
