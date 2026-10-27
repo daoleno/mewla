@@ -115,3 +115,21 @@ test("snooze is tomorrow at nine, and Ask Brain quotes the Work", () => {
   expect([until.getDate(), until.getHours(), until.getMinutes()]).toEqual([9, 9, 0]);
   expect(brainWorkAskDraft({ title: "sync fix", workId: "w1", summary: "Keep both?" })).toBe("Re: sync fix (work w1)\n> Keep both?\n");
 });
+
+describe("a running Calendar run's slip", () => {
+  test("opens its Worker but cannot stop it from Brain", () => {
+    const slip = {
+      workId: "calendar-9f",
+      group: "running" as const,
+      status: "running" as const,
+      statusLabel: "Running",
+      title: "运营：从今天的工作里挖稿",
+      sessionId: "%217",
+      unread: false,
+      calendar: { itemId: "43754e56", runId: "run-27" },
+    };
+    const kinds = brainWorkActions(slip).map((action) => action.kind);
+    expect(kinds).toContain("open");
+    expect(kinds).not.toContain("stop");
+  });
+});

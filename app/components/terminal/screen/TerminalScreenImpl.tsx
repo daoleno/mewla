@@ -21,7 +21,7 @@ import { dshWebServiceURL } from "../../../services/sessionServicesPresentation"
 import { wsClient } from "../../../services/websocket";
 import { useDesktopPageTitle } from "../../navigation/useDesktopWeb";
 import { useCalendarOrigin } from "../../calendar/CalendarOriginLink";
-import { calendarOriginOfWork } from "../../../services/calendarRuns";
+import { calendarOriginOfWork, calendarWorkOwnsSession } from "../../../services/calendarRuns";
 
 export default function TerminalScreen() {
   const { state } = useWorkers();
@@ -116,7 +116,13 @@ export default function TerminalScreen() {
   useDesktopPageTitle(displayName, screenFocused);
   const calendarOrigin = useCalendarOrigin(
     serverId,
-    useMemo(() => (linkedWork ? calendarOriginOfWork(linkedWork) : null), [linkedWork]),
+    useMemo(
+      () =>
+        linkedWork && calendarWorkOwnsSession(linkedWork, agent?.started_at)
+          ? calendarOriginOfWork(linkedWork)
+          : null,
+      [linkedWork, agent?.started_at],
+    ),
     { title: linkedWork?.frontmatter.title, at: linkedWork?.frontmatter.created },
   );
   useMissingSessionExit({

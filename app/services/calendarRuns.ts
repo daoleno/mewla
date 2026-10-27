@@ -137,3 +137,20 @@ export function calendarOriginLabel(
     : "";
   return { title, date, label: date ? `${title} · ${date}` : title };
 }
+
+/** A Calendar run's Session starts right after its Work is written. */
+const SESSION_START_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Whether a Session is the one a Calendar run's Work started. Pane ids
+ * restart when tmux does, so a later, unrelated Session can carry a finished
+ * run's id; it started well after that Work was written.
+ */
+export function calendarWorkOwnsSession(
+  work: { frontmatter?: { created?: string } },
+  sessionStartedAt: number | undefined,
+): boolean {
+  const created = Date.parse(work.frontmatter?.created ?? "");
+  if (!Number.isFinite(created) || !sessionStartedAt) return true;
+  return sessionStartedAt <= created + SESSION_START_WINDOW_MS;
+}

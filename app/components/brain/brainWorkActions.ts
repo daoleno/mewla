@@ -85,7 +85,9 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
   }
   if (slip.group === "running") {
     const open: BrainWorkAction[] = slip.sessionId ? [{ kind: "open", label: "Open Worker", primary: true }] : [];
-    const stop: BrainWorkAction[] = slip.sessionId
+    // Calendar, not Brain, runs a Calendar run's Worker: Stop would cancel
+    // Brain's Work and leave the run going.
+    const stop: BrainWorkAction[] = slip.sessionId && !slip.calendar
       ? [{ kind: "stop", label: "Stop", confirm: "The Worker is closed and its Work cancelled. Unsaved work in it is lost." }]
       : [];
     return [...open, { kind: "ask", label: "Ask Brain about this" }, ...stop];
