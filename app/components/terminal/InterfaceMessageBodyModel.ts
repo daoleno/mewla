@@ -68,7 +68,9 @@ function parseMessageBlocksUninstrumented(value: string): MessageBlock[] {
   let paragraph: string[] = [];
   let list: MessageListItem[] = [];
   let quote: string[] = [];
-  let code: { fence: string; language?: string; lines: string[] } | null = null;
+  // indent: the opening fence's leading spaces, which every code line drops
+  // (CommonMark), so a fence inside a list item doesn't keep the item's indent.
+  let code: { fence: string; indent: number; language?: string; lines: string[] } | null = null;
 
   const flushParagraph = () => {
     const text = normalizeProseText(paragraph.join(" ")).trim();
@@ -111,7 +113,7 @@ function parseMessageBlocksUninstrumented(value: string): MessageBlock[] {
         });
         code = null;
       } else {
-        code.lines.push(rawLine);
+        code.lines.push(stripFenceIndent(rawLine, code.indent));
       }
       continue;
     }
@@ -121,6 +123,7 @@ function parseMessageBlocksUninstrumented(value: string): MessageBlock[] {
       flushOpenBlocks();
       code = {
         fence: fence[1],
+        indent: rawLine.length - rawLine.trimStart().length,
         language: normalizeCodeFenceLanguage(fence[2]),
         lines: [],
       };
@@ -515,6 +518,12 @@ function normalizeCodeFenceLanguage(value: string): string | undefined {
     .trim();
 
   return token ? token.toLowerCase() : undefined;
+}
+
+function stripFenceIndent(line: string, indent: number): string {
+  let index = 0;
+  while (index < indent && line[index] === " ") index += 1;
+  return line.slice(index);
 }
 
 function escapeRegex(value: string): string {
