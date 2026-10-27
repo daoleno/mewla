@@ -64,6 +64,7 @@ import { useBrain } from "../store/brain";
 import { useCurrentServer } from "../store/currentServer";
 import { Icon } from "../components/icons/Icon";
 import { IconButton } from "../components/ui/IconButton";
+import { InlineNotice } from "../components/ui/InlineNotice";
 
 type ServerItem = CalendarItem & { serverId: string; serverName: string };
 const CALENDAR_FONT_SCALE_MAX = 1.25;
@@ -244,40 +245,29 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       {notificationState !== "granted" ? (
-        <View style={styles.permission}>
-          <Icon
-            name="notifications-off"
-            size={18}
-            color={colors.statusBlocked}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.permissionTitle}>
-              {notificationState === "denied"
-                ? "Reminders disabled"
-                : notificationState === "unavailable"
-                  ? "Reminders unavailable"
-                  : "Reminders not enabled"}
-            </Text>
-          </View>
-          {notificationState !== "unavailable" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={notificationState === "denied" ? "Open notification settings" : "Enable reminders"}
-              onPress={() => void enableNotifications()}
-              style={styles.permissionAction}
-            >
-              {notificationState === "denied" ? (
-                <Icon name="settings" size={20} color={colors.accent} />
-              ) : <Text style={styles.permissionActionText}>Enable</Text>}
-            </Pressable>
-          ) : null}
-        </View>
+        <InlineNotice
+          icon="notifications-off"
+          title={
+            notificationState === "denied"
+              ? "Reminders disabled"
+              : notificationState === "unavailable"
+                ? "Reminders unavailable"
+                : "Reminders not enabled"
+          }
+          action={
+            notificationState === "unavailable"
+              ? undefined
+              : {
+                  label: notificationState === "denied" ? "Settings" : "Enable",
+                  accessibilityLabel:
+                    notificationState === "denied" ? "Open notification settings" : "Enable reminders",
+                  onPress: () => void enableNotifications(),
+                }
+          }
+          style={styles.notice}
+        />
       ) : null}
-      {error ? (
-        <View style={styles.errorBanner}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : null}
+      {error ? <InlineNotice tone="danger" title={error} style={styles.notice} /> : null}
       <ScrollView contentContainerStyle={styles.content}>
         {monthExpanded ? (
           <MonthNavigator
@@ -1243,34 +1233,9 @@ function createStyles(colors: any) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bgPrimary },
     calendarHeaderActions: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
-    permission: {
+    notice: {
       marginHorizontal: Spacing.lg,
       marginTop: Spacing.sm,
-      marginBottom: 0,
-      padding: 12,
-      borderRadius: Radii.sm,
-      backgroundColor: colors.surfaceSubtle,
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: 10,
-    },
-    permissionTitle: { ...TypeScale.label, color: colors.textPrimary },
-    permissionAction: {
-      minHeight: 40,
-      paddingHorizontal: 12,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: Radii.sm,
-      backgroundColor: colors.bgSurface,
-    },
-    permissionActionText: { ...TypeScale.label, color: colors.accent },
-    errorBanner: {
-      marginHorizontal: Spacing.lg,
-      marginTop: Spacing.sm,
-      marginBottom: 0,
-      padding: 10,
-      borderRadius: Radii.xs,
-      backgroundColor: colors.surfaceSubtle,
     },
     errorText: { ...TypeScale.compact, color: colors.statusFailed },
     content: {
