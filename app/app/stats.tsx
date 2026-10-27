@@ -827,10 +827,10 @@ function StatsRangeScene({
             {(data.models?.length ?? 0) > 0 && (
               <View style={s.card}>
                 <Text style={s.label}>Models</Text>
-                {(expandedSections.has('models') ? rankedModels : visibleModels).map((m) => (
+                {(expandedSections.has('models') ? rankedModels : visibleModels).map((m, i, list) => (
                   <AnimatedPressable
                     key={statsModelKey(m)}
-                    style={s.modelRow}
+                    style={[s.modelRow, i === list.length - 1 && s.rowLast]}
                     accessibilityRole="button"
                     accessibilityLabel={`${m.id || m.name}, ${m.provider || ''}, ${costSourceLabel(m.costProvenance)} cost ${fmtAvailableCost(m.cost, m.costKnown)}, ${rowActivitySummary(m)}`}
                     accessibilityHint="Open model usage and pricing details"
@@ -855,8 +855,8 @@ function StatsRangeScene({
             {(data.projects?.length ?? 0) > 0 && (
               <View style={s.card}>
                 <Text style={s.label}>Projects</Text>
-                {(expandedSections.has('projects') ? rankedProjects : visibleProjects).map((p) => (
-                  <View key={p.name} style={s.row}>
+                {(expandedSections.has('projects') ? rankedProjects : visibleProjects).map((p, i, list) => (
+                  <View key={p.name} style={[s.row, i === list.length - 1 && s.rowLast]}>
                     <View style={s.rowInfo}>
                       <Text style={s.rowName} numberOfLines={1}>{p.name}</Text>
                       <Text style={s.rowMeta} numberOfLines={1}>{[rowActivitySummary(p), costSourceLabel(p.costProvenance)].join(' · ')}</Text>
@@ -1074,8 +1074,8 @@ function StatsRangeScene({
                   <Text style={s.label}>Skills</Text>
                   <Text style={s.labelCount}>{totalSkillCalls} calls</Text>
                 </View>
-                {(expandedSections.has('skills') ? data.skills : visibleSkills).map((sk) => (
-                  <View key={sk.name} style={s.row}>
+                {(expandedSections.has('skills') ? data.skills : visibleSkills).map((sk, i, list) => (
+                  <View key={sk.name} style={[s.row, i === list.length - 1 && s.rowLast]}>
                     <View style={s.rowInfo}>
                       <Text style={s.skillCmd} numberOfLines={1}>{sk.name}</Text>
                       <Text style={s.rowMeta} numberOfLines={1}>{sk.projects?.join(' · ')}</Text>
@@ -1097,8 +1097,8 @@ function StatsRangeScene({
                   <Text style={s.label}>Tools</Text>
                   <Text style={s.labelCount}>{totalToolCalls} calls</Text>
                 </View>
-                {(expandedSections.has('tools') ? data.tools : visibleTools).map((t) => (
-                  <View key={t.name} style={s.row}>
+                {(expandedSections.has('tools') ? data.tools : visibleTools).map((t, i, list) => (
+                  <View key={t.name} style={[s.row, i === list.length - 1 && s.rowLast]}>
                     <View style={s.rowInfo}>
                       <Text style={s.rowName} numberOfLines={1}>{t.name}</Text>
                     </View>
@@ -1504,7 +1504,7 @@ function createStyles(colors: AppColors, isLight = true) {
     codexWindow: { gap: 7 },
     codexWindowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 },
     codexWindowLabel: { ...TypeScale.label, ...UiTextMetrics, color: colors.textPrimary },
-    codexRemaining: { ...TypeScale.monoStrong, ...UiTextMetrics, color: colors.accent },
+    codexRemaining: { ...TypeScale.label, ...UiTextMetrics, fontVariant: ['tabular-nums'], color: colors.accent },
     codexTrack: { height: 7, borderRadius: 4, backgroundColor: colors.borderSubtle, overflow: 'hidden' },
     codexFill: { height: '100%', borderRadius: 4, backgroundColor: colors.accent, opacity: 0.78 },
     codexReset: { ...TypeScale.caption, ...UiTextMetrics, color: colors.textTertiary },
@@ -1648,6 +1648,8 @@ function createStyles(colors: AppColors, isLight = true) {
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: colors.borderSubtle,
     },
+    // The next section's top rule closes the list; a last-row rule doubled it.
+    rowLast: { borderBottomWidth: 0 },
     rowInfo: { flex: 1, minWidth: 0 },
     rowName: {
       ...TypeScale.mono,
@@ -1661,16 +1663,18 @@ function createStyles(colors: AppColors, isLight = true) {
       marginTop: 2,
     },
     rowCost: {
-      ...TypeScale.monoStrong,
+      ...TypeScale.label,
       ...UiTextMetrics,
+      fontVariant: ['tabular-nums'],
       color: colors.accent,
       minWidth: 44,
       textAlign: 'right',
     },
     rowValueUnavailable: { color: colors.textTertiary },
     rowCount: {
-      ...TypeScale.monoStrong,
+      ...TypeScale.label,
       ...UiTextMetrics,
+      fontVariant: ['tabular-nums'],
       color: colors.textSecondary,
       minWidth: 34,
       textAlign: 'right',
@@ -1714,8 +1718,9 @@ function createStyles(colors: AppColors, isLight = true) {
       textAlign: 'center',
     },
     dValue: {
-      ...TypeScale.monoStrong,
+      ...TypeScale.label,
       ...UiTextMetrics,
+      fontVariant: ['tabular-nums'],
       color: colors.textPrimary,
       textAlign: 'center',
     },
