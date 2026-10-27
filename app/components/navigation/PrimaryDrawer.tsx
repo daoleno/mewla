@@ -27,10 +27,19 @@ import {
   type PrimaryDrawerMotion,
 } from "./primaryDrawerMotion";
 
-/** Horizontal travel before the pan claims the touch from the pager/content. */
+/**
+ * Horizontal travel before the pan claims the touch. Half again Android's
+ * 8dp touch slop, so a nested horizontal scroller (table, code block) that
+ * claims at its slop always gets there first.
+ */
 const DRAWER_ACTIVATION_DISTANCE = 12;
-/** Vertical travel that hands the touch to scrolling instead. */
-const DRAWER_VERTICAL_FAIL_DISTANCE = 5;
+/**
+ * Vertical travel that hands the touch to scrolling instead. Equal to the
+ * activation distance, so any swipe flatter than 45° can open or close the
+ * drawer, as DrawerLayout allows; the list's own scroll claims steeper ones
+ * at its slop. Narrower cones lose real thumb swipes, which arc.
+ */
+const DRAWER_VERTICAL_FAIL_DISTANCE = 12;
 const OVERLAY_ACTIVE_PROGRESS = 0.05;
 // Overdamped and clamped, matching the previous drawer's settle. With the
 // system's reduced-motion setting on, the drawer jumps to its target; the
@@ -125,13 +134,17 @@ interface PrimaryDrawerProps {
   drawer: ReactNode;
   drawerStyle?: StyleProp<ViewStyle>;
   drawerWidth: number;
-  /** Leading strip that can start an opening swipe while closed. */
-  edgeWidth: number;
   onDragStart?(): void;
   overlayAccessibilityLabel: string;
   overlayColor: string;
   style?: StyleProp<ViewStyle>;
-  /** Opening swipe from the edge. Closing swipes work whenever open. */
+  /**
+   * A rightward swipe anywhere on the surface opens the drawer. Not limited
+   * to an edge strip: on Android gesture navigation the system's Back zone
+   * covers the leading ~30dp, so an edge-only drawer is all but unreachable
+   * there, and a swipe from the very edge leaves the app. Closing swipes
+   * work whenever open.
+   */
   swipeToOpenEnabled: boolean;
   windowWidth: number;
 }
@@ -147,7 +160,6 @@ export function PrimaryDrawer({
   drawer,
   drawerStyle,
   drawerWidth,
-  edgeWidth,
   onDragStart,
   overlayAccessibilityLabel,
   overlayColor,
@@ -167,7 +179,6 @@ export function PrimaryDrawer({
   const pan = useMemo(() => {
     const gesture = Gesture.Pan()
       .enabled(open || swipeToOpenEnabled)
-      .hitSlop(open ? { left: 0 } : { left: 0, width: edgeWidth })
       .failOffsetY([
         -DRAWER_VERTICAL_FAIL_DISTANCE,
         DRAWER_VERTICAL_FAIL_DISTANCE,
@@ -210,7 +221,6 @@ export function PrimaryDrawer({
   }, [
     beginDrag,
     drawerWidth,
-    edgeWidth,
     effects,
     motion,
     open,
