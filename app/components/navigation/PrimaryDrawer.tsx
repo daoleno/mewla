@@ -26,6 +26,7 @@ import {
   type PrimaryDrawerEffects,
   type PrimaryDrawerMotion,
 } from "./primaryDrawerMotion";
+import { cancelTouchesBelowGestureRoot } from "../../modules/touch-cancel/src";
 
 /**
  * Horizontal travel before the pan claims the touch. Half again Android's
@@ -170,6 +171,9 @@ export function PrimaryDrawer({
   const { effects, motion, open, request } = controller;
   const touchStartX = useSharedValue(0);
   const beginDrag = useCallback(() => {
+    // The pan took the touch from the page; text under the finger would
+    // otherwise still long-press into a selection (Android).
+    cancelTouchesBelowGestureRoot();
     Keyboard.dismiss();
     onDragStart?.();
   }, [onDragStart]);
