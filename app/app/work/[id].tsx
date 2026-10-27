@@ -240,7 +240,7 @@ function CurrentWorkDetail() {
                 onPress={() => void toggleEditing()}
               />
               <IconButton
-                icon="more-horizontal"
+                icon="more-vertical"
                 size={40}
                 accessibilityLabel="Work actions"
                 onPress={() => setMenuOpen(true)}

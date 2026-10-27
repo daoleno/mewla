@@ -55,7 +55,7 @@ Red always means "needs you", never "failed".
 
 **All current Work in one place.** The cat's line at the end of the
 conversation says what is out: "3 Workers running", "Brought something back".
-On a phone the chat gets the whole screen: tap that line, or ⋯ → Work, to open
+On a phone the chat gets the whole screen: tap that line, or ⋮ → Work, to open
 the list as a sheet, with all the counts in one line at its top. On a wide
 screen the list is the Work column beside the chat, and tapping the cat's line
 scrolls the column to the Work it counts. Both group Work by what it asks of
@@ -262,7 +262,7 @@ up this way.
 ## Brain's workspace
 
 Brain keeps plain-file notes under `~/.mewla/brain`; `mewla brain workspace`
-prints the path. **Browse workspace** in Brain's ⋯ menu opens them in the app.
+prints the path. **Browse workspace** in Brain's ⋮ menu opens them in the app.
 
 | File | Holds |
 | --- | --- |
@@ -290,7 +290,7 @@ The thread and its history move with Brain. First run asks which agent Brain
 uses when more than one is ready and keeps that answer. A start without a
 terminal (a service, CI) never asks: Brain takes the first installed agent in
 the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, and the daemon
-log names it and the `mewla brain use` command that changes it. In the app, Brain's ⋯ menu has
+log names it and the `mewla brain use` command that changes it. In the app, Brain's ⋮ menu has
 **Switch executor**, **New chat** (a fresh thread), **Open terminal** (Brain's
 own Session) and **Browse workspace**.
 

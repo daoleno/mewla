@@ -468,7 +468,7 @@ export function ScreenScreen() {
       title,
       headerShown: !landscape,
       headerRight: () => currentServer ? (
-        <IconButton icon="more-horizontal" size={40} accessibilityLabel="Screen options" onPress={() => setMenu(true)} />
+        <IconButton icon="more-vertical" size={40} accessibilityLabel="Screen options" onPress={() => setMenu(true)} />
       ) : null,
     }} />
   );
@@ -577,7 +577,7 @@ export function ScreenScreen() {
         <View style={[styles.tray, { borderTopColor: colors.borderSubtle, paddingBottom: typing ? Spacing.xs : Math.max(insets.bottom, Spacing.xs) }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
             <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />
-            {landscape ? <KeyButton label="" icon="more-horizontal" name="Screen options" onPress={() => setMenu(true)} /> : null}
+            {landscape ? <KeyButton label="" icon="more-vertical" name="Screen options" onPress={() => setMenu(true)} /> : null}
             {MODIFIERS.map((m) => (
               <KeyButton key={m.key} label={m.label} name={m.name} active={active.includes(m.key)} locked={mods.locked.includes(m.key)}
                 onPress={() => setMods(tapModifier(modsRef.current, m.key))} />
@@ -675,7 +675,7 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
 function KeyButton({ label, name, icon, active, locked, wide, onPress }: {
   label: string;
   name: string;
-  icon?: "keyboard" | "more-horizontal";
+  icon?: "keyboard" | "more-vertical";
   active?: boolean;
   locked?: boolean;
   wide?: boolean;
