@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -54,6 +55,7 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
 import { SegmentedControl } from "../ui/SegmentedControl";
+import { SegmentedPager } from "../ui/SegmentedPager";
 import { StatusPill } from "../ui/StatusPill";
 import { StatusMark } from "../ui/StatusMark";
 import { PluginsPresentation } from "../plugins/PluginsPresentation";
@@ -143,123 +145,145 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
     filters.agents.length +
     Number(filters.status !== "all") +
     Number(filters.scope !== "all");
+  const projectScope =
+    props.currentServerAvailable && props.projectCwd ? (
+      <ProjectScope cwd={props.projectCwd} />
+    ) : null;
+  const sectionOptions = props.sections.map((section) => ({
+    value: section,
+    label: section === "skills" ? "Skills" : "Plugins",
+    icon: section === "skills" ? ("book" as const) : ("puzzle" as const),
+  }));
+  const renderSection = (section: SkillsSurfaceSection) =>
+    section === "skills" ? (
+      <View style={styles.flex}>
+        <View style={styles.searchArea}>
+          <View
+            style={[
+              styles.search,
+              {
+                borderColor: colors.borderSubtle,
+                backgroundColor: colors.surfaceSubtle,
+              },
+            ]}
+          >
+            <Icon
+              name="search"
+              size={19}
+              color={colors.textTertiary}
+            />
+            <MobileSingleLineInput
+              accessibilityLabel="Search local Skills"
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search Skills"
+              placeholderTextColor={colors.textTertiary}
+              containerStyle={{ flex: 1 }}
+            />
+            {query ? (
+              <Pressable
+                accessibilityLabel="Clear search"
+                onPress={() => setQuery("")}
+                style={styles.smallIcon}
+              >
+                <Icon
+                  name="close-circle-fill"
+                  size={19}
+                  color={colors.textTertiary}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+          <Pressable
+            accessibilityLabel="Filter Skills"
+            onPress={() => setFiltersOpen(true)}
+            style={[
+              styles.filterButton,
+              {
+                borderColor: activeFilterCount
+                  ? colors.accent
+                  : colors.borderSubtle,
+                backgroundColor: activeFilterCount
+                  ? colors.accentSoft
+                  : colors.surfaceSubtle,
+              },
+            ]}
+          >
+            <Icon
+              name="options"
+              size={20}
+              color={activeFilterCount ? colors.accent : colors.textSecondary}
+            />
+          </Pressable>
+        </View>
+        {activeFilterCount ? (
+          <ActiveFilters filters={filters} onChange={setFilters} />
+        ) : null}
+        <LocalSkillsList
+          {...props}
+          rows={visible}
+          inventory={inventory}
+          filtersActive={Boolean(query.trim()) || activeFilterCount > 0}
+          onClearFilters={() => { setQuery(""); setFilters(DEFAULT_FILTERS); }}
+          onChooseCopy={(skill) => setDeletePickerKey(skill.key)}
+        />
+        <FilterSheet
+          visible={filtersOpen}
+          agents={props.filterAgents}
+          filters={filters}
+          onChange={setFilters}
+          onClose={() => setFiltersOpen(false)}
+        />
+      </View>
+    ) : (
+      <PluginsPresentation
+        state={props.pluginsState}
+        plugins={props.logicalPlugins}
+        skills={props.skills}
+        preparingMutation={props.preparingMutation}
+        currentServerAvailable={props.currentServerAvailable}
+        wide={wide}
+        focusedPluginKey={props.focusedPluginKey}
+        onFocusPluginConsumed={props.onFocusPluginConsumed}
+        onOpenSettings={props.onOpenSettings}
+        onRefresh={props.onRetryPlugins}
+        onUninstall={props.onUninstallPlugin}
+        onInspectSkillCopy={props.onInspectSkillCopy}
+      />
+    );
+  // Plugins and Skills are peer pages: on phones they swipe like Brain ·
+  // Sessions. Web keeps the tap-only switch (desktop has no swipe).
+  const swipeable = props.sections.length > 1 && Platform.OS !== "web";
   const main = (
     <SafeAreaView
       style={[styles.safe, { backgroundColor: colors.bgPrimary }]}
       edges={[]}
     >
-      <View style={styles.header}>
-        {props.currentServerAvailable && props.projectCwd ? (
-          <ProjectScope cwd={props.projectCwd} />
-        ) : null}
-        {props.sections.length > 1 ? (
-          <SegmentedControl
-            accessibilityLabel="Plugins and Skills"
-            value={props.section}
-            onChange={props.onSelectSection}
-            options={props.sections.map((section) => ({
-              value: section,
-              label: section === "skills" ? "Skills" : "Plugins",
-              icon: section === "skills" ? "book" : "puzzle",
-            }))}
-          />
-        ) : null}
-      </View>
-      {props.section === "skills" ? (
-        <View style={styles.flex}>
-          <View style={styles.searchArea}>
-            <View
-              style={[
-                styles.search,
-                {
-                  borderColor: colors.borderSubtle,
-                  backgroundColor: colors.surfaceSubtle,
-                },
-              ]}
-            >
-              <Icon
-                name="search"
-                size={19}
-                color={colors.textTertiary}
-              />
-              <MobileSingleLineInput
-                accessibilityLabel="Search local Skills"
-                value={query}
-                onChangeText={setQuery}
-                placeholder="Search Skills"
-                placeholderTextColor={colors.textTertiary}
-                containerStyle={{ flex: 1 }}
-              />
-              {query ? (
-                <Pressable
-                  accessibilityLabel="Clear search"
-                  onPress={() => setQuery("")}
-                  style={styles.smallIcon}
-                >
-                  <Icon
-                    name="close-circle-fill"
-                    size={19}
-                    color={colors.textTertiary}
-                  />
-                </Pressable>
-              ) : null}
-            </View>
-            <Pressable
-              accessibilityLabel="Filter Skills"
-              onPress={() => setFiltersOpen(true)}
-              style={[
-                styles.filterButton,
-                {
-                  borderColor: activeFilterCount
-                    ? colors.accent
-                    : colors.borderSubtle,
-                  backgroundColor: activeFilterCount
-                    ? colors.accentSoft
-                    : colors.surfaceSubtle,
-                },
-              ]}
-            >
-              <Icon
-                name="options"
-                size={20}
-                color={activeFilterCount ? colors.accent : colors.textSecondary}
-              />
-            </Pressable>
-          </View>
-          {activeFilterCount ? (
-            <ActiveFilters filters={filters} onChange={setFilters} />
-          ) : null}
-          <LocalSkillsList
-            {...props}
-            rows={visible}
-            inventory={inventory}
-            filtersActive={Boolean(query.trim()) || activeFilterCount > 0}
-            onClearFilters={() => { setQuery(""); setFilters(DEFAULT_FILTERS); }}
-            onChooseCopy={(skill) => setDeletePickerKey(skill.key)}
-          />
-          <FilterSheet
-            visible={filtersOpen}
-            agents={props.filterAgents}
-            filters={filters}
-            onChange={setFilters}
-            onClose={() => setFiltersOpen(false)}
-          />
-        </View>
-      ) : (
-        <PluginsPresentation
-          state={props.pluginsState}
-          plugins={props.logicalPlugins}
-          skills={props.skills}
-          preparingMutation={props.preparingMutation}
-          currentServerAvailable={props.currentServerAvailable}
-          wide={wide}
-          focusedPluginKey={props.focusedPluginKey}
-          onFocusPluginConsumed={props.onFocusPluginConsumed}
-          onOpenSettings={props.onOpenSettings}
-          onRefresh={props.onRetryPlugins}
-          onUninstall={props.onUninstallPlugin}
-          onInspectSkillCopy={props.onInspectSkillCopy}
+      {swipeable ? (
+        <SegmentedPager
+          accessibilityLabel="Plugins and Skills"
+          header={projectScope}
+          headerStyle={styles.header}
+          options={sectionOptions}
+          value={props.section}
+          onChange={props.onSelectSection}
+          renderPage={renderSection}
         />
+      ) : (
+        <>
+          <View style={styles.header}>
+            {projectScope}
+            {props.sections.length > 1 ? (
+              <SegmentedControl
+                accessibilityLabel="Plugins and Skills"
+                value={props.section}
+                onChange={props.onSelectSection}
+                options={sectionOptions}
+              />
+            ) : null}
+          </View>
+          {renderSection(props.section)}
+        </>
       )}
     </SafeAreaView>
   );

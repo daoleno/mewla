@@ -1,5 +1,13 @@
-import React from "react";
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import React, { useState } from "react";
+import {
+  Animated,
+  Pressable,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
 import * as Haptics from "expo-haptics";
 import { TouchTarget, shadow, useAppTheme } from "../../constants/tokens";
 import { AppText } from "./AppText";
@@ -18,8 +26,17 @@ interface SegmentedControlProps<T extends string> {
   value: T;
   onChange(value: T): void;
   accessibilityLabel: string;
+  /**
+   * A pager's position (0 … options.length - 1). The thumb and the active
+   * ink then follow the finger through a swipe instead of jumping on
+   * release; see SegmentedPager.
+   */
+  position?: Animated.AnimatedInterpolation<number>;
   style?: StyleProp<ViewStyle>;
 }
+
+const TRACK_PADDING = 3;
+const SEGMENT_GAP = 2;
 
 /**
  * Inset segmented control for a small exclusive choice, such as appearance.
@@ -30,18 +47,55 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
   accessibilityLabel,
+  position,
   style,
 }: SegmentedControlProps<T>) {
   const { colors, theme } = useAppTheme();
+  const [trackWidth, setTrackWidth] = useState(0);
+  const thumbStyle = {
+    // Paper on the tinted track; the hairline keeps the thumb visible where
+    // the shadow does not draw (web, Android).
+    backgroundColor: theme.isLight ? colors.bgSurface : colors.surfaceActive,
+    borderColor: theme.isLight ? colors.border : "transparent",
+    ...shadow("card", colors.shadowColor),
+  };
+  const segmentWidth = Math.max(
+    0,
+    (trackWidth - TRACK_PADDING * 2 - SEGMENT_GAP * (options.length - 1)) / options.length,
+  );
+  const thumbX =
+    position && options.length > 1
+      ? position.interpolate({
+          inputRange: options.map((_, index) => index),
+          outputRange: options.map((_, index) => index * (segmentWidth + SEGMENT_GAP)),
+          extrapolate: "clamp",
+        })
+      : null;
+  // Until the track is measured the selected segment draws its own thumb.
+  const thumbFollows = thumbX !== null && segmentWidth > 0;
   return (
     <View
       accessibilityRole="radiogroup"
       accessibilityLabel={accessibilityLabel}
+      onLayout={position ? (event: LayoutChangeEvent) => setTrackWidth(event.nativeEvent.layout.width) : undefined}
       style={[styles.track, { backgroundColor: colors.surfaceSubtle }, style]}
     >
-      {options.map((option) => {
+      {thumbFollows ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.thumb, thumbStyle, { width: segmentWidth, transform: [{ translateX: thumbX }] }]}
+        />
+      ) : null}
+      {options.map((option, index) => {
         const selected = option.value === value;
-        const ink = selected ? colors.textPrimary : colors.textSecondary;
+        const content = (ink: string) => (
+          <>
+            {option.leading ?? (option.icon ? <Icon name={option.icon} size={16} color={ink} /> : null)}
+            <AppText variant="label" numberOfLines={1} style={{ color: ink }}>
+              {option.label}
+            </AppText>
+          </>
+        );
         return (
           <Pressable
             key={option.value}
@@ -55,26 +109,33 @@ export function SegmentedControl<T extends string>({
             }}
             style={({ pressed }) => [
               styles.segment,
-              selected
-                ? [
-                    styles.selected,
-                    {
-                      // Paper on the tinted track; the hairline keeps the
-                      // thumb visible where the shadow does not draw (web,
-                      // Android).
-                      backgroundColor: theme.isLight ? colors.bgSurface : colors.surfaceActive,
-                      borderColor: theme.isLight ? colors.border : "transparent",
-                      ...shadow("card", colors.shadowColor),
-                    },
-                  ]
-                : null,
+              selected && !thumbFollows ? [styles.selected, thumbStyle] : null,
               pressed && !selected ? { opacity: 0.6 } : null,
             ]}
           >
-            {option.leading ?? (option.icon ? <Icon name={option.icon} size={16} color={ink} /> : null)}
-            <AppText variant="label" numberOfLines={1} style={{ color: ink }}>
-              {option.label}
-            </AppText>
+            {position ? (
+              <>
+                {content(colors.textSecondary)}
+                <Animated.View
+                  aria-hidden
+                  pointerEvents="none"
+                  style={[
+                    styles.activeInk,
+                    {
+                      opacity: position.interpolate({
+                        inputRange: [index - 1, index, index + 1],
+                        outputRange: [0, 1, 0],
+                        extrapolate: "clamp",
+                      }),
+                    },
+                  ]}
+                >
+                  {content(colors.textPrimary)}
+                </Animated.View>
+              </>
+            ) : (
+              content(selected ? colors.textPrimary : colors.textSecondary)
+            )}
           </Pressable>
         );
       })}
@@ -85,9 +146,9 @@ export function SegmentedControl<T extends string>({
 const styles = StyleSheet.create({
   track: {
     flexDirection: "row",
-    padding: 3,
+    padding: TRACK_PADDING,
     borderRadius: 999,
-    gap: 2,
+    gap: SEGMENT_GAP,
   },
   segment: {
     flex: 1,
@@ -102,4 +163,25 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   selected: {},
+  thumb: {
+    position: "absolute",
+    left: TRACK_PADDING,
+    top: TRACK_PADDING,
+    bottom: TRACK_PADDING,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  // Same row as the segment, drawn over the secondary ink.
+  activeInk: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 8,
+  },
 });
