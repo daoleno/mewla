@@ -28,10 +28,12 @@ import { resolvePrimaryAppBarGeometry } from "../../components/navigation/Primar
 import { ActionMenu, EmptyState, confirmDestructive } from "../../components/ui";
 import { sessionEmptyCat, sessionEmptyState } from "../../services/sessionEmptyState";
 import { PetSprite } from "../../components/pets/PetSprite";
+import { usePrimaryAppBarLayout } from "../../components/navigation/primaryAppBarInset";
 import { useLoadingVeil } from "../../components/mewla/useLoadingVeil";
 import {
   NewSessionButton,
   SESSIONS_COLUMN_MAX_WIDTH,
+  SESSIONS_TEXT_INSET,
   SessionsListView,
   type SessionsListRowState,
 } from "../../components/workers/SessionsListView";
@@ -85,6 +87,8 @@ import {
 } from "../../services/sessionServicesPresentation";
 
 export default function InboxScreen() {
+  // Docked: the "Sessions" title sits on the list column's text edge.
+  usePrimaryAppBarLayout("list", { column: SESSIONS_COLUMN_MAX_WIDTH, columnInset: SESSIONS_TEXT_INSET });
   const { state } = useWorkers();
   const { currentServer, currentServerId, hydrated: storageHydrated, isCurrentServer } = useCurrentServer();
   const servicesRequestEpochRef = useRef(0);

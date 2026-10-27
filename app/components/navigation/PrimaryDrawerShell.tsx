@@ -37,7 +37,7 @@ import {
   usePrimarySelectionBarContent,
 } from "./PrimarySelectionBar";
 import { resolvePrimaryAppBarGeometry } from "./primaryAppBarGeometry";
-import { PrimaryAppBarTrailingInsetContext } from "./primaryAppBarInset";
+import { PrimaryAppBarLayoutContext, type PrimaryAppBarLayout } from "./primaryAppBarInset";
 import { useDrawerFocusContainment } from "./useDrawerFocusContainment";
 import { usePrimaryDrawerBack } from "./usePrimaryDrawerBack";
 import { useDesktopWebShellHosted } from "./useDesktopWeb";
@@ -66,8 +66,8 @@ interface PrimaryAppBarProps {
   onOpenPressIn(): void;
   onSelectPrimaryRoute(route: PrimaryRouteName): void;
   topInset: number;
-  /** Width at the trailing edge the bar leaves to a side column. */
-  trailingInset?: number;
+  /** Docked: how the page's content sits under the bar. */
+  layout?: PrimaryAppBarLayout | null;
 }
 
 const PRIMARY_DRAWER_SWIPE_EDGE_WIDTH = 40;
@@ -84,7 +84,7 @@ function PrimaryAppBar({
   onOpenPressIn,
   onSelectPrimaryRoute,
   topInset,
-  trailingInset = 0,
+  layout,
 }: PrimaryAppBarProps) {
   const colors = useAppColors();
   const geometry = resolvePrimaryAppBarGeometry(topInset);
@@ -130,20 +130,30 @@ function PrimaryAppBar({
         {
           paddingTop: geometry.safeAreaTop,
           minHeight: geometry.contentInset,
-          right: trailingInset,
+          right: layout?.trailingInset ?? 0,
           backgroundColor: showBrainCanvas ? "transparent" : colors.bgPrimary,
           borderBottomColor: "transparent",
         },
       ]}
     >
       {docked ? (
-        <Text
-          accessibilityRole="header"
-          numberOfLines={1}
-          style={[styles.dockedTitle, { color: colors.textPrimary }]}
+        <View
+          style={[
+            styles.dockedRow,
+            layout?.column
+              ? { maxWidth: layout.column, paddingLeft: layout.columnInset ?? 0 }
+              : styles.dockedRowFull,
+          ]}
         >
-          {activePrimaryRoute === "brain" ? "Brain" : "Sessions"}
-        </Text>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={[styles.dockedTitle, { color: colors.textPrimary }]}
+          >
+            {activePrimaryRoute === "brain" ? "Brain" : "Sessions"}
+          </Text>
+          <PrimaryAppBarPageAction drawerVisible={drawerVisible} />
+        </View>
       ) : (
       <>
       <PrimaryChromeButton
@@ -161,9 +171,9 @@ function PrimaryAppBar({
         activeRoute={activePrimaryRoute}
         onSelectRoute={onSelectPrimaryRoute}
       />
+      <PrimaryAppBarPageAction drawerVisible={drawerVisible} />
       </>
       )}
-      <PrimaryAppBarPageAction drawerVisible={drawerVisible} />
     </View>
   );
 }
@@ -179,7 +189,17 @@ export function PrimaryDrawerShell({
   const routeFocused = useIsFocused();
   const drawerWidth = Math.min(320, Math.max(240, windowWidth - 52));
   const docked = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
-  const [brainTrailingInset, setBrainTrailingInset] = useState(0);
+  const [appBarLayouts, setAppBarLayouts] = useState<Partial<Record<PrimaryRouteName, PrimaryAppBarLayout>>>({});
+  const setAppBarLayout = useCallback((route: PrimaryRouteName, layout: PrimaryAppBarLayout | null) => {
+    setAppBarLayouts((current) => {
+      if (!layout) {
+        if (!(route in current)) return current;
+        const { [route]: _removed, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [route]: layout };
+    });
+  }, []);
   // Desktop web: the root shell already draws the sidebar beside every page.
   const sidebarHosted = useDesktopWebShellHosted();
   const [restoreMenuFocus, setRestoreMenuFocus] = useState(false);
@@ -304,7 +324,7 @@ export function PrimaryDrawerShell({
 
   if (docked) {
     return (
-      <PrimaryAppBarTrailingInsetContext.Provider value={setBrainTrailingInset}>
+      <PrimaryAppBarLayoutContext.Provider value={setAppBarLayout}>
       <PrimaryPageActionProvider>
         <PrimarySelectionBarProvider>
           <PrimarySurfaceInteractionProvider drawerPhase="closed" routeFocused={routeFocused}>
@@ -335,7 +355,7 @@ export function PrimaryDrawerShell({
                   onOpenPressIn={beginOpenInteraction}
                   onSelectPrimaryRoute={onSelectPrimaryRoute}
                   topInset={insets.top}
-                  trailingInset={activePrimaryRoute === "brain" ? brainTrailingInset : 0}
+                  layout={appBarLayouts[activePrimaryRoute]}
                 />
                 <View style={styles.content}>{children}</View>
               </View>
@@ -343,7 +363,7 @@ export function PrimaryDrawerShell({
           </PrimarySurfaceInteractionProvider>
         </PrimarySelectionBarProvider>
       </PrimaryPageActionProvider>
-      </PrimaryAppBarTrailingInsetContext.Provider>
+      </PrimaryAppBarLayoutContext.Provider>
     );
   }
 
@@ -450,10 +470,20 @@ const styles = StyleSheet.create({
     width: PRIMARY_SIDEBAR_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
   },
+  dockedRow: {
+    flex: 1,
+    alignSelf: "stretch",
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    marginHorizontal: "auto",
+  },
+  dockedRowFull: {
+    paddingLeft: 20,
+  },
   dockedTitle: {
     ...TypeScale.pageTitle,
     flex: 1,
-    alignSelf: "center",
-    paddingHorizontal: 20,
+    minWidth: 0,
   },
 });
