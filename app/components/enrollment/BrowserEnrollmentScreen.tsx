@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useAppTheme } from "../../constants/tokens";
+import { Typography, useAppTheme } from "../../constants/tokens";
 import { AppText } from "../ui/AppText";
 import { Button } from "../ui/Button";
 import { browserEnrollmentServer, readBrowserEnrollmentStatus, requestBrowserEnrollment, type BrowserEnrollmentPrompt } from "../../services/browserEnrollment";
@@ -78,13 +78,13 @@ export function BrowserEnrollmentScreen() {
   return (
     <View style={[styles.page, { backgroundColor: colors.bgPrimary }]}>
       <View style={styles.content}>
-        <AppText variant="caption" tone="secondary">CONNECT TO MEWLA</AppText>
-        <AppText variant="display" accessibilityRole="header">{waiting ? "Waiting for approval" : state === "denied" ? "Request denied" : state === "expired" ? "Request expired" : "Could not connect"}</AppText>
-        <AppText tone="secondary">{waiting ? "Match this number on your computer to let this browser in. A phone already paired with it can approve it too." : state === "denied" ? "This browser was not approved. You can try again when you’re ready." : state === "expired" ? "For your security, requests expire after five minutes. Request a new number to try again." : error}</AppText>
+        <AppText variant="caption" tone="secondary" style={styles.center}>Connect to Mewla</AppText>
+        <AppText variant="display" accessibilityRole="header" style={styles.center}>{waiting ? "Waiting for approval" : state === "denied" ? "Request denied" : state === "expired" ? "Request expired" : "Could not connect"}</AppText>
+        <AppText tone="secondary" style={styles.center}>{waiting ? "Approve this number on your computer or a paired phone." : state === "denied" ? "This browser wasn’t approved." : state === "expired" ? "This number expired." : error}</AppText>
         {waiting && prompt ? <AppText variant="display" accessibilityLabel={`Verification number ${prompt.verificationNumber}`} style={styles.number}>{prompt.verificationNumber}</AppText> : null}
-        {waiting ? <ActivityIndicator color={colors.accent} /> : <Button label="Try again" variant="filled" onPress={() => { try { sessionStorage.removeItem("mewla:enrollment:v1"); } catch {} setAttempt((value) => value + 1); }} />}
-        {waiting && error ? <AppText tone="secondary" accessibilityLiveRegion="polite">{error}</AppText> : null}
-        <AppText variant="caption" tone="secondary">First device? Run mewla pair on your computer and open the browser link it prints.</AppText>
+        {waiting ? <ActivityIndicator color={colors.accent} /> : <Button label={state === "expired" ? "New number" : "Try again"} variant="filled" onPress={() => { try { sessionStorage.removeItem("mewla:enrollment:v1"); } catch {} setAttempt((value) => value + 1); }} />}
+        {waiting && error ? <AppText tone="secondary" accessibilityLiveRegion="polite" style={styles.center}>{error}</AppText> : null}
+        <AppText variant="caption" tone="secondary" style={styles.center}>First device? Run <Text style={styles.command}>mewla pair</Text> on your computer and open its link.</AppText>
         <Button label="Use a pairing link" variant="plain" onPress={() => router.push({ pathname: "/settings", params: { addServer: Date.now().toString(), pairingRequired: "1", pairMode: "import" } })} />
       </View>
     </View>
@@ -94,4 +94,6 @@ const styles = StyleSheet.create({
   page: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   content: { width: "100%", maxWidth: 440, gap: 24 },
   number: { fontSize: 64, lineHeight: 80, textAlign: "center", letterSpacing: 12 },
+  center: { textAlign: "center" },
+  command: { fontFamily: Typography.terminalFont },
 });
