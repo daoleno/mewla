@@ -4,7 +4,7 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-rou
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppColors } from "../../constants/tokens";
+import { ContentWidth, useAppColors } from "../../constants/tokens";
 import { ComputerPanel } from "../../components/settings/ComputerPanel";
 import {
   computerProblems,
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   },
   inner: {
     width: "100%",
-    maxWidth: 760,
+    maxWidth: ContentWidth.page,
     alignSelf: "center",
   },
 });

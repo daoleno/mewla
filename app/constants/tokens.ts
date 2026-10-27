@@ -47,6 +47,23 @@ export const Spacing = {
   actionBarHeight: 56,
 } as const;
 
+/**
+ * Content columns. Every page picks one, so a page title, its cards and its
+ * lists share one left edge wherever they appear. Widths include the
+ * `Spacing.lg` gutter on each side.
+ */
+export const ContentWidth = {
+  /** Settings, Extensions, Stats and their sub-pages: forms and lists. */
+  page: 760,
+  /** Data-dense pages: Calendar and Resources. */
+  wide: 1080,
+  /** Chats (ChatCanvas): Brain and Session conversations. */
+  reading: 820,
+} as const;
+
+/** Desktop web page header: one height for every page, Brain included. */
+export const DESKTOP_HEADER_HEIGHT = 52;
+
 // One 4pt-aligned ladder. Named roles alias a step instead of sitting between
 // steps (the old 22/24/28/32 cluster read as noise, not hierarchy).
 export const Radii = {
@@ -140,6 +157,14 @@ export const TypeScale = {
     fontWeight: '800',
     lineHeight: 40,
     letterSpacing: -0.85,
+  },
+  /** Desktop web page titles (Brain, Sessions, every menu destination). */
+  pageTitle: {
+    fontFamily: Typography.displayFont,
+    fontSize: 24,
+    fontWeight: '800',
+    lineHeight: 30,
+    letterSpacing: -0.6,
   },
   title: {
     fontFamily: Typography.displayFontSemibold,

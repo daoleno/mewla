@@ -1,6 +1,7 @@
 import React, { type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
+import { ContentWidth } from "../../constants/tokens";
 
 type ChatCanvasProps = {
   chrome: TerminalThemeChrome;
@@ -19,7 +20,7 @@ export function ChatCanvas({
 }
 
 /** Conversation leads at a reading width; wide screens get margins, not lines. */
-export const CHAT_READING_WIDTH = 820;
+export const CHAT_READING_WIDTH = ContentWidth.reading;
 
 const styles = StyleSheet.create({
   root: {

@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppTheme } from "../../constants/tokens";
+import { ContentWidth, useAppTheme } from "../../constants/tokens";
 import { AppText } from "../../components/ui/AppText";
 import { ListRow, ListSection } from "../../components/ui/ListSection";
 import { licenseItemId, licenseSummary, openSourceLicenses } from "../../services/openSourceLicenses";
@@ -48,6 +48,6 @@ export default function OpenSourceLicensesScreen() {
 
 const styles = StyleSheet.create({
   content: { width: "100%", paddingHorizontal: 16, paddingTop: 16 },
-  inner: { width: "100%", maxWidth: 760, alignSelf: "center" },
+  inner: { width: "100%", maxWidth: ContentWidth.page, alignSelf: "center" },
   intro: { paddingHorizontal: 4, marginBottom: 20 },
 });

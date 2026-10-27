@@ -63,6 +63,7 @@ import {
 import { useBrain } from "../store/brain";
 import { useCurrentServer } from "../store/currentServer";
 import { Icon } from "../components/icons/Icon";
+import { IconButton } from "../components/ui/IconButton";
 
 type ServerItem = CalendarItem & { serverId: string; serverName: string };
 const CALENDAR_FONT_SCALE_MAX = 1.25;
@@ -116,53 +117,33 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerShown: true,
-      headerTitle: () => (
-        <Text
-          maxFontSizeMultiplier={1.15}
-          numberOfLines={1}
-          style={styles.headerTitle}
-        >
-          Calendar
-        </Text>
-      ),
       headerRight: () => (
         <View style={styles.calendarHeaderActions}>
-          <Pressable
-            accessibilityRole="button"
+          <IconButton
+            icon={monthExpanded ? "calendar-fill" : "calendar"}
+            size={40}
+            iconSize={20}
+            color={colors.textPrimary}
             accessibilityLabel={
               monthExpanded ? "Collapse month calendar" : "Expand month calendar"
             }
             accessibilityState={{ expanded: monthExpanded }}
-            hitSlop={8}
             onPress={() => {
               setMonthExpanded((expanded) => {
                 if (expanded) setSelectedDate(null);
                 return !expanded;
               });
             }}
-            style={styles.calendarHeaderAction}
-          >
-            <Icon
-              name={monthExpanded ? "calendar-fill" : "calendar"}
-              size={21}
-              color={colors.textPrimary}
-            />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
+          />
+          <IconButton
+            icon="add"
+            size={40}
+            iconSize={20}
+            color={activeServer ? colors.textPrimary : colors.disabledText}
             accessibilityLabel="Add calendar item"
-            accessibilityState={{ disabled: !activeServer }}
             disabled={!activeServer}
-            hitSlop={8}
             onPress={() => setEditing("new")}
-            style={styles.calendarHeaderAction}
-          >
-            <Icon
-              name="add"
-              size={24}
-              color={activeServer ? colors.textPrimary : colors.disabledText}
-            />
-          </Pressable>
+          />
         </View>
       ),
     });
@@ -1261,19 +1242,7 @@ function monthGrid(month: Date) {
 function createStyles(colors: any) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bgPrimary },
-    calendarHeaderAction: {
-      width: 44,
-      height: 44,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    calendarHeaderActions: { flexDirection: "row", alignItems: "center" },
-    // Same face and size as the shared Stack header title.
-    headerTitle: {
-      fontFamily: Typography.uiFontMedium,
-      fontSize: 17,
-      color: colors.textPrimary,
-    },
+    calendarHeaderActions: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
     permission: {
       marginHorizontal: Spacing.lg,
       marginTop: Spacing.sm,

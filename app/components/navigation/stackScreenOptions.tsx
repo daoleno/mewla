@@ -1,18 +1,12 @@
 import React, { useCallback } from "react";
 import { Platform } from "react-native";
-import { Typography, useAppTheme } from "../../constants/tokens";
+import { ContentWidth, Typography, useAppTheme } from "../../constants/tokens";
+import { DesktopPageHeader } from "./DesktopPageHeader";
 import { HeaderBackButton } from "./HeaderBackButton";
 import { screenBackParent, type ScreenBackParent } from "./screenBack";
 import { useScreenBack, type ScreenBackNavigation } from "./useScreenBack";
-import { desktopReadableRoute, isDesktopTopLevelRoute } from "./desktopWeb";
+import { desktopPageColumn, isDesktopTopLevelRoute } from "./desktopWeb";
 import { useDesktopWeb } from "./useDesktopWeb";
-
-/** Desktop web pages keep a readable width beside the sidebar. */
-const DESKTOP_PAGE_STYLE = {
-  width: "100%" as const,
-  maxWidth: 1080,
-  alignSelf: "center" as const,
-};
 
 // Native headers inset their leading and trailing items by 16pt. The web
 // Stack header (JS Header) reads these container styles instead; they are not
@@ -44,6 +38,7 @@ export function useStackScreenOptions() {
     }) => {
       const topLevel = desktopWeb && isDesktopTopLevelRoute(route.name);
       const backParent = topLevel ? null : screenBackParent(route.name);
+      const column = desktopWeb ? desktopPageColumn(route.name) : null;
       return {
         headerStyle: { backgroundColor: colors.bgPrimary },
         headerTintColor: colors.textPrimary,
@@ -71,8 +66,25 @@ export function useStackScreenOptions() {
           : topLevel
             ? () => null
             : undefined,
-        contentStyle: desktopWeb && desktopReadableRoute(route.name)
-          ? [{ backgroundColor: colors.bgPrimary }, DESKTOP_PAGE_STYLE]
+        // Desktop web: one header for every page, its title on the content
+        // column's left edge (DesktopPageHeader).
+        ...(desktopWeb
+          ? {
+              header: (props: StackHeaderProps) => (
+                <DesktopPageHeader
+                  column={column}
+                  title={desktopHeaderTitle(props)}
+                  leading={backParent ? <StackBackButton navigation={navigation} parent={backParent} /> : null}
+                  trailing={props.options.headerRight?.({ tintColor: colors.textPrimary, canGoBack: Boolean(props.back) })}
+                />
+              ),
+            }
+          : null),
+        contentStyle: column
+          ? [
+              { backgroundColor: colors.bgPrimary },
+              { width: "100%" as const, maxWidth: ContentWidth[column], alignSelf: "center" as const },
+            ]
           : { backgroundColor: colors.bgPrimary },
         animation: desktopWeb ? ("none" as const) : ("slide_from_right" as const),
         fullScreenGestureEnabled: true,
@@ -81,6 +93,27 @@ export function useStackScreenOptions() {
     },
     [colors, desktopWeb],
   );
+}
+
+/** The part of the Stack's header props DesktopPageHeader reads. */
+interface StackHeaderProps {
+  route: { name: string };
+  back?: unknown;
+  options: {
+    title?: string;
+    headerTitle?: string | ((props: { children: string; tintColor?: string }) => React.ReactNode);
+    headerRight?: (props: { tintColor?: string; canGoBack: boolean }) => React.ReactNode;
+  };
+}
+
+/** A page's title as plain text, or the page's own title element. */
+function desktopHeaderTitle({ options, route }: StackHeaderProps): React.ReactNode {
+  if (typeof options.headerTitle === "string" && options.headerTitle) return options.headerTitle;
+  if (options.title) return options.title;
+  if (typeof options.headerTitle === "function") {
+    return options.headerTitle({ children: route.name, tintColor: undefined });
+  }
+  return "";
 }
 
 /** Default header Back for every pushed screen; see useScreenBack. */

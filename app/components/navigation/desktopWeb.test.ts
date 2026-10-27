@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   DESKTOP_RETAINED_PAGES,
   desktopDocumentTitle,
+  desktopPageColumn,
   desktopReadableRoute,
   desktopScreenRetained,
   desktopShellExcluded,
@@ -72,6 +73,15 @@ describe("route mapping", () => {
     expect(desktopReadableRoute("stats")).toBe(true);
     expect(desktopReadableRoute("(primary)")).toBe(false);
     expect(desktopReadableRoute("terminal/[id]")).toBe(false);
+  });
+
+  test("forms and lists share the page column; data pages go wide", () => {
+    for (const name of ["settings", "stats", "index", "[service]/index", "settings/model-providers", "work/[id]"]) {
+      expect(desktopPageColumn(name)).toBe("page");
+    }
+    expect(desktopPageColumn("calendar")).toBe("wide");
+    expect(desktopPageColumn("resources")).toBe("wide");
+    expect(desktopPageColumn("screen")).toBeNull();
   });
 });
 

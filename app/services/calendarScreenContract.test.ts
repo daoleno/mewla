@@ -26,11 +26,11 @@ describe("Calendar screen contract", () => {
     expect(source).not.toContain("styles.modeBar");
     expect(source).toContain('accessibilityLabel="Month date navigator"');
     expect(source).toContain('accessibilityLabel="Return to today"');
-    expect(source).toMatch(/calendarHeaderAction:\s*\{[^}]*width: 44,[^}]*height: 44/s);
+    // Header actions are the shared IconButton (40 pt disc, 44 pt target).
+    expect(source).toMatch(/<IconButton[^>]*size=\{40\}/s);
     expect(source).toContain('"Expand month calendar"');
     expect(source).toContain('"Collapse month calendar"');
     expect(source).not.toContain("segmentButton");
-    expect(source).toContain("maxFontSizeMultiplier={1.15}");
   });
   test("anchors concise Agenda states below a localized Today time anchor", () => {
     expect(source).toContain("timeZoneName: \"short\"");
