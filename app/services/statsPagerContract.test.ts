@@ -27,7 +27,10 @@ describe('Stats pager integration contract', () => {
     expect(source).toContain('swipeEnabled={!nestedHorizontalScrollActive}');
     expect(source).toContain('onGestureStart={onNestedHorizontalGestureStart}');
     expect(source).toContain('onGestureEnd={onNestedHorizontalGestureEnd}');
-    expect(source).toContain('.onTouchesDown(() => onGestureStart())');
+    // Pausing the pager on touch-down re-rendered every range at the start of a vertical
+    // scroll and held the readout up; only an activated scrub pauses it.
+    expect(source).toContain('.onStart(() => onGestureStart())');
+    expect(source).not.toContain('.onTouchesDown(() => onGestureStart())');
     // onFinalize runs on release, cancel and failure alike, so the pager always gets its swipe back.
     expect(source).toMatch(/\.onFinalize\(\(\) => \{\s*setFocusIndex\(null\);\s*onGestureEnd\(\);/);
   });
