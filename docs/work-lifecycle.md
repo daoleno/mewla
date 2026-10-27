@@ -277,7 +277,9 @@ Brain's Work shows as slips in the conversation and in one Work surface (a
 column on wide screens, a sheet on phones, opened from the cat's tail row
 or ⋮ → Work); see
 [Brain and Work](brain-and-work.md#follow-the-work). The app reads
-`current_work` and maps each lifecycle onto six marks in
+`current_work`, then `open_work` (every unfinished Work `current_work` leaves
+out, newest first, with its status, progress mode and wait; Brain's own
+context keeps only the bounded `current_work`), and maps each lifecycle onto six marks in
 `brainWorkLifecycleStatus` (`app/components/brain/brainWorkEventPresentation.ts`).
 
 ### User Decisions

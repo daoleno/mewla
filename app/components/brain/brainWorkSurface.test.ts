@@ -55,7 +55,7 @@ describe("brainWorkSurface", () => {
       ["pipeline", "back"],
       ["doc", "waiting"],
     ]);
-    expect(surface.counts).toEqual({ needs: 1, running: 1, back: 1, waiting: 1 });
+    expect(surface.counts).toEqual({ needs: 1, running: 1, back: 1, waiting: 1, queued: 0 });
   });
 
   test("leaves out closed Work, unrun Calendar occurrences and resource telemetry", () => {
@@ -114,8 +114,37 @@ test("a bare wake reference is not shown as the summary", () => {
 
 describe("brainWorkSummaryLine", () => {
   test("reads like the mock and drops empty groups", () => {
-    expect(brainWorkSummaryLine({ needs: 1, running: 3, back: 0, waiting: 0 })).toBe("1 needs you · 3 running");
-    expect(brainWorkSummaryLine({ needs: 2, running: 0, back: 1, waiting: 4 })).toBe("2 need you · 1 back · 4 waiting");
-    expect(brainWorkSummaryLine({ needs: 0, running: 0, back: 0, waiting: 0 })).toBeNull();
+    expect(brainWorkSummaryLine({ needs: 1, running: 3, back: 0, waiting: 0, queued: 0 })).toBe("1 needs you · 3 running");
+    expect(brainWorkSummaryLine({ needs: 2, running: 0, back: 1, waiting: 4, queued: 0 })).toBe("2 need you · 1 back · 4 waiting");
+    expect(brainWorkSummaryLine({ needs: 0, running: 0, back: 0, waiting: 0, queued: 0 })).toBeNull();
+  });
+});
+
+describe("open Work on the rail", () => {
+  test("Work no Worker has yet is Queued; Work waiting on something is Waiting", () => {
+    const surface = brainWorkSurface([], [], Date.now(), [
+      { work_id: "q1", title: "Ship atlas-notes v1.4", status: "open", progress_mode: "ready" },
+      { work_id: "w1", title: "Renew the cert", status: "waiting", progress_mode: "waiting", wait_for: "the registrar's approval email" },
+      { work_id: "resource-pressure:mem", title: "Memory pressure", status: "open", progress_mode: "ready" },
+      { work_id: "cal", title: "Daily digest", status: "open", progress_mode: "waiting", wake: { kind: "calendar_result" } as never },
+    ]);
+    expect(surface.slips.map((slip) => [slip.workId, slip.group, slip.statusLabel])).toEqual([
+      ["w1", "waiting", "Waiting"],
+      ["q1", "queued", "Queued"],
+    ]);
+    expect(surface.slips[0].summary).toBe("the registrar's approval email");
+    expect(surface.counts.queued).toBe(1);
+    expect(brainWorkSummaryLine(surface.counts)).toBe("1 waiting · 1 queued");
+  });
+
+  test("a Work in current_work is listed once", () => {
+    const surface = brainWorkSurface(
+      [{ work_id: "q1", revision: 1, title: "Ship it", status: "running", progress_mode: "owned", unread_result: false }],
+      [],
+      Date.now(),
+      [{ work_id: "q1", title: "Ship it", status: "open", progress_mode: "ready" }],
+    );
+    expect(surface.slips.map((slip) => slip.workId)).toEqual(["q1"]);
+    expect(surface.slips[0].group).toBe("running");
   });
 });

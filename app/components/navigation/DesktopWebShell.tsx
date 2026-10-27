@@ -163,7 +163,7 @@ export function DesktopWebShell({ children }: { children: ReactNode }) {
         detail: worker.project || worker.cwd || undefined,
       }));
     const brain = serverId ? brainState.byServer[serverId] : null;
-    const work = brainWorkSurface(brain?.current_work, brain?.workers).slips.map((slip) => ({
+    const work = brainWorkSurface(brain?.current_work, brain?.workers, Date.now(), brain?.open_work).slips.map((slip) => ({
       workId: slip.workId,
       title: slip.title,
       statusLabel: slip.statusLabel,

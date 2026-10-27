@@ -36,6 +36,7 @@ type WorkerRef struct {
 type Snapshot struct {
 	Personality  string                `json:"personality"`
 	CurrentWork  []CurrentWork         `json:"current_work"`
+	OpenWork     []OpenWork            `json:"open_work"`
 	WorkBacklog  WorkBacklog           `json:"work_backlog"`
 	Objective    *Objective            `json:"objective,omitempty"`
 	Workers      []WorkerRef           `json:"workers"`

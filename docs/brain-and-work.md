@@ -49,17 +49,20 @@ again, its slip moves down to that moment instead of piling up copies.
 | Red "Needs you" pill, dark outline | Waiting for your decision |
 | Open triangle | Needs review, for example the Worker stopped reporting |
 | Crossed box, with the cause | Failed |
-| Dashed ring | Blocked or waiting on something else |
+| Dashed ring | Queued, blocked or waiting on something else |
 
 Red always means "needs you", never "failed".
 
-**All current Work in one place.** The cat's line at the end of the
+**All open Work in one place.** The cat's line at the end of the
 conversation says what is out: "3 Workers running", "Brought something back".
 On a phone the chat gets the whole screen: tap that line, or ⋮ → Work, to open
 the list as a sheet, with all the counts in one line at its top. On a wide
 screen the list is the Work column beside the chat, and tapping the cat's line
 scrolls the column to the Work it counts. Both group Work by what it asks of
-you: Needs you, Running, Back, Waiting. Each group's caption says its state once,
+you: Needs you, Running, Back, Waiting, Queued. Queued is Work no Worker has
+picked up yet; it carries no buttons, since nothing there needs you (open it
+to ask Brain about it or drop it). With nothing open the list says "No open
+Work". Each group's caption says its state once,
 so a slip in it shows a state word only when it differs, such as Failed under
 Running. Under a goal line ("2 of 5 back") the sheet's count line leaves out its
 own "back". Closed Work leaves the list. When Work needs you while you are

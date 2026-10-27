@@ -203,8 +203,8 @@ export default function BrainScreen() {
   // Wide screens get the Work column; it holds the cat and Brain's presence.
   const workColumn = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
   const workSurface = useMemo(
-    () => brainWorkSurface(activeBrain?.current_work, activeBrain?.workers),
-    [activeBrain?.current_work, activeBrain?.workers],
+    () => brainWorkSurface(activeBrain?.current_work, activeBrain?.workers, Date.now(), activeBrain?.open_work),
+    [activeBrain?.current_work, activeBrain?.workers, activeBrain?.open_work],
   );
   const [workSheetVisible, setWorkSheetVisible] = useState(false);
   const [workReveal, setWorkReveal] = useState<BrainWorkReveal | null>(null);

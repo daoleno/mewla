@@ -78,7 +78,7 @@ export function BrainWorkList({
       <View style={emptyCat ? styles.emptyWithCat : undefined}>
         {emptyCat ? <PetSprite state="idle" size={72} animate={animate} /> : null}
         <Text style={[styles.empty, emptyCat ? styles.emptyCentered : null]}>
-          Nothing out right now. Work Brain hands off shows up here.
+          No open Work
         </Text>
       </View>
     );

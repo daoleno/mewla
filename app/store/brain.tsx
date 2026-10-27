@@ -64,6 +64,20 @@ export type BrainCurrentWork = {
   user_action?: BrainWorkUserAction;
 };
 
+/**
+ * Unfinished Work outside current_work: no Worker has it yet, or it waits on
+ * something that is not live. The Work rail lists it with its state.
+ */
+export type BrainOpenWork = {
+  work_id: string;
+  title: string;
+  status: BrainWorkStatus;
+  progress_mode?: BrainWorkProgressMode;
+  wait_for?: string;
+  wake?: BrainWorkWake;
+  updated_at?: string;
+};
+
 export type BrainWorkUserActionKind = "reply" | "close" | "dismiss" | "stop" | "snooze";
 
 export type BrainWorkUserAction = {
@@ -131,6 +145,7 @@ export type BrainSnapshot = {
   executors?: BrainExecutorRef[];
   chat_thread_id?: string;
   current_work?: BrainCurrentWork[];
+  open_work?: BrainOpenWork[];
   work_backlog?: BrainWorkBacklog;
   objective?: BrainObjective;
   workspace?: string;
@@ -155,9 +170,10 @@ export const initialBrainState: BrainState = {
 
 type RawBrainSnapshot = Omit<
   Partial<BrainSnapshot>,
-  "current_work" | "work_backlog" | "objective"
+  "current_work" | "open_work" | "work_backlog" | "objective"
 > & {
   current_work?: unknown[];
+  open_work?: unknown[];
   work_backlog?: unknown;
   objective?: unknown;
 };
@@ -204,6 +220,7 @@ function normalizeSnapshot(
     current_work: Array.isArray(raw?.current_work)
       ? normalizeCurrentWork(raw.current_work)
       : [],
+    open_work: Array.isArray(raw?.open_work) ? normalizeOpenWork(raw.open_work) : [],
     work_backlog: normalizeWorkBacklog(raw?.work_backlog),
     objective: normalizeObjective(raw?.objective),
     workspace: typeof raw?.workspace === "string" ? raw.workspace : undefined,
@@ -212,6 +229,30 @@ function normalizeSnapshot(
     generated_at:
       typeof raw?.generated_at === "string" ? raw.generated_at : undefined,
   };
+}
+
+function normalizeOpenWork(raw: unknown[]): BrainOpenWork[] {
+  const out: BrainOpenWork[] = [];
+  const seen = new Set<string>();
+  for (const value of raw) {
+    const item = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+    if (!item) continue;
+    const workId = typeof item.work_id === "string" ? item.work_id.trim() : "";
+    const title = typeof item.title === "string" ? item.title.trim() : "";
+    const status = normalizeWorkStatus(item.status);
+    if (!workId || !title || !status || status === "done" || status === "cancelled" || seen.has(workId)) continue;
+    seen.add(workId);
+    out.push({
+      work_id: workId,
+      title,
+      status,
+      progress_mode: normalizeWorkProgressMode(item.progress_mode),
+      wait_for: typeof item.wait_for === "string" && item.wait_for.trim() ? item.wait_for.trim() : undefined,
+      wake: normalizeWorkWake(item.wake),
+      updated_at: typeof item.updated_at === "string" ? item.updated_at : undefined,
+    });
+  }
+  return out;
 }
 
 function normalizeCurrentWork(raw: unknown[]): BrainCurrentWork[] {
@@ -565,10 +606,29 @@ function brainServerStatesEqual(
     workerRefArraysEqual(left.workers ?? [], right.workers ?? []) &&
     executorRefArraysEqual(left.executors ?? [], right.executors ?? []) &&
     currentWorkArraysEqual(left.current_work ?? [], right.current_work ?? []) &&
+    openWorkArraysEqual(left.open_work ?? [], right.open_work ?? []) &&
     workBacklogEqual(left.work_backlog, right.work_backlog) &&
     left.objective?.title === right.objective?.title &&
     left.objective?.total === right.objective?.total &&
     left.objective?.back === right.objective?.back
+  );
+}
+
+function openWorkArraysEqual(left: BrainOpenWork[], right: BrainOpenWork[]) {
+  return (
+    left.length === right.length &&
+    left.every((item, index) => {
+      const other = right[index];
+      return (
+        item.work_id === other.work_id &&
+        item.title === other.title &&
+        item.status === other.status &&
+        item.progress_mode === other.progress_mode &&
+        item.wait_for === other.wait_for &&
+        workWakeEqual(item.wake, other.wake) &&
+        item.updated_at === other.updated_at
+      );
+    })
   );
 }
 

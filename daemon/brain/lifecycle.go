@@ -302,8 +302,23 @@ type WorkBacklog struct {
 	HistoricalResults int `json:"historical_results"`
 }
 
+// OpenWork is every unfinished Work the current projection leaves out: Work
+// no Worker has picked up yet, or waiting on something that is not live.
+// It is the user's list of what is still open (the app's Work rail); Brain's
+// own context keeps the bounded CurrentWork.
+type OpenWork struct {
+	ID           string           `json:"work_id"`
+	Title        string           `json:"title"`
+	Status       WorkStatus       `json:"status"`
+	ProgressMode WorkProgressMode `json:"progress_mode,omitempty"`
+	WaitFor      string           `json:"wait_for,omitempty"`
+	Wake         *WorkWake        `json:"wake,omitempty"`
+	UpdatedAt    time.Time        `json:"updated_at,omitempty"`
+}
+
 type WorkInventory struct {
 	Current []CurrentWork
+	Open    []OpenWork
 	Backlog WorkBacklog
 }
 
@@ -3203,6 +3218,28 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 		return database.BrainWork[leftIndex].UpdatedAt.After(database.BrainWork[rightIndex].UpdatedAt)
 	})
 
+	open := make([]OpenWork, 0)
+	for _, item := range database.BrainWork {
+		if currentIDs[item.ID] || item.Status == WorkDone || item.Status == WorkCancelled {
+			continue
+		}
+		open = append(open, OpenWork{
+			ID:           item.ID,
+			Title:        item.Title,
+			Status:       item.Status,
+			ProgressMode: mustDeriveWorkProgressMode(database, item),
+			WaitFor:      item.WaitFor,
+			Wake:         cloneWorkWake(item.Wake),
+			UpdatedAt:    item.UpdatedAt.UTC(),
+		})
+	}
+	sort.SliceStable(open, func(left, right int) bool {
+		if open[left].UpdatedAt.Equal(open[right].UpdatedAt) {
+			return open[left].ID < open[right].ID
+		}
+		return open[left].UpdatedAt.After(open[right].UpdatedAt)
+	})
+
 	backlog := WorkBacklog{}
 	for _, item := range database.BrainWork {
 		if currentIDs[item.ID] {
@@ -3216,7 +3253,7 @@ func (s *Store) ProjectWorkInventory(presentSessions map[string]bool) (WorkInven
 			backlog.HistoricalResults++
 		}
 	}
-	return WorkInventory{Current: current, Backlog: backlog}, nil
+	return WorkInventory{Current: current, Open: open, Backlog: backlog}, nil
 }
 
 func reviewHandlingEnded(review *WorkReview) bool {

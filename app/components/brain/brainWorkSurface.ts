@@ -1,6 +1,6 @@
-import type { BrainCurrentWork, BrainWorkerRef } from "../../store/brain";
+import type { BrainCurrentWork, BrainOpenWork, BrainWorkerRef } from "../../store/brain";
 
-export type { BrainCurrentWork, BrainObjective, BrainWorkerRef } from "../../store/brain";
+export type { BrainCurrentWork, BrainObjective, BrainOpenWork, BrainWorkerRef } from "../../store/brain";
 import type { WorkStatus } from "../ui/workStatus";
 import { brainProviderLabel } from "./brainPresentation";
 import {
@@ -12,16 +12,18 @@ import {
 /**
  * Brain's one Work surface: the current Work, grouped by what it asks of
  * you. The phone shows it as a summary line under the header; wide screens
- * show it as the Work column. Both read the daemon's `current_work`, so a
+ * show it as the Work column. Both read the daemon's `current_work`, then its
+ * `open_work` (unfinished Work no Worker has yet: Queued, or Waiting), so a
  * Work leaves the surface as soon as the daemon stops listing it.
  */
-export type BrainWorkGroup = "needs" | "running" | "back" | "waiting";
+export type BrainWorkGroup = "needs" | "running" | "back" | "waiting" | "queued";
 
 export const BRAIN_WORK_GROUP_ORDER: readonly BrainWorkGroup[] = [
   "needs",
   "running",
   "back",
   "waiting",
+  "queued",
 ];
 
 export const BRAIN_WORK_GROUP_LABELS: Readonly<Record<BrainWorkGroup, string>> = {
@@ -29,6 +31,7 @@ export const BRAIN_WORK_GROUP_LABELS: Readonly<Record<BrainWorkGroup, string>> =
   running: "Running",
   back: "Back",
   waiting: "Waiting",
+  queued: "Queued",
 };
 
 export type BrainWorkSlip = {
@@ -91,6 +94,7 @@ export function brainWorkSurface(
   currentWork: readonly BrainCurrentWork[] | undefined,
   workers: readonly BrainWorkerRef[] | undefined,
   now: number = Date.now(),
+  openWork?: readonly BrainOpenWork[],
 ): BrainWorkSurface {
   const workerById = new Map((workers ?? []).map((worker) => [worker.id, worker] as const));
   const counts: Record<BrainWorkGroup, number> = {
@@ -98,6 +102,7 @@ export function brainWorkSurface(
     running: 0,
     back: 0,
     waiting: 0,
+    queued: 0,
   };
   const slips: BrainWorkSlip[] = [];
   for (const work of currentWork ?? []) {
@@ -185,10 +190,40 @@ export function brainWorkSurface(
       closed: terminal || undefined,
     });
   }
+  const listed = new Set(slips.map((slip) => slip.workId));
+  for (const work of openWork ?? []) {
+    if (listed.has(work.work_id) || !isSurfacedOpenWork(work)) continue;
+    const waiting = work.progress_mode === "waiting" || work.status === "waiting" || work.status === "needs_input";
+    const group: BrainWorkGroup = waiting ? "waiting" : "queued";
+    counts[group] += 1;
+    slips.push({
+      workId: work.work_id,
+      group,
+      // The dashed ring: nothing is working on it yet.
+      status: "blocked",
+      statusLabel: BRAIN_WORK_GROUP_LABELS[group],
+      title: brainWorkTitle(work.title),
+      summary: waiting ? readableLine(work.wait_for) : undefined,
+      updatedAt: work.updated_at,
+      unread: false,
+    });
+  }
   const rank = (group: BrainWorkGroup) => BRAIN_WORK_GROUP_ORDER.indexOf(group);
   // Stable: within a group the daemon's order (review queue, then newest) holds.
   slips.sort((left, right) => rank(left.group) - rank(right.group));
   return { slips, counts };
+}
+
+function isSurfacedOpenWork(work: BrainOpenWork): boolean {
+  if (work.work_id.startsWith(RESOURCE_PRESSURE_WORK_PREFIX)) return false;
+  // A Calendar occurrence that has not run yet: Calendar owns it.
+  return work.wake?.kind !== "calendar_result";
+}
+
+/** A line worth reading: a bare reference ("operator:2985…") is plumbing. */
+function readableLine(value: string | undefined): string | undefined {
+  const line = value?.replace(/\s+/g, " ").trim();
+  return line && line.includes(" ") ? line : undefined;
 }
 
 function isSurfacedWork(work: BrainCurrentWork): boolean {
@@ -222,6 +257,7 @@ export function brainWorkSummaryLine(
   if (counts.running) parts.push(`${counts.running} running`);
   if (counts.back) parts.push(`${counts.back} back`);
   if (counts.waiting) parts.push(`${counts.waiting} waiting`);
+  if (counts.queued) parts.push(`${counts.queued} queued`);
   return parts.length ? parts.join(" · ") : null;
 }
 

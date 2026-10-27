@@ -90,6 +90,13 @@ export function brainWorkActions(slip: BrainWorkSlip): BrainWorkAction[] {
       : [];
     return [...open, { kind: "ask", label: "Ask Brain about this" }, ...stop];
   }
+  if (slip.group === "queued" || slip.group === "waiting") {
+    // Nothing here asks for you, so the slip stays quiet; its sheet has these.
+    return [
+      { kind: "ask", label: "Ask Brain about this" },
+      { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
+    ];
+  }
   return [
     { kind: "ask", label: "Ask Brain about this", primary: true },
     { kind: "dismiss", label: "Not needed anymore", confirm: "Brain stops this Work and won't bring it up again." },
