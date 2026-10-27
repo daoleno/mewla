@@ -437,7 +437,7 @@ func (s *Scheduler) reconcile(ctx context.Context, item Item) {
 	} // Explicitly remain running when this architecture cannot prove a terminal state.
 	status, result, failure, known := inspector.InspectScheduledAction(ctx, item, *active)
 	if !known {
-		s.finish(item, *active, "", "Linked Work/agent is no longer observable after restart; Mewla did not relaunch it to avoid duplicate execution.")
+		s.finish(item, *active, "", "Mewla restarted while this ran and lost track of it. It was not started again, so it would not run twice.")
 		return
 	}
 	switch status {
