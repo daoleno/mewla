@@ -1,6 +1,6 @@
 import React from "react";
 import { useRouter } from "expo-router";
-import { CatalogView, MewlaPluginsHeading, ToolUpdatesNotice } from "../../components/plugins/PluginConnectionViews";
+import { CatalogView, ToolUpdatesNotice } from "../../components/plugins/PluginConnectionViews";
 import { pluginServicePath, PluginsPage, usePluginsFlow } from "../../components/plugins/PluginsFlow";
 import { AgentToolsSection } from "../../components/extensions/AgentToolsSection";
 import { useAgentExtensions } from "../../components/extensions/AgentExtensionsProvider";
@@ -18,7 +18,6 @@ export default function ExtensionsScreen() {
   const agent = useAgentExtensions();
   const connecting = flow.running?.startsWith("connect:") ? flow.running.slice("connect:".length) : isConnecting(flow.phase) ? flow.service : null;
   return <PluginsPage title="Extensions" catalog>
-    <MewlaPluginsHeading />
     {flow.accounts.map((account) => <ToolUpdatesNotice
       key={account.id}
       account={account}
