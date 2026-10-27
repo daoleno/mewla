@@ -28,6 +28,12 @@ describe("messageTableColumnWidths", () => {
     expect(cjk).toBeGreaterThan(latin);
   });
 
+  test("a seven-digit id fits on one line", () => {
+    const [pid] = messageTableColumnWidths(["PID"], [["4074674"]]);
+    // 13 pt Inter digits measure about 8.1 px each, plus the cell's padding and hairline.
+    expect(pid).toBeGreaterThanOrEqual(7 * 8.1 + MESSAGE_TABLE_CELL_LIMITS.regular.padding * 2 + 1);
+  });
+
   test("ragged rows still get a width for every column", () => {
     expect(messageTableColumnWidths(["A"], [["1", "2", "3"]], true)).toHaveLength(3);
   });
