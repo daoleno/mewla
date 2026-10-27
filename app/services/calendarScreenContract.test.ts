@@ -28,8 +28,10 @@ describe("Calendar screen contract", () => {
     expect(source).toContain('accessibilityLabel="Return to today"');
     // Header actions are the shared IconButton (40 pt disc, 44 pt target).
     expect(source).toMatch(/<IconButton[^>]*size=\{40\}/s);
-    expect(source).toContain('"Expand month calendar"');
-    expect(source).toContain('"Collapse month calendar"');
+    // Desktop always shows the month; the phone toggles it from the header.
+    expect(source).toContain("const monthExpanded = desktop || monthToggled");
+    expect(source).toContain('"Show month"');
+    expect(source).toContain('"Hide month"');
     expect(source).not.toContain("segmentButton");
   });
   test("anchors concise Agenda states below a localized Today time anchor", () => {
