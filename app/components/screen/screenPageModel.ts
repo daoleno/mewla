@@ -77,10 +77,10 @@ export function unsupportedScreen(
     return { title: "Screen can't start on this Mac", detail: status.reason || `${name} can't share its screen with Mewla.`, canChooseComputer: false };
   }
   return {
-    title: "Screen works on Macs for now",
-    detail: canSwitchComputer
-      ? `${name} isn't a Mac. To see and control a Mac, add the Mewla running on it and switch to that computer.`
-      : `${name} isn't a Mac. To see and control a Mac, open Mewla on your phone and switch to the Mewla running on that Mac.`,
+    title: "Screen needs a Mac",
+    // The app switches computers with its button; a browser stays bound to
+    // the computer that served it.
+    detail: canSwitchComputer ? `${name} isn't a Mac.` : `${name} isn't a Mac. Open Mewla from a Mac.`,
     canChooseComputer: canSwitchComputer,
   };
 }

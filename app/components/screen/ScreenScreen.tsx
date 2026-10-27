@@ -18,6 +18,7 @@ import { useCurrentServer } from "../../store/currentServer";
 import { currentTransportPath, directPathBecameAvailable, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
 import type { ScreenStreamStats } from "../../services/screenStream";
+import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
@@ -86,7 +87,10 @@ export function ScreenScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const landscape = width > height;
+  // A phone held sideways: the screen takes the whole display. A desktop
+  // window is always wider than tall and keeps its page header.
+  const desktopWeb = useDesktopWeb();
+  const landscape = width > height && !desktopWeb;
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
   const serverName = serverDisplayName(currentServer?.name);

@@ -80,14 +80,14 @@ describe("unsupported computers", () => {
   });
   test("away from a Mac, the app points to switching computers", () => {
     const linux = unsupportedScreen(status("linux", "Screen works only on Macs for now"), "manjaro", true);
-    expect(linux.title).toBe("Screen works on Macs for now");
-    expect(linux.detail).toContain("switch to that computer");
+    expect(linux.title).toBe("Screen needs a Mac");
+    expect(linux.detail).toBe("manjaro isn't a Mac.");
     expect(linux.canChooseComputer).toBe(true);
   });
   test("a browser can't switch, so it says where to go instead", () => {
     const web = unsupportedScreen(status("linux"), "manjaro", false);
     expect(web.canChooseComputer).toBe(false);
-    expect(web.detail).toContain("open Mewla on your phone");
+    expect(web.detail).toContain("Open Mewla from a Mac");
   });
   test("a Mac that can't start keeps its own reason", () => {
     const mac = unsupportedScreen(status("darwin", "Screen needs macOS 13 or later"), "MacBook", true);

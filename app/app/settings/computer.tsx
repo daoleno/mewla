@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { Redirect, Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -129,7 +129,8 @@ export default function ComputerScreen() {
 
   if (!servers) return null;
   if (!server) {
-    return <Stack.Screen options={{ title: "" }} />;
+    // A removed computer, or a link without one: back to the list, not a blank page.
+    return <Redirect href="/settings" />;
   }
 
   const apply = async (key: string, change: AgentUseChange, after?: string) => {
