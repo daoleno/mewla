@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
 import { resolveStoredServerURL, transportPathOfURL, type TransportPath } from "./pinnedTransport";
+import { screenFailureText } from "./screenFailure";
 import { parseStreamStats, type ScreenStreamStats } from "./screenStream";
 import type { StoredServer } from "./storage";
 import { authSubprotocol } from "./webSocketAuth";
@@ -95,7 +96,7 @@ export async function screenRequest(
     throw new ScreenRequestError("This server's Mewla is too old for Screen. Update it on that computer.", response.status);
   }
   if (!response.ok || !result) {
-    throw new ScreenRequestError(result?.error || body.trim().slice(0, 300) || "Screen request failed", response.status);
+    throw new ScreenRequestError(result?.error || screenFailureText(response.status, body), response.status);
   }
   return result;
 }
