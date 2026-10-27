@@ -133,6 +133,40 @@ preference.
   `more-vertical`. A menu on one thing in a list or under a reply (a message,
   a post, a provider row) draws `more-horizontal`.
 
+### Gestures
+
+- **Peer pages swipe; filters tap.** Pages that are peers under one header
+  sit in a native pager (react-native-tab-view on react-native-pager-view),
+  and the indicator follows the finger through the swipe rather than jumping
+  on release: Brain · Sessions (`app/(primary)/_layout.tsx`), Stats' ranges
+  and Plugins · Skills on an agent's page (`SegmentedPager`, which feeds the
+  pager position to `SegmentedControl`). A control that filters, picks or
+  steps through one list stays tap-only, because a swipe on its content
+  already belongs to that content: Friends' All · Following (it narrows one
+  feed and looks like tabs), the diff scope, the provider agent selector,
+  Appearance, and a Claude question's option stepper.
+- **Menu.** On phone the menu opens from a rightward swipe anywhere on
+  Brain, not only from the edge: with Android gesture navigation the left
+  30 dp is system Back, so an edge-only drawer is unreachable there and the
+  swipe leaves the app. On Sessions a rightward swipe pages back to Brain
+  instead. An open menu closes on a swipe left anywhere or a scrim tap. The
+  drag follows the finger on the UI thread; on release a fling (over
+  500 pt/s) wins, otherwise the menu settles the way it was moving once the
+  drag passes 60 pt, so a long drag is not undone by a slow drift. It claims
+  a drag after 12 pt, within 45° of horizontal (`PrimaryDrawer.tsx`).
+- **Nested horizontal scrollers win.** Tables and code blocks in a reply
+  claim a horizontal drag at 6 pt, before the menu (12 pt) and the pager
+  (Android's 16 dp paging slop), through
+  `useNestedHorizontalScrollGesture`. A rightward drag on a table already
+  scrolled to its start therefore does nothing rather than open the menu.
+  The terminal owns all its touches.
+- **Platforms.** All of this is shared code. The platform differences are
+  the system's: Android's Back gesture keeps the screen edge, and on iOS a
+  pager that is not on its first page (Skills, a later Stats range) takes a
+  rightward swipe as paging, so the stack's back swipe works from the first
+  page. Web is outside this rule: desktop web turns Brain · Sessions
+  swiping off, and Plugins · Skills stays a tap-only switch on web.
+
 ## Desktop web
 
 A desktop browser (web, at least 1024 pt wide) gets a web app, not a stretched

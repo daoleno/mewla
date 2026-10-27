@@ -96,7 +96,7 @@ machine with secrets, read [Permission bypass risks](executors.md#permission-byp
 
 | On a phone | On a wide screen (1024 pt and up) |
 | --- | --- |
-| ☰ opens the menu; the top bar switches **Brain · Sessions**; ⋮ holds the current page's actions | The menu is a sidebar with Brain and Sessions on top; ⋮ is the same |
+| ☰ opens the menu, or swipe right anywhere on Brain; swipe or tap **Brain · Sessions** in the top bar; ⋮ holds the current page's actions | The menu is a sidebar with Brain and Sessions on top; ⋮ is the same |
 
 The menu holds everything else, each in exactly one place: Calendar,
 Extensions, Stats, Resources and Settings.
