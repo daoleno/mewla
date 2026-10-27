@@ -21,7 +21,7 @@ interface InlineNoticeProps {
   tone?: InlineNoticeTone;
   icon?: IconName;
   busy?: boolean;
-  action?: { label: string; onPress(): void; disabled?: boolean };
+  action?: { label: string; accessibilityLabel?: string; onPress(): void; disabled?: boolean };
   style?: StyleProp<ViewStyle>;
 }
 
@@ -73,7 +73,7 @@ export function InlineNotice({
       {action ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={action.label}
+          accessibilityLabel={action.accessibilityLabel ?? action.label}
           accessibilityState={{ disabled: Boolean(action.disabled) }}
           disabled={action.disabled}
           hitSlop={8}
