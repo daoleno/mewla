@@ -163,8 +163,15 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       if (pending.current?.callback && valid()) void finish(pending.current.callback);
     }
   }, [fail, finish, remember, settle, valid]);
+  // List once the server can answer: a request sent while the socket still
+  // connects (a page load, a reconnect) would fail and leave the page on an
+  // error the connection has already fixed.
+  const sendRef = useRef(send);
+  sendRef.current = send;
   useEffect(() => {
-    void send({ action: "list" });
+    if (connection === "connected") void sendRef.current({ action: "list" });
+  }, [connection, serverId]);
+  useEffect(() => {
     // A web sign-in returned through the daemon's callback. The outcome is
     // already settled there; the stored flow, if any, only confirms it.
     const { connected, plugin_error: returnedError, service: returnedService } = returnParams;
@@ -190,7 +197,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
         if (initial && matchesPluginReturn(initial, stored.flow)) await finish(initial); else await check();
       } catch { if (valid()) { fail("The previous sign-in could not be restored. Start again."); await remember(null); } }
     });
-    const connectedEvent = (event: { serverId: string }) => { if (event.serverId === serverId) { void send({ action: "list" }); void check(); } };
+    const connectedEvent = (event: { serverId: string }) => { if (event.serverId === serverId) void check(); };
     const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void check(); });
     const links = Linking.addEventListener("url", (event) => void finish(event.url));
     // A web tab coming back into view checks the sign-in it left waiting.
