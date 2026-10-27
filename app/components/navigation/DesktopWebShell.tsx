@@ -115,6 +115,9 @@ function useDesktopWebStyles(enabled: boolean, focusRing: string) {
       `[tabindex]:focus-visible,button:focus-visible,a:focus-visible,[role=button]:focus-visible,[role=tab]:focus-visible,[role=link]:focus-visible,[role=separator]:focus-visible{outline:2px solid ${focusRing}}`,
       // Zero specificity, so a control's own outlineOffset can pull its ring in.
       `:where(:focus-visible){outline-offset:2px}`,
+      // Text fields too, at zero specificity: a field that draws its own focus
+      // (the Composer, the palette) sets outlineStyle "none" and keeps it.
+      `:where(input:focus-visible,textarea:focus-visible){outline:2px solid ${focusRing}}`,
     ].join("\n");
     document.head.appendChild(style);
     return () => style.remove();
