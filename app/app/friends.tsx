@@ -5,6 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../constants/tokens";
 import { AppText } from "../components/ui/AppText";
 import { Icon } from "../components/icons/Icon";
+import { EmptyState } from "../components/ui/EmptyState";
+import { IconButton } from "../components/ui/IconButton";
 import { FriendsAvatar } from "../components/friends/FriendsAvatar";
 import { PostList } from "../components/friends/PostList";
 import { useFriendsLabs } from "../store/friendsLabs";
@@ -29,26 +31,29 @@ export default function FriendsScreen() {
   const me = status?.me;
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
+      // Off, the page has nothing to act on.
+      headerRight: () => enabled ? (
         <View style={styles.headerActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={unread > 0 ? `Notifications, ${unread} new` : "Notifications"}
-            hitSlop={8}
-            onPress={() => router.push("/friends/notifications")}
-          >
-            <Icon name="bell" color={colors.textPrimary} size={24} />
-            {unread > 0 ? <View style={[styles.dot, { backgroundColor: colors.seal, borderColor: colors.bgPrimary }]} /> : null}
-          </Pressable>
+          <View>
+            <IconButton
+              icon="bell"
+              size={40}
+              iconSize={20}
+              color={colors.textPrimary}
+              accessibilityLabel={unread > 0 ? `Notifications, ${unread} new` : "Notifications"}
+              onPress={() => router.push("/friends/notifications")}
+            />
+            {unread > 0 ? <View pointerEvents="none" style={[styles.dot, { backgroundColor: colors.seal, borderColor: colors.bgPrimary }]} /> : null}
+          </View>
           {me ? (
             <Pressable accessibilityRole="button" accessibilityLabel="Your profile" hitSlop={8} onPress={() => router.push({ pathname: "/friends/person/[id]", params: { id: me.id } })}>
               <FriendsAvatar author={me} size={32} />
             </Pressable>
           ) : null}
         </View>
-      ),
+      ) : null,
     });
-  }, [navigation, router, colors, unread, me]);
+  }, [navigation, router, colors, unread, me, enabled]);
 
   const header = (
     <View>
@@ -90,9 +95,11 @@ export default function FriendsScreen() {
     return (
       <SafeAreaView edges={["bottom"]} style={[styles.screen, { backgroundColor: colors.bgPrimary }]}>
         <View style={styles.off}>
-          <AppText variant="body" tone="secondary" style={styles.offText}>
-            Friends is off. Turn it on in Settings, Labs.
-          </AppText>
+          <EmptyState
+            icon="people"
+            title="Friends is off"
+            action={{ label: "Open Labs", icon: "settings", onPress: () => router.push("/settings") }}
+          />
         </View>
       </SafeAreaView>
     );
@@ -105,7 +112,6 @@ export default function FriendsScreen() {
         header={header}
         reloadToken={reload}
         emptyTitle={scope === "all" ? "Nothing here yet" : "No one followed yet"}
-        emptyDetail={scope === "all" ? "Posts from other agents show up here." : "Follow someone from their profile to see their posts here."}
       />
     </SafeAreaView>
   );
@@ -114,13 +120,12 @@ export default function FriendsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 16 },
-  dot: { position: "absolute", top: -1, right: -1, width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
+  dot: { position: "absolute", top: 4, right: 4, width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
   tabs: { flexDirection: "row", gap: 24, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth },
   tab: { paddingTop: 12 },
   underline: { height: 2, marginTop: 8, borderRadius: 1 },
   banner: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   count: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   bannerCopy: { flex: 1 },
-  off: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
-  offText: { textAlign: "center" },
+  off: { flex: 1, justifyContent: "center" },
 });

@@ -43,9 +43,6 @@ export function PetPicker({ animate = true }: { animate?: boolean }) {
           animate={animate}
         />
         <AppText variant="heading">{pet.name.en}</AppText>
-        <AppText variant="caption" tone="tertiary">
-          Shows what Brain is doing.
-        </AppText>
       </View>
       <View style={styles.grid} accessibilityRole="radiogroup" accessibilityLabel="Pet">
         {PET_PACKS.map((pack) => {
