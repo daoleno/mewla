@@ -66,6 +66,7 @@ import { useCurrentServer } from "../store/currentServer";
 import { Icon } from "../components/icons/Icon";
 import { IconButton } from "../components/ui/IconButton";
 import { InlineNotice } from "../components/ui/InlineNotice";
+import { useDesktopWeb } from "../components/navigation/useDesktopWeb";
 
 type ServerItem = CalendarItem & { serverId: string; serverName: string };
 const CALENDAR_FONT_SCALE_MAX = 1.25;
@@ -88,7 +89,12 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
   const viewerZone = useMemo(() => viewerTimezone(), []);
   const now = new Date();
   const todayKey = calendarDateKey(now, viewerZone);
-  const [monthExpanded, setMonthExpanded] = useState(false);
+  // Desktop web has the room: the month is always there, so the header needs
+  // no toggle. The phone opens it from the header, and the button stays lit
+  // while it is open.
+  const desktop = useDesktopWeb();
+  const [monthToggled, setMonthToggled] = useState(false);
+  const monthExpanded = desktop || monthToggled;
   const [month, setMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selected, setSelected] = useState<ServerItem | null>(null);
@@ -121,22 +127,23 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
       headerShown: true,
       headerRight: () => (
         <View style={styles.calendarHeaderActions}>
-          <IconButton
-            icon={monthExpanded ? "calendar-fill" : "calendar"}
-            size={40}
-            iconSize={20}
-            color={colors.textPrimary}
-            accessibilityLabel={
-              monthExpanded ? "Collapse month calendar" : "Expand month calendar"
-            }
-            accessibilityState={{ expanded: monthExpanded }}
-            onPress={() => {
-              setMonthExpanded((expanded) => {
-                if (expanded) setSelectedDate(null);
-                return !expanded;
-              });
-            }}
-          />
+          {desktop ? null : (
+            <IconButton
+              icon={monthToggled ? "calendar-fill" : "calendar"}
+              size={40}
+              iconSize={20}
+              tone={monthToggled ? "tinted" : "default"}
+              color={monthToggled ? undefined : colors.textPrimary}
+              accessibilityLabel={monthToggled ? "Hide month" : "Show month"}
+              accessibilityState={{ expanded: monthToggled }}
+              onPress={() => {
+                setMonthToggled((expanded) => {
+                  if (expanded) setSelectedDate(null);
+                  return !expanded;
+                });
+              }}
+            />
+          )}
           <IconButton
             icon="add"
             size={40}
@@ -149,7 +156,7 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
         </View>
       ),
     });
-  }, [activeServer, colors, monthExpanded, navigation, styles]);
+  }, [activeServer, colors, desktop, monthToggled, navigation, styles]);
   useEffect(() => {
     if (props.notificationStateOverride) return;
     let active = true;
@@ -269,65 +276,69 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
         />
       ) : null}
       {error ? <InlineNotice tone="danger" title={error} style={styles.notice} /> : null}
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, desktop ? styles.contentDesktop : null]}>
         {monthExpanded ? (
-          <MonthNavigator
-            items={visible}
-            month={month}
+          <View style={desktop ? styles.monthPane : undefined}>
+            <MonthNavigator
+              items={visible}
+              month={month}
+              selectedDate={selectedDate}
+              timeZone={viewerZone}
+              todayKey={todayKey}
+              onChangeMonth={setMonth}
+              onSelectDate={(date, key) => {
+                setSelectedDate(key);
+                if (
+                  date.getMonth() !== month.getMonth() ||
+                  date.getFullYear() !== month.getFullYear()
+                ) {
+                  setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
+                }
+              }}
+            />
+          </View>
+        ) : null}
+        <View style={styles.agendaPane}>
+          <AgendaHeading
+            now={now}
             selectedDate={selectedDate}
             timeZone={viewerZone}
-            todayKey={todayKey}
-            onChangeMonth={setMonth}
-            onSelectDate={(date, key) => {
-              setSelectedDate(key);
-              if (
-                date.getMonth() !== month.getMonth() ||
-                date.getFullYear() !== month.getFullYear()
-              ) {
-                setMonth(new Date(date.getFullYear(), date.getMonth(), 1));
-              }
+            onToday={() => {
+              setSelectedDate(null);
+              setMonth(new Date());
             }}
           />
-        ) : null}
-        <AgendaHeading
-          now={now}
-          selectedDate={selectedDate}
-          timeZone={viewerZone}
-          onToday={() => {
-            setSelectedDate(null);
-            setMonth(new Date());
-          }}
-        />
-        {props.loading ? (
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel="Loading calendar"
-            style={styles.agendaStatus}
-          >
-            <Icon name="sync" size={20} color={colors.accent} />
-            <Text style={styles.emptyTitle}>Loading calendar…</Text>
-          </View>
-        ) : sections.length ? (
-          sections.map((section) => (
-            <View key={section.title} style={styles.section}>
-              {selectedDate || section.title === "Today" ? null : (
-                <Text style={styles.sectionTitle}>{section.title}</Text>
-              )}
-              {section.data.map((raw) => (
-                <CalendarRow
-                  key={`${(raw as ServerItem).serverId}:${raw.id}`}
-                  item={raw as ServerItem}
-                  onPress={() => openItem(raw as ServerItem)}
-                />
-              ))}
+          {props.loading ? (
+            <View
+              accessibilityRole="progressbar"
+              accessibilityLabel="Loading calendar"
+              style={styles.agendaStatus}
+            >
+              <Icon name="sync" size={20} color={colors.accent} />
+              <Text style={styles.emptyTitle}>Loading calendar…</Text>
             </View>
-          ))
-        ) : (
-          <EmptyState
-            connected={Boolean(activeServer)}
-            dateFiltered={selectedDate !== null}
-          />
-        )}
+          ) : sections.length ? (
+            sections.map((section) => (
+              <View key={section.title} style={styles.section}>
+                {selectedDate || section.title === "Today" ? null : (
+                  <Text style={styles.sectionTitle}>{section.title}</Text>
+                )}
+                {section.data.map((raw) => (
+                  <CalendarRow
+                    key={`${(raw as ServerItem).serverId}:${raw.id}`}
+                    item={raw as ServerItem}
+                    onPress={() => openItem(raw as ServerItem)}
+                  />
+                ))}
+              </View>
+            ))
+          ) : (
+            <EmptyState
+              connected={Boolean(activeServer)}
+              dateFiltered={selectedDate !== null}
+            />
+          )}
+        </View>
       </ScrollView>
       <DetailModal
         item={selected}
@@ -1220,6 +1231,14 @@ function createStyles(colors: any) {
       paddingBottom: 40,
       gap: Spacing.md,
     },
+    // Desktop web: the month beside the agenda, as a desktop calendar is laid out.
+    contentDesktop: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: Spacing.xl,
+    },
+    monthPane: { width: 320 },
+    agendaPane: { flex: 1, minWidth: 0, gap: Spacing.md },
     agendaHeading: { gap: 2 },
     agendaTitleRow: {
       minHeight: 44,
