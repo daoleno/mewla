@@ -10,6 +10,9 @@ import {
 } from "react-native";
 import {
   ContinuousCorners,
+  Radii,
+  Spacing,
+  shadow,
   useAppColors,
   type AppColors,
 } from "../../constants/tokens";
@@ -138,11 +141,12 @@ function createStyles(colors: AppColors) {
       ...ContinuousCorners,
       width: "100%",
       maxWidth: 420,
-      padding: 20,
-      borderRadius: 18,
+      padding: Spacing.xl,
+      borderRadius: Radii.xl,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderStrong,
+      borderColor: colors.border,
       backgroundColor: colors.modalSurface,
+      ...shadow("float", colors.shadowColor),
     },
     message: {
       marginTop: 8,
