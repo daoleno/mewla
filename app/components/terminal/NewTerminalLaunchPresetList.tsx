@@ -110,8 +110,11 @@ function createStyles(colors: AppColors) {
       flexWrap: "wrap",
       gap: 10,
     },
+    // Two equal columns that fill the row: a fixed 48% left the gap's
+    // remainder as a ragged right margin.
     presetCard: {
-      width: "48%",
+      flexGrow: 1,
+      flexBasis: "40%",
       minHeight: 64,
       flexDirection: "row",
       alignItems: "center",
