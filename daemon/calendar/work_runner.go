@@ -125,11 +125,11 @@ func (r *WorkRunner) InspectScheduledAction(_ context.Context, item Item, run Ru
 		if readErr != nil {
 			return StatusFailed, "", "Linked agent completed, but its current scheduled Work is unavailable or invalid.", true
 		}
-		return StatusFailed, "", "Linked agent completed before producing a valid terminal scheduled Work deliverable.", true
+		return StatusFailed, "", "The agent finished without writing its result.", true
 	case classifier.StateFailed, classifier.StateRemoved:
 		failure := compactFailure(worker.Summary)
 		if failure == "" {
-			failure = "Linked agent failed before producing a terminal scheduled Work deliverable."
+			failure = "The agent stopped before writing its result."
 		}
 		return StatusFailed, "", failure, true
 	default:

@@ -824,7 +824,7 @@ func TestSchedulerRestartDuringHandoffFailsClosedWithoutDuplicate(t *testing.T) 
 	if len(finished.Runs) != 1 || finished.Runs[0].Status != StatusFailed {
 		t.Fatalf("restart recovery = %#v, want exactly one failed occurrence", finished)
 	}
-	if finished.Runs[0].Result != "" || !strings.Contains(finished.Runs[0].FailureReason, "no longer observable after restart") {
+	if finished.Runs[0].Result != "" || !strings.Contains(finished.Runs[0].FailureReason, "Mewla restarted while this ran") {
 		t.Fatalf("restart failure = %#v", finished.Runs[0])
 	}
 	if failedResults := reopened.ScheduledResults("thread-1", 0); len(failedResults) != 1 ||
@@ -909,7 +909,7 @@ func TestSchedulerWorkerEndedWithoutNotificationFailsOccurrenceOnce(t *testing.T
 	if finished.Runs[0].Status != StatusFailed || finished.Runs[0].Result != "" {
 		t.Fatalf("ended-without-notification occurrence = %#v", finished.Runs[0])
 	}
-	if !strings.Contains(finished.Runs[0].FailureReason, "completed before producing a valid terminal scheduled Work deliverable") {
+	if !strings.Contains(finished.Runs[0].FailureReason, "finished without writing its result") {
 		t.Fatalf("ended-without-notification failure = %q", finished.Runs[0].FailureReason)
 	}
 	if finished.NextAt.Equal(now) || finished.Status != StatusScheduled {
@@ -920,7 +920,7 @@ func TestSchedulerWorkerEndedWithoutNotificationFailsOccurrenceOnce(t *testing.T
 	}
 	if failedResults := calendarStore.ScheduledResults("thread-1", 0); len(failedResults) != 1 ||
 		failedResults[0].Status != StatusFailed ||
-		!strings.Contains(failedResults[0].Body, "completed before producing a valid terminal scheduled Work deliverable") {
+		!strings.Contains(failedResults[0].Body, "finished without writing its result") {
 		t.Fatalf("ended-without-notification projection = %#v, want exactly one failed result", failedResults)
 	}
 	if finished.Revision != launched.Revision+1 {
