@@ -3,7 +3,6 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import { unpricedReasonLabel } from '../services/unpricedReason';
 import { costEstimateMark, statsModelHeading, statsModelKey } from '../services/statsCostPresentation';
 import {
-  ActivityIndicator,
   Animated as NativeAnimated,
   type LayoutChangeEvent,
   ScrollView,
@@ -593,7 +592,7 @@ function StatsRangeScene({
     >
       {loading && !statsData ? (
         <View style={s.emptyContainer}>
-          <ActivityIndicator color={colors.textSecondary} />
+          <EmptyState busy />
         </View>
       ) : !statsData && loadError ? (
         <View style={s.emptyContainer}>
@@ -607,9 +606,11 @@ function StatsRangeScene({
         </View>
       ) : !showStatsContent ? (
         <View style={s.emptyContainer}>
-          <Text style={s.emptyIcon}>{'∷'}</Text>
-          <Text style={s.emptyText}>{emptyTitle}</Text>
-          {latestDay ? <Text style={s.emptySubtext}>Latest activity: {shortDate(latestDay.date)}</Text> : null}
+          <EmptyState
+            icon="stats"
+            title={emptyTitle}
+            detail={latestDay ? `Latest activity: ${shortDate(latestDay.date)}` : null}
+          />
         </View>
       ) : (
         <ScrollView
@@ -1281,26 +1282,6 @@ function createStyles(colors: AppColors, isLight = true) {
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 36,
-    },
-    emptyIcon: {
-      fontSize: 40,
-      color: colors.accent,
-      lineHeight: 46,
-      marginBottom: 16,
-    },
-    emptyText: {
-      ...TypeScale.heading,
-      ...UiTextMetrics,
-      color: colors.textPrimary,
-      textAlign: 'center',
-    },
-    emptySubtext: {
-      ...TypeScale.compact,
-      ...UiTextMetrics,
-      color: colors.textSecondary,
-      marginTop: 8,
-      maxWidth: 320,
-      textAlign: 'center',
     },
 
     // Sections
