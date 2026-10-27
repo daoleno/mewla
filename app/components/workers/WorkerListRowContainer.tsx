@@ -12,6 +12,8 @@ interface WorkerListRowContainerProps {
   agent: Worker;
   alias?: string;
   linkedWorkTitle?: string;
+  /** "运营：挖稿 · Oct 27" when a Calendar schedule started this Session. */
+  calendarLabel?: string;
   onOpenWorker(agent: Worker): void;
   /** Normal mode long press: enter selection mode with this Session selected. */
   onEnterSelection(agent: Worker): void;
@@ -32,6 +34,7 @@ function WorkerListRowContainerComponent({
   agent,
   alias,
   linkedWorkTitle,
+  calendarLabel,
   onOpenWorker,
   onEnterSelection,
   onToggleSelection,
@@ -44,7 +47,7 @@ function WorkerListRowContainerComponent({
 }: WorkerListRowContainerProps) {
   const rowModel = useMemo(() => {
     const presented = presentWorker(agent, alias);
-    const workTitle = linkedWorkTitle?.trim();
+    const workTitle = calendarLabel?.trim() || linkedWorkTitle?.trim();
     const title =
       presented.titleSource !== 'default'
         ? presented.title
@@ -57,7 +60,7 @@ function WorkerListRowContainerComponent({
       serverName: agent.serverName,
     });
     return { presented, preview, title };
-  }, [agent, alias, linkedWorkTitle, showServerName]);
+  }, [agent, alias, calendarLabel, linkedWorkTitle, showServerName]);
 
   const handlePress = useCallback(() => {
     if (selectionMode) {
@@ -92,6 +95,7 @@ function WorkerListRowContainerComponent({
       status={agent.status}
       needsYou={agent.needs_attention === true}
       brainDelegated={Boolean(agent.delegated)}
+      fromCalendar={Boolean(calendarLabel)}
       onPress={handlePress}
       onLongPress={handleLongPress}
       selectionMode={selectionMode}

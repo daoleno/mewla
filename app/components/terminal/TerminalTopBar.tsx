@@ -20,6 +20,8 @@ export interface TerminalTopBarGitDiffPresentation {
 export interface TerminalTopBarProps {
   title: string;
   subtitle?: string;
+  /** Calendar-born work: "运营：挖稿 · Oct 27" under the title, tapping opens it. */
+  calendarOrigin?: { label: string; title: string; date: string; open(): void } | null;
   kind: AgentKind;
   terminalFlavor?: TerminalFlavor;
   backgroundColor: string;
@@ -40,6 +42,7 @@ export interface TerminalTopBarProps {
 export function TerminalTopBar({
   title,
   subtitle,
+  calendarOrigin,
   kind,
   terminalFlavor,
   chrome,
@@ -84,7 +87,17 @@ export function TerminalTopBar({
     <TelegramChatHeader
       chrome={chrome}
       title={title}
-      subtitle={subtitle ?? (delegated ? "Delegated" : undefined)}
+      subtitle={
+        calendarOrigin
+          ? // The title already names the schedule when the Session took it.
+            calendarOrigin.title === title
+            ? calendarOrigin.date || calendarOrigin.label
+            : calendarOrigin.label
+          : subtitle ?? (delegated ? "Delegated" : undefined)
+      }
+      subtitleIcon={calendarOrigin ? "calendar" : undefined}
+      onPressTitle={calendarOrigin?.open}
+      titleActionLabel={calendarOrigin ? "Open in Calendar" : undefined}
       agentKind={kind}
       terminalFlavor={terminalFlavor}
       avatarLabel={title}

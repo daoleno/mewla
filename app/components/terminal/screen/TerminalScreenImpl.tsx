@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Linking } from "react-native";
 import { isWorkerSessionListFreshForConnection, useWorkers } from "../../../store/workers";
 import { useBrain } from "../../../store/brain";
@@ -20,6 +20,8 @@ import { useMissingSessionExit } from "./useMissingSessionExit";
 import { dshWebServiceURL } from "../../../services/sessionServicesPresentation";
 import { wsClient } from "../../../services/websocket";
 import { useDesktopPageTitle } from "../../navigation/useDesktopWeb";
+import { useCalendarOrigin } from "../../calendar/CalendarOriginLink";
+import { calendarOriginOfWork } from "../../../services/calendarRuns";
 
 export default function TerminalScreen() {
   const { state } = useWorkers();
@@ -112,6 +114,11 @@ export default function TerminalScreen() {
     showInterfaceChat,
   } = route;
   useDesktopPageTitle(displayName, screenFocused);
+  const calendarOrigin = useCalendarOrigin(
+    serverId,
+    useMemo(() => (linkedWork ? calendarOriginOfWork(linkedWork) : null), [linkedWork]),
+    { title: linkedWork?.frontmatter.title, at: linkedWork?.frontmatter.created },
+  );
   useMissingSessionExit({
     focused: screenFocused,
     resolved: Boolean(agent),
@@ -237,6 +244,7 @@ export default function TerminalScreen() {
       handleAccessoryLayout,
       handleCtrlArmedChange,
       hasLinkedWork: Boolean(linkedWork),
+      calendarOrigin,
       hasTerminalRoute,
       isStructuredChatWorker,
       keyboardVisible,

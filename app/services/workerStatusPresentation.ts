@@ -52,15 +52,18 @@ export function buildWorkerSessionAccessibilityLabel({
   preview,
   timeLabel,
   brainDelegated,
+  fromCalendar = false,
 }: {
   title: string;
   status: WorkerStatus;
   preview: string;
   timeLabel: string;
   brainDelegated: boolean;
+  fromCalendar?: boolean;
 }): string {
   return [
     title,
+    fromCalendar ? 'From Calendar' : null,
     brainDelegated ? 'Brain delegated' : null,
     workerStatusLabel(status),
     preview,

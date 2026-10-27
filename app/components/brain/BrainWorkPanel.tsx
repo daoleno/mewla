@@ -22,6 +22,7 @@ import { PetSprite } from "../pets/PetSprite";
 import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
 import { Icon } from "../icons/Icon";
 import { composerNeutralFill } from "../terminal/composerMaterial";
+import { CalendarOriginLink } from "../calendar/CalendarOriginLink";
 
 /** The slip's actions, built by the screen that can run them. */
 export type BrainWorkActionsFor = (slip: BrainWorkSlip, placement: "slip" | "sheet") => WorkSlipAction[];
@@ -39,7 +40,7 @@ function slipLine(slip: BrainWorkSlip): string | undefined {
 }
 
 function slipMeta(slip: BrainWorkSlip): string | undefined {
-  return [slip.who, formatChatBubbleTime(slip.updatedAt)].filter(Boolean).join(" · ") || undefined;
+  return [slip.calendarLabel ?? slip.who, formatChatBubbleTime(slip.updatedAt)].filter(Boolean).join(" · ") || undefined;
 }
 
 /**
@@ -109,6 +110,7 @@ export function BrainWorkList({
                 statusShown={slip.statusLabel !== BRAIN_WORK_GROUP_LABELS[group]}
                 title={slip.title}
                 meta={slipMeta(slip)}
+                metaIcon={slip.calendarLabel ? "calendar" : undefined}
                 summary={slipLine(slip)}
                 unread={slip.unread}
                 perched={Boolean(perch && slip.workId === firstNeeds)}
@@ -309,6 +311,7 @@ export function BrainWorkDetailSheet({
   replyOpen,
   replyBusy,
   onReply,
+  onOpenCalendar,
   onClose,
 }: {
   slip: BrainWorkSlip | null;
@@ -319,10 +322,13 @@ export function BrainWorkDetailSheet({
   replyOpen?: boolean;
   replyBusy?: boolean;
   onReply?(text: string): void;
+  /** A Calendar run's Work: open its schedule at this run. */
+  onOpenCalendar?(): void;
   onClose(): void;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
-  const meta = slip ? slipMeta(slip) : undefined;
+  // A Calendar run's meta is its schedule, shown as the link below.
+  const meta = slip ? (slip.calendarLabel ? formatChatBubbleTime(slip.updatedAt) : slipMeta(slip)) : undefined;
   const [draft, setDraft] = useState("");
   const workId = slip?.workId;
   useEffect(() => setDraft(""), [workId]);
@@ -352,12 +358,15 @@ export function BrainWorkDetailSheet({
                 <Text style={styles.columnSummary}>{[meta, age].filter(Boolean).join(" · ")}</Text>
               ) : null}
             </View>
+            {slip.calendarLink && onOpenCalendar ? (
+              <CalendarOriginLink label={slip.calendarLink} onPress={onOpenCalendar} />
+            ) : null}
             {slip.question ? (
               <Text selectable style={styles.question}>{slip.question}</Text>
             ) : slipLine(slip) ? (
               <Text selectable style={styles.detailBody}>{slipLine(slip)}</Text>
             ) : null}
-            {waitFor && waitFor !== slip.summary && !slip.question && waitFor.includes(" ") ? (
+            {waitFor && !slip.calendar && waitFor !== slip.summary && !slip.question && waitFor.includes(" ") ? (
               <Text selectable style={styles.columnSummary}>Waiting for: {waitFor}</Text>
             ) : null}
             {actions?.length ? <WorkSlipActions actions={actions} chrome={chrome} /> : null}

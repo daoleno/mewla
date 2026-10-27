@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Alert,
   AppState,
   KeyboardAvoidingView,
   Linking,
@@ -32,15 +31,19 @@ import {
 import {
   calendarDateKey,
   calendarStatusLabel,
-  calendarStatusMark,
-  formatCalendarTime,
   groupAgenda,
   itemInstant,
   kindLabel,
   viewerTimezone,
 } from "../services/calendarPresentation";
-import { StatusMark } from "../components/ui/StatusMark";
-import { workStatusTextInk } from "../components/ui/workStatus";
+import { calendarActiveRun, calendarItemSummary } from "../services/calendarRuns";
+import { terminalRouteParams } from "../services/workerRouteId";
+import { selectCurrentServerItems } from "../services/currentServerSelection";
+import { useWorkerList } from "../store/workers";
+import {
+  CalendarItemSheet,
+  CalendarStatus,
+} from "../components/calendar/CalendarItemSheet";
 import {
   formatResolvedInstant,
   localFieldsFromInstant,
@@ -82,7 +85,7 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
   const navigation = useNavigation();
-  const params = useLocalSearchParams<{ id?: string; serverId?: string }>();
+  const params = useLocalSearchParams<{ id?: string; serverId?: string; run?: string }>();
   const state = useCalendar();
   const { currentServerId } = useCurrentServer();
   const scopedServerId = props.serverIdOverride ?? currentServerId;
@@ -97,7 +100,8 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
   const monthExpanded = desktop || monthToggled;
   const [month, setMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selected, setSelected] = useState<ServerItem | null>(null);
+  // The open item by id, so its runs move on while the sheet is open.
+  const [selected, setSelected] = useState<{ id: string; runId?: string } | null>(null);
   const [editing, setEditing] = useState<ServerItem | "new" | null>(null);
   const [error, setError] = useState(props.initialError ?? "");
   const [notificationState, setNotificationState] =
@@ -105,6 +109,11 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
       props.notificationStateOverride ?? "undetermined",
     );
   const serverScopeRef = useRef(scopedServerId);
+  const workers = useWorkerList();
+  const liveSessions = useMemo(
+    () => new Set(selectCurrentServerItems(workers, scopedServerId).map((worker) => worker.id)),
+    [workers, scopedServerId],
+  );
   const activeServer = selectCurrentServerCalendar(state, scopedServerId);
   const items = useMemo(
     () =>
@@ -180,15 +189,32 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
       subscription.remove();
     };
   }, [activeServer, props.notificationStateOverride]);
+  // A back-link opens its item (and run) once; closing the sheet stays closed
+  // as the item changes.
+  const openedLinkRef = useRef("");
   useEffect(() => {
     if (!params.id) return;
+    const link = `${params.serverId ?? ""}:${params.id}:${params.run ?? ""}`;
+    if (openedLinkRef.current === link) return;
     const found = items.find(
       (item) =>
         item.id === params.id &&
         (!params.serverId || item.serverId === params.serverId),
     );
-    if (found) setSelected(found);
-  }, [items, params.id, params.serverId]);
+    if (!found) return;
+    openedLinkRef.current = link;
+    setError("");
+    setSelected({ id: found.id, runId: params.run || undefined });
+  }, [items, params.id, params.run, params.serverId]);
+  const selectedItem = selected ? items.find((item) => item.id === selected.id) ?? null : null;
+  const openSession = (sessionId: string) => {
+    if (!scopedServerId) return;
+    setSelected(null);
+    router.push({
+      pathname: "/terminal/[id]",
+      params: terminalRouteParams(sessionId, scopedServerId),
+    });
+  };
   const visible = items.filter((item) => item.status !== "cancelled");
   const agendaItems = selectedDate
     ? visible.filter(
@@ -200,8 +226,14 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
     ? [{ title: selectedDate, data: agendaItems }]
     : groupAgenda(agendaItems, now, viewerZone);
   const openItem = (item: ServerItem) => {
+    // Running now: its live Session is what there is to see.
+    const session = item.status === "running" ? calendarActiveRun(item)?.worker_session : undefined;
+    if (session && liveSessions.has(session)) {
+      openSession(session);
+      return;
+    }
     setError("");
-    setSelected(item);
+    setSelected({ id: item.id });
   };
   const actionError = (value: unknown) =>
     setError(
@@ -340,25 +372,23 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
           )}
         </View>
       </ScrollView>
-      <DetailModal
-        item={selected}
+      <CalendarItemSheet
+        item={selectedItem}
+        serverId={selectedItem?.serverId}
+        initialRunId={selected?.runId}
         error={error}
+        liveSessions={liveSessions}
         onClose={() => {
           setSelected(null);
           setError("");
         }}
         onEdit={(item) => {
           setSelected(null);
-          setEditing(item);
+          setEditing(item as ServerItem);
         }}
-        onCancel={cancel}
-        onRun={runNow}
-        onOpenWork={(item) =>
-          router.push({
-            pathname: "/work/[id]",
-            params: { id: item.linked_work_id!, serverId: item.serverId },
-          })
-        }
+        onCancel={(item) => cancel(item as ServerItem)}
+        onRun={(item) => runNow(item as ServerItem)}
+        onOpenSession={openSession}
       />
       <EditorModal
         value={editing}
@@ -433,10 +463,11 @@ function AgendaHeading({
 function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const summary = calendarItemSummary(item);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.title}, ${kindLabel[item.kind]}, ${calendarStatusLabel[item.status]}`}
+      accessibilityLabel={`${item.title}, ${summary || kindLabel[item.kind]}, ${calendarStatusLabel[item.status]}`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
@@ -451,7 +482,9 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
           {item.title}
         </Text>
         <View style={styles.meta}>
-          <Text style={styles.metaText}>{kindLabel[item.kind]}</Text>
+          <Text style={[styles.metaText, styles.metaSummary]} numberOfLines={1}>
+            {summary || kindLabel[item.kind]}
+          </Text>
           <Text style={styles.metaDot}>·</Text>
           <CalendarStatus status={item.status} />
         </View>
@@ -460,38 +493,6 @@ function CalendarRow({ item, onPress }: { item: ServerItem; onPress(): void }) {
     </Pressable>
   );
 }
-/** The status word with its Seal & Slip mark; Scheduled stays a plain word. */
-function CalendarStatus({ status }: { status: CalendarItem["status"] }) {
-  const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  const mark = calendarStatusMark[status];
-  return (
-    <View style={styles.status}>
-      {mark ? <StatusMark status={mark} /> : null}
-      <Text
-        style={[
-          styles.metaText,
-          mark && mark !== "blocked"
-            ? {
-                color: workStatusTextInk(mark, {
-                  statusReady: colors.statusDone,
-                  statusRunning: colors.statusRunning,
-                  seal: colors.seal,
-                  sealText: colors.sealText,
-                  statusWarning: colors.statusWarning,
-                  statusFailed: colors.statusFailed,
-                  statusBlocked: colors.statusBlocked,
-                }),
-              }
-            : null,
-        ]}
-      >
-        {calendarStatusLabel[status]}
-      </Text>
-    </View>
-  );
-}
-
 function MonthNavigator({
   items,
   month,
@@ -637,155 +638,6 @@ function EmptyState({
   );
 }
 
-function DetailModal({
-  item,
-  error,
-  onClose,
-  onEdit,
-  onCancel,
-  onRun,
-  onOpenWork,
-}: {
-  item: ServerItem | null;
-  error: string;
-  onClose(): void;
-  onEdit(item: ServerItem): void;
-  onCancel(item: ServerItem): void;
-  onRun(item: ServerItem): void;
-  onOpenWork(item: ServerItem): void;
-}) {
-  const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  if (!item) return null;
-  const canRun =
-    item.kind === "scheduled_action" &&
-    item.status !== "running" &&
-    item.status !== "cancelled";
-  return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <SafeAreaView edges={["bottom"]} style={styles.sheet}>
-          <View style={styles.sheetHandle} />
-          <View style={styles.detailHeader}>
-            <View style={{ flex: 1 }}>
-              <View style={[styles.meta, styles.detailMeta]}>
-                <Text style={styles.detailKind}>{kindLabel[item.kind]}</Text>
-                <Text style={styles.metaDot}>·</Text>
-                <CalendarStatus status={item.status} />
-              </View>
-              <Text style={styles.detailTitle}>{item.title}</Text>
-            </View>
-            <Pressable
-              accessibilityLabel="Close"
-              onPress={onClose}
-              style={styles.iconButton}
-            >
-              <Icon name="close" size={23} color={colors.textPrimary} />
-            </Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.detailContent}>
-            <Info
-              label={
-                item.kind === "reminder"
-                  ? "Notify"
-                  : item.kind === "event"
-                    ? "Time"
-                    : "Due"
-              }
-              value={formatCalendarTime(item)}
-            />
-            {item.end_at ? (
-              <Info
-                label="Ends"
-                value={formatDate(item.end_at, DateStyle.dateTime, { timeZone: item.timezone, timeZoneName: "short" })}
-              />
-            ) : null}
-            <Info label="Timezone" value={item.timezone} />
-            <Info label="Recurrence" value={item.recurrence} />
-            {item.notes ? <Info label="Notes" value={item.notes} /> : null}
-            {item.action_instruction ? (
-              <Info label="Mewla action" value={item.action_instruction} />
-            ) : null}
-            {item.source_thread_id ? (
-              <Info label="Source Brain thread" value={item.source_thread_id} />
-            ) : null}
-            {item.linked_work_id ? (
-              <Pressable
-                onPress={() => onOpenWork(item)}
-                style={styles.linkRow}
-              >
-                <Text style={styles.infoLabel}>Linked Work</Text>
-                <Text style={styles.linkText}>{item.linked_work_id} ›</Text>
-              </Pressable>
-            ) : null}
-            {item.failure_reason ? (
-              <View style={styles.failure}>
-                <View style={styles.failureHeading}>
-                  <StatusMark status="failed" knockout={colors.surfaceSubtle} />
-                  <Text style={styles.failureTitle}>Why it failed</Text>
-                </View>
-                <Text style={styles.failureBody}>{item.failure_reason}</Text>
-              </View>
-            ) : null}
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-          </ScrollView>
-          <View style={styles.actions}>
-            {canRun ? (
-              <Pressable
-                onPress={() => void onRun(item)}
-                style={styles.primaryAction}
-              >
-                <Text style={styles.primaryButtonText}>
-                  {item.status === "failed" ? "Retry now" : "Run now"}
-                </Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              disabled={item.status === "running"}
-              onPress={() => onEdit(item)}
-              style={styles.secondaryAction}
-            >
-              <Text style={styles.secondaryText}>Edit</Text>
-            </Pressable>
-            <Pressable
-              disabled={
-                item.status === "running" || item.status === "cancelled"
-              }
-              onPress={() =>
-                Alert.alert(
-                  "Cancel calendar item?",
-                  "It will remain in Calendar as cancelled.",
-                  [
-                    { text: "Keep", style: "cancel" },
-                    {
-                      text: "Cancel item",
-                      style: "destructive",
-                      onPress: () => void onCancel(item),
-                    },
-                  ],
-                )
-              }
-              style={styles.secondaryAction}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </SafeAreaView>
-      </View>
-    </Modal>
-  );
-}
-function Info({ label, value }: { label: string; value: string }) {
-  const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  return (
-    <View style={styles.info}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
-}
-
 function EditorModal({
   value,
   serverId,
@@ -817,6 +669,7 @@ function EditorModal({
   const [recurrence, setRecurrence] = useState<CalendarRecurrence>("none");
   const [notes, setNotes] = useState("");
   const [instruction, setInstruction] = useState("");
+  const [summary, setSummary] = useState("");
   const [saving, setSaving] = useState(false);
   const editorSessionId =
     value === "new"
@@ -850,6 +703,7 @@ function EditorModal({
     setRecurrence(existing?.recurrence ?? "none");
     setNotes(existing?.notes ?? "");
     setInstruction(existing?.action_instruction ?? "");
+    setSummary(existing?.summary ?? "");
   }, [editorSessionId]);
   const atResolution = useMemo(
     () => resolveLocalDateTime(atDate, atTime, timezone),
@@ -898,11 +752,14 @@ function EditorModal({
         timezone: timezone.trim(),
         recurrence,
         notes: notes.trim(),
+        summary: kind === "scheduled_action" ? summary.trim() : undefined,
         action_instruction:
           kind === "scheduled_action" ? instruction.trim() : undefined,
         source_thread_id:
           kind === "scheduled_action" ? sourceThreadId : undefined,
       };
+      // Runs are the daemon's history, never part of an edit.
+      delete payload.runs;
       delete payload.start_at;
       delete payload.end_at;
       delete payload.notify_at;
@@ -1076,6 +933,15 @@ function EditorModal({
               multiline
               placeholder="Optional context"
             />
+            {kind === "scheduled_action" ? (
+              <Field
+                label="Summary"
+                value={summary}
+                onChangeText={setSummary}
+                maxLength={120}
+                placeholder="What it does, in one line"
+              />
+            ) : null}
             {kind === "scheduled_action" ? (
               <Field
                 label="Action instruction"
@@ -1308,6 +1174,7 @@ function createStyles(colors: any) {
       gap: 4,
     },
     metaText: { ...TypeScale.caption, color: colors.textTertiary },
+    metaSummary: { flexShrink: 1 },
     metaDot: { color: colors.textTertiary },
     empty: {
       minHeight: 52,
@@ -1323,10 +1190,6 @@ function createStyles(colors: any) {
       ...TypeScale.body,
       color: colors.textTertiary,
       textAlign: "center",
-    },
-    primaryButtonText: {
-      ...TypeScale.label,
-      color: colors.textOnAccent,
     },
     monthHeader: {
       height: 48,
@@ -1381,69 +1244,7 @@ function createStyles(colors: any) {
       justifyContent: "flex-end",
       backgroundColor: colors.modalBackdrop,
     },
-    sheet: {
-      maxHeight: "88%",
-      backgroundColor: colors.bgSurface,
-      borderTopLeftRadius: Radii.lg,
-      borderTopRightRadius: Radii.lg,
-    },
-    sheetHandle: {
-      width: 40,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.border,
-      alignSelf: "center",
-      marginTop: 8,
-    },
-    detailHeader: { padding: 16, flexDirection: "row", gap: 12 },
-    detailMeta: { marginBottom: 5 },
-    detailKind: { ...TypeScale.label, color: colors.textSecondary },
-    detailTitle: { ...TypeScale.title, color: colors.textPrimary },
-    detailContent: { paddingHorizontal: 16, paddingBottom: 20, gap: 14 },
-    info: { gap: 3 },
-    infoLabel: {
-      ...TypeScale.micro,
-      color: colors.textTertiary,
-      textTransform: "uppercase",
-    },
-    infoValue: { ...TypeScale.body, color: colors.textPrimary },
-    linkRow: { gap: 3 },
-    linkText: { ...TypeScale.body, color: colors.accent },
-    failure: {
-      padding: 12,
-      borderRadius: Radii.sm,
-      backgroundColor: colors.surfaceSubtle,
-      gap: 4,
-    },
-    failureHeading: { flexDirection: "row", alignItems: "center", gap: 6 },
-    failureTitle: { ...TypeScale.label, color: colors.statusFailed },
-    failureBody: { ...TypeScale.compact, color: colors.textSecondary },
-    actions: {
-      padding: 16,
-      flexDirection: "row",
-      gap: 8,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.borderSubtle,
-    },
-    primaryAction: {
-      flex: 1,
-      minHeight: 46,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.accent,
-      borderRadius: Radii.sm,
-    },
-    secondaryAction: {
-      minWidth: 70,
-      minHeight: 46,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 12,
-      borderRadius: Radii.sm,
-      backgroundColor: colors.surfaceSubtle,
-    },
     secondaryText: { ...TypeScale.label, color: colors.textPrimary },
-    cancelText: { ...TypeScale.label, color: colors.statusFailed },
     editor: {
       flex: 1,
       marginTop: Spacing.xl,

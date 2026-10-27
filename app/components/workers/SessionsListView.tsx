@@ -51,6 +51,7 @@ const workerKeyExtractor = (agent: Worker) => agent.key;
 export interface SessionsListRowState {
   alias?: string;
   linkedWorkTitle?: string;
+  calendarLabel?: string;
   selected: boolean;
   selectionDisabled: boolean;
 }
@@ -97,6 +98,7 @@ export function SessionsListView({
             agent={item}
             alias={state.alias}
             linkedWorkTitle={state.linkedWorkTitle}
+            calendarLabel={state.calendarLabel}
             showServerName={showServerName}
             selectionMode={selectionMode}
             selected={state.selected}

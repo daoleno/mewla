@@ -32,6 +32,8 @@ import {
 import { HeaderBackButton } from "../../components/navigation/HeaderBackButton";
 import { useScreenBack } from "../../components/navigation/useScreenBack";
 import type { StatusTone } from "../../components/ui/StatusPill";
+import { CalendarOriginLink, useCalendarOrigin } from "../../components/calendar/CalendarOriginLink";
+import { calendarOriginOfWork } from "../../services/calendarRuns";
 
 const AUTOSAVE_DELAY_MS = 600;
 
@@ -65,6 +67,11 @@ function CurrentWorkDetail() {
   const serverId = typeof params.serverId === "string" ? params.serverId : "";
   const item = state.byKey[workItemKey(serverId, itemId)] as WorkItem | undefined;
   const storedDraft = state.draftsByKey[workItemKey(serverId, itemId)];
+  const calendarOrigin = useMemo(() => (item ? calendarOriginOfWork(item) : null), [item]);
+  const fromCalendar = useCalendarOrigin(serverId, calendarOrigin, {
+    title: item?.frontmatter.title,
+    at: item?.frontmatter.created,
+  });
 
   const [draftBody, setDraftBody] = useState(storedDraft?.body ?? item?.body ?? "");
   const [baseMtime, setBaseMtime] = useState(storedDraft?.baseMtime ?? item?.mtime ?? "");
@@ -219,7 +226,8 @@ function CurrentWorkDetail() {
   const draftTitle = workItemTitle(item) || titleFromMarkdown(draftBody) || "Untitled work";
   const status = workStatusInfo(item);
   const updatedLabel = relativeTime(item.mtime || item.frontmatter.created);
-  const previewBody = stripLeadingTitle(draftBody);
+  // Calendar Work ends with metadata for its agent; the link above says it.
+  const previewBody = stripLeadingTitle(calendarOrigin ? stripCalendarMetadata(draftBody) : draftBody);
   const headerTitle = item.project;
   // The header already names the project, and there is only one current
   // server, so the context line is just when it last changed.
@@ -269,6 +277,9 @@ function CurrentWorkDetail() {
           <Text style={styles.workTitle} numberOfLines={2}>
             {draftTitle}
           </Text>
+          {fromCalendar ? (
+            <CalendarOriginLink label={fromCalendar.label} onPress={fromCalendar.open} style={styles.calendarLink} />
+          ) : null}
         </View>
 
         {remoteBanner ? (
@@ -367,6 +378,10 @@ function titleFromMarkdown(value: string): string {
     return "";
   }
   return firstHeading.replace(/^#{1,6}\s+/, "").trim();
+}
+
+function stripCalendarMetadata(value: string): string {
+  return value.replace(/\n## Calendar metadata\n[\s\S]*$/, "\n");
 }
 
 function stripLeadingTitle(value: string): string {
@@ -486,6 +501,7 @@ function createStyles(colors: AppColors) {
     alignItems: "center",
     gap: 8,
   },
+  calendarLink: { marginTop: 6 },
   context: {
     paddingHorizontal: 16,
     paddingTop: 6,

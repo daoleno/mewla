@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography, TypeScale } from "../../constants/tokens";
 import { TappableCat } from "../mewla/TappableCat";
+import { Icon, type IconName } from "../icons/Icon";
 import { StatusMark } from "../ui/StatusMark";
 import { workStatusInk, workStatusTextInk, type WorkStatus } from "../ui/workStatus";
 import {
@@ -30,6 +31,7 @@ export function WorkSlip({
   statusShown = true,
   title,
   meta,
+  metaIcon,
   summary,
   unread,
   perched,
@@ -48,6 +50,8 @@ export function WorkSlip({
   title: string;
   /** "Claude Code · perpetuo · 20:11" */
   meta?: string;
+  /** A glyph before the meta line: the calendar on a Calendar run's Work. */
+  metaIcon?: IconName;
   summary?: string;
   unread?: boolean;
   perched?: boolean;
@@ -87,9 +91,12 @@ export function WorkSlip({
         {/* With no who · when to show, the state sits beside the title. */}
         <View style={meta ? styles.meta : styles.titleRow}>
           {meta ? (
-            <Text numberOfLines={1} style={styles.who}>
-              {meta}
-            </Text>
+            <>
+              {metaIcon ? <Icon name={metaIcon} size={12} color={chrome.textMuted} /> : null}
+              <Text numberOfLines={1} style={styles.who}>
+                {meta}
+              </Text>
+            </>
           ) : (
             <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={[styles.title, styles.titleInRow]}>
               {title}

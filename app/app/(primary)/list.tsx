@@ -21,6 +21,8 @@ import { Worker, useWorkers } from "../../store/workers";
 import { useCurrentServer } from "../../store/currentServer";
 import { selectCurrentServerItems } from "../../services/currentServerSelection";
 import { useWork, type WorkItem } from "../../store/work";
+import { selectCurrentServerCalendar, useCalendar } from "../../store/calendar";
+import { calendarOriginLabel, calendarOriginOfWork } from "../../services/calendarRuns";
 import { useAppTheme } from "../../constants/tokens";
 import type { ResolvedTheme } from "../../theme";
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
@@ -100,6 +102,8 @@ export default function InboxScreen() {
     [state.workers, currentServerId],
   );
   const { state: workState } = useWork();
+  const calendarState = useCalendar();
+  const calendarItems = selectCurrentServerCalendar(calendarState, currentServerId)?.items;
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const topChromeInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
@@ -110,7 +114,9 @@ export default function InboxScreen() {
   const workerWorkMap = useMemo(() => {
     const map: Record<string, WorkItem> = {};
     for (const current of Object.values(workState.byKey)) {
-      if (current.serverId !== currentServerId || current.frontmatter.done || !current.frontmatter.worker_session) {
+      // A finished Calendar run keeps naming its Session: that is where it came from.
+      const finished = current.frontmatter.done && current.frontmatter.kind !== "calendar_action";
+      if (current.serverId !== currentServerId || finished || !current.frontmatter.worker_session) {
         continue;
       }
       map[`${current.serverId}:${current.frontmatter.worker_session}`] = current;
@@ -667,14 +673,28 @@ export default function InboxScreen() {
     }
   };
 
+  // A Calendar run's Session says which schedule it belongs to.
+  const sessionCalendarLabel = useCallback(
+    (work: WorkItem | undefined) => {
+      const origin = work ? calendarOriginOfWork(work) : null;
+      return origin
+        ? calendarOriginLabel(origin, calendarItems ?? [], {
+            title: work?.frontmatter.title,
+            at: work?.frontmatter.created,
+          })?.label
+        : undefined;
+    },
+    [calendarItems],
+  );
   const listRowState = useCallback(
     (item: Worker): SessionsListRowState => ({
       alias: workerAliases[item.key],
       linkedWorkTitle: workerWorkMap[`${item.serverId}:${item.id}`]?.title,
+      calendarLabel: sessionCalendarLabel(workerWorkMap[`${item.serverId}:${item.id}`]),
       selected: selectedKeys.has(item.key),
       selectionDisabled: !isSessionTerminable(item, state.serverConnections),
     }),
-    [selectedKeys, state.serverConnections, workerAliases, workerWorkMap],
+    [selectedKeys, state.serverConnections, workerAliases, workerWorkMap, sessionCalendarLabel],
   );
 
   const openHeaderMenu = useCallback(() => {
