@@ -3,7 +3,6 @@ export type {
   AppPalette,
   ChatLayout,
   ChatPalette,
-  DataVisualizationPalette,
   MaterialPalette,
   ResolvedTheme,
   SurfacePalette,

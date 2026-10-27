@@ -23,11 +23,13 @@ describe('Stats pager integration contract', () => {
     expect(source).not.toContain('active && s.rangeTabActive');
   });
 
-  it('keeps nested horizontal activity scrollers in control of their touches', () => {
+  it('keeps the Activity chart scrub in control of its touches', () => {
     expect(source).toContain('swipeEnabled={!nestedHorizontalScrollActive}');
-    expect(source.match(/onTouchStart={onNestedHorizontalGestureStart}/g)?.length).toBe(2);
-    expect(source.match(/onTouchEnd={onNestedHorizontalGestureEnd}/g)?.length).toBe(2);
-    expect(source.match(/onTouchCancel={onNestedHorizontalGestureEnd}/g)?.length).toBe(2);
+    expect(source).toContain('onGestureStart={onNestedHorizontalGestureStart}');
+    expect(source).toContain('onGestureEnd={onNestedHorizontalGestureEnd}');
+    expect(source).toContain('.onTouchesDown(() => onGestureStart())');
+    // onFinalize runs on release, cancel and failure alike, so the pager always gets its swipe back.
+    expect(source).toMatch(/\.onFinalize\(\(\) => \{\s*setFocusIndex\(null\);\s*onGestureEnd\(\);/);
   });
 
   it('hides mounted off-screen scenes from native accessibility traversal', () => {

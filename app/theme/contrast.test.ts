@@ -4,7 +4,7 @@ import { resolveTheme } from "./resolve";
 import type { ResolvedTheme, ThemeColorScheme } from "./types";
 
 // WCAG 2.x AA: body text 4.5:1; large text and meaningful UI affordances
-// (focus ring, strong borders, status glyphs, heatmap cells) 3:1.
+// (focus ring, strong borders, status glyphs) 3:1.
 const TEXT = 4.5;
 const UI = 3;
 
@@ -130,16 +130,6 @@ describe("Mewla palette WCAG AA contrast", () => {
         .filter(({ ratio, minimum }) => ratio < minimum)
         .map(({ label, ratio, minimum }) => `${label}: ${ratio.toFixed(2)} < ${minimum}`);
       expect(failures).toEqual([]);
-    });
-
-    test(`${colorScheme}: the densest activity cell stays visible and ordered`, () => {
-      const { dataVisualization, surfaces } = resolveTheme({ colorScheme });
-      const ramp = dataVisualization.activityRamp;
-      expect(contrastRatio(ramp[3], surfaces.card)).toBeGreaterThanOrEqual(UI);
-      const distance = ramp.map((cell) => contrastRatio(cell, surfaces.card));
-      for (let index = 1; index < distance.length; index += 1) {
-        expect(distance[index]).toBeGreaterThan(distance[index - 1]);
-      }
     });
 
     test(`${colorScheme}: running status stays apart from unknown, done and danger`, () => {

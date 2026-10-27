@@ -61,10 +61,6 @@ export interface MaterialPalette {
   tint: string;
 }
 
-export interface DataVisualizationPalette {
-  activityRamp: readonly [string, string, string, string];
-}
-
 export interface ThemeDefinition {
   id: string;
   name: string;
@@ -73,7 +69,6 @@ export interface ThemeDefinition {
   chat: ChatPalette;
   surfaces: SurfacePalette;
   materials: MaterialPalette;
-  dataVisualization: DataVisualizationPalette;
   avatarColors: readonly string[];
 }
 
