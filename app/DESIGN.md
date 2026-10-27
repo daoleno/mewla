@@ -196,7 +196,9 @@ phone web and native, tablets included, keep the model above. Rules:
 6. **Keyboard first.** Enter sends and Shift+Enter is a new line (Ctrl/⌘+Enter
    always sends); nothing sends during IME composition. ⌘K / Ctrl+K opens the
    command palette, `?` lists every shortcut, Esc closes the top overlay, and
-   focus rings are visible. Shortcuts never fire while typing in a field or
+   focus rings are visible and follow the control's shape (round buttons get
+   a round ring). Tab reaches only what is on screen: the page the pager is
+   not showing takes no focus. Shortcuts never fire while typing in a field or
    the terminal, and tooltips name them. Web with no touch pointer at all
    drops the terminal's phone keys (keyboard toggle, Ctrl, Esc, Tab, ^C,
    arrows) and keeps Attach; phones, tablets and touch laptops keep them.
