@@ -265,3 +265,35 @@ func TestRouteCalendarEventKeepsInFlightRunWhenNextOccurrenceIsRouted(t *testing
 		}
 	}
 }
+
+// Calendar occurrence Work names its schedule and run wherever the app lists
+// it, so a running or returned occurrence is never an anonymous new Work.
+func TestCalendarOccurrenceWorkNamesItsScheduleAndRun(t *testing.T) {
+	store, service := newCalendarRouteService(t)
+	calendarRouteRoute(t, service, calendarRouteItem("item-1", calendarRouteRun("run-1", calendar.StatusRunning, "%77")), nil)
+	inventory, err := store.ProjectWorkInventory(map[string]bool{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := WorkCalendarRef{ItemID: "item-1", RunID: "run-1"}
+	found := false
+	for _, work := range inventory.Current {
+		if work.ID == calendarWorkID("item-1", "run-1") {
+			found = work.Calendar != nil && *work.Calendar == want
+		}
+	}
+	for _, work := range inventory.Open {
+		if work.ID == calendarWorkID("item-1", "run-1") {
+			found = work.Calendar != nil && *work.Calendar == want
+		}
+	}
+	if !found {
+		t.Fatalf("calendar ref missing: %+v", inventory)
+	}
+	if ref := workCalendarRef(Work{ID: calendarWorkID("item-1", "run-1"), ContextRef: "calendar:item-2:run-1"}); ref != nil {
+		t.Fatalf("a context that does not match the Work ID was trusted: %+v", ref)
+	}
+	if ref := workCalendarRef(Work{ID: "ordinary", ContextRef: "calendar:item-1:run-1"}); ref != nil {
+		t.Fatalf("ordinary Work got a calendar ref: %+v", ref)
+	}
+}

@@ -273,6 +273,7 @@ func (s *Store) create(item Item) (Item, error) {
 	if item.Recurrence == "" {
 		item.Recurrence = RecurrenceNone
 	}
+	item.Summary = strings.TrimSpace(item.Summary)
 	if err := item.Validate(); err != nil {
 		return Item{}, err
 	}
@@ -312,6 +313,7 @@ func (s *Store) Update(item Item, expectedRevision int64) (Item, error) {
 	if item.Recurrence == "" {
 		item.Recurrence = RecurrenceNone
 	}
+	item.Summary = strings.TrimSpace(item.Summary)
 	if err := item.Validate(); err != nil {
 		return Item{}, err
 	}
@@ -530,10 +532,10 @@ func (s *Store) FinishRun(id, runID, result, failure string) (Item, error) {
 			advanceItem(&item)
 		}
 	}
-	if status == StatusFailed && item.Status == StatusScheduled {
-		// The series remains schedulable, while Calendar still explains the
-		// most recent failed occurrence until the next run is claimed.
-		item.FailureReason = failure
+	// A failure belongs to its run. The item keeps it only when the failed
+	// run ended the item; a series that goes on is scheduled, not failed.
+	if item.Status != StatusFailed {
+		item.FailureReason = ""
 	}
 	s.items[id] = item
 	if err := s.persistLocked(); err != nil {

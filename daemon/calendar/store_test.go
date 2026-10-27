@@ -799,6 +799,8 @@ func TestFailedRunNowDoesNotConsumeAStillFutureScheduledOccurrence(t *testing.T)
 	}
 }
 
+// The failure is the run's: the series goes on scheduled, with no failure of
+// its own.
 func TestFailedRecurringOccurrenceAdvancesAndRemainsRecorded(t *testing.T) {
 	store, _ := NewStore(t.TempDir())
 	now := localTime(t, "America/New_York", 2026, time.July, 14, 10, 0)
@@ -816,7 +818,8 @@ func TestFailedRecurringOccurrenceAdvancesAndRemainsRecorded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Status != StatusScheduled || !got.NextAt.After(now) || got.Runs[0].Status != StatusFailed || got.FailureReason != "executor failed" {
+	if got.Status != StatusScheduled || !got.NextAt.After(now) || got.Runs[0].Status != StatusFailed ||
+		got.Runs[0].FailureReason != "executor failed" || got.FailureReason != "" {
 		t.Fatalf("got = %#v", got)
 	}
 }
@@ -848,5 +851,27 @@ func TestSchedulerReminderDeadlineEventAndRecurringAction(t *testing.T) {
 	gotEvent, _ := store.Get(event.ID)
 	if gotEvent.Status != StatusScheduled || gotEvent.StartAt.Day() != start.Day()+1 {
 		t.Fatalf("event = %#v", gotEvent)
+	}
+}
+
+func TestSummaryIsTrimmedAndOneLine(t *testing.T) {
+	store, _ := NewStore(t.TempDir())
+	due := time.Now().UTC().Add(time.Hour)
+	base := Item{Title: "运营：挖稿", Kind: KindScheduledAction, DueAt: &due, Timezone: "UTC", ActionInstruction: "Mine drafts", SourceThreadID: "thread-1"}
+	withSummary := base
+	withSummary.Summary = "  每天晚上从当天的工作里挖出可以发的稿子  "
+	item, err := store.Create(withSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Summary != "每天晚上从当天的工作里挖出可以发的稿子" {
+		t.Fatalf("summary = %q", item.Summary)
+	}
+	for _, bad := range []string{"two\nlines", strings.Repeat("长", MaxSummaryRunes+1)} {
+		invalid := base
+		invalid.Summary = bad
+		if _, err := store.Create(invalid); err == nil {
+			t.Fatalf("summary %q was accepted", bad)
+		}
 	}
 }
