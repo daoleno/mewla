@@ -369,7 +369,6 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
       {flow.error && !catalogFailed ? <InlineNotice tone="danger" title="That didn't go through" detail={flow.error} /> : null}
       {flow.serverId && (flow.service || flow.connectError) ? <ConnectStatusCard
         serviceName={flow.plugin(flow.service)?.name ?? null}
-        integration={flow.service ?? undefined}
         phase={flow.phase}
         flow={flow.flow}
         error={flow.connectError}

@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
@@ -27,7 +26,6 @@ import (
 	"github.com/daoleno/mewla/daemon/account"
 	"github.com/daoleno/mewla/daemon/account/dns"
 	"github.com/daoleno/mewla/daemon/friendsvc"
-	"github.com/daoleno/mewla/daemon/googleauth"
 	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/daoleno/mewla/daemon/proxyproto"
 	"golang.org/x/crypto/acme"
@@ -217,17 +215,13 @@ func run(args []string) error {
 		MaxHeaderBytes:    16 << 10,
 	}
 
-	google, err := googleExchange(publicURL, tlsAddress != "", os.Getenv)
-	if err != nil {
-		return err
-	}
 	var publicServer *http.Server
 	var publicListener net.Listener
 	if tlsAddress != "" {
 		if tlsCacheDir == "" {
 			tlsCacheDir = filepath.Join(filepath.Dir(databasePath), "acme")
 		}
-		publicServer, publicListener, err = listenPublicTLS(tlsAddress, publicURL, tlsCacheDir, proxyProtocol, handler, google)
+		publicServer, publicListener, err = listenPublicTLS(tlsAddress, publicURL, tlsCacheDir, proxyProtocol, handler)
 		if err != nil {
 			return err
 		}
@@ -322,57 +316,11 @@ func withFriends(base, friends http.Handler) http.Handler {
 	return mux
 }
 
-// googleExchange is the sign-in service behind the Google Calendar and Gmail
-// plugins: it holds Mewla's Google client secrets so that no daemon has to.
-// Google verifies a Cloud project rather than a scope, so each plugin can hold
-// its own client: Gmail's restricted scopes can then move to a second project
-// and be reviewed without holding Calendar's sign-in in the same review. Until
-// the Gmail pair is set, both plugins share the one client.
-// It runs on the public HTTPS listener only, and only when every value is
-// set; a half-set configuration stops the service rather than starting
-// without it.
-func googleExchange(publicURL string, publicTLS bool, env func(string) string) (http.Handler, error) {
-	base := googleauth.Client{ID: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_CLIENT_ID")), Secret: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET"))}
-	gmail := googleauth.Client{ID: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID")), Secret: strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET"))}
-	receiptKey := strings.TrimSpace(env("MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY"))
-	configured := base.ID != "" || base.Secret != "" || gmail.ID != "" || gmail.Secret != "" || receiptKey != ""
-	if !configured {
-		return nil, nil
-	}
-	if base.ID == "" || base.Secret == "" {
-		return nil, errors.New("Google sign-in needs $MEWLA_ACCOUNT_GOOGLE_CLIENT_ID and $MEWLA_ACCOUNT_GOOGLE_CLIENT_SECRET")
-	}
-	// A half-set Gmail client would fail after the user already tapped
-	// Connect, so it is refused at start like every other value.
-	if (gmail.ID == "") != (gmail.Secret == "") {
-		return nil, errors.New("the Gmail client needs both $MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_ID and $MEWLA_ACCOUNT_GOOGLE_GMAIL_CLIENT_SECRET")
-	}
-	if gmail.ID == "" {
-		gmail = base
-	}
-	if receiptKey == "" {
-		return nil, errors.New("Google sign-in needs $MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY")
-	}
-	if !publicTLS {
-		return nil, errors.New("Google sign-in is served on -tls-addr only")
-	}
-	key, err := base64.RawURLEncoding.DecodeString(receiptKey)
-	if err != nil {
-		return nil, errors.New("$MEWLA_ACCOUNT_GOOGLE_RECEIPT_KEY must be base64url without padding")
-	}
-	clients := map[string]googleauth.Client{googleauth.Calendar: base, googleauth.Gmail: gmail}
-	exchange, err := googleauth.New(googleauth.Config{Origin: publicURL, Clients: clients, ReceiptKey: key})
-	if err != nil {
-		return nil, fmt.Errorf("Google sign-in: %w", err)
-	}
-	return exchange, nil
-}
-
 // listenPublicTLS serves handler over HTTPS for publicURL's host, with a
 // Let's Encrypt certificate by TLS-ALPN-01. Behind the relay that is the
 // only challenge that reaches it: the relay passes the TLS stream through.
 // Health checks are not served here; the plugin sign-in return page is.
-func listenPublicTLS(address, publicURL, cacheDir string, proxyProtocol bool, handler http.Handler, google http.Handler) (*http.Server, net.Listener, error) {
+func listenPublicTLS(address, publicURL, cacheDir string, proxyProtocol bool, handler http.Handler) (*http.Server, net.Listener, error) {
 	parsed, err := url.Parse(publicURL)
 	if err != nil || parsed.Scheme != "https" || parsed.Port() != "" {
 		return nil, nil, errors.New("-tls-addr needs an https -public-url without a port")
@@ -401,9 +349,6 @@ func listenPublicTLS(address, publicURL, cacheDir string, proxyProtocol bool, ha
 	mux := http.NewServeMux()
 	mux.Handle("/healthz", http.NotFoundHandler())
 	mux.HandleFunc("GET "+pluginreturn.Path, pluginreturn.Handler)
-	if google != nil {
-		mux.Handle("/google/", google)
-	}
 	mux.Handle("/", handler)
 	server := &http.Server{
 		Handler:           mux,

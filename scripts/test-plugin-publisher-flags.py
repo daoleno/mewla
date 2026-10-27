@@ -18,7 +18,7 @@ spec.loader.exec_module(publisher)
 
 class PublisherTests(unittest.TestCase):
     def setUp(self):
-        self.config = {'schema_version': 1, 'github': {'owner': 'daoleno', 'client_id': 'fixture.github'}, 'slack': {'workspace_id': 'T0CA7628ECC', 'client_id': '123.456'}, 'google': {'exchange_origin': 'https://connect.mewla.ai'}}
+        self.config = {'schema_version': 1, 'github': {'owner': 'daoleno', 'client_id': 'fixture.github'}, 'slack': {'workspace_id': 'T0CA7628ECC', 'client_id': '123.456'}}
 
     def test_public_only_and_missing_registration(self):
         self.assertIn('GitHubPublicClientID=fixture.github', publisher.publisher_flags(self.config, ['github']))
@@ -26,21 +26,6 @@ class PublisherTests(unittest.TestCase):
         self.assertNotIn('GitHubPublicClientID', publisher.publisher_flags(self.config, []))
         with self.assertRaisesRegex(ValueError, 'cannot publish'):
             publisher.publisher_flags(self.config, ['github'])
-
-    def test_google_ships_only_the_fixed_exchange_origin(self):
-        self.assertIn('connections.GoogleExchangeOrigin=https://connect.mewla.ai', publisher.publisher_flags(self.config, ['google']))
-        self.config['google']['exchange_origin'] = None
-        self.assertNotIn('GoogleExchangeOrigin', publisher.publisher_flags(self.config, []))
-        with self.assertRaisesRegex(ValueError, 'cannot publish'):
-            publisher.publisher_flags(self.config, ['google'])
-        for value, extra in [('https://evil.example', None), ('http://connect.mewla.ai', None), ('https://connect.mewla.ai -X main.Version=evil', None), ('https://connect.mewla.ai', ('client_secret', 'secret'))]:
-            with self.subTest(value=value, extra=extra):
-                config = copy.deepcopy(self.config)
-                config['google']['exchange_origin'] = value
-                if extra:
-                    config['google'][extra[0]] = extra[1]
-                with self.assertRaises(ValueError):
-                    publisher.publisher_flags(config, [])
 
     def test_reject_secrets_unknown_owner_and_linker_injection(self):
         for path, value in [(('github', 'client_secret'), 'secret'), (('github', 'owner'), 'paul-freeride'), (('slack', 'workspace_id'), None), (('slack', 'workspace_id'), 'T123OTHER'), (('github', 'client_id'), 'x -X main.Version=evil'), (('github', 'client_id'), '$(touch bad)'), (('github', 'client_id'), '')]:
@@ -82,7 +67,6 @@ pathlib.Path(sys.argv[sys.argv.index('-o')+1]).touch()
                 flags = next(a for a in call['args'] if a.startswith('-ldflags='))
                 self.assertIn('connections.GitHubPublicClientID=fixture.github', flags)
                 self.assertIn('connections.SlackPublicClientID=123.456', flags)
-                self.assertIn('connections.GoogleExchangeOrigin=https://connect.mewla.ai', flags)
 
 
 if __name__ == '__main__':

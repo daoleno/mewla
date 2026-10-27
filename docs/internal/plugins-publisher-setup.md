@@ -2,7 +2,7 @@
 
 **Revised 2026-10-02 after checking current public-client support.** Ordinary users install Mewla and connect accounts. They never run `oauth-configure`, register an app, choose callbacks or receive Mewla's shared client secret. Existing local operator configuration remains supported for that operator's own registrations; it is not the distributed product solution.
 
-The committed GitHub publisher client is configured. Slack registration and Google publisher hosting/registration remain pending. GitHub repository ownership is not proof of ownership of other vendor accounts. No publisher-owned application registration or deployment is claimed; automatic protocol DCR is distinguished below.
+The committed GitHub publisher client is configured. Slack registration remains pending. GitHub repository ownership is not proof of ownership of other vendor accounts. No publisher-owned application registration or deployment is claimed; automatic protocol DCR is distinguished below.
 
 ## Smallest recommended product arrangement
 
@@ -12,7 +12,6 @@ The committed GitHub publisher client is configured. Slack registration and Goog
 | Notion | Connect → official MCP OAuth consent; advertised public DCR/PKCE | Automatic registration supported by current metadata; no manual publisher registration established as necessary | Fixed native URI accepted by real DCR; exact MCP resource binding | Official metadata now returns200; unauthenticated Streamable HTTP returns401 with the correct resource metadata challenge. Prior403 is not evidence of redirect incompatibility. Actual Mewla DCR accepted `mewla://plugins`, S256 and the exact MCP resource; official browser login loaded. Account grant/read/native return remain unverified. |
 | GitHub | Connect → official device page; code entered on GitHub, no Mewla text input. Existing signed-in identity is a secondary explicitly consented import | Mewla-owned OAuth app, device flow enabled; **public client ID only** shipped in official release | No redirect/hosting. Daemon polls respecting interval/slow_down; token remains in daemon vault | Device flow docs verified. The public client ID is committed in `release/plugin-publishers.json`. Existing gh API can verify/import identity but is not first-time signup proof. |
 | Slack | Connect → official workspace authorization with user scopes | Mewla-owned app with **PKCE enabled**, `https://connect.mewla.ai/plugins/return` and `mewla://plugins` registered, public distribution; **public client ID only** shipped | Relay URI + S256. `oauth.v2.access` sends verifier, no client secret. Daemon stores and rotates tokens. Public-client refresh tokens expire after 30 days | Current official PKCE guide and 2026-03-30 GA announcement confirm standard and directory apps can enable it. Registered 2026-10-18: app `A0CA39R2DS6` in workspace `T0CA7628ECC` (Mewla, owned by daodaoonline@gmail.com), Public distribution activated 2026-10-18. Consent page reached from a release-built daemon. |
-| Google Calendar, Gmail | Connect → Google's official consent, once per plugin. Scopes: Calendar `calendar.calendarlist.readonly`, `calendar.events.readonly`, `calendar.freebusy` (+ `calendar.events` for changes); Gmail `gmail.readonly` (+ `gmail.modify` for changes) | Mewla-owned Google Cloud project (`mewla-50425`) with the Gmail and Calendar APIs, a **Web application** client whose only redirect is `https://connect.mewla.ai/google/callback`, and the exchange in `mewla-account` holding the secret | Google callback and code exchange on the product host; a per-flow daemon key seals the tokens; the daemon vault keeps them. Refresh also goes through the exchange | Registered and deployed per [Google exchange](plugins-google-exchange.md). Testing mode until verified. |
 | Custom MCP / OpenAPI | Separate advanced path with service endpoint and real service-specific prerequisites | Service owner | Explicit network trust and individual grants; automatic MCP registration when supported | Existing custom functionality retained. It is not a fallback for failed built-in onboarding. |
 
 ### Notion discovery diagnosis
@@ -50,12 +49,6 @@ Import/review `docs/internal/plugins-slack-manifest.json` in the confirmed Slack
 
 This removes the earlier proposed Slack HTTPS/static handoff. The earlier advice to disable Slack token rotation was incorrect and is superseded by this document.
 
-### Google: evaluate maintained components before selecting
-
-The approved sequence is GitHub, Linear/Notion, Slack, then Google. [Maintained-component comparison](plugins-google-options.md) checks current licenses, free/paid features, credentials, deployment and the mobile-to-offline-daemon boundary. The [Google-only exchange](plugins-google-exchange.md) was selected and runs inside the account service.
-
-The minimum remaining Google owner decision is an actually owned Cloud project and an existing owned HTTPS host **after reviewing that comparison**. No paid plan, domain purchase, new host or vendor/legal acceptance is implied. All approaches still require real Google branding/audience/scopes/verification. Shared client secrets may never be shipped to daemons. A static handoff alone cannot solve that boundary.
-
 ## Decisive flow changes
 
 | Before | After | Why |
@@ -77,15 +70,3 @@ Sources checked 2026-10-02: [Slack PKCE](https://docs.slack.dev/authentication/u
 3. Select **JSON**, paste [plugins-slack-manifest.json](plugins-slack-manifest.json), then **Next**.
 4. Review and **Create**. In **OAuth & Permissions**, verify PKCE, `mewla://plugins`, and user scopes `channels:read`, `channels:history`, `search:read`, `chat:write`. No bot scopes. The app requests `chat:write` only when the user enables changes. PKCE is a one-way setting; native tokens rotate and refresh authorization expires after 30 days.
 5. Copy **Basic Information → App Credentials → Client ID** and the selected workspace's `T…` ID. Set the `slack` object in `release/plugin-publishers.json` to `{"workspace_id":"T…","client_id":"…"}`. Rebuild/restart the daemon. No client secret is needed. Other workspaces can install it only after **Manage Distribution → Activate Public Distribution**, which needs the https redirect above.
-
-### Google: personal daemon registration
-
-This configures an operator's own app on their own daemon; it does not provision a shared Mewla publisher service.
-
-1. In <https://console.cloud.google.com/>, select/create the owner's project. Under **APIs & Services → Library**, enable **Google Drive API**, **Gmail API**, and **Google Calendar API**.
-2. Open **Google Auth Platform → Branding → Get started**. Supply app name, support email and developer contact. Choose **Audience → External → Testing**, and add the account(s) under **Test users** (up to 100). An eligible Workspace-only project may choose Internal instead. Testing refresh tokens normally expire after seven days for these scopes, requiring reconnect.
-3. Under **Data Access → Add or remove scopes**, add `openid`, `email`, `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/gmail.readonly`, and `https://www.googleapis.com/auth/calendar.readonly`. Optional changes additionally use `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/gmail.send`, and `https://www.googleapis.com/auth/calendar.events`.
-4. Under **Clients → Create client → Web application**, add the daemon's exact public HTTPS origin followed by `/plugins/oauth/callback` as an **Authorized redirect URI**. No JavaScript origin is required for this server-side flow. Download the credentials privately. Google does not accept `mewla://plugins` for this Web client.
-5. Store a private mode-0600 JSON file containing `client_id`, `client_secret`, and that exact `redirect_url`. Apply it with one command: `mewla connections oauth-configure --integration google --oauth-config-file /private/google-oauth.json`. The running daemon immediately reports Google available; no rebuild is needed. Delete the staging file after successful application. The secret stays on that operator's daemon and must never enter the publisher manifest or app bundle.
-
-For external production distribution, publishing the consent screen is separate from verification. These sensitive/restricted scopes require Google's review; server-side use of restricted Gmail/Drive data may also require a security assessment. Supply the actual owned domain, privacy policy and required verification evidence. Do not promise that switching from Testing to Production completes verification. The shared Mewla deployment runs the [Google exchange](plugins-google-exchange.md) in the account service at `connect.mewla.ai`; a client ID alone cannot provision it.

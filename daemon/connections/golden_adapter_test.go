@@ -38,5 +38,3 @@ func goldenOfficial() map[string]goldenOfficialSet {
 func goldenReviewed(id string) []Tool {
 	return lookup(id).reviewed()
 }
-
-func goldenGoogleScopes(id string, writes bool) []string { return googleScopes(id, writes) }

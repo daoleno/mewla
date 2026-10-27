@@ -1,8 +1,7 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Google Calendar, Gmail, Cloudflare, Onlora for generating and
-finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
+GitHub, Slack, Cloudflare, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
 services. Plugins are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
@@ -55,16 +54,17 @@ Mewla's own app registration with the provider:
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
-| Google Calendar, Gmail | **Invite only while Google reviews Mewla's app.** Google's own sign-in, one per plugin, through Mewla's sign-in service at `connect.mewla.ai` (see [Google Calendar and Gmail](#google-calendar-and-gmail)) | Works: the sign-in opens in a new tab, which says when to close it, and Extensions updates by itself |
 | Hyperliquid | No sign-in and no setup to read; one API wallet key you paste to let Brain trade | Works everywhere; the key field is on the service's page |
 
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.
 
-Google Workspace, which bundled Drive, Gmail and Calendar, was replaced by the
-two plugins below: a server deletes an old Google Workspace account and its
-saved key when it starts. Drive is not offered. fal and Image generation were
-removed the same way. Onlora generates images, speech and video.
+Mewla has no Google plugins. Google Calendar and Gmail were removed, as was the
+older Google Workspace plugin: when a server starts it signs out of any Google
+account still connected there and deletes the account and its saved token.
+Mewla's own [Calendar](calendar.md) is not a plugin and is unaffected. fal and
+Image generation were removed the same way. Onlora generates images, speech and
+video.
 
 ## What Brain can do
 
@@ -116,45 +116,6 @@ expired, **Turn on** when it is off, **Check again** after a failed call, or
 
 To add a second account, use **Add another account** at the bottom of the
 service's page. It is the same sign-in as Connect.
-
-## Google Calendar and Gmail
-
-Google Calendar and Gmail are two plugins, and each signs in on its own. Each
-asks Google only for what it needs, so connecting Calendar never lets Brain
-read your mail, and the reverse. Connecting both takes two quick sign-ins, and
-you can connect just one.
-
-| Plugin | Read and search | Make changes when asked |
-| --- | --- | --- |
-| Google Calendar | List your calendars and events, find events by text and see when you're free. Times come back in your calendar's time zone, recurring events as single occurrences | Create, change and delete events, add or remove guests and reply to invitations. Guests are not emailed unless Brain asks for it |
-| Gmail | Search mail with Gmail's own search, read messages and conversations as readable text (long ones are cut and marked), and list labels | Save drafts, send a message or a draft, mark read, archive and label |
-
-Google's scopes behind them: Calendar reads with `calendar.calendarlist.readonly`,
-`calendar.events.readonly` and `calendar.freebusy`, and changes with
-`calendar.events`. Gmail reads with `gmail.readonly` and changes with
-`gmail.modify`. Gmail has no narrower scope that can read a message's text or
-search it.
-
-Brain drafts instead of sending unless you asked for that exact message, and
-Mewla builds the message itself, so an address or subject cannot add a header
-or a hidden recipient. To keep a plugin from sending, turn off its
-`send_message` and `send_draft` tools under **Tools & activity**.
-
-**Mewla's sign-in service holds Google's client secret, so your computer never
-does.** When you tap Connect, your computer asks `connect.mewla.ai` for a
-sign-in. After you approve on Google's page, Google's tokens travel to your
-computer encrypted so that only the computer that asked can open them, and the
-service keeps nothing afterwards. Refreshing a token goes through the same
-service with a receipt only your computer holds.
-
-**Invite only while Google reviews Mewla's app.** Until Google has verified
-Mewla, only accounts on Mewla's early-access list can sign in, and Google ends
-each connection after 7 days. Any other account gets Google's own "access
-blocked" page, which never returns to the app. Mewla says nothing before you
-connect; when you close that page, or Google refuses, the card reads "If Google
-blocked it, this account isn't on Mewla's early-access list yet". A connection that Google ended shows
-**Needs sign-in again**; tap **Reconnect**. Google's verification of Gmail
-access also needs a yearly third-party security assessment.
 
 ## Cloudflare
 
