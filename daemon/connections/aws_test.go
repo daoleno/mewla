@@ -61,7 +61,9 @@ func writeAWSModels(t *testing.T, gz bool) string {
 				"GetObjectOutput": map[string]any{"type": "structure", "members": map[string]any{"Body": map[string]any{"shape": "Body"}}}}},
 		"lambda": {"AWS Lambda", []awsFixtureOp{{"Invoke", "<p>Invokes a function.</p>", "Empty", "Empty"}, {"GetFunctionConfiguration", "<p>Returns configuration.</p>", "Empty", "Empty"}},
 			map[string]any{"Empty": map[string]any{"type": "structure", "members": map[string]any{}}}},
-		"ssm": {"AWS Systems Manager", []awsFixtureOp{{"GetParameter", "<p>Gets a parameter.</p>", "Empty", "Empty"}},
+		"ssm": {"AWS Systems Manager", []awsFixtureOp{{"GetParameter", "<p>Gets a parameter.</p>", "Empty", "Empty"}, {"StartSession", "<p>Initiates a connection to a target.</p>", "Empty", "Empty"}},
+			map[string]any{"Empty": map[string]any{"type": "structure", "members": map[string]any{}}}},
+		"ecs": {"Amazon Elastic Container Service", []awsFixtureOp{{"ExecuteCommand", "<p>Runs a command in a container.</p>", "Empty", "Empty"}},
 			map[string]any{"Empty": map[string]any{"type": "structure", "members": map[string]any{}}}},
 		"secretsmanager": {"AWS Secrets Manager", []awsFixtureOp{{"GetSecretValue", "<p>Retrieves a secret.</p>", "Empty", "Empty"}, {"ListSecrets", "<p>Lists secrets.</p>", "Empty", "Empty"}},
 			map[string]any{"Empty": map[string]any{"type": "structure", "members": map[string]any{}}}},
@@ -126,7 +128,7 @@ func awsTestManager(t *testing.T, reply func(c awsCommand) ([]byte, error)) (*Ma
 	config := `[default]
 region = us-east-1
 
-[profile freeride]
+[profile work]
 login_session = arn:aws:iam::123456789012:user/audit
 region = ap-southeast-1
 
@@ -272,7 +274,7 @@ func TestAWSProfiles(t *testing.T) {
 	for _, p := range r.Profiles {
 		kinds[p.Name], regions[p.Name] = p.Kind, p.Region
 	}
-	want := map[string]string{"default": "other", "freeride": "login", "work-sso": "sso", "deploy": "role", "static": "keys"}
+	want := map[string]string{"default": "other", "work": "login", "work-sso": "sso", "deploy": "role", "static": "keys"}
 	if len(kinds) != len(want) {
 		t.Fatalf("profiles: %v", kinds)
 	}
@@ -281,7 +283,7 @@ func TestAWSProfiles(t *testing.T) {
 			t.Errorf("%s: %s, want %s", name, kinds[name], kind)
 		}
 	}
-	if regions["freeride"] != "ap-southeast-1" {
+	if regions["work"] != "ap-southeast-1" {
 		t.Errorf("region: %v", regions)
 	}
 	raw, _ := json.Marshal(r)
@@ -386,15 +388,15 @@ func TestAWSConnectProfile(t *testing.T) {
 	m, fake := awsTestManager(t, awsOK)
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "inherited-secret")
 	t.Setenv("AWS_PROFILE", "inherited-profile")
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	if a.Name != "AWS 123456789012" || a.Identity != "arn:aws:iam::123456789012:user/audit" || a.Status != "connected" {
 		t.Fatalf("%+v", a)
 	}
-	if a.Profile != "freeride" || a.Region != "ap-southeast-1" || a.AuthMethod != "aws_profile" {
+	if a.Profile != "work" || a.Region != "ap-southeast-1" || a.AuthMethod != "aws_profile" {
 		t.Fatalf("%+v", a)
 	}
 	c := fake.last()
-	if !awsArgsHave(c, "sts", "get-caller-identity", "--profile=freeride", "--output=json", "--no-cli-pager", "--no-cli-auto-prompt", "--no-paginate") {
+	if !awsArgsHave(c, "sts", "get-caller-identity", "--profile=work", "--output=json", "--no-cli-pager", "--no-cli-auto-prompt", "--no-paginate") {
 		t.Fatalf("argv: %v", c.Args)
 	}
 	for _, e := range c.Env {
@@ -413,7 +415,7 @@ func TestAWSConnectProfile(t *testing.T) {
 		t.Fatalf("grants: %v", granted)
 	}
 	// Connecting the same profile again renews the account.
-	again := addAWSProfile(t, m, "freeride")
+	again := addAWSProfile(t, m, "work")
 	if again.ID != a.ID || len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 1 {
 		t.Fatal("the same profile twice is one account")
 	}
@@ -431,7 +433,7 @@ func TestAWSConnectProfile(t *testing.T) {
 	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "aws"}}); err == nil {
 		t.Error("neither a profile nor keys")
 	}
-	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "aws", Profile: "freeride", Credential: "{}"}}); err == nil {
+	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "aws", Profile: "work", Credential: "{}"}}); err == nil {
 		t.Error("both a profile and keys")
 	}
 }
@@ -499,13 +501,13 @@ func TestAWSKeysWithoutRegionDefaultToUSEast1(t *testing.T) {
 
 func TestAWSReadCall(t *testing.T) {
 	m, fake := awsTestManager(t, awsOK)
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	got, err := invokeAWS(m, a, "read", `{"service":"rds","operation":"describe-db-instances","params":{"DBInstanceIdentifier":"main"},"region":"us-west-2","query":"DBInstances[].DBInstanceIdentifier"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := fake.last()
-	want := []string{"rds", "describe-db-instances", "--output=json", "--no-cli-pager", "--no-cli-auto-prompt", "--no-paginate", "--profile=freeride", "--region=us-west-2", "--query=DBInstances[].DBInstanceIdentifier"}
+	want := []string{"rds", "describe-db-instances", "--output=json", "--no-cli-pager", "--no-cli-auto-prompt", "--no-paginate", "--profile=work", "--region=us-west-2", "--query=DBInstances[].DBInstanceIdentifier"}
 	if strings.Join(c.Args, "|") != strings.Join(want, "|") {
 		t.Fatalf("argv:\n%v\nwant\n%v", c.Args, want)
 	}
@@ -531,7 +533,7 @@ func TestAWSReadCall(t *testing.T) {
 
 func TestAWSRefusals(t *testing.T) {
 	m, fake := awsTestManager(t, awsOK)
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	before := len(fake.calls)
 	for name, c := range map[string]struct{ tool, args, contains string }{
 		"a change through read":         {"read", `{"service":"rds","operation":"DeleteDBInstance","params":{"DBInstanceIdentifier":"main"}}`, "execute"},
@@ -562,7 +564,7 @@ func TestAWSRefusals(t *testing.T) {
 // Even with execute allowed, streamed and file-reading operations stay refused.
 func TestAWSExecuteWhenAllowed(t *testing.T) {
 	m, fake := awsTestManager(t, awsOK)
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	mustHandle(t, m, Request{Action: "permissions", ID: a.ID, Group: "write", Allowed: true})
 	if _, err := invokeAWS(m, a, "execute", `{"service":"rds","operation":"DeleteDBInstance","params":{"DBInstanceIdentifier":"main"}}`); err != nil {
 		t.Fatal(err)
@@ -573,12 +575,17 @@ func TestAWSExecuteWhenAllowed(t *testing.T) {
 	for _, args := range []string{
 		`{"service":"s3","operation":"GetObject"}`,
 		`{"service":"lambda","operation":"Invoke"}`,
+		`{"service":"ssm","operation":"StartSession","params":{"Target":"i-1"}}`,
+		`{"service":"ecs","operation":"ExecuteCommand","params":{"command":"sh","interactive":true,"task":"t"}}`,
 		`{"service":"rds","operation":"ModifyDBInstance","params":{"DBInstanceIdentifier":"file://etc/hosts"}}`,
 	} {
 		n := len(fake.calls)
 		if _, err := invokeAWS(m, a, "execute", args); err == nil || len(fake.calls) != n {
 			t.Errorf("%s: %v", args, err)
 		}
+	}
+	if _, err := invokeAWS(m, a, "execute", `{"service":"ssm","operation":"StartSession"}`); err == nil || !strings.Contains(err.Error(), "Session Manager") {
+		t.Errorf("an interactive session: %v", err)
 	}
 	// A reads-only operation also runs through execute.
 	if _, err := invokeAWS(m, a, "execute", `{"service":"rds","operation":"DescribeDBInstances"}`); err != nil {
@@ -588,7 +595,7 @@ func TestAWSExecuteWhenAllowed(t *testing.T) {
 
 func TestAWSSearchAndDocsTools(t *testing.T) {
 	m, fake := awsTestManager(t, awsOK)
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	n := len(fake.calls)
 	got, err := invokeAWS(m, a, "search", `{"query":"delete rds instance"}`)
 	if err != nil || !strings.Contains(string(got.Result), `"operation":"DeleteDBInstance"`) || !strings.Contains(string(got.Result), `"kind":"write"`) {
@@ -625,9 +632,9 @@ func TestAWSSearchAndDocsTools(t *testing.T) {
 
 func TestAWSWhoami(t *testing.T) {
 	m, _ := awsTestManager(t, awsOK)
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	got, err := invokeAWS(m, a, "whoami", `{}`)
-	if err != nil || !strings.Contains(string(got.Result), `"account":"123456789012"`) || !strings.Contains(string(got.Result), `"profile":"freeride"`) {
+	if err != nil || !strings.Contains(string(got.Result), `"account":"123456789012"`) || !strings.Contains(string(got.Result), `"profile":"work"`) {
 		t.Fatalf("%v %s", err, got.Result)
 	}
 }
@@ -635,7 +642,7 @@ func TestAWSWhoami(t *testing.T) {
 func TestAWSModelsMissing(t *testing.T) {
 	m, _ := awsTestManager(t, awsOK)
 	m.awsModelDir = func() (string, error) { return "", errors.New("models not found") }
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	if _, err := invokeAWS(m, a, "search", `{"query":"rds"}`); err == nil || !strings.Contains(err.Error(), "models not found") {
 		t.Fatalf("search without models: %v", err)
 	}
@@ -658,16 +665,16 @@ func TestAWSSessionExpiry(t *testing.T) {
 		}
 		return awsOK(c)
 	})
-	login := addAWSProfile(t, m, "freeride")
+	login := addAWSProfile(t, m, "work")
 	sso := addAWSProfile(t, m, "work-sso")
 	for _, c := range []struct {
 		account *Account
 		stderr  string
 		hint    string
 	}{
-		{login, "\naws: [ERROR]: Error loading login session token: Unable to load a existing login session for session arn:aws:iam::123456789012:user/audit, Please reauthenticate with 'aws login'.\n", "run `aws login --profile freeride`"},
+		{login, "\naws: [ERROR]: Error loading login session token: Unable to load a existing login session for session arn:aws:iam::123456789012:user/audit, Please reauthenticate with 'aws login'.\n", "run `aws login --profile work`"},
 		{sso, "\naws: [ERROR]: Error loading SSO Token: Token for corp does not exist\n", "run `aws sso login --profile work-sso`"},
-		{login, "\naws: [ERROR]: An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired\n", "run `aws login --profile freeride`"},
+		{login, "\naws: [ERROR]: An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired\n", "run `aws login --profile work`"},
 	} {
 		expired, stderr = true, c.stderr
 		_, err := invokeAWS(m, c.account, "whoami", `{}`)
@@ -749,18 +756,18 @@ func TestRunAWSEnvironmentAndParams(t *testing.T) {
 	t.Setenv("AWS_CONFIG_FILE", "")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	r := &record{Account: Account{AuthMethod: awsMethodProfile, Profile: "freeride"}}
+	r := &record{Account: Account{AuthMethod: awsMethodProfile, Profile: "work"}}
 	env, err := awsEnv(r, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := runAWS(context.Background(), awsCommand{Args: []string{"rds", "describe-db-instances", "--profile=freeride"}, Env: env, Input: []byte(`{"Password":"p@ss"}`)})
+	out, err := runAWS(context.Background(), awsCommand{Args: []string{"rds", "describe-db-instances", "--profile=work"}, Env: env, Input: []byte(`{"Password":"p@ss"}`)})
 	if err != nil || strings.TrimSpace(string(out)) != `{"ok":true}` {
 		t.Fatalf("%v %s", err, out)
 	}
 	raw, _ := os.ReadFile(log)
 	text := string(raw)
-	if !strings.Contains(text, "ARGS:rds describe-db-instances --profile=freeride --cli-input-json=file://") {
+	if !strings.Contains(text, "ARGS:rds describe-db-instances --profile=work --cli-input-json=file://") {
 		t.Fatalf("argv: %s", text)
 	}
 	if strings.Contains(text, "p@ss\n") && !strings.Contains(text, "PARAMS:{\"Password\":\"p@ss\"}") {
@@ -863,7 +870,7 @@ func TestAWSAnswersDoNotMarkTheAccount(t *testing.T) {
 		}
 		return awsOK(c)
 	})
-	a := addAWSProfile(t, m, "freeride")
+	a := addAWSProfile(t, m, "work")
 	if _, err := invokeAWS(m, a, "read", `{"service":"rds","operation":"DeleteDBInstance"}`); err == nil {
 		t.Fatal("a refusal")
 	}
