@@ -18,7 +18,8 @@ import {
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { DESKTOP_PAGE_GUTTER, TypeScale, useAppColors } from "../../constants/tokens";
+import { ContentWidth, Spacing, TypeScale, useAppColors } from "../../constants/tokens";
+import { SESSIONS_TEXT_INSET } from "../workers/SessionsListView";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { Icon } from "../icons/Icon";
 import { PrimaryChromeButton } from "./PrimaryChromeButton";
@@ -136,7 +137,16 @@ function PrimaryAppBar({
       ]}
     >
       {docked ? (
-        <View style={styles.dockedRow}>
+        <View
+          style={[
+            styles.dockedRow,
+            // The row is the page's own column: Brain's chat, or the Sessions
+            // list, whose rows start SESSIONS_TEXT_INSET in.
+            activePrimaryRoute === "brain"
+              ? { maxWidth: ContentWidth.reading, paddingLeft: Spacing.lg - APP_BAR_SIDE_PADDING }
+              : { maxWidth: ContentWidth.page, paddingLeft: SESSIONS_TEXT_INSET - APP_BAR_SIDE_PADDING },
+          ]}
+        >
           <Text
             accessibilityRole="header"
             numberOfLines={1}
@@ -468,10 +478,10 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
-    width: "100%",
-    // The bar already pads its sides. Title and actions sit on the page
-    // gutters, as in DesktopPageHeader.
-    paddingHorizontal: DESKTOP_PAGE_GUTTER - APP_BAR_SIDE_PADDING,
+    // The bar is a row: auto side margins center the page's column in it.
+    marginHorizontal: "auto",
+    // The bar already pads its sides; the title's left padding is set per page.
+    paddingRight: Spacing.lg - APP_BAR_SIDE_PADDING,
   },
   dockedTitle: {
     ...TypeScale.pageTitle,

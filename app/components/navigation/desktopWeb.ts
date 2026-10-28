@@ -124,6 +124,28 @@ export function isDesktopTopLevelRoute(routeName: string): boolean {
   }
 }
 
+/** A desktop page's content column (see ContentWidth). */
+export type DesktopPageColumn = "page" | "wide";
+
+/**
+ * The column a page's header row shares with its content, so the title sits
+ * where the content starts. Null: the browser and Screen run full width.
+ */
+export function desktopPageColumn(routeName: string): DesktopPageColumn | null {
+  switch (routeName) {
+    case "browser":
+    case "screen":
+    case "onboarding":
+    case "screenshot-demo":
+      return null;
+    case "calendar":
+    case "resources":
+      return "wide";
+    default:
+      return "page";
+  }
+}
+
 /**
  * Routes that center their own content column inside a full-width scroll
  * area (so the scrollbar stays at the window edge) or lay out their own

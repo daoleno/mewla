@@ -6,6 +6,7 @@ import type {
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
 import {
+  ContentWidth,
   ContinuousCorners,
   TypeScale,
   useAppTheme,
@@ -115,6 +116,7 @@ export function UserMessage({
   const subject = messageSubject(item);
   return (
     <View style={[styles.userRow, spacing]}>
+      <View style={styles.userCap}>
       <MessageActionSurface
         subject={subject}
         align="end"
@@ -158,6 +160,7 @@ export function UserMessage({
           ) : null}
         </View>
       </MessageActionSurface>
+      </View>
     </View>
   );
 }
@@ -238,6 +241,14 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     overflow: "visible",
   },
+  // The frame is wide; a sent message wraps within a reading width, still
+  // right-aligned to the frame's edge.
+  userCap: {
+    width: "100%",
+    maxWidth: ContentWidth.reading,
+    minWidth: 0,
+    alignItems: "flex-end",
+  },
   userBubble: {
     position: "relative",
     maxWidth: "100%",
@@ -273,9 +284,11 @@ const styles = StyleSheet.create({
     ...TypeScale.micro,
     marginBottom: 4,
   },
+  // The frame is wide; the text caps its own line length for reading.
   assistantContent: {
-    alignSelf: "stretch",
+    alignSelf: "flex-start",
     width: "100%",
+    maxWidth: ContentWidth.reading,
     minWidth: 0,
   },
 

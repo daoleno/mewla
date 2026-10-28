@@ -112,7 +112,8 @@ preference.
   read for.
 - **Failures show at the action.** Send stays pressable while offline: the
   composer says "Not sent: Mewla can't reach your computer. Your message is
-  still here." and keeps the draft; the note clears on reconnect. A sent
+  still here." and keeps the draft; the note clears on reconnect. Drafts also survive a reload
+  and an app restart (`services/draftStore.ts`, 14 days, cleared on send). A sent
   message waits in the queue and goes out by itself; one that could not be
   delivered shows a "!" you tap to send it again.
   Other actions (New chat, a Work action) fail with a toast.
@@ -217,24 +218,24 @@ phone web and native, tablets included, keep the model above. Rules:
    arrows) and keeps Attach; phones, tablets and touch laptops keep them.
 7. **Desktop affordances.** Rows show hover and a pointer, chats are
    selectable, and each tab has a title ("Calendar · Mewla").
-8. **One header, centered columns.** Every page has a 52 pt header that spans
-   the pane: its title in `TypeScale.pageTitle` at the page gutter,
-   `DESKTOP_PAGE_GUTTER` (24 pt right of the sidebar), and its actions at the
-   opposite gutter (40 pt buttons). Brain and Sessions included, so switching
-   pages never moves either (`DesktopPageHeader`, the docked `PrimaryAppBar`,
-   a Session's flat header). Content sits in a column centered under it, so a
-   wide window gets balanced margins, never an empty right side. Widths are
+8. **One header, centered columns.** Every page has a 52 pt header bar that
+   spans the pane, and its row (title in `TypeScale.pageTitle` on the left,
+   actions on the right, 40 pt buttons) sits on the page's own centered
+   column, so the title lines up with the content below it and the actions
+   with its right edge. Brain and Sessions included (`DesktopPageHeader`, the
+   docked `PrimaryAppBar`, a Session's header); the sidebar and Back stay put.
+   A wide window gets balanced margins, never an empty right side. Widths are
    tokens, never literals: `ContentWidth.page` (760: Settings, Stats,
    Sessions, Extensions and sub-pages), `ContentWidth.wide` (1200: Calendar,
-   Resources) and `ContentWidth.reading` (820: chats and a Session's
-   terminal). Menu destinations center their own column inside a full-width
+   Resources, a Session) and `ContentWidth.reading` (820: Brain's chat). Menu destinations center their own column inside a full-width
    scroll area, so the scrollbar stays at the window edge; sub-pages with no
    column of their own are framed by the Stack (`desktopFramedRoute`). Phones
    and tablets keep their centered columns.
    The two views of one thing share one frame: a Session's chat and its
-   terminal sit in the same header and the same 820 pt body, so toggling
+   terminal sit in the same header and the same 1200 pt `wide` frame, so toggling
    changes neither width, gutter nor header position
-   (`TerminalScreenLayout`).
+   (`TerminalScreenLayout`, `SESSION_FRAME_WIDTH`). Message text caps its own
+   width inside the frame; frame, header and composer stay at the shared width.
 9. **One way to make a thing.** A page's main action is one header button
    with its shortcut in the tooltip (Sessions: + "New session (N)"; Calendar:
    + "Add calendar item"); desktop drops the phone's floating button and the
@@ -542,8 +543,9 @@ changes that the service must approve all call it.
   name lives in the accessibility label and the tooltip ("New session (N)" on
   desktop web). Nothing sits
   above the list unless the server is unreachable.
-- **Worker chat.** The conversation and the terminal grid share Brain's 820 pt
-  reading width, one frame for both views. The header avatar carries the Session's
+- **Worker chat.** The conversation and the terminal grid share one 1200 pt
+  frame (`wide`), one frame for both views; message text caps at the reading
+  width. The header avatar carries the Session's
   StatusMark (Running, Blocked, Failed only).
 - **Tool rows.** A bare soft-ink tool glyph, the title, then the StatusMark
   in place of the old mono status word: Running and Waiting spin the arc,

@@ -5,7 +5,7 @@ import { DesktopPageHeader } from "./DesktopPageHeader";
 import { HeaderBackButton } from "./HeaderBackButton";
 import { screenBackParent, type ScreenBackParent } from "./screenBack";
 import { useScreenBack, type ScreenBackNavigation } from "./useScreenBack";
-import { desktopFramedRoute, isDesktopTopLevelRoute } from "./desktopWeb";
+import { desktopFramedRoute, desktopPageColumn, isDesktopTopLevelRoute } from "./desktopWeb";
 import { useDesktopWeb } from "./useDesktopWeb";
 
 // Native headers inset their leading and trailing items by 16pt. The web
@@ -66,12 +66,13 @@ export function useStackScreenOptions() {
           : topLevel
             ? () => null
             : undefined,
-        // Desktop web: one full-width header for every page (DesktopPageHeader);
-        // the page's column is centered under it (desktopFramedRoute).
+        // Desktop web: one header for every page, its row on the page's own
+        // centered column (DesktopPageHeader, desktopFramedRoute).
         ...(desktopWeb
           ? {
               header: (props: StackHeaderProps) => (
                 <DesktopPageHeader
+                  column={desktopPageColumn(route.name)}
                   title={desktopHeaderTitle(props)}
                   leading={backParent ? <StackBackButton navigation={navigation} parent={backParent} /> : null}
                   trailing={props.options.headerRight?.({ tintColor: colors.textPrimary, canGoBack: Boolean(props.back) })}
