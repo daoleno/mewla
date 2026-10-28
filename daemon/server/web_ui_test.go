@@ -134,7 +134,7 @@ func TestPrefersHTML(t *testing.T) {
 	}
 }
 
-// Reloading /resources or /browser in the web app must reopen the page, while
+// Reloading /resources, /browser or /friends in the web app must reopen the page, while
 // the app's own requests to the same paths keep the daemon API.
 func TestAppRoutesServeTheWebUIToPageLoadsOnly(t *testing.T) {
 	manager, err := auth.NewManager(t.TempDir())
@@ -156,7 +156,7 @@ func TestAppRoutesServeTheWebUIToPageLoadsOnly(t *testing.T) {
 		return recorder
 	}
 	const loopbackHost, loopbackRemote = "127.0.0.1:9876", "127.0.0.1:50000"
-	for _, path := range []string{"/resources", "/browser", "/resources?tab=processes"} {
+	for _, path := range []string{"/resources", "/browser", "/friends", "/resources?tab=processes"} {
 		response := serve(http.MethodGet, path, browserPageAccept, loopbackHost, loopbackRemote)
 		if response.Code != http.StatusOK || response.Body.String() != "<html>mewla</html>" {
 			t.Fatalf("page load %s: status=%d body=%q", path, response.Code, response.Body.String())
