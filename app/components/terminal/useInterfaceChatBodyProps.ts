@@ -1,3 +1,4 @@
+import type { ComposerKeyActions } from "./composerKeyActions";
 import { useCallback, useMemo, type ReactNode } from "react";
 import type { ConnectionState } from "../../store/workers";
 import type {
@@ -74,6 +75,8 @@ interface UseInterfaceChatBodyPropsInput {
   ): void;
   showUnavailableAction?: boolean;
   composerAccessory?: ReactNode;
+  composerPickerOpen?: boolean;
+  composerKeyActions?: ComposerKeyActions;
   /** The edit bar: above the composer, but not a picker that holds Enter. */
   composerEditBar?: ReactNode;
   skillsSheet?: ReactNode;
@@ -122,6 +125,8 @@ export function useInterfaceChatBodyProps({
   onKeyboardLifecycleInvalidate,
   showUnavailableAction,
   composerAccessory,
+  composerPickerOpen,
+  composerKeyActions,
   composerEditBar,
   skillsSheet,
 }: UseInterfaceChatBodyPropsInput): InterfaceChatBodyProps {
@@ -210,6 +215,7 @@ export function useInterfaceChatBodyProps({
       onRemoveAttachment: controller.removeAttachment,
       onDraftChange: setDraft,
       onUploadPress: handleUploadPress,
+      onAddFiles: controller.addFiles,
       onCancelUpload: controller.cancelUpload,
       onInputFocus: composerInput.handleFocus,
       onInputBlur: composerInput.handleBlur,
@@ -219,6 +225,8 @@ export function useInterfaceChatBodyProps({
       onPendingUserMessageAction: controller.actOnPendingUserMessage,
       onTerminalActionAnswer,
       composerAccessory,
+      composerPickerOpen,
+      composerKeyActions,
       composerEditBar,
       skillsSheet,
     }),
@@ -262,6 +270,7 @@ export function useInterfaceChatBodyProps({
       handleSendPress,
       handleStopPress,
       handleUploadPress,
+      controller.addFiles,
       loading,
       jumpLabel,
       emptyTitle,
@@ -273,6 +282,8 @@ export function useInterfaceChatBodyProps({
       onTerminalActionAnswer,
       onKeyboardLifecycleInvalidate,
       composerAccessory,
+      composerPickerOpen,
+      composerKeyActions,
       composerEditBar,
       screenFocused,
       showUnavailableAction,

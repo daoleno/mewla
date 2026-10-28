@@ -38,10 +38,15 @@ export type MessageTableBlock = {
 const MAX_BARE_JSON_LINES = 240;
 const MAX_BARE_JSON_CHARS = 140_000;
 
-export function parseMessageBlocks(value: string): MessageBlock[] {
+/**
+ * `keepLineBreaks`: a person's own message keeps the line breaks they typed
+ * (Shift+Enter, or Return on a phone). An agent's markdown wraps its prose
+ * at a fixed column, so there a single newline is only a space.
+ */
+export function parseMessageBlocks(value: string, { keepLineBreaks = false } = {}): MessageBlock[] {
   const measure = isTimelineProjectionPerfEnabled();
   const started = measure ? markdownPerfNowMs() : 0;
-  const blocks = parseMessageBlocksUninstrumented(value);
+  const blocks = parseMessageBlocksUninstrumented(value, keepLineBreaks);
   if (measure) {
     recordMarkdownParseSample({
       durationMs: markdownPerfNowMs() - started,
@@ -59,7 +64,7 @@ function markdownPerfNowMs() {
   return perf?.now?.() ?? Date.now();
 }
 
-function parseMessageBlocksUninstrumented(value: string): MessageBlock[] {
+function parseMessageBlocksUninstrumented(value: string, keepLineBreaks: boolean): MessageBlock[] {
   const lines = value
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/\r\n/g, "\n")
@@ -73,7 +78,7 @@ function parseMessageBlocksUninstrumented(value: string): MessageBlock[] {
   let code: { fence: string; indent: number; language?: string; lines: string[] } | null = null;
 
   const flushParagraph = () => {
-    const text = normalizeProseText(paragraph.join(" ")).trim();
+    const text = normalizeProseText(paragraph.join(keepLineBreaks ? "\n" : " ")).trim();
     if (text) {
       blocks.push({ type: "paragraph", text });
     }

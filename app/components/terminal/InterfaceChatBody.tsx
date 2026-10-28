@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   StyleSheet,
   useWindowDimensions,
@@ -36,6 +36,9 @@ import type {
   TerminalActionPromptOption,
 } from "./TerminalActionPromptModel";
 import { ClaudeChoiceCard } from "./ClaudeChoiceCard";
+import { useComposerFileTransfer } from "./useComposerFileTransfer";
+import { InterfaceDropOverlay } from "./InterfaceDropOverlay";
+import { ComposerKeyActionsContext, type ComposerKeyActions } from "./composerKeyActions";
 import { choiceCardMaxHeight, type InterfaceChoicePrompt } from "./claudeChoiceModel";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import type { TurnFocusSpacerRequest } from "./turnFocusState";
@@ -129,6 +132,8 @@ export interface InterfaceChatBodyProps {
   onRemoveAttachment(id: string): void;
   onDraftChange(value: string): void;
   onUploadPress(): void;
+  /** Web: files pasted into the composer or dropped on the chat. */
+  onAddFiles?(files: File[]): void;
   onCancelUpload(): void;
   onInputFocus(): void;
   onInputBlur(): void;
@@ -138,6 +143,9 @@ export interface InterfaceChatBodyProps {
   onPendingUserMessageAction(id: string, action: PendingUserMessageAction): void;
   onTerminalActionAnswer(option: TerminalActionPromptOption): Promise<void> | void;
   composerAccessory?: React.ReactNode;
+  /** A list above the box owns Enter (Brain's @mention picker). */
+  composerPickerOpen?: boolean;
+  composerKeyActions?: ComposerKeyActions;
   composerEditBar?: React.ReactNode;
   skillsSheet?: React.ReactNode;
 }
@@ -213,6 +221,7 @@ export function InterfaceChatBody({
   onRemoveAttachment,
   onDraftChange,
   onUploadPress,
+  onAddFiles,
   onCancelUpload,
   onInputFocus,
   onInputBlur,
@@ -222,11 +231,20 @@ export function InterfaceChatBody({
   onPendingUserMessageAction,
   onTerminalActionAnswer,
   composerAccessory,
+  composerPickerOpen = false,
+  composerKeyActions = noKeyActions,
   composerEditBar,
   skillsSheet,
 }: InterfaceChatBodyProps) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const rootRef = useRef<View>(null);
+  const filesEnabled = !readOnly && canAttach && onAddFiles != null;
+  const { dragging } = useComposerFileTransfer({
+    rootRef,
+    enabled: filesEnabled,
+    onFiles: onAddFiles ?? noFiles,
+  });
   const composer = !readOnly ? (
     <>
       {choicePrompt ? (
@@ -256,7 +274,7 @@ export function InterfaceChatBody({
       {composerAccessory}
       {composerEditBar}
       <InterfaceChatComposerSection
-        accessoryOpen={composerAccessory != null}
+        accessoryOpen={composerPickerOpen}
         inputRef={inputRef}
         draft={draft}
         editable={editable}
@@ -297,6 +315,8 @@ export function InterfaceChatBody({
   ) : undefined;
 
   return (
+    <ComposerKeyActionsContext.Provider value={composerKeyActions}>
+    <View ref={rootRef} style={styles.root}>
     <InterfaceChatKeyboardFrame
       enabled={screenFocused}
       composerFocused={composerFocused}
@@ -361,10 +381,20 @@ export function InterfaceChatBody({
         />
       )}
     />
+    {dragging ? <InterfaceDropOverlay chrome={chrome} /> : null}
+    </View>
+    </ComposerKeyActionsContext.Provider>
   );
 }
 
+const noFiles = () => undefined;
+const noKeyActions: ComposerKeyActions = {};
+
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    minHeight: 0,
+  },
   jumpSlot: {
     height: 52,
     position: "relative",

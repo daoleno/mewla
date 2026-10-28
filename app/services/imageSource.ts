@@ -47,7 +47,8 @@ export async function resolveImageSource(source: ImageSource, owner: ImageOwner 
     // Native requests and redirects carry no Mewla credentials.
     return { uri: url.href, headers: {} };
   }
-  if (!/^(content:|file:)/i.test(source.uri)) throw new Error("The local image grant is unavailable.");
+  // content:/file: on a phone; blob: is the browser File the composer itself holds.
+  if (!/^(content:|file:|blob:)/i.test(source.uri)) throw new Error("The local image grant is unavailable.");
   return { uri: source.uri, headers: {} };
 }
 

@@ -132,7 +132,7 @@ export function UserMessage({
           ]}
         >
           {hasBody ? (
-            <MessageBody value={item.body} chrome={sentChrome} theme={theme} />
+            <MessageBody value={item.body} chrome={sentChrome} theme={theme} keepLineBreaks />
           ) : null}
           {item.attachments.length > 0 ? (
             <InterfaceTimelineAttachmentPreviewList

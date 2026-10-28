@@ -46,6 +46,8 @@ interface InterfaceChatSurfaceProps {
     draft: string;
     setDraft: (value: string) => void;
   }) => React.ReactNode;
+  /** The accessory is a list that owns Enter (Brain's @mention picker). */
+  composerPickerOpen?: (draft: string) => boolean;
   composerModelControl?: ComposerModelControlPresentation | null;
   onComposerModelControlPress?: () => void;
   onSwitchToTerminal?: () => void;
@@ -79,6 +81,7 @@ function InterfaceChatSurfaceImpl({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
+  composerPickerOpen,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -110,6 +113,7 @@ function InterfaceChatSurfaceImpl({
     composerAccessory,
     onDraftChange,
     renderComposerAccessory,
+    composerPickerOpen,
       composerModelControl,
     onComposerModelControlPress,
     onSwitchToTerminal,

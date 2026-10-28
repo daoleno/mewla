@@ -15,20 +15,10 @@ import { COMPOSER_MAX_FONT_SCALE } from "./composerExpansionMetrics";
 import {
   COMPOSER_SUBMIT_BEHAVIOR,
   composerReturnKeyType,
+  hasDesktopPointer,
 } from "./composerInputBehavior";
 import { composerKeyIntent } from "../navigation/desktopShortcuts";
-
-/**
- * No touchscreen as the primary pointer: there Enter sends (desktop web).
- * Phones and tablets report a coarse pointer and keep Enter as a new line.
- */
-function hasDesktopPointer(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    !window.matchMedia("(pointer: coarse)").matches
-  );
-}
+import { useComposerKeyActions } from "./composerKeyActions";
 
 interface InterfaceComposerInputProps {
   inputRef: React.RefObject<TextInputInstance | null>;
@@ -59,6 +49,9 @@ export function InterfaceComposerInput({
   lastSentRef,
   pickerOpen = false,
 }: InterfaceComposerInputProps) {
+  const keyActions = useComposerKeyActions();
+  // A desktop window has the room: the box grows to about eleven lines.
+  const maxInputHeight = Platform.OS === "web" && hasDesktopPointer() ? DESKTOP_MAX_INPUT_HEIGHT : MAX_INPUT_HEIGHT;
   const [inputHeight, setInputHeight] = useState(MIN_INPUT_HEIGHT);
   const draftEmpty = draft.length === 0;
   const multilineDraft = draft.includes("\n");
@@ -68,10 +61,10 @@ export function InterfaceComposerInput({
     (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
       const measuredHeight = Math.ceil(event.nativeEvent.contentSize.height);
       setInputHeight(
-        Math.max(MIN_INPUT_HEIGHT, Math.min(MAX_INPUT_HEIGHT, measuredHeight)),
+        Math.max(MIN_INPUT_HEIGHT, Math.min(maxInputHeight, measuredHeight)),
       );
     },
-    [],
+    [maxInputHeight],
   );
 
   useEffect(() => {
@@ -98,26 +91,37 @@ export function InterfaceComposerInput({
         event.preventDefault();
         onKeyboardSend?.();
       } else if (intent === "blur") {
-        inputRef.current?.blur();
-      } else if (intent === "recall" && lastSentRef?.current) {
-        event.preventDefault();
-        onDraftChange(lastSentRef.current);
+        // Esc leaves an edit first, then the box.
+        if (keyActions.cancelEdit?.()) {
+          event.preventDefault();
+        } else {
+          inputRef.current?.blur();
+        }
+      } else if (intent === "recall") {
+        // ↑ edits the last message where it can be edited, else brings back
+        // the text this box last sent.
+        if (keyActions.editLast?.()) {
+          event.preventDefault();
+        } else if (lastSentRef?.current) {
+          event.preventDefault();
+          onDraftChange(lastSentRef.current);
+        }
       }
     },
-    [draftEmpty, inputRef, lastSentRef, onDraftChange, onKeyboardSend, pickerOpen],
+    [draftEmpty, inputRef, keyActions, lastSentRef, onDraftChange, onKeyboardSend, pickerOpen],
   );
 
   return (
     <View
       collapsable={false}
-      style={[styles.inputWrap, { height: inputHeight }]}
+      style={[styles.inputWrap, { height: inputHeight, maxHeight: maxInputHeight }]}
     >
       <TextInput
         ref={inputRef}
         style={[
           styles.input,
           centerInputText ? styles.inputCentered : null,
-          { color: chrome.text, height: inputHeight },
+          { color: chrome.text, height: inputHeight, maxHeight: maxInputHeight },
         ]}
         value={draft}
         onChangeText={onDraftChange}
@@ -210,3 +214,4 @@ const styles = StyleSheet.create({
 
 const MIN_INPUT_HEIGHT = 44;
 const MAX_INPUT_HEIGHT = 124;
+const DESKTOP_MAX_INPUT_HEIGHT = 268;

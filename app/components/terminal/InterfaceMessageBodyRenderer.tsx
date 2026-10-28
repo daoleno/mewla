@@ -17,6 +17,8 @@ interface MessageBodyProps {
   compact?: boolean;
   dense?: boolean;
   streaming?: boolean;
+  /** Keep the line breaks a person typed (their own message). */
+  keepLineBreaks?: boolean;
 }
 
 export function MessageBody({
@@ -26,6 +28,7 @@ export function MessageBody({
   compact = false,
   dense = false,
   streaming = false,
+  keepLineBreaks = false,
 }: MessageBodyProps) {
   // Provider value stays lossless in props; only presentation work coalesces.
   const presentedValue = useStreamingMarkdownPresentation(value, streaming);
@@ -34,13 +37,13 @@ export function MessageBody({
       streaming ? prepareInterfaceMarkdown(presentedValue, true) : presentedValue,
     [presentedValue, streaming],
   );
-  return <MarkdownWithImages markdown={displayValue} chrome={chrome} renderMarkdown={(text) => <MessageBlocks value={text} chrome={chrome} theme={theme} compact={compact} dense={dense} streaming={streaming} />} />;
+  return <MarkdownWithImages markdown={displayValue} chrome={chrome} renderMarkdown={(text) => <MessageBlocks value={text} chrome={chrome} theme={theme} compact={compact} dense={dense} streaming={streaming} keepLineBreaks={keepLineBreaks} />} />;
 }
 
-function MessageBlocks({ value, chrome, theme, compact = false, dense = false, streaming = false }: MessageBodyProps) {
+function MessageBlocks({ value, chrome, theme, compact = false, dense = false, streaming = false, keepLineBreaks = false }: MessageBodyProps) {
   const blocks = useMemo(
-    () => parseMessageBlocks(value),
-    [value],
+    () => parseMessageBlocks(value, { keepLineBreaks }),
+    [keepLineBreaks, value],
   );
   if (blocks.length === 0) {
     return null;

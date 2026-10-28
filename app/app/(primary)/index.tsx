@@ -480,6 +480,11 @@ export default function BrainScreen() {
     },
     [availableExecutors, chrome, hostExecutor?.id],
   );
+  // The @mention list owns Enter while it is showing; LiveAnswer does not.
+  const brainMentionPickerOpen = useCallback(
+    (draft: string) => availableExecutors.length > 0 && activeExecutorMentionAtEnd(draft) != null,
+    [availableExecutors],
+  );
   // A tap on a live notification/widget answers through here, where the composer's send lives.
   const renderBrainComposerAccessory = useCallback(
     (accessory: Parameters<typeof renderBrainComposerAccessoryInner>[0]) => (
@@ -781,6 +786,7 @@ export default function BrainScreen() {
                 emptyTitle={BRAIN_EMPTY_TITLE}
                 emptyBody={BRAIN_EMPTY_BODY}
                 renderComposerAccessory={brainWaking ? undefined : renderBrainComposerAccessory}
+                composerPickerOpen={brainWaking ? undefined : brainMentionPickerOpen}
                 composerModelControl={brainWaking ? null : brainModelSheet.composerControl}
                 onComposerModelControlPress={() => brainModelSheet.open()}
               />

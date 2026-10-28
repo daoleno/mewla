@@ -51,6 +51,8 @@ import { liveActionPromptScopeKey } from "../../services/workerSessionListTransp
 import { useCodexSlashCommands } from "./CodexSlashCommands";
 import { useInterfaceChatBodyProps } from "./useInterfaceChatBodyProps";
 import { finalReplyIdsOf } from "./InterfaceTimelineModel";
+import { isEditablePrompt } from "./messageActionsModel";
+import type { ComposerKeyActions } from "./composerKeyActions";
 import { useInterfaceMessageActions } from "./useInterfaceMessageActions";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import {
@@ -100,6 +102,7 @@ interface UseInterfaceChatSurfaceStateInput {
     draft: string;
     setDraft: (value: string) => void;
   }) => ReactNode;
+  composerPickerOpen?: (draft: string) => boolean;
   composerModelControl?:
     | import("../../services/providers/sessionModelHelpers").ComposerModelControlPresentation
     | null;
@@ -144,6 +147,7 @@ export function useInterfaceChatSurfaceState({
   composerAccessory,
   onDraftChange,
   renderComposerAccessory,
+  composerPickerOpen: pickerOpenFor,
   composerModelControl,
   onComposerModelControlPress,
   onSwitchToTerminal,
@@ -416,6 +420,34 @@ export function useInterfaceChatSurfaceState({
     focusComposer: composerInput.focus,
     sendDraft: controller.sendDraft,
   });
+  // ↑ in an empty box edits the last message the person sent, where the app
+  // lets it be edited (idle, connected, text only).
+  const { environment: messageEnvironment, onEdit: editMessage, cancelEditIfActive } = messageActions;
+  const composerKeyActions = useMemo<ComposerKeyActions>(
+    () => ({
+      editLast: () => {
+        for (let index = events.length - 1; index >= 0; index -= 1) {
+          const event = events[index];
+          if (event.kind !== "user_message") continue;
+          const subject = {
+            id: event.id,
+            role: "user" as const,
+            body: event.body ?? "",
+            hasAttachments: (event.attachments?.length ?? 0) > 0,
+            pending: false,
+            streaming: false,
+            timestamp: event.timestamp,
+          };
+          if (!isEditablePrompt(subject, messageEnvironment)) return false;
+          editMessage(subject);
+          return true;
+        }
+        return false;
+      },
+      cancelEdit: cancelEditIfActive,
+    }),
+    [cancelEditIfActive, editMessage, events, messageEnvironment],
+  );
   const sendEdited = messageActions.sendEdited;
   const editAwareController = useMemo(
     () => ({
@@ -655,6 +687,8 @@ export function useInterfaceChatSurfaceState({
     onKeyboardLifecycleInvalidate: handleKeyboardLifecycleInvalidate,
     showUnavailableAction,
     composerAccessory: renderedComposerAccessory,
+    composerKeyActions,
+    composerPickerOpen: pickerOpenFor?.(draft) ?? false,
     composerEditBar: messageActions.accessory,
     skillsSheet: sheets,
   });

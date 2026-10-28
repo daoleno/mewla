@@ -161,6 +161,13 @@ export function useInterfaceMessageActions({
     [cancelEdit, chrome, edit, editError, rewinding],
   );
 
+  // Esc: leave an edit in progress. False when there is none to leave.
+  const cancelEditIfActive = useCallback(() => {
+    if (!latest.current.edit) return false;
+    cancelEdit();
+    return true;
+  }, [cancelEdit]);
+
   const editBlocksSend = rewinding || (edit !== null && !editIsSendable(edit, draft));
-  return { environment, replyIds, onEdit, sendEdited, accessory, editBlocksSend };
+  return { environment, replyIds, onEdit, cancelEditIfActive, sendEdited, accessory, editBlocksSend };
 }

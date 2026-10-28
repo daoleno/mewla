@@ -94,6 +94,7 @@ export function useInterfaceChatController({
 
   const {
     activeUpload,
+    addFiles,
     canAttach,
     cancelUpload,
     handleUploadAttachment,
@@ -186,6 +187,7 @@ export function useInterfaceChatController({
     actOnPendingUserMessage,
     pickSlashCommand,
     handleUploadAttachment,
+    addFiles,
     cancelUpload,
     removeAttachment,
     insertSkillMention,

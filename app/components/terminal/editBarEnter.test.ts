@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 
-// The edit bar sits above the composer but is not a picker: a picker holds
-// Enter on desktop (no send, no newline), so an edit could never be sent with
-// the keyboard when the bar was counted as one.
-test("the edit bar does not hold Enter like a picker accessory", async () => {
+// Only a list that owns Enter counts as a picker: a picker holds Enter on
+// desktop (no send, no newline). The edit bar, and Brain's accessory slot
+// (which always holds a fragment, even with nothing in it), are not pickers,
+// or Enter could never send there.
+test("only an open list holds Enter, not the edit bar or an accessory slot", async () => {
   const body = await Bun.file(new URL("./InterfaceChatBody.tsx", import.meta.url)).text();
-  expect(body).toContain("accessoryOpen={composerAccessory != null}");
+  expect(body).toContain("accessoryOpen={composerPickerOpen}");
   expect(body).toContain("{composerEditBar}");
   expect(body).not.toMatch(/accessoryOpen=\{[^}]*composerEditBar/);
+  expect(body).not.toMatch(/accessoryOpen=\{[^}]*composerAccessory/);
 });
