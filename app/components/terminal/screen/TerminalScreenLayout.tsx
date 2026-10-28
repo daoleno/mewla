@@ -1,6 +1,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { useDesktopWeb } from "../../navigation/useDesktopWeb";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { TerminalTopBar } from "../TerminalTopBar";
 import type { TerminalTopBarProps } from "../TerminalTopBar";
@@ -8,7 +9,7 @@ import { TerminalViewport } from "../TerminalViewport";
 import type { TerminalViewportProps } from "../TerminalViewport";
 import type { TerminalThemeChrome } from "../../../constants/terminalThemes";
 import { TerminalScreenOverlays } from "./TerminalScreenOverlays";
-import { CHAT_READING_WIDTH } from "../ChatCanvas";
+import { SESSION_FRAME_WIDTH } from "../ChatCanvas";
 import type { TerminalScreenOverlaysProps } from "./TerminalScreenOverlays";
 
 interface TerminalScreenLayoutProps {
@@ -27,22 +28,37 @@ export function TerminalScreenLayout({
   overlayProps,
 }: TerminalScreenLayoutProps) {
   const floatingChatChrome = viewportProps.showInterfaceChat;
+  const desktopWeb = useDesktopWeb();
+  // Desktop: the flat header's bar spans the pane; its row is the frame.
+  const barStyle = desktopWeb
+    ? {
+        backgroundColor: chrome.appBackground,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: chrome.border,
+      }
+    : null;
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: chrome.appBackground }]}
       edges={["top"]}
     >
       <StatusBar style={statusBarStyle} />
-      {/* One frame for both views of a Session: the header spans the pane and
-          the body holds the reading width, whether it is the chat or the
-          terminal grid, so switching never moves either. */}
+      {/* One frame for both views of a Session: header, body and composer share
+          one width, whether it is the chat or the terminal grid, so switching
+          never moves any of them. */}
       <View style={styles.stage}>
         {floatingChatChrome ? (
-          <View pointerEvents="box-none" style={styles.headerOverlay}>
-            <TerminalTopBar {...topBarProps} />
+          <View pointerEvents="box-none" style={[styles.headerOverlay, barStyle]}>
+            <View style={styles.headerColumn}>
+              <TerminalTopBar {...topBarProps} />
+            </View>
           </View>
         ) : (
-          <TerminalTopBar {...topBarProps} />
+          <View style={barStyle}>
+            <View style={styles.headerColumn}>
+              <TerminalTopBar {...topBarProps} />
+            </View>
+          </View>
         )}
         <View style={styles.frame}>
           <TerminalViewport {...viewportProps} />
@@ -67,7 +83,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     width: "100%",
-    maxWidth: CHAT_READING_WIDTH,
+    maxWidth: SESSION_FRAME_WIDTH,
+    alignSelf: "center",
+  },
+  headerColumn: {
+    width: "100%",
+    maxWidth: SESSION_FRAME_WIDTH,
     alignSelf: "center",
   },
   headerOverlay: {

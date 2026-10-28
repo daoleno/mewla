@@ -21,6 +21,11 @@ export function ChatCanvas({
 
 /** Conversation leads at a reading width; wide screens get margins, not lines. */
 export const CHAT_READING_WIDTH = ContentWidth.reading;
+/**
+ * A Session's frame: header, chat or terminal grid, and composer, one width
+ * in both views (~150 terminal columns). Message text caps its own width.
+ */
+export const SESSION_FRAME_WIDTH = ContentWidth.wide;
 
 const styles = StyleSheet.create({
   root: {

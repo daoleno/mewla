@@ -305,9 +305,8 @@ function createStyles(colors: AppColors, chrome?: TerminalThemeChrome) {
     outerFlat: {
       paddingTop: 0,
       paddingBottom: 0,
-      backgroundColor: chrome?.appBackground ?? colors.bgPrimary,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: borderColor,
+      // The bar behind it (hairline included) is full width, in TerminalScreenLayout.
+      backgroundColor: 'transparent',
     },
     row: {
       flexDirection: 'row',
