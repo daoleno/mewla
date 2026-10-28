@@ -1,5 +1,5 @@
 import type { ConnectPhase, PendingConnection } from "./pluginOnboarding";
-import { accountStatus, type AccessState, type ConnectionRequest, type ConnectionTool, type PluginAccount, type PluginIntegration } from "./connections";
+import { accountStatus, type AccessState, type AwsProfile, type ConnectionRequest, type ConnectionTool, type PluginAccount, type PluginIntegration } from "./connections";
 
 export type ConnectionTone = "success" | "warning" | "danger" | "neutral" | "accent";
 
@@ -43,9 +43,43 @@ export function pluginCatalogRows(
   return { services: rows.filter((row) => Boolean(reviewed[row.plugin.id])), custom: rows.filter((row) => !reviewed[row.plugin.id]) };
 }
 
-/** Services whose page holds a form: a custom service's address, or Hyperliquid's optional trading key. */
+/** Services whose page holds a form: a custom service's address, Hyperliquid's optional trading key, or AWS's profile or keys. */
 export function connectsWithForm(serviceId: string): boolean {
-  return serviceId === "mcp" || serviceId === "openapi" || serviceId === "hyperliquid";
+  return serviceId === "mcp" || serviceId === "openapi" || serviceId === "hyperliquid" || serviceId === "aws";
+}
+
+const AWS_PROFILE_KINDS: Record<AwsProfile["kind"], string> = {
+  login: "Signed in with aws login",
+  sso: "Signed in with aws sso login",
+  keys: "Saved access key",
+  role: "Assumed role",
+  other: "AWS CLI profile",
+};
+
+/** One profile row's second line: how the profile signs in, and its region. */
+export function awsProfileSubtitle(profile: AwsProfile): string {
+  return [AWS_PROFILE_KINDS[profile.kind], profile.region].filter(Boolean).join(" · ");
+}
+
+/**
+ * Access keys pasted into the form, as the one credential string the server
+ * reads. A session token is only included when there is one.
+ */
+export function awsKeysCredential(keys: { accessKeyId: string; secretAccessKey: string; sessionToken: string }): string {
+  const token = keys.sessionToken.trim();
+  return JSON.stringify({
+    access_key_id: keys.accessKeyId.trim(),
+    secret_access_key: keys.secretAccessKey.trim(),
+    ...(token ? { session_token: token } : {}),
+  });
+}
+
+/**
+ * Whether an AWS account signs in through the AWS CLI on the server's
+ * computer. Reconnecting it re-checks that session; it has no browser step.
+ */
+export function awsUsesCliSession(account: Pick<PluginAccount, "integration" | "profile">): boolean {
+  return account.integration === "aws" && !!account.profile;
 }
 
 /**
@@ -243,6 +277,14 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
   }
   // Off is a choice, not a fault: the account's own switch turns it back on.
   if (!account.enabled) return null;
+  if (account.status === "authorization_required" && account.integration === "aws") {
+    // The server's own line already names the command to run, for this profile.
+    const said = account.history.find((event) => event.status === "error" && event.message?.startsWith("AWS session expired"))?.message;
+    const detail = account.profile
+      ? said ?? `Run aws login --profile ${account.profile} on this computer, then tap Reconnect.`
+      : "These access keys expired or were revoked. Add new keys below.";
+    return { title: "Needs sign-in again", detail, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
+  }
   if (account.status === "authorization_required") {
     return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }

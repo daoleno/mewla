@@ -4,6 +4,9 @@ import {
   accessControl,
   accountRecovery,
   accountTone,
+  awsKeysCredential,
+  awsProfileSubtitle,
+  awsUsesCliSession,
   bulkToolNames,
   canDisconnect,
   connectsWithForm,
@@ -246,5 +249,44 @@ describe("hyperliquid accounts", () => {
     const test = account({ id: "t", integration: "hyperliquid", name: "Hyperliquid Testnet · 0x0000…00aa", network: "testnet" });
     const rows = pluginCatalogRows([plugin("hyperliquid", "Hyperliquid")], [main, test], { hyperliquid: {} });
     expect(rows.services[0]!.accounts.map((a) => a.network)).toEqual(["mainnet", "testnet"]);
+  });
+});
+
+describe("AWS", () => {
+  const aws = (patch: Partial<PluginAccount>) => account({ integration: "aws", name: "AWS 123456789012", identity: "arn:aws:iam::123456789012:user/audit", profile: "freeride", ...patch });
+
+  test("AWS connects from a form, not a browser sign-in", () => {
+    expect(connectsWithForm("aws")).toBe(true);
+    expect(connectsWithForm("cloudflare")).toBe(false);
+  });
+
+  test("a profile row says how it signs in and its region", () => {
+    expect(awsProfileSubtitle({ name: "freeride", kind: "login", region: "us-east-1" })).toBe("Signed in with aws login · us-east-1");
+    expect(awsProfileSubtitle({ name: "corp", kind: "sso" })).toBe("Signed in with aws sso login");
+    expect(awsProfileSubtitle({ name: "ci", kind: "keys", region: "eu-west-1" })).toBe("Saved access key · eu-west-1");
+  });
+
+  test("pasted keys travel as one trimmed JSON credential, with a token only when there is one", () => {
+    expect(JSON.parse(awsKeysCredential({ accessKeyId: " AKIA1 ", secretAccessKey: "s3cret\n", sessionToken: " " }))).toEqual({ access_key_id: "AKIA1", secret_access_key: "s3cret" });
+    expect(JSON.parse(awsKeysCredential({ accessKeyId: "ASIA1", secretAccessKey: "s", sessionToken: "tok" })).session_token).toBe("tok");
+  });
+
+  test("an expired session says what to run, and Reconnect re-checks it", () => {
+    const expired = aws({ status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired; run `aws login --profile freeride`" }] });
+    expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS session expired; run `aws login --profile freeride`", action: "reconnect", actionLabel: "Reconnect", tone: "warning" });
+    expect(awsUsesCliSession(expired)).toBe(true);
+    // Before the server has said anything, the page still names the command.
+    expect(accountRecovery(aws({ status: "authorization_required" }), "AWS")?.detail).toBe("Run aws login --profile freeride on this computer, then tap Reconnect.");
+  });
+
+  test("expired pasted keys are replaced, not re-checked", () => {
+    const keys = aws({ profile: undefined, status: "authorization_required" });
+    expect(awsUsesCliSession(keys)).toBe(false);
+    expect(accountRecovery(keys, "AWS")?.detail).toContain("Add new keys");
+  });
+
+  test("the service row says Reconnect for an expired profile", () => {
+    const rows = pluginCatalogRows([plugin("aws", "AWS")], [aws({ status: "authorization_required" })], { aws: {} });
+    expect(rows.services[0]?.state.kind).toBe("reconnect");
   });
 });

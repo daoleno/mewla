@@ -30,6 +30,10 @@ export type PluginAccount = {
   address?: string;
   /** Hyperliquid: the saved API wallet's public address; absent when the account is read only. */
   signer?: string;
+  /** AWS: the AWS CLI profile the account signs in through; absent for pasted access keys. */
+  profile?: string;
+  /** AWS: the profile's default region, or the region saved with pasted access keys. */
+  region?: string;
   enabled: boolean;
   credential_removal_pending?: boolean;
   status: "connected" | "configured" | "error" | "authorization_required" | "disconnected";
@@ -51,17 +55,24 @@ export type PluginAccess = {
   allowed: number;
   tools: number;
 };
+/** A profile of the AWS CLI on the server's computer. It never carries a key. */
+export type AwsProfile = {
+  name: string;
+  region?: string;
+  /** How it signs in: `aws login`, `aws sso login`, a saved key, a role, or something else. */
+  kind: "login" | "sso" | "keys" | "role" | "other";
+};
 export type ConnectionRequest = {
   flow_id?: string;
   callback?: string;
   group?: "read" | "write";
-  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
+  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "aws_profiles" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
   id?: string;
   tool?: string;
   /** policy: several tools at once, all of them or none. confirm_updates and dismiss_updates: the updated tools shown. */
   tools?: string[];
   allowed?: boolean;
-  input?: { integration: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+  input?: { integration: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; profile?: string; region?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectFlow = {
   id: string;
@@ -83,6 +94,7 @@ export type ConnectionResponse = {
   catalog?: PluginIntegration[];
   accounts?: PluginAccount[];
   account?: PluginAccount;
+  profiles?: AwsProfile[];
 };
 export function accountStatus(account: PluginAccount): string {
   if (account.status === "disconnected") return "Disconnected";

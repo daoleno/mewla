@@ -385,7 +385,7 @@ func awsFailure(r *record, stderr string) error {
 		if r.Account.AuthMethod == awsMethodKeys {
 			return awsAuthError("these AWS access keys expired or were revoked; add new keys")
 		}
-		return awsAuthError("AWS session expired; run `" + awsLoginCommand(r) + "`, then Check the account")
+		return awsAuthError("AWS session expired; run `" + awsLoginCommand(r) + "`")
 	case has("you must specify a region"):
 		return callRefused("this profile has no default region; pass region, for example us-east-1")
 	}

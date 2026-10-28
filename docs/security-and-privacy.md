@@ -163,7 +163,7 @@ The daemon connects out only for features you use:
 | `models.dev` | Model names and reference prices for Stats and Model Providers |
 | Expo push service | Sending a push notification to your phone |
 | The model provider you selected | Requests from Codex and Claude Code through the local gateway |
-| Connected plugin services | Calls Brain or Workers make. For Hyperliquid, the addresses Brain reads (public on Hyperliquid), the API wallet's address when you add a key to find its account, and, for trades, orders signed with that wallet; the key itself never leaves the server |
+| Connected plugin services | Calls Brain or Workers make. For Hyperliquid, the addresses Brain reads (public on Hyperliquid), the API wallet's address when you add a key to find its account, and, for trades, orders signed with that wallet; the key itself never leaves the server. For AWS, calls go from this computer to AWS through its AWS CLI; a profile's credentials stay in the CLI's own files, and pasted access keys stay in the private vault |
 | Telegram Bot API | When Telegram is connected |
 | Cloudflare | When you start a Quick Tunnel |
 
