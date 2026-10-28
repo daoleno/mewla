@@ -180,7 +180,7 @@ parameter that starts with `file://` or `fileb://`.
 
 ```sh
 mewla connections aws-profiles
-mewla connections add --integration aws --profile freeride
+mewla connections add --integration aws --profile work
 mewla connections invoke --id ACCOUNT_ID --tool whoami
 mewla connections invoke --id ACCOUNT_ID --tool search --args '{"query":"rds instances"}'
 mewla connections invoke --id ACCOUNT_ID --tool read --args '{"service":"rds","operation":"DescribeDBInstances","query":"DBInstances[].DBInstanceIdentifier"}'

@@ -634,6 +634,14 @@ func addAWSDriver(m *Manager, ctx context.Context, in *Input) (Response, error) 
 
 // ---- invoke -------------------------------------------------------------
 
+// awsUnrunnable are operations whose CLI command is not a plain request: it
+// writes to a file or opens an interactive session through a helper program.
+var awsUnrunnable = map[string]string{
+	"lambda/Invoke":      "writes its reply to a local file",
+	"ssm/StartSession":   "opens an interactive session through the Session Manager plugin",
+	"ecs/ExecuteCommand": "opens an interactive session through the Session Manager plugin",
+}
+
 func awsArgs(args map[string]any) (service, operation, region, query string, params map[string]any, err error) {
 	service, _ = args["service"].(string)
 	operation, _ = args["operation"].(string)
@@ -786,8 +794,8 @@ func (m *Manager) awsCall(ctx context.Context, r *record, secret, tool string, a
 	if err != nil {
 		return nil, err
 	}
-	if op.Service == "lambda" && op.Name == "Invoke" {
-		return nil, callRefused("lambda Invoke writes its reply to a local file, which Mewla does not run")
+	if why, ok := awsUnrunnable[op.Service+"/"+op.Name]; ok {
+		return nil, callRefused(op.Service + " " + op.Command + " " + why + ", which Mewla does not run")
 	}
 	shapes, err := idx.loadShapes(idx.services[op.Service])
 	if err != nil {

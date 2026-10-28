@@ -253,7 +253,7 @@ describe("hyperliquid accounts", () => {
 });
 
 describe("AWS", () => {
-  const aws = (patch: Partial<PluginAccount>) => account({ integration: "aws", name: "AWS 123456789012", identity: "arn:aws:iam::123456789012:user/audit", profile: "freeride", ...patch });
+  const aws = (patch: Partial<PluginAccount>) => account({ integration: "aws", name: "AWS 123456789012", identity: "arn:aws:iam::123456789012:user/audit", profile: "work", ...patch });
 
   test("AWS connects from a form, not a browser sign-in", () => {
     expect(connectsWithForm("aws")).toBe(true);
@@ -261,7 +261,7 @@ describe("AWS", () => {
   });
 
   test("a profile row says how it signs in and its region", () => {
-    expect(awsProfileSubtitle({ name: "freeride", kind: "login", region: "us-east-1" })).toBe("Signed in with aws login · us-east-1");
+    expect(awsProfileSubtitle({ name: "work", kind: "login", region: "us-east-1" })).toBe("Signed in with aws login · us-east-1");
     expect(awsProfileSubtitle({ name: "corp", kind: "sso" })).toBe("Signed in with aws sso login");
     expect(awsProfileSubtitle({ name: "ci", kind: "keys", region: "eu-west-1" })).toBe("Saved access key · eu-west-1");
   });
@@ -272,11 +272,11 @@ describe("AWS", () => {
   });
 
   test("an expired session says what to run, and Reconnect re-checks it", () => {
-    const expired = aws({ status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired; run `aws login --profile freeride`" }] });
-    expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS session expired; run `aws login --profile freeride`", action: "reconnect", actionLabel: "Reconnect", tone: "warning" });
+    const expired = aws({ status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired; run `aws login --profile work`" }] });
+    expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS session expired; run `aws login --profile work`", action: "reconnect", actionLabel: "Reconnect", tone: "warning" });
     expect(awsUsesCliSession(expired)).toBe(true);
     // Before the server has said anything, the page still names the command.
-    expect(accountRecovery(aws({ status: "authorization_required" }), "AWS")?.detail).toBe("Run aws login --profile freeride on this computer, then tap Reconnect.");
+    expect(accountRecovery(aws({ status: "authorization_required" }), "AWS")?.detail).toBe("Run aws login --profile work on this computer, then tap Reconnect.");
   });
 
   test("expired pasted keys are replaced, not re-checked", () => {
