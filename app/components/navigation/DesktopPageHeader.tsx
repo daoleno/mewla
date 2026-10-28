@@ -1,19 +1,15 @@
 import React, { type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
-  ContentWidth,
   DESKTOP_HEADER_HEIGHT,
   DESKTOP_PAGE_GUTTER,
   Spacing,
   TypeScale,
   useAppColors,
 } from "../../constants/tokens";
-import type { DesktopPageColumn } from "./desktopWeb";
 
 interface DesktopPageHeaderProps {
   title: ReactNode;
-  /** The page's content column; null lays the header across the full width. */
-  column: DesktopPageColumn | null;
   /** Back, on sub-pages. */
   leading?: ReactNode;
   /** The page's own actions. */
@@ -21,22 +17,15 @@ interface DesktopPageHeaderProps {
 }
 
 /**
- * The one desktop web page header. Its title sits at the page gutter, where
- * every page's content starts, so switching pages never moves it; the
- * actions end where the content column ends.
+ * The one desktop web page header. It spans the whole pane: the title sits at
+ * the page gutter and the actions at the opposite gutter, whatever width the
+ * page's content column holds below it, so switching pages never moves either.
  */
-export function DesktopPageHeader({ title, column, leading, trailing }: DesktopPageHeaderProps) {
+export function DesktopPageHeader({ title, leading, trailing }: DesktopPageHeaderProps) {
   const colors = useAppColors();
   return (
     <View style={[styles.bar, { backgroundColor: colors.bgPrimary }]}>
-      <View
-        style={[
-          styles.row,
-          column
-            ? { maxWidth: ContentWidth[column], marginLeft: DESKTOP_PAGE_GUTTER - Spacing.lg, paddingHorizontal: Spacing.lg }
-            : styles.fullRow,
-        ]}
-      >
+      <View style={styles.row}>
         {leading}
         {typeof title === "string" ? (
           <Text
@@ -65,8 +54,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-  },
-  fullRow: {
     paddingHorizontal: DESKTOP_PAGE_GUTTER,
   },
   title: {

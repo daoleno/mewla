@@ -1,7 +1,7 @@
 import { StyleSheet } from "react-native";
-import { Radii, TypeScale, UiTextMetrics, type AppColors } from "../../constants/tokens";
+import { ContentWidth, Radii, TypeScale, UiTextMetrics, type AppColors } from "../../constants/tokens";
 
-export const RESOURCES_CONTENT_MAX_WIDTH = 1360;
+export const RESOURCES_CONTENT_MAX_WIDTH = ContentWidth.wide;
 
 export function createResourceStyles(colors: AppColors) {
   return StyleSheet.create({

@@ -56,7 +56,7 @@ export const ContentWidth = {
   /** Settings, Extensions, Stats and their sub-pages: forms and lists. */
   page: 760,
   /** Data-dense pages: Calendar and Resources. */
-  wide: 1080,
+  wide: 1200,
   /** Chats (ChatCanvas): Brain and Session conversations. */
   reading: 820,
 } as const;

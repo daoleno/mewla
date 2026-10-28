@@ -10,7 +10,6 @@ import {
 import {
   ContentWidth,
   ContinuousCorners,
-  DESKTOP_PAGE_GUTTER,
   Radii,
   TypeScale,
   UiTextMetrics,
@@ -32,18 +31,12 @@ export const SESSIONS_COLUMN_MAX_WIDTH = ContentWidth.page;
 /** Where row text and section captions start inside the column. */
 export const SESSIONS_TEXT_INSET = 22;
 
-/**
- * The column's place: centered on phones and tablets; on desktop web anchored
- * so its rows start at the page gutter, under the title.
- */
-export function sessionsColumnStyle(desktop: boolean) {
-  return {
-    width: "100%" as const,
-    maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
-    alignSelf: desktop ? ("flex-start" as const) : ("center" as const),
-    marginLeft: desktop ? DESKTOP_PAGE_GUTTER - SESSIONS_TEXT_INSET : 0,
-  };
-}
+/** The column's place: centered under the page header, whatever the width. */
+export const sessionsColumnStyle = {
+  width: "100%" as const,
+  maxWidth: SESSIONS_COLUMN_MAX_WIDTH,
+  alignSelf: "center" as const,
+};
 const NEW_SESSION_BUTTON_HEIGHT = 48;
 
 const workerKeyExtractor = (agent: Worker) => agent.key;
@@ -231,7 +224,7 @@ function createStyles(theme: ResolvedTheme, desktop: boolean) {
   const { sectionLabel } = surfacesFromTheme(theme);
   return StyleSheet.create({
     content: {
-      ...sessionsColumnStyle(desktop),
+      ...sessionsColumnStyle,
       paddingTop: 4,
     },
     rowWrap: {

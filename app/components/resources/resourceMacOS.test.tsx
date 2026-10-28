@@ -56,7 +56,7 @@ if (!process.env.MEWLA_MACOS_RENDER_CHILD) {
   mock.module("../ui/StatusMark", () => ({ StatusMark: "StatusMark" }));
   mock.module("../ui/StatusPill", () => ({ StatusPill: "StatusPill" }));
   mock.module("../../constants/tokens", () => ({
-    useAppTheme: () => ({ colors: { statusUnknown: "grey-ring" } }), Radii: {}, TypeScale: {}, UiTextMetrics: {},
+    useAppTheme: () => ({ colors: { statusUnknown: "grey-ring" } }), ContentWidth: { wide: 1200 }, Radii: {}, TypeScale: {}, UiTextMetrics: {},
   }));
   const { ResourcesView } = await import("./ResourcesView");
   const render = (telemetry: ReturnType<typeof normalizeResourceTelemetry>) => {

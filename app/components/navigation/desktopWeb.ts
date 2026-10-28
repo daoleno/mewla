@@ -124,36 +124,35 @@ export function isDesktopTopLevelRoute(routeName: string): boolean {
   }
 }
 
-/** A desktop page's content column (see ContentWidth). */
-export type DesktopPageColumn = "page" | "wide";
+/**
+ * Routes that center their own content column inside a full-width scroll
+ * area (so the scrollbar stays at the window edge) or lay out their own
+ * width: the menu destinations, Brain, Sessions, a Session, the browser.
+ */
+const SELF_FRAMED_ROUTES: ReadonlySet<string> = new Set([
+  "(primary)",
+  "plugins",
+  "index",
+  "terminal/[id]",
+  "onboarding",
+  "screenshot-demo",
+  "browser",
+  "screen",
+  "calendar",
+  "resources",
+  "settings",
+  "stats",
+  "settings/computer",
+  "settings/licenses",
+  "settings/license",
+]);
 
 /**
- * The content column each page holds on desktop web, so its header title and
- * its content share one left edge. Brain, Sessions and a Session lay out
- * their own chat width; the terminal grid, the browser and pairing stay full
- * width (null).
+ * Whether the Stack holds this route's screen in the centered page column
+ * (`ContentWidth.page`): sub-pages and lists that have no column of their own.
  */
-export function desktopPageColumn(routeName: string): DesktopPageColumn | null {
-  switch (routeName) {
-    case "(primary)":
-    case "plugins":
-    case "terminal/[id]":
-    case "onboarding":
-    case "screenshot-demo":
-    case "browser":
-    case "screen":
-      return null;
-    case "calendar":
-    case "resources":
-      return "wide";
-    default:
-      return "page";
-  }
-}
-
-/** Pages that hold a readable maximum width on desktop web. */
-export function desktopReadableRoute(routeName: string): boolean {
-  return desktopPageColumn(routeName) !== null;
+export function desktopFramedRoute(routeName: string): boolean {
+  return !SELF_FRAMED_ROUTES.has(routeName);
 }
 
 /** The root Stack route that hosts each sidebar row. */
