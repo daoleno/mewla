@@ -46,7 +46,8 @@ export function AppImage({ source, chrome, gallery, compact = false }: {
   const initial = useMemo(() => Math.max(0, images.findIndex((image) => imageSourceKey(image, owner?.key || "phone") === identity)), [images, owner?.key, identity]);
   const retry = () => { setFailed(null); setLoaded(null); setAttempt((value) => value + 1); };
   return (
-    <View style={{ width: compact ? 96 : "100%", maxWidth: 400 }}>
+    // A bubble wraps its widest line, so a picture under a short message needs its own floor.
+    <View style={{ width: compact ? 96 : "100%", minWidth: compact ? undefined : 220, maxWidth: 400 }}>
       <Pressable accessibilityRole="button" accessibilityLabel={error ? `Retry ${source.name}` : `Open ${source.name}`} disabled={!error && !isLoaded}
         onPress={error ? retry : () => setOpened(identity)}
         style={[styles.preview, { borderColor: chrome.border, backgroundColor: chrome.surfaceMuted, height: compact ? 80 : Math.max(100, Math.min(280, 320 / ratio)) }]}>
