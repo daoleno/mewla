@@ -43,6 +43,7 @@ type Manager struct {
 	githubToken  func(context.Context) (string, error)
 	webOrigin    func(origin string) bool
 	toolsSeen    map[string]time.Time // when each MCP account's tool list was last read
+	awsState
 }
 
 // SetWebOrigins admits web UI origins for browser sign-in returns. Without it,
@@ -71,6 +72,7 @@ func (m *Manager) EnsureDefaults() error {
 
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
 	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
+	m.awsExec, m.awsModelDir = runAWS, findAWSModels
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -219,6 +221,8 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		}
 		sort.Slice(accounts, func(i, j int) bool { return accounts[i].Name < accounts[j].Name })
 		return Response{Catalog: m.catalog(), Accounts: accounts, OAuthConfigured: m.oauthConfigured()}, nil
+	case "aws_profiles":
+		return m.awsProfilesResponse()
 	case "oauth_configure":
 		return m.configureOAuth(q.Input)
 	case "oauth_start":
@@ -338,6 +342,9 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		err = m.discover(ctx, r, secret)
 		if err != nil {
 			r.Account.Status = "error"
+			if errors.Is(err, errAuth) {
+				r.Account.Status = "authorization_required"
+			}
 			m.event(r, "refresh", err)
 			_ = m.save()
 			return Response{}, err
@@ -599,6 +606,14 @@ func schemaArgumentPath(pointer string) string {
 	return path.String()
 }
 
+// answeredNotFailed: the service replied with its own error, or Mewla refused
+// the call before sending it. Neither says the account stopped working.
+func answeredNotFailed(err error) bool {
+	var service serviceError
+	var refused callRefused
+	return errors.As(err, &service) || errors.As(err, &refused)
+}
+
 func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, error) {
 	t, args, err := checkInvoke(r, q)
 	if err != nil {
@@ -627,9 +642,9 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 	}
 	if errors.Is(err, errAuth) {
 		r.Account.Status = "authorization_required"
-	} else if err != nil {
+	} else if err != nil && !answeredNotFailed(err) {
 		r.Account.Status = "error"
-	} else {
+	} else if err == nil {
 		r.Account.Status = "connected"
 		now := time.Now().UTC()
 		r.Account.VerifiedAt = &now

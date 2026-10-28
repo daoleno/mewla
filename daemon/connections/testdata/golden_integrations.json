@@ -1,5 +1,27 @@
 {
   "add": {
+    "aws": {
+      "credential": {
+        "error": "paste an access key ID and secret access key",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "choose an AWS profile on this computer, or paste access keys",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "paste an access key ID and secret access key",
+        "requests": []
+      },
+      "trusted": {
+        "error": "paste an access key ID and secret access key",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "paste an access key ID and secret access key",
+        "requests": []
+      }
+    },
     "bogus": {
       "credential": {
         "error": "unknown plugin",
@@ -559,6 +581,13 @@
       "description": "The whole Cloudflare API: Workers, R2, D1, DNS and more"
     },
     {
+      "id": "aws",
+      "name": "AWS",
+      "available": true,
+      "setup_url": "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html",
+      "description": "The whole AWS API: EC2, RDS, S3, CloudWatch and more, through this computer's AWS CLI"
+    },
+    {
       "id": "mcp",
       "name": "Remote MCP",
       "available": true,
@@ -580,6 +609,18 @@
       "notion",
       "slack"
     ],
+    "aws": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
+    },
     "bogus": {
       "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
       "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
@@ -738,6 +779,68 @@
     }
   },
   "connect": {
+    "aws": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      }
+    },
     "bogus": {
       "direct": {
         "error": "Sign-in is not set up for this service yet.",
@@ -3131,6 +3234,11 @@
       "account_name": "Custom service",
       "service": "Custom service"
     },
+    "aws": {
+      "account": "AWS",
+      "account_name": "AWS",
+      "service": "AWS"
+    },
     "bogus": {
       "account": "Custom service",
       "account_name": "Custom service",
@@ -3556,6 +3664,11 @@
       }
     },
     "others": {
+      "aws": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
       "github": {
         "execute": "",
         "get_me": "",
@@ -3585,6 +3698,7 @@
   },
   "readiness": {
     "none": {
+      "aws": "",
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
@@ -3596,6 +3710,7 @@
       "slack": "Slack sign-in is not set up yet."
     },
     "operator_github": {
+      "aws": "",
       "cloudflare": "",
       "github": "",
       "hyperliquid": "",
@@ -3607,6 +3722,7 @@
       "slack": "Slack sign-in is not set up yet."
     },
     "operator_notion": {
+      "aws": "",
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
@@ -3618,6 +3734,7 @@
       "slack": "Slack sign-in is not set up yet."
     },
     "operator_slack_app": {
+      "aws": "",
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
@@ -3629,6 +3746,7 @@
       "slack": ""
     },
     "operator_slack_no_secret_callback": {
+      "aws": "",
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
@@ -3640,6 +3758,7 @@
       "slack": "Slack sign-in is not set up yet."
     },
     "operator_slack_relay": {
+      "aws": "",
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
@@ -3651,6 +3770,7 @@
       "slack": ""
     },
     "operator_slack_secret_app": {
+      "aws": "",
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
@@ -3662,6 +3782,7 @@
       "slack": "Slack sign-in is not set up yet."
     },
     "operator_slack_secret_callback": {
+      "aws": "",
       "cloudflare": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
@@ -3673,6 +3794,7 @@
       "slack": ""
     },
     "publisher": {
+      "aws": "",
       "cloudflare": "",
       "github": "",
       "hyperliquid": "",
@@ -4363,6 +4485,11 @@
     ]
   },
   "uses_mcp": {
+    "aws": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
     "cloudflare": {
       "method:": false,
       "method:mcp_oauth": true,
