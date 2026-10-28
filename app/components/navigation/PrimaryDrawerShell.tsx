@@ -136,16 +136,7 @@ function PrimaryAppBar({
       ]}
     >
       {docked ? (
-        <View
-          style={[
-            styles.dockedRow,
-            // The title sits at the page gutter on every page; a column page's
-            // action ends where its column ends.
-            layout?.column
-              ? { maxWidth: DESKTOP_PAGE_GUTTER - APP_BAR_SIDE_PADDING - (layout.columnInset ?? 0) + layout.column }
-              : null,
-          ]}
-        >
+        <View style={styles.dockedRow}>
           <Text
             accessibilityRole="header"
             numberOfLines={1}
@@ -478,8 +469,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     width: "100%",
-    // The bar already pads its sides.
-    paddingLeft: DESKTOP_PAGE_GUTTER - APP_BAR_SIDE_PADDING,
+    // The bar already pads its sides. Title and actions sit on the page
+    // gutters, as in DesktopPageHeader.
+    paddingHorizontal: DESKTOP_PAGE_GUTTER - APP_BAR_SIDE_PADDING,
   },
   dockedTitle: {
     ...TypeScale.pageTitle,

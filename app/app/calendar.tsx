@@ -22,6 +22,7 @@ import {
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  ContentWidth,
   Radii,
   Spacing,
   TypeScale,
@@ -1086,12 +1087,19 @@ function createStyles(colors: any) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bgPrimary },
     calendarHeaderActions: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
+    // Notice and agenda share one centered column on wide screens.
     notice: {
+      width: "100%",
+      maxWidth: ContentWidth.wide - 2 * Spacing.lg,
+      alignSelf: "center",
       marginHorizontal: Spacing.lg,
       marginTop: Spacing.sm,
     },
     errorText: { ...TypeScale.compact, color: colors.statusFailed },
     content: {
+      width: "100%",
+      maxWidth: ContentWidth.wide,
+      alignSelf: "center",
       paddingHorizontal: Spacing.lg,
       paddingTop: Spacing.md,
       paddingBottom: 40,

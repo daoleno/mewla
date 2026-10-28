@@ -24,7 +24,7 @@ if (!process.env.MEWLA_CONSUMERS_TEST_CHILD) {
   mock.module("../ui/StatusMark", () => ({ StatusMark: "StatusMark" }));
   mock.module("../ui/StatusPill", () => ({ StatusPill: "StatusPill" }));
   mock.module("../../constants/tokens", () => ({
-    useAppTheme: () => ({ colors: {} }), Radii: {}, TypeScale: {}, UiTextMetrics: {},
+    useAppTheme: () => ({ colors: {} }), ContentWidth: { wide: 1200 }, Radii: {}, TypeScale: {}, UiTextMetrics: {},
   }));
   const { ConsumersSection } = await import("./ResourceConsumersSection");
   const { createResourceStyles } = await import("./resourceStyles");

@@ -1,11 +1,11 @@
 import React, { useCallback } from "react";
 import { Platform } from "react-native";
-import { ContentWidth, DESKTOP_PAGE_GUTTER, Spacing, Typography, useAppTheme } from "../../constants/tokens";
+import { ContentWidth, Typography, useAppTheme } from "../../constants/tokens";
 import { DesktopPageHeader } from "./DesktopPageHeader";
 import { HeaderBackButton } from "./HeaderBackButton";
 import { screenBackParent, type ScreenBackParent } from "./screenBack";
 import { useScreenBack, type ScreenBackNavigation } from "./useScreenBack";
-import { desktopPageColumn, isDesktopTopLevelRoute } from "./desktopWeb";
+import { desktopFramedRoute, isDesktopTopLevelRoute } from "./desktopWeb";
 import { useDesktopWeb } from "./useDesktopWeb";
 
 // Native headers inset their leading and trailing items by 16pt. The web
@@ -38,7 +38,7 @@ export function useStackScreenOptions() {
     }) => {
       const topLevel = desktopWeb && isDesktopTopLevelRoute(route.name);
       const backParent = topLevel ? null : screenBackParent(route.name);
-      const column = desktopWeb ? desktopPageColumn(route.name) : null;
+      const framed = desktopWeb && desktopFramedRoute(route.name);
       return {
         headerStyle: { backgroundColor: colors.bgPrimary },
         headerTintColor: colors.textPrimary,
@@ -66,13 +66,12 @@ export function useStackScreenOptions() {
           : topLevel
             ? () => null
             : undefined,
-        // Desktop web: one header for every page, its title on the content
-        // column's left edge (DesktopPageHeader).
+        // Desktop web: one full-width header for every page (DesktopPageHeader);
+        // the page's column is centered under it (desktopFramedRoute).
         ...(desktopWeb
           ? {
               header: (props: StackHeaderProps) => (
                 <DesktopPageHeader
-                  column={column}
                   title={desktopHeaderTitle(props)}
                   leading={backParent ? <StackBackButton navigation={navigation} parent={backParent} /> : null}
                   trailing={props.options.headerRight?.({ tintColor: colors.textPrimary, canGoBack: Boolean(props.back) })}
@@ -80,17 +79,13 @@ export function useStackScreenOptions() {
               ),
             }
           : null),
-        contentStyle: column
-          ? [
-              { backgroundColor: colors.bgPrimary },
-              {
-                width: "100%" as const,
-                maxWidth: ContentWidth[column],
-                // Anchored at the page gutter; pages pad their own content by Spacing.lg.
-                alignSelf: "flex-start" as const,
-                marginLeft: DESKTOP_PAGE_GUTTER - Spacing.lg,
-              },
-            ]
+        contentStyle: framed
+          ? {
+              backgroundColor: colors.bgPrimary,
+              width: "100%" as const,
+              maxWidth: ContentWidth.page,
+              alignSelf: "center" as const,
+            }
           : { backgroundColor: colors.bgPrimary },
         animation: desktopWeb ? ("none" as const) : ("slide_from_right" as const),
         fullScreenGestureEnabled: true,

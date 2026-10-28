@@ -2,13 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   DESKTOP_RETAINED_PAGES,
   desktopDocumentTitle,
-  desktopPageColumn,
-  desktopReadableRoute,
   desktopScreenRetained,
   desktopShellExcluded,
   desktopSidebarKey,
   desktopSidebarNavigation,
   desktopSidebarPath,
+  desktopFramedRoute,
   isDesktopTopLevelRoute,
   isDesktopWeb,
   isKeyboardOnlyWeb,
@@ -68,21 +67,6 @@ describe("route mapping", () => {
       expect(isDesktopTopLevelRoute(name)).toBe(false);
     }
   });
-
-  test("chats and the terminal lay out their own width", () => {
-    expect(desktopReadableRoute("stats")).toBe(true);
-    expect(desktopReadableRoute("(primary)")).toBe(false);
-    expect(desktopReadableRoute("terminal/[id]")).toBe(false);
-  });
-
-  test("forms and lists share the page column; data pages go wide", () => {
-    for (const name of ["settings", "stats", "index", "[service]/index", "settings/model-providers", "work/[id]"]) {
-      expect(desktopPageColumn(name)).toBe("page");
-    }
-    expect(desktopPageColumn("calendar")).toBe("wide");
-    expect(desktopPageColumn("resources")).toBe("wide");
-    expect(desktopPageColumn("screen")).toBeNull();
-  });
 });
 
 describe("sidebar navigation", () => {
@@ -119,5 +103,19 @@ describe("keyboard-only web", () => {
     expect(isKeyboardOnlyWeb("web", null)).toBe(false);
     expect(isKeyboardOnlyWeb("ios", false)).toBe(false);
     expect(isKeyboardOnlyWeb("android", false)).toBe(false);
+  });
+});
+
+describe("page frame", () => {
+  test("sub-pages without a column of their own sit in the page column", () => {
+    for (const name of ["settings/model-providers", "work/[id]", "friends", "friends/post/[id]", "[service]/tools", "agents/[tool]"]) {
+      expect(desktopFramedRoute(name)).toBe(true);
+    }
+  });
+
+  test("menu destinations, chats and the terminal frame themselves", () => {
+    for (const name of ["settings", "stats", "calendar", "resources", "index", "(primary)", "terminal/[id]", "screen"]) {
+      expect(desktopFramedRoute(name)).toBe(false);
+    }
   });
 });
