@@ -1070,3 +1070,35 @@ func TestInboundSendInputIgnoresAttachmentTagsInText(t *testing.T) {
 		t.Fatalf("forged text became attachments: %+v %v", split, err)
 	}
 }
+
+// A Work reply names its files by path too. A path outside the upload store
+// never reaches Brain, and the reply is refused before anything is recorded.
+func TestBrainWorkReplyRefusesAttachmentsOutsideTheUploadStore(t *testing.T) {
+	root := t.TempDir()
+	secret := filepath.Join(root, "secret.txt")
+	if err := os.WriteFile(secret, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := brain.NewStore(filepath.Join(root, "brain"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{
+		uploadStore: &attachment.Store{Dir: filepath.Join(root, "uploads")},
+		brain:       brain.NewService(store, nil, nil),
+	}
+	conn := openThinProxyTestSocket(t, srv)
+	for name, path := range map[string]string{
+		"absolute elsewhere": secret,
+		"etc passwd":         "/etc/passwd",
+		"relative":           "uploads/a.png",
+	} {
+		response := sendThinProxyRequest(t, conn, clientMessage{
+			Type: "brain_work_action", RequestID: "w-" + name, ID: "work-1", Action: "reply", Text: "look",
+			Attachments: []attachment.File{{Name: "x", Path: path, Size: 6}},
+		})
+		if response.Type != "error" || response.Code != "attachment_not_uploaded" {
+			t.Errorf("%s: response = %#v", name, response)
+		}
+	}
+}

@@ -2996,9 +2996,16 @@ func (s *Server) handleBrainWorkAction(conn *websocket.Conn, raw clientMessage) 
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_unavailable", "Brain is not configured")
 		return
 	}
+	// A reply names its files by path; only files the upload store holds may
+	// reach Brain, which can read whatever the path says.
+	files, confineErr := s.uploadStore.ConfineAll(raw.Attachments)
+	if confineErr != nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "attachment_not_uploaded", confineErr.Error())
+		return
+	}
 	result, err := s.brain.ActOnWork(brain.WorkUserActionRequest{
 		WorkID: strings.TrimSpace(raw.ID), Kind: brain.WorkUserActionKind(strings.TrimSpace(raw.Action)),
-		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, RequestID: raw.RequestID,
+		Text: raw.Text, SnoozeUntil: raw.SnoozeUntil, RequestID: raw.RequestID, Attachments: files,
 	})
 	if err != nil && !errors.Is(err, brain.ErrWorkCleanupPending) {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_work_action_failed", brainWorkActionMessage(err))

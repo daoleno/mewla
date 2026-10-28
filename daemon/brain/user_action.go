@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/attachment"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/google/uuid"
 )
@@ -57,6 +58,10 @@ type WorkUserActionRequest struct {
 	// Text is the reply; for a choice it is the choice itself.
 	Text        string     `json:"text,omitempty"`
 	SnoozeUntil *time.Time `json:"snooze_until,omitempty"`
+	// Attachments are files the reply carries. The caller has confined them to
+	// the upload store; they reach Brain as the same attachment tag a chat
+	// message carries, so Brain reads them by path.
+	Attachments []attachment.File `json:"attachments,omitempty"`
 	// RequestID makes a retried reply the same Brain input.
 	RequestID string `json:"request_id,omitempty"`
 }
@@ -103,13 +108,27 @@ func normalizeWorkChoices(values []string) []string {
 }
 
 // WorkReplyBody is the Brain turn input for a reply: the Work it answers,
-// by title and id, then the user's words.
-func WorkReplyBody(item Work, text string) string {
+// by title and id, then the user's words and, last, the attachment tag.
+func WorkReplyBody(item Work, text string, files []attachment.File) string {
+	text = attachment.Message{Text: text, Files: files}.Render()
 	header := "Re: " + firstNonEmpty(strings.TrimSpace(item.Title), item.ID) + " (work " + item.ID + ")"
 	if question := strings.TrimSpace(item.Question); question != "" {
 		header += "\n> " + question
 	}
-	return header + "\n" + strings.TrimSpace(text)
+	return header + "\n" + text
+}
+
+// workReplySummary is what the slip and the Event show of a reply: the words,
+// or the file names when the reply is only files.
+func workReplySummary(request WorkUserActionRequest) string {
+	if request.Text != "" || len(request.Attachments) == 0 {
+		return request.Text
+	}
+	names := make([]string, 0, len(request.Attachments))
+	for _, file := range request.Attachments {
+		names = append(names, firstNonEmpty(strings.TrimSpace(file.Name), "file"))
+	}
+	return strings.Join(names, ", ")
 }
 
 // RecordWorkUserAction appends the user's decision for a non-closing action
@@ -144,8 +163,8 @@ func (s *Store) RecordWorkUserAction(request WorkUserActionRequest, admission Ex
 		event.Kind = "user.replied"
 		event.DedupeKey = "user:reply:" + receipt
 		event.PayloadRef = receipt
-		event.Summary = request.Text
-		details, _ := json.Marshal(map[string]string{"admission": string(admission), "question": item.Question})
+		event.Summary = workReplySummary(request)
+		details, _ := json.Marshal(map[string]any{"admission": string(admission), "question": item.Question, "attachments": request.Attachments})
 		event.DetailsJSON = string(details)
 		if st, stateErr := s.fsmState(item.ID); stateErr == nil && st != nil && st.Wake != nil && st.Wake.Kind == lifecycle.WakeKind(WorkWakeUserInput) {
 			// The user answered what the Work waited on.
@@ -246,8 +265,8 @@ func (s *Service) ActOnWork(request WorkUserActionRequest) (WorkUserActionResult
 	}
 	switch request.Kind {
 	case WorkUserReply:
-		if request.Text == "" {
-			return WorkUserActionResult{}, fmt.Errorf("%w: a reply needs text", ErrWorkUserAction)
+		if request.Text == "" && len(request.Attachments) == 0 {
+			return WorkUserActionResult{}, fmt.Errorf("%w: a reply needs text or a file", ErrWorkUserAction)
 		}
 		requestID := firstNonEmpty(strings.TrimSpace(request.RequestID), uuid.NewString())
 		receipt := "work-reply:" + item.ID + ":" + requestID
@@ -255,7 +274,7 @@ func (s *Service) ActOnWork(request WorkUserActionRequest) (WorkUserActionResult
 			// A retried request: Brain already has this reply.
 			return WorkUserActionResult{Work: item, Event: event, Admission: ExternalInputAccepted}, nil
 		}
-		admission, submitErr := s.SubmitExternalUserInput(receipt, WorkReplyBody(item, request.Text))
+		admission, submitErr := s.SubmitExternalUserInput(receipt, WorkReplyBody(item, request.Text, request.Attachments))
 		if submitErr != nil || admission == ExternalInputNotSubmitted {
 			if submitErr == nil {
 				submitErr = fmt.Errorf("Brain did not receive the reply")

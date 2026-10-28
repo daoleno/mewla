@@ -54,6 +54,7 @@ import { InterfaceChatSurface } from "../../components/terminal/InterfaceChatSur
 import { buildChatChrome } from "../../theme";
 import { useAppTheme } from "../../constants/tokens";
 import { wsClient } from "../../services/websocket";
+import type { SendAttachment } from "../../services/structuredWebSocketTransport";
 import { terminalRouteParams } from "../../services/workerRouteId";
 import { brainScreenSurface } from "../../services/connectionLifecycle";
 import {
@@ -560,7 +561,7 @@ export default function BrainScreen() {
     setPendingAskDraft(null);
   }, [pendingAskDraft]);
   const sendWorkAction = useCallback(
-    async (slip: BrainWorkSlip, action: BrainWorkAction, text?: string) => {
+    async (slip: BrainWorkSlip, action: BrainWorkAction, text?: string, attachments?: SendAttachment[]) => {
       const kind = brainWorkUserAction(action.kind);
       if (!activeServer || !kind) return;
       const busyKey = `${slip.workId}:${action.kind}:${action.text ?? ""}`;
@@ -568,6 +569,7 @@ export default function BrainScreen() {
       try {
         const result = await wsClient.actOnBrainWork(activeServer.id, slip.workId, kind, {
           text: text ?? action.text,
+          attachments,
           snoozeUntil: kind === "snooze" ? brainWorkSnoozeUntil().toISOString() : undefined,
         });
         setSelectedWorkSlip(null);
@@ -847,8 +849,10 @@ export default function BrainScreen() {
         actions={liveSelectedSlip ? workActionsFor(liveSelectedSlip, "sheet") : undefined}
         replyOpen={replyOpenFor === liveSelectedSlip?.workId}
         replyBusy={Boolean(liveSelectedSlip && workActionBusy?.startsWith(`${liveSelectedSlip.workId}:reply`))}
-        onReply={(text) => {
-          if (liveSelectedSlip) void sendWorkAction(liveSelectedSlip, { kind: "reply", label: "Reply" }, text);
+        serverId={activeServer?.id}
+        connectionState={connectionState}
+        onReply={(text, attachments) => {
+          if (liveSelectedSlip) void sendWorkAction(liveSelectedSlip, { kind: "reply", label: "Reply" }, text, attachments);
         }}
         onClose={() => {
           setSelectedWorkSlip(null);

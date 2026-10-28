@@ -291,7 +291,7 @@ Event with `source_name: user`, so Brain reads the decision as a fact.
 
 | Action | Daemon effect | Event |
 | --- | --- | --- |
-| `reply` (a choice or free text) | Submitted to the current Brain host through the same admission as any user message (`SubmitExternalUserInput`, receipt `work-reply:<work>:<request>`), as `Re: <title> (work <id>)`, Brain's question quoted, then the text. Once Brain has it (accepted or uncertain), the question clears and a `user_input` wake is released. A not-submitted reply records nothing. | `user.replied` (non-actionable; details carry the admission) |
+| `reply` (a choice or free text) | Submitted to the current Brain host through the same admission as any user message (`SubmitExternalUserInput`, receipt `work-reply:<work>:<request>`), as `Re: <title> (work <id>)`, Brain's question quoted, then the text and, when the reply carries files, the same `<mewla_attachments>` tag a chat message ends with (the files are uploaded first; the daemon refuses any path outside the upload store with `attachment_not_uploaded`, and a reply needs text or a file). Once Brain has it (accepted or uncertain), the question clears and a `user_input` wake is released. A not-submitted reply records nothing. | `user.replied` (non-actionable; details carry the admission) |
 | `close` (Accept) | `CloseWork` as done, actor `user` | `brain.work_closed` |
 | `dismiss` (Not needed anymore) | `CloseWork` as cancelled, actor `user` | `brain.work_closed` |
 | `stop` | `CloseWork` as cancelled, then the delegated Worker Session is torn down; never the Host | `brain.work_closed` |
