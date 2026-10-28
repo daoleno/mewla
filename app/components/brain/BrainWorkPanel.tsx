@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { webReplyKeyPress } from "../terminal/composerInputBehavior";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { ResizeHandle, useResizableWidth } from "../navigation/ResizeHandle";
 import { PRIMARY_APP_BAR_HEIGHT } from "../navigation/primaryAppBarGeometry";
@@ -382,6 +383,16 @@ export function BrainWorkDetailSheet({
                   multiline
                   editable={!replyBusy}
                   onSubmitEditing={send}
+                  onKeyPress={
+                    Platform.OS === "web"
+                      ? (event) =>
+                          webReplyKeyPress(event, {
+                            canSend: replyReady,
+                            send,
+                            leave: () => event.currentTarget?.blur?.(),
+                          })
+                      : undefined
+                  }
                   style={styles.replyInput}
                 />
                 <Pressable
