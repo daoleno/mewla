@@ -718,7 +718,7 @@ func (m *Manager) discoverOAuth(ctx context.Context, r *record) (oauthMetadata, 
 }
 
 func (m *Manager) sensitiveValues(r *record, access string) []string {
-	values := []string{access}
+	values := append([]string{access}, awsKeyValues(r, access)...)
 	if r.OAuth != nil {
 		if raw, ok, err := m.vault.Get("integration:" + r.Account.ID); err == nil && ok {
 			var secret oauthSecret

@@ -19,7 +19,7 @@ import (
 
 func runConnectionsCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
+		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|import-gh|aws-profiles|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
 Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name; describe without --tool lists every tool.
 Invoke: --args '{"query":{...}}' or --args-file path (up to 8 MiB). One bounded call, no implicit pagination, never retried.
@@ -30,6 +30,8 @@ updates --id account asks the service now and shows them; confirm-updates|dismis
 A call blocked by an update names the confirm-updates command that clears every update waiting on its account.
 Add: --integration github|notion|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
 Hyperliquid (also in Extensions): reading needs no account setup; pass each read an address. To trade, add --integration hyperliquid --credential-stdin with an API wallet key; the key names its account and network, and tool results name the network.
+AWS (also in Extensions) goes through this computer's AWS CLI: aws-profiles lists its profiles, add --integration aws --profile NAME connects one (run aws login --profile NAME first; Mewla keeps no key for it), or add --integration aws --credential-stdin with JSON access keys {"access_key_id","secret_access_key","session_token"} and optional --region.
+AWS tools: whoami; search --query words finds operations; docs --service s --operation O shows parameters; read runs Describe/List/Get operations ({"service":"rds","operation":"DescribeDBInstances","params":{...},"region":"us-east-1","query":"JMESPath"}); execute runs anything else and needs the user's authorization for the task. A read of a secret value is an execute.
 Cloudflare (connected in Extensions) covers the whole Cloudflare API: find the endpoint with its search tool, then call it with execute; docs searches Cloudflare's docs.
 Deleting Cloudflare resources, changing DNS, or creating or revoking tokens needs the user's authorization for that task.
 Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
@@ -61,6 +63,8 @@ Never send messages or make updates without task-specific user authorization, ev
 	fs.StringVar(&in.Integration, "integration", "", "plugin ID")
 	fs.StringVar(&in.Name, "name", "", "account name")
 	fs.StringVar(&in.Network, "network", "", "hyperliquid: look for the key on mainnet or testnet only")
+	fs.StringVar(&in.Profile, "profile", "", "aws: AWS CLI profile on this computer")
+	fs.StringVar(&in.Region, "region", "", "aws: default region for pasted access keys")
 	fs.StringVar(&in.Endpoint, "endpoint", "", "remote HTTPS endpoint")
 	fs.StringVar(&argsJSON, "args", "{}", "tool arguments JSON")
 	fs.StringVar(&argsFile, "args-file", "", "tool arguments file")
@@ -76,6 +80,8 @@ Never send messages or make updates without task-specific user authorization, ev
 		return errors.New("unexpected positional arguments")
 	}
 	switch action {
+	case "aws-profiles":
+		q.Action = "aws_profiles"
 	case "list", "add", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy", "resources", "updates":
 	case "read-resource", "confirm-updates", "dismiss-updates":
 		q.Action = strings.ReplaceAll(action, "-", "_")
@@ -134,6 +140,8 @@ Never send messages or make updates without task-specific user authorization, ev
 				return errors.New("GitHub CLI login unavailable; run gh auth login first")
 			}
 			in.Credential = strings.TrimSpace(string(token))
+		} else if in.Integration == "aws" && in.Profile != "" {
+			// A profile carries no credential of Mewla's: the AWS CLI signs in.
 		} else {
 			if stdinSecret {
 				raw, err := io.ReadAll(io.LimitReader(os.Stdin, 16385))

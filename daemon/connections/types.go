@@ -70,7 +70,11 @@ type Account struct {
 	// is the account a trading key trades for, empty on the keyless reader.
 	// Signer is the API wallet's public address when a trading key is saved.
 	// None of these is secret.
-	Network                  string     `json:"network,omitempty"`
+	Network string `json:"network,omitempty"`
+	// AWS: the AWS CLI profile the account signs in through (none for pasted
+	// access keys) and its default region. Neither is secret.
+	Profile                  string     `json:"profile,omitempty"`
+	Region                   string     `json:"region,omitempty"`
 	Address                  string     `json:"address,omitempty"`
 	Signer                   string     `json:"signer,omitempty"`
 	Enabled                  bool       `json:"enabled"`
@@ -107,7 +111,11 @@ type Input struct {
 	Credential      string   `json:"credential,omitempty"`
 	// Hyperliquid adds an API wallet key as Credential. The key names its
 	// account and network; Network only limits the search to one of them.
-	Network     string             `json:"network,omitempty"`
+	Network string `json:"network,omitempty"`
+	// AWS: connect through a profile of the AWS CLI on this computer, or paste
+	// access keys as Credential. Region is the keys' default region.
+	Profile     string             `json:"profile,omitempty"`
+	Region      string             `json:"region,omitempty"`
 	Spec        json.RawMessage    `json:"spec,omitempty"`
 	OAuthClient *OAuthClientConfig `json:"oauth_client,omitempty"`
 	Mobile      bool               `json:"mobile,omitempty"`
@@ -154,4 +162,5 @@ type Response struct {
 	Result           json.RawMessage `json:"result,omitempty"`
 	AuthorizationURL string          `json:"authorization_url,omitempty"`
 	OAuthConfigured  []string        `json:"oauth_configured"`
+	Profiles         []AWSProfile    `json:"profiles,omitempty"`
 }

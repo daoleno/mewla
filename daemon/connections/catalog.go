@@ -147,6 +147,9 @@ type entry struct {
 	Custom bool
 	// Endpoint is the service's API origin.
 	Endpoint string
+	// Local: the driver reaches the service through a program on the server's
+	// computer, so there is no API origin.
+	Local bool
 	// AddRefusal: the service connects only through browser sign-in; adding
 	// it with a credential says this.
 	AddRefusal      string
@@ -197,6 +200,7 @@ func registerDrivers() {
 		"hyperliquid": {discover: discoverHyperliquidDriver, invoke: invokeHyperliquidDriver, add: addHyperliquidDriver, removeKey: removeHyperliquidKeyDriver},
 		"openapi":     {discover: discoverOpenAPI, invoke: invokeOpenAPI, unverified: true},
 		"mcp":         {discover: discoverMCPToken},
+		"aws":         {discover: discoverAWS, invoke: invokeAWSDriver, add: addAWSDriver},
 	}
 }
 
@@ -342,6 +346,10 @@ func buildCatalog() []*entry {
 			},
 		},
 		{
+			Integration: Integration{ID: "aws", Name: "AWS", Available: true, SetupURL: "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html", Description: "The whole AWS API: EC2, RDS, S3, CloudWatch and more, through this computer's AWS CLI"},
+			Driver:      "aws", Local: true, Tools: awsTools,
+		},
+		{
 			Integration: Integration{ID: "mcp", Name: "Remote MCP", Available: true, SetupURL: "https://modelcontextprotocol.io", Description: "Discover tools from a remote MCP server"},
 			Driver:      "mcp", Custom: true, TokenMCP: true, NamedByPerson: true,
 			OAuth: &oauthSpec{Source: clientOperator, Configurable: true},
@@ -383,13 +391,13 @@ func (e *entry) validate() error {
 	if e.Custom && (e.Endpoint != "" || e.MCP != nil || e.Tools != nil) {
 		return fmt.Errorf("a custom service has no fixed endpoint or reviewed tools")
 	}
-	if !e.Custom && e.Driver != "mcp" && e.Driver != "openapi" && e.Driver != "" && e.Endpoint == "" && len(e.Networks) == 0 {
+	if !e.Custom && e.Driver != "mcp" && e.Driver != "openapi" && e.Driver != "" && e.Endpoint == "" && len(e.Networks) == 0 && !e.Local {
 		return fmt.Errorf("a built-in service needs an endpoint")
 	}
 	if e.NeedsCredential && e.Endpoint == "" {
 		return fmt.Errorf("needs_credential requires an endpoint")
 	}
-	if (e.Driver == "rest" || e.Driver == "slack" || e.Driver == "hyperliquid") && e.Tools == nil {
+	if (e.Driver == "rest" || e.Driver == "slack" || e.Driver == "hyperliquid" || e.Driver == "aws") && e.Tools == nil {
 		return fmt.Errorf("driver %q needs reviewed tools", e.Driver)
 	}
 	if e.Driver == "rest" && e.IdentityPath == "" {

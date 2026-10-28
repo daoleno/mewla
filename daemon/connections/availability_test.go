@@ -35,7 +35,7 @@ func TestCatalogReportsPublisherReadiness(t *testing.T) {
 			}
 		}
 	}
-	expected := map[string]bool{"github": false, "slack": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "hyperliquid": true, "mcp": true, "openapi": true}
+	expected := map[string]bool{"github": false, "slack": false, "notion": true, "linear": true, "onlora": true, "cloudflare": true, "aws": true, "hyperliquid": true, "mcp": true, "openapi": true}
 	assertAvailability(expected)
 	for _, kind := range []string{"github", "slack"} {
 		_, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: kind}})
