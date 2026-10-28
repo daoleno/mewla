@@ -10,9 +10,9 @@ import { ContentWidth, Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
-import { connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { awsUsesCliSession, connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
-import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
+import { type AwsProfile, type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 
 /** Route of one service page; its Tools page lives below it. */
@@ -75,6 +75,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const [connectedId, setConnectedId] = useState<string | null>(null);
   const [flow, setFlow] = useState<PendingConnection | null>(null);
   const [details, setDetails] = useState<Record<string, PluginAccount>>({});
+  /** AWS: the profiles of the AWS CLI on this server's computer; null until asked. */
+  const [awsProfiles, setAwsProfiles] = useState<AwsProfile[] | null>(null);
   const alive = useRef(true);
   const mutation = useRef(false);
   const completion = useRef(false);
@@ -315,10 +317,18 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     return !!response;
   };
   const recover = (account: PluginAccount, action: AccountRecoveryAction) => {
-    if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
+    // An AWS profile signs in through the AWS CLI: after `aws login` on the
+    // server's computer, reconnecting only checks the session again.
+    if (action === "refresh" || action === "reconnect" && awsUsesCliSession(account)) void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
+    else if (action === "reconnect" && account.integration === "aws") router.push(pluginServicePath(account.integration));
     else if (action === "disconnect") void disconnect(account);
     else void connect(account.integration, { writes: reconnectsWithWrites(account) });
   };
+  /** AWS: asks which profiles the AWS CLI on the server's computer has. */
+  const loadAwsProfiles = useCallback(async () => {
+    const result = await send({ action: "aws_profiles" }, "aws:profiles");
+    if (result && valid()) setAwsProfiles(result.profiles ?? []);
+  }, [send, valid]);
   /** Hyperliquid: deletes the saved API wallet key and leaves the account read only. */
   const removeKey = (account: PluginAccount) => send({ action: "remove_key", id: account.id }, `key:${account.id}`).then((response) => !!response);
   /** The account's own on/off switch. Off keeps its sign-in and tool choices. */
@@ -348,6 +358,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const serviceLabel = (account: PluginAccount) => account.integration === "mcp" || account.integration === "openapi" ? account.name : plugin(account.integration)?.name ?? account.name;
   return {
     serverId, serverName, connection, deferredName,
+    awsProfiles, loadAwsProfiles,
     catalog, accounts, details, loaded, running, busy: running !== null, error, phase, flow, service, connectError,
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),

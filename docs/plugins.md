@@ -1,7 +1,7 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Cloudflare, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
+GitHub, Slack, Cloudflare, AWS, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
 services. Plugins are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
@@ -51,6 +51,7 @@ Mewla's own app registration with the provider:
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
+| AWS | No sign-in in Mewla. Pick a profile of the AWS CLI on the server's computer (an `aws login` or `aws sso login` session, which the CLI renews), or paste access keys | Works everywhere; the profiles list and the key fields are on the service's page |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
@@ -125,6 +126,65 @@ Cloudflare's MCP server covers the whole Cloudflare API with a few tools:
 under **Make changes when asked**, so turn that on before Brain reads anything
 from your account, and it can only do what you granted on Cloudflare's page; to grant more, disconnect and connect again, choosing more
 permissions there.
+
+## AWS
+
+AWS needs the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+(version 2) on the computer Mewla runs on. Mewla runs it for Brain and Workers;
+it does not talk to AWS another way.
+
+**Connect.** Open **AWS** in Extensions. The page lists the profiles in that
+computer's AWS config, each with how it signs in (`aws login`, `aws sso login`,
+a saved key or a role) and its region. Tap one. Mewla asks AWS who is signed in
+(STS `GetCallerIdentity`) and names the account **AWS 123456789012**, with the
+identity's ARN beneath it. Mewla keeps no key for a profile: the CLI signs every
+call, and refreshes the session as it normally does. If the profile has expired,
+run `aws login --profile NAME` (or `aws sso login --profile NAME`) on that
+computer first. The other way is **Paste access keys**: the keys, an optional
+session token and a region go to the server's private vault and reach the CLI
+only through the environment of one call. A profile already connected is
+renewed in place, not added twice.
+
+**When the session expires.** The account's row reads **Reconnect**, and a call
+fails with one line, for example ``AWS session expired; run `aws login --profile
+NAME` ``. Run that on the computer, then tap **Reconnect**: it checks the
+session again and brings the account back. Expired pasted keys are replaced
+from the same page.
+
+**Read and search** (on after you connect): `whoami`, `search` and `docs`
+(find an operation, then see its parameters and what it returns; they read the
+AWS CLI's own service models and make no request), and `read`, which runs a
+`Describe*`, `List*`, `Get*`, `BatchGet*`, `Head*`, `Lookup*` or `Search*`
+operation. A call names `service` (such as `ec2`, `rds`, `logs`, `s3api`),
+`operation`, the operation's `params` with the API's own names, an optional
+`region` (otherwise the profile's own), and an optional JMESPath `query` to cut
+the result down. Each call returns one page; pass the operation's own
+`MaxResults` and `NextToken` to page. A result over 1 MiB is refused with a hint
+to ask for less.
+
+**Make changes when asked** (off until you turn it on): `execute` runs any
+operation, changes included. It is the tool that needs your authorization for
+the task, like Cloudflare's. Operations that look like reads but hand out
+credentials or secret values (`GetSecretValue`, `GetSessionToken`,
+`GetAuthorizationToken`, `GetPasswordData`, `GetRoleCredentials`, a Parameter
+Store read with decryption and the like) are changes too: `read` refuses them
+and says to use `execute`. Mewla sorts operations by name; the account's IAM
+permissions stay the real limit, so give Brain an identity that can do only
+what you mean it to. Secret fields in results (secret keys, session tokens,
+secret strings, passwords, user data, and the values of environment variables
+whose names look secret) are replaced with `[REDACTED]`.
+
+Not run at all: operations that stream data to or from a file on the server
+(`s3api get-object` and `put-object`, Lambda `Invoke`, and the like), and any
+parameter that starts with `file://` or `fileb://`.
+
+```sh
+mewla connections aws-profiles
+mewla connections add --integration aws --profile freeride
+mewla connections invoke --id ACCOUNT_ID --tool whoami
+mewla connections invoke --id ACCOUNT_ID --tool search --args '{"query":"rds instances"}'
+mewla connections invoke --id ACCOUNT_ID --tool read --args '{"service":"rds","operation":"DescribeDBInstances","query":"DBInstances[].DBInstanceIdentifier"}'
+```
 
 ## Hyperliquid
 
