@@ -327,7 +327,10 @@ until Brain's next turn, which is the dead end this replaces. "Ask Brain"
 never sends by itself: it puts `Re: <title> (work <id>)` and the slip's line in
 the composer. A reply is a real Brain message bound to the Work. The toast
 says "Brain has your answer", or that it may not have arrived when the
-admission is uncertain.
+admission is uncertain. The reply box takes files like a chat does: the attach
+button, and on the web paste or drop, with the same previews and upload queue.
+A reply can be words, files or both; it waits while a file uploads, and a
+failed send keeps the words and the uploaded files in the box.
 
 **Stuck and stale.** Outcome unknown and No decision are the Warning state
 (triangle) under Needs you; a snoozed slip waits under Waiting with

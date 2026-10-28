@@ -2592,7 +2592,7 @@ export class WebSocketClient {
     serverId: string,
     workId: string,
     action: BrainWorkUserActionKind,
-    options: { text?: string; snoozeUntil?: string } = {},
+    options: { text?: string; snoozeUntil?: string; attachments?: SendAttachment[] } = {},
   ): Promise<{ status?: string; admission?: string }> {
     return this.request(
       serverId,
@@ -2602,6 +2602,7 @@ export class WebSocketClient {
         action,
         ...(options.text ? { text: options.text } : {}),
         ...(options.snoozeUntil ? { snooze_until: options.snoozeUntil } : {}),
+        ...(options.attachments?.length ? { attachments: options.attachments } : {}),
       },
       {
         requestId: newRequestId("work_"),

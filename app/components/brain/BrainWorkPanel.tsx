@@ -1,6 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { webReplyKeyPress } from "../terminal/composerInputBehavior";
+import { InterfaceComposerAttachmentRail } from "../terminal/InterfaceComposerAttachmentRail";
+import { InterfaceDropOverlay } from "../terminal/InterfaceDropOverlay";
+import type { ComposerAttachment } from "../terminal/InterfaceChatSession";
+import { useComposerFileTransfer } from "../terminal/useComposerFileTransfer";
+import { useInterfaceComposerAttachments } from "../terminal/useInterfaceComposerAttachments";
+import type { SendAttachment } from "../../services/structuredWebSocketTransport";
+import type { ConnectionState } from "../../store/workers";
+import { workReplyFiles, workReplyReady } from "./workReply";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 import { ResizeHandle, useResizableWidth } from "../navigation/ResizeHandle";
 import { PRIMARY_APP_BAR_HEIGHT } from "../navigation/primaryAppBarGeometry";
@@ -311,6 +319,8 @@ export function BrainWorkDetailSheet({
   actions,
   replyOpen,
   replyBusy,
+  serverId,
+  connectionState = "offline",
   onReply,
   onOpenCalendar,
   onClose,
@@ -322,7 +332,10 @@ export function BrainWorkDetailSheet({
   /** Open with the reply box focused ("Reply", "Something else…"). */
   replyOpen?: boolean;
   replyBusy?: boolean;
-  onReply?(text: string): void;
+  /** The computer files are uploaded to, and whether it is reachable. */
+  serverId?: string;
+  connectionState?: ConnectionState;
+  onReply?(text: string, attachments: SendAttachment[]): void;
   /** A Calendar run's Work: open its schedule at this run. */
   onOpenCalendar?(): void;
   onClose(): void;
@@ -331,21 +344,42 @@ export function BrainWorkDetailSheet({
   // A Calendar run's meta is its schedule, shown as the link below.
   const meta = slip ? (slip.calendarLabel ? formatChatBubbleTime(slip.updatedAt) : slipMeta(slip)) : undefined;
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const workId = slip?.workId;
-  useEffect(() => setDraft(""), [workId]);
-  const canReply = Boolean(onReply && slip && !slip.closed);
-  const replyReady = Boolean(draft.trim()) && !replyBusy;
-  const send = () => {
-    const text = draft.trim();
-    if (!text || !onReply) return;
-    onReply(text);
+  const inputRef = useRef<TextInput>(null);
+  const rootRef = useRef<View>(null);
+  useEffect(() => {
     setDraft("");
+    setAttachments([]);
+  }, [workId]);
+  const canReply = Boolean(onReply && slip && !slip.closed);
+  const focusInput = useCallback(() => inputRef.current?.focus(), []);
+  const files = useInterfaceComposerAttachments({
+    serverId: serverId ?? "",
+    ownerKey: workId ?? "",
+    attachments,
+    connectionState: serverId ? connectionState : "offline",
+    setAttachments,
+    focusComposer: focusInput,
+  });
+  // Web: paste or drop files on the sheet, as in the chats.
+  const { dragging } = useComposerFileTransfer({
+    rootRef,
+    enabled: canReply && !replyBusy && files.canAttach,
+    onFiles: files.addFiles,
+  });
+  const replyReady = workReplyReady(draft, attachments, Boolean(replyBusy));
+  // The reply stays in the box until it lands: the sheet closes on success,
+  // and a failed send keeps the words and the uploaded files to try again.
+  const send = () => {
+    if (!onReply || !replyReady) return;
+    onReply(draft.trim(), workReplyFiles(attachments));
   };
   const age = slip?.waitedMs && slip.group === "needs" ? `Waiting ${brainWorkAge(slip.waitedMs)}` : undefined;
   return (
     <BottomSheetFrame visible={Boolean(slip)} onClose={onClose} keyboardAvoiding cardStyle={{ backgroundColor: chrome.surface }}>
       {slip ? (
-        <>
+        <View ref={rootRef} style={styles.sheetRoot}>
           <View style={styles.sheetHeader}>
             <Text selectable style={styles.detailTitle}>{slip.title}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Close Work details" onPress={onClose} style={styles.close}>
@@ -372,8 +406,28 @@ export function BrainWorkDetailSheet({
             ) : null}
             {actions?.length ? <WorkSlipActions actions={actions} chrome={chrome} /> : null}
             {canReply ? (
+              <InterfaceComposerAttachmentRail
+                attachments={attachments}
+                activeUpload={files.activeUpload}
+                chrome={chrome}
+                onRemoveAttachment={files.removeAttachment}
+                onCancelUpload={files.cancelUpload}
+              />
+            ) : null}
+            {canReply ? (
               <View style={styles.replyRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Attach file"
+                  accessibilityState={{ disabled: !files.canAttach || replyBusy, busy: files.uploading }}
+                  disabled={!files.canAttach || replyBusy}
+                  onPress={() => void files.handleUploadAttachment()}
+                  style={[styles.replySend, styles.replySendIdle]}
+                >
+                  <Icon name="attach" size={18} color={files.canAttach ? chrome.textMuted : chrome.textSubtle} />
+                </Pressable>
                 <TextInput
+                  ref={inputRef}
                   accessibilityLabel={`Reply to Brain about ${slip.title}`}
                   value={draft}
                   onChangeText={setDraft}
@@ -407,7 +461,8 @@ export function BrainWorkDetailSheet({
               </View>
             ) : null}
           </ScrollView>
-        </>
+          {dragging ? <InterfaceDropOverlay chrome={chrome} /> : null}
+        </View>
       ) : null}
     </BottomSheetFrame>
   );
@@ -526,6 +581,9 @@ function createStyles(chrome: TerminalThemeChrome) {
     question: {
       ...TypeScale.body,
       color: chrome.text,
+    },
+    sheetRoot: {
+      position: "relative",
     },
     replyRow: {
       flexDirection: "row",

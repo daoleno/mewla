@@ -368,3 +368,27 @@ describe("correlated WebSocket requests", () => {
     });
   }
 });
+
+describe("Work reply attachments", () => {
+  test("a reply names its uploaded files in the frame; a text-only reply sends none", async () => {
+    const { client, socket } = await connected();
+    withTimers(() => {
+      void client
+        .actOnBrainWork(server.id, "work", "reply" as any, {
+          text: "see the screenshot",
+          attachments: [{ name: "shot.png", path: "/uploads/shot.png", content_type: "image/png" }],
+        })
+        .catch(() => undefined);
+    });
+    const withFiles = JSON.parse(socket.sent.at(-1) ?? "{}");
+    expect(withFiles.type).toBe("brain_work_action");
+    expect(withFiles.text).toBe("see the screenshot");
+    expect(withFiles.attachments).toEqual([{ name: "shot.png", path: "/uploads/shot.png", content_type: "image/png" }]);
+
+    withTimers(() => {
+      void client.actOnBrainWork(server.id, "work", "reply" as any, { text: "hi", attachments: [] }).catch(() => undefined);
+    });
+    expect("attachments" in JSON.parse(socket.sent.at(-1) ?? "{}")).toBe(false);
+    client.disconnect();
+  });
+});
