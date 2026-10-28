@@ -541,7 +541,9 @@ func (idx *awsIndex) search(query, service string, limit int) ([]awsMatch, error
 				switch {
 				case svc.Name == t:
 					s = 4
-				case contains(words, t) || contains(words, stem):
+				case contains(words, t):
+					s = 5
+				case contains(words, stem):
 					s = 4
 				case len(stem) >= 4 && strings.Contains(command, stem):
 					s = 3
