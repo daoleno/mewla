@@ -1,3 +1,4 @@
+import { draftStore } from "../../services/draftStore";
 import {
   useCallback,
   useEffect,
@@ -1049,6 +1050,7 @@ export function useInterfaceChatSession({
       } else {
         draftCache.delete(composerCacheKey);
       }
+      draftStore.save(composerCacheKey, nextDraft);
       setDraftState({
         cacheKey: composerCacheKey,
         value: nextDraft,
@@ -1056,6 +1058,23 @@ export function useInterfaceChatSession({
     },
     [composerCacheKey],
   );
+  // A reload brings back what was typed in this conversation.
+  useEffect(() => {
+    if (draftCache.has(composerCacheKey)) return;
+    let cancelled = false;
+    void draftStore.load(composerCacheKey).then((saved) => {
+      if (cancelled || !saved || draftCache.has(composerCacheKey)) return;
+      draftCache.set(composerCacheKey, saved);
+      setDraftState((current) =>
+        current.cacheKey === composerCacheKey && current.value
+          ? current
+          : { cacheKey: composerCacheKey, value: saved },
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [composerCacheKey]);
   const setDraft = useCallback(
     (nextDraft: string) => writeDraft(nextDraft),
     [writeDraft],
