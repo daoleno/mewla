@@ -1890,10 +1890,14 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 			activity = w.enrichChoicePrompt(item.id, withChoicePrompt(activity, item.content))
 		}
 		turn, hasTurn, turnErr := w.ledgerTurnFor(item.id, item.now)
-		if hasTurn && turnErr == nil {
-			turn = w.syncPromptGate(item.id, item.workerSnap, item.alive, activity, turn)
-		}
 		pendingList, pendingErr := w.pendingInputAdmissions(item.id)
+		if turnErr == nil && pendingErr == nil {
+			turn, hasTurn = w.syncPromptGate(item.id, item.workerSnap, item.alive, activity, turn, hasTurn, pendingList)
+			if hasTurn {
+				// Filing may have promoted a pending admission to this turn.
+				pendingList, pendingErr = w.pendingInputAdmissions(item.id)
+			}
+		}
 		hasPending := len(pendingList) > 0
 		if pendingErr != nil {
 			turnErr = pendingErr

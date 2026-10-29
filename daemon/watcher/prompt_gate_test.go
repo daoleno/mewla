@@ -31,7 +31,7 @@ func TestPromptGateFilesBlockedWithOptionsAndClears(t *testing.T) {
 		t.Fatalf("fixture has no structured prompt: %+v", open)
 	}
 
-	turn = w.syncPromptGate(sessionID, worker, true, open, turn)
+	turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
 	if turn.Status != TurnBlocked || turn.Attention != "user_input" {
 		t.Fatalf("turn not blocked: %+v", turn)
 	}
@@ -52,13 +52,13 @@ func TestPromptGateFilesBlockedWithOptionsAndClears(t *testing.T) {
 	}
 
 	// The same prompt on the next poll is not filed again.
-	w.syncPromptGate(sessionID, worker, true, open, turn)
+	w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
 	if len(ledger.applied) != 1 {
 		t.Fatalf("the same prompt was filed twice: %+v", ledger.applied)
 	}
 
 	// Answered: the pane no longer shows it.
-	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn)
+	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
 	if len(ledger.applied) != 2 || ledger.applied[1].Kind != "running" || ledger.applied[1].Attention != "none" {
 		t.Fatalf("the answered prompt was not cleared: %+v", ledger.applied)
 	}
@@ -78,10 +78,38 @@ func TestPromptGateIgnoresWorkersItDoesNotOwn(t *testing.T) {
 		"settled":       {classifier.Worker{ID: "a", Delegated: true, Command: "claude"}, TurnSnapshot{TurnID: "t", Status: TurnDone, SignalProtocol: true}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			w.syncPromptGate("a", tc.worker, true, open, tc.turn)
+			w.syncPromptGate("a", tc.worker, true, open, tc.turn, true, nil)
 			if len(ledger.applied) != 0 {
 				t.Fatalf("filed a prompt for a turn it does not own: %+v", ledger.applied)
 			}
 		})
+	}
+}
+
+// A Worker can reach a prompt before its first progress report admitted its
+// turn (the ledger holds only the prepared prompt). The prompt must still reach
+// Brain: the gate's fact promotes the pending turn, as the Worker's own would.
+func TestPromptGateReachesBrainBeforeTheTurnIsAdmitted(t *testing.T) {
+	w := New(0)
+	sessionID := "mewla-worker-early:@1"
+	worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateRunning, Command: "claude"}
+	w.workers[sessionID] = &worker
+	w.workerOrder = append(w.workerOrder, sessionID)
+	ledger := newFakeTurnLedger()
+	w.SetTurnLedger(ledger)
+	pending, _, err := ledger.PrepareInputAdmission(InputAdmission{
+		WorkID: "work", SessionID: sessionID, ProposedTurnID: "turn:early", SignalProtocol: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+
+	turn, has := w.syncPromptGate(sessionID, worker, true, open, TurnSnapshot{}, false, []InputAdmission{pending})
+	if !has || turn.TurnID != "turn:early" || turn.Status != TurnBlocked {
+		t.Fatalf("the pending turn was not promoted and blocked: %+v has=%v", turn, has)
+	}
+	if len(ledger.applied) != 1 || ledger.applied[0].TurnID != "turn:early" || ledger.applied[0].Kind != "attention" {
+		t.Fatalf("applied: %+v", ledger.applied)
 	}
 }

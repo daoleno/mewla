@@ -164,11 +164,33 @@ func (w *Watcher) enrichChoicePrompt(sessionID string, signal classifier.Activit
 }
 
 // syncPromptGate files the prompt open in a delegated Worker's pane to its
-// live turn, and files its disappearance. It returns the turn as the ledger
-// now holds it.
-func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool, activity classifier.ActivitySignal, turn TurnSnapshot) TurnSnapshot {
-	if !worker.Delegated || worker.Hidden || !alive || !turn.SignalProtocol || TurnTerminal(turn.Status) {
-		return turn
+// turn, and files its disappearance. A Worker can reach a prompt before its
+// first progress report has admitted its turn; the pending prompt-carried turn
+// is then promoted by this very fact, as it is by the Worker's own report. It
+// returns the turn as the ledger now holds it.
+func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool, activity classifier.ActivitySignal, turn TurnSnapshot, hasTurn bool, pending []InputAdmission) (TurnSnapshot, bool) {
+	if !worker.Delegated || worker.Hidden || !alive {
+		return turn, hasTurn
+	}
+	turnID := ""
+	if hasTurn && turn.SignalProtocol && !TurnTerminal(turn.Status) {
+		turnID = turn.TurnID
+	} else {
+		var newest *InputAdmission
+		for index := range pending {
+			candidate := pending[index]
+			if candidate.State == InputAdmissionPending && candidate.SignalProtocol && candidate.ClaimToken == "" && candidate.Purpose == "" &&
+				(newest == nil || candidate.AcceptedAt.After(newest.AcceptedAt)) {
+				newest = &pending[index]
+			}
+		}
+		if newest != nil {
+			turnID = newest.ProposedTurnID
+			turn = TurnSnapshot{SessionID: id, TurnID: turnID, Status: TurnAdmitted, SignalProtocol: true}
+		}
+	}
+	if turnID == "" {
+		return turn, hasTurn
 	}
 	w.mu.RLock()
 	gate, filed := w.gates[id]
@@ -178,30 +200,33 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	if activity.Prompt != nil {
 		promptID = activity.Prompt.ID
 	}
-	if filed && gate.turnID == turn.TurnID && open && gate.promptID == promptID {
-		return turn
+	if filed && gate.turnID == turnID && open && gate.promptID == promptID {
+		return turn, hasTurn
+	}
+	refresh := func() {
+		if refreshed, ok, err := w.ledgerTurnAuthoritative(id, time.Now().UTC()); ok && err == nil && refreshed.TurnID == turnID {
+			turn, hasTurn = refreshed, true
+		}
 	}
 	if filed {
 		w.mu.Lock()
 		delete(w.gates, id)
 		w.mu.Unlock()
-		if gate.turnID == turn.TurnID && turn.Status == TurnBlocked {
+		if gate.turnID == turnID && turn.Status == TurnBlocked {
 			if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
-				TurnID: turn.TurnID, Status: "running", Phase: "working", Attention: "none",
+				TurnID: turnID, Status: "running", Phase: "working", Attention: "none",
 				Summary: "The prompt was answered", EventKind: "progress", LeaseSeconds: promptGateAnswerLease,
-				ProgressEventID: fmt.Sprintf("pane-gate-clear:%s:%s:%d", turn.TurnID, gate.promptID, time.Now().UnixNano()),
+				ProgressEventID: fmt.Sprintf("pane-gate-clear:%s:%s:%d", turnID, gate.promptID, time.Now().UnixNano()),
 			}); err != nil {
-				return turn
+				return turn, hasTurn
 			}
-			if refreshed, ok, err := w.ledgerTurnAuthoritative(id, time.Now().UTC()); ok && err == nil {
-				turn = refreshed
-			}
+			refresh()
 		}
 	}
 	// A turn already blocked by the Worker's own report or the permission hook
 	// has told Brain; this prompt is that one.
 	if !open || turn.Status == TurnBlocked {
-		return turn
+		return turn, hasTurn
 	}
 	details := map[string]any{"event": "prompt_blocked", "pane": strings.TrimSpace(id)}
 	summary := activity.Summary
@@ -214,22 +239,20 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	}
 	raw, err := json.Marshal(details)
 	if err != nil {
-		return turn
+		return turn, hasTurn
 	}
 	if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
-		TurnID: turn.TurnID, Status: "blocked", Phase: "working", Attention: "user_input",
+		TurnID: turnID, Status: "blocked", Phase: "working", Attention: "user_input",
 		Summary: summary, EventKind: "needs_judgment", DetailsJSON: string(raw), LeaseSeconds: promptGateLeaseSeconds,
-		ProgressEventID: fmt.Sprintf("pane-gate:%s:%s:%d", turn.TurnID, promptID, time.Now().UnixNano()),
+		ProgressEventID: fmt.Sprintf("pane-gate:%s:%s:%d", turnID, promptID, time.Now().UnixNano()),
 	}); err != nil {
-		return turn
+		return turn, hasTurn
 	}
 	w.mu.Lock()
-	w.gates[id] = promptGate{turnID: turn.TurnID, promptID: promptID}
+	w.gates[id] = promptGate{turnID: turnID, promptID: promptID}
 	w.mu.Unlock()
-	if refreshed, ok, err := w.ledgerTurnAuthoritative(id, time.Now().UTC()); ok && err == nil {
-		turn = refreshed
-	}
-	return turn
+	refresh()
+	return turn, hasTurn
 }
 
 // answerWith is the command Brain answers a prompt with.
