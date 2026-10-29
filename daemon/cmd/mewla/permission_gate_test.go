@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/agentevents"
+	"github.com/daoleno/mewla/daemon/agentevents/claude"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
 )
@@ -360,5 +362,20 @@ func TestALegacyPermissionDeniedHookIsAnsweredWithNothing(t *testing.T) {
 	}
 	if told, _, _, _ := rec.snapshot(); len(told) != 0 {
 		t.Fatalf("Brain was told: %q", told)
+	}
+}
+
+// AskUserQuestion is answered in its own prompt; a hook decision about the tool
+// would hand Brain an allow/deny that answers nothing.
+func TestAskUserQuestionIsNotAPermissionQuestion(t *testing.T) {
+	hub := agentevents.NewHub()
+	svc := newAgentEventService(hub, func() []*classifier.Worker { return nil })
+	payload := claude.Payload{HookEvent: "PermissionRequest", ToolName: "AskUserQuestion", SessionID: "s"}
+	resp := svc.askPrompt(context.Background(), "%1", payload)
+	if !resp.OK || resp.HookOutput != "" {
+		t.Fatalf("response: %+v", resp)
+	}
+	if state, ok := hub.State("%1"); ok && len(state.Approvals) != 0 {
+		t.Fatalf("an approval was published: %+v", state.Approvals)
 	}
 }
