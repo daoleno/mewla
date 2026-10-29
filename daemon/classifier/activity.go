@@ -13,6 +13,10 @@ type ActivitySignal struct {
 	Summary  string
 	Source   string // stable machine tag, e.g. "cursor_pane_stop_marker"
 	Provider string // adapter name, e.g. "cursor", "codex"
+	// Prompt is the structured prompt behind a Blocked signal, when the
+	// adapter could read it; nil when the pane proves a prompt but not its
+	// shape.
+	Prompt *Prompt
 }
 
 // ActivityInput is the provider-neutral observation bundle passed to adapters.

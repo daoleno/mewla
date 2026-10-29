@@ -1,0 +1,239 @@
+package watcher
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/daoleno/mewla/daemon/classifier"
+)
+
+// A blocking prompt in a delegated Worker's terminal is a fact about its turn,
+// not only a colour on its row: nobody sits at that terminal, so Brain must be
+// told. The prompt is filed to the ledger as the same blocked progress the
+// Worker's own `worker progress --attention user_input` would file, so the
+// reducer, the lease and Brain's review all take the one path they already
+// have. Clearing it files running again.
+
+// promptGate remembers the prompt filed for one Session, so one prompt is
+// filed once and its disappearance is filed once.
+type promptGate struct {
+	turnID   string
+	promptID string
+}
+
+const (
+	promptGateLeaseSeconds = 900
+	promptGateAnswerLease  = 300
+)
+
+// ErrPromptGone means the prompt an answer was composed for is no longer the
+// one on screen. No key was sent.
+var ErrPromptGone = errors.New("the prompt has passed")
+
+// withChoicePrompt gives an AskUserQuestion signal its structured prompt. The
+// pane shows one question at a time, so the other tabs carry only their header
+// until the transcript fills them.
+func withChoicePrompt(signal classifier.ActivitySignal, pane string) classifier.ActivitySignal {
+	if signal.State != classifier.StateBlocked || signal.Source != "claude_pane_choice" {
+		return signal
+	}
+	screen := parseClaudeChoiceScreen(pane)
+	if screen.Kind != claudeChoiceScreenQuestion && screen.Kind != claudeChoiceScreenReview {
+		return signal
+	}
+	prompt := classifier.Prompt{Kind: classifier.PromptChoice, Provider: signal.Provider, Title: signal.Summary}
+	if screen.Kind == claudeChoiceScreenReview {
+		prompt.ID = classifier.PromptID(classifier.PromptChoice, append([]string{"review"}, screen.Tabs...)...)
+		for index, header := range screen.Tabs {
+			prompt.Questions = append(prompt.Questions, classifier.PromptQuestion{Header: header, Answered: index < len(screen.TabsAnswered) && screen.TabsAnswered[index]})
+		}
+		signal.Prompt = &prompt
+		return signal
+	}
+	current := classifier.PromptQuestion{Question: screen.Question}
+	for _, row := range screen.Rows {
+		current.MultiSelect = current.MultiSelect || row.HasBox
+		current.Options = append(current.Options, classifier.PromptOption{Number: row.Number, Label: row.Text, Selected: row.Checked || row.Cursor})
+	}
+	if len(screen.Tabs) <= 1 {
+		prompt.Questions = []classifier.PromptQuestion{current}
+		parts := []string{current.Question}
+		for _, option := range current.Options {
+			parts = append(parts, option.Label)
+		}
+		prompt.ID = classifier.PromptID(classifier.PromptChoice, parts...)
+	} else {
+		for index, header := range screen.Tabs {
+			question := classifier.PromptQuestion{Header: header, Answered: index < len(screen.TabsAnswered) && screen.TabsAnswered[index]}
+			prompt.Questions = append(prompt.Questions, question)
+		}
+		// The tab list is stable while the questions are answered one by one.
+		prompt.ID = classifier.PromptID(classifier.PromptChoice, screen.Tabs...)
+	}
+	signal.Prompt = &prompt
+	return signal
+}
+
+// syncPromptGate files the prompt open in a delegated Worker's pane to its
+// live turn, and files its disappearance. It returns the turn as the ledger
+// now holds it.
+func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool, activity classifier.ActivitySignal, turn TurnSnapshot) TurnSnapshot {
+	if !worker.Delegated || worker.Hidden || !alive || !turn.SignalProtocol || TurnTerminal(turn.Status) {
+		return turn
+	}
+	w.mu.RLock()
+	gate, filed := w.gates[id]
+	w.mu.RUnlock()
+	open := activity.State == classifier.StateBlocked
+	promptID := ""
+	if activity.Prompt != nil {
+		promptID = activity.Prompt.ID
+	}
+	if filed && gate.turnID == turn.TurnID && open && gate.promptID == promptID {
+		return turn
+	}
+	if filed {
+		w.mu.Lock()
+		delete(w.gates, id)
+		w.mu.Unlock()
+		if gate.turnID == turn.TurnID && turn.Status == TurnBlocked {
+			if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
+				TurnID: turn.TurnID, Status: "running", Phase: "working", Attention: "none",
+				Summary: "The prompt was answered", EventKind: "progress", LeaseSeconds: promptGateAnswerLease,
+				ProgressEventID: fmt.Sprintf("pane-gate-clear:%s:%s:%d", turn.TurnID, gate.promptID, time.Now().UnixNano()),
+			}); err != nil {
+				return turn
+			}
+			if refreshed, ok, err := w.ledgerTurnAuthoritative(id, time.Now().UTC()); ok && err == nil {
+				turn = refreshed
+			}
+		}
+	}
+	// A turn already blocked by the Worker's own report or the permission hook
+	// has told Brain; this prompt is that one.
+	if !open || turn.Status == TurnBlocked {
+		return turn
+	}
+	details := map[string]any{"event": "prompt_blocked", "pane": strings.TrimSpace(id)}
+	summary := activity.Summary
+	if prompt := activity.Prompt; prompt != nil {
+		details["prompt"] = prompt
+		details["answer_with"] = answerWith(id, prompt)
+		if prompt.Title != "" && prompt.Title != summary {
+			summary = summary + ": " + prompt.Title
+		}
+	}
+	raw, err := json.Marshal(details)
+	if err != nil {
+		return turn
+	}
+	if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
+		TurnID: turn.TurnID, Status: "blocked", Phase: "working", Attention: "user_input",
+		Summary: summary, EventKind: "needs_judgment", DetailsJSON: string(raw), LeaseSeconds: promptGateLeaseSeconds,
+		ProgressEventID: fmt.Sprintf("pane-gate:%s:%s:%d", turn.TurnID, promptID, time.Now().UnixNano()),
+	}); err != nil {
+		return turn
+	}
+	w.mu.Lock()
+	w.gates[id] = promptGate{turnID: turn.TurnID, promptID: promptID}
+	w.mu.Unlock()
+	if refreshed, ok, err := w.ledgerTurnAuthoritative(id, time.Now().UTC()); ok && err == nil {
+		turn = refreshed
+	}
+	return turn
+}
+
+// answerWith is the command Brain answers a prompt with.
+func answerWith(sessionID string, prompt *classifier.Prompt) string {
+	switch prompt.Kind {
+	case classifier.PromptChoice:
+		return fmt.Sprintf(`mewla worker answer -id %s -prompt %s -answers '<one {"selected":[<option number>],"other":"<text>"} per question, as a JSON array>'`, sessionID, prompt.ID)
+	default:
+		return fmt.Sprintf("mewla worker answer -id %s -prompt %s -choice <option number>", sessionID, prompt.ID)
+	}
+}
+
+// AnswerPrompt presses the option Number of the numbered menu open in a
+// Session's pane, after proving the menu is still the prompt the answer was
+// composed for. A choice prompt (AskUserQuestion) is answered through
+// AnswerClaudeChoice instead.
+func (w *Watcher) AnswerPrompt(sessionID, promptID string, number int) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || strings.TrimSpace(promptID) == "" {
+		return refusePrompt("name the Session and the prompt")
+	}
+	identity, known := w.targetForSession(sessionID)
+	if !known {
+		return refusePrompt("target provider could not be proven; no key was sent")
+	}
+	pane := &tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
+	return w.sessionInputOwner().serialized(sessionID, func() error {
+		prompt, err := w.currentPrompt(pane, sessionID)
+		if err != nil {
+			return err
+		}
+		if prompt == nil || prompt.ID != promptID {
+			return fmt.Errorf("%w: %w", ErrPromptGone, ErrClaudeChoiceRefused)
+		}
+		if prompt.Kind == classifier.PromptChoice {
+			return refusePrompt("a question is answered with its answers, not one option")
+		}
+		valid := false
+		for _, option := range prompt.Options {
+			valid = valid || option.Number == number
+		}
+		if !valid || number < 1 || number > 9 {
+			return refusePrompt("the prompt has no option %d", number)
+		}
+		if err := pane.sendKey(fmt.Sprint(number)); err != nil {
+			return err
+		}
+		deadline := time.Now().Add(claudeChoiceStepTimeout)
+		for {
+			time.Sleep(claudeChoicePollInterval)
+			after, err := w.currentPrompt(pane, sessionID)
+			if err != nil {
+				return err
+			}
+			if after == nil || after.ID != promptID {
+				return nil
+			}
+			if !time.Now().Before(deadline) {
+				return refusePrompt("the prompt did not take option %d", number)
+			}
+		}
+	})
+}
+
+func refusePrompt(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", ErrClaudeChoiceRefused, fmt.Sprintf(format, args...))
+}
+
+// CurrentPrompt reads the prompt open in a Session's pane right now.
+func (w *Watcher) CurrentPrompt(sessionID string) (*classifier.Prompt, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	identity, known := w.targetForSession(sessionID)
+	if !known {
+		return nil, refusePrompt("target provider could not be proven")
+	}
+	return w.currentPrompt(&tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}, sessionID)
+}
+
+func (w *Watcher) currentPrompt(pane claudeChoicePane, sessionID string) (*classifier.Prompt, error) {
+	content, err := pane.capture()
+	if err != nil {
+		return nil, err
+	}
+	worker := w.GetWorker(sessionID)
+	if worker == nil {
+		return nil, refusePrompt("unknown Session")
+	}
+	signal := withChoicePrompt(w.activitySignal(*worker, content, 0, nil), content)
+	if signal.State != classifier.StateBlocked {
+		return nil, nil
+	}
+	return signal.Prompt, nil
+}

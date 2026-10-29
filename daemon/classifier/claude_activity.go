@@ -41,20 +41,44 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Provider: a.Name(),
 		}
 	case claudeTailHasPrefix(tail, "Claude has written up a plan"):
-		return ActivitySignal{
+		signal := ActivitySignal{
 			State:    StateBlocked,
 			Summary:  "Waiting for plan approval",
 			Source:   "claude_pane_plan",
 			Provider: a.Name(),
 		}
+		if prompt, ok := ParseMenuPrompt(a.Name(), PromptPlan, pane); ok {
+			prompt.Title = signal.Summary
+			signal.Prompt = &prompt
+		}
+		return signal
 	}
 	if permission := claudePromptTail(pane, 12); claudeTailHasPrefix(permission, "Do you want to") &&
 		len(permission) > 0 && strings.HasPrefix(permission[0], "Esc to cancel") {
-		return ActivitySignal{
+		signal := ActivitySignal{
 			State:    StateBlocked,
 			Summary:  "Waiting for Claude permission",
 			Source:   "claude_pane_blocked",
 			Provider: a.Name(),
+		}
+		if prompt, ok := ParseMenuPrompt(a.Name(), PromptPermission, pane, "Esc to cancel"); ok {
+			if prompt.Title == "" {
+				prompt.Title = signal.Summary
+			}
+			signal.Prompt = &prompt
+		}
+		return signal
+	}
+	// Launch-time menus (trust this folder, accept a mode, pick a theme) end
+	// in "Enter to confirm" and appear before any conversation exists.
+	if prompt, ok := ParseMenuPrompt(a.Name(), PromptStartup, pane, "Enter to confirm"); ok {
+		prompt.Title = "Waiting for your choice"
+		return ActivitySignal{
+			State:    StateBlocked,
+			Summary:  prompt.Title,
+			Source:   "claude_pane_startup",
+			Provider: a.Name(),
+			Prompt:   &prompt,
 		}
 	}
 

@@ -443,6 +443,11 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 			}
 			supervisor.inflight[item.id] = true
 			supervisor.mu.Unlock()
+			// A stale prompt fence (a keystroke sent into a prompt is never
+			// admitted as a user prompt) would make every resume fail with
+			// "Work already has an active Attempt" and retry forever; release
+			// it as delivery-unknown first.
+			w.releaseStaleAdmissions(item.id, stall.stale)
 			// A failed delivery retries on a later check, never every poll.
 			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
 			sessionID, fromTurn := item.id, stall.turnID
@@ -457,14 +462,7 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		case turnRecoveryEscalate:
 			// A stale prompt fence would also hold back Brain's delivery of
 			// the escalation; release it as delivery-unknown first.
-			if ambiguity, ok := w.turnLedger.(InputAdmissionAmbiguityLedger); ok {
-				for _, pending := range stall.stale {
-					if err := ambiguity.MarkInputAdmissionAmbiguous(item.id, pending,
-						"provider settled and stayed idle without this prompt's progress signal"); err != nil {
-						log.Printf("delegated turn recovery: release stale admission %s: %v", pending, err)
-					}
-				}
-			}
+			w.releaseStaleAdmissions(item.id, stall.stale)
 			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
 			summary := stallSummary(decision, item.provider.Error, item.content)
 			if err := ledger.EscalateStalledTurn(TurnStall{
@@ -559,6 +557,22 @@ func staleSignalAdmission(pending InputAdmission, provider ProviderActivityObser
 		pending.Purpose == "" && provider.ProbeState == ProbeStateOK && providerActivityTerminal(provider.Status) &&
 		!provider.SettledAt.IsZero() && provider.SettledAt.After(pending.AcceptedAt) &&
 		now.Sub(provider.SettledAt) >= signalAdmissionStaleAfter
+}
+
+// releaseStaleAdmissions closes prepared prompt admissions the provider took
+// its turn over without ever admitting, as delivery-unknown. They are not
+// replayed; the fence they hold on the Work is what is released.
+func (w *Watcher) releaseStaleAdmissions(sessionID string, stale []string) {
+	ambiguity, ok := w.turnLedger.(InputAdmissionAmbiguityLedger)
+	if !ok {
+		return
+	}
+	for _, pending := range stale {
+		if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, pending,
+			"provider settled and stayed idle without this prompt's progress signal"); err != nil {
+			log.Printf("delegated turn recovery: release stale admission %s: %v", pending, err)
+		}
+	}
 }
 
 func (w *Watcher) resumeStalledTurn(
