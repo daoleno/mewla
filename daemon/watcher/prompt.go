@@ -23,10 +23,17 @@ import (
 type promptGate struct {
 	turnID   string
 	promptID string
+	// filedAt is when the prompt was last filed or its lease renewed.
+	filedAt time.Time
 }
 
 const (
 	promptGateLeaseSeconds = 900
+	// promptGateRenewEvery is how often a prompt still open renews the turn's
+	// lease. The lifecycle sweep expires a lease whether or not the turn is
+	// blocked and gives up on it after a grace period, so a prompt left
+	// unanswered would otherwise decay to a lost turn.
+	promptGateRenewEvery = 5 * time.Minute
 	promptGateAnswerLease  = 300
 )
 
@@ -200,8 +207,14 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	if activity.Prompt != nil {
 		promptID = activity.Prompt.ID
 	}
+	renewing := false
 	if filed && gate.turnID == turnID && open && gate.promptID == promptID {
-		return turn, hasTurn
+		if time.Since(gate.filedAt) < promptGateRenewEvery {
+			return turn, hasTurn
+		}
+		// Still the same prompt: renew the lease below. The filed gate stays
+		// in place so the prompt is not read as new.
+		filed, renewing = false, true
 	}
 	refresh := func() {
 		if refreshed, ok, err := w.ledgerTurnAuthoritative(id, time.Now().UTC()); ok && err == nil && refreshed.TurnID == turnID {
@@ -225,7 +238,7 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	}
 	// A turn already blocked by the Worker's own report or the permission hook
 	// has told Brain; this prompt is that one.
-	if !open || turn.Status == TurnBlocked {
+	if !open || (turn.Status == TurnBlocked && !renewing) {
 		return turn, hasTurn
 	}
 	details := map[string]any{"event": "prompt_blocked", "pane": strings.TrimSpace(id)}
@@ -249,7 +262,7 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		return turn, hasTurn
 	}
 	w.mu.Lock()
-	w.gates[id] = promptGate{turnID: turnID, promptID: promptID}
+	w.gates[id] = promptGate{turnID: turnID, promptID: promptID, filedAt: time.Now()}
 	w.mu.Unlock()
 	refresh()
 	return turn, hasTurn

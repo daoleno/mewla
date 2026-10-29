@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 )
@@ -111,5 +112,41 @@ func TestPromptGateReachesBrainBeforeTheTurnIsAdmitted(t *testing.T) {
 	}
 	if len(ledger.applied) != 1 || ledger.applied[0].TurnID != "turn:early" || ledger.applied[0].Kind != "attention" {
 		t.Fatalf("applied: %+v", ledger.applied)
+	}
+}
+
+// The lifecycle sweep expires a lease whether or not the turn is blocked and
+// gives up on it after a grace period; a prompt left unanswered must keep its
+// turn alive by renewing the lease while the same prompt stays open.
+func TestPromptGateRenewsTheLeaseWhileThePromptStaysOpen(t *testing.T) {
+	w := New(0)
+	sessionID := "mewla-worker-renew:@1"
+	worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateRunning, Command: "claude"}
+	w.workers[sessionID] = &worker
+	w.workerOrder = append(w.workerOrder, sessionID)
+	ledger := newFakeTurnLedger()
+	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:renew", Status: TurnRunning, SignalProtocol: true}
+	ledger.seed(sessionID, turn)
+	w.SetTurnLedger(ledger)
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+
+	turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	if len(ledger.applied) != 1 {
+		t.Fatalf("renewed before it was due: %+v", ledger.applied)
+	}
+
+	w.mu.Lock()
+	gate := w.gates[sessionID]
+	gate.filedAt = time.Now().Add(-promptGateRenewEvery - time.Second)
+	w.gates[sessionID] = gate
+	w.mu.Unlock()
+	w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	if len(ledger.applied) != 2 || ledger.applied[1].Kind != "attention" || ledger.applied[1].LeaseSeconds != promptGateLeaseSeconds {
+		t.Fatalf("the lease was not renewed: %+v", ledger.applied)
+	}
+	w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	if len(ledger.applied) != 2 {
+		t.Fatalf("renewed again immediately: %+v", ledger.applied)
 	}
 }
