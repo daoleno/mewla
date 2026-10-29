@@ -78,6 +78,17 @@ followed. For a Worker that Brain delegated (it has a Work and a turn;
    details also carry the action, the approval id, the Work and `answer_with`.
    The app does not list the approval yet. The hook offers no "always" option:
    its decision output has only allow and deny.
+   A request can come when the Worker has no live turn: it reported done and
+   stopped (or never reported) while a background sub-agent kept running. A
+   settled turn is immutable, and the Worker is no Work's Attempt any more, so
+   the gate finds the Work through its last prompt (`Store.WorkOfSession`) and
+   opens a turn for the request (`Watcher.OpenPromptTurn`: a prepared signal
+   admission, no input sent) that the `needs_input` fact promotes. A stop is
+   not the end of a signal turn (only the Worker's own report is), so there is
+   no second path for it. The Worker's older turn id is no longer current after
+   this; it ends up reported by Brain's next send or the stall supervisor. A
+   fact that does not block its turn is an error, and the approval then goes to
+   the user.
 2. **Brain answers** with `mewla worker answer -id W -prompt P -choice N -basis
    "<brief sentence>"`. `handleWorkerAnswer` finds the held approval by its prompt
    id (a sub-agent's dialog has no pane prompt) and decides it; the pane prompt's

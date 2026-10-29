@@ -1,6 +1,8 @@
 package watcher
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/google/uuid"
 )
 
 // A blocking prompt in a delegated Worker's terminal is a fact about its turn,
@@ -297,6 +300,41 @@ func answerWith(sessionID string, prompt *classifier.Prompt) string {
 	default:
 		return fmt.Sprintf("mewla worker answer -id %s -prompt %s -choice <option number>", sessionID, prompt.ID)
 	}
+}
+
+// OpenPromptTurn gives a blocking prompt a turn of its own when the Worker has
+// none live: its last turn settled (a Worker reports done and stops while a
+// background sub-agent keeps running) or never gained an Attempt. A settled
+// turn is immutable, so a request raised after it cannot be filed on it, and
+// Brain would never hear about it. The turn is a prepared signal admission for
+// the Work, sent to nobody: the fact that files the prompt promotes it, the same
+// way the Worker's own first report promotes its prompt-carried turn. The
+// returned id is the turn that fact must name.
+func (w *Watcher) OpenPromptTurn(sessionID, workID string) (string, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	owner := w.sessionInputOwner()
+	if owner == nil {
+		return "", fmt.Errorf("the session input owner is unavailable")
+	}
+	identity, known := w.targetForSession(sessionID)
+	if !known {
+		return "", fmt.Errorf("target provider could not be proven")
+	}
+	turnID := "turn:" + uuid.NewString()
+	digest := sha256.Sum256([]byte("prompt-turn\x00" + turnID))
+	_, created, err := owner.prepareInputAdmission(InputAdmission{
+		WorkID: strings.TrimSpace(workID), SessionID: sessionID, ProposedTurnID: turnID, Receipt: turnID,
+		PayloadSHA256: hex.EncodeToString(digest[:]), ProcessIdentity: delegatedTurnIdentity(identity),
+		PaneGeneration: w.currentPaneGeneration(sessionID), AcceptedAt: time.Now().UTC(),
+		Mode: InputAdmissionFresh, SignalProtocol: true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("open a turn for the prompt: %w", err)
+	}
+	if !created {
+		return "", fmt.Errorf("open a turn for the prompt: the turn already existed")
+	}
+	return turnID, nil
 }
 
 // SetApprovalHold installs how the gate learns that a permission hook holds
