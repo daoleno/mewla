@@ -788,6 +788,19 @@ func (s *Store) WorkOfSession(sessionID string) (string, bool) {
 	return workID, workID != ""
 }
 
+// ActiveWorkOfSession is WorkOfSession for a Work that is not done or cancelled.
+func (s *Store) ActiveWorkOfSession(sessionID string) (string, bool) {
+	workID, ok := s.WorkOfSession(sessionID)
+	if !ok {
+		return "", false
+	}
+	item, err := s.Work(workID)
+	if err != nil || item.Status == WorkDone || item.Status == WorkCancelled {
+		return "", false
+	}
+	return workID, true
+}
+
 // TurnByID reads one exact canonical provider Turn. Host handling recovery
 // must never substitute whichever Turn happens to be current for the Session.
 func (s *Store) TurnByID(sessionID, turnID string) (watcher.TurnSnapshot, bool, error) {

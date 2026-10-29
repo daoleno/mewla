@@ -365,6 +365,7 @@ type Watcher struct {
 	ledgerTurnReadAt      map[string]time.Time        // TTL for authoritative ledger re-reads
 	probeLossSince        map[string]probeLossState   // session -> current turn loss streak
 	gates                 map[string]promptGate       // session -> the pane prompt filed to the ledger as a blocked turn
+	latePrompts           map[string]latePrompt       // session -> the dialog seen on it while it had no live turn
 	approvalHolds         func(sessionID string) bool // whether a permission hook holds the Session's dialog
 	recovery              *turnRecoverySupervisor
 	recoveryOnce          sync.Once

@@ -250,3 +250,105 @@ func TestOpenPromptTurnPreparesASignalTurnForTheWork(t *testing.T) {
 		t.Fatal("a turn was opened for a target that could not be proven")
 	}
 }
+
+type workLedger struct {
+	*fakeTurnLedger
+	active map[string]string
+}
+
+func (l workLedger) ActiveWorkOfSession(sessionID string) (string, bool) {
+	workID, ok := l.active[sessionID]
+	return workID, ok
+}
+
+// A Worker reported done and stopped; a background result wakes it into a
+// permission dialog. The settled turn takes nothing, so the dialog is filed on a
+// turn opened for it, and answering it settles that turn again.
+func TestPromptGateOpensATurnForADialogAfterTheWorkersTurnSettled(t *testing.T) {
+	window := latePromptSettle
+	latePromptSettle = 0
+	t.Cleanup(func() { latePromptSettle = window })
+	w := New(0)
+	sessionID := "mewla-worker-woken:@1"
+	worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateDone, Command: "claude"}
+	w.workers[sessionID] = &worker
+	w.workerOrder = append(w.workerOrder, sessionID)
+	w.targetOwnershipResolver = func(string) (bool, error) { return true, nil }
+	w.targetProcessResolver = fixedSessionInputResolver(testSessionInputIdentity("claude"))
+	w.sessionInput = newSessionInputOwner(newFakeSessionInputIO())
+	ledger := workLedger{fakeTurnLedger: newFakeTurnLedger(), active: map[string]string{sessionID: "work-1"}}
+	settled := TurnSnapshot{SessionID: sessionID, TurnID: "turn:settled", Status: TurnDone, SignalProtocol: true}
+	ledger.seed(sessionID, settled)
+	w.SetTurnLedger(ledger)
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	if open.Prompt == nil {
+		t.Fatalf("fixture has no structured prompt: %+v", open)
+	}
+
+	turn, _ := w.syncPromptGate(sessionID, worker, true, open, settled, true, nil)
+	if turn.Status != TurnBlocked || turn.TurnID == "turn:settled" {
+		t.Fatalf("the dialog was not filed on a turn of its own: %+v", turn)
+	}
+	if len(ledger.applied) != 1 || ledger.applied[0].TurnID != turn.TurnID || ledger.applied[0].Kind != "attention" {
+		t.Fatalf("applied: %+v", ledger.applied)
+	}
+	prepared, found, _ := ledger.InputAdmission(sessionID, turn.TurnID)
+	if !found || prepared.WorkID != "work-1" || !prepared.SignalProtocol {
+		t.Fatalf("the opened turn belongs to the wrong Work: %+v found=%v", prepared, found)
+	}
+
+	// The same dialog on the next poll opens nothing more.
+	w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	if len(ledger.applied) != 1 {
+		t.Fatalf("the same dialog was filed twice: %+v", ledger.applied)
+	}
+
+	// Answered: the opened turn settles as done, not running, so Brain reviews
+	// the result the Worker had reported.
+	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+	if len(ledger.applied) != 2 || ledger.applied[1].TurnID != turn.TurnID || ledger.applied[1].Kind != "done" {
+		t.Fatalf("the answered dialog did not settle its turn: %+v", ledger.applied)
+	}
+}
+
+func TestPromptGateOpensNoTurnWhenItShouldNot(t *testing.T) {
+	window := latePromptSettle
+	t.Cleanup(func() { latePromptSettle = window })
+	setup := func(active map[string]string) (*Watcher, classifier.Worker, workLedger, classifier.ActivitySignal, TurnSnapshot) {
+		w := New(0)
+		sessionID := "mewla-worker-quiet:@1"
+		worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateDone, Command: "claude"}
+		w.workers[sessionID] = &worker
+		w.workerOrder = append(w.workerOrder, sessionID)
+		w.targetOwnershipResolver = func(string) (bool, error) { return true, nil }
+		w.targetProcessResolver = fixedSessionInputResolver(testSessionInputIdentity("claude"))
+		w.sessionInput = newSessionInputOwner(newFakeSessionInputIO())
+		ledger := workLedger{fakeTurnLedger: newFakeTurnLedger(), active: active}
+		settled := TurnSnapshot{SessionID: sessionID, TurnID: "turn:settled", Status: TurnDone, SignalProtocol: true}
+		ledger.seed(sessionID, settled)
+		w.SetTurnLedger(ledger)
+		open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+		return w, worker, ledger, open, settled
+	}
+	// A dialog that has only just appeared (or a hook has just had answered).
+	latePromptSettle = time.Hour
+	w, worker, ledger, open, settled := setup(map[string]string{"mewla-worker-quiet:@1": "work-1"})
+	w.syncPromptGate(worker.ID, worker, true, open, settled, true, nil)
+	if pending, _ := ledger.PendingInputAdmissions(worker.ID); len(pending) != 0 || len(ledger.applied) != 0 {
+		t.Fatalf("a dialog that had not stood a moment opened a turn: %+v %+v", pending, ledger.applied)
+	}
+	// A Work that is done or unknown to the Session.
+	latePromptSettle = 0
+	w, worker, ledger, open, settled = setup(map[string]string{})
+	w.syncPromptGate(worker.ID, worker, true, open, settled, true, nil)
+	if pending, _ := ledger.PendingInputAdmissions(worker.ID); len(pending) != 0 || len(ledger.applied) != 0 {
+		t.Fatalf("a turn was opened with no Work to raise it on: %+v %+v", pending, ledger.applied)
+	}
+	// A dialog a permission hook holds is the hook's to report.
+	w, worker, ledger, open, settled = setup(map[string]string{"mewla-worker-quiet:@1": "work-1"})
+	w.SetApprovalHold(func(string) bool { return true })
+	w.syncPromptGate(worker.ID, worker, true, open, settled, true, nil)
+	if pending, _ := ledger.PendingInputAdmissions(worker.ID); len(pending) != 0 || len(ledger.applied) != 0 {
+		t.Fatalf("the gate opened a turn for a dialog its hook holds: %+v %+v", pending, ledger.applied)
+	}
+}

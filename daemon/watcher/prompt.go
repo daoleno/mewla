@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -30,6 +31,15 @@ type promptGate struct {
 	filedAt time.Time
 	// permission is whether the filed prompt is a tool permission dialog.
 	permission bool
+	// late marks a prompt filed on a turn opened for it, after the Worker's own
+	// turn had settled. Answering it settles that turn again.
+	late bool
+}
+
+// SessionWorkLedger names the Work a Session can still raise a request on: the
+// one its last prompt belonged to, while that Work is not done or cancelled.
+type SessionWorkLedger interface {
+	ActiveWorkOfSession(sessionID string) (string, bool)
 }
 
 const (
@@ -201,13 +211,24 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 			turn = TurnSnapshot{SessionID: id, TurnID: turnID, Status: TurnAdmitted, SignalProtocol: true}
 		}
 	}
+	open := activity.State == classifier.StateBlocked
+	late := false
+	if turnID == "" && open && activity.Prompt != nil && !w.hookHoldsPrompt(id, activity.Prompt) && w.latePromptStands(id, activity.Prompt.ID) {
+		// The Worker has no live turn: it reported done and stopped, and a
+		// background result woke it into a dialog. The dialog still reaches
+		// Brain, on a turn opened for it.
+		if opened, ok := w.openLatePromptTurn(id); ok {
+			turnID, late = opened, true
+			turn = TurnSnapshot{SessionID: id, TurnID: turnID, Status: TurnAdmitted, SignalProtocol: true}
+		}
+	}
 	if turnID == "" {
+		w.forgetLatePrompt(id)
 		return turn, hasTurn
 	}
 	w.mu.RLock()
 	gate, filed := w.gates[id]
 	w.mu.RUnlock()
-	open := activity.State == classifier.StateBlocked
 	promptID := ""
 	if activity.Prompt != nil {
 		promptID = activity.Prompt.ID
@@ -231,11 +252,19 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		delete(w.gates, id)
 		w.mu.Unlock()
 		if gate.turnID == turnID && turn.Status == TurnBlocked {
-			if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
+			cleared := classifier.WorkerProgress{
 				TurnID: turnID, Status: "running", Phase: "working", Attention: "none",
 				Summary: "The prompt was answered", EventKind: "progress", LeaseSeconds: promptGateAnswerLease,
 				ProgressEventID: fmt.Sprintf("pane-gate-clear:%s:%s:%d", turnID, gate.promptID, time.Now().UnixNano()),
-			}); err != nil {
+			}
+			if gate.late {
+				// The turn was opened for this prompt alone: settling it hands
+				// Brain the result the Worker had reported, which the prompt's
+				// blocked review took the place of.
+				cleared.Status, cleared.Phase, cleared.Attention, cleared.EventKind = "done", "reporting", "done", "done"
+				cleared.Summary, cleared.LeaseSeconds = "The prompt was answered; the Worker had already reported done", 0
+			}
+			if _, err := w.UpdateWorkerProgress(id, cleared); err != nil {
 				return turn, hasTurn
 			}
 			refresh()
@@ -265,7 +294,8 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		return turn, hasTurn
 	}
 	w.mu.Lock()
-	w.gates[id] = promptGate{turnID: turnID, promptID: promptID, filedAt: time.Now(), permission: activity.Prompt != nil && activity.Prompt.Kind == classifier.PromptPermission}
+	w.gates[id] = promptGate{turnID: turnID, promptID: promptID, filedAt: time.Now(), permission: activity.Prompt != nil && activity.Prompt.Kind == classifier.PromptPermission,
+		late: late || gate.late && gate.turnID == turnID}
 	w.mu.Unlock()
 	refresh()
 	return turn, hasTurn
@@ -335,6 +365,60 @@ func (w *Watcher) OpenPromptTurn(sessionID, workID string) (string, error) {
 		return "", fmt.Errorf("open a turn for the prompt: the turn already existed")
 	}
 	return turnID, nil
+}
+
+// latePromptSettle is how long a dialog must stay on a Worker with no live turn
+// before a turn is opened for it. A dialog a permission hook just had answered
+// is still on screen for a moment, and must not read as a new one.
+var latePromptSettle = 3 * time.Second
+
+type latePrompt struct {
+	promptID string
+	since    time.Time
+}
+
+// latePromptStands reports whether the same dialog has been open on the Worker
+// for the settle time.
+func (w *Watcher) latePromptStands(id, promptID string) bool {
+	now := time.Now()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.latePrompts == nil {
+		w.latePrompts = map[string]latePrompt{}
+	}
+	seen, ok := w.latePrompts[id]
+	if !ok || seen.promptID != promptID {
+		seen = latePrompt{promptID: promptID, since: now}
+		w.latePrompts[id] = seen
+	}
+	return now.Sub(seen.since) >= latePromptSettle
+}
+
+func (w *Watcher) forgetLatePrompt(id string) {
+	w.mu.Lock()
+	delete(w.latePrompts, id)
+	w.mu.Unlock()
+}
+
+// openLatePromptTurn opens a turn for a prompt on a Worker with no live turn,
+// on the Work its last prompt belonged to.
+func (w *Watcher) openLatePromptTurn(id string) (string, bool) {
+	w.mu.RLock()
+	ledger, ok := w.turnLedger.(SessionWorkLedger)
+	w.mu.RUnlock()
+	if !ok {
+		return "", false
+	}
+	workID, found := ledger.ActiveWorkOfSession(id)
+	if !found {
+		return "", false
+	}
+	turnID, err := w.OpenPromptTurn(id, workID)
+	if err != nil {
+		log.Printf("prompt gate: could not open a turn for %s's prompt: %v", id, err)
+		return "", false
+	}
+	return turnID, true
 }
 
 // SetApprovalHold installs how the gate learns that a permission hook holds
