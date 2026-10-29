@@ -2,11 +2,49 @@
   <!-- Android 16 QPR1: promoted ongoing notifications (Live Updates). -->
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- Calendar alerts: an alarm at the exact minute (granted to calendar apps), a lock-screen takeover, and re-arming after a reboot. -->
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
   <application>
     <receiver
       android:name=".LiveDismissReceiver"
       android:exported="false" />
+
+    <receiver
+      android:name=".CalendarAlarmReceiver"
+      android:exported="false" />
+
+    <receiver
+      android:name=".CalendarActionReceiver"
+      android:exported="false" />
+
+    <!-- System broadcasts only: the sender is the system, which is why this one is exported. -->
+    <receiver
+      android:name=".CalendarBootReceiver"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+      </intent-filter>
+    </receiver>
+
+    <!-- Over the lock screen on its own: the app's main activity never is. -->
+    <activity
+      android:name=".CalendarAlertActivity"
+      android:exported="false"
+      android:launchMode="singleInstance"
+      android:taskAffinity=""
+      android:excludeFromRecents="true"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:theme="@android:style/Theme.Material.NoActionBar" />
 
     <receiver
       android:name=".SmallWidgetProvider"
