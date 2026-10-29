@@ -24,6 +24,7 @@ interface UseTerminalScreenModelsInput {
   serverConnections: Record<string, ConnectionState>;
   serverConnectionIssues: Record<string, ConnectionIssue | null>;
   interfaceRenderModes: StoredInterfaceRenderModes;
+  sessionListFresh: boolean;
   brainHostWorker?: BrainWorkerRef | null;
   brainHostServerId?: string | null;
 }
@@ -40,6 +41,7 @@ export function useTerminalScreenModels({
   serverConnections,
   serverConnectionIssues,
   interfaceRenderModes,
+  sessionListFresh,
   brainHostWorker,
   brainHostServerId,
 }: UseTerminalScreenModelsInput) {
@@ -55,6 +57,7 @@ export function useTerminalScreenModels({
     serverConnections,
     serverConnectionIssues,
     interfaceRenderModes,
+    sessionListFresh,
     brainHostWorker,
     brainHostServerId,
   });

@@ -8,6 +8,7 @@ import {
   normalizeWorkerSessionCapabilities,
   type WorkerSessionCapabilities,
 } from "../services/providers/sessionCapabilities";
+import { normalizePrompt, type WorkerPrompt } from "./workers";
 
 export type BrainWorkStatus =
   | "open"
@@ -126,6 +127,12 @@ export type BrainWorkerRef = {
    * Hidden hosts are absent from worker_session_list — never invent from name/command.
    */
   capabilities?: WorkerSessionCapabilities;
+  /**
+   * The blocking prompt open in the hidden host's terminal, as the daemon read
+   * it; absent unless the host is blocked on one. Answered through the same
+   * answer_prompt as a Session's, with the host's id.
+   */
+  prompt?: WorkerPrompt;
 };
 
 export type BrainExecutorCapabilities = {
@@ -529,6 +536,7 @@ function normalizeWorkerRef(raw: any): BrainWorkerRef {
     delegated: raw?.delegated === true,
     // Same strict flat boolean helper as worker_session.capabilities.
     capabilities: normalizeWorkerSessionCapabilities(raw?.capabilities),
+    prompt: normalizePrompt(raw?.prompt),
   };
 }
 
@@ -779,7 +787,8 @@ function workerRefsEqual(
       right.capabilities?.model_profile_managed &&
     left.capabilities?.model_profile_active_switch ===
       right.capabilities?.model_profile_active_switch &&
-    left.capabilities?.message_rewind === right.capabilities?.message_rewind
+    left.capabilities?.message_rewind === right.capabilities?.message_rewind &&
+    JSON.stringify(left.prompt ?? null) === JSON.stringify(right.prompt ?? null)
   );
 }
 

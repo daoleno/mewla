@@ -176,6 +176,11 @@ type Server struct {
 	workerFeed                  workerFeed
 	codexThread                 func(sessionID string) string
 
+	// hostBlockSignature is the blocked state and prompt of the Brain host that
+	// the last brain_snapshot carried, so only a change in it is broadcast.
+	// handleWatcherEvent runs on one goroutine and is its only user.
+	hostBlockSignature string
+
 	clients            map[*websocket.Conn]*authenticatedClient
 	active             map[*websocket.Conn]string
 	outboxes           map[*websocket.Conn]*clientOutbox
@@ -3107,6 +3112,11 @@ func (s *Server) enrichBrainSnapshotHostWorkerCapabilities(payload map[string]an
 	}
 	hostMap["capabilities"] = s.hostWorkerWireCapabilities(sessionID)
 	if host := s.lookupWorker(sessionID); host != nil {
+		// The blocking prompt the app answers through answer_prompt; only a
+		// blocked host has one.
+		if host.State == classifier.StateBlocked && host.Prompt != nil {
+			hostMap["prompt"] = host.Prompt
+		}
 		executorID, provider := s.workerExecutor(host)
 		if executorID != "" {
 			hostMap["executor_id"] = executorID
@@ -3444,10 +3454,13 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 			}
 			// Hidden hosts stay off worker_session_list. Refresh brain_snapshot
 			// only when the current Host appears or disappears so capabilities
-			// converge after reconnect discovery — never on output/turn noise,
+			// converge after reconnect discovery, or when it becomes blocked,
+			// stops being blocked or moves to another prompt so the Brain chat
+			// can show it — never on output/turn noise,
 			// without launching a provider from projection. Current-Host removal
 			// separately wakes the continuity lifecycle owner.
 			if s.shouldBroadcastHiddenHostBrainSnapshot(ev) {
+				s.noteHostBlockSignature(ev)
 				s.broadcastBrainHostCapabilityRefresh()
 				if ev.Type == "worker_removed" {
 					// Recovery can wait for provider readiness. Wake its lifecycle
@@ -3502,13 +3515,55 @@ func (s *Server) shouldBroadcastHiddenHostBrainSnapshot(ev watcher.SessionEvent)
 	switch ev.Type {
 	case "worker_discovered", "worker_removed":
 	default:
-		return false
+		return s.hostBlockChanged(ev)
 	}
 	hostID := s.brain.CurrentHostSessionID()
 	if hostID == "" {
 		return false
 	}
 	return hostID == strings.TrimSpace(ev.Worker.ID)
+}
+
+// hostBlockSignature names what a phone can act on for the Brain host: it is
+// empty unless the host is blocked, and then carries the prompt it is blocked on.
+func hostBlockSignature(worker *classifier.Worker) string {
+	if worker == nil || worker.State != classifier.StateBlocked {
+		return ""
+	}
+	if worker.Prompt == nil {
+		return "blocked"
+	}
+	return "blocked|" + worker.Prompt.ID
+}
+
+// noteHostBlockSignature records what the brain_snapshot about to be sent
+// carries for the host.
+func (s *Server) noteHostBlockSignature(ev watcher.SessionEvent) {
+	if ev.Type == "worker_removed" {
+		s.hostBlockSignature = ""
+		return
+	}
+	s.hostBlockSignature = hostBlockSignature(ev.Worker)
+}
+
+// hostBlockChanged reports whether the current host became blocked, stopped
+// being blocked, or moved to another prompt since the last brain_snapshot. The
+// Brain chat answers the host's prompts, so it needs these changes as they
+// happen; hidden hosts are not on worker_session_list.
+func (s *Server) hostBlockChanged(ev watcher.SessionEvent) bool {
+	if s == nil || s.brain == nil || ev.Worker == nil || !ev.Worker.Hidden {
+		return false
+	}
+	switch ev.Type {
+	case "worker_state_change", "worker_metadata_change":
+	default:
+		return false
+	}
+	hostID := s.brain.CurrentHostSessionID()
+	if hostID == "" || hostID != strings.TrimSpace(ev.Worker.ID) {
+		return false
+	}
+	return hostBlockSignature(ev.Worker) != s.hostBlockSignature
 }
 
 func (s *Server) routeSessionEventToBrain(ev watcher.SessionEvent) {

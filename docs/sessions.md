@@ -53,8 +53,10 @@ What you type in either Chat or Terminal goes to the same `tmux` pane.
 A waiting prompt is either a card you can answer by tapping, or no card at all.
 Every card is read from the prompt the agent has open in its terminal and is
 answered by Mewla, which checks the screen is still showing that same prompt
-before it presses a key. A prompt Mewla cannot answer this way shows no card:
-use the **Terminal** view of the Session.
+before it presses a key. When a Session is blocked on a prompt Mewla cannot
+answer this way, the Session opens on its live **Terminal** instead. Going back
+to the chat leaves it there until the Session is blocked on something else.
+Brain's chat shows the same cards for the prompts Brain itself is blocked on.
 
 **Claude's questions** (AskUserQuestion) show a card above the composer. It
 works like Claude's own prompt: one question at a time, with a tab for each

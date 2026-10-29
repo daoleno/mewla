@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AgentKind, presentWorker } from "../../../services/workerPresentation";
 import type { ConnectionIssue } from "../../../services/connectionIssue";
 import type {
@@ -16,6 +16,7 @@ import type { WorkItem } from "../../../store/work";
 import {
   sessionAllowsModelProfileActivation,
 } from "../../../services/providers/sessionCapabilities";
+import { resolveBlockedTerminal } from "../blockedTerminalSurface";
 import { findLinkedWork } from "./TerminalScreenModel";
 import type { TerminalRouteSessionHint } from "./useTerminalScreenLocalState";
 
@@ -30,6 +31,8 @@ interface UseTerminalRouteModelInput {
   serverConnections: Record<string, ConnectionState>;
   serverConnectionIssues: Record<string, ConnectionIssue | null>;
   interfaceRenderModes: StoredInterfaceRenderModes;
+  /** The Session list was received on the current connection. */
+  sessionListFresh: boolean;
   /** Current-server Brain host_worker (hidden from worker_session_list). */
   brainHostWorker?: BrainWorkerRef | null;
   /** serverId that owns brainHostWorker — must match route serverId. */
@@ -47,6 +50,7 @@ export function useTerminalRouteModel({
   serverConnections,
   serverConnectionIssues,
   interfaceRenderModes,
+  sessionListFresh,
   brainHostWorker,
   brainHostServerId,
 }: UseTerminalRouteModelInput) {
@@ -103,12 +107,38 @@ export function useTerminalRouteModel({
     presentedWorker.kind,
     agent?.capabilities,
   );
-  const interfaceRenderMode = resolveInterfaceRenderMode({
+  const storedInterfaceRenderMode = resolveInterfaceRenderMode({
     kind: presentedWorker.kind,
     capabilities: agent?.capabilities,
     sessionKey,
     storedModes: interfaceRenderModes,
   });
+  // A Session blocked on something the chat has no card for shows its live
+  // terminal. This is not a stored choice: it ends with the block.
+  const [dismissedBlockKey, setDismissedBlockKey] = useState<string | null>(null);
+  const blocked = resolveBlockedTerminal({
+    status: isStructuredChatWorker && hasTerminalRoute ? agent?.status : undefined,
+    prompt: agent?.prompt,
+    approvals: agent?.approvals,
+    live: connectionState === "connected" && sessionListFresh,
+    identity: `${workerId}|${agent?.process_id ?? ""}|${agent?.started_at ?? ""}`,
+    dismissedKey: dismissedBlockKey,
+  });
+  useEffect(() => {
+    if (blocked.dismissedKey !== dismissedBlockKey) {
+      setDismissedBlockKey(blocked.dismissedKey);
+    }
+  }, [blocked.dismissedKey, dismissedBlockKey]);
+  const blockKey = blocked.blockKey;
+  /** Leaving the terminal for the chat while this block persists ends the forcing. */
+  const dismissBlockedTerminal = useCallback(() => {
+    if (blockKey) {
+      setDismissedBlockKey(blockKey);
+    }
+  }, [blockKey]);
+  const interfaceRenderMode: StoredInterfaceRenderMode = blocked.forceTerminal
+    ? "terminal"
+    : storedInterfaceRenderMode;
   const showInterfaceChat =
     hasTerminalRoute && isStructuredChatWorker && interfaceRenderMode === "chat";
 
@@ -126,6 +156,7 @@ export function useTerminalRouteModel({
     linkedWork,
     presentedWorker,
     showInterfaceChat,
+    dismissBlockedTerminal,
   };
 }
 
@@ -263,6 +294,7 @@ export function resolveTerminalRouteWorker({
       process_id: brainHostWorker.process_id,
       delegated: brainHostWorker.delegated,
       capabilities: hostCapabilities,
+      prompt: brainHostWorker.prompt,
     };
   }
 

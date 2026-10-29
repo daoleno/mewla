@@ -83,6 +83,28 @@ describe("Brain host_worker Provider Model capabilities", () => {
     });
   });
 
+  test("the host's route Session carries the prompt the daemon read", () => {
+    const sessionKey = makeSessionKey(SERVER_ID, HOST_ID);
+    const prompt = {
+      id: "perm-1",
+      kind: "permission" as const,
+      provider: "claude",
+      title: "Bash command",
+      options: [{ number: 1, label: "Yes" }],
+    };
+    const agent = resolveTerminalRouteWorker({
+      storedWorker: undefined,
+      routeSessionHint: {},
+      sessionKey,
+      serverId: SERVER_ID,
+      workerId: HOST_ID,
+      brainHostWorker: { ...hostRef(), status: "blocked", prompt },
+      brainHostServerId: SERVER_ID,
+    });
+    expect(agent?.status).toBe("blocked");
+    expect(agent?.prompt).toEqual(prompt);
+  });
+
   test("routed host action is visible and activatable", () => {
     const sessionKey = makeSessionKey(SERVER_ID, HOST_ID);
     const agent = resolveTerminalRouteWorker({
