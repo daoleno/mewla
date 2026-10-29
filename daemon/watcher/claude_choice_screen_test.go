@@ -131,3 +131,20 @@ func TestClaudeChoiceAnswerMatches(t *testing.T) {
 		}
 	}
 }
+
+// The prompt a person or Brain reads keeps its spaces; only the key matched
+// against the transcript is whitespace-free.
+func TestParseClaudeChoiceScreen_QuestionTextKeepsItsSpaces(t *testing.T) {
+	for name, tc := range map[string]struct{ pane, key, text string }{
+		"one line": {"←  ☐ Fruit  ✔ Submit  →\nWhich fruit?\n❯ 1. Apple\n  2. Type something.\n\nEnter to select · Esc to cancel\n", "Whichfruit?", "Which fruit?"},
+		"wrapped":  {"←  ☐ Fruit  ✔ Submit  →\nWhich fruit should the\n  worker pick first?\n❯ 1. Apple\n  2. Type something.\n\nEnter to select · Esc to cancel\n", "Whichfruitshouldtheworkerpickfirst?", "Which fruit should the worker pick first?"},
+		"cjk":      {"←  ☐ 水果  ✔ Submit  →\n你想要哪种\n  水果？\n❯ 1. 苹果\n  2. Type something.\n\nEnter to select · Esc to cancel\n", "你想要哪种水果？", "你想要哪种水果？"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			screen := parseClaudeChoiceScreen(tc.pane)
+			if screen.Kind != claudeChoiceScreenQuestion || screen.Question != tc.key || screen.QuestionText != tc.text {
+				t.Fatalf("kind=%v key=%q text=%q", screen.Kind, screen.Question, screen.QuestionText)
+			}
+		})
+	}
+}

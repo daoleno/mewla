@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Claude Code AskUserQuestion TUI (verified against 2.1.296, wide and narrow
@@ -56,7 +57,8 @@ type claudeChoiceScreen struct {
 	Kind         claudeChoiceScreenKind
 	Tabs         []string // tab headers, in order, without the Submit tab
 	TabsAnswered []bool
-	Question     string // whitespace-free question text
+	Question     string // whitespace-free question text: the key matched against the transcript
+	QuestionText string // the same text with its spaces, for a person to read
 	Rows         []claudeChoiceRow
 	SubmitRow    bool
 	SubmitCursor bool
@@ -140,14 +142,17 @@ func parseClaudeChoiceScreen(pane string) claudeChoiceScreen {
 
 func parseClaudeChoiceQuestion(screen claudeChoiceScreen, body []string) claudeChoiceScreen {
 	var question strings.Builder
+	var lines []string
 	index := 0
 	for ; index < len(body); index++ {
 		if claudeChoiceRowRe.MatchString(body[index]) {
 			break
 		}
 		question.WriteString(body[index])
+		lines = append(lines, body[index])
 	}
 	screen.Question = claudeChoiceCompact(question.String())
+	screen.QuestionText = joinClaudeChoiceLines(lines)
 	if screen.Question == "" {
 		return claudeChoiceScreen{}
 	}
@@ -272,6 +277,32 @@ func claudeChoiceCompact(value string) string {
 		}
 		return r
 	}, value)
+}
+
+// joinClaudeChoiceLines reads a question Ink wrapped over several lines. Words
+// wrap at spaces, so Latin lines are joined with one; CJK text has no spaces
+// to restore and stays contiguous.
+func joinClaudeChoiceLines(lines []string) string {
+	text := ""
+	for _, line := range lines {
+		line = claudeChoiceCollapse(line)
+		if line == "" {
+			continue
+		}
+		if text != "" {
+			last, _ := utf8.DecodeLastRuneInString(text)
+			first, _ := utf8.DecodeRuneInString(line)
+			if !claudeChoiceWide(last) && !claudeChoiceWide(first) {
+				text += " "
+			}
+		}
+		text += line
+	}
+	return text
+}
+
+func claudeChoiceWide(r rune) bool {
+	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }
 
 func claudeChoiceCollapse(value string) string {

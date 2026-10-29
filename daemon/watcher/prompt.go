@@ -63,7 +63,7 @@ func withChoicePrompt(signal classifier.ActivitySignal, pane string) classifier.
 		signal.Prompt = &prompt
 		return signal
 	}
-	current := classifier.PromptQuestion{Question: screen.Question}
+	current := classifier.PromptQuestion{Question: firstNonEmptyString(screen.QuestionText, screen.Question)}
 	for _, row := range screen.Rows {
 		current.MultiSelect = current.MultiSelect || row.HasBox
 		current.Options = append(current.Options, classifier.PromptOption{Number: row.Number, Label: row.Text, Selected: row.Checked || row.Cursor})
