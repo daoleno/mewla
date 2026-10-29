@@ -150,6 +150,11 @@ func TestSignalProtocolProviderCompletionAwaitsControlFinalization(t *testing.T)
 	if decision.ExistingTurn.Status != TurnRunning || decision.ExistingTurn.ControlState == TurnControlOwnershipLost {
 		t.Fatalf("provider-first completion changed ownership/status: %+v", decision.ExistingTurn)
 	}
+	// The turn is still the Work's active Attempt, so a send must continue it:
+	// a Fresh admission is refused ("Work already has an active Attempt").
+	if decision.Mode != delegatedReuseConditionalSteer || decision.BaselineActivity != "activity-canonical" {
+		t.Fatalf("a send after the provider settled a live signal turn would be Fresh: %+v", decision)
+	}
 	if got := ledger.snapshot(sessionID); got.Status != TurnRunning || got.ControlState == TurnControlOwnershipLost {
 		t.Fatalf("provider-first completion changed canonical turn: %+v", got)
 	}
@@ -265,5 +270,42 @@ func TestResolveDelegatedControlIsReadOnlyAcrossProviderActivityChanges(t *testi
 	probe.mu.Unlock()
 	if consumed != 0 {
 		t.Fatalf("read-only control consumed provider activity observation: %d", consumed)
+	}
+}
+
+// Brain sends while the Worker's provider Activity has settled (its response
+// ended, even on a provider error) but the Worker has not reported its signal
+// turn. That turn still owns the Work's one active Attempt, so the send has to
+// continue it. Falling through to a Fresh admission was refused with
+// "persist pending delegated submission: lifecycle: Work already has an active
+// Attempt".
+func TestSendAfterTheProviderSettledALiveSignalTurnSteersItsAttempt(t *testing.T) {
+	for _, status := range []string{"completed", "failed", "interrupted"} {
+		t.Run(status, func(t *testing.T) {
+			io := newFakeSessionInputIO()
+			ledger := newFakeTurnLedger()
+			ledger.providerSignalHints = true
+			now := time.Date(2026, 10, 29, 15, 0, 0, 0, time.UTC)
+			sessionID := "mewla-worker-settled-live:@1"
+			identity := testSessionInputIdentity("claude")
+			turnID := sessionID + ":turn:1"
+			ledger.seed(sessionID, TurnSnapshot{
+				SessionID: sessionID, TurnID: turnID, Status: TurnRunning,
+				AcceptedAt: now.Add(-time.Minute), ActivityID: "activity-canonical",
+				ProcessIdentity: delegatedTurnIdentity(identity), PaneGeneration: io.paneValue.generation,
+				SignalProtocol: true,
+			})
+			owner := newLedgerSessionInputOwner(io, ledger)
+			decision, err := owner.reconcileSubmissionActivity(sessionID, ledger.snapshot(sessionID), ProviderActivityObservation{
+				ID: "activity-canonical", Status: status, StartedAt: now.Add(-time.Minute),
+				SettledAt: now, Structured: true,
+			})
+			if err != nil {
+				t.Fatalf("%s: %v", status, err)
+			}
+			if decision.Mode != delegatedReuseConditionalSteer || decision.ExistingTurn.TurnID != turnID || decision.BaselineActivity != "activity-canonical" {
+				t.Fatalf("%s: the send would be a Fresh admission against an active Attempt: %+v", status, decision)
+			}
+		})
 	}
 }

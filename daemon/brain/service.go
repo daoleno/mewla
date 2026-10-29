@@ -476,6 +476,17 @@ func (s *Service) ApplyDelegatedTurnProgress(fact watcher.TurnFact) (watcher.Tur
 	return s.store.ApplyDelegatedTurnProgress(fact)
 }
 
+// ActiveWorkOfSession lets the watcher, which holds the Service as its turn
+// ledger, find the Work a settled Worker's request belongs to.
+func (s *Service) ActiveWorkOfSession(sessionID string) (string, bool) {
+	if s == nil || s.store == nil {
+		return "", false
+	}
+	return s.store.ActiveWorkOfSession(sessionID)
+}
+
+var _ watcher.SessionWorkLedger = (*Service)(nil)
+
 func (s *Service) PrepareInputAdmission(submission watcher.InputAdmission) (watcher.InputAdmission, bool, error) {
 	if s == nil || s.store == nil {
 		return watcher.InputAdmission{}, false, fmt.Errorf("brain store is not configured")

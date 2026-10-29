@@ -352,3 +352,46 @@ func TestPromptGateOpensNoTurnWhenItShouldNot(t *testing.T) {
 		t.Fatalf("the gate opened a turn for a dialog its hook holds: %+v %+v", pending, ledger.applied)
 	}
 }
+
+// The settle window is measured across polls: the dialog is noted on the first
+// poll that sees it and opens a turn on the first poll after the window.
+func TestPromptGateOpensTheTurnOnceTheDialogHasStoodForTheWindow(t *testing.T) {
+	window := latePromptSettle
+	latePromptSettle = 40 * time.Millisecond
+	t.Cleanup(func() { latePromptSettle = window })
+	w := New(0)
+	sessionID := "mewla-worker-stands:@1"
+	worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateDone, Command: "claude"}
+	w.workers[sessionID] = &worker
+	w.workerOrder = append(w.workerOrder, sessionID)
+	w.targetOwnershipResolver = func(string) (bool, error) { return true, nil }
+	w.targetProcessResolver = fixedSessionInputResolver(testSessionInputIdentity("claude"))
+	w.sessionInput = newSessionInputOwner(newFakeSessionInputIO())
+	ledger := workLedger{fakeTurnLedger: newFakeTurnLedger(), active: map[string]string{sessionID: "work-1"}}
+	settled := TurnSnapshot{SessionID: sessionID, TurnID: "turn:settled", Status: TurnDone, SignalProtocol: true}
+	ledger.seed(sessionID, settled)
+	w.SetTurnLedger(ledger)
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+
+	w.syncPromptGate(sessionID, worker, true, open, settled, true, nil)
+	if len(ledger.applied) != 0 {
+		t.Fatalf("a dialog that had not stood the window opened a turn: %+v", ledger.applied)
+	}
+	// Polled again inside the window: still the same dialog, still waiting.
+	w.syncPromptGate(sessionID, worker, true, open, settled, true, nil)
+	if len(ledger.applied) != 0 {
+		t.Fatalf("a second poll inside the window opened a turn: %+v", ledger.applied)
+	}
+	time.Sleep(60 * time.Millisecond)
+	w.syncPromptGate(sessionID, worker, true, open, settled, true, nil)
+	if len(ledger.applied) != 1 || ledger.applied[0].Kind != "attention" {
+		t.Fatalf("the dialog that stood the window was not filed: %+v", ledger.applied)
+	}
+
+	// A dialog that went away starts the window over.
+	w2 := w
+	w2.forgetLatePrompt(sessionID)
+	if _, seen := w2.latePrompts[sessionID]; seen {
+		t.Fatal("the window survived forgetting the dialog")
+	}
+}

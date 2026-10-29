@@ -213,17 +213,22 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	}
 	open := activity.State == classifier.StateBlocked
 	late := false
-	if turnID == "" && open && activity.Prompt != nil && !w.hookHoldsPrompt(id, activity.Prompt) && w.latePromptStands(id, activity.Prompt.ID) {
-		// The Worker has no live turn: it reported done and stopped, and a
-		// background result woke it into a dialog. The dialog still reaches
-		// Brain, on a turn opened for it.
-		if opened, ok := w.openLatePromptTurn(id); ok {
-			turnID, late = opened, true
-			turn = TurnSnapshot{SessionID: id, TurnID: turnID, Status: TurnAdmitted, SignalProtocol: true}
+	if turnID == "" {
+		if open && activity.Prompt != nil && !w.hookHoldsPrompt(id, activity.Prompt) {
+			// The Worker has no live turn: it reported done and stopped, and a
+			// background result woke it into a dialog. Once the dialog has
+			// stood a moment it reaches Brain, on a turn opened for it.
+			if w.latePromptStands(id, activity.Prompt.ID) {
+				if opened, ok := w.openLatePromptTurn(id); ok {
+					turnID, late = opened, true
+					turn = TurnSnapshot{SessionID: id, TurnID: turnID, Status: TurnAdmitted, SignalProtocol: true}
+				}
+			}
+		} else {
+			w.forgetLatePrompt(id)
 		}
 	}
 	if turnID == "" {
-		w.forgetLatePrompt(id)
 		return turn, hasTurn
 	}
 	w.mu.RLock()
