@@ -257,6 +257,11 @@ func truncateRunes(text string, limit int) string {
 // askPrompt answers a PermissionRequest hook: a prompt Claude is about to show.
 func (s *agentEventService) askPrompt(ctx context.Context, workerID string, payload claude.Payload) control.Response {
 	a := claude.Approval(uuid.NewString(), payload)
+	if strings.EqualFold(strings.TrimSpace(a.Tool), "AskUserQuestion") {
+		// Allowing the tool answers nothing: the question is answered in the
+		// prompt itself, which the pane prompt path reports with its options.
+		return control.Response{OK: true}
+	}
 	decision, answered, delegated := s.ask(ctx, workerID, a)
 	if !answered {
 		if delegated && !s.stopping() {
