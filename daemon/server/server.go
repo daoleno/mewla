@@ -603,10 +603,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			out := s.outboxStats(conn)
-			if cause := link.endCause(err, out); cause != "peer-closed" || websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			if cause := link.endCause(err, out); cause != "peer-closed" || !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				// Without this line a phone that lost its connection leaves no
 				// trace here: connect and disconnect are verbose-only. The
-				// cause says which end hung up.
+				// cause says which end hung up. Only a close frame that says
+				// goodbye is quiet: a reset or an abrupt close is the phone
+				// vanishing, which is what this line is for.
 				log.Printf("websocket: client connection lost remote=%s device=%s age=%s cause=%s %s: %v", r.RemoteAddr, device.ID, time.Since(connectedAt).Round(time.Second), cause, link.describe(out), err)
 			}
 			break
