@@ -126,6 +126,7 @@ func advanceItem(item *Item) bool {
 	item.NextAt = next
 	item.Status = StatusScheduled
 	item.FailureReason = ""
+	item.SnoozedUntil = nil
 	return true
 }
 

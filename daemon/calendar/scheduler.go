@@ -50,11 +50,31 @@ type OwnerDuty struct {
 // ownerRetry spaces the attempts after a failed Fire.
 const ownerRetry = time.Minute
 
+// Alerter tells the user an event, reminder or deadline is near: it sends the
+// push for the alert due at alertAt. The scheduler has already recorded the
+// alert as fired, so an error is retried only while AlertWindow lasts and
+// ErrNoAlertTarget (nobody to tell) is not retried at all.
+type Alerter func(item Item, alertAt time.Time) error
+
+// ErrNoAlertTarget is what an Alerter returns when no phone could be told.
+var ErrNoAlertTarget = errors.New("no device to alert")
+
+// maxAlertRetries is how many times a failed alert is sent again.
+const maxAlertRetries = 3
+
+type alertRetry struct {
+	at   time.Time
+	next time.Time
+	left int
+}
+
 type Scheduler struct {
 	store        *Store
 	dutiesMu     sync.Mutex
 	duties       map[string]OwnerDuty
 	retryAt      map[string]time.Time
+	alerter      Alerter
+	alertRetries map[string]alertRetry
 	runner       ActionRunner
 	now          func() time.Time
 	newTimer     func(time.Duration) wakeTimer
@@ -109,6 +129,91 @@ func (s *Scheduler) Own(owner string, duty OwnerDuty) {
 	}
 	s.duties[owner] = duty
 	s.Wake()
+}
+
+// Alert registers what tells the user an item is near. Until it is set no
+// alert fires and none is recorded.
+func (s *Scheduler) Alert(alerter Alerter) {
+	s.dutiesMu.Lock()
+	s.alerter = alerter
+	s.dutiesMu.Unlock()
+	s.Wake()
+}
+
+// tickAlert fires the alert an item owes once its instant has come. The fired
+// alert is recorded before it is sent, so a daemon that restarts or reloads
+// never sends it twice; the cost is that a send lost to a crash is not
+// retried, and the phone's own alarm is what covers it.
+func (s *Scheduler) tickAlert(item Item, now time.Time, next *wakePoints) {
+	s.dutiesMu.Lock()
+	alerter := s.alerter
+	retry, retrying := s.alertRetries[item.ID]
+	s.dutiesMu.Unlock()
+	if alerter == nil {
+		return
+	}
+	if retrying {
+		if now.Sub(retry.at) > AlertWindow || retry.left <= 0 {
+			s.clearAlertRetry(item.ID)
+		} else if !retry.next.After(now) {
+			s.dutiesMu.Lock()
+			retry.next = now.Add(ownerRetry)
+			s.alertRetries[item.ID] = retry
+			s.dutiesMu.Unlock()
+			s.sendAlert(alerter, item, retry.at)
+		} else {
+			next.consider(retry.next)
+		}
+	}
+	at, owed := item.AlertPending()
+	if !owed {
+		return
+	}
+	if item.Kind == KindEvent && item.EndAt != nil && !item.EndAt.After(now) {
+		return
+	}
+	if at.After(now) {
+		next.consider(at)
+		return
+	}
+	if now.Sub(at) > AlertWindow {
+		return
+	}
+	marked, fired, err := s.store.MarkAlerted(item.ID, at)
+	s.note("calendar mark-alerted "+item.ID, err)
+	if err != nil || !fired {
+		return
+	}
+	s.sendAlert(alerter, marked, at)
+}
+
+func (s *Scheduler) sendAlert(alerter Alerter, item Item, at time.Time) {
+	go func() {
+		err := alerter(item, at)
+		if err == nil || errors.Is(err, ErrNoAlertTarget) {
+			s.clearAlertRetry(item.ID)
+			return
+		}
+		log.Printf("WARN calendar: alert %s: %v", item.ID, err)
+		s.dutiesMu.Lock()
+		if s.alertRetries == nil {
+			s.alertRetries = map[string]alertRetry{}
+		}
+		previous, again := s.alertRetries[item.ID]
+		left := maxAlertRetries
+		if again && previous.at.Equal(at) {
+			left = previous.left
+		}
+		s.alertRetries[item.ID] = alertRetry{at: at, next: s.now().Add(ownerRetry), left: left - 1}
+		s.dutiesMu.Unlock()
+		s.Wake()
+	}()
+}
+
+func (s *Scheduler) clearAlertRetry(id string) {
+	s.dutiesMu.Lock()
+	delete(s.alertRetries, id)
+	s.dutiesMu.Unlock()
 }
 
 // WorkerChanged tells Run that a Worker changed state or went away, which may
@@ -289,6 +394,7 @@ func (s *Scheduler) tick(ctx context.Context) time.Time {
 		if item.Status == StatusCancelled || item.Status == StatusCompleted || item.Status == StatusFailed {
 			continue
 		}
+		s.tickAlert(item, now, next)
 		switch item.Kind {
 		case KindReminder, KindDeadline:
 			if item.Owner != "" {
