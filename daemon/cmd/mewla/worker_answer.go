@@ -32,9 +32,10 @@ func runWorkerAnswer(args []string, stderr io.Writer) error {
 	fs.IntVar(&req.PromptChoice, "choice", 0, "number of the option to pick in a permission, plan, startup or approval menu")
 	fs.StringVar(&answers, "answers", "", `answers to a question prompt: a JSON array with one {"selected":[<1-based option numbers>],"other":"text"} per question`)
 	fs.BoolVar(&req.Force, "force", false, "answer a non-delegated external session")
-	fs.StringVar(&req.ApprovalBasis, "basis", "", "the brief sentence that authorizes allowing a blocked action (required when Brain holds a permission request)")
+	fs.StringVar(&req.ApprovalBasis, "basis", "", "what the answer relies on: the brief sentence that authorizes allowing a blocked action (required to allow one Brain holds), or why it is escalated or denied")
+	fs.BoolVar(&req.PromptEscalate, "escalate", false, "hand a blocked action Brain holds to the user instead of answering it (with -basis saying why)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla worker answer -id <worker> -prompt <id> (-choice <n> | -answers '<json>') [-basis \"<brief sentence>\"]")
+		fmt.Fprintln(stderr, "Usage: mewla worker answer -id <worker> -prompt <id> (-choice <n> | -answers '<json>' | -escalate) [-basis \"<brief sentence>\"]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -46,7 +47,7 @@ func runWorkerAnswer(args []string, stderr io.Writer) error {
 	if strings.TrimSpace(req.WorkerID) == "" || strings.TrimSpace(req.PromptID) == "" {
 		return fmt.Errorf("-id and -prompt are required")
 	}
-	raw, err := promptAnswersFlag(req.PromptChoice, answers)
+	raw, err := promptAnswersFlag(req.PromptChoice, answers, req.PromptEscalate)
 	if err != nil {
 		return err
 	}
@@ -61,23 +62,29 @@ func runWorkerAnswer(args []string, stderr io.Writer) error {
 // promptAnswersFlag checks that exactly one of -choice and -answers was given
 // and turns -answers, whose option numbers start at 1 as the prompt shows
 // them, into the zero-based indexes the daemon takes.
-func promptAnswersFlag(choice int, answers string) (json.RawMessage, error) {
+func promptAnswersFlag(choice int, answers string, escalate bool) (json.RawMessage, error) {
 	answers = strings.TrimSpace(answers)
-	if (choice > 0) == (answers != "") {
-		return nil, fmt.Errorf("give exactly one of -choice <n> and -answers '<json>'")
+	given := 0
+	for _, present := range []bool{choice > 0, answers != "", escalate} {
+		if present {
+			given++
+		}
+	}
+	if given != 1 {
+		return nil, fmt.Errorf("give exactly one of -choice <n>, -answers '<json>' and -escalate")
 	}
 	if answers == "" {
 		return nil, nil
 	}
-	var given []struct {
+	var parsed []struct {
 		Selected []int  `json:"selected"`
 		Other    string `json:"other"`
 	}
-	if err := json.Unmarshal([]byte(answers), &given); err != nil || len(given) == 0 {
+	if err := json.Unmarshal([]byte(answers), &parsed); err != nil || len(parsed) == 0 {
 		return nil, fmt.Errorf(`-answers must be a JSON array with one {"selected":[<option numbers>],"other":"text"} per question`)
 	}
-	converted := make([]server.ChoiceSelection, len(given))
-	for index, answer := range given {
+	converted := make([]server.ChoiceSelection, len(parsed))
+	for index, answer := range parsed {
 		converted[index] = server.ChoiceSelection{Selected: []int{}, Other: answer.Other}
 		for _, number := range answer.Selected {
 			if number < 1 {
@@ -107,9 +114,28 @@ func (a *controlApp) handleWorkerAnswer(req control.Request) control.Response {
 	if !worker.Delegated && !worker.Hidden && !req.Force {
 		return control.ErrorResponse("worker_not_delegated", "Refusing to answer a session that was not created as a Brain delegated Mewla Worker. Use -force only when you intentionally want to control this external session.")
 	}
+	if approvalID, held := a.heldApprovalFor(workerID, req.PromptID); held {
+		return a.answerHeldApproval(workerID, approvalID, req)
+	}
 	pane, ok := a.watcher.(server.PanePrompts)
 	if !ok {
 		return control.ErrorResponse("prompt_unavailable", "Prompts cannot be answered here.")
+	}
+	if req.PromptEscalate {
+		// The dialog may be on screen as well as held; its prompt is then the
+		// one the pane shows, and the hook's decision is what is handed over.
+		open, err := pane.CurrentPrompt(workerID)
+		if err != nil {
+			return promptAnswerError(err)
+		}
+		var held []control.Approval
+		if a.agentEvents != nil {
+			held = a.agentEvents.approvals(workerID, false)
+		}
+		if open != nil && open.ID == strings.TrimSpace(req.PromptID) && open.Kind == classifier.PromptPermission && len(held) == 1 {
+			return a.answerHeldApproval(workerID, held[0].ID, req)
+		}
+		return control.ErrorResponse("prompt_gone", "No blocked action is held for that prompt; only a blocked action Brain holds can be escalated.")
 	}
 	answer := server.PromptAnswer{PromptID: strings.TrimSpace(req.PromptID), Number: req.PromptChoice}
 	if len(req.PromptAnswers) > 0 {
@@ -130,6 +156,47 @@ func (a *controlApp) handleWorkerAnswer(req control.Request) control.Response {
 	resp := control.Response{OK: true, Confirmation: "answered"}
 	if len(recorded) > 0 {
 		resp.Context = map[string]any{"answers": recorded}
+	}
+	return resp
+}
+
+// heldApprovalFor finds the decision a permission hook holds for the Worker
+// that the prompt id names. A sub-agent's dialog is not drawn in the pane, so
+// this is the only place such a prompt exists.
+func (a *controlApp) heldApprovalFor(workerID, promptID string) (string, bool) {
+	if a.agentEvents == nil {
+		return "", false
+	}
+	for _, pending := range a.agentEvents.approvals(workerID, false) {
+		if approvalPromptID(pending.ID) == promptID {
+			return pending.ID, true
+		}
+	}
+	return "", false
+}
+
+// answerHeldApproval answers a held decision by its prompt: the numbered
+// option, or escalate. The decision is the same one the app and the hook
+// path use, so the Work records who answered and on what basis.
+func (a *controlApp) answerHeldApproval(workerID, approvalID string, req control.Request) control.Response {
+	optionID := "escalate"
+	if !req.PromptEscalate {
+		if len(req.PromptAnswers) > 0 || req.PromptChoice < 1 {
+			return control.ErrorResponse("prompt_refused", "A permission prompt is answered with -choice <option number> or -escalate.")
+		}
+		optionID = ""
+		for _, pending := range a.agentEvents.approvals(workerID, false) {
+			if pending.ID == approvalID && req.PromptChoice <= len(pending.Options) {
+				optionID = pending.Options[req.PromptChoice-1].ID
+			}
+		}
+		if optionID == "" {
+			return control.ErrorResponse("prompt_refused", fmt.Sprintf("the prompt has no option %d", req.PromptChoice))
+		}
+	}
+	resp := a.agentEvents.decide(workerID, approvalID, optionID, answeredByOperator, req.ApprovalBasis)
+	if resp.OK {
+		resp.Confirmation = "answered"
 	}
 	return resp
 }

@@ -40,10 +40,10 @@ func runWorkerApprove(args []string, stderr io.Writer) error {
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
 	fs.StringVar(&req.WorkerID, "id", "", "Worker session id")
 	fs.StringVar(&req.ApprovalID, "approval", "", "approval id from `mewla worker approvals`")
-	fs.StringVar(&req.OptionID, "option", "", "one of the options that approval offers, or escalate to hand a blocked action to the user")
+	fs.StringVar(&req.OptionID, "option", "", "one of the options that approval offers (Brain answers a Claude permission it holds with `mewla worker answer` instead)")
 	fs.StringVar(&req.ApprovalBasis, "basis", "", "what this answer relies on: the brief sentence that authorizes it (required for allow)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla worker approve -id <worker> -approval <id> -option <allow|deny|escalate> [-basis \"<brief sentence>\"]")
+		fmt.Fprintln(stderr, "Usage: mewla worker approve -id <worker> -approval <id> -option <allow|deny> [-basis \"<brief sentence>\"]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {

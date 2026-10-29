@@ -359,12 +359,13 @@ type Watcher struct {
 	inventoryMu           sync.Mutex       // register resource ownership after in-flight inventory/reconciliation
 	workerEpoch           map[string]int64 // per-agent generation for lock-free probe apply
 	turnLedger            TurnLedger
-	pollSources           *PollSources              // test-only seam (SetPollSources); production is nil
-	ledgerTurns           map[string]TurnSnapshot   // projection cache of the canonical ledger, never a truth owner
-	appliedFactIDs        map[string]string         // session -> last applied provider FactID (skip identical applies)
-	ledgerTurnReadAt      map[string]time.Time      // TTL for authoritative ledger re-reads
-	probeLossSince        map[string]probeLossState // session -> current turn loss streak
-	gates                 map[string]promptGate     // session -> the pane prompt filed to the ledger as a blocked turn
+	pollSources           *PollSources                // test-only seam (SetPollSources); production is nil
+	ledgerTurns           map[string]TurnSnapshot     // projection cache of the canonical ledger, never a truth owner
+	appliedFactIDs        map[string]string           // session -> last applied provider FactID (skip identical applies)
+	ledgerTurnReadAt      map[string]time.Time        // TTL for authoritative ledger re-reads
+	probeLossSince        map[string]probeLossState   // session -> current turn loss streak
+	gates                 map[string]promptGate       // session -> the pane prompt filed to the ledger as a blocked turn
+	approvalHolds         func(sessionID string) bool // whether a permission hook holds the Session's dialog
 	recovery              *turnRecoverySupervisor
 	recoveryOnce          sync.Once
 	providerSignals       map[string]providerActivitySignal

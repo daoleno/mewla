@@ -67,28 +67,32 @@ mewla worker status -id <session> --json
 mewla worker capture -id <session> --json     # the transcript
 mewla worker send -id <session> --work-id <work> -text "Also update the tests"
 mewla worker receipt -id <session> --work-id <work> --turn-id <turn>   # did an input arrive?
-mewla worker approvals [-id <session>]        # what a Claude Worker is waiting for you to allow
+mewla worker answer -id <session> -prompt <id> -choice 1   # any blocking prompt: permission, plan, startup, question
+mewla worker approvals [-id <session>]        # decisions agents wait on (Codex app-server requests)
 mewla worker approve -id <session> -approval <id> -option allow   # or deny
-mewla worker answer -id <session> -prompt <id> -choice 1   # the prompt open in the Worker's terminal
 mewla worker close -id <session>
 ```
 
-`answer` replies to a prompt a delegated Worker is stopped at in its terminal:
-a numbered menu (a permission or plan request, a startup question) by
-`-choice <option number>`, or an `AskUserQuestion` by `-answers '[{"selected":[1],"other":""}]'`,
-one entry per question with 1-based option numbers. `-prompt` is the id Brain
-receives in the Worker's `needs_input` (`"event":"prompt_blocked"`, with the
-prompt's options in `details.prompt`). The daemon reads the terminal again first
+`answer` replies to a prompt a delegated Worker is stopped at: a numbered menu
+(a permission or plan request, a startup question) by `-choice <option number>`,
+or an `AskUserQuestion` by `-answers '[{"selected":[1],"other":""}]'`, one entry
+per question with 1-based option numbers. `-prompt` is the id Brain receives in
+the Worker's `needs_input` (`"event":"prompt_blocked"`, with the prompt's options
+in `details.prompt` and the exact command in `details.answer_with`). Every
+blocking prompt raises that one event, whether the daemon read it from the
+terminal or a permission hook is holding it (a sub-agent's dialog is not drawn in
+the terminal at all). Allowing a permission Brain holds needs `-basis`, the brief
+sentence that authorizes it; `-escalate -basis "<why>"` hands it to the user
+instead. For a prompt in the terminal the daemon reads the terminal again first
 and sends no key when that prompt has passed (`prompt_gone`). While a prompt is
 open, `worker send` refuses with `prompt_open` instead of typing into it. A
-permission prompt that a hook is also waiting on is resolved through that
-approval, not by keys.
+permission a hook is waiting on is resolved through that decision, not by keys.
 
-`approvals` and `approve` answer the permission prompts of a Claude or Codex
-Worker that Mewla started. Claude Workers run in bypass mode by default, so
-these are rare: an `ask` rule, organization policy or a mode you chose. The answer goes
-through Claude's own hook or Codex's app-server, so no keys are sent; with no
-answer the agent's own prompt decides. The phone answers the same requests.
+`approvals` and `approve` stay for the requests that have no terminal prompt to
+answer: a Codex app-server approval is allowed or declined straight through
+Codex, without keys. Claude Workers run in bypass mode by default, so Claude
+permissions are rare (an `ask` rule or organization policy), and Brain answers
+them with `answer`. The phone answers the same requests.
 
 `mewla worker spawn`, `worker progress`, `worker release`, `brain context`,
 `brain playbooks`, `brain gc` and the other `brain work` actions (`create`,

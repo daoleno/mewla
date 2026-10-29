@@ -25,6 +25,8 @@ type promptGate struct {
 	promptID string
 	// filedAt is when the prompt was last filed or its lease renewed.
 	filedAt time.Time
+	// permission is whether the filed prompt is a tool permission dialog.
+	permission bool
 }
 
 const (
@@ -237,19 +239,17 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		}
 	}
 	// A turn already blocked by the Worker's own report or the permission hook
-	// has told Brain; this prompt is that one.
-	if !open || (turn.Status == TurnBlocked && !renewing) {
+	// has told Brain; this prompt is that one. A permission dialog whose hook
+	// holds the decision is the hook's to report.
+	if !open || (turn.Status == TurnBlocked && !renewing) || (!renewing && w.hookHoldsPrompt(id, activity.Prompt)) {
 		return turn, hasTurn
 	}
-	details := map[string]any{"event": "prompt_blocked", "pane": strings.TrimSpace(id)}
 	summary := activity.Summary
-	if prompt := activity.Prompt; prompt != nil {
-		details["prompt"] = prompt
-		details["answer_with"] = answerWith(id, prompt)
-		if prompt.Title != "" && prompt.Title != summary {
-			summary = summary + ": " + prompt.Title
-		}
+	if prompt := activity.Prompt; prompt != nil && prompt.Title != "" && prompt.Title != summary {
+		summary = summary + ": " + prompt.Title
 	}
+	details := PromptEventDetails(id, activity.Prompt)
+	details["pane"] = strings.TrimSpace(id)
 	raw, err := json.Marshal(details)
 	if err != nil {
 		return turn, hasTurn
@@ -262,20 +262,72 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		return turn, hasTurn
 	}
 	w.mu.Lock()
-	w.gates[id] = promptGate{turnID: turnID, promptID: promptID, filedAt: time.Now()}
+	w.gates[id] = promptGate{turnID: turnID, promptID: promptID, filedAt: time.Now(), permission: activity.Prompt != nil && activity.Prompt.Kind == classifier.PromptPermission}
 	w.mu.Unlock()
 	refresh()
 	return turn, hasTurn
 }
+
+// PromptEventDetails is what Brain reads in a Worker's needs_input for a
+// blocking prompt, whichever path caught it: the pane gate or the permission
+// hook. Both name the same event, carry the same structured prompt, and end in
+// the one command that answers it.
+func PromptEventDetails(sessionID string, prompt *classifier.Prompt) map[string]any {
+	details := map[string]any{"event": "prompt_blocked"}
+	if prompt == nil {
+		return details
+	}
+	details["prompt"] = prompt
+	details["answer_with"] = answerWith(sessionID, prompt)
+	if prompt.Kind == classifier.PromptPermission {
+		details["policy"] = permissionPolicy
+	}
+	return details
+}
+
+const permissionPolicy = "Choose Allow only for what the Work's brief already authorizes, and quote that sentence as -basis. Use -escalate for anything the brief does not cover (other people's data, money, accounts or credentials, outside messages, irreversible deletion): the user then gets a card. Choose Deny to refuse it, with -basis saying why. If you do not answer, the user is asked."
 
 // answerWith is the command Brain answers a prompt with.
 func answerWith(sessionID string, prompt *classifier.Prompt) string {
 	switch prompt.Kind {
 	case classifier.PromptChoice:
 		return fmt.Sprintf(`mewla worker answer -id %s -prompt %s -answers '<one {"selected":[<option number>],"other":"<text>"} per question, as a JSON array>'`, sessionID, prompt.ID)
+	case classifier.PromptPermission:
+		return fmt.Sprintf(`mewla worker answer -id %s -prompt %s -choice <option number> -basis "<the sentence of the brief that authorizes it>"  (or -escalate -basis "<why>" to hand it to the user)`, sessionID, prompt.ID)
 	default:
 		return fmt.Sprintf("mewla worker answer -id %s -prompt %s -choice <option number>", sessionID, prompt.ID)
 	}
+}
+
+// SetApprovalHold installs how the gate learns that a permission hook holds
+// the decision of a Session's dialog, so one dialog is reported once.
+func (w *Watcher) SetApprovalHold(holds func(sessionID string) bool) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	w.approvalHolds = holds
+	w.mu.Unlock()
+}
+
+func (w *Watcher) hookHoldsPrompt(sessionID string, prompt *classifier.Prompt) bool {
+	if prompt == nil || prompt.Kind != classifier.PromptPermission {
+		return false
+	}
+	w.mu.RLock()
+	holds := w.approvalHolds
+	w.mu.RUnlock()
+	return holds != nil && holds(sessionID)
+}
+
+// PanePromptFiled reports whether the pane gate has already told Brain about
+// the permission dialog open in a Session, so the hook that holds its decision
+// does not tell Brain again.
+func (w *Watcher) PanePromptFiled(sessionID string) bool {
+	w.mu.RLock()
+	gate, filed := w.gates[sessionID]
+	w.mu.RUnlock()
+	return filed && gate.permission
 }
 
 // AnswerPrompt presses the option Number of the numbered menu open in a

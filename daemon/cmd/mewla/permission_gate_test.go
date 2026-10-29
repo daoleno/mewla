@@ -130,7 +130,7 @@ func TestAPermissionPromptReachesBrainFirstAndStaysOffThePhone(t *testing.T) {
 	rec.mu.Lock()
 	details := rec.details[0]
 	rec.mu.Unlock()
-	if details["approval_id"] != asked.ID || details["event"] != "permission_blocked" || !strings.Contains(details["answer_with"].(string), asked.ID) {
+	if details["approval_id"] != asked.ID || details["event"] != "prompt_blocked" || !strings.Contains(details["answer_with"].(string), approvalPromptID(asked.ID)) {
 		t.Fatalf("details = %+v", details)
 	}
 
@@ -378,4 +378,94 @@ func TestAskUserQuestionIsNotAPermissionQuestion(t *testing.T) {
 	if state, ok := hub.State("%1"); ok && len(state.Approvals) != 0 {
 		t.Fatalf("an approval was published: %+v", state.Approvals)
 	}
+}
+
+// A hook-held permission reaches Brain as the same prompt event a dialog in
+// the terminal does: numbered options, one answer command, no second name.
+func TestAHeldPermissionIsTheOnePromptEvent(t *testing.T) {
+	s, rec := gateService(t, true)
+	done := start(s, askedPush)
+	asked := pending(t, s, false, 1)[0]
+	waitUntil(t, "Brain to be told", func() bool { told, _, _, _ := rec.snapshot(); return len(told) == 1 })
+	rec.mu.Lock()
+	details := rec.details[0]
+	rec.mu.Unlock()
+	prompt, ok := details["prompt"].(*classifier.Prompt)
+	if !ok || prompt.ID != approvalPromptID(asked.ID) || prompt.Kind != classifier.PromptPermission || len(prompt.Options) != 2 ||
+		prompt.Options[0].Number != 1 || prompt.Options[0].Label != "Allow" || prompt.Options[1].Number != 2 || prompt.Options[1].Label != "Deny" {
+		t.Fatalf("prompt = %+v", details["prompt"])
+	}
+	answer, _ := details["answer_with"].(string)
+	if details["event"] != "prompt_blocked" || !strings.Contains(answer, "mewla worker answer -id %4 -prompt "+prompt.ID+" -choice") || strings.Contains(answer, "approve") {
+		t.Fatalf("details = %+v", details)
+	}
+
+	app := &controlApp{agentEvents: s}
+	if id, found := app.heldApprovalFor("%4", "not-a-prompt"); found {
+		t.Fatalf("an unknown prompt matched approval %s", id)
+	}
+	id, found := app.heldApprovalFor("%4", prompt.ID)
+	if !found || id != asked.ID {
+		t.Fatalf("held approval for %s = %q, %v", prompt.ID, id, found)
+	}
+	// Allowing a prompt Brain holds needs the brief sentence, as before.
+	if resp := app.answerHeldApproval("%4", id, control.Request{PromptChoice: 1}); resp.OK || resp.Error.Code != "approval_basis_required" {
+		t.Fatalf("allowed without a basis: %+v", resp)
+	}
+	if resp := app.answerHeldApproval("%4", id, control.Request{PromptChoice: 3}); resp.OK || resp.Error.Code != "prompt_refused" {
+		t.Fatalf("picked an option the prompt does not have: %+v", resp)
+	}
+	if resp := app.answerHeldApproval("%4", id, control.Request{PromptChoice: 1, ApprovalBasis: "Release: push to origin main."}); !resp.OK || resp.Confirmation != "answered" {
+		t.Fatalf("answer: %+v", resp)
+	}
+	if resp := <-done; !strings.Contains(resp.HookOutput, `"behavior":"allow"`) {
+		t.Fatalf("hook output = %+v", resp)
+	}
+}
+
+func TestBrainEscalatesAHeldPermissionThroughTheAnswerCommand(t *testing.T) {
+	s, rec := gateService(t, true)
+	done := start(s, askedPush)
+	asked := pending(t, s, false, 1)[0]
+	app := &controlApp{agentEvents: s}
+	if resp := app.answerHeldApproval("%4", asked.ID, control.Request{PromptEscalate: true, ApprovalBasis: "Pushing is outside the brief."}); !resp.OK {
+		t.Fatalf("escalate: %+v", resp)
+	}
+	if shown := pending(t, s, true, 1); shown[0].Route != routeUser {
+		t.Fatalf("the user was not handed the question: %+v", shown)
+	}
+	_ = rec
+	s.decide("%4", asked.ID, "deny", answeredByApp, "")
+	<-done
+}
+
+// The pane gate may report the dialog before the hook asks. Brain was told
+// then, so the hook does not tell it again, and the question stays answerable.
+func TestAHookDoesNotTellBrainTwiceWhenThePaneGateWasFirst(t *testing.T) {
+	s, rec := gateService(t, true)
+	s.gate.paneFiled = func(string) bool { return true }
+	done := start(s, askedPush)
+	asked := pending(t, s, false, 1)[0]
+	time.Sleep(50 * time.Millisecond)
+	if told, _, _, _ := rec.snapshot(); len(told) != 0 {
+		t.Fatalf("Brain was told twice about one dialog: %q", told)
+	}
+	if resp := s.decide("%4", asked.ID, "deny", answeredByOperator, "no"); !resp.OK {
+		t.Fatalf("decide: %+v", resp)
+	}
+	<-done
+}
+
+func TestTheHubHoldsTheDialogWhileAnApprovalIsPending(t *testing.T) {
+	s, _ := gateService(t, true)
+	if s.holdsApproval("%4") {
+		t.Fatal("held with nothing pending")
+	}
+	done := start(s, askedPush)
+	asked := pending(t, s, false, 1)[0]
+	if !s.holdsApproval("%4") {
+		t.Fatal("not held while a hook waits")
+	}
+	s.decide("%4", asked.ID, "deny", answeredByOperator, "no")
+	<-done
 }
