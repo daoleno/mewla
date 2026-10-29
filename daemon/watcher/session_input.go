@@ -786,16 +786,21 @@ func (owner *sessionInputOwner) submitWithTurn(
 						continue
 					}
 					if _, marked := ledger.entry(prior.Receipt); marked {
-						// A delivered prompt whose progress signal never came
-						// would fence every later prompt. Once the provider has
+						// A delivered prompt whose progress signal has not come
+						// must not fence a later send. Once the provider has
 						// taken its turn over it and stayed idle, its delivery is
-						// unknown: keep it as evidence, release the fence.
+						// unknown; while the provider is still busy the new
+						// prompt queues behind it, as typed input does, and the
+						// older one is superseded. Either way it stays as
+						// evidence and its late signal is still accepted, but it
+						// can no longer take the Work's turn from the newer one.
+						reason := "superseded by a newer prompt sent before this prompt's progress signal came"
 						if staleSignalAdmission(prior, providerBaseline, owner.nowUTC()) {
-							if ambiguity, ok := owner.ledger.(InputAdmissionAmbiguityLedger); ok {
-								if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, prior.ProposedTurnID,
-									"provider settled and stayed idle without this prompt's progress signal"); err != nil {
-									return definitelyNotSubmitted(result.Receipt, fmt.Errorf("release stale preparation: %w", err))
-								}
+							reason = "provider settled and stayed idle without this prompt's progress signal"
+						}
+						if ambiguity, ok := owner.ledger.(InputAdmissionAmbiguityLedger); ok {
+							if err := ambiguity.MarkInputAdmissionAmbiguous(sessionID, prior.ProposedTurnID, reason); err != nil {
+								return definitelyNotSubmitted(result.Receipt, fmt.Errorf("release delivered preparation: %w", err))
 							}
 						}
 						continue
