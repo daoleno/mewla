@@ -115,6 +115,7 @@ describe("native platform config", () => {
       nativeProjectName: "Mewla",
       artifactName: "mewla-preview-ios",
       notificationMode: "production",
+      timeSensitive: true,
       liveExtensionBundleIdentifier: "com.daoleno.mewla.preview.live",
       appGroup: "group.com.daoleno.mewla.preview",
     });
@@ -122,8 +123,11 @@ describe("native platform config", () => {
 
   it("builds the Live Activity extension only when asked, with its own identity per variant", () => {
     const off = withIdentityEnv({ MEWLA_IOS_APP_VARIANT: "preview" }, () => createConfig());
-    expect(off.ios.entitlements).toBeUndefined();
+    // Time Sensitive calendar alerts are the only entitlement without Live.
+    expect(off.ios.entitlements).toEqual({ "com.apple.developer.usernotifications.time-sensitive": true });
     expect(off.ios.infoPlist.NSSupportsLiveActivities).toBeUndefined();
+    const production = withIdentityEnv({ MEWLA_IOS_APP_VARIANT: "production" }, () => createConfig());
+    expect(production.ios.entitlements).toBeUndefined();
     expect(JSON.stringify(off.plugins)).not.toContain("apple-targets");
 
     for (const [variant, group] of [

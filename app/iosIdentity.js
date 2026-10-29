@@ -18,6 +18,9 @@ const IOS_IDENTITIES = Object.freeze({
     nativeProjectName: "Mewla",
     artifactName: "mewla-preview-ios",
     notificationMode: "production",
+    // Time Sensitive calendar alerts break through Focus. The App ID needs the
+    // capability enabled in the developer portal before it is signed with it.
+    timeSensitive: true,
     liveExtensionBundleIdentifier: "com.daoleno.mewla.preview.live",
     appGroup: "group.com.daoleno.mewla.preview",
   }),
