@@ -661,17 +661,20 @@ function ToolRow({ tool, busy, onToggle }: { tool: NonNullable<PluginAccount["to
   const { colors } = useAppTheme();
   const [expanded, setExpanded] = useState(false);
   const inputs = toolInputs(tool.input_schema);
+  const description = tool.description.replace(/\s+/g, " ").trim();
+  // The row clamps to two lines; expanding is how the full text is read.
+  const expandable = inputs.length > 0 || description.length > 120;
   return (
     <View>
       <ListRow
         title={tool.name}
         // One paragraph, so a description's own line breaks don't grow the row.
-        subtitle={`${tool.updated ? "Updated, waits for your confirmation · " : ""}${tool.description.replace(/\s+/g, " ").trim()}`}
-        numberOfLines={2}
-        leading={inputs.length ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={15} color={colors.textTertiary} /> : <View style={styles.disclosureSpace} />}
-        onPress={inputs.length ? () => setExpanded(!expanded) : undefined}
-        accessibilityLabel={inputs.length ? `${tool.name}, ${inputs.length} input${inputs.length === 1 ? "" : "s"}` : undefined}
-        accessibilityHint={inputs.length ? (expanded ? "Hides inputs" : "Shows inputs") : undefined}
+        subtitle={`${tool.updated ? "Updated, waits for your confirmation · " : ""}${description}`}
+        numberOfLines={expanded ? undefined : 2}
+        leading={expandable ? <Icon name={expanded ? "chevron-down" : "chevron-right"} size={15} color={colors.textTertiary} /> : <View style={styles.disclosureSpace} />}
+        onPress={expandable ? () => setExpanded(!expanded) : undefined}
+        accessibilityLabel={expandable ? `${tool.name}, ${inputs.length} input${inputs.length === 1 ? "" : "s"}` : undefined}
+        accessibilityHint={expandable ? (expanded ? "Hides details" : "Shows details") : undefined}
         trailing={<InkSwitch accessibilityLabel={`Allow ${tool.name}`} value={tool.allowed} disabled={busy} onValueChange={onToggle} />}
       />
       {expanded ? (

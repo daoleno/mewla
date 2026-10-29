@@ -220,11 +220,7 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 			if err != nil || len(schema) > MaxToolSchemaBytes {
 				return nil, fmt.Errorf("MCP tool %q schema is %d KB, over the %d KB limit", t.Name, len(schema)>>10, MaxToolSchemaBytes>>10)
 			}
-			desc := t.Description
-			if len(desc) > 1000 {
-				desc = desc[:1000]
-			}
-			tools = append(tools, Tool{Name: t.Name, Description: desc, InputSchema: schema})
+			tools = append(tools, Tool{Name: t.Name, Description: t.Description, InputSchema: schema})
 			if len(tools) > MaxTools {
 				return nil, errors.New("MCP exposes more than 200 tools; use a narrower endpoint")
 			}

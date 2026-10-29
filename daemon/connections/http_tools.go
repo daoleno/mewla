@@ -251,9 +251,6 @@ func openAPITools(spec json.RawMessage) ([]Tool, error) {
 			if desc == "" {
 				desc = op.Description
 			}
-			if len(desc) > 1000 {
-				desc = desc[:1000]
-			}
 			tools = append(tools, Tool{Name: name, Description: desc, InputSchema: schema, Method: method, Path: path})
 			if len(tools) > MaxTools {
 				return nil, errors.New("OpenAPI document exceeds 200 operations")
