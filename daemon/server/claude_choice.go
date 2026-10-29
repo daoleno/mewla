@@ -16,11 +16,15 @@ import (
 // pending tool call and picks option indexes; the questions themselves are
 // re-read from the provider transcript, never trusted from the client.
 type answerChoiceRequest struct {
-	CallID  string `json:"call_id"`
-	Answers []struct {
-		Selected []int  `json:"selected"`
-		Other    string `json:"other"`
-	} `json:"answers"`
+	CallID  string            `json:"call_id"`
+	Answers []ChoiceSelection `json:"answers"`
+}
+
+// ChoiceSelection answers one question: zero-based option indexes and/or
+// free text for the Other row.
+type ChoiceSelection struct {
+	Selected []int  `json:"selected"`
+	Other    string `json:"other"`
 }
 
 const answerChoiceConfirmTimeout = 8 * time.Second
@@ -36,18 +40,7 @@ func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "answer_choice_refused", "This Session is not a live Claude Session.")
 		return
 	}
-	reader := work.NewProviderConversationReader()
-	load := func() (work.CodexConversation, error) {
-		conversation, err := s.loadProviderConversation(reader, resolved, time.Now())
-		if err != nil || s.brain == nil || s.brain.CurrentHostSessionID() != resolved.targetID {
-			return conversation, err
-		}
-		// Brain chat shows the host-bound transcript; answer against that same source.
-		if bound, boundErr := s.brain.HostBoundProviderConversation(); boundErr == nil && bound.Available {
-			conversation = work.PreferHostBoundConversation(conversation, bound)
-		}
-		return conversation, nil
-	}
+	load := s.choiceConversationLoader(resolved)
 	answers, err := s.answerChoice(resolved.targetID, request, load)
 	if err != nil {
 		code, message := "answer_choice_failed", err.Error()
@@ -73,6 +66,18 @@ func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 // answerChoice drives the pending choice and returns the answers Claude
 // recorded, after proving they are exactly the requested ones.
 func (s *Server) answerChoice(workerID string, request answerChoiceRequest, load func() (work.CodexConversation, error)) ([]string, error) {
+	drive := s.answerClaudeChoiceOverride
+	if drive == nil {
+		drive = s.watcher.AnswerClaudeChoice
+	}
+	return driveChoiceAnswer(workerID, request, load, drive)
+}
+
+// driveChoiceAnswer is the one answer path of a pending AskUserQuestion, shared
+// by the app and `mewla worker answer`: questions come from the transcript,
+// never from the caller, and the recorded answers are checked against the
+// requested ones.
+func driveChoiceAnswer(workerID string, request answerChoiceRequest, load func() (work.CodexConversation, error), drive func(string, []watcher.ClaudeChoiceQuestion, []watcher.ClaudeChoiceAnswer) error) ([]string, error) {
 	conversation, err := load()
 	if err != nil {
 		return nil, err
@@ -101,10 +106,6 @@ func (s *Server) answerChoice(workerID string, request answerChoiceRequest, load
 	expected, err := watcher.ExpectedClaudeChoiceAnswers(questions, answers)
 	if err != nil {
 		return nil, err
-	}
-	drive := s.answerClaudeChoiceOverride
-	if drive == nil {
-		drive = s.watcher.AnswerClaudeChoice
 	}
 	if err := drive(workerID, questions, answers); err != nil {
 		return nil, err

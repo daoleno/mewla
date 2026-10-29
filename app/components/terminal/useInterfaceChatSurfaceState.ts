@@ -41,10 +41,14 @@ import {
 } from "./TerminalActionPromptModel";
 import {
   CHOICE_GONE_NOTICE,
+  PROMPT_GONE_NOTICE,
   awaitingChoiceAnswer,
+  choiceFromPrompt,
   isChoiceGoneError,
+  isPromptGoneError,
+  latestPendingChoice,
   visiblePendingChoice,
-  type ChoiceAnswerPayload,
+  type ChoiceAnswer,
   type InterfaceChoicePrompt,
 } from "./claudeChoiceModel";
 import { liveActionPromptScopeKey } from "../../services/workerSessionListTransport";
@@ -176,7 +180,7 @@ export function useInterfaceChatSurfaceState({
   const [actionMenuPinned, setActionMenuPinned] = useState(false);
   const [skillsSheetVisible, setSkillsSheetVisible] = useState(false);
   const [statusSheetVisible, setStatusSheetVisible] = useState(false);
-  const [choiceNotice, setChoiceNotice] = useState<string>();
+  const [promptNotice, setPromptNotice] = useState<string>();
   const { state: statusState, load: loadStatus } = useCodexStatus({
     serverId,
     workerId,
@@ -474,50 +478,55 @@ export function useInterfaceChatSurfaceState({
     composerLayout,
     modelControl: composerModelControl,
   });
-  // Questions the daemon said already passed; the transcript can lag the screen.
-  const [goneChoiceCallIds, setGoneChoiceCallIds] = useState<ReadonlySet<string>>(
+  // Prompts the daemon said already passed (a prompt id, or a tool call id for
+  // the Brain host); the Session list can lag the screen.
+  const [gonePromptIds, setGonePromptIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   const bodyController = useMemo(
     () => ({
       ...editAwareController,
-      operationalError: editAwareController.operationalError ?? choiceNotice,
+      operationalError: editAwareController.operationalError ?? promptNotice,
     }),
-    [choiceNotice, editAwareController],
+    [promptNotice, editAwareController],
   );
+  // The hidden Brain host is not on the Session list, so it has no live status
+  // and no terminal prompt; its question is read from the transcript instead.
+  const hostWithoutLivePrompt = workerInfo?.status === undefined;
+  // Live pane fact only: require the connect snapshot (worker_session_list) for this WebSocket
+  // connection generation so retained pre-disconnect snapshots cannot flash.
+  const livePrompt =
+    workerId && workerSessionListFresh && workerInfo?.prompt && !gonePromptIds.has(workerInfo.prompt.id)
+      ? workerInfo.prompt
+      : undefined;
+  const transcriptChoice = useMemo(() => latestPendingChoice(events), [events]);
   const pendingChoice = useMemo(
-    () => visiblePendingChoice(events, goneChoiceCallIds),
-    [events, goneChoiceCallIds],
+    () => visiblePendingChoice(events, gonePromptIds),
+    [events, gonePromptIds],
   );
+  const openPromptId = workerInfo?.prompt?.id;
+  const openCallId = pendingChoice?.call_id;
   useEffect(() => {
-    setGoneChoiceCallIds((existing) => (existing.size ? new Set() : existing));
-    setChoiceNotice(undefined);
+    setGonePromptIds((existing) => (existing.size ? new Set() : existing));
+    setPromptNotice(undefined);
   }, [serverId, workerId]);
   useEffect(() => {
-    if (pendingChoice?.call_id) {
-      setChoiceNotice(undefined);
-    }
-  }, [pendingChoice?.call_id]);
-  // A listed Session proves the prompt is on screen with status "blocked". The
-  // hidden Brain host carries no live status, so a pending (not abandoned)
-  // choice counts as live there. This only picks the card's copy: a stale or
-  // missing status never locks the card, because the daemon re-checks the
-  // screen before any key and says when the question has passed.
-  const pendingChoiceLive =
-    Boolean(pendingChoice) &&
-    connectionState === "connected" &&
-    (workerInfo?.status === undefined || (workerSessionListFresh && workerInfo.status === "blocked"));
-  const answerPendingChoice = useCallback(
-    async (payload: ChoiceAnswerPayload) => {
+    setPromptNotice(undefined);
+  }, [openPromptId, openCallId]);
+  const answerPrompt = useCallback(
+    async (
+      promptId: string,
+      answer: { number?: number; answers?: ChoiceAnswer[] },
+    ) => {
       if (connectionState !== "connected" || !serverId || !workerId) {
         throw new Error("Daemon is not connected.");
       }
       try {
-        await wsClient.answerChoice(serverId, workerId, payload);
+        await wsClient.answerPrompt(serverId, workerId, { prompt_id: promptId, ...answer });
       } catch (reason) {
-        if (isChoiceGoneError(reason)) {
-          setGoneChoiceCallIds((existing) => new Set(existing).add(payload.call_id));
-          setChoiceNotice(CHOICE_GONE_NOTICE);
+        if (isPromptGoneError(reason)) {
+          setGonePromptIds((existing) => new Set(existing).add(promptId));
+          setPromptNotice(PROMPT_GONE_NOTICE);
           return;
         }
         throw reason;
@@ -525,31 +534,67 @@ export function useInterfaceChatSurfaceState({
     },
     [connectionState, serverId, workerId],
   );
-  const choicePrompt = useMemo<InterfaceChoicePrompt | null>(
-    () =>
-      pendingChoice?.call_id
-        ? {
-            callId: pendingChoice.call_id,
-            choice: pendingChoice.choice,
-            live: pendingChoiceLive,
-            connected: connectionState === "connected",
-            onSubmit: answerPendingChoice,
-          }
-        : null,
-    [answerPendingChoice, connectionState, pendingChoice, pendingChoiceLive],
+  const answerTranscriptChoice = useCallback(
+    async (callId: string, answers: ChoiceAnswer[]) => {
+      if (connectionState !== "connected" || !serverId || !workerId) {
+        throw new Error("Daemon is not connected.");
+      }
+      try {
+        await wsClient.answerChoice(serverId, workerId, { call_id: callId, answers });
+      } catch (reason) {
+        if (isChoiceGoneError(reason)) {
+          setGonePromptIds((existing) => new Set(existing).add(callId));
+          setPromptNotice(CHOICE_GONE_NOTICE);
+          return;
+        }
+        throw reason;
+      }
+    },
+    [connectionState, serverId, workerId],
   );
+  const choicePrompt = useMemo<InterfaceChoicePrompt | null>(() => {
+    const connected = connectionState === "connected";
+    if (hostWithoutLivePrompt) {
+      const callId = pendingChoice?.call_id;
+      return callId && pendingChoice
+        ? {
+            key: callId,
+            choice: pendingChoice.choice,
+            connected,
+            onSubmit: (answers) => answerTranscriptChoice(callId, answers),
+          }
+        : null;
+    }
+    const promptId = livePrompt?.id;
+    const choice = choiceFromPrompt(
+      livePrompt,
+      transcriptChoice?.call_id
+        ? { callId: transcriptChoice.call_id, choice: transcriptChoice.choice }
+        : null,
+    );
+    return promptId && choice
+      ? {
+          key: livePrompt?.call_id ?? promptId,
+          choice,
+          connected,
+          onSubmit: (answers) => answerPrompt(promptId, { answers }),
+        }
+      : null;
+  }, [
+    answerPrompt,
+    answerTranscriptChoice,
+    connectionState,
+    hostWithoutLivePrompt,
+    livePrompt,
+    pendingChoice,
+    transcriptChoice,
+  ]);
   const terminalActionPrompt = useMemo(() => {
-    // Live pane fact only: require the connect snapshot (worker_session_list) for this WebSocket
-    // connection generation so retained pre-disconnect snapshots cannot flash.
-    // A structured transcript choice owns the prompt; never show both.
-    if (!workerId || !workerSessionListFresh || pendingChoice) {
+    if (!workerId || !workerSessionListFresh) {
       return null;
     }
     return buildTerminalActionPrompt({
-      status: workerInfo?.status,
-      summary: workerInfo?.summary,
-      lastOutputLines: workerInfo?.lastOutputLines,
-      provider: workerInfo?.provider,
+      prompt: livePrompt,
       approvals: workerInfo?.approvals,
       scopeKey: liveActionPromptScopeKey({
         workerId,
@@ -560,16 +605,12 @@ export function useInterfaceChatSurfaceState({
     });
   }, [
     workerId,
-    workerInfo?.provider,
+    livePrompt,
     workerInfo?.approvals,
-    workerInfo?.lastOutputLines,
     workerInfo?.processId,
     workerInfo?.startedAt,
-    workerInfo?.status,
-    workerInfo?.summary,
     workerSessionListFresh,
     connectionGeneration,
-    pendingChoice,
   ]);
   const answerTerminalAction = useCallback(
     (option: TerminalActionPromptOption) => {
@@ -584,9 +625,12 @@ export function useInterfaceChatSurfaceState({
           option.approvalOptionId,
         );
       }
-      return wsClient.sendKey(serverId, workerId, option.key);
+      if (option.number !== undefined && terminalActionPrompt?.promptId) {
+        return answerPrompt(terminalActionPrompt.promptId, { number: option.number });
+      }
+      throw new Error("This option cannot be answered here.");
     },
-    [workerId, connectionState, serverId, terminalActionPrompt?.approvalId],
+    [workerId, connectionState, serverId, terminalActionPrompt?.approvalId, terminalActionPrompt?.promptId, answerPrompt],
   );
   const skillsSheet = useMemo(
     () =>

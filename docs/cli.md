@@ -69,8 +69,20 @@ mewla worker send -id <session> --work-id <work> -text "Also update the tests"
 mewla worker receipt -id <session> --work-id <work> --turn-id <turn>   # did an input arrive?
 mewla worker approvals [-id <session>]        # what a Claude Worker is waiting for you to allow
 mewla worker approve -id <session> -approval <id> -option allow   # or deny
+mewla worker answer -id <session> -prompt <id> -choice 1   # the prompt open in the Worker's terminal
 mewla worker close -id <session>
 ```
+
+`answer` replies to a prompt a delegated Worker is stopped at in its terminal:
+a numbered menu (a permission or plan request, a startup question) by
+`-choice <option number>`, or an `AskUserQuestion` by `-answers '[{"selected":[1],"other":""}]'`,
+one entry per question with 1-based option numbers. `-prompt` is the id Brain
+receives in the Worker's `needs_input` (`"event":"prompt_blocked"`, with the
+prompt's options in `details.prompt`). The daemon reads the terminal again first
+and sends no key when that prompt has passed (`prompt_gone`). While a prompt is
+open, `worker send` refuses with `prompt_open` instead of typing into it. A
+permission prompt that a hook is also waiting on is resolved through that
+approval, not by keys.
 
 `approvals` and `approve` answer the permission prompts of a Claude or Codex
 Worker that Mewla started. Claude Workers run in bypass mode by default, so

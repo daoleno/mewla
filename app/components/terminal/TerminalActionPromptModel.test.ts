@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { buildTerminalActionPrompt } from "./TerminalActionPromptModel";
+import type { WorkerPrompt } from "../../store/workers";
 import {
   bumpServerConnectionGeneration,
   isWorkerSessionListFreshForConnection,
@@ -8,15 +9,62 @@ import {
   type TransportConnectionState,
 } from "../../services/workerSessionListTransport";
 
-const WEEKLY_LIMIT_LINES = [
-  "◆ Task completed in 2m45s: Wait for dedicated em",
-  "You hit your weekly limit.",
-  "1 (O) Upgrade tier          Upgrade to a higher tier for more usage",
-  "2 (O) Buy more credits      Purchase credits to keep using Grok Build",
-  "↑/↓ navigate · y copy Enter:submit",
-  "Esc:unselect | Tab:scrollback |",
-];
+const permission: WorkerPrompt = {
+  id: "perm-1",
+  kind: "permission",
+  provider: "claude",
+  title: "Bash command",
+  request: "touch /tmp/x\nAPI_TOKEN=abc123 curl localhost",
+  options: [
+    { number: 1, label: "Yes", selected: true },
+    { number: 2, label: "Yes, and don't ask again for touch commands", description: "Applies to this project" },
+    { number: 3, label: "No" },
+  ],
+};
 
+const plan: WorkerPrompt = {
+  id: "plan-1",
+  kind: "plan",
+  provider: "claude",
+  title: "Waiting for plan approval",
+  request: "1. Add the card\n2. Test it",
+  options: [
+    { number: 1, label: "Yes, and use auto mode", selected: true },
+    { number: 2, label: "Yes, manually approve edits" },
+    { number: 3, label: "Tell Claude what to change" },
+  ],
+};
+
+const startup: WorkerPrompt = {
+  id: "startup-1",
+  kind: "startup",
+  provider: "claude",
+  title: "Do you trust the files in this folder?",
+  options: [
+    { number: 1, label: "Yes, I trust this folder", selected: true },
+    { number: 2, label: "No, exit" },
+  ],
+};
+
+const codexApproval: WorkerPrompt = {
+  id: "codex-1",
+  kind: "approval",
+  provider: "codex",
+  title: "Would you like to run the following command?",
+  request: "$ rm -rf build",
+  options: [
+    { number: 1, label: "Yes, proceed", selected: true },
+    { number: 2, label: "No, and tell Codex what to do differently" },
+  ],
+};
+
+const choice: WorkerPrompt = {
+  id: "choice-1",
+  kind: "choice",
+  provider: "claude",
+  title: "Question",
+  questions: [{ question: "Which?", options: [{ number: 1, label: "A" }] }],
+};
 
 type TransportSlice = {
   connectionState: TransportConnectionState;
@@ -65,24 +113,13 @@ function isFresh(slice: TransportSlice, serverId: string) {
 function projectPrompt(
   slice: TransportSlice,
   serverId: string,
-  agent: {
-    id: string;
-    status: string;
-    summary?: string;
-    provider?: string;
-    processId?: number;
-    startedAt?: number;
-    lastOutputLines?: string[];
-  },
+  agent: { id: string; prompt?: WorkerPrompt; processId?: number; startedAt?: number },
 ) {
   if (!isFresh(slice, serverId)) {
     return null;
   }
   return buildTerminalActionPrompt({
-    status: agent.status,
-    summary: agent.summary,
-    lastOutputLines: agent.lastOutputLines,
-    provider: agent.provider,
+    prompt: agent.prompt,
     scopeKey: liveActionPromptScopeKey({
       workerId: agent.id,
       processId: agent.processId,
@@ -92,275 +129,83 @@ function projectPrompt(
   });
 }
 
-const LIVE_BLOCKED = {
-  id: "grok-1",
-  status: "blocked",
-  provider: "grok",
-  summary: "↑/↓ navigate · y copy Enter:submit",
-  processId: 41413,
-  startedAt: 900,
-  lastOutputLines: WEEKLY_LIMIT_LINES,
-};
+const LIVE_BLOCKED = { id: "claude-1", prompt: plan, processId: 41413, startedAt: 900 };
 
-describe("buildTerminalActionPrompt", () => {
-  const approval = (id: string, tool: string) => ({
-    id,
-    tool,
-    options: [
-      { id: "allow", label: "Allow", scope: "once" },
-      { id: "deny", label: "Deny", scope: "deny" },
-    ],
+describe("buildTerminalActionPrompt from the daemon's prompt", () => {
+  test("a permission card answers by option number and redacts the request", () => {
+    const card = buildTerminalActionPrompt({ prompt: permission });
+    expect(card?.title).toBe("Bash command");
+    expect(card?.promptId).toBe("perm-1");
+    expect(card?.requestText).toBe("touch /tmp/x\nAPI_TOKEN=[redacted] curl localhost");
+    expect(card?.options.map((o) => [o.id, o.number, o.label])).toEqual([
+      ["1", 1, "Yes"],
+      ["2", 2, "Yes, and don't ask again for touch commands"],
+      ["3", 3, "No"],
+    ]);
+    expect(card?.options[1].description).toBe("Applies to this project");
+    expect(card?.options[0]).toMatchObject({ primary: true, default: true });
+    expect(card?.options[2].destructive).toBe(true);
+    expect(card?.options[0].destructive).toBe(false);
+    expect(card?.defaultOptionId).toBe("1");
+    expect(card?.approvalId).toBeUndefined();
   });
 
-  test("never turns an AskUserQuestion into an Allow/Deny card", () => {
-    for (const tool of ["AskUserQuestion", "askuserquestion"]) {
-      expect(
-        buildTerminalActionPrompt({ status: "blocked", provider: "claude", approvals: [approval("a1", tool)] }),
-      ).toBeNull();
+  test("a plan card shows the plan and Claude's own labels", () => {
+    const card = buildTerminalActionPrompt({ prompt: plan });
+    expect(card?.title).toBe("Waiting for plan approval");
+    expect(card?.requestText).toBe("1. Add the card\n2. Test it");
+    expect(card?.options.map((o) => o.label)).toEqual([
+      "Yes, and use auto mode",
+      "Yes, manually approve edits",
+      "Tell Claude what to change",
+    ]);
+    expect(card?.options.map((o) => o.number)).toEqual([1, 2, 3]);
+  });
+
+  test("a startup card and a Codex approval card are menu cards too", () => {
+    const folder = buildTerminalActionPrompt({ prompt: startup });
+    expect(folder?.title).toBe("Do you trust the files in this folder?");
+    expect(folder?.requestText).toBeUndefined();
+    expect(folder?.options.map((o) => o.number)).toEqual([1, 2]);
+    const codex = buildTerminalActionPrompt({ prompt: codexApproval });
+    expect(codex?.requestText).toBe("$ rm -rf build");
+    expect(codex?.options[1].destructive).toBe(true);
+  });
+
+  test("no card carries a key press or instructions to use the terminal", () => {
+    for (const prompt of [permission, plan, startup, codexApproval]) {
+      const card = buildTerminalActionPrompt({ prompt });
+      const json = JSON.stringify(card);
+      expect(json).not.toMatch(/terminal/i);
+      expect(card?.options.every((o) => !("key" in o))).toBe(true);
+      expect(card).not.toHaveProperty("detail");
+      expect(card).not.toHaveProperty("actionable");
     }
   });
 
-  test("a question approval does not hide a real permission behind it", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "claude",
-      approvals: [approval("a1", "AskUserQuestion"), approval("a2", "Bash")],
-    });
-    expect(prompt?.approvalId).toBe("a2");
-    expect(prompt?.requestLabel).toBe("Bash");
+  test("a choice prompt is the choice card's, not a menu", () => {
+    expect(buildTerminalActionPrompt({ prompt: choice })).toBeNull();
   });
 
-  test("a Claude question screen, whole or clipped, is never a prompt", () => {
-    const screens = [
-      ["←  ☐ Color  ☐ Size  ✔ Submit  →", "Pick a color?", "❯ 1. Red", "  2. Blue", "  3. Type something.", "  4. Chat about this", "Enter to select · Esc to cancel"],
-      ["  4. Chat about this", "Enter to select · Tab/Arrow keys to navigate · Esc to cancel"],
-    ];
-    for (const lastOutputLines of screens) {
-      expect(
-        buildTerminalActionPrompt({
-          status: "blocked",
-          provider: "claude",
-          approvals: [approval("a1", "AskUserQuestion")],
-          lastOutputLines,
-        }),
-      ).toBeNull();
-    }
+  test("a Session blocked without a structured prompt has no card", () => {
+    expect(buildTerminalActionPrompt({})).toBeNull();
+    expect(buildTerminalActionPrompt({ prompt: undefined, approvals: [] })).toBeNull();
+    expect(buildTerminalActionPrompt({ prompt: { ...plan, options: [] } })).toBeNull();
   });
 
-  test("a Claude permission menu is still shown read-only", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "claude",
-      lastOutputLines: ["Do you want to proceed?", "❯ 1. Yes", "  2. No, and tell Claude what to do differently"],
-    });
-    expect(prompt?.actionable).toBe(false);
-    expect(prompt?.options.map((option) => option.id)).toEqual(["1", "2"]);
-  });
-
-  test("projects Grok weekly-limit choice menu as display-only Interface state", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "grok",
-      summary: "↑/↓ navigate · y copy Enter:submit",
-      lastOutputLines: WEEKLY_LIMIT_LINES,
-    });
-
-    expect(prompt).not.toBeNull();
-    expect(prompt?.actionable).toBe(false);
-    expect(prompt?.title).toBe("You hit your weekly limit.");
-    expect(prompt?.options.map((option) => option.label)).toEqual([
-      "Upgrade tier",
-      "Buy more credits",
-    ]);
-    expect(prompt?.options.map((option) => option.description)).toEqual([
-      "Upgrade to a higher tier for more usage",
-      "Purchase credits to keep using Grok Build",
-    ]);
-    expect(prompt?.defaultOptionId).toBeUndefined();
-    expect(prompt?.options.every((option) => !option.default && !option.primary)).toBe(true);
-    expect(prompt?.inputHints).toContain("navigate");
-    expect(prompt?.inputHints?.toLowerCase()).toContain("enter");
-  });
-
-  test("preserves proven Grok selection caret without fabricating others", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "grok",
-      lastOutputLines: [
-        "You hit your free usage limit.",
-        "› 1 ○ Upgrade to SuperGrok",
-        "  2 ○ Continue free",
-        "↑/↓ navigate · enter confirm · esc cancel",
-      ],
-    });
-
-    expect(prompt?.actionable).toBe(false);
-    expect(prompt?.defaultOptionId).toBe("1");
-    expect(prompt?.options[0]?.default).toBe(true);
-    expect(prompt?.options[1]?.default).toBe(false);
-  });
-
-  test("preserves proven filled radio glyph without fabricating others", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "grok",
-      lastOutputLines: [
-        "Choose a plan",
-        "1 ● Upgrade to SuperGrok",
-        "2 ○ Continue free",
-        "↑/↓ navigate · enter confirm · esc cancel",
-      ],
-    });
-
-    expect(prompt?.actionable).toBe(false);
-    expect(prompt?.defaultOptionId).toBe("1");
-  });
-
-  test("does not invent selection when multiple filled markers appear", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "grok",
-      lastOutputLines: [
-        "Choose a plan",
-        "1 ● Upgrade to SuperGrok",
-        "2 ● Continue free",
-        "↑/↓ navigate · enter confirm · esc cancel",
-      ],
-    });
-
-    expect(prompt?.defaultOptionId).toBeUndefined();
-    expect(prompt?.options.every((option) => !option.default)).toBe(true);
-  });
-
-  test("clears when blocked status resolves (stale-session safeguard)", () => {
-    expect(
-      buildTerminalActionPrompt({
-        status: "running",
-        provider: "grok",
-        lastOutputLines: WEEKLY_LIMIT_LINES,
-      }),
-    ).toBeNull();
-    expect(
-      buildTerminalActionPrompt({
-        status: "unknown",
-        provider: "grok",
-        lastOutputLines: WEEKLY_LIMIT_LINES,
-      }),
-    ).toBeNull();
-  });
-
-  test("clears when pane lines no longer contain a choice menu", () => {
-    expect(
-      buildTerminalActionPrompt({
-        status: "blocked",
-        provider: "grok",
-        lastOutputLines: [
-          "│ ❯                                                                        │",
-          "╰─────────────────────────────────────── Grok 4.5 (high) · always-approve ─╯",
-          "Shift+Tab:mode  │  Ctrl+c:cancel  │  Ctrl+g:send to bg  │  Ctrl+x:shortcuts",
-        ],
-      }),
-    ).toBeNull();
-  });
-
-  test("does not invent a card from options without navigate footer", () => {
-    expect(
-      buildTerminalActionPrompt({
-        status: "blocked",
-        provider: "grok",
-        lastOutputLines: [
-          "1 (O) Upgrade tier",
-          "2 (O) Buy more credits",
-          "Shift+Tab:mode  │  Ctrl+c:cancel",
-        ],
-      }),
-    ).toBeNull();
-  });
-
-  test("does not invent a card from navigate footer without numbered choices", () => {
-    expect(
-      buildTerminalActionPrompt({
-        status: "blocked",
-        provider: "grok",
-        lastOutputLines: [
-          "Resume session",
-          "↑/↓ navigate · enter confirm · esc cancel",
-        ],
-      }),
-    ).toBeNull();
-  });
-
-  test("keeps Codex approval prompts actionable", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "codex",
-      lastOutputLines: [
-        "$ systemctl list-unit-files --state=enabled",
-        "› 1. Yes, proceed (y)",
-        "  2. No, and tell Codex what to do differently (esc)",
-        "Press enter to confirm or esc to cancel",
-      ],
-    });
-
-    expect(prompt?.actionable).toBe(true);
-    expect(prompt?.title).toBe("Waiting for confirmation");
-    expect(prompt?.options[0]?.key).toBe("y");
-    expect(prompt?.defaultOptionId).toBe("1");
-  });
-
-  test("does not invent a card from Grok retry_state / 402 text alone", () => {
-    expect(
-      buildTerminalActionPrompt({
-        status: "blocked",
-        provider: "grok",
-        summary: "Provider request failed",
-        lastOutputLines: [
-          "API error (status 402 Payment Required): Grok Build usage balance exhausted",
-          "Request URL: https://cli-chat-proxy.grok.com/v1/responses",
-        ],
-      }),
-    ).toBeNull();
-  });
-
-  for (const provider of ["codex", "claude", "cursor", "terminal", ""]) {
-    test(`does not project Grok card under non-Grok provider (${provider || "unknown"})`, () => {
-      expect(
-        buildTerminalActionPrompt({
-          status: "blocked",
-          provider,
-          lastOutputLines: WEEKLY_LIMIT_LINES,
-        }),
-      ).toBeNull();
-    });
-  }
-
-  test("scopes prompt id to the live process/session generation", () => {
+  test("scopes the card id to the live process/session generation", () => {
     const first = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "grok",
-      scopeKey: liveActionPromptScopeKey({
-        workerId: "agent-a",
-        processId: 11,
-        startedAt: 100,
-        connectionGeneration: 1,
-      }),
-      lastOutputLines: WEEKLY_LIMIT_LINES,
+      prompt: plan,
+      scopeKey: liveActionPromptScopeKey({ workerId: "agent-a", processId: 11, startedAt: 100, connectionGeneration: 1 }),
     });
     const second = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "grok",
-      scopeKey: liveActionPromptScopeKey({
-        workerId: "agent-a",
-        processId: 22,
-        startedAt: 200,
-        connectionGeneration: 2,
-      }),
-      lastOutputLines: WEEKLY_LIMIT_LINES,
+      prompt: plan,
+      scopeKey: liveActionPromptScopeKey({ workerId: "agent-a", processId: 22, startedAt: 200, connectionGeneration: 2 }),
     });
-
-    expect(first?.id.startsWith("agent-a:11:100:1|")).toBe(true);
+    expect(first?.id).toBe("agent-a:11:100:1|plan-1");
     expect(second?.id.startsWith("agent-a:22:200:2|")).toBe(true);
     expect(first?.id).not.toBe(second?.id);
+    expect(first?.promptId).toBe("plan-1");
   });
 });
 
@@ -377,9 +222,7 @@ describe("worker_session_list connection-generation freshness", () => {
 
     slice = applyFullWorkerSessionList(slice, "server");
     expect(isFresh(slice, "server")).toBe(true);
-    expect(projectPrompt(slice, "server", LIVE_BLOCKED)?.title).toBe(
-      "You hit your weekly limit.",
-    );
+    expect(projectPrompt(slice, "server", LIVE_BLOCKED)?.title).toBe("Waiting for plan approval");
   });
 
   test("disconnect hides; reconnect with retained identical data stays hidden until new full list", () => {
@@ -391,7 +234,7 @@ describe("worker_session_list connection-generation freshness", () => {
     slice = applyConnection(slice, "server", "connecting");
     slice = applyConnection(slice, "server", "connected");
     slice = applyFullWorkerSessionList(slice, "server");
-    expect(projectPrompt(slice, "server", LIVE_BLOCKED)?.actionable).toBe(false);
+    expect(projectPrompt(slice, "server", LIVE_BLOCKED)?.promptId).toBe("plan-1");
 
     slice = applyConnection(slice, "server", "connecting");
     expect(isFresh(slice, "server")).toBe(false);
@@ -407,9 +250,7 @@ describe("worker_session_list connection-generation freshness", () => {
 
     slice = applyFullWorkerSessionList(slice, "server");
     expect(isFresh(slice, "server")).toBe(true);
-    expect(projectPrompt(slice, "server", LIVE_BLOCKED)?.title).toBe(
-      "You hit your weekly limit.",
-    );
+    expect(projectPrompt(slice, "server", LIVE_BLOCKED)?.title).toBe("Waiting for plan approval");
   });
 
   test("fresh resolved snapshot stays absent after full list", () => {
@@ -421,66 +262,7 @@ describe("worker_session_list connection-generation freshness", () => {
     slice = applyConnection(slice, "server", "connected");
     slice = applyFullWorkerSessionList(slice, "server");
     expect(isFresh(slice, "server")).toBe(true);
-    expect(
-      projectPrompt(slice, "server", {
-        id: "grok-1",
-        status: "unknown",
-        provider: "grok",
-        lastOutputLines: [
-          "│ ❯",
-          "╰─────────────────────────────────────── Grok 4.5 (high) · always-approve ─╯",
-        ],
-      }),
-    ).toBeNull();
-  });
-});
-
-describe("Claude terminal prompts", () => {
-
-  test("plan approval is read-only with Claude's own labels", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "claude",
-      summary: "Waiting for plan approval",
-      lastOutputLines: [
-        " Claude has written up a plan and is ready to execute. Would you like to proceed?",
-        " ❯ 1. Yes, and use auto mode",
-        "   2. Yes, manually approve edits",
-        "   3. Tell Claude what to change",
-        "      shift+tab to approve with this feedback",
-        " ctrl+g to edit in VS Code · ~/.claude/plans/plan.md",
-      ],
-    });
-    expect(prompt?.title).toBe("Waiting for plan approval");
-    expect(prompt?.actionable).toBe(false);
-    expect(prompt?.options.map((option) => option.label)).toEqual([
-      "Yes, and use auto mode",
-      "Yes, manually approve edits",
-      "Tell Claude what to change",
-    ]);
-    expect(prompt?.defaultOptionId).toBe("1");
-  });
-
-  test("permission prompt never relabels Claude options as Codex actions", () => {
-    const prompt = buildTerminalActionPrompt({
-      status: "blocked",
-      provider: "claude",
-      summary: "Waiting for Claude permission",
-      lastOutputLines: [
-        " Do you want to proceed?",
-        " ❯ 1. Yes",
-        "   2. Yes, and switch to auto mode · auto mode handles these prompts for you",
-        "   3. No",
-        " Esc to cancel · Tab to amend",
-      ],
-    });
-    expect(prompt?.actionable).toBe(false);
-    expect(prompt?.detail).not.toContain("Codex");
-    expect(prompt?.options.map((option) => option.label)).toEqual([
-      "Yes",
-      "Yes, and switch to auto mode · auto mode handles these prompts for you",
-      "No",
-    ]);
+    expect(projectPrompt(slice, "server", { id: "claude-1" })).toBeNull();
   });
 });
 
@@ -496,29 +278,37 @@ describe("buildTerminalActionPrompt with a decision the agent reported", () => {
     ],
   };
 
-  test("answers through the agent and reads nothing off the screen", () => {
+  test("answers through the agent ahead of a terminal prompt", () => {
     const prompt = buildTerminalActionPrompt({
-      status: "running",
-      lastOutputLines: ["1. Yes, proceed", "2. No"],
-      provider: "codex",
+      prompt: plan,
       approvals: [approval],
       scopeKey: "w|1",
     });
     expect(prompt?.id).toBe("w|1|approval:a1");
     expect(prompt?.approvalId).toBe("a1");
     expect(prompt?.requestText).toBe("touch /tmp/x");
-    expect(prompt?.options.map((o) => [o.id, o.approvalOptionId, o.key])).toEqual([
-      ["accept", "accept", ""],
-      ["cancel", "cancel", ""],
+    expect(prompt?.options.map((o) => [o.id, o.approvalOptionId, o.number])).toEqual([
+      ["accept", "accept", undefined],
+      ["cancel", "cancel", undefined],
     ]);
+    expect(prompt?.promptId).toBeUndefined();
     expect(prompt?.options[0]).toMatchObject({ primary: true, default: true });
     expect(prompt?.options[1].destructive).toBe(true);
     expect(prompt?.defaultOptionId).toBe("accept");
   });
 
-  test("a Worker waiting on nothing is not blocked by what the screen shows", () => {
-    expect(
-      buildTerminalActionPrompt({ status: "running", lastOutputLines: ["1. Yes", "2. No"], provider: "codex" }),
-    ).toBeNull();
+  test("a question approval is not a decision card", () => {
+    expect(buildTerminalActionPrompt({ approvals: [{ ...approval, tool: "AskUserQuestion" }] })).toBeNull();
+  });
+
+  test("a question approval does not hide a real permission behind it", () => {
+    const prompt = buildTerminalActionPrompt({
+      approvals: [{ ...approval, id: "q1", tool: "AskUserQuestion" }, approval],
+    });
+    expect(prompt?.approvalId).toBe("a1");
+  });
+
+  test("no prompt and no decision means no card", () => {
+    expect(buildTerminalActionPrompt({ approvals: undefined })).toBeNull();
   });
 });

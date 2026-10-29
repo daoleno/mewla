@@ -3,16 +3,16 @@ import type {
   ConversationChoice,
   ConversationChoiceQuestion,
 } from "../../services/codexConversation";
+import type { WorkerPrompt } from "../../store/workers";
 
 /** The pending choice the Interface composer renders as a card. */
 export type InterfaceChoicePrompt = {
-  callId: string;
+  /** The same question set keeps the draft; a new one starts over. */
+  key: string;
   choice: ConversationChoice;
-  /** The Session list confirms the prompt is on screen; this only picks the copy. */
-  live: boolean;
   /** The daemon connection is up, which is all an answer needs: the daemon re-checks the screen. */
   connected: boolean;
-  onSubmit(payload: ChoiceAnswerPayload): Promise<void>;
+  onSubmit(answers: ChoiceAnswer[]): Promise<void>;
 };
 
 /** One question's in-progress answer on the Interface card. */
@@ -22,10 +22,8 @@ export type ChoiceDraftAnswer = {
   otherActive: boolean;
 };
 
-export type ChoiceAnswerPayload = {
-  call_id: string;
-  answers: Array<{ selected: number[]; other?: string }>;
-};
+/** One question's answer: zero-based option indexes plus the free text of Other, "" when unused. */
+export type ChoiceAnswer = { selected: number[]; other: string };
 
 const MAX_OTHER_LENGTH = 500;
 
@@ -56,6 +54,64 @@ export const CHOICE_GONE_CODE = "answer_choice_gone";
 
 /** What the person is told when the card disappears because the question passed. */
 export const CHOICE_GONE_NOTICE = "That question has already passed.";
+
+/** The daemon code for "the prompt on screen is no longer the one this answer was for". */
+export const PROMPT_GONE_CODE = "answer_prompt_gone";
+
+/** What the person is told when a prompt card disappears because the prompt passed. */
+export const PROMPT_GONE_NOTICE = "This prompt has already passed.";
+
+/** Whether an answer error means the prompt is no longer open. */
+export function isPromptGoneError(reason: unknown): boolean {
+  return (
+    typeof reason === "object" &&
+    reason !== null &&
+    (reason as { code?: unknown }).code === PROMPT_GONE_CODE
+  );
+}
+
+/**
+ * The choice card's questions for a choice prompt the daemon read from the
+ * terminal, or null when it cannot be answered. The terminal shows one tab at
+ * a time, so a question without options is filled from the transcript's
+ * pending choice of the same tool call; if any still has none the app cannot
+ * drive it, and there is no card.
+ */
+export function choiceFromPrompt(
+  prompt: WorkerPrompt | undefined,
+  transcript?: { callId: string; choice: ConversationChoice } | null,
+): ConversationChoice | null {
+  if (!prompt || prompt.kind !== "choice" || !prompt.questions?.length) {
+    return null;
+  }
+  const fill =
+    transcript && prompt.call_id && transcript.callId === prompt.call_id
+      ? transcript.choice
+      : null;
+  const questions: ConversationChoiceQuestion[] = [];
+  for (let index = 0; index < prompt.questions.length; index += 1) {
+    const source = prompt.questions[index];
+    if (source.options.length > 0) {
+      questions.push({
+        question: source.question,
+        header: source.header,
+        multi_select: source.multi_select,
+        allows_other: source.allows_other === true,
+        options: source.options.map((option) => ({
+          label: option.label,
+          description: option.description,
+        })),
+      });
+      continue;
+    }
+    const filled = fill?.questions.length === prompt.questions.length ? fill.questions[index] : undefined;
+    if (!filled || filled.options.length === 0) {
+      return null;
+    }
+    questions.push({ ...filled, header: source.header ?? filled.header });
+  }
+  return { kind: "AskUserQuestion", state: "pending", questions };
+}
 
 /**
  * The pending choice the card should show: the latest pending one, unless the
@@ -90,7 +146,7 @@ export function isChoiceGoneError(reason: unknown): boolean {
 }
 
 export function questionAllowsOther(question: ConversationChoiceQuestion) {
-  return !question.options.some((option) => Boolean(option.preview));
+  return question.allows_other ?? !question.options.some((option) => Boolean(option.preview));
 }
 
 export function emptyChoiceDraft(choice: ConversationChoice): ChoiceDraftAnswer[] {
@@ -177,24 +233,17 @@ export function choiceDraftComplete(choice: ConversationChoice, draft: ChoiceDra
   );
 }
 
-export function buildChoiceAnswerPayload(
-  callId: string,
+export function buildChoiceAnswers(
   choice: ConversationChoice,
   draft: ChoiceDraftAnswer[],
-): ChoiceAnswerPayload | null {
-  if (!callId || !choiceDraftComplete(choice, draft)) {
+): ChoiceAnswer[] | null {
+  if (!choiceDraftComplete(choice, draft)) {
     return null;
   }
-  return {
-    call_id: callId,
-    answers: choice.questions.map((_, index) => {
-      const answer = draft[index];
-      const other = answerOther(answer);
-      return other
-        ? { selected: answer.selected, other }
-        : { selected: answer.selected };
-    }),
-  };
+  return choice.questions.map((_, index) => {
+    const answer = draft[index];
+    return { selected: answer.selected, other: answerOther(answer) };
+  });
 }
 
 /** Room the composer needs under the card, in dp. */

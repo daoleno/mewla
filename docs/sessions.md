@@ -48,41 +48,40 @@ Open a Session to read it in one of three ways:
 
 What you type in either Chat or Terminal goes to the same `tmux` pane.
 
-### When Claude asks you to choose
+### When an agent is waiting for you
 
-When Claude asks a question with options (AskUserQuestion), Chat shows a
-**Waiting for your choice** card above the composer. It works like Claude's
-own prompt in the Terminal: one question at a time, with a tab for each
+A waiting prompt is either a card you can answer by tapping, or no card at all.
+Every card is read from the prompt the agent has open in its terminal and is
+answered by Mewla, which checks the screen is still showing that same prompt
+before it presses a key. A prompt Mewla cannot answer this way shows no card:
+use the **Terminal** view of the Session.
+
+**Claude's questions** (AskUserQuestion) show a card above the composer. It
+works like Claude's own prompt: one question at a time, with a tab for each
 question and a final **Review** tab. Tapping an option on a single-choice
 question moves on to the next question. Where a question allows several
 options, tick any and tap **Next**. Type your own answer in the **Type
 something** row. Review lists every answer; tap a row or a tab to change it,
 then tap **Submit**. Questions you have not answered are marked there, and the
-button counts them.
+button counts them. The Working row is hidden while a question is open. Once it
+is answered, from the card or from the Terminal, the card becomes an
+**Answered** line in the chat.
 
-The card stays tappable whenever the app is connected, even if the Session
-list still shows the agent as working; the Working row is replaced by
-**Waiting for your answer** while a question is open. Mewla reads the
-questions from Claude's transcript, not from the screen. It selects your answer
-in the live terminal and checks the screen before every key. If the question
-has already passed (the Terminal no longer shows it, or shows a different
-prompt), Mewla says **That question has already passed** and the card goes
-away; no Allow or Deny card ever takes its place, and the Working row stays
-hidden until the chat records the outcome. If the Terminal still shows the same
-prompt but moved to another question or to Review, or it was partly answered in
-the Terminal, Mewla stops and says so, the card stays, and nothing is
-submitted. When the Terminal does not respond to a key, Mewla says so in plain
-words and you can try again.
-You can always finish in the Terminal. Once the question is answered, from the card or from the Terminal,
-the card becomes an **Answered** line in the chat.
+**Permission, plan, startup and approval prompts** (run this command, accept
+this plan, trust this folder, a Codex approval) show a card with the prompt's
+own heading, what it asks about, and one button per numbered option, labelled as
+the agent labels it. Tapping a button answers that option.
+
+If the prompt has already passed (answered in the Terminal, replaced by another,
+or timed out), Mewla says **This prompt has already passed** and the card goes
+away. If Mewla cannot send the answer, it says so on the card and the card
+stays, so you can try again.
 
 When Claude, Codex or OpenCode asks to run a command or change files, and Mewla
 started that Worker, the card names the command and offers the agent's own
-options (Allow or Deny; OpenCode also offers Always allow). Tapping one answers the agent directly: nothing is typed into
-the Terminal, and a request that was already answered, or that belongs to
-another conversation, is refused. A Worker Mewla did not start, and the prompts
-of other agents, are still read from the screen: Claude's own prompts then show
-as **Waiting for your choice** and are answered in the Terminal.
+options (Allow or Deny; OpenCode also offers Always allow). Tapping one answers
+the agent directly, and a request that was already answered, or that belongs to
+another conversation, is refused.
 
 ### Copy and edit a message
 

@@ -337,6 +337,7 @@ func providerActivitySignalFor(observation ProviderActivityObservation) provider
 
 // Watcher monitors owned tmux panes and classifies agent states.
 type Watcher struct {
+	promptEnrich          promptEnrichment
 	quickTunnels          *serviceTunnels
 	tunnelResolveHost     func(context.Context, string) ([]net.IPAddr, error)
 	pollInterval          time.Duration
@@ -1886,7 +1887,7 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 		if probe != nil {
 			toolChild := isCursorAgentCommand(item.workerSnap.Command) && cursorToolChildActive(item.panePID, processes)
 			activity = probe.Infer(classifier.ActivityInput{Worker: item.workerSnap, PaneContent: item.content, ToolChildActive: toolChild})
-			activity = withChoicePrompt(activity, item.content)
+			activity = w.enrichChoicePrompt(item.id, withChoicePrompt(activity, item.content))
 		}
 		turn, hasTurn, turnErr := w.ledgerTurnFor(item.id, item.now)
 		if hasTurn && turnErr == nil {

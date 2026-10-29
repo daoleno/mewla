@@ -31,6 +31,8 @@ export interface Worker {
   provider?: string;
   /** Decisions the agent is waiting on; absent when it waits on none. */
   approvals?: WorkerApproval[];
+  /** The blocking prompt open in the Session's terminal right now; absent when there is none. */
+  prompt?: WorkerPrompt;
   summary: string;
   phase?: string;
   attention?: string;
@@ -53,6 +55,42 @@ export interface WorkerApproval {
   tool?: string;
   summary?: string;
   options: { id: string; label: string; scope?: string }[];
+}
+
+export type WorkerPromptKind = 'permission' | 'plan' | 'choice' | 'startup' | 'approval';
+
+/** One row of a prompt's numbered menu; `number` is the digit that picks it. */
+export interface WorkerPromptOption {
+  number: number;
+  label: string;
+  description?: string;
+  selected?: boolean;
+}
+
+/** One question (tab) of a choice prompt. */
+export interface WorkerPromptQuestion {
+  header?: string;
+  question: string;
+  multi_select?: boolean;
+  allows_other?: boolean;
+  answered?: boolean;
+  options: WorkerPromptOption[];
+}
+
+/**
+ * A blocking prompt the daemon read from the Session's terminal. Menu kinds
+ * (permission, plan, startup, approval) carry `options` and are answered by
+ * option number; a `choice` prompt carries `questions`.
+ */
+export interface WorkerPrompt {
+  id: string;
+  kind: WorkerPromptKind;
+  provider: string;
+  title: string;
+  request?: string;
+  options?: WorkerPromptOption[];
+  questions?: WorkerPromptQuestion[];
+  call_id?: string;
 }
 
 export type ConnectionState = 'offline' | 'connecting' | 'connected';
@@ -82,6 +120,7 @@ export type RawWorker = {
   executor_id?: string;
   provider?: string;
   approvals?: unknown;
+  prompt?: unknown;
   summary?: string;
   phase?: string;
   attention?: string;
@@ -370,6 +409,7 @@ function agentsEqual(left: Worker, right: Worker): boolean {
       left.executor_id === right.executor_id &&
       left.provider === right.provider &&
       approvalsEqual(left.approvals, right.approvals) &&
+      promptsEqual(left.prompt, right.prompt) &&
       left.summary === right.summary &&
       left.phase === right.phase &&
       left.attention === right.attention &&
@@ -448,6 +488,7 @@ function normalizeWorker(
     executor_id: typeof agent.executor_id === 'string' && agent.executor_id ? agent.executor_id : undefined,
     provider: typeof agent.provider === 'string' && agent.provider ? agent.provider : undefined,
     approvals: normalizeApprovals(agent.approvals),
+    prompt: normalizePrompt(agent.prompt),
     summary: agent.summary || '',
     phase: typeof agent.phase === 'string' ? agent.phase : undefined,
     attention: typeof agent.attention === 'string' ? agent.attention : undefined,
@@ -491,6 +532,83 @@ export function normalizeApprovals(raw: unknown): WorkerApproval[] | undefined {
     });
   }
   return approvals.length > 0 ? approvals : undefined;
+}
+
+const PROMPT_KINDS: readonly WorkerPromptKind[] = ['permission', 'plan', 'choice', 'startup', 'approval'];
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+function normalizePromptOptions(raw: unknown): WorkerPromptOption[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const options: WorkerPromptOption[] = [];
+  for (const item of raw) {
+    const o = item as Record<string, unknown> | null;
+    if (!o || typeof o !== 'object' || !Number.isInteger(o.number) || typeof o.label !== 'string') continue;
+    options.push({
+      number: o.number as number,
+      label: o.label,
+      description: optionalString(o.description),
+      selected: o.selected === true ? true : undefined,
+    });
+  }
+  return options;
+}
+
+/**
+ * The daemon's structured prompt, or undefined when it is not one the app can
+ * answer: a menu kind needs options and a choice needs questions.
+ */
+export function normalizePrompt(raw: unknown): WorkerPrompt | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+  const entry = raw as Record<string, unknown>;
+  const kind = PROMPT_KINDS.find((candidate) => candidate === entry.kind);
+  if (typeof entry.id !== 'string' || !entry.id || !kind) {
+    return undefined;
+  }
+  const prompt: WorkerPrompt = {
+    id: entry.id,
+    kind,
+    provider: typeof entry.provider === 'string' ? entry.provider : '',
+    title: typeof entry.title === 'string' ? entry.title : '',
+    request: optionalString(entry.request),
+    call_id: optionalString(entry.call_id),
+  };
+  if (kind === 'choice') {
+    const questions: WorkerPromptQuestion[] = [];
+    for (const item of Array.isArray(entry.questions) ? entry.questions : []) {
+      const q = item as Record<string, unknown> | null;
+      if (!q || typeof q !== 'object') continue;
+      questions.push({
+        header: optionalString(q.header),
+        question: typeof q.question === 'string' ? q.question : '',
+        multi_select: q.multi_select === true ? true : undefined,
+        allows_other: q.allows_other === true ? true : undefined,
+        answered: q.answered === true ? true : undefined,
+        options: normalizePromptOptions(q.options),
+      });
+    }
+    if (questions.length === 0) {
+      return undefined;
+    }
+    prompt.questions = questions;
+    return prompt;
+  }
+  const options = normalizePromptOptions(entry.options);
+  if (options.length === 0) {
+    return undefined;
+  }
+  prompt.options = options;
+  return prompt;
+}
+
+function promptsEqual(left?: WorkerPrompt, right?: WorkerPrompt): boolean {
+  return left === right || JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
 function approvalsEqual(left?: WorkerApproval[], right?: WorkerApproval[]): boolean {

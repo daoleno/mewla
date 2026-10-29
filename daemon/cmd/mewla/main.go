@@ -438,6 +438,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	w.SetStructuredInput(firstHandled(senders...))
 	w.SetStructuredInterrupt(firstHandledStop(stops...))
+	w.SetPromptEnricher(choicePromptEnricher(w, execs))
 	controlHandler := &controlApp{
 		agentEvents:     agentEvents,
 		resourceSampler: resourceSampler,
@@ -1147,6 +1148,8 @@ func runWorkerCommand(args []string, stderr io.Writer) error {
 		return runWorkerApprovals(args[1:], stderr)
 	case "approve":
 		return runWorkerApprove(args[1:], stderr)
+	case "answer":
+		return runWorkerAnswer(args[1:], stderr)
 	case "release":
 		return runWorkerRelease(args[1:], stderr)
 	case "close":
@@ -1320,12 +1323,13 @@ func isHelpArg(value string) bool {
 }
 
 func printWorkerUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: mewla worker <list|spawn|send|capture|status|receipt|progress|release|close> [flags]")
+	fmt.Fprintln(w, "Usage: mewla worker <list|spawn|send|answer|capture|status|receipt|progress|release|close> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  list       List visible Mewla Workers")
 	fmt.Fprintln(w, "  spawn      Create a visible delegated Mewla Worker")
 	fmt.Fprintln(w, "  send       Send text to a Mewla Worker")
+	fmt.Fprintln(w, "  answer     Answer the prompt open in a Mewla Worker's terminal")
 	fmt.Fprintln(w, "  capture    Capture a Mewla Worker transcript")
 	fmt.Fprintln(w, "  status     Print compact status for one Mewla Worker")
 	fmt.Fprintln(w, "  receipt    Read exact durable input acceptance without resubmitting")
@@ -1340,6 +1344,7 @@ func printWorkerUsage(w io.Writer) {
 	fmt.Fprintln(w, "  mewla worker status -id mewla-worker-review-docs:@1 --json")
 	fmt.Fprintln(w, "  mewla worker progress --status running --phase working --attention none --summary \"Reading files\" --task-class lasting_design --event-kind invariant --lease 300")
 	fmt.Fprintln(w, "  mewla worker send -id mewla-worker-review-docs:@1 -text \"continue\" --submit=true")
+	fmt.Fprintln(w, "  mewla worker answer -id mewla-worker-review-docs:@1 -prompt 3fa9c1d2e4b6 -choice 1")
 	fmt.Fprintln(w, "  mewla worker close -id mewla-worker-review-docs:@1 --force")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Retained services:")

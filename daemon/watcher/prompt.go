@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -74,6 +75,91 @@ func withChoicePrompt(signal classifier.ActivitySignal, pane string) classifier.
 		prompt.ID = classifier.PromptID(classifier.PromptChoice, screen.Tabs...)
 	}
 	signal.Prompt = &prompt
+	return signal
+}
+
+// PromptEnricher completes a choice prompt from the provider transcript: every
+// question with its options, and the tool call behind it. It must keep the
+// prompt's ID.
+type PromptEnricher func(sessionID string, prompt classifier.Prompt) classifier.Prompt
+
+// promptEnrichment caches one Session's enriched choice prompt, so the
+// transcript is read once per prompt and not on every poll.
+type promptEnrichment struct {
+	mu      sync.Mutex
+	enrich  PromptEnricher
+	entries map[string]enrichedPrompt
+}
+
+type enrichedPrompt struct {
+	promptID  string
+	questions []classifier.PromptQuestion
+	callID    string
+	triedAt   time.Time
+}
+
+// promptEnrichRetry spaces the transcript reads for a prompt the transcript
+// could not yet complete.
+const promptEnrichRetry = 2 * time.Second
+
+// SetPromptEnricher installs where a choice prompt gets the questions the
+// pane shows one tab at a time.
+func (w *Watcher) SetPromptEnricher(enrich PromptEnricher) {
+	if w == nil {
+		return
+	}
+	w.promptEnrich.mu.Lock()
+	w.promptEnrich.enrich = enrich
+	w.promptEnrich.entries = nil
+	w.promptEnrich.mu.Unlock()
+}
+
+// enrichChoicePrompt gives a choice prompt every question of its tool call.
+// The pane stays the authority on which tabs are answered.
+func (w *Watcher) enrichChoicePrompt(sessionID string, signal classifier.ActivitySignal) classifier.ActivitySignal {
+	prompt := signal.Prompt
+	if prompt == nil || prompt.Kind != classifier.PromptChoice {
+		return signal
+	}
+	state := &w.promptEnrich
+	state.mu.Lock()
+	enrich := state.enrich
+	entry, cached := state.entries[sessionID]
+	state.mu.Unlock()
+	if enrich == nil {
+		return signal
+	}
+	if !cached || entry.promptID != prompt.ID {
+		entry = enrichedPrompt{promptID: prompt.ID}
+		cached = false
+	}
+	if !cached || (len(entry.questions) == 0 && time.Since(entry.triedAt) >= promptEnrichRetry) {
+		enriched := enrich(sessionID, *prompt)
+		entry = enrichedPrompt{promptID: prompt.ID, triedAt: time.Now()}
+		if enriched.CallID != "" {
+			// Only a prompt tied to its tool call is the transcript's.
+			entry.questions, entry.callID = enriched.Questions, enriched.CallID
+		}
+		state.mu.Lock()
+		if state.entries == nil {
+			state.entries = map[string]enrichedPrompt{}
+		}
+		state.entries[sessionID] = entry
+		state.mu.Unlock()
+	}
+	if len(entry.questions) == 0 {
+		return signal
+	}
+	merged := *prompt
+	merged.CallID = entry.callID
+	merged.Questions = make([]classifier.PromptQuestion, len(entry.questions))
+	for index, question := range entry.questions {
+		if index < len(prompt.Questions) && len(prompt.Questions) > 1 {
+			question.Answered = prompt.Questions[index].Answered
+		}
+		merged.Questions[index] = question
+	}
+	signal.Prompt = &merged
 	return signal
 }
 

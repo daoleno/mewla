@@ -544,9 +544,8 @@ function ChatDemo() {
             <>
               {showChoice ? (
                 <ClaudeChoiceCard
-                  callId="demo-choice"
+                  promptKey="demo-choice"
                   choice={SCREENSHOT_CHOICE_FIXTURE}
-                  live
                   connected
                   chrome={chrome}
                   maxHeight={choiceCardMaxHeight({

@@ -88,16 +88,18 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
   // Captured by driving the flat card (the one before the one-question-at-a-time
   // rewrite) through the same answers: Cloud SQL, Invite only, US East + Asia +
   // Other "Oceania", Pro. The wizard must send these exact answers.
-  const FOUR_QUESTION_PAYLOAD = {
-    call_id: "toolu_4",
-    answers: [{ selected: [1] }, { selected: [0] }, { selected: [0, 2], other: "Oceania" }, { selected: [1] }],
-  };
+  const FOUR_QUESTION_ANSWERS = [
+    { selected: [1], other: "" },
+    { selected: [0], other: "" },
+    { selected: [0, 2], other: "Oceania" },
+    { selected: [1], other: "" },
+  ];
 
-  function render(live: boolean, onSubmit: (payload: any) => Promise<void>, shown: any = choice, callId = "toolu_1", connected = true) {
+  function render(onSubmit: (answers: any) => Promise<void>, shown: any = choice, promptKey = "toolu_1", connected = true) {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
-        <ClaudeChoiceCard callId={callId} choice={shown} live={live} connected={connected} chrome={chrome} onSubmit={onSubmit} />,
+        <ClaudeChoiceCard promptKey={promptKey} choice={shown} connected={connected} chrome={chrome} onSubmit={onSubmit} />,
       );
     });
     const all = () => renderer.root.findAllByType("Pressable" as any);
@@ -117,10 +119,9 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     return { renderer, pressable, optionPressable, tab, inputs, text, press };
   }
 
-  test("a 4-question prompt sends the same payload the flat card sent", async () => {
+  test("a 4-question prompt sends the same answers the flat card sent", async () => {
     const payloads: any[] = [];
     const { renderer, pressable, optionPressable, inputs, press, text } = render(
-      true,
       async (payload) => {
         payloads.push(payload);
       },
@@ -141,12 +142,12 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     expect(text()).toContain("Review your answers");
     expect(pressable("Send answer").props.disabled).toBe(false);
     await press(pressable("Send answer"));
-    expect(payloads).toEqual([FOUR_QUESTION_PAYLOAD]);
+    expect(payloads).toEqual([FOUR_QUESTION_ANSWERS]);
     await act(async () => renderer.unmount());
   });
 
   test("a single-select pick moves to the next question and the last one to review", async () => {
-    const { renderer, optionPressable, press, text } = render(true, async () => {});
+    const { renderer, optionPressable, press, text } = render(async () => {});
     expect(text()).toContain("Which fruit?");
     expect(text()).not.toContain("Which colors?");
     await press(optionPressable("Banana"));
@@ -157,7 +158,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
 
   test("going back and changing an answer keeps the other answers", async () => {
     const payloads: any[] = [];
-    const { renderer, pressable, optionPressable, tab, press, text } = render(true, async (payload) => {
+    const { renderer, pressable, optionPressable, tab, press, text } = render(async (payload) => {
       payloads.push(payload);
     });
     await press(optionPressable("Banana"));
@@ -175,12 +176,12 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     await press(pressable("Next question"));
     await press(pressable("Next question"));
     await press(pressable("Send answer"));
-    expect(payloads).toEqual([{ call_id: "toolu_1", answers: [{ selected: [0] }, { selected: [2] }] }]);
+    expect(payloads).toEqual([[{ selected: [0], other: "" }, { selected: [2], other: "" }]]);
     await act(async () => renderer.unmount());
   });
 
   test("tabs show which questions are answered and the review says what is missing", async () => {
-    const { renderer, pressable, optionPressable, tab, press, text } = render(true, async () => {});
+    const { renderer, pressable, optionPressable, tab, press, text } = render(async () => {});
     expect(tab("Fruit").props.accessibilityLabel).toBe("Fruit, not answered");
     await press(optionPressable("Apple"));
     expect(tab("Fruit").props.accessibilityLabel).toBe("Fruit, answered");
@@ -198,7 +199,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
   });
 
   test("review rows jump to their question", async () => {
-    const { renderer, optionPressable, tab, press, text } = render(true, async () => {});
+    const { renderer, optionPressable, tab, press, text } = render(async () => {});
     await press(optionPressable("Apple"));
     await press(optionPressable("Red"));
     await press(tab("Review"));
@@ -214,7 +215,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
   });
 
   test("multi-select toggles checkboxes and Next only opens once something is chosen", async () => {
-    const { renderer, pressable, optionPressable, press, text } = render(true, async () => {});
+    const { renderer, pressable, optionPressable, press, text } = render(async () => {});
     await press(optionPressable("Apple"));
     expect(optionPressable("Red").props.accessibilityRole).toBe("checkbox");
     expect(pressable("Next question").props.disabled).toBe(true);
@@ -233,7 +234,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
 
   test("Other is an inline row: typing selects it, an empty Other is unanswered", async () => {
     const payloads: any[] = [];
-    const { renderer, pressable, optionPressable, tab, inputs, press, text } = render(true, async (payload) => {
+    const { renderer, pressable, optionPressable, tab, inputs, press, text } = render(async (payload) => {
       payloads.push(payload);
     });
     expect(optionPressable("Apple").props.accessibilityRole).toBe("radio");
@@ -250,9 +251,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     await press(optionPressable("Green"));
     await press(pressable("Next question"));
     await press(pressable("Send answer"));
-    expect(payloads).toEqual([
-      { call_id: "toolu_1", answers: [{ selected: [], other: "Mango; ripe" }, { selected: [1] }] },
-    ]);
+    expect(payloads).toEqual([[{ selected: [], other: "Mango; ripe" }, { selected: [1], other: "" }]]);
     // Picking a listed option afterwards replaces Other.
     await press(tab("Fruit"));
     await press(optionPressable("Apple"));
@@ -262,7 +261,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
 
   test("shows the daemon's refusal and keeps the draft for retry", async () => {
     let attempts = 0;
-    const { renderer, pressable, optionPressable, press, text } = render(true, async () => {
+    const { renderer, pressable, optionPressable, press, text } = render(async () => {
       attempts += 1;
       throw new Error("The Terminal is not showing this question.");
     });
@@ -277,25 +276,45 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     await act(async () => renderer.unmount());
   });
 
-  test("stays answerable when the Session list has not confirmed the prompt", async () => {
+  test("a card has no instructions to use the Terminal", async () => {
+    const { renderer, text } = render(async () => {});
+    expect(text()).not.toMatch(/terminal/i);
+    expect(text()).not.toContain("Waiting for your answer");
+    expect(text()).not.toContain("Choose any");
+    await act(async () => renderer.unmount());
+  });
+
+  test("a two-question prompt with a multi-select answers by tapping alone", async () => {
     const payloads: any[] = [];
-    const { renderer, pressable, optionPressable, press, text } = render(false, async (payload) => {
-      payloads.push(payload);
+    const { renderer, pressable, optionPressable, tab, press } = render(async (answers) => {
+      payloads.push(answers);
     });
-    expect(optionPressable("Apple").props.disabled).toBe(false);
-    expect(text()).toContain("Waiting for your answer");
-    expect(text()).toContain("checked when you send");
-    await press(optionPressable("Apple"));
+    await press(tab("Colors"));
     await press(optionPressable("Red"));
+    await press(optionPressable("Blue"));
+    await press(tab("Fruit"));
+    await press(optionPressable("Apple")); // single-select moves on to Colors
     await press(pressable("Next question"));
-    expect(pressable("Send answer").props.disabled).toBe(false);
     await press(pressable("Send answer"));
-    expect(payloads).toEqual([{ call_id: "toolu_1", answers: [{ selected: [0] }, { selected: [0] }] }]);
+    expect(payloads).toEqual([[{ selected: [0], other: "" }, { selected: [0, 2], other: "" }]]);
+    await act(async () => renderer.unmount());
+  });
+
+  test("keeps the draft while the same question set is re-rendered with a new choice object", async () => {
+    const { renderer, optionPressable, tab, press, text } = render(async () => {});
+    await press(optionPressable("Apple"));
+    await act(async () => {
+      renderer.update(
+        <ClaudeChoiceCard promptKey="toolu_1" choice={{ ...choice }} connected chrome={chrome} onSubmit={async () => {}} />,
+      );
+    });
+    expect(tab("Fruit").props.accessibilityLabel).toBe("Fruit, answered");
+    expect(text()).toContain("Which colors?");
     await act(async () => renderer.unmount());
   });
 
   test("is read-only while disconnected, but can be browsed", async () => {
-    const { renderer, pressable, optionPressable, tab, press, text } = render(true, async () => {}, choice, "toolu_1", false);
+    const { renderer, pressable, optionPressable, tab, press, text } = render(async () => {}, choice, "toolu_1", false);
     expect(optionPressable("Apple").props.disabled).toBe(true);
     expect(text()).toContain("Reconnecting");
     await press(tab("Review"));
@@ -305,12 +324,12 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
   });
 
   test("a new tool call starts over at the first question", async () => {
-    const { renderer, optionPressable, press, text } = render(true, async () => {});
+    const { renderer, optionPressable, press, text } = render(async () => {});
     await press(optionPressable("Apple"));
     expect(text()).toContain("Which colors?");
     await act(async () => {
       renderer.update(
-        <ClaudeChoiceCard callId="toolu_2" choice={choice} live connected chrome={chrome} onSubmit={async () => {}} />,
+        <ClaudeChoiceCard promptKey="toolu_2" choice={choice} connected chrome={chrome} onSubmit={async () => {}} />,
       );
     });
     expect(text()).toContain("Which fruit?");
@@ -318,11 +337,11 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
   });
 
   test("caps its height when given a budget so it scrolls instead of passing under the header", async () => {
-    const { renderer } = render(true, async () => {});
+    const { renderer } = render(async () => {});
     expect(JSON.stringify(renderer.toJSON())).not.toContain("maxHeight");
     await act(async () => {
       renderer.update(
-        <ClaudeChoiceCard callId="toolu_1" choice={choice} live connected chrome={chrome} maxHeight={321} onSubmit={async () => {}} />,
+        <ClaudeChoiceCard promptKey="toolu_1" choice={choice} connected chrome={chrome} maxHeight={321} onSubmit={async () => {}} />,
       );
     });
     expect(JSON.stringify(renderer.toJSON())).toContain('"maxHeight":321');

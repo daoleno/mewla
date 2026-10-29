@@ -6,6 +6,7 @@ import {
   initialWorkerState,
   reconcileServerWorkers,
   normalizeApprovals,
+  normalizePrompt,
   type Worker,
 } from "./workers";
 
@@ -229,5 +230,91 @@ describe("normalizeApprovals", () => {
     ]);
     expect(normalizeApprovals(undefined)).toBeUndefined();
     expect(normalizeApprovals([])).toBeUndefined();
+  });
+});
+
+describe("normalizePrompt", () => {
+  test("keeps a menu prompt with its numbered options", () => {
+    expect(
+      normalizePrompt({
+        id: "p1",
+        kind: "permission",
+        provider: "claude",
+        title: "Bash command",
+        request: "touch x",
+        options: [
+          { number: 1, label: "Yes", selected: true },
+          { number: 2, label: "No", description: "Tell Claude why" },
+          { number: "3", label: "bad" },
+        ],
+      }),
+    ).toEqual({
+      id: "p1",
+      kind: "permission",
+      provider: "claude",
+      title: "Bash command",
+      request: "touch x",
+      call_id: undefined,
+      options: [
+        { number: 1, label: "Yes", description: undefined, selected: true },
+        { number: 2, label: "No", description: "Tell Claude why", selected: undefined },
+      ],
+    });
+  });
+
+  test("keeps a choice prompt's questions, including tabs that carry only a header", () => {
+    const prompt = normalizePrompt({
+      id: "c1",
+      kind: "choice",
+      provider: "claude",
+      title: "Question",
+      call_id: "toolu_1",
+      questions: [
+        { header: "Fruit", question: "Which fruit?", options: [{ number: 1, label: "Apple" }] },
+        { header: "Colors", multi_select: true, options: null },
+      ],
+    });
+    expect(prompt?.call_id).toBe("toolu_1");
+    expect(prompt?.questions?.map((q) => [q.header, q.question, q.multi_select, q.options.length])).toEqual([
+      ["Fruit", "Which fruit?", undefined, 1],
+      ["Colors", "", true, 0],
+    ]);
+  });
+
+  test("drops what cannot be answered", () => {
+    expect(normalizePrompt(undefined)).toBeUndefined();
+    expect(normalizePrompt({ id: "p", kind: "mystery", options: [{ number: 1, label: "A" }] })).toBeUndefined();
+    expect(normalizePrompt({ id: "p", kind: "plan", options: [] })).toBeUndefined();
+    expect(normalizePrompt({ kind: "plan", options: [{ number: 1, label: "A" }] })).toBeUndefined();
+    expect(normalizePrompt({ id: "p", kind: "choice", questions: [] })).toBeUndefined();
+  });
+
+  test("a new prompt on an otherwise unchanged Worker is not dropped as equal", () => {
+    const open = { id: "p1", kind: "plan", options: [{ number: 1, label: "Yes" }] };
+    const raw = { id: "w", name: "w", status: "blocked", summary: "s" };
+    let state = workerReducer(initialWorkerState, {
+      type: "UPSERT_SERVER_WORKERS",
+      serverId: "server",
+      serverName: "Server",
+      serverUrl: "https://server.test",
+      workers: [raw],
+    });
+    expect(state.workers[0].prompt).toBeUndefined();
+    state = workerReducer(state, {
+      type: "UPSERT_WORKER",
+      serverId: "server",
+      serverName: "Server",
+      serverUrl: "https://server.test",
+      worker: { ...raw, prompt: open },
+    });
+    expect(state.workers[0].prompt?.id).toBe("p1");
+    state = workerReducer(state, {
+      type: "UPSERT_WORKER",
+      serverId: "server",
+      serverName: "Server",
+      serverUrl: "https://server.test",
+      worker: raw,
+    });
+    expect(state.workers[0].prompt).toBeUndefined();
   });
 });

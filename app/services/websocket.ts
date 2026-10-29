@@ -2397,7 +2397,7 @@ export class WebSocketClient {
       {
         responseType: "choice_answered",
         timeoutMs: 30000,
-        timeout: "Timed out while answering. Check the Terminal.",
+        timeout: "Timed out while answering.",
         error: (payload) =>
           daemonRequestError(
             payload.message || "Could not send the answer.",
@@ -2405,6 +2405,41 @@ export class WebSocketClient {
           ),
         parse: (payload) =>
           Array.isArray(payload.answers) ? payload.answers : [],
+      },
+    );
+  }
+
+  /**
+   * Answer the blocking prompt open in a Session's terminal. The daemon checks
+   * that `prompt_id` is still the prompt on screen before it presses a key: a
+   * menu prompt is answered by its option `number`, a choice prompt by
+   * `answers` (one per question, zero-based option indexes plus free text).
+   * A prompt that has passed rejects with code `answer_prompt_gone`.
+   */
+  answerPrompt(
+    serverId: string,
+    workerId: string,
+    answer: {
+      prompt_id: string;
+      number?: number;
+      answers?: Array<{ selected: number[]; other: string }>;
+    },
+  ) {
+    return this.request<string>(
+      serverId,
+      "answer_prompt",
+      { worker_id: workerId, prompt_answer: answer },
+      {
+        responseType: "prompt_answered",
+        timeoutMs: 30000,
+        timeout: "Timed out while answering.",
+        error: (payload) =>
+          daemonRequestError(
+            payload.message || "Could not send the answer.",
+            payload.code,
+          ),
+        parse: (payload) =>
+          typeof payload.prompt_id === "string" ? payload.prompt_id : "",
       },
     );
   }

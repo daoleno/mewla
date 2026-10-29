@@ -7,7 +7,7 @@ import {
   useState,
   type SetStateAction,
 } from "react";
-import type { ConnectionState, WorkerApproval } from "../../store/workers";
+import type { ConnectionState, WorkerApproval, WorkerPrompt } from "../../store/workers";
 import {
   conversationChoicesEqual,
   type CodexConversation,
@@ -113,6 +113,8 @@ export type InterfaceChatWorkerInfo = {
   provider?: string;
   /** Decisions the agent is waiting on, as the daemon reports them. */
   approvals?: WorkerApproval[];
+  /** The blocking prompt open in the Session's terminal, as the daemon read it. */
+  prompt?: WorkerPrompt;
   name?: string;
   startedAt?: number;
   processId?: number;

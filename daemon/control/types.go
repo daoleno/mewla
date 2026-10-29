@@ -99,6 +99,13 @@ type Request struct {
 	// authorizes an approved action); worker_approve from Brain requires it.
 	ApprovalBasis string `json:"approval_basis,omitempty"`
 	OptionID      string `json:"option_id,omitempty"`
+	// PromptID names the pane prompt worker_answer is composed for. A menu
+	// prompt takes PromptChoice, the number of the option; a choice prompt
+	// takes PromptAnswers, a JSON array with one {"selected":[zero-based
+	// option indexes],"other":"text"} per question.
+	PromptID      string          `json:"prompt_id,omitempty"`
+	PromptChoice  int             `json:"prompt_choice,omitempty"`
+	PromptAnswers json.RawMessage `json:"prompt_answers,omitempty"`
 }
 
 // AgentEventRequest carries one agent hook call to the daemon. Payload is the
