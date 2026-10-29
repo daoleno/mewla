@@ -85,8 +85,9 @@ followed. For a Worker that Brain delegated (it has a Work and a turn;
    opens a turn for the request (`Watcher.OpenPromptTurn`: a prepared signal
    admission, no input sent) that the `needs_input` fact promotes. A stop is
    not the end of a signal turn (only the Worker's own report is), so there is
-   no second path for it. The Worker's older turn id is no longer current after
-   this; it ends up reported by Brain's next send or the stall supervisor. A
+   no second path for it. Answering the request settles that turn as done again, so Brain
+   reviews the result the Worker had reported (the request's blocked review
+   had taken its place); the Worker's older turn id is no longer current. A
    fact that does not block its turn is an error, and the approval then goes to
    the user.
 2. **Brain answers** with `mewla worker answer -id W -prompt P -choice N -basis
