@@ -26,16 +26,18 @@ var HookEvents = []string{
 // Payload is the part of a hook payload Mewla reads. Prompt text is hashed
 // and then dropped; it is never stored.
 type Payload struct {
-	SessionID      string          `json:"session_id"`
-	TranscriptPath string          `json:"transcript_path"`
-	HookEvent      string          `json:"hook_event_name"`
-	PromptID       string          `json:"prompt_id"`
-	Prompt         string          `json:"prompt"`
-	Source         string          `json:"source"`
-	ToolName       string          `json:"tool_name"`
-	ToolInput      json.RawMessage `json:"tool_input"`
-	Error          string          `json:"error"`
-	ErrorDetails   string          `json:"error_details"`
+	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
+	HookEvent      string `json:"hook_event_name"`
+	PromptID       string `json:"prompt_id"`
+	// AgentID names the sub-agent a hook fired for; the Worker's own agent has none.
+	AgentID      string          `json:"agent_id"`
+	Prompt       string          `json:"prompt"`
+	Source       string          `json:"source"`
+	ToolName     string          `json:"tool_name"`
+	ToolInput    json.RawMessage `json:"tool_input"`
+	Error        string          `json:"error"`
+	ErrorDetails string          `json:"error_details"`
 }
 
 // Parse decodes a hook payload.
@@ -55,7 +57,7 @@ func Parse(raw []byte) (Payload, error) {
 // through Decision.
 func Map(workerID string, p Payload, now time.Time) []agentevents.Event {
 	event := func(kind agentevents.EventKind) agentevents.Event {
-		return agentevents.Event{WorkerID: workerID, Kind: kind, At: now, TurnID: p.PromptID}
+		return agentevents.Event{WorkerID: workerID, Kind: kind, At: now, TurnID: p.PromptID, AgentID: p.AgentID}
 	}
 	switch p.HookEvent {
 	case "SessionStart":
@@ -123,6 +125,7 @@ func Approval(id string, p Payload) agentevents.Approval {
 	return agentevents.Approval{
 		ID:             id,
 		ConversationID: p.SessionID,
+		AgentID:        p.AgentID,
 		Kind:           "permission",
 		Tool:           p.ToolName,
 		Summary:        summarizeToolInput(p.ToolName, p.ToolInput),

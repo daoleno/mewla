@@ -141,10 +141,13 @@ type Approval struct {
 	// ConversationID is the conversation that asked. An answer resolves the
 	// request only while the Worker is still in that conversation.
 	ConversationID string
-	Kind           string // command, file_change, permission, question
-	Tool           string
-	Summary        string
-	Options        []ApprovalOption
+	// AgentID is the sub-agent that asked, "" for the Worker's own agent. Only
+	// that agent moving on settles the request.
+	AgentID string
+	Kind    string // command, file_change, permission, question
+	Tool    string
+	Summary string
+	Options []ApprovalOption
 }
 
 // ApprovalOption is one answer the agent offers, with the agent's own id.
@@ -161,6 +164,8 @@ type Event struct {
 	Kind     EventKind
 	At       time.Time
 
+	// AgentID is the sub-agent the event came from, "" for the Worker's own.
+	AgentID string
 	// TurnID is the agent's identity for the turn the event belongs to.
 	TurnID string
 	Status TurnStatus
