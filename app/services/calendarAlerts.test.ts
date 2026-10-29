@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  calendarTriggerParts,
   calendarAlertAt,
   calendarAlertBody,
   calendarAlertPlan,
@@ -128,5 +129,16 @@ describe("open calendar alerts (the card)", () => {
     expect(openCalendarAlerts([old], ms("2026-07-14T16:31:00Z"))).toEqual([]);
     expect(openCalendarAlerts([{ ...old, status: "cancelled" }], fired + 1000)).toEqual([]);
     expect(openCalendarAlerts([{ ...old, owner: "watch_brief" }], fired + 1000)).toEqual([]);
+  });
+});
+
+describe("iOS calendar trigger parts", () => {
+  test("wall clock in the zone the alert was armed in", () => {
+    expect(calendarTriggerParts(Date.parse("2026-07-14T15:20:05Z"), "Asia/Shanghai")).toEqual({
+      year: 2026, month: 7, day: 14, hour: 23, minute: 20, second: 5, timezone: "Asia/Shanghai",
+    });
+    expect(calendarTriggerParts(Date.parse("2026-07-14T23:59:00Z"), "America/New_York")).toEqual({
+      year: 2026, month: 7, day: 14, hour: 19, minute: 59, second: 0, timezone: "America/New_York",
+    });
   });
 });
