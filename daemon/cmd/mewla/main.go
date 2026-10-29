@@ -723,6 +723,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	calendarScheduler := calendar.NewScheduler(calendarStore, &calendar.WorkRunner{Store: workStore, Launcher: launcher, Watcher: w, Brain: brainService})
 	controlHandler.calendarScheduler = calendarScheduler
+	calendarScheduler.Alert(func(item calendar.Item, alertAt time.Time) error {
+		err := pusher.NotifyCalendarAlert(push.CalendarAlert{
+			ID: item.ID, Kind: string(item.Kind), Title: item.Title, Notes: item.Notes,
+			At: item.NextAt, AlertAt: alertAt, Now: time.Now(),
+		})
+		if errors.Is(err, push.ErrNoRegistration) {
+			return calendar.ErrNoAlertTarget
+		}
+		return err
+	})
 	srv.SetCalendar(calendarStore, calendarScheduler)
 	controlServer := &control.Server{
 		Path:    controlPath,
@@ -1189,7 +1199,7 @@ func runBrainCommand(args []string, stderr io.Writer) error {
 
 func runCalendarCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: mewla calendar <list|get|create|update|cancel|run> [flags]")
+		fmt.Fprintln(stderr, "Usage: mewla calendar <list|get|create|update|cancel|run|snooze|done> [flags]")
 		return flag.ErrHelp
 	}
 	switch args[0] {
@@ -1201,6 +1211,10 @@ func runCalendarCommand(args []string, stderr io.Writer) error {
 		return runCalendarID("calendar_cancel", args[1:], stderr, true)
 	case "run":
 		return runCalendarID("calendar_run", args[1:], stderr, false)
+	case "done":
+		return runCalendarID("calendar_done", args[1:], stderr, false)
+	case "snooze":
+		return runCalendarSnooze(args[1:], stderr)
 	case "create":
 		return runCalendarWrite(false, args[1:], stderr)
 	case "update":
@@ -1246,12 +1260,36 @@ func runCalendarID(requestType string, args []string, stderr io.Writer, withRevi
 	return writeControlResponse(os.Stdout, resp, cfg.json)
 }
 
+func runCalendarSnooze(args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("mewla calendar snooze", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg := cliConfig{json: true}
+	req := control.Request{Type: "calendar_snooze"}
+	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon control socket")
+	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
+	fs.StringVar(&req.ID, "id", "", "calendar item id")
+	fs.IntVar(&req.Minutes, "minutes", 5, "minutes until the next alert")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 || strings.TrimSpace(req.ID) == "" {
+		return fmt.Errorf("calendar item -id is required")
+	}
+	resp, err := callControl(cfg, req)
+	if err != nil {
+		return err
+	}
+	return writeControlResponse(os.Stdout, resp, cfg.json)
+}
+
 func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla calendar create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
 	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, summary, instruction, cwd, sourceThread string
 	var revision int64
+	var lead int
+	fs.IntVar(&lead, "lead", -1, "minutes before an event starts or a deadline falls due that the phone alerts (default: event 10, deadline 30; a reminder alerts at its time)")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon control socket")
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&itemJSON, "item-json", "", "complete calendar item JSON (required for update)")
@@ -1304,6 +1342,9 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 		default:
 			item.DueAt = &at
 		}
+	}
+	if lead >= 0 {
+		item.AlertLeadMinutes = &lead
 	}
 	if item.Kind == calendar.KindScheduledAction && strings.TrimSpace(item.SourceThreadID) == "" {
 		return fmt.Errorf("scheduled_action requires -source-thread (source_thread_id)")

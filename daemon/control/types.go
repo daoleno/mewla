@@ -76,6 +76,7 @@ type Request struct {
 	Force                bool                                   `json:"force,omitempty"`
 	ID                   string                                 `json:"id,omitempty"`
 	Revision             int64                                  `json:"revision,omitempty"`
+	Minutes              int                                    `json:"minutes,omitempty"`
 	Actor                string                                 `json:"actor,omitempty"`
 	Reason               string                                 `json:"reason,omitempty"`
 	EnrollmentID         string                                 `json:"enrollment_id,omitempty"`

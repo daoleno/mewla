@@ -67,6 +67,9 @@ type registration struct {
 	deviceID  string
 	token     string
 	serverRef string // Opaque client-side server identifier for notification routing
+	platform  string // "android" or "ios" once the device said so
+	// quiet is a device that turned strong calendar alerts off.
+	quiet bool
 }
 
 // New creates a push notification client.
@@ -107,6 +110,20 @@ func (c *Client) ForgetDevice(deviceID string) {
 	delete(c.liveDevices, deviceID)
 }
 
+// SetDevice records what a device said about itself in its latest
+// registration: its platform ("android" or "ios") and whether it wants strong
+// calendar alerts. It does nothing for a device that has no token yet.
+func (c *Client) SetDevice(deviceID, platform string, strongAlerts bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r, ok := c.registrations[deviceID]
+	if !ok {
+		return
+	}
+	r.platform, r.quiet = strings.ToLower(strings.TrimSpace(platform)), !strongAlerts
+	c.registrations[deviceID] = r
+}
+
 // HasToken returns true if any device has a push token registered.
 func (c *Client) HasToken() bool {
 	c.mu.RLock()
@@ -121,6 +138,15 @@ type Message struct {
 	Data     map[string]string `json:"data,omitempty"`
 	Priority string            `json:"priority,omitempty"` // "high" or "default"
 	Sound    string            `json:"sound,omitempty"`
+	// ChannelID overrides the Android channel the notification is filed in.
+	ChannelID string `json:"-"`
+	// InterruptionLevel is iOS's: "time-sensitive" breaks through Focus.
+	InterruptionLevel string `json:"-"`
+	// DataOnly sends no title, body, sound or channel, so the phone shows
+	// nothing by itself and its app code posts the notification (Android).
+	// Title and Body travel in data. TTL, when set, is in seconds.
+	DataOnly bool `json:"-"`
+	TTL      int  `json:"-"`
 }
 
 // Send sends a push notification to every registered device.
@@ -256,10 +282,31 @@ func (c *Client) submit(token string, msg Message, receipt *receiptClaim) (submi
 		"body":  msg.Body,
 		"sound": "default",
 		// The channel the app creates for alerts (importance max).
-		"channelId": "mewla-agents",
+		"channelId": firstNonEmpty(msg.ChannelID, "mewla-agents"),
+	}
+	if msg.DataOnly {
+		// No channelId either: Expo turns it into an FCM notification block and
+		// a phone whose app is not running would show that instead of waking
+		// the app's service (see SendLive).
+		delete(payload, "title")
+		delete(payload, "body")
+		delete(payload, "sound")
+		delete(payload, "channelId")
+		data := make(map[string]string, len(msg.Data)+2)
+		for key, value := range msg.Data {
+			data[key] = value
+		}
+		data["title"], data["body"] = msg.Title, msg.Body
+		msg.Data = data
 	}
 	if msg.Priority != "" {
 		payload["priority"] = msg.Priority
+	}
+	if msg.InterruptionLevel != "" {
+		payload["interruptionLevel"] = msg.InterruptionLevel
+	}
+	if msg.TTL > 0 {
+		payload["ttl"] = msg.TTL
 	}
 	if msg.Data != nil {
 		payload["data"] = msg.Data
