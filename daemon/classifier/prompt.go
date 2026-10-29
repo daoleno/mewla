@@ -182,6 +182,39 @@ func menuRequest(lines []string, menuStart int) (title, request string) {
 	return title, request
 }
 
+var (
+	// A dialog Claude will refuse by itself says so, with a clock that ticks:
+	// "Claude Code will automatically deny this request in about 28 seconds".
+	autoDenyLineRe = regexp.MustCompile(`(?i)auto(?:matically)?[ -]?(?:deny|denied|denies|reject|dismiss|cancel)`)
+	// An elapsed or remaining time in brackets: "Running… (12s)", "(1m 5s)".
+	clockInBracketsRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?\s*[)\]]`)
+	// A spinner or progress glyph that leads a line and turns as time passes.
+	spinnerRunes = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✻✶✳✢✽·◐◓◑◒"
+)
+
+// withoutVolatileLines drops the lines of a prompt's text that only count time.
+func withoutVolatileLines(text string) string {
+	lines := strings.Split(text, "\n")
+	kept := lines[:0:0]
+	for _, line := range lines {
+		if !autoDenyLineRe.MatchString(line) {
+			kept = append(kept, line)
+		}
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+// stableText is what a prompt's identity may rest on: its words without the
+// clocks and spinners that change while it stays open.
+func stableText(text string) string {
+	lines := strings.Split(text, "\n")
+	for index, line := range lines {
+		line = strings.TrimLeft(line, " \t"+spinnerRunes)
+		lines[index] = clockInBracketsRe.ReplaceAllString(line, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func trimRunes(text string, limit int) string {
 	runes := []rune(text)
 	if len(runes) <= limit {
@@ -229,10 +262,11 @@ func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 		return Prompt{}, false
 	}
 	title, request := menuRequest(body, start)
+	request = withoutVolatileLines(request)
 	labels := make([]string, 0, len(options)+2)
-	labels = append(labels, request)
+	labels = append(labels, stableText(request))
 	for _, option := range options {
-		labels = append(labels, option.Label)
+		labels = append(labels, stableText(option.Label))
 	}
 	return Prompt{
 		ID:       PromptID(kind, labels...),

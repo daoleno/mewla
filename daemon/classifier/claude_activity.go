@@ -28,7 +28,7 @@ func (a *ClaudeActivityAdapter) Match(in ActivityInput) bool {
 }
 
 func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
-	pane := latestProviderPaneWindow(in.PaneContent, "claude code")
+	pane := latestProviderPaneWindow(withoutAutoDenyMention(in.PaneContent), "claude code")
 	// Claude's selection prompts sit at the bottom of the pane; only the
 	// footer region proves one is open now.
 	tail := claudePromptTail(pane, 8)
@@ -86,6 +86,23 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 }
 
 // claudePromptTail returns the last n non-blank lines, trimmed.
+// withoutAutoDenyMention keeps the notice "Claude Code will automatically deny
+// this request in ..." from passing for the banner that starts the latest
+// window of the pane: it sits inside an open dialog, and the request above it
+// would be cut away.
+func withoutAutoDenyMention(content string) string {
+	if !autoDenyLineRe.MatchString(content) {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	for index, line := range lines {
+		if autoDenyLineRe.MatchString(line) {
+			lines[index] = strings.NewReplacer("Claude Code", "this agent", "claude code", "this agent").Replace(line)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func claudePromptTail(pane string, n int) []string {
 	lines := strings.Split(strings.ReplaceAll(pane, "\r\n", "\n"), "\n")
 	var tail []string

@@ -1338,8 +1338,7 @@ func (owner *sessionInputOwner) reconcileSubmissionActivity(
 			// it must not be promoted into an ownership mismatch while that
 			// control signal is still in flight.
 			if turn.SignalProtocol && !TurnTerminal(snapshot.Status) {
-				decision.ExistingTurn = snapshot
-				return decision, nil
+				return steerLiveSignalTurn(decision, snapshot, boundProvider), nil
 			}
 			return decision, fmt.Errorf("provider completion did not settle the canonical turn")
 		}
@@ -1348,8 +1347,7 @@ func (owner *sessionInputOwner) reconcileSubmissionActivity(
 	case "failed", "interrupted", "cancelled":
 		if snapshot.Status != TurnFailed {
 			if turn.SignalProtocol && !TurnTerminal(snapshot.Status) {
-				decision.ExistingTurn = snapshot
-				return decision, nil
+				return steerLiveSignalTurn(decision, snapshot, boundProvider), nil
 			}
 			return decision, fmt.Errorf("provider failure did not settle the canonical turn")
 		}
@@ -1358,6 +1356,21 @@ func (owner *sessionInputOwner) reconcileSubmissionActivity(
 	default:
 		return decision, fmt.Errorf("current provider activity has no authoritative lifecycle status")
 	}
+}
+
+// steerLiveSignalTurn names the Attempt a send must continue when the provider's
+// Activity has settled but the Worker has not reported its signal turn: that
+// turn still owns the Work's one active Attempt (the Worker's own report ends
+// it), so a Fresh admission is refused by the lifecycle ("Work already has an
+// active Attempt"). The send steers that exact Attempt, from the settled
+// Activity as baseline; the prompt-carried signal resolves the new turn.
+func steerLiveSignalTurn(decision delegatedReuseDecision, snapshot TurnSnapshot, provider ProviderActivityObservation) delegatedReuseDecision {
+	decision.ExistingTurn = snapshot
+	if baseline := strings.TrimSpace(provider.ID); baseline != "" {
+		decision.Mode = delegatedReuseConditionalSteer
+		decision.BaselineActivity = baseline
+	}
+	return decision
 }
 
 func providerActivityTerminal(status string) bool {

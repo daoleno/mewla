@@ -87,7 +87,18 @@ followed. For a Worker that Brain delegated (it has a Work and a turn;
    not the end of a signal turn (only the Worker's own report is), so there is
    no second path for it. Answering the request settles that turn as done again, so Brain
    reviews the result the Worker had reported (the request's blocked review
-   had taken its place); the Worker's older turn id is no longer current. A
+   had taken its place); the Worker's older turn id is no longer current, and a
+   report on it fails with "turn identity does not match the current delegated
+   prompt". The pane gate does the same for a dialog no hook holds (a Worker a
+   background result woke into an AskUserQuestion after its turn ended): once the
+   same dialog has stood three seconds, `syncPromptGate` opens the turn through
+   `OpenPromptTurn` on the Work found by `SessionWorkLedger`, and settles it when
+   the dialog goes away. A prompt's id rests on its words, not on the clocks on
+   it (the "will automatically deny this request in …" notice, bracketed times,
+   spinners), so it survives the countdown. A send while the provider's Activity
+   has settled but the Worker has not reported its signal turn continues that
+   turn's Attempt (a Fresh admission would be refused as "Work already has an
+   active Attempt"). A
    fact that does not block its turn is an error, and the approval then goes to
    the user.
 2. **Brain answers** with `mewla worker answer -id W -prompt P -choice N -basis
