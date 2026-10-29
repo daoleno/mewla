@@ -615,3 +615,21 @@ func TestDescribeWithoutToolListsEveryTool(t *testing.T) {
 		t.Fatal("unknown tool accepted")
 	}
 }
+
+func TestMCPDiscoveryKeepsTheFullToolDescription(t *testing.T) {
+	long := strings.Repeat("第二半段说明 full text. ", 150)
+	if len(long) < 3000 {
+		t.Fatal("fixture description too short")
+	}
+	server := mcp.NewServer(&mcp.Implementation{Name: "Fixture", Version: "1"}, nil)
+	addFixtureTool(server, "generate_voice", long, &atomic.Int32{})
+	m, id := mcpFixture(t, server)
+	tool := mustHandle(t, m, Request{Action: "describe", ID: id, Tool: "generate_voice"}).Tool
+	if tool == nil || tool.Description != long {
+		t.Fatalf("describe cut the description: %d of %d bytes", len(tool.Description), len(long))
+	}
+	list := mustHandle(t, m, Request{Action: "describe", ID: id}).Matches
+	if len(list) != 1 || list[0].Description != long {
+		t.Fatal("describe list cut the description")
+	}
+}
