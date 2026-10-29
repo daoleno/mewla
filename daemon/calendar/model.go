@@ -75,7 +75,20 @@ type Item struct {
 	// Owner names the part of Mewla that created and acts on this item. Only
 	// the daemon sets it; clients cannot create or change it. An owned item
 	// is an ordinary reminder the user can move, repeat differently or cancel.
-	Owner         string     `json:"owner,omitempty"`
+	Owner string `json:"owner,omitempty"`
+	// AlertLeadMinutes is how long before an event starts or a deadline falls
+	// due the phone is alerted; nil means the kind's default (see AlertLead).
+	// A reminder alerts at its time. Brain sets it from chat.
+	AlertLeadMinutes *int `json:"alert_lead_minutes,omitempty"`
+	// SnoozedUntil moves the next alert to that instant. Only Snooze sets it;
+	// the alert it fires, an edit or the next occurrence clears it.
+	SnoozedUntil *time.Time `json:"snoozed_until,omitempty"`
+	// AlertedAt is the alert instant the daemon last fired and AckedAt the
+	// last one the user acted on (Done, Snooze or an edit). An alert is open
+	// while AlertedAt is later than AckedAt: every phone shows its card until
+	// one of them acts. Only the daemon sets both.
+	AlertedAt     *time.Time `json:"alerted_at,omitempty"`
+	AckedAt       *time.Time `json:"acked_at,omitempty"`
 	FailureReason string     `json:"failure_reason,omitempty"`
 	NextAt        time.Time  `json:"next_at"`
 	CreatedAt     time.Time  `json:"created_at"`
@@ -158,6 +171,9 @@ func (i Item) Validate() error {
 	default:
 		return fmt.Errorf("invalid recurrence %q", i.Recurrence)
 	}
+	if i.AlertLeadMinutes != nil && (*i.AlertLeadMinutes < 0 || *i.AlertLeadMinutes > MaxAlertLeadMinutes) {
+		return fmt.Errorf("alert_lead_minutes must be between 0 and %d", MaxAlertLeadMinutes)
+	}
 	for name, value := range map[string]*time.Time{
 		"start_at": i.StartAt, "end_at": i.EndAt, "notify_at": i.NotifyAt, "due_at": i.DueAt,
 	} {
@@ -204,6 +220,13 @@ func cloneItem(item Item) Item {
 	item.NotifyAt = cloneTime(item.NotifyAt)
 	item.DueAt = cloneTime(item.DueAt)
 	item.CancelledAt = cloneTime(item.CancelledAt)
+	item.SnoozedUntil = cloneTime(item.SnoozedUntil)
+	item.AlertedAt = cloneTime(item.AlertedAt)
+	item.AckedAt = cloneTime(item.AckedAt)
+	if item.AlertLeadMinutes != nil {
+		lead := *item.AlertLeadMinutes
+		item.AlertLeadMinutes = &lead
+	}
 	item.Runs = append([]Run(nil), item.Runs...)
 	for index := range item.Runs {
 		item.Runs[index].FinishedAt = cloneTime(item.Runs[index].FinishedAt)

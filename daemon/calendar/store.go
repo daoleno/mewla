@@ -281,6 +281,7 @@ func (s *Store) create(item Item) (Item, error) {
 	item.CreatedAt, item.UpdatedAt, item.Revision = now, now, 1
 	item.Status, item.NextAt = StatusScheduled, item.TriggerAt()
 	item.Runs = nil
+	item.SnoozedUntil, item.AlertedAt, item.AckedAt = nil, nil, nil
 	s.items[item.ID] = item
 	if err := s.persistLocked(); err != nil {
 		delete(s.items, item.ID)
@@ -321,6 +322,17 @@ func (s *Store) Update(item Item, expectedRevision int64) (Item, error) {
 	item.Runs = append([]Run(nil), current.Runs...)
 	item.Status, item.NextAt = StatusScheduled, item.TriggerAt()
 	item.CancelledAt, item.FailureReason = nil, ""
+	// The alert state is the daemon's, whatever the client sent back. Moving
+	// the item drops its snooze and answers the alert it had open: the user is
+	// already looking at it.
+	item.SnoozedUntil, item.AlertedAt, item.AckedAt = current.SnoozedUntil, current.AlertedAt, current.AckedAt
+	if !item.NextAt.Equal(current.NextAt) {
+		item.SnoozedUntil = nil
+		if item.AlertedAt != nil {
+			acked := *item.AlertedAt
+			item.AckedAt = &acked
+		}
+	}
 	s.items[item.ID] = item
 	if err := s.persistLocked(); err != nil {
 		s.items[item.ID] = current
@@ -401,6 +413,128 @@ func (s *Store) setStatusLocked(id string, status Status, reason string) (Item, 
 	}
 	s.broadcast(item)
 	return cloneItem(item), nil
+}
+
+// MarkAlerted records that the alert due at alertAt fired, which opens it for
+// the user and spends a snooze. It does nothing, reporting false, when the
+// item no longer alerts at that instant (it was edited, snoozed or cancelled
+// since alertAt was read), so a stale pass never marks a later alert as sent.
+func (s *Store) MarkAlerted(id string, alertAt time.Time) (Item, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.items[id]
+	if !ok {
+		return Item{}, false, ErrNotFound
+	}
+	pending, due := item.AlertPending()
+	if !due || !pending.Equal(alertAt) {
+		return cloneItem(item), false, nil
+	}
+	return s.updateLocked(id, func(item *Item) {
+		fired := alertAt
+		item.AlertedAt, item.SnoozedUntil = &fired, nil
+	})
+}
+
+// Snooze moves the item's next alert to until and answers the alert that is
+// open. A finished or cancelled item has nothing to snooze.
+func (s *Store) Snooze(id string, until time.Time) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.items[id]
+	if !ok {
+		return Item{}, ErrNotFound
+	}
+	if !until.After(s.now()) {
+		return Item{}, fmt.Errorf("snooze must end in the future")
+	}
+	if item.Owner != "" || item.Kind == KindScheduledAction {
+		return Item{}, fmt.Errorf("this item does not alert")
+	}
+	switch item.Status {
+	case StatusScheduled, StatusWaiting, StatusRunning:
+	default:
+		return Item{}, fmt.Errorf("a %s item cannot be snoozed", item.Status)
+	}
+	updated, _, err := s.updateLocked(id, func(item *Item) {
+		until := until.UTC()
+		item.SnoozedUntil = &until
+		item.AckedAt = cloneTimePtr(item.AlertedAt)
+	})
+	return updated, err
+}
+
+// Done answers the item's open alert. A reminder or deadline is finished
+// (a repeating one moves to its next time); an event only stops alerting, it
+// is not over until it ends.
+func (s *Store) Done(id string) (Item, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.items[id]
+	if !ok {
+		return Item{}, ErrNotFound
+	}
+	switch item.Status {
+	case StatusScheduled, StatusWaiting, StatusRunning:
+	default:
+		return cloneItem(item), nil
+	}
+	switch item.Kind {
+	case KindReminder, KindDeadline:
+		if item.Owner != "" {
+			return Item{}, fmt.Errorf("this item acts for Mewla and cannot be marked done")
+		}
+		// A repeating reminder moves on the moment it is due, before the user
+		// has answered: its open alert then belongs to the occurrence behind
+		// it, and finishing the next one would skip it.
+		if item.Status == StatusWaiting || (item.AlertedAt != nil && !item.AlertedAt.Before(item.NextAt.Add(-item.AlertLead()))) {
+			if _, err := s.setStatusLocked(id, StatusCompleted, ""); err != nil {
+				return Item{}, err
+			}
+		}
+		return s.ackLocked(id)
+	case KindEvent:
+		return s.ackLocked(id)
+	}
+	return Item{}, fmt.Errorf("a scheduled action cannot be marked done")
+}
+
+// ackLocked answers the open alert and drops a snooze, bumping the revision
+// only when something changed.
+func (s *Store) ackLocked(id string) (Item, error) {
+	item := s.items[id]
+	if item.SnoozedUntil == nil && (item.AlertedAt == nil || (item.AckedAt != nil && !item.AckedAt.Before(*item.AlertedAt))) {
+		return cloneItem(item), nil
+	}
+	updated, _, err := s.updateLocked(id, func(item *Item) {
+		item.SnoozedUntil = nil
+		item.AckedAt = cloneTimePtr(item.AlertedAt)
+	})
+	return updated, err
+}
+
+// updateLocked applies change to an item as one committed revision.
+func (s *Store) updateLocked(id string, change func(*Item)) (Item, bool, error) {
+	original := s.items[id]
+	item := cloneItem(original)
+	change(&item)
+	item.UpdatedAt = s.now().UTC()
+	item.Revision++
+	s.items[id] = item
+	if err := s.persistLocked(); err != nil {
+		s.items[id] = original
+		return Item{}, false, err
+	}
+	s.broadcast(item)
+	return cloneItem(item), true, nil
+}
+
+func cloneTimePtr(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 func (s *Store) Claim(id string, manual bool) (Item, Run, error) {
