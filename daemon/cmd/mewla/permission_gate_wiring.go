@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/classifier"
@@ -69,6 +70,12 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 		p.TurnID = turnID
 		return w.UpdateWorkerProgress(workerID, p)
 	}
+	// lateTurns holds, per Worker, the turn opened for a request that came after
+	// its own turn settled. Answering that request settles the turn again, so
+	// Brain reviews the result the Worker had reported, which the new turn's
+	// blocked review took the place of.
+	var lateMu sync.Mutex
+	lateTurns := map[string]string{}
 	progress := func(workerID string, p classifier.WorkerProgress) error {
 		turnID, ok := turnOf(workerID)
 		if !ok {
@@ -110,6 +117,9 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 				if turnID, err = w.OpenPromptTurn(workerID, item.ID); err != nil {
 					return err
 				}
+				lateMu.Lock()
+				lateTurns[workerID] = turnID
+				lateMu.Unlock()
 			}
 			raised, err := report(workerID, turnID, classifier.WorkerProgress{
 				Status: "blocked", Phase: "working", Attention: "user_input",
@@ -125,10 +135,22 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 			return nil
 		},
 		resumed: func(workerID, summary string) {
-			err := progress(workerID, classifier.WorkerProgress{
+			next := classifier.WorkerProgress{
 				Status: "running", Phase: "working", Attention: "none",
 				Summary: summary, EventKind: "progress", LeaseSeconds: 300,
-			})
+			}
+			turnID, live := turnOf(workerID)
+			lateMu.Lock()
+			late := live && lateTurns[workerID] == turnID
+			delete(lateTurns, workerID)
+			lateMu.Unlock()
+			if late {
+				next = classifier.WorkerProgress{
+					Status: "done", Phase: "reporting", Attention: "done",
+					Summary: summary + "; the Worker had already reported done", EventKind: "done",
+				}
+			}
+			err := progress(workerID, next)
 			if err != nil {
 				log.Printf("permission: could not mark %s running again: %v", workerID, err)
 			}
