@@ -110,6 +110,8 @@ mewla service tunnel start|status|stop -id <service> -generation <generation>
 mewla calendar list --json
 mewla calendar create -title "Review plan" -kind reminder -date 2026-10-09 -time 09:30
 mewla calendar run -id <item> --json
+mewla calendar snooze -id <item> -minutes 15 --json
+mewla calendar done -id <item> --json
 mewla calendar cancel -id <item> -revision <revision> --json
 
 mewla screen status           # support, permissions, allowed devices, keep-awake

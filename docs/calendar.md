@@ -61,12 +61,42 @@ demand.
 Scheduled actions run unattended; see
 [Permission bypass risks](executors.md#permission-bypass-risks).
 
-## Reminders on your phone
+## Alerts you will not miss
 
-After a sync, the app schedules the next reminder as a local notification, so
-it still fires if the phone loses its connection to the daemon. If you deny
-notification permission, Calendar keeps working and tells you notifications are
-off.
+An event, reminder or deadline alerts your phone, with no setup. An event
+alerts 10 minutes before it starts, a deadline 30 minutes before it is due and
+a reminder at its time. Each item can carry its own lead: ask Brain "remind me
+half an hour before" or pass `-lead <minutes>` on the CLI. An alert fires once
+per occurrence, also across daemon restarts, and one the daemon was too late for
+(more than 15 minutes) is dropped rather than sent as old news.
+
+Two paths carry every alert, and the phone shows it once:
+
+- **The phone's own alarm.** After a sync the app schedules each upcoming alert
+  on the phone, so it fires even when the daemon or the network is late.
+- **A push from the daemon,** for what the phone has not synced yet, such as an
+  item Brain just created while the app was closed.
+
+On Android the alert is an alarm-style notification in its own Calendar channel
+(heads-up and sound); with the screen locked it takes over the screen with
+Done and Snooze, and opening the app from it asks for your unlock first. On iOS
+it is a Time Sensitive notification, which breaks through Focus.
+
+When an alert fires with the app open, or you open the app from it, a card
+covers the screen with the title, time and notes, and stays until you act:
+
+- **Done** finishes a reminder or deadline (a repeating one moves to its next
+  time) and silences an event's alert.
+- **Snooze 5 min / 15 min** alerts again later.
+- **Open in Calendar** goes to the item.
+
+The card is the same on every phone and on the web: acting on one dismisses it
+everywhere. Settings has one switch, **Strong calendar alerts**, on by default.
+Off, alerts are ordinary notifications (no lock-screen takeover on Android, no
+Time Sensitive on iOS) and the card still appears in the app.
+
+If you deny notification permission, Calendar keeps working and tells you
+notifications are off.
 
 ## Items Mewla acts on
 
@@ -96,7 +126,12 @@ mewla calendar create -title "Summarise merged PRs" -kind scheduled_action \
   -source-thread <brain-thread-id> --json
 mewla calendar cancel -id <item-id> -revision <revision> --json
 mewla calendar run -id <item-id> --json
+mewla calendar snooze -id <item-id> -minutes 15 --json
+mewla calendar done -id <item-id> --json
 ```
+
+`-lead <minutes>` on `create` sets how long before an event or deadline the
+phone alerts (default 10 for an event, 30 for a deadline).
 
 A scheduled action needs `-source-thread`, the Brain thread that receives its
 result. `-summary` is the one line Calendar shows; `-instruction` is the full
