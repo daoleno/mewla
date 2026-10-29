@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  mayArmNative,
+  mayCancelNative,
   calendarTriggerParts,
   calendarAlertAt,
   calendarAlertBody,
@@ -140,5 +142,19 @@ describe("iOS calendar trigger parts", () => {
     expect(calendarTriggerParts(Date.parse("2026-07-14T23:59:00Z"), "America/New_York")).toEqual({
       year: 2026, month: 7, day: 14, hour: 19, minute: 59, second: 0, timezone: "America/New_York",
     });
+  });
+});
+
+describe("one armed set for the one current computer", () => {
+  test("another computer's snapshot does not replace the current one's alarms", () => {
+    expect(mayArmNative("a", "a")).toBe(true);
+    expect(mayArmNative("a", "b")).toBe(false);
+    expect(mayArmNative(null, "b")).toBe(true);
+  });
+
+  test("removing a computer leaves the alarms that belong to another", () => {
+    expect(mayCancelNative("a", "b")).toBe(false);
+    expect(mayCancelNative("a", "a")).toBe(true);
+    expect(mayCancelNative(null, "b")).toBe(true);
   });
 });

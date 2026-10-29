@@ -180,3 +180,17 @@ export function calendarTriggerParts(at: number, timezone: string) {
     timezone,
   };
 }
+
+/**
+ * The phone's alarms are one set for the one current computer (the native
+ * schedule replaces what it held), so a snapshot from another computer must not
+ * replace them.
+ */
+export function mayArmNative(currentServerId: string | null | undefined, serverId: string): boolean {
+  return !currentServerId || currentServerId === serverId;
+}
+
+/** Removing a computer clears the armed alarms only when they are that computer's. */
+export function mayCancelNative(armedServerId: string | null | undefined, serverId: string): boolean {
+  return !armedServerId || armedServerId === serverId;
+}

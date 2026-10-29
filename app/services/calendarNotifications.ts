@@ -4,14 +4,17 @@ import { Platform } from "react-native";
 import { getMewlaLiveModule } from "../modules/mewla-live/src";
 import type { CalendarNativeAction } from "../modules/mewla-live/src";
 import type { CalendarItem } from "../store/calendar";
-import { calendarAlertPlan, calendarTriggerParts } from "./calendarAlerts";
+import { calendarAlertPlan, calendarTriggerParts, mayArmNative, mayCancelNative } from "./calendarAlerts";
 import { strongCalendarAlerts } from "./calendarAlertSettings";
+import { getCurrentServerId } from "./storage";
 import {
   reconcileCalendarNotifications,
   type CalendarNotificationDependencies,
 } from "./calendarNotificationReconciler";
 
 const storageKey = "mewla.calendar.notification_ids.v1";
+/** The computer the phone's native alarms belong to. */
+const nativeServerKey = "mewla.calendar.native_alarm_server.v1";
 /** Heads-up and sound; the native alarm uses its own alarm-style channel. */
 export const calendarChannelId = "mewla-calendar";
 export type CalendarNotificationState =
@@ -59,7 +62,10 @@ export async function syncCalendarNotifications(
   if (state !== "granted") return state;
   const native = nativeAlerts();
   if (native) {
+    // The native schedule is one set for the current computer.
+    if (!mayArmNative(await getCurrentServerId(), serverId)) return state;
     await ensureCalendarChannel();
+    await AsyncStorage.setItem(nativeServerKey, serverId);
     native.calendarAlertsSchedule!(
       JSON.stringify(
         calendarAlertPlan(serverId, items).map((entry) => ({
@@ -81,7 +87,9 @@ export async function syncCalendarNotifications(
 export async function cancelCalendarNotifications(serverId: string) {
   const native = nativeAlerts();
   if (native) {
+    if (!mayCancelNative(await AsyncStorage.getItem(nativeServerKey), serverId)) return;
     native.calendarAlertsSchedule!("[]");
+    await AsyncStorage.removeItem(nativeServerKey);
     return;
   }
   await reconcileCalendarNotifications(serverId, [], notificationDeps());
