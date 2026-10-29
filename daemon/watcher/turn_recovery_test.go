@@ -198,6 +198,13 @@ func (l *recoveryLedger) EscalateStalledTurn(stall TurnStall) error {
 func (l *recoveryLedger) MarkInputAdmissionAmbiguous(sessionID, proposedTurnID, reason string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	// Releasing an admission that is already ambiguous changes nothing, as in
+	// the real ledger, where it no longer lists as pending afterwards.
+	for _, released := range l.ambiguous {
+		if released == proposedTurnID {
+			return nil
+		}
+	}
 	l.ambiguous = append(l.ambiguous, proposedTurnID)
 	return nil
 }
@@ -512,5 +519,26 @@ func TestSuperviseDelegatedTurnsDoesNotReportAWorkerWakingFromABackgroundMonitor
 	w.superviseDelegatedTurns([]probedPollWorker{poll(end.Add(10*time.Minute+DefaultTurnRecoveryPolicy().StoppedAfter), "")})
 	if len(ledger.stalls) != 1 || ledger.stalls[0].Reason != "stopped" {
 		t.Fatalf("stalls = %+v, want one stopped escalation", ledger.stalls)
+	}
+}
+
+// A prompt answered by typing into the pane is never admitted as a user prompt:
+// its prepared admission stays pending after the Worker moved on, and blocked
+// every later send ("Work already has an active Attempt: admission ... is still
+// prepared"). It must be released on its own once the provider has settled and
+// stayed idle, even when no recovery record exists for the proposed turn.
+func TestStalePreparedAdmissionIsReleasedWithoutARecoveryRecord(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1", lost: true}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 10, 12, 1, 0, 0, 0, time.UTC)
+	item := stalledPollItem(settled.Add(2*time.Minute), settled, "a1", nil)
+	item.hasTurn, item.turn = false, TurnSnapshot{}
+	item.pending = []InputAdmission{{ProposedTurnID: "turn:answer-1", State: InputAdmissionPending, SignalProtocol: true, AcceptedAt: settled.Add(-2 * time.Minute)}}
+
+	w.superviseDelegatedTurns([]probedPollWorker{item})
+
+	if len(ledger.ambiguous) != 1 || ledger.ambiguous[0] != "turn:answer-1" {
+		t.Fatalf("the stale prepared admission was not released: %v", ledger.ambiguous)
 	}
 }

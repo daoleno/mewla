@@ -406,6 +406,13 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		if !stalled || busy || (throttled && item.now.Before(due)) {
 			continue
 		}
+		// A prompt the provider took its turn over without admitting (a
+		// keystroke sent into a prompt never becomes a user prompt) holds the
+		// Work's active-Attempt fence: every later send or resume fails with
+		// "Work already has an active Attempt". It is released as
+		// delivery-unknown as soon as it is proven stale, whether or not a
+		// recovery record exists for it.
+		w.releaseStaleAdmissions(item.id, stall.stale)
 		if stall.pendingFresh {
 			// An in-flight admission still owns the next prompt.
 			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
@@ -443,11 +450,6 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 			}
 			supervisor.inflight[item.id] = true
 			supervisor.mu.Unlock()
-			// A stale prompt fence (a keystroke sent into a prompt is never
-			// admitted as a user prompt) would make every resume fail with
-			// "Work already has an active Attempt" and retry forever; release
-			// it as delivery-unknown first.
-			w.releaseStaleAdmissions(item.id, stall.stale)
 			// A failed delivery retries on a later check, never every poll.
 			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
 			sessionID, fromTurn := item.id, stall.turnID
@@ -460,9 +462,6 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 				w.resumeStalledTurn(ledger, supervisor, sessionID, workID, fromTurn, decision)
 			})
 		case turnRecoveryEscalate:
-			// A stale prompt fence would also hold back Brain's delivery of
-			// the escalation; release it as delivery-unknown first.
-			w.releaseStaleAdmissions(item.id, stall.stale)
 			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
 			summary := stallSummary(decision, item.provider.Error, item.content)
 			if err := ledger.EscalateStalledTurn(TurnStall{
