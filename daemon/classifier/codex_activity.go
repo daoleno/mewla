@@ -35,12 +35,20 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	pane := latestProviderPaneWindow(in.PaneContent, "openai codex")
 	approvalPane := strings.Join(linesAfterLastReadyComposer(strings.Split(pane, "\n")), "\n")
 	if codexApprovalPromptRe.MatchString(approvalPane) {
-		return ActivitySignal{
+		signal := ActivitySignal{
 			State:    StateBlocked,
 			Summary:  "Waiting for Codex approval",
 			Source:   "codex_pane_blocked",
 			Provider: a.Name(),
 		}
+		if prompt, ok := ParseMenuPrompt(a.Name(), PromptApproval, approvalPane, "Press enter to confirm", "enter to confirm", "Enter to continue"); ok {
+			prompt.Title = signal.Summary
+			signal.Prompt = &prompt
+		} else if prompt, ok := ParseMenuPrompt(a.Name(), PromptApproval, approvalPane); ok {
+			prompt.Title = signal.Summary
+			signal.Prompt = &prompt
+		}
+		return signal
 	}
 
 	if codexWorkingRe.MatchString(pane) && codexInterruptRe.MatchString(pane) {

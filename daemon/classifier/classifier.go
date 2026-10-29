@@ -35,26 +35,28 @@ type Worker struct {
 	ExecutorID string `json:"executor_id,omitempty"`
 	// AgentControl is the socket of the agent's own control server, when the
 	// launch started one for Mewla. It is never sent to a phone.
-	AgentControl        string      `json:"-"`
-	State               WorkerState `json:"status"`
-	Summary             string      `json:"summary"`
-	Phase               string      `json:"phase,omitempty"`
-	Attention           string      `json:"attention,omitempty"`
-	TaskClass           string      `json:"task_class,omitempty"`
-	EventKind           string      `json:"event_kind,omitempty"`
-	DetailsJSON         string      `json:"details_json,omitempty"`
-	NeedsAttention      bool        `json:"needs_attention,omitempty"`
-	LastProgressAt      *time.Time  `json:"last_progress_at,omitempty"`
-	ExpectedNextCheckAt *time.Time  `json:"expected_next_check_at,omitempty"`
-	LeaseSeconds        int         `json:"lease_seconds,omitempty"`
-	LastLines           []string    `json:"last_output_lines"`
-	StartedAt           time.Time   `json:"started_at,omitempty"`
-	UpdatedAt           time.Time   `json:"updated_at"`
-	LastSeenAt          time.Time   `json:"last_seen_at,omitempty"`
-	ProcessID           int         `json:"process_id,omitempty"`
-	Hidden              bool        `json:"hidden,omitempty"`
-	Delegated           bool        `json:"delegated,omitempty"`
-	PaneAlive           bool        `json:"-"`
+	AgentControl string      `json:"-"`
+	State        WorkerState `json:"status"`
+	Summary      string      `json:"summary"`
+	Phase        string      `json:"phase,omitempty"`
+	Attention    string      `json:"attention,omitempty"`
+	TaskClass    string      `json:"task_class,omitempty"`
+	EventKind    string      `json:"event_kind,omitempty"`
+	DetailsJSON  string      `json:"details_json,omitempty"`
+	// Prompt is the blocking prompt open in the Worker's terminal right now.
+	Prompt              *Prompt    `json:"prompt,omitempty"`
+	NeedsAttention      bool       `json:"needs_attention,omitempty"`
+	LastProgressAt      *time.Time `json:"last_progress_at,omitempty"`
+	ExpectedNextCheckAt *time.Time `json:"expected_next_check_at,omitempty"`
+	LeaseSeconds        int        `json:"lease_seconds,omitempty"`
+	LastLines           []string   `json:"last_output_lines"`
+	StartedAt           time.Time  `json:"started_at,omitempty"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	LastSeenAt          time.Time  `json:"last_seen_at,omitempty"`
+	ProcessID           int        `json:"process_id,omitempty"`
+	Hidden              bool       `json:"hidden,omitempty"`
+	Delegated           bool       `json:"delegated,omitempty"`
+	PaneAlive           bool       `json:"-"`
 }
 
 // blockedPatterns match output that indicates the agent is waiting for user input.

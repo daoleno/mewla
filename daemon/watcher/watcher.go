@@ -363,6 +363,7 @@ type Watcher struct {
 	appliedFactIDs        map[string]string         // session -> last applied provider FactID (skip identical applies)
 	ledgerTurnReadAt      map[string]time.Time      // TTL for authoritative ledger re-reads
 	probeLossSince        map[string]probeLossState // session -> current turn loss streak
+	gates                 map[string]promptGate     // session -> the pane prompt filed to the ledger as a blocked turn
 	recovery              *turnRecoverySupervisor
 	recoveryOnce          sync.Once
 	providerSignals       map[string]providerActivitySignal
@@ -436,6 +437,7 @@ func New(pollInterval time.Duration) *Watcher {
 		appliedFactIDs:   make(map[string]string),
 		ledgerTurnReadAt: make(map[string]time.Time),
 		probeLossSince:   make(map[string]probeLossState),
+		gates:            make(map[string]promptGate),
 		providerSignals:  make(map[string]providerActivitySignal),
 		events:           make(chan SessionEvent, 100),
 		snapshotReadyCh:  make(chan struct{}),
@@ -1723,6 +1725,10 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 		}
 		worker.State = newState
 		worker.Summary = summary
+		worker.Prompt = nil
+		if newState == classifier.StateBlocked && activity.State == classifier.StateBlocked {
+			worker.Prompt = activity.Prompt
+		}
 		providerChanged := false
 		if worker.Hidden {
 			nextProvider := providerActivitySignalFor(r.provider)
@@ -1880,8 +1886,12 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 		if probe != nil {
 			toolChild := isCursorAgentCommand(item.workerSnap.Command) && cursorToolChildActive(item.panePID, processes)
 			activity = probe.Infer(classifier.ActivityInput{Worker: item.workerSnap, PaneContent: item.content, ToolChildActive: toolChild})
+			activity = withChoicePrompt(activity, item.content)
 		}
 		turn, hasTurn, turnErr := w.ledgerTurnFor(item.id, item.now)
+		if hasTurn && turnErr == nil {
+			turn = w.syncPromptGate(item.id, item.workerSnap, item.alive, activity, turn)
+		}
 		pendingList, pendingErr := w.pendingInputAdmissions(item.id)
 		hasPending := len(pendingList) > 0
 		if pendingErr != nil {
@@ -1959,7 +1969,7 @@ func (w *Watcher) restoreTurnTranscriptBindingLocked(worker *classifier.Worker, 
 func projectDelegatedActivity(worker *classifier.Worker, turn TurnSnapshot, activity classifier.ActivitySignal) (classifier.WorkerState, string) {
 	state, summary := projectDelegatedTurn(worker, turn)
 	hostGate := worker != nil && worker.Hidden
-	if (hostGate || !TurnTerminal(turn.Status)) && activity.State == classifier.StateBlocked {
+	if (hostGate || !TurnImmutable(turn.Status)) && activity.State == classifier.StateBlocked {
 		worker.Attention = "user_input"
 		worker.NeedsAttention = true
 		worker.LastProgressAt = nil
@@ -2618,13 +2628,19 @@ type workerMetadataSnapshot struct {
 	expectedNextCheckAt int64
 	leaseSeconds        int
 	delegated           bool
+	promptID            string
 }
 
 func workerMetadataSnapshotFor(worker *classifier.Worker) workerMetadataSnapshot {
 	if worker == nil {
 		return workerMetadataSnapshot{}
 	}
+	promptID := ""
+	if worker.Prompt != nil {
+		promptID = worker.Prompt.ID
+	}
 	return workerMetadataSnapshot{
+		promptID:            promptID,
 		name:                worker.Name,
 		project:             worker.Project,
 		cwd:                 worker.Cwd,
