@@ -204,3 +204,30 @@ func TestHubAnnouncesABindingThatMoved(t *testing.T) {
 		t.Fatalf("announced %d times, want first binding, clear and transcript move: %v", len(moved), moved)
 	}
 }
+
+// A sub-agent's request is settled by that sub-agent moving on, not by the
+// Worker's own agent, which carries on or ends its turn while a background
+// sub-agent waits at its prompt.
+func TestHubKeepsASubAgentApprovalWhenTheWorkersOwnAgentMoves(t *testing.T) {
+	h := NewHub()
+	h.Publish(Event{WorkerID: "w", Kind: KindTurnStarted, TurnID: "t1", At: t0})
+	h.Publish(Event{WorkerID: "w", Kind: KindApprovalRequest, At: t0, Approval: &Approval{ID: "sub", AgentID: "agent-1"}})
+	h.Publish(Event{WorkerID: "w", Kind: KindApprovalRequest, At: t0, Approval: &Approval{ID: "main"}})
+
+	h.Publish(Event{WorkerID: "w", Kind: KindProgress, At: t0.Add(time.Second)})
+	if s, _ := h.State("w"); len(s.Approvals) != 1 || s.Approvals[0].ID != "sub" {
+		t.Fatalf("the Worker's own progress settled the wrong requests: %+v", s.Approvals)
+	}
+	h.Publish(Event{WorkerID: "w", Kind: KindTurnFinished, TurnID: "t1", Status: TurnCompleted, At: t0.Add(2 * time.Second)})
+	if s, _ := h.State("w"); len(s.Approvals) != 1 {
+		t.Fatalf("the Worker's turn ending dropped a waiting sub-agent: %+v", s.Approvals)
+	}
+	h.Publish(Event{WorkerID: "w", Kind: KindProgress, AgentID: "other-agent", At: t0.Add(3 * time.Second)})
+	if s, _ := h.State("w"); len(s.Approvals) != 1 {
+		t.Fatalf("another sub-agent's progress settled the request: %+v", s.Approvals)
+	}
+	h.Publish(Event{WorkerID: "w", Kind: KindProgress, AgentID: "agent-1", At: t0.Add(4 * time.Second)})
+	if s, _ := h.State("w"); len(s.Approvals) != 0 {
+		t.Fatalf("the sub-agent moved on but its request stayed: %+v", s.Approvals)
+	}
+}

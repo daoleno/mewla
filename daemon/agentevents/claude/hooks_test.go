@@ -118,3 +118,18 @@ func TestUserPromptSubmitOfADelegatedBriefCarriesTheBriefsOwnDigest(t *testing.T
 		t.Fatalf("digests = %q / %q, want %q / %q", events[0].InputSHA256, events[0].InputUnwrappedSHA256, wrapped, exact)
 	}
 }
+
+// A sub-agent's hooks name it, so what it asks is settled by it alone.
+func TestSubAgentHooksCarryTheSubAgent(t *testing.T) {
+	events := mustMap(t, `{"hook_event_name":"PostToolUse","session_id":"s1","prompt_id":"p1","agent_id":"abc","agent_type":"general-purpose","tool_name":"Bash"}`)
+	if len(events) != 1 || events[0].AgentID != "abc" {
+		t.Fatalf("events = %+v", events)
+	}
+	if events := mustMap(t, `{"hook_event_name":"Stop","session_id":"s1","prompt_id":"p1"}`); events[0].AgentID != "" {
+		t.Fatalf("the Worker's own Stop names a sub-agent: %+v", events)
+	}
+	p, _ := Parse([]byte(`{"hook_event_name":"PermissionRequest","session_id":"s1","agent_id":"abc","tool_name":"Bash","tool_input":{"command":"touch x"}}`))
+	if a := Approval("ap-1", p); a.AgentID != "abc" {
+		t.Fatalf("approval = %+v", a)
+	}
+}

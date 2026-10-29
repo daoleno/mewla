@@ -345,7 +345,7 @@ func (s *agentEventService) decide(workerID, approvalID, optionID, by, basis str
 		return control.ErrorResponse("invalid_approval_option", "The agent did not offer that option.")
 	}
 	if optionID == "allow" && route == routeBrain && basis == "" {
-		return control.ErrorResponse("approval_basis_required", "Allowing a delegated Worker's blocked action needs -basis: the sentence of the brief that authorizes it. If the brief does not cover it, use -option escalate.")
+		return control.ErrorResponse("approval_basis_required", "Allowing a delegated Worker's blocked action needs -basis: the sentence of the brief that authorizes it. If the brief does not cover it, escalate it (worker answer -escalate).")
 	}
 	if basis != "" {
 		s.mu.Lock()

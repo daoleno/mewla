@@ -152,8 +152,17 @@ func (w *workerState) apply(e Event) {
 	switch e.Kind {
 	case KindProgress, KindTurnStarted, KindTurnFinished, KindUserMessage:
 		// An agent waiting on a decision does not move. If it moved, the
-		// decision was made somewhere else (its own prompt).
-		w.Approvals = nil
+		// decision was made somewhere else (its own prompt). A sub-agent's
+		// request is settled by that sub-agent moving, not by the Worker's
+		// own agent (which carries on, or ends its turn, while a background
+		// sub-agent waits).
+		kept := w.Approvals[:0:0]
+		for _, a := range w.Approvals {
+			if a.AgentID != e.AgentID {
+				kept = append(kept, a)
+			}
+		}
+		w.Approvals = kept
 	}
 	switch e.Kind {
 	case KindBound:
