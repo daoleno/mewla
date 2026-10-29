@@ -86,6 +86,7 @@ import {
 } from "../components/ui";
 import { MewlaMark } from "../components/mewla/MewlaMark";
 import { PetPicker } from "../components/settings/PetPicker";
+import { CalendarAlertsSection } from "../components/settings/CalendarAlertsSection";
 import { LabsSection } from "../components/settings/LabsSection";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
@@ -449,6 +450,9 @@ export default function SettingsScreen() {
               onPress={() => router.push("/settings/model-providers")}
             />
           </ListSection>
+
+          <SettingsSectionHeader>Calendar</SettingsSectionHeader>
+          <CalendarAlertsSection />
 
           <SettingsSectionHeader>Appearance</SettingsSectionHeader>
           <SegmentedControl

@@ -48,10 +48,16 @@ module.exports = () => {
       ...(baseConfig.ios || {}),
       bundleIdentifier: iosIdentity.bundleIdentifier,
       buildNumber: iosBuildNumber,
-      ...(iosLive
+      ...(iosLive || iosIdentity.timeSensitive
         ? {
             entitlements: {
-              "com.apple.security.application-groups": [iosIdentity.appGroup],
+              ...(iosLive
+                ? { "com.apple.security.application-groups": [iosIdentity.appGroup] }
+                : {}),
+              // Calendar alerts that break through Focus (the Preview identity).
+              ...(iosIdentity.timeSensitive
+                ? { "com.apple.developer.usernotifications.time-sensitive": true }
+                : {}),
             },
           }
         : {}),
