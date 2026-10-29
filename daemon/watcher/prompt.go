@@ -33,8 +33,8 @@ const (
 	// lease. The lifecycle sweep expires a lease whether or not the turn is
 	// blocked and gives up on it after a grace period, so a prompt left
 	// unanswered would otherwise decay to a lost turn.
-	promptGateRenewEvery = 5 * time.Minute
-	promptGateAnswerLease  = 300
+	promptGateRenewEvery  = 5 * time.Minute
+	promptGateAnswerLease = 300
 )
 
 // ErrPromptGone means the prompt an answer was composed for is no longer the
