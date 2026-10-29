@@ -513,7 +513,7 @@ func TestWorkerAndBrainHelpAreDiscoverable(t *testing.T) {
 	}
 	workerHelp := workerOutput.String()
 	for _, want := range []string{
-		"Usage: mewla worker <list|spawn|send|answer|capture|status|receipt|progress|release|close> [flags]",
+		"Usage: mewla worker <list|spawn|send|answer|approvals|approve|capture|status|receipt|progress|release|close> [flags]",
 		"mewla worker spawn -name \"Review docs\" -executor codex -model gpt-6-astra -reasoning high",
 		"mewla worker capture -id",
 		"mewla worker status -id",
