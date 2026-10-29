@@ -85,3 +85,59 @@ describe("MewlaLive iOS native contract", () => {
     expect(state).toContain('"group." + appBundleId');
   });
 });
+
+describe("MewlaLive Android calendar alerts contract", () => {
+  const androidMain = join(moduleRoot, "android/src/main");
+  const manifest = read(join(androidMain, "AndroidManifest.xml"));
+  const kotlin = (name: string) => read(join(androidMain, "java/expo/modules/mewlalive", name));
+
+  test("the module exposes exactly the calls the app uses", () => {
+    const module = kotlin("MewlaLiveModule.kt");
+    const names = [...module.matchAll(/Function\("(calendarAlerts\w+)"\)/g)].map((match) => match[1]).sort();
+    expect(names).toEqual([
+      "calendarAlertsCancelItem",
+      "calendarAlertsCapabilities",
+      "calendarAlertsOpenFullScreenSettings",
+      "calendarAlertsSchedule",
+      "calendarAlertsSetForeground",
+      "calendarAlertsSetStrong",
+      "calendarAlertsTakeActions",
+    ]);
+  });
+
+  test("the manifest declares the permissions and components alerts need", () => {
+    for (const permission of ["USE_EXACT_ALARM", "USE_FULL_SCREEN_INTENT", "RECEIVE_BOOT_COMPLETED", "VIBRATE", "POST_NOTIFICATIONS"]) {
+      expect(manifest).toContain(`android.permission.${permission}`);
+    }
+    expect(manifest).toMatch(/SCHEDULE_EXACT_ALARM"\s+android:maxSdkVersion="32"/);
+    for (const component of [".CalendarAlarmReceiver", ".CalendarActionReceiver", ".CalendarBootReceiver", ".CalendarAlertActivity"]) {
+      expect(manifest).toContain(`android:name="${component}"`);
+    }
+    for (const action of ["BOOT_COMPLETED", "MY_PACKAGE_REPLACED", "TIME_SET", "TIMEZONE_CHANGED"]) {
+      expect(manifest).toContain(`android.intent.action.${action}`);
+    }
+  });
+
+  test("only the alert activity shows over the lock screen, on its own task", () => {
+    const activity = manifest.slice(manifest.indexOf(".CalendarAlertActivity"));
+    const tag = activity.slice(0, activity.indexOf("/>"));
+    for (const attribute of ['android:showWhenLocked="true"', 'android:turnScreenOn="true"', 'android:taskAffinity=""', 'android:excludeFromRecents="true"', 'android:exported="false"']) {
+      expect(tag).toContain(attribute);
+    }
+    // The main activity is the app's, and must never be shown over the lock screen by this module.
+    expect(manifest).not.toContain("MainActivity");
+  });
+
+  test("alarms are exact when allowed and never an alarm clock", () => {
+    const alerts = kotlin("CalendarAlerts.kt");
+    expect(alerts).toContain("setExactAndAllowWhileIdle");
+    expect(alerts).toContain("setAndAllowWhileIdle");
+    expect(alerts).not.toContain("setAlarmClock(");
+  });
+
+  test("a push for a calendar alert is handled before the live and Expo paths", () => {
+    const service = kotlin("MewlaFirebaseMessagingService.kt");
+    expect(service.indexOf("extractCalendar(remoteMessage.data)")).toBeGreaterThan(0);
+    expect(service.indexOf("extractCalendar(remoteMessage.data)")).toBeLessThan(service.indexOf("extractLive(remoteMessage.data)"));
+  });
+});

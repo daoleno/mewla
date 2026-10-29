@@ -11,6 +11,13 @@ import org.json.JSONObject
  */
 class MewlaFirebaseMessagingService : ExpoFirebaseMessagingService() {
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
+    val calendar = extractCalendar(remoteMessage.data)
+    if (calendar != null) {
+      // Fired once: a push for an alert this phone's own alarm already showed is dropped.
+      val shown = CalendarAlerts.fire(this, calendar)
+      Log.d(TAG, "calendar alert push key=${calendar.key} shown=$shown")
+      return
+    }
     val live = extractLive(remoteMessage.data)
     if (live == null) {
       Log.d(TAG, "not a live message, keys=${remoteMessage.data.keys.sorted()} notification=${remoteMessage.notification != null}")
@@ -27,6 +34,31 @@ class MewlaFirebaseMessagingService : ExpoFirebaseMessagingService() {
 
   companion object {
     private const val TAG = "MewlaLive"
+
+    /** The calendar alert in a push's data, whether its keys are top level or in the JSON string under `body`. */
+    internal fun extractCalendar(data: Map<String, String>): CalendarAlert? {
+      fun from(get: (String) -> String?): CalendarAlert? {
+        if (get("mewla_calendar") != "1") return null
+        val itemId = get("calendar_id") ?: return null
+        val atMs = get("alert_at")?.toLongOrNull() ?: return null
+        return CalendarAlert(
+          key = get("alert_key") ?: CalendarAlertRules.key(itemId, atMs),
+          itemId = itemId,
+          serverId = get("server_id").orEmpty(),
+          title = get("title").orEmpty(),
+          body = get("body").orEmpty(),
+          atMs = get("at")?.toLongOrNull() ?: atMs,
+        )
+      }
+      from { data[it] }?.let { return it }
+      val body = data["body"] ?: return null
+      return try {
+        val o = JSONObject(body)
+        from { key -> if (o.has(key)) o.get(key).toString() else null }
+      } catch (_: Exception) {
+        null
+      }
+    }
 
     /**
      * Expo's push service puts the message's `data` object, stringified, under `body`; accept the

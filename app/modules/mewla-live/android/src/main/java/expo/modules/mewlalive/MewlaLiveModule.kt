@@ -1,6 +1,10 @@
 package expo.modules.mewlalive
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import org.json.JSONArray
 import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 import expo.modules.kotlin.exception.CodedException
@@ -49,6 +53,47 @@ class MewlaLiveModule : Module() {
     }
 
     Function("refreshWidgets") { WidgetSync.refreshAsync(context) }
+
+    /**
+     * Replaces the armed calendar alarms with the app's synced set: `[{key, itemId, serverId, title,
+     * body, atMs}]`. Alerts that already fired stay fired.
+     */
+    Function("calendarAlertsSchedule") { json: String ->
+      val array = JSONArray(json)
+      CalendarAlerts.schedule(
+        context,
+        (0 until array.length()).map { CalendarAlertStore.alertOf(array.getJSONObject(it)) },
+      )
+    }
+
+    Function("calendarAlertsCancelItem") { itemId: String -> CalendarAlerts.cancelItem(context, itemId) }
+
+    /** The person's own "Strong calendar alerts" setting; it decides the channel and the lock-screen takeover. */
+    Function("calendarAlertsSetStrong") { strong: Boolean -> CalendarAlertStore(context).strong = strong }
+
+    /** With the app open an alert marks itself fired but posts nothing: the in-app card shows it. */
+    Function("calendarAlertsSetForeground") { foreground: Boolean -> CalendarAlerts.foreground = foreground }
+
+    Function("calendarAlertsCapabilities") { CalendarAlerts.capabilities(context) }
+
+    Function("calendarAlertsOpenFullScreenSettings") {
+      val uri = Uri.fromParts("package", context.packageName, null)
+      val intents = listOfNotNull(
+        if (Build.VERSION.SDK_INT >= 34) Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, uri) else null,
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+      )
+      for (intent in intents) {
+        try {
+          context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+          break
+        } catch (_: Exception) {
+          continue
+        }
+      }
+    }
+
+    /** What the person did to an alert with no app running: `[{type, itemId, serverId, minutes, atMs}]`, then cleared. */
+    Function("calendarAlertsTakeActions") { CalendarAlertStore(context).takeActions() }
 
     Function("isSupported") { true }
 
