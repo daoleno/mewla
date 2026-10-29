@@ -207,3 +207,46 @@ func TestPromptEventDetailsAreTheOneShape(t *testing.T) {
 		t.Fatalf("a plan prompt asks for a basis: %+v", plain)
 	}
 }
+
+// A Worker whose turn settled (it reported done and stopped while a background
+// sub-agent keeps running) is asked a question by that sub-agent. The settled
+// turn is immutable, so the question gets a turn of its own: a prepared signal
+// admission for the Work, bound to the live process and pane, that no input was
+// sent for.
+func TestOpenPromptTurnPreparesASignalTurnForTheWork(t *testing.T) {
+	w := New(0)
+	sessionID := "mewla-worker-late:@1"
+	identity := testSessionInputIdentity("claude")
+	w.workers[sessionID] = &classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateDone, Command: "claude"}
+	w.workerOrder = append(w.workerOrder, sessionID)
+	w.targetOwnershipResolver = func(string) (bool, error) { return true, nil }
+	w.targetProcessResolver = fixedSessionInputResolver(identity)
+	input := newFakeSessionInputIO()
+	input.paneValue.generation = "pane-now"
+	w.sessionInput = newSessionInputOwner(input)
+	ledger := newFakeTurnLedger()
+	w.SetTurnLedger(ledger)
+
+	turnID, err := w.OpenPromptTurn(sessionID, "work-1")
+	if err != nil || !strings.HasPrefix(turnID, "turn:") {
+		t.Fatalf("OpenPromptTurn = %q, %v", turnID, err)
+	}
+	pending, err := ledger.PendingInputAdmissions(sessionID)
+	if err != nil || len(pending) != 1 {
+		t.Fatalf("pending admissions: %+v %v", pending, err)
+	}
+	got := pending[0]
+	if got.ProposedTurnID != turnID || got.WorkID != "work-1" || !got.SignalProtocol || got.ClaimToken != "" || got.Purpose != "" ||
+		got.ProcessIdentity != delegatedTurnIdentity(identity) || got.PaneGeneration != "pane-now" {
+		t.Fatalf("prepared admission: %+v", got)
+	}
+	if len(input.queues) != 0 {
+		t.Fatalf("a turn opened for a prompt sent input to the Worker: %+v", input.queues)
+	}
+
+	// An unproven target gets no turn.
+	w.targetProcessResolver = func(string) (targetProcessIdentity, bool) { return targetProcessIdentity{}, false }
+	if _, err := w.OpenPromptTurn(sessionID, "work-1"); err == nil {
+		t.Fatal("a turn was opened for a target that could not be proven")
+	}
+}

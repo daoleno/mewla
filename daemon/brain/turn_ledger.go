@@ -766,6 +766,28 @@ func (s *Store) Turn(sessionID string) (watcher.TurnSnapshot, bool, error) {
 	return snapshot, true, nil
 }
 
+// WorkOfSession names the Work a Session last took a prompt for, whether or not
+// that Work still holds the Session as its Attempt. A Worker that reported done
+// and stopped no longer is any Work's Attempt, yet a background sub-agent of it
+// can still ask for something; the Work its last prompt belonged to is whose
+// question that is.
+func (s *Store) WorkOfSession(sessionID string) (string, bool) {
+	sessionID = strings.TrimSpace(sessionID)
+	if s == nil || s.fsm == nil || sessionID == "" {
+		return "", false
+	}
+	var workID string
+	var latest time.Time
+	s.fsm.Each(func(st *lifecycle.State) {
+		for _, admission := range st.Admissions {
+			if admission.SessionID == sessionID && (workID == "" || admission.AttemptedAt.After(latest)) {
+				workID, latest = string(st.ID), admission.AttemptedAt
+			}
+		}
+	})
+	return workID, workID != ""
+}
+
 // TurnByID reads one exact canonical provider Turn. Host handling recovery
 // must never substitute whichever Turn happens to be current for the Session.
 func (s *Store) TurnByID(sessionID, turnID string) (watcher.TurnSnapshot, bool, error) {
