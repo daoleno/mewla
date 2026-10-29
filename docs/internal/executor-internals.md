@@ -71,13 +71,20 @@ followed. For a Worker that Brain delegated (it has a Work and a turn;
 
 1. **Brain first.** The daemon opens a `permission` approval and raises
    `needs_input` on the Worker's turn through the ordinary progress path, so Brain
-   is woken by a normal `session.needs_input` with `"event":"permission_blocked"`.
-   Its details carry the action, the approval id, the Work and the command to
-   answer with. The app does not list the approval yet.
-2. **Brain answers** with `mewla worker approve -id W -approval A -option
-   allow|deny|escalate -basis "<brief sentence>"`. `allow` requires the basis: the
-   sentence of the brief that authorizes the action (`playbooks/permission-block.md`
-   says what to approve, escalate or refuse). `escalate` hands it to the user.
+   is woken by a normal `session.needs_input` with `"event":"prompt_blocked"`,
+   the same event a dialog read from the pane raises (`watcher.PromptEventDetails`).
+   `details.prompt` is the approval in the one prompt shape (`approvalPrompt`:
+   id derived from the approval id, Allow and Deny numbered 1 and 2), and the
+   details also carry the action, the approval id, the Work and `answer_with`.
+   The app does not list the approval yet. The hook offers no "always" option:
+   its decision output has only allow and deny.
+2. **Brain answers** with `mewla worker answer -id W -prompt P -choice N -basis
+   "<brief sentence>"`. `handleWorkerAnswer` finds the held approval by its prompt
+   id (a sub-agent's dialog has no pane prompt) and decides it; the pane prompt's
+   id for the same dialog resolves to the same decision. Allow requires the basis:
+   the sentence of the brief that authorizes the action
+   (`playbooks/permission-block.md` says what to allow, escalate or refuse).
+   `-escalate -basis "<why>"` hands it to the user.
    Brain's answer (any option) also resolves the `needs_input` review it was
    handed with a `wait` on the Worker's Session Turn, so ending the Host turn
    raises no `brain.reconcile_required` and Brain is not woken again; the user's
@@ -110,6 +117,12 @@ answer -id W -prompt P -choice N` or `-answers '[...]'`; the phone sends
 changed without sending a key, resolves a hook-held permission request through
 the hub, and drives a choice with the same code as `answer_choice`.
 `worker send` refuses with `prompt_open` while a prompt is open.
+
+One dialog is reported once. A permission dialog on the screen while its hook
+holds the decision is the hook's to report (`Watcher.SetApprovalHold`: the pane
+gate files nothing); if the pane gate filed first, the hook skips its own event
+(`permissionGate.paneFiled`) and the pane prompt id is answered through the same
+hub decision.
 
 The `PermissionDenied` hook and the `PreToolUse` retry grant that answered
 Auto-mode refusals are gone, and so is the Brain host's `Bash(mewla worker approve

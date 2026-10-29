@@ -46,7 +46,7 @@ func TestAutoModeGuidanceIsGoneFromTheShippedTemplatesAndReachesExistingHomes(t 
 		t.Fatal(err)
 	}
 	policy := readSeed(t, store, delegation.relativePath)
-	if strings.Contains(policy, "Auto mode") || !strings.HasPrefix(policy, "my own notes\n\n") || !strings.Contains(policy, "permission_blocked") {
+	if strings.Contains(policy, "Auto mode") || !strings.HasPrefix(policy, "my own notes\n\n") || !strings.Contains(policy, "prompt_blocked") {
 		t.Fatalf("managed delegation block was not reconciled around the user's text:\n%s", policy)
 	}
 	if got := readSeed(t, store, "playbooks/permission-block.md"); got != defaultPermissionBlockPlaybook {

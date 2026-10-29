@@ -150,15 +150,18 @@ func TestWorkerAnswerResolvesAHookHeldPermissionThroughTheHub(t *testing.T) {
 
 func TestPromptAnswersFlag(t *testing.T) {
 	cases := []struct {
-		name    string
-		choice  int
-		answers string
-		want    string
-		wantErr bool
+		name     string
+		choice   int
+		answers  string
+		escalate bool
+		want     string
+		wantErr  bool
 	}{
 		{name: "menu choice carries no answers", choice: 2},
 		{name: "one-based numbers become indexes", answers: `[{"selected":[1,3]},{"selected":[],"other":"Teal"}]`, want: `[{"selected":[0,2],"other":""},{"selected":[],"other":"Teal"}]`},
 		{name: "neither", wantErr: true},
+		{name: "escalate alone", escalate: true},
+		{name: "escalate with a choice", choice: 1, escalate: true, wantErr: true},
 		{name: "both", choice: 1, answers: `[{"selected":[1]}]`, wantErr: true},
 		{name: "zero is not an option number", answers: `[{"selected":[0]}]`, wantErr: true},
 		{name: "not an array", answers: `{"selected":[1]}`, wantErr: true},
@@ -166,7 +169,7 @@ func TestPromptAnswersFlag(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			raw, err := promptAnswersFlag(tc.choice, tc.answers)
+			raw, err := promptAnswersFlag(tc.choice, tc.answers, tc.escalate)
 			if (err != nil) != tc.wantErr || string(raw) != tc.want {
 				t.Fatalf("raw=%s err=%v", raw, err)
 			}

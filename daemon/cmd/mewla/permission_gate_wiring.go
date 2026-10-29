@@ -74,7 +74,8 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 		return err
 	}
 	return permissionGate{
-		changed: changed,
+		changed:   changed,
+		paneFiled: w.PanePromptFiled,
 		delegated: func(workerID string) bool {
 			worker := w.GetWorker(workerID)
 			if worker == nil || !worker.Delegated {

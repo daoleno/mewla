@@ -106,6 +106,9 @@ type Request struct {
 	PromptID      string          `json:"prompt_id,omitempty"`
 	PromptChoice  int             `json:"prompt_choice,omitempty"`
 	PromptAnswers json.RawMessage `json:"prompt_answers,omitempty"`
+	// PromptEscalate hands a blocked action Brain holds to the user instead of
+	// answering it; the reason goes in ApprovalBasis.
+	PromptEscalate bool `json:"prompt_escalate,omitempty"`
 }
 
 // AgentEventRequest carries one agent hook call to the daemon. Payload is the

@@ -564,6 +564,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	eventHub.OnApprovalsChanged(srv.WorkerApprovalsChanged)
 	agentEvents.gate = permissionGateHooks(w, brainStore, brainService, srv.WorkerApprovalsChanged)
+	w.SetApprovalHold(agentEvents.holdsApproval)
 	book, err := addressbook.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize address book: %w", err)
@@ -1323,13 +1324,15 @@ func isHelpArg(value string) bool {
 }
 
 func printWorkerUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: mewla worker <list|spawn|send|answer|capture|status|receipt|progress|release|close> [flags]")
+	fmt.Fprintln(w, "Usage: mewla worker <list|spawn|send|answer|approvals|approve|capture|status|receipt|progress|release|close> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  list       List visible Mewla Workers")
 	fmt.Fprintln(w, "  spawn      Create a visible delegated Mewla Worker")
 	fmt.Fprintln(w, "  send       Send text to a Mewla Worker")
-	fmt.Fprintln(w, "  answer     Answer the prompt open in a Mewla Worker's terminal")
+	fmt.Fprintln(w, "  answer     Answer a Worker's blocking prompt: a permission, plan, startup menu or question (Brain's one command)")
+	fmt.Fprintln(w, "  approvals  List the Codex or Claude decisions agents wait on (approve answers a Codex app-server request without keys)")
+	fmt.Fprintln(w, "  approve    Allow or deny one listed decision; a Brain-held Claude permission is answered with `worker answer`")
 	fmt.Fprintln(w, "  capture    Capture a Mewla Worker transcript")
 	fmt.Fprintln(w, "  status     Print compact status for one Mewla Worker")
 	fmt.Fprintln(w, "  receipt    Read exact durable input acceptance without resubmitting")

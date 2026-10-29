@@ -150,3 +150,60 @@ func TestPromptGateRenewsTheLeaseWhileThePromptStaysOpen(t *testing.T) {
 		t.Fatalf("renewed again immediately: %+v", ledger.applied)
 	}
 }
+
+// A permission dialog whose hook holds the decision is the hook's to report:
+// the pane gate files nothing, so Brain hears of one dialog once. Once the
+// pane gate has filed it (it got there first), the hook is told so.
+func TestPromptGateLeavesAHookHeldPermissionToTheHook(t *testing.T) {
+	w := New(0)
+	sessionID := "mewla-worker-hold:@1"
+	worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateRunning, Command: "claude"}
+	w.workers[sessionID] = &worker
+	w.workerOrder = append(w.workerOrder, sessionID)
+	ledger := newFakeTurnLedger()
+	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:hold", Status: TurnRunning, SignalProtocol: true}
+	ledger.seed(sessionID, turn)
+	w.SetTurnLedger(ledger)
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	if open.Prompt == nil || open.Prompt.Kind != classifier.PromptPermission {
+		t.Fatalf("fixture is not a permission dialog: %+v", open.Prompt)
+	}
+
+	held := true
+	w.SetApprovalHold(func(string) bool { return held })
+	w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	if len(ledger.applied) != 0 || w.PanePromptFiled(sessionID) {
+		t.Fatalf("the pane gate reported a dialog its hook holds: %+v", ledger.applied)
+	}
+
+	// Hook not holding it (none installed, or already answered): the gate files.
+	held = false
+	turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	if len(ledger.applied) != 1 || !w.PanePromptFiled(sessionID) {
+		t.Fatalf("the pane gate did not report the dialog: %+v", ledger.applied)
+	}
+	// The hook then takes it over: no second event, and the clear still happens.
+	held = true
+	turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	if len(ledger.applied) != 1 {
+		t.Fatalf("the dialog was reported twice: %+v", ledger.applied)
+	}
+	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+	if len(ledger.applied) != 2 || ledger.applied[1].Kind != "running" || w.PanePromptFiled(sessionID) {
+		t.Fatalf("the answered dialog was not cleared: %+v", ledger.applied)
+	}
+}
+
+// Whichever path catches a prompt, Brain reads the same event.
+func TestPromptEventDetailsAreTheOneShape(t *testing.T) {
+	prompt := &classifier.Prompt{ID: "abc", Kind: classifier.PromptPermission, Options: []classifier.PromptOption{{Number: 1, Label: "Yes"}, {Number: 2, Label: "No"}}}
+	details := PromptEventDetails("%7", prompt)
+	answer, _ := details["answer_with"].(string)
+	if details["event"] != "prompt_blocked" || details["prompt"] != prompt ||
+		!strings.Contains(answer, "mewla worker answer -id %7 -prompt abc -choice") || !strings.Contains(answer, "-basis") || !strings.Contains(answer, "-escalate") {
+		t.Fatalf("details = %+v", details)
+	}
+	if plain := PromptEventDetails("%7", &classifier.Prompt{ID: "p", Kind: classifier.PromptPlan}); strings.Contains(plain["answer_with"].(string), "-basis") {
+		t.Fatalf("a plan prompt asks for a basis: %+v", plain)
+	}
+}

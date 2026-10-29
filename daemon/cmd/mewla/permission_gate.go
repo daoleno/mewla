@@ -10,7 +10,9 @@ import (
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/agentevents/claude"
+	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/google/uuid"
 )
 
@@ -19,9 +21,9 @@ import (
 // requires it, or when the executor command chose a mode that can ask (an
 // explicit `auto` that fell back to a prompt). Nobody sits at a delegated
 // Worker's terminal, so this file is the path those prompts take: Brain is told
-// first, as a needs_input on the Worker's turn that carries the action, and
-// answers through `mewla worker approve` with the sentence of the brief that
-// authorizes it. Brain can hand the question to the user (an approval card in
+// first, as the same prompt_blocked needs_input a dialog in the terminal
+// raises, and answers through `mewla worker answer` with the sentence of the
+// brief that authorizes it. Brain can hand the question to the user (an approval card in
 // the app) and, if nobody answers in time, the prompt is refused with a reason,
 // so the Worker is never left waiting at it. Every answer is written to the
 // Work.
@@ -52,6 +54,9 @@ type permissionGate struct {
 	delegated func(workerID string) bool
 	// tellBrain raises needs_input on the Worker's turn.
 	tellBrain func(workerID, summary string, details map[string]any) error
+	// paneFiled reports whether the pane gate already told Brain about the
+	// permission dialog open in the Worker's terminal.
+	paneFiled func(workerID string) bool
 	// resumed clears that needs_input once the question is answered.
 	resumed func(workerID, summary string)
 	// answered records Brain's answer as the disposition of the review that
@@ -65,6 +70,12 @@ type permissionGate struct {
 
 func (s *agentEventService) isDelegated(workerID string) bool {
 	return s.gate.delegated != nil && s.gate.delegated(workerID)
+}
+
+// holdsApproval reports whether a permission hook is waiting on a decision for
+// the Worker, which makes that decision the owner of the dialog it shows.
+func (s *agentEventService) holdsApproval(workerID string) bool {
+	return len(s.approvals(workerID, false)) > 0
 }
 
 func (s *agentEventService) routeOf(approvalID string) string {
@@ -120,6 +131,12 @@ func (s *agentEventService) ask(ctx context.Context, workerID string, a agenteve
 		go func() {
 			defer close(told)
 			s.awaitPublished(ctx, workerID, a.ID)
+			if s.gate.paneFiled != nil && s.gate.paneFiled(workerID) {
+				// The dialog is on the Worker's screen and the pane gate got to
+				// Brain first. Its prompt is answered through this decision, so
+				// Brain is not told twice.
+				return
+			}
 			if err := s.gate.tellBrain(workerID, summary, details); err != nil {
 				log.Printf("permission: Brain could not be told about %s: %v", a.ID, err)
 				s.escalate(workerID, a, "Brain could not be told: "+err.Error())
@@ -234,14 +251,36 @@ func actionDetails(workerID string, a agentevents.Approval) map[string]any {
 	}
 }
 
-// brainRequest is what Brain reads: the action the Worker waits on and how to
-// answer. The Work and its brief are added where the Work is known.
+// approvalPromptID names the prompt a held approval stands for. It is derived
+// from the approval, so `mewla worker answer -prompt` finds the decision the
+// hook is waiting on without a dialog in the pane (a sub-agent's is not drawn).
+func approvalPromptID(approvalID string) string {
+	return classifier.PromptID(classifier.PromptPermission, "hook", approvalID)
+}
+
+// approvalPrompt is a held approval in the one prompt shape: the action, and
+// its options numbered as Brain answers them.
+func approvalPrompt(a agentevents.Approval) classifier.Prompt {
+	prompt := classifier.Prompt{
+		ID: approvalPromptID(a.ID), Kind: classifier.PromptPermission, Provider: claude.Provider,
+		Title: a.Tool, Request: truncateRunes(a.Summary, actionRunes),
+	}
+	for index, option := range a.Options {
+		prompt.Options = append(prompt.Options, classifier.PromptOption{Number: index + 1, Label: option.Label})
+	}
+	return prompt
+}
+
+// brainRequest is what Brain reads: the same prompt event a dialog in the
+// Worker's terminal raises, with the approval it is. The Work and its brief are
+// added where the Work is known.
 func brainRequest(workerID string, a agentevents.Approval) (string, map[string]any) {
 	summary := truncateRunes(fmt.Sprintf("Waiting on a permission prompt: %s %s", a.Tool, strings.Join(strings.Fields(a.Summary), " ")), 150)
-	details := actionDetails(workerID, a)
-	details["event"] = "permission_blocked"
-	details["answer_with"] = fmt.Sprintf(`mewla worker approve -id %s -approval %s -option allow|deny|escalate -basis "<the sentence of the brief that authorizes it>"`, workerID, a.ID)
-	details["policy"] = "Approve only what the Work's brief already authorizes, and quote that sentence as -basis. Use escalate for anything the brief does not cover (other people's data, money, accounts or credentials, outside messages, irreversible deletion). Use deny to refuse it. If you do not answer, the user is asked."
+	prompt := approvalPrompt(a)
+	details := watcher.PromptEventDetails(workerID, &prompt)
+	for key, value := range actionDetails(workerID, a) {
+		details[key] = value
+	}
 	return strings.TrimSpace(summary), details
 }
 
