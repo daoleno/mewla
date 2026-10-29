@@ -213,6 +213,8 @@ func TestABlockedActionBrainDoesNotAnswerGoesToTheUser(t *testing.T) {
 	if card.Route != routeUser {
 		t.Fatalf("card = %+v", card)
 	}
+	// The route flips before the escalation is written to the Work.
+	waitUntil(t, "the escalation to be recorded", func() bool { _, audits, _, _ := rec.snapshot(); return len(audits) > 0 })
 	if _, audits, _, _ := rec.snapshot(); len(audits) != 1 || !strings.Contains(audits[0], "Brain did not answer in time") {
 		t.Fatalf("audits = %q", audits)
 	}
