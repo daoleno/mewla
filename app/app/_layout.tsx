@@ -31,7 +31,10 @@ import {
   CurrentServerProvider,
   useCurrentServer,
 } from "../store/currentServer";
-import { syncCalendarNotifications } from "../services/calendarNotifications";
+import { replayNativeCalendarActions } from "../services/calendarAlertActions";
+import { loadStrongCalendarAlerts, onStrongCalendarAlertsChange } from "../services/calendarAlertSettings";
+import { setCalendarAlertsForeground, syncCalendarNotifications } from "../services/calendarNotifications";
+import { registerPushMessage, rememberPushToken } from "../services/pushRegistration";
 import { createNotificationReporter } from "../services/notificationReport";
 import { ensurePushPermission } from "../services/pushPermission";
 import { terminalRouteParams } from "../services/workerRouteId";
@@ -61,6 +64,7 @@ import { syncComputers } from "../services/computerSync";
 import { importConnection } from "../services/importConnection";
 import { confirmPairingScopeFor } from "../services/confirmPairingScope";
 import { readInitialConnectLink } from "../services/initialConnectLink";
+import { CalendarAlertHost } from "../components/calendar/CalendarAlertHost";
 import { EnrollmentApprovalHost } from "../components/enrollment/EnrollmentApprovalHost";
 import { PairingCancelledError } from "../services/pairingScope";
 import {
@@ -72,7 +76,6 @@ import { LaunchVeil } from "../components/mewla/LaunchVeil";
 import type { LaunchDestination } from "../components/mewla/launchTiming";
 import { consumeUnfinishedNativeTerminalBreadcrumb } from "../services/nativeTerminalDiagnosticsObserver";
 import { LiveSurfaceBridge } from "../components/live/LiveSurfaceBridge";
-import { getMewlaLiveModule } from "../modules/mewla-live/src";
 import { startAppUpdateChecks } from "../services/useAppUpdate";
 import {
   foregroundNotificationPresentation,
@@ -82,6 +85,9 @@ import {
   screenshotDemoEnabled,
   shouldUseScreenshotDemoRuntime,
 } from "../services/screenshotDemoGate";
+
+// The "Strong calendar alerts" setting, read once; a registration waits for it.
+const strongAlertsLoaded = loadStrongCalendarAlerts();
 
 Notifications.setNotificationHandler({
   handleNotification: foregroundNotificationPresentation,
@@ -162,6 +168,7 @@ function LiveAppRuntime() {
       <CurrentServerConnectionBinder />
       <NotificationObserver />
       <EnrollmentApprovalHost />
+      <CalendarAlertHost />
       <AppNavigator bootstrapResolved={destination !== null} />
       {launched ? null : <LaunchVeil destination={destination} onDone={handleLaunched} />}
     </>
@@ -536,10 +543,14 @@ const NotificationObserver = memo(function NotificationObserver() {
 
   useEffect(() => {
     wsClient.noteAppState(AppState.currentState);
+    setCalendarAlertsForeground(AppState.currentState === "active");
+    void replayNativeCalendarActions();
     const subscription = AppState.addEventListener("change", (nextState) => {
       const previous = appStateRef.current;
       appStateRef.current = nextState;
       wsClient.noteAppState(nextState);
+      setCalendarAlertsForeground(nextState === "active");
+      if (nextState === "active") void replayNativeCalendarActions();
       const liveServerId = wsClient.liveServerId();
       if (liveServerId && wsClient.isConnected(liveServerId)) {
         sendAppState(liveServerId, nextState);
@@ -571,31 +582,34 @@ const NotificationObserver = memo(function NotificationObserver() {
         return undefined;
       });
       const attempt = pendingToken;
-      void attempt.then((token) => {
+      void Promise.all([attempt, strongAlertsLoaded]).then(([token]) => {
         if (!token) {
           // Retry on the next connection, e.g. after a transient token failure.
           if (pendingToken === attempt) pendingToken = null;
           return;
         }
         if (cancelled) return;
-        wsClient.send(serverId, {
-          type: "register_push",
-          push_token: token,
-          server_ref: serverId,
-          // Watch's morning brief follows where the person is and what they read.
-          time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          locale: Intl.DateTimeFormat().resolvedOptions().locale,
-          // The Android live surface is a data push only this build can show.
-          ...(getMewlaLiveModule() ? { live_state: true } : {}),
-        });
+        rememberPushToken(token);
+        const message = registerPushMessage(serverId, token);
+        if (message) wsClient.send(serverId, message);
       });
     };
 
     const onConnected = (data: any) => {
       registerPush(data.serverId);
       sendAppState(data.serverId, appStateRef.current);
+      void replayNativeCalendarActions();
     };
     wsClient.on("connected", onConnected);
+    // Strong alerts changed: tell the daemon how to send them and re-arm the
+    // phone's own, whose delivery depends on it.
+    const stopStrongWatch = onStrongCalendarAlertsChange(() => {
+      const serverId = wsClient.liveServerId();
+      if (!serverId || !wsClient.isConnected(serverId)) return;
+      const message = registerPushMessage(serverId);
+      if (message) wsClient.send(serverId, message);
+      wsClient.listCalendarItems(serverId);
+    });
 
     const liveServerId = wsClient.liveServerId();
     if (liveServerId && wsClient.isConnected(liveServerId)) {
@@ -654,6 +668,7 @@ const NotificationObserver = memo(function NotificationObserver() {
     return () => {
       cancelled = true;
       wsClient.off("connected", onConnected);
+      stopStrongWatch();
       reporter.dispose();
       notificationListener.current?.remove();
       responseListener.current?.remove();

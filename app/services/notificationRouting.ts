@@ -9,7 +9,25 @@ export type NotificationDestination =
       serverId?: string;
     };
 
-export async function foregroundNotificationPresentation() {
+/** The notification's routing data, from a received notification. */
+type ReceivedNotification = { request?: { content?: { data?: unknown } } };
+
+/** A calendar alert (local or pushed): the in-app card is what shows it while the app is open. */
+export function isCalendarAlert(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const fields = data as Record<string, unknown>;
+  return fields.screen === "calendar" && typeof fields.alert_key === "string";
+}
+
+export async function foregroundNotificationPresentation(notification?: ReceivedNotification) {
+  if (isCalendarAlert(notification?.request?.content?.data)) {
+    return {
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: false,
+      shouldShowList: false,
+    };
+  }
   return {
     shouldPlaySound: true,
     shouldSetBadge: false,
