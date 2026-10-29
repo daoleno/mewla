@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
 
@@ -87,5 +88,20 @@ func TestAQuestionAfterTheTurnSettledOpensItsOwnBlockedTurn(t *testing.T) {
 	}
 	if !raised {
 		t.Fatalf("Brain was not told: %+v", events)
+	}
+
+	// The question's review took the place of the review of the Worker's
+	// reported result. Answering settles the question's turn as done again, so
+	// Brain is handed that result to review once more.
+	if result, err := store.ApplyDelegatedTurnProgress(fact(second, "done", "late-ask-answered", acceptedAt.Add(5*time.Minute))); err != nil || !result.Changed || result.Turn.Status != watcher.TurnDone {
+		t.Fatalf("settling the question's turn: %+v %v", result, err)
+	}
+	reviewed, err := store.Work(item.ID)
+	if err != nil || reviewed.Status != WorkWaiting || reviewed.NextAction != "Review the delegated Session result." {
+		t.Fatalf("Brain is not handed the result again: %+v %v", reviewed, err)
+	}
+	state, err := store.FSM().State(lifecycle.WorkID(item.ID))
+	if err != nil || state.Review == nil || state.Review.Reason != "turn_done" || state.Review.Ref != second {
+		t.Fatalf("review after the answer: %+v %v", state.Review, err)
 	}
 }
