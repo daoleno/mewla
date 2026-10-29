@@ -55,8 +55,17 @@ mewla calendar run -id <item-id> --json
 
 Create, update, cancel, get, and run responses include a plain confirmation with the resolved local date, time, timezone, and effect. In the CLI, `-source-thread` supplies `source_thread_id` and is mandatory for `scheduled_action`; callers updating with `-item-json` must preserve the same field. Brain is instructed to use these tools only for explicit calendar intent, not to extract commitments from every message.
 
-## Device reminders
+## Alerts
 
-After a sync, the app schedules the next future reminder as a local device notification. The OS keeps that notification useful if the phone temporarily loses its daemon connection. Cancelling or editing an item resynchronizes the local schedule. Permission denial is non-fatal: Calendar remains usable and explains that notifications are disabled.
+The scheduler fires one alert per event, reminder or deadline occurrence (`Item.AlertAt`: its snooze, or its time less the lead; default lead event 10 min, deadline 30, reminder 0; `alert_lead_minutes` overrides). Owned items and scheduled actions never alert.
+
+- The fired alert is recorded before it is sent (`alerted_at`, a bumped revision), so a reload or restart never sends it twice. `acked_at` is the last alert the user answered; an alert is open while `alerted_at` is later. Only the daemon sets both and `snoozed_until`; `Store.Update` keeps them and answers the open alert when the time moves.
+- An alert more than `AlertWindow` (15 min) late is dropped, which is also what keeps a first run on an old calendar from sending a burst. A failed send is retried three times a minute apart inside that window; no registered phone is not retried.
+- `snooze_calendar_item` / `done_calendar_item` (and `mewla calendar snooze|done`) answer it. Done finishes a reminder or deadline (a repeating one that already moved on only answers the alert) and only silences an event.
+- The push is `push.KindCalendarAlert`, so Watch records it like any notification. Android devices (they say `platform: android` in `register_push`) get a data-only message their app posts and dedups against its own alarm; iOS gets a visible one, `time-sensitive` unless the device sent `strong_alerts: false`.
+
+## Device alerts
+
+The app arms the next alert of every item on the phone, so it fires with the daemon or the network late. Android hands the set to `MewlaLive.calendarAlertsSchedule` (`AlarmManager.setExactAndAllowWhileIdle`, re-armed after boot, deduped with the push by `alert_key` under one lock); iOS schedules a `UNCalendarNotificationTrigger` through expo-notifications. The in-app card (`CalendarAlertHost`) is derived from the synced items and the phone's clock (`openCalendarAlerts`), not from how an alert arrived. Permission denial is non-fatal: Calendar remains usable and explains that notifications are disabled.
 
 V1 does not sync Apple or Google calendars and does not include attendees, shared calendars, meeting rooms, complex colors, or arbitrary automatic scheduling.
