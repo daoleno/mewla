@@ -479,6 +479,16 @@ func (s *Store) Done(id string) (Item, error) {
 	default:
 		return cloneItem(item), nil
 	}
+	// The phone's own alarm can show the alert a moment before the scheduler
+	// records it. Answering it settles it: it is not alerted again.
+	if at, owed := item.AlertPending(); owed && !at.After(s.now()) {
+		fired := at
+		updated, _, err := s.updateLocked(id, func(item *Item) { item.AlertedAt = &fired })
+		if err != nil {
+			return Item{}, err
+		}
+		item = updated
+	}
 	switch item.Kind {
 	case KindReminder, KindDeadline:
 		if item.Owner != "" {
