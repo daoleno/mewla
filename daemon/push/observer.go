@@ -11,6 +11,7 @@ const (
 	KindScheduledResult = "scheduled_result"
 	KindBrainReply      = "brain_reply"
 	KindWatchUrgent     = "watch_urgent"
+	KindCalendarAlert   = "calendar_alert"
 	KindOther           = "other"
 )
 

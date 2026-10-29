@@ -265,6 +265,10 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleCalendarCancel(req)
 	case "calendar_run":
 		return a.handleCalendarRun(req)
+	case "calendar_snooze":
+		return a.handleCalendarSnooze(req)
+	case "calendar_done":
+		return a.handleCalendarDone(req)
 	case "device_list":
 		return a.handleDeviceList()
 	case "device_revoke":
@@ -528,6 +532,29 @@ func (a *controlApp) handleCalendarCancel(req control.Request) control.Response 
 		return calendarControlError(err)
 	}
 	return calendarControlResponse(item, "Cancelled")
+}
+func (a *controlApp) handleCalendarSnooze(req control.Request) control.Response {
+	if a == nil || a.calendarStore == nil {
+		return control.ErrorResponse("calendar_unavailable", "Calendar is not configured.")
+	}
+	if req.Minutes < 1 || req.Minutes > 24*60 {
+		return control.ErrorResponse("invalid_snooze", "Snooze minutes must be between 1 and 1440.")
+	}
+	item, err := a.calendarStore.Snooze(strings.TrimSpace(req.ID), time.Now().Add(time.Duration(req.Minutes)*time.Minute))
+	if err != nil {
+		return calendarControlError(err)
+	}
+	return control.Response{OK: true, CalendarItem: &item, Confirmation: fmt.Sprintf("Snoozed %s for %d min.", item.Kind, req.Minutes)}
+}
+func (a *controlApp) handleCalendarDone(req control.Request) control.Response {
+	if a == nil || a.calendarStore == nil {
+		return control.ErrorResponse("calendar_unavailable", "Calendar is not configured.")
+	}
+	item, err := a.calendarStore.Done(strings.TrimSpace(req.ID))
+	if err != nil {
+		return calendarControlError(err)
+	}
+	return control.Response{OK: true, CalendarItem: &item, Confirmation: fmt.Sprintf("Marked %s done.", item.Kind)}
 }
 func (a *controlApp) handleCalendarRun(req control.Request) control.Response {
 	if a == nil || a.calendarScheduler == nil {

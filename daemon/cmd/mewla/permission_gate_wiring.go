@@ -41,6 +41,9 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 			if admission, ok := pendingAdmission(workerID); ok {
 				item, err = store.Work(admission.WorkID)
 				found = err == nil
+			} else if workID, ok := store.WorkOfSession(workerID); ok {
+				item, err = store.Work(workID)
+				found = err == nil
 			}
 		}
 		if err != nil || !found || item.Status == brain.WorkDone || item.Status == brain.WorkCancelled {
@@ -48,9 +51,10 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 		}
 		return item, true
 	}
-	// turnOf names the turn a question belongs to. A Worker can ask before its
-	// first report has admitted its turn; the prompt-carried turn still pending
-	// is then the one a report on its behalf promotes.
+	// turnOf names the live turn a question belongs to. A Worker can ask before
+	// its first report has admitted its turn; the prompt-carried turn still
+	// pending is then the one a report on its behalf promotes. A settled turn is
+	// not one: it is immutable, so nothing can be filed on it.
 	turnOf := func(workerID string) (string, bool) {
 		turn, found, err := store.Turn(workerID)
 		if err == nil && found && strings.TrimSpace(turn.TurnID) != "" && !watcher.TurnTerminal(turn.Status) {
@@ -59,18 +63,18 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 		if admission, ok := pendingAdmission(workerID); ok {
 			return admission.ProposedTurnID, true
 		}
-		if err != nil || !found || strings.TrimSpace(turn.TurnID) == "" {
-			return "", false
-		}
-		return turn.TurnID, true
+		return "", false
+	}
+	report := func(workerID, turnID string, p classifier.WorkerProgress) (*classifier.Worker, error) {
+		p.TurnID = turnID
+		return w.UpdateWorkerProgress(workerID, p)
 	}
 	progress := func(workerID string, p classifier.WorkerProgress) error {
 		turnID, ok := turnOf(workerID)
 		if !ok {
-			return fmt.Errorf("worker %s has no delegated turn", workerID)
+			return fmt.Errorf("worker %s has no live delegated turn", workerID)
 		}
-		p.TurnID = turnID
-		_, err := w.UpdateWorkerProgress(workerID, p)
+		_, err := report(workerID, turnID, p)
 		return err
 	}
 	return permissionGate{
@@ -81,9 +85,8 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 			if worker == nil || !worker.Delegated {
 				return false
 			}
-			_, hasTurn := turnOf(workerID)
 			_, hasWork := workFor(workerID)
-			return hasTurn && hasWork
+			return hasWork
 		},
 		tellBrain: func(workerID, summary string, details map[string]any) error {
 			if item, ok := workFor(workerID); ok {
@@ -95,10 +98,31 @@ func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.
 			if err != nil {
 				return err
 			}
-			return progress(workerID, classifier.WorkerProgress{
+			// A request can come after the Worker's own turn settled: it
+			// reported done and stopped while a background sub-agent kept
+			// running. The request still reaches Brain, on a turn opened for it.
+			turnID, live := turnOf(workerID)
+			if !live {
+				item, found := workFor(workerID)
+				if !found {
+					return fmt.Errorf("worker %s has no active Work to raise the request on", workerID)
+				}
+				if turnID, err = w.OpenPromptTurn(workerID, item.ID); err != nil {
+					return err
+				}
+			}
+			raised, err := report(workerID, turnID, classifier.WorkerProgress{
 				Status: "blocked", Phase: "working", Attention: "user_input",
 				Summary: summary, EventKind: "needs_judgment", DetailsJSON: string(raw), LeaseSeconds: 900,
 			})
+			if err != nil {
+				return err
+			}
+			// A fact the ledger dropped (the turn had settled) raises nothing.
+			if raised == nil || raised.State != classifier.StateBlocked {
+				return fmt.Errorf("the request did not block turn %s", turnID)
+			}
+			return nil
 		},
 		resumed: func(workerID, summary string) {
 			err := progress(workerID, classifier.WorkerProgress{

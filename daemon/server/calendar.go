@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/gorilla/websocket"
@@ -104,6 +105,38 @@ func (s *Server) handleRunCalendarItem(conn *websocket.Conn, raw clientMessage) 
 		return
 	}
 	s.sendJSON(conn, map[string]any{"type": "calendar_item_running", "request_id": raw.RequestID, "calendar_item": calendarItemWire(item)})
+}
+
+// maxSnoozeMinutes bounds a snooze: a day.
+const maxSnoozeMinutes = 24 * 60
+
+func (s *Server) handleSnoozeCalendarItem(conn *websocket.Conn, raw clientMessage) {
+	if s.calendar == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "calendar_unavailable", "calendar store not configured")
+		return
+	}
+	if raw.SnoozeMinutes < 1 || raw.SnoozeMinutes > maxSnoozeMinutes {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "invalid_snooze", "snooze_minutes must be between 1 and 1440")
+		return
+	}
+	item, err := s.calendar.Snooze(strings.TrimSpace(raw.ID), time.Now().Add(time.Duration(raw.SnoozeMinutes)*time.Minute))
+	if err != nil {
+		s.sendCalendarError(conn, raw.RequestID, err)
+		return
+	}
+	s.sendJSON(conn, map[string]any{"type": "calendar_item_updated", "request_id": raw.RequestID, "calendar_item": calendarItemWire(item)})
+}
+func (s *Server) handleDoneCalendarItem(conn *websocket.Conn, raw clientMessage) {
+	if s.calendar == nil {
+		s.sendErrorWithRequestID(conn, raw.RequestID, "calendar_unavailable", "calendar store not configured")
+		return
+	}
+	item, err := s.calendar.Done(strings.TrimSpace(raw.ID))
+	if err != nil {
+		s.sendCalendarError(conn, raw.RequestID, err)
+		return
+	}
+	s.sendJSON(conn, map[string]any{"type": "calendar_item_updated", "request_id": raw.RequestID, "calendar_item": calendarItemWire(item)})
 }
 func (s *Server) sendCalendarError(conn *websocket.Conn, requestID string, err error) {
 	code := "calendar_request_failed"

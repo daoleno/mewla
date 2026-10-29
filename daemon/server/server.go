@@ -94,6 +94,12 @@ type notificationPusher interface {
 	NotifyScheduledResult(title, status, threadID, resultID string) error
 }
 
+// deviceInfoPusher is a pusher that keeps what a device says about itself:
+// its platform and whether it wants strong calendar alerts.
+type deviceInfoPusher interface {
+	SetDevice(deviceID, platform string, strongAlerts bool)
+}
+
 // notificationRecorder is how the server tells Watch what the phone did with
 // notifications, and which ones it held back. It is optional.
 type notificationRecorder interface {
@@ -395,6 +401,9 @@ type clientMessage struct {
 	Body                 string                                 `json:"body"`
 	Action               string                                 `json:"action"`
 	PushToken            string                                 `json:"push_token"`
+	Platform             string                                 `json:"platform"`
+	StrongAlerts         *bool                                  `json:"strong_alerts"`
+	SnoozeMinutes        int                                    `json:"snooze_minutes"`
 	NotificationID       string                                 `json:"notification_id"`
 	AppState             string                                 `json:"app_state"`
 	OccurredAtMS         int64                                  `json:"occurred_at_ms"`
@@ -1044,6 +1053,10 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleCancelCalendarItem(conn, raw)
 	case "run_calendar_item":
 		s.handleRunCalendarItem(conn, raw)
+	case "snooze_calendar_item":
+		s.handleSnoozeCalendarItem(conn, raw)
+	case "done_calendar_item":
+		s.handleDoneCalendarItem(conn, raw)
 	case "brain_snapshot":
 		s.sendBrainSnapshot(conn, raw.RequestID)
 	case "brain_context":
@@ -1066,6 +1079,9 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 	case "register_push":
 		if raw.PushToken != "" && s.pusher != nil {
 			s.pusher.SetRegistration(s.deviceIDOf(conn), raw.PushToken, raw.ServerRef)
+			if pusher, ok := s.pusher.(deviceInfoPusher); ok {
+				pusher.SetDevice(s.deviceIDOf(conn), raw.Platform, raw.StrongAlerts == nil || *raw.StrongAlerts)
+			}
 			if s.deviceHook != nil {
 				s.deviceHook(strings.TrimSpace(raw.TimeZone), strings.TrimSpace(raw.Locale))
 			}

@@ -95,3 +95,82 @@ func calendarAuthHeader(privateKey ed25519.PrivateKey, daemonID, deviceID, purpo
 	signature := ed25519.Sign(privateKey, auth.BuildSignaturePayload(purpose, daemonID, deviceID, timestamp, nonceHex))
 	return auth.AuthorizationHeaderPrefix + "v1:" + deviceID + ":" + daemonID + ":" + timestamp + ":" + nonceHex + ":" + hex.EncodeToString(signature)
 }
+
+func TestCalendarWebSocketSnoozeAndDoneAnswerTheAlert(t *testing.T) {
+	authManager, err := auth.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairing, _ := authManager.IssuePairingToken(time.Minute)
+	publicKey, privateKey, _ := ed25519.GenerateKey(rand.Reader)
+	if _, err := authManager.EnrollDevice(pairing.Value, authManager.DaemonID(), authManager.PublicKeyHex(), "device-alert", "phone", hex.EncodeToString(publicKey)); err != nil {
+		t.Fatal(err)
+	}
+	store, _ := calendar.NewStore(t.TempDir())
+	srv := New(authManager, watcher.New(time.Second), nil, nil, nil, nil, nil)
+	srv.SetCalendar(store, calendar.NewScheduler(store, nil))
+	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
+	defer httpServer.Close()
+	header := http.Header{}
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-alert", "mewla-connect"))
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	readType := func(want string) map[string]any {
+		t.Helper()
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		for {
+			_, raw, readErr := conn.ReadMessage()
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["type"] == want || payload["type"] == "error" {
+				return payload
+			}
+		}
+	}
+	at := time.Now().UTC().Add(time.Hour)
+	item, err := store.Create(calendar.Item{Title: "Call", Kind: calendar.KindReminder, NotifyAt: &at, Timezone: "UTC"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.WriteJSON(map[string]any{"type": "snooze_calendar_item", "request_id": "s0", "id": item.ID, "snooze_minutes": 0}); err != nil {
+		t.Fatal(err)
+	}
+	if bad := readType("calendar_item_updated"); bad["type"] != "error" {
+		t.Fatalf("a zero snooze was accepted: %#v", bad)
+	}
+	if err := conn.WriteJSON(map[string]any{"type": "snooze_calendar_item", "request_id": "s1", "id": item.ID, "snooze_minutes": 15}); err != nil {
+		t.Fatal(err)
+	}
+	snoozed := readType("calendar_item_updated")
+	raw, _ := json.Marshal(snoozed["calendar_item"])
+	var got calendar.Item
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.SnoozedUntil == nil || time.Until(*got.SnoozedUntil) < 14*time.Minute {
+		t.Fatalf("snoozed = %#v", got)
+	}
+	if _, err := store.SetStatus(item.ID, calendar.StatusWaiting, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.WriteJSON(map[string]any{"type": "done_calendar_item", "request_id": "d1", "id": item.ID}); err != nil {
+		t.Fatal(err)
+	}
+	done := readType("calendar_item_updated")
+	raw, _ = json.Marshal(done["calendar_item"])
+	got = calendar.Item{}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != calendar.StatusCompleted || got.SnoozedUntil != nil {
+		t.Fatalf("done = %#v", got)
+	}
+}
