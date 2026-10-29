@@ -15,15 +15,50 @@ import (
 // Worker's turn. It acts only for a Worker Brain delegated, whose turn and
 // Work it can name; for any other session every question goes to the user.
 func permissionGateHooks(w *watcher.Watcher, store *brain.Store, service *brain.Service, changed func(workerID string)) permissionGate {
+	// pendingAdmission is the prompt-carried input of a Worker whose first
+	// report has not admitted its turn yet.
+	pendingAdmission := func(workerID string) (watcher.InputAdmission, bool) {
+		pending, err := store.PendingInputAdmissions(workerID)
+		if err != nil {
+			return watcher.InputAdmission{}, false
+		}
+		var newest *watcher.InputAdmission
+		for index := range pending {
+			candidate := pending[index]
+			if candidate.State == watcher.InputAdmissionPending && candidate.SignalProtocol && candidate.ClaimToken == "" && candidate.Purpose == "" &&
+				(newest == nil || candidate.AcceptedAt.After(newest.AcceptedAt)) {
+				newest = &pending[index]
+			}
+		}
+		if newest == nil {
+			return watcher.InputAdmission{}, false
+		}
+		return *newest, true
+	}
 	workFor := func(workerID string) (brain.Work, bool) {
 		item, found, err := service.WorkForSession(workerID)
+		if err == nil && !found {
+			if admission, ok := pendingAdmission(workerID); ok {
+				item, err = store.Work(admission.WorkID)
+				found = err == nil
+			}
+		}
 		if err != nil || !found || item.Status == brain.WorkDone || item.Status == brain.WorkCancelled {
 			return brain.Work{}, false
 		}
 		return item, true
 	}
+	// turnOf names the turn a question belongs to. A Worker can ask before its
+	// first report has admitted its turn; the prompt-carried turn still pending
+	// is then the one a report on its behalf promotes.
 	turnOf := func(workerID string) (string, bool) {
 		turn, found, err := store.Turn(workerID)
+		if err == nil && found && strings.TrimSpace(turn.TurnID) != "" && !watcher.TurnTerminal(turn.Status) {
+			return turn.TurnID, true
+		}
+		if admission, ok := pendingAdmission(workerID); ok {
+			return admission.ProposedTurnID, true
+		}
 		if err != nil || !found || strings.TrimSpace(turn.TurnID) == "" {
 			return "", false
 		}
