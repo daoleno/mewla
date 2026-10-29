@@ -92,32 +92,3 @@ export function formatCalendarTime(item: CalendarItem) {
 export function executes(item: CalendarItem) {
   return item.kind === "scheduled_action";
 }
-export function calendarReminderPlan(
-  serverId: string,
-  items: CalendarItem[],
-  now = Date.now(),
-) {
-  return items
-    .filter(
-      (item) =>
-        item.kind === "reminder" &&
-        // An item Mewla acts on (the morning brief) sends its own message, and
-        // only when it has something to say; no reminder on top of it.
-        !item.owner &&
-        item.status === "scheduled" &&
-        Boolean(item.next_at) &&
-        Date.parse(item.next_at) > now,
-    )
-    .map((item) => ({
-      key: `${serverId}:${item.id}`,
-      item,
-      trigger: item.next_at,
-      fingerprint: JSON.stringify({
-        trigger: item.next_at,
-        title: item.title,
-        body: item.notes?.trim() || `Reminder · ${item.timezone}`,
-        timezone: item.timezone,
-        revision: item.revision,
-      }),
-    }));
-}

@@ -46,6 +46,13 @@ export interface CalendarItem {
   linked_work_id?: string;
   /** Set by the daemon when Mewla acts on this item itself, e.g. Watch's morning brief. */
   owner?: string;
+  /** Minutes before an event starts or a deadline falls due that the phone alerts; unset means the kind's default. */
+  alert_lead_minutes?: number;
+  /** A snooze moves the next alert here. Only the daemon sets the alert state. */
+  snoozed_until?: string;
+  /** The alert the daemon last fired, and the last one the user answered. An alert is open while the first is later. */
+  alerted_at?: string;
+  acked_at?: string;
   failure_reason?: string;
   next_at: string;
   created_at: string;

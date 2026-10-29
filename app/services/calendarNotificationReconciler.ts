@@ -1,5 +1,5 @@
 import type { CalendarItem } from "../store/calendar";
-import { calendarReminderPlan } from "./calendarPresentation";
+import { alertKey, calendarAlertPlan } from "./calendarAlerts";
 import { warnOnce } from "./warnOnce";
 
 export type CalendarNotificationRequest = {
@@ -8,6 +8,8 @@ export type CalendarNotificationRequest = {
   itemId: string;
   serverId: string;
   trigger: string;
+  /** The alert's identity, `<item>@<instant ms>`; the daemon's push for the same alert carries it too. */
+  alertKey: string;
 };
 export type CalendarNotificationDependencies = {
   getStored(): Promise<string | null>;
@@ -15,6 +17,8 @@ export type CalendarNotificationDependencies = {
   schedule(request: CalendarNotificationRequest): Promise<string>;
   cancel(id: string): Promise<void>;
   ensureChannel(): Promise<void>;
+  /** Anything besides the item that changes what is scheduled, such as the strong-alerts setting. */
+  variant?(): string;
 };
 type StoredNotification = { id: string; fingerprint: string; trigger: string };
 type NotificationMap = Record<string, StoredNotification>;
@@ -27,15 +31,17 @@ export async function reconcileCalendarNotifications(
 ) {
   await deps.ensureChannel();
   const current = await readMap(deps);
+  const variant = deps.variant?.() ?? "";
   const wanted = new Set<string>();
-  for (const { key, item, trigger, fingerprint } of calendarReminderPlan(
+  for (const { key, item, trigger, fingerprint, title, body, at } of calendarAlertPlan(
     serverId,
     items,
     now,
   )) {
     wanted.add(key);
     const existing = current[key];
-    if (existing?.fingerprint === fingerprint && existing.trigger === trigger) {
+    const stamped = fingerprint + variant;
+    if (existing?.fingerprint === stamped && existing.trigger === trigger) {
       continue;
     }
     if (existing?.id) {
@@ -47,13 +53,14 @@ export async function reconcileCalendarNotifications(
       }
     }
     const id = await deps.schedule({
-      title: item.title,
-      body: item.notes?.trim() || `Reminder · ${item.timezone}`,
+      title,
+      body,
       itemId: item.id,
       serverId,
       trigger,
+      alertKey: alertKey(item.id, at),
     });
-    current[key] = { id, fingerprint, trigger };
+    current[key] = { id, fingerprint: stamped, trigger };
   }
   for (const [key, record] of Object.entries(current)) {
     if (!key.startsWith(`${serverId}:`) || wanted.has(key)) continue;

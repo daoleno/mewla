@@ -3041,6 +3041,28 @@ export class WebSocketClient {
     );
   }
 
+  /** Alert again in `minutes`, and close the alert that is open. */
+  snoozeCalendarItem(serverId: string, id: string, minutes: number) {
+    return this.calendarAction(
+      serverId,
+      "snooze_calendar_item",
+      "calendar_item_updated",
+      { id, snooze_minutes: minutes },
+      "Failed to snooze calendar item.",
+    );
+  }
+
+  /** Finish a reminder or deadline; an event only stops alerting. */
+  doneCalendarItem(serverId: string, id: string) {
+    return this.calendarAction(
+      serverId,
+      "done_calendar_item",
+      "calendar_item_updated",
+      { id },
+      "Failed to finish calendar item.",
+    );
+  }
+
   runCalendarItem(serverId: string, id: string) {
     return this.calendarAction(
       serverId,

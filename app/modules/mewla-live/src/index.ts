@@ -20,6 +20,46 @@ interface MewlaLiveNativeModule {
   /** "none" until provisioned, "ok" while the token works, "revoked" after the daemon refused it. */
   widgetState(): "none" | "ok" | "revoked";
   diagnostics(): LiveDiagnostics;
+  /*
+   * Calendar alerts (Android). Optional: a binary built before them lacks these, and the app then
+   * falls back to the ordinary scheduled notification.
+   */
+  /** Replaces the armed set with these alerts (JSON array of CalendarAlarm); returns how many are armed. */
+  calendarAlertsSchedule?(alarmsJson: string): number;
+  /** Cancels an item's armed alarms and dismisses its posted notification. */
+  calendarAlertsCancelItem?(itemId: string): void;
+  /** The device-local "Strong calendar alerts" setting: alarm-style channel and lock-screen takeover. */
+  calendarAlertsSetStrong?(strong: boolean): void;
+  /** While the app is in front, alerts mark themselves fired without posting; the in-app card shows instead. */
+  calendarAlertsSetForeground?(foreground: boolean): void;
+  calendarAlertsCapabilities?(): CalendarAlertCapabilities;
+  calendarAlertsOpenFullScreenSettings?(): void;
+  /** Done and Snooze taken on the notification or lock-screen alert with no JS running; returns and clears them (JSON). */
+  calendarAlertsTakeActions?(): string;
+}
+
+export interface CalendarAlarm {
+  key: string;
+  itemId: string;
+  serverId: string;
+  title: string;
+  body: string;
+  atMs: number;
+}
+
+export interface CalendarAlertCapabilities {
+  exactAlarms: boolean;
+  fullScreen: boolean;
+  notifications: boolean;
+}
+
+/** An action taken natively on a calendar alert; JS replays it against the daemon. */
+export interface CalendarNativeAction {
+  type: "done" | "snooze";
+  itemId: string;
+  serverId: string;
+  minutes: number;
+  atMs: number;
 }
 
 let cached: MewlaLiveNativeModule | null | undefined;

@@ -55,4 +55,16 @@ describe("remote notification behavior", () => {
       shouldShowList: true,
     });
   });
+
+  test("a calendar alert is left to the in-app card while the app is open", async () => {
+    const alert = { request: { content: { data: { screen: "calendar", alert_key: "item@1" } } } };
+    expect(await foregroundNotificationPresentation(alert)).toEqual({
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+      shouldShowBanner: false,
+      shouldShowList: false,
+    });
+    const plain = { request: { content: { data: { screen: "calendar" } } } };
+    expect((await foregroundNotificationPresentation(plain)).shouldShowBanner).toBe(true);
+  });
 });
