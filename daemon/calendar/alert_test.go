@@ -334,3 +334,20 @@ func secondAt(r *alertRecorder) time.Time {
 	_, at := r.at(1)
 	return at
 }
+
+func TestDoneBeforeTheDaemonRecordedTheAlertSettlesItForGood(t *testing.T) {
+	f := newAlertFixture(t)
+	rem, _ := f.store.Create(reminder(f.now.Add(time.Minute)))
+	f.setClock(f.now.Add(time.Minute)) // due, but no pass has run yet
+	done, err := f.store.Done(rem.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != StatusCompleted || done.AlertOpen() {
+		t.Fatalf("done = %s open %v", done.Status, done.AlertOpen())
+	}
+	f.tick(f.clock().Add(time.Minute))
+	if f.rec.count() != 0 {
+		t.Fatalf("an answered alert was sent: %d", f.rec.count())
+	}
+}
