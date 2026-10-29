@@ -44,6 +44,16 @@ class CalendarAlertActivity : Activity() {
     vibrate()
   }
 
+  /** A newer alert while this one is still up (the activity is a single instance): show the newer. */
+  override fun onNewIntent(intent: android.content.Intent) {
+    super.onNewIntent(intent)
+    setIntent(intent)
+    val current = CalendarAlerts.alertOf(intent) ?: return
+    alert = current
+    setContentView(content(current))
+    vibrate()
+  }
+
   private fun content(current: CalendarAlert): LinearLayout {
     val pad = (24 * resources.displayMetrics.density).toInt()
     fun text(value: String, size: Float, bold: Boolean, alpha: Int) = TextView(this).apply {

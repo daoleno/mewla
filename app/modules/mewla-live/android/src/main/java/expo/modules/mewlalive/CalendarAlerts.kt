@@ -10,6 +10,7 @@ import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 /**
@@ -18,6 +19,7 @@ import androidx.core.app.NotificationCompat
  * receiver and the FCM service share [LOCK], so they never both post.
  */
 internal object CalendarAlerts {
+  private const val TAG = "MewlaLive"
   val LOCK = Any()
 
   /** Set by the app from its AppState: with the app open the in-app card shows instead of a notification. */
@@ -83,15 +85,19 @@ internal object CalendarAlerts {
    * Fires an alert once. Returns false when it already fired (an alarm and a push for the same alert,
    * or a snooze both here and from the daemon).
    */
-  fun fire(context: Context, alert: CalendarAlert): Boolean {
+  fun fire(context: Context, alert: CalendarAlert, source: String = "alarm"): Boolean {
     synchronized(LOCK) {
       val store = CalendarAlertStore(context)
       val now = System.currentTimeMillis()
-      if (CalendarAlertRules.alreadyFired(store.fired(now), alert.key)) return false
+      if (CalendarAlertRules.alreadyFired(store.fired(now), alert.key)) {
+        Log.d(TAG, "calendar alert $source key=${alert.key} dropped: already fired")
+        return false
+      }
       store.markFired(alert.key, now)
       store.setArmed(store.armed().filter { it.key != alert.key })
       cancelAlarm(context, alert.key)
     }
+    Log.d(TAG, "calendar alert $source key=${alert.key} fired foreground=$foreground")
     if (!foreground) post(context, alert)
     return true
   }
