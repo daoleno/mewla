@@ -14,7 +14,7 @@ class MewlaFirebaseMessagingService : ExpoFirebaseMessagingService() {
     val calendar = extractCalendar(remoteMessage.data)
     if (calendar != null) {
       // Fired once: a push for an alert this phone's own alarm already showed is dropped.
-      val shown = CalendarAlerts.fire(this, calendar)
+      val shown = CalendarAlerts.fire(this, calendar, "push")
       Log.d(TAG, "calendar alert push key=${calendar.key} shown=$shown")
       return
     }
