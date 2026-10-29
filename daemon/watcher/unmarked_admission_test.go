@@ -73,9 +73,10 @@ func (l *staleAdmissionTestLedger) MarkInputAdmissionAmbiguous(sessionID, propos
 	return nil
 }
 
-// A delivered prompt whose progress signal never came must not fence later
-// prompts forever, but a prompt still queued behind a live turn must.
-func TestDeliveredPreparationReleasedOnlyAfterProviderIdlesPastIt(t *testing.T) {
+// A delivered prompt whose progress signal has not come never fences a later
+// send: not after the provider idled past it, and not while the provider is
+// still busy, when the new prompt queues behind it like typed input.
+func TestDeliveredPreparationNeverRefusesALaterSend(t *testing.T) {
 	for _, mode := range []string{"idle-after", "running", "just-settled"} {
 		t.Run(mode, func(t *testing.T) {
 			io := newFakeSessionInputIO()
@@ -101,10 +102,12 @@ func TestDeliveredPreparationReleasedOnlyAfterProviderIdlesPastIt(t *testing.T) 
 			}
 			owner := newSessionInputOwner(io)
 			owner.ledger = ledger
-			_, _ = owner.submitDelegated(prior.SessionID, identity, fixedSessionInputResolver(identity), identity.Command, "continue", delegatedTurnDraft{WorkID: "work", ID: "new", AcceptedAt: now, ProcessIdentity: delegatedTurnIdentity(identity), SignalProtocol: true}, confirm)
-			released := len(ledger.ambiguous) == 1 && ledger.ambiguous[0] == "old"
-			if released != (mode == "idle-after") {
-				t.Fatalf("%s: released=%v (%v)", mode, released, ledger.ambiguous)
+			result, err := owner.submitDelegated(prior.SessionID, identity, fixedSessionInputResolver(identity), identity.Command, "continue", delegatedTurnDraft{WorkID: "work", ID: "new", AcceptedAt: now, ProcessIdentity: delegatedTurnIdentity(identity), SignalProtocol: true}, confirm)
+			if len(ledger.ambiguous) != 1 || ledger.ambiguous[0] != "old" {
+				t.Fatalf("%s: the delivered preparation still fences the Work: %v (err=%v)", mode, ledger.ambiguous, err)
+			}
+			if err != nil || result.Outcome != InputAccepted {
+				t.Fatalf("%s: the send was refused: outcome=%v err=%v", mode, result.Outcome, err)
 			}
 		})
 	}
