@@ -191,3 +191,19 @@ func PendingConversationChoice(conversation CodexConversation, callID string) (C
 	}
 	return CodexConversationEvent{}, false
 }
+
+// LatestPendingConversationChoice returns the newest choice event of the
+// conversation when it is still pending: the only one that can be on screen.
+func LatestPendingConversationChoice(conversation CodexConversation) (CodexConversationEvent, bool) {
+	for index := len(conversation.Events) - 1; index >= 0; index-- {
+		event := conversation.Events[index]
+		if event.Choice == nil {
+			continue
+		}
+		if event.Choice.State != ConversationChoicePending || strings.TrimSpace(event.CallID) == "" {
+			return CodexConversationEvent{}, false
+		}
+		return event, true
+	}
+	return CodexConversationEvent{}, false
+}

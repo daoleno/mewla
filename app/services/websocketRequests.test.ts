@@ -157,6 +157,7 @@ const RPCS: Rpc[] = [
   { name: "getTerminalSnapshot", call: (c) => c.getTerminalSnapshot(server.id, "t"), reply: { type: "terminal_snapshot", text: "x", target_id: "t" } },
   { name: "getTerminalHistory", call: (c) => c.getTerminalHistory(server.id, "s"), reply: { type: "terminal_history", session_id: "s", history: { lines: [] } } },
   { name: "answerChoice", call: (c) => c.answerChoice(server.id, "worker", { call_id: "c", answers: [{ selected: [0] }] }), reply: { type: "choice_answered", answers: ["A"] } },
+  { name: "answerPrompt", call: (c) => c.answerPrompt(server.id, "worker", { prompt_id: "p", number: 1 }), reply: { type: "prompt_answered", prompt_id: "p" } },
   { name: "sendKey", call: (c) => c.sendKey(server.id, "worker", "Enter"), reply: { type: "key_sent" } },
   { name: "decideApproval", call: (c) => c.decideApproval(server.id, "worker", "a1", "accept"), reply: { type: "approval_decided" } },
   { name: "getStats", call: (c) => c.getStats(server.id), reply: { type: "stats_data", total: 1 } },
@@ -389,6 +390,35 @@ describe("Work reply attachments", () => {
       void client.actOnBrainWork(server.id, "work", "reply" as any, { text: "hi", attachments: [] }).catch(() => undefined);
     });
     expect("attachments" in JSON.parse(socket.sent.at(-1) ?? "{}")).toBe(false);
+    client.disconnect();
+  });
+});
+
+describe("answering a prompt", () => {
+  test("sends the prompt id with the number or the per-question answers, and resolves with the prompt id", async () => {
+    const { client, socket } = await connected();
+    const menu = withTimers(() => client.answerPrompt(server.id, "worker", { prompt_id: "p1", number: 2 }));
+    const menuFrame = JSON.parse(socket.sent.at(-1) ?? "{}");
+    expect(menuFrame).toMatchObject({ type: "answer_prompt", worker_id: "worker", prompt_answer: { prompt_id: "p1", number: 2 } });
+    socket.receive({ type: "prompt_answered", request_id: menuFrame.request_id, worker_id: "worker", prompt_id: "p1" });
+    expect(await menu).toBe("p1");
+
+    const answers = [{ selected: [0, 2], other: "" }, { selected: [], other: "mine" }];
+    const choice = withTimers(() => client.answerPrompt(server.id, "worker", { prompt_id: "p2", answers }));
+    const choiceFrame = JSON.parse(socket.sent.at(-1) ?? "{}");
+    expect(choiceFrame.prompt_answer).toEqual({ prompt_id: "p2", answers });
+    socket.receive({ type: "prompt_answered", request_id: choiceFrame.request_id, prompt_id: "p2" });
+    expect(await choice).toBe("p2");
+    client.disconnect();
+  });
+
+  test("a prompt that passed rejects with answer_prompt_gone and the daemon's words", async () => {
+    const { client, socket } = await connected();
+    const pending = withTimers(() => client.answerPrompt(server.id, "worker", { prompt_id: "p1", number: 1 }));
+    const frame = JSON.parse(socket.sent.at(-1) ?? "{}");
+    socket.receive({ type: "error", request_id: frame.request_id, code: "answer_prompt_gone", message: "This prompt has already passed." });
+    const error = await pending.catch((reason: unknown) => reason);
+    expect(describeError(error)).toMatchObject({ code: "answer_prompt_gone", message: "This prompt has already passed." });
     client.disconnect();
   });
 });

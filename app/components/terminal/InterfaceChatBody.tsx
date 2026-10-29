@@ -122,7 +122,7 @@ export interface InterfaceChatBodyProps {
   composerPresentation: InterfaceComposerPresentation;
   topChromeInset?: number;
   terminalActionPrompt?: TerminalActionPrompt | null;
-  /** A structured provider choice; it replaces the screen-read prompt card. */
+  /** A structured provider choice; it replaces the menu prompt card. */
   choicePrompt?: InterfaceChoicePrompt | null;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
@@ -249,9 +249,8 @@ export function InterfaceChatBody({
     <>
       {choicePrompt ? (
         <ClaudeChoiceCard
-          callId={choicePrompt.callId}
+          promptKey={choicePrompt.key}
           choice={choicePrompt.choice}
-          live={choicePrompt.live}
           connected={choicePrompt.connected}
           chrome={chrome}
           maxHeight={choiceCardMaxHeight({
@@ -268,7 +267,6 @@ export function InterfaceChatBody({
           chrome={chrome}
           theme={theme}
           onAnswer={onTerminalActionAnswer}
-          onSwitchToTerminal={onUnavailableAction}
         />
       ) : null}
       {composerAccessory}

@@ -94,6 +94,23 @@ followed. For a Worker that Brain delegated (it has a Work and a turn;
 A session that is not a delegated Worker keeps its old behavior: a prompt becomes
 an approval card at once.
 
+### Prompts read from the pane
+
+A prompt no hook reports (a plan approval, AskUserQuestion, a startup menu, a
+Codex approval, a permission request the hook did not carry) is read from the
+Worker's pane into one `classifier.Prompt` (`daemon/classifier/prompt.go`) and
+filed as blocked progress, so Brain gets `session.needs_input` with
+`"event":"prompt_blocked"`, `details.prompt` (id, kind, options or every question)
+and `details.answer_with`. A choice prompt's questions are completed from the
+Claude transcript (`Watcher.SetPromptEnricher`). Brain answers with `mewla worker
+answer -id W -prompt P -choice N` or `-answers '[...]'`; the phone sends
+`answer_prompt` with `prompt_answer {prompt_id, number | answers}` and gets
+`prompt_answered` or `answer_prompt_gone|refused|failed`. Both go through
+`server.AnswerPanePrompt`, which re-reads the pane, refuses a prompt whose id
+changed without sending a key, resolves a hook-held permission request through
+the hub, and drives a choice with the same code as `answer_choice`.
+`worker send` refuses with `prompt_open` while a prompt is open.
+
 The `PermissionDenied` hook and the `PreToolUse` retry grant that answered
 Auto-mode refusals are gone, and so is the Brain host's `Bash(mewla worker approve
 *)` allow rule: with nothing reviewing Brain's commands it needs no exception. A

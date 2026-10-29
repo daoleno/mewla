@@ -14,7 +14,7 @@ import type { ConversationChoice } from "../../services/codexConversation";
 import { outlinedSurface } from "../ui/outlinedSurface";
 import { Icon } from "../icons/Icon";
 import {
-  buildChoiceAnswerPayload,
+  buildChoiceAnswers,
   choiceDraftAnswerText,
   choiceQuestionAnswered,
   choiceReviewStep,
@@ -26,20 +26,19 @@ import {
   toggleChoiceOption,
   toggleChoiceOther,
   unansweredChoiceQuestions,
-  type ChoiceAnswerPayload,
+  type ChoiceAnswer,
 } from "./claudeChoiceModel";
 
 interface ClaudeChoiceCardProps {
-  callId: string;
+  /** The same question set keeps the person's draft; a new one starts over. */
+  promptKey: string;
   choice: ConversationChoice;
-  /** The Session list confirms the prompt is on screen; only changes the copy. */
-  live: boolean;
   /** The daemon is reachable. The daemon re-checks the screen before any key. */
   connected: boolean;
   chrome: TerminalThemeChrome;
   /** The tallest the card may grow before it scrolls instead of passing under the header. */
   maxHeight?: number;
-  onSubmit(payload: ChoiceAnswerPayload): Promise<void>;
+  onSubmit(answers: ChoiceAnswer[]): Promise<void>;
 }
 
 /**
@@ -48,9 +47,8 @@ interface ClaudeChoiceCardProps {
  * Other as an inline text row.
  */
 export function ClaudeChoiceCard({
-  callId,
+  promptKey,
   choice,
-  live,
   connected,
   chrome,
   maxHeight,
@@ -70,20 +68,17 @@ export function ClaudeChoiceCard({
     setTyping(false);
     setSending(false);
     setError(null);
-    // A new tool call is a new prompt; the same call keeps the user's draft.
+    // A new question set starts over; the same one keeps the user's draft.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [callId]);
+  }, [promptKey]);
 
   const reviewStep = choiceReviewStep(choice);
   const current = clampChoiceStep(choice, step);
   const reviewing = current === reviewStep;
   const missing = useMemo(() => unansweredChoiceQuestions(choice, draft), [choice, draft]);
-  const payload = useMemo(
-    () => buildChoiceAnswerPayload(callId, choice, draft),
-    [callId, choice, draft],
-  );
+  const answers = useMemo(() => buildChoiceAnswers(choice, draft), [choice, draft]);
   const editable = connected && !sending;
-  const canSend = Boolean(payload) && editable;
+  const canSend = Boolean(answers) && editable;
   const showTabs = choice.questions.length > 1 && !typing;
 
   useEffect(() => {
@@ -96,12 +91,12 @@ export function ClaudeChoiceCard({
   };
 
   const submit = () => {
-    if (!payload || !editable) {
+    if (!answers || !editable) {
       return;
     }
     setSending(true);
     setError(null);
-    onSubmit(payload)
+    onSubmit(answers)
       .catch((reason: unknown) => {
         setError(reason instanceof Error && reason.message ? reason.message : "Could not send the answer.");
       })
@@ -136,9 +131,6 @@ export function ClaudeChoiceCard({
         maxHeight != null ? { maxHeight } : null,
       ]}
     >
-      <Text style={[styles.waiting, { color: chrome.textMuted }]} numberOfLines={1}>
-        Waiting for your answer
-      </Text>
       {showTabs ? (
         <ScrollView
           ref={tabsRef}
@@ -214,9 +206,6 @@ export function ClaudeChoiceCard({
             <Text accessibilityRole="header" style={[styles.questionText, { color: chrome.text }]}>
               {question.question}
             </Text>
-            {multi && !typing ? (
-              <Text style={[styles.hint, { color: chrome.textSubtle }]}>Choose any</Text>
-            ) : null}
             {typing
               ? null
               : question.options.map((option, optionIndex) => {
@@ -363,10 +352,6 @@ export function ClaudeChoiceCard({
       ) : !connected ? (
         <Text style={[styles.status, { color: chrome.textMuted }]} numberOfLines={2}>
           Reconnecting to answer…
-        </Text>
-      ) : !live ? (
-        <Text style={[styles.status, { color: chrome.textMuted }]} numberOfLines={2}>
-          Not confirmed in the Terminal yet; it is checked when you send.
         </Text>
       ) : null}
 
@@ -535,10 +520,6 @@ const styles = StyleSheet.create({
   header: {
     ...TypeScale.micro,
   },
-  waiting: {
-    ...TypeScale.micro,
-    paddingHorizontal: 4,
-  },
   questionText: {
     fontFamily: Typography.chatFontMedium,
     fontSize: 14,
@@ -546,11 +527,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
     paddingHorizontal: 4,
     paddingBottom: 4,
-  },
-  hint: {
-    ...TypeScale.micro,
-    paddingHorizontal: 4,
-    paddingBottom: 2,
   },
   option: {
     minHeight: 44,

@@ -66,6 +66,8 @@ export interface ConversationChoiceQuestion {
   question: string;
   header?: string;
   multi_select?: boolean;
+  /** Set when the daemon says the free-text Other row exists; absent in the transcript. */
+  allows_other?: boolean;
   options: ConversationChoiceOption[];
 }
 

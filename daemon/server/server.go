@@ -128,6 +128,7 @@ type Server struct {
 	computerName                 string
 	agentUse                     *agentuse.Service
 	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
+	promptPaneOverride           PanePrompts
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
 	rewindMessageOverride        func(workerID string, request watcher.MessageRewindRequest) error
 	rewound                      rewoundMessages
@@ -366,6 +367,7 @@ type clientMessage struct {
 	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
 	DSHAfterRev          *int64                                 `json:"dsh_after_rev"`
 	ChoiceAnswer         json.RawMessage                        `json:"choice_answer"`
+	PromptAnswer         json.RawMessage                        `json:"prompt_answer"`
 	MessageRewind        json.RawMessage                        `json:"message_rewind"`
 	ServiceID            string                                 `json:"service_id"`
 	ServiceGeneration    string                                 `json:"service_generation"`
@@ -1007,6 +1009,8 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		s.handleApprovalDecision(conn, raw)
 	case "answer_choice":
 		go s.handleAnswerChoice(conn, raw)
+	case "answer_prompt":
+		go s.handleAnswerPrompt(conn, raw)
 	case "rewind_message":
 		go s.handleRewindMessage(conn, raw)
 	case "git_diff_status", "git_diff_patch", "git_diff_page", "git_diff_file_content", "git_repo_entries", "git_repo_file_content", "list_dir":

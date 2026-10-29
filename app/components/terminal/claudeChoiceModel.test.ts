@@ -5,7 +5,10 @@ import {
   type ConversationChoice,
 } from "../../services/codexConversation";
 import {
-  buildChoiceAnswerPayload,
+  buildChoiceAnswers,
+  choiceFromPrompt,
+  isPromptGoneError,
+  PROMPT_GONE_CODE,
   choiceAnsweredSummary,
   choiceCardMaxHeight,
   choiceDraftAnswerText,
@@ -23,6 +26,7 @@ import {
   setChoiceOtherText,
   toggleChoiceOption,
   toggleChoiceOther,
+  questionAllowsOther,
 } from "./claudeChoiceModel";
 import { buildTimeline } from "./InterfaceTimelineModel";
 
@@ -118,12 +122,12 @@ describe("claude choice model", () => {
     draft = toggleChoiceOption(choice, draft, 1, 2);
     draft = toggleChoiceOption(choice, draft, 1, 0);
     draft = toggleChoiceOther(choice, draft, 1);
-    expect(buildChoiceAnswerPayload("toolu_1", choice, draft)).toBeNull();
+    expect(buildChoiceAnswers(choice, draft)).toBeNull();
     draft = setChoiceOtherText(draft, 1, " Mauve\n紫 ");
-    expect(buildChoiceAnswerPayload("toolu_1", choice, draft)).toEqual({
-      call_id: "toolu_1",
-      answers: [{ selected: [1] }, { selected: [0, 2], other: "Mauve 紫" }],
-    });
+    expect(buildChoiceAnswers(choice, draft)).toEqual([
+      { selected: [1], other: "" },
+      { selected: [0, 2], other: "Mauve 紫" },
+    ]);
   });
 
   test("single-select Other replaces the option", () => {
@@ -131,7 +135,7 @@ describe("claude choice model", () => {
     draft = toggleChoiceOther(choice, draft, 0);
     draft = setChoiceOtherText(draft, 0, "Cherry");
     draft = toggleChoiceOption(choice, draft, 1, 1);
-    expect(buildChoiceAnswerPayload("toolu_1", choice, draft)?.answers[0]).toEqual({
+    expect(buildChoiceAnswers(choice, draft)?.[0]).toEqual({
       selected: [],
       other: "Cherry",
     });
@@ -203,9 +207,9 @@ describe("one-question-at-a-time steps", () => {
     expect(unansweredChoiceQuestions(wizard, draft)).toEqual([]);
     // Changing an answer later replaces it and leaves the others alone.
     draft = toggleChoiceOption(wizard, draft, 0, 0);
-    expect(buildChoiceAnswerPayload("call", wizard, draft)?.answers).toEqual([
-      { selected: [0] },
-      { selected: [0] },
+    expect(buildChoiceAnswers(wizard, draft)).toEqual([
+      { selected: [0], other: "" },
+      { selected: [0], other: "" },
       { selected: [], other: "Sea" },
     ]);
   });
@@ -256,5 +260,92 @@ describe("a pending choice the status has not caught up with", () => {
     expect(isChoiceGoneError(Object.assign(new Error("x"), { code: "answer_choice_refused" }))).toBe(false);
     expect(isChoiceGoneError(new Error(CHOICE_GONE_CODE))).toBe(false);
     expect(isChoiceGoneError(undefined)).toBe(false);
+  });
+});
+
+describe("a choice prompt the daemon read from the terminal", () => {
+  const prompt = (questions: any[], extra: any = {}) => ({
+    id: "choice-1",
+    kind: "choice" as const,
+    provider: "claude",
+    title: "Question",
+    questions,
+    ...extra,
+  });
+  const fruit = {
+    header: "Fruit",
+    question: "Which fruit?",
+    allows_other: true,
+    options: [
+      { number: 1, label: "Apple", description: "Red and crisp" },
+      { number: 2, label: "Banana" },
+    ],
+  };
+  const colors = {
+    header: "Colors",
+    question: "Which colors?",
+    multi_select: true,
+    options: [
+      { number: 1, label: "Red" },
+      { number: 2, label: "Green" },
+      { number: 3, label: "Blue" },
+    ],
+  };
+
+  test("two questions, one of them multi-select, answer by option index", () => {
+    const shown = choiceFromPrompt(prompt([fruit, colors]));
+    expect(shown?.questions.map((q) => [q.header, q.question, q.multi_select ?? false, q.options.length])).toEqual([
+      ["Fruit", "Which fruit?", false, 2],
+      ["Colors", "Which colors?", true, 3],
+    ]);
+    expect(shown?.questions[0].options[0]).toEqual({ label: "Apple", description: "Red and crisp" });
+    expect(questionAllowsOther(shown!.questions[0])).toBe(true);
+    expect(questionAllowsOther(shown!.questions[1])).toBe(false);
+    let draft = emptyChoiceDraft(shown!);
+    draft = toggleChoiceOption(shown!, draft, 0, 1);
+    draft = toggleChoiceOption(shown!, draft, 1, 0);
+    draft = toggleChoiceOption(shown!, draft, 1, 2);
+    expect(buildChoiceAnswers(shown!, draft)).toEqual([
+      { selected: [1], other: "" },
+      { selected: [0, 2], other: "" },
+    ]);
+  });
+
+  test("the daemon's Other flag decides the Other row, not the options", () => {
+    const shown = choiceFromPrompt(prompt([{ ...fruit, allows_other: false }]));
+    expect(toggleChoiceOther(shown!, emptyChoiceDraft(shown!), 0)[0].otherActive).toBe(false);
+  });
+
+  test("tabs that carry only a header are filled from the transcript's same tool call", () => {
+    const headerOnly = prompt([{ header: "Fruit", question: "", options: [] }, { header: "Colors", question: "", options: [] }], {
+      call_id: "toolu_1",
+    });
+    expect(choiceFromPrompt(headerOnly)).toBeNull();
+    expect(choiceFromPrompt(headerOnly, { callId: "toolu_other", choice })).toBeNull();
+    const filled = choiceFromPrompt(headerOnly, { callId: "toolu_1", choice });
+    expect(filled?.questions.map((q) => q.question)).toEqual(["Which fruit?", "Which colors?"]);
+    expect(filled?.questions[1].multi_select).toBe(true);
+  });
+
+  test("one tab with options and another without is filled, never half-shown", () => {
+    const mixed = prompt([fruit, { header: "Colors", question: "", options: [] }], { call_id: "toolu_1" });
+    expect(choiceFromPrompt(mixed)).toBeNull();
+    const filled = choiceFromPrompt(mixed, { callId: "toolu_1", choice });
+    expect(filled?.questions[0].question).toBe("Which fruit?");
+    expect(filled?.questions[1].question).toBe("Which colors?");
+  });
+
+  test("a menu prompt or nothing is not a choice", () => {
+    expect(choiceFromPrompt(undefined)).toBeNull();
+    expect(
+      choiceFromPrompt({ id: "p", kind: "plan", provider: "claude", title: "t", options: [{ number: 1, label: "Yes" }] }),
+    ).toBeNull();
+  });
+
+  test("recognises the daemon's prompt gone code and nothing else", () => {
+    expect(isPromptGoneError(Object.assign(new Error("x"), { code: PROMPT_GONE_CODE }))).toBe(true);
+    expect(isPromptGoneError(Object.assign(new Error("x"), { code: "answer_prompt_refused" }))).toBe(false);
+    expect(isPromptGoneError(Object.assign(new Error("x"), { code: "answer_choice_gone" }))).toBe(false);
+    expect(isPromptGoneError(new Error(PROMPT_GONE_CODE))).toBe(false);
   });
 });

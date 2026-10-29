@@ -5,6 +5,7 @@ import React, {
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -20,61 +21,52 @@ interface TerminalActionPromptCardProps {
   prompt: TerminalActionPrompt;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
-  /** Answers with the chosen option: a key for the terminal, or the agent's own approval answer. */
+  /** Answers with the chosen option: its menu number, or the agent's own approval answer. */
   onAnswer(option: TerminalActionPrompt["options"][number]): Promise<void> | void;
-  onSwitchToTerminal?: () => void;
 }
 
 export function TerminalActionPromptCard({
   prompt,
   chrome,
   onAnswer,
-  onSwitchToTerminal,
 }: TerminalActionPromptCardProps) {
   const [sendingOptionId, setSendingOptionId] = useState<string | null>(null);
   const [sentOptionId, setSentOptionId] = useState<string | null>(null);
   const [failedOptionId, setFailedOptionId] = useState<string | null>(null);
-  const actionable = prompt.actionable !== false;
+  const [failure, setFailure] = useState<string | null>(null);
 
   useEffect(() => {
     setSendingOptionId(null);
     setSentOptionId(null);
     setFailedOptionId(null);
+    setFailure(null);
   }, [prompt.id]);
 
   const handleOptionPress = (option: TerminalActionPrompt["options"][number]) => {
-    if (!actionable || sendingOptionId) {
+    if (sendingOptionId) {
       return;
     }
     setSendingOptionId(option.id);
     setSentOptionId(null);
     setFailedOptionId(null);
+    setFailure(null);
     Promise.resolve()
       .then(() => onAnswer(option))
       .then(() => {
         setSentOptionId(option.id);
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
         setFailedOptionId(option.id);
+        setFailure(
+          reason instanceof Error && reason.message
+            ? reason.message
+            : "Could not send. Check the connection and try again.",
+        );
       })
       .finally(() => {
         setSendingOptionId(null);
       });
   };
-  const statusOption = prompt.options.find(
-    (option) => option.id === (sendingOptionId || sentOptionId || failedOptionId),
-  );
-  const statusTone =
-    failedOptionId ? "failed" : sendingOptionId ? "sending" : sentOptionId ? "sent" : null;
-  const statusText =
-    statusTone === "failed"
-      ? "Could not send. Check the connection and try again."
-      : statusTone === "sending"
-        ? `Sending ${statusOption?.label ?? "decision"}...`
-        : statusTone === "sent"
-          ? `Sent ${statusOption?.label ?? "decision"}. Waiting for Codex to continue.`
-          : null;
-
   return (
     <View
       style={[
@@ -92,9 +84,6 @@ export function TerminalActionPromptCard({
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: chrome.text }]} numberOfLines={2}>
             {prompt.title}
-          </Text>
-          <Text style={[styles.detail, { color: chrome.textMuted }]} numberOfLines={2}>
-            {prompt.detail}
           </Text>
         </View>
       </View>
@@ -114,9 +103,13 @@ export function TerminalActionPromptCard({
               {prompt.requestLabel}
             </Text>
           ) : null}
-          <Text style={[styles.requestText, { color: chrome.text }]} numberOfLines={3}>
-            {prompt.requestText}
-          </Text>
+          <ScrollView
+            nestedScrollEnabled
+            style={styles.requestScroll}
+            showsVerticalScrollIndicator
+          >
+            <Text style={[styles.requestText, { color: chrome.text }]}>{prompt.requestText}</Text>
+          </ScrollView>
         </View>
       ) : null}
 
@@ -157,7 +150,7 @@ export function TerminalActionPromptCard({
                           { color: option.primary ? chrome.textOnAccent : chrome.textMuted },
                         ]}
                       >
-                        {actionable ? "Default" : "Selected"}
+                        Default
                       </Text>
                     </View>
                   ) : null}
@@ -200,25 +193,6 @@ export function TerminalActionPromptCard({
             option.id === failedOptionId ? { borderColor: chrome.danger } : null,
           ];
 
-          if (!actionable) {
-            return (
-              <View
-                key={option.id}
-                accessibilityRole="text"
-                accessibilityLabel={[
-                  option.label,
-                  option.default ? "Currently selected" : "",
-                  option.description,
-                ]
-                  .filter(Boolean)
-                  .join(", ")}
-                style={optionStyle}
-              >
-                {optionBody}
-              </View>
-            );
-          }
-
           return (
             <Pressable
               key={option.id}
@@ -247,45 +221,11 @@ export function TerminalActionPromptCard({
         })}
       </View>
 
-      {prompt.inputHints ? (
-        <Text style={[styles.statusText, { color: chrome.textMuted }]} numberOfLines={2}>
-          {prompt.inputHints}
+      {failure ? (
+        <Text style={[styles.statusText, { color: chrome.danger }]} numberOfLines={3}>
+          {failure}
         </Text>
       ) : null}
-
-      {!actionable ? (
-        <Text style={[styles.statusText, { color: chrome.textMuted }]} numberOfLines={2}>
-          Display only. Use Terminal to navigate and submit the native selection.
-        </Text>
-      ) : null}
-
-      {statusText ? (
-        <Text
-          style={[
-            styles.statusText,
-            { color: statusTone === "failed" ? chrome.danger : chrome.textMuted },
-          ]}
-          numberOfLines={2}
-        >
-          {statusText}
-        </Text>
-      ) : null}
-
-      <View style={styles.secondaryRow}>
-        {onSwitchToTerminal ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open raw terminal"
-            onPress={onSwitchToTerminal}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed ? { backgroundColor: chrome.surfaceActive } : null,
-            ]}
-          >
-            <Text style={[styles.secondaryText, { color: chrome.accent }]}>Terminal</Text>
-          </Pressable>
-        ) : null}
-      </View>
     </View>
   );
 }
@@ -321,12 +261,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     letterSpacing: 0,
   },
-  detail: {
-    fontFamily: Typography.chatFont,
-    fontSize: 12,
-    lineHeight: 17,
-    letterSpacing: 0,
-  },
   requestBlock: {
     ...outlinedSurface(8),
     paddingHorizontal: 9,
@@ -336,6 +270,9 @@ const styles = StyleSheet.create({
   requestLabel: {
     ...TypeScale.micro,
     textTransform: "uppercase",
+  },
+  requestScroll: {
+    maxHeight: 168,
   },
   requestText: {
     fontFamily: Typography.chatMonoFont,
@@ -388,22 +325,5 @@ const styles = StyleSheet.create({
   },
   statusText: {
     ...TypeScale.caption,
-  },
-  secondaryRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  secondaryButton: {
-    minHeight: 44,
-    borderRadius: 8,
-    justifyContent: "center",
-    paddingHorizontal: 8,
-  },
-  secondaryText: {
-    fontFamily: Typography.chatMonoFont,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0,
   },
 });

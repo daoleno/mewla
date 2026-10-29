@@ -168,6 +168,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse("agent_events_unavailable", "Agent events are not running.")
 		}
 		return a.agentEvents.decide(strings.TrimSpace(req.WorkerID), strings.TrimSpace(req.ApprovalID), strings.TrimSpace(req.OptionID), answeredByOperator, req.ApprovalBasis)
+	case "worker_answer":
+		return a.handleWorkerAnswer(req)
 	case "worker_list":
 		return a.handleWorkerList()
 	case "worker_spawn":
@@ -1165,6 +1167,9 @@ func (a *controlApp) handleWorkerSend(req control.Request) control.Response {
 	if worker != nil && !a.watcher.HasSession(workerID) {
 		return control.ErrorResponse("worker_session_unavailable", "Worker is listed but the tmux target is no longer available. Refresh the worker list and spawn a new session if needed.")
 	}
+	if open := a.openPrompt(workerID, worker); open != nil {
+		return control.ErrorResponse("prompt_open", fmt.Sprintf("%s is waiting on prompt %s; answer it with: %s", workerID, open.ID, watcher.AnswerCommand(workerID, open)))
+	}
 	if strings.TrimSpace(req.WorkID) != "" {
 		if !req.Submit || strings.TrimSpace(payload) == "" {
 			return control.ErrorResponse("missing_text", "Work input requires submitted prompt text.")
@@ -1194,6 +1199,25 @@ func (a *controlApp) handleWorkerSend(req control.Request) control.Response {
 	}
 	out := controlWorker(worker)
 	return control.Response{OK: true, Worker: &out}
+}
+
+// openPrompt is the prompt a Worker's pane shows right now, if any. Text typed
+// into it would answer it by accident, so input waits for an answer.
+func (a *controlApp) openPrompt(workerID string, worker *classifier.Worker) *classifier.Prompt {
+	if worker != nil && worker.Prompt != nil {
+		return worker.Prompt
+	}
+	reader, ok := a.watcher.(interface {
+		CurrentPrompt(string) (*classifier.Prompt, error)
+	})
+	if !ok {
+		return nil
+	}
+	prompt, err := reader.CurrentPrompt(workerID)
+	if err != nil {
+		return nil
+	}
+	return prompt
 }
 
 // submitWorkerHandoff is the single control-plane owner for initial delegated

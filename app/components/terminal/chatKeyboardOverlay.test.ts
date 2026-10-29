@@ -57,6 +57,7 @@ describe("structured chat keyboard overlay", () => {
     const frame = source("InterfaceChatKeyboardFrame.tsx");
 
     expect(body).toContain("<TerminalActionPromptCard");
+    expect(body).toContain("<ClaudeChoiceCard");
     expect(body).toContain("{composerAccessory}");
     expect(body).toContain("<InterfaceChatComposerSection");
     expect(body).toContain("composer={composer}");
@@ -204,3 +205,29 @@ describe("structured chat keyboard overlay", () => {
     expect(demo).toContain("showStopButton={working && !hasContent}");
   });
 });
+
+describe("prompt cards", () => {
+  test("a card is interactive or absent: no display-only copy, no hand-off to the Terminal", () => {
+    for (const file of [
+      "TerminalActionPromptCard.tsx",
+      "TerminalActionPromptModel.ts",
+      "ClaudeChoiceCard.tsx",
+      "claudeChoiceModel.ts",
+    ]) {
+      const text = source(file);
+      expect(text).not.toContain("Display only");
+      expect(text).not.toContain("Use Terminal");
+      expect(text).not.toContain("in the Terminal");
+      expect(text).not.toContain("onSwitchToTerminal");
+      expect(text).not.toContain("actionable");
+    }
+    expect(source("InterfaceChatBody.tsx")).not.toContain("onSwitchToTerminal={");
+  });
+
+  test("a menu card answers through the daemon's prompt, never by typed keys", () => {
+    const surface = source("useInterfaceChatSurfaceState.ts");
+    expect(surface).toContain("wsClient.answerPrompt(");
+    expect(surface).not.toContain("wsClient.sendKey");
+  });
+});
+
