@@ -68,6 +68,8 @@ interface UseTerminalSessionActionsInput {
   connectionState: ConnectionState;
   creatingSession: boolean;
   interfaceRenderMode: StoredInterfaceRenderMode;
+  /** Called when the chat is chosen, so a terminal shown for a blocked Session lets go. */
+  onChatChosen?(): void;
   linkedWork?: WorkItem;
   renameDraft: string;
   closeMenu(): void;
@@ -86,6 +88,7 @@ export function useTerminalSessionActions({
   connectionState,
   creatingSession,
   interfaceRenderMode,
+  onChatChosen,
   linkedWork,
   renameDraft,
   closeMenu,
@@ -158,6 +161,9 @@ export function useTerminalSessionActions({
   const applyInterfaceRenderMode = useCallback(
     (mode: StoredInterfaceRenderMode) => {
       if (!sessionKey) return;
+      if (mode === "chat") {
+        onChatChosen?.();
+      }
       setInterfaceRenderModes((current) => {
         if (current[sessionKey] === mode) {
           return current;
@@ -172,7 +178,7 @@ export function useTerminalSessionActions({
         console.log("Failed to persist Interface render mode:", error);
       });
     },
-    [closeMenu, sessionKey, setInterfaceRenderModes],
+    [closeMenu, onChatChosen, sessionKey, setInterfaceRenderModes],
   );
 
   const toggleInterfaceRenderMode = useCallback(() => {

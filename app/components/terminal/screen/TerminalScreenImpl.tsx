@@ -96,6 +96,7 @@ export default function TerminalScreen() {
     serverConnections: state.serverConnections,
     serverConnectionIssues: state.serverConnectionIssues,
     interfaceRenderModes,
+    sessionListFresh: Boolean(serverId) && isWorkerSessionListFreshForConnection(state, serverId),
     brainHostWorker: brainForServer?.host_worker ?? null,
     brainHostServerId: brainForServer?.serverId ?? null,
   });
@@ -112,6 +113,7 @@ export default function TerminalScreen() {
     linkedWork,
     presentedWorker,
     showInterfaceChat,
+    dismissBlockedTerminal,
   } = route;
   useDesktopPageTitle(displayName, screenFocused);
   const calendarOrigin = useCalendarOrigin(
@@ -197,6 +199,7 @@ export default function TerminalScreen() {
     connectionState,
     creatingSession,
     interfaceRenderMode,
+    onChatChosen: dismissBlockedTerminal,
     linkedWork,
     renameDraft,
     closeMenu,

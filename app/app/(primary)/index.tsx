@@ -769,6 +769,9 @@ export default function BrainScreen() {
                   name: hostWorker?.name,
                   processId: hostWorker?.process_id,
                   startedAt: hostWorker?.started_at,
+                  // Only the prompt: a status here would make the host a listed
+                  // Session and stop its AskUserQuestion reading from the transcript.
+                  prompt: hostWorker?.prompt,
                 }}
                 connectionState={brainWaking ? "connecting" : connectionState}
                 connectionIssue={connectionIssue}

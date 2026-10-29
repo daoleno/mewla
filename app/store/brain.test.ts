@@ -3,6 +3,7 @@ import {
   brainReducer,
   initialBrainState,
 } from "./brain";
+import type { WorkerPrompt } from "./workers";
 
 describe("Brain current Work and backlog normalization", () => {
   test("keeps multiple minimal Work projections and rejects scheduler internals", () => {
@@ -241,5 +242,56 @@ describe("Brain current Work and backlog normalization", () => {
     });
 
     expect(second).not.toBe(first);
+  });
+});
+
+describe("Brain host_worker prompt", () => {
+  const prompt: WorkerPrompt = {
+    id: "perm-1",
+    kind: "permission",
+    provider: "claude",
+    title: "Bash command",
+    options: [
+      { number: 1, label: "Yes", selected: true },
+      { number: 2, label: "No" },
+    ],
+  };
+  const snapshot = (hostPrompt?: WorkerPrompt) => ({
+    type: "BRAIN_SNAPSHOT" as const,
+    serverId: "server-1",
+    serverName: "Mewla",
+    serverUrl: "ws://mewla",
+    brain: { host_worker: { id: "host-1", name: "Brain", status: "blocked", prompt: hostPrompt } },
+  });
+
+  test("decodes the daemon's structured prompt like a Session's", () => {
+    const state = brainReducer(initialBrainState, snapshot(prompt));
+    expect(state.byServer["server-1"]?.host_worker?.prompt).toEqual({
+      id: "perm-1",
+      kind: "permission",
+      provider: "claude",
+      title: "Bash command",
+      request: undefined,
+      call_id: undefined,
+      options: [
+        { number: 1, label: "Yes", description: undefined, selected: true },
+        { number: 2, label: "No", description: undefined, selected: undefined },
+      ],
+    });
+  });
+
+  test("drops a prompt the app could not answer", () => {
+    const state = brainReducer(initialBrainState, snapshot({ id: "x", kind: "weird" } as unknown as WorkerPrompt));
+    expect(state.byServer["server-1"]?.host_worker?.prompt).toBeUndefined();
+  });
+
+  test("a prompt change alone is a new snapshot, and the same prompt is not", () => {
+    const first = brainReducer(initialBrainState, snapshot(prompt));
+    expect(brainReducer(first, snapshot({ ...prompt }))).toBe(first);
+    const next = brainReducer(first, snapshot({ ...prompt, id: "perm-2" }));
+    expect(next).not.toBe(first);
+    expect(next.byServer["server-1"]?.host_worker?.prompt?.id).toBe("perm-2");
+    const answered = brainReducer(next, snapshot(undefined));
+    expect(answered.byServer["server-1"]?.host_worker?.prompt).toBeUndefined();
   });
 });
