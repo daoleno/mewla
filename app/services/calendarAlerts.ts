@@ -148,3 +148,35 @@ export function remainingSnoozeMinutes(
 ): number {
   return Math.ceil((action.atMs + action.minutes * 60_000 - now) / 60_000);
 }
+
+/**
+ * The wall-clock parts of an instant in a zone, for an iOS calendar trigger.
+ * Pinning the zone keeps the alert at the same instant if the phone later
+ * changes time zone.
+ */
+export function calendarTriggerParts(at: number, timezone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US-u-ca-gregory-nu-latn", {
+      timeZone: timezone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+    })
+      .formatToParts(new Date(at))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  return {
+    year: parts.year,
+    month: parts.month,
+    day: parts.day,
+    hour: parts.hour,
+    minute: parts.minute,
+    second: parts.second,
+    timezone,
+  };
+}

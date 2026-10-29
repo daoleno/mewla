@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { getMewlaLiveModule } from "../modules/mewla-live/src";
 import type { CalendarNativeAction } from "../modules/mewla-live/src";
 import type { CalendarItem } from "../store/calendar";
-import { calendarAlertPlan } from "./calendarAlerts";
+import { calendarAlertPlan, calendarTriggerParts } from "./calendarAlerts";
 import { strongCalendarAlerts } from "./calendarAlertSettings";
 import {
   reconcileCalendarNotifications,
@@ -151,11 +151,24 @@ function notificationDeps(): CalendarNotificationDependencies {
             alert_key: request.alertKey,
           },
         },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: new Date(request.trigger),
-          channelId: Platform.OS === "android" ? calendarChannelId : undefined,
-        },
+        // iOS: a calendar trigger (UNCalendarNotificationTrigger) at the alert's
+        // wall clock in the zone it was armed in. Expo's DATE trigger would be a
+        // time-interval one, counted from now.
+        trigger:
+          Platform.OS === "ios"
+            ? {
+                type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+                repeats: false,
+                ...calendarTriggerParts(
+                  Date.parse(request.trigger),
+                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+                ),
+              }
+            : {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: new Date(request.trigger),
+                channelId: Platform.OS === "android" ? calendarChannelId : undefined,
+              },
       }),
     cancel: (id) => Notifications.cancelScheduledNotificationAsync(id),
     ensureChannel: ensureCalendarChannel,
