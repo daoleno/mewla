@@ -16,9 +16,14 @@ object HelperLauncher {
      */
     fun command(context: Context, endpoint: HelperEndpoint): String {
         val apk = context.applicationInfo.sourceDir
+        val build = installStamp(context)
         return "read t; (echo \"\$t\" | CLASSPATH=$apk setsid app_process /system/bin --nice-name=mewla-phone-helper " +
-            "$HELPER_CLASS ${context.packageName} ${endpoint.port} >$LOG_FILE 2>&1 &); read _"
+            "$HELPER_CLASS ${context.packageName} ${endpoint.port} $build >$LOG_FILE 2>&1 &); read _"
     }
+
+    /** Changes with every install of the App, so a helper started by an older install is known by it. */
+    fun installStamp(context: Context): Long =
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime }.getOrDefault(0L)
 
     /** Starts the helper and returns once it answers; throws when it does not come up. */
     fun start(context: Context, connection: AdbConnection, waitMs: Long = 10_000): HelperClient {

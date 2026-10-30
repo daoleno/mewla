@@ -141,7 +141,7 @@ internal class PhoneHelper(
 
     private fun dispatch(op: String, r: JSONObject): JSONObject = when (op) {
         "hello" -> ok()
-            .put("protocol", PROTOCOL).put("sdk", Build.VERSION.SDK_INT).put("model", Build.MODEL)
+            .put("protocol", PROTOCOL).put("build", build).put("sdk", Build.VERSION.SDK_INT).put("model", Build.MODEL)
             .put("pid", android.os.Process.myPid()).put("display", screen?.displayId ?: -1)
             .put("w", screen?.width ?: 0).put("h", screen?.height ?: 0)
         "display" -> display(r.optInt("w", 720), r.optInt("h", 1600), r.optInt("dpi", 280))
@@ -262,18 +262,27 @@ internal class PhoneHelper(
 
     private fun interactive(): Boolean = context.getSystemService(PowerManager::class.java)?.isInteractive ?: true
 
-    /** Whether [pkg] has a task showing on the person's own display. */
-    @SuppressLint("PrivateApi")
+    /**
+     * Whether [pkg] has a task showing on the person's own display. ActivityManager answers per
+     * Android version (the hidden service call changed its arguments in API 33 and again in 34);
+     * most recent first, so when the platform does not say which tasks are visible the first
+     * task on the main display is the one in front.
+     */
     private fun visibleOnMainScreen(pkg: String): Boolean = try {
-        val service = Class.forName("android.app.ActivityTaskManager").getMethod("getService").invoke(null)!!
-        val tasks = service.javaClass.getMethod("getTasks", Int::class.javaPrimitiveType).invoke(service, 100) as List<*>
-        tasks.any { task ->
-            val info = task as ActivityManager.RunningTaskInfo
-            val display = info.javaClass.getField("displayId").getInt(info)
-            val visible = runCatching { info.javaClass.getField("isVisible").getBoolean(info) }.getOrDefault(true)
+        val manager = context.getSystemService(ActivityManager::class.java)!!
+        @Suppress("DEPRECATION")
+        val tasks = manager.getRunningTasks(50)
+        var front = true
+        var shown = false
+        for (info in tasks) {
+            val display = runCatching { info.javaClass.getField("displayId").getInt(info) }.getOrDefault(0)
+            if (display != 0) continue
+            val visible = runCatching { info.javaClass.getField("isVisible").getBoolean(info) }.getOrNull() ?: front
+            front = false
             val owner = (info.topActivity ?: info.baseActivity)?.packageName
-            display == 0 && visible && owner == pkg
+            if (visible && owner == pkg) shown = true
         }
+        shown
     } catch (e: Exception) {
         // Not being able to tell is a reason not to take the person's app.
         Log.w(TAG, "cannot inspect tasks", e)
@@ -299,6 +308,9 @@ internal class PhoneHelper(
         private const val LONG_PRESS_MS = 700L
         /** Bumped when the app and helper stop understanding each other; the app restarts a helper that differs. */
         const val PROTOCOL = 1
+
+        /** The App install this helper was started by (PackageInfo.lastUpdateTime), 0 when unknown. */
+        @Volatile var build: Long = 0L
         private const val AUTH_TIMEOUT_MS = 5_000
         private const val ORPHAN_DISPLAY_MS = 5 * 60 * 1000L
         private const val BAD_TOKEN_DELAY_MS = 1_000L
@@ -313,6 +325,8 @@ internal class PhoneHelper(
                 exitProcess(2)
             }
             val port = args[1].toIntOrNull() ?: exitProcess(2)
+            // The App's install stamp: a helper left running by an older App says so in hello and is replaced.
+            build = args.getOrNull(2)?.toLongOrNull() ?: 0L
             // The token comes on the first line of standard input, which closes right after.
             val token = runCatching { System.`in`.bufferedReader().readLine()?.trim() }.getOrNull()
             runCatching { System.`in`.close() }

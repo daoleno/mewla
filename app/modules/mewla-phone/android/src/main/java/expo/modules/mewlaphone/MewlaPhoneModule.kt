@@ -3,7 +3,13 @@ package expo.modules.mewlaphone
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.app.PendingIntent
+import android.app.PictureInPictureParams
+import android.app.RemoteAction
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
+import android.os.Build
+import android.util.Rational
 import android.provider.Settings
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -71,6 +77,19 @@ class MewlaPhoneModule : Module() {
         Function("stop") { PhoneController.stop() }
         Function("handoffDone") { PhoneController.handoffDone() }
 
+        /** Floats the agent's screen in a small window over other apps. */
+        Function("enterPip") { w: Int, h: Int ->
+            val activity = appContext.currentActivity
+            if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) false
+            else activity.enterPictureInPictureMode(pipParams(w, h, false))
+        }
+
+        /** While an agent works and the Phone page is open, leaving the App floats the screen by itself. */
+        Function("setPipAuto") { on: Boolean, w: Int, h: Int ->
+            val activity = appContext.currentActivity
+            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.setPictureInPictureParams(pipParams(w, h, on))
+        }
+
         Function("openWirelessDebugging") { openWirelessDebugging() }
         Function("openDeveloperSettings") {
             val about = Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -105,5 +124,25 @@ class MewlaPhoneModule : Module() {
         val component = ComponentName(context, PairingAccessibilityService::class.java)
         val state = if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
         context.packageManager.setComponentEnabledSetting(component, state, PackageManager.DONT_KILL_APP)
+    }
+
+    /** The floating window keeps the display's proportions and carries Take over and Stop. */
+    private fun pipParams(w: Int, h: Int, auto: Boolean): PictureInPictureParams {
+        val ratio = if (w > 0 && h > 0) (w.toDouble() / h).coerceIn(1 / 2.39, 2.39) else 9.0 / 20
+        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational((ratio * 1000).toInt(), 1000))
+        builder.setActions(
+            listOf(
+                pipAction("Take over", PhoneNotifier.ACTION_TAKE_OVER, 20, android.R.drawable.ic_menu_edit),
+                pipAction("Stop", PhoneNotifier.ACTION_STOP, 21, android.R.drawable.ic_menu_close_clear_cancel),
+            ),
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setAutoEnterEnabled(auto)
+        return builder.build()
+    }
+
+    private fun pipAction(title: String, action: String, request: Int, icon: Int): RemoteAction {
+        val intent = Intent(context, PhoneActionReceiver::class.java).setAction(action)
+        val pending = PendingIntent.getBroadcast(context, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return RemoteAction(Icon.createWithResource(context, icon), title, title, pending)
     }
 }

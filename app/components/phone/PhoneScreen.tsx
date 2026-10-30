@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
+import { useNavigation } from "expo-router";
+import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
 import { MewlaPhone, PhoneLiveView, type PhoneStatus } from "../../modules/mewla-phone/src";
@@ -8,6 +9,7 @@ import { AppText } from "../ui/AppText";
 import { Button } from "../ui/Button";
 import { ListRow, ListSection } from "../ui";
 import { Icon } from "../icons/Icon";
+import { IconButton } from "../ui/IconButton";
 import { nextPhoneStep, phoneMode, phoneSteps, type PhoneStepId } from "./phoneSetup";
 
 /** Phone use: the setup until it works, then the agent's own screen with Take over and Stop one tap away. */
@@ -39,6 +41,28 @@ export function PhoneScreen() {
     );
   }
   const mode = phoneMode(status);
+  return <Body status={status} mode={mode} />;
+}
+
+function Body({ status, mode }: { status: PhoneStatus; mode: ReturnType<typeof phoneMode> }) {
+  const { colors } = useAppTheme();
+  const { width } = useWindowDimensions();
+  const navigation = useNavigation();
+  // In a floating window only the agent's screen fits: no header, no buttons.
+  const floating = width < 360;
+  const working = mode === "watching" || mode === "driving" || mode === "handoff";
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: !floating });
+  }, [navigation, floating]);
+  // While an agent works and this page is open, leaving the App floats its screen by itself.
+  useEffect(() => {
+    if (!working) return;
+    MewlaPhone?.setPipAuto?.(true, status.w, status.h);
+    return () => MewlaPhone?.setPipAuto?.(false, status.w, status.h);
+  }, [working, status.w, status.h]);
+  if (floating && mode !== "setup" && PhoneLiveView) {
+    return <PhoneLiveView style={[styles.fill, { backgroundColor: "#000" }]} interactive={false} />;
+  }
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.bgPrimary }]} edges={["bottom"]}>
       {mode === "setup" ? <Setup status={status} /> : <Live status={status} mode={mode} />}
@@ -147,6 +171,16 @@ function Live({ status, mode }: { status: PhoneStatus; mode: Exclude<ReturnType<
           {mode === "handoff" ? status.handoff : mode === "stopped" ? "Stopped" : mode === "idle" ? "Ready" : status.agent ?? ""}
         </AppText>
         <View style={[styles.dot, { backgroundColor: mode === "idle" ? colors.success : driving ? colors.seal : colors.accent }]} />
+        {mode === "watching" || mode === "driving" ? (
+          <IconButton
+            icon="expand"
+            size={36}
+            iconSize={18}
+            color={colors.textSecondary}
+            accessibilityLabel="Float"
+            onPress={() => MewlaPhone?.enterPip?.(status.w, status.h)}
+          />
+        ) : null}
       </View>
       <View style={styles.stage}>
         {PhoneLiveView && status.w > 0 && mode !== "idle" ? (

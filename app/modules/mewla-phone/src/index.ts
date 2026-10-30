@@ -41,6 +41,10 @@ export interface PhoneNativeModule {
   giveBack(): void;
   stop(): void;
   handoffDone(): void;
+  /** Floats the agent's screen in a small window; false when the phone cannot. */
+  enterPip?(w: number, h: number): boolean;
+  /** Leaving the App floats the screen by itself while this is on. */
+  setPipAuto?(on: boolean, w: number, h: number): void;
   openWirelessDebugging(): void;
   openDeveloperSettings(): void;
   openAccessibilitySettings(): void;
