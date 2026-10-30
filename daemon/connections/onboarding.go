@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -40,13 +41,13 @@ type ConnectFlow struct {
 	AccountID        string    `json:"account_id,omitempty"`
 	// WebReturn: the provider returns the browser to the web UI's Plugins page.
 	WebReturn bool `json:"web_return,omitempty"`
-	// CodeRequired: the sign-in ends with a code the person pastes back
-	// (connect_finish with code), as AWS's console sign-in does.
-	CodeRequired bool `json:"code_required,omitempty"`
+	// AddressRequired: the sign-in returns to this server's own address, which
+	// a browser on another device can't open. The person pastes the address the
+	// browser ended on (connect_finish with callback).
+	AddressRequired bool `json:"address_required,omitempty"`
 }
 type connectFlow struct {
 	ConnectFlow
-	aws         *awsLogin
 	state       string
 	secret      string
 	deviceCode  string
@@ -54,6 +55,8 @@ type connectFlow struct {
 	interval    time.Duration
 	nextPoll    time.Time
 	allowWrites bool
+	// renewID is the account a "sign in again" started from.
+	renewID string
 }
 
 func (m *Manager) isPending(id string) bool {
@@ -73,7 +76,6 @@ func (m *Manager) expireFlows() {
 	}
 	for id, flow := range m.connectFlows {
 		if time.Now().After(flow.Expires) {
-			flow.stopAWS()
 			delete(m.connectFlows, id)
 		}
 	}
@@ -130,9 +132,6 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if reason := m.unavailableReason(in.Integration); reason != "" {
 			return Response{}, errors.New(reason)
 		}
-		if in.Integration == "aws" {
-			return m.startAWSSignIn(ctx, &in)
-		}
 		if e := lookup(in.Integration); e != nil && e.OAuth != nil && e.OAuth.Device != nil {
 			return m.startDevice(ctx, e, &in)
 		}
@@ -146,7 +145,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 				state = key
 			}
 		}
-		f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", AuthorizationURL: response.AuthorizationURL, Expires: m.pending[state].Expires, AccountID: response.Account.ID, WebReturn: m.pending[state].Web}, state: state}
+		f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", AuthorizationURL: response.AuthorizationURL, Expires: m.pending[state].Expires, AccountID: response.Account.ID, WebReturn: m.pending[state].Web, AddressRequired: m.pending[state].Loopback}, state: state, renewID: in.AccountID}
 		m.connectFlows[f.ID] = f
 		return flowResult(f), nil
 	}
@@ -165,13 +164,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		// A completed consent is never disconnected by a late cancel.
 		f.secret = ""
 		f.deviceCode = ""
-		f.stopAWS()
 		f.Status = "cancelled"
 		f.AuthorizationURL = ""
 		return flowResult(f), nil
-	}
-	if f.aws != nil && (q.Action == "connect_status" || q.Action == "connect_finish") {
-		return m.advanceAWSSignIn(ctx, f, strings.TrimSpace(q.Code))
 	}
 	if q.Action == "github_import" {
 		if f.Status == "connected" {
@@ -233,11 +228,26 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if f.Status != "waiting" || f.state == "" {
 			return Response{}, errors.New("This connection is no longer waiting for authorization")
 		}
-		callback, err := url.Parse(q.Callback)
-		if err != nil || len(q.Callback) > 16384 || callback.Scheme != "mewla" || callback.Host != "plugins" || callback.Path != "" || callback.Fragment != "" || callback.User != nil || callback.Query().Get("state") != f.state || len(callback.Query()["state"]) != 1 || len(callback.Query()["code"]) > 1 || len(callback.Query()["error"]) > 1 || len(callback.Query()["iss"]) > 1 {
-			return Response{}, errors.New("Authorization return does not match this connection")
+		var returned string
+		if pending, ok := m.pending[f.state]; ok && pending.Loopback {
+			// The browser may have reached this server by itself; asking again
+			// without an address only reports where the sign-in stands.
+			if strings.TrimSpace(q.Callback) == "" {
+				return m.connectedFlow(f)
+			}
+			values, ok := loopbackReturn(q.Callback, m.records[pending.ID].OAuth.RedirectURL)
+			if !ok || values.Get("state") != f.state {
+				return Response{}, errors.New("That is not the address this sign-in ended on. Copy it from the browser's address bar, whole.")
+			}
+			returned = values.Encode()
+		} else {
+			callback, err := url.Parse(q.Callback)
+			if err != nil || len(q.Callback) > 16384 || callback.Scheme != "mewla" || callback.Host != "plugins" || callback.Path != "" || callback.Fragment != "" || callback.User != nil || callback.Query().Get("state") != f.state || len(callback.Query()["state"]) != 1 || len(callback.Query()["code"]) > 1 || len(callback.Query()["error"]) > 1 || len(callback.Query()["iss"]) > 1 {
+				return Response{}, errors.New("Authorization return does not match this connection")
+			}
+			returned = callback.RawQuery
 		}
-		req := httptest.NewRequest(http.MethodGet, "https://native.invalid/?"+callback.RawQuery, nil)
+		req := httptest.NewRequest(http.MethodGet, "https://native.invalid/?"+returned, nil)
 		w := httptest.NewRecorder()
 		if cause := m.finishOAuth(w, req, ctx, true, false); cause != "" {
 			f.Status = "failed"
@@ -275,23 +285,41 @@ func (m *Manager) connectedFlow(f *connectFlow) (Response, error) {
 	return result, nil
 }
 func (m *Manager) nameAndDeduplicate(r *record) {
-	if r.Account.Identity != "" && !strings.Contains(r.Account.Identity, "identity not provided") {
+	if r.Account.Identity != "" && !strings.Contains(r.Account.Identity, "identity not provided") && r.Account.Integration != "aws" {
 		r.Account.Name = r.Account.Identity
+	}
+	if r.Account.Integration == "aws" {
+		m.nameAWS(r)
 	}
 	if r.Account.Identity == "" || strings.Contains(r.Account.Identity, "identity not provided") {
 		return
 	}
-	native := false
+	native, renew := false, ""
 	for _, f := range m.connectFlows {
 		if f.AccountID == r.Account.ID {
-			native = true
+			native, renew = true, f.renewID
 		}
 	}
 	if !native {
 		return
 	}
-	for id, existing := range m.records {
-		if existing == r || existing.Account.Status == "disconnected" || existing.Account.Integration != r.Account.Integration || existing.Account.Identity != r.Account.Identity {
+	ids := make([]string, 0, len(m.records))
+	for id := range m.records {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		existing := m.records[id]
+		if existing == r || existing.Account.Status == "disconnected" || existing.Account.Integration != r.Account.Integration {
+			continue
+		}
+		// "Sign in again" on a card renews that card, if the same AWS account
+		// signed in; any other sign-in renews the account of the same identity.
+		if renew != "" {
+			if id != renew || r.Account.Integration == "aws" && awsAccountID(existing) != awsAccountID(r) {
+				continue
+			}
+		} else if existing.Account.Identity != r.Account.Identity {
 			continue
 		}
 		// Identity has been reverified by the provider. Keep stable account IDs,
@@ -305,6 +333,9 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 		}
 		oldID := r.Account.ID
 		_ = m.vault.Delete("integration:" + oldID)
+		if e := lookup(r.Account.Integration); e != nil && e.OAuth != nil && e.OAuth.KeepGrants {
+			keepAccount(r, existing)
+		}
 		r.Account.ID = id
 		m.records[id] = r
 		delete(m.records, oldID)
@@ -499,4 +530,37 @@ func (m *Manager) slackToken(ctx context.Context, r *record, values url.Values) 
 		token.Expiry = time.Now().Add(time.Duration(value.ExpiresIn) * time.Second)
 	}
 	return token.WithExtra(map[string]any{"scope": strings.ReplaceAll(value.Scope, ",", " ")}), nil
+}
+
+// keepAccount carries what the person set on an account over to the account
+// that replaces it after signing in again: its name, whether it is on, and every
+// grant whose tool is unchanged.
+func keepAccount(r, old *record) {
+	if old.Account.Name != "" {
+		r.Account.Name = old.Account.Name
+	}
+	r.Account.Enabled = old.Account.Enabled
+	for _, t := range r.Account.Tools {
+		if fp, ok := old.Grants[t.Name]; ok && fp == fingerprint(t) {
+			r.Grants[t.Name] = fp
+		}
+	}
+	if r.Account.Integration == "aws" {
+		awsAdoptName(r, old.Account.AWS)
+	}
+}
+
+// nameAWS names a new AWS account after the AWS account, else by its ID, and
+// tells two accounts of the same AWS account apart by who is signed in.
+func (m *Manager) nameAWS(r *record) {
+	r.Account.Name = "AWS " + awsAccountID(r)
+	if d := r.Account.AWS; d != nil && d.AccountName != "" {
+		r.Account.Name = d.AccountName
+	}
+	for _, other := range m.records {
+		if other != r && other.Account.Integration == "aws" && other.Account.Status != "disconnected" && other.Account.Name == r.Account.Name && awsAccountID(other) == awsAccountID(r) && r.Account.AWS != nil && r.Account.AWS.Who != "" {
+			r.Account.Name += " (" + r.Account.AWS.Who + ")"
+			return
+		}
+	}
 }

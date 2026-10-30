@@ -71,10 +71,8 @@ type Account struct {
 	// Signer is the API wallet's public address when a trading key is saved.
 	// None of these is secret.
 	Network string `json:"network,omitempty"`
-	// AWS: the AWS CLI profile the account signs in through (none for pasted
-	// access keys) and its default region. Neither is secret.
-	Profile string `json:"profile,omitempty"`
-	Region  string `json:"region,omitempty"`
+	// AWS: the account's default region. Not secret.
+	Region string `json:"region,omitempty"`
 	// AWS: who is connected, in words a person recognizes. Not secret.
 	AWS                      *AWSDetails `json:"aws,omitempty"`
 	Address                  string      `json:"address,omitempty"`
@@ -114,10 +112,8 @@ type Input struct {
 	// Hyperliquid adds an API wallet key as Credential. The key names its
 	// account and network; Network only limits the search to one of them.
 	Network string `json:"network,omitempty"`
-	// AWS: connect through a profile of the AWS CLI on this computer, or paste
-	// access keys as Credential. Region is the keys' default region.
-	Profile     string             `json:"profile,omitempty"`
-	Region      string             `json:"region,omitempty"`
+	// AccountID names the account a sign-in renews: "Sign in again" on its card.
+	AccountID   string             `json:"account_id,omitempty"`
 	Spec        json.RawMessage    `json:"spec,omitempty"`
 	OAuthClient *OAuthClientConfig `json:"oauth_client,omitempty"`
 	Mobile      bool               `json:"mobile,omitempty"`
@@ -141,9 +137,6 @@ type Request struct {
 	Tools     []string        `json:"tools,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	Allowed   bool            `json:"allowed,omitempty"`
-	// Code is the authorization code AWS shows after a browser sign-in
-	// (connect_finish of an AWS sign-in).
-	Code string `json:"code,omitempty"`
 	// URI names one resource for read_resource; Cursor continues a listing.
 	URI    string `json:"uri,omitempty"`
 	Cursor string `json:"cursor,omitempty"`
@@ -167,5 +160,4 @@ type Response struct {
 	Result           json.RawMessage `json:"result,omitempty"`
 	AuthorizationURL string          `json:"authorization_url,omitempty"`
 	OAuthConfigured  []string        `json:"oauth_configured"`
-	Profiles         []AWSProfile    `json:"profiles,omitempty"`
 }
