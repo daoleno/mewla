@@ -179,7 +179,8 @@ internal class PhoneHelper(
             val on = interactive()
             val began = android.os.SystemClock.uptimeMillis()
             val tree = if (on) reader.read(s.displayId) else JSONObject().put("windows", JSONArray())
-            Log.i(TAG, "tree: interactive=$on read in ${android.os.SystemClock.uptimeMillis() - began} ms, windows=${tree.optJSONArray("windows")?.length()}")
+            val took = android.os.SystemClock.uptimeMillis() - began
+            if (took > 1_000) Log.w(TAG, "tree: interactive=$on read took $took ms")
             tree.put("ok", true).put("w", s.width).put("h", s.height).put("interactive", on)
         }
         "settle" -> {

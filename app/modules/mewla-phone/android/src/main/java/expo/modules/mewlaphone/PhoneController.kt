@@ -400,7 +400,8 @@ object PhoneController {
     fun execute(request: JSONObject): JSONObject {
         val started = System.currentTimeMillis()
         val result = executeTimed(request)
-        Log.i(TAG, "${request.optString("op")} ${if (result.optBoolean("ok")) "ok" else result.optString("code")} in ${System.currentTimeMillis() - started} ms")
+        val took = System.currentTimeMillis() - started
+        if (took > 3_000) Log.i(TAG, "${request.optString("op")} ${if (result.optBoolean("ok")) "ok" else result.optString("code")} took $took ms")
         return result
     }
 
@@ -417,7 +418,6 @@ object PhoneController {
             } catch (e: Exception) {
                 return failure(id, "not_ready", "Phone use is not ready on the phone: ${e.message}")
             }
-            Log.i(TAG, "$op: helper ready")
             keepScreenOn()
             activeWorker = request.optString("worker_name").ifEmpty { request.optString("worker") }.ifEmpty { "An agent" }
             publish()
