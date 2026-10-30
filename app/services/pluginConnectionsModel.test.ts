@@ -9,6 +9,7 @@ import {
   awsSignInInput,
   bulkToolNames,
   canDisconnect,
+  connectLabel,
   connectsWithForm,
   connectSteps,
   enabledRequest,
@@ -265,6 +266,8 @@ describe("AWS", () => {
     expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" });
     expect(awsSignInInput(expired)).toEqual({ integration: "aws", account_id: "aws-3" });
     expect(awsSignInInput(account({ integration: "github" }))).toBeNull();
+    expect(connectLabel({ id: "aws", name: "AWS" })).toBe("Sign in to AWS");
+    expect(connectLabel({ id: "github", name: "GitHub" })).toBe("Connect GitHub");
     // No terminal command anywhere.
     expect(JSON.stringify(accountRecovery(aws({ status: "authorization_required" }), "AWS"))).not.toContain("aws login");
   });

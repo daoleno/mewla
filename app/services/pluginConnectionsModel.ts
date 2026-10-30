@@ -49,6 +49,11 @@ export function connectsWithForm(serviceId: string): boolean {
   return serviceId === "mcp" || serviceId === "openapi" || serviceId === "hyperliquid";
 }
 
+/** The primary button on a service with nothing connected: AWS opens its own sign-in, others connect. */
+export function connectLabel(plugin: Pick<PluginIntegration, "id" | "name">): string {
+  return plugin.id === "aws" ? "Sign in to AWS" : `Connect ${plugin.name}`;
+}
+
 /**
  * The sign-in that renews an AWS account: the same browser sign-in as
  * connecting, naming the card it came from so that card is renewed in place.
