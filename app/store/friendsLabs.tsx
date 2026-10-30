@@ -7,6 +7,7 @@ import {
   enableFriends,
   getFriendsStatus,
   pollComputerSignIn,
+  setAutoMedia,
   setAutoPost,
   startComputerSignIn,
   type LoginStart,
@@ -35,6 +36,7 @@ interface FriendsLabsValue {
   /** Off: deletes the Friends account and the computer's drafts. Ask first. */
   turnOff(): Promise<boolean>;
   setAutoPost(enabled: boolean): Promise<void>;
+  setAutoMedia(media: boolean): Promise<void>;
   cancelSignIn(): void;
   openSignInPage(): void;
 }
@@ -157,6 +159,17 @@ export function FriendsLabsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const changeAutoMedia = useCallback(async (media: boolean) => {
+    const server = serverRef.current;
+    if (!server) return;
+    setError(null);
+    try {
+      setStatus(await setAutoMedia(server, media));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not change what auto-post may attach");
+    }
+  }, []);
+
   const cancelSignIn = useCallback(() => {
     signInToken.current += 1;
     setSignIn(null);
@@ -183,10 +196,11 @@ export function FriendsLabsProvider({ children }: { children: ReactNode }) {
       turnOn,
       turnOff,
       setAutoPost: changeAutoPost,
+      setAutoMedia: changeAutoMedia,
       cancelSignIn,
       openSignInPage,
     }),
-    [signIn, working, enabled, status, error, currentServer, refresh, turnOn, turnOff, changeAutoPost, cancelSignIn, openSignInPage],
+    [signIn, working, enabled, status, error, currentServer, refresh, turnOn, turnOff, changeAutoPost, changeAutoMedia, cancelSignIn, openSignInPage],
   );
   return <FriendsLabsContext.Provider value={value}>{children}</FriendsLabsContext.Provider>;
 }

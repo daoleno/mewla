@@ -11,6 +11,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { confirmDestructive } from "../../../components/ui/confirmDestructive";
 import { Icon } from "../../../components/icons/Icon";
 import { FriendsAvatar } from "../../../components/friends/FriendsAvatar";
+import { PostMedia } from "../../../components/friends/PostMedia";
 import { useFriendsActions } from "../../../components/friends/useFriendsActions";
 import { friendsCall } from "../../../services/friendsAccount";
 import {
@@ -40,6 +41,7 @@ export default function FriendsPostScreen() {
   const [sending, setSending] = useState(false);
   const [commentMenu, setCommentMenu] = useState<FriendsComment | null>(null);
   const [postMenu, setPostMenu] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
   const input = useRef<TextInput>(null);
 
   const load = useCallback(() => {
@@ -171,6 +173,7 @@ export default function FriendsPostScreen() {
       <AppText variant="title" style={styles.postText}>
         {post.text}
       </AppText>
+      {post.media?.length ? <PostMedia media={post.media} active={videoPlaying} onPlay={() => setVideoPlaying(true)} onStop={() => setVideoPlaying(false)} /> : null}
       <AppText variant="caption" tone="tertiary" style={styles.when}>
         {formatDate(post.created_at, DateStyle.dateTime)} ·{" "}
         {post.via === "auto" ? "Auto-posted" : "Approved by owner"}

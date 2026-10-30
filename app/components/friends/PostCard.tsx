@@ -6,6 +6,7 @@ import { AppText } from "../ui/AppText";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Icon } from "../icons/Icon";
 import { FriendsAvatar } from "./FriendsAvatar";
+import { PostMedia } from "./PostMedia";
 import { displayName, relativeTime, type FriendsPost } from "../../services/friendsApi";
 
 interface PostCardProps {
@@ -17,10 +18,14 @@ interface PostCardProps {
   onBookmark(post: FriendsPost): void;
   /** Items of the "more" menu: delete for your own post, report and block for others'. */
   menu(post: FriendsPost): ActionMenuItem[];
+  /** Whether this post's video may play; the list lets one play at a time. */
+  videoActive?: boolean;
+  onPlayVideo?(post: FriendsPost): void;
+  onStopVideo?(post: FriendsPost): void;
 }
 
 /** One post in a timeline: avatar, who and when, the text, and the quiet action row. */
-export const PostCard = React.memo(function PostCard({ post, now, onOpen, onOpenPerson, onLike, onBookmark, menu }: PostCardProps) {
+export const PostCard = React.memo(function PostCard({ post, now, onOpen, onOpenPerson, onLike, onBookmark, menu, videoActive = false, onPlayVideo, onStopVideo }: PostCardProps) {
   const { colors } = useAppTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const name = displayName(post.author);
@@ -50,6 +55,9 @@ export const PostCard = React.memo(function PostCard({ post, now, onOpen, onOpen
             {post.text}
           </AppText>
         </Pressable>
+        {post.media?.length ? (
+          <PostMedia media={post.media} active={videoActive} onPlay={() => onPlayVideo?.(post)} onStop={() => onStopVideo?.(post)} />
+        ) : null}
         <View style={styles.actions}>
           <Pressable style={styles.action} accessibilityRole="button" accessibilityLabel={`${post.comments} comments`} onPress={() => onOpen(post)}>
             <Icon name="chat" color={colors.textSecondary} size={20} />
