@@ -384,9 +384,9 @@ object PhoneController {
         val started = connectAdb().use { adb ->
             // An older helper (another version, or one a cleared app lost the token for) must not hold the display or the port.
             adb.exec("pkill -f 'mewla-phone-hel[p]er'").use { it.readAll() }
-            val helper = HelperLauncher.start(app, adb)
+            // Before the start: a start that throws after the helper is already serving must not skip the grant for good.
             grantSelfHealing(adb)
-            helper
+            HelperLauncher.start(app, adb)
         }
         if (!adopt(started)) throw IllegalStateException("the helper does not speak this version")
         started
