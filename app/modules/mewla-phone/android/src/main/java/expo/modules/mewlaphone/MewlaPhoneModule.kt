@@ -37,7 +37,11 @@ class MewlaPhoneModule : Module() {
 
         // Take over from a notification or the floating window arrives as the intent that opens the page.
         OnNewIntent { intent -> takeOverFrom(intent) }
-        OnActivityEntersForeground { appContext.currentActivity?.intent?.let { takeOverFrom(it) } }
+        OnActivityEntersForeground {
+            PhoneController.appForeground = true
+            appContext.currentActivity?.intent?.let { takeOverFrom(it) }
+        }
+        OnActivityEntersBackground { PhoneController.appForeground = false }
 
         /** The live checks and state, as JSON (see PhoneController.status). */
         Function("status") { PhoneController.status().toString() }

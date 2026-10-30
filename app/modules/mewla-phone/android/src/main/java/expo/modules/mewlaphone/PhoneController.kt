@@ -88,18 +88,33 @@ object PhoneController {
     private var linkStartedAt = 0L
 
     /**
-     * The computer reaches the phone through the App's JavaScript link. Without the App's screen
-     * (after a reboot, or once it was swiped away) there is no JavaScript running: this starts it
-     * headless. Asked at most once a minute, and not while a module already listens.
+     * The computer reaches the phone through the App's JavaScript link. React Native stops its timers
+     * while the App is in the background, and the link's address probing and retries wait on them, so
+     * a link that drops there (the computer restarted) would stay down until the App came to the front.
+     * While the link is down and the App is not in front, this runs a headless task, which keeps the
+     * timers going until the link is back; with no screen at all (after a reboot) it also starts the
+     * JavaScript. Backed off (see [LinkRetry]) so a computer that is off costs next to nothing.
      */
     @Synchronized
     fun ensureLink() {
-        if (!::app.isInitialized || !prefs.enabled || listener != null) return
+        if (!::app.isInitialized || !prefs.enabled) return
+        if (linkOnline) {
+            linkAttempts = 0
+            return
+        }
+        // With the App in front its JavaScript timers run and the link retries by itself.
+        if (appForeground) return
         val now = android.os.SystemClock.elapsedRealtime()
-        if (linkStartedAt != 0L && now - linkStartedAt < 60_000) return
+        if (linkStartedAt != 0L && now - linkStartedAt < LinkRetry.delayMs(linkAttempts)) return
         linkStartedAt = now
+        linkAttempts += 1
         runCatching { PhoneLinkTaskService.start(app) }.onFailure { Log.w(TAG, "cannot start the link", it) }
     }
+
+    private var linkAttempts = 0
+
+    /** Whether the App's screen is in front: set by the module as the activity comes and goes. */
+    @Volatile var appForeground = false
 
     // ---- keeping the helper up ---------------------------------------------------------------
 
@@ -390,6 +405,8 @@ object PhoneController {
         client = candidate
         if (hello.optInt("w") > 0) display = intArrayOf(hello.optInt("w"), hello.optInt("h"))
         publish()
+        // Views mounted while the link was down asked for frames that could not be requested then.
+        PhoneLiveViews.resume()
         return true
     }
 
@@ -623,7 +640,8 @@ object PhoneController {
 
     /** The agent's display at roughly the size of this phone's, so apps lay out as they do for the person. */
     private fun ensureDisplay(helper: HelperClient) {
-        if (display != null) return
+        // Always asked, never assumed: the helper answers at once for a live display of this size and makes
+        // a new one when the system dropped the old (a link drop or the screen going off can leave a stale one).
         val bounds = app.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
         val width = minOf(bounds.width(), bounds.height()).toDouble()
         val height = maxOf(bounds.width(), bounds.height()).toDouble()
@@ -635,6 +653,7 @@ object PhoneController {
         if (!reply.optBoolean("ok")) throw IllegalStateException(reply.optString("error", "no display"))
         display = intArrayOf(w, h)
         publish()
+        PhoneLiveViews.resume()
     }
 
     private fun even(v: Double) = (Math.round(v / 2.0) * 2).toInt()

@@ -59,3 +59,38 @@ export class PhoneLinkHost {
     this.watchers.forEach((watcher) => watcher(state));
   }
 }
+
+/**
+ * Resolves once the link is up, or can never come up on its own (taken by another phone, refused as
+ * too old, released), or after [maxMs]. A headless task awaits this: while it runs, React Native keeps
+ * its timers going in the background, and the link's reconnect waits on them.
+ */
+export function untilLinkSettles(
+  host: Pick<PhoneLinkHost, "watch">,
+  maxMs: number,
+  timers: { set(fn: () => void, ms: number): unknown; clear(handle: unknown): void } = {
+    set: (fn, ms) => setTimeout(fn, ms),
+    clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  },
+): Promise<PhoneLinkHostState> {
+  return new Promise((resolve) => {
+    let done = false;
+    let stop: (() => void) | null = null;
+    let cap: unknown = null;
+    const finish = (state: PhoneLinkHostState) => {
+      if (done) return;
+      done = true;
+      if (cap !== null) timers.clear(cap);
+      stop?.();
+      resolve(state);
+    };
+    stop = host.watch((state) => {
+      if (state === "online" || state === "replaced" || state === "unsupported") finish(state);
+    });
+    if (done) {
+      stop();
+      return;
+    }
+    cap = timers.set(() => finish("offline"), maxMs);
+  });
+}
