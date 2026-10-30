@@ -11,7 +11,7 @@ import {
   type PhoneStateFrame,
 } from "./phoneProtocol";
 
-export type PhoneLinkState = "connecting" | "online" | "offline" | "replaced";
+export type PhoneLinkState = "connecting" | "online" | "offline" | "replaced" | "unsupported";
 
 export interface PhoneLinkOptions {
   server: StoredServer;
@@ -21,6 +21,10 @@ export interface PhoneLinkOptions {
 }
 
 const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000];
+
+// The daemon's /phone/device close codes (daemon/phone/protocol.go).
+const CLOSE_REPLACED = 4001;
+const CLOSE_UNSUPPORTED = 4002;
 
 /**
  * The phone's signed WebSocket to its computer. The computer sends one request at a time; the
@@ -82,17 +86,25 @@ export class PhoneLink {
       socket.onmessage = (event) => {
         if (typeof event.data === "string") void this.onFrame(event.data);
       };
-      socket.onclose = () => this.closed(socket);
+      socket.onclose = (event) => this.closed(socket, event.code);
       socket.onerror = () => undefined;
     } catch {
       this.retry();
     }
   }
 
-  private closed(socket: WebSocket) {
+  private closed(socket: WebSocket, code: number) {
     if (this.socket !== socket) return;
     this.socket = null;
-    if (!this.stopped) this.retry();
+    if (this.stopped) return;
+    // Another phone took this computer's Phone use, or this App is older than the computer
+    // understands: reconnecting would only repeat it.
+    if (code === CLOSE_REPLACED || code === CLOSE_UNSUPPORTED) {
+      this.stopped = true;
+      this.options.onState(code === CLOSE_REPLACED ? "replaced" : "unsupported");
+      return;
+    }
+    this.retry();
   }
 
   private retry() {
@@ -156,13 +168,6 @@ export class PhoneLink {
   private async onFrame(raw: string) {
     const frame = parseDaemonFrame(raw);
     if (!frame) return;
-    if (frame.type === "replaced") {
-      // Another phone took this computer's Phone use: do not fight it.
-      this.stopped = true;
-      this.options.onState("replaced");
-      this.socket?.close();
-      return;
-    }
     if (frame.type !== "request") return;
     let result: string;
     try {
