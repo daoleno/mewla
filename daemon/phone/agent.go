@@ -237,8 +237,8 @@ func decodeImage(s string) []byte {
 }
 
 // resolve finds the element an id names on the latest reading.
-func (a *Agent) resolve(id int, t *trace) (Element, error) {
-	if err := a.mgr.Check(); err != nil {
+func (a *Agent) resolve(ctx context.Context, id int, t *trace) (Element, error) {
+	if err := a.mgr.CheckWait(ctx); err != nil {
 		return Element{}, err
 	}
 	el, err := a.session(a.mgr.Generation()).Resolve(id)
@@ -253,7 +253,7 @@ func (a *Agent) tap(ctx context.Context, w worker, act AgentAction, t *trace) (A
 	x, y := act.X, act.Y
 	switch {
 	case act.Element > 0:
-		el, err := a.resolve(act.Element, t)
+		el, err := a.resolve(ctx, act.Element, t)
 		if err != nil {
 			return AgentResult{}, err
 		}
@@ -297,7 +297,7 @@ func (a *Agent) typeText(ctx context.Context, w worker, act AgentAction, t *trac
 		return AgentResult{}, errors.New("type needs text (with replace true, empty text clears the field)")
 	}
 	if act.Element > 0 {
-		el, err := a.resolve(act.Element, t)
+		el, err := a.resolve(ctx, act.Element, t)
 		if err != nil {
 			return AgentResult{}, err
 		}
@@ -342,13 +342,13 @@ func (a *Agent) swipe(ctx context.Context, w worker, act AgentAction, t *trace) 
 		// The region the finger moves in: the element's, else the whole display.
 		var left, top, right, bottom int
 		if act.Element > 0 {
-			el, err := a.resolve(act.Element, t)
+			el, err := a.resolve(ctx, act.Element, t)
 			if err != nil {
 				return AgentResult{}, err
 			}
 			left, top, right, bottom = el.Bounds[0], el.Bounds[1], el.Bounds[2], el.Bounds[3]
 		} else {
-			if err := a.mgr.Check(); err != nil {
+			if err := a.mgr.CheckWait(ctx); err != nil {
 				return AgentResult{}, err
 			}
 			dw, dh := a.displaySize()

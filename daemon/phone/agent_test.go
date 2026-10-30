@@ -379,7 +379,7 @@ func TestRefusalsReachTheAgentAsErrors(t *testing.T) {
 			}
 		}
 	}
-	a := NewAgent(NewManager(Options{}), nil)
+	a := NewAgent(NewManager(Options{Reconnect: -1}), nil)
 	if _, err := a.Act(context.Background(), "w1", "", AgentAction{Action: ActTap, Element: 1}); code(err) != CodeNotConnected {
 		t.Fatalf("offline: %v", err)
 	}
