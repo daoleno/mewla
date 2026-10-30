@@ -41,7 +41,7 @@ export interface PhoneRequestFrame {
   image?: boolean;
 }
 
-export type PhoneFrameFromDaemon = PhoneRequestFrame | { type: "ping" } | { type: "replaced"; reason?: string };
+export type PhoneFrameFromDaemon = PhoneRequestFrame;
 
 export function parseDaemonFrame(raw: string): PhoneFrameFromDaemon | null {
   try {
