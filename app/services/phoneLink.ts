@@ -1,0 +1,182 @@
+import { Platform } from "react-native";
+import { buildAuthorizationHeader } from "./auth";
+import { resolveStoredServerURL } from "./pinnedTransport";
+import type { StoredServer } from "./storage";
+import type { PhoneNativeModule, PhoneStatus } from "../modules/mewla-phone/src";
+import {
+  PHONE_PROTOCOL_VERSION,
+  parseDaemonFrame,
+  type PhoneEventFrame,
+  type PhoneHello,
+  type PhoneStateFrame,
+} from "./phoneProtocol";
+
+export type PhoneLinkState = "connecting" | "online" | "offline" | "replaced";
+
+export interface PhoneLinkOptions {
+  server: StoredServer;
+  native: PhoneNativeModule;
+  appVersion: string;
+  onState(state: PhoneLinkState): void;
+}
+
+const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000];
+
+/**
+ * The phone's signed WebSocket to its computer. The computer sends one request at a time; the
+ * native side runs it and the result goes back on the same socket. Only a person's Labs switch
+ * starts it, it reconnects by itself, and it stays up in the background through the foreground
+ * service the native side holds.
+ */
+export class PhoneLink {
+  private socket: WebSocket | null = null;
+  private stopped = false;
+  private attempt = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private lastState = "";
+  private subscriptions: { remove(): void }[] = [];
+
+  constructor(private readonly options: PhoneLinkOptions) {}
+
+  start() {
+    this.stopped = false;
+    this.subscriptions.push(
+      this.options.native.addListener("onStatus", (event) => this.relayStatus(event.json)),
+      this.options.native.addListener("onEvent", (event) => this.relayEvent(event.json)),
+    );
+    void this.open();
+  }
+
+  stop() {
+    this.stopped = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.subscriptions.forEach((subscription) => subscription.remove());
+    this.subscriptions = [];
+    const socket = this.socket;
+    this.socket = null;
+    socket?.close();
+  }
+
+  private async open() {
+    const { server, onState } = this.options;
+    if (this.stopped) return;
+    onState("connecting");
+    try {
+      const url = new URL(await resolveStoredServerURL(server));
+      url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
+      url.pathname = "/phone/device";
+      url.search = "";
+      const authorization = await buildAuthorizationHeader({ daemonId: server.daemonId, purpose: "mewla-phone-device" });
+      if (this.stopped) return;
+      const NativeWebSocket = WebSocket as unknown as {
+        new (url: string, protocols: undefined, options: { headers: Record<string, string> }): WebSocket;
+      };
+      const socket = new NativeWebSocket(url.toString(), undefined, { headers: { Authorization: authorization } });
+      this.socket = socket;
+      socket.onopen = () => {
+        this.attempt = 0;
+        this.lastState = "";
+        this.hello();
+      };
+      socket.onmessage = (event) => {
+        if (typeof event.data === "string") void this.onFrame(event.data);
+      };
+      socket.onclose = () => this.closed(socket);
+      socket.onerror = () => undefined;
+    } catch {
+      this.retry();
+    }
+  }
+
+  private closed(socket: WebSocket) {
+    if (this.socket !== socket) return;
+    this.socket = null;
+    if (!this.stopped) this.retry();
+  }
+
+  private retry() {
+    if (this.stopped) return;
+    this.options.onState("offline");
+    const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)];
+    this.attempt += 1;
+    this.timer = setTimeout(() => void this.open(), delay);
+  }
+
+  private send(frame: object) {
+    const socket = this.socket;
+    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(frame));
+  }
+
+  private hello() {
+    const status = this.currentStatus();
+    const hello: PhoneHello = {
+      type: "hello",
+      version: PHONE_PROTOCOL_VERSION,
+      model: String(Platform.constants && "Model" in Platform.constants ? (Platform.constants as { Model?: string }).Model ?? "" : ""),
+      sdk: status?.sdk ?? Number(Platform.Version),
+      app_version: this.options.appVersion,
+      state: status?.state ?? "setup",
+    };
+    this.send(hello);
+    this.options.onState("online");
+    if (status) this.relayStatus(JSON.stringify(status));
+  }
+
+  private currentStatus(): PhoneStatus | null {
+    try {
+      return JSON.parse(this.options.native.status()) as PhoneStatus;
+    } catch {
+      return null;
+    }
+  }
+
+  private relayStatus(json: string) {
+    let status: PhoneStatus;
+    try {
+      status = JSON.parse(json) as PhoneStatus;
+    } catch {
+      return;
+    }
+    const key = `${status.state}:${status.w}:${status.h}`;
+    if (key === this.lastState) return;
+    this.lastState = key;
+    const frame: PhoneStateFrame = { type: "state", state: status.state, w: status.w || undefined, h: status.h || undefined };
+    this.send(frame);
+  }
+
+  private relayEvent(json: string) {
+    try {
+      this.send(JSON.parse(json) as PhoneEventFrame);
+    } catch {
+      // Not an event frame.
+    }
+  }
+
+  private async onFrame(raw: string) {
+    const frame = parseDaemonFrame(raw);
+    if (!frame) return;
+    if (frame.type === "replaced") {
+      // Another phone took this computer's Phone use: do not fight it.
+      this.stopped = true;
+      this.options.onState("replaced");
+      this.socket?.close();
+      return;
+    }
+    if (frame.type !== "request") return;
+    let result: string;
+    try {
+      result = await this.options.native.execute(raw);
+    } catch (error) {
+      result = JSON.stringify({
+        type: "result",
+        id: frame.id,
+        ok: false,
+        code: "failed",
+        error: error instanceof Error ? error.message : "The phone could not do that",
+      });
+    }
+    const socket = this.socket;
+    if (socket && socket.readyState === WebSocket.OPEN) socket.send(result);
+  }
+}

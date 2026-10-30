@@ -24,6 +24,7 @@ import { removeCatGameData } from "../services/catGameCleanup";
 import { WorkProvider, useWorkDispatch } from "../store/work";
 import { CalendarProvider, useCalendarDispatch } from "../store/calendar";
 import { FriendsLabsProvider } from "../store/friendsLabs";
+import { PhoneUseProvider } from "../store/phoneUse";
 import {
   CurrentSessionProvider,
 } from "../store/currentSession";
@@ -705,6 +706,7 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="resources" options={{ title: "Resources" }} />
       <Stack.Screen name="settings" options={{ title: "Settings" }} />
       <Stack.Screen name="friends" options={{ title: "Friends" }} />
+      <Stack.Screen name="phone" options={{ title: "Phone use" }} />
       <Stack.Screen name="friends/post/[id]" options={{ title: "Post" }} />
       <Stack.Screen name="friends/person/[id]" options={{ title: "Profile" }} />
       <Stack.Screen name="friends/drafts" options={{ title: "Drafts" }} />
@@ -773,6 +775,7 @@ export default function RootLayout() {
           <WorkerProvider>
             <CurrentServerProvider>
               <FriendsLabsProvider>
+              <PhoneUseProvider>
               <CurrentSessionProvider>
                 <BrainProvider>
                   <WorkProvider>
@@ -790,6 +793,7 @@ export default function RootLayout() {
                   </WorkProvider>
                 </BrainProvider>
               </CurrentSessionProvider>
+              </PhoneUseProvider>
               </FriendsLabsProvider>
             </CurrentServerProvider>
           </WorkerProvider>
