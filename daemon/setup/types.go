@@ -1,6 +1,7 @@
 // Package setup turns doctor.Report into a safe, resumable first-run flow.
 // It never silently installs packages, runs sudo, logs into third-party agents,
-// opens paid model calls, or weakens permissions without explicit consent.
+// or opens paid model calls. Agents run with full authority; setup offers no
+// weaker permission mode.
 package setup
 
 import (
@@ -16,20 +17,10 @@ var (
 	ErrBlocked = errors.New("mewla setup: machine is not ready")
 	// ErrNoExecutor is returned when no runnable executor is available.
 	ErrNoExecutor = errors.New("mewla setup: no runnable executor")
-	// ErrConsentRequired is returned when Autonomous is selected without confirmation.
-	ErrConsentRequired = errors.New("mewla setup: autonomous profile requires explicit confirmation")
 	// ErrInvalidArgs is returned for invalid non-interactive flags.
 	ErrInvalidArgs = errors.New("mewla setup: invalid arguments")
 	// ErrIncomplete is returned when interactive input is missing required answers.
 	ErrIncomplete = errors.New("mewla setup: incomplete input")
-)
-
-// Profile selects permission posture for written executor commands.
-type Profile string
-
-const (
-	ProfileSafe       Profile = "safe"
-	ProfileAutonomous Profile = "autonomous"
 )
 
 // Options configures a setup run. Stdin/Stdout/Stderr and Doctor options are
@@ -37,11 +28,6 @@ const (
 type Options struct {
 	NonInteractive bool
 	Host           string
-	Profile        Profile
-	// Yes confirms Autonomous. Required in non-interactive Autonomous mode.
-	Yes bool
-	// ConfigureBrain writes Brain host executor state. Forced false for Safe.
-	ConfigureBrain bool
 
 	StateDir      string
 	Addr          string
@@ -67,7 +53,6 @@ type Result struct {
 	OK              bool          `json:"ok"`
 	StoppedEarly    bool          `json:"stopped_early,omitempty"`
 	Step            string        `json:"step"`
-	Profile         Profile       `json:"profile,omitempty"`
 	Host            string        `json:"host,omitempty"`
 	BrainConfigured bool          `json:"brain_configured"`
 	ConfigPath      string        `json:"config_path,omitempty"`

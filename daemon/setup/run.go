@@ -64,17 +64,7 @@ func Run(opts Options) (Result, error) {
 		hostDefault = candidates[0].ID
 	}
 
-	profile := opts.Profile
-	if profile == "" {
-		profile = ProfileSafe
-	}
-	profile, err = normalizeProfile(string(profile))
-	if err != nil {
-		return result, err
-	}
-
 	host := strings.TrimSpace(opts.Host)
-	configureBrain := false
 
 	if opts.NonInteractive {
 		if host == "" {
@@ -83,17 +73,6 @@ func Run(opts Options) (Result, error) {
 		if !isCandidate(candidates, host) {
 			return result, fmt.Errorf("%w: host must be a runnable candidate", ErrInvalidArgs)
 		}
-		if profile == ProfileAutonomous && !opts.Yes {
-			writeLines(out, PermissionExplanation()...)
-			writeLines(out, "", "Autonomous profile requires explicit confirmation (--yes).")
-			result.StoppedEarly = true
-			result.Message = "autonomous profile requires explicit confirmation (--yes)"
-			result.Step = "permissions"
-			return result, ErrConsentRequired
-		}
-		if profile == ProfileAutonomous && opts.Yes {
-			configureBrain = true
-		}
 	} else {
 		writeLines(out, "mewla setup", "")
 		writeLines(out, formatCandidates(candidates)...)
@@ -101,38 +80,10 @@ func Run(opts Options) (Result, error) {
 		if err != nil {
 			return result, err
 		}
-
-		result.Step = "permissions"
-		writeLines(out, append([]string{""}, append(PermissionExplanation(), "")...)...)
-		profileStr, err := promptChoice(opts, out, errOut, "Permission profile (safe/autonomous)", string(ProfileSafe), []string{string(ProfileSafe), string(ProfileAutonomous)})
-		if err != nil {
-			return result, err
-		}
-		profile, err = normalizeProfile(profileStr)
-		if err != nil {
-			return result, err
-		}
-		if profile == ProfileAutonomous {
-			confirmed, cerr := promptYesNo(opts, out, errOut, "Confirm Autonomous profile (high risk)?", false)
-			if cerr != nil {
-				return result, cerr
-			}
-			if !confirmed {
-				result.StoppedEarly = true
-				result.Message = "autonomous profile requires explicit confirmation"
-				result.Step = "permissions"
-				return result, ErrConsentRequired
-			}
-			configureBrain = true
-		}
-	}
-
-	if profile == ProfileSafe {
-		configureBrain = false
+		writeLines(out, "", "Agents run with full authority: no approvals, no sandbox.", "")
 	}
 
 	result.Host = host
-	result.Profile = profile
 	result.Step = "config"
 
 	paths, err := resolvePaths(opts)
@@ -157,7 +108,6 @@ func Run(opts Options) (Result, error) {
 
 	written, err := writeExecutorsConfig(configWriteRequest{
 		Path:     paths.ExecutorsPath,
-		Profile:  profile,
 		Selected: selected,
 		Now:      now().UTC(),
 	})
@@ -167,16 +117,10 @@ func Run(opts Options) (Result, error) {
 	result.BackupPath = written.BackupPath
 	result.RestartRequired = true
 
-	if configureBrain {
-		if err := persistBrainHost(paths.BrainRoot, host); err != nil {
-			return result, err
-		}
-		result.BrainConfigured = true
-	} else if BrainHardensHostAtRuntime() {
-		result.Warnings = append(result.Warnings,
-			"Brain host left unconfigured: current runtime hardens Codex/Claude Brain sessions to bypass/noninteractive mode",
-		)
+	if err := persistBrainHost(paths.BrainRoot, host); err != nil {
+		return result, err
 	}
+	result.BrainConfigured = true
 
 	result.Step = "next"
 	result.OK = true
@@ -379,38 +323,6 @@ func promptChoice(opts Options, out, errOut io.Writer, label, def string, allowe
 			return value, nil
 		}
 		fmt.Fprintf(errOut, "choose one of: %s\n", strings.Join(allowed, ", "))
-	}
-}
-
-func promptYesNo(opts Options, out, errOut io.Writer, label string, def bool) (bool, error) {
-	defLabel := "n"
-	if def {
-		defLabel = "y"
-	}
-	if opts.Stdin == nil {
-		return false, fmt.Errorf("%w: stdin required for interactive setup", ErrIncomplete)
-	}
-	scanner := bufio.NewScanner(opts.Stdin)
-	for {
-		fmt.Fprintf(out, "%s [%s]: ", label, defLabel)
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return false, err
-			}
-			return false, fmt.Errorf("%w: missing confirmation", ErrIncomplete)
-		}
-		value := strings.ToLower(strings.TrimSpace(scanner.Text()))
-		if value == "" {
-			return def, nil
-		}
-		switch value {
-		case "y", "yes":
-			return true, nil
-		case "n", "no":
-			return false, nil
-		default:
-			fmt.Fprintln(errOut, "enter y or n")
-		}
 	}
 }
 

@@ -28,12 +28,12 @@ a Claude model is still a Cursor Session.
 
 ```sh
 mewla setup
-mewla setup --non-interactive --host codex --profile safe
+mewla setup --non-interactive --host codex
 ```
 
-`--host` is the executor that runs Brain. `--profile` is `safe` or
-`autonomous` (autonomous needs `--yes` without prompts). Setup never installs
-packages, runs `sudo` or signs in to providers.
+`--host` is the executor that runs Brain. Setup never installs packages, runs
+`sudo` or signs in to providers. It has no permission question: every agent runs
+with full authority (see below).
 
 To edit it by hand, add one `[[executors]]` entry per command. An entry with a
 built-in name overrides it; any other name adds a custom terminal agent:
@@ -54,23 +54,29 @@ chooses which one each Worker uses (see
 
 ## Permission bypass risks
 
-Unattended work from a phone means agents run tools and shell commands without
-asking. On a machine with secrets or production access, that is dangerous.
+**Every agent Mewla launches runs with full authority.** There is no safe mode
+and no setting that turns this off: agents run tools and shell commands without
+asking, and nothing reviews an action before it runs. On a machine with secrets
+or production access, that is dangerous.
 
-**Sessions you start** use the command as configured. The built-in `agent` and
-`grok` commands bypass approvals, and `pi` is always permissive.
+This covers the Brain host, Brain Workers and Calendar scheduled actions, and the
+app's agent presets carry the same flags. Mewla adds these flags whatever the
+configuration says:
 
-**Brain Workers and Calendar scheduled actions** always run unattended. Mewla
-adds these flags whatever the configuration says:
-
-| Agent | Added for unattended work |
+| Agent | Added to every launch |
 | --- | --- |
 | Codex | `--dangerously-bypass-approvals-and-sandbox` |
-| Claude Code | `--permission-mode bypassPermissions`: no per-action approval, and nothing reviews what it runs. An explicit `auto`, `bypassPermissions` or `--dangerously-skip-permissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected |
+| Claude Code | `--permission-mode bypassPermissions`: no per-action approval, and nothing reviews what it runs. An explicit `bypassPermissions` or `--dangerously-skip-permissions` in your command is kept; `default`, `acceptEdits`, `dontAsk` and `plan` are rejected for delegated work |
 | Cursor Agent | `--force --sandbox disabled --trust --approve-mcps` |
 | Grok | `--permission-mode bypassPermissions --sandbox off` |
 | OpenCode | `--auto` |
-| Pi | Nothing. Calendar may add `--no-extensions` |
+| Pi | Nothing: it has no approval gate. Calendar may add `--no-extensions` |
+
+Earlier versions started Claude Code in `--permission-mode auto`, where a
+classifier could block work you had approved. That mode is gone: a command
+written with `--permission-mode auto`, in `executors.toml` or by an older app,
+now starts in `bypassPermissions`. Nothing in your files is rewritten; Mewla
+changes the command as it loads and launches it.
 
 Claude Code asks you to accept a one-time warning the first time it runs in
 bypass mode. Mewla answers it for the Claude it launches, through a settings
@@ -89,46 +95,11 @@ nobody answers. Nothing else checks an action before it runs.
 
 So:
 
-1. On a machine with secrets or production access, use the safe profile for
-   Sessions you start, and do not give that machine's work to Brain.
+1. On a machine with secrets or production access, do not run Mewla, or do not
+   give that machine's work to Brain.
 2. Use Brain and scheduled actions only where you accept an agent changing
    things without asking.
 3. Model providers see what agents send them.
-
-### Safe profile
-
-With this file, Sessions you start ask for approval in their terminal. Delete
-the agents you don't use, then restart `mewla`. `mewla setup --profile safe`
-writes the same thing.
-
-```toml
-[[executors]]
-name = "codex"
-command = "codex"
-
-[[executors]]
-name = "claude"
-command = "claude"
-
-[[executors]]
-name = "agent"
-command = "cursor-agent"
-kind = "cursor"
-
-[[executors]]
-name = "grok"
-command = "grok --no-alt-screen"
-
-[[executors]]
-name = "pi"
-command = "pi"
-kind = "pi"
-
-[[executors]]
-name = "opencode"
-command = "opencode"
-kind = "opencode"
-```
 
 ## Model Providers
 

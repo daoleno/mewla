@@ -24,10 +24,17 @@ commands and the `MEWLA_DELEGATED_EXECUTOR` lock no longer exist.
 Claude, Cursor and Grok delegated launches reuse the existing unattended client
 adapters. Claude runs in `--permission-mode bypassPermissions` by default for Brain
 host, delegated Workers and Calendar `scheduled_action`. An explicit
-`--permission-mode auto`, `--permission-mode bypassPermissions` or
-`--dangerously-skip-permissions` in the executor command is the person's own
-choice and is kept. `default`, `acceptEdits`, `dontAsk` and `plan` can stop at a
-prompt, so they are rejected for delegated work. Pi/DSH retain their native
+`--permission-mode bypassPermissions` or `--dangerously-skip-permissions` in
+the executor command is the person's own choice and is kept. `default`,
+`acceptEdits`, `dontAsk` and `plan` can stop at a prompt, so they are rejected
+for delegated work. An explicit `--permission-mode auto`, which earlier releases
+wrote, is rewritten to `bypassPermissions` by `work.MigrateClaudeAutoMode` (a
+token-aware rewrite that keeps every other byte of the command) wherever Claude
+is launched: `LoadExecutors`, `HardenClaudeCommand` (Brain host),
+`ScheduledActionCommand` (Workers, Calendar, `resolveSpawnCommand`) and the
+WebSocket `create_session` handler, which still receives old app presets. The
+Brain host also hardens Cursor and Grok through `PrepareDelegatedCommand`, so a
+host on any provider never stops at an approval prompt. Pi/DSH retain their native
 client behavior; extensions and authentication may still require setup.
 
 ### Why Claude defaults to bypassPermissions
@@ -58,8 +65,9 @@ reviews an individual action.
 - **Root.** Claude refuses bypass mode for uid 0 unless it runs in a container
   or sandbox (`IS_SANDBOX=1`, Docker, bubblewrap). The daemon is documented as
   not supported as root, and Mewla does not set `IS_SANDBOX`.
-- **An explicit `auto`** still works as a person's own choice. Its refusals are
-  Claude's: Mewla no longer answers a classifier refusal for a Worker.
+- **No Auto mode.** `auto` is migrated to `bypassPermissions` at launch, so no
+  Mewla-launched Claude runs a classifier. The Brain host's inline `--settings`
+  also carries `permissions.defaultMode`, matching the routed payload.
 
 ### Permission prompts of a delegated Worker
 
@@ -276,8 +284,8 @@ session-bound loopback and injects the saved upstream key there. The launch uses
 session-specific Claude settings to keep a pre-existing native settings file's
 endpoint or authentication environment from redirecting that managed session;
 native-login sessions retain their own authentication behavior. The same
-session settings set `permissions.defaultMode` to `auto`, so a routed Claude
-launch starts in Claude Code's Auto permission mode; an explicit
+session settings set `permissions.defaultMode` to `bypassPermissions`, so a routed
+Claude launch starts in bypass mode; an explicit
 `--permission-mode` or `--dangerously-skip-permissions` on the launch command
 still takes precedence. The session settings outrank the machine-level
 gateway projection in `~/.claude/settings.json`, so a managed session keeps its

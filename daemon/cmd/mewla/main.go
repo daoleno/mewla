@@ -195,7 +195,6 @@ func run(args []string, stderr io.Writer) error {
 func isSetupUserError(err error) bool {
 	return errors.Is(err, setup.ErrBlocked) ||
 		errors.Is(err, setup.ErrNoExecutor) ||
-		errors.Is(err, setup.ErrConsentRequired) ||
 		errors.Is(err, setup.ErrInvalidArgs) ||
 		errors.Is(err, setup.ErrIncomplete)
 }
