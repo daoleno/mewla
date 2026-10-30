@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Keyboard, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { Keyboard, PixelRatio, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -14,19 +14,23 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePathname, useRouter } from "expo-router";
 import { useAppTheme } from "../../constants/tokens";
 import { MewlaPhone, PhoneLiveView } from "../../modules/mewla-phone/src";
-import { getPhoneFloatCorner, setPhoneFloatCorner } from "../../services/storage";
+import { getPhoneFloatCorner, getPhoneFloatSize, setPhoneFloatCorner, setPhoneFloatSize } from "../../services/storage";
 import { usePhoneUse } from "../../store/phoneUse";
 import { IconButton } from "../ui/IconButton";
 import {
   DEFAULT_FLOAT_CORNER,
+  FLOAT_DEFAULT,
+  clampFloatFraction,
   floatOrigin,
   floatSize,
-  floatWidth,
   nearestFloatCorner,
   parseFloatCorner,
+  parseFloatFraction,
   phoneAgentWorking,
   phoneFloatVisible,
   phoneMode,
+  resizedFloatWidth,
+  toggledFloatFraction,
   type FloatCorner,
 } from "./phoneSetup";
 
@@ -37,11 +41,16 @@ const HEADER = 56;
 const COMPOSER = 140;
 /** Frames the small window asks for; the Phone page and the floating window ask for more. */
 const FLOAT_FPS = 4;
-/** Frame width asked for: enough pixels for the small window, the full frame for the large one. */
-const SMALL_FRAME_WIDTH = 480;
-const LARGE_FRAME_WIDTH = 720;
+/** Frame width asked for: the window's own pixels, in steps so a resize does not ask again at every move. */
+const FRAME_STEP = 120;
+const FRAME_MIN = 240;
+const FRAME_MAX = 720;
 const CONTROLS_MS = 4_000;
 const BUTTON = 34;
+const RADIUS = 10;
+/** The resize handle: a touch area around a small grip in the float's inner corner. */
+const HANDLE = 40;
+const GRIP = 16;
 
 function useKeyboardHeight() {
   const [height, setHeight] = useState(0);
@@ -81,6 +90,8 @@ export function PhoneFloat() {
   return <Float />;
 }
 
+type Gesturing = "none" | "drag" | "resize";
+
 function Float() {
   const { colors } = useAppTheme();
   const phone = usePhoneUse();
@@ -95,15 +106,18 @@ function Float() {
 
   const [box, setBox] = useState({ width: window.width, height: window.height });
   const [corner, setCorner] = useState<FloatCorner>(DEFAULT_FLOAT_CORNER);
+  const [fraction, setFraction] = useState(FLOAT_DEFAULT);
   const [controls, setControls] = useState(false);
-  const [large, setLarge] = useState(false);
   const placed = useRef(false);
+  const gesturing = useRef<Gesturing>("none");
 
   useEffect(() => {
     let alive = true;
-    void getPhoneFloatCorner()
-      .then((value) => {
-        if (alive) setCorner(parseFloatCorner(value));
+    void Promise.all([getPhoneFloatCorner(), getPhoneFloatSize()])
+      .then(([savedCorner, savedSize]) => {
+        if (!alive) return;
+        setCorner(parseFloatCorner(savedCorner));
+        setFraction(parseFloatFraction(savedSize));
       })
       .catch(() => undefined);
     return () => {
@@ -121,20 +135,25 @@ function Float() {
     [box.height, box.width, insets.bottom, insets.top, keyboard],
   );
   const ratio = status && status.w > 0 && status.h > 0 ? status.w / status.h : 9 / 20;
+  // The window is the agent display's exact shape, so the picture fills it; it never reaches the composer or the keyboard.
   const size = useMemo(
-    () => floatSize(ratio, floatWidth(box.width, large), Math.max(240, (area.bottom - area.top) - 2 * EDGE)),
-    [area.bottom, area.top, box.width, large, ratio],
+    () => floatSize(ratio, fraction, box, Math.max(0, area.bottom - area.top - 2 * EDGE)),
+    [area.bottom, area.top, box, fraction, ratio],
   );
 
   const x = useSharedValue(area.right - EDGE - size.width);
   const y = useSharedValue(area.top + EDGE);
-  const dragging = useRef(false);
   const origin = useMemo(() => floatOrigin(corner, area, size, EDGE), [area, corner, size]);
+
+  // The gestures are made once and read what changes through this, so a resize that re-renders at
+  // every move never replaces the gesture that is in progress.
+  const latest = useRef({ area, size, corner, ratio, fraction, box });
+  latest.current = { area, size, corner, ratio, fraction, box };
 
   // The float follows its corner: the keyboard, a rotation or a new size move it, a drag does not.
   useEffect(() => {
-    if (dragging.current) return;
-    if (!placed.current) {
+    if (gesturing.current === "drag") return;
+    if (!placed.current || gesturing.current === "resize") {
       placed.current = true;
       x.value = origin.x;
       y.value = origin.y;
@@ -144,25 +163,20 @@ function Float() {
     y.value = withTiming(origin.y, { duration: 220, easing: Easing.out(Easing.cubic) });
   }, [origin.x, origin.y, x, y]);
 
-  const drop = useCallback(
-    (nextCorner: FloatCorner) => {
-      dragging.current = false;
-      setCorner(nextCorner);
-      void setPhoneFloatCorner(nextCorner).catch(() => undefined);
-      const target = floatOrigin(nextCorner, area, size, EDGE);
-      x.value = withTiming(target.x, { duration: 220, easing: Easing.out(Easing.cubic) });
-      y.value = withTiming(target.y, { duration: 220, easing: Easing.out(Easing.cubic) });
-    },
-    [area, size, x, y],
-  );
+  const remember = useCallback((next: number) => {
+    void setPhoneFloatSize(next).catch(() => undefined);
+  }, []);
 
   const start = useSharedValue({ x: 0, y: 0 });
-  const gesture = useMemo(() => {
+  const startWidth = useRef(0);
+  const startFraction = useRef(FLOAT_DEFAULT);
+  const gestures = useMemo(() => {
     const pan = Gesture.Pan()
       .runOnJS(true)
+      .maxPointers(1)
       .minDistance(6)
       .onStart(() => {
-        dragging.current = true;
+        gesturing.current = "drag";
         cancelAnimation(x);
         cancelAnimation(y);
         start.value = { x: x.value, y: y.value };
@@ -172,13 +186,20 @@ function Float() {
         y.value = start.value.y + event.translationY;
       })
       .onEnd((event) => {
+        const l = latest.current;
         // A flick carries a little further than the finger.
-        const centerX = start.value.x + event.translationX + event.velocityX * 0.08 + size.width / 2;
-        const centerY = start.value.y + event.translationY + event.velocityY * 0.08 + size.height / 2;
-        drop(nearestFloatCorner({ x: centerX, y: centerY }, area));
+        const centerX = start.value.x + event.translationX + event.velocityX * 0.08 + l.size.width / 2;
+        const centerY = start.value.y + event.translationY + event.velocityY * 0.08 + l.size.height / 2;
+        const next = nearestFloatCorner({ x: centerX, y: centerY }, l.area);
+        gesturing.current = "none";
+        setCorner(next);
+        void setPhoneFloatCorner(next).catch(() => undefined);
+        const target = floatOrigin(next, l.area, l.size, EDGE);
+        x.value = withTiming(target.x, { duration: 220, easing: Easing.out(Easing.cubic) });
+        y.value = withTiming(target.y, { duration: 220, easing: Easing.out(Easing.cubic) });
       })
-      .onFinalize((_event, success) => {
-        if (!success) dragging.current = false;
+      .onFinalize(() => {
+        if (gesturing.current === "drag") gesturing.current = "none";
       });
     const tap = Gesture.Tap()
       .runOnJS(true)
@@ -186,22 +207,53 @@ function Float() {
       .onEnd((_event, success) => {
         if (success) setControls((shown) => !shown);
       });
-    // A pinch out or a double tap enlarges the window; a pinch in or another double tap shrinks it.
-    const pinch = Gesture.Pinch()
-      .runOnJS(true)
-      .onEnd((event) => {
-        if (event.scale > 1.15) setLarge(true);
-        else if (event.scale < 0.87) setLarge(false);
-      });
+    // A double tap goes between the default and the large size.
     const doubleTap = Gesture.Tap()
       .runOnJS(true)
       .numberOfTaps(2)
       .maxDuration(400)
       .onEnd((_event, success) => {
-        if (success) setLarge((value) => !value);
+        if (!success) return;
+        const next = toggledFloatFraction(latest.current.fraction);
+        setFraction(next);
+        remember(next);
       });
-    return Gesture.Race(pan, pinch, Gesture.Exclusive(doubleTap, tap));
-  }, [area, drop, size.height, size.width, start, x, y]);
+    // Two fingers resize continuously, the shape locked.
+    const pinch = Gesture.Pinch()
+      .runOnJS(true)
+      .onStart(() => {
+        gesturing.current = "resize";
+        startFraction.current = latest.current.fraction;
+      })
+      .onUpdate((event) => setFraction(clampFloatFraction(startFraction.current * event.scale)))
+      .onEnd(() => remember(latest.current.fraction))
+      .onFinalize(() => {
+        if (gesturing.current === "resize") gesturing.current = "none";
+      });
+    return Gesture.Simultaneous(pinch, Gesture.Race(pan, Gesture.Exclusive(doubleTap, tap)));
+  }, [remember, start, x, y]);
+
+  // The corner handle resizes with one finger along the diagonal.
+  const handle = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .minDistance(0)
+        .onStart(() => {
+          gesturing.current = "resize";
+          startWidth.current = latest.current.size.width;
+        })
+        .onUpdate((event) => {
+          const l = latest.current;
+          const width = resizedFloatWidth(startWidth.current, l.ratio, { x: event.translationX, y: event.translationY }, l.corner);
+          setFraction(clampFloatFraction(width / l.box.width));
+        })
+        .onEnd(() => remember(latest.current.fraction))
+        .onFinalize(() => {
+          if (gesturing.current === "resize") gesturing.current = "none";
+        }),
+    [remember],
+  );
 
   // The controls tuck themselves away; a handoff keeps asking.
   useEffect(() => {
@@ -243,74 +295,91 @@ function Float() {
     openPhone();
   };
 
+  const frameWidth = Math.min(FRAME_MAX, Math.max(FRAME_MIN, Math.ceil((size.width * PixelRatio.get()) / FRAME_STEP) * FRAME_STEP));
+  // The handle sits in the corner opposite the one the float is anchored to, so dragging it outward grows the window.
+  const handleLeft = corner.endsWith("right");
+  const handleTop = corner.startsWith("bottom");
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onLayout={onLayout}>
-      <GestureDetector gesture={gesture}>
-        <Animated.View
-          accessibilityLabel="Agent screen"
-          style={[
-            styles.frame,
-            { width: size.width, height: size.height, backgroundColor: "#000", borderColor: colors.borderSubtle, shadowColor: "#000" },
-            frameStyle,
-          ]}
-        >
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {PhoneLiveView ? <PhoneLiveView
-                style={StyleSheet.absoluteFill}
-                fps={FLOAT_FPS}
-                maxWidth={large ? LARGE_FRAME_WIDTH : SMALL_FRAME_WIDTH}
-              /> : null}
-          </View>
-          {handoff ? (
-            <Animated.View pointerEvents="none" style={[styles.ring, { borderColor: colors.seal }, ringStyle]} />
-          ) : null}
-          {controls ? (
-            <View style={styles.controls}>
-              <IconButton icon="expand" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Open" onPress={openPhone} style={styles.button} />
-              {handoff ? (
-                <IconButton icon="check" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Done" onPress={phone.handoffDone} style={styles.button} />
-              ) : driving ? (
-                <IconButton icon="return-forward" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Give back" onPress={phone.giveBack} style={styles.button} />
-              ) : (
-                <IconButton icon="hand" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Take over" onPress={takeOver} style={styles.button} />
-              )}
-              <IconButton icon="stop" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Stop" onPress={phone.stop} style={styles.button} />
+      <Animated.View
+        accessibilityLabel="Agent screen"
+        style={[
+          styles.frame,
+          { width: size.width, height: size.height, backgroundColor: "#000", shadowColor: "#000" },
+          frameStyle,
+        ]}
+      >
+        <GestureDetector gesture={gestures}>
+          <View style={StyleSheet.absoluteFill}>
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              {PhoneLiveView ? <PhoneLiveView style={StyleSheet.absoluteFill} fps={FLOAT_FPS} maxWidth={frameWidth} /> : null}
             </View>
-          ) : null}
-        </Animated.View>
-      </GestureDetector>
+            {controls ? (
+              <View style={styles.controls}>
+                <IconButton icon="expand" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Open" onPress={openPhone} style={styles.button} />
+                {handoff ? (
+                  <IconButton icon="check" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Done" onPress={phone.handoffDone} style={styles.button} />
+                ) : driving ? (
+                  <IconButton icon="return-forward" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Give back" onPress={phone.giveBack} style={styles.button} />
+                ) : (
+                  <IconButton icon="hand" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Take over" onPress={takeOver} style={styles.button} />
+                )}
+                <IconButton icon="stop" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Stop" onPress={phone.stop} style={styles.button} />
+              </View>
+            ) : null}
+          </View>
+        </GestureDetector>
+        <View pointerEvents="none" style={[styles.edge, { borderColor: colors.borderSubtle }]} />
+        {handoff ? <Animated.View pointerEvents="none" style={[styles.ring, { borderColor: colors.seal }, ringStyle]} /> : null}
+        <GestureDetector gesture={handle}>
+          <View
+            accessibilityLabel="Resize"
+            style={[styles.handle, handleLeft ? styles.handleLeft : styles.handleRight, handleTop ? styles.handleTop : styles.handleBottom]}
+          >
+            <View
+              style={[
+                styles.grip,
+                handleLeft ? { borderLeftWidth: 3, borderTopLeftRadius: handleTop ? 6 : 0, borderBottomLeftRadius: handleTop ? 0 : 6 } : { borderRightWidth: 3, borderTopRightRadius: handleTop ? 6 : 0, borderBottomRightRadius: handleTop ? 0 : 6 },
+                handleTop ? { borderTopWidth: 3 } : { borderBottomWidth: 3 },
+              ]}
+            />
+          </View>
+        </GestureDetector>
+      </Animated.View>
     </View>
   );
 }
+
+const fill = { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 } as const;
 
 const styles = StyleSheet.create({
   frame: {
     position: "absolute",
     left: 0,
     top: 0,
-    borderRadius: 14,
+    borderRadius: RADIUS,
     overflow: "hidden",
-    borderWidth: StyleSheet.hairlineWidth,
     elevation: 8,
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
   },
-  ring: { position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0, borderWidth: 3, borderRadius: 14 },
+  // The hairline is drawn over the picture, so it takes none of the window's size.
+  edge: { ...fill, borderWidth: StyleSheet.hairlineWidth, borderRadius: RADIUS },
+  ring: { ...fill, borderWidth: 3, borderRadius: RADIUS },
   controls: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...fill,
     backgroundColor: "rgba(0,0,0,0.55)",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
   },
   button: { backgroundColor: "rgba(255,255,255,0.18)" },
+  handle: { position: "absolute", width: HANDLE, height: HANDLE, padding: 8 },
+  handleLeft: { left: 0, alignItems: "flex-start" },
+  handleRight: { right: 0, alignItems: "flex-end" },
+  handleTop: { top: 0, justifyContent: "flex-start" },
+  handleBottom: { bottom: 0, justifyContent: "flex-end" },
+  grip: { width: GRIP, height: GRIP, borderColor: "rgba(255,255,255,0.9)" },
 });
