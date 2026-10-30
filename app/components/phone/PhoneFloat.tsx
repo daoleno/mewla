@@ -21,6 +21,7 @@ import {
   DEFAULT_FLOAT_CORNER,
   floatOrigin,
   floatSize,
+  floatWidth,
   nearestFloatCorner,
   parseFloatCorner,
   phoneAgentWorking,
@@ -29,7 +30,6 @@ import {
   type FloatCorner,
 } from "./phoneSetup";
 
-const FLOAT_WIDTH = 84;
 const EDGE = 12;
 /** Under the page header. */
 const HEADER = 56;
@@ -37,7 +37,9 @@ const HEADER = 56;
 const COMPOSER = 140;
 /** Frames the small window asks for; the Phone page and the floating window ask for more. */
 const FLOAT_FPS = 4;
-const FLOAT_FRAME_WIDTH = 300;
+/** Frame width asked for: enough pixels for the small window, the full frame for the large one. */
+const SMALL_FRAME_WIDTH = 480;
+const LARGE_FRAME_WIDTH = 720;
 const CONTROLS_MS = 4_000;
 const BUTTON = 34;
 
@@ -94,6 +96,7 @@ function Float() {
   const [box, setBox] = useState({ width: window.width, height: window.height });
   const [corner, setCorner] = useState<FloatCorner>(DEFAULT_FLOAT_CORNER);
   const [controls, setControls] = useState(false);
+  const [large, setLarge] = useState(false);
   const placed = useRef(false);
 
   useEffect(() => {
@@ -119,8 +122,8 @@ function Float() {
   );
   const ratio = status && status.w > 0 && status.h > 0 ? status.w / status.h : 9 / 20;
   const size = useMemo(
-    () => floatSize(ratio, FLOAT_WIDTH, Math.max(120, (area.bottom - area.top) * 0.6)),
-    [area.bottom, area.top, ratio],
+    () => floatSize(ratio, floatWidth(box.width, large), Math.max(240, (area.bottom - area.top) - 2 * EDGE)),
+    [area.bottom, area.top, box.width, large, ratio],
   );
 
   const x = useSharedValue(area.right - EDGE - size.width);
@@ -183,7 +186,21 @@ function Float() {
       .onEnd((_event, success) => {
         if (success) setControls((shown) => !shown);
       });
-    return Gesture.Exclusive(pan, tap);
+    // A pinch out or a double tap enlarges the window; a pinch in or another double tap shrinks it.
+    const pinch = Gesture.Pinch()
+      .runOnJS(true)
+      .onEnd((event) => {
+        if (event.scale > 1.15) setLarge(true);
+        else if (event.scale < 0.87) setLarge(false);
+      });
+    const doubleTap = Gesture.Tap()
+      .runOnJS(true)
+      .numberOfTaps(2)
+      .maxDuration(400)
+      .onEnd((_event, success) => {
+        if (success) setLarge((value) => !value);
+      });
+    return Gesture.Race(pan, pinch, Gesture.Exclusive(doubleTap, tap));
   }, [area, drop, size.height, size.width, start, x, y]);
 
   // The controls tuck themselves away; a handoff keeps asking.
@@ -238,7 +255,11 @@ function Float() {
           ]}
         >
           <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {PhoneLiveView ? <PhoneLiveView style={StyleSheet.absoluteFill} fps={FLOAT_FPS} maxWidth={FLOAT_FRAME_WIDTH} /> : null}
+            {PhoneLiveView ? <PhoneLiveView
+                style={StyleSheet.absoluteFill}
+                fps={FLOAT_FPS}
+                maxWidth={large ? LARGE_FRAME_WIDTH : SMALL_FRAME_WIDTH}
+              /> : null}
           </View>
           {handoff ? (
             <Animated.View pointerEvents="none" style={[styles.ring, { borderColor: colors.seal }, ringStyle]} />

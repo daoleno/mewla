@@ -3,6 +3,7 @@ import type { PhoneStatus } from "../../modules/mewla-phone/src";
 import {
   floatOrigin,
   floatSize,
+  floatWidth,
   nearestFloatCorner,
   nextPhoneStep,
   parseFloatCorner,
@@ -126,6 +127,15 @@ describe("phone float", () => {
     expect(floatSize(9 / 20, 80, 400)).toEqual({ width: 80, height: 178 });
     expect(floatSize(9 / 20, 80, 100)).toEqual({ width: 45, height: 100 });
     expect(floatSize(0, 80, 400)).toEqual({ width: 80, height: 178 });
+  });
+
+  test("is two fifths of the window wide, and larger on request, never a sliver", () => {
+    expect(floatWidth(411, false)).toBe(164);
+    expect(floatWidth(411, true)).toBe(288);
+    // The agent's 720x1600 display at that width on a 914-tall window leaves room for the whole picture.
+    expect(floatSize(720 / 1600, floatWidth(411, false), 700)).toEqual({ width: 164, height: 364 });
+    // With the keyboard up the window gives height first, but keeps a readable width.
+    expect(floatSize(720 / 1600, floatWidth(411, false), 240).width).toBe(108);
   });
 
   test("remembers only a corner it knows", () => {

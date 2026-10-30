@@ -127,6 +127,11 @@ export function nearestFloatCorner(center: { x: number; y: number }, area: Float
   return `${vertical}-${horizontal}`;
 }
 
+/** Small is readable at a glance, about two fifths of the window; large is for reading what the agent shows. */
+export function floatWidth(windowWidth: number, large: boolean): number {
+  return Math.round(windowWidth * (large ? 0.7 : 0.4));
+}
+
 /** The float's size: a fixed width in the agent's proportions, never taller than a share of the free height. */
 export function floatSize(ratio: number, width: number, maxHeight: number) {
   const safe = ratio > 0 ? ratio : 9 / 20;
