@@ -442,8 +442,12 @@ export default function SettingsScreen() {
             </>
           )}
 
-          <SettingsSectionHeader>Calendar</SettingsSectionHeader>
-          <CalendarAlertsSection />
+          {Platform.OS === "web" ? null : (
+            <>
+              <SettingsSectionHeader>Calendar</SettingsSectionHeader>
+              <CalendarAlertsSection />
+            </>
+          )}
 
           <SettingsSectionHeader>Appearance</SettingsSectionHeader>
           <AppearanceSection />

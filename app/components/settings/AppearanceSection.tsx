@@ -41,8 +41,7 @@ export function PetSection() {
   return (
     <ListSection>
       <ListRow
-        title="Pet"
-        value={pet.name.en}
+        title={pet.name.en}
         leading={<Image source={pet.portrait} style={styles.portrait} contentFit="contain" />}
         accessory="chevron"
         onPress={() => router.push("/settings/pet")}
