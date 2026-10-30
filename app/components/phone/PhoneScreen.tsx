@@ -9,7 +9,7 @@ import { Button } from "../ui/Button";
 import { ListRow, ListSection } from "../ui";
 import { Icon } from "../icons/Icon";
 import { IconButton } from "../ui/IconButton";
-import { nextPhoneStep, phoneMode, phoneSteps, type PhoneStepId } from "./phoneSetup";
+import { phoneMode, phoneSetupPlan, phoneSteps, type PhoneStepId } from "./phoneSetup";
 
 /** Phone use: the setup until it works, then the agent's own screen with Take over and Stop one tap away. */
 export function PhoneScreen() {
@@ -56,22 +56,44 @@ function Setup({ status }: { status: PhoneStatus }) {
   const { colors } = useAppTheme();
   const phone = usePhoneUse();
   const steps = phoneSteps(status);
-  const next = nextPhoneStep(status);
-  const [pairing, setPairing] = React.useState(false);
+  const [running, setRunning] = React.useState(false);
+  const plan = phoneSetupPlan(status, running);
+
+  // The guided setup runs in the background of this page: Mewla opens Settings, taps through it and
+  // brings the person back here; this page only starts it and shows where it is.
+  const setUp = async () => {
+    if (!MewlaPhone) return;
+    setRunning(true);
+    try {
+      await phone.pair();
+    } finally {
+      setRunning(false);
+    }
+  };
 
   const run = async (id: PhoneStepId) => {
     if (!MewlaPhone) return;
     if (id === "developer") MewlaPhone.openDeveloperSettings();
     else if (id === "wifi" || id === "wireless") MewlaPhone.openWirelessDebugging();
     else if (id === "pair") {
-      setPairing(true);
+      setRunning(true);
       try {
         MewlaPhone.openWirelessDebugging();
         await phone.pair();
       } finally {
-        setPairing(false);
+        setRunning(false);
       }
     } else if (id === "helper") await MewlaPhone.ensureHelper();
+  };
+
+  const primary = async () => {
+    if (!MewlaPhone) return;
+    if (plan.action === "allow") {
+      // Silent when the secure-settings grant exists; otherwise the system's page for Mewla's service.
+      if (!MewlaPhone.enableAccessibility()) MewlaPhone.openAccessibilitySettings();
+    } else if (plan.action === "setup") await setUp();
+    else if (plan.action === "wifi") MewlaPhone.openWirelessDebugging();
+    else await MewlaPhone.ensureHelper();
   };
 
   return (
@@ -81,17 +103,18 @@ function Setup({ status }: { status: PhoneStatus }) {
       </View>
       <ListSection>
         {steps.map((step) => {
-          const current = next?.id === step.id;
+          const current = plan.current === step.id;
+          const busy = current && !step.done && (running || status.guide !== null || step.id === "helper");
           return (
             <ListRow
               key={step.id}
               title={step.title}
-              subtitle={current ? step.hint : undefined}
+              subtitle={current ? plan.note ?? step.hint : undefined}
               onPress={step.done ? undefined : () => void run(step.id)}
               trailing={
                 step.done ? (
                   <Icon name="check-circle-fill" color={colors.success} size={22} />
-                ) : current && (pairing || step.id === "helper") ? (
+                ) : busy ? (
                   <ActivityIndicator color={colors.textTertiary} />
                 ) : (
                   <Icon name="circle" color={colors.textTertiary} size={22} />
@@ -102,42 +125,13 @@ function Setup({ status }: { status: PhoneStatus }) {
         })}
       </ListSection>
       <View style={styles.footer}>
-        {next ? (
-          <Button
-            label={nextLabel(next.id)}
-            variant="filled"
-            size="lg"
-            block
-            loading={pairing}
-            onPress={() => void run(next.id)}
-          />
-        ) : null}
-        {!status.accessibility ? (
-          <Button
-            label="Pair automatically"
-            variant="plain"
-            size="md"
-            onPress={() => MewlaPhone?.openAccessibilitySettings()}
-          />
+        <Button label={plan.label} variant="filled" size="lg" block loading={(running || status.guide !== null) && plan.action === "setup"} onPress={() => void primary()} />
+        {plan.action === "allow" && status.restricted ? (
+          <Button label="Open App info" variant="plain" size="md" onPress={() => MewlaPhone?.openAppSettings()} />
         ) : null}
       </View>
     </View>
   );
-}
-
-function nextLabel(id: PhoneStepId): string {
-  switch (id) {
-    case "developer":
-      return "Open Settings";
-    case "wifi":
-      return "Open Wi‑Fi";
-    case "wireless":
-      return "Turn on";
-    case "pair":
-      return "Pair";
-    case "helper":
-      return "Start";
-  }
 }
 
 function Live({ status, mode }: { status: PhoneStatus; mode: Exclude<ReturnType<typeof phoneMode>, "setup"> }) {

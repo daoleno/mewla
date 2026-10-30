@@ -25,6 +25,50 @@ export function nextPhoneStep(status: PhoneStatus): PhoneStep | null {
   return phoneSteps(status).find((step) => !step.done) ?? null;
 }
 
+export type PhoneSetupAction = "allow" | "setup" | "wifi" | "start";
+
+export interface PhoneSetupPlan {
+  /** What the one big button does now. */
+  action: PhoneSetupAction;
+  label: string;
+  /** The row the person's eye should be on, and the short line under it. */
+  current: PhoneStepId | null;
+  note: string | null;
+}
+
+const GUIDE_NOTES: Record<"developer" | "wireless" | "pair", string> = {
+  developer: "Tapping Build number",
+  wireless: "Turning on Wireless debugging",
+  pair: "Pairing",
+};
+
+/**
+ * The shortest way through setup: allow Mewla's accessibility service once, then it walks Settings
+ * itself and the person only answers what Android reserves for them (the screen lock, the network
+ * prompt). A step that stops getting anywhere falls back to its manual row.
+ */
+export function phoneSetupPlan(status: PhoneStatus, running: boolean): PhoneSetupPlan {
+  const next = nextPhoneStep(status);
+  const guide = status.guide;
+  if (!next) return { action: "start", label: "Start", current: null, note: null };
+  if (next.id === "helper") return { action: "start", label: "Start", current: "helper", note: null };
+  if (next.id === "wifi") return { action: "wifi", label: "Open Wi‑Fi", current: "wifi", note: null };
+  if (!status.accessibility) {
+    return {
+      action: "allow",
+      label: "Allow",
+      current: next.id,
+      note: status.restricted ? "Android blocks it for apps installed from a file: App info › ⋮ › Allow restricted settings" : null,
+    };
+  }
+  if (!running && !guide) return { action: "setup", label: "Set up", current: next.id, note: null };
+  if (guide?.needs === "allow") return { action: "setup", label: "Set up", current: "wireless", note: "Tap Allow on the system prompt" };
+  if (guide?.needs === "lock") return { action: "setup", label: "Set up", current: "developer", note: "Confirm your screen lock" };
+  if (guide?.stalled) return { action: "setup", label: "Set up", current: next.id, note: next.hint ?? "Do this step yourself" };
+  const step = guide?.step ?? (next.id === "developer" || next.id === "wireless" ? next.id : "pair");
+  return { action: "setup", label: "Set up", current: next.id, note: GUIDE_NOTES[step] };
+}
+
 export type PhoneMode = "setup" | "idle" | "watching" | "driving" | "handoff" | "stopped";
 
 /** What the screen shows: the setup list until everything is in place, then the agent's screen. */

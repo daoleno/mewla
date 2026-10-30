@@ -4,7 +4,8 @@ import Constants from "expo-constants";
 import { MewlaPhone, parsePhoneStatus, type PhoneStatus } from "../modules/mewla-phone/src";
 import { resolveDistributionChannel } from "../services/appUpdate";
 import { changePhone } from "../services/phoneApi";
-import { PhoneLink, type PhoneLinkState } from "../services/phoneLink";
+import { phoneLinkHost } from "../services/phoneLinkProcess";
+import type { PhoneLinkState } from "../services/phoneLink";
 import { useCurrentServer } from "./currentServer";
 
 export type PhoneUseLink = PhoneLinkState | "off";
@@ -65,7 +66,7 @@ export function phoneUseAvailable(): boolean {
  */
 export function PhoneUseProvider({ children }: { children: ReactNode }) {
   const available = useMemo(() => phoneUseAvailable(), []);
-  const { currentServer } = useCurrentServer();
+  const { currentServer, hydrated } = useCurrentServer();
   const [status, setStatus] = useState<PhoneStatus | null>(() => (available && MewlaPhone ? parsePhoneStatus(MewlaPhone.status()) : null));
   const [link, setLink] = useState<PhoneUseLink>("off");
   const [error, setError] = useState<string | null>(null);
@@ -90,33 +91,28 @@ export function PhoneUseProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [available, status?.enabled]);
 
-  // The foreground notification says whether the computer can reach the phone.
-  useEffect(() => {
-    if (available) MewlaPhone?.setLink?.(link === "online");
-  }, [available, link]);
-
   const enabled = status?.enabled === true;
   const serverId = currentServer?.id ?? null;
+  // The link belongs to the process (see phoneLinkHost): this page watches it and decides which computer it is for.
+  useEffect(() => phoneLinkHost.watch((state) => setLink(state)), []);
   useEffect(() => {
-    if (!available || !MewlaPhone || !enabled || !currentServer) {
-      setLink("off");
+    if (!available || !MewlaPhone || !enabled) {
+      phoneLinkHost.release();
+      return;
+    }
+    // Until the saved servers are read there is nothing to decide, and a link brought up without a screen must not flap.
+    if (!hydrated) return;
+    if (!currentServer) {
+      phoneLinkHost.release();
       return;
     }
     const server = currentServer;
-    const native = MewlaPhone;
-    const phoneLink = new PhoneLink({
-      server,
-      native,
-      appVersion: String(Constants.expoConfig?.version ?? ""),
-      onState: setLink,
-    });
     // The computer's own switch for its Workers, then the connection.
     void changePhone(server, { enabled: true }).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Not reachable"));
-    phoneLink.start();
-    return () => phoneLink.stop();
+    phoneLinkHost.hold({ server, native: MewlaPhone, appVersion: String(Constants.expoConfig?.version ?? "") });
     // The link belongs to the computer, not to its object identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [available, enabled, serverId]);
+  }, [available, enabled, hydrated, serverId]);
 
   const turnOn = useCallback(async () => {
     if (!MewlaPhone) return;
