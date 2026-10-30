@@ -45,14 +45,6 @@ export function PhoneScreen() {
 
 function Body({ status, mode }: { status: PhoneStatus; mode: ReturnType<typeof phoneMode> }) {
   const { colors } = useAppTheme();
-  const working = mode === "watching" || mode === "driving" || mode === "handoff";
-  // While an agent works and this page is open, leaving the App floats its screen by itself; the
-  // floating window shows the agent's screen alone (drawn natively, see PipOverlay.kt).
-  useEffect(() => {
-    if (!working) return;
-    MewlaPhone?.setPipAuto?.(true, status.w, status.h);
-    return () => MewlaPhone?.setPipAuto?.(false, status.w, status.h);
-  }, [working, status.w, status.h]);
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.bgPrimary }]} edges={["bottom"]}>
       {mode === "setup" ? <Setup status={status} /> : <Live status={status} mode={mode} />}

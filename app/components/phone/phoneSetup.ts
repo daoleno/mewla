@@ -36,3 +36,56 @@ export function phoneMode(status: PhoneStatus): PhoneMode {
   if (status.agent) return "watching";
   return "idle";
 }
+
+/** An agent is working on the phone and its screen is worth showing; stopped, idle and setup are not. */
+export function phoneAgentWorking(status: PhoneStatus | null): boolean {
+  if (!status?.enabled) return false;
+  const mode = phoneMode(status);
+  return mode === "watching" || mode === "driving" || mode === "handoff";
+}
+
+/** Whether the agent's screen floats over the page the person is on: only while an agent works, and never on the Phone page itself. */
+export function phoneFloatVisible(status: PhoneStatus | null, pathname: string): boolean {
+  if (!status || !phoneAgentWorking(status) || status.w <= 0 || status.h <= 0) return false;
+  return pathname !== "/phone" && !pathname.startsWith("/phone/");
+}
+
+export type FloatCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+export const DEFAULT_FLOAT_CORNER: FloatCorner = "top-right";
+
+export function parseFloatCorner(value: string | null): FloatCorner {
+  return value === "top-left" || value === "top-right" || value === "bottom-left" || value === "bottom-right"
+    ? value
+    : DEFAULT_FLOAT_CORNER;
+}
+
+/** The free rectangle the float may sit in: above the composer and the keyboard, under the header. */
+export interface FloatArea {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Where the float's top-left corner goes for a corner of the free area. */
+export function floatOrigin(corner: FloatCorner, area: FloatArea, size: { width: number; height: number }, margin: number) {
+  const x = corner.endsWith("left") ? area.left + margin : area.right - margin - size.width;
+  const y = corner.startsWith("top") ? area.top + margin : area.bottom - margin - size.height;
+  // A tiny area keeps the float on screen rather than off its top or left.
+  return { x: Math.max(area.left, x), y: Math.max(area.top, y) };
+}
+
+/** The corner nearest the float's centre once the finger lets go. */
+export function nearestFloatCorner(center: { x: number; y: number }, area: FloatArea): FloatCorner {
+  const horizontal = center.x < (area.left + area.right) / 2 ? "left" : "right";
+  const vertical = center.y < (area.top + area.bottom) / 2 ? "top" : "bottom";
+  return `${vertical}-${horizontal}`;
+}
+
+/** The float's size: a fixed width in the agent's proportions, never taller than a share of the free height. */
+export function floatSize(ratio: number, width: number, maxHeight: number) {
+  const safe = ratio > 0 ? ratio : 9 / 20;
+  const height = Math.min(width / safe, maxHeight);
+  return { width: Math.round(height * safe), height: Math.round(height) };
+}
