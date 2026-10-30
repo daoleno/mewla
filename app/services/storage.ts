@@ -25,6 +25,7 @@ const KEYS = {
   interfaceRenderModes: "mewla:codex_render_modes",
   themePreference: "mewla:theme_preference",
   petPreference: "mewla:pet_preference",
+  phoneFloatCorner: "mewla:phone_float_corner",
 } as const;
 
 let serverWriteTail: Promise<unknown> = Promise.resolve();
@@ -308,4 +309,13 @@ export async function getPetPreference(): Promise<string | null> {
 
 export async function setPetPreference(petId: string): Promise<void> {
   await AsyncStorage.setItem(KEYS.petPreference, petId);
+}
+
+/** The corner the agent's floating screen was left in, as the person last placed it. */
+export async function getPhoneFloatCorner(): Promise<string | null> {
+  return AsyncStorage.getItem(KEYS.phoneFloatCorner);
+}
+
+export async function setPhoneFloatCorner(corner: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.phoneFloatCorner, corner);
 }
