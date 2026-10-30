@@ -311,3 +311,65 @@ func TestForegroundIsUnknownWhenTheAppNeverReportsIt(t *testing.T) {
 		t.Fatalf("app_foreground = %q, want unknown", signal.Refs["app_foreground"])
 	}
 }
+
+// 2026-10-30: one permission prompt on mewla-friends-media sent about 100
+// identical "needs input" pushes, one a second, and Watch said nothing.
+func TestNotificationBurstRuleFlagsTheSameNotificationRepeated(t *testing.T) {
+	collector, store := newTestCollector(t, t.TempDir())
+	now := time.Now().UTC()
+	collector.now = func() time.Time { return now }
+	send := func(id string, ago time.Duration, kind, worker, outcome string) {
+		collector.NotificationSent(push.Sent{ID: id, Kind: kind, At: now.Add(-ago), Title: "mewla-friends-media needs input", Body: "Waiting for Claude permission",
+			Priority: "high", Refs: map[string]string{"worker_id": worker, "screen": "terminal"}, Outcome: outcome})
+	}
+	// Three is a retry, not a burst.
+	for i := 0; i < 3; i++ {
+		send("n_three"+string(rune('a'+i)), time.Duration(i)*time.Minute, push.KindWorkerBlocked, "%1", push.OutcomeAccepted)
+	}
+	// Different Sessions with the same text are different notifications.
+	for i := 0; i < 3; i++ {
+		send("n_other"+string(rune('a'+i)), time.Duration(i)*time.Minute, push.KindWorkerBlocked, "%2", push.OutcomeAccepted)
+	}
+	drain(t, collector)
+	if got := ruleNotificationBurst(store, now); len(got) != 0 {
+		t.Fatalf("flagged ordinary notifications: %#v", got)
+	}
+	// The incident: about one a second, some never left the daemon.
+	for i := 0; i < 100; i++ {
+		outcome := push.OutcomeAccepted
+		if i < 60 {
+			outcome = push.OutcomeNotSent
+		}
+		send("n_burst"+string(rune('a'+i/26))+string(rune('a'+i%26)), time.Duration(100-i)*time.Second, push.KindWorkerBlocked, "%763", outcome)
+	}
+	drain(t, collector)
+	got := ruleNotificationBurst(store, now)
+	if len(got) != 1 || got[0].Rule != RuleNotificationBurst || got[0].Count != 100 || !got[0].Severe ||
+		!strings.Contains(got[0].Title, "100 times") || !strings.Contains(got[0].Detail, "%763") {
+		t.Fatalf("problems = %#v", got)
+	}
+	// Spread thinly, the same text is not a burst.
+	for i := 0; i < 6; i++ {
+		send("n_slow"+string(rune('a'+i)), time.Duration(i)*30*time.Minute+time.Hour, push.KindWorkerDone, "%9", push.OutcomeAccepted)
+	}
+	drain(t, collector)
+	for _, problem := range ruleNotificationBurst(store, now) {
+		if problem.Subject == push.KindWorkerDone+"|%9|" {
+			t.Fatalf("slow notifications flagged: %#v", problem)
+		}
+	}
+}
+
+// What the server held back is the fix working, not a burst.
+func TestNotificationBurstRuleIgnoresSuppressedNotifications(t *testing.T) {
+	collector, store := newTestCollector(t, t.TempDir())
+	now := time.Now().UTC()
+	collector.now = func() time.Time { return now }
+	for i := 0; i < 10; i++ {
+		collector.NotificationSuppressed(push.KindWorkerBlocked, "%763", "mewla-friends-media needs input", "Waiting for Claude permission", "same_question_already_notified")
+	}
+	drain(t, collector)
+	if got := ruleNotificationBurst(store, now); len(got) != 0 {
+		t.Fatalf("flagged held-back notifications: %#v", got)
+	}
+}

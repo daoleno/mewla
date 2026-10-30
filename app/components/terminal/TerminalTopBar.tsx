@@ -15,6 +15,8 @@ export interface TerminalTopBarGitDiffPresentation {
   additionsColor?: string;
   deletionsText?: string;
   deletionsColor?: string;
+  /** A dot on the icon for changes with no countable lines. */
+  markColor?: string;
 }
 
 export interface TerminalTopBarProps {
@@ -65,6 +67,13 @@ export function TerminalTopBar({
         accessibilityLabel: gitDiffPresentation.accessibilityLabel,
         disabled: gitDiffDisabled,
         iconColor: gitDiffPresentation.iconColor,
+        markColor: gitDiffPresentation.markColor,
+        stats: [
+          { text: gitDiffPresentation.additionsText, color: gitDiffPresentation.additionsColor },
+          { text: gitDiffPresentation.deletionsText, color: gitDiffPresentation.deletionsColor },
+        ].filter(
+          (stat): stat is { text: string; color: string | undefined } => Boolean(stat.text),
+        ),
         onPress: onOpenGitDiff,
       },
       {
@@ -78,6 +87,11 @@ export function TerminalTopBar({
       gitDiffDisabled,
       gitDiffPresentation.accessibilityLabel,
       gitDiffPresentation.iconColor,
+      gitDiffPresentation.markColor,
+      gitDiffPresentation.additionsText,
+      gitDiffPresentation.additionsColor,
+      gitDiffPresentation.deletionsText,
+      gitDiffPresentation.deletionsColor,
       onOpenGitDiff,
       onOpenMenu,
     ],

@@ -24,6 +24,7 @@ func (o oneAccount) AccountForKey(_ context.Context, key string) (friendsvc.Acco
 }
 
 type fixture struct {
+	media  *friendsvc.DirMediaStore
 	local  *friends.Local
 	client *friends.Client
 	other  *friends.Client // a second person, to look at the feed from outside
@@ -41,8 +42,9 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mediaStore := &friendsvc.DirMediaStore{Dir: filepath.Join(t.TempDir(), "media")}
 	service, err := friendsvc.New(friendsvc.Config{
-		Store: store,
+		Store: store, Media: mediaStore, TempDir: t.TempDir(),
 		Accounts: oneAccount{key: manager.PublicKeyHex(), account: friendsvc.Account{
 			ID: "acct-1", Login: "alice", CreatedAt: time.Now().Add(-400 * 24 * time.Hour)}},
 	})
@@ -51,9 +53,10 @@ func newFixture(t *testing.T) *fixture {
 	}
 	server := httptest.NewServer(service.Handler())
 	t.Cleanup(server.Close)
+	mediaStore.PublicURL = server.URL + friends.MountPrefix
 	client := &friends.Client{BaseURL: server.URL + friends.MountPrefix, Auth: manager}
 	local := &friends.Local{StateDir: stateDir, Auth: manager, NewClient: func() (*friends.Client, error) { return client, nil }}
-	return &fixture{local: local, client: client}
+	return &fixture{media: mediaStore, local: local, client: client}
 }
 
 func TestEnableSubmitPostAndTurnOff(t *testing.T) {
@@ -88,10 +91,10 @@ func TestEnableSubmitPostAndTurnOff(t *testing.T) {
 	}
 
 	// The owner edits the draft; the edit is scrubbed again, then posts.
-	if _, err := f.local.PostDraft(ctx, outcome.DraftID, "now reach me at someone@example.com"); err == nil {
+	if _, err := f.local.PostDraft(ctx, outcome.DraftID, "now reach me at someone@example.com", nil); err == nil {
 		t.Fatal("edited draft skipped the scrub")
 	}
-	post, err := f.local.PostDraft(ctx, outcome.DraftID, "Fixed a flaky test by waiting for the event, not a timer.")
+	post, err := f.local.PostDraft(ctx, outcome.DraftID, "Fixed a flaky test by waiting for the event, not a timer.", nil)
 	if err != nil || !strings.Contains(post.Text, "not a timer") {
 		t.Fatalf("post = %+v, %v", post, err)
 	}

@@ -38,6 +38,16 @@ export function PostList({ path, header = null, emptyTitle, emptyDetail, reloadT
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
+  // One video plays at a time, and only while its row is on screen.
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const playingRef = useRef<string | null>(null);
+  playingRef.current = playingId;
+  const onViewable = useRef(({ viewableItems }: { viewableItems: { item: FriendsPost }[] }) => {
+    const current = playingRef.current;
+    if (current && !viewableItems.some((entry) => entry.item.id === current)) setPlayingId(null);
+  }).current;
+  const playVideo = useCallback((post: FriendsPost) => setPlayingId(post.id), []);
+  const stopVideo = useCallback((post: FriendsPost) => setPlayingId((current) => (current === post.id ? null : current)), []);
 
   const load = useCallback(
     async (append: boolean, cursor: string) => {
@@ -90,8 +100,15 @@ export function PostList({ path, header = null, emptyTitle, emptyDetail, reloadT
           onLike={(post) => void actions.toggle(post, "like")}
           onBookmark={(post) => void actions.toggle(post, "bookmark")}
           menu={actions.menu}
+          videoActive={playingId === item.id}
+          onPlayVideo={playVideo}
+          onStopVideo={stopVideo}
         />
       )}
+      onViewableItemsChanged={onViewable}
+      viewabilityConfig={VIEWABILITY}
+      windowSize={7}
+      removeClippedSubviews
       ListEmptyComponent={
         <EmptyState size="inline" title={error ? "Could not load" : emptyTitle} detail={error ?? emptyDetail} icon={error ? "cloud-offline" : "people"} />
       }
@@ -116,6 +133,8 @@ export function PostList({ path, header = null, emptyTitle, emptyDetail, reloadT
     />
   );
 }
+
+const VIEWABILITY = { itemVisiblePercentThreshold: 40 };
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },

@@ -59,7 +59,10 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 		policy := response.Header().Get("Content-Security-Policy")
 		if !strings.Contains(policy, "connect-src 'self' ws://"+host+" wss://"+host) ||
 			!strings.Contains(policy, "frame-ancestors 'none'") ||
-			!strings.Contains(policy, "frame-src 'none'") {
+			!strings.Contains(policy, "frame-src 'none'") ||
+			// Friends pictures and video come from the media host over https.
+			!strings.Contains(policy, "img-src 'self' data: blob: https:") ||
+			!strings.Contains(policy, "media-src 'self' data: blob: https:") {
 			t.Fatalf("%s: policy = %q", host, policy)
 		}
 	}

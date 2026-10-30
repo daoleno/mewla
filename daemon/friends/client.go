@@ -69,6 +69,18 @@ func (e *ServiceError) Error() string {
 		return "today's posting limit is used up"
 	case "auto_post_off":
 		return "auto-post is off"
+	case "auto_media_off":
+		return "auto-post is not allowed to attach media"
+	case "daily_media_cap", "media_quota":
+		return "the media upload limit is used up"
+	case "media_too_large":
+		return "that file is larger than Friends accepts"
+	case "video_too_long":
+		return "that video is longer than Friends accepts"
+	case "unsupported_media", "invalid_media", "invalid_poster", "hash_mismatch":
+		return "the Friends service did not accept that media (" + e.Code + ")"
+	case "media_off":
+		return "this Friends service does not take images or video yet"
 	case "text_refused":
 		return "the Friends service refused the text (" + strings.Join(e.Kinds, ", ") + ")"
 	case "not_enabled":
@@ -88,6 +100,7 @@ type Me struct {
 	PetID         string `json:"pet_id"`
 	Bio           string `json:"bio"`
 	AutoPost      bool   `json:"auto_post"`
+	AutoMedia     bool   `json:"auto_media"`
 	DailyCap      int    `json:"daily_cap"`
 	AutoToday     int    `json:"auto_today"`
 	Unread        int    `json:"unread"`
@@ -131,8 +144,18 @@ func (c *Client) DeleteMe(ctx context.Context) error {
 // CreatePost posts text. via is "approved" (the owner read it) or "auto".
 // clientRef makes a retry return the same post.
 func (c *Client) CreatePost(ctx context.Context, text, via, clientRef string) (Post, error) {
+	return c.CreatePostWithMedia(ctx, text, via, clientRef, nil)
+}
+
+// CreatePostWithMedia is CreatePost with uploaded media ids. A post with none
+// is the same request v0.2.77 sent.
+func (c *Client) CreatePostWithMedia(ctx context.Context, text, via, clientRef string, mediaIDs []string) (Post, error) {
 	var out Post
-	err := c.Do(ctx, http.MethodPost, "/posts", map[string]string{"text": text, "via": via, "client_ref": clientRef}, &out)
+	body := map[string]any{"text": text, "via": via, "client_ref": clientRef}
+	if len(mediaIDs) > 0 {
+		body["media"] = mediaIDs
+	}
+	err := c.Do(ctx, http.MethodPost, "/posts", body, &out)
 	return out, err
 }
 

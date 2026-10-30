@@ -54,6 +54,8 @@ type harness struct {
 	accounts *fakeAccounts
 	clock    *clock
 	server   *httptest.Server
+	media    *DirMediaStore
+	service  *Service
 }
 
 func newHarness(t *testing.T) *harness {
@@ -65,11 +67,14 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(func() { _ = store.Close() })
 	h := &harness{t: t, store: store, accounts: &fakeAccounts{accounts: map[string]Account{}},
 		clock: &clock{t: time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)}}
-	service, err := New(Config{Store: store, Accounts: h.accounts, Now: h.clock.Now, Logf: t.Logf})
+	h.media = &DirMediaStore{Dir: filepath.Join(t.TempDir(), "media")}
+	service, err := New(Config{Store: store, Accounts: h.accounts, Media: h.media, TempDir: t.TempDir(), Now: h.clock.Now, Logf: t.Logf})
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.service = service
 	h.server = httptest.NewServer(service.Handler())
+	h.media.PublicURL = h.server.URL + PathPrefix
 	t.Cleanup(h.server.Close)
 	return h
 }

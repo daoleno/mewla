@@ -3,12 +3,15 @@ package server
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -38,17 +41,25 @@ var friendsLogins = struct {
 }{pending: map[string]friendsLogin{}}
 
 type friendsAction struct {
-	Op        string          `json:"op"`
-	AgentName string          `json:"agent_name,omitempty"`
-	PetID     string          `json:"pet_id,omitempty"`
-	TZ        string          `json:"tz,omitempty"`
-	LoginID   string          `json:"login_id,omitempty"`
-	DraftID   string          `json:"draft_id,omitempty"`
-	Text      string          `json:"text,omitempty"`
-	Enabled   bool            `json:"enabled,omitempty"`
-	Method    string          `json:"method,omitempty"`
-	Path      string          `json:"path,omitempty"`
-	Body      json.RawMessage `json:"body,omitempty"`
+	Op        string `json:"op"`
+	AgentName string `json:"agent_name,omitempty"`
+	PetID     string `json:"pet_id,omitempty"`
+	TZ        string `json:"tz,omitempty"`
+	LoginID   string `json:"login_id,omitempty"`
+	DraftID   string `json:"draft_id,omitempty"`
+	Text      string `json:"text,omitempty"`
+	// Enabled is a pointer so a request that only sets Media leaves auto-post alone.
+	Enabled *bool `json:"enabled,omitempty"`
+	// Media is the auto-post attachment choice; absent leaves it as it is.
+	Media *bool `json:"media,omitempty"`
+	// Index and File name one media item of a draft.
+	Index int    `json:"index,omitempty"`
+	File  string `json:"file,omitempty"`
+	// Reviewed lists the media files the phone showed the owner for a draft.
+	Reviewed []string        `json:"reviewed,omitempty"`
+	Method   string          `json:"method,omitempty"`
+	Path     string          `json:"path,omitempty"`
+	Body     json.RawMessage `json:"body,omitempty"`
 }
 
 type friendsStatus struct {
@@ -145,6 +156,8 @@ func friendsFail(w http.ResponseWriter, err error) {
 		status, code = http.StatusConflict, "not_enabled"
 	case errors.Is(err, friends.ErrNoDraft):
 		status, code = http.StatusNotFound, "no_draft"
+	case errors.Is(err, friends.ErrMediaNotReviewed):
+		status, code = http.StatusConflict, "media_not_reviewed"
 	case errors.As(err, &refused):
 		status, code = http.StatusUnprocessableEntity, "refused"
 	case errors.As(err, &service):
@@ -217,15 +230,23 @@ func (s *Server) friendsAction(w http.ResponseWriter, r *http.Request, action fr
 		}
 		client, err := local.Client()
 		if err == nil {
-			err = client.Do(ctx, http.MethodPut, "/me/auto-post", map[string]any{"enabled": action.Enabled, "tz": action.TZ}, nil)
+			err = client.Do(ctx, http.MethodPut, "/me/auto-post", autoPostBody(action), nil)
 		}
 		if err != nil {
 			friendsFail(w, err)
 			return
 		}
 		s.writeFriendsStatus(w, ctx)
+	case "draft_media_remove":
+		if _, err := friends.NewStore(local.StateDir).RemoveDraftMedia(action.DraftID, action.Index); err != nil {
+			friendsFail(w, err)
+			return
+		}
+		s.writeFriendsStatus(w, ctx)
+	case "draft_media":
+		s.friendsDraftMedia(w, local.StateDir, action.DraftID, action.File)
 	case "post_draft":
-		post, err := local.PostDraft(ctx, action.DraftID, action.Text)
+		post, err := local.PostDraft(ctx, action.DraftID, action.Text, action.Reviewed)
 		if err != nil {
 			friendsFail(w, err)
 			return
@@ -275,6 +296,48 @@ func (s *Server) friendsAction(w http.ResponseWriter, r *http.Request, action fr
 	default:
 		http.Error(w, "unknown Friends operation", http.StatusBadRequest)
 	}
+}
+
+// autoPostBody is the auto-post request: the media choice goes only when the
+// phone sent one, so an older App cannot change it.
+func autoPostBody(action friendsAction) map[string]any {
+	body := map[string]any{"tz": action.TZ}
+	if action.Enabled != nil {
+		body["enabled"] = *action.Enabled
+	}
+	if action.Media != nil {
+		body["media"] = *action.Media
+	}
+	return body
+}
+
+// friendsDraftMedia returns a picture of a draft for the phone to show: an
+// image, or a video's poster. The video itself stays on the computer until
+// the draft is posted. File must be a name the draft lists.
+func (s *Server) friendsDraftMedia(w http.ResponseWriter, stateDir, draftID, file string) {
+	store := friends.NewStore(stateDir)
+	draft, err := store.Draft(draftID)
+	if err != nil {
+		friendsFail(w, err)
+		return
+	}
+	for _, item := range draft.Media {
+		shown := item
+		if item.Poster != nil {
+			shown = *item.Poster
+		}
+		if shown.File != file || shown.File != filepath.Base(shown.File) {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(store.MediaDir(draft.ID), shown.File))
+		if err != nil {
+			friendsFail(w, &localError{err})
+			return
+		}
+		writeFriendsJSON(w, http.StatusOK, map[string]any{"mime": shown.Mime, "width": shown.Width, "height": shown.Height, "data": base64.StdEncoding.EncodeToString(raw)})
+		return
+	}
+	friendsFail(w, friends.ErrNoDraft)
 }
 
 // friendsLoginStart begins the same device sign-in `mewla login` does, so the

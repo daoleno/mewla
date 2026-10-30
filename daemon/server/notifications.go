@@ -1,11 +1,13 @@
 package server
 
 import (
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 
+	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
@@ -169,4 +171,13 @@ func workerNotificationKind(state string) (string, bool) {
 // session event.
 func workerNotice(ev watcher.SessionEvent) push.WorkerNotice {
 	return push.WorkerNotice{WorkerID: ev.WorkerID, Window: ev.Worker.Window, Summary: ev.Worker.Summary}
+}
+
+// workerPushPath is where the last blocked or failed push of each Worker is
+// kept, beside the rest of the daemon's state.
+func workerPushPath(manager *auth.Manager) string {
+	if manager == nil || manager.StorageDir() == "" {
+		return ""
+	}
+	return filepath.Join(manager.StorageDir(), "worker-pushes.json")
 }

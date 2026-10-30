@@ -1,6 +1,7 @@
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
@@ -10,6 +11,7 @@ import { brainCanNow, type ConnectPhase, type PendingConnection } from "../../se
 import {
   accessControl,
   accountRecovery,
+  awsAccountSummary,
   toolUpdates,
   accountTone,
   allowedToolCount,
@@ -447,6 +449,9 @@ export function AccountCard({
 }) {
   const [confirming, setConfirming] = useState(false);
   const [confirmingKey, setConfirmingKey] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const aws = awsAccountSummary(account);
   const network = account.network === "testnet" ? networkLabel(account.network) : null;
   const removingKey = running === `key:${account.id}`;
   const recovery = accountRecovery(account, plugin.name);
@@ -474,7 +479,7 @@ export function AccountCard({
       <ListRow
         icon="person-circle"
         title={account.name}
-        subtitle={[custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : ""].filter(Boolean).join(" · ") || undefined}
+        subtitle={aws ? aws.subtitle || undefined : [custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : ""].filter(Boolean).join(" · ") || undefined}
         numberOfLines={2}
         disabled={!account.enabled}
         trailing={
@@ -498,6 +503,22 @@ export function AccountCard({
           numberOfLines={3}
           trailing={<Button label={recovery.actionLabel} size="sm" variant="tinted" loading={recovering} disabled={busy && !recovering} onPress={() => onRecover(recovery.action)} />}
         />
+      ) : null}
+      {aws ? (
+        <>
+          <ListRow icon="info" title="Details" accessory={showDetails ? undefined : "chevron"} onPress={() => setShowDetails(!showDetails)} />
+          {showDetails ? aws.details.map((row) => (
+            <ListRow
+              key={row.label}
+              title={row.label}
+              subtitle={row.value}
+              numberOfLines={3}
+              value={copied === row.label ? "Copied" : undefined}
+              onPress={row.copy ? () => { void Clipboard.setStringAsync(row.value); setCopied(row.label); } : undefined}
+              accessibilityLabel={row.copy ? `Copy ${row.label}` : undefined}
+            />
+          )) : null}
+        </>
       ) : null}
       {custom ? null : [group("read"), group("write")]}
       <ListRow

@@ -160,7 +160,9 @@ func TestNotificationSuppressionUsesExactWorkerViewer(t *testing.T) {
 	}
 }
 
-func TestRepeatedRealBlockedTransitionsEachAttemptPush(t *testing.T) {
+// Blocked again with the same question is not a new ask; a different question
+// is (see worker_push_dedupe_test.go for prompts, restarts and moving on).
+func TestRepeatedBlockedTransitionsPushOncePerQuestion(t *testing.T) {
 	pusher := &recordingNotificationPusher{}
 	srv, turnID := ledgerNotificationServer(t, "agent-1")
 	srv.pusher = pusher
@@ -172,8 +174,17 @@ func TestRepeatedRealBlockedTransitionsEachAttemptPush(t *testing.T) {
 	srv.maybeNotifyForSessionEvent(blocked)
 	srv.maybeNotifyForSessionEvent(running)
 	srv.maybeNotifyForSessionEvent(blocked)
-	if calls := pusher.snapshot(); len(calls) != 2 || calls[0].kind != "blocked" || calls[1].kind != "blocked" {
+	if calls := pusher.snapshot(); len(calls) != 1 || calls[0].kind != "blocked" {
 		t.Fatalf("calls = %#v", calls)
+	}
+
+	other := notificationTransition("agent-1", "running", "blocked")
+	other.TurnID = turnID
+	other.Worker.Summary = "Waiting for your choice"
+	srv.maybeNotifyForSessionEvent(running)
+	srv.maybeNotifyForSessionEvent(other)
+	if calls := pusher.snapshot(); len(calls) != 2 {
+		t.Fatalf("a different question was not pushed: %#v", calls)
 	}
 }
 

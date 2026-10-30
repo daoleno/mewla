@@ -73,16 +73,18 @@ type Account struct {
 	Network string `json:"network,omitempty"`
 	// AWS: the AWS CLI profile the account signs in through (none for pasted
 	// access keys) and its default region. Neither is secret.
-	Profile                  string     `json:"profile,omitempty"`
-	Region                   string     `json:"region,omitempty"`
-	Address                  string     `json:"address,omitempty"`
-	Signer                   string     `json:"signer,omitempty"`
-	Enabled                  bool       `json:"enabled"`
-	CredentialRemovalPending bool       `json:"credential_removal_pending,omitempty"`
-	Status                   string     `json:"status"`
-	VerifiedAt               *time.Time `json:"verified_at,omitempty"`
-	Tools                    []Tool     `json:"tools"`
-	History                  []Event    `json:"history"`
+	Profile string `json:"profile,omitempty"`
+	Region  string `json:"region,omitempty"`
+	// AWS: who is connected, in words a person recognizes. Not secret.
+	AWS                      *AWSDetails `json:"aws,omitempty"`
+	Address                  string      `json:"address,omitempty"`
+	Signer                   string      `json:"signer,omitempty"`
+	Enabled                  bool        `json:"enabled"`
+	CredentialRemovalPending bool        `json:"credential_removal_pending,omitempty"`
+	Status                   string      `json:"status"`
+	VerifiedAt               *time.Time  `json:"verified_at,omitempty"`
+	Tools                    []Tool      `json:"tools"`
+	History                  []Event     `json:"history"`
 	// Access is projected for clients and never stored.
 	Access *Access `json:"access,omitempty"`
 	// Updates names the tools the service added or changed that wait for

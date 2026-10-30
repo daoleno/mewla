@@ -36,6 +36,10 @@ interface TelegramChatHeaderAction {
   disabled?: boolean;
   /** Optional override; defaults to muted header icon color. */
   iconColor?: string;
+  /** Short coloured figures beside the icon, e.g. `+12` and `\u22123`. */
+  stats?: { text: string; color?: string }[];
+  /** A dot on the icon's corner. */
+  markColor?: string;
   onPress: () => void;
 }
 
@@ -224,6 +228,9 @@ export function TelegramChatHeader({
                 style={[
                   styles.iconButton,
                   flat ? styles.iconButtonFlat : null,
+                  action.stats?.length && !action.disabled
+                    ? styles.iconButtonStats
+                    : null,
                 ]}
                 preset="press"
                 scale={0.9}
@@ -235,15 +242,36 @@ export function TelegramChatHeader({
                   action.onPress();
                 }}
               >
-                <Icon
-                  name={action.icon}
-                  size={20}
-                  color={
-                    action.disabled
-                      ? colors.disabledText
-                      : action.iconColor ?? styles.iconMuted.color
-                  }
-                />
+                <View>
+                  <Icon
+                    name={action.icon}
+                    size={20}
+                    color={
+                      action.disabled
+                        ? colors.disabledText
+                        : action.iconColor ?? styles.iconMuted.color
+                    }
+                  />
+                  {action.markColor && !action.disabled ? (
+                    <View
+                      pointerEvents="none"
+                      style={[styles.iconMark, { backgroundColor: action.markColor }]}
+                    />
+                  ) : null}
+                </View>
+                {!action.disabled && action.stats?.length ? (
+                  <Text style={styles.stats} numberOfLines={1}>
+                    {action.stats.map((stat, index) => (
+                      <Text
+                        key={stat.text}
+                        style={stat.color ? { color: stat.color } : null}
+                      >
+                        {index > 0 ? ' ' : ''}
+                        {stat.text}
+                      </Text>
+                    ))}
+                  </Text>
+                ) : null}
               </AnimatedPressable>
             ))}
           </Capsule>
@@ -385,7 +413,7 @@ function createStyles(colors: AppColors, chrome?: TerminalThemeChrome) {
       borderRadius: 0,
     },
     iconButton: {
-      width: 44,
+      minWidth: 44,
       height: 44,
       borderRadius: Radii.pill,
       alignItems: 'center',
@@ -393,8 +421,28 @@ function createStyles(colors: AppColors, chrome?: TerminalThemeChrome) {
       opacity: 1,
     },
     iconButtonFlat: {
-      width: 44,
+      minWidth: 44,
       height: 44,
+    },
+    iconButtonStats: {
+      flexDirection: 'row',
+      gap: 4,
+      paddingHorizontal: 8,
+    },
+    iconMark: {
+      position: 'absolute',
+      top: -1,
+      right: -2,
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+    },
+    stats: {
+      ...UiTextMetrics,
+      ...TypeScale.micro,
+      color: iconMuted,
+      fontFamily: Typography.uiFontMedium,
+      fontVariant: ['tabular-nums'],
     },
     iconColor: {
       color: iconColor,

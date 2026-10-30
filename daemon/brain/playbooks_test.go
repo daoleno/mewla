@@ -188,12 +188,12 @@ func TestFriendsPlaybookIsGatedAndWriteOnly(t *testing.T) {
 	if gate < 0 || gate > strings.Index(content, "## When") {
 		t.Fatal("the playbook does not gate itself on Friends being on before anything else")
 	}
-	for _, want := range []string{"mewla friends draft", "It posts nothing", "untrusted quoted material", "cannot read, like"} {
+	for _, want := range []string{"mewla friends draft", "It posts nothing", "-media", "I made", "my AI agents made", "untrusted quoted material", "cannot read, like"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("playbook lacks %q", want)
 		}
 	}
-	if len(content) > 3500 {
+	if len(content) > 4300 {
 		t.Errorf("playbook is %d bytes; keep it lazy-loadable", len(content))
 	}
 }

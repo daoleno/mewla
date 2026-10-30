@@ -112,3 +112,37 @@ func TestStableTextDropsSpinnersAndBracketedClocks(t *testing.T) {
 		}
 	}
 }
+
+// In a narrow pane the auto-deny notice wraps, and what each wrapped line
+// carries changes with the clock. The prompt must keep one identity across
+// widths and ticks, or every tick reads as a new dialog.
+func TestPromptIdentityIgnoresWrappedCountdown(t *testing.T) {
+	const deny = "⏱ Claude Code will automatically deny this request in %s, to avoid blocking progress on an unattended session"
+	wrap := func(text string, width int) string {
+		var out []string
+		for len(text) > width {
+			cut := strings.LastIndex(text[:width], " ")
+			out = append(out, text[:cut])
+			text = text[cut+1:]
+		}
+		return strings.Join(append(out, text), "\n")
+	}
+	body := strings.TrimSuffix(subAgentPermissionPane, "\n")
+	want := ""
+	for _, width := range []int{200, 100, 80, 60} {
+		for _, left := range []string{"about 58 seconds", "about 9 seconds", "0:09", "1 second"} {
+			notice := wrap(strings.Replace(deny, "%s", left, 1), width)
+			pane := strings.Replace(body, " Do you want to proceed?\n", " "+notice+"\n\n Do you want to proceed?\n", 1)
+			signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: pane})
+			if signal.State != StateBlocked || signal.Prompt == nil {
+				t.Fatalf("width %d %q: not a blocked prompt: %+v", width, left, signal)
+			}
+			if want == "" {
+				want = signal.Prompt.ID
+			}
+			if signal.Prompt.ID != want || strings.Contains(signal.Prompt.Request, "unattended") {
+				t.Fatalf("width %d %q: identity %s != %s or notice leaked: %q", width, left, signal.Prompt.ID, want, signal.Prompt.Request)
+			}
+		}
+	}
+}
