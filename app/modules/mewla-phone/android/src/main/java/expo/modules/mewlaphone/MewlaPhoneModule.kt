@@ -35,6 +35,10 @@ class MewlaPhoneModule : Module() {
         }
         OnDestroy { PhoneController.listener = null }
 
+        // Take over from a notification or the floating window arrives as the intent that opens the page.
+        OnNewIntent { intent -> takeOverFrom(intent) }
+        OnActivityEntersForeground { appContext.currentActivity?.intent?.let { takeOverFrom(it) } }
+
         /** The live checks and state, as JSON (see PhoneController.status). */
         Function("status") { PhoneController.status().toString() }
 
@@ -138,17 +142,26 @@ class MewlaPhoneModule : Module() {
         val builder = PictureInPictureParams.Builder().setAspectRatio(Rational((ratio * 1000).toInt(), 1000))
         builder.setActions(
             listOf(
-                pipAction("Take over", PhoneNotifier.ACTION_TAKE_OVER, 20, android.R.drawable.ic_menu_edit),
-                pipAction("Stop", PhoneNotifier.ACTION_STOP, 21, android.R.drawable.ic_menu_close_clear_cancel),
+                pipAction("Take over", PhoneNotifier.takeOver(context, 20), android.R.drawable.ic_menu_edit),
+                pipAction("Stop", broadcast(PhoneNotifier.ACTION_STOP, 21), android.R.drawable.ic_menu_close_clear_cancel),
             ),
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setAutoEnterEnabled(auto)
         return builder.build()
     }
 
-    private fun pipAction(title: String, action: String, request: Int, icon: Int): RemoteAction {
+    private fun broadcast(action: String, request: Int): PendingIntent {
         val intent = Intent(context, PhoneActionReceiver::class.java).setAction(action)
-        val pending = PendingIntent.getBroadcast(context, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        return RemoteAction(Icon.createWithResource(context, icon), title, title, pending)
+        return PendingIntent.getBroadcast(context, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun pipAction(title: String, pending: PendingIntent, icon: Int) =
+        RemoteAction(Icon.createWithResource(context, icon), title, title, pending)
+
+    /** The intent that opened the page says the person tapped Take over; it is applied once. */
+    private fun takeOverFrom(intent: Intent) {
+        if (!intent.getBooleanExtra(PhoneNotifier.EXTRA_TAKE_OVER, false)) return
+        intent.removeExtra(PhoneNotifier.EXTRA_TAKE_OVER)
+        PhoneController.takeOver()
     }
 }
