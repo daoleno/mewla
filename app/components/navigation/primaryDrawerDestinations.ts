@@ -4,6 +4,7 @@ import type { PrimaryRouteName } from "../../services/interactionTrace";
 export type PrimaryDrawerPathname =
   | "/calendar"
   | "/friends"
+  | "/phone"
   | "/plugins"
   | "/stats"
   | "/browser"
@@ -23,8 +24,8 @@ export interface PrimaryDrawerDestination {
   label: string;
   pathname: PrimaryDrawerPathname;
   icon: IconName;
-  /** A Labs feature: listed only while the owner has it turned on. */
-  labs?: boolean;
+  /** A Labs feature: listed only while the owner has it turned on (and, for Phone use, available). */
+  labs?: "friends" | "phone";
 }
 
 /** Brain and Sessions, the primary pages, lead the menu on every layout. */
@@ -45,7 +46,8 @@ export const PRIMARY_DRAWER_DESTINATIONS: readonly PrimaryDrawerDestination[] = 
   { key: "screen", label: "Screen", pathname: "/screen", icon: "desktop" },
   { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
   { key: "resources", label: "Resources", pathname: "/resources", icon: "resources" },
-  { key: "friends", label: "Friends", pathname: "/friends", icon: "people", labs: true },
+  { key: "friends", label: "Friends", pathname: "/friends", icon: "people", labs: "friends" },
+  { key: "phone", label: "Phone", pathname: "/phone", icon: "phone", labs: "phone" },
 ];
 
 /** Settings sits apart at the bottom of the menu, above the server status. */

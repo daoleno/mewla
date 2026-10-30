@@ -30,6 +30,8 @@ export function screenBackParent(routeName: string): ScreenBackParent | null {
     case "screenshot-demo":
       return null;
     case "settings/model-providers":
+    case "settings/friends":
+    case "settings/phone":
       return "/settings";
     default:
       return "/";

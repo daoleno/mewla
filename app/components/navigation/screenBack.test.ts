@@ -10,7 +10,9 @@ describe("screen back", () => {
   });
 
   test("deep-linked screens land on their logical parent", () => {
-    expect(screenBackParent("settings/model-providers")).toBe("/settings");
+    for (const route of ["settings/model-providers", "settings/friends", "settings/phone"]) {
+      expect(screenBackParent(route)).toBe("/settings");
+    }
     for (const route of [
       "calendar",
       "stats",
