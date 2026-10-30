@@ -7,7 +7,6 @@ export const GROK_COMMAND =
   "grok --no-alt-screen --permission-mode bypassPermissions";
 export const DSH_COMMAND = "dsh";
 export const PI_COMMAND = "pi";
-export const OPENCODE_COMMAND = "opencode";
 export const OPENCODE_AUTO_COMMAND = "opencode --auto";
 
 /** DSH is a native session/terminal launcher; its browser UI is a service. */
