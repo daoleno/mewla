@@ -77,6 +77,20 @@ Codex has it, is Codex's tool: none of this covers it, except that the switch
 turns it off for Codex Workers started afterwards. See
 [Codex's own computer use](screen.md#codexs-own-computer-use).
 
+## Phone use
+
+With **Phone use** on (Labs, Android, GitHub APK), agents Mewla starts on your
+computer can use your phone on a hidden screen of its own. The phone connects to
+the computer it is currently using over the same signed connection and takes
+requests from that computer only; a request must name a running Mewla Worker.
+Setup pairs the app with the phone's own Wireless debugging and starts a helper
+with the phone's shell permissions (what `adb shell` has). The helper listens on
+the phone's loopback address only and admits only the app, by a token that lives
+in the app's private storage. You can see and stop it at any time, you can take
+the screen over, and logins, captchas and payments are handed to you. Each
+action is logged on the computer without what was typed. See
+[Phone use](phone.md).
+
 ## Agents in your browser
 
 When **Agents can use this computer** is on and the Playwright extension is in

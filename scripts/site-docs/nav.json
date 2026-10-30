@@ -19,6 +19,7 @@
         { "source": "docs/calendar.md", "slug": "calendar", "title": "Calendar" },
         { "source": "docs/plugins.md", "slug": "plugins", "title": "Plugins" },
         { "source": "docs/screen.md", "slug": "screen", "title": "Screen" },
+        { "source": "docs/phone.md", "slug": "phone", "title": "Phone use" },
         { "source": "docs/your-browser.md", "slug": "your-browser", "title": "Agents in your browser" },
         { "source": "docs/computers.md", "slug": "computers", "title": "Your other computers" },
         { "source": "docs/watch.md", "slug": "watch", "title": "Watch" }
