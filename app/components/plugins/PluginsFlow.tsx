@@ -274,6 +274,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       }
       const result = await send({ action: "connect_start", input: connectInput(input, Platform.OS, globalThis.location?.origin) }, `connect:${serviceId}`);
       if (!result?.flow || !valid()) { if (valid()) { setPhase("idle"); } return; }
+      // A profile that is still signed in connects without a browser.
+      if (result.flow.status === "connected") { await settle(result); return; }
       if (currentAttempt !== attempt.current) {
         await wsClient.requestConnections(serverId!, { action: "connect_cancel", flow_id: result.flow.id }).catch(() => undefined);
         return;

@@ -328,7 +328,8 @@ func (f *connectFlow) stopAWS() {
 }
 
 // startAWSSignIn begins a browser sign-in: for a profile that exists (renewing
-// its session) or for a new one (connecting an account).
+// its session in place, or connecting it at once if it is still signed in) or
+// for a new one (connecting an account).
 func (m *Manager) startAWSSignIn(ctx context.Context, in *Input) (Response, error) {
 	region := strings.TrimSpace(in.Region)
 	if region != "" && !awsRegionName.MatchString(region) {
@@ -359,6 +360,24 @@ func (m *Manager) startAWSSignIn(ctx context.Context, in *Input) (Response, erro
 	}
 	if region == "" {
 		region = awsDefaultRegion
+	}
+	if !created {
+		// A profile the person tapped may still be signed in: then it connects
+		// at once, and only an expired session needs the browser.
+		cand := &record{Account: Account{ID: uuid.NewString(), Integration: "aws", AuthMethod: awsMethodProfile, Profile: profile, Region: region, Enabled: true, History: []Event{}}, Grants: map[string]string{}}
+		_, err := m.awsWhoami(ctx, cand, "")
+		switch {
+		case err == nil:
+			added, err := addAWSDriver(m, ctx, &Input{Integration: "aws", Profile: profile})
+			if err != nil {
+				return Response{}, err
+			}
+			f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: "aws", Status: "connected", AccountID: added.Account.ID, Expires: time.Now().Add(awsLoginLifetime)}}
+			m.connectFlows[f.ID] = f
+			return m.connectedFlow(f)
+		case !errors.Is(err, errAuth):
+			return Response{}, err
+		}
 	}
 	// Two sign-ins for one profile would write the same cache.
 	for _, other := range m.connectFlows {

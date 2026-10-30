@@ -147,6 +147,9 @@ caches the session and its refresh token and renews them as it normally does.
 The page also lists the profiles already in that computer's AWS config, each
 with how it signs in (`aws login`, `aws sso login`, a saved key or a role) and
 its region. Tap one that is signed in and it connects at once, with no sign-in.
+Tap an `aws login` or `aws sso login` profile whose session has expired and it
+signs in again under its own name, with the same sign-in as the button, instead of
+creating a new profile. A profile that holds keys or a role just connects.
 The last way is **Paste access keys**: the keys, an optional session token and a
 region go to the server's private vault and reach the CLI only through the
 environment of one call. A profile already connected is renewed in place, not
