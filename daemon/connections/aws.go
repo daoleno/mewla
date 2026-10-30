@@ -102,7 +102,9 @@ func runAWS(ctx context.Context, c awsCommand) ([]byte, error) {
 		if err := os.WriteFile(path, c.Input, 0o600); err != nil {
 			return nil, errors.New("could not prepare the AWS call")
 		}
-		args = append(append([]string{}, args...), "--cli-input-json=file://"+path)
+		// Two arguments, not "--cli-input-json=file://...": AWS CLI 2.x resolves
+		// file:// only in the spaced form and reads the "=" form as no parameters.
+		args = append(append([]string{}, args...), "--cli-input-json", "file://"+path)
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = c.Env

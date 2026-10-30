@@ -7,10 +7,12 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 )
@@ -740,7 +742,7 @@ func fakeAWS(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
-	script := "#!/bin/sh\n{ echo \"ARGS:$*\"; env | sort; for a in \"$@\"; do case \"$a\" in --cli-input-json=file://*) f=${a#--cli-input-json=file://}; echo \"PARAMS:$(cat \"$f\")\"; echo \"MODE:$(stat -c %a \"$f\" 2>/dev/null || stat -f %Lp \"$f\")\"; echo \"FILE:$f\";; esac; done; } > " + log + "\n" + body + "\n"
+	script := "#!/bin/sh\n{ echo \"ARGS:$*\"; env | sort; prev=; for a in \"$@\"; do if [ \"$prev\" = --cli-input-json ]; then case \"$a\" in file://*) f=${a#file://}; echo \"PARAMS:$(cat \"$f\")\"; echo \"MODE:$(stat -c %a \"$f\" 2>/dev/null || stat -f %Lp \"$f\")\"; echo \"FILE:$f\";; esac; fi; prev=$a; done; } > " + log + "\n" + body + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "aws"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -767,7 +769,7 @@ func TestRunAWSEnvironmentAndParams(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(log)
 	text := string(raw)
-	if !strings.Contains(text, "ARGS:rds describe-db-instances --profile=work --cli-input-json=file://") {
+	if !strings.Contains(text, "ARGS:rds describe-db-instances --profile=work --cli-input-json file://") {
 		t.Fatalf("argv: %s", text)
 	}
 	if strings.Contains(text, "p@ss\n") && !strings.Contains(text, "PARAMS:{\"Password\":\"p@ss\"}") {
@@ -880,5 +882,37 @@ func TestAWSAnswersDoNotMarkTheAccount(t *testing.T) {
 	}
 	if got := mustHandle(t, m, Request{Action: "get", ID: a.ID}).Account; got.Status != "connected" {
 		t.Fatalf("status %s", got.Status)
+	}
+}
+
+// TestRunAWSParamsReachTheRealCLI runs the installed AWS CLI against a closed
+// local port. Parameters in a file that the CLI resolves pass its validation
+// and the call fails to connect; parameters it does not resolve fail
+// validation with "arguments are required". It guards the spelling of
+// --cli-input-json, which the fake CLI above cannot: AWS CLI 2.x ignores
+// file:// in "--cli-input-json=file://..." and answered every call that had
+// params as if it had none.
+func TestRunAWSParamsReachTheRealCLI(t *testing.T) {
+	if _, err := exec.LookPath("aws"); err != nil {
+		t.Skip("needs the AWS CLI")
+	}
+	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir(), "AWS_CONFIG_FILE=" + os.DevNull, "AWS_SHARED_CREDENTIALS_FILE=" + os.DevNull,
+		"AWS_EC2_METADATA_DISABLED=true", "AWS_ACCESS_KEY_ID=AKIAEXAMPLEEXAMPLE0", "AWS_SECRET_ACCESS_KEY=exampleexampleexample", "AWS_MAX_ATTEMPTS=1", "AWS_PAGER="}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := runAWS(ctx, awsCommand{
+		Args:  []string{"iam", "get-role", "--region=us-east-1", "--endpoint-url=http://127.0.0.1:1", "--no-cli-pager"},
+		Env:   env,
+		Input: []byte(`{"RoleName":"Example"}`),
+	})
+	var exit *awsExitError
+	if !errors.As(err, &exit) {
+		t.Fatalf("want the CLI to fail on the closed port, got %v", err)
+	}
+	if strings.Contains(exit.stderr, "ParamValidation") || strings.Contains(exit.stderr, "required") {
+		t.Fatalf("the CLI did not read the params file: %s", exit.stderr)
+	}
+	if !strings.Contains(exit.stderr, "Could not connect") {
+		t.Fatalf("unexpected CLI failure (is the AWS CLI v2?): %s", exit.stderr)
 	}
 }
