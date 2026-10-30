@@ -338,3 +338,43 @@ export function connectSteps(phase: ConnectPhase, flow: PendingConnection | null
 export function isConnecting(phase: ConnectPhase): boolean {
   return phase === "opening" || phase === "waiting" || phase === "verifying";
 }
+
+export interface AccountDetailRow {
+  label: string;
+  value: string;
+  /** Tapping the row copies this. */
+  copy?: boolean;
+}
+
+export interface AwsAccountSummary {
+  /** Under the account name: who is signed in, then the region. */
+  subtitle: string;
+  /** The ID, the ARN and how the account signs in, for a details area. */
+  details: AccountDetailRow[];
+}
+
+const AWS_SIGN_IN_LABEL: Record<string, string> = {
+  login: "AWS sign-in",
+  sso: "IAM Identity Center",
+  keys: "Access keys",
+  profile: "AWS CLI profile",
+};
+
+/** What a card for an AWS account says about who is connected; null before the server has said. */
+export function awsAccountSummary(account: Pick<PluginAccount, "integration" | "aws" | "region" | "identity">, now: Date = new Date()): AwsAccountSummary | null {
+  const aws = account.aws;
+  if (account.integration !== "aws" || !aws) return null;
+  const details: AccountDetailRow[] = [];
+  const signIn = AWS_SIGN_IN_LABEL[aws.sign_in];
+  if (signIn) details.push({ label: "Signed in with", value: signIn });
+  if (aws.expires_at) {
+    const ends = new Date(aws.expires_at);
+    if (!Number.isNaN(ends.getTime())) {
+      details.push({ label: ends.getTime() <= now.getTime() ? "Session ended" : "Session ends", value: ends.toLocaleString() });
+    }
+  }
+  if (aws.session) details.push({ label: "Session name", value: aws.session });
+  if (aws.account_id) details.push({ label: "Account ID", value: aws.account_id, copy: true });
+  if (account.identity) details.push({ label: "Identity", value: account.identity, copy: true });
+  return { subtitle: [aws.who, account.region].filter(Boolean).join(" · "), details };
+}

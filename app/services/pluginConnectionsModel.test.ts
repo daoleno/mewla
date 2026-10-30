@@ -4,6 +4,7 @@ import {
   accessControl,
   accountRecovery,
   accountTone,
+  awsAccountSummary,
   awsKeysCredential,
   awsProfileSubtitle,
   awsCodeFromText,
@@ -303,5 +304,34 @@ describe("AWS", () => {
   test("the service row says Reconnect for an expired profile", () => {
     const rows = pluginCatalogRows([plugin("aws", "AWS")], [aws({ status: "authorization_required" })], { aws: {} });
     expect(rows.services[0]?.state.kind).toBe("reconnect");
+  });
+});
+
+describe("awsAccountSummary", () => {
+  const arn = "arn:aws:sts::113732353381:assumed-role/AccountFullAccessRole/sess";
+  const base = { integration: "aws", region: "us-east-1", identity: arn };
+  test("names who is connected and keeps the ARN out of the headline", () => {
+    const summary = awsAccountSummary({ ...base, aws: { account_id: "113732353381", account_name: "Blank Canvas", who: "AccountFullAccessRole", session: "sess", sign_in: "login" } });
+    expect(summary?.subtitle).toBe("AccountFullAccessRole · us-east-1");
+    expect(summary?.subtitle).not.toContain("arn:");
+    expect(summary?.details).toEqual([
+      { label: "Signed in with", value: "AWS sign-in" },
+      { label: "Session name", value: "sess" },
+      { label: "Account ID", value: "113732353381", copy: true },
+      { label: "Identity", value: arn, copy: true },
+    ]);
+  });
+  test("drops a missing region and shows an Identity Center session end", () => {
+    const aws = { account_id: "1", who: "Root user", sign_in: "sso" as const, expires_at: "2030-01-02T03:04:05Z" };
+    const open = awsAccountSummary({ integration: "aws", identity: "", aws }, new Date("2029-01-01T00:00:00Z"));
+    expect(open?.subtitle).toBe("Root user");
+    expect(open?.details.find((row) => row.label === "Session ends")).toBeDefined();
+    expect(open?.details.find((row) => row.label === "Identity")).toBeUndefined();
+    const ended = awsAccountSummary({ integration: "aws", identity: "", aws }, new Date("2031-01-01T00:00:00Z"));
+    expect(ended?.details.find((row) => row.label === "Session ended")).toBeDefined();
+  });
+  test("is absent before the server has said, and for other services", () => {
+    expect(awsAccountSummary({ ...base })).toBeNull();
+    expect(awsAccountSummary({ integration: "github", identity: "x", aws: { account_id: "1", who: "x", sign_in: "keys" } })).toBeNull();
   });
 });
