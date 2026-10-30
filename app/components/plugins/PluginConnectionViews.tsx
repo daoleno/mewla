@@ -12,6 +12,7 @@ import {
   accessControl,
   accountRecovery,
   awsAccountSummary,
+  connectLabel,
   toolUpdates,
   accountTone,
   allowedToolCount,
@@ -410,7 +411,7 @@ export function ConnectOffer({ plugin, job, serverName, connecting, disabled, on
         <ListRow icon="edit" title="Make changes when asked" subtitle={job ? `${job.write}. Off until you allow it.` : "Off until you allow it."} numberOfLines={3} value="Off" />
       </ListSection>
       <View style={styles.actions}>
-        <Button label={`Connect ${plugin.name}`} variant="filled" size="lg" block loading={connecting} disabled={disabled} onPress={onConnect} />
+        <Button label={connectLabel(plugin)} variant="filled" size="lg" block loading={connecting} disabled={disabled} onPress={onConnect} />
         {onUseServerAccount ? <Button label="Use the GitHub login on this server" variant="plain" block disabled={disabled || connecting} onPress={onUseServerAccount} /> : null}
       </View>
     </>
