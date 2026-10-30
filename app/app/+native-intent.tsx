@@ -1,4 +1,5 @@
 import { redirectLivePath } from "../services/liveSurface";
+import { redirectPhonePath } from "../services/phoneRoute";
 import { isPluginReturnUrl } from "../services/pluginOnboarding";
 
 /**
@@ -7,9 +8,10 @@ import { isPluginReturnUrl } from "../services/pluginOnboarding";
  * pop the Plugins stack to its catalog mid-connection, so they are dropped
  * here. A cold start still opens Plugins, which restores and finishes the flow.
  *
- * Live notification, chip and widget links (mewla://live/…) open Brain.
+ * Live notification, chip and widget links (mewla://live/…) open Brain. Phone use's
+ * notifications (mewla://phone) open its page.
  */
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }) {
   if (!initial && isPluginReturnUrl(path)) return null;
-  return redirectLivePath(path);
+  return redirectPhonePath(redirectLivePath(path));
 }

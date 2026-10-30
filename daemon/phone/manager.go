@@ -286,6 +286,11 @@ func (m *Manager) onState(l *Link, s State) {
 	if s.W > 0 && s.H > 0 {
 		l.w, l.h = s.W, s.H
 	}
+	if s.State == StatePersonInCharge && l.pending != nil && l.pending.op == OpHandoff {
+		// A handoff is the phone putting the person in charge: it is what the request asked for,
+		// not a reason to fail it. Stop, take-over and setup below still end it.
+		return
+	}
 	if s.State != StateReady {
 		l.failPending(l.refusalLocked())
 	}

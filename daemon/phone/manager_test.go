@@ -405,6 +405,47 @@ func TestAHandoffEndsWhenThePersonSaysTheyAreDone(t *testing.T) {
 	}
 }
 
+// The phone reports person_in_control as soon as it asks the person for help, and again as ready
+// when they are done. Neither may end the handoff that caused it.
+func TestAHandoffSurvivesThePhoneSayingThePersonIsInCharge(t *testing.T) {
+	m := NewManager(Options{})
+	link, conn := connect(t, m, StateReady, func(Request) *Result { return nil })
+	type answer struct {
+		reply Reply
+		err   error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		reply, err := m.Do(context.Background(), "w1", "Writer", OpHandoff, HandoffArgs{Reason: "Sign in"}, false)
+		done <- answer{reply, err}
+	}()
+	eventually(t, "the handoff", func() bool { return len(conn.ops()) == 1 })
+	id := conn.requests()[0].ID
+	sendFrame(t, link, State{Type: TypeState, State: StatePersonInCharge, W: 720, H: 1600})
+	select {
+	case a := <-done:
+		t.Fatalf("the phone's own state ended the handoff: %+v %v", a.reply, a.err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	// While they work, the screen is theirs: another agent is told so.
+	if _, err := tap(m, "w2"); code(err) != CodeBusy && code(err) != CodePersonInControl {
+		t.Fatalf("another agent during a handoff: %v", err)
+	}
+	sendFrame(t, link, Event{Type: TypeEvent, Kind: EventHandedOff, ID: id})
+	sendFrame(t, link, State{Type: TypeState, State: StateReady, W: 720, H: 1600})
+	if a := <-done; a.err != nil || !a.reply.OK {
+		t.Fatalf("handoff: %+v %v", a.reply, a.err)
+	}
+	// And the agent has the phone again.
+	conn.mu.Lock()
+	conn.handle = func(Request) *Result { return &Result{OK: true} }
+	conn.mu.Unlock()
+	eventually(t, "the agent's next action", func() bool {
+		_, err := tap(m, "w1")
+		return err == nil
+	})
+}
+
 func TestTimeoutsFollowTheOp(t *testing.T) {
 	m := NewManager(Options{Timeout: 40 * time.Millisecond})
 	_, conn := connect(t, m, StateReady, func(r Request) *Result {
