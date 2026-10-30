@@ -73,7 +73,12 @@ object PhoneController {
         if (::app.isInitialized) return
         app = context.applicationContext
         prefs = PhonePrefs(app)
-        if (prefs.enabled) startKeeper()
+        if (prefs.enabled) {
+            // The service is what keeps this process running with the App in the background, so it
+            // comes back whenever the App does (after an update, a crash or a restart).
+            runCatching { PhoneUseService.start(app) }.onFailure { Log.w(TAG, "cannot start the service from here", it) }
+            startKeeper()
+        }
     }
 
     // ---- keeping the helper up ---------------------------------------------------------------
@@ -454,6 +459,7 @@ object PhoneController {
         ensureDisplay(helper)
         var settleQuiet = 300L
         var settleMax = 2_500L
+        var settleMin = 700L
         when (op) {
             "screen" -> {}
             "launch" -> {
@@ -462,6 +468,7 @@ object PhoneController {
                 if (!reply.optBoolean("ok")) return failure(id, reply.optString("code", "failed").ifEmpty { "failed" }, reply.optString("error"))
                 settleQuiet = 500
                 settleMax = 5_000
+                settleMin = 2_000
             }
             "tap" -> helper.call("tap", JSONObject().put("x", args.getInt("x")).put("y", args.getInt("y")).put("long", args.optBoolean("long")))
                 .let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
@@ -480,7 +487,7 @@ object PhoneController {
             }
             else -> return failure(id, "failed", "Unknown phone op $op")
         }
-        if (op != "screen") helper.call("settle", JSONObject().put("quiet_ms", settleQuiet).put("timeout_ms", settleMax), settleMax + 3_000)
+        if (op != "screen") helper.call("settle", JSONObject().put("quiet_ms", settleQuiet).put("timeout_ms", settleMax).put("min_wait_ms", settleMin), settleMax + 3_000)
         return snapshot(id, helper, wantImage)
     }
 

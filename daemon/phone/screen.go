@@ -200,8 +200,9 @@ func appendWindow(cands []candidate, w Window, window, dw, dh int) []candidate {
 		if !ok {
 			continue
 		}
-		if interactive && text == "" && desc == "" && hint == "" {
-			// A pressable row with nothing to say itself says what its text children do.
+		if n.F&(FlagClickable|FlagLongClickable|FlagCheckable) != 0 && text == "" && desc == "" && hint == "" {
+			// A pressable row with nothing to say itself says what its text children do. A
+			// scrolling container does not: its rows say their own.
 			text = absorbChildren(w.Nodes, i, absorbed)
 		}
 		el := Element{
@@ -220,12 +221,18 @@ func appendWindow(cands []candidate, w Window, window, dw, dh int) []candidate {
 }
 
 // absorbChildren is the text of up to three plain text nodes below nodes[i], which are then not
-// elements of their own.
+// elements of their own. A pressable node below is its own element, and so is everything in it.
 func absorbChildren(nodes []Node, i int, absorbed map[int]bool) string {
 	var parts []string
 	for j := i + 1; j < len(nodes) && nodes[j].D > nodes[i].D; j++ {
 		c := nodes[j]
-		if absorbed[j] || c.F&interactiveMask != 0 {
+		if c.F&interactiveMask != 0 {
+			for j+1 < len(nodes) && nodes[j+1].D > c.D {
+				j++
+			}
+			continue
+		}
+		if absorbed[j] {
 			continue
 		}
 		label := cleanLabel(c.T)
