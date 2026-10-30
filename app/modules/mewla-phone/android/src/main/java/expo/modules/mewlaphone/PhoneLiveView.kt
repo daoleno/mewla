@@ -133,6 +133,11 @@ internal object PhoneLiveViews {
         views.forEach { it.showFrame(jpeg) }
     }
 
+    /** The helper or its display just came back: views that are already mounted ask for frames again. */
+    fun resume() {
+        if (views.isNotEmpty()) refresh()
+    }
+
     /** Frames flow only while a view is mounted, at the rate of the most demanding one. */
     fun refresh() {
         val fps = views.maxOfOrNull { it.fps }
