@@ -39,7 +39,7 @@ describe("primary drawer destinations", () => {
       ["Sessions", "list"],
     ]);
     expect(destinations.map((item) => item.label)).toEqual([
-      "Calendar", "Extensions", "Screen", "Stats", "Resources", "Friends", "Phone", "Settings",
+      "Calendar", "Extensions", "Screen", "Phone", "Stats", "Resources", "Friends", "Settings",
     ]);
     for (const key of ["key", "label", "pathname", "icon"] as const) {
       expect(new Set(destinations.map((item) => item[key])).size).toBe(destinations.length);

@@ -44,10 +44,10 @@ export const PRIMARY_DRAWER_DESTINATIONS: readonly PrimaryDrawerDestination[] = 
   { key: "calendar", label: "Calendar", pathname: "/calendar", icon: "calendar" },
   { key: "plugins", label: "Extensions", pathname: "/plugins", icon: "plugins" },
   { key: "screen", label: "Screen", pathname: "/screen", icon: "desktop" },
+  { key: "phone", label: "Phone", pathname: "/phone", icon: "phone", labs: "phone" },
   { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
   { key: "resources", label: "Resources", pathname: "/resources", icon: "resources" },
   { key: "friends", label: "Friends", pathname: "/friends", icon: "people", labs: "friends" },
-  { key: "phone", label: "Phone", pathname: "/phone", icon: "phone", labs: "phone" },
 ];
 
 /** Settings sits apart at the bottom of the menu, above the server status. */
