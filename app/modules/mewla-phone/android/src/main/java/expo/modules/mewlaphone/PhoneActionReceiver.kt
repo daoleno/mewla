@@ -19,6 +19,7 @@ class PhoneActionReceiver : BroadcastReceiver() {
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 )
             }
+            PhoneNotifier.ACTION_RESUME -> PhoneController.giveBack()
             PhoneNotifier.ACTION_DONE -> PhoneController.handoffDone()
             PhoneNotifier.ACTION_CODE -> {
                 val code = RemoteInput.getResultsFromIntent(intent)?.getCharSequence(PhoneNotifier.KEY_CODE)?.toString()?.trim()
