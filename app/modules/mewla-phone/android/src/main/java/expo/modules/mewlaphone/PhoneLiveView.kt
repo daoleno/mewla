@@ -35,6 +35,7 @@ class PhoneLiveView(context: Context, appContext: AppContext) : ExpoView(context
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         PhoneLiveViews.add(this)
+        PhoneLiveViews.last?.let { showFrame(it) }
         touches.execute { PhoneController.watch(true) }
     }
 
@@ -98,5 +99,10 @@ internal object PhoneLiveViews {
     fun add(view: PhoneLiveView) { views.addIfAbsent(view) }
     fun remove(view: PhoneLiveView) { views.remove(view) }
     fun isEmpty() = views.isEmpty()
-    fun deliver(jpeg: ByteArray) { views.forEach { it.showFrame(jpeg) } }
+    /** The newest frame, so a view that appears while the agent's screen sits still has a picture at once. */
+    @Volatile var last: ByteArray? = null
+    fun deliver(jpeg: ByteArray) {
+        last = jpeg
+        views.forEach { it.showFrame(jpeg) }
+    }
 }

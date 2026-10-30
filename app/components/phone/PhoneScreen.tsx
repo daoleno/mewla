@@ -1,6 +1,5 @@
-import React, { useEffect, useLayoutEffect, useRef } from "react";
-import { useNavigation } from "expo-router";
-import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
 import { MewlaPhone, PhoneLiveView, type PhoneStatus } from "../../modules/mewla-phone/src";
@@ -46,23 +45,14 @@ export function PhoneScreen() {
 
 function Body({ status, mode }: { status: PhoneStatus; mode: ReturnType<typeof phoneMode> }) {
   const { colors } = useAppTheme();
-  const { width } = useWindowDimensions();
-  const navigation = useNavigation();
-  // In a floating window only the agent's screen fits: no header, no buttons.
-  const floating = width < 360;
   const working = mode === "watching" || mode === "driving" || mode === "handoff";
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: !floating });
-  }, [navigation, floating]);
-  // While an agent works and this page is open, leaving the App floats its screen by itself.
+  // While an agent works and this page is open, leaving the App floats its screen by itself; the
+  // floating window shows the agent's screen alone (drawn natively, see PipOverlay.kt).
   useEffect(() => {
     if (!working) return;
     MewlaPhone?.setPipAuto?.(true, status.w, status.h);
     return () => MewlaPhone?.setPipAuto?.(false, status.w, status.h);
   }, [working, status.w, status.h]);
-  if (floating && mode !== "setup" && PhoneLiveView) {
-    return <PhoneLiveView style={[styles.fill, { backgroundColor: "#000" }]} interactive={false} />;
-  }
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: colors.bgPrimary }]} edges={["bottom"]}>
       {mode === "setup" ? <Setup status={status} /> : <Live status={status} mode={mode} />}
