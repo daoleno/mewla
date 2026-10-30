@@ -25,6 +25,7 @@ internal object PhoneNotifier {
 
     const val ACTION_STOP = "expo.modules.mewlaphone.STOP"
     const val ACTION_TAKE_OVER = "expo.modules.mewlaphone.TAKE_OVER"
+    const val ACTION_RESUME = "expo.modules.mewlaphone.RESUME"
     const val ACTION_DONE = "expo.modules.mewlaphone.DONE"
     const val ACTION_CODE = "expo.modules.mewlaphone.CODE"
     const val KEY_CODE = "pairing_code"
@@ -84,6 +85,9 @@ internal object PhoneNotifier {
         if (!PhoneController.linkOnline) {
             // The App's process is alive for the helper but its connection to the computer is not.
             builder.setContentTitle("Open Mewla to reconnect")
+        } else if (PhoneController.state() == "stopped") {
+            builder.setContentTitle("Stopped")
+                .addAction(0, "Resume", action(context, ACTION_RESUME, 7))
         } else if (agent == null) {
             builder.setContentTitle("Phone use is on")
         } else {
