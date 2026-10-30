@@ -7,6 +7,7 @@ import {
   awsKeysCredential,
   awsProfileSubtitle,
   awsCodeFromText,
+  awsProfileSignsInWithBrowser,
   awsSignInInput,
   bulkToolNames,
   canDisconnect,
@@ -278,6 +279,12 @@ describe("AWS", () => {
     expect(awsSignInInput(expired)).toEqual({ integration: "aws", profile: "work" });
     // No terminal command anywhere.
     expect(JSON.stringify(accountRecovery(aws({ status: "authorization_required" }), "AWS"))).not.toContain("aws login");
+  });
+
+  test("a tapped login or sso profile goes through the sign-in; keys, roles and others just connect", () => {
+    expect(awsProfileSignsInWithBrowser({ kind: "login" })).toBe(true);
+    expect(awsProfileSignsInWithBrowser({ kind: "sso" })).toBe(true);
+    for (const kind of ["keys", "role", "other"] as const) expect(awsProfileSignsInWithBrowser({ kind })).toBe(false);
   });
 
   test("only text that could be AWS's authorization code fills the code field", () => {

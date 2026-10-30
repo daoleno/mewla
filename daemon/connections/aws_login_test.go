@@ -3,6 +3,7 @@ package connections
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -130,6 +131,11 @@ type fakeLoginHost struct {
 	runs     []*fakeLoginRun
 	approve  chan struct{}
 	failSelf error // exit at once with this error, printing nothing
+	// signedOut makes the fake AWS answer STS with an expired session, until a
+	// sign-in succeeds.
+	signedOut atomic.Bool
+	// probeErr, if set, is what STS answers instead (a failure that is not an expiry).
+	probeErr error
 }
 
 type fakeLoginRun struct {
@@ -185,8 +191,11 @@ func (h *fakeLoginHost) spawn(args, env []string) (*awsProc, error) {
 				err = &awsExitError{stderr: "killed"}
 			}
 		}
-		if err == nil && h.onSuccess != nil {
-			h.onSuccess()
+		if err == nil {
+			h.signedOut.Store(false)
+			if h.onSuccess != nil {
+				h.onSuccess()
+			}
 		}
 		fmt.Fprint(stdoutW, "Enter the authorization code displayed in your browser: ")
 		stdoutW.Close()
@@ -221,7 +230,17 @@ func (r *fakeLoginRun) has(parts ...string) bool {
 
 func awsSignInManager(t *testing.T, h *fakeLoginHost) *Manager {
 	t.Helper()
-	m, _ := awsTestManager(t, awsOK)
+	m, _ := awsTestManager(t, func(c awsCommand) ([]byte, error) {
+		if len(c.Args) > 0 && c.Args[0] == "sts" {
+			if h.probeErr != nil {
+				return nil, h.probeErr
+			}
+			if h.signedOut.Load() {
+				return nil, &awsExitError{stderr: "\naws: [ERROR]: An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired\n"}
+			}
+		}
+		return awsOK(c)
+	})
 	h.t = t
 	m.awsSpawn = h.spawn
 	return m
@@ -437,6 +456,7 @@ func TestAWSSignInRenewsAProfileInPlace(t *testing.T) {
 	h := &fakeLoginHost{print: []string{awsSignInPage}, needCode: true}
 	m := awsSignInManager(t, h)
 	work := addAWSProfile(t, m, "work")
+	h.signedOut.Store(true)
 	f := startSignIn(t, m, Input{Profile: "work"})
 	run := h.last()
 	// The profile's own region, and no new profile.
@@ -452,11 +472,63 @@ func TestAWSSignInRenewsAProfileInPlace(t *testing.T) {
 	}
 }
 
+// A profile the person taps that is still signed in connects at once; one
+// whose session expired is signed in again, in place, under its own name.
+func TestAWSSignInTappedProfileStillSignedIn(t *testing.T) {
+	h := &fakeLoginHost{print: []string{awsSignInPage}, needCode: true}
+	m := awsSignInManager(t, h)
+	got := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "aws", Profile: "work"}})
+	if got.Flow == nil || got.Flow.Status != "connected" || got.Account == nil || got.Account.Profile != "work" || got.Account.Access == nil || got.Account.Access.Read != "allowed" {
+		t.Fatalf("%+v", got)
+	}
+	if len(h.runs) != 0 {
+		t.Fatal("a signed-in profile was sent to the browser")
+	}
+	// Tapping it again renews the same account, still without a browser.
+	again := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "aws", Profile: "work"}})
+	if again.Account.ID != got.Account.ID || len(mustHandle(t, m, Request{Action: "list"}).Accounts) != 1 || len(h.runs) != 0 {
+		t.Fatalf("%+v", again)
+	}
+}
+
+func TestAWSSignInTappedExpiredProfileRenewsItself(t *testing.T) {
+	h := &fakeLoginHost{print: []string{awsSignInPage}, needCode: true}
+	m := awsSignInManager(t, h)
+	h.signedOut.Store(true)
+	// No account yet: the profile is not new, so it keeps its name and region.
+	f := startSignIn(t, m, Input{Profile: "work"})
+	if !f.CodeRequired || !h.last().has("login", "--remote", "--profile", "work", "--region", "ap-southeast-1") {
+		t.Fatalf("%+v %v", f, h.last().args)
+	}
+	got := flowAction(t, m, "connect_finish", f, awsGoodCode)
+	if got.Flow.Status != "connected" || got.Account.Profile != "work" || got.Account.Name != "AWS 123456789012" {
+		t.Fatalf("%+v %+v", got.Flow, got.Account)
+	}
+	for _, a := range mustHandle(t, m, Request{Action: "list"}).Accounts {
+		if a.Profile == "mewla" {
+			t.Fatal("a new profile was created")
+		}
+	}
+}
+
+func TestAWSSignInTappedProfileFailingForAnotherReason(t *testing.T) {
+	h := &fakeLoginHost{print: []string{awsSignInPage}, needCode: true}
+	h.probeErr = &awsExitError{stderr: "aws: [ERROR]: Could not connect to the endpoint URL: \"https://sts.us-east-1.amazonaws.com/\""}
+	m := awsSignInManager(t, h)
+	if _, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: "aws", Profile: "work"}}); err == nil || errors.Is(err, errAuth) {
+		t.Fatalf("%v", err)
+	}
+	if len(h.runs) != 0 {
+		t.Fatal("a network failure opened the browser")
+	}
+}
+
 func TestAWSSignInSSOApprovesByItself(t *testing.T) {
 	h := &fakeLoginHost{print: []string{"Browser will not be automatically opened.", "Please visit the following URL:", "", "https://device.sso.eu-west-1.amazonaws.com/", "", "Then enter the code:", "", "WXYZ-1234", "", "Alternatively, you may visit the following URL which will autofill the code upon loading:", "https://device.sso.eu-west-1.amazonaws.com/?user_code=WXYZ-1234"},
 		approve: make(chan struct{})}
 	m := awsSignInManager(t, h)
 	sso := addAWSProfile(t, m, "work-sso")
+	h.signedOut.Store(true)
 	f := startSignIn(t, m, Input{Profile: "work-sso"})
 	if f.UserCode != "WXYZ-1234" || f.CodeRequired || f.AuthorizationURL != "https://device.sso.eu-west-1.amazonaws.com/" {
 		t.Fatalf("%+v", f)
@@ -497,6 +569,7 @@ func TestAWSSignInOnlyForBrowserProfiles(t *testing.T) {
 func TestAWSSignInTwiceForOneProfile(t *testing.T) {
 	h := &fakeLoginHost{print: []string{awsSignInPage}, needCode: true}
 	m := awsSignInManager(t, h)
+	h.signedOut.Store(true)
 	first := startSignIn(t, m, Input{Profile: "work"})
 	run := h.last()
 	second := startSignIn(t, m, Input{Profile: "work"})

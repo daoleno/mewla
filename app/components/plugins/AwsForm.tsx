@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Field } from "./CustomServiceForm";
 import { AppText, Button, InlineNotice, ListRow, ListSection } from "../ui";
-import { awsKeysCredential, awsProfileSubtitle } from "../../services/pluginConnectionsModel";
+import { awsKeysCredential, awsProfileSignsInWithBrowser, awsProfileSubtitle } from "../../services/pluginConnectionsModel";
 import type { AwsProfile, ConnectionRequest, PluginAccount, PluginIntegration } from "../../services/connections";
 
 type Input = NonNullable<ConnectionRequest["input"]>;
@@ -42,7 +42,8 @@ export function AwsForm({ plugin, accounts, profiles, connecting, serverName, on
         numberOfLines={2}
         accessory="chevron"
         disabled={connecting}
-        onPress={() => void onConnect({ integration: plugin.id, profile: profile.name }, false)}
+        // A browser profile connects at once while signed in, and signs in again in place once expired; keys and roles just connect.
+        onPress={() => void onConnect({ integration: plugin.id, profile: profile.name }, awsProfileSignsInWithBrowser(profile))}
       />)}
     </ListSection> : null}
     {keys ? <>

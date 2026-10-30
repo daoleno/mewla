@@ -56,6 +56,11 @@ const AWS_PROFILE_KINDS: Record<AwsProfile["kind"], string> = {
   other: "AWS CLI profile",
 };
 
+/** Whether tapping a profile may need AWS's sign-in page: its session is the CLI's browser sign-in. Keys and roles never do. */
+export function awsProfileSignsInWithBrowser(profile: Pick<AwsProfile, "kind">): boolean {
+  return profile.kind === "login" || profile.kind === "sso";
+}
+
 /** One profile row's second line: how the profile signs in, and its region. */
 export function awsProfileSubtitle(profile: AwsProfile): string {
   return [AWS_PROFILE_KINDS[profile.kind], profile.region].filter(Boolean).join(" · ");
