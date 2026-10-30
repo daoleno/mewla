@@ -199,12 +199,14 @@ object PhoneController {
             .put("stalled", quiet && SettingsReading.needs == null)
     }
 
-    /** True when Android blocks switching a sideloaded app's accessibility service on until "Allow restricted settings" is chosen in App info. */
+    /**
+     * True when Android may block switching a sideloaded app's accessibility service on until "Allow
+     * restricted settings" is chosen in App info. An app cannot read that setting itself (the op is
+     * system-only), so this is the rule's trigger: Android 13+ and not installed by the Play Store.
+     */
     private fun accessibilityRestricted(): Boolean = runCatching {
         if (Build.VERSION.SDK_INT < 33 || SettingsReading.serviceRunning) return@runCatching false
-        val ops = app.getSystemService(android.app.AppOpsManager::class.java)
-        ops.unsafeCheckOpNoThrow("android:access_restricted_settings", android.os.Process.myUid(), app.packageName) !=
-            android.app.AppOpsManager.MODE_ALLOWED
+        app.packageManager.getInstallSourceInfo(app.packageName).installingPackageName != "com.android.vending"
     }.getOrDefault(false)
 
     /**
