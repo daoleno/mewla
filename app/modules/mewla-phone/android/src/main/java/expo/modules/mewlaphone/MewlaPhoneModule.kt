@@ -81,13 +81,19 @@ class MewlaPhoneModule : Module() {
         Function("enterPip") { w: Int, h: Int ->
             val activity = appContext.currentActivity
             if (activity == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) false
-            else activity.enterPictureInPictureMode(pipParams(w, h, false))
+            else {
+                PipOverlay.follow(activity, appContext)
+                activity.enterPictureInPictureMode(pipParams(w, h, false))
+            }
         }
 
         /** While an agent works and the Phone page is open, leaving the App floats the screen by itself. */
         Function("setPipAuto") { on: Boolean, w: Int, h: Int ->
             val activity = appContext.currentActivity
-            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) activity.setPictureInPictureParams(pipParams(w, h, on))
+            if (activity != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (on) PipOverlay.follow(activity, appContext)
+                activity.setPictureInPictureParams(pipParams(w, h, on))
+            }
         }
 
         Function("openWirelessDebugging") { openWirelessDebugging() }
