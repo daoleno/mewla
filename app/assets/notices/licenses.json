@@ -1388,6 +1388,13 @@
      "text": "fb3ca4a837f5"
     },
     {
+     "name": "expo-video",
+     "version": "57.0.5",
+     "license": "MIT",
+     "url": "https://github.com/expo/expo",
+     "text": "fb3ca4a837f5"
+    },
+    {
      "name": "expo-web-browser",
      "version": "57.0.3",
      "license": "MIT",
