@@ -24,7 +24,8 @@ internal object PhoneNotifier {
     const val ID_PAIRING = 7103
 
     const val ACTION_STOP = "expo.modules.mewlaphone.STOP"
-    const val ACTION_TAKE_OVER = "expo.modules.mewlaphone.TAKE_OVER"
+    /** Carried by the intent that opens the Phone page when the person tapped Take over. */
+    const val EXTRA_TAKE_OVER = "expo.modules.mewlaphone.take_over"
     const val ACTION_RESUME = "expo.modules.mewlaphone.RESUME"
     const val ACTION_DONE = "expo.modules.mewlaphone.DONE"
     const val ACTION_CODE = "expo.modules.mewlaphone.CODE"
@@ -67,6 +68,18 @@ internal object PhoneNotifier {
         return PendingIntent.getActivity(context, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 
+    /**
+     * Take over opens the Phone page with the person already in charge. Android blocks a
+     * notification (or floating window) button from starting an activity through a broadcast, so
+     * the button is the activity launch itself and the module applies the take-over on arrival.
+     */
+    fun takeOver(context: Context, request: Int): PendingIntent {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("mewla://phone")).setPackage(context.packageName)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_TAKE_OVER, true)
+        return PendingIntent.getActivity(context, request, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
     private fun action(context: Context, action: String, request: Int, mutable: Boolean = false): PendingIntent {
         val intent = Intent(context, PhoneActionReceiver::class.java).setAction(action)
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (mutable) PendingIntent.FLAG_MUTABLE else PendingIntent.FLAG_IMMUTABLE
@@ -92,7 +105,7 @@ internal object PhoneNotifier {
             builder.setContentTitle("Phone use is on")
         } else {
             builder.setContentTitle("$agent is using your phone")
-                .addAction(0, "Take over", action(context, ACTION_TAKE_OVER, 2))
+                .addAction(0, "Take over", takeOver(context, 2))
                 .addAction(0, "Stop", action(context, ACTION_STOP, 3))
         }
         return builder.build()
