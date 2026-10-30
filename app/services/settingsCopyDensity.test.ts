@@ -31,8 +31,6 @@ describe("Settings copy density", () => {
       "Allow camera access to scan a mewla pairing QR code.",
       "On the computer, run mewla pair. Scan its QR code or paste the link it prints.",
       "Telegram cloud messages are not deleted.",
-      'accessibilityLabel="Appearance theme"',
-      "<SegmentedControl",
     ]) {
       expect(source).toContain(necessaryCopy);
     }
@@ -42,7 +40,14 @@ describe("Settings copy density", () => {
       "utf8",
     );
     expect(computerPage).toContain('accessibilityLabel="Address"');
-    // Appearance is one segmented control; each segment owns its radio state.
+    // Appearance is one row per theme; each row owns its radio state.
+    const appearance = readFileSync(
+      join(import.meta.dir, "../components/settings/AppearanceSection.tsx"),
+      "utf8",
+    );
+    expect(appearance).toContain('accessory="check"');
+    expect(appearance).toContain("selected={choice.value === current}");
+    // The segmented control keeps its own radio contract for the screens that use it.
     const segmented = readFileSync(
       join(import.meta.dir, "../components/ui/SegmentedControl.tsx"),
       "utf8",
