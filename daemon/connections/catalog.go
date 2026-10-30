@@ -79,6 +79,10 @@ type staticOAuth struct {
 	// ScopeParam names the authorization parameter that carries the scopes
 	// when the service does not use the standard "scope".
 	ScopeParam string
+	// Registration is the RFC 7591 endpoint: Mewla registers a client of its own
+	// (and keeps it) instead of using a published one. Resource is the RFC 8707
+	// resource every grant and refresh names.
+	Registration, Resource string
 }
 
 // deviceFlow is a service that signs in with the OAuth device grant.
@@ -112,6 +116,14 @@ type oauthSpec struct {
 	ChangeScopes func() []string
 	Static       *staticOAuth
 	Device       *deviceFlow
+	// Loopback: the service takes only a loopback return address. The sign-in
+	// returns to this daemon's own port, which a browser on the daemon's
+	// computer reaches by itself; from any other device the person pastes the
+	// address the browser ended on.
+	Loopback bool
+	// KeepGrants: signing in again to an account keeps what the person allowed
+	// on it, for every tool whose definition is unchanged.
+	KeepGrants bool
 	// Codec names a registered token codec for services that do not follow
 	// the standard token endpoint.
 	Codec string
@@ -200,7 +212,7 @@ func registerDrivers() {
 		"hyperliquid": {discover: discoverHyperliquidDriver, invoke: invokeHyperliquidDriver, add: addHyperliquidDriver, removeKey: removeHyperliquidKeyDriver},
 		"openapi":     {discover: discoverOpenAPI, invoke: invokeOpenAPI, unverified: true},
 		"mcp":         {discover: discoverMCPToken},
-		"aws":         {discover: discoverAWS, invoke: invokeAWSDriver, add: addAWSDriver},
+		"aws":         {discover: discoverAWS, invoke: invokeAWSDriver},
 	}
 }
 
@@ -346,8 +358,17 @@ func buildCatalog() []*entry {
 			},
 		},
 		{
-			Integration: Integration{ID: "aws", Name: "AWS", Available: true, SetupURL: "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html", Description: "The whole AWS API: EC2, RDS, S3, CloudWatch and more, through this computer's AWS CLI"},
-			Driver:      "aws", Local: true, Tools: awsTools,
+			Integration: Integration{ID: "aws", Name: "AWS", Available: true, SetupURL: "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/oauth-authentication.html", Description: "The whole AWS API: EC2, RDS, S3, CloudWatch and more, through AWS's own MCP server"},
+			Driver:      "aws", Endpoint: awsMCPEndpoint, Tools: awsTools,
+			AddRefusal: "AWS uses browser sign-in; connect it from Extensions",
+			OAuth: &oauthSpec{
+				Source: clientOperator, Loopback: true, KeepGrants: true,
+				Scopes: func(bool) []string { return nil },
+				Static: &staticOAuth{
+					Issuer: awsIssuer, AuthURL: awsIssuer + "/v1/authorize", TokenURL: awsIssuer + "/v1/token", Registration: awsIssuer + "/v1/register",
+					AuthMethods: []string{"none"}, Resource: awsMCPEndpoint,
+				},
+			},
 		},
 		{
 			Integration: Integration{ID: "mcp", Name: "Remote MCP", Available: true, SetupURL: "https://modelcontextprotocol.io", Description: "Discover tools from a remote MCP server"},

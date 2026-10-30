@@ -523,6 +523,11 @@ func (s *Server) RunWithReady(ctx context.Context, addr string, onReady func()) 
 		s.terminalCleanup.Drain()
 		return err
 	}
+	if s.connections != nil {
+		if bound, ok := tcp.Addr().(*net.TCPAddr); ok {
+			s.connections.SetLoopbackPort(bound.Port)
+		}
+	}
 	var listener net.Listener = tcp
 	if s.tlsConfig != nil {
 		listener = &tlsHTTPListener{Listener: tcp, config: s.tlsConfig.Clone()}

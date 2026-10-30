@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +51,10 @@ type oauthFlow struct {
 	Mobile       bool
 	Web          bool // returns to the web UI's Plugins page
 	AllowWrites  bool
+	// Loopback: the provider returns to this daemon's own port; the person may
+	// also paste the address the browser ended on. One state finishes once,
+	// from either.
+	Loopback bool
 }
 type oauthMetadata struct {
 	Issuer                string   `json:"issuer"`
@@ -179,6 +184,16 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if callback == "" && in.Mobile {
 		callback = NativeCallback
 	}
+	// A loopback service returns to this daemon's own port, whatever device the
+	// person signs in on.
+	loopback := oauth != nil && oauth.Loopback
+	if loopback {
+		redirect, err := m.loopbackRedirect()
+		if err != nil {
+			return Response{}, err
+		}
+		client, ok, callback = OAuthClientConfig{RedirectURL: redirect}, true, ""
+	}
 	registers := oauth != nil && (oauth.Source == clientRegistered || oauth.Source == clientOperator)
 	if !ok && callback != "" && registers {
 		client.RedirectURL = callback
@@ -227,7 +242,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	var meta oauthMetadata
 	if oauth.Static != nil {
 		r.Account.AuthMethod = "oauth"
-		meta = oauthMetadata{Issuer: oauth.Static.Issuer, AuthorizationEndpoint: oauth.Static.AuthURL, TokenEndpoint: oauth.Static.TokenURL, AuthMethods: oauth.Static.AuthMethods}
+		meta = oauthMetadata{Issuer: oauth.Static.Issuer, AuthorizationEndpoint: oauth.Static.AuthURL, TokenEndpoint: oauth.Static.TokenURL, RegistrationEndpoint: oauth.Static.Registration, AuthMethods: oauth.Static.AuthMethods}
 		r.Account.Scopes = oauth.Scopes(in.AllowWrites)
 	} else {
 		meta, err = m.discoverOAuth(ctx, r)
@@ -249,6 +264,9 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	style := oauth2.AuthStyleInParams
 	if client.ClientSecret != "" && contains(meta.AuthMethods, "client_secret_basic") {
 		style = oauth2.AuthStyleInHeader
+	}
+	if loopback {
+		client.ClientID = m.savedRegistration(in.Integration, client.RedirectURL)
 	}
 	if client.ClientID == "" {
 		if meta.RegistrationEndpoint == "" {
@@ -288,6 +306,9 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 			return Response{}, errors.New("provider returned an invalid OAuth client")
 		}
 		client.ClientID, client.ClientSecret = registered.ClientID, registered.ClientSecret
+		if loopback && registered.ClientSecret == "" {
+			m.saveRegistration(in.Integration, client.RedirectURL, client.ClientID)
+		}
 		style = oauth2.AuthStyleInParams
 		if registered.AuthMethod == "client_secret_basic" || registered.AuthMethod == "" && registered.ClientSecret != "" {
 			style = oauth2.AuthStyleInHeader
@@ -296,6 +317,8 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	r.OAuth = &oauthAccount{ClientID: client.ClientID, RedirectURL: client.RedirectURL, Issuer: meta.Issuer, AuthURL: meta.AuthorizationEndpoint, TokenURL: meta.TokenEndpoint, RevokeURL: meta.RevocationEndpoint, AuthStyle: style}
 	if r.Account.AuthMethod == "mcp_oauth" {
 		r.OAuth.Resource = endpoint
+	} else if oauth.Static != nil {
+		r.OAuth.Resource = oauth.Static.Resource
 	}
 	state, verifier := oauth2.GenerateVerifier(), oauth2.GenerateVerifier()
 	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
@@ -309,7 +332,12 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	}
 	authURL := config.AuthCodeURL(state, options...)
 	m.records[r.Account.ID] = r
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Expires: time.Now().Add(10 * time.Minute), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
+	lifetime := 10 * time.Minute
+	if loopback {
+		// The person may be away from the screen the sign-in started on.
+		lifetime = oauthLoopbackLifetime
+	}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Loopback: loopback, Expires: time.Now().Add(lifetime), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
@@ -403,7 +431,7 @@ func oauthCode(code string) string {
 func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile, webUI bool) string {
 	state := req.URL.Query().Get("state")
 	flow, ok := m.pending[state]
-	if !ok || flow.Mobile != mobile || time.Now().After(flow.Expires) {
+	if !ok || flow.Mobile != mobile && !flow.Loopback || time.Now().After(flow.Expires) {
 		if webUI && !mobile {
 			pluginsReturn(w, req, "", url.Values{"plugin_error": {"expired"}})
 			return "expired"
@@ -458,6 +486,11 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 		token, err = config.Exchange(context.WithValue(ctx, oauth2.HTTPClient, m.oauthHTTP(r)), req.URL.Query().Get("code"), options...)
 	}
 	if err != nil || token == nil || token.AccessToken == "" || len(token.AccessToken) > 16384 || len(token.RefreshToken) > 16384 {
+		var retrieve *oauth2.RetrieveError
+		if flow.Loopback && errors.As(err, &retrieve) && retrieve.ErrorCode == "invalid_client" {
+			// The provider no longer knows the client Mewla registered.
+			m.forgetRegistration(r.Account.Integration)
+		}
 		return fail("token", signInDetail(err))
 	}
 	if scope, ok := token.Extra("scope").(string); ok {
@@ -718,7 +751,7 @@ func (m *Manager) discoverOAuth(ctx context.Context, r *record) (oauthMetadata, 
 }
 
 func (m *Manager) sensitiveValues(r *record, access string) []string {
-	values := append([]string{access}, awsKeyValues(r, access)...)
+	values := []string{access}
 	if r.OAuth != nil {
 		if raw, ok, err := m.vault.Get("integration:" + r.Account.ID); err == nil && ok {
 			var secret oauthSecret
@@ -731,4 +764,83 @@ func (m *Manager) sensitiveValues(r *record, access string) []string {
 		}
 	}
 	return values
+}
+
+// ---- loopback sign-in ---------------------------------------------------
+
+// oauthLoopbackLifetime is how long a loopback sign-in waits for its return.
+const oauthLoopbackLifetime = time.Hour
+
+// oauthRegistrationLife is how long Mewla keeps a client it registered. Providers
+// expire these (AWS after 90 days); a stale one fails in the browser, where this
+// daemon can't see it, so it is replaced well before.
+const oauthRegistrationLife = 80 * 24 * time.Hour
+
+// SetLoopbackPort tells the manager the port this daemon serves on. A service
+// that takes only loopback returns sends the browser to 127.0.0.1 on it.
+func (m *Manager) SetLoopbackPort(port int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.loopbackPort = port
+}
+
+// loopbackRedirect is the address a loopback provider returns the browser to.
+func (m *Manager) loopbackRedirect() (string, error) {
+	if m.loopbackPort <= 0 {
+		return "", errors.New("Sign-in is not ready on this server yet. Try again in a moment.")
+	}
+	return "http://127.0.0.1:" + strconv.Itoa(m.loopbackPort) + "/plugins/oauth/callback", nil
+}
+
+type oauthRegistration struct {
+	RedirectURL  string    `json:"redirect_url"`
+	ClientID     string    `json:"client_id"`
+	RegisteredAt time.Time `json:"registered_at"`
+}
+
+// savedRegistration is the client Mewla registered for this return address,
+// while it is still fresh. The address carries the port, so two daemons on one
+// computer keep separate clients.
+func (m *Manager) savedRegistration(integration, redirect string) string {
+	raw, ok, err := m.vault.Get("oauth-registration:" + integration)
+	if err != nil || !ok {
+		return ""
+	}
+	var saved oauthRegistration
+	if json.Unmarshal([]byte(raw), &saved) != nil || saved.RedirectURL != redirect || saved.ClientID == "" || time.Since(saved.RegisteredAt) > oauthRegistrationLife || saved.RegisteredAt.After(time.Now().Add(time.Minute)) {
+		return ""
+	}
+	return saved.ClientID
+}
+
+func (m *Manager) saveRegistration(integration, redirect, clientID string) {
+	raw, _ := json.Marshal(oauthRegistration{RedirectURL: redirect, ClientID: clientID, RegisteredAt: time.Now().UTC()})
+	_ = m.vault.Set("oauth-registration:"+integration, string(raw))
+}
+
+func (m *Manager) forgetRegistration(integration string) {
+	_ = m.vault.Delete("oauth-registration:" + integration)
+}
+
+// loopbackReturn reads the address a person pasted back: the one the browser
+// ended on after sign-in. It must be this account's registered return address
+// exactly, so no other address can carry a code into the sign-in.
+func loopbackReturn(raw, registered string) (url.Values, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) > 16384 || strings.ContainsAny(raw, " \t\r\n") {
+		return nil, false
+	}
+	if strings.HasPrefix(raw, "127.0.0.1") {
+		raw = "http://" + raw
+	}
+	got, err := url.Parse(raw)
+	want, werr := url.Parse(registered)
+	if err != nil || werr != nil || got.Scheme != want.Scheme || got.Host != want.Host || got.Path != want.Path || got.User != nil || got.Fragment != "" {
+		return nil, false
+	}
+	q := got.Query()
+	if len(q["state"]) != 1 || len(q["code"]) > 1 || len(q["error"]) > 1 || len(q["iss"]) > 1 {
+		return nil, false
+	}
+	return q, true
 }

@@ -43,7 +43,7 @@ type Manager struct {
 	githubToken  func(context.Context) (string, error)
 	webOrigin    func(origin string) bool
 	toolsSeen    map[string]time.Time // when each MCP account's tool list was last read
-	awsState
+	loopbackPort int                  // the port this daemon serves on; see SetLoopbackPort
 }
 
 // SetWebOrigins admits web UI origins for browser sign-in returns. Without it,
@@ -72,7 +72,6 @@ func (m *Manager) EnsureDefaults() error {
 
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
 	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
-	m.awsExec, m.awsModelDir, m.awsSpawn = runAWS, findAWSModels, spawnAWS
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -87,6 +86,7 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 	if err := m.removeRetired(); err != nil {
 		return nil, err
 	}
+	m.markLegacyAWS()
 	return m, nil
 }
 
@@ -221,8 +221,6 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		}
 		sort.Slice(accounts, func(i, j int) bool { return accounts[i].Name < accounts[j].Name })
 		return Response{Catalog: m.catalog(), Accounts: accounts, OAuthConfigured: m.oauthConfigured()}, nil
-	case "aws_profiles":
-		return m.awsProfilesResponse()
 	case "oauth_configure":
 		return m.configureOAuth(q.Input)
 	case "oauth_start":
@@ -660,4 +658,16 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 		return Response{}, err
 	}
 	return Response{Result: result}, nil
+}
+
+// markLegacyAWS flags the AWS accounts connected through the AWS CLI. They stay
+// as they were, with their name, identity and grants, and read "Sign in again":
+// signing in renews them in place (see nameAndDeduplicate). Nothing else about
+// them runs, since the CLI is no longer used.
+func (m *Manager) markLegacyAWS() {
+	for _, r := range m.records {
+		if r.Account.Integration == "aws" && r.OAuth == nil && r.Account.Status != "disconnected" {
+			r.Account.Status = "authorization_required"
+		}
+	}
 }
