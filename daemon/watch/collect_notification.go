@@ -32,6 +32,19 @@ const (
 // Whether a notification was worth sending is judgment's call, not a rule's.
 const RuleNotificationDelivery = "notification_delivery"
 
+// RuleNotificationBurst flags the same notification sent over and over: one
+// kind, Session and text more than burstCount times within burstWindow. On
+// 2026-10-30 one permission prompt sent about 100 identical "needs input"
+// pushes in two minutes and nothing noticed. This counts what the daemon
+// emitted, delivered or not: the fault is the sending, not the delivery.
+const RuleNotificationBurst = "notification_burst"
+
+const (
+	burstCount  = 3
+	burstWindow = 10 * time.Minute
+	burstRecent = 6 * time.Hour
+)
+
 // deliverySuppressed is the delivery of a notification the daemon held back.
 const deliverySuppressed = "suppressed"
 
@@ -432,4 +445,48 @@ func ruleNotificationDelivery(store *Store, now time.Time) []Problem {
 			len(failures), firstNonEmpty(reason, "failed"), failures[0].Time.Format(time.RFC3339), latest.Excerpt),
 		Count: len(failures), Evidence: evidenceIDs(failures), FirstSeen: failures[0].Time, LastSeen: latest.Time,
 	}}
+}
+
+// ruleNotificationBurst flags each notification (kind, Session, text) that went
+// out more than burstCount times inside burstWindow during the last
+// burstRecent. Notifications the server held back are not counted: holding
+// them back is the fix, not the fault.
+func ruleNotificationBurst(store *Store, now time.Time) []Problem {
+	groups := map[string][]Signal{}
+	for _, signal := range store.Signals(Filter{Source: SourceNotification, Since: now.Add(-burstRecent)}) {
+		if signal.Refs["delivery"] == deliverySuppressed {
+			continue
+		}
+		key := signal.Kind + "|" + signal.Refs["session"] + "|" + signal.Excerpt
+		groups[key] = append(groups[key], signal)
+	}
+	var out []Problem
+	for key, signals := range groups {
+		if len(signals) <= burstCount {
+			continue
+		}
+		sort.Slice(signals, func(i, j int) bool { return signals[i].Time.Before(signals[j].Time) })
+		burst, start, burstEnd := 0, 0, 0
+		for end := range signals {
+			for signals[end].Time.Sub(signals[start].Time) > burstWindow {
+				start++
+			}
+			if end-start+1 > burst {
+				burst, burstEnd = end-start+1, end
+			}
+		}
+		if burst <= burstCount {
+			continue
+		}
+		first, latest := signals[burstEnd-burst+1], signals[len(signals)-1]
+		out = append(out, Problem{
+			ID: problemID(RuleNotificationBurst, key), ProjectID: latest.ProjectID, Rule: RuleNotificationBurst, Subject: key,
+			Title: fmt.Sprintf("The same notification was sent %d times: %s", burst, excerpt(latest.Excerpt, 100)),
+			Detail: fmt.Sprintf("%d identical %s notifications for %s within %s (from %s); the phone is being flooded and each one asks for the person's attention. Latest: %s",
+				burst, latest.Kind, firstNonEmpty(latest.Refs["session"], "no session"), burstWindow, first.Time.Format(time.RFC3339), latest.Excerpt),
+			Severe: true, Count: burst,
+			Evidence: evidenceIDs(signals[burstEnd-burst+1 : burstEnd+1]), FirstSeen: first.Time, LastSeen: latest.Time,
+		})
+	}
+	return out
 }

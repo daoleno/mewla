@@ -96,6 +96,9 @@ A few clear-cut problems are flagged immediately, without a model:
   receipt (for example a missing push credential). A computer with no phone
   paired sends nothing and is not flagged. Whether a push was *worth* sending
   is never a rule: that is judgment's call.
+- **The same notification sent over and over.** One kind, Session and text sent
+  more than three times within ten minutes, delivered or not. Pushes the
+  daemon held back are not counted.
 
 ### Problems and Work
 

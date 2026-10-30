@@ -59,7 +59,7 @@ func TestPromptGateFilesBlockedWithOptionsAndClears(t *testing.T) {
 	}
 
 	// Answered: the pane no longer shows it.
-	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+	syncAnswered(w, sessionID, worker, turn)
 	if len(ledger.applied) != 2 || ledger.applied[1].Kind != "running" || ledger.applied[1].Attention != "none" {
 		t.Fatalf("the answered prompt was not cleared: %+v", ledger.applied)
 	}
@@ -188,7 +188,7 @@ func TestPromptGateLeavesAHookHeldPermissionToTheHook(t *testing.T) {
 	if len(ledger.applied) != 1 {
 		t.Fatalf("the dialog was reported twice: %+v", ledger.applied)
 	}
-	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+	syncAnswered(w, sessionID, worker, turn)
 	if len(ledger.applied) != 2 || ledger.applied[1].Kind != "running" || w.PanePromptFiled(sessionID) {
 		t.Fatalf("the answered dialog was not cleared: %+v", ledger.applied)
 	}
@@ -305,7 +305,7 @@ func TestPromptGateOpensATurnForADialogAfterTheWorkersTurnSettled(t *testing.T) 
 
 	// Answered: the opened turn settles as done, not running, so Brain reviews
 	// the result the Worker had reported.
-	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+	syncAnswered(w, sessionID, worker, turn)
 	if len(ledger.applied) != 2 || ledger.applied[1].TurnID != turn.TurnID || ledger.applied[1].Kind != "done" {
 		t.Fatalf("the answered dialog did not settle its turn: %+v", ledger.applied)
 	}
@@ -393,5 +393,49 @@ func TestPromptGateOpensTheTurnOnceTheDialogHasStoodForTheWindow(t *testing.T) {
 	w2.forgetLatePrompt(sessionID)
 	if _, seen := w2.latePrompts[sessionID]; seen {
 		t.Fatal("the window survived forgetting the dialog")
+	}
+}
+
+// syncAnswered polls a Session whose pane has stopped showing its filed
+// prompt, once to start the absence and again after the absence has lasted.
+func syncAnswered(w *Watcher, sessionID string, worker classifier.Worker, turn TurnSnapshot) {
+	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+	w.mu.Lock()
+	if gate, ok := w.gates[sessionID]; ok && !gate.absentSince.IsZero() {
+		gate.absentSince = time.Now().Add(-promptGateClearAfter - time.Second)
+		w.gates[sessionID] = gate
+	}
+	w.mu.Unlock()
+	w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+}
+
+// A dialog that blinks out of one poll (a redraw, a half-read frame) is still
+// the same dialog. Filing it answered and then blocked again made one pane
+// state change per blink, and each blocked pushed to the person's phone: about
+// 100 identical "needs input" pushes in two minutes on 2026-10-30.
+func TestPromptGateSurvivesABlinkingDialog(t *testing.T) {
+	w := New(0)
+	sessionID := "mewla-worker-blink:@1"
+	worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateRunning, Command: "claude"}
+	w.workers[sessionID] = &worker
+	w.workerOrder = append(w.workerOrder, sessionID)
+	ledger := newFakeTurnLedger()
+	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:blink", Status: TurnRunning, SignalProtocol: true}
+	ledger.seed(sessionID, turn)
+	w.SetTurnLedger(ledger)
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+
+	turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	for range 20 {
+		turn, _ = w.syncPromptGate(sessionID, worker, true, classifier.ActivitySignal{}, turn, true, nil)
+		turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
+	}
+	if len(ledger.applied) != 1 {
+		t.Fatalf("a blinking dialog was filed %d times, want once: %+v", len(ledger.applied), ledger.applied)
+	}
+	// Answered for real: gone for longer than a blink.
+	syncAnswered(w, sessionID, worker, turn)
+	if len(ledger.applied) != 2 || ledger.applied[1].Kind != "running" {
+		t.Fatalf("the answered dialog was not cleared: %+v", ledger.applied)
 	}
 }
