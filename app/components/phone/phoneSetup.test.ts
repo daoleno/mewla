@@ -9,6 +9,7 @@ import {
   phoneAgentWorking,
   phoneFloatVisible,
   phoneMode,
+  phoneSetupPlan,
   phoneSteps,
 } from "./phoneSetup";
 
@@ -23,6 +24,9 @@ const ready: PhoneStatus = {
   paired: true,
   helper: true,
   accessibility: false,
+  restricted: false,
+  self_healing: true,
+  guide: null,
   notifications: true,
   state: "ready",
   w: 720,
@@ -128,5 +132,45 @@ describe("phone float", () => {
     expect(parseFloatCorner("bottom-left")).toBe("bottom-left");
     expect(parseFloatCorner("middle")).toBe("top-right");
     expect(parseFloatCorner(null)).toBe("top-right");
+  });
+});
+
+describe("phone setup plan", () => {
+  const fresh: PhoneStatus = { ...ready, developer_options: false, wireless_debugging: false, paired: false, helper: false };
+
+  test("the first thing asked is to allow the accessibility service, and why it may not open", () => {
+    expect(phoneSetupPlan(fresh, false)).toMatchObject({ action: "allow", label: "Allow", note: null });
+    expect(phoneSetupPlan({ ...fresh, restricted: true }, false).note).toContain("Allow restricted settings");
+  });
+
+  test("with it on, one Set up walks everything and names the step it is on", () => {
+    const on = { ...fresh, accessibility: true };
+    expect(phoneSetupPlan(on, false)).toMatchObject({ action: "setup", label: "Set up", current: "developer" });
+    expect(phoneSetupPlan({ ...on, guide: { step: "developer", needs: null, stalled: false } }, true).note).toBe("Tapping Build number");
+    expect(phoneSetupPlan({ ...on, developer_options: true, guide: { step: "wireless", needs: null, stalled: false } }, true).note).toBe(
+      "Turning on Wireless debugging",
+    );
+  });
+
+  test("only what Android reserves for the person is asked of them", () => {
+    const on = { ...fresh, accessibility: true };
+    expect(phoneSetupPlan({ ...on, guide: { step: "developer", needs: "lock", stalled: false } }, true).note).toBe("Confirm your screen lock");
+    expect(phoneSetupPlan({ ...on, developer_options: true, guide: { step: "wireless", needs: "allow", stalled: false } }, true)).toMatchObject({
+      current: "wireless",
+      note: "Tap Allow on the system prompt",
+    });
+  });
+
+  test("a step that stops getting anywhere falls back to its manual hint, at that step only", () => {
+    const on = { ...fresh, accessibility: true };
+    expect(phoneSetupPlan({ ...on, guide: { step: "developer", needs: null, stalled: true } }, true)).toMatchObject({
+      current: "developer",
+      note: "Tap Build number 7 times",
+    });
+  });
+
+  test("off Wi-Fi the Wi-Fi page is offered, and a paired phone only needs its helper started", () => {
+    expect(phoneSetupPlan({ ...fresh, accessibility: true, wifi: false, developer_options: true }, false).action).toBe("wifi");
+    expect(phoneSetupPlan({ ...ready, helper: false }, false)).toMatchObject({ action: "start", current: "helper" });
   });
 });
