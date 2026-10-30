@@ -11,7 +11,7 @@ import {
   CODEX_COMMAND,
   CURSOR_AGENT_COMMAND,
   GROK_COMMAND,
-  OPENCODE_COMMAND,
+  OPENCODE_AUTO_COMMAND,
   PI_COMMAND,
   DSH_COMMAND,
 } from "../../services/agentCommands";
@@ -38,7 +38,7 @@ const LAUNCH_PRESETS: readonly NewTerminalLaunchPreset[] = [
   { key: "cursor", kind: "cursor", label: "Cursor", command: CURSOR_AGENT_COMMAND },
   { key: "grok", kind: "grok", label: "Grok", command: GROK_COMMAND },
   { key: "pi", kind: "pi", label: "Pi", command: PI_COMMAND },
-  { key: "opencode", kind: "opencode", label: "OpenCode", command: OPENCODE_COMMAND },
+  { key: "opencode", kind: "opencode", label: "OpenCode", command: OPENCODE_AUTO_COMMAND },
   { key: "dsh", kind: "dsh", label: "DSH", command: DSH_COMMAND },
 ];
 

@@ -11,12 +11,12 @@ these; one installed, signed-in CLI is enough:
 
 | Executor | Command | Approval prompts |
 | --- | --- | --- |
-| `claude` | `claude` | The CLI's own policy |
-| `codex` | `codex` | The CLI's own policy |
+| `claude` | `claude` | None: Mewla adds `--permission-mode bypassPermissions` |
+| `codex` | `codex` | None: Mewla adds `--dangerously-bypass-approvals-and-sandbox` |
 | `agent` (Cursor) | `cursor-agent --force --sandbox disabled` | Bypassed |
 | `grok` | `grok --no-alt-screen --permission-mode bypassPermissions` | Bypassed |
 | `pi` | `pi` | None; Pi is always permissive |
-| `opencode` | `opencode` (OpenCode 2 only) | The CLI's own policy |
+| `opencode` | `opencode` (OpenCode 2 only) | None: Mewla adds `--auto` |
 | `dsh` | `dsh` | Opens the DSH web harness, not a terminal agent |
 
 A Session's type follows the program that actually runs: a Cursor Session using

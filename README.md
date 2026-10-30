@@ -81,8 +81,8 @@ Other ways to connect, such as the same Wi-Fi only or Tailscale, are in
 [Get started](docs/get-started.md).
 
 > [!WARNING]
-> Brain's Workers run without approval prompts, and some built-in agent
-> commands skip them too. On a machine with secrets or production access, read
+> Every agent Mewla launches runs with full authority: no approval prompts, no
+> sandbox. On a machine with secrets or production access, read
 > [Permission bypass risks](docs/executors.md#permission-bypass-risks) first.
 
 ## Status
