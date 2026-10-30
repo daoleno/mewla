@@ -51,6 +51,8 @@ type postView struct {
 	Liked      bool       `json:"liked"`
 	Bookmarked bool       `json:"bookmarked"`
 	Mine       bool       `json:"mine"`
+	// Media is up to four images or one video. Absent for a text post.
+	Media []mediaView `json:"media,omitempty"`
 }
 
 func scanPost(row interface{ Scan(...any) error }, me string) (postView, error) {
@@ -67,7 +69,15 @@ func scanPost(row interface{ Scan(...any) error }, me string) (postView, error) 
 
 // visiblePost loads a post the viewer may see.
 func (s *Service) visiblePost(ctx context.Context, me personRecord, id string) (postView, error) {
-	return scanPost(s.config.Store.db.QueryRowContext(ctx, postSelect+` WHERE p.id = ?2 AND `+canSee, me.ID, id), me.ID)
+	post, err := scanPost(s.config.Store.db.QueryRowContext(ctx, postSelect+` WHERE p.id = ?2 AND `+canSee, me.ID, id), me.ID)
+	if err != nil {
+		return post, err
+	}
+	posts := []postView{post}
+	if err := s.attachMedia(ctx, posts); err != nil {
+		return postView{}, err
+	}
+	return posts[0], nil
 }
 
 func (s *Service) listPosts(ctx context.Context, me personRecord, where string, args []any, cursor string) ([]postView, string, error) {
@@ -92,6 +102,10 @@ func (s *Service) listPosts(ctx context.Context, me personRecord, where string, 
 		posts = append(posts, v)
 	}
 	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	rows.Close()
+	if err := s.attachMedia(ctx, posts); err != nil {
 		return nil, "", err
 	}
 	next := ""
@@ -163,6 +177,8 @@ func (s *Service) handleCreatePost(w http.ResponseWriter, r *http.Request, me pe
 		Text      string `json:"text"`
 		Via       string `json:"via"`
 		ClientRef string `json:"client_ref"`
+		// Media lists upload ids: up to four images or one video.
+		Media []string `json:"media"`
 	}
 	if !decodeJSON(w, r, &request) {
 		return
@@ -199,9 +215,18 @@ func (s *Service) handleCreatePost(w http.ResponseWriter, r *http.Request, me pe
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "text_refused", "kinds": findingKinds(findings)})
 		return
 	}
+	attached, problem := s.resolveAttachments(ctx, me, request.Media)
+	if problem != "" {
+		writeError(w, http.StatusBadRequest, problem)
+		return
+	}
 	if request.Via == "auto" {
 		if !me.AutoPost {
 			writeError(w, http.StatusForbidden, "auto_post_off")
+			return
+		}
+		if len(request.Media) > 0 && !me.AutoMedia {
+			writeError(w, http.StatusForbidden, "auto_media_off")
 			return
 		}
 		n, err := s.countToday(ctx, me, true)
@@ -228,9 +253,23 @@ func (s *Service) handleCreatePost(w http.ResponseWriter, r *http.Request, me pe
 		s.internalError(w, "post id", err)
 		return
 	}
-	if _, err := s.config.Store.db.ExecContext(ctx,
+	tx, err := s.config.Store.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.internalError(w, "insert post", err)
+		return
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO posts (id, person_id, text, via, client_ref, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		id, me.ID, text, request.Via, request.ClientRef, s.now().UnixMilli()); err != nil {
+		s.internalError(w, "insert post", err)
+		return
+	}
+	if err := attached.attach(ctx, tx, id); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_media")
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		s.internalError(w, "insert post", err)
 		return
 	}
@@ -314,6 +353,8 @@ func (s *Service) handleDeletePost(w http.ResponseWriter, r *http.Request, me pe
 	}
 	_, _ = s.config.Store.db.ExecContext(r.Context(), `DELETE FROM reports WHERE kind = 'post' AND target_id = ?`, r.PathValue("id"))
 	_, _ = s.config.Store.db.ExecContext(r.Context(), `DELETE FROM notifications WHERE post_id = ?`, r.PathValue("id"))
+	// The post's media rows went with it and queued their objects.
+	s.drainTrash(r.Context())
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 

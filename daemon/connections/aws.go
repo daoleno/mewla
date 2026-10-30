@@ -102,7 +102,9 @@ func runAWS(ctx context.Context, c awsCommand) ([]byte, error) {
 		if err := os.WriteFile(path, c.Input, 0o600); err != nil {
 			return nil, errors.New("could not prepare the AWS call")
 		}
-		args = append(append([]string{}, args...), "--cli-input-json=file://"+path)
+		// Two arguments, not "--cli-input-json=file://...": AWS CLI 2.x resolves
+		// file:// only in the spaced form and reads the "=" form as no parameters.
+		args = append(append([]string{}, args...), "--cli-input-json", "file://"+path)
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = c.Env
@@ -212,8 +214,8 @@ func awsProfileKind(settings map[string]string) string {
 	return "other"
 }
 
-// awsProfiles lists the profiles of this computer's AWS CLI, sorted by name.
-func awsProfiles() []AWSProfile {
+// awsMergedProfiles is the settings of every profile, credentials file first.
+func awsMergedProfiles() map[string]map[string]string {
 	configFile, credentialsFile := awsConfigFiles()
 	merged := map[string]map[string]string{}
 	for name, s := range parseAWSFile(credentialsFile, false) {
@@ -227,6 +229,15 @@ func awsProfiles() []AWSProfile {
 			merged[name][k] = v
 		}
 	}
+	return merged
+}
+
+// awsProfileSettings is one profile's settings, empty when it is not there.
+func awsProfileSettings(name string) map[string]string { return awsMergedProfiles()[name] }
+
+// awsProfiles lists the profiles of this computer's AWS CLI, sorted by name.
+func awsProfiles() []AWSProfile {
+	merged := awsMergedProfiles()
 	out := make([]AWSProfile, 0, len(merged))
 	for name, s := range merged {
 		if awsProfileName.MatchString(name) {
@@ -522,11 +533,23 @@ func discoverAWS(m *Manager, ctx context.Context, r *record, secret string) ([]T
 		return nil, err
 	}
 	a.Identity = id.Arn
+	previous := a.AWS
+	a.AWS = m.awsDetails(ctx, r, secret, id)
+	awsAdoptName(r, previous)
 	return awsTools(), nil
 }
 
 // awsAccountID is the 12-digit account of an identity, as the account name uses it.
 func awsAccountName(id awsIdentity) string { return "AWS " + id.Account }
+
+// awsNewAccountName is the name a new account starts with: the AWS account's
+// name if it can be read, else "AWS" and the account ID.
+func awsNewAccountName(id awsIdentity, d *AWSDetails) string {
+	if d != nil && d.AccountName != "" {
+		return d.AccountName
+	}
+	return awsAccountName(id)
+}
 
 func addAWSDriver(m *Manager, ctx context.Context, in *Input) (Response, error) {
 	profile := strings.TrimSpace(in.Profile)
@@ -579,7 +602,7 @@ func addAWSDriver(m *Manager, ctx context.Context, in *Input) (Response, error) 
 	}
 	if r == nil {
 		r = cand
-		r.Account.Name = awsAccountName(id)
+		r.Account.Name = awsNewAccountName(id, cand.Account.AWS)
 		for _, other := range m.records {
 			if other.Account.Name == r.Account.Name && other.Account.Integration == "aws" && other.Account.Status != "disconnected" {
 				if method == awsMethodProfile {
@@ -599,7 +622,9 @@ func addAWSDriver(m *Manager, ctx context.Context, in *Input) (Response, error) 
 	}
 	isNew := r == cand
 	if !isNew {
-		r.Account.Tools, r.Account.Identity, r.Account.Region = cand.Account.Tools, cand.Account.Identity, cand.Account.Region
+		previous := r.Account.AWS
+		r.Account.Tools, r.Account.Identity, r.Account.Region, r.Account.AWS = cand.Account.Tools, cand.Account.Identity, cand.Account.Region, cand.Account.AWS
+		awsAdoptName(r, previous)
 		r.Account.Status, r.Account.VerifiedAt, r.Account.Enabled = cand.Account.Status, cand.Account.VerifiedAt, true
 	}
 	before := map[string]bool{}
@@ -808,7 +833,7 @@ func (m *Manager) awsCall(ctx context.Context, r *record, secret, tool string, a
 			return nil, errors.New("AWS returned something that is not JSON; use query to return JSON")
 		}
 	}
-	reply := map[string]any{"account": strings.TrimPrefix(r.Account.Name, "AWS "), "service": op.Service, "operation": op.Name, "result": awsRedact(result)}
+	reply := map[string]any{"account": awsAccountID(r), "service": op.Service, "operation": op.Name, "result": awsRedact(result)}
 	if region != "" {
 		reply["region"] = region
 	} else if r.Account.Region != "" {

@@ -47,6 +47,7 @@ func evaluateRules(store *Store, now time.Time) (int, error) {
 		RuleWorkerStalls:  ruleWorkerStalls,
 
 		RuleNotificationDelivery: ruleNotificationDelivery,
+		RuleNotificationBurst:    ruleNotificationBurst,
 	} {
 		n, err := store.RecordProblems(rule, evaluate(store, now))
 		if err != nil {

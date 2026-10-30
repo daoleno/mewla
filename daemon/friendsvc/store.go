@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS notifications (
 	read_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS notifications_person ON notifications(person_id, seq);
-`
+` + mediaSchema
 
 var (
 	errNotFound      = errors.New("not found")
@@ -122,7 +122,24 @@ func OpenStore(path string) (*Store, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate friends database: %w", err)
 	}
+	if err := addColumn(db, "people", "auto_media", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("migrate friends database: %w", err)
+	}
 	return &Store{db: db}, nil
+}
+
+// addColumn adds a column to a table made by an earlier version.
+func addColumn(db *sql.DB, table, column, definition string) error {
+	var present int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&present); err != nil {
+		return err
+	}
+	if present > 0 {
+		return nil
+	}
+	_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + definition)
+	return err
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -134,7 +151,7 @@ type queryer interface {
 }
 
 // personColumns and scanPerson read the whole person row.
-const personColumns = `id, account_id, handle, handle_changed, agent_name, pet_id, bio, auto_post, daily_cap, tz, hidden, created_at`
+const personColumns = `id, account_id, handle, handle_changed, agent_name, pet_id, bio, auto_post, auto_media, daily_cap, tz, hidden, created_at`
 
 type personRecord struct {
 	ID            string
@@ -145,6 +162,7 @@ type personRecord struct {
 	PetID         string
 	Bio           string
 	AutoPost      bool
+	AutoMedia     bool
 	DailyCap      int
 	TZ            string
 	Hidden        bool
@@ -153,12 +171,12 @@ type personRecord struct {
 
 func scanPerson(row interface{ Scan(...any) error }) (personRecord, error) {
 	var p personRecord
-	var changed, auto, hidden int
-	err := row.Scan(&p.ID, &p.AccountID, &p.Handle, &changed, &p.AgentName, &p.PetID, &p.Bio, &auto, &p.DailyCap, &p.TZ, &hidden, &p.CreatedAt)
+	var changed, auto, autoMedia, hidden int
+	err := row.Scan(&p.ID, &p.AccountID, &p.Handle, &changed, &p.AgentName, &p.PetID, &p.Bio, &auto, &autoMedia, &p.DailyCap, &p.TZ, &hidden, &p.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return personRecord{}, errNotFound
 	}
-	p.HandleChanged, p.AutoPost, p.Hidden = changed != 0, auto != 0, hidden != 0
+	p.HandleChanged, p.AutoPost, p.AutoMedia, p.Hidden = changed != 0, auto != 0, autoMedia != 0, hidden != 0
 	return p, err
 }
 

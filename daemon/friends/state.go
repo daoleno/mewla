@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
@@ -45,6 +46,10 @@ type Draft struct {
 	Text      string    `json:"text"`
 	Source    string    `json:"source,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	// Media is up to four images or one video, already prepared; the files
+	// live in <state>/friends/drafts/<id>.media until the draft is posted or
+	// discarded.
+	Media []MediaFile `json:"media,omitempty"`
 }
 
 // Store keeps the state and drafts under <state dir>/friends.
@@ -99,8 +104,18 @@ func (s *Store) State() (State, error) {
 // Clear forgets the state and every draft.
 func (s *Store) Clear() error { return os.RemoveAll(s.Dir) }
 
+// MediaDir is where a draft keeps its prepared media.
+func (s *Store) MediaDir(id string) string { return filepath.Join(s.Dir, "drafts", id+".media") }
+
 // AddDraft stores a draft that already passed the scrubber.
 func (s *Store) AddDraft(text, source string) (Draft, error) {
+	return s.AddDraftWithMedia(text, source, nil, nil)
+}
+
+// AddDraftWithMedia stores a draft with media. prepare is given the draft's
+// media directory and returns the prepared files; when it fails nothing is
+// kept.
+func (s *Store) AddDraftWithMedia(text, source string, sources []string, prepare func(sources []string, dir string) ([]MediaFile, error)) (Draft, error) {
 	if _, err := s.State(); err != nil {
 		return Draft{}, err
 	}
@@ -116,6 +131,17 @@ func (s *Store) AddDraft(text, source string) (Draft, error) {
 		return Draft{}, err
 	}
 	draft := Draft{ID: hex.EncodeToString(raw), Text: text, Source: source, CreatedAt: s.now().UTC()}
+	if len(sources) > 0 {
+		if err := s.ensure(); err != nil {
+			return Draft{}, err
+		}
+		files, err := prepare(sources, s.MediaDir(draft.ID))
+		if err != nil {
+			_ = os.RemoveAll(s.MediaDir(draft.ID))
+			return Draft{}, err
+		}
+		draft.Media = files
+	}
 	encoded, err := json.Marshal(draft)
 	if err != nil {
 		return Draft{}, err
@@ -123,7 +149,44 @@ func (s *Store) AddDraft(text, source string) (Draft, error) {
 	if err := s.ensure(); err != nil {
 		return Draft{}, err
 	}
-	return draft, atomicfile.Write(filepath.Join(s.Dir, "drafts", draft.ID+".json"), encoded, 0o600)
+	if err := atomicfile.Write(filepath.Join(s.Dir, "drafts", draft.ID+".json"), encoded, 0o600); err != nil {
+		_ = os.RemoveAll(s.MediaDir(draft.ID))
+		return Draft{}, err
+	}
+	return draft, nil
+}
+
+// SaveDraft rewrites a draft that already exists.
+func (s *Store) SaveDraft(draft Draft) error {
+	encoded, err := json.Marshal(draft)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(filepath.Join(s.Dir, "drafts", draft.ID+".json"), encoded, 0o600)
+}
+
+// RemoveDraftMedia drops one media item from a draft and deletes its files. A
+// video goes with its poster. The last item may be removed: the draft is then
+// text only.
+func (s *Store) RemoveDraftMedia(id string, index int) (Draft, error) {
+	draft, err := s.Draft(id)
+	if err != nil {
+		return Draft{}, err
+	}
+	if index < 0 || index >= len(draft.Media) {
+		return Draft{}, errors.New("no such media in this draft")
+	}
+	removed := draft.Media[index]
+	draft.Media = append(append([]MediaFile{}, draft.Media[:index]...), draft.Media[index+1:]...)
+	if err := s.SaveDraft(draft); err != nil {
+		return Draft{}, err
+	}
+	dir := s.MediaDir(id)
+	_ = os.Remove(filepath.Join(dir, removed.File))
+	if removed.Poster != nil {
+		_ = os.Remove(filepath.Join(dir, removed.Poster.File))
+	}
+	return draft, nil
 }
 
 // Drafts lists waiting drafts, oldest first, and deletes the expired.
@@ -137,6 +200,9 @@ func (s *Store) Drafts() ([]Draft, error) {
 	}
 	var drafts []Draft
 	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
 		path := filepath.Join(s.Dir, "drafts", entry.Name())
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -148,6 +214,7 @@ func (s *Store) Drafts() ([]Draft, error) {
 		}
 		if s.now().Sub(draft.CreatedAt) > DraftTTL {
 			_ = os.Remove(path)
+			_ = os.RemoveAll(s.MediaDir(draft.ID))
 			continue
 		}
 		drafts = append(drafts, draft)
@@ -179,7 +246,7 @@ func (s *Store) RemoveDraft(id string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return nil
+	return os.RemoveAll(s.MediaDir(id))
 }
 
 // ErrNoDraft means there is no such draft.

@@ -41,6 +41,8 @@ import {
 } from "../terminal/InterfaceTimelineModel";
 import { useInterfaceTimelineItems } from "../terminal/useInterfaceTimelineItems";
 import { TerminalTopBar } from "../terminal/TerminalTopBar";
+import { describeGitDiffTopBarButton } from "../terminal/gitDiffPresentation";
+import type { TerminalGitDiffSummary } from "../terminal/useTerminalGitDiff";
 import { GitDiffSheet } from "../terminal/GitDiffSheet";
 import { TerminalPaletteFixture } from "../terminal/TerminalPaletteFixture";
 import { useTerminalThemeChrome } from "../terminal/screen/useTerminalThemeChrome";
@@ -120,6 +122,15 @@ import { Icon } from "../icons/Icon";
 import { ComputersScreenshotDemo } from "./ComputersScreenshotDemo";
 
 const NOOP = () => undefined;
+
+const DEMO_GIT_SUMMARY: TerminalGitDiffSummary = {
+  label: "3 files changed",
+  tone: "dirty",
+  additions: 42,
+  deletions: 9,
+  fileCount: 3,
+  showStats: true,
+};
 const loadNoDemoAsset = async () => null;
 
 export default function ScreenshotDemoScreen() {
@@ -521,13 +532,12 @@ function ChatDemo() {
             menuAnchorRef={menuAnchorRef}
             interfaceRenderMode="chat"
             gitDiffDisabled={false}
-            gitDiffPresentation={{
-              accessibilityLabel: "Open changes",
-              backgroundColor: chrome.accentSoft,
-              iconColor: chrome.accent,
-              additionsText: "+42",
-              deletionsText: "−9",
-            }}
+            gitDiffPresentation={describeGitDiffTopBarButton({
+              chrome,
+              disabled: false,
+              summary: DEMO_GIT_SUMMARY,
+              terminalTheme: theme,
+            })}
             isStructuredChatWorker
             onBack={NOOP}
             onOpenGitDiff={NOOP}
@@ -692,11 +702,12 @@ function TerminalPaletteDemo() {
         menuAnchorRef={menuAnchorRef}
         interfaceRenderMode="terminal"
         gitDiffDisabled={false}
-        gitDiffPresentation={{
-          accessibilityLabel: "Open changes",
-          backgroundColor: "transparent",
-          iconColor: chromeColors.text,
-        }}
+        gitDiffPresentation={describeGitDiffTopBarButton({
+          chrome: chromeColors,
+          disabled: false,
+          summary: DEMO_GIT_SUMMARY,
+          terminalTheme,
+        })}
         isStructuredChatWorker={false}
         status="running"
         onBack={NOOP}

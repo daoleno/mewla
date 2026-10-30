@@ -1,3 +1,7 @@
+import type {
+  TerminalThemeChrome,
+  TerminalThemePalette,
+} from "../../constants/terminalThemes";
 import type { IconName } from "../icons/Icon";
 import {
   describeGitDiffScope,
@@ -5,6 +9,8 @@ import {
   type GitDiffFileInfo,
   type GitDiffScope,
 } from "../../services/gitDiff";
+import type { TerminalTopBarGitDiffPresentation } from "./TerminalTopBar";
+import type { TerminalGitDiffSummary } from "./useTerminalGitDiff";
 
 export type GitDiffStatusTone =
   | "added"
@@ -160,4 +166,77 @@ export function gitDiffToneColor(
     case "binary":
       return muted;
   }
+}
+
+/** `999`, `1.2k`, `12k`: change counts that stay narrow in the top bar. */
+export function formatGitDelta(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0";
+  }
+  if (value < 1000) {
+    return String(value);
+  }
+  if (value < 10000) {
+    return `${(value / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  }
+  return `${Math.round(value / 1000)}k`;
+}
+
+/**
+ * The top-bar Git button. Clean and unknown stay muted; uncommitted work is
+ * the one state worth a glance, so it gets full ink, its `+12 \u22123` counts in
+ * the terminal's change colours (a side with no lines is left out), and a dot
+ * when it has no countable lines (untracked or binary files only).
+ */
+export function describeGitDiffTopBarButton({
+  chrome,
+  disabled,
+  summary,
+  terminalTheme,
+}: {
+  chrome: TerminalThemeChrome;
+  disabled: boolean;
+  summary: TerminalGitDiffSummary | null;
+  terminalTheme: Pick<TerminalThemePalette, "green" | "red">;
+}): TerminalTopBarGitDiffPresentation {
+  if (!summary) {
+    return {
+      accessibilityLabel: "Open Git diff",
+      backgroundColor: "transparent",
+      iconColor: disabled ? chrome.textSubtle : chrome.textMuted,
+    };
+  }
+
+  const statsLabel = summary.showStats
+    ? `+${formatGitDelta(summary.additions)} -${formatGitDelta(summary.deletions)}`
+    : "";
+  const base = {
+    accessibilityLabel: ["Open Git diff", summary.label, statsLabel]
+      .filter(Boolean)
+      .join(", "),
+    backgroundColor: "transparent",
+  };
+  if (disabled) {
+    return { ...base, iconColor: chrome.textSubtle };
+  }
+  if (summary.tone === "error") {
+    return { ...base, iconColor: chrome.danger };
+  }
+  if (summary.tone !== "dirty") {
+    return { ...base, iconColor: chrome.textMuted };
+  }
+
+  const additions = summary.showStats && summary.additions > 0;
+  const deletions = summary.showStats && summary.deletions > 0;
+  return {
+    ...base,
+    iconColor: chrome.accent,
+    additionsText: additions ? `+${formatGitDelta(summary.additions)}` : undefined,
+    additionsColor: additions ? terminalTheme.green : undefined,
+    deletionsText: deletions
+      ? `\u2212${formatGitDelta(summary.deletions)}`
+      : undefined,
+    deletionsColor: deletions ? terminalTheme.red : undefined,
+    markColor: additions || deletions ? undefined : chrome.accent,
+  };
 }

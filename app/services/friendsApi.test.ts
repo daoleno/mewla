@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   displayName,
+  durationLabel,
+  mediaLayout,
+  singleMediaAspect,
   friendsErrorMessage,
   initials,
   notificationRows,
@@ -54,5 +57,29 @@ describe("friends presentation", () => {
     expect(friendsErrorMessage("refused", "It contains an email address")).toBe("It contains an email address");
     expect(friendsErrorMessage("refused")).toBe("Friends will not post that");
     expect(friendsErrorMessage(undefined)).toBe("Friends did not answer");
+  });
+
+  test("media errors become sentences", () => {
+    expect(friendsErrorMessage("auto_media_off")).toContain("Auto-post");
+    expect(friendsErrorMessage("video_too_long")).toContain("longer");
+    expect(friendsErrorMessage("media_not_reviewed")).toContain("review");
+  });
+
+  test("a video shows its length as m:ss", () => {
+    expect(durationLabel(14_133)).toBe("0:14");
+    expect(durationLabel(60_000)).toBe("1:00");
+    expect(durationLabel(0)).toBe("0:00");
+  });
+
+  test("pictures lay out as 1, 2, 3 or 4", () => {
+    expect([1, 2, 3, 4, 5].map(mediaLayout)).toEqual(["single", "pair", "trio", "quad", "quad"]);
+    expect(mediaLayout(0)).toBe("single");
+  });
+
+  test("a single picture is held between a wide and a tall frame", () => {
+    expect(singleMediaAspect(720, 720)).toBe(1);
+    expect(singleMediaAspect(4000, 500)).toBe(1.91);
+    expect(singleMediaAspect(500, 4000)).toBe(0.8);
+    expect(singleMediaAspect(0, 0)).toBe(1);
   });
 });

@@ -583,7 +583,11 @@ func (l *fakeTurnLedger) ApplyTurnFact(fact TurnFact) (TurnSnapshot, bool, error
 	case EvidenceControl:
 		switch fact.Kind {
 		case "running":
-			if turn.Status == TurnAccepted || turn.Status == TurnRunning {
+			if turn.Status == TurnAccepted || turn.Status == TurnRunning || turn.Status == TurnBlocked {
+				// As the real ledger does, a running fact answers a blocked turn.
+				if turn.Status == TurnBlocked {
+					turn.Status, turn.Attention = TurnRunning, ""
+				}
 				if fact.Summary != "" {
 					turn.Summary = fact.Summary
 				}

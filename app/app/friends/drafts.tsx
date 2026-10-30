@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
@@ -8,8 +9,8 @@ import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { Icon } from "../../components/icons/Icon";
 import { FriendsAvatar } from "../../components/friends/FriendsAvatar";
-import { checkDraftText, discardDraft, postDraft } from "../../services/friendsAccount";
-import { FRIENDS_POST_LIMIT, relativeTime, type FriendsDraft } from "../../services/friendsApi";
+import { checkDraftText, discardDraft, draftMediaImage, postDraft, removeDraftMedia } from "../../services/friendsAccount";
+import { FRIENDS_POST_LIMIT, durationLabel, relativeTime, type FriendsDraft, type FriendsDraftMedia } from "../../services/friendsApi";
 import { useCurrentServer } from "../../store/currentServer";
 import { useFriendsLabs } from "../../store/friendsLabs";
 
@@ -74,7 +75,8 @@ function DraftCard({ draft }: { draft: FriendsDraft }) {
     if (!currentServer || busy) return;
     setBusy(true);
     try {
-      const answer = await postDraft(currentServer, draft.id, text.trim());
+      // The files shown below are what the owner reviews; the computer posts the draft only if they match.
+      const answer = await postDraft(currentServer, draft.id, text.trim(), (draft.media ?? []).map((item) => item.file));
       await refresh();
       router.replace({ pathname: "/friends/post/[id]", params: { id: answer.post.id } });
     } catch (reason) {
@@ -82,6 +84,14 @@ function DraftCard({ draft }: { draft: FriendsDraft }) {
     } finally {
       setBusy(false);
     }
+  };
+  const removeMedia = (index: number) => {
+    if (!currentServer || busy) return;
+    setBusy(true);
+    removeDraftMedia(currentServer, draft.id, index)
+      .then(() => refresh())
+      .catch((reason) => setProblem(reason instanceof Error ? reason.message : "Could not remove that"))
+      .finally(() => setBusy(false));
   };
   const discard = () => {
     if (!currentServer || busy) return;
@@ -126,6 +136,13 @@ function DraftCard({ draft }: { draft: FriendsDraft }) {
         accessibilityLabel="Draft text"
         style={[styles.input, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle, color: colors.textPrimary }]}
       />
+      {draft.media?.length ? (
+        <View style={styles.mediaRow}>
+          {draft.media.map((item, index) => (
+            <DraftMediaTile key={item.file} draftId={draft.id} item={item} busy={busy} onRemove={() => removeMedia(index)} />
+          ))}
+        </View>
+      ) : null}
       <View style={styles.check}>
         <Icon name={problem ? "alert-circle" : "shield-check"} color={problem ? colors.dangerText : colors.success} size={20} />
         <AppText variant="caption" tone={problem ? "danger" : "secondary"} style={styles.checkText}>
@@ -143,7 +160,48 @@ function DraftCard({ draft }: { draft: FriendsDraft }) {
   );
 }
 
+/** One picture (or a video's poster) of a draft, loaded from the computer, with a button to take it off. */
+function DraftMediaTile({ draftId, item, busy, onRemove }: { draftId: string; item: FriendsDraftMedia; busy: boolean; onRemove(): void }) {
+  const { colors } = useAppTheme();
+  const { currentServer } = useCurrentServer();
+  const [uri, setUri] = useState<string | null>(null);
+  const shown = item.poster?.file ?? item.file;
+  useEffect(() => {
+    if (!currentServer) return;
+    let cancelled = false;
+    draftMediaImage(currentServer, draftId, shown)
+      .then((image) => {
+        if (!cancelled) setUri(image.uri);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentServer, draftId, shown]);
+  return (
+    <View style={[styles.mediaTile, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
+      {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityIgnoresInvertColors accessibilityLabel={item.kind === "video" ? "Video" : "Picture"} /> : null}
+      {item.kind === "video" ? (
+        <View style={styles.tileBadge}>
+          <Icon name="play" color="#FFFFFF" size={14} />
+          <AppText variant="micro" style={styles.tileBadgeText}>
+            {durationLabel(item.duration_ms ?? 0)}
+          </AppText>
+        </View>
+      ) : null}
+      <Pressable style={styles.tileRemove} hitSlop={8} disabled={busy} accessibilityRole="button" accessibilityLabel="Remove from post" onPress={onRemove}>
+        <Icon name="close" color="#FFFFFF" size={14} />
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  mediaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  mediaTile: { width: 96, height: 96, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
+  tileRemove: { position: "absolute", top: 6, right: 6, width: 24, height: 24, borderRadius: 12, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center" },
+  tileBadge: { position: "absolute", left: 6, bottom: 6, flexDirection: "row", alignItems: "center", gap: 3, borderRadius: 8, backgroundColor: "rgba(0,0,0,0.55)", paddingHorizontal: 6, paddingVertical: 2 },
+  tileBadgeText: { color: "#FFFFFF" },
   content: { padding: 16, gap: 16 },
   card: { borderRadius: 28, borderWidth: 1.5, padding: 16, gap: 12 },
   head: { flexDirection: "row", alignItems: "center", gap: 12 },

@@ -106,7 +106,7 @@ func (s *Server) webUIHandler() http.Handler {
 			"style-src 'self' 'unsafe-inline'",
 			"img-src 'self' data: blob: https:",
 			"font-src 'self' data:",
-			"media-src 'self' data: blob:",
+			"media-src 'self' data: blob: https:",
 			"connect-src 'self' ws://" + host + " wss://" + host,
 			"worker-src 'self' blob:",
 			"frame-src 'none'",
