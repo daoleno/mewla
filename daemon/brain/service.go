@@ -344,8 +344,11 @@ func (s *Service) ReconcileSignalSystemStartup(workers []*classifier.Worker, lim
 		if currentTurnErr != nil {
 			return false, currentTurnErr
 		}
-		live := worker != nil && (worker.State == classifier.StateRunning || worker.State == classifier.StateBlocked) &&
-			hasTurn && !watcher.TurnImmutable(turn.Status) && hasCurrentTurn && currentTurn.TurnID == handling.ProviderTurnID
+		// The exact ledger Turn decides, not the projected pane state: a
+		// restart sees "unknown" for a Host whose Turn is still running.
+		live := worker != nil && hasTurn && !watcher.TurnTerminal(turn.Status) &&
+			turn.ControlState != watcher.TurnControlOwnershipLost &&
+			hasCurrentTurn && currentTurn.TurnID == handling.ProviderTurnID
 		if !live {
 			// The delivered lease ends without a disposition; the same
 			// unresolved action remains visible for explicit recovery (row 16).
@@ -1827,6 +1830,17 @@ func (s *Service) ObserveHostSessionEvent(event watcher.SessionEvent) (bool, err
 			for _, handling := range handlings {
 				if handling.DeliveryHostSessionID == workerID &&
 					handling.ProviderTurnID == strings.TrimSpace(event.TurnID) {
+					// The projected pane state is a trigger, not proof: it reads
+					// "unknown" while the exact Turn is still running (admission
+					// and poll projection race), which ended every handling a few
+					// seconds after delivery. Only the ledger Turn ends it.
+					ended, endedErr := s.store.HostTurnEnded(handling.DeliveryHostSessionID, handling.ProviderTurnID)
+					if endedErr != nil {
+						return false, endedErr
+					}
+					if !ended {
+						break
+					}
 					_, handlingEnded, err = s.store.EndReviewDelivery(
 						handling.WorkID, handling.HandlingID, handling.ProviderTurnID,
 					)
