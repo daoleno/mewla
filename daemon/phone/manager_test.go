@@ -26,7 +26,7 @@ func tap(m *Manager, worker string) (Reply, error) {
 }
 
 func TestTheManagerRefusesWhatThePhoneCannotDo(t *testing.T) {
-	m := NewManager(Options{})
+	m := NewManager(Options{Reconnect: -1})
 	if _, err := tap(m, "w1"); code(err) != CodeNotConnected {
 		t.Fatalf("no phone: %v", err)
 	}
@@ -529,5 +529,50 @@ func TestAnAgentThatCannotHaveThePhoneIsToldAtOnceNotAfterAHandoff(t *testing.T)
 	}
 	if _, err := tap(m, "w2"); code(err) != CodeStopped {
 		t.Fatalf("after stop: %v", err)
+	}
+}
+
+func TestAnActionWaitsForThePhoneToReconnect(t *testing.T) {
+	m := NewManager(Options{Reconnect: 2 * time.Second})
+	link, _ := connect(t, m, StateReady, okResult(nil))
+	link.Detach()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := tap(m, "w1")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("the action did not wait for the phone: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	_, conn := connect(t, m, StateReady, okResult(nil))
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("after the phone came back: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the action never ran after the phone came back")
+	}
+	if ops := conn.ops(); len(ops) != 1 || ops[0] != OpTap {
+		t.Fatalf("ops %v", ops)
+	}
+}
+
+func TestAnActionGivesUpWhenThePhoneStaysAway(t *testing.T) {
+	m := NewManager(Options{Reconnect: 80 * time.Millisecond})
+	start := time.Now()
+	if _, err := tap(m, "w1"); code(err) != CodeNotConnected {
+		t.Fatalf("no phone: %v", err)
+	}
+	if d := time.Since(start); d < 70*time.Millisecond || d > time.Second {
+		t.Fatalf("waited %v", d)
+	}
+	// The daemon's own release never waits for a phone.
+	start = time.Now()
+	if _, err := m.Do(context.Background(), "", "", OpRelease, nil, false); err != nil || time.Since(start) > 50*time.Millisecond {
+		t.Fatalf("release: %v after %v", err, time.Since(start))
 	}
 }

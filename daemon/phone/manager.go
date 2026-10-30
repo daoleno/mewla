@@ -26,6 +26,9 @@ const (
 	DefaultTimeout = 30 * time.Second
 	// DefaultIdle is how long the phone's display stays with an agent that does nothing.
 	DefaultIdle = 60 * time.Second
+	// DefaultReconnect is how long an agent's action waits for a phone that dropped to come back
+	// (the App reconnects by itself) before it is told the phone is not connected.
+	DefaultReconnect = 30 * time.Second
 	// HandoffDefault is how long a handoff waits for the person.
 	HandoffDefault = 10 * time.Minute
 	// handoffGrace lets the phone's own handoff timeout answer before the daemon gives up.
@@ -87,6 +90,9 @@ type Options struct {
 	Clock   Clock
 	Timeout time.Duration // an ordinary op; DefaultTimeout
 	Idle    time.Duration // DefaultIdle
+	// Reconnect is how long an action waits for a missing connection; DefaultReconnect, or a
+	// negative value to refuse at once.
+	Reconnect time.Duration
 }
 
 // Active is the agent using the phone.
@@ -124,8 +130,10 @@ type Manager struct {
 	// sem holds the one request in flight.
 	sem chan struct{}
 
-	mu       sync.Mutex
-	link     *Link
+	mu   sync.Mutex
+	link *Link
+	// up is closed, and replaced, when a connection attaches: a caller that finds no phone waits on it.
+	up       chan struct{}
 	gen      uint64
 	nextID   uint64
 	active   *Active
@@ -145,7 +153,10 @@ func NewManager(opts Options) *Manager {
 	if opts.Idle <= 0 {
 		opts.Idle = DefaultIdle
 	}
-	return &Manager{opts: opts, sem: make(chan struct{}, 1)}
+	if opts.Reconnect == 0 {
+		opts.Reconnect = DefaultReconnect
+	}
+	return &Manager{opts: opts, sem: make(chan struct{}, 1), up: make(chan struct{})}
 }
 
 // Link is one phone connection. The server feeds it the phone's frames.
@@ -204,6 +215,8 @@ func (m *Manager) Attach(hello Hello, conn Conn) (*Link, error) {
 	l.person = state == StatePersonInCharge
 	old := m.link
 	m.link = l
+	close(m.up)
+	m.up = make(chan struct{})
 	if old != nil {
 		old.dead = true
 		old.failPending(ErrReplaced)
@@ -453,6 +466,32 @@ func (m *Manager) freeDisplay() {
 	}()
 }
 
+// awaitLink gives a phone that dropped a moment to come back: the App reconnects by itself, so an
+// agent's action waits up to the reconnect window instead of failing at once. It returns when a
+// phone is connected, the window ends or ctx does; callers then run their gates as usual.
+func (m *Manager) awaitLink(ctx context.Context) {
+	m.mu.Lock()
+	if m.link != nil || m.opts.Reconnect < 0 {
+		m.mu.Unlock()
+		return
+	}
+	up := m.up
+	m.mu.Unlock()
+	timer := time.NewTimer(m.opts.Reconnect)
+	defer timer.Stop()
+	select {
+	case <-up:
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+}
+
+// CheckWait is Check for an agent about to use the phone: a missing connection gets the reconnect window first.
+func (m *Manager) CheckWait(ctx context.Context) error {
+	m.awaitLink(ctx)
+	return m.Check()
+}
+
 // Check says why an action could not be sent now, or nil.
 func (m *Manager) Check() error {
 	m.mu.Lock()
@@ -509,6 +548,7 @@ func (m *Manager) Do(ctx context.Context, worker, workerName, op string, args an
 	// An agent that cannot have the phone is told so at once, not after waiting its turn behind
 	// another's handoff; the same gates run again once it has the turn.
 	if worker != "" {
+		m.awaitLink(ctx)
 		m.mu.Lock()
 		err := m.gateLocked(worker)
 		m.mu.Unlock()
@@ -526,6 +566,10 @@ func (m *Manager) Do(ctx context.Context, worker, workerName, op string, args an
 	}
 	defer func() { <-m.sem }()
 
+	if worker != "" {
+		// The phone may have dropped while this caller waited its turn.
+		m.awaitLink(ctx)
+	}
 	m.mu.Lock()
 	l := m.link
 	if l == nil {
