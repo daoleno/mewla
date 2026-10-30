@@ -100,6 +100,9 @@ object PhoneController {
         var wait = 1_000L
         try {
             while (prefs.enabled) {
+                // React Native stops JS timers while the App is in the background, so the link's own
+                // retry never fires there. A link that is down is told to try again from here.
+                if (!linkOnline) listener?.onEvent(JSONObject().put("type", "tick"))
                 if (client?.isClosed == false) {
                     wait = 5_000L
                 } else if (prefs.paired && !pairing && onWifi()) {
@@ -395,6 +398,13 @@ object PhoneController {
 
     /** Runs one request from the daemon and returns its result frame; never throws. */
     fun execute(request: JSONObject): JSONObject {
+        val started = System.currentTimeMillis()
+        val result = executeTimed(request)
+        Log.i(TAG, "${request.optString("op")} ${if (result.optBoolean("ok")) "ok" else result.optString("code")} in ${System.currentTimeMillis() - started} ms")
+        return result
+    }
+
+    private fun executeTimed(request: JSONObject): JSONObject {
         val id = request.optString("id")
         val op = request.optString("op")
         try {
@@ -407,6 +417,7 @@ object PhoneController {
             } catch (e: Exception) {
                 return failure(id, "not_ready", "Phone use is not ready on the phone: ${e.message}")
             }
+            Log.i(TAG, "$op: helper ready")
             keepScreenOn()
             activeWorker = request.optString("worker_name").ifEmpty { request.optString("worker") }.ifEmpty { "An agent" }
             publish()

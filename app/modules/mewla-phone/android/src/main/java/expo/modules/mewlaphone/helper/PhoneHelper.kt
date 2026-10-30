@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.app.ActivityManager
 import android.content.Intent
+import android.hardware.display.DisplayManager
+import android.view.Display
 import android.os.PowerManager
 import android.os.Build
 import android.os.Looper
@@ -172,8 +174,13 @@ internal class PhoneHelper(
         }
         "tree" -> {
             val s = screen ?: return fail("no display")
-            // The tree is only reported while the phone's own screen is on.
-            reader.read(s.displayId).put("ok", true).put("w", s.width).put("h", s.height).put("interactive", interactive())
+            // The tree is only reported while the phone's own screen is on, and asking while it is
+            // off blocks in the accessibility service for ~20 s before it says nothing: say so now.
+            val on = interactive()
+            val began = android.os.SystemClock.uptimeMillis()
+            val tree = if (on) reader.read(s.displayId) else JSONObject().put("windows", JSONArray())
+            Log.i(TAG, "tree: interactive=$on read in ${android.os.SystemClock.uptimeMillis() - began} ms, windows=${tree.optJSONArray("windows")?.length()}")
+            tree.put("ok", true).put("w", s.width).put("h", s.height).put("interactive", on)
         }
         "settle" -> {
             val s = screen ?: return fail("no display")
@@ -266,7 +273,19 @@ internal class PhoneHelper(
         return if (output.contains("Error", ignoreCase = true)) fail(output.trim().take(200)) else ok().put("component", component)
     }
 
-    private fun interactive(): Boolean = context.getSystemService(PowerManager::class.java)?.isInteractive ?: true
+    /**
+     * Whether the person's own display is on: only then does the accessibility service report
+     * windows. The power manager is not the answer: a dim wake lock (the App takes one while an
+     * agent works) leaves it "interactive" while the display is off and the tree empty.
+     */
+    private fun interactive(): Boolean = try {
+        val manager = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
+            .apply { isAccessible = true }.newInstance(context)
+        val state = manager.getDisplay(Display.DEFAULT_DISPLAY)?.state
+        state == null || state == Display.STATE_ON || state == Display.STATE_DOZE
+    } catch (e: Exception) {
+        context.getSystemService(PowerManager::class.java)?.isInteractive ?: true
+    }
 
     /**
      * Whether [pkg] has a task showing on the person's own display. ActivityManager answers per
