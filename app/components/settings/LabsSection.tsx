@@ -9,12 +9,14 @@ import { FriendsAvatar } from "../friends/FriendsAvatar";
 import { FriendsSheet } from "../friends/FriendsSheet";
 import { useAppTheme } from "../../constants/tokens";
 import { useFriendsLabs } from "../../store/friendsLabs";
+import { usePhoneUse } from "../../store/phoneUse";
 
 /** Things still being tried. Today one: Friends, off until the owner turns it on. */
 export function LabsSection() {
   const { colors } = useAppTheme();
   const router = useRouter();
   const friends = useFriendsLabs();
+  const phone = usePhoneUse();
   const [autoSheet, setAutoSheet] = useState(false);
   const [offSheet, setOffSheet] = useState(false);
   // The computer reads and signs; the web build has no paired phone to ask.
@@ -74,6 +76,28 @@ export function LabsSection() {
           />
         ) : null}
         {enabled ? <ListRow title="Open Friends" icon="chat" accessory="chevron" onPress={() => router.push("/friends")} /> : null}
+        {phone.available ? (
+          <ListRow
+            title="Phone use"
+            subtitle={phone.enabled ? phoneSubtitle(phone.ready, phone.status?.state) : undefined}
+            icon="phone"
+            accessibilityRole="switch"
+            accessory={phone.enabled ? "chevron" : "none"}
+            onPress={phone.enabled ? () => router.push("/phone") : undefined}
+            trailing={
+              <InkSwitch
+                value={phone.enabled}
+                accessibilityLabel="Phone use"
+                onValueChange={(next) => {
+                  if (next) {
+                    void phone.turnOn();
+                    router.push("/phone");
+                  } else void phone.turnOff();
+                }}
+              />
+            }
+          />
+        ) : null}
       </ListSection>
 
       {phase === "signing_in" && signIn ? (
@@ -138,3 +162,9 @@ const styles = StyleSheet.create({
   code: { padding: 20, gap: 16, alignItems: "center" },
   codeButtons: { flexDirection: "row", gap: 12 },
 });
+
+function phoneSubtitle(ready: boolean, state: string | undefined): string {
+  if (!ready) return "Set up";
+  if (state === "person_in_control") return "You are in control";
+  return "Ready";
+}

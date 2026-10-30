@@ -38,6 +38,7 @@ export type AuthPurpose =
   | `mewla-browser-view:${string}`
   | "mewla-screen"
   | "mewla-screen-view"
+  | "mewla-phone-device"
   | "mewla-upload"
   | "mewla-enrollment:decision:POST:/enrollment/decision"
   | "mewla-probe"

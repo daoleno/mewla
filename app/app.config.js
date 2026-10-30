@@ -117,6 +117,11 @@ module.exports = () => {
         "./plugins/withAndroidAppUpdate",
         { channel: extra.distribution.android },
       ],
+      // Phone use (Labs): the GitHub APK only; a store build drops its service entries.
+      [
+        "./plugins/withAndroidPhoneUse",
+        { channel: extra.distribution.android },
+      ],
     ],
     extra,
   };
