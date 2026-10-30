@@ -2,6 +2,14 @@ import { requireOptionalNativeModule, requireNativeViewManager } from "expo-modu
 import type { ComponentType } from "react";
 import type { ViewProps } from "react-native";
 
+/** Where the guided setup is: the step, what only the person can do, and whether it has stopped getting anywhere. */
+export interface PhoneGuide {
+  step: "developer" | "wireless" | "pair" | null;
+  /** "allow": the system's prompt for this network; "lock": the screen lock. */
+  needs: "allow" | "lock" | null;
+  stalled: boolean;
+}
+
 /** What the helper and the phone's settings say, as the setup screen reads it live. */
 export interface PhoneStatus {
   supported: boolean;
@@ -15,6 +23,12 @@ export interface PhoneStatus {
   paired: boolean;
   helper: boolean;
   accessibility: boolean;
+  /** Android blocks switching the accessibility service on until "Allow restricted settings" is chosen in App info. */
+  restricted: boolean;
+  /** The App may write secure settings (granted once through its helper): it restores Wireless debugging and its own accessibility service itself. */
+  self_healing: boolean;
+  /** The guided setup while it walks Settings, else null. */
+  guide: PhoneGuide | null;
   notifications: boolean;
   /** The word the daemon is told: ready, setup, person_in_control or stopped. */
   state: "ready" | "setup" | "person_in_control" | "stopped";
@@ -33,6 +47,8 @@ export interface PhoneNativeModule {
   /** Pairs with this phone's own Wireless debugging; `null` reads the code off the screen. */
   pair(code: string | null): Promise<boolean>;
   ensureHelper(): Promise<boolean>;
+  /** Switches the accessibility service on by itself when it may; false when the person must do it in Settings. */
+  enableAccessibility(): boolean;
   /** One request frame from the daemon; resolves with the result frame. */
   execute(requestJson: string): Promise<string>;
   /** Tells the notification whether the connection to the computer is up. */

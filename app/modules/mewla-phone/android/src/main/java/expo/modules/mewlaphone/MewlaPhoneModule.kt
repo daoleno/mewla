@@ -46,6 +46,8 @@ class MewlaPhoneModule : Module() {
         Function("setEnabled") { enabled: Boolean ->
             setAccessibilityComponent(enabled)
             PhoneController.setEnabled(enabled)
+            // Once the secure-settings grant exists, nothing is asked of the person again.
+            if (enabled) runCatching { PhoneController.enableAccessibility() }
         }
 
         /** Pairs with this phone's own Wireless debugging; the code is read off the screen when null. */
@@ -58,6 +60,9 @@ class MewlaPhoneModule : Module() {
             PhoneController.publish()
             ok
         }
+
+        /** Turns the accessibility service on by itself when the secure-settings grant is there; false when the person must do it in Settings. */
+        Function("enableAccessibility") { PhoneController.enableAccessibility() }
 
         AsyncFunction("ensureHelper") {
             try {
@@ -112,7 +117,13 @@ class MewlaPhoneModule : Module() {
             )
         }
         Function("openAccessibilitySettings") {
-            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            // Mewla's own entry when the phone has the page for it, else the list.
+            val own = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                .putExtra(Intent.EXTRA_COMPONENT_NAME, ComponentName(context, PairingAccessibilityService::class.java).flattenToString())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val target = if (own.resolveActivity(context.packageManager) != null) own
+            else Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(target)
         }
         Function("showPairingCodeBox") { PhoneNotifier.pairingCode(context) }
 

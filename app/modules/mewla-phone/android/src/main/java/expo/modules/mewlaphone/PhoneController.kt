@@ -32,6 +32,8 @@ import java.util.concurrent.TimeUnit
 object PhoneController {
     private const val TAG = "MewlaPhone"
     private const val MIN_SDK = Build.VERSION_CODES.R
+    private const val STALL_MS = 25_000L
+    private const val WRITE_SECURE = "android.permission.WRITE_SECURE_SETTINGS"
 
     /** Told what the App must show or forward to the daemon; called from worker threads. */
     interface Listener {
@@ -81,6 +83,24 @@ object PhoneController {
         }
     }
 
+    // ---- keeping the link up -----------------------------------------------------------------
+
+    private var linkStartedAt = 0L
+
+    /**
+     * The computer reaches the phone through the App's JavaScript link. Without the App's screen
+     * (after a reboot, or once it was swiped away) there is no JavaScript running: this starts it
+     * headless. Asked at most once a minute, and not while a module already listens.
+     */
+    @Synchronized
+    fun ensureLink() {
+        if (!::app.isInitialized || !prefs.enabled || listener != null) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (linkStartedAt != 0L && now - linkStartedAt < 60_000) return
+        linkStartedAt = now
+        runCatching { PhoneLinkTaskService.start(app) }.onFailure { Log.w(TAG, "cannot start the link", it) }
+    }
+
     // ---- keeping the helper up ---------------------------------------------------------------
 
     private var keeper: Thread? = null
@@ -102,7 +122,10 @@ object PhoneController {
             while (prefs.enabled) {
                 // React Native stops JS timers while the App is in the background, so the link's own
                 // retry never fires there. A link that is down is told to try again from here.
-                if (!linkOnline) listener?.onEvent(JSONObject().put("type", "tick"))
+                if (!linkOnline) {
+                    listener?.onEvent(JSONObject().put("type", "tick"))
+                    ensureLink()
+                }
                 if (client?.isClosed == false) {
                     wait = 5_000L
                 } else if (prefs.paired && !pairing && onWifi()) {
@@ -136,12 +159,54 @@ object PhoneController {
             .put("paired", prefs.paired)
             .put("helper", helperUp)
             .put("accessibility", SettingsReading.serviceRunning)
+            .put("restricted", accessibilityRestricted())
+            .put("self_healing", selfHealing)
+            .put("guide", guide())
             .put("notifications", PhoneNotifier.canNotify(app))
             .put("state", state())
             .put("w", display?.get(0) ?: 0)
             .put("h", display?.get(1) ?: 0)
             .put("agent", activeWorker ?: JSONObject.NULL)
             .put("handoff", handoff?.reason ?: JSONObject.NULL)
+    }
+
+    /**
+     * Where the guided setup is: the step it is on, what only the person can do ("allow" the
+     * system's network prompt, "lock" the screen lock), and whether it has stopped getting
+     * anywhere (the one step the person then does by hand).
+     */
+    private fun guide(): Any {
+        if (!SettingsReading.guiding) return JSONObject.NULL
+        val quiet = android.os.SystemClock.uptimeMillis() - SettingsReading.progressAt > STALL_MS
+        return JSONObject()
+            .put("step", SettingsReading.step ?: JSONObject.NULL)
+            .put("needs", SettingsReading.needs ?: JSONObject.NULL)
+            .put("stalled", quiet && SettingsReading.needs == null)
+    }
+
+    /** True when Android blocks switching a sideloaded app's accessibility service on until "Allow restricted settings" is chosen in App info. */
+    private fun accessibilityRestricted(): Boolean = runCatching {
+        if (Build.VERSION.SDK_INT < 33 || SettingsReading.serviceRunning) return@runCatching false
+        val ops = app.getSystemService(android.app.AppOpsManager::class.java)
+        ops.unsafeCheckOpNoThrow("android:access_restricted_settings", android.os.Process.myUid(), app.packageName) !=
+            android.app.AppOpsManager.MODE_ALLOWED
+    }.getOrDefault(false)
+
+    /**
+     * Switches this App's accessibility service on. With the secure-settings grant that is a
+     * silent write; before it, Android only lets the person do it, so this returns false and the
+     * caller opens the system screen.
+     */
+    fun enableAccessibility(): Boolean {
+        if (SettingsReading.serviceRunning) return true
+        if (!selfHealing) return false
+        val component = android.content.ComponentName(app, PairingAccessibilityService::class.java).flattenToString()
+        val current = Settings.Secure.getString(app.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        if (!current.split(':').contains(component)) {
+            Settings.Secure.putString(app.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, if (current.isEmpty()) component else "$current:$component")
+        }
+        Settings.Secure.putInt(app.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
+        return true
     }
 
     /** The one word the daemon and the App agree on (see daemon/phone/protocol.go). */
@@ -199,9 +264,13 @@ object PhoneController {
         if (pairing) return false
         pairing = true
         SettingsReading.pairing = null
+        SettingsReading.needs = null
         SettingsReading.guiding = code == null && SettingsReading.serviceRunning
+        if (SettingsReading.guiding) SettingsReading.service?.beginGuide()
+        pausedUntil = 0
         try {
-            val deadline = System.currentTimeMillis() + 3 * 60_000
+            // A guided walk may start from nothing (Build number, a lock screen, the system's prompt), so it gets longer.
+            val deadline = System.currentTimeMillis() + if (SettingsReading.guiding) 8 * 60_000 else 3 * 60_000
             val tls = AndroidAdb.tls(AndroidAdb.identity(app))
             var lastFailure: Exception? = null
             while (System.currentTimeMillis() < deadline) {
@@ -243,6 +312,9 @@ object PhoneController {
             pairing = false
             typedCode = null
             SettingsReading.guiding = false
+            SettingsReading.step = null
+            SettingsReading.needs = null
+            SettingsReading.service?.endGuide()
         }
     }
 
@@ -323,17 +395,44 @@ object PhoneController {
 
     /** With WRITE_SECURE_SETTINGS (granted once through the helper) Wireless debugging is turned back on without the person. */
     private fun ensureWirelessDebugging() {
-        if (Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) == 1) return
-        if (app.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) == 1) {
+            strikes = 0
+            return
+        }
+        if (!selfHealing) {
             throw IllegalStateException("Wireless debugging is off")
         }
+        // On a network Android has not been told to allow, switching it on raises the system's prompt, and
+        // if that is dismissed the switch falls back. Twice in a row means this network is the person's to
+        // approve: stop raising the prompt for a while rather than nag.
+        val now = System.currentTimeMillis()
+        if (now < pausedUntil) throw IllegalStateException("Wireless debugging is off on this network")
+        strikes = if (switchedOnAt > 0 && now - switchedOnAt < 90_000) strikes + 1 else 0
+        if (strikes >= 2) {
+            pausedUntil = now + 30 * 60_000
+            strikes = 0
+            throw IllegalStateException("Wireless debugging is off on this network")
+        }
+        switchedOnAt = now
         Settings.Global.putInt(app.contentResolver, "adb_wifi_enabled", 1)
         Thread.sleep(2_500)
     }
 
+    private var strikes = 0
+    private var switchedOnAt = 0L
+    @Volatile private var pausedUntil = 0L
+
+    /** Once, through the helper's own shell: lets this App turn Wireless debugging back on and its accessibility service on without the person. */
     private fun grantSelfHealing(adb: AdbConnection) {
-        runCatching { adb.exec("pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS").use { it.readAll() } }
+        if (app.checkSelfPermission(WRITE_SECURE) == android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        runCatching { adb.exec("pm grant ${app.packageName} $WRITE_SECURE").use { it.readText() } }
+            .onSuccess { Log.i(TAG, "pm grant WRITE_SECURE_SETTINGS: '${it.trim()}' granted=${selfHealing}") }
+            .onFailure { Log.w(TAG, "pm grant WRITE_SECURE_SETTINGS failed", it) }
     }
+
+    /** Whether this App may write secure settings (the grant above happened). */
+    val selfHealing: Boolean
+        get() = app.checkSelfPermission(WRITE_SECURE) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
     private fun stopHelper() {
         val c = client ?: return

@@ -1,7 +1,8 @@
 /**
  * Expo config plugin: phone use belongs to the GitHub APK. It starts a helper through the phone's
  * own Wireless debugging and reads the pairing code with an accessibility service, which Google
- * Play does not allow an app like this to do, so any other channel leaves its manifest entries out.
+ * Play does not allow an app like this to do, so any other channel leaves its manifest entries out
+ * (including the boot receiver and the secure-settings permission that keep it set up).
  * The GitHub APK also lets the main activity float the agent's screen (picture-in-picture).
  */
 const { createRunOncePlugin, withAndroidManifest } = require('@expo/config-plugins');
@@ -9,9 +10,11 @@ const { createRunOncePlugin, withAndroidManifest } = require('@expo/config-plugi
 const SERVICES = [
   'expo.modules.mewlaphone.PairingAccessibilityService',
   'expo.modules.mewlaphone.PhoneUseService',
+  'expo.modules.mewlaphone.PhoneLinkTaskService',
 ];
-const RECEIVERS = ['expo.modules.mewlaphone.PhoneActionReceiver'];
-const PERMISSIONS = ['android.permission.FOREGROUND_SERVICE_SPECIAL_USE'];
+const RECEIVERS = ['expo.modules.mewlaphone.PhoneActionReceiver', 'expo.modules.mewlaphone.PhoneBootReceiver'];
+// RECEIVE_BOOT_COMPLETED stays: the live surfaces use it in every channel.
+const PERMISSIONS = ['android.permission.FOREGROUND_SERVICE_SPECIAL_USE', 'android.permission.WRITE_SECURE_SETTINGS'];
 
 function removePhoneUse(androidManifest) {
   const manifest = androidManifest?.manifest;

@@ -27,6 +27,7 @@ repositories {
 
 dependencies {
   implementation project(':expo-modules-core')
+  implementation 'com.facebook.react:react-android'
   implementation 'androidx.core:core:1.17.0'
   implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
   testImplementation 'junit:junit:4.13.2'
