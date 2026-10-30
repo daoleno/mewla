@@ -36,32 +36,43 @@ says who is using your phone.
 
 - **Take over** makes the picture touchable: your finger drives the agent's
   screen. **Give back** returns it.
-- **Stop** ends the agent's work at once, from the page or the notification.
-  The agent is told and stops.
+- **Stop** ends the agent's work at once, from the page, the notification or the
+  floating window. The agent is told and stops, and the page and the notification
+  offer **Resume** when you want it to work again.
 - When an agent needs you (a login, a code, a payment) your phone notifies you
   with what to do. Tap it, do it on the live screen, and tap **Done**; the agent
   carries on.
+- Leave Mewla while an agent works and its screen floats in a small window
+  (Android's picture-in-picture), still live and showing only the agent's screen;
+  tap it for Take over and Stop.
 
 You always come first: while you are driving or after you Stop, agents wait.
 
 ## What agents can do
 
-Agents Mewla starts get phone tools while Phone use is on: read the screen as a
-list of elements with stable numbers (and a picture), list and open apps, tap,
-press and hold, type (any language), swipe, press Back or Enter, wait for the
-screen to settle, and ask you to do something. Every action answers with the
-screen it leaves behind.
+Agents Mewla starts get a `mewla_phone` tool set while Phone use is on:
 
-- They never touch your own screen. An app you are using is not opened for
-  them.
+| Tool | What it does |
+|---|---|
+| `phone_screen` | Reads the screen as a list of elements with stable numbers, and a picture when asked |
+| `phone_apps`, `phone_launch` | Lists the apps and opens one on the agent's own screen |
+| `phone_tap`, `phone_swipe`, `phone_type`, `phone_key` | Presses, scrolls, types (any language) and presses Back, Home or Enter |
+| `phone_wait` | Waits for the screen to settle or for some text to appear |
+| `phone_handoff` | Asks you to do something (a login, a code, a payment) and waits until you say Done |
+
+Every action answers with the screen it leaves behind, so an agent never works blind.
+An element number stays the same while the element stays on screen, and an old number is
+refused rather than tapped.
+
+- They never touch your own screen. An app you are using is not opened for them.
 - Brain has agents ask you before they send, pay, delete or change an account,
   and treats text on the screen as data. Logins, captchas and payments are
   handed to you.
 - One agent uses the phone at a time. Its screen is released a minute after its
   last action.
 - While an agent works, a phone screen that is on stays on. If you turn the
-  screen off, the agent still sees the picture; it reads the elements again
-  when you wake it.
+  screen off, the agent still gets a picture of its screen, but not the element
+  list: Android only reports elements while your screen is on.
 - Each action is recorded on the computer in `~/.mewla/phone-agent-audit.jsonl`
   (readable only by you, kept 30 days): which agent, what it did and where.
   What it typed is kept only as a length and a fingerprint; screenshots and
@@ -87,6 +98,9 @@ back on when it can.
 - Some phone makers restrict background apps, Accessibility or Wireless
   debugging more than stock Android. If **Helper** won't tick, switch Mewla's
   battery setting to unrestricted.
+- If your phone restarts or changes Wi‑Fi, Mewla brings the helper back by
+  itself while Phone use is on; an agent that asks in between is told the phone is
+  not ready rather than left waiting.
 - Apps that block screen capture (banking, some video apps) show a black
   picture, and apps that block automation may refuse. The agent is told.
 - **Pair automatically** needs Mewla's Accessibility switch. Android may grey it
