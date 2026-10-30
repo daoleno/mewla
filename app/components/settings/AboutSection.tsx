@@ -3,7 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useAppTheme } from "../../constants/tokens";
 import { appVersion } from "../../constants/appVersion";
-import { appUpdateRow } from "../../services/appUpdate";
+import { appUpdateRow, type AppUpdateState } from "../../services/appUpdate";
 import { PRIVACY_POLICY_URL, SUPPORT_URL, openAboutPage } from "../../services/aboutPages";
 import { useAppUpdate } from "../../services/useAppUpdate";
 import { Button } from "../ui/Button";
@@ -12,16 +12,21 @@ import { MewlaMark } from "../mewla/MewlaMark";
 
 /** Settings → About: the version, its update when this build can take one, and the legal pages. */
 export function AboutSection() {
+  const { state, press } = useAppUpdate();
+  return <AboutRows state={state} press={press} />;
+}
+
+/** The section for a given update state; Settings reads it from the app, previews and tests pass one in. */
+export function AboutRows({ state, press }: { state: AppUpdateState; press: () => void }) {
   const router = useRouter();
   const { colors } = useAppTheme();
-  const { state, press } = useAppUpdate();
   const update = appUpdateRow(state);
   return (
     <ListSection>
       <ListRow
         title="Mewla"
         value={`Version ${appVersion}`}
-        leading={<MewlaMark size={28} />}
+        leading={<MewlaMark size={30} />}
         accessibilityLabel={`Mewla, Version ${appVersion}`}
       />
       {update ? (
