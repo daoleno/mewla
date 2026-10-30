@@ -59,6 +59,10 @@ export const MewlaPhone: PhoneNativeModule | null = requireOptionalNativeModule<
 export interface PhoneLiveViewProps extends ViewProps {
   /** Touches drive the agent's screen (Take over) instead of being ignored (Watch). */
   interactive?: boolean;
+  /** Frames per second this view needs (default 12); the shared stream runs at the highest mounted view. */
+  fps?: number;
+  /** Frame width in pixels this view needs (default 540). */
+  maxWidth?: number;
 }
 
 export const PhoneLiveView: ComponentType<PhoneLiveViewProps> | null = MewlaPhone

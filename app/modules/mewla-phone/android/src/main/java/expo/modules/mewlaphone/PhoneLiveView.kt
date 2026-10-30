@@ -27,6 +27,18 @@ class PhoneLiveView(context: Context, appContext: AppContext) : ExpoView(context
     /** Whether touches go to the agent's screen (Take over) or are ignored (Watch). */
     var interactive = false
 
+    /** What this view needs of the shared stream; the stream runs at the highest of the mounted views. */
+    var fps = PhoneLiveViews.DEFAULT_FPS
+        set(value) {
+            field = value
+            if (isAttachedToWindow) PhoneLiveViews.refresh()
+        }
+    var maxWidth = PhoneLiveViews.DEFAULT_WIDTH
+        set(value) {
+            field = value
+            if (isAttachedToWindow) PhoneLiveViews.refresh()
+        }
+
     init {
         setWillNotDraw(false)
         setBackgroundColor(Color.TRANSPARENT)
@@ -36,12 +48,10 @@ class PhoneLiveView(context: Context, appContext: AppContext) : ExpoView(context
         super.onAttachedToWindow()
         PhoneLiveViews.add(this)
         PhoneLiveViews.last?.let { showFrame(it) }
-        touches.execute { PhoneController.watch(true) }
     }
 
     override fun onDetachedFromWindow() {
         PhoneLiveViews.remove(this)
-        if (PhoneLiveViews.isEmpty()) touches.execute { PhoneController.watch(false) }
         super.onDetachedFromWindow()
     }
 
@@ -93,16 +103,42 @@ class PhoneLiveView(context: Context, appContext: AppContext) : ExpoView(context
     }
 }
 
-/** The mounted live views, which share the one frame stream. */
+/**
+ * The mounted live views, which share the one frame stream. Every change to the set or to what a
+ * view asks for re-issues the one watch request, in order on a single thread, so two views never
+ * race each other and the stream falls back to the rate a remaining view wants.
+ */
 internal object PhoneLiveViews {
+    const val DEFAULT_FPS = 12
+    const val DEFAULT_WIDTH = 540
+
     private val views = java.util.concurrent.CopyOnWriteArrayList<PhoneLiveView>()
-    fun add(view: PhoneLiveView) { views.addIfAbsent(view) }
-    fun remove(view: PhoneLiveView) { views.remove(view) }
-    fun isEmpty() = views.isEmpty()
+    private val requests = Executors.newSingleThreadExecutor()
+
+    fun add(view: PhoneLiveView) {
+        views.addIfAbsent(view)
+        refresh()
+    }
+
+    fun remove(view: PhoneLiveView) {
+        views.remove(view)
+        refresh()
+    }
+
     /** The newest frame, so a view that appears while the agent's screen sits still has a picture at once. */
     @Volatile var last: ByteArray? = null
+
     fun deliver(jpeg: ByteArray) {
         last = jpeg
         views.forEach { it.showFrame(jpeg) }
+    }
+
+    /** Frames flow only while a view is mounted, at the rate of the most demanding one. */
+    fun refresh() {
+        val fps = views.maxOfOrNull { it.fps }
+        val width = views.maxOfOrNull { it.maxWidth }
+        requests.execute {
+            if (fps == null || width == null) PhoneController.watch(false) else PhoneController.watch(true, fps, width)
+        }
     }
 }
