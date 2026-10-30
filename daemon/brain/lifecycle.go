@@ -2752,6 +2752,13 @@ func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (Wo
 			return action, false, nil
 		}
 	}
+	// A follow-up Brain already sent is a disposition in flight: its provider
+	// acceptance resolves this review. If it is aborted instead, the next lane
+	// pass finds the Host Turn ended and ends the handling here.
+	if st, stateErr := s.fsmState(workID); stateErr == nil && followUpInFlight(st) {
+		action, _ := reviewActionFromReview(database, review)
+		return action, false, nil
+	}
 	// Delivered input stays consumed. An unresolved decision is visible for
 	// explicit recovery, never a reason to spend another automatic Host turn.
 	if _, releaseErr := s.fsm.ReleaseReview(lifecycle.WorkID(workID), lifecycle.TurnToken(providerTurnID)); releaseErr != nil {
@@ -2775,6 +2782,30 @@ func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (Wo
 	action, _ := reviewActionFromReview(database, database.BrainWork[itemIndex].Review)
 	s.broadcastWorkChange(workID)
 	return action, true, nil
+}
+
+// followUpInFlight reports a Brain-directed submission (no review claim) that
+// is prepared but not yet accepted or aborted.
+func followUpInFlight(st *lifecycle.State) bool {
+	if st == nil {
+		return false
+	}
+	for _, admission := range st.Admissions {
+		if admission.Status == lifecycle.AdmissionPrepared && admission.ClaimToken == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// HostTurnEnded reports whether the exact Host Turn is terminal in the ledger
+// (done, failed or unknown) or its control ownership is lost.
+func (s *Store) HostTurnEnded(hostSessionID, providerTurnID string) (bool, error) {
+	turn, found, err := s.TurnByID(hostSessionID, providerTurnID)
+	if err != nil || !found {
+		return false, err
+	}
+	return watcher.TurnTerminal(turn.Status) || turn.ControlState == watcher.TurnControlOwnershipLost, nil
 }
 
 func (s *Store) WorkEvent(eventID string) (WorkEvent, bool, error) {
