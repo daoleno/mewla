@@ -206,7 +206,7 @@ nothing needs you."); when Work needs you, it opens the first one; while Brain
 works, it says what Brain is doing; offline, it tries to reconnect. It holds
 still when your device asks for reduced motion.
 
-Pick another pet in **Settings → Pet**: ten to choose from, and the choice
+Pick another pet in **Settings → Pet** (the row opens the picker): ten to choose from, and the choice
 stays on that device (the phone and the web UI each keep their own).
 
 ## Worker routing
