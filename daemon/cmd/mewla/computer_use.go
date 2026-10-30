@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/agentuse"
-	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -32,16 +31,8 @@ func (a *controlApp) handleComputerControl(req control.Request) control.Response
 		a.screen.StopAgent()
 		return control.ErrorResponse("computer_off", "Agents can't use this computer: it is turned off in the app")
 	}
-	if a.watcher != nil {
-		w := a.watcher.GetWorker(req.WorkerID)
-		live := w != nil && a.watcher.HasSession(req.WorkerID)
-		if live {
-			_, err := a.watcher.ResolveOwnedGeneration(req.WorkerID)
-			live = err == nil && !(w.Delegated && (w.State == classifier.StateDone || w.State == classifier.StateFailed))
-		}
-		if !live {
-			return control.ErrorResponse("computer_denied", "Only a running Mewla Worker can use this computer")
-		}
+	if !a.liveWorker(req.WorkerID) {
+		return control.ErrorResponse("computer_denied", "Only a running Mewla Worker can use this computer")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()

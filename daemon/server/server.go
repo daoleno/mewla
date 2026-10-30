@@ -44,6 +44,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/pairlink"
+	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/screen"
 	skillmgmt "github.com/daoleno/mewla/daemon/skills"
@@ -112,6 +113,8 @@ type notificationRecorder interface {
 type Server struct {
 	browsers                     *browser.Manager
 	screen                       *screen.Service
+	phone                        *phone.Manager
+	phonePing                    time.Duration // the phone's ping interval; zero is the default
 	connections                  *connections.Manager
 	auth                         *auth.Manager
 	watcher                      *watcher.Watcher
@@ -495,6 +498,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/computers/invite", s.handleComputersInvite)
 	mux.HandleFunc("/computers", s.handleComputers)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
+	mux.HandleFunc("/phone", s.handlePhone)
+	mux.HandleFunc("/phone/device", s.handlePhoneDevice)
 	mux.Handle("/friends", s.appRoute(webUI, http.HandlerFunc(s.handleFriends)))
 	mux.HandleFunc("/upload", s.handleUpload)
 	mux.HandleFunc("/session-file-capability", s.handleSessionFileCapability)

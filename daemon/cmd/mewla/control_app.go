@@ -22,6 +22,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/watch"
@@ -73,6 +74,7 @@ type controlApp struct {
 	calendarStore     *calendar.Store
 	calendarScheduler *calendar.Scheduler
 	screen            *screen.Service
+	phone             *phone.Agent
 	agentUse          *agentuse.Service
 	profiles          *modelprofiles.Owner
 	telegram          telegramControlManager
@@ -106,6 +108,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return control.Response{OK: true, Connections: &result}
 	case "computer":
 		return a.handleComputerControl(req)
+	case "phone":
+		return a.handlePhoneControl(req)
 	case "agent_use":
 		if a.agentUse == nil {
 			return control.ErrorResponse("agent_use_unavailable", "Agent use is not running")

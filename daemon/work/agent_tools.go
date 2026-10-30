@@ -12,10 +12,18 @@ import (
 const (
 	ChromeMCPName   = "mewla_chrome"
 	ComputerMCPName = "mewla_computer"
+	// PhoneMCPName is the person's Android phone, when Phone use is on.
+	PhoneMCPName = "mewla_phone"
 	// CodexComputerUseName is Codex's own computer use, from the user's
 	// Codex config.
 	CodexComputerUseName = "computer-use"
 )
+
+// PhoneToolTimeoutSec is how long an agent host waits for one phone tool call: Codex's default
+// is a minute, and Claude's per-server limit is set to the same. A handoff waits for the person
+// for ten, plus the daemon's own margins (phone.AgentAction's Budget and the control call around
+// it are shorter than this).
+const PhoneToolTimeoutSec = 800
 
 // AgentTools is what an agent launched now can use on this computer.
 type AgentTools struct {
@@ -23,6 +31,8 @@ type AgentTools struct {
 	Chrome bool
 	// Computer is this computer's screen, keyboard and pointer.
 	Computer bool
+	// Phone is the person's Android phone, through the Mewla app.
+	Phone bool
 	// NoCodexComputerUse turns off Codex's own computer use, which the
 	// user's Codex config adds, while agents may not use this computer.
 	NoCodexComputerUse bool
@@ -40,13 +50,18 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 		// env names the variables the server needs from the agent's own
 		// environment (Codex passes MCP servers only a short list).
 		env []string
+		// timeoutSec is how long Codex waits for one call, where the default is too short.
+		timeoutSec int
 	}
 	var servers []server
 	if tools.Chrome {
-		servers = append(servers, server{ChromeMCPName, []string{"agent-use", "chrome-mcp", "--state-dir", stateDir}, nil})
+		servers = append(servers, server{name: ChromeMCPName, args: []string{"agent-use", "chrome-mcp", "--state-dir", stateDir}})
 	}
 	if tools.Computer {
-		servers = append(servers, server{ComputerMCPName, []string{"agent-use", "computer-mcp", "--state-dir", stateDir}, []string{"MEWLA_WORKER_ID"}})
+		servers = append(servers, server{name: ComputerMCPName, args: []string{"agent-use", "computer-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}})
+	}
+	if tools.Phone {
+		servers = append(servers, server{name: PhoneMCPName, args: []string{"agent-use", "phone-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}, timeoutSec: PhoneToolTimeoutSec})
 	}
 	// Only a config that defines the server can turn it off: Codex refuses a
 	// server entry with nothing to run. A launch that picks its own Codex
@@ -60,7 +75,7 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 		return command
 	}
 	for _, arg := range opts.argv {
-		if strings.HasPrefix(arg, "mcp_servers."+ChromeMCPName) || strings.HasPrefix(arg, "mcp_servers."+ComputerMCPName) ||
+		if strings.HasPrefix(arg, "mcp_servers."+ChromeMCPName) || strings.HasPrefix(arg, "mcp_servers."+ComputerMCPName) || strings.HasPrefix(arg, "mcp_servers."+PhoneMCPName) ||
 			arg == "--mcp-config" || strings.HasPrefix(arg, "--mcp-config=") || arg == "--strict-mcp-config" {
 			return command
 		}
@@ -75,6 +90,9 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 	case WorkerProviderCodex:
 		for _, s := range servers {
 			config := "mcp_servers." + s.name + "={command=" + strconv.Quote(executable) + ",args=" + tomlStrings(s.args) + ",enabled=true"
+			if s.timeoutSec > 0 {
+				config += ",tool_timeout_sec=" + strconv.Itoa(s.timeoutSec)
+			}
 			if len(s.env) > 0 {
 				config += ",env_vars=" + tomlStrings(s.env)
 			}
@@ -85,7 +103,12 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 		entries := map[string]any{}
 		allowed := make([]string, 0, len(servers))
 		for _, s := range servers {
-			entries[s.name] = map[string]any{"command": executable, "args": s.args}
+			entry := map[string]any{"command": executable, "args": s.args}
+			if s.timeoutSec > 0 {
+				// Claude's per-server tool-call limit, in milliseconds.
+				entry["timeout"] = s.timeoutSec * 1000
+			}
+			entries[s.name] = entry
 			allowed = append(allowed, "mcp__"+s.name)
 		}
 		raw, _ := json.Marshal(map[string]any{"mcpServers": entries})

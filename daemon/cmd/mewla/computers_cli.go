@@ -117,6 +117,9 @@ func printComputersResult(w io.Writer, action string, result computers.Result) {
 				if peer.Caps.ComputerUse {
 					line += "\tagents can use its screen"
 				}
+				if peer.Caps.PhoneUse {
+					line += "\tagents can use its owner's phone"
+				}
 			}
 			if peer.Queued > 0 {
 				line += fmt.Sprintf("\t%d waiting", peer.Queued)

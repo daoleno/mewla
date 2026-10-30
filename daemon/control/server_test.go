@@ -1,6 +1,7 @@
 package control
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/phone"
 )
 
 type testHandler struct {
@@ -147,4 +150,76 @@ func shortStateDir(t *testing.T) string {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
+}
+
+// A phone action and its answer, a picture included, cross the control socket intact, and a
+// request that waits longer than the usual bound is served on its own connection.
+func TestPhoneActionAndPictureRoundTrip(t *testing.T) {
+	stateDir := shortStateDir(t)
+	socketPath, err := DefaultSocketPath(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	picture := make([]byte, 300<<10)
+	for i := range picture {
+		picture[i] = byte(i * 7)
+	}
+	release := make(chan struct{})
+	handler := &phoneHandler{release: release, picture: picture}
+	server := &Server{Path: socketPath, Handler: handler}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- server.Run(ctx) }()
+	waitForSocketPath(t, socketPath)
+
+	type answer struct {
+		resp Response
+		err  error
+	}
+	slow := make(chan answer, 1)
+	go func() {
+		resp, err := CallWithTimeout(socketPath, Request{Type: "phone", WorkerID: "%7", PhoneAction: &phone.AgentAction{Action: phone.ActHandoff, Reason: "Sign in"}}, 10*time.Second)
+		slow <- answer{resp, err}
+	}()
+	// While the handoff waits for the person, other calls on the socket are still served.
+	resp, err := Call(socketPath, Request{Type: "phone", WorkerID: "%7", PhoneAction: &phone.AgentAction{Action: phone.ActScreen, Image: true}})
+	if err != nil || !resp.OK || resp.PhoneResult == nil || resp.PhoneResult.Text != "Screen 1080x2400" || !bytes.Equal(resp.PhoneResult.Image, picture) {
+		t.Fatalf("%+v %v", resp, err)
+	}
+	select {
+	case <-slow:
+		t.Fatal("the handoff answered before the person did")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	got := <-slow
+	if got.err != nil || got.resp.PhoneResult == nil || got.resp.PhoneResult.Text != "done" {
+		t.Fatalf("%+v %v", got.resp, got.err)
+	}
+	handler.mu.Lock()
+	if len(handler.seen) != 2 || handler.seen[0].PhoneAction == nil || handler.seen[0].WorkerID != "%7" {
+		t.Fatalf("requests %+v", handler.seen)
+	}
+	handler.mu.Unlock()
+	cancel()
+	<-done
+}
+
+type phoneHandler struct {
+	mu      sync.Mutex
+	seen    []Request
+	release chan struct{}
+	picture []byte
+}
+
+func (h *phoneHandler) HandleControlRequest(req Request) Response {
+	h.mu.Lock()
+	h.seen = append(h.seen, req)
+	h.mu.Unlock()
+	if req.PhoneAction.Action == phone.ActHandoff {
+		<-h.release
+		return Response{OK: true, PhoneResult: &phone.AgentResult{Text: "done"}}
+	}
+	return Response{OK: true, PhoneResult: &phone.AgentResult{Text: "Screen 1080x2400", Image: h.picture}}
 }
