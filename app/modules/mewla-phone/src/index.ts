@@ -23,7 +23,7 @@ export interface PhoneStatus {
   paired: boolean;
   helper: boolean;
   accessibility: boolean;
-  /** Android blocks switching the accessibility service on until "Allow restricted settings" is chosen in App info. */
+  /** Android may block switching the accessibility service on until "Allow restricted settings" is chosen in App info (Android 13+, not installed from the Play Store). */
   restricted: boolean;
   /** The App may write secure settings (granted once through its helper): it restores Wireless debugging and its own accessibility service itself. */
   self_healing: boolean;

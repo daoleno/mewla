@@ -121,13 +121,20 @@ class MewlaPhoneModule : Module() {
             )
         }
         Function("openAccessibilitySettings") {
-            // Mewla's own entry when the phone has the page for it, else the list.
+            // The page for Mewla's own entry resolves on some phones yet is not exported for apps to start
+            // (a SecurityException): the list, with Mewla's entry highlighted, is the way that always works.
+            val component = ComponentName(context, PairingAccessibilityService::class.java).flattenToString()
             val own = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-                .putExtra(Intent.EXTRA_COMPONENT_NAME, ComponentName(context, PairingAccessibilityService::class.java).flattenToString())
+                .putExtra(Intent.EXTRA_COMPONENT_NAME, component)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            val target = if (own.resolveActivity(context.packageManager) != null) own
-            else Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(target)
+            val opened = own.resolveActivity(context.packageManager) != null && runCatching { context.startActivity(own) }.isSuccess
+            if (!opened) {
+                context.startActivity(
+                    Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        .putExtra(":settings:fragment_args_key", component)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
         }
         Function("showPairingCodeBox") { PhoneNotifier.pairingCode(context) }
 

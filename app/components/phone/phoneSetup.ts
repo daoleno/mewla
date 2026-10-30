@@ -58,7 +58,7 @@ export function phoneSetupPlan(status: PhoneStatus, running: boolean): PhoneSetu
       action: "allow",
       label: "Allow",
       current: next.id,
-      note: status.restricted ? "Android blocks it for apps installed from a file: App info › ⋮ › Allow restricted settings" : null,
+      note: status.restricted ? "If Android greys it out: App info › ⋮ › Allow restricted settings" : null,
     };
   }
   if (!running && !guide) return { action: "setup", label: "Set up", current: next.id, note: null };
