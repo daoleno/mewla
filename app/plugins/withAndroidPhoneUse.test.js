@@ -1,5 +1,5 @@
 const { expect, test } = require('bun:test');
-const { removePhoneUse } = require('./withAndroidPhoneUse');
+const { allowPictureInPicture, removePhoneUse } = require('./withAndroidPhoneUse');
 
 test('a store build leaves out the accessibility service, the foreground service and their permission, once', () => {
   const input = { manifest: { application: [{ $: {} }] } };
@@ -13,4 +13,10 @@ test('a store build leaves out the accessibility service, the foreground service
   expect(output.manifest['uses-permission']).toEqual([
     { $: { 'android:name': 'android.permission.FOREGROUND_SERVICE_SPECIAL_USE', 'tools:node': 'remove' } },
   ]);
+});
+
+test('the GitHub APK lets the main activity float the agent screen', () => {
+  const input = { manifest: { application: [{ activity: [{ $: { 'android:name': '.MainActivity' } }] }] } };
+  const output = allowPictureInPicture(input);
+  expect(output.manifest.application[0].activity[0].$['android:supportsPictureInPicture']).toBe('true');
 });

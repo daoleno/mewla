@@ -2,6 +2,7 @@
  * Expo config plugin: phone use belongs to the GitHub APK. It starts a helper through the phone's
  * own Wireless debugging and reads the pairing code with an accessibility service, which Google
  * Play does not allow an app like this to do, so any other channel leaves its manifest entries out.
+ * The GitHub APK also lets the main activity float the agent's screen (picture-in-picture).
  */
 const { createRunOncePlugin, withAndroidManifest } = require('@expo/config-plugins');
 
@@ -36,13 +37,23 @@ function removePhoneUse(androidManifest) {
   return androidManifest;
 }
 
+function allowPictureInPicture(androidManifest) {
+  const application = androidManifest?.manifest?.application?.[0];
+  const main = (application?.activity || []).find((item) => item.$?.['android:name'] === '.MainActivity');
+  if (!main) {
+    throw new Error('withAndroidPhoneUse: MainActivity not found');
+  }
+  main.$['android:supportsPictureInPicture'] = 'true';
+  return androidManifest;
+}
+
 function withAndroidPhoneUse(config, { channel } = {}) {
-  if (channel === 'github-apk') return config;
   return withAndroidManifest(config, (cfg) => {
-    cfg.modResults = removePhoneUse(cfg.modResults);
+    cfg.modResults = channel === 'github-apk' ? allowPictureInPicture(cfg.modResults) : removePhoneUse(cfg.modResults);
     return cfg;
   });
 }
 
 module.exports = createRunOncePlugin(withAndroidPhoneUse, 'withAndroidPhoneUse');
 module.exports.removePhoneUse = removePhoneUse;
+module.exports.allowPictureInPicture = allowPictureInPicture;

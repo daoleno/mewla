@@ -73,6 +73,41 @@ object PhoneController {
         if (::app.isInitialized) return
         app = context.applicationContext
         prefs = PhonePrefs(app)
+        if (prefs.enabled) startKeeper()
+    }
+
+    // ---- keeping the helper up ---------------------------------------------------------------
+
+    private var keeper: Thread? = null
+
+    /**
+     * While Phone use is on, brings the helper back whenever it is not there: after the App is
+     * restarted or updated, after a Wi-Fi change or a reboot. The daemon only sends actions to a
+     * phone that says it is ready, so this has to happen before an agent asks, not when it does.
+     */
+    @Synchronized
+    private fun startKeeper() {
+        if (keeper?.isAlive == true) return
+        keeper = Thread({ keepHelper() }, "mewla-phone-keeper").apply { isDaemon = true; start() }
+    }
+
+    private fun keepHelper() {
+        var wait = 1_000L
+        try {
+            while (prefs.enabled) {
+                if (client?.isClosed == false) {
+                    wait = 5_000L
+                } else if (prefs.paired && !pairing && onWifi()) {
+                    val up = runCatching { ensureHelper() }.onFailure { Log.i(TAG, "helper not up yet: ${it.message}") }.isSuccess
+                    publish()
+                    wait = if (up) 5_000L else (wait * 2).coerceIn(4_000L, 120_000L)
+                } else {
+                    wait = 5_000L
+                }
+                Thread.sleep(wait)
+            }
+        } catch (_: InterruptedException) {
+        }
     }
 
     // ---- setup -------------------------------------------------------------------------------
@@ -113,7 +148,7 @@ object PhoneController {
         prefs.enabled = enabled
         if (enabled) {
             PhoneUseService.start(app)
-            Thread({ runCatching { ensureHelper() }; publish() }, "mewla-phone-ensure").start()
+            startKeeper()
         } else {
             PhoneUseService.stop(app)
             stopHelper()
@@ -256,10 +291,10 @@ object PhoneController {
         started
     }
 
-    /** Keeps [candidate] when its protocol is ours; otherwise shuts it down so a fresh one can start. */
+    /** Keeps [candidate] when it is this App install's helper; otherwise shuts it down so a fresh one can start. */
     private fun adopt(candidate: HelperClient): Boolean {
         val hello = runCatching { candidate.call("hello", timeoutMs = 5_000) }.getOrNull()
-        if (hello?.optInt("protocol") != PhoneHelper.PROTOCOL) {
+        if (hello?.optInt("protocol") != PhoneHelper.PROTOCOL || hello.optLong("build") != HelperLauncher.installStamp(app)) {
             runCatching { candidate.call("shutdown", timeoutMs = 2_000) }
             candidate.close()
             return false
