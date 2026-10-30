@@ -42,11 +42,13 @@ says who is using your phone.
 - When an agent needs you (a login, a code, a payment) your phone notifies you
   with what to do. Tap it, do it on the live screen, and tap **Done**; the agent
   carries on.
-- While an agent works, its screen also floats as a small live window over every
-  other page of Mewla, so you can keep chatting with Brain and watch at once. It is
-  about two fifths of the screen wide; double-tap it to make it larger. Drag it: it
-  snaps to a corner and remembers it, and it stays above the chat input and the
-  keyboard. Tap it for Take over (which opens the Phone page), Stop and
+- While an agent works, its screen also floats as a live window over every
+  other page of Mewla, so you can keep chatting with Brain and watch at once. It
+  has the agent screen's exact shape and starts at a bit over half the screen's
+  width. Drag the handle in its inner corner, or pinch, to resize it (from about a
+  third of the screen to nearly all of it); double-tap it to go between the
+  default and a large size. Drag it: it snaps to a corner, and it remembers its
+  corner and size. It stays above the chat input and the keyboard. Tap it for Take over (which opens the Phone page), Stop and
   expand. When the agent needs you, it shows a pulsing ring. It disappears when
   the agent finishes or you Stop, and on the Phone page itself.
 - Leave Mewla from any page while an agent works and its screen floats in a small

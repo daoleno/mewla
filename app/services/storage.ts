@@ -26,6 +26,7 @@ const KEYS = {
   themePreference: "mewla:theme_preference",
   petPreference: "mewla:pet_preference",
   phoneFloatCorner: "mewla:phone_float_corner",
+  phoneFloatSize: "mewla:phone_float_size",
 } as const;
 
 let serverWriteTail: Promise<unknown> = Promise.resolve();
@@ -318,4 +319,13 @@ export async function getPhoneFloatCorner(): Promise<string | null> {
 
 export async function setPhoneFloatCorner(corner: string): Promise<void> {
   await AsyncStorage.setItem(KEYS.phoneFloatCorner, corner);
+}
+
+/** The share of the window's width the agent's floating screen was left at. */
+export async function getPhoneFloatSize(): Promise<string | null> {
+  return AsyncStorage.getItem(KEYS.phoneFloatSize);
+}
+
+export async function setPhoneFloatSize(fraction: number): Promise<void> {
+  await AsyncStorage.setItem(KEYS.phoneFloatSize, String(fraction));
 }
