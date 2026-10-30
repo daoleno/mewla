@@ -59,9 +59,13 @@ class HelperClient private constructor(
         val id = ids.getAndIncrement()
         val future = CompletableFuture<JSONObject>()
         pending[id] = future
+        val started = System.currentTimeMillis()
         try {
             Wire.write(out, Wire.REQUEST, JSONObject(args.toString()).put("id", id).put("op", op).toString())
-            return future.get(timeoutMs, TimeUnit.MILLISECONDS)
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS).also {
+                val took = System.currentTimeMillis() - started
+                if (took > 1_000) android.util.Log.i("MewlaPhone", "helper $op took $took ms")
+            }
         } catch (e: TimeoutException) {
             throw IOException("the helper did not answer $op", e)
         } finally {

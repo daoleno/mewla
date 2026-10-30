@@ -38,6 +38,8 @@ export class PhoneLink {
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastState = "";
+  private nextTryAt = 0;
+  private opening = false;
   private subscriptions: { remove(): void }[] = [];
 
   constructor(private readonly options: PhoneLinkOptions) {}
@@ -64,7 +66,10 @@ export class PhoneLink {
 
   private async open() {
     const { server, onState } = this.options;
-    if (this.stopped) return;
+    if (this.stopped || this.opening || this.socket) return;
+    this.opening = true;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
     onState("connecting");
     try {
       const url = new URL(await resolveStoredServerURL(server));
@@ -90,6 +95,8 @@ export class PhoneLink {
       socket.onerror = () => undefined;
     } catch {
       this.retry();
+    } finally {
+      this.opening = false;
     }
   }
 
@@ -112,6 +119,8 @@ export class PhoneLink {
     this.options.onState("offline");
     const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)];
     this.attempt += 1;
+    this.nextTryAt = Date.now() + delay;
+    if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.open(), delay);
   }
 
@@ -159,10 +168,24 @@ export class PhoneLink {
 
   private relayEvent(json: string) {
     try {
-      this.send(JSON.parse(json) as PhoneEventFrame);
+      const frame = JSON.parse(json) as PhoneEventFrame | { type: "tick" };
+      if (frame.type === "tick") {
+        this.tick();
+        return;
+      }
+      this.send(frame);
     } catch {
       // Not an event frame.
     }
+  }
+
+  /**
+   * The native side's heartbeat while the link is down. JS timers do not run while the App is in
+   * the background, so a retry waiting on one would wait until the person opens the App again.
+   */
+  private tick() {
+    if (this.stopped || this.socket || this.opening || Date.now() < this.nextTryAt) return;
+    void this.open();
   }
 
   private async onFrame(raw: string) {

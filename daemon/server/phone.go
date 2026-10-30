@@ -159,7 +159,8 @@ func (s *Server) handlePhoneDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	defer link.Detach()
 	log.Printf("phone: device %s connected (%s, Android API %d, state %s)", device.ID, hello.Model, hello.SDK, hello.State)
-	defer log.Printf("phone: device %s disconnected", device.ID)
+	var endedBy error
+	defer func() { log.Printf("phone: device %s disconnected (%v)", device.ID, endedBy) }()
 
 	// Pings keep the connection honest through NATs and tunnels, and tell a dead phone from a
 	// quiet one; a phone that is unpaired meanwhile is let go.
@@ -194,6 +195,7 @@ func (s *Server) handlePhoneDevice(w http.ResponseWriter, r *http.Request) {
 	for {
 		kind, data, err := ws.ReadMessage()
 		if err != nil {
+			endedBy = err
 			return
 		}
 		alive()
