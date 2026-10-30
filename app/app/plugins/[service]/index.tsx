@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { AwsForm } from "../../../components/plugins/AwsForm";
 import { CustomServiceForm } from "../../../components/plugins/CustomServiceForm";
 import { HyperliquidForm } from "../../../components/plugins/HyperliquidForm";
 import { AccountCard, ConnectOffer, ServiceHeader, ToolUpdatesNotice } from "../../../components/plugins/PluginConnectionViews";
@@ -32,17 +31,11 @@ export default function PluginServiceScreen() {
   const submit = (input: NonNullable<ConnectionRequest["input"]>, signIn = false) => flow.connect(plugin.id, { input, signIn });
   // Hyperliquid's reading is its account above; the form below is the optional API wallet key for trading.
   const trading = plugin.id === "hyperliquid";
-  const aws = plugin.id === "aws";
-  const form = aws
-    ? <AwsForm key={plugin.id} plugin={plugin} accounts={accounts} profiles={flow.awsProfiles} connecting={connecting} serverName={flow.serverName} onLoad={flow.loadAwsProfiles} onConnect={submit} />
-    : trading
+  const form = trading
     ? <HyperliquidForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} defaultOpen={adding} onConnect={submit} />
     : <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />;
   const addAnother = (label: string) => <Button label={label} icon="add" variant="tinted" block onPress={() => setAdding(true)} />;
-  const tail = aws
-    // Pasted keys that stopped working are replaced from the same form.
-    ? !accounts.length || adding || accounts.some((account) => account.status === "authorization_required" && !account.profile) ? form : addAnother("Add another AWS account")
-    : trading
+  const tail = trading
     ? accounts.some((account) => account.signer) ? adding ? form : addAnother("Add another key") : form
     : custom
       ? !accounts.length || adding ? form : addAnother(plugin.id === "mcp" ? "Add another MCP server" : "Add another OpenAPI service")

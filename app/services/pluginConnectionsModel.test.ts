@@ -5,10 +5,7 @@ import {
   accountRecovery,
   accountTone,
   awsAccountSummary,
-  awsKeysCredential,
-  awsProfileSubtitle,
-  awsCodeFromText,
-  awsProfileSignsInWithBrowser,
+  signInAddressFromText,
   awsSignInInput,
   bulkToolNames,
   canDisconnect,
@@ -256,52 +253,33 @@ describe("hyperliquid accounts", () => {
 });
 
 describe("AWS", () => {
-  const aws = (patch: Partial<PluginAccount>) => account({ integration: "aws", name: "AWS 123456789012", identity: "arn:aws:iam::123456789012:user/audit", profile: "work", ...patch });
+  const aws = (patch: Partial<PluginAccount>) => account({ integration: "aws", name: "AWS 123456789012", identity: "arn:aws:iam::123456789012:user/audit", ...patch });
 
-  test("AWS has a page of its own for its sign-in, profiles and keys", () => {
-    expect(connectsWithForm("aws")).toBe(true);
-    expect(connectsWithForm("cloudflare")).toBe(false);
+  test("AWS connects like any browser sign-in, with no form of its own", () => {
+    expect(connectsWithForm("aws")).toBe(false);
+    expect(connectsWithForm("mcp")).toBe(true);
   });
 
-  test("a profile row says how it signs in and its region", () => {
-    expect(awsProfileSubtitle({ name: "work", kind: "login", region: "us-east-1" })).toBe("Signed in with aws login · us-east-1");
-    expect(awsProfileSubtitle({ name: "corp", kind: "sso" })).toBe("Signed in with aws sso login");
-    expect(awsProfileSubtitle({ name: "ci", kind: "keys", region: "eu-west-1" })).toBe("Saved access key · eu-west-1");
-  });
-
-  test("pasted keys travel as one trimmed JSON credential, with a token only when there is one", () => {
-    expect(JSON.parse(awsKeysCredential({ accessKeyId: " AKIA1 ", secretAccessKey: "s3cret\n", sessionToken: " " }))).toEqual({ access_key_id: "AKIA1", secret_access_key: "s3cret" });
-    expect(JSON.parse(awsKeysCredential({ accessKeyId: "ASIA1", secretAccessKey: "s", sessionToken: "tok" })).session_token).toBe("tok");
-  });
-
-  test("an expired session offers the same Sign in to AWS button, for its own profile", () => {
-    const expired = aws({ status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired. Sign in again." }] });
+  test("an expired session offers the same Sign in to AWS button, naming its own card", () => {
+    const expired = aws({ id: "aws-3", status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired. Sign in again." }] });
     expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" });
-    expect(awsSignInInput(expired)).toEqual({ integration: "aws", profile: "work" });
+    expect(awsSignInInput(expired)).toEqual({ integration: "aws", account_id: "aws-3" });
+    expect(awsSignInInput(account({ integration: "github" }))).toBeNull();
     // No terminal command anywhere.
     expect(JSON.stringify(accountRecovery(aws({ status: "authorization_required" }), "AWS"))).not.toContain("aws login");
   });
 
-  test("a tapped login or sso profile goes through the sign-in; keys, roles and others just connect", () => {
-    expect(awsProfileSignsInWithBrowser({ kind: "login" })).toBe(true);
-    expect(awsProfileSignsInWithBrowser({ kind: "sso" })).toBe(true);
-    for (const kind of ["keys", "role", "other"] as const) expect(awsProfileSignsInWithBrowser({ kind })).toBe(false);
-  });
-
-  test("only text that could be AWS's authorization code fills the code field", () => {
-    expect(awsCodeFromText("  eyJhbGciOiJSUzI1NiJ9.abc-DEF_123\n")).toBe("eyJhbGciOiJSUzI1NiJ9.abc-DEF_123");
-    for (const stray of ["", null, undefined, "short", "two words here", "https://signin.aws.amazon.com/v1/authorize?x=1", "line\nbreak-and-more", "é".repeat(12), "a".repeat(5000)]) {
-      expect(awsCodeFromText(stray)).toBe("");
+  test("only the address a sign-in ended on fills the address field", () => {
+    const address = "http://127.0.0.1:9877/plugins/oauth/callback?code=abc&state=def";
+    expect(signInAddressFromText(`  ${address}\n`)).toBe(address);
+    expect(signInAddressFromText("127.0.0.1:9877/plugins/oauth/callback?code=abc&state=def")).toBe("127.0.0.1:9877/plugins/oauth/callback?code=abc&state=def");
+    expect(signInAddressFromText("http://localhost:9877/plugins/oauth/callback?error=access_denied&state=def")).not.toBe("");
+    for (const stray of ["", null, undefined, "short", "two words here", "https://example.com/?state=x&code=y-and-more", "http://127.0.0.1:9877/plugins/oauth/callback?code=abc", "http://127.0.0.1:9877/x\nnext?state=1", "a".repeat(9000)]) {
+      expect(signInAddressFromText(stray)).toBe("");
     }
   });
 
-  test("expired pasted keys are replaced, not re-checked", () => {
-    const keys = aws({ profile: undefined, status: "authorization_required" });
-    expect(awsSignInInput(keys)).toBeNull();
-    expect(accountRecovery(keys, "AWS")?.detail).toContain("Add new keys");
-  });
-
-  test("the service row says Reconnect for an expired profile", () => {
+  test("the service row says Reconnect for an expired account", () => {
     const rows = pluginCatalogRows([plugin("aws", "AWS")], [aws({ status: "authorization_required" })], { aws: {} });
     expect(rows.services[0]?.state.kind).toBe("reconnect");
   });
@@ -311,27 +289,22 @@ describe("awsAccountSummary", () => {
   const arn = "arn:aws:sts::113732353381:assumed-role/AccountFullAccessRole/sess";
   const base = { integration: "aws", region: "us-east-1", identity: arn };
   test("names who is connected and keeps the ARN out of the headline", () => {
-    const summary = awsAccountSummary({ ...base, aws: { account_id: "113732353381", account_name: "Blank Canvas", who: "AccountFullAccessRole", session: "sess", sign_in: "login" } });
+    const summary = awsAccountSummary({ ...base, aws: { account_id: "113732353381", account_name: "Blank Canvas", who: "AccountFullAccessRole", session: "sess" } });
     expect(summary?.subtitle).toBe("AccountFullAccessRole · us-east-1");
     expect(summary?.subtitle).not.toContain("arn:");
     expect(summary?.details).toEqual([
-      { label: "Signed in with", value: "AWS sign-in" },
       { label: "Session name", value: "sess" },
       { label: "Account ID", value: "113732353381", copy: true },
       { label: "Identity", value: arn, copy: true },
     ]);
   });
-  test("drops a missing region and shows an Identity Center session end", () => {
-    const aws = { account_id: "1", who: "Root user", sign_in: "sso" as const, expires_at: "2030-01-02T03:04:05Z" };
-    const open = awsAccountSummary({ integration: "aws", identity: "", aws }, new Date("2029-01-01T00:00:00Z"));
+  test("drops a missing region and an empty identity", () => {
+    const open = awsAccountSummary({ integration: "aws", identity: "", aws: { account_id: "1", who: "Root user" } });
     expect(open?.subtitle).toBe("Root user");
-    expect(open?.details.find((row) => row.label === "Session ends")).toBeDefined();
     expect(open?.details.find((row) => row.label === "Identity")).toBeUndefined();
-    const ended = awsAccountSummary({ integration: "aws", identity: "", aws }, new Date("2031-01-01T00:00:00Z"));
-    expect(ended?.details.find((row) => row.label === "Session ended")).toBeDefined();
   });
   test("is absent before the server has said, and for other services", () => {
     expect(awsAccountSummary({ ...base })).toBeNull();
-    expect(awsAccountSummary({ integration: "github", identity: "x", aws: { account_id: "1", who: "x", sign_in: "keys" } })).toBeNull();
+    expect(awsAccountSummary({ integration: "github", identity: "x", aws: { account_id: "1", who: "x" } })).toBeNull();
   });
 });
