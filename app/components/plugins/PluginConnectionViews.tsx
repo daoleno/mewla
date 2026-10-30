@@ -27,7 +27,7 @@ import {
   type ToolsSwitch,
 } from "../../services/pluginConnectionsModel";
 import { Icon, type IconName } from "../icons/Icon";
-import { AwsCodeEntry } from "./AwsCodeEntry";
+import { AwsAddressEntry } from "./AwsAddressEntry";
 import { ServiceMark } from "./ServiceMarks";
 import { hasServiceMark } from "./serviceMarkPaths";
 
@@ -258,7 +258,7 @@ export function ConnectStatusCard({
   onChooseTools,
   onUseServerAccount,
   onImport,
-  onSubmitCode,
+  onSubmitAddress,
 }: {
   /** Null for a return that names no service (a stale or replayed sign-in). */
   serviceName: string | null;
@@ -279,8 +279,8 @@ export function ConnectStatusCard({
   onChooseTools(account: PluginAccount): void;
   onUseServerAccount?(): void;
   onImport(): void;
-  /** The code a sign-in ends with (AWS's console sign-in). */
-  onSubmitCode(code: string): void;
+  /** The address a sign-in ended on, pasted back when the browser could not reach this server. */
+  onSubmitAddress(address: string): void;
 }) {
   const { colors } = useAppTheme();
   if (serviceName === null) {
@@ -314,10 +314,10 @@ export function ConnectStatusCard({
       </StatusCard>
     );
   }
-  if (phase === "waiting" && flow?.flow.code_required) {
+  if (phase === "waiting" && flow?.flow.address_required) {
     return (
-      <StatusCard busy title={`Paste the code from ${serviceName}`} detail={error || `${serviceName} shows it after you sign in.`}>
-        <AwsCodeEntry onSubmit={onSubmitCode} />
+      <StatusCard busy title={`Finish signing in to ${serviceName}`} detail={error || "This finishes by itself on the computer running Mewla. On this device the page won't load: copy its address anyway and paste it here."}>
+        <AwsAddressEntry onSubmit={onSubmitAddress} />
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>

@@ -25,9 +25,6 @@ export type AwsAccountDetails = {
   who: string;
   /** The role session's name. */
   session?: string;
-  sign_in: "login" | "sso" | "keys" | "profile";
-  /** When an IAM Identity Center sign-in ends; absent for the other sign-ins. */
-  expires_at?: string;
   checked_at?: string;
 };
 export type PluginAccount = {
@@ -45,9 +42,7 @@ export type PluginAccount = {
   address?: string;
   /** Hyperliquid: the saved API wallet's public address; absent when the account is read only. */
   signer?: string;
-  /** AWS: the AWS CLI profile the account signs in through; absent for pasted access keys. */
-  profile?: string;
-  /** AWS: the profile's default region, or the region saved with pasted access keys. */
+  /** AWS: the account's default region. */
   region?: string;
   /** AWS: who is connected. */
   aws?: AwsAccountDetails;
@@ -72,26 +67,17 @@ export type PluginAccess = {
   allowed: number;
   tools: number;
 };
-/** A profile of the AWS CLI on the server's computer. It never carries a key. */
-export type AwsProfile = {
-  name: string;
-  region?: string;
-  /** How it signs in: `aws login`, `aws sso login`, a saved key, a role, or something else. */
-  kind: "login" | "sso" | "keys" | "role" | "other";
-};
 export type ConnectionRequest = {
   flow_id?: string;
   callback?: string;
-  /** connect_finish of an AWS sign-in: the authorization code AWS showed. */
-  code?: string;
   group?: "read" | "write";
-  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "aws_profiles" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
+  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
   id?: string;
   tool?: string;
   /** policy: several tools at once, all of them or none. confirm_updates and dismiss_updates: the updated tools shown. */
   tools?: string[];
   allowed?: boolean;
-  input?: { integration: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; profile?: string; region?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+  input?: { integration: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; account_id?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectFlow = {
   id: string;
@@ -99,8 +85,8 @@ export type ConnectFlow = {
   status: "waiting" | "confirm" | "connected" | "cancelled" | "failed";
   authorization_url?: string;
   user_code?: string;
-  /** The sign-in ends with a code the person pastes back (AWS's console sign-in). */
-  code_required?: boolean;
+  /** The sign-in returns to the server's own address; from another device the person pastes the address the browser ended on (connect_finish with callback). */
+  address_required?: boolean;
   identity?: string;
   message?: string;
   expires: string;
@@ -115,7 +101,6 @@ export type ConnectionResponse = {
   catalog?: PluginIntegration[];
   accounts?: PluginAccount[];
   account?: PluginAccount;
-  profiles?: AwsProfile[];
 };
 export function accountStatus(account: PluginAccount): string {
   if (account.status === "disconnected") return "Disconnected";

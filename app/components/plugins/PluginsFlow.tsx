@@ -12,7 +12,7 @@ import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { awsSignInInput, connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
-import { type AwsProfile, type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
+import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
 
 /** Route of one service page; its Tools page lives below it. */
@@ -75,8 +75,6 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const [connectedId, setConnectedId] = useState<string | null>(null);
   const [flow, setFlow] = useState<PendingConnection | null>(null);
   const [details, setDetails] = useState<Record<string, PluginAccount>>({});
-  /** AWS: the profiles of the AWS CLI on this server's computer; null until asked. */
-  const [awsProfiles, setAwsProfiles] = useState<AwsProfile[] | null>(null);
   const alive = useRef(true);
   const mutation = useRef(false);
   const completion = useRef(false);
@@ -234,8 +232,8 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     try {
       setPhase("waiting");
       if (active.flow.user_code) await Clipboard.setStringAsync(active.flow.user_code);
-      // A code to enter or to paste back ends in the app, not in a return link, so the page opens as plain browsing.
-      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code || !!active.flow.code_required, Platform.OS === "web" ? active.flow.web_return ? "same-tab" : "new-tab" : undefined);
+      // A code to enter or an address to paste back ends in the app, not in a return link, so the page opens as plain browsing, in the full browser where its address can be copied.
+      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code || !!active.flow.address_required, Platform.OS === "web" ? active.flow.web_return ? "same-tab" : "new-tab" : undefined);
       if (result.type === "external") { await check(); return; }
       if (!valid()) {
         if (result.type === "success") await deferReturn(result.url);
@@ -304,19 +302,19 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     const result = await send({ action: "github_import", flow_id: pending.current.flow.id, input: { integration: "github" } }, "connect:github");
     if (result) await settle(result); else fail("GitHub couldn't be verified. Start again.");
   };
-  /** Hands the code AWS showed to the sign-in waiting for it; the server answers when the CLI has finished. */
-  const submitCode = async (code: string) => {
+  /** Hands the address the browser ended on to the sign-in waiting for it; the server checks it is this sign-in's own. */
+  const submitAddress = async (address: string) => {
     const active = pending.current;
     if (!active || !valid() || completion.current) return;
     completion.current = true; setPhase("verifying"); setConnectError("");
     try {
-      await settle(await wsClient.requestConnections(active.serverId, { action: "connect_finish", flow_id: active.flow.id, code }));
+      await settle(await wsClient.requestConnections(active.serverId, { action: "connect_finish", flow_id: active.flow.id, callback: address }));
     } catch (failure) {
-      // The server answered: that is not the code, or this sign-in has ended. Either way it can be tried again from the card.
+      // The server answered: that is not this sign-in's address, or the sign-in has ended. Either way it can be tried again from the card.
       if (valid()) {
         if ((failure as { code?: string }).code === "plugin_request_failed" && /expired|ended|no longer/i.test(failure instanceof Error ? failure.message : "")) {
           fail(failure instanceof Error ? failure.message : "This sign-in expired. Start again."); await remember(null);
-        } else { setPhase("waiting"); setConnectError(failure instanceof Error ? failure.message : "Could not send the code. Try again."); }
+        } else { setPhase("waiting"); setConnectError(failure instanceof Error ? failure.message : "Could not send the address. Try again."); }
       }
     } finally { completion.current = false; }
   };
@@ -336,20 +334,14 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     return !!response;
   };
   const recover = (account: PluginAccount, action: AccountRecoveryAction) => {
-    // An AWS profile signs in again with the same browser sign-in as connecting;
-    // pasted keys are replaced from the service's page.
+    // An AWS account signs in again with the same browser sign-in as connecting,
+    // naming itself so it is renewed in place.
     const awsSignIn = action === "reconnect" ? awsSignInInput(account) : null;
     if (awsSignIn) void connect(account.integration, { input: awsSignIn });
     else if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
-    else if (action === "reconnect" && account.integration === "aws") router.push(pluginServicePath(account.integration));
     else if (action === "disconnect") void disconnect(account);
     else void connect(account.integration, { writes: reconnectsWithWrites(account) });
   };
-  /** AWS: asks which profiles the AWS CLI on the server's computer has. */
-  const loadAwsProfiles = useCallback(async () => {
-    const result = await send({ action: "aws_profiles" }, "aws:profiles");
-    if (result && valid()) setAwsProfiles(result.profiles ?? []);
-  }, [send, valid]);
   /** Hyperliquid: deletes the saved API wallet key and leaves the account read only. */
   const removeKey = (account: PluginAccount) => send({ action: "remove_key", id: account.id }, `key:${account.id}`).then((response) => !!response);
   /** The account's own on/off switch. Off keeps its sign-in and tool choices. */
@@ -379,11 +371,10 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const serviceLabel = (account: PluginAccount) => account.integration === "mcp" || account.integration === "openapi" ? account.name : plugin(account.integration)?.name ?? account.name;
   return {
     serverId, serverName, connection, deferredName,
-    awsProfiles, loadAwsProfiles,
     catalog, accounts, details, loaded, running, busy: running !== null, error, phase, flow, service, connectError,
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
-    plugin, send, connect, cancel, check, openBrowser, submitCode, useServerGitHub, importGitHub, dismiss,
+    plugin, send, connect, cancel, check, openBrowser, submitAddress, useServerGitHub, importGitHub, dismiss,
     setAccess, disconnect, removeKey, recover, setEnabled, load, setTools, confirmUpdates, serviceLabel,
   };
 }
@@ -421,7 +412,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
         onChooseTools={(account) => { flow.dismiss(); router.push({ pathname: `${pluginServicePath(account.integration)}/tools`, params: { account: account.id } } as never); }}
         onUseServerAccount={flow.service === "github" ? () => void flow.useServerGitHub() : undefined}
         onImport={() => void flow.importGitHub()}
-        onSubmitCode={(code) => void flow.submitCode(code)}
+        onSubmitAddress={(address) => void flow.submitAddress(address)}
       /> : null}
       {!flow.serverId ? <NoServerState onOpenSettings={() => router.push("/settings")} /> : children}
     </KeyboardAwareScrollView>

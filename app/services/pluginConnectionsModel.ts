@@ -1,6 +1,6 @@
 import { formatDate } from "./dateFormat";
 import type { ConnectPhase, PendingConnection } from "./pluginOnboarding";
-import { accountStatus, type AccessState, type AwsProfile, type ConnectionRequest, type ConnectionTool, type PluginAccount, type PluginIntegration } from "./connections";
+import { accountStatus, type AccessState, type ConnectionRequest, type ConnectionTool, type PluginAccount, type PluginIntegration } from "./connections";
 
 export type ConnectionTone = "success" | "warning" | "danger" | "neutral" | "accent";
 
@@ -44,60 +44,29 @@ export function pluginCatalogRows(
   return { services: rows.filter((row) => Boolean(reviewed[row.plugin.id])), custom: rows.filter((row) => !reviewed[row.plugin.id]) };
 }
 
-/** Services whose page holds a form: a custom service's address, Hyperliquid's optional trading key, or AWS's profile or keys. */
+/** Services whose page holds a form: a custom service's address, or Hyperliquid's optional trading key. */
 export function connectsWithForm(serviceId: string): boolean {
-  return serviceId === "mcp" || serviceId === "openapi" || serviceId === "hyperliquid" || serviceId === "aws";
-}
-
-const AWS_PROFILE_KINDS: Record<AwsProfile["kind"], string> = {
-  login: "Signed in with aws login",
-  sso: "Signed in with aws sso login",
-  keys: "Saved access key",
-  role: "Assumed role",
-  other: "AWS CLI profile",
-};
-
-/** Whether tapping a profile may need AWS's sign-in page: its session is the CLI's browser sign-in. Keys and roles never do. */
-export function awsProfileSignsInWithBrowser(profile: Pick<AwsProfile, "kind">): boolean {
-  return profile.kind === "login" || profile.kind === "sso";
-}
-
-/** One profile row's second line: how the profile signs in, and its region. */
-export function awsProfileSubtitle(profile: AwsProfile): string {
-  return [AWS_PROFILE_KINDS[profile.kind], profile.region].filter(Boolean).join(" · ");
+  return serviceId === "mcp" || serviceId === "openapi" || serviceId === "hyperliquid";
 }
 
 /**
- * Access keys pasted into the form, as the one credential string the server
- * reads. A session token is only included when there is one.
+ * The sign-in that renews an AWS account: the same browser sign-in as
+ * connecting, naming the card it came from so that card is renewed in place.
  */
-export function awsKeysCredential(keys: { accessKeyId: string; secretAccessKey: string; sessionToken: string }): string {
-  const token = keys.sessionToken.trim();
-  return JSON.stringify({
-    access_key_id: keys.accessKeyId.trim(),
-    secret_access_key: keys.secretAccessKey.trim(),
-    ...(token ? { session_token: token } : {}),
-  });
+export function awsSignInInput(account: Pick<PluginAccount, "id" | "integration">): { integration: string; account_id: string } | null {
+  return account.integration === "aws" ? { integration: "aws", account_id: account.id } : null;
 }
 
 /**
- * The sign-in that renews an AWS account's session: the same browser sign-in
- * as connecting, for the account's own profile. Pasted access keys have no
- * session to renew, so they get none.
+ * The address a sign-in ended on, if text from the clipboard could be one: the
+ * server's own http address with the sign-in's state in it. Anything else
+ * returns "", so a stray clipboard never fills the field.
  */
-export function awsSignInInput(account: Pick<PluginAccount, "integration" | "profile">): { integration: string; profile: string } | null {
-  return account.integration === "aws" && account.profile ? { integration: "aws", profile: account.profile } : null;
-}
-
-/**
- * The authorization code AWS shows after a sign-in, if text from the clipboard
- * could be one: a single printable token that is not a web address. Anything
- * else returns "", so a stray clipboard never fills the field.
- */
-export function awsCodeFromText(text: string | null | undefined): string {
-  const code = (text ?? "").trim();
-  if (code.length < 8 || code.length > 4096 || /^[a-z][a-z0-9+.-]*:\/\//i.test(code)) return "";
-  return /^[\x21-\x7e]+$/.test(code) ? code : "";
+export function signInAddressFromText(text: string | null | undefined): string {
+  const address = (text ?? "").trim();
+  if (address.length < 20 || address.length > 8192 || /\s/.test(address)) return "";
+  const bare = /^(?:https?:\/\/)?(?:127\.0\.0\.1|localhost)(?::\d{1,5})?\/[^?#]*\?/i.test(address);
+  return bare && /[?&]state=/.test(address) ? address : "";
 }
 
 /**
@@ -296,9 +265,8 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
   // Off is a choice, not a fault: the account's own switch turns it back on.
   if (!account.enabled) return null;
   if (account.status === "authorization_required" && account.integration === "aws") {
-    // A profile signs in again with one tap; pasted keys are replaced below.
-    if (account.profile) return { title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" };
-    return { title: "Needs sign-in again", detail: "These access keys expired or were revoked. Add new keys below.", action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
+    // AWS ends a sign-in after 12 hours; signing in again renews this account.
+    return { title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" };
   }
   if (account.status === "authorization_required") {
     return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
@@ -350,30 +318,15 @@ export interface AccountDetailRow {
 export interface AwsAccountSummary {
   /** Under the account name: who is signed in, then the region. */
   subtitle: string;
-  /** The ID, the ARN and how the account signs in, for a details area. */
+  /** The ID and the ARN, for a details area. */
   details: AccountDetailRow[];
 }
 
-const AWS_SIGN_IN_LABEL: Record<string, string> = {
-  login: "AWS sign-in",
-  sso: "IAM Identity Center",
-  keys: "Access keys",
-  profile: "AWS CLI profile",
-};
-
 /** What a card for an AWS account says about who is connected; null before the server has said. */
-export function awsAccountSummary(account: Pick<PluginAccount, "integration" | "aws" | "region" | "identity">, now: Date = new Date()): AwsAccountSummary | null {
+export function awsAccountSummary(account: Pick<PluginAccount, "integration" | "aws" | "region" | "identity">): AwsAccountSummary | null {
   const aws = account.aws;
   if (account.integration !== "aws" || !aws) return null;
   const details: AccountDetailRow[] = [];
-  const signIn = AWS_SIGN_IN_LABEL[aws.sign_in];
-  if (signIn) details.push({ label: "Signed in with", value: signIn });
-  if (aws.expires_at) {
-    const ends = new Date(aws.expires_at);
-    if (!Number.isNaN(ends.getTime())) {
-      details.push({ label: ends.getTime() <= now.getTime() ? "Session ended" : "Session ends", value: formatDate(ends) });
-    }
-  }
   if (aws.session) details.push({ label: "Session name", value: aws.session });
   if (aws.account_id) details.push({ label: "Account ID", value: aws.account_id, copy: true });
   if (account.identity) details.push({ label: "Identity", value: account.identity, copy: true });

@@ -51,7 +51,7 @@ Mewla's own app registration with the provider:
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
-| AWS | **Sign in to AWS**: AWS's own sign-in page opens in the browser on the device you hold, and you paste back the code it shows (an Identity Center profile needs no code). Or pick a profile of the AWS CLI already signed in on the server's computer, or paste access keys | Works everywhere; the button, the profiles list and the key fields are on the service's page |
+| AWS | **Sign in to AWS**: AWS's own sign-in page, through AWS's MCP server. Nothing to install on the server and no keys. AWS returns only to the computer Mewla runs on: from another device you paste back the address the page ended on | Works everywhere; the button is on the service's page |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
@@ -129,59 +129,61 @@ permissions there.
 
 ## AWS
 
-AWS needs the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
-(version 2) on the computer Mewla runs on. Mewla runs it for Brain and Workers;
-it does not talk to AWS another way.
+AWS is reached through [AWS's own MCP server](https://docs.aws.amazon.com/agent-toolkit/latest/userguide/oauth-authentication.html),
+signed in with AWS Sign-In. There is nothing to install on the computer Mewla
+runs on, and Mewla keeps no AWS key: it holds the sign-in AWS gave it.
 
 **Connect.** Open **AWS** in Extensions and tap **Sign in to AWS**. AWS's
-console sign-in page opens in the browser on the device you are holding (the
-computer Mewla runs on may be elsewhere). Sign in there, copy the authorization
-code AWS shows, and come back: Mewla fills the field from the clipboard, and
-**Continue** finishes. Mewla asks AWS who is signed in (STS
-`GetCallerIdentity`) and for the account's name (`account
-get-account-information`, else the account alias). The card is titled with
-that name, for example **Blank Canvas**, and says who is signed in beneath it:
-**Root user**, the role's name or **IAM user NAME**, then the region. If an
-organization's policy denies both name calls, the card is titled **AWS
-123456789012** instead. **Details** shows how the account signs in (AWS
-sign-in, IAM Identity Center or access keys), when an Identity Center session
-ends, the session name, and the account ID and ARN, which tap to copy. Mewla
-reads these when you connect or check the account, and again when you open an
-account whose details are over six hours old. A name you gave the account is
-never replaced. Nothing is asked of you that is not a credential: the
-sign-in is saved in the AWS CLI's config under a profile named `mewla` (or
-`mewla-2` and so on), with the region `us-east-1`. Mewla runs `aws login --remote` for this and keeps no key: the CLI
-caches the session and its refresh token and renews them as it normally does.
+sign-in page opens in the browser; sign in and approve. AWS sends the browser
+back to the computer Mewla runs on, so if you are on that computer you are
+done: the account appears by itself. From a phone or another computer the page
+after you approve will not load, which is expected. Copy its address from the
+browser's address bar anyway and paste it into Mewla (it fills in from the
+clipboard when you come back), then tap **Continue**. The address is only
+accepted for the sign-in that is waiting, and it works once. You have an hour
+to finish.
 
-The page also lists the profiles already in that computer's AWS config, each
-with how it signs in (`aws login`, `aws sso login`, a saved key or a role) and
-its region. Tap one that is signed in and it connects at once, with no sign-in.
-Tap an `aws login` or `aws sso login` profile whose session has expired and it
-signs in again under its own name, with the same sign-in as the button, instead of
-creating a new profile. A profile that holds keys or a role just connects.
-The last way is **Paste access keys**: the keys, an optional session token and a
-region go to the server's private vault and reach the CLI only through the
-environment of one call. A profile already connected is renewed in place, not
-added twice.
+Your AWS identity needs permission to sign in this way: the managed policy
+`AWSMCPSignInOAuthAccessPolicy` (`signin:AuthorizeOAuth2Access` and
+`signin:CreateOAuth2Token`). The root user needs nothing extra. Signing in
+gives Brain no more access than you have: your IAM policies and your
+organization's service control policies still decide every call.
 
-**When the session expires.** The account's row reads **Sign in to AWS**, and a
-call fails with one line, ``AWS session expired. Sign in again.`` Tap the button:
-the same sign-in runs for that profile (`aws login --remote`, or `aws sso login
---use-device-code` for an Identity Center profile, which shows a code to enter on
-AWS and needs no paste back) and the account comes back. Profiles that hold keys
-or a role cannot sign in from a browser; sign in to them with the AWS CLI on that
-computer. Expired pasted keys are replaced from the same page.
+Mewla asks AWS who is signed in (STS `GetCallerIdentity`) and for the
+account's name (`account get-account-information`, else the account alias).
+The card is titled with that name, for example **Blank Canvas**, and says who
+is signed in beneath it: **Root user**, the role's name or **IAM user NAME**,
+then the region (`us-east-1` unless a call names another). If an organization's
+policy denies both name calls, the card is titled **AWS 123456789012**
+instead. **Details** shows the session name and the account ID and ARN, which
+tap to copy. Mewla reads these when you connect or check the account, and
+again when you open an account whose details are over six hours old. A name you
+gave the account is never replaced. One sign-in is one account; to use another
+AWS account, tap **Add another AWS account** and sign in to it.
 
-**Read and search** (on after you connect): `whoami`, `search` and `docs`
-(find an operation, then see its parameters and what it returns; they read the
-AWS CLI's own service models and make no request), and `read`, which runs a
-`Describe*`, `List*`, `Get*`, `BatchGet*`, `Head*`, `Lookup*` or `Search*`
-operation. A call names `service` (such as `ec2`, `rds`, `logs`, `s3api`),
-`operation`, the operation's `params` with the API's own names, an optional
-`region` (otherwise the profile's own), and an optional JMESPath `query` to cut
-the result down. Each call returns one page; pass the operation's own
-`MaxResults` and `NextToken` to page. A result over 1 MiB is refused with a hint
-to ask for less.
+**When the session ends.** AWS ends a sign-in after at most 12 hours. The
+account's row then reads **Sign in to AWS**, and a call fails with one line,
+``AWS session expired. Sign in again.`` Tap the button and sign in again: the
+same account comes back, with its name and what you allowed.
+Disconnecting an account removes Mewla's copy of the sign-in; AWS stops
+honoring it on its own within 12 hours.
+
+**Accounts connected before this change.** Accounts that used the AWS CLI or
+pasted keys show **Sign in to AWS** once. Tap it on each: the account keeps its
+name and its permissions and switches to the new sign-in. Sign in to the same
+AWS account you connected before; a different one is added as a new account.
+The AWS CLI and the keys in its config are no longer used and are left as they
+were.
+
+**Read and search** (on after you connect): `whoami`; `search` and `docs`
+(search AWS's documentation, then read a page of it, to find an operation and
+its parameters); and `read`, which runs a `Describe*`, `List*`, `Get*`,
+`BatchGet*`, `Head*`, `Lookup*` or `Search*` operation. A call names `service`
+(the SDK's name, such as `ec2`, `rds`, `logs`, `s3`, `bedrock`), `operation`
+in PascalCase such as `DescribeInstances`, the operation's `params` with the
+API's own names, and an optional `region` (otherwise `us-east-1`). Results are
+collected across pages, up to 1000 items. A result over 1 MiB is refused with a
+hint to ask for less.
 
 **Make changes when asked** (off until you turn it on): `execute` runs any
 operation, changes included. It is the tool that needs your authorization for
@@ -195,16 +197,16 @@ what you mean it to. Secret fields in results (secret keys, session tokens,
 secret strings, passwords, user data, and the values of environment variables
 whose names look secret) are replaced with `[REDACTED]`.
 
-Not run at all: operations that stream data to or from a file on the server
-(`s3api get-object` and `put-object`, Lambda `Invoke`, and the like), and any
-parameter that starts with `file://` or `fileb://`.
+Brain never writes the code that runs in AWS. AWS's server runs a short script
+for each call, and Mewla sends only a fixed one that makes exactly one request
+for the service and operation the call names. The server allows 10 requests a
+second for an account.
 
 ```sh
-mewla connections aws-profiles
-mewla connections add --integration aws --profile work
 mewla connections invoke --id ACCOUNT_ID --tool whoami
-mewla connections invoke --id ACCOUNT_ID --tool search --args '{"query":"rds instances"}'
-mewla connections invoke --id ACCOUNT_ID --tool read --args '{"service":"rds","operation":"DescribeDBInstances","query":"DBInstances[].DBInstanceIdentifier"}'
+mewla connections invoke --id ACCOUNT_ID --tool search --args '{"query":"rds describe instances API"}'
+mewla connections invoke --id ACCOUNT_ID --tool read --args '{"service":"rds","operation":"DescribeDBInstances"}'
+mewla connections invoke --id ACCOUNT_ID --tool read --args '{"service":"bedrock","operation":"ListFoundationModels","region":"us-west-2"}'
 ```
 
 ## Hyperliquid
