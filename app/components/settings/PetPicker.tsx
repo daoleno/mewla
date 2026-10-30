@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
-import { ContinuousCorners, Radii, useAppTheme } from "../../constants/tokens";
+import { Radii, useAppTheme } from "../../constants/tokens";
 import { useThemeContext } from "../../theme";
 import { AppText } from "../ui/AppText";
 import type { BrainCatState } from "../mewla/brainCatState";
@@ -18,7 +18,7 @@ const PORTRAIT_SIZE = 52;
 
 /** Settings → Pet: the chosen pet acting out Brain's states, and every pet to pick from. */
 export function PetPicker({ animate = true }: { animate?: boolean }) {
-  const { colors, theme } = useAppTheme();
+  const { colors } = useAppTheme();
   const { petId, setPetId } = useThemeContext();
   const pet = findPetPack(PET_PACKS, petId, DEFAULT_PET_ID);
   const [step, setStep] = useState(0);
@@ -33,9 +33,8 @@ export function PetPicker({ animate = true }: { animate?: boolean }) {
     setStep(0);
     void setPetId(id);
   };
-  const border = theme.isLight ? colors.borderSubtle : theme.materials.stroke;
   return (
-    <View style={[styles.card, { backgroundColor: colors.bgSurface, borderColor: border }]}>
+    <View style={styles.card}>
       <View style={styles.preview}>
         <PetSprite
           state={PREVIEW_STATES[step % PREVIEW_STATES.length]}
@@ -81,12 +80,8 @@ export function PetPicker({ animate = true }: { animate?: boolean }) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: Radii.card,
-    ...ContinuousCorners,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: 16,
     paddingHorizontal: 10,
-    marginBottom: 26,
     gap: 12,
   },
   preview: {

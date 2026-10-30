@@ -4,7 +4,7 @@ import path from "path";
 import nacl from "tweetnacl";
 import {
   appUpdatePending,
-  appUpdateStatus,
+  appUpdateRow,
   AUTO_CHECK_INTERVAL_MS,
   MANUAL_CHECK_COOLDOWN_MS,
   compareVersions,
@@ -170,40 +170,48 @@ describe("distribution channel", () => {
   });
 });
 
-describe("About row status", () => {
+describe("About update row", () => {
   const update = parseAndroidUpdateManifest(manifestText())!;
 
-  test("always says where an updatable build stands, and a settled check can be tapped", () => {
-    expect(appUpdateStatus({ kind: "hidden" })).toEqual({ text: null, actionable: false });
-    expect(appUpdateStatus({ kind: "idle" })).toEqual({ text: "Checking for updates…", actionable: false });
-    expect(appUpdateStatus({ kind: "checking" })).toEqual({ text: "Checking for updates…", actionable: false });
-    expect(appUpdateStatus({ kind: "current" })).toEqual({ text: "Up to date · Tap to check", actionable: true });
-    expect(appUpdateStatus({ kind: "checkFailed" })).toEqual({
-      text: "Couldn't check for updates · Tap to retry",
-      actionable: true,
-    });
+  test("a build that cannot update has no row; otherwise it says where it stands", () => {
+    expect(appUpdateRow({ kind: "hidden" })).toBeNull();
+    expect(appUpdateRow({ kind: "idle" })).toEqual({ title: "Check for updates", busy: true, actionable: false });
+    expect(appUpdateRow({ kind: "checking" })).toEqual({ title: "Check for updates", busy: true, actionable: false });
+    expect(appUpdateRow({ kind: "current" })).toEqual({ title: "Check for updates", value: "Up to date", actionable: true });
+    expect(appUpdateRow({ kind: "checkFailed" })).toEqual({ title: "Check for updates", action: "Retry", actionable: true });
     // Only a waiting release dots Settings.
     for (const kind of ["hidden", "idle", "checking", "current", "checkFailed"] as const) {
       expect(appUpdatePending({ kind })).toBe(false);
     }
   });
 
-  test("reads short and plain once an update is waiting", () => {
-    expect(appUpdateStatus({ kind: "available", update })).toEqual({
-      text: "Update to v0.2.9",
+  test("a waiting update is a title, its version and one button, never a sentence", () => {
+    expect(appUpdateRow({ kind: "available", update })).toEqual({
+      title: "Update available",
+      subtitle: "v0.2.9",
+      action: "Update",
       actionable: true,
     });
-    expect(appUpdateStatus({ kind: "downloading", update, progress: 0.426 })).toEqual({
-      text: "Downloading 42%",
+    expect(appUpdateRow({ kind: "downloading", update, progress: 0.426 })).toEqual({
+      title: "Downloading",
+      value: "42%",
+      progress: 0.426,
       actionable: false,
     });
-    expect(appUpdateStatus({ kind: "ready", update, fileName: update.fileName }).text).toBe("Install v0.2.9");
-    expect(appUpdateStatus({ kind: "failed", update, message: "x" })).toEqual({
-      text: "Couldn't update · Tap to retry",
+    expect(appUpdateRow({ kind: "ready", update, fileName: update.fileName })).toEqual({
+      title: "Ready to install",
+      subtitle: "v0.2.9",
+      action: "Install",
       actionable: true,
     });
-    expect(appUpdateStatus({ kind: "needsPermission", update, fileName: update.fileName })).toEqual({
-      text: "Allow Mewla to install apps · Tap to continue",
+    expect(appUpdateRow({ kind: "failed", update, message: "x" })).toEqual({
+      title: "Update failed",
+      action: "Retry",
+      actionable: true,
+    });
+    expect(appUpdateRow({ kind: "needsPermission", update, fileName: update.fileName })).toEqual({
+      title: "Allow app installs",
+      action: "Continue",
       actionable: true,
     });
     expect(appUpdatePending({ kind: "available", update })).toBe(true);
