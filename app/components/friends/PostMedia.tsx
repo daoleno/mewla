@@ -149,8 +149,17 @@ function PlayingVideo({ url, muted, view, onToggleMute, onEnded }: { url: string
   const player: VideoPlayer = useVideoPlayer({ uri: url }, (instance) => {
     instance.loop = false;
     instance.muted = true;
-    instance.play();
   });
+  // The source is still loading when the player is made, and a play() before
+  // it is ready is dropped on web, so start once it says it can.
+  const { status } = useEvent(player, "statusChange", { status: player.status });
+  const started = useRef(false);
+  useEffect(() => {
+    if (status === "readyToPlay" && !started.current) {
+      started.current = true;
+      player.play();
+    }
+  }, [player, status]);
   useEffect(() => {
     player.muted = muted;
   }, [player, muted]);
