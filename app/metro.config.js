@@ -33,6 +33,9 @@ config.resolver.blockList = [
   underRepo("app", "android", ".gradle"),
   underRepo("app", "ios", "build"),
   underRepo("app", "ios", "Pods"),
+  // Gradle output of every native module (app/modules/*, node_modules/*): a
+  // native build rewrites thousands of files there and Metro grew past 8 GB.
+  /\/android\/(build|\.cxx|\.gradle)\//,
 ];
 
 module.exports = config;
