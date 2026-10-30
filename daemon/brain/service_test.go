@@ -2503,6 +2503,38 @@ func TestServiceSnapshotHonorsHostExecutorOverride(t *testing.T) {
 	}
 }
 
+// The Brain host and a default Worker are both launched with full authority,
+// and a host command an earlier release wrote with Auto mode is migrated.
+func TestBrainHostAndDefaultWorkerCommandsCarryFullAuthority(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(store, &fakeWatcher{}, work.NewExecutorConfig(map[string]work.Executor{}))
+	for _, tc := range []struct{ executor, command, want string }{
+		{"claude", "claude", "--permission-mode bypassPermissions"},
+		{"claude", "claude --permission-mode auto", "--permission-mode bypassPermissions"},
+		{"codex", "codex", "--dangerously-bypass-approvals-and-sandbox"},
+		{"cursor", "cursor-agent", "--force"},
+		{"grok", "grok --no-alt-screen", "--permission-mode bypassPermissions"},
+	} {
+		host, err := service.hostCommand(work.NewWorkerExecutor(tc.executor, work.Executor{Name: tc.executor, Command: tc.command}))
+		if err != nil {
+			t.Fatalf("%s host: %v", tc.command, err)
+		}
+		if !strings.Contains(host, tc.want) || strings.Contains(host, "permission-mode auto") {
+			t.Fatalf("Brain host command %q = %q, want %q", tc.command, host, tc.want)
+		}
+		if tc.executor == "claude" && !strings.Contains(host, `"defaultMode":"bypassPermissions"`) {
+			t.Fatalf("Claude host command %q lacks the bypass defaultMode: %q", tc.command, host)
+		}
+		prepared, err := work.PrepareDelegatedCommand(work.InferWorkerProvider(tc.command), tc.command)
+		if err != nil || !strings.Contains(prepared, tc.want) {
+			t.Fatalf("Worker command %q = %q err=%v, want %q", tc.command, prepared, err, tc.want)
+		}
+	}
+}
+
 func TestServiceBootstrapPromptDefaultsToAutonomousScheduling(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {

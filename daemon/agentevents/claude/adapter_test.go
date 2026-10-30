@@ -43,7 +43,7 @@ func TestPrepareLaunchAddsTheHookFileOnce(t *testing.T) {
 }
 
 func TestPrepareLaunchGivesAFreshLaunchItsOwnSession(t *testing.T) {
-	launched, err := Adapter{SettingsPath: "/s.json"}.PrepareLaunch("claude --permission-mode auto")
+	launched, err := Adapter{SettingsPath: "/s.json"}.PrepareLaunch("claude --permission-mode bypassPermissions")
 	if err != nil {
 		t.Fatal(err)
 	}

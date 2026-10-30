@@ -84,3 +84,28 @@ func TestLoadExecutors_Roles(t *testing.T) {
 		t.Fatalf("roles = %v", names)
 	}
 }
+
+func TestLoadExecutorsMigratesAutoModeCommands(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "executors.toml")
+	body := `[[executors]]
+name = "claude"
+command = "claude --model m --permission-mode auto"
+
+[[executors]]
+name = "claude-edits"
+command = "claude --permission-mode acceptEdits"
+`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadExecutors(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.ByName["claude"].Command; got != "claude --model m --permission-mode bypassPermissions" {
+		t.Fatalf("old Auto-mode executor = %q", got)
+	}
+	if got := cfg.ByName["claude-edits"].Command; got != "claude --permission-mode acceptEdits" {
+		t.Fatalf("a person's own mode was rewritten: %q", got)
+	}
+}

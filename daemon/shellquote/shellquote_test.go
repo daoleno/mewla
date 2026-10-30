@@ -34,3 +34,25 @@ func TestWordLeavesLiteralWordsAlone(t *testing.T) {
 		}
 	}
 }
+
+func TestReplaceFieldsKeepsEveryOtherByte(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		replace  map[int]string
+		want     string
+		ok       bool
+	}{
+		{"value", `env PATH='/a b':$PATH claude --mode  auto  --x "y z"`, map[int]string{4: "bypass"}, `env PATH='/a b':$PATH claude --mode  bypass  --x "y z"`, true},
+		{"quoted field", `claude "--mode=auto" x`, map[int]string{1: "--mode=bypass"}, `claude --mode=bypass x`, true},
+		{"needs quoting", `claude a`, map[int]string{1: "b c"}, `claude 'b c'`, true},
+		{"out of range", `claude a`, map[int]string{2: "b"}, "", false},
+		{"not simple", `claude a; b`, map[int]string{1: "b"}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ReplaceFields(tc.in, tc.replace)
+			if ok != tc.ok || got != tc.want {
+				t.Fatalf("ReplaceFields(%q) = %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}

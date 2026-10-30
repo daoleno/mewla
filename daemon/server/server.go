@@ -1186,7 +1186,10 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			recorder.NotificationEngaged(notificationViewed, strings.TrimSpace(raw.WorkerID))
 		}
 	case "create_session":
-		command := strings.TrimSpace(raw.Command)
+		// An app that predates the bypass default still sends its Claude preset
+		// in Auto mode; Mewla has no Auto mode, so that Session starts in full
+		// authority like every other.
+		command := work.MigrateClaudeAutoMode(strings.TrimSpace(raw.Command))
 		if work.InferWorkerProvider(command) == work.WorkerProviderDSH {
 			ensured, err := work.EnsureDSHSessionLaunchCommand(command)
 			if err != nil {

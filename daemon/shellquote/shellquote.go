@@ -31,15 +31,60 @@ func Word(value string) string {
 // quoting needed to recover argv but deliberately rejects shell comments,
 // command composition and substitution outside single quotes.
 func Fields(command string) ([]string, bool) {
+	fields, _, ok := scan(command)
+	return fields, ok
+}
+
+// ReplaceFields returns command with the fields at the given indexes (as
+// Fields numbers them) rewritten to the mapped literal values, leaving every
+// other byte of the command exactly as written. It reports false when command
+// is not one simple command or an index is out of range.
+func ReplaceFields(command string, replace map[int]string) (string, bool) {
+	fields, spans, ok := scan(command)
+	if !ok {
+		return "", false
+	}
+	for index := range replace {
+		if index < 0 || index >= len(fields) {
+			return "", false
+		}
+	}
+	var out strings.Builder
+	last := 0
+	for index, span := range spans {
+		value, ok := replace[index]
+		if !ok {
+			continue
+		}
+		out.WriteString(command[last:span[0]])
+		out.WriteString(Word(value))
+		last = span[1]
+	}
+	out.WriteString(command[last:])
+	return out.String(), true
+}
+
+// scan splits command like Fields and also returns each field's [start, end)
+// byte span in command.
+func scan(command string) ([]string, [][2]int, bool) {
 	var fields []string
+	var spans [][2]int
 	var token strings.Builder
 	var quote byte
 	started := false
-	flush := func() {
+	start := 0
+	flush := func(end int) {
 		if started {
 			fields = append(fields, token.String())
+			spans = append(spans, [2]int{start, end})
 			token.Reset()
 			started = false
+		}
+	}
+	begin := func(index int) {
+		if !started {
+			start = index
+			started = true
 		}
 	}
 	for index := 0; index < len(command); index++ {
@@ -51,42 +96,41 @@ func Fields(command string) ([]string, bool) {
 			}
 			if quote == '"' && (current == '`' ||
 				current == '$' && index+1 < len(command) && command[index+1] == '(') {
-				return nil, false
+				return nil, nil, false
 			}
 			if quote == '"' && current == '\\' {
 				index++
 				if index >= len(command) {
-					return nil, false
+					return nil, nil, false
 				}
 				current = command[index]
 			}
 			token.WriteByte(current)
-			started = true
 			continue
 		}
 		switch current {
 		case '\'', '"':
+			begin(index)
 			quote = current
-			started = true
 		case '\\':
+			begin(index)
 			index++
 			if index >= len(command) {
-				return nil, false
+				return nil, nil, false
 			}
 			token.WriteByte(command[index])
-			started = true
 		case '#', ';', '|', '&', '<', '>', '`', '(', ')', '\n', '\r':
-			return nil, false
+			return nil, nil, false
 		case ' ', '\t':
-			flush()
+			flush(index)
 		default:
+			begin(index)
 			token.WriteByte(current)
-			started = true
 		}
 	}
 	if quote != 0 {
-		return nil, false
+		return nil, nil, false
 	}
-	flush()
-	return fields, true
+	flush(len(command))
+	return fields, spans, true
 }
