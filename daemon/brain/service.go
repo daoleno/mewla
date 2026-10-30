@@ -3689,8 +3689,14 @@ func (s *Service) hostLaunchCommand(executor work.WorkerExecutor, resumeSessionI
 		}
 		return withCLIOnPath(command), nil
 	case work.WorkerProviderGrok, work.WorkerProviderCursor:
+		// The Brain host gets the same full-authority launch as a Worker, so it
+		// never stops at an approval prompt.
+		hardened, err := work.PrepareDelegatedCommand(provider, command)
+		if err != nil {
+			return "", err
+		}
+		command = hardened
 		if resumeSessionID != "" {
-			var err error
 			command, err = work.WithProviderResumeToken(provider, command, resumeSessionID)
 			if err != nil {
 				return "", err

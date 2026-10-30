@@ -93,6 +93,10 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 		if executor.Command == "" {
 			executor.Command = name
 		}
+		// A command an earlier release wrote in Auto mode runs in full authority.
+		if NewWorkerExecutor(name, executor).Provider == WorkerProviderClaude {
+			executor.Command = MigrateClaudeAutoMode(executor.Command)
+		}
 		cfg.ByName[name] = executor
 	}
 	return cfg, nil
@@ -100,7 +104,7 @@ func LoadExecutors(path string) (*ExecutorConfig, error) {
 
 // IDForCommand names the executor a launch command belongs to: the one whose
 // configured command it is, or else the single executor that starts the same
-// program (the app launches "claude --permission-mode auto" for the "claude"
+// program (an app preset may launch "claude --model m" for the "claude"
 // executor). It returns "" when no executor claims the command, and the caller
 // then reports no executor rather than guessing one.
 func (c *ExecutorConfig) IDForCommand(command string) string {

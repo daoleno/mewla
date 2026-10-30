@@ -43,7 +43,7 @@ const (
 	// hidden Session and gets no hook file (which carries the same key), so its
 	// command carries the key itself; a routed launch's own --settings payload,
 	// appended later, replaces this one and carries the key too.
-	ClaudeSkipBypassWarningSettings = `--settings '{"skipDangerousModePermissionPrompt":true}'`
+	ClaudeSkipBypassWarningSettings = `--settings '{"permissions":{"defaultMode":"bypassPermissions"},"skipDangerousModePermissionPrompt":true}'`
 
 	// OpenCodeAutoFlag auto-approves permissions that are not explicitly denied.
 	// Brain-delegated and Calendar OpenCode sessions use this so unattended
@@ -60,18 +60,54 @@ const (
 // authorization mode.
 var ErrScheduledActionUnattended = errors.New("scheduled_action executor cannot launch unattended")
 
+// MigrateClaudeAutoMode rewrites an explicit Claude `--permission-mode auto`
+// (or `=auto`) to bypassPermissions. Earlier Mewla versions launched Claude in
+// Auto mode and wrote that command into executor configs and app launch
+// presets; Mewla no longer has an Auto mode, so such a command is moved to
+// full authority wherever it is launched. Only the argv of the Claude
+// invocation is read, so an env value or a quoted string that merely mentions
+// the flag is untouched, and every other byte of the command is kept. Other
+// explicit modes are the person's own choice and are left alone.
+func MigrateClaudeAutoMode(command string) string {
+	options, ok := inspectLaunchCommandOptions(command)
+	if !ok || !scheduledProviderExecutable(WorkerProviderClaude, options.executable) {
+		return command
+	}
+	replace := map[int]string{}
+	for index, argument := range options.argv {
+		switch {
+		case argument == "--permission-mode":
+			if index+1 < len(options.argv) && options.argv[index+1] == "auto" {
+				replace[options.argvStart+index+1] = "bypassPermissions"
+			}
+		case argument == "--permission-mode=auto":
+			replace[options.argvStart+index] = "--permission-mode=bypassPermissions"
+		}
+	}
+	if len(replace) == 0 {
+		return command
+	}
+	migrated, ok := shellquote.ReplaceFields(command, replace)
+	if !ok {
+		return command
+	}
+	return migrated
+}
+
 // HardenClaudeCommand returns a Claude launch command configured for
-// autonomous execution. When command does not already declare an explicit
+// autonomous execution. An explicit Auto mode is migrated to bypassPermissions
+// (MigrateClaudeAutoMode). When command does not already declare an
 // authorization mode, ClaudeBypassPermissionFlag is appended; commands that
-// already include --permission-mode (any value) or --dangerously-skip-permissions
-// keep their own choice. A command without its own --settings also gets
-// ClaudeSkipBypassWarningSettings, so a first launch never waits at Claude's
-// bypass-mode warning.
+// already include --permission-mode (any other value) or
+// --dangerously-skip-permissions keep their own choice. A command without its
+// own --settings also gets ClaudeSkipBypassWarningSettings, so a first launch
+// never waits at Claude's bypass-mode warning.
 func HardenClaudeCommand(command string) string {
 	command = strings.TrimSpace(command)
 	if command == "" {
 		command = WorkerProviderClaude
 	}
+	command = MigrateClaudeAutoMode(command)
 	if !strings.Contains(command, "--permission-mode") &&
 		!strings.Contains(command, "--dangerously-skip-permissions") {
 		command += " " + ClaudeBypassPermissionFlag
@@ -260,15 +296,17 @@ func ScheduledActionCommand(executorID string, executor Executor) (string, error
 		}
 		return appendScheduledOptions(executorID, command, options, CodexFullAuthorizationFlag)
 	case WorkerProviderClaude:
-		// Auto is the default. An explicit bypassPermissions or
-		// --dangerously-skip-permissions is the person's own choice and is kept;
+		// bypassPermissions is the default, and an old explicit Auto mode is
+		// migrated to it. An explicit --dangerously-skip-permissions is kept;
 		// every mode that can stop at a prompt (default, acceptEdits, dontAsk,
 		// plan) fails before spawn.
+		command = MigrateClaudeAutoMode(command)
+		options, _ = inspectLaunchCommandOptions(command)
 		permissionPresent, permissionMode := options.optionValue("--permission-mode")
 		skipPresent, skipEnabled := options.option("", "--dangerously-skip-permissions")
 		if skipPresent && !skipEnabled ||
-			permissionPresent && permissionMode != "auto" && permissionMode != "bypassPermissions" {
-			return "", fmt.Errorf("%w: executor %q has a Claude permission mode other than auto or bypassPermissions", ErrScheduledActionUnattended, executorID)
+			permissionPresent && permissionMode != "bypassPermissions" {
+			return "", fmt.Errorf("%w: executor %q has a Claude permission mode other than bypassPermissions", ErrScheduledActionUnattended, executorID)
 		}
 		if permissionPresent || skipEnabled {
 			return command, nil
@@ -388,6 +426,8 @@ func appendCommandOptions(command string, options ...string) string {
 type launchCommandOptions struct {
 	executable string
 	argv       []string
+	// argvStart is the index of argv[0] among the command's shell fields.
+	argvStart  int
 	terminated bool
 }
 
@@ -412,6 +452,7 @@ func inspectLaunchCommandOptions(command string) (launchCommandOptions, bool) {
 	options := launchCommandOptions{
 		executable: filepath.Base(fields[executable]),
 		argv:       fields[executable+1:],
+		argvStart:  executable + 1,
 	}
 	for index, argument := range options.argv {
 		if argument == "--" {

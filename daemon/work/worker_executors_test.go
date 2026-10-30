@@ -24,9 +24,9 @@ func TestHardenClaudeCommandAppendsBypassPermission(t *testing.T) {
 			want: "claude --profile my-profile " + ClaudeBypassPermissionFlag + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
-			name: "explicit auto preserved",
+			name: "explicit auto migrated to bypassPermissions",
 			in:   "claude --permission-mode auto",
-			want: "claude --permission-mode auto" + " " + ClaudeSkipBypassWarningSettings,
+			want: "claude --permission-mode bypassPermissions" + " " + ClaudeSkipBypassWarningSettings,
 		},
 		{
 			name: "already authorized dontAsk",
@@ -108,8 +108,9 @@ func TestScheduledActionCommandRecognizesExactUnattendedArgv(t *testing.T) {
 		{"Codex partial sandbox", "codex", "codex -s=danger-full-access", "", "codex -s=danger-full-access --ask-for-approval never"},
 		{"Codex before terminator", "codex", `codex -a never -s danger-full-access -- "literal prompt"`, "", `codex -a never -s danger-full-access -- "literal prompt"`},
 		{"Claude quoted equals", "claude", `claude "--permission-mode=bypassPermissions"`, "", `claude "--permission-mode=bypassPermissions"`},
-		{"Claude explicit auto", "claude", "claude --permission-mode auto", "", "claude --permission-mode auto"},
-		{"Claude explicit auto equals", "claude", "claude --permission-mode=auto --model m", "", "claude --permission-mode=auto --model m"},
+		{"Claude explicit auto migrated", "claude", "claude --permission-mode auto", "", "claude --permission-mode bypassPermissions"},
+		{"Claude explicit auto equals migrated", "claude", "claude --permission-mode=auto --model m", "", "claude --permission-mode=bypassPermissions --model m"},
+		{"Claude quoted auto migrated", "claude", `env PROFILE=calendar -- claude "--permission-mode=auto"`, "", `env PROFILE=calendar -- claude --permission-mode=bypassPermissions`},
 		{"Claude default is bypassPermissions", "claude", "claude --model m", "", "claude --model m --permission-mode bypassPermissions"},
 		{"Cursor substrings", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra", "cursor", "env FORCE=--force cursor-agent --forceful --sandbox=disabled --distrust --approve-mcps-extra --force --trust --approve-mcps"},
 		{"Cursor quoted exact", "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`, "cursor", `cursor-agent '--yolo' "--sandbox=disabled" '--trust' "--approve-mcps"`},
@@ -271,11 +272,11 @@ func TestProfileClientExecutorSeparatesAliasFromCanonicalClient(t *testing.T) {
 }
 
 func TestEnsureClaudeSessionLaunchCommandGivesFreshLaunchItsOwnID(t *testing.T) {
-	first, err := EnsureClaudeSessionLaunchCommand("claude --permission-mode auto")
+	first, err := EnsureClaudeSessionLaunchCommand("claude --permission-mode bypassPermissions")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := EnsureClaudeSessionLaunchCommand("claude --permission-mode auto")
+	second, err := EnsureClaudeSessionLaunchCommand("claude --permission-mode bypassPermissions")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,5 +323,63 @@ func TestPrepareDelegatedCommandBindsClaudeButNotOtherProviders(t *testing.T) {
 	}
 	if strings.Contains(grok, "session") {
 		t.Fatalf("grok launch unexpectedly changed: %q", grok)
+	}
+}
+
+func TestMigrateClaudeAutoModeRewritesOnlyTheExplicitFlag(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"separate value", "claude --model m --permission-mode auto --resume x", "claude --model m --permission-mode bypassPermissions --resume x"},
+		{"equals", "claude --permission-mode=auto", "claude --permission-mode=bypassPermissions"},
+		{"quoted value", `claude --permission-mode "auto"`, "claude --permission-mode bypassPermissions"},
+		{"every other byte kept", `env PATH='/x y':$PATH claude --settings '{"a":"--permission-mode auto"}' --permission-mode auto`, `env PATH='/x y':$PATH claude --settings '{"a":"--permission-mode auto"}' --permission-mode bypassPermissions`},
+		{"env value only", "env NOTE=auto MODE=--permission-mode claude", "env NOTE=auto MODE=--permission-mode claude"},
+		{"after terminator", "claude -- --permission-mode auto", "claude -- --permission-mode auto"},
+		{"own choice kept", "claude --permission-mode acceptEdits", "claude --permission-mode acceptEdits"},
+		{"already bypass", "claude --permission-mode bypassPermissions", "claude --permission-mode bypassPermissions"},
+		{"no flag", "claude --model m", "claude --model m"},
+		{"another program", "grok --permission-mode auto", "grok --permission-mode auto"},
+		{"unparseable", "claude --permission-mode auto; rm -rf x", "claude --permission-mode auto; rm -rf x"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := MigrateClaudeAutoMode(tc.in); got != tc.want {
+				t.Fatalf("MigrateClaudeAutoMode(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// An executor command written by an earlier Mewla release (Auto mode) is
+// migrated at launch, whichever path launches it: the Brain host, a delegated
+// Worker, or a scheduled action.
+func TestOldAutoExecutorCommandIsMigratedOnEveryLaunchPath(t *testing.T) {
+	const old = "claude --model m --permission-mode auto"
+	const want = "claude --model m --permission-mode bypassPermissions"
+	if got := HardenClaudeCommand(old); !strings.HasPrefix(got, want+" ") {
+		t.Fatalf("Brain host command = %q", got)
+	}
+	worker, err := PrepareDelegatedCommand(WorkerProviderClaude, old)
+	if err != nil || strings.Contains(worker, "permission-mode auto") || !strings.Contains(worker, "--permission-mode bypassPermissions") {
+		t.Fatalf("Worker command = %q err=%v", worker, err)
+	}
+	scheduled, err := ScheduledActionCommand("claude", Executor{Name: "claude", Command: old})
+	if err != nil || scheduled != want {
+		t.Fatalf("scheduled command = %q err=%v", scheduled, err)
+	}
+}
+
+func TestDefaultWorkerCommandsCarryFullAuthority(t *testing.T) {
+	for provider, want := range map[string]string{
+		WorkerProviderClaude: "--permission-mode bypassPermissions",
+		WorkerProviderCodex:  CodexFullAuthorizationFlag,
+		WorkerProviderCursor: "--force",
+		WorkerProviderGrok:   "--permission-mode bypassPermissions",
+	} {
+		got, err := PrepareDelegatedCommand(provider, map[string]string{
+			WorkerProviderClaude: "claude", WorkerProviderCodex: "codex",
+			WorkerProviderCursor: "cursor-agent", WorkerProviderGrok: "grok",
+		}[provider])
+		if err != nil || !strings.Contains(got, want) {
+			t.Fatalf("%s default Worker command = %q err=%v, want %q", provider, got, err, want)
+		}
 	}
 }
