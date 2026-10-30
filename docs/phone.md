@@ -44,7 +44,7 @@ says who is using your phone.
   carries on.
 - While an agent works, its screen also floats as a small live window over every
   other page of Mewla, so you can keep chatting with Brain and watch at once. It is
-  about two fifths of the screen wide; double-tap or pinch it larger. Drag it: it
+  about two fifths of the screen wide; double-tap it to make it larger. Drag it: it
   snaps to a corner and remembers it, and it stays above the chat input and the
   keyboard. Tap it for Take over (which opens the Phone page), Stop and
   expand. When the agent needs you, it shows a pulsing ring. It disappears when
