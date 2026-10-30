@@ -1052,7 +1052,7 @@ func (a *controlApp) handleBrainWorkUpdate(req control.Request) control.Response
 	if a.brainService == nil {
 		return control.ErrorResponse("brain_unavailable", "Brain Work decision service is not configured.")
 	}
-	item, err := a.brainService.UpdateWork(strings.TrimSpace(req.WorkID), update)
+	item, err := a.brainService.BrainUpdateWork(strings.TrimSpace(req.WorkID), update)
 	if err != nil {
 		if errors.Is(err, brain.ErrWorkCleanupPending) {
 			response := brainWorkControlError(err)

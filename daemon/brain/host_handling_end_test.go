@@ -129,3 +129,99 @@ func TestHostTurnEndWaitsForAFollowUpInFlight(t *testing.T) {
 		t.Fatal("accepted follow-up still produced reconcile_required")
 	}
 }
+
+// Brain's `work update` is its disposition while a handling of the Work is
+// live: the real pattern is a Worker result Brain only logs to its worklog and
+// then parks with -status waiting, with no handling id passed.
+func TestBrainWorkUpdateIsTheDispositionOfTheLiveHandling(t *testing.T) {
+	endHostTurn := func(t *testing.T, store *Store, service *Service, claimed WorkReviewAction) {
+		t.Helper()
+		settleCanonicalHostTurnForTest(t, store, "host", claimed.ProviderTurnID)
+		if _, err := service.ObserveHostSessionEvent(watcher.SessionEvent{
+			Type: "worker_state_change", WorkerID: "host", TurnID: claimed.ProviderTurnID,
+			Worker:   &classifier.Worker{ID: "host", Hidden: true, State: classifier.StateDone},
+			OldState: string(classifier.StateRunning), NewState: string(classifier.StateDone),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status := func(s WorkStatus) *WorkStatus { return &s }
+	text := func(s string) *string { return &s }
+	dispositionOf := func(t *testing.T, store *Store, workID string) WorkDisposition {
+		t.Helper()
+		for _, event := range mustWorkEvents(t, store, workID) {
+			if event.HandledAt != nil && event.Disposition != "" {
+				return event.Disposition
+			}
+		}
+		return ""
+	}
+
+	for _, tc := range []struct {
+		name   string
+		update WorkUpdate
+		want   WorkDisposition
+	}{
+		{"waiting waits on the Brain thread", WorkUpdate{Status: status(WorkWaiting), NextAction: text("Waiting for the user's approval.")}, WorkDispositionWait},
+		{"needs_input waits on the Brain thread", WorkUpdate{Status: status(WorkNeedsInput)}, WorkDispositionWait},
+		{"a question continues", WorkUpdate{Question: text("Ship it?")}, WorkDispositionContinue},
+		{"running continues", WorkUpdate{Status: status(WorkRunning)}, WorkDispositionContinue},
+		{"prose continues", WorkUpdate{NextAction: text("Review the next PR.")}, WorkDispositionContinue},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			store, service, item, claimed := hostHandlingFixture(t)
+			if _, err := service.BrainUpdateWork(item.ID, tc.update); err != nil {
+				t.Fatal(err)
+			}
+			after, _ := store.Work(item.ID)
+			if after.Review != nil {
+				t.Fatalf("update left the review open: %+v", after.Review)
+			}
+			if got := dispositionOf(t, store, item.ID); got != tc.want {
+				t.Fatalf("disposition = %q, want %q", got, tc.want)
+			}
+			if tc.want == WorkDispositionWait && after.Status != WorkWaiting {
+				t.Fatalf("status = %s, want waiting", after.Status)
+			}
+			endHostTurn(t, store, service, claimed)
+			if hasReconcileRequired(t, store, item.ID) {
+				t.Fatal("a disposed handling still raised reconcile_required at the end of the Host turn")
+			}
+		})
+	}
+
+	t.Run("done accepts", func(t *testing.T) {
+		store, service, item, claimed := hostHandlingFixture(t)
+		if _, err := service.BrainUpdateWork(item.ID, WorkUpdate{Status: status(WorkDone)}); err != nil {
+			t.Fatal(err)
+		}
+		if after, _ := store.Work(item.ID); after.Status != WorkDone || after.Review != nil {
+			t.Fatalf("after done: %+v", after)
+		}
+		endHostTurn(t, store, service, claimed)
+		if hasReconcileRequired(t, store, item.ID) {
+			t.Fatal("accepted Work still raised reconcile_required")
+		}
+	})
+
+	t.Run("without a live handling it is an ordinary update", func(t *testing.T) {
+		store, err := NewStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		service := NewService(store, &fakeWatcher{turnStore: store, outcomes: map[string]watcher.InputOutcome{}}, nil)
+		item, err := store.CreateWork(Work{Title: "idle", Objective: "nothing running"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.BrainUpdateWork(item.ID, WorkUpdate{Status: status(WorkWaiting)}); err != nil {
+			t.Fatal(err)
+		}
+		if after, _ := store.Work(item.ID); after.Status != WorkWaiting {
+			t.Fatalf("status = %s", after.Status)
+		}
+		if _, err := service.BrainUpdateWork(item.ID, WorkUpdate{Status: status(WorkRunning)}); err == nil {
+			t.Fatal("-status running must stay rejected without a live handling")
+		}
+	})
+}

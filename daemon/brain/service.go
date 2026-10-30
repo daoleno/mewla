@@ -205,6 +205,56 @@ func (s *Service) UpdateWork(id string, update WorkUpdate) (Work, error) {
 	return item, s.cleanupAfterWorkDecision(item.ID)
 }
 
+// BrainUpdateWork is Brain's `work update`. While a handling of the Work is
+// live, the update is also Brain's disposition of the event it is reading, so
+// Brain never passes handling ids: waiting or needs_input waits on the user
+// (the Work's Brain thread), done or cancelled accepts or cancels (the update
+// itself closes the review), and anything else (running, a question, prose)
+// continues. Without a live handling it is an ordinary update.
+func (s *Service) BrainUpdateWork(id string, update WorkUpdate) (Work, error) {
+	if s == nil || s.store == nil {
+		return Work{}, fmt.Errorf("brain store is not configured")
+	}
+	id = strings.TrimSpace(id)
+	handling, live, err := s.store.LiveReviewHandling(id)
+	if err != nil {
+		return Work{}, err
+	}
+	if live && (update.Status == nil || (*update.Status != WorkDone && *update.Status != WorkCancelled)) {
+		request := WorkReviewDispositionRequest{
+			WorkID: id, HandlingID: handling.HandlingID, ProviderTurnID: handling.ProviderTurnID,
+			ExpectedWorkRevision: handling.DeliveryWorkRevision, Disposition: WorkDispositionContinue,
+			Summary: "Recorded by Brain's work update.",
+		}
+		statusIsDisposition := update.Status != nil &&
+			(*update.Status == WorkRunning || *update.Status == WorkWaiting || *update.Status == WorkNeedsInput)
+		if update.Status != nil && (*update.Status == WorkWaiting || *update.Status == WorkNeedsInput) {
+			request.Disposition = WorkDispositionWait
+			request.Wake = &WorkWake{Kind: WorkWakeUserInput, Ref: "brain-thread:" + strings.TrimSpace(handling.SourceThreadID)}
+		}
+		if update.Status == nil || statusIsDisposition {
+			_, _, resolveErr := s.store.ResolveWorkReview(request)
+			switch {
+			case resolveErr == nil:
+				if statusIsDisposition {
+					update.Status = nil
+				}
+			case request.Disposition == WorkDispositionWait &&
+				(errors.Is(resolveErr, ErrWorkAttemptConflict) || strings.TrimSpace(handling.SourceThreadID) == ""):
+				// A wait the Work cannot take stays the ordinary update's error.
+			case errors.Is(resolveErr, ErrEventHandled), errors.Is(resolveErr, ErrEventClaim):
+				// The handling ended or was resolved while Brain acted.
+			default:
+				return Work{}, resolveErr
+			}
+		}
+	}
+	if update == (WorkUpdate{}) {
+		return s.store.Work(id)
+	}
+	return s.UpdateWork(id, update)
+}
+
 func (s *Service) cleanupAfterWorkDecision(workID string) error {
 	if err := s.reconcileCompletedSessions(workID); err != nil {
 		return fmt.Errorf("%w: %s: %w", ErrWorkCleanupPending, workID, err)

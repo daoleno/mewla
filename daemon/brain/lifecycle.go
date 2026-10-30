@@ -2784,6 +2784,24 @@ func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (Wo
 	return action, true, nil
 }
 
+// LiveReviewHandling returns the delivered, un-ended handling of one Work: the
+// review Brain is reading right now.
+func (s *Store) LiveReviewHandling(workID string) (WorkReviewAction, bool, error) {
+	workID = strings.TrimSpace(workID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return WorkReviewAction{}, false, err
+	}
+	index := workIndex(database.BrainWork, workID)
+	if index < 0 || !reviewDeliveredAwaitingDisposition(database.BrainWork[index].Review) {
+		return WorkReviewAction{}, false, nil
+	}
+	action, found := reviewActionFromReview(database, database.BrainWork[index].Review)
+	return action, found, nil
+}
+
 // followUpInFlight reports a Brain-directed submission (no review claim) that
 // is prepared but not yet accepted or aborted.
 func followUpInFlight(st *lifecycle.State) bool {
