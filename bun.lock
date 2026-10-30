@@ -97,6 +97,10 @@
       "name": "mewla-live",
       "version": "0.1.0",
     },
+    "app/modules/mewla-phone": {
+      "name": "mewla-phone",
+      "version": "0.1.0",
+    },
     "app/modules/terminal-vt": {
       "name": "terminal-vt",
       "version": "0.1.0",
@@ -1106,6 +1110,8 @@
     "metro-transform-worker": ["metro-transform-worker@0.84.5", "https://registry.npmmirror.com/metro-transform-worker/-/metro-transform-worker-0.84.5.tgz", { "dependencies": { "@babel/core": "^7.25.2", "@babel/generator": "^7.29.1", "@babel/parser": "^7.29.0", "@babel/types": "^7.29.0", "flow-enums-runtime": "^0.0.6", "metro": "0.84.5", "metro-babel-transformer": "0.84.5", "metro-cache": "0.84.5", "metro-cache-key": "0.84.5", "metro-minify-terser": "0.84.5", "metro-source-map": "0.84.5", "metro-transform-plugins": "0.84.5", "nullthrows": "^1.1.1" } }, "sha512-ui1Z8x4s5RL36gMmKLaMMO7O9NNDHNdthEZSCDQHAau3JcAsTaFOK6I+2q4I/kW5u8hSEjJk9L45TXSVJw6g1A=="],
 
     "mewla-live": ["mewla-live@workspace:app/modules/mewla-live"],
+
+    "mewla-phone": ["mewla-phone@workspace:app/modules/mewla-phone"],
 
     "micromatch": ["micromatch@4.0.8", "https://registry.npmmirror.com/micromatch/-/micromatch-4.0.8.tgz", { "dependencies": { "braces": "^3.0.3", "picomatch": "^2.3.1" } }, "sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA=="],
 
