@@ -1,0 +1,510 @@
+package expo.modules.mewlaphone
+
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
+import android.util.Log
+import android.view.WindowManager
+import expo.modules.mewlaphone.adb.AdbConnectPort
+import expo.modules.mewlaphone.adb.AdbConnection
+import expo.modules.mewlaphone.adb.AdbConnectionException
+import expo.modules.mewlaphone.adb.AdbPairing
+import expo.modules.mewlaphone.adb.AdbPairingException
+import expo.modules.mewlaphone.adb.AdbServiceTypes
+import expo.modules.mewlaphone.adb.AndroidAdb
+import expo.modules.mewlaphone.adb.NsdAdbServiceFinder
+import expo.modules.mewlaphone.adb.PortCache
+import expo.modules.mewlaphone.helper.PhoneHelper
+import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+/**
+ * Phone use on this phone: the setup it needs, the helper it keeps running, and the one entry the
+ * daemon's requests come through. Everything here is plain Android, so the Expo module stays a
+ * thin shell around it.
+ */
+object PhoneController {
+    private const val TAG = "MewlaPhone"
+    private const val MIN_SDK = Build.VERSION_CODES.R
+
+    /** Told what the App must show or forward to the daemon; called from worker threads. */
+    interface Listener {
+        fun onStatus(status: JSONObject)
+        fun onEvent(event: JSONObject)
+        fun onFrame(jpeg: ByteArray)
+    }
+
+    private lateinit var app: Context
+    private lateinit var prefs: PhonePrefs
+    @Volatile var listener: Listener? = null
+
+    /** Whether the App's signed connection to the computer is up: the notification says so, since the daemon's requests only come through it. */
+    @Volatile var linkOnline = false
+        set(value) {
+            field = value
+            if (::app.isInitialized) publish()
+        }
+
+    private val helperLock = Any()
+    @Volatile private var client: HelperClient? = null
+    @Volatile private var display: IntArray? = null
+    @Volatile private var watching = false
+    private val finder by lazy { NsdAdbServiceFinder(app) }
+
+    // What the person did to the agent's screen.
+    @Volatile private var stopped = false
+    @Volatile private var personInControl = false
+    @Volatile var activeWorker: String? = null
+        private set
+    private var handoff: Handoff? = null
+
+    private class Handoff(val id: String, val reason: String) {
+        val done = CountDownLatch(1)
+    }
+
+    @Synchronized
+    fun init(context: Context) {
+        if (::app.isInitialized) return
+        app = context.applicationContext
+        prefs = PhonePrefs(app)
+    }
+
+    // ---- setup -------------------------------------------------------------------------------
+
+    /** The live checks behind the setup screen, plus the state the daemon is told. */
+    fun status(): JSONObject {
+        val developer = Settings.Global.getInt(app.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1
+        val wireless = Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) == 1
+        val helperUp = client?.isClosed == false
+        return JSONObject()
+            .put("supported", Build.VERSION.SDK_INT >= MIN_SDK)
+            .put("sdk", Build.VERSION.SDK_INT)
+            .put("enabled", prefs.enabled)
+            .put("link", linkOnline)
+            .put("developer_options", developer)
+            .put("wireless_debugging", wireless)
+            .put("wifi", onWifi())
+            .put("paired", prefs.paired)
+            .put("helper", helperUp)
+            .put("accessibility", SettingsReading.serviceRunning)
+            .put("notifications", PhoneNotifier.canNotify(app))
+            .put("state", state())
+            .put("w", display?.get(0) ?: 0)
+            .put("h", display?.get(1) ?: 0)
+            .put("agent", activeWorker ?: JSONObject.NULL)
+            .put("handoff", handoff?.reason ?: JSONObject.NULL)
+    }
+
+    /** The one word the daemon and the App agree on (see daemon/phone/protocol.go). */
+    fun state(): String = when {
+        stopped -> "stopped"
+        personInControl -> "person_in_control"
+        client?.isClosed == false -> "ready"
+        else -> "setup"
+    }
+
+    fun setEnabled(enabled: Boolean) {
+        prefs.enabled = enabled
+        if (enabled) {
+            PhoneUseService.start(app)
+            Thread({ runCatching { ensureHelper() }; publish() }, "mewla-phone-ensure").start()
+        } else {
+            PhoneUseService.stop(app)
+            stopHelper()
+        }
+        publish()
+    }
+
+    val enabled: Boolean get() = prefs.enabled
+
+    /** The agent's display size, or null before it exists. */
+    fun displaySize(): IntArray? = display
+
+    private fun onWifi(): Boolean = runCatching {
+        val cm = app.getSystemService(ConnectivityManager::class.java)
+        @Suppress("DEPRECATION")
+        cm.allNetworks.any { cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true }
+    }.getOrDefault(false)
+
+    fun publish() {
+        listener?.onStatus(status())
+        PhoneNotifier.refresh(app)
+    }
+
+    // ---- pairing -----------------------------------------------------------------------------
+
+    @Volatile private var pairing = false
+    @Volatile private var typedCode: String? = null
+
+    /**
+     * Pairs with this phone's own adbd. The code is [code] (typed into the notification) or, when
+     * null, read off the Wireless debugging screen by the accessibility service, which also taps
+     * through those screens while this runs; the port is what adbd announces over mDNS or what
+     * that same screen shows. A typed code reaches a pairing already waiting for one.
+     */
+    fun pair(code: String?): Boolean {
+        if (code != null) {
+            typedCode = code
+            if (pairing) return true
+        }
+        if (pairing) return false
+        pairing = true
+        SettingsReading.pairing = null
+        SettingsReading.guiding = code == null && SettingsReading.serviceRunning
+        try {
+            val deadline = System.currentTimeMillis() + 3 * 60_000
+            val tls = AndroidAdb.tls(AndroidAdb.identity(app))
+            var lastFailure: Exception? = null
+            while (System.currentTimeMillis() < deadline) {
+                val reading = SettingsReading.pairing?.takeIf { System.currentTimeMillis() - it.at < 2 * 60_000 }
+                val digits = typedCode ?: reading?.code
+                if (digits == null) {
+                    Thread.sleep(400)
+                    continue
+                }
+                val ports = LinkedHashSet<Int>()
+                reading?.let { ports += it.port }
+                ports += runBlocking { finder.findPorts(AdbServiceTypes.PAIRING, 2_500) }
+                for (port in ports) {
+                    for (host in listOfNotNull("127.0.0.1", reading?.host)) {
+                        try {
+                            AdbPairing(tls).pair(host, port, digits)
+                            prefs.paired = true
+                            Log.i(TAG, "paired")
+                            returnToApp()
+                            publish()
+                            return true
+                        } catch (e: AdbPairingException) {
+                            lastFailure = e
+                            // A wrong typed code will not become right by trying again.
+                            if (e.reason == AdbPairingException.Reason.WRONG_CODE && typedCode != null) {
+                                typedCode = null
+                                return false
+                            }
+                        } catch (e: Exception) {
+                            lastFailure = e
+                        }
+                    }
+                }
+                if (ports.isEmpty()) Thread.sleep(800)
+            }
+            Log.w(TAG, "pairing gave up", lastFailure)
+            return false
+        } finally {
+            pairing = false
+            typedCode = null
+            SettingsReading.guiding = false
+        }
+    }
+
+    /** Leaves the Settings screens pairing used and brings the App back in front of the person. */
+    private fun returnToApp() {
+        SettingsReading.service?.takeIf { SettingsReading.guiding }?.leaveSettings()
+        runCatching {
+            app.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("mewla://phone"))
+                    .setPackage(app.packageName)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            )
+        }
+    }
+
+    // ---- helper ------------------------------------------------------------------------------
+
+    private fun connectAdb(): AdbConnection {
+        val tls = AndroidAdb.tls(AndroidAdb.identity(app))
+        val cache = object : PortCache {
+            override fun load() = prefs.adbPort.takeIf { it > 0 }
+            override fun save(port: Int) { prefs.adbPort = port }
+        }
+        val connect = AdbConnectPort({ null }, finder, cache)
+        return try {
+            runBlocking { connect.connect { port -> AdbConnection.open("127.0.0.1", port, tls) } }
+        } catch (e: AdbConnectionException) {
+            // The phone no longer knows our key (a revoked authorisation): pairing must be done again.
+            if (e.reason == AdbConnectionException.Reason.UNAUTHORIZED) prefs.paired = false
+            throw e
+        }
+    }
+
+    /**
+     * A connected helper of this app's version: reuses the running one, else starts it through
+     * Wireless debugging (turning that back on first when this app may). Throws when it cannot.
+     */
+    fun ensureHelper(): HelperClient = synchronized(helperLock) {
+        client?.takeIf { !it.isClosed }?.let { return it }
+        val endpoint = HelperEndpoint.load(app)
+        HelperClient.connect(endpoint)?.let { existing ->
+            if (adopt(existing)) return existing
+        }
+        if (!prefs.paired) throw IllegalStateException("not paired")
+        ensureWirelessDebugging()
+        val started = connectAdb().use { adb ->
+            // An older helper (another version, or one a cleared app lost the token for) must not hold the display or the port.
+            adb.exec("pkill -f 'mewla-phone-hel[p]er'").use { it.readAll() }
+            val helper = HelperLauncher.start(app, adb)
+            grantSelfHealing(adb)
+            helper
+        }
+        if (!adopt(started)) throw IllegalStateException("the helper does not speak this version")
+        started
+    }
+
+    /** Keeps [candidate] when its protocol is ours; otherwise shuts it down so a fresh one can start. */
+    private fun adopt(candidate: HelperClient): Boolean {
+        val hello = runCatching { candidate.call("hello", timeoutMs = 5_000) }.getOrNull()
+        if (hello?.optInt("protocol") != PhoneHelper.PROTOCOL) {
+            runCatching { candidate.call("shutdown", timeoutMs = 2_000) }
+            candidate.close()
+            return false
+        }
+        candidate.onFrame = { jpeg -> listener?.onFrame(jpeg) }
+        candidate.onClosed = {
+            if (client === candidate) {
+                client = null
+                display = null
+                publish()
+            }
+        }
+        client = candidate
+        if (hello.optInt("w") > 0) display = intArrayOf(hello.optInt("w"), hello.optInt("h"))
+        publish()
+        return true
+    }
+
+    /** With WRITE_SECURE_SETTINGS (granted once through the helper) Wireless debugging is turned back on without the person. */
+    private fun ensureWirelessDebugging() {
+        if (Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) == 1) return
+        if (app.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            throw IllegalStateException("Wireless debugging is off")
+        }
+        Settings.Global.putInt(app.contentResolver, "adb_wifi_enabled", 1)
+        Thread.sleep(2_500)
+    }
+
+    private fun grantSelfHealing(adb: AdbConnection) {
+        runCatching { adb.exec("pm grant ${app.packageName} android.permission.WRITE_SECURE_SETTINGS").use { it.readAll() } }
+    }
+
+    private fun stopHelper() {
+        val c = client ?: return
+        client = null
+        display = null
+        runCatching { c.call("shutdown", timeoutMs = 2_000) }
+        c.close()
+    }
+
+    // ---- the person's controls ---------------------------------------------------------------
+
+    fun stop() {
+        stopped = true
+        handoff?.done?.countDown()
+        emit("stop")
+        publish()
+    }
+
+    fun takeOver() {
+        personInControl = true
+        emit("take_over")
+        publish()
+    }
+
+    fun giveBack() {
+        personInControl = false
+        stopped = false
+        handoff?.done?.countDown()
+        emit("give_back")
+        publish()
+    }
+
+    /** The person finished what a handoff asked of them. */
+    fun handoffDone() {
+        val pending = handoff ?: return
+        emit("handed_off", pending.id)
+        pending.done.countDown()
+    }
+
+    private fun emit(kind: String, id: String? = null) {
+        listener?.onEvent(JSONObject().put("type", "event").put("kind", kind).apply { id?.let { put("id", it) } })
+    }
+
+    /** A live view asks for frames; the helper only spends the battery while someone watches. */
+    fun watch(on: Boolean, fps: Int = 12, maxWidth: Int = 540): Boolean {
+        val c = client ?: return false
+        if (display == null) return false
+        watching = on
+        return runCatching { c.call("watch", JSONObject().put("on", on).put("fps", fps).put("maxWidth", maxWidth)).optBoolean("ok") }.getOrDefault(false)
+    }
+
+    /** A touch of the person driving the agent's screen. */
+    fun touch(phase: String, x: Double, y: Double): Boolean {
+        val c = client ?: return false
+        return runCatching { c.call("touch", JSONObject().put("phase", phase).put("x", x).put("y", y), 3_000).optBoolean("ok") }.getOrDefault(false)
+    }
+
+    // ---- the daemon's requests ---------------------------------------------------------------
+
+    private fun failure(id: String, code: String, error: String) =
+        JSONObject().put("type", "result").put("id", id).put("ok", false).put("code", code).put("error", error)
+
+    /** Runs one request from the daemon and returns its result frame; never throws. */
+    fun execute(request: JSONObject): JSONObject {
+        val id = request.optString("id")
+        val op = request.optString("op")
+        try {
+            if (stopped) return failure(id, "stopped", "The person stopped you on their phone. Stop and report.")
+            if (personInControl && op != "release") {
+                return failure(id, "person_in_control", "The person is using the agent's screen on their phone. Wait, or report.")
+            }
+            val helper = try {
+                ensureHelper()
+            } catch (e: Exception) {
+                return failure(id, "not_ready", "Phone use is not ready on the phone: ${e.message}")
+            }
+            keepScreenOn()
+            activeWorker = request.optString("worker_name").ifEmpty { request.optString("worker") }.ifEmpty { "An agent" }
+            publish()
+            val args = request.optJSONObject("args") ?: JSONObject()
+            val wantImage = request.optBoolean("image", false)
+            return when (op) {
+                "apps" -> {
+                    val reply = helper.call("apps")
+                    if (!reply.optBoolean("ok")) failure(id, "failed", reply.optString("error"))
+                    else JSONObject().put("type", "result").put("id", id).put("ok", true).put("apps", reply.getJSONArray("apps").also { dropSelf(it) })
+                }
+                "release" -> {
+                    helper.call("display_release")
+                    display = null
+                    activeWorker = null
+                    publish()
+                    JSONObject().put("type", "result").put("id", id).put("ok", true)
+                }
+                "handoff" -> handoff(id, request, helper, args, wantImage)
+                else -> act(id, op, helper, args, wantImage)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "$op failed", e)
+            return failure(id, "failed", e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    private val screenLock by lazy {
+        @Suppress("DEPRECATION")
+        app.getSystemService(PowerManager::class.java).newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "mewla:phone-use")
+            .apply { setReferenceCounted(false) }
+    }
+
+    /**
+     * While an agent works, a screen that is on stays on: the screen reading stops while the phone
+     * sleeps. This never wakes a screen the person turned off.
+     */
+    private fun keepScreenOn() {
+        runCatching { screenLock.acquire(90_000) }
+    }
+
+    /** Mewla itself is never something an agent should open on its own screen. */
+    private fun dropSelf(apps: JSONArray) {
+        for (i in apps.length() - 1 downTo 0) {
+            if (apps.getJSONObject(i).optString("package") == app.packageName) apps.remove(i)
+        }
+    }
+
+    private fun act(id: String, op: String, helper: HelperClient, args: JSONObject, wantImage: Boolean): JSONObject {
+        ensureDisplay(helper)
+        var settleQuiet = 300L
+        var settleMax = 2_500L
+        when (op) {
+            "screen" -> {}
+            "launch" -> {
+                if (args.optString("package") == app.packageName) return failure(id, "failed", "Mewla's own screen is not for agents.")
+                val reply = helper.call("launch", JSONObject().put("package", args.getString("package")), 30_000)
+                if (!reply.optBoolean("ok")) return failure(id, reply.optString("code", "failed").ifEmpty { "failed" }, reply.optString("error"))
+                settleQuiet = 500
+                settleMax = 5_000
+            }
+            "tap" -> helper.call("tap", JSONObject().put("x", args.getInt("x")).put("y", args.getInt("y")).put("long", args.optBoolean("long")))
+                .let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
+            "swipe" -> helper.call(
+                "swipe",
+                JSONObject().put("x1", args.getInt("x1")).put("y1", args.getInt("y1")).put("x2", args.getInt("x2")).put("y2", args.getInt("y2"))
+                    .put("ms", args.optInt("ms", 300)),
+            ).let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
+            "text" -> helper.call("text", JSONObject().put("value", args.getString("value")).put("replace", args.optBoolean("replace")))
+                .let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
+            "key" -> helper.call("key", JSONObject().put("name", args.getString("name")))
+                .let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
+            "wait" -> {
+                val ms = args.optLong("ms", 0)
+                if (ms > 0) Thread.sleep(ms.coerceAtMost(10_000)) else settleMax = 4_000
+            }
+            else -> return failure(id, "failed", "Unknown phone op $op")
+        }
+        if (op != "screen") helper.call("settle", JSONObject().put("quiet_ms", settleQuiet).put("timeout_ms", settleMax), settleMax + 3_000)
+        return snapshot(id, helper, wantImage)
+    }
+
+    private fun handoff(id: String, request: JSONObject, helper: HelperClient, args: JSONObject, wantImage: Boolean): JSONObject {
+        ensureDisplay(helper)
+        val pending = Handoff(id, args.optString("reason").ifEmpty { "Help the agent" })
+        handoff = pending
+        personInControl = true
+        publish()
+        PhoneNotifier.handoff(app, pending.reason, request.optString("worker_name"))
+        val timeoutMs = args.optLong("timeout_ms", 0).takeIf { it > 0 } ?: (10 * 60_000L)
+        val finished = pending.done.await(timeoutMs, TimeUnit.MILLISECONDS)
+        handoff = null
+        PhoneNotifier.clearHandoff(app)
+        val wasStopped = stopped
+        personInControl = false
+        publish()
+        if (wasStopped) return failure(id, "stopped", "The person stopped you on their phone. Stop and report.")
+        if (!finished) return failure(id, "failed", "The person did not finish in time.")
+        helper.call("settle", JSONObject().put("quiet_ms", 400).put("timeout_ms", 3_000), 6_000)
+        return snapshot(id, helper, wantImage)
+    }
+
+    /** The agent's display at roughly the size of this phone's, so apps lay out as they do for the person. */
+    private fun ensureDisplay(helper: HelperClient) {
+        if (display != null) return
+        val bounds = app.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
+        val width = minOf(bounds.width(), bounds.height()).toDouble()
+        val height = maxOf(bounds.width(), bounds.height()).toDouble()
+        val scale = minOf(1.0, 720.0 / width)
+        val w = even(width * scale)
+        val h = even(height * scale)
+        val dpi = (app.resources.displayMetrics.densityDpi * scale).toInt().coerceAtLeast(160)
+        val reply = helper.call("display", JSONObject().put("w", w).put("h", h).put("dpi", dpi))
+        if (!reply.optBoolean("ok")) throw IllegalStateException(reply.optString("error", "no display"))
+        display = intArrayOf(w, h)
+        publish()
+    }
+
+    private fun even(v: Double) = (Math.round(v / 2.0) * 2).toInt()
+
+    /** What is on the agent's display now, in the daemon's Screen shape, with a picture when asked or needed. */
+    private fun snapshot(id: String, helper: HelperClient, wantImage: Boolean): JSONObject {
+        val tree = helper.call("tree")
+        if (!tree.optBoolean("ok")) return failure(id, "failed", tree.optString("error"))
+        val windows = tree.optJSONArray("windows") ?: JSONArray()
+        val interactive = tree.optBoolean("interactive", true)
+        val result = JSONObject().put("type", "result").put("id", id).put("ok", true)
+        val screenOff = windows.length() == 0 && !interactive
+        if (screenOff) {
+            result.put("ok", false).put("code", "screen_off")
+                .put("error", "The phone's own screen is off, so the screen cannot be read as elements. The picture is current; the person can wake the phone.")
+        } else {
+            result.put("screen", JSONObject().put("w", tree.optInt("w")).put("h", tree.optInt("h")).put("windows", windows))
+        }
+        if (wantImage || screenOff) {
+            val shot = helper.call("screenshot", JSONObject().put("maxWidth", tree.optInt("w", 720)).put("quality", 60), 15_000)
+            if (shot.optBoolean("ok")) result.put("image", shot.getString("jpeg"))
+        }
+        return result
+    }
+}

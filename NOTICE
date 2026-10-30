@@ -7,3 +7,9 @@ See the LICENSE file for the full license text.
 Third-party components and bundled assets remain under their own licenses.
 See docs/third-party-assets.md and the notice files under app/assets/notices/
 and app/modules/terminal-vt/ for attribution and redistribution details.
+
+This product includes software derived from Mika (https://github.com/wangzan101/mika),
+Copyright 2026 wangzan101, licensed under the Apache License, Version 2.0: the Wireless
+debugging pairing and connection code in
+app/modules/mewla-phone/android/src/main/java/expo/modules/mewlaphone/adb/, with its comments
+translated, its identifiers renamed and its Android parts adapted. Each such file says so.
