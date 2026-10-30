@@ -34,6 +34,8 @@ var privateAllowedPaths = map[string]bool{
 	"/computers":               true,
 	"/computers/invite":        true,
 	"/agent-use":               true,
+	"/phone":                   true,
+	"/phone/device":            true,
 	"/friends":                 true,
 	"/upload":                  true,
 	"/session-file-capability": true,

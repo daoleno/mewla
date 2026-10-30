@@ -39,6 +39,9 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	if action == "computer-mcp" {
 		return runComputerMCP(args[1:], stderr)
 	}
+	if action == "phone-mcp" {
+		return runPhoneMCP(args[1:], stderr)
+	}
 	fs := flag.NewFlagSet("mewla agent-use "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var stateDir string
@@ -134,9 +137,35 @@ func daemonAgentUse(stateDir string, local agentuse.Status) agentuse.Status {
 	return local
 }
 
+// printPhone says whether Phone use is on, which only the person turns on (Settings → Labs).
+func printPhone(w io.Writer, status agentuse.Status) {
+	phone := status.Phone
+	if phone == nil || !phone.Enabled {
+		return
+	}
+	line := "Your phone: Phone use is on; "
+	switch {
+	case !phone.Connected:
+		line += "the phone is not connected (open Mewla on it)"
+	case phone.State == "ready":
+		line += "connected (" + phone.Model + "); Workers here have mewla_phone"
+	default:
+		line += "connected (" + phone.Model + "), " + phone.State
+	}
+	fmt.Fprintln(w, line)
+	if phone.Active != nil {
+		name := phone.Active.Name
+		if name == "" {
+			name = phone.Active.Worker
+		}
+		fmt.Fprintf(w, "  %s is using it now.\n", name)
+	}
+}
+
 func printAgentUse(w io.Writer, status agentuse.Status) {
 	if !status.Enabled {
 		fmt.Fprintln(w, "Agents can use this computer: off")
+		printPhone(w, status)
 		return
 	}
 	fmt.Fprintln(w, "Agents can use this computer: on")
@@ -156,6 +185,7 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 			fmt.Fprintf(w, "  %s is using it now.\n", name)
 		}
 	}
+	printPhone(w, status)
 	if status.CodexComputerUse {
 		fmt.Fprintln(w, "Codex's own computer use: Codex Workers here have it. Mewla can't watch or pause it.")
 	}

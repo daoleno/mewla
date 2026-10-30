@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/phone"
 )
 
 //go:embed playwright/package.json
@@ -82,6 +83,8 @@ type Status struct {
 	Enabled  bool            `json:"enabled"`
 	Browser  BrowserStatus   `json:"browser"`
 	Computer *ComputerStatus `json:"computer,omitempty"`
+	// Phone is the person's phone, for agents to use: off until they turn it on.
+	Phone *PhoneStatus `json:"phone,omitempty"`
 	// CodexComputerUse is set when the user's Codex config gives Codex its
 	// own computer use. Codex Workers here get it while the switch is on.
 	CodexComputerUse bool `json:"codex_computer_use,omitempty"`
@@ -91,6 +94,8 @@ type settings struct {
 	// Off is stored instead of "enabled" so a missing file means on.
 	Off bool   `json:"off,omitempty"`
 	Key string `json:"pasted_key,omitempty"`
+	// Phone is Phone use, a Labs feature: stored as on, so a missing file means off.
+	Phone bool `json:"phone,omitempty"`
 }
 
 type Service struct {
@@ -114,6 +119,7 @@ type Service struct {
 	installErr   error
 	installErrAt time.Time
 	computer     *ComputerHooks
+	phone        func() phone.Status
 }
 
 // New reads this computer's switch from stateDir. It never touches Chrome.
@@ -155,7 +161,7 @@ func (s *Service) Status() Status {
 	if time.Since(s.cachedAt) < statusTTL {
 		status := s.cached
 		s.mu.Unlock()
-		return s.withComputer(status)
+		return s.withLive(status)
 	}
 	s.mu.Unlock()
 	return s.Refresh()
@@ -167,7 +173,7 @@ func (s *Service) BrowserReady() bool {
 }
 
 func (s *Service) Refresh() Status {
-	return s.withComputer(s.refreshBrowser())
+	return s.withLive(s.refreshBrowser())
 }
 
 func (s *Service) refreshBrowser() Status {

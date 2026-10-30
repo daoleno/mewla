@@ -88,6 +88,9 @@ func (s *Service) StopAgent() (Status, error) {
 	return s.Status(), nil
 }
 
+// withLive adds the rows that are never cached: the computer's and the phone's.
+func (s *Service) withLive(status Status) Status { return s.withPhone(s.withComputer(status)) }
+
 // withComputer adds the computer row to a status; it is never cached, so the
 // app sees an agent start or stop at once.
 func (s *Service) withComputer(status Status) Status {

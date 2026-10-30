@@ -41,6 +41,7 @@ import (
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/remote"
 	"github.com/daoleno/mewla/daemon/screen"
@@ -619,13 +620,18 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	go agentUse.Refresh()
 	go agentUse.Run(ctx)
+	// The person's phone holds one connection to this computer; Workers use it when the
+	// person has turned Phone use on.
+	phoneManager := phone.NewManager(phone.Options{})
+	agentUse.SetPhone(phoneManager.Status)
 	w.SetAgentTools(func(command string, worker bool) string {
-		// The screen acts for a named Worker, so only sessions that carry
-		// their Worker identity get it.
-		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
+		// The screen and the phone act for a named Worker, so only sessions that
+		// carry their Worker identity get them.
+		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), Phone: worker && agentUse.PhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
+	srv.SetPhone(phoneManager)
 	go srv.RunFriendsNotifier(ctx)
 	srv.SetComputerName(computers.FriendlyName())
 	hostName, _ := os.Hostname()
@@ -706,6 +712,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		Stop: screenService.StopAgent,
 	})
 	controlHandler.agentUse = agentUse
+	controlHandler.phone = phone.NewAgent(phoneManager, phone.NewAudit(authManager.StorageDir()))
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager

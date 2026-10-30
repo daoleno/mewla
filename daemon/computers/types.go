@@ -67,6 +67,8 @@ type Caps struct {
 	Apps        []string `json:"apps,omitempty"`
 	ComputerUse bool     `json:"computer_use"`
 	BrowserUse  bool     `json:"browser_use"`
+	// PhoneUse is set only while the person has Phone use on.
+	PhoneUse bool `json:"phone_use,omitempty"`
 }
 
 type Hello struct {

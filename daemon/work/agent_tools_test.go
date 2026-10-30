@@ -84,3 +84,50 @@ func TestTheSwitchTurnsOffCodexsOwnComputerUse(t *testing.T) {
 		}
 	}
 }
+
+func TestThePhoneIsAnInvocationScopedServerForClaudeAndCodex(t *testing.T) {
+	phone := AgentTools{Phone: true}
+	codex := WithAgentTools("codex --model x", "/path with space/mewla", "/private/state", phone)
+	for _, want := range []string{
+		"mcp_servers.mewla_phone={", `args=["agent-use","phone-mcp","--state-dir","/private/state"]`, ",enabled=true", `env_vars=["MEWLA_WORKER_ID"]`,
+		// A handoff waits ten minutes for the person; Codex's default minute would cut it short.
+		",tool_timeout_sec=800",
+	} {
+		if !strings.Contains(codex, want) {
+			t.Fatalf("missing %q in %s", want, codex)
+		}
+	}
+	if strings.Contains(codex, "chrome") || strings.Contains(codex, "computer-mcp") {
+		t.Fatal(codex)
+	}
+	claude := WithAgentTools("claude --model x", "/path with space/mewla", "/private/state", phone)
+	if !strings.Contains(claude, `"timeout":800000`) {
+		t.Fatalf("Claude's per-server tool limit is not set to cover a handoff: %s", claude)
+	}
+	if !strings.Contains(claude, `"mewla_phone"`) || !strings.Contains(claude, "phone-mcp") || !strings.HasSuffix(claude, "--allowedTools mcp__mewla_phone") {
+		t.Fatal(claude)
+	}
+	for _, got := range []string{codex, claude} {
+		if _, ok := shellquote.Fields(got); !ok {
+			t.Fatalf("unsafe command: %s", got)
+		}
+		if again := WithAgentTools(got, "/path with space/mewla", "/private/state", phone); again != got {
+			t.Fatalf("added twice: %s", again)
+		}
+	}
+	// Alongside the others, in one Claude config; off means absent.
+	all := WithAgentTools("claude", "/mewla", "/state", AgentTools{Chrome: true, Computer: true, Phone: true})
+	if strings.Count(all, "--mcp-config") != 1 || !strings.Contains(all, "--allowedTools mcp__mewla_chrome,mcp__mewla_computer,mcp__mewla_phone") {
+		t.Fatal(all)
+	}
+	if got := WithAgentTools("codex", "/mewla", "/state", AgentTools{Chrome: true, Computer: true}); strings.Contains(got, "phone") {
+		t.Fatal(got)
+	}
+	// A launch that names MCP servers itself is left alone.
+	if got := WithAgentTools("claude --mcp-config x", "/mewla", "/state", phone); got != "claude --mcp-config x" {
+		t.Fatal(got)
+	}
+	if got := WithAgentTools("codex -c 'mcp_servers.mewla_phone={command=\"x\"}'", "/mewla", "/state", phone); strings.Count(got, "mewla_phone") != 1 {
+		t.Fatal(got)
+	}
+}
