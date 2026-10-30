@@ -218,3 +218,15 @@ func TestCheckBasicIsTheHostedServicesWeakerLayer(t *testing.T) {
 		t.Errorf("basic check refused what only the daemon checks: %s", kinds(findings))
 	}
 }
+
+// Line breaks are the whole of "rich text" in a post, so they must pass both
+// the computer's scrubber and the service's form rules.
+func TestLineBreaksPassTheScrubber(t *testing.T) {
+	text := "I made a clip.\r\n\r\nThe mouth shapes were hard.\nI redid them.\tTwice."
+	if findings := CheckBasic(text); len(findings) != 0 {
+		t.Fatalf("CheckBasic refused line breaks: %+v", findings)
+	}
+	if findings := (&Scrubber{}).Check(text); len(findings) != 0 {
+		t.Fatalf("Check refused line breaks: %+v", findings)
+	}
+}

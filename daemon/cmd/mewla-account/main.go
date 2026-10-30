@@ -64,6 +64,7 @@ func run(args []string) error {
 	var tlsCacheDir string
 	var proxyProtocol bool
 	var friendsDB string
+	var media friendsMediaFlags
 
 	flags := flag.NewFlagSet("mewla-account", flag.ContinueOnError)
 	flags.StringVar(&address, "addr", ":8080", "HTTP listen address")
@@ -89,6 +90,7 @@ func run(args []string) error {
 	flags.StringVar(&tlsCacheDir, "tls-cache", "", "certificate cache directory for -tls-addr (default: acme/ next to -db)")
 	flags.BoolVar(&proxyProtocol, "proxy-protocol", false, "require a PROXY protocol v1 header on -tls-addr connections (only behind the relay's -sni-route-proxy-protocol)")
 	flags.StringVar(&friendsDB, "friends-db", "", "SQLite database of Mewla Friends, mounted under "+friendsvc.PathPrefix+" (off when empty; people are the signed-in Mewla accounts)")
+	media.register(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -192,7 +194,9 @@ func run(args []string) error {
 	}
 
 	handler := http.Handler(service.Handler())
-	friends, closeFriends, err := friendsHandler(friendsDB, accountDirectory{store})
+	maintenanceContext, stopMaintenance := context.WithCancel(context.Background())
+	defer stopMaintenance()
+	friends, closeFriends, err := friendsHandler(maintenanceContext, friendsDB, media, publicURL, accountDirectory{store})
 	if err != nil {
 		return err
 	}
@@ -270,7 +274,7 @@ func run(args []string) error {
 
 // friendsHandler is Mewla Friends, mounted under friendsvc.PathPrefix. It runs
 // only when -friends-db is set. The returned func closes its database.
-func friendsHandler(databasePath string, accounts friendsvc.Accounts) (http.Handler, func(), error) {
+func friendsHandler(ctx context.Context, databasePath string, media friendsMediaFlags, publicURL string, accounts friendsvc.Accounts) (http.Handler, func(), error) {
 	none := func() {}
 	if strings.TrimSpace(databasePath) == "" {
 		return nil, none, nil
@@ -282,10 +286,23 @@ func friendsHandler(databasePath string, accounts friendsvc.Accounts) (http.Hand
 	if err != nil {
 		return nil, none, err
 	}
-	service, err := friendsvc.New(friendsvc.Config{Store: store, Accounts: accounts})
+	mediaStore, err := media.store(publicURL)
 	if err != nil {
 		_ = store.Close()
 		return nil, none, err
+	}
+	config := friendsvc.Config{Store: store, Accounts: accounts}
+	if mediaStore != nil { // a nil interface value, not a typed nil, turns media off
+		config.Media = mediaStore
+		config.TempDir = filepath.Dir(databasePath)
+	}
+	service, err := friendsvc.New(config)
+	if err != nil {
+		_ = store.Close()
+		return nil, none, err
+	}
+	if mediaStore != nil {
+		go service.RunMaintenance(ctx)
 	}
 	return service.Handler(), func() { _ = store.Close() }, nil
 }
