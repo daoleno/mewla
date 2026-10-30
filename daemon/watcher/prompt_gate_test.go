@@ -439,3 +439,48 @@ func TestPromptGateSurvivesABlinkingDialog(t *testing.T) {
 		t.Fatalf("the answered dialog was not cleared: %+v", ledger.applied)
 	}
 }
+
+// The real incident (2026-10-30, turn 5b78e865 on %763): the open permission
+// dialog read as a different prompt on every poll, so the gate filed it
+// answered then blocked 83 times in 82 seconds (clear and refile 40ms apart,
+// polls 0.7-1.6s apart), and each blocked was a push. A dialog whose id churns
+// is filed once; a new dialog that holds its id still replaces the old one.
+func TestPromptGateFilesAChurningPromptIdOnce(t *testing.T) {
+	w := New(0)
+	sessionID := "mewla-worker-churn:@1"
+	worker := classifier.Worker{ID: sessionID, Delegated: true, State: classifier.StateRunning, Command: "claude"}
+	w.workers[sessionID] = &worker
+	w.workerOrder = append(w.workerOrder, sessionID)
+	ledger := newFakeTurnLedger()
+	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:churn", Status: TurnRunning, SignalProtocol: true}
+	ledger.seed(sessionID, turn)
+	w.SetTurnLedger(ledger)
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	withID := func(id string) classifier.ActivitySignal {
+		signal := open
+		prompt := *open.Prompt
+		prompt.ID = id
+		signal.Prompt = &prompt
+		return signal
+	}
+
+	turn, _ = w.syncPromptGate(sessionID, worker, true, withID("id-0"), turn, true, nil)
+	for i := 1; i <= 83; i++ {
+		turn, _ = w.syncPromptGate(sessionID, worker, true, withID("id-"+strings.Repeat("x", i)), turn, true, nil)
+	}
+	if len(ledger.applied) != 1 {
+		t.Fatalf("a churning prompt id was filed %d times, want once", len(ledger.applied))
+	}
+
+	// A different dialog that holds its id replaces it, once it has stood still.
+	w.syncPromptGate(sessionID, worker, true, withID("next"), turn, true, nil)
+	w.mu.Lock()
+	gate := w.gates[sessionID]
+	gate.pendingSince = time.Now().Add(-promptGateClearAfter - time.Second)
+	w.gates[sessionID] = gate
+	w.mu.Unlock()
+	w.syncPromptGate(sessionID, worker, true, withID("next"), turn, true, nil)
+	if len(ledger.applied) != 3 || ledger.applied[1].Kind != "running" || ledger.applied[2].Kind != "attention" {
+		t.Fatalf("a new dialog did not replace the old one: %d facts", len(ledger.applied))
+	}
+}

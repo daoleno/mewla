@@ -38,6 +38,11 @@ type promptGate struct {
 	// zero while it is showing. A redraw or a half-read frame makes a dialog
 	// blink out for a poll; only an absence that lasts is an answer.
 	absentSince time.Time
+	// pendingID is a different prompt id the pane has shown since the filing,
+	// and pendingSince when it first did. A dialog whose id churns from poll to
+	// poll never settles on one, and so never replaces the filed prompt.
+	pendingID    string
+	pendingSince time.Time
 }
 
 // SessionWorkLedger names the Work a Session can still raise a request on: the
@@ -262,11 +267,31 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 			return turn, hasTurn
 		}
 	}
+	if filed && gate.turnID == turnID && open && gate.promptID != promptID {
+		// Another prompt id on the same open dialog. A new dialog holds its id;
+		// one that changes every poll is the same dialog being read differently
+		// (the 2026-10-30 permission prompt refiled 83 times in 82 seconds, each
+		// refile an answered-then-blocked pair and a push). Replace the filed
+		// prompt only once the new id has stood still.
+		now := time.Now()
+		w.mu.Lock()
+		current := w.gates[id]
+		if current.pendingID != promptID {
+			current.pendingID, current.pendingSince = promptID, now
+		}
+		current.absentSince = time.Time{}
+		w.gates[id] = current
+		w.mu.Unlock()
+		if now.Sub(current.pendingSince) < promptGateClearAfter {
+			return turn, hasTurn
+		}
+	}
 	if filed && gate.turnID == turnID && open && gate.promptID == promptID {
-		if !gate.absentSince.IsZero() {
+		if !gate.absentSince.IsZero() || gate.pendingID != "" {
 			w.mu.Lock()
 			if current, ok := w.gates[id]; ok {
 				current.absentSince = time.Time{}
+				current.pendingID, current.pendingSince = "", time.Time{}
 				w.gates[id] = current
 			}
 			w.mu.Unlock()
