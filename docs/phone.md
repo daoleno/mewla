@@ -13,17 +13,28 @@ later, in the APK from GitHub (the Play Store build leaves it out).
 
 1. **Settings → Labs → Phone use**, switch on. The Phone page opens, and Phone is added to the left menu.
 2. The page lists what the phone needs and checks it live: **Developer
-   options**, **Wi‑Fi**, **Wireless debugging**, **Pairing** and **Helper**. Tap
-   the button for the first one that isn't done. Each opens the right place in
-   Settings and the tick appears when you come back.
-3. **Pairing** pairs Mewla with the phone's own Wireless debugging, once. With
-   **Pair automatically** on (an Accessibility switch for Mewla), Mewla reads
-   the six digits off the Settings screen itself. Without it, a notification
-   asks for the code: pull it down and type the digits shown on the pairing
-   dialog.
-4. When every line is ticked the page says **Ready**. There is nothing more to
-   start: the helper starts itself, and starts again after a Wi‑Fi change or
-   restart.
+   options**, **Wi‑Fi**, **Wireless debugging**, **Pairing** and **Helper**.
+3. Tap **Allow**. Android has you switch on Mewla's Accessibility service, once
+   (the page opens on Mewla's entry). Android may grey it out for an app
+   installed from a file: open **App info → ⋮ → Allow restricted settings**
+   first (the page offers **Open App info** when it can tell).
+4. Tap **Set up**. Mewla opens Settings and does the rest itself, with a line at
+   the bottom of the screen saying what it is doing: it taps **Build number**
+   until Developer options is on, switches on **Wireless debugging**, opens
+   **Pair device with pairing code**, reads the six digits and pairs. Two things
+   stay yours, because Android keeps them for you: your screen lock if one asks,
+   and the system's **Allow wireless debugging on this network?** prompt. Mewla
+   ticks **Always allow on this network** and waits for your tap on **Allow**.
+   If a step doesn't move, that one row falls back to its manual button.
+5. When every line is ticked the page says **Ready**, and Mewla returns you to
+   it. That is the last time: the first helper start also grants Mewla the
+   permission to switch Wireless debugging back on, so after a restart or a
+   Wi‑Fi change the helper and the connection to your computer come back by
+   themselves, with Mewla closed.
+
+Without Accessibility the manual path still works: each row opens the right
+place in Settings, and a notification asks for the pairing code (pull it down
+and type the digits shown on the pairing dialog).
 
 The computer you're connected to is the one agents come from. Pair your phone
 with another computer and switch to it, and Phone use follows. Agents on
@@ -109,13 +120,16 @@ back on when it can.
   debugging more than stock Android. If **Helper** won't tick, switch Mewla's
   battery setting to unrestricted.
 - If your phone restarts or changes Wi‑Fi, Mewla brings the helper back by
-  itself while Phone use is on; an agent that asks in between is told the phone is
-  not ready rather than left waiting.
+  itself while Phone use is on. An agent that asks while the connection is down
+  waits up to 30 seconds for it to return; after that it is told the phone is
+  not connected rather than left waiting.
 - Apps that block screen capture (banking, some video apps) show a black
   picture, and apps that block automation may refuse. The agent is told.
-- **Pair automatically** needs Mewla's Accessibility switch. Android may grey it
-  out for an app installed from a file: open **App info → ⋮ → Allow restricted
-  settings** for Mewla first.
+- Mewla's Accessibility service only acts while **Set up** runs, only inside
+  Settings and the system's prompt, and never answers a system prompt for you.
+- On a network Android hasn't been told to allow, switching Wireless debugging on
+  raises the system's prompt. Mewla only does that by itself on a network where
+  it worked, and stops asking after the prompt is dismissed twice.
 - iOS has no Phone use.
 
 ## Turn it off
