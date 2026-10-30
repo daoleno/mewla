@@ -1,3 +1,4 @@
+import { formatDate } from "./dateFormat";
 import type { ConnectPhase, PendingConnection } from "./pluginOnboarding";
 import { accountStatus, type AccessState, type AwsProfile, type ConnectionRequest, type ConnectionTool, type PluginAccount, type PluginIntegration } from "./connections";
 
@@ -370,7 +371,7 @@ export function awsAccountSummary(account: Pick<PluginAccount, "integration" | "
   if (aws.expires_at) {
     const ends = new Date(aws.expires_at);
     if (!Number.isNaN(ends.getTime())) {
-      details.push({ label: ends.getTime() <= now.getTime() ? "Session ended" : "Session ends", value: ends.toLocaleString() });
+      details.push({ label: ends.getTime() <= now.getTime() ? "Session ended" : "Session ends", value: formatDate(ends) });
     }
   }
   if (aws.session) details.push({ label: "Session name", value: aws.session });
