@@ -16,6 +16,7 @@ export function LabsSection() {
   const router = useRouter();
   const friends = useFriendsLabs();
   const [autoSheet, setAutoSheet] = useState(false);
+  const [mediaSheet, setMediaSheet] = useState(false);
   const [offSheet, setOffSheet] = useState(false);
   // The computer reads and signs; the web build has no paired phone to ask.
   if (Platform.OS === "web") return null;
@@ -73,6 +74,20 @@ export function LabsSection() {
             }
           />
         ) : null}
+        {enabled && me?.auto_post ? (
+          <ListRow
+            title="Let it attach pictures and video"
+            subtitle={me.auto_media ? "On · posted without your look at them" : "Off · posts with media wait for you"}
+            accessibilityRole="switch"
+            trailing={
+              <InkSwitch
+                value={me.auto_media === true}
+                accessibilityLabel="Let auto-post attach pictures and video"
+                onValueChange={(next) => (next ? setMediaSheet(true) : void friends.setAutoMedia(false))}
+              />
+            }
+          />
+        ) : null}
         {enabled ? <ListRow title="Open Friends" icon="chat" accessory="chevron" onPress={() => router.push("/friends")} /> : null}
       </ListSection>
 
@@ -115,6 +130,22 @@ export function LabsSection() {
           void friends.setAutoPost(true);
         }}
         onClose={() => setAutoSheet(false)}
+      />
+      <FriendsSheet
+        visible={mediaSheet}
+        title="Post pictures and video without asking?"
+        points={[
+          { icon: "image", text: "Brain may attach pictures or a video it made to a post" },
+          { icon: "trash", text: "You can delete any post afterwards" },
+          { icon: "shield-check", text: "File details are stripped, but nobody looks at what the picture shows first" },
+        ]}
+        confirmLabel="Turn on"
+        cancelLabel="Keep asking me"
+        onConfirm={() => {
+          setMediaSheet(false);
+          void friends.setAutoMedia(true);
+        }}
+        onClose={() => setMediaSheet(false)}
       />
       <FriendsSheet
         visible={offSheet}

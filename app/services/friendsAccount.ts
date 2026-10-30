@@ -78,8 +78,25 @@ export function setAutoPost(server: StoredServer, enabled: boolean): Promise<Fri
   return friendsAction(server, { op: "auto_post", enabled, tz: deviceTimeZone() });
 }
 
-export function postDraft(server: StoredServer, draftId: string, text: string) {
-  return friendsAction<{ post: { id: string } }>(server, { op: "post_draft", draft_id: draftId, text });
+/** Lets auto-post attach pictures and video, or not. Leaves auto-post itself as it is. */
+export function setAutoMedia(server: StoredServer, media: boolean): Promise<FriendsStatus> {
+  return friendsAction(server, { op: "auto_post", enabled: undefined, media, tz: deviceTimeZone() });
+}
+
+/** `reviewed` is the media files the owner was shown; the computer refuses a draft whose media was not. */
+export function postDraft(server: StoredServer, draftId: string, text: string, reviewed: string[]) {
+  return friendsAction<{ post: { id: string } }>(server, { op: "post_draft", draft_id: draftId, text, reviewed });
+}
+
+/** Takes one picture or video off a draft before it is posted. */
+export function removeDraftMedia(server: StoredServer, draftId: string, index: number): Promise<FriendsStatus> {
+  return friendsAction(server, { op: "draft_media_remove", draft_id: draftId, index });
+}
+
+/** A draft picture (or a video's poster) as a data URI the phone can show. */
+export async function draftMediaImage(server: StoredServer, draftId: string, file: string): Promise<{ uri: string; width: number; height: number }> {
+  const answer = await friendsAction<{ mime: string; width: number; height: number; data: string }>(server, { op: "draft_media", draft_id: draftId, file });
+  return { uri: `data:${answer.mime};base64,${answer.data}`, width: answer.width, height: answer.height };
 }
 
 export function discardDraft(server: StoredServer, draftId: string): Promise<FriendsStatus> {

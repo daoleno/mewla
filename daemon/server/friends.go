@@ -48,7 +48,8 @@ type friendsAction struct {
 	LoginID   string `json:"login_id,omitempty"`
 	DraftID   string `json:"draft_id,omitempty"`
 	Text      string `json:"text,omitempty"`
-	Enabled   bool   `json:"enabled,omitempty"`
+	// Enabled is a pointer so a request that only sets Media leaves auto-post alone.
+	Enabled *bool `json:"enabled,omitempty"`
 	// Media is the auto-post attachment choice; absent leaves it as it is.
 	Media *bool `json:"media,omitempty"`
 	// Index and File name one media item of a draft.
@@ -300,7 +301,10 @@ func (s *Server) friendsAction(w http.ResponseWriter, r *http.Request, action fr
 // autoPostBody is the auto-post request: the media choice goes only when the
 // phone sent one, so an older App cannot change it.
 func autoPostBody(action friendsAction) map[string]any {
-	body := map[string]any{"enabled": action.Enabled, "tz": action.TZ}
+	body := map[string]any{"tz": action.TZ}
+	if action.Enabled != nil {
+		body["enabled"] = *action.Enabled
+	}
 	if action.Media != nil {
 		body["media"] = *action.Media
 	}

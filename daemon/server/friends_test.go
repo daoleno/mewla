@@ -311,13 +311,13 @@ func TestFriendsDraftMediaThroughThePairedPhone(t *testing.T) {
 		t.Fatalf("after removal: %+v", left.Media)
 	}
 
+	on := true
 	// The media choice is sent only when the phone sent it.
-	if body := autoPostBody(friendsAction{Enabled: true, TZ: "UTC"}); body["media"] != nil {
+	if body := autoPostBody(friendsAction{Enabled: &on, TZ: "UTC"}); body["media"] != nil {
 		t.Fatalf("an old phone's request carries media: %v", body)
 	}
-	on := true
-	if body := autoPostBody(friendsAction{Media: &on}); body["media"] != true {
-		t.Fatalf("body = %v", body)
+	if body := autoPostBody(friendsAction{Media: &on}); body["media"] != true || body["enabled"] != nil {
+		t.Fatalf("a media-only request must leave auto-post alone: %v", body)
 	}
 	if code, raw := act(map[string]any{"op": "auto_post", "enabled": true, "media": true, "tz": "UTC"}); code != http.StatusOK || !strings.Contains(string(raw), `"auto_media":true`) {
 		t.Fatalf("auto_post = %d %s", code, raw)
