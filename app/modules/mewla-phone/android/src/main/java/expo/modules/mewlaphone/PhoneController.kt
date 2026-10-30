@@ -325,7 +325,11 @@ object PhoneController {
             }
             Log.w(TAG, "pairing gave up", lastFailure)
             return false
+        } catch (e: Throwable) {
+            Log.w(TAG, "pairing stopped", e)
+            throw e
         } finally {
+            Log.i(TAG, "pair ended guiding=${SettingsReading.guiding}")
             pairing = false
             typedCode = null
             SettingsReading.guiding = false
