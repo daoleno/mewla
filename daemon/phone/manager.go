@@ -322,6 +322,12 @@ func (m *Manager) onEvent(l *Link, e Event) {
 		// A handoff is answered by this event as well as by a Result.
 		if p := l.pending; p != nil && p.op == OpHandoff && (e.ID == "" || e.ID == p.id) {
 			p.finish(outcome{result: Result{Type: TypeResult, ID: p.id, OK: true, Note: "The person says they are done."}})
+			// Done hands the screen back. The phone says so in a state frame of its own, but only
+			// after this event, and the agent's next look at the screen must not wait for that.
+			l.person = false
+			if l.state == StatePersonInCharge {
+				l.state = StateReady
+			}
 		}
 	}
 	m.mu.Unlock()

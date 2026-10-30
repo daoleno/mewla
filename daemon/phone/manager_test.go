@@ -431,19 +431,22 @@ func TestAHandoffSurvivesThePhoneSayingThePersonIsInCharge(t *testing.T) {
 	if _, err := tap(m, "w2"); code(err) != CodeBusy && code(err) != CodePersonInControl {
 		t.Fatalf("another agent during a handoff: %v", err)
 	}
+	// The phone's Done is the event first and its own "ready" frame after: the agent's very next
+	// action, which comes in between, must already have the phone.
 	sendFrame(t, link, Event{Type: TypeEvent, Kind: EventHandedOff, ID: id})
-	sendFrame(t, link, State{Type: TypeState, State: StateReady, W: 720, H: 1600})
 	if a := <-done; a.err != nil || !a.reply.OK {
 		t.Fatalf("handoff: %+v %v", a.reply, a.err)
 	}
-	// And the agent has the phone again.
 	conn.mu.Lock()
 	conn.handle = func(Request) *Result { return &Result{OK: true} }
 	conn.mu.Unlock()
-	eventually(t, "the agent's next action", func() bool {
-		_, err := tap(m, "w1")
-		return err == nil
-	})
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatalf("the agent's next action right after Done: %v", err)
+	}
+	sendFrame(t, link, State{Type: TypeState, State: StateReady, W: 720, H: 1600})
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatalf("after the phone's own ready frame: %v", err)
+	}
 }
 
 func TestTimeoutsFollowTheOp(t *testing.T) {
