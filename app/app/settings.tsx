@@ -451,6 +451,13 @@ export default function SettingsScreen() {
             />
           </ListSection>
 
+          {Platform.OS === "web" ? null : (
+            <>
+              <SettingsSectionHeader>Labs</SettingsSectionHeader>
+              <LabsSection />
+            </>
+          )}
+
           <SettingsSectionHeader>Calendar</SettingsSectionHeader>
           <CalendarAlertsSection />
 
@@ -465,9 +472,6 @@ export default function SettingsScreen() {
 
           <SettingsSectionHeader>Pet</SettingsSectionHeader>
           <PetPicker animate={screenFocused} />
-
-          <SettingsSectionHeader>Labs</SettingsSectionHeader>
-          <LabsSection />
 
           <SettingsSectionHeader>About</SettingsSectionHeader>
           <ListSection>

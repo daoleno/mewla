@@ -30,6 +30,7 @@ export type DesktopSidebarKey =
   | "stats"
   | "resources"
   | "friends"
+  | "phone"
   | "settings";
 
 function firstSegment(pathname: string): string {
@@ -69,6 +70,8 @@ export function desktopSidebarKey(pathname: string): DesktopSidebarKey | null {
       return "resources";
     case "friends":
       return "friends";
+    case "phone":
+      return "phone";
     case "settings":
       return "settings";
     default:
@@ -87,6 +90,7 @@ const PAGE_TITLES: Record<string, string> = {
   stats: "Stats",
   resources: "Resources",
   friends: "Friends",
+  phone: "Phone use",
   settings: "Settings",
   browser: "Browser",
   onboarding: "Pair",
@@ -117,6 +121,7 @@ export function isDesktopTopLevelRoute(routeName: string): boolean {
     case "stats":
     case "resources":
     case "friends":
+    case "phone":
     case "settings":
       return true;
     default:

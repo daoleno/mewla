@@ -25,6 +25,7 @@ import {
 import { brainNeedsYou, sessionsNeedYou } from "./primarySessionsAttention";
 import { useBrain } from "../../store/brain";
 import { useFriendsLabs } from "../../store/friendsLabs";
+import { usePhoneUse } from "../../store/phoneUse";
 import { useConnectionAttention } from "./useConnectionAttention";
 import { useAppUpdatePending } from "../../services/useAppUpdate";
 import type { DesktopSidebarKey } from "./desktopWeb";
@@ -284,6 +285,8 @@ export function PrimaryDrawerPanel({
   const sessionsAttention = sessionsNeedYou(workersState.workers, currentServer?.id);
   const { state: brainState } = useBrain();
   const { enabled: friendsEnabled } = useFriendsLabs();
+  const phone = usePhoneUse();
+  const labsOn = { friends: friendsEnabled, phone: phone.available && phone.enabled };
   const brainAttention = brainNeedsYou(
     currentServer ? brainState.byServer[currentServer.id]?.current_work : undefined,
   );
@@ -393,7 +396,7 @@ export function PrimaryDrawerPanel({
           ))}
         </View> : null}
         {PRIMARY_DRAWER_DESTINATIONS.map((destination) => (
-          destination.labs && !friendsEnabled ? null : <DrawerRow
+          destination.labs && !labsOn[destination.labs] ? null : <DrawerRow
             key={destination.key}
             drawerVisible={drawerVisible}
             icon={destination.icon}

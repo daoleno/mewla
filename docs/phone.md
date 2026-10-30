@@ -11,7 +11,7 @@ later, in the APK from GitHub (the Play Store build leaves it out).
 
 ## Turn it on
 
-1. **Settings → Labs → Phone use**, switch on. The Phone page opens.
+1. **Settings → Labs → Phone use**, switch on. The Phone page opens, and Phone is added to the left menu.
 2. The page lists what the phone needs and checks it live: **Developer
    options**, **Wi‑Fi**, **Wireless debugging**, **Pairing** and **Helper**. Tap
    the button for the first one that isn't done. Each opens the right place in
@@ -110,7 +110,7 @@ back on when it can.
 
 ## Turn it off
 
-Switch **Phone use** off in **Labs**. The helper stops, the notification goes,
+Switch **Phone use** off in **Settings → Labs → Phone use**. The helper stops, the notification goes,
 the Accessibility service is disabled, and agents lose the phone tools for new
 Workers. To forget the pairing, remove Mewla under **Wireless debugging → Paired
 devices** in Settings.
