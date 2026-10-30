@@ -138,8 +138,17 @@ console sign-in page opens in the browser on the device you are holding (the
 computer Mewla runs on may be elsewhere). Sign in there, copy the authorization
 code AWS shows, and come back: Mewla fills the field from the clipboard, and
 **Continue** finishes. Mewla asks AWS who is signed in (STS
-`GetCallerIdentity`) and names the account **AWS 123456789012**, with the
-identity's ARN beneath it. Nothing is asked of you that is not a credential: the
+`GetCallerIdentity`) and for the account's name (`account
+get-account-information`, else the account alias). The card is titled with
+that name, for example **Blank Canvas**, and says who is signed in beneath it:
+**Root user**, the role's name or **IAM user NAME**, then the region. If an
+organization's policy denies both name calls, the card is titled **AWS
+123456789012** instead. **Details** shows how the account signs in (AWS
+sign-in, IAM Identity Center or access keys), when an Identity Center session
+ends, the session name, and the account ID and ARN, which tap to copy. Mewla
+reads these when you connect or check the account, and again when you open an
+account whose details are over six hours old. A name you gave the account is
+never replaced. Nothing is asked of you that is not a credential: the
 sign-in is saved in the AWS CLI's config under a profile named `mewla` (or
 `mewla-2` and so on), with the region `us-east-1`. Mewla runs `aws login --remote` for this and keeps no key: the CLI
 caches the session and its refresh token and renews them as it normally does.
