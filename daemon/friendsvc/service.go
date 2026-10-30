@@ -61,6 +61,11 @@ type Accounts interface {
 type Config struct {
 	Store    *Store
 	Accounts Accounts
+	// Media keeps post images and videos. Nil turns media off: posts are
+	// text only and uploads answer 503.
+	Media MediaStore
+	// TempDir stages uploads before they are checked; empty is the system's.
+	TempDir string
 	// MinAccountAge defaults to 30 days.
 	MinAccountAge time.Duration
 	Now           func() time.Time
@@ -118,6 +123,8 @@ func (s *Service) Handler() http.Handler {
 		mux.HandleFunc(method+" "+apiPrefix+path, s.person(h))
 	}
 	mux.HandleFunc("POST "+apiPrefix+"/me/enable", s.signed(s.handleEnable))
+	mux.HandleFunc("PUT "+apiPrefix+"/media", s.handleUpload)
+	mux.HandleFunc("GET "+PathPrefix+"/media/{key}", s.handleMedia)
 	v1("GET", "/me", s.handleMe)
 	v1("DELETE", "/me", s.handleDeleteMe)
 	v1("PATCH", "/me/profile", s.handlePatchProfile)
@@ -158,22 +165,50 @@ func (s *Service) signed(next func(w http.ResponseWriter, r *http.Request, accou
 			writeError(w, rejection.Status, rejection.Message)
 			return
 		}
-		account, ok, err := s.config.Accounts.AccountForKey(r.Context(), strings.ToLower(strings.TrimSpace(result.Key)))
-		if err != nil {
-			s.internalError(w, "resolve account", err)
-			return
-		}
+		account, ok := s.accountForKey(w, r, result.Key)
 		if !ok {
-			// Signed by a key that is not signed in to any account.
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
-		}
-		if account.Disabled {
-			writeError(w, http.StatusForbidden, "account disabled")
 			return
 		}
 		next(w, reqsign.WithBody(r, r.Context(), result.Body), account)
 	}
+}
+
+// accountForKey resolves the account a verified key is signed in to, or
+// answers the request and returns false.
+func (s *Service) accountForKey(w http.ResponseWriter, r *http.Request, key string) (Account, bool) {
+	account, ok, err := s.config.Accounts.AccountForKey(r.Context(), strings.ToLower(strings.TrimSpace(key)))
+	if err != nil {
+		s.internalError(w, "resolve account", err)
+		return Account{}, false
+	}
+	if !ok {
+		// Signed by a key that is not signed in to any account.
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return Account{}, false
+	}
+	if account.Disabled {
+		writeError(w, http.StatusForbidden, "account disabled")
+		return Account{}, false
+	}
+	return account, true
+}
+
+// personForKey is accountForKey for a request that needs Friends turned on.
+func (s *Service) personForKey(w http.ResponseWriter, r *http.Request, key string) (personRecord, bool) {
+	account, ok := s.accountForKey(w, r, key)
+	if !ok {
+		return personRecord{}, false
+	}
+	me, err := s.config.Store.personByAccount(r.Context(), account.ID)
+	if errors.Is(err, errNotFound) {
+		writeError(w, http.StatusNotFound, "not_enabled")
+		return personRecord{}, false
+	}
+	if err != nil {
+		s.internalError(w, "load person", err)
+		return personRecord{}, false
+	}
+	return me, true
 }
 
 // person additionally needs the account to have turned Friends on.
@@ -206,9 +241,12 @@ type meView struct {
 	PetID         string `json:"pet_id"`
 	Bio           string `json:"bio"`
 	AutoPost      bool   `json:"auto_post"`
-	DailyCap      int    `json:"daily_cap"`
-	AutoToday     int    `json:"auto_today"`
-	Unread        int    `json:"unread"`
+	// AutoMedia is whether auto posts may carry images and video. Off unless
+	// the owner turned it on; a client that predates media never sets it.
+	AutoMedia bool `json:"auto_media"`
+	DailyCap  int  `json:"daily_cap"`
+	AutoToday int  `json:"auto_today"`
+	Unread    int  `json:"unread"`
 }
 
 func (s *Service) meView(ctx context.Context, p personRecord) (meView, error) {
@@ -220,7 +258,7 @@ func (s *Service) meView(ctx context.Context, p personRecord) (meView, error) {
 	if err := s.config.Store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM notifications WHERE person_id = ? AND read_at IS NULL`, p.ID).Scan(&unread); err != nil {
 		return meView{}, err
 	}
-	return meView{p.ID, p.Handle, p.HandleChanged, p.AgentName, p.PetID, p.Bio, p.AutoPost, p.DailyCap, autoToday, unread}, nil
+	return meView{p.ID, p.Handle, p.HandleChanged, p.AgentName, p.PetID, p.Bio, p.AutoPost, p.AutoMedia, p.DailyCap, autoToday, unread}, nil
 }
 
 func (s *Service) handleEnable(w http.ResponseWriter, r *http.Request, account Account) {
@@ -289,6 +327,8 @@ func (s *Service) handleDeleteMe(w http.ResponseWriter, r *http.Request, me pers
 		s.internalError(w, "delete person", err)
 		return
 	}
+	// The person's media rows went with them and queued their objects.
+	s.drainTrash(r.Context())
 	writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
 }
 
@@ -362,7 +402,10 @@ func (s *Service) handlePatchProfile(w http.ResponseWriter, r *http.Request, me 
 
 func (s *Service) handleAutoPost(w http.ResponseWriter, r *http.Request, me personRecord) {
 	var request struct {
-		Enabled bool   `json:"enabled"`
+		// Enabled and Media are pointers: a request that leaves one out leaves
+		// it as it is, so a client that never heard of media cannot turn it on.
+		Enabled *bool  `json:"enabled"`
+		Media   *bool  `json:"media"`
 		TZ      string `json:"tz"`
 	}
 	if !decodeJSON(w, r, &request) {
@@ -372,11 +415,14 @@ func (s *Service) handleAutoPost(w http.ResponseWriter, r *http.Request, me pers
 	if request.TZ != "" {
 		tz = validTZ(request.TZ)
 	}
-	enabled := 0
-	if request.Enabled {
-		enabled = 1
+	enabled, media := boolInt(me.AutoPost), boolInt(me.AutoMedia)
+	if request.Enabled != nil {
+		enabled = boolInt(*request.Enabled)
 	}
-	if _, err := s.config.Store.db.ExecContext(r.Context(), `UPDATE people SET auto_post = ?, tz = ? WHERE id = ?`, enabled, tz, me.ID); err != nil {
+	if request.Media != nil {
+		media = boolInt(*request.Media)
+	}
+	if _, err := s.config.Store.db.ExecContext(r.Context(), `UPDATE people SET auto_post = ?, auto_media = ?, tz = ? WHERE id = ?`, enabled, media, tz, me.ID); err != nil {
 		s.internalError(w, "set auto-post", err)
 		return
 	}
@@ -444,6 +490,13 @@ func validTZ(name string) string {
 		return ""
 	}
 	return name
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func clip(text string, runes int) string {

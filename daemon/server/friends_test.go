@@ -9,8 +9,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -227,5 +230,103 @@ func TestFriendsFailLocalErrorIsNotBadGateway(t *testing.T) {
 	friendsFail(recorder, &localError{errors.New("disk full")})
 	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), `"local_error"`) {
 		t.Fatalf("local error = %d %s", recorder.Code, recorder.Body)
+	}
+}
+
+// The phone sees a draft's pictures, removes one before posting, and turns on
+// media for auto-post, all through the computer; the video file itself never
+// goes to the phone.
+func TestFriendsDraftMediaThroughThePairedPhone(t *testing.T) {
+	manager, privateKey, deviceID := sessionFileAuthFixture(t)
+	store, err := friendsvc.OpenStore(filepath.Join(t.TempDir(), "friends.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	media := &friendsvc.DirMediaStore{Dir: filepath.Join(t.TempDir(), "media")}
+	service, err := friendsvc.New(friendsvc.Config{Store: store, Media: media, TempDir: t.TempDir(), Accounts: theComputersAccount{
+		key: manager.PublicKeyHex(), account: friendsvc.Account{ID: "acct", Login: "owner", CreatedAt: time.Now().Add(-400 * 24 * time.Hour)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosted := httptest.NewServer(service.Handler())
+	defer hosted.Close()
+	media.PublicURL = hosted.URL + friends.MountPrefix
+	srv := New(manager, nil, nil, nil, nil, nil, nil)
+	act := func(op map[string]any) (int, []byte) {
+		body, _ := json.Marshal(op)
+		sum := sha256.Sum256(body)
+		nonce := make([]byte, 16)
+		_, _ = rand.Read(nonce)
+		timestamp := strconv.FormatInt(time.Now().UnixMilli(), 10)
+		purpose := "mewla-friends:POST:/friends:sha256=" + hex.EncodeToString(sum[:])
+		signature := ed25519.Sign(privateKey, auth.BuildSignaturePayload(purpose, manager.DaemonID(), deviceID, timestamp, hex.EncodeToString(nonce)))
+		request := httptest.NewRequest(http.MethodPost, "/friends", bytes.NewReader(body))
+		request.Header.Set("Authorization", auth.AuthorizationHeaderPrefix+"v1:"+deviceID+":"+manager.DaemonID()+":"+timestamp+":"+hex.EncodeToString(nonce)+":"+hex.EncodeToString(signature))
+		response := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(response, request)
+		return response.Code, response.Body.Bytes()
+	}
+	if err := remote.SaveConfig(manager.StorageDir(), remote.Config{ServiceURL: hosted.URL, Machine: remote.Machine{
+		AccountLogin: "owner", Hostname: "h.example.test", Label: "h", RouteID: "r", Relays: []remote.Relay{{Name: "x"}}}}); err != nil {
+		t.Fatal(err)
+	}
+	if code, raw := act(map[string]any{"op": "enable", "agent_name": "Mochi", "tz": "UTC"}); code != http.StatusOK {
+		t.Fatalf("enable: %d %s", code, raw)
+	}
+
+	picture := t.TempDir() + "/a.png"
+	var encoded bytes.Buffer
+	_ = png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 20, 10)))
+	if err := os.WriteFile(picture, encoded.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", t.TempDir())
+	local := &friends.Local{StateDir: manager.StorageDir(), Auth: manager}
+	out, err := local.SubmitMedia(context.Background(), "I drew a small square.", "", []string{picture, picture})
+	if err != nil || out.DraftID == "" {
+		t.Fatalf("submit = %+v %v", out, err)
+	}
+	draft, err := friends.NewStore(manager.StorageDir()).Draft(out.DraftID)
+	if err != nil || len(draft.Media) != 2 {
+		t.Fatalf("draft = %+v %v", draft, err)
+	}
+
+	// The phone fetches a draft picture by a file name the draft lists, and
+	// nothing else (no path walks, no other files on the computer).
+	code, raw := act(map[string]any{"op": "draft_media", "draft_id": out.DraftID, "file": draft.Media[0].File})
+	if code != http.StatusOK || !strings.Contains(string(raw), `"mime":"image/png"`) || !strings.Contains(string(raw), `"data":"`) {
+		t.Fatalf("draft_media = %d %s", code, raw)
+	}
+	for _, file := range []string{"../../state.json", "/etc/passwd", "", "nope.png"} {
+		if code, _ := act(map[string]any{"op": "draft_media", "draft_id": out.DraftID, "file": file}); code != http.StatusNotFound {
+			t.Errorf("draft_media %q = %d, want 404", file, code)
+		}
+	}
+
+	if code, raw := act(map[string]any{"op": "draft_media_remove", "draft_id": out.DraftID, "index": 0}); code != http.StatusOK || !strings.Contains(string(raw), out.DraftID) {
+		t.Fatalf("remove = %d %s", code, raw)
+	}
+	if left, _ := friends.NewStore(manager.StorageDir()).Draft(out.DraftID); len(left.Media) != 1 || left.Media[0].File != draft.Media[1].File {
+		t.Fatalf("after removal: %+v", left.Media)
+	}
+
+	// The media choice is sent only when the phone sent it.
+	if body := autoPostBody(friendsAction{Enabled: true, TZ: "UTC"}); body["media"] != nil {
+		t.Fatalf("an old phone's request carries media: %v", body)
+	}
+	on := true
+	if body := autoPostBody(friendsAction{Media: &on}); body["media"] != true {
+		t.Fatalf("body = %v", body)
+	}
+	if code, raw := act(map[string]any{"op": "auto_post", "enabled": true, "media": true, "tz": "UTC"}); code != http.StatusOK || !strings.Contains(string(raw), `"auto_media":true`) {
+		t.Fatalf("auto_post = %d %s", code, raw)
+	}
+	// A phone that did not show the media (an older App) cannot post it.
+	if code, raw := act(map[string]any{"op": "post_draft", "draft_id": out.DraftID}); code != http.StatusConflict || !strings.Contains(string(raw), "media_not_reviewed") {
+		t.Fatalf("post without review: %d %s", code, raw)
+	}
+	if code, raw := act(map[string]any{"op": "post_draft", "draft_id": out.DraftID, "reviewed": []string{draft.Media[1].File}}); code != http.StatusOK {
+		t.Fatalf("post draft: %d %s", code, raw)
 	}
 }
