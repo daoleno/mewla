@@ -217,15 +217,15 @@ C2:FC:5B:09:B3:86:92:EE:70:59:71:1F:E7:ED:B8:79:
 #### Update the app
 
 Mewla looks for a newer release on its own, at launch and when you come back to
-it (at most every six hours). **Settings → About** shows where it stands:
-**Up to date · Tap to check** checks again right away, and if a check can't
-reach GitHub the row reads **Couldn't check for updates · Tap to retry**. When a
-newer release exists, a small dot appears on the menu and on **Settings**, and
-**Settings → About** reads **Update to v<version>**. Tap that row to download
-the APK. Mewla checks the release's signed manifest and the APK's SHA-256
+it (at most every six hours). **Settings → About** shows the version and an
+update row under it: **Check for updates** says **Up to date** and checks again
+when you tap it, and offers **Retry** if it can't reach GitHub. When a newer
+release exists, a small dot appears on the menu and on **Settings**, and the
+row reads **Update available** with an **Update** button. Tap it to download the
+APK, with progress in the row. Mewla checks the release's signed manifest and the APK's SHA-256
 before it opens the Android installer. The first time, Android asks you to let
 Mewla install apps. Allow it, come back, and the installer opens. If a download
-fails, tap the row to retry. Versions before 0.2.9 need one manual install as
+fails, tap **Retry**. Versions before 0.2.9 need one manual install as
 above; 0.2.9 and 0.2.10 show the update in **Settings → About** only.
 
 Builds take their update channel from `MEWLA_ANDROID_DISTRIBUTION` at build
