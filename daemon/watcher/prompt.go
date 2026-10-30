@@ -34,6 +34,10 @@ type promptGate struct {
 	// late marks a prompt filed on a turn opened for it, after the Worker's own
 	// turn had settled. Answering it settles that turn again.
 	late bool
+	// absentSince is when the pane first stopped showing the filed prompt, or
+	// zero while it is showing. A redraw or a half-read frame makes a dialog
+	// blink out for a poll; only an absence that lasts is an answer.
+	absentSince time.Time
 }
 
 // SessionWorkLedger names the Work a Session can still raise a request on: the
@@ -50,6 +54,11 @@ const (
 	// unanswered would otherwise decay to a lost turn.
 	promptGateRenewEvery  = 5 * time.Minute
 	promptGateAnswerLease = 300
+	// promptGateClearAfter is how long the pane must stop showing a filed
+	// prompt before it counts as answered. Clearing on the first missed poll
+	// turned every blink into running then blocked again, and each blocked was
+	// a push to the person's phone.
+	promptGateClearAfter = 4 * time.Second
 )
 
 // ErrPromptGone means the prompt an answer was composed for is no longer the
@@ -239,7 +248,29 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		promptID = activity.Prompt.ID
 	}
 	renewing := false
+	if filed && gate.turnID == turnID && !open {
+		// The prompt may only have blinked: wait out the absence.
+		now := time.Now()
+		w.mu.Lock()
+		current := w.gates[id]
+		if current.absentSince.IsZero() {
+			current.absentSince = now
+			w.gates[id] = current
+		}
+		w.mu.Unlock()
+		if now.Sub(current.absentSince) < promptGateClearAfter {
+			return turn, hasTurn
+		}
+	}
 	if filed && gate.turnID == turnID && open && gate.promptID == promptID {
+		if !gate.absentSince.IsZero() {
+			w.mu.Lock()
+			if current, ok := w.gates[id]; ok {
+				current.absentSince = time.Time{}
+				w.gates[id] = current
+			}
+			w.mu.Unlock()
+		}
 		if time.Since(gate.filedAt) < promptGateRenewEvery {
 			return turn, hasTurn
 		}

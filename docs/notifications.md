@@ -27,9 +27,13 @@ If you are looking at that exact Session in the app, Mewla does not notify you.
 Anywhere else, including another Session, it sends the push, with two
 exceptions for **Finished**: it is not sent while the app is open in front of
 you, and a Work that finishes again in the same run (for example a series of
-releases) notifies once. **Needs input** and **Failed** always send, and a
-Work that needed you starts its next run fresh. Every push held back this way
-is still recorded in [Watch](watch.md), with the reason.
+releases) notifies once. **Needs input** and **Failed** send once per question:
+the same prompt blinking, re-rendering or coming back after a daemon restart
+does not send again, while a new prompt, or the same one after the Session had
+moved on for 30 seconds, does. A newer push for a Session replaces the older
+one on your phone instead of stacking. A Work that needed you starts its next
+run fresh. Every push held back this way is still recorded in
+[Watch](watch.md), with the reason.
 
 Calendar sends two other kinds of alert:
 

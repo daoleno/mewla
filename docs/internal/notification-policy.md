@@ -119,6 +119,8 @@ Current OSS-core behavior is intentionally simple:
 
 - The daemon is the only runtime lifecycle/result OS-alert producer. The app registers its Expo token, presents incoming pushes, and handles deep links; it does not mirror agent or scheduled-result state into local alerts.
 - Ordinary delegated `blocked`, `failed`, and `done` transitions each trigger one best-effort daemon attempt unless that exact agent is actively viewed. Viewing a different agent or a non-Terminal screen does not suppress it.
+- `blocked` and `failed` push once per question (`daemon/server/worker_push_dedupe.go`): the key is the prompt id (stable across its countdown and re-renders), or turn plus summary when there is no prompt. The last key per Worker is persisted in `worker-pushes.json`, so a restart does not repeat it. It resets when the Worker is out of the state for 30 seconds, settles `done`, or the push reached no phone (`no_registration`). The pane gate that files a prompt to the turn clears it only after the prompt has been gone 4 seconds, so a blink is not an answer. Worker pushes carry Expo `collapseId`/`tag` (replace) and `threadId` (group) `worker:<id>`, so a newer push replaces the older one on the phone.
+- Watch flags `notification_burst`: one kind, Session and text sent more than 3 times in 10 minutes (held-back ones are not counted).
 - Scheduled actions run in non-delegated sessions and never enter the generic agent-lifecycle alert path. The first successfully persisted Calendar terminal result makes one separate best-effort push attempt for either completion or failure, deep-linking to the frozen Brain thread.
 - Explicit future Calendar reminders remain locally scheduled after sync. They are a separate user commitment, not a runtime lifecycle producer.
 

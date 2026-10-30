@@ -3,6 +3,7 @@ package push
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -147,6 +148,12 @@ type Message struct {
 	// Title and Body travel in data. TTL, when set, is in seconds.
 	DataOnly bool `json:"-"`
 	TTL      int  `json:"-"`
+	// CollapseID makes a newer notification with the same id replace the
+	// older one on the phone instead of stacking beside it: Expo's collapseId
+	// on iOS, tag on Android. ThreadID is iOS's visual grouping. Both are
+	// ignored for DataOnly messages, which the app posts itself.
+	CollapseID string `json:"-"`
+	ThreadID   string `json:"-"`
 }
 
 // Send sends a push notification to every registered device.
@@ -257,6 +264,15 @@ func (c *Client) deliver(id string, receipt *receiptClaim, registration registra
 	return c.submit(registration.token, msg, receipt)
 }
 
+// collapseKey fits an id to APNs's 64-byte apns-collapse-id limit.
+func collapseKey(id string) string {
+	if len(id) <= 64 {
+		return id
+	}
+	sum := sha256.Sum256([]byte(id))
+	return "h:" + hex.EncodeToString(sum[:])[:32]
+}
+
 func (c *Client) sendTo(token string, msg Message) error {
 	_, err := c.submit(token, msg, nil)
 	return err
@@ -298,6 +314,15 @@ func (c *Client) submit(token string, msg Message, receipt *receiptClaim) (submi
 		}
 		data["title"], data["body"] = msg.Title, msg.Body
 		msg.Data = data
+	}
+	if !msg.DataOnly {
+		if id := collapseKey(msg.CollapseID); id != "" {
+			payload["collapseId"] = id
+			payload["tag"] = id
+		}
+		if msg.ThreadID != "" {
+			payload["threadId"] = msg.ThreadID
+		}
 	}
 	if msg.Priority != "" {
 		payload["priority"] = msg.Priority
@@ -449,7 +474,13 @@ func notificationData(workerID, serverRef string) map[string]string {
 // workerMessage is the notification for a Worker that became blocked, failed or done.
 func workerMessage(kind string, notice WorkerNotice, serverRef string) Message {
 	label := notice.label()
-	message := Message{Data: notificationData(notice.WorkerID, serverRef)}
+	// One notification per Worker on the phone: a newer one replaces the
+	// older, so a second "needs input" never stacks beside the first.
+	message := Message{
+		Data:       notificationData(notice.WorkerID, serverRef),
+		CollapseID: "worker:" + notice.WorkerID,
+		ThreadID:   "worker:" + notice.WorkerID,
+	}
 	switch kind {
 	case KindWorkerBlocked:
 		message.Title, message.Body, message.Priority = label+" needs input", buildNotificationBody(notice.Summary, "Waiting for your response."), "high"

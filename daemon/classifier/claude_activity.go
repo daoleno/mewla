@@ -94,6 +94,9 @@ func withoutAutoDenyMention(content string) string {
 	if !autoDenyLineRe.MatchString(content) {
 		return content
 	}
+	// A narrow pane can wrap the notice between "Claude Code" and the words
+	// that name it, leaving the mention on a line the per-line pass misses.
+	content = wrappedAutoDenyRe.ReplaceAllString(content, "this agent$1")
 	lines := strings.Split(content, "\n")
 	for index, line := range lines {
 		if autoDenyLineRe.MatchString(line) {

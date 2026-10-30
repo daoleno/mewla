@@ -186,6 +186,8 @@ var (
 	// A dialog Claude will refuse by itself says so, with a clock that ticks:
 	// "Claude Code will automatically deny this request in about 28 seconds".
 	autoDenyLineRe = regexp.MustCompile(`(?i)auto(?:matically)?[ -]?(?:deny|denied|denies|reject|dismiss|cancel)`)
+	// "Claude Code" followed, across any wrap, by the words of the notice.
+	wrappedAutoDenyRe = regexp.MustCompile(`(?i)claude\s+code(\s+will\s+auto(?:matically)?[ -]?(?:deny|denied|denies|reject|dismiss|cancel))`)
 	// An elapsed or remaining time in brackets: "Running… (12s)", "(1m 5s)".
 	clockInBracketsRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?\s*[)\]]`)
 	// A spinner or progress glyph that leads a line and turns as time passes.
@@ -193,11 +195,22 @@ var (
 )
 
 // withoutVolatileLines drops the lines of a prompt's text that only count time.
+// The auto-deny notice is a paragraph: in a narrow pane it wraps, and the
+// wrapped tail ("to avoid blocking progress...") carries no keyword, so a
+// per-line filter leaves a fragment whose shape changes as the clock does.
 func withoutVolatileLines(text string) string {
 	lines := strings.Split(text, "\n")
 	kept := lines[:0:0]
+	inNotice := false
 	for _, line := range lines {
-		if !autoDenyLineRe.MatchString(line) {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case trimmed == "":
+			inNotice = false
+		case strings.HasPrefix(trimmed, "⏱") || autoDenyLineRe.MatchString(line):
+			inNotice = true
+		}
+		if !inNotice {
 			kept = append(kept, line)
 		}
 	}
