@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mewla_phone_accessibility_description">Reads the pairing code on the Wireless debugging screen so Mewla can pair with this phone by itself.</string>
+</resources>

@@ -1,0 +1,42 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <application>
+    <!--
+      Reads the pairing code off the Wireless debugging screen. Off until the person turns Phone
+      use on (the App enables the component then), so it is not even in their Accessibility list
+      before that. The Play Store build removes it (plugins/withAndroidPhoneUse.js).
+    -->
+    <service
+      android:name="expo.modules.mewlaphone.PairingAccessibilityService"
+      android:enabled="false"
+      android:exported="false"
+      android:label="Mewla Phone use"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/mewla_phone_accessibility" />
+    </service>
+
+    <service
+      android:name="expo.modules.mewlaphone.PhoneUseService"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Keeps the connection to the person's computer so its agents can use the phone while the app is in the background" />
+    </service>
+
+    <receiver
+      android:name="expo.modules.mewlaphone.PhoneActionReceiver"
+      android:exported="false" />
+  </application>
+</manifest>
