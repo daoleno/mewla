@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mewla_phone_accessibility_description">Reads the pairing code on the Wireless debugging screen so Mewla can pair with this phone by itself.</string>
+    <string name="mewla_phone_accessibility_description">While Mewla sets up Phone use, taps through Settings to turn on Developer options and Wireless debugging and reads the pairing code, so you do not have to. It reads nothing else and does not approve any system prompt for you.</string>
 </resources>

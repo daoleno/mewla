@@ -1,10 +1,23 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <!--
+    Granted to the App once, through its own Wireless debugging shell (pm grant). It lets the App
+    turn Wireless debugging back on after a reboot and switch its own accessibility service on,
+    so setup is never repeated. pm grant only works for a permission the manifest declares.
+  -->
+  <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
+
+  <!-- The Settings and SystemUI screens the setup guide reads labels from, in the person's language. -->
+  <queries>
+    <package android:name="com.android.settings" />
+    <package android:name="com.android.systemui" />
+  </queries>
 
   <application>
     <!--
@@ -35,8 +48,21 @@
         android:value="Keeps the connection to the person's computer so its agents can use the phone while the app is in the background" />
     </service>
 
+    <service
+      android:name="expo.modules.mewlaphone.PhoneLinkTaskService"
+      android:exported="false" />
+
     <receiver
       android:name="expo.modules.mewlaphone.PhoneActionReceiver"
       android:exported="false" />
+
+    <!-- Brings Phone use back after a reboot, when the person had it on. -->
+    <receiver
+      android:name="expo.modules.mewlaphone.PhoneBootReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>

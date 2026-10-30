@@ -20,6 +20,8 @@ class PhoneUseService : Service() {
         PhoneController.init(this)
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
         ServiceCompat.startForeground(this, PhoneNotifier.ID_STATUS, PhoneNotifier.status(this), type)
+        // No App screen needed: after a reboot this brings the link to the computer back by itself.
+        PhoneController.ensureLink()
         return START_STICKY
     }
 
