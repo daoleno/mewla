@@ -15,6 +15,21 @@ export type ConnectionTool = {
   /** The service added or changed this tool; it waits for confirmation before Brain can use it. */
   updated?: boolean;
 };
+/** AWS: who is connected, read by the server when the account is connected or refreshed. */
+export type AwsAccountDetails = {
+  account_id: string;
+  /** The AWS account's name or alias; absent when the sign-in may read neither. */
+  account_name?: string;
+  account_state?: string;
+  /** The signed-in identity in words: "Root user", a role's name, "IAM user NAME". */
+  who: string;
+  /** The role session's name. */
+  session?: string;
+  sign_in: "login" | "sso" | "keys" | "profile";
+  /** When an IAM Identity Center sign-in ends; absent for the other sign-ins. */
+  expires_at?: string;
+  checked_at?: string;
+};
 export type PluginAccount = {
   id: string;
   integration: string;
@@ -34,6 +49,8 @@ export type PluginAccount = {
   profile?: string;
   /** AWS: the profile's default region, or the region saved with pasted access keys. */
   region?: string;
+  /** AWS: who is connected. */
+  aws?: AwsAccountDetails;
   enabled: boolean;
   credential_removal_pending?: boolean;
   status: "connected" | "configured" | "error" | "authorization_required" | "disconnected";

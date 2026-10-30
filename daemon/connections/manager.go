@@ -261,6 +261,9 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return Response{}, errors.New("plugin account not found")
 	}
 	if q.Action == "get" || q.Action == "updates" {
+		if q.Action == "get" && awsDetailsStale(r, time.Now()) {
+			m.awsRefreshDetails(ctx, r)
+		}
 		a := m.projection(r)
 		return Response{Account: &a}, nil
 	}

@@ -3,6 +3,8 @@ package connections
 import (
 	"compress/gzip"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -914,5 +916,171 @@ func TestRunAWSParamsReachTheRealCLI(t *testing.T) {
 	}
 	if !strings.Contains(exit.stderr, "Could not connect") {
 		t.Fatalf("unexpected CLI failure (is the AWS CLI v2?): %s", exit.stderr)
+	}
+}
+
+// ---- account details ----------------------------------------------------
+
+func TestParseAWSPrincipal(t *testing.T) {
+	for arn, want := range map[string][2]string{
+		"arn:aws:iam::725098487500:root":                                              {"Root user", ""},
+		"arn:aws:sts::113732353381:assumed-role/AccountFullAccessRole/54784408-0061":  {"AccountFullAccessRole", "54784408-0061"},
+		"arn:aws:iam::123456789012:user/audit":                                        {"IAM user audit", ""},
+		"arn:aws:iam::123456789012:user/team/audit":                                   {"IAM user audit", ""},
+		"arn:aws:sts::1:assumed-role/AWSReservedSSO_Admin_0123456789abcdef/ann@x.com": {"Admin", "ann@x.com"},
+		"arn:aws:sts::1:federated-user/bob":                                           {"Federated user bob", ""},
+		"arn:aws:iam::1:role/ops/deploy":                                              {"deploy", ""},
+		"nonsense":                                                                    {"AWS identity", ""},
+		"arn:aws:iam::1:something":                                                    {"AWS identity", ""},
+	} {
+		if who, session := parseAWSPrincipal(arn); who != want[0] || session != want[1] {
+			t.Errorf("%s: got %q, %q; want %q, %q", arn, who, session, want[0], want[1])
+		}
+		if who, _ := parseAWSPrincipal(arn); strings.HasPrefix(who, "arn:") {
+			t.Errorf("%s: the headline is an ARN", arn)
+		}
+	}
+}
+
+// awsDetailsReply answers STS and, per the options, the account calls.
+func awsDetailsReply(accountInfo, aliases string) func(c awsCommand) ([]byte, error) {
+	denied := &awsExitError{stderr: "aws: [ERROR]: An error occurred (AccessDeniedException) when calling the operation: explicit deny in a service control policy"}
+	return func(c awsCommand) ([]byte, error) {
+		switch {
+		case c.Args[0] == "sts":
+			return []byte(`{"UserId":"AROAEXAMPLE:sess-1","Account":"123456789012","Arn":"arn:aws:sts::123456789012:assumed-role/AccountFullAccessRole/sess-1"}`), nil
+		case c.Args[0] == "account":
+			if accountInfo == "" {
+				return nil, denied
+			}
+			return []byte(accountInfo), nil
+		case c.Args[0] == "iam" && c.Args[1] == "list-account-aliases":
+			if aliases == "" {
+				return nil, denied
+			}
+			return []byte(aliases), nil
+		}
+		return awsOK(c)
+	}
+}
+
+func TestAWSAccountDetails(t *testing.T) {
+	m, fake := awsTestManager(t, awsDetailsReply(`{"AccountId":"123456789012","AccountName":"Blank Canvas","AccountState":"ACTIVE"}`, ""))
+	a := addAWSProfile(t, m, "work")
+	d := a.AWS
+	if d == nil || d.AccountName != "Blank Canvas" || d.AccountState != "ACTIVE" || d.Who != "AccountFullAccessRole" || d.Session != "sess-1" || d.SignIn != "login" || d.AccountID != "123456789012" {
+		t.Fatalf("%+v", d)
+	}
+	if a.Name != "Blank Canvas" {
+		t.Fatalf("the card is titled by the account name, got %q", a.Name)
+	}
+	if d.ExpiresAt != nil {
+		t.Fatal("a login profile's cached credential is renewed by the CLI; it is not a session end")
+	}
+	// The details are read at connect, not again when the account is opened.
+	n := len(fake.calls)
+	got := mustHandle(t, m, Request{Action: "get", ID: a.ID}).Account
+	if got.AWS == nil || len(fake.calls) != n {
+		t.Fatalf("fresh details are not read again (%d calls)", len(fake.calls)-n)
+	}
+	// Listing never reaches AWS either.
+	mustHandle(t, m, Request{Action: "list"})
+	if len(fake.calls) != n {
+		t.Fatal("list called AWS")
+	}
+}
+
+func TestAWSAccountNameFallbacks(t *testing.T) {
+	// The account name is denied: the alias names the account.
+	m, _ := awsTestManager(t, awsDetailsReply("", `{"AccountAliases":["acme-prod"]}`))
+	a := addAWSProfile(t, m, "work")
+	if a.AWS.AccountName != "acme-prod" || a.Name != "acme-prod" || a.AWS.AccountState != "" {
+		t.Fatalf("alias: %+v %q", a.AWS, a.Name)
+	}
+	// Both are denied (an organization's policy): the ID names the account, no error.
+	m, _ = awsTestManager(t, awsDetailsReply("", ""))
+	a = addAWSProfile(t, m, "work")
+	if a.AWS == nil || a.AWS.AccountName != "" || a.Name != "AWS 123456789012" || a.AWS.Who != "AccountFullAccessRole" || a.Status != "connected" {
+		t.Fatalf("denied: %+v %q", a.AWS, a.Name)
+	}
+}
+
+func TestAWSAccountNameAdoptedLater(t *testing.T) {
+	denied := true
+	m, _ := awsTestManager(t, func(c awsCommand) ([]byte, error) {
+		if c.Args[0] == "account" && !denied {
+			return []byte(`{"AccountName":"Blank Canvas","AccountState":"ACTIVE"}`), nil
+		}
+		return awsDetailsReply("", "")(c)
+	})
+	a := addAWSProfile(t, m, "work")
+	other := addAWSProfile(t, m, "work-sso")
+	if a.Name != "AWS 123456789012" || other.Name != "AWS 123456789012 (work-sso)" {
+		t.Fatalf("%q %q", a.Name, other.Name)
+	}
+	denied = false
+	got := mustHandle(t, m, Request{Action: "refresh", ID: other.ID}).Account
+	if got.Name != "Blank Canvas (work-sso)" || got.AWS.AccountName != "Blank Canvas" {
+		t.Fatalf("refresh renames a default name and keeps the suffix: %q", got.Name)
+	}
+	// A stale read of an account that was connected before details existed.
+	m.records[a.ID].Account.AWS = nil
+	got = mustHandle(t, m, Request{Action: "get", ID: a.ID}).Account
+	if got.AWS == nil || got.Name != "Blank Canvas" {
+		t.Fatalf("opening reads the missing details: %+v %q", got.AWS, got.Name)
+	}
+	// A name the person gave is not replaced.
+	m.records[a.ID].Account.Name = "Production"
+	m.records[a.ID].Account.AWS.CheckedAt = m.records[a.ID].Account.AWS.CheckedAt.Add(-24 * time.Hour)
+	got = mustHandle(t, m, Request{Action: "get", ID: a.ID}).Account
+	if got.Name != "Production" || time.Since(got.AWS.CheckedAt) > time.Minute {
+		t.Fatalf("%q %v", got.Name, got.AWS.CheckedAt)
+	}
+}
+
+func TestAWSDetailsOnOpenSeeExpiredSession(t *testing.T) {
+	expired := false
+	m, _ := awsTestManager(t, func(c awsCommand) ([]byte, error) {
+		if expired {
+			return nil, &awsExitError{stderr: "aws: [ERROR]: Error loading login session token: Please reauthenticate with 'aws login'."}
+		}
+		return awsDetailsReply("", "")(c)
+	})
+	a := addAWSProfile(t, m, "work")
+	expired = true
+	m.records[a.ID].Account.AWS = nil
+	got := mustHandle(t, m, Request{Action: "get", ID: a.ID}).Account
+	if got.Status != "authorization_required" || got.AWS == nil || got.AWS.Who != "AccountFullAccessRole" {
+		t.Fatalf("an expired session shows as such and still says who: %s %+v", got.Status, got.AWS)
+	}
+}
+
+func TestAWSSSOExpiryFromCache(t *testing.T) {
+	m, _ := awsTestManager(t, awsDetailsReply("", ""))
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".aws", "sso", "cache")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha1.Sum([]byte("corp"))
+	if err := os.WriteFile(filepath.Join(dir, hex.EncodeToString(sum[:])+".json"), []byte(`{"accessToken":"sso-token-value","expiresAt":"2030-01-02T03:04:05Z"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := addAWSProfile(t, m, "work-sso")
+	if a.AWS.SignIn != "sso" || a.AWS.ExpiresAt == nil || !a.AWS.ExpiresAt.Equal(time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)) {
+		t.Fatalf("%+v", a.AWS)
+	}
+	raw, _ := json.Marshal(a)
+	if strings.Contains(string(raw), "sso-token-value") {
+		t.Fatal("the cache's token reached the account")
+	}
+}
+
+func TestAWSKeysAccountDetails(t *testing.T) {
+	m, _ := awsTestManager(t, awsDetailsReply(`{"AccountName":"Blank Canvas"}`, ""))
+	creds := `{"access_key_id":"AKIAEXAMPLEEXAMPLE1","secret_access_key":"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}`
+	a := mustHandle(t, m, Request{Action: "add", Input: &Input{Integration: "aws", Credential: creds, Region: "eu-west-1"}}).Account
+	if a.AWS.SignIn != "keys" || a.Name != "Blank Canvas" || a.Region != "eu-west-1" {
+		t.Fatalf("%+v %q", a.AWS, a.Name)
 	}
 }
