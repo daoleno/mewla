@@ -24,7 +24,6 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
-		Profile:        ProfileSafe,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".mewla"),
 		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
@@ -61,7 +60,6 @@ func TestSetupNoExecutorStopsWithLoginHints(t *testing.T) {
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
-		Profile:        ProfileSafe,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".mewla"),
 		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
@@ -87,7 +85,7 @@ func TestSetupNoExecutorStopsWithLoginHints(t *testing.T) {
 	}
 }
 
-func TestSetupVerifiedBeforeUnknownOrderingAndSafeWrite(t *testing.T) {
+func TestSetupVerifiedBeforeUnknownOrderingAndWrite(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	writeFakeTmux(t, binDir)
@@ -113,7 +111,6 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
-		Profile:        ProfileSafe,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".mewla"),
 		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
@@ -129,7 +126,7 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !result.OK || result.BrainConfigured {
+	if !result.OK || !result.BrainConfigured {
 		t.Fatalf("result = %+v", result)
 	}
 	candidates := selectableCandidates(result.Doctor)
@@ -142,10 +139,11 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 		t.Fatalf("ReadFile: %v", err)
 	}
 	text := string(raw)
-	for _, bad := range []string{"--force", "sandbox disabled", "bypassPermissions", "dangerously-bypass"} {
-		if strings.Contains(text, bad) {
-			t.Fatalf("safe profile leaked %q:\n%s", bad, text)
-		}
+	if !strings.Contains(text, `command = "grok --no-alt-screen --permission-mode bypassPermissions"`) {
+		t.Fatalf("unselected executor's full-authority command was not kept:\n%s", text)
+	}
+	if strings.Contains(text, "Safe") || strings.Contains(text, "Autonomous") || strings.Contains(text, "Profile:") {
+		t.Fatalf("config still describes a permission profile:\n%s", text)
 	}
 	if !strings.Contains(text, "custom-keep") || !strings.Contains(text, "echo keep-me") {
 		t.Fatalf("unrelated executor not preserved:\n%s", text)
@@ -156,36 +154,9 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 	if _, err := os.Stat(result.BackupPath); err != nil {
 		t.Fatalf("backup missing: %v", err)
 	}
-	if !strings.Contains(out.String(), "Brain host left unconfigured") && len(result.Warnings) == 0 {
-		t.Fatalf("expected Brain unconfigured warning, out=\n%s result=%+v", out.String(), result)
-	}
 }
 
-func TestSetupAutonomousRequiresExplicitConsent(t *testing.T) {
-	home := t.TempDir()
-	binDir := readyBinDir(t)
-	_, err := Run(Options{
-		NonInteractive: true,
-		Host:           "codex",
-		Profile:        ProfileAutonomous,
-		Yes:            false,
-		Home:           home,
-		StateDir:       filepath.Join(home, ".mewla"),
-		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
-		PathEnv:        binDir,
-		Addr:           "127.0.0.1:0",
-		Stdout:         io.Discard,
-		Stderr:         io.Discard,
-		DoctorListen:   func(network, address string) (io.Closer, error) { return nopCloser{}, nil },
-		DoctorHTTPGet:  func(url string) (int, []byte, error) { return 0, nil, errors.New("refused") },
-		Now:            fixedNow,
-	})
-	if !errors.Is(err, ErrConsentRequired) {
-		t.Fatalf("err = %v, want ErrConsentRequired", err)
-	}
-}
-
-func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
+func TestSetupConfiguresBrainAndFullAuthority(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	writeFakeTmux(t, binDir)
@@ -195,8 +166,6 @@ func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "agent",
-		Profile:        ProfileAutonomous,
-		Yes:            true,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".mewla"),
 		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
@@ -217,7 +186,7 @@ func TestSetupAutonomousWithYesConfiguresBrainAndBypass(t *testing.T) {
 	}
 	raw, _ := os.ReadFile(result.ConfigPath)
 	if !strings.Contains(string(raw), "cursor-agent --force --sandbox disabled") {
-		t.Fatalf("autonomous cursor command missing:\n%s", raw)
+		t.Fatalf("full-authority cursor command missing:\n%s", raw)
 	}
 	store, err := brain.NewStore(filepath.Join(home, ".mewla", "brain"))
 	if err != nil {
@@ -246,11 +215,11 @@ name = "keep"
 command = "keep-cmd"
 `)
 
-	first, err := Run(baseOpts(home, binDir, ProfileSafe, "codex"))
+	first, err := Run(baseOpts(home, binDir, "codex"))
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	second, err := Run(baseOpts(home, binDir, ProfileSafe, "codex"))
+	second, err := Run(baseOpts(home, binDir, "codex"))
 	if err != nil {
 		t.Fatalf("second: %v", err)
 	}
@@ -291,7 +260,6 @@ func TestSetupNonInteractiveInvalidArgs(t *testing.T) {
 	binDir := readyBinDir(t)
 	_, err := Run(Options{
 		NonInteractive: true,
-		Profile:        ProfileSafe,
 		Home:           home,
 		PathEnv:        binDir,
 		Addr:           "127.0.0.1:0",
@@ -304,9 +272,9 @@ func TestSetupNonInteractiveInvalidArgs(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 
-	_, err = Run(baseOpts(home, binDir, Profile("nope"), "codex"))
+	_, err = Run(baseOpts(home, binDir, "not-a-candidate"))
 	if !errors.Is(err, ErrInvalidArgs) {
-		t.Fatalf("bad profile err = %v", err)
+		t.Fatalf("bad host err = %v", err)
 	}
 }
 
@@ -316,7 +284,7 @@ func TestSetupDoesNotEmitSecrets(t *testing.T) {
 	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using an API key - sk-SECRETVALUE")
 	var out bytes.Buffer
-	opts := baseOpts(home, binDir, ProfileSafe, "codex")
+	opts := baseOpts(home, binDir, "codex")
 	opts.Stdout = &out
 	result, err := Run(opts)
 	if err != nil {
@@ -349,14 +317,19 @@ func TestNextStepsKeepPrivateAndHTTPSRoutesDistinct(t *testing.T) {
 	}
 }
 
-func TestCommandForProfileNeverInjectsBypassIntoCustom(t *testing.T) {
-	cmd, _ := commandForProfile("custom", "mycli", "mycli --fancy", ProfileAutonomous)
+func TestCommandForProviderGivesEveryAgentFullAuthority(t *testing.T) {
+	cmd, _ := commandForProvider("custom", "mycli", "mycli --fancy")
 	if cmd != "mycli --fancy" {
 		t.Fatalf("custom command mutated: %q", cmd)
 	}
-	cmd, _ = commandForProfile("cursor", "agent", "cursor-agent", ProfileSafe)
-	if strings.Contains(cmd, "--force") || strings.Contains(cmd, "disabled") {
-		t.Fatalf("safe cursor has bypass: %q", cmd)
+	for provider, want := range map[string]string{
+		work.WorkerProviderCursor:   "cursor-agent --force --sandbox disabled",
+		work.WorkerProviderGrok:     "grok --no-alt-screen --permission-mode bypassPermissions",
+		work.WorkerProviderOpenCode: "opencode --auto",
+	} {
+		if got, _ := commandForProvider(provider, provider, ""); got != want {
+			t.Fatalf("%s command = %q, want %q", provider, got, want)
+		}
 	}
 }
 
@@ -368,12 +341,10 @@ func fixedNow() time.Time {
 	return time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
 }
 
-func baseOpts(home, binDir string, profile Profile, host string) Options {
+func baseOpts(home, binDir, host string) Options {
 	return Options{
 		NonInteractive: true,
 		Host:           host,
-		Profile:        profile,
-		Yes:            profile == ProfileAutonomous,
 		Home:           home,
 		StateDir:       filepath.Join(home, ".mewla"),
 		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
@@ -468,7 +439,7 @@ func TestAgentCommandIsWhatTheExecutorRunsByDefault(t *testing.T) {
 		if !ok {
 			t.Fatalf("agent %q has no provider here", id)
 		}
-		command, _ := commandForProfile(provider, id, "", ProfileSafe)
+		command, _ := commandForProvider(provider, id, "")
 		if fields := strings.Fields(command); len(fields) == 0 || fields[0] != hostdeps.AgentCommand(id) {
 			t.Fatalf("agent %q: registry runs %q, caps look for %q", id, command, hostdeps.AgentCommand(id))
 		}

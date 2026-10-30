@@ -11,14 +11,10 @@
 #
 # One authenticated executor is enough. Delete [[executors]] blocks you do not use.
 #
-# WARNING: Autonomous / bypass profiles can run shell and tools with little or
-# no interactive approval. Prefer the safe profile on machines with secrets.
-
-# ---------------------------------------------------------------------------
-# Safe / manual profile (recommended starting point)
-# ---------------------------------------------------------------------------
-# Launch CLIs without sandbox/permission bypass flags. Expect approval prompts
-# in the agent TTY when the tool asks; mobile unattended control will be slower.
+# WARNING: Mewla runs every agent with full authority: no approvals, no
+# sandbox. Brain, Workers and scheduled actions add the bypass flags themselves
+# (see docs/executors.md), so plain commands below are enough for Codex and
+# Claude. Do not use Mewla on a machine whose secrets you cannot risk.
 
 [[executors]]
 name = "codex"
@@ -30,12 +26,12 @@ command = "claude"
 
 [[executors]]
 name = "agent"
-command = "cursor-agent"
+command = "cursor-agent --force --sandbox disabled"
 kind = "cursor"
 
 [[executors]]
 name = "grok"
-command = "grok --no-alt-screen"
+command = "grok --no-alt-screen --permission-mode bypassPermissions"
 
 [[executors]]
 name = "pi"
@@ -44,35 +40,9 @@ kind = "pi"
 
 [[executors]]
 name = "opencode"
-command = "opencode"
+command = "opencode --auto"
 kind = "opencode"
 
-# ---------------------------------------------------------------------------
-# Autonomous profile (high risk) — UNCOMMENT ONLY IF YOU ACCEPT THE RISK
-# ---------------------------------------------------------------------------
-# These match the spirit of current built-in defaults for Cursor/Grok and the
-# Brain-delegated Codex hardener (see docs/executors.md):
-#
-# [[executors]]
-# name = "agent"
-# command = "cursor-agent --force --sandbox disabled"
-# kind = "cursor"
-#
-# [[executors]]
-# name = "grok"
-# command = "grok --no-alt-screen --permission-mode bypassPermissions"
-#
-# [[executors]]
-# name = "opencode"
-# command = "opencode --auto"
-# kind = "opencode"
-#
-# Pi is already permissive by default. Calendar may append --no-extensions so
-# extension ui.confirm gates cannot stall unattended work. Brain/daemon inject
-# an absolute --session path for Mewla-owned Pi sessions.
-#
-# Brain-delegated Codex sessions may still append
-# --dangerously-bypass-approvals-and-sandbox in current daemon code even when
-# the base command is plain "codex". Treat Brain delegation as elevated trust.
-# OpenCode --auto is only derived for autonomous Brain/Calendar work; ordinary
-# interactive OpenCode stays plain "opencode".
+# Pi has no approval gate. Calendar may append --no-extensions so extension
+# ui.confirm gates cannot stall unattended work. Brain/daemon inject an absolute
+# --session path for Mewla-owned Pi sessions.

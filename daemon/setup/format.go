@@ -10,7 +10,6 @@ func successLines(result Result) []string {
 	lines := []string{
 		"",
 		"mewla setup complete",
-		fmt.Sprintf("  profile: %s", result.Profile),
 		fmt.Sprintf("  host: %s", result.Host),
 		fmt.Sprintf("  config: %s", result.ConfigPath),
 	}

@@ -6,8 +6,6 @@ import (
 	"flag"
 	"strings"
 	"testing"
-
-	"github.com/daoleno/mewla/daemon/setup"
 )
 
 func TestSetupHelp(t *testing.T) {
@@ -17,7 +15,7 @@ func TestSetupHelp(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 	out := stderr.String()
-	for _, want := range []string{"Usage: mewla setup", "--non-interactive", "--profile", "--yes"} {
+	for _, want := range []string{"Usage: mewla setup", "--non-interactive", "--host"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help missing %q:\n%s", want, out)
 		}
@@ -35,9 +33,12 @@ func TestMainHelpListsSetup(t *testing.T) {
 	}
 }
 
-func TestSetupNonInteractiveConsentExit(t *testing.T) {
-	// Library-level sentinel remains stable for CLI mapping.
-	if !errors.Is(setup.ErrConsentRequired, setup.ErrConsentRequired) {
-		t.Fatal("sentinel identity")
+func TestSetupHasNoPermissionProfile(t *testing.T) {
+	var stderr bytes.Buffer
+	for _, flagName := range []string{"--profile", "--yes"} {
+		stderr.Reset()
+		if err := run([]string{"setup", flagName}, &stderr); err == nil {
+			t.Fatalf("setup accepted removed flag %s", flagName)
+		}
 	}
 }
