@@ -34,6 +34,9 @@ servers:
       -proxy-protocol
       -dns-provider=cloudflare
       -cloudflare-zone-id=338037db978d5f7b2ae75f151022ad66
+      -friends-media-endpoint=https://4d91ce685354fcc9ebae23ff7fa4ac9f.r2.cloudflarestorage.com
+      -friends-media-bucket=mewla-friends-media
+      -friends-media-public-url=https://friends-media.mewla.ai
     options:
       # The relay's SNI route target; app container names change with
       # every version. Not published: only the relay can reach it, which is
@@ -46,6 +49,8 @@ env:
     MEWLA_ACCOUNT_GITHUB_CLIENT_ID: Ov23liBbGJrVUAJyzDHg
   secret:
     - MEWLA_ACCOUNT_CLOUDFLARE_TOKEN
+    - MEWLA_ACCOUNT_MEDIA_ACCESS_KEY
+    - MEWLA_ACCOUNT_MEDIA_SECRET_KEY
 
 volumes:
   # SQLite databases (accounts, Friends) and the grant signing key. Back it up
