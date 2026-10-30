@@ -72,7 +72,7 @@ func (m *Manager) EnsureDefaults() error {
 
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
 	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
-	m.awsExec, m.awsModelDir = runAWS, findAWSModels
+	m.awsExec, m.awsModelDir, m.awsSpawn = runAWS, findAWSModels, spawnAWS
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {

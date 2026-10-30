@@ -6,7 +6,8 @@ import {
   accountTone,
   awsKeysCredential,
   awsProfileSubtitle,
-  awsUsesCliSession,
+  awsCodeFromText,
+  awsSignInInput,
   bulkToolNames,
   canDisconnect,
   connectsWithForm,
@@ -255,7 +256,7 @@ describe("hyperliquid accounts", () => {
 describe("AWS", () => {
   const aws = (patch: Partial<PluginAccount>) => account({ integration: "aws", name: "AWS 123456789012", identity: "arn:aws:iam::123456789012:user/audit", profile: "work", ...patch });
 
-  test("AWS connects from a form, not a browser sign-in", () => {
+  test("AWS has a page of its own for its sign-in, profiles and keys", () => {
     expect(connectsWithForm("aws")).toBe(true);
     expect(connectsWithForm("cloudflare")).toBe(false);
   });
@@ -271,17 +272,24 @@ describe("AWS", () => {
     expect(JSON.parse(awsKeysCredential({ accessKeyId: "ASIA1", secretAccessKey: "s", sessionToken: "tok" })).session_token).toBe("tok");
   });
 
-  test("an expired session says what to run, and Reconnect re-checks it", () => {
-    const expired = aws({ status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired; run `aws login --profile work`" }] });
-    expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS session expired; run `aws login --profile work`", action: "reconnect", actionLabel: "Reconnect", tone: "warning" });
-    expect(awsUsesCliSession(expired)).toBe(true);
-    // Before the server has said anything, the page still names the command.
-    expect(accountRecovery(aws({ status: "authorization_required" }), "AWS")?.detail).toBe("Run aws login --profile work on this computer, then tap Reconnect.");
+  test("an expired session offers the same Sign in to AWS button, for its own profile", () => {
+    const expired = aws({ status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired. Sign in again." }] });
+    expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" });
+    expect(awsSignInInput(expired)).toEqual({ integration: "aws", profile: "work" });
+    // No terminal command anywhere.
+    expect(JSON.stringify(accountRecovery(aws({ status: "authorization_required" }), "AWS"))).not.toContain("aws login");
+  });
+
+  test("only text that could be AWS's authorization code fills the code field", () => {
+    expect(awsCodeFromText("  eyJhbGciOiJSUzI1NiJ9.abc-DEF_123\n")).toBe("eyJhbGciOiJSUzI1NiJ9.abc-DEF_123");
+    for (const stray of ["", null, undefined, "short", "two words here", "https://signin.aws.amazon.com/v1/authorize?x=1", "line\nbreak-and-more", "é".repeat(12), "a".repeat(5000)]) {
+      expect(awsCodeFromText(stray)).toBe("");
+    }
   });
 
   test("expired pasted keys are replaced, not re-checked", () => {
     const keys = aws({ profile: undefined, status: "authorization_required" });
-    expect(awsUsesCliSession(keys)).toBe(false);
+    expect(awsSignInInput(keys)).toBeNull();
     expect(accountRecovery(keys, "AWS")?.detail).toContain("Add new keys");
   });
 

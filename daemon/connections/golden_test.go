@@ -552,6 +552,8 @@ func goldenConnect(t *testing.T, ids []string) map[string]any {
 			}
 			wire := goldenSignIn(t)
 			m.networkOwned = false
+			// AWS signs in through the CLI on this computer; the dump must not run it.
+			m.awsSpawn = func(args, env []string) (*awsProc, error) { return nil, errAWSMissing }
 			m.http = &http.Client{Transport: wire}
 			m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
 			if v.operator != nil {

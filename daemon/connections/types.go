@@ -139,6 +139,9 @@ type Request struct {
 	Tools     []string        `json:"tools,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
 	Allowed   bool            `json:"allowed,omitempty"`
+	// Code is the authorization code AWS shows after a browser sign-in
+	// (connect_finish of an AWS sign-in).
+	Code string `json:"code,omitempty"`
 	// URI names one resource for read_resource; Cursor continues a listing.
 	URI    string `json:"uri,omitempty"`
 	Cursor string `json:"cursor,omitempty"`

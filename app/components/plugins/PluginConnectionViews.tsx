@@ -25,6 +25,7 @@ import {
   type ToolsSwitch,
 } from "../../services/pluginConnectionsModel";
 import { Icon, type IconName } from "../icons/Icon";
+import { AwsCodeEntry } from "./AwsCodeEntry";
 import { ServiceMark } from "./ServiceMarks";
 import { hasServiceMark } from "./serviceMarkPaths";
 
@@ -255,6 +256,7 @@ export function ConnectStatusCard({
   onChooseTools,
   onUseServerAccount,
   onImport,
+  onSubmitCode,
 }: {
   /** Null for a return that names no service (a stale or replayed sign-in). */
   serviceName: string | null;
@@ -275,6 +277,8 @@ export function ConnectStatusCard({
   onChooseTools(account: PluginAccount): void;
   onUseServerAccount?(): void;
   onImport(): void;
+  /** The code a sign-in ends with (AWS's console sign-in). */
+  onSubmitCode(code: string): void;
 }) {
   const { colors } = useAppTheme();
   if (serviceName === null) {
@@ -304,6 +308,15 @@ export function ConnectStatusCard({
         </AppText>
         <Button label={`Copy code and open ${serviceName}`} icon="open-external" variant="filled" block onPress={onOpen} />
         {onUseServerAccount ? <Button label="Use the GitHub login on this server" variant="plain" block onPress={onUseServerAccount} /> : null}
+        <Button label="Cancel" variant="plain" block onPress={onCancel} />
+      </StatusCard>
+    );
+  }
+  if (phase === "waiting" && flow?.flow.code_required) {
+    return (
+      <StatusCard busy title={`Paste the code from ${serviceName}`} detail={error || `${serviceName} shows it after you sign in.`}>
+        <AwsCodeEntry onSubmit={onSubmitCode} />
+        <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>
     );
