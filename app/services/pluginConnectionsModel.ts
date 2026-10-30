@@ -75,11 +75,23 @@ export function awsKeysCredential(keys: { accessKeyId: string; secretAccessKey: 
 }
 
 /**
- * Whether an AWS account signs in through the AWS CLI on the server's
- * computer. Reconnecting it re-checks that session; it has no browser step.
+ * The sign-in that renews an AWS account's session: the same browser sign-in
+ * as connecting, for the account's own profile. Pasted access keys have no
+ * session to renew, so they get none.
  */
-export function awsUsesCliSession(account: Pick<PluginAccount, "integration" | "profile">): boolean {
-  return account.integration === "aws" && !!account.profile;
+export function awsSignInInput(account: Pick<PluginAccount, "integration" | "profile">): { integration: string; profile: string } | null {
+  return account.integration === "aws" && account.profile ? { integration: "aws", profile: account.profile } : null;
+}
+
+/**
+ * The authorization code AWS shows after a sign-in, if text from the clipboard
+ * could be one: a single printable token that is not a web address. Anything
+ * else returns "", so a stray clipboard never fills the field.
+ */
+export function awsCodeFromText(text: string | null | undefined): string {
+  const code = (text ?? "").trim();
+  if (code.length < 8 || code.length > 4096 || /^[a-z][a-z0-9+.-]*:\/\//i.test(code)) return "";
+  return /^[\x21-\x7e]+$/.test(code) ? code : "";
 }
 
 /**
@@ -278,12 +290,9 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
   // Off is a choice, not a fault: the account's own switch turns it back on.
   if (!account.enabled) return null;
   if (account.status === "authorization_required" && account.integration === "aws") {
-    // The server's own line already names the command to run, for this profile.
-    const said = account.history.find((event) => event.status === "error" && event.message?.startsWith("AWS session expired"))?.message;
-    const detail = account.profile
-      ? said ?? `Run aws login --profile ${account.profile} on this computer, then tap Reconnect.`
-      : "These access keys expired or were revoked. Add new keys below.";
-    return { title: "Needs sign-in again", detail, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
+    // A profile signs in again with one tap; pasted keys are replaced below.
+    if (account.profile) return { title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" };
+    return { title: "Needs sign-in again", detail: "These access keys expired or were revoked. Add new keys below.", action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
   if (account.status === "authorization_required") {
     return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };

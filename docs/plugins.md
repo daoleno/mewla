@@ -51,7 +51,7 @@ Mewla's own app registration with the provider:
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
-| AWS | No sign-in in Mewla. Pick a profile of the AWS CLI on the server's computer (an `aws login` or `aws sso login` session, which the CLI renews), or paste access keys | Works everywhere; the profiles list and the key fields are on the service's page |
+| AWS | **Sign in to AWS**: AWS's own sign-in page opens in the browser on the device you hold, and you paste back the code it shows (an Identity Center profile needs no code). Or pick a profile of the AWS CLI already signed in on the server's computer, or paste access keys | Works everywhere; the button, the profiles list and the key fields are on the service's page |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
@@ -133,23 +133,32 @@ AWS needs the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting
 (version 2) on the computer Mewla runs on. Mewla runs it for Brain and Workers;
 it does not talk to AWS another way.
 
-**Connect.** Open **AWS** in Extensions. The page lists the profiles in that
-computer's AWS config, each with how it signs in (`aws login`, `aws sso login`,
-a saved key or a role) and its region. Tap one. Mewla asks AWS who is signed in
-(STS `GetCallerIdentity`) and names the account **AWS 123456789012**, with the
-identity's ARN beneath it. Mewla keeps no key for a profile: the CLI signs every
-call, and refreshes the session as it normally does. If the profile has expired,
-run `aws login --profile NAME` (or `aws sso login --profile NAME`) on that
-computer first. The other way is **Paste access keys**: the keys, an optional
-session token and a region go to the server's private vault and reach the CLI
-only through the environment of one call. A profile already connected is
-renewed in place, not added twice.
+**Connect.** Open **AWS** in Extensions and tap **Sign in to AWS**. AWS's
+console sign-in page opens in the browser on the device you are holding (the
+computer Mewla runs on may be elsewhere). Sign in there, copy the authorization
+code AWS shows, and come back: Mewla fills the field from the clipboard, and
+**Continue** finishes. Mewla asks AWS who is signed in (STS
+`GetCallerIdentity`) and names the account **AWS 123456789012**, with the
+identity's ARN beneath it. Nothing is asked of you that is not a credential: the
+sign-in is saved in the AWS CLI's config under a profile named `mewla` (or
+`mewla-2` and so on), with the region `us-east-1`. Mewla runs `aws login --remote` for this and keeps no key: the CLI
+caches the session and its refresh token and renews them as it normally does.
 
-**When the session expires.** The account's row reads **Reconnect**, and a call
-fails with one line, for example ``AWS session expired; run `aws login --profile
-NAME` ``. Run that on the computer, then tap **Reconnect**: it checks the
-session again and brings the account back. Expired pasted keys are replaced
-from the same page.
+The page also lists the profiles already in that computer's AWS config, each
+with how it signs in (`aws login`, `aws sso login`, a saved key or a role) and
+its region. Tap one that is signed in and it connects at once, with no sign-in.
+The last way is **Paste access keys**: the keys, an optional session token and a
+region go to the server's private vault and reach the CLI only through the
+environment of one call. A profile already connected is renewed in place, not
+added twice.
+
+**When the session expires.** The account's row reads **Sign in to AWS**, and a
+call fails with one line, ``AWS session expired. Sign in again.`` Tap the button:
+the same sign-in runs for that profile (`aws login --remote`, or `aws sso login
+--use-device-code` for an Identity Center profile, which shows a code to enter on
+AWS and needs no paste back) and the account comes back. Profiles that hold keys
+or a role cannot sign in from a browser; sign in to them with the AWS CLI on that
+computer. Expired pasted keys are replaced from the same page.
 
 **Read and search** (on after you connect): `whoami`, `search` and `docs`
 (find an operation, then see its parameters and what it returns; they read the

@@ -672,9 +672,9 @@ func TestAWSSessionExpiry(t *testing.T) {
 		stderr  string
 		hint    string
 	}{
-		{login, "\naws: [ERROR]: Error loading login session token: Unable to load a existing login session for session arn:aws:iam::123456789012:user/audit, Please reauthenticate with 'aws login'.\n", "run `aws login --profile work`"},
-		{sso, "\naws: [ERROR]: Error loading SSO Token: Token for corp does not exist\n", "run `aws sso login --profile work-sso`"},
-		{login, "\naws: [ERROR]: An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired\n", "run `aws login --profile work`"},
+		{login, "\naws: [ERROR]: Error loading login session token: Unable to load a existing login session for session arn:aws:iam::123456789012:user/audit, Please reauthenticate with 'aws login'.\n", "AWS session expired. Sign in again."},
+		{sso, "\naws: [ERROR]: Error loading SSO Token: Token for corp does not exist\n", "AWS session expired. Sign in again."},
+		{login, "\naws: [ERROR]: An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired\n", "AWS session expired. Sign in again."},
 	} {
 		expired, stderr = true, c.stderr
 		_, err := invokeAWS(m, c.account, "whoami", `{}`)
@@ -722,7 +722,7 @@ func TestAWSFailureText(t *testing.T) {
 		{r, "aws: [ERROR]: The config profile (p) could not be found", "no longer in this computer's AWS config", false},
 		{r, "aws: [ERROR]: You must specify a region. You can also configure your region by running \"aws configure\".", "pass region", false},
 		{k, "aws: [ERROR]: An error occurred (InvalidClientTokenId) when calling the GetCallerIdentity operation: The security token included in the request is invalid.", "add new keys", true},
-		{r, "aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials.", "run `aws login --profile p`", true},
+		{r, "aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials.", "sign in to it with the AWS CLI", true},
 		{r, "", "without a message", false},
 	}
 	for _, c := range cases {

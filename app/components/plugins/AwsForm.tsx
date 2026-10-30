@@ -8,12 +8,13 @@ import type { AwsProfile, ConnectionRequest, PluginAccount, PluginIntegration } 
 type Input = NonNullable<ConnectionRequest["input"]>;
 
 /**
- * How AWS connects: pick a profile of the AWS CLI on the server's computer
- * (Mewla keeps no key for it), or paste access keys, which stay in the
+ * How AWS connects: one Sign in to AWS button (AWS's own page in the browser;
+ * the server's AWS CLI keeps the session and Mewla no key), a profile of that
+ * CLI that is already signed in, or pasted access keys, which stay in the
  * server's vault. Profiles are read from that computer when the form opens.
  */
-export function AwsForm({ plugin, accounts, profiles, loading, connecting, serverName, onLoad, onConnect }: {
-  plugin: PluginIntegration; accounts: readonly PluginAccount[]; profiles: AwsProfile[] | null; loading: boolean;
+export function AwsForm({ plugin, accounts, profiles, connecting, serverName, onLoad, onConnect }: {
+  plugin: PluginIntegration; accounts: readonly PluginAccount[]; profiles: AwsProfile[] | null;
   connecting: boolean; serverName: string;
   onLoad: () => Promise<void>;
   onConnect: (input: Input, signIn: boolean) => Promise<void>;
@@ -31,13 +32,9 @@ export function AwsForm({ plugin, accounts, profiles, loading, connecting, serve
     await onConnect({ integration: plugin.id, credential, region: region.trim() || undefined }, false);
   };
   return <View style={styles.form}>
-    <ListSection
-      title={`Profiles on ${serverName}`}
-      footer="Mewla uses the AWS CLI’s own sign-in and keeps no key for a profile. If a profile has expired, run aws login --profile NAME on that computer first."
-    >
-      {profiles === null ? <ListRow icon="refresh" title={loading ? "Looking for profiles…" : "Profiles not loaded"} disabled /> : profiles.length === 0 ? (
-        <ListRow icon="info" title="No AWS profiles found" subtitle="Run aws login on that computer, then look again." numberOfLines={3} />
-      ) : profiles.map((profile) => <ListRow
+    <Button label="Sign in to AWS" icon="open-external" variant="filled" size="lg" block loading={connecting} onPress={() => void onConnect({ integration: plugin.id }, true)} />
+    {profiles?.length ? <ListSection title={`Already on ${serverName}`}>
+      {profiles.map((profile) => <ListRow
         key={profile.name}
         icon="person-circle"
         title={profile.name}
@@ -47,10 +44,9 @@ export function AwsForm({ plugin, accounts, profiles, loading, connecting, serve
         disabled={connecting}
         onPress={() => void onConnect({ integration: plugin.id, profile: profile.name }, false)}
       />)}
-      <ListRow icon="refresh" title="Look again" disabled={loading || connecting} onPress={() => void onLoad()} />
-    </ListSection>
+    </ListSection> : null}
     {keys ? <>
-      <ListSection title="Access keys" footer={`The keys stay on ${serverName}. Prefer a profile when you have one.`}>
+      <ListSection title="Access keys" footer={`The keys stay on ${serverName}.`}>
         <Field label="Access key ID" accessibilityLabel="AWS access key ID" placeholder="AKIA…" autoCapitalize="characters" autoCorrect={false} value={accessKeyId} onChangeText={setAccessKeyId} />
         <Field label="Secret access key" accessibilityLabel="AWS secret access key" secureTextEntry autoCapitalize="none" autoCorrect={false} value={secretAccessKey} onChangeText={setSecretAccessKey} />
         <Field label="Session token (temporary keys only)" accessibilityLabel="AWS session token" secureTextEntry autoCapitalize="none" autoCorrect={false} value={sessionToken} onChangeText={setSessionToken} />

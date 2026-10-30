@@ -311,7 +311,7 @@ func awsEnv(r *record, secret, home string) ([]string, error) {
 	switch r.Account.AuthMethod {
 	case awsMethodProfile:
 		env = append(env, "HOME="+os.Getenv("HOME"))
-		for _, name := range []string{"AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE"} {
+		for _, name := range []string{"AWS_CONFIG_FILE", "AWS_SHARED_CREDENTIALS_FILE", "AWS_LOGIN_CACHE_DIRECTORY"} {
 			if v := os.Getenv(name); v != "" {
 				env = append(env, name+"="+v)
 			}
@@ -351,18 +351,6 @@ type awsAuthError string
 func (e awsAuthError) Error() string        { return string(e) }
 func (e awsAuthError) Is(target error) bool { return target == errAuth }
 
-// awsLoginCommand is the command that renews a profile's session.
-func awsLoginCommand(r *record) string {
-	profile := r.Account.Profile
-	if r.Account.AuthMethod == awsMethodKeys {
-		return ""
-	}
-	if p, ok := awsProfile(profile); ok && p.Kind == "sso" {
-		return "aws sso login --profile " + profile
-	}
-	return "aws login --profile " + profile
-}
-
 // awsFailure turns the CLI's error text into one line for the person.
 func awsFailure(r *record, stderr string) error {
 	text := strings.TrimSpace(stderr)
@@ -385,7 +373,10 @@ func awsFailure(r *record, stderr string) error {
 		if r.Account.AuthMethod == awsMethodKeys {
 			return awsAuthError("these AWS access keys expired or were revoked; add new keys")
 		}
-		return awsAuthError("AWS session expired; run `" + awsLoginCommand(r) + "`")
+		if p, ok := awsProfile(r.Account.Profile); ok && (p.Kind == "login" || p.Kind == "sso") {
+			return awsAuthError("AWS session expired. Sign in again.")
+		}
+		return awsAuthError("AWS session expired for this profile; sign in to it with the AWS CLI on that computer")
 	case has("you must specify a region"):
 		return callRefused("this profile has no default region; pass region, for example us-east-1")
 	}
@@ -893,6 +884,7 @@ func awsRedact(v any) any {
 
 type awsState struct {
 	awsExec     awsExec
+	awsSpawn    awsSpawn
 	awsModelDir func() (string, error)
 	awsOnce     sync.Once
 	awsIdx      *awsIndex

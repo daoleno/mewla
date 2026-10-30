@@ -40,9 +40,13 @@ type ConnectFlow struct {
 	AccountID        string    `json:"account_id,omitempty"`
 	// WebReturn: the provider returns the browser to the web UI's Plugins page.
 	WebReturn bool `json:"web_return,omitempty"`
+	// CodeRequired: the sign-in ends with a code the person pastes back
+	// (connect_finish with code), as AWS's console sign-in does.
+	CodeRequired bool `json:"code_required,omitempty"`
 }
 type connectFlow struct {
 	ConnectFlow
+	aws         *awsLogin
 	state       string
 	secret      string
 	deviceCode  string
@@ -69,6 +73,7 @@ func (m *Manager) expireFlows() {
 	}
 	for id, flow := range m.connectFlows {
 		if time.Now().After(flow.Expires) {
+			flow.stopAWS()
 			delete(m.connectFlows, id)
 		}
 	}
@@ -125,6 +130,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if reason := m.unavailableReason(in.Integration); reason != "" {
 			return Response{}, errors.New(reason)
 		}
+		if in.Integration == "aws" {
+			return m.startAWSSignIn(ctx, &in)
+		}
 		if e := lookup(in.Integration); e != nil && e.OAuth != nil && e.OAuth.Device != nil {
 			return m.startDevice(ctx, e, &in)
 		}
@@ -157,9 +165,13 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		// A completed consent is never disconnected by a late cancel.
 		f.secret = ""
 		f.deviceCode = ""
+		f.stopAWS()
 		f.Status = "cancelled"
 		f.AuthorizationURL = ""
 		return flowResult(f), nil
+	}
+	if f.aws != nil && (q.Action == "connect_status" || q.Action == "connect_finish") {
+		return m.advanceAWSSignIn(ctx, f, strings.TrimSpace(q.Code))
 	}
 	if q.Action == "github_import" {
 		if f.Status == "connected" {

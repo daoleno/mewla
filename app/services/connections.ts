@@ -65,6 +65,8 @@ export type AwsProfile = {
 export type ConnectionRequest = {
   flow_id?: string;
   callback?: string;
+  /** connect_finish of an AWS sign-in: the authorization code AWS showed. */
+  code?: string;
   group?: "read" | "write";
   action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "aws_profiles" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
   id?: string;
@@ -80,6 +82,8 @@ export type ConnectFlow = {
   status: "waiting" | "confirm" | "connected" | "cancelled" | "failed";
   authorization_url?: string;
   user_code?: string;
+  /** The sign-in ends with a code the person pastes back (AWS's console sign-in). */
+  code_required?: boolean;
   identity?: string;
   message?: string;
   expires: string;

@@ -813,23 +813,23 @@
         "requests": []
       },
       "native": {
-        "error": "Sign-in is not set up for this service yet.",
+        "error": "the AWS CLI is not installed on this computer; install AWS CLI v2 and connect again",
         "requests": []
       },
       "native_custom_endpoint": {
-        "error": "Sign-in is not set up for this service yet.",
+        "error": "the AWS CLI is not installed on this computer; install AWS CLI v2 and connect again",
         "requests": []
       },
       "native_operator_secret": {
-        "error": "OAuth is not supported for this plugin",
+        "error": "the AWS CLI is not installed on this computer; install AWS CLI v2 and connect again",
         "requests": []
       },
       "native_writes_publishers": {
-        "error": "Sign-in is not set up for this service yet.",
+        "error": "the AWS CLI is not installed on this computer; install AWS CLI v2 and connect again",
         "requests": []
       },
       "web": {
-        "error": "Sign-in is not set up for this service yet.",
+        "error": "the AWS CLI is not installed on this computer; install AWS CLI v2 and connect again",
         "requests": []
       },
       "web_bad_origin": {
@@ -837,7 +837,7 @@
         "requests": []
       },
       "web_writes_publishers": {
-        "error": "Sign-in is not set up for this service yet.",
+        "error": "the AWS CLI is not installed on this computer; install AWS CLI v2 and connect again",
         "requests": []
       }
     },

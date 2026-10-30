@@ -34,7 +34,7 @@ export default function PluginServiceScreen() {
   const trading = plugin.id === "hyperliquid";
   const aws = plugin.id === "aws";
   const form = aws
-    ? <AwsForm key={plugin.id} plugin={plugin} accounts={accounts} profiles={flow.awsProfiles} loading={flow.running === "aws:profiles"} connecting={connecting} serverName={flow.serverName} onLoad={flow.loadAwsProfiles} onConnect={submit} />
+    ? <AwsForm key={plugin.id} plugin={plugin} accounts={accounts} profiles={flow.awsProfiles} connecting={connecting} serverName={flow.serverName} onLoad={flow.loadAwsProfiles} onConnect={submit} />
     : trading
     ? <HyperliquidForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} defaultOpen={adding} onConnect={submit} />
     : <CustomServiceForm key={plugin.id} plugin={plugin} connecting={connecting} serverName={flow.serverName} onConnect={submit} />;
