@@ -60,6 +60,7 @@ class PairingAccessibilityService : AccessibilityService() {
     private val poll = object : Runnable {
         override fun run() {
             if (!SettingsReading.guiding) {
+                Log.d(TAG, "poll: not guiding")
                 hideBanner()
                 return
             }
@@ -155,6 +156,7 @@ class PairingAccessibilityService : AccessibilityService() {
             return
         }
         if (pkg != SettingsLabels.SETTINGS || root == null) {
+            Log.d(TAG, "guide $wanted: front=$pkg")
             SettingsReading.needs = null
             hideBanner()
             // Somewhere else (Mewla, the launcher): bring the right Settings screen up.
@@ -164,8 +166,9 @@ class PairingAccessibilityService : AccessibilityService() {
         // Settings is in front: the walk is on it, and says so.
         SettingsReading.needs = null
         showBanner(wanted)
-        if (texts.any { CODE.matches(it) }) return // the pairing dialog is up: the code is read, nothing to tap
+        if (texts.any { CODE.matches(it) }) { Log.d(TAG, "guide $wanted: code on screen"); return } // the pairing dialog is up: the code is read, nothing to tap
         if (hasPasswordField(root)) {
+            Log.d(TAG, "guide $wanted: password field")
             SettingsReading.needs = "lock"
             moved()
             return
@@ -293,17 +296,19 @@ class PairingAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun scrollableNode(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        if (node.isScrollable) return node
+    /** Every scrollable node under [node], the innermost first (a collapsing header wraps the list that must scroll). */
+    private fun scrollables(node: AccessibilityNodeInfo, out: MutableList<AccessibilityNodeInfo> = ArrayList()): List<AccessibilityNodeInfo> {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            scrollableNode(child)?.let { return it }
+            scrollables(child, out)
         }
-        return null
+        if (node.isScrollable) out += node
+        return out
     }
 
+    /** Scrolls the innermost list that still can; false when every list is at its end. */
     private fun scrollForward(root: AccessibilityNodeInfo): Boolean =
-        scrollableNode(root)?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) == true
+        scrollables(root).any { it.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD) }
 
     /** Clicks [node], or its nearest clickable ancestor (a row's label is rarely the clickable part). */
     private fun click(node: AccessibilityNodeInfo?): Boolean {
