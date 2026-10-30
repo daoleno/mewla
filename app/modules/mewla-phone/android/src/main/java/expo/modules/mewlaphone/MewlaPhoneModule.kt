@@ -118,6 +118,8 @@ class MewlaPhoneModule : Module() {
 
         View(PhoneLiveView::class) {
             Prop("interactive") { view: PhoneLiveView, interactive: Boolean -> view.interactive = interactive }
+            Prop("fps") { view: PhoneLiveView, fps: Int -> view.fps = fps.coerceIn(1, 30) }
+            Prop("maxWidth") { view: PhoneLiveView, width: Int -> view.maxWidth = width.coerceIn(120, 1080) }
         }
     }
 
