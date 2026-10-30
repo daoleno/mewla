@@ -182,6 +182,7 @@ internal class PhoneHelper(
             val took = android.os.SystemClock.uptimeMillis() - began
             if (took > 1_000) Log.w(TAG, "tree: interactive=$on read took $took ms")
             tree.put("ok", true).put("w", s.width).put("h", s.height).put("interactive", on)
+                .put("display_alive", s.alive()).put("frames", s.frameCount()).put("frame_age_ms", s.frameAgeMs())
         }
         "settle" -> {
             val s = screen ?: return fail("no display")
@@ -222,7 +223,10 @@ internal class PhoneHelper(
 
     private fun display(w: Int, h: Int, dpi: Int): JSONObject {
         screen?.let { existing ->
-            if (existing.width == w && existing.height == h) return ok().put("display", existing.displayId).put("w", w).put("h", h)
+            if (existing.width == w && existing.height == h && existing.alive()) {
+                return ok().put("display", existing.displayId).put("w", w).put("h", h)
+            }
+            // A different size, or a display the system dropped: start over on a fresh one.
             existing.release()
             screen = null
         }
@@ -264,14 +268,38 @@ internal class PhoneHelper(
         // looking at on their own screen is never launched.
         if (visibleOnMainScreen(pkg)) return fail("the person is using this app on their own screen").put("code", "in_use_on_main")
         val component = intent.component?.flattenToShortString() ?: return fail("no launcher activity")
-        val process = ProcessBuilder("am", "start", "--display", s.displayId.toString(), "-n", component, "-f", "0x10000000")
+        var target = s
+        var recovered = false
+        for (attempt in 0..1) {
+            val began = android.os.SystemClock.uptimeMillis()
+            val started = startOn(target.displayId, component)
+            if (started != null) return fail(started.replace("%PKG%", pkg))
+            // An app that is up on a live display draws within a moment. If nothing was ever drawn, the
+            // display is stale (the system dropped it, or the helper outlived what it was made for):
+            // make a fresh one and start the app there once.
+            if (!DisplayHealth.needsRecreate(target.alive(), target.drewSince(began, DRAW_WAIT_MS), target.frameCount() > 0, attempt)) break
+            Log.w(TAG, "display ${target.displayId} drew nothing after launching $pkg: recreating")
+            val dims = intArrayOf(target.width, target.height, target.dpi)
+            target.release()
+            screen = null
+            target = AgentScreen(context, dims[0], dims[1], dims[2])
+            screen = target
+            setImePolicy(target.displayId)
+            recovered = true
+        }
+        return ok().put("component", component).put("recovered", recovered).put("display", target.displayId)
+    }
+
+    /** `am start` on [displayId]; null when it started, else why not. */
+    private fun startOn(displayId: Int, component: String): String? {
+        val process = ProcessBuilder("am", "start", "--display", displayId.toString(), "-n", component, "-f", "0x10000000")
             .redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         if (!process.waitFor(15, TimeUnit.SECONDS)) {
             process.destroyForcibly()
-            return fail("starting $pkg timed out")
+            return "starting %PKG% timed out"
         }
-        return if (output.contains("Error", ignoreCase = true)) fail(output.trim().take(200)) else ok().put("component", component)
+        return if (output.contains("Error", ignoreCase = true)) output.trim().take(200) else null
     }
 
     /**
@@ -332,6 +360,7 @@ internal class PhoneHelper(
     companion object {
         private const val TAG = "MewlaPhoneHelper"
         private const val LONG_PRESS_MS = 700L
+        private const val DRAW_WAIT_MS = 3_000L
         /** Bumped when the app and helper stop understanding each other; the app restarts a helper that differs. */
         const val PROTOCOL = 1
 

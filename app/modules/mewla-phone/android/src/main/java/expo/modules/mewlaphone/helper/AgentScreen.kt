@@ -27,6 +27,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     private var held: Image? = null
     private var scratch: Bitmap? = null
     private val display: VirtualDisplay
+    private val manager: DisplayManager
     @Volatile private var released = false
 
     /** Called with a JPEG on the frame thread while someone watches. */
@@ -46,7 +47,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         // The context's own getSystemService would bind the manager to the system package, which
         // the shell uid does not own.
         @SuppressLint("PrivateApi")
-        val manager = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
+        manager = DisplayManager::class.java.getDeclaredConstructor(Context::class.java)
             .apply { isAccessible = true }.newInstance(context)
         reader.setOnImageAvailableListener({ onImage() }, handler)
         display = manager.createVirtualDisplay("mewla-agent", width, height, dpi, reader.surface, flags())
@@ -87,6 +88,23 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         val jpeg = jpeg(maxWidth, quality) ?: return
         target(jpeg)
     }
+
+    /** Whether the system still has this display: a removed one keeps its object but never draws again. */
+    fun alive(): Boolean = !released && runCatching { manager.getDisplay(displayId) != null }.getOrDefault(true)
+
+    /** Waits up to [timeoutMs] for a frame drawn after [since] (uptime ms); false when the display drew nothing. */
+    fun drewSince(since: Long, timeoutMs: Long): Boolean {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        while (lastFrameAt < since) {
+            if (SystemClock.uptimeMillis() >= deadline) return false
+            Thread.sleep(40)
+        }
+        return true
+    }
+
+    /** How many frames this display has ever drawn, and how long ago the last one was. */
+    fun frameCount(): Long = frames
+    fun frameAgeMs(): Long = SystemClock.uptimeMillis() - lastFrameAt
 
     /** Notes that something is about to act on this display, so [settle] waits for what it causes. */
     fun markAction() {

@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import { AppRegistry, Platform } from "react-native";
 import { MewlaPhone, parsePhoneStatus } from "../modules/mewla-phone/src";
 import { resolveCurrentServerId, selectCurrentServer } from "./currentServerSelection";
+import { untilLinkSettles } from "./phoneLinkHost";
 import { phoneLinkHost } from "./phoneLinkProcess";
 import { getCurrentServerId, getServers } from "./storage";
 
@@ -15,7 +16,11 @@ export async function runPhoneLinkTask(): Promise<void> {
   const server = selectCurrentServer(servers, resolveCurrentServerId(servers, persistedId));
   if (!server) return;
   phoneLinkHost.hold({ server, native: MewlaPhone, appVersion: String(Constants.expoConfig?.version ?? "") });
+  await untilLinkSettles(phoneLinkHost, LINK_TASK_MS);
 }
+
+/** How long one task keeps the process's JavaScript timers going: the native side starts another if the link is still down. */
+const LINK_TASK_MS = 40_000;
 
 if (Platform.OS === "android" && MewlaPhone) {
   AppRegistry.registerHeadlessTask("MewlaPhoneLink", () => runPhoneLinkTask);

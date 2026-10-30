@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
@@ -62,7 +63,7 @@ class PairingAccessibilityService : AccessibilityService() {
                 hideBanner()
                 return
             }
-            runCatching { step() }
+            runCatching { step() }.onFailure { Log.w(TAG, "guide step failed", it) }
             handler.postDelayed(this, POLL_MS)
         }
     }
@@ -175,6 +176,7 @@ class PairingAccessibilityService : AccessibilityService() {
             "wireless" -> wireless(root, texts, l, now)
             else -> pair(root, texts, l, now)
         }
+        Log.d(TAG, "guide $wanted in ${root.packageName}: acted=$acted")
         if (acted) {
             lastActionAt = now
             SettingsReading.progressAt = now
@@ -322,6 +324,7 @@ class PairingAccessibilityService : AccessibilityService() {
     }
 
     private companion object {
+        const val TAG = "MewlaPhone"
         const val POLL_MS = 600L
         const val ACTION_MS = 450L
         const val LAUNCH_MS = 6_000L
