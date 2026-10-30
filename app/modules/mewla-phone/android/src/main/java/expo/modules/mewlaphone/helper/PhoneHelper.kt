@@ -139,7 +139,13 @@ internal class PhoneHelper(
         fail(e.message ?: e.javaClass.simpleName)
     }
 
-    private fun dispatch(op: String, r: JSONObject): JSONObject = when (op) {
+    private fun dispatch(op: String, r: JSONObject): JSONObject {
+        // Whatever acts on the display, "settle" next waits for the frame that action causes.
+        if (op == "tap" || op == "swipe" || op == "key" || op == "text" || op == "launch") screen?.markAction()
+        return dispatchOp(op, r)
+    }
+
+    private fun dispatchOp(op: String, r: JSONObject): JSONObject = when (op) {
         "hello" -> ok()
             .put("protocol", PROTOCOL).put("build", build).put("sdk", Build.VERSION.SDK_INT).put("model", Build.MODEL)
             .put("pid", android.os.Process.myPid()).put("display", screen?.displayId ?: -1)
@@ -171,7 +177,7 @@ internal class PhoneHelper(
         }
         "settle" -> {
             val s = screen ?: return fail("no display")
-            ok().put("settled", s.settle(r.optLong("quiet_ms", 300), r.optLong("timeout_ms", 2_500)))
+            ok().put("settled", s.settle(r.optLong("quiet_ms", 300), r.optLong("timeout_ms", 2_500), r.optLong("min_wait_ms", 0)))
         }
         "tap" -> {
             val s = screen ?: return fail("no display")

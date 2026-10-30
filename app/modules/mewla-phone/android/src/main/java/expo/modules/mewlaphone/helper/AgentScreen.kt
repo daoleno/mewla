@@ -37,6 +37,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     private var lastPushAt = 0L
     @Volatile private var lastFrameAt = SystemClock.uptimeMillis()
     @Volatile private var frames = 0L
+    @Volatile private var actionAt = 0L
     private var pushPending = false
 
     val displayId: Int
@@ -87,24 +88,44 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         target(jpeg)
     }
 
+    /** Notes that something is about to act on this display, so [settle] waits for what it causes. */
+    fun markAction() {
+        actionAt = SystemClock.uptimeMillis()
+    }
+
     /**
      * Waits until the display has stopped changing for [quietMs], at most [timeoutMs], so what the
-     * agent reads next is the screen its action led to, not the middle of the transition. A screen
-     * that never settles (a video, a spinner) returns when the time is up.
+     * agent reads next is the screen its action led to, not the middle of the transition. An
+     * action that draws something is seen by its first frame; one that draws nothing (a tap on a
+     * dead spot) is given [minWaitMs] to do so. A screen that never settles (a video, a spinner)
+     * returns when the time is up.
      */
-    fun settle(quietMs: Long, timeoutMs: Long): Boolean {
+    fun settle(quietMs: Long, timeoutMs: Long, minWaitMs: Long): Boolean {
         val deadline = SystemClock.uptimeMillis() + timeoutMs
-        while (SystemClock.uptimeMillis() < deadline) {
-            if (SystemClock.uptimeMillis() - lastFrameAt >= quietMs) return true
+        while (true) {
+            val now = SystemClock.uptimeMillis()
+            val drew = lastFrameAt >= actionAt || now - actionAt >= minWaitMs
+            if (drew && now - lastFrameAt >= quietMs) return true
+            if (now >= deadline) return false
             Thread.sleep(40)
         }
-        return false
     }
 
     /** The screen now as a JPEG no wider than [maxWidth]; null before the first frame. */
     fun jpeg(maxWidth: Int, quality: Int): ByteArray? = synchronized(lock) {
-        val image = held ?: return null
+        val image = held ?: return blank(maxWidth, quality)
         encode(image, maxWidth, quality)
+    }
+
+    /** A display nothing has drawn on yet is black: say so with a picture instead of none. */
+    private fun blank(maxWidth: Int, quality: Int): ByteArray {
+        val target = maxWidth.coerceIn(1, width)
+        val bitmap = Bitmap.createBitmap(target, maxOf(1, height * target / width), Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(0xFF000000.toInt())
+        val out = ByteArrayOutputStream(8 * 1024)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        bitmap.recycle()
+        return out.toByteArray()
     }
 
     private fun encode(image: Image, maxWidth: Int, quality: Int): ByteArray {

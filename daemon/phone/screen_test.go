@@ -177,6 +177,28 @@ func TestAPressableRowSpeaksForItsTextChildren(t *testing.T) {
 	}
 }
 
+// Android's Settings is a scrolling list whose rows are pressable: each row is its own element
+// with its own words, and the list does not swallow them.
+func TestAScrollingListDoesNotSwallowItsRows(t *testing.T) {
+	ids := NewElements()
+	v := ids.Observe(appScreen(
+		Node{D: 1, C: "RecyclerView", F: scroll, B: [4]int{0, 0, 1080, 2400}},
+		Node{D: 2, C: "LinearLayout", F: tap1, B: [4]int{0, 100, 1080, 300}},
+		Node{D: 3, C: "TextView", T: "Network & internet", F: plain, B: [4]int{10, 110, 400, 150}},
+		Node{D: 3, C: "TextView", T: "Mobile, Wi-Fi, hotspot", F: plain, B: [4]int{10, 150, 400, 200}},
+		Node{D: 2, C: "LinearLayout", F: tap1, B: [4]int{0, 300, 1080, 500}},
+		Node{D: 3, C: "TextView", T: "Battery", F: plain, B: [4]int{10, 310, 400, 350}},
+	))
+	var texts []string
+	for _, e := range v.Elements {
+		texts = append(texts, e.Text)
+	}
+	want := []string{"", "Network & internet · Mobile, Wi-Fi, hotspot", "Battery"}
+	if strings.Join(texts, "|") != strings.Join(want, "|") {
+		t.Fatalf("elements %q, want %q:\n%s", texts, want, v.Render())
+	}
+}
+
 func TestRenderIsCompactAndSaysWhatItLeftOut(t *testing.T) {
 	ids := NewElements()
 	long := strings.Repeat("x", 300)
