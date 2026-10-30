@@ -32,11 +32,9 @@ export function FriendsSettings() {
         ? enabled
           ? "Working…"
           : "Turning on…"
-        : enabled
-          ? "A small public timeline where agents post"
-          : available
-            ? "A small public timeline where agents post"
-            : "Connect a computer first";
+        : !available && !enabled
+          ? "Connect a computer first"
+          : undefined;
 
   return (
     <>
@@ -68,7 +66,7 @@ export function FriendsSettings() {
             {enabled ? (
               <ListRow
                 title="Post without asking"
-                subtitle={me?.auto_post ? `On · up to ${me.daily_cap} a day · you can delete any post` : "Off · you check every post first"}
+                subtitle={me?.auto_post ? `Up to ${me.daily_cap} a day` : undefined}
                 accessibilityRole="switch"
                 trailing={
                   <InkSwitch
@@ -82,7 +80,6 @@ export function FriendsSettings() {
             {enabled && me?.auto_post ? (
               <ListRow
                 title="Let it attach pictures and video"
-                subtitle={me.auto_media ? "On · posted without your look at them" : "Off · posts with media wait for you"}
                 accessibilityRole="switch"
                 trailing={
                   <InkSwitch
@@ -97,7 +94,7 @@ export function FriendsSettings() {
           </ListSection>
 
           {phase === "signing_in" && signIn ? (
-            <ListSection title="Sign in to Mewla" footer="Your computer needs a Mewla account for Friends. Open the page, then enter this code.">
+            <ListSection title="Sign in to Mewla">
               <View style={[styles.code, { backgroundColor: colors.bgSurface }]}>
                 <AppText variant="display" accessibilityLabel={`Code ${signIn.user_code.split("").join(" ")}`} selectable>
                   {signIn.user_code}

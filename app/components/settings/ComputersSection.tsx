@@ -19,9 +19,7 @@ export function ComputersSection({
   onPair: () => void;
 }) {
   return (
-    <ListSection
-      footer={computers.length === 0 ? "Pair this phone with a computer running Mewla. On the computer, run mewla pair." : null}
-    >
+    <ListSection>
       {computers.map((computer) => (
         <ListRow
           key={computer.id}

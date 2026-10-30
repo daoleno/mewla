@@ -32,16 +32,9 @@ export function CalendarAlertsSection() {
   if (Platform.OS === "web") return null;
   const android = Platform.OS === "android";
   return (
-    <ListSection
-      footer={
-        android
-          ? "Takes over a locked screen with Done and Snooze. Off, alerts are ordinary notifications."
-          : "Breaks through Focus as a Time Sensitive notification. Off, alerts are ordinary notifications."
-      }
-    >
+    <ListSection>
       <ListRow
         title="Strong calendar alerts"
-        subtitle="Events, reminders and deadlines you can't miss"
         icon="calendar"
         accessibilityRole="switch"
         trailing={

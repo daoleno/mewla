@@ -211,31 +211,51 @@ export function shouldCheckForUpdate(
   return now - lastCheckAt >= (manual ? MANUAL_CHECK_COOLDOWN_MS : AUTO_CHECK_INTERVAL_MS);
 }
 
+/** What the About section's update row shows: a short state, and the one action when there is one. */
+export interface AppUpdateRowModel {
+  title: string;
+  /** The version a waiting update carries. */
+  subtitle?: string;
+  /** A short state beside the title. */
+  value?: string;
+  /** The compact button, when the state has an action. */
+  action?: string;
+  /** Whether tapping does something: the action, or checking again. */
+  actionable: boolean;
+  busy?: boolean;
+  /** Download progress, 0 to 1. */
+  progress?: number;
+}
+
 /**
- * The About row's status line, and whether tapping the row does something.
- * Builds that can update themselves always say where they stand, and a tap
- * checks again; builds that can't show the version only.
+ * The update row under the app's version. Null where this build cannot update
+ * itself; otherwise it always says where it stands in a few words.
  */
-export function appUpdateStatus(state: AppUpdateState): { text: string | null; actionable: boolean } {
+export function appUpdateRow(state: AppUpdateState): AppUpdateRowModel | null {
   switch (state.kind) {
     case "hidden":
-      return { text: null, actionable: false };
+      return null;
     case "idle":
     case "checking":
-      return { text: "Checking for updates…", actionable: false };
+      return { title: "Check for updates", busy: true, actionable: false };
     case "current":
-      return { text: "Up to date · Tap to check", actionable: true };
+      return { title: "Check for updates", value: "Up to date", actionable: true };
     case "checkFailed":
-      return { text: "Couldn't check for updates · Tap to retry", actionable: true };
+      return { title: "Check for updates", action: "Retry", actionable: true };
     case "available":
-      return { text: `Update to v${state.update.version}`, actionable: true };
+      return { title: "Update available", subtitle: `v${state.update.version}`, action: "Update", actionable: true };
     case "downloading":
-      return { text: `Downloading ${Math.floor(state.progress * 100)}%`, actionable: false };
+      return {
+        title: "Downloading",
+        value: `${Math.floor(state.progress * 100)}%`,
+        progress: state.progress,
+        actionable: false,
+      };
     case "needsPermission":
-      return { text: "Allow Mewla to install apps · Tap to continue", actionable: true };
+      return { title: "Allow app installs", action: "Continue", actionable: true };
     case "ready":
-      return { text: `Install v${state.update.version}`, actionable: true };
+      return { title: "Ready to install", subtitle: `v${state.update.version}`, action: "Install", actionable: true };
     case "failed":
-      return { text: "Couldn't update · Tap to retry", actionable: true };
+      return { title: "Update failed", action: "Retry", actionable: true };
   }
 }

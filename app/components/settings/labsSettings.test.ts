@@ -30,3 +30,25 @@ describe("Settings → Labs", () => {
     expect(read("./PhoneSettings.tsx")).toContain('accessibilityLabel="Phone use"');
   });
 });
+
+describe("Settings is one visual system", () => {
+  const sections = ["AppearanceSection", "AboutSection", "ComputersSection", "CalendarAlertsSection", "LabsSection"];
+
+  test("every section is a ListSection of ListRows, with no control drawn its own way", () => {
+    expect(settings).not.toContain("SegmentedControl");
+    expect(settings).not.toContain("PetPicker");
+    for (const name of sections) {
+      const source = read(`./${name}.tsx`);
+      expect(source).toContain("<ListSection");
+      expect(source).not.toContain("SegmentedControl");
+    }
+  });
+
+  test("no explanatory footers or filler subtitles", () => {
+    for (const name of [...sections, "FriendsSettings", "PhoneSettings"]) expect(read(`./${name}.tsx`)).not.toContain("footer=");
+    expect(read("./FriendsSettings.tsx")).not.toContain("A small public timeline");
+    expect(read("./CalendarAlertsSection.tsx")).not.toContain("can't miss");
+    expect(settings).not.toContain("Talk to Brain from Telegram");
+    expect(settings).not.toContain("Official login or your own API keys");
+  });
+});

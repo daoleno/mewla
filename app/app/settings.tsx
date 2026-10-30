@@ -17,7 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
 import {
   SafeAreaView,
@@ -44,12 +44,8 @@ import {
   type AppColors,
   ContentWidth,
 } from "../constants/tokens";
-import { useThemeContext, type ResolvedTheme } from "../theme";
+import type { ResolvedTheme } from "../theme";
 import { DARK_APP_COLORS } from "../theme/primitives";
-import { appVersion } from "../constants/appVersion";
-import { appUpdateStatus } from "../services/appUpdate";
-import { PRIVACY_POLICY_URL, SUPPORT_URL, openAboutPage } from "../services/aboutPages";
-import { useAppUpdate } from "../services/useAppUpdate";
 import { importConnection } from "../services/importConnection";
 import { PairingCancelledError } from "../services/pairingScope";
 import {
@@ -84,11 +80,10 @@ import {
   ListRow,
   ListSection,
 } from "../components/ui";
-import { MewlaMark } from "../components/mewla/MewlaMark";
-import { PetPicker } from "../components/settings/PetPicker";
+import { AppearanceSection, PetSection } from "../components/settings/AppearanceSection";
+import { AboutSection } from "../components/settings/AboutSection";
 import { CalendarAlertsSection } from "../components/settings/CalendarAlertsSection";
 import { LabsSection } from "../components/settings/LabsSection";
-import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
 import { RisingSheet } from "../components/ui/RisingSheet";
 import {
@@ -109,15 +104,9 @@ import { Icon } from "../components/icons/Icon";
 const QR_BARCODE_TYPES: BarcodeType[] = ["qr"];
 const SCANNER_COLORS = DARK_APP_COLORS;
 const TELEGRAM_BOTFATHER_URL = "https://t.me/BotFather";
-const THEME_CHOICES = [
-  { label: "Auto", value: "system", icon: "contrast" },
-  { label: "Light", value: "classic-light", icon: "sun" },
-  { label: "Dark", value: "classic-dark", icon: "moon" },
-] as const;
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const screenFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const {
     currentServerId,
@@ -126,7 +115,6 @@ export default function SettingsScreen() {
   } = useCurrentServer();
   const { serverConnections, serverConnectionIssues } = useWorkerServerSummary();
   const colors = useAppColors();
-  const { preference, setPreference } = useThemeContext();
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const params = useLocalSearchParams<{
@@ -438,11 +426,7 @@ export default function SettingsScreen() {
           <ListSection>
             <ListRow
               title="Model Providers"
-              subtitle={
-                currentServerId
-                  ? "Official login or your own API keys"
-                  : "No current server"
-              }
+              subtitle={currentServerId ? undefined : "No current server"}
               icon="key"
               accessory="chevron"
               accessibilityLabel="Model Providers"
@@ -462,41 +446,13 @@ export default function SettingsScreen() {
           <CalendarAlertsSection />
 
           <SettingsSectionHeader>Appearance</SettingsSectionHeader>
-          <SegmentedControl
-            accessibilityLabel="Appearance theme"
-            options={THEME_CHOICES}
-            value={preference === "classic-light" || preference === "classic-dark" ? preference : "system"}
-            onChange={(value) => void setPreference(value)}
-            style={styles.appearance}
-          />
+          <AppearanceSection />
 
           <SettingsSectionHeader>Pet</SettingsSectionHeader>
-          <PetPicker animate={screenFocused} />
+          <PetSection />
 
           <SettingsSectionHeader>About</SettingsSectionHeader>
-          <ListSection>
-            <AboutAppRow />
-            <ListRow
-              title="Privacy Policy"
-              icon="shield-check"
-              accessory="chevron"
-              accessibilityRole="link"
-              onPress={() => void openAboutPage(PRIVACY_POLICY_URL)}
-            />
-            <ListRow
-              title="Support"
-              icon="help"
-              accessory="chevron"
-              accessibilityRole="link"
-              onPress={() => void openAboutPage(SUPPORT_URL)}
-            />
-            <ListRow
-              title="Open-source Licenses"
-              icon="document-text"
-              accessory="chevron"
-              onPress={() => router.push("/settings/licenses")}
-            />
-          </ListSection>
+          <AboutSection />
         </View>
       </ScrollView>
 
@@ -745,24 +701,6 @@ export default function SettingsScreen() {
         )}
       </RisingSheet>
     </SafeAreaView>
-  );
-}
-
-/** About: the app's version, and its update when this build can take one. */
-function AboutAppRow() {
-  const { state, press } = useAppUpdate();
-  const status = appUpdateStatus(state);
-  return (
-    <ListRow
-      title="Mewla"
-      subtitle={status.text}
-      value={`Version ${appVersion}`}
-      leading={<MewlaMark size={28} />}
-      accessory={status.actionable ? "chevron" : "none"}
-      loading={state.kind === "checking" || state.kind === "downloading"}
-      onPress={status.actionable ? press : undefined}
-      accessibilityLabel={["Mewla", `Version ${appVersion}`, status.text].filter(Boolean).join(", ")}
-    />
   );
 }
 
@@ -1036,7 +974,7 @@ function TelegramConnectionRow({
       <ListRow
         title="Telegram"
         // The pill carries a non-neutral state, so the subtitle never repeats it.
-        subtitle={visibleStatus?.bot_username ? `@${visibleStatus.bot_username}` : stateTone !== "neutral" ? "Talk to Brain from Telegram" : stateLabel}
+        subtitle={visibleStatus?.bot_username ? `@${visibleStatus.bot_username}` : stateTone !== "neutral" ? undefined : stateLabel}
         leading={
           <View style={styles.serverGlyph}>
             <Icon name="paper-plane" size={20} color={colors.textSecondary} />
@@ -1155,9 +1093,6 @@ function createStyles(theme: ResolvedTheme) {
 
 
     channelSection: {},
-    appearance: {
-      marginBottom: 26,
-    },
     // Mirrors the Stack header: Back, centred title, balancing end slot.
     detailHeader: {
       minHeight: 56,
