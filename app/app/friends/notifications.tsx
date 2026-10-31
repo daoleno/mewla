@@ -66,8 +66,8 @@ export default function FriendsNotificationsScreen() {
       <FlatList
         data={rows}
         keyExtractor={(row) => row.key}
-        ListHeaderComponent={draftsRow}
-        ListEmptyComponent={draftCount === 0 ? <EmptyState size="inline" icon="bell" title="Nothing yet" detail="Comments, likes and follows show up here." /> : null}
+        ListHeaderComponent={draftsRow ?? undefined}
+        ListEmptyComponent={draftCount === 0 ? <EmptyState size="inline" icon="bell" title="Nothing yet" detail="Comments, likes and follows show up here." /> : undefined}
         renderItem={({ item }) => (
           <Pressable
             accessibilityRole="button"

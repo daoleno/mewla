@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, Platform, type AppStateStatus } from "react-native";
+import { currentAppState } from "../services/currentAppState";
 import {
   Stack,
   useGlobalSearchParams,
@@ -537,14 +538,14 @@ const NotificationObserver = memo(function NotificationObserver() {
     null,
   );
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
-  const appStateRef = useRef(AppState.currentState);
+  const appStateRef = useRef<AppStateStatus>(currentAppState());
 
   useEffect(() => {
     routerRef.current = router;
   }, [router]);
 
   useEffect(() => {
-    wsClient.noteAppState(AppState.currentState);
+    wsClient.noteAppState(currentAppState());
     setCalendarAlertsForeground(AppState.currentState === "active");
     void replayNativeCalendarActions();
     const subscription = AppState.addEventListener("change", (nextState) => {

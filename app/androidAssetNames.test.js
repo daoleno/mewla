@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAndroidResourceFolderName, getAndroidResourceIdentifier } from "@react-native/assets-registry/path-support";
+import { getAndroidResourceFolderName, getAndroidResourceIdentifier } from "@react-native/asset-utils";
 import { parse } from "metro/private/node-haste/lib/AssetPaths";
 
 function collisionsFor(files) {

@@ -127,17 +127,17 @@ describe('iOS signed release identity contract', () => {
     }
     expect(workflow).not.toContain('save-caches');
     expect(nativeCacheWorkflow).toMatch(/uses: \.\/\.github\/actions\/ios-native\s+with:\s+save-caches: "true"/);
-    expect(nativeCacheWorkflow).toContain('runs-on: macos-26');
+    expect(nativeCacheWorkflow).toContain('runs-on: xcode-27');
     expect(nativeCacheWorkflow).not.toContain('secrets.');
   });
 });
 
 describe('iOS unsigned Simulator contract', () => {
   it('builds only the Apple Silicon architecture shipped by the native XCFramework', () => {
-    expect(ciWorkflow).toContain('runs-on: macos-26');
+    expect(ciWorkflow).toContain('runs-on: xcode-27');
     expect(ciWorkflow).toContain("-destination 'generic/platform=iOS Simulator'");
     expect(ciWorkflow).toContain('ARCHS=arm64');
-    expect(nativeLibsWorkflow).toContain('runs-on: macos-26');
+    expect(nativeLibsWorkflow).toContain('runs-on: xcode-27');
     expect(nativeLibsWorkflow).toContain("-destination 'generic/platform=iOS Simulator'");
     expect(nativeLibsWorkflow).toContain('ARCHS=arm64');
   });

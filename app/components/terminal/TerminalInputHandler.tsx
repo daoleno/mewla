@@ -1,5 +1,5 @@
 import React, { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
-import { Platform, TextInput, StyleSheet } from 'react-native';
+import { Platform, TextInput, StyleSheet, type TextInputInstance } from 'react-native';
 import { applyCtrlModifier } from './terminalControl';
 import {
   diffTerminalInput,
@@ -25,7 +25,7 @@ interface TerminalInputHandlerProps {
  */
 export const TerminalInputHandler = forwardRef<TerminalInputHandleRef, TerminalInputHandlerProps>(
   ({ onInput, ctrlArmed, onCtrlConsumed }, ref) => {
-    const inputRef = useRef<TextInput>(null);
+    const inputRef = useRef<TextInputInstance>(null);
     const lastTextRef = useRef('');
     const handledSubmitRef = useRef(false);
 

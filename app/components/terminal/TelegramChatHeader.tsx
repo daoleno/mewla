@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type ViewInstance } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import type { TerminalThemeChrome } from '../../constants/terminalThemes';
 import {
@@ -60,7 +60,7 @@ interface TelegramChatHeaderProps {
   /** What tapping the title does, for assistive tech ("Open in Calendar"). */
   titleActionLabel?: string;
   rightActions?: TelegramChatHeaderAction[];
-  menuAnchorRef?: React.RefObject<View | null>;
+  menuAnchorRef?: React.RefObject<ViewInstance | null>;
   flat?: boolean;
   /** Live Session state, shown as its StatusMark on the avatar. */
   status?: WorkerStatus;

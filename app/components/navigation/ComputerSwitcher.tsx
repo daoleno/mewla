@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Platform, Pressable, StyleSheet, Text, View, type View as ViewInstance } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, type ViewInstance } from "react-native";
 import { Typography, useAppTheme } from "../../constants/tokens";
 import { Icon, type IconName } from "../icons/Icon";
 import { ActionMenu } from "../ui/ActionMenu";

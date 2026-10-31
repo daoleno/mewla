@@ -46,7 +46,7 @@ An unavailable image remains an explicit file error rather than a blank success.
 Fenced `mermaid` code blocks in Chat, Brain workspace Markdown, Work previews,
 and Skill file Markdown render as flowcharts when the source is a `flowchart`
 or `graph` diagram. Other Mermaid types stay as ordinary readable code.
-Rendering uses bundled mermaid `11.16.1` inside a sandboxed WebView: no CDN,
+Rendering uses bundled mermaid `12.2.0` inside a sandboxed WebView: no CDN,
 no custom callbacks, and `%%{init}%%` / frontmatter cannot loosen security.
 One hidden engine WebView serializes render jobs (at most one in flight, eight
 queued; extra requests fail busy). At most three inline SVG preview WebViews

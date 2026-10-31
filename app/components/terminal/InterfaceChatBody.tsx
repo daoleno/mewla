@@ -7,7 +7,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type FlatList,
-  type TextInput,
+  type TextInput, type TextInputInstance, type ViewInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SharedValue } from "react-native-reanimated";
@@ -109,7 +109,7 @@ export interface InterfaceChatBodyProps {
   onScrollToLatest(animated?: boolean): void;
   onUnavailableAction?: () => void;
   showUnavailableAction?: boolean;
-  inputRef: React.RefObject<TextInput | null>;
+  inputRef: React.RefObject<TextInputInstance | null>;
   draft: string;
   editable: boolean;
   composerFocused: boolean;
@@ -238,7 +238,7 @@ export function InterfaceChatBody({
 }: InterfaceChatBodyProps) {
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const rootRef = useRef<View>(null);
+  const rootRef = useRef<ViewInstance>(null);
   const filesEnabled = !readOnly && canAttach && onAddFiles != null;
   const { dragging } = useComposerFileTransfer({
     rootRef,

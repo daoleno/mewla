@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AppState, Platform, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from "react-native";
+import { AppState, Platform, View, type StyleProp, type ViewStyle } from "react-native";
 import { Asset } from "expo-asset";
 import { Image } from "expo-image";
 import { useReducedMotion } from "react-native-reanimated";
 import { useThemeContext } from "../../theme";
 import type { BrainCatState } from "../mewla/brainCatState";
-import { findPetPack, petInSeal, petTransition, type PetClipName, type PetPack } from "./petModel";
+import { findPetPack, petInSeal, petTransition, type PetClipName, type PetImageSource, type PetPack } from "./petModel";
 import { DEFAULT_PET_ID, PET_PACKS } from "./petPacks";
 
 interface PetSpriteProps {
@@ -74,7 +74,7 @@ export function PetSprite({ state, size, animate = true, petId, cheer = 0, still
  * A browser keeps one animation per image URL, so a one-shot shown again would
  * hold its last frame. On web each play of a one-shot gets its own URL.
  */
-function freshPlay(source: ImageSourcePropType, play: number): ImageSourcePropType {
+function freshPlay(source: PetImageSource, play: number): PetImageSource {
   if (Platform.OS !== "web") return source;
   return { uri: `${Asset.fromModule(source as number).uri}#${play}` };
 }
