@@ -125,7 +125,9 @@ the app's own controls: they list the Mac's apps, open one that isn't running
 (behind the app in front, by its name; only apps, never a file or link), read one app's windows as its
 buttons, fields and text, even an app behind others, and press, fill in or
 open those by name, without moving the pointer or bringing the app forward
-(some actions bring it forward themselves). They can type into one app the
+(some actions bring it forward themselves). After acting on a control, the
+agent is told what changed in the app since it last read it, not the whole app
+again; when a window opened or closed, or much changed, it gets the whole app. They can type into one app the
 same way, and click a point in its window behind others: a plain click on
 something the app can press presses it through accessibility; any other click
 is sent through a part of macOS Apple doesn't document, which an app behind

@@ -372,8 +372,13 @@ func TestAnIdNeverMovesToAnotherElement(t *testing.T) {
 	first := act(t, s, "%7", AgentAction{Action: "app_state", App: "系统设置"}).Text
 	cancel, about := idOf(t, first, `Button "Cancel"`), idOf(t, first, "关于本机")
 
-	// Acting reads the app again; what didn't change keeps its id.
-	again := act(t, s, "%7", AgentAction{Action: "element", Element: idOf(t, first, "Search"), ElementAction: "set_value", Text: "显示器"}).Text
+	// Acting reads the app again and answers with what changed; what didn't
+	// change keeps its id.
+	answer := act(t, s, "%7", AgentAction{Action: "element", Element: idOf(t, first, "Search"), ElementAction: "set_value", Text: "显示器"}).Text
+	if strings.Contains(answer, "Cancel") || !strings.Contains(answer, `TextField "Search" = "显示器"`) {
+		t.Fatalf("the answer should hold only the change:\n%s", answer)
+	}
+	again := act(t, s, "%7", AgentAction{Action: "app_state", App: "系统设置"}).Text
 	if idOf(t, again, `Button "Cancel"`) != cancel || idOf(t, again, "关于本机") != about {
 		t.Fatalf("ids moved:\n%s\n%s", first, again)
 	}

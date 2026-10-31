@@ -158,6 +158,8 @@ type AgentResult struct {
 	// audit: counts only, never content. They are not part of the answer.
 	rows      int
 	truncated bool
+	// diff says the answer held only what changed.
+	diff bool
 }
 
 // AgentState is what the app shows while an agent uses the screen.
@@ -711,17 +713,29 @@ func (a *agentSession) numberLocked(tree *ElementTree) {
 	}
 }
 
-// readAppLocked replaces the agent's latest read; callers hold appMu.
-func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult, error) {
-	tree, err := a.apps.ReadApp(ctx, app.PID, elementsRead)
+// swapTreeLocked reads app again and makes it the agent's latest read, whose
+// ids element actions name; it gives back the read it replaces, if any, whose
+// text can be compared but whose handles are released. Callers hold appMu.
+func (a *agentSession) swapTreeLocked(ctx context.Context, app App) (previous *ElementTree, tree ElementTree, err error) {
+	tree, err = a.apps.ReadApp(ctx, app.PID, elementsRead)
 	if err != nil {
-		return AgentResult{}, a.gone(ctx, app, err)
+		return nil, ElementTree{}, a.gone(ctx, app, err)
 	}
 	a.numberLocked(&tree)
 	if a.tree != nil {
+		previous = a.tree
 		a.apps.Release(*a.tree)
 	}
 	a.tree, a.treeApp = &tree, app
+	return previous, tree, nil
+}
+
+// readAppLocked replaces the agent's latest read; callers hold appMu.
+func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult, error) {
+	_, tree, err := a.swapTreeLocked(ctx, app)
+	if err != nil {
+		return AgentResult{}, err
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	text, stats := formatAppTree(app, tree, a.latest.Rect, a.toAgent)
@@ -776,12 +790,29 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	case <-ctx.Done():
 		return AgentResult{}, ctx.Err()
 	}
-	result, err := a.readAppLocked(ctx, a.treeApp)
+	app := a.treeApp
+	previous, tree, err := a.swapTreeLocked(ctx, app)
 	if err != nil {
 		return AgentResult{Text: "Done; reading the app again failed: " + err.Error()}, nil
 	}
-	result.Text = fmt.Sprintf("Done: %s on [%d]. The app now:\n", strings.TrimPrefix(name, "AX"), action.Element) + result.Text
-	return result, nil
+	did := fmt.Sprintf("Done: %s on [%d]. ", strings.TrimPrefix(name, "AX"), action.Element)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// What changed is the answer, unless it would mislead or save little;
+	// then the whole app, as app_state gives it.
+	why := "there was no earlier read"
+	if previous != nil {
+		beforeRows := appRows(*previous, a.latest.Rect, a.toAgent)
+		afterRows := appRows(tree, a.latest.Rect, a.toAgent)
+		var text string
+		var stats readStats
+		var ok bool
+		if text, stats, why, ok = diffAnswer(*previous, tree, beforeRows, afterRows); ok {
+			return AgentResult{Text: did + text, rows: stats.rows, diff: true}, nil
+		}
+	}
+	text, stats := formatAppTree(app, tree, a.latest.Rect, a.toAgent)
+	return AgentResult{Text: did + "The whole app now (" + why + "):\n" + text, rows: stats.rows, truncated: stats.truncated}, nil
 }
 
 // readValue gives one element's whole value, up to valueRead characters,
@@ -1640,6 +1671,8 @@ type auditLine struct {
 	Rows      int   `json:"rows,omitempty"`
 	Truncated bool  `json:"truncated,omitempty"`
 	Bytes     int   `json:"bytes"`
+	// Diff marks an element action answered with only what changed.
+	Diff bool `json:"diff,omitempty"`
 }
 
 // audit records what an agent did, never what it typed or saw. started is
@@ -1647,7 +1680,7 @@ type auditLine struct {
 func (s *Service) audit(worker string, action AgentAction, result AgentResult, started time.Time, actErr error) {
 	line := auditLine{Time: time.Now().UTC(), Worker: worker, Action: action.Action, Coordinate: action.Coordinate, Start: action.StartCoordinate, App: action.App,
 		Element: action.Element, Does: action.ElementAction, Ms: time.Since(started).Milliseconds(),
-		Rows: result.rows, Truncated: result.truncated, Bytes: len(result.Text) + len(result.Image)}
+		Rows: result.rows, Truncated: result.truncated, Bytes: len(result.Text) + len(result.Image), Diff: result.diff}
 	switch {
 	case action.Action == "type", action.Action == "element" && action.Text != "":
 		sum := sha256.Sum256([]byte(action.Text))
