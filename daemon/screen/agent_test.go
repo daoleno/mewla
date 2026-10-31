@@ -3,7 +3,9 @@ package screen
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/jpeg"
 	"os"
@@ -284,6 +286,54 @@ func TestAuditNeverHoldsWhatWasTyped(t *testing.T) {
 	}
 	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
 		t.Fatalf("audit mode %v", info.Mode())
+	}
+}
+
+// Every audit line says how long the action took and how big its answer was;
+// a read of an app also counts its rows and whether it was cut. Never text.
+func TestAuditCountsTimeRowsAndBytes(t *testing.T) {
+	s, backend, dir := newAgentService(t)
+	long := []Element{{Role: "AXWindow", Title: "Big", Enabled: true}}
+	for i := 0; i < elementsShown+20; i++ {
+		long = append(long, Element{Depth: 1, Role: "AXButton", Title: fmt.Sprintf("Button %d", i), Enabled: true})
+	}
+	backend.RunningApps = append(fakeApps()[:1], FakeApp{App: App{Name: "Big", PID: 404}, Elements: long})
+	short := act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"})
+	big := act(t, s, "%7", AgentAction{Action: "app_state", App: "Big"})
+	shot := act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "type", Text: "my secret reply"})
+
+	raw, err := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("%v: %s", err, line)
+		}
+		lines = append(lines, entry)
+	}
+	if len(lines) != 4 {
+		t.Fatalf("%d lines:\n%s", len(lines), raw)
+	}
+	for i, line := range lines {
+		if _, ok := line["ms"]; !ok {
+			t.Fatalf("line %d has no ms: %v", i, line)
+		}
+	}
+	if lines[0]["rows"] != float64(3) || lines[0]["truncated"] != nil || lines[0]["bytes"] != float64(len(short.Text)) {
+		t.Fatalf("a short read: %v", lines[0])
+	}
+	if lines[1]["rows"] != float64(elementsShown) || lines[1]["truncated"] != true || lines[1]["bytes"] != float64(len(big.Text)) {
+		t.Fatalf("a read that was cut: %v", lines[1])
+	}
+	if lines[2]["bytes"] != float64(len(shot.Image)+len(shot.Text)) || lines[2]["rows"] != nil {
+		t.Fatalf("a screenshot: %v", lines[2])
+	}
+	if strings.Contains(string(raw), "secret") || strings.Contains(string(raw), "Button 1") {
+		t.Fatalf("audit holds content:\n%s", raw)
 	}
 }
 
