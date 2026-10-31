@@ -38,16 +38,11 @@ export interface PhoneSetupPlan {
   note: string | null;
 }
 
-const GUIDE_NOTES: Record<"developer" | "wireless" | "pair", string> = {
-  developer: "Tapping Build number",
-  wireless: "Turning on Wireless debugging",
-  pair: "Pairing",
-};
-
 /**
  * The shortest way through setup: allow Mewla's accessibility service once, then it walks Settings
  * itself and the person only answers what Android reserves for them (the screen lock, the network
- * prompt). A step that stops getting anywhere falls back to its manual row.
+ * prompt). A step that stops getting anywhere falls back to its manual row. A note appears only
+ * where the person has to do something; progress is the row's spinner.
  */
 export function phoneSetupPlan(status: PhoneStatus, running: boolean): PhoneSetupPlan {
   const next = nextPhoneStep(status);
@@ -62,15 +57,14 @@ export function phoneSetupPlan(status: PhoneStatus, running: boolean): PhoneSetu
       action: "allow",
       label: "Allow",
       current: next.id,
-      note: status.restricted ? "If Android greys it out: App info › ⋮ › Allow restricted settings" : null,
+      note: status.restricted ? "App info › ⋮ › Allow restricted settings" : null,
     };
   }
   if (!running && !guide) return { action: "setup", label: "Set up", current: next.id, note: null };
   if (guide?.needs === "allow") return { action: "setup", label: "Set up", current: "wireless", note: "Tap Allow on the system prompt" };
   if (guide?.needs === "lock") return { action: "setup", label: "Set up", current: "developer", note: "Confirm your screen lock" };
   if (guide?.stalled) return { action: "setup", label: "Set up", current: next.id, note: next.hint ?? "Do this step yourself" };
-  const step = guide?.step ?? (next.id === "developer" || next.id === "wireless" ? next.id : "pair");
-  return { action: "setup", label: "Set up", current: next.id, note: GUIDE_NOTES[step] };
+  return { action: "setup", label: "Set up", current: next.id, note: null };
 }
 
 export type PhoneMode = "setup" | "idle" | "watching" | "driving" | "handoff" | "stopped";
@@ -99,14 +93,17 @@ export function phoneFloatVisible(status: PhoneStatus | null, pathname: string):
 }
 
 /**
- * What the float says while the agent's display has nothing on it, or null once it shows a picture:
- * a black slab tells nobody anything, so it says what is going on.
+ * What the float shows while the agent's display has nothing on it, or null once it shows a picture:
+ * a black slab tells nobody anything. A spinner is waiting, with the app's name once it is known; a
+ * failure says what failed.
  */
-export function floatPlaceholder(status: Pick<PhoneStatus, "drawn" | "opening" | "launch_failed">): string | null {
+export function floatPlaceholder(
+  status: Pick<PhoneStatus, "drawn" | "opening" | "launch_failed">,
+): { text: string | null; failed: boolean } | null {
   if (status.drawn) return null;
-  if (status.opening) return `Opening ${status.opening}…`;
-  if (status.launch_failed) return `Couldn't open ${status.launch_failed}`;
-  return "Getting the screen ready…";
+  if (status.opening) return { text: status.opening, failed: false };
+  if (status.launch_failed) return { text: `Couldn't open ${status.launch_failed}`, failed: true };
+  return { text: null, failed: false };
 }
 
 export type FloatCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";

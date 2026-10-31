@@ -229,12 +229,12 @@ describe("phone float", () => {
     expect(floatOrigin(DEFAULT_FLOAT_CORNER, area, size, 12)).toEqual({ x: 168, y: 208 });
   });
 
-  test("says what is going on while the agent's screen has nothing on it", () => {
+  test("shows what is going on while the agent's screen has nothing on it, in as few words as it can", () => {
     expect(floatPlaceholder({ drawn: true, opening: null, launch_failed: null })).toBeNull();
     expect(floatPlaceholder({ drawn: true, opening: "微信", launch_failed: null })).toBeNull();
-    expect(floatPlaceholder({ drawn: false, opening: "微信 (分身 999)", launch_failed: null })).toBe("Opening 微信 (分身 999)…");
-    expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: "微信 (分身 999)" })).toBe("Couldn't open 微信 (分身 999)");
-    expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: null })).toBe("Getting the screen ready…");
+    expect(floatPlaceholder({ drawn: false, opening: "微信 (分身 999)", launch_failed: null })).toEqual({ text: "微信 (分身 999)", failed: false });
+    expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: "微信 (分身 999)" })).toEqual({ text: "Couldn't open 微信 (分身 999)", failed: true });
+    expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: null })).toEqual({ text: null, failed: false });
   });
 });
 
@@ -246,13 +246,14 @@ describe("phone setup plan", () => {
     expect(phoneSetupPlan({ ...fresh, restricted: true }, false).note).toContain("Allow restricted settings");
   });
 
-  test("with it on, one Set up walks everything and names the step it is on", () => {
+  test("with it on, one Set up walks everything; the row's spinner is the progress, not a sentence", () => {
     const on = { ...fresh, accessibility: true };
     expect(phoneSetupPlan(on, false)).toMatchObject({ action: "setup", label: "Set up", current: "developer" });
-    expect(phoneSetupPlan({ ...on, guide: { step: "developer", needs: null, stalled: false } }, true).note).toBe("Tapping Build number");
-    expect(phoneSetupPlan({ ...on, developer_options: true, guide: { step: "wireless", needs: null, stalled: false } }, true).note).toBe(
-      "Turning on Wireless debugging",
-    );
+    expect(phoneSetupPlan({ ...on, guide: { step: "developer", needs: null, stalled: false } }, true)).toMatchObject({ current: "developer", note: null });
+    expect(phoneSetupPlan({ ...on, developer_options: true, guide: { step: "wireless", needs: null, stalled: false } }, true)).toMatchObject({
+      current: "wireless",
+      note: null,
+    });
   });
 
   test("only what Android reserves for the person is asked of them", () => {

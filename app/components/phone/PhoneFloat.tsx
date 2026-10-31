@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Keyboard, PixelRatio, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
+import { ActivityIndicator, Keyboard, PixelRatio, Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
@@ -299,7 +299,6 @@ function Float() {
 
   // Until the agent's screen has drawn, a light card says what is going on instead of a black slab.
   const placeholder = status ? floatPlaceholder(status) : null;
-  const failed = placeholder !== null && !!status?.launch_failed && !status.opening;
   const frameWidth = Math.min(FRAME_MAX, Math.max(FRAME_MIN, Math.ceil((size.width * PixelRatio.get()) / FRAME_STEP) * FRAME_STEP));
   // The handle sits in the corner opposite the one the float is anchored to, so dragging it outward grows the window.
   const handleLeft = corner.endsWith("right");
@@ -322,9 +321,12 @@ function Float() {
             </View>
             {placeholder ? (
               <View style={styles.placeholder} pointerEvents="none" accessibilityLiveRegion="polite">
-                <AppText variant="caption" tone={failed ? "danger" : "secondary"} style={styles.placeholderText}>
-                  {placeholder}
-                </AppText>
+                {placeholder.failed ? null : <ActivityIndicator color={colors.textTertiary} />}
+                {placeholder.text ? (
+                  <AppText variant="caption" tone={placeholder.failed ? "danger" : "secondary"} style={styles.placeholderText}>
+                    {placeholder.text}
+                  </AppText>
+                ) : null}
               </View>
             ) : null}
             {controls ? (
@@ -395,6 +397,6 @@ const styles = StyleSheet.create({
   handleTop: { top: 0, justifyContent: "flex-start" },
   handleBottom: { bottom: 0, justifyContent: "flex-end" },
   grip: { width: GRIP, height: GRIP },
-  placeholder: { ...fill, alignItems: "center", justifyContent: "center", padding: 12 },
+  placeholder: { ...fill, alignItems: "center", justifyContent: "center", gap: 8, padding: 12 },
   placeholderText: { textAlign: "center" },
 });
