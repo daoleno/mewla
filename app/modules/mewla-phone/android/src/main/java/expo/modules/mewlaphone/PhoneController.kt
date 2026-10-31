@@ -625,12 +625,25 @@ object PhoneController {
         return result
     }
 
+    /** The agent is done: its display goes, and the App stops showing it, whether or not the helper is up. */
+    private fun release(id: String): JSONObject {
+        client?.takeIf { !it.isClosed }?.let { runCatching { it.call("display_release") } }
+        display = null
+        resetPicture()
+        activeWorker = null
+        publish()
+        return JSONObject().put("type", "result").put("id", id).put("ok", true)
+    }
+
     private fun executeTimed(request: JSONObject): JSONObject {
         val id = request.optString("id")
         val op = request.optString("op")
         try {
+            // Giving the screen back needs no helper and is never refused: a helper that is down or a
+            // person who stopped the agent still leaves the float showing a Worker that is gone.
+            if (op == "release") return release(id)
             if (stopped) return failure(id, "stopped", "The person stopped you on their phone. Stop and report.")
-            if (personInControl && op != "release") {
+            if (personInControl) {
                 return failure(id, "person_in_control", "The person is using the agent's screen on their phone. Wait, or report.")
             }
             val helper = try {
@@ -648,14 +661,6 @@ object PhoneController {
                     val reply = helper.call("apps")
                     if (!reply.optBoolean("ok")) failure(id, "failed", reply.optString("error"))
                     else JSONObject().put("type", "result").put("id", id).put("ok", true).put("apps", reply.getJSONArray("apps").also { dropSelf(it) })
-                }
-                "release" -> {
-                    helper.call("display_release")
-                    display = null
-                    resetPicture()
-                    activeWorker = null
-                    publish()
-                    JSONObject().put("type", "result").put("id", id).put("ok", true)
                 }
                 "handoff" -> handoff(id, request, helper, args, wantImage)
                 else -> act(id, op, helper, args, wantImage)
