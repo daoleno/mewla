@@ -224,17 +224,29 @@ internal class PhoneHelper(
 
     private fun display(w: Int, h: Int, dpi: Int): JSONObject {
         screen?.let { existing ->
-            if (existing.width == w && existing.height == h && existing.alive()) {
-                return ok().put("display", existing.displayId).put("w", w).put("h", h)
-            }
-            // A different size, or a display the system dropped: start over on a fresh one.
+            if (existing.width == w && existing.height == h && existing.dpi == dpi && existing.alive()) return described(existing)
+            // A different size or density (the person changed Display size), or a display the system
+            // dropped: start over on a fresh one.
             existing.release()
             screen = null
         }
         val created = AgentScreen(context, w, h, dpi)
         screen = created
         setImePolicy(created.displayId)
-        return ok().put("display", created.displayId).put("w", w).put("h", h)
+        // A system that gives the display another density than asked leaves apps laid out larger than on the phone.
+        if (created.effectiveDpi() != dpi) {
+            runCatching { shell("wm", "density", dpi.toString(), "-d", created.displayId.toString()) }
+                .onFailure { Log.w(TAG, "wm density failed", it) }
+        }
+        return described(created)
+    }
+
+    /** The display's size and density as asked and as the system has them, next to the phone's own screen. */
+    private fun described(s: AgentScreen): JSONObject {
+        val main = s.metrics(0)
+        return ok().put("display", s.displayId).put("w", s.width).put("h", s.height).put("dpi", s.dpi)
+            .put("effective_dpi", s.effectiveDpi()).put("main_dpi", main?.densityDpi ?: 0)
+            .put("main_w", main?.widthPixels ?: 0).put("main_h", main?.heightPixels ?: 0)
     }
 
     /** Keyboards for a field on the agent's display appear there, not on the person's screen. */
