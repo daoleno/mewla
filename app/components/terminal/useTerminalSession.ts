@@ -27,6 +27,14 @@ type Handlers = {
   onError?: (payload: { session_id?: string; code?: string; message: string }) => void;
 };
 
+/**
+ * A live session's PTY size follows the window once it settles. Folding or
+ * unfolding a device (and its rail inset arriving a frame later) changes the
+ * width in several steps; each step reflows tmux, so only the last is sent.
+ * The first open is never delayed.
+ */
+export const TERMINAL_RESIZE_SETTLE_MS = 120;
+
 export function useTerminalSession(
   serverId: string,
   targetId: string,
@@ -39,7 +47,17 @@ export function useTerminalSession(
   const reopenOnConnectRef = useRef(false);
   const correlationRef = useRef(new TerminalSessionCorrelation());
 
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   handlersRef.current = handlers;
+
+  // A settling resize belongs to this server's session; never let it outlive it.
+  useEffect(() => () => {
+    if (resizeTimerRef.current) {
+      clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = null;
+    }
+  }, [backend, serverId, targetId]);
 
   useEffect(() => {
     const correlation = correlationRef.current;
@@ -291,7 +309,15 @@ export function useTerminalSession(
 
     const sessionId = correlationRef.current.sessionId;
     if (sessionId && correlationRef.current.canInteract) {
-      wsClient.resizeTerminal(serverId, sessionId, nextCols, nextRows);
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = setTimeout(() => {
+        resizeTimerRef.current = null;
+        const live = correlationRef.current;
+        const size = sizeRef.current;
+        if (size && live.sessionId && live.canInteract) {
+          wsClient.resizeTerminal(serverId, live.sessionId, size.cols, size.rows);
+        }
+      }, TERMINAL_RESIZE_SETTLE_MS);
       return true;
     }
     if (!wsClient.isConnected(serverId)) {
