@@ -742,8 +742,8 @@ func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult,
 	return AgentResult{Text: text, rows: stats.rows, truncated: stats.truncated}, nil
 }
 
-// elementSettle lets an app redraw after an element action, before the app
-// is read again for the agent.
+// elementSettle lets an app redraw where it can't be fingerprinted (see
+// settleApp), and after a window is raised for a click.
 const elementSettle = 300 * time.Millisecond
 
 // actOnElement does one thing to an element of the latest read, in the
@@ -785,10 +785,8 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err := actor.ActOnElement(ctx, e, name, action.Text); err != nil {
 		return AgentResult{}, a.gone(ctx, a.treeApp, err)
 	}
-	select {
-	case <-time.After(elementSettle):
-	case <-ctx.Done():
-		return AgentResult{}, ctx.Err()
+	if err := a.settleApp(ctx, a.treeApp.PID); err != nil {
+		return AgentResult{}, err
 	}
 	app := a.treeApp
 	previous, tree, err := a.swapTreeLocked(ctx, app)

@@ -97,7 +97,11 @@ func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
 }
 
 // waitFor reads an app until an element matching appears, for up to
-// Duration seconds (at most waitForMax), and leaves that read's ids.
+// Duration seconds (at most waitForMax), and leaves that read's ids. Between
+// reads it watches a cheap fingerprint of the app instead of reading it every
+// waitForEvery: it reads again when that changes and has gone quiet, and
+// anyway every waitForRecheck, since a change deep in the app may not show in
+// it. Where an app can't be fingerprinted it reads every waitForEvery.
 func (a *agentSession) waitFor(ctx context.Context, action AgentAction) (AgentResult, error) {
 	if action.Match == nil {
 		return AgentResult{}, errors.New("wait_for needs match")
@@ -107,13 +111,24 @@ func (a *agentSession) waitFor(ctx context.Context, action AgentAction) (AgentRe
 		limit = waitForMax
 	}
 	deadline := time.Now().Add(limit)
+	printer, _ := a.apps.(appPrinter)
+	pid := 0
 	for {
+		// Fingerprinted before the read, so a change during it isn't missed.
+		var before AppPrint
+		known := false
+		if pid != 0 && printer != nil {
+			var err error
+			before, err = printer.PrintApp(ctx, pid)
+			known = err == nil
+		}
 		result, err := a.appState(ctx, action.App)
 		if err != nil {
 			return AgentResult{}, err
 		}
 		a.appMu.Lock()
 		id, matchErr := a.tree.match(*action.Match, false)
+		appPID := a.treeApp.PID
 		a.appMu.Unlock()
 		if matchErr == nil {
 			result.Text = fmt.Sprintf("Found [%d].\n", id) + result.Text
@@ -122,12 +137,14 @@ func (a *agentSession) waitFor(ctx context.Context, action AgentAction) (AgentRe
 		if time.Now().After(deadline) {
 			return AgentResult{}, fmt.Errorf("%s did not appear within %s", action.Match, limit.Round(time.Second))
 		}
-		select {
-		case <-time.After(waitForEvery):
-		case <-ctx.Done():
-			return AgentResult{}, ctx.Err()
-		case <-a.ctx.Done():
-			return AgentResult{}, context.Cause(a.ctx)
+		if pid == 0 && printer != nil {
+			var err error
+			pid = appPID
+			before, err = printer.PrintApp(ctx, pid)
+			known = err == nil
+		}
+		if err := a.awaitChange(ctx, appPID, before, known, deadline); err != nil {
+			return AgentResult{}, err
 		}
 	}
 }

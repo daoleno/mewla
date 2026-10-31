@@ -254,6 +254,49 @@ func readApp(ctx context.Context, pid int, limit int) (ElementTree, error) {
 	return tree, nil
 }
 
+// PrintApp fingerprints an app: two requests, a few of its attributes each,
+// not its elements. An app that doesn't answer gives an empty fingerprint
+// rather than an error, which two reads in a row agree on; the read that
+// follows says what is wrong.
+func (b *macBackend) PrintApp(ctx context.Context, pid int) (AppPrint, error) {
+	if !loadApps() {
+		return AppPrint{}, ErrNoApps
+	}
+	var print AppPrint
+	var err error
+	withPool(func() { print, err = printApp(pid) })
+	return print, err
+}
+
+func printApp(pid int) (AppPrint, error) {
+	app := appsLib.createApplication(int32(pid))
+	if app == 0 {
+		return AppPrint{}, fmt.Errorf("couldn't reach the app with pid %d", pid)
+	}
+	defer axLib.release(app)
+	axLib.setTimeout(app, 1)
+	const windows, focusedWindow, focusedElement = 0, 1, 2
+	slots, done := axReadMany(app, axLib.printAppSet)
+	defer done()
+	var print AppPrint
+	if list := slots[windows]; list != 0 && axLib.typeID(list) == axLib.arrayTypeID() {
+		print.Windows = int(axLib.arrayCount(list))
+	}
+	if focus := slots[focusedElement]; focus != 0 {
+		print.Focus = appsLib.hash(focus)
+	}
+	if window := slots[focusedWindow]; window != 0 {
+		const title, children = 0, 1
+		parts, doneWindow := axReadMany(window, axLib.printWindowSet)
+		defer doneWindow()
+		print.Title = cfStringOf(parts[title])
+		if list := parts[children]; list != 0 && axLib.typeID(list) == axLib.arrayTypeID() {
+			print.Children = int(axLib.arrayCount(list))
+		}
+	}
+	return print, nil
+}
+
 func axActionNames(element uintptr) []string {
 	var names uintptr
 	if appsLib.copyActionNames(element, &names) != 0 || names == 0 {
@@ -704,4 +747,5 @@ var (
 	_ appReader   = (*macBackend)(nil)
 	_ appActor    = (*macBackend)(nil)
 	_ appRaiser   = (*macBackend)(nil)
+	_ appPrinter  = (*macBackend)(nil)
 )
