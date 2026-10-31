@@ -751,6 +751,7 @@ func TestBootInstallEnvironmentChangeRestarts(t *testing.T) {
 }
 
 func TestBootInstallRefusesForeignUnit(t *testing.T) {
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	path, err := bootUnitPath()
 	if err != nil {
@@ -776,6 +777,7 @@ func TestBootInstallRefusesForeignUnit(t *testing.T) {
 }
 
 func TestBootInstallRefusesRoot(t *testing.T) {
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	original := bootEffectiveUID
 	bootEffectiveUID = func() int { return 0 }
@@ -790,6 +792,7 @@ func TestBootInstallRefusesRoot(t *testing.T) {
 }
 
 func TestBootInstallRefusesLiveStateOwner(t *testing.T) {
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	bootHoldStateLock(t, config.StateDir)
 	runner := bootTestRunner()
@@ -807,6 +810,7 @@ func TestBootInstallRefusesLiveStateOwner(t *testing.T) {
 }
 
 func TestBootInstallRefusesBusyAddress(t *testing.T) {
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -860,6 +864,7 @@ func TestBootInstallVerificationFailureStopsOwnUnit(t *testing.T) {
 }
 
 func TestBootInstallRefusesInaccessibleContext(t *testing.T) {
+	requireSystemdBootHost(t)
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses the user access checks")
 	}
@@ -933,6 +938,7 @@ func TestBootInstallFailsFastWhenUnitDoesNotStart(t *testing.T) {
 }
 
 func TestBootInstallRefusesActiveUnitWithManualOwner(t *testing.T) {
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	bootHoldStateLock(t, config.StateDir)
 	runner := bootTestRunner()
@@ -998,6 +1004,7 @@ func TestBootInstallRequiresStableOwner(t *testing.T) {
 }
 
 func TestBootInstallDryRunWritesNothing(t *testing.T) {
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	config.DryRun = true
 	var out bytes.Buffer
@@ -1456,6 +1463,9 @@ func TestBootStateLockPIDStrictProvenForeignIsSkipped(t *testing.T) {
 // holds no descriptors and can never be the state lock owner, so the scan must
 // skip it instead of failing closed with an unreadable /proc/<pid>/fd.
 func TestBootStateLockPIDZombieIsSkipped(t *testing.T) {
+	// The scan reads /proc/<pid>/stat for the zombie state; macOS has no /proc
+	// and the launchd path does not scan cgroups.
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	bootHoldStateLock(t, config.StateDir)
 	cmd := exec.Command("/bin/sh", "-c", "exit 0")
