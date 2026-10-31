@@ -820,7 +820,7 @@ func (a *agentSession) readValue(ctx context.Context, e Element, id int) (AgentR
 	if !ok {
 		return AgentResult{}, ErrNoApps
 	}
-	if e.Role == "AXSecureTextField" {
+	if e.secureField() {
 		return AgentResult{}, errors.New("a password field's value is never read")
 	}
 	value, length, err := reader.ReadValue(ctx, e, valueRead)

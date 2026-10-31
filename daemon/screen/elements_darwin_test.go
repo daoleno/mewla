@@ -59,3 +59,17 @@ func TestBatchedReadsMatchSingleReads(t *testing.T) {
 		t.Fatalf("%d of %d elements differ", differ, n)
 	}
 }
+
+// The attribute lists are built when accessibility loads: a read indexes
+// into them, so an empty one would panic on the first element.
+func TestAttributeSetsAreBuilt(t *testing.T) {
+	if !loadAX() {
+		t.Skip("accessibility is not available here")
+	}
+	for name, want := range map[string]int{"walk": 9, "print app": 3, "print window": 2} {
+		set := map[string]attrSet{"walk": axLib.walkSet, "print app": axLib.printAppSet, "print window": axLib.printWindowSet}[name]
+		if len(set.names) != want || (axLib.batch && set.array == 0) {
+			t.Errorf("%s set: %d names (want %d), array %v, batch %v", name, len(set.names), want, set.array, axLib.batch)
+		}
+	}
+}

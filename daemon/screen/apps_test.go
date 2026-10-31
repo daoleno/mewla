@@ -701,3 +701,34 @@ func TestAnAppOnAnotherDesktopSaysSo(t *testing.T) {
 		t.Fatalf("an app with nothing to read:\n%s", got)
 	}
 }
+
+// A native password field is an AXTextField whose subrole is
+// AXSecureTextField: its value is hidden, can't be matched and can't be read,
+// as for the role of the same name.
+func TestAPasswordFieldBySubroleNeverShowsItsValue(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = []FakeApp{{App: App{Name: "Bank", PID: 505, Active: true}, Elements: []Element{
+		{Role: "AXWindow", Title: "Sign in", Enabled: true},
+		{Depth: 1, Role: "AXTextField", Title: "User", Value: "ada", Enabled: true, Actions: []string{"AXConfirm"}},
+		{Depth: 1, Role: "AXTextField", Subrole: "AXSecureTextField", Title: "Password", Value: "hunter2", Enabled: true, Actions: []string{"AXConfirm"}},
+		{Depth: 1, Role: "AXButton", Title: "Go", Enabled: true, Actions: []string{"AXPress"}},
+	}}}
+	state := act(t, s, "%7", AgentAction{Action: "app_state"}).Text
+	if strings.Contains(state, "hunter2") || !strings.Contains(state, `TextField "Password"`) || !strings.Contains(state, `= "ada"`) {
+		t.Fatalf("app_state:\n%s", state)
+	}
+	password := idOf(t, state, `"Password"`)
+
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Element: password, ElementAction: "read"}); err == nil || !strings.Contains(err.Error(), "password") {
+		t.Fatalf("read a password: %v", err)
+	}
+	for _, m := range []ElementMatch{{Value: "hunter2"}, {Role: "TextField", Title: "Password", Empty: true}} {
+		if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "expect", Match: &m}); err == nil {
+			t.Fatalf("matched a password's value: %+v", m)
+		}
+	}
+	set := act(t, s, "%7", AgentAction{Action: "element", Element: password, ElementAction: "set_value", Text: "newsecret"}).Text
+	if strings.Contains(set, "newsecret") || strings.Contains(set, "hunter2") {
+		t.Fatalf("the answer shows a password:\n%s", set)
+	}
+}

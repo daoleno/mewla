@@ -23,7 +23,7 @@ func appRows(tree ElementTree, screen image.Rectangle, toAgent func(image.Point)
 	var rows []appRow
 	for i, e := range tree.Elements {
 		title, value := oneLine(e.Title), oneLine(e.Value)
-		if e.Role == "AXSecureTextField" {
+		if e.secureField() {
 			value = ""
 		}
 		special := false

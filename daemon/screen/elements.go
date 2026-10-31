@@ -16,8 +16,11 @@ var ErrNoElements = errors.New("Reading the screen's elements works on Macs; use
 // Element is one accessibility element of the focused window, as a backend
 // reads it, in framebuffer pixels. Depth is its nesting under the window.
 type Element struct {
-	Depth   int
-	Role    string
+	Depth int
+	Role  string
+	// Subrole refines Role: a native password field is an AXTextField whose
+	// subrole is AXSecureTextField.
+	Subrole string
 	Title   string
 	Value   string
 	Frame   image.Rectangle
@@ -76,6 +79,12 @@ const (
 	elementText   = 80   // characters of a title or value
 )
 
+// secureField says whether e is a password field, by role or subrole. The
+// value of one is never read, shown, matched or kept.
+func (e Element) secureField() bool {
+	return e.Role == "AXSecureTextField" || e.Subrole == "AXSecureTextField"
+}
+
 // Elements without a name or value are shown only when they do something.
 var actionableRoles = map[string]bool{
 	"AXButton": true, "AXCheckBox": true, "AXRadioButton": true, "AXTextField": true,
@@ -100,7 +109,7 @@ func formatElements(tree ElementTree, screen image.Rectangle, toAgent func(image
 			continue
 		}
 		title, value := oneLine(e.Title), oneLine(e.Value)
-		if e.Role == "AXSecureTextField" {
+		if e.secureField() {
 			value = ""
 		}
 		if title == "" && value == "" && !actionableRoles[e.Role] {

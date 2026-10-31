@@ -62,14 +62,14 @@ func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
 			continue
 		}
 		value := e.Value
-		if e.Role == "AXSecureTextField" {
+		if e.secureField() {
 			value = ""
 		}
 		if m.Value != "" && !strings.Contains(strings.ToLower(value), strings.ToLower(m.Value)) {
 			continue
 		}
 		// A password's value is never read, so it can't be known empty.
-		if m.Empty && (e.Value != "" || e.Role == "AXSecureTextField") {
+		if m.Empty && (e.Value != "" || e.secureField()) {
 			continue
 		}
 		switch {
