@@ -712,6 +712,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	})
 	controlHandler.agentUse = agentUse
 	controlHandler.phone = phone.NewAgent(phoneManager, phone.NewAudit(authManager.StorageDir()))
+	// A Worker that finishes or is closed gives the phone's screen back at once.
+	phoneManager.SetAlive(controlHandler.liveWorker)
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager
