@@ -252,7 +252,7 @@ describe("Plugins connection route contract", () => {
   const views = read("components/plugins/PluginConnectionViews.tsx");
   test("server switches remount the flow and every page shares one keyboard-aware scroll view", () => {
     expect(layout).toContain('key={currentServerId ?? "none"}');
-    expect(layout).toContain('initialRouteName: "index"');
+    expect(layout).toContain('anchor: "index"');
     expect(flow.match(/<KeyboardAwareScrollView/g)?.length).toBe(1);
     for (const route of routes) {
       expect(route).toContain("<PluginsPage");

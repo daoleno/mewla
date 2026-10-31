@@ -4,7 +4,7 @@ import {
   StyleSheet,
   View,
   type PressableProps,
-  type View as ViewInstance,
+  type ViewInstance,
 } from "react-native";
 import { useAppColors } from "../../constants/tokens";
 import { GlassSurface } from "../ui/GlassSurface";

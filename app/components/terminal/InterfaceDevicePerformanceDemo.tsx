@@ -7,7 +7,7 @@ import {
   TextInput,
   View,
   type NativeScrollEvent,
-  type NativeSyntheticEvent,
+  type NativeSyntheticEvent, type TextInputInstance, type ViewInstance,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams } from "expo-router";
@@ -105,8 +105,8 @@ export function InterfaceDevicePerformanceDemo({
     () => buildChatChrome(appTheme),
     [appTheme],
   );
-  const menuAnchorRef = useRef<View>(null);
-  const inputRef = useRef<TextInput>(null);
+  const menuAnchorRef = useRef<ViewInstance>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const insets = useSafeAreaInsets();
   const emptyPending = useMemo(() => [], []);
   const detachedInitRef = useRef(false);

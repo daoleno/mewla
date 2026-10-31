@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance, type TextInputInstance, type ViewInstance } from "react-native";
 import { webReplyKeyPress } from "../terminal/composerInputBehavior";
 import { InterfaceComposerAttachmentRail } from "../terminal/InterfaceComposerAttachmentRail";
 import { InterfaceDropOverlay } from "../terminal/InterfaceDropOverlay";
@@ -171,7 +171,7 @@ export function BrainWorkColumn({
   reveal?: BrainWorkReveal | null;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const groupY = useRef(new Map<BrainWorkGroup, number>());
   const [lit, setLit] = useState<BrainWorkGroup | null>(null);
   useEffect(() => {
@@ -346,8 +346,8 @@ export function BrainWorkDetailSheet({
   const [draft, setDraft] = useState("");
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const workId = slip?.workId;
-  const inputRef = useRef<TextInput>(null);
-  const rootRef = useRef<View>(null);
+  const inputRef = useRef<TextInputInstance>(null);
+  const rootRef = useRef<ViewInstance>(null);
   useEffect(() => {
     setDraft("");
     setAttachments([]);
@@ -443,7 +443,7 @@ export function BrainWorkDetailSheet({
                           webReplyKeyPress(event, {
                             canSend: replyReady,
                             send,
-                            leave: () => event.currentTarget?.blur?.(),
+                            leave: () => inputRef.current?.blur(),
                           })
                       : undefined
                   }

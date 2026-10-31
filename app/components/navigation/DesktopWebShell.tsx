@@ -7,7 +7,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View, type ViewInstance } from "react-native";
 import { useNavigationContainerRef, usePathname, useRouter } from "expo-router";
 import { useAppColors } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
@@ -267,7 +267,7 @@ export function DesktopWebShell({ children }: { children: ReactNode }) {
     [go],
   );
   const noop = useCallback(() => undefined, []);
-  const closeButtonRef = useRef<View>(null);
+  const closeButtonRef = useRef<ViewInstance>(null);
 
   return (
     <DesktopWebShellContext.Provider value={desktop}>

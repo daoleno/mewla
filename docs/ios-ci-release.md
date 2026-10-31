@@ -15,7 +15,7 @@ An iPhone build must be signed and provisioned. App Store distribution IPAs are 
 
 ## Unsigned macOS CI
 
-The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on the Apple Silicon `macos-26` image. Ordinary `push` to `main` and pull requests run only fast Linux checks and do not allocate a macOS runner; this job runs on a release tag push or a manual `ci.yml` dispatch. It:
+The `ios-native` job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on the Apple Silicon `xcode-27` image (Xcode 27.1 by default). Ordinary `push` to `main` and pull requests run only fast Linux checks and do not allocate a macOS runner; this job runs on a release tag push or a manual `ci.yml` dispatch. It:
 
 1. installs the locked Bun workspace;
 2. validates the shared Android/iOS native contract;

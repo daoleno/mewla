@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View, type ViewInstance } from "react-native";
 import { useAppColors } from "../../constants/tokens";
 import { clampPanelWidth } from "./panelWidth";
 
@@ -61,7 +61,7 @@ interface ResizeHandleProps {
  */
 export function ResizeHandle({ edge, width, label, onResize, onCommit, onReset }: ResizeHandleProps) {
   const colors = useAppColors();
-  const ref = useRef<View>(null);
+  const ref = useRef<ViewInstance>(null);
   const [active, setActive] = useState(false);
   const latest = useRef({ width, onResize, onCommit, onReset });
   latest.current = { width, onResize, onCommit, onReset };

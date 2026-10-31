@@ -14,7 +14,7 @@ import {
   Text,
   View,
   useWindowDimensions,
-  type View as ViewInstance,
+  type ViewInstance,
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

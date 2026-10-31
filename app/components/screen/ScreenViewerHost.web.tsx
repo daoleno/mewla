@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { View } from "react-native";
+import { View, type ViewInstance } from "react-native";
 import { mountScreenViewer } from "./screenViewerRuntime";
 import type { ScreenViewerHostHandle, ScreenViewerHostProps } from "./screenViewerProtocol";
 
@@ -12,7 +12,7 @@ export const ScreenViewerHost = forwardRef<ScreenViewerHostHandle, ScreenViewerH
   { onMessage, backgroundColor, accessibilityLabel },
   ref,
 ) {
-  const container = useRef<View>(null);
+  const container = useRef<ViewInstance>(null);
   const viewer = useRef<ReturnType<typeof mountScreenViewer> | null>(null);
   const handler = useRef(onMessage);
   handler.current = onMessage;

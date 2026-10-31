@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
+  View, type ScrollViewInstance,
 } from "react-native";
 import { Radii, Typography, shadow, useAppColors } from "../../constants/tokens";
 import { Icon } from "../icons/Icon";
@@ -99,7 +99,7 @@ export function DesktopCommandPalette({
   const colors = useAppColors();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
-  const listRef = useRef<ScrollView>(null);
+  const listRef = useRef<ScrollViewInstance>(null);
   useEffect(() => {
     if (visible) {
       setQuery("");

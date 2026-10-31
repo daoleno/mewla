@@ -5,7 +5,7 @@ import {
   SectionList,
   StyleSheet,
   Text,
-  View,
+  View, type ViewInstance,
 } from "react-native";
 import {
   ContentWidth,
@@ -150,7 +150,7 @@ export function SessionsListView({
   return (
     <SectionList
       sections={sections}
-      ListHeaderComponent={header}
+      ListHeaderComponent={header ?? undefined}
       key="list"
       keyExtractor={workerKeyExtractor}
       renderItem={renderItem}
@@ -191,7 +191,7 @@ export function NewSessionButton({
   const styles = useMemo(() => createStyles(theme, desktop), [theme, desktop]);
   const inactive = disabled || busy;
   const ink = inactive ? colors.disabledText : colors.textOnAccent;
-  const buttonRef = useRef<View>(null);
+  const buttonRef = useRef<ViewInstance>(null);
   useWebTooltip(buttonRef, desktop ? "New session (N)" : "New session");
   return (
     <View

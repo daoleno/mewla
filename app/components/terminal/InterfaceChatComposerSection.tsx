@@ -1,5 +1,5 @@
 import React from "react";
-import type { TextInput } from "react-native";
+import type { TextInputInstance } from "react-native";
 import type {
   TerminalThemeChrome,
   TerminalThemePalette,
@@ -11,7 +11,7 @@ import type { InterfaceComposerPresentation } from "./InterfaceChatSurfaceModel"
 import { InterfaceChatComposer } from "./InterfaceChatComposer";
 
 interface InterfaceChatComposerSectionProps {
-  inputRef: React.RefObject<TextInput | null>;
+  inputRef: React.RefObject<TextInputInstance | null>;
   draft: string;
   editable: boolean;
   focused: boolean;

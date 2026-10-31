@@ -1138,7 +1138,7 @@ function ModelSyncSheet({
               <ActivityIndicator size="small" color={colors.accent} />
               <Text style={styles.pickerSavingText}>Saving…</Text>
             </View>
-          ) : null
+          ) : undefined
         }
         ListEmptyComponent={
           !saving ? (
@@ -1147,7 +1147,7 @@ function ModelSyncSheet({
                 ? "No models were reported by this endpoint."
                 : "No models match this search."}
             </Text>
-          ) : null
+          ) : undefined
         }
       />
     </RisingSheet>

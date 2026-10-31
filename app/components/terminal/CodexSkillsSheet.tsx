@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  type TextInputInstance,
   View,
 } from "react-native";
 import type {
@@ -49,7 +50,7 @@ export function CodexSkillsSheet({
   const [skills, setSkills] = useState<CodexSkill[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const searchInputRef = useRef<TextInput | null>(null);
+  const searchInputRef = useRef<TextInputInstance | null>(null);
 
   useEffect(() => {
     if (!visible) {

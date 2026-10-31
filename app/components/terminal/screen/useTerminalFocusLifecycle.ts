@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { useFocusEffect } from "expo-router";
+import { currentAppState } from "../../../services/currentAppState";
 import { wsClient } from "../../../services/websocket";
 import {
   createTerminalConnectedPresenceHandler,
@@ -40,11 +41,11 @@ export function useTerminalFocusLifecycle({
   useFocusEffect(
     useCallback(() => {
       setScreenFocused(true);
-      syncActiveTerminal(AppState.currentState);
+      syncActiveTerminal(currentAppState());
 
       const onConnected = createTerminalConnectedPresenceHandler(
         serverId,
-        () => syncActiveTerminal(AppState.currentState),
+        () => syncActiveTerminal(currentAppState()),
       );
       wsClient.on("connected", onConnected);
 
@@ -57,7 +58,7 @@ export function useTerminalFocusLifecycle({
         wsClient.off("connected", onConnected);
         setScreenFocused(false);
         onInactive();
-        syncActiveTerminal(AppState.currentState, false);
+        syncActiveTerminal(currentAppState(), false);
       };
     }, [onInactive, serverId, setScreenFocused, syncActiveTerminal]),
   );

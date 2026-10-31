@@ -4,7 +4,7 @@ import {
   type StyleProp,
   StyleSheet,
   type View,
-  type ViewStyle,
+  type ViewStyle, type ViewInstance,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
@@ -43,7 +43,7 @@ export function IconButton({
   ...props
 }: IconButtonProps) {
   const { colors, theme } = useAppTheme();
-  const ref = useRef<View>(null);
+  const ref = useRef<ViewInstance>(null);
   useWebTooltip(ref, tooltip ?? props.accessibilityLabel ?? undefined);
   const backgroundColor =
     tone === "input"

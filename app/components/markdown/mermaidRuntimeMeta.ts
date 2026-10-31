@@ -1,3 +1,3 @@
-export const MERMAID_VERSION = "11.16.1";
-export const MERMAID_RUNTIME_SHA256 = "18327bef70d96fb505fe7287d9f6a7362ebf07ff6576ddfaffb1a06f3e1a2954";
+export const MERMAID_VERSION = "12.2.0";
+export const MERMAID_RUNTIME_SHA256 = "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f";
 export const MERMAID_LICENSE = "MIT";

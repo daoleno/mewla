@@ -2,7 +2,7 @@ import React, { useCallback, useRef } from "react";
 import {
   StyleSheet,
   View,
-  type TextInput as TextInputInstance,
+  type TextInputInstance,
 } from "react-native";
 import type {
   TerminalThemeChrome,
