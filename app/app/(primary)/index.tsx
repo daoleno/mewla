@@ -27,7 +27,6 @@ import {
 import { usePrimaryPageAction } from "../../components/navigation/PrimaryPageAction";
 import { useConnectionStalled } from "../../components/navigation/useConnectionAttention";
 import {
-  PRIMARY_SIDEBAR_BREAKPOINT,
   resolvePrimaryAppBarGeometry,
 } from "../../components/navigation/PrimaryDrawerShell";
 import {
@@ -53,6 +52,7 @@ import { CHAT_CHROME_HORIZONTAL_INSET } from "../../components/terminal/chatChro
 import { InterfaceChatSurface } from "../../components/terminal/InterfaceChatSurface";
 import { buildChatChrome } from "../../theme";
 import { useAppTheme } from "../../constants/tokens";
+import { shouldShowBrainWorkColumn } from "../../constants/windowRoom";
 import { wsClient } from "../../services/websocket";
 import type { SendAttachment } from "../../services/structuredWebSocketTransport";
 import { terminalRouteParams } from "../../services/workerRouteId";
@@ -203,9 +203,9 @@ export default function BrainScreen() {
   );
 
   const ready = Boolean(activeServer && activeBrain?.hydrated && hostWorker?.id);
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   // Wide screens get the Work column; it holds the cat and Brain's presence.
-  const workColumn = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
+  const workColumn = shouldShowBrainWorkColumn(windowWidth, windowHeight);
   const calendarState = useCalendar();
   const calendarItems = activeServer ? selectCurrentServerCalendar(calendarState, activeServer.id)?.items : undefined;
   const workSurface = useMemo(

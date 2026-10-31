@@ -375,7 +375,7 @@ function GitDiffSheetBody({
   return (
     <SafeAreaView
       style={[styles.root, { backgroundColor: chrome.appBackground }]}
-      edges={["top"]}
+      edges={["top", "left", "right"]}
     >
       <StatusBar
         barStyle={

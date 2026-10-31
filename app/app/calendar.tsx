@@ -785,7 +785,7 @@ function EditorModal({
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.modalBackdrop}
       >
-        <SafeAreaView edges={["bottom"]} style={styles.editor}>
+        <SafeAreaView edges={["bottom", "left", "right"]} style={styles.editor}>
           <View style={styles.editorHeader}>
             <Pressable onPress={onClose} style={styles.headerAction}>
               <Text style={styles.secondaryText}>Cancel</Text>

@@ -94,7 +94,7 @@ machine with secrets, read [Permission bypass risks](executors.md#permission-byp
 
 ## Find your way
 
-| On a phone | On a wide screen (1024 pt and up) |
+| On a phone | With room for two panes (a tablet, an unfolded foldable) |
 | --- | --- |
 | ☰ opens the menu, or swipe right anywhere on Brain; swipe or tap **Brain · Sessions** in the top bar; ⋮ holds the current page's actions | The menu is a sidebar with Brain and Sessions on top; ⋮ is the same |
 

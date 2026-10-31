@@ -121,7 +121,7 @@ export function CalendarItemSheet({
   return (
     <Modal visible transparent animationType="slide" onRequestClose={selectedRun ? () => setRunId(null) : onClose}>
       <View style={styles.backdrop}>
-        <SafeAreaView edges={["bottom"]} style={styles.sheet}>
+        <SafeAreaView edges={["bottom", "left", "right"]} style={styles.sheet}>
           <View style={styles.handle} />
           {selectedRun ? (
             <ImageOwnerContext.Provider value={imageOwner}>

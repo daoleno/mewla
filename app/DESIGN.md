@@ -86,9 +86,18 @@ preference.
   on Sessions when a Session needs you) and one ⋮ page action. The menu
   slides over the page. Nothing else is pinned under the app bar: no status
   strip, no goal line, no connection banner.
-- **Wide (≥ 1024 pt).** The menu docks as a permanent sidebar and the app bar
-  shows the page title. On native tablets it docks beside Brain and Sessions;
-  on desktop web it docks beside every page (see Desktop web).
+- **Room for two panes (≥ 640 pt wide and ≥ 500 pt tall).** The menu docks as
+  a permanent sidebar and the app bar shows the page title. This follows the
+  window's size alone, never the device or its orientation: a tablet, a
+  foldable's inner screen and a resized window dock; a phone, held either way,
+  does not. Folding or unfolding only adds or removes the sidebar, and the
+  page keeps its state. On native it docks beside Brain and Sessions; on
+  desktop web it docks beside every page (see Desktop web). The thresholds
+  live in `constants/windowRoom.ts`.
+- **Side insets.** Every page sits inside the left and right safe areas (a
+  foldable's rail, a landscape notch): one frame around each screen in the root
+  Stack (`HorizontalSafeAreaFrame`), and floating layers (toasts, sheets, the
+  phone float) add the insets themselves.
 - **Brain and Sessions have one home per layout.** On phone it is the app
   bar's switch, so the menu does not list them. Docked (wide), the sidebar
   lists them and the app bar shows the page title instead of the switch.
@@ -249,7 +258,7 @@ Brain has one Work surface, built from the daemon's `current_work`, then its
 waiting on something not live) (`components/brain/brainWorkSurface.ts`, pure
 and tested):
 
-- **Wide (≥ 1024 pt).** A 360 pt Work column to the right of the conversation
+- **Wide (≥ 1024 pt, with the sidebar docked).** A 360 pt Work column to the right of the conversation
   (`BrainWorkColumn`): "Work", the goal line when there is one, a count
   line, then slips grouped Needs you ·
   Running · Back · Waiting · Queued. Queued and Waiting slips carry no

@@ -24,7 +24,6 @@ import { WorkerSessionSelectionBar } from "../workers/WorkerSessionSelectionBar"
 import { usePrimarySelectionBar } from "../navigation/PrimarySelectionBar";
 import { groupWorkersByDirectory } from "../../services/workerDirectory";
 import {
-  PRIMARY_SIDEBAR_BREAKPOINT,
   PrimaryDrawerShell,
   resolvePrimaryAppBarGeometry,
 } from "../navigation/PrimaryDrawerShell";
@@ -56,6 +55,7 @@ import {
   useAppColors,
   useAppTheme,
 } from "../../constants/tokens";
+import { shouldShowBrainWorkColumn } from "../../constants/windowRoom";
 import { buildChatChrome } from "../../theme";
 import {
   SCREENSHOT_CHOICE_FIXTURE,
@@ -840,8 +840,8 @@ function BrainChatDemo({ empty, running, loading = false, events, work }: { empt
   });
   const hasContent = draft.trim().length > 0;
   const appBarInset = resolvePrimaryAppBarGeometry(insets.top).contentInset;
-  const { width } = useWindowDimensions();
-  const workColumn = Boolean(work) && width >= PRIMARY_SIDEBAR_BREAKPOINT;
+  const { width, height } = useWindowDimensions();
+  const workColumn = Boolean(work) && shouldShowBrainWorkColumn(width, height);
   const surface = useMemo(() => brainWorkSurface(work?.currentWork, work?.workers), [work]);
   const topChromeInset = appBarInset;
 

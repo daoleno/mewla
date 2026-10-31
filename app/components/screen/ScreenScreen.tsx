@@ -14,6 +14,7 @@ import * as Haptics from "expo-haptics";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
+import { hasRoomyHeight } from "../../constants/windowRoom";
 import { useCurrentServer } from "../../store/currentServer";
 import { currentTransportPath, directPathBecameAvailable, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
@@ -86,11 +87,13 @@ const SHORTCUTS: { label: string; name: string; text?: string; key?: ScreenKey; 
 export function ScreenScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
-  // A phone held sideways: the screen takes the whole display. A desktop
-  // window is always wider than tall and keeps its page header.
+  const { height } = useWindowDimensions();
+  // Not enough height for a page header beside the picture (a phone held
+  // sideways): the screen takes the whole display. Height decides, not
+  // aspect ratio: an unfolded foldable is wider than tall yet roomy. A
+  // desktop window keeps its page header.
   const desktopWeb = useDesktopWeb();
-  const landscape = width > height && !desktopWeb;
+  const immersive = !hasRoomyHeight(height) && !desktopWeb;
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
   const serverName = serverDisplayName(currentServer?.name);
@@ -283,7 +286,9 @@ export function ScreenScreen() {
     return () => clearInterval(timer);
   }, [currentServer, phase, watching, isCurrentServer, connect]);
 
-  // Only this page may rotate; the rest of the app stays portrait.
+  // This page asks to rotate and, on leaving, for portrait again. Both are
+  // preferences the system may refuse (iOS 27, foldables): nothing here
+  // assumes the orientation, the layout follows the window.
   useEffect(() => {
     if (Platform.OS === "web") return;
     void ScreenOrientation.unlockAsync().catch(() => {});
@@ -469,7 +474,7 @@ export function ScreenScreen() {
   const header = (
     <Stack.Screen options={{
       title,
-      headerShown: !landscape,
+      headerShown: !immersive,
       headerRight: () => currentServer ? (
         <IconButton icon="more-vertical" size={40} accessibilityLabel="Screen options" onPress={() => setMenu(true)} />
       ) : null,
@@ -497,11 +502,11 @@ export function ScreenScreen() {
   const readoutHeadline = streamHeadline(readout);
   const viewerVisible = phase === "connecting" || phase === "live";
   const active = activeModifiers(mods);
-  const cornerTop = landscape ? Math.max(insets.top, Spacing.sm) : Spacing.sm;
+  const cornerTop = immersive ? Math.max(insets.top, Spacing.sm) : Spacing.sm;
   const agentLabel = status?.agent?.name || "An agent";
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingLeft: landscape ? insets.left : 0, paddingRight: landscape ? insets.right : 0 }]}>
+    <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
       {header}
       {sheet}
       {phase === "setup" && status ? (
@@ -601,7 +606,7 @@ export function ScreenScreen() {
         <View style={[styles.tray, { borderTopColor: colors.borderSubtle, paddingBottom: typing ? Spacing.xs : Math.max(insets.bottom, Spacing.xs) }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
             <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />
-            {landscape ? <KeyButton label="" icon="more-vertical" name="Screen options" onPress={() => setMenu(true)} /> : null}
+            {immersive ? <KeyButton label="" icon="more-vertical" name="Screen options" onPress={() => setMenu(true)} /> : null}
             {MODIFIERS.map((m) => (
               <KeyButton key={m.key} label={m.label} name={m.name} active={active.includes(m.key)} locked={mods.locked.includes(m.key)}
                 onPress={() => setMods(tapModifier(modsRef.current, m.key))} />
