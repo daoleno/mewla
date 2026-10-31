@@ -22,6 +22,7 @@ const (
 	ActKey     = "key"
 	ActWait    = "wait"
 	ActHandoff = "handoff"
+	ActSteps   = "steps"
 )
 
 // AgentAction is one thing an agent asks of the phone, in the words of the tools it has.
@@ -30,10 +31,13 @@ type AgentAction struct {
 	// App is a label or package, for launch.
 	App string `json:"app,omitempty"`
 	// Element is an id from the latest screen, for tap, type and swipe.
-	Element int  `json:"element,omitempty"`
-	X       int  `json:"x,omitempty"`
-	Y       int  `json:"y,omitempty"`
-	Long    bool `json:"long,omitempty"`
+	Element int `json:"element,omitempty"`
+	// Match names the element for tap, type and swipe by its text, description or hint on the
+	// screen as it is now, waiting a few seconds for it to appear; Element wins when both are set.
+	Match string `json:"match,omitempty"`
+	X     int    `json:"x,omitempty"`
+	Y     int    `json:"y,omitempty"`
+	Long  bool   `json:"long,omitempty"`
 	// Text is typed into the focused field (or the Element, which is tapped first).
 	Text    string `json:"text,omitempty"`
 	Replace bool   `json:"replace,omitempty"`
@@ -55,6 +59,8 @@ type AgentAction struct {
 	Reason string `json:"reason,omitempty"`
 	// Image asks for a picture of the screen with the answer.
 	Image bool `json:"image,omitempty"`
+	// Steps are a batch's actions, run in order by ActSteps; only the last one's screen is returned.
+	Steps []AgentAction `json:"steps,omitempty"`
 }
 
 // AgentResult is what the agent sees: the screen as text, and a JPEG when it is needed.
@@ -67,15 +73,22 @@ const (
 	// actionBudget bounds an action that takes a few ops, each of which the phone answers quickly.
 	actionBudget = 2 * time.Minute
 	maxWaitSecs  = 10
-	pollEvery    = 500 * time.Millisecond
+	pollEvery    = 250 * time.Millisecond
 	appsFresh    = 10 * time.Second
 	maxApps      = 300
+	// maxSteps bounds a batch; stepsBudget is how long one may take in all.
+	maxSteps    = 12
+	stepsBudget = 3 * time.Minute
+	// matchWait is how long a step that names an element by its text waits for it to appear.
+	matchWait = 4 * time.Second
 )
 
 // Budget is the longest the daemon lets an action take: every layer that waits for it (the
 // control socket call, the agent's tool timeout) is longer than this.
 func (a AgentAction) Budget() time.Duration {
 	switch a.Action {
+	case ActSteps:
+		return stepsBudget + actionBudget
 	case ActHandoff:
 		return HandoffDefault + handoffGrace + actionBudget
 	case ActWait:
@@ -162,6 +175,8 @@ func (a *Agent) run(ctx context.Context, w worker, act AgentAction, t *trace) (A
 		return a.wait(ctx, w, act)
 	case ActHandoff:
 		return a.handoff(ctx, w, act)
+	case ActSteps:
+		return a.runSteps(ctx, w, act)
 	}
 	return AgentResult{}, fmt.Errorf("unknown phone action %q", act.Action)
 }
@@ -252,8 +267,8 @@ func (a *Agent) resolve(ctx context.Context, id int, t *trace) (Element, error) 
 func (a *Agent) tap(ctx context.Context, w worker, act AgentAction, t *trace) (AgentResult, error) {
 	x, y := act.X, act.Y
 	switch {
-	case act.Element > 0:
-		el, err := a.resolve(ctx, act.Element, t)
+	case act.Element > 0 || act.Match != "":
+		el, err := a.target(ctx, w, act, t)
 		if err != nil {
 			return AgentResult{}, err
 		}
@@ -296,8 +311,8 @@ func (a *Agent) typeText(ctx context.Context, w worker, act AgentAction, t *trac
 	if act.Text == "" && !act.Replace {
 		return AgentResult{}, errors.New("type needs text (with replace true, empty text clears the field)")
 	}
-	if act.Element > 0 {
-		el, err := a.resolve(ctx, act.Element, t)
+	if act.Element > 0 || act.Match != "" {
+		el, err := a.target(ctx, w, act, t)
 		if err != nil {
 			return AgentResult{}, err
 		}
@@ -403,10 +418,18 @@ func strokeFor(direction string, amount float64, left, top, right, bottom int) (
 }
 
 func (a *Agent) wait(ctx context.Context, w worker, act AgentAction) (AgentResult, error) {
+	res, _, err := a.waitFor(ctx, w, act)
+	return res, err
+}
+
+// waitFor is wait, and says whether the text it was asked to wait for appeared (true when it was
+// asked for none).
+func (a *Agent) waitFor(ctx context.Context, w worker, act AgentAction) (AgentResult, bool, error) {
 	secs := min(max(act.Seconds, 0), maxWaitSecs)
 	if strings.TrimSpace(act.For) == "" {
 		reply, err := a.do(ctx, w, OpWait, WaitArgs{MS: int(secs * 1000)}, act.Image)
-		return a.finish(ctx, w, reply, err, "")
+		res, err := a.finish(ctx, w, reply, err, "")
+		return res, true, err
 	}
 	if act.Seconds <= 0 {
 		secs = 5
@@ -416,15 +439,17 @@ func (a *Agent) wait(ctx context.Context, w worker, act AgentAction) (AgentResul
 		reply, err := a.do(ctx, w, OpScreen, ScreenArgs{}, false)
 		if err == nil && reply.Screen != nil {
 			if el, found := a.session(reply.Gen).Observe(reply.Screen).Find(act.For); found {
-				return a.finish(ctx, w, reply, nil, fmt.Sprintf("Found %q at [%d].", act.For, el.ID))
+				res, err := a.finish(ctx, w, reply, nil, fmt.Sprintf("Found %q at [%d].", act.For, el.ID))
+				return res, true, err
 			}
 		}
 		if err != nil || !a.now().Before(deadline) {
 			prefix := fmt.Sprintf("%q did not appear within %g seconds.", act.For, secs)
-			return a.finish(ctx, w, reply, err, prefix)
+			res, err := a.finish(ctx, w, reply, err, prefix)
+			return res, false, err
 		}
 		if err := a.sleep(ctx, pollEvery); err != nil {
-			return AgentResult{}, err
+			return AgentResult{}, false, err
 		}
 	}
 }

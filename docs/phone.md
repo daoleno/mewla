@@ -78,6 +78,7 @@ Agents Mewla starts get a `mewla_phone` tool set while Phone use is on:
 | `phone_screen` | Reads the screen as a list of elements with stable numbers, and a picture when asked |
 | `phone_apps`, `phone_launch` | Lists the apps and opens one on the agent's own screen. An app clone (应用分身, a work profile) is its own entry, such as `微信 (分身 999) — com.tencent.mm@999`; a bare package is always the app of your own |
 | `phone_tap`, `phone_swipe`, `phone_type`, `phone_key` | Presses, scrolls, types (any language) and presses Back, Home or Enter. Typing sets the field's text, and if the field does not show it, pastes through the clipboard, then sends key events; the agent is told which way it went |
+| `phone_steps` | Runs up to 12 actions (launch, tap, type, swipe, key, wait) in one call and returns only the last screen, so a whole flow (search, type, open the first result) costs one model turn. Elements can be named by their text (`match`), waited for up to 4 seconds. A step that fails ends the batch and the answer says which one and shows the screen as it stands |
 | `phone_wait` | Waits for the screen to settle or for some text to appear |
 | `phone_handoff` | Asks you to do something (a login, a code, a payment) and waits until you say Done |
 
