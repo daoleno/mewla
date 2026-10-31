@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import android.util.DisplayMetrics
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -116,6 +117,14 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
             }
         }
     }
+
+    /** The real metrics of a display (0 is the phone's own screen), or null when it is gone. */
+    fun metrics(id: Int): DisplayMetrics? = runCatching {
+        DisplayMetrics().also { manager.getDisplay(id).getRealMetrics(it) }
+    }.getOrNull()
+
+    /** The density the system gave this display, which a system override can make differ from [dpi]. */
+    fun effectiveDpi(): Int = metrics(displayId)?.densityDpi ?: dpi
 
     /** Whether the system still has this display: a removed one keeps its object but never draws again. */
     fun alive(): Boolean = !released && runCatching { manager.getDisplay(displayId) != null }.getOrDefault(true)
