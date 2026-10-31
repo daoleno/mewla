@@ -35,7 +35,7 @@ object PhoneController {
     private const val TAG = "MewlaPhone"
     private const val MIN_SDK = Build.VERSION_CODES.R
     private const val STALL_MS = 25_000L
-    // The agent display has the phone's real pixels; pictures for the model are scaled down to this width.
+    // The agent display has the phone's real pixels; what the agent sees and sends is the picture space, at most this wide.
     private const val MODEL_IMAGE_WIDTH = 720
     private const val REPLACE_EVERY_MS = 60_000L
     private const val WRITE_SECURE = "android.permission.WRITE_SECURE_SETTINGS"
@@ -205,8 +205,8 @@ object PhoneController {
             .put("guide", guide())
             .put("notifications", PhoneNotifier.canNotify(app))
             .put("state", state())
-            .put("w", display?.get(0) ?: 0)
-            .put("h", display?.get(1) ?: 0)
+            .put("w", pictureSize()?.get(0) ?: 0)
+            .put("h", pictureSize()?.get(1) ?: 0)
             .put("display_info", displayInfo ?: JSONObject.NULL)
             .put("agent", activeWorker ?: JSONObject.NULL)
             .put("drawn", drawn)
@@ -278,8 +278,37 @@ object PhoneController {
 
     val enabled: Boolean get() = prefs.enabled
 
-    /** The agent's display size, or null before it exists. */
+    /** The agent's display size in real pixels (what a person's touch maps onto), or null before it exists. */
     fun displaySize(): IntArray? = display
+
+    /**
+     * The picture space: the display scaled to at most [MODEL_IMAGE_WIDTH] wide, as pictures for the model are.
+     * Everything the agent sees and sends (screen size, element bounds, tap and swipe points) is in it, so a
+     * point on the picture is a point on the screen; only the phone itself works in real display pixels.
+     * The height is cut the way the helper cuts a scaled picture's, so both always agree.
+     */
+    fun pictureSize(): IntArray? = display?.let { d ->
+        val w = minOf(d[0], MODEL_IMAGE_WIDTH)
+        intArrayOf(w, maxOf(1, d[1] * w / d[0]))
+    }
+
+    /** A point of the picture space as a display pixel. */
+    private fun toDisplay(value: Int, axis: Int): Int {
+        val real = display ?: return value
+        val picture = pictureSize() ?: return value
+        return Math.round(value.toDouble() * real[axis] / picture[axis]).toInt().coerceIn(0, real[axis] - 1)
+    }
+
+    /** A box of display pixels (left, top, right, bottom) as a box of the picture space, in place. */
+    private fun toPicture(box: JSONArray?) {
+        val real = display ?: return
+        val picture = pictureSize() ?: return
+        if (box == null || box.length() != 4) return
+        for (i in 0 until 4) {
+            val axis = i % 2
+            box.put(i, Math.round(box.optInt(i).toDouble() * picture[axis] / real[axis]).toInt())
+        }
+    }
 
     private fun onWifi(): Boolean = runCatching {
         val cm = app.getSystemService(ConnectivityManager::class.java)
@@ -731,11 +760,12 @@ object PhoneController {
                 settleMax = 5_000
                 settleMin = 2_000
             }
-            "tap" -> helper.call("tap", JSONObject().put("x", args.getInt("x")).put("y", args.getInt("y")).put("long", args.optBoolean("long")))
+            "tap" -> helper.call("tap", JSONObject().put("x", toDisplay(args.getInt("x"), 0)).put("y", toDisplay(args.getInt("y"), 1)).put("long", args.optBoolean("long")))
                 .let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
             "swipe" -> helper.call(
                 "swipe",
-                JSONObject().put("x1", args.getInt("x1")).put("y1", args.getInt("y1")).put("x2", args.getInt("x2")).put("y2", args.getInt("y2"))
+                JSONObject().put("x1", toDisplay(args.getInt("x1"), 0)).put("y1", toDisplay(args.getInt("y1"), 1))
+                    .put("x2", toDisplay(args.getInt("x2"), 0)).put("y2", toDisplay(args.getInt("y2"), 1))
                     .put("ms", args.optInt("ms", 300)),
             ).let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
             "text" -> helper.call("text", JSONObject().put("value", args.getString("value")).put("replace", args.optBoolean("replace"))).let {
@@ -794,7 +824,7 @@ object PhoneController {
         val dpi = real.densityDpi
         val reply = helper.call("display", JSONObject().put("w", w).put("h", h).put("dpi", dpi))
         if (!reply.optBoolean("ok")) throw IllegalStateException(reply.optString("error", "no display"))
-        displayInfo = "${w}x$h asked ${dpi}dpi, system ${reply.optInt("effective_dpi")}dpi; phone ${reply.optInt("main_w")}x${reply.optInt("main_h")} ${reply.optInt("main_dpi")}dpi (app sees ${app.resources.displayMetrics.densityDpi}dpi)"
+        displayInfo = "${w}x$h asked ${dpi}dpi, system ${reply.optInt("effective_dpi")}dpi; phone ${reply.optInt("main_w")}x${reply.optInt("main_h")} ${reply.optInt("main_dpi")}dpi (app sees ${app.resources.displayMetrics.densityDpi}dpi); agent sees ${minOf(w, MODEL_IMAGE_WIDTH)} wide"
         Log.i(TAG, "agent display $displayInfo")
         display = intArrayOf(w, h)
         publish()
@@ -812,6 +842,13 @@ object PhoneController {
         val tree = helper.call("tree")
         if (!tree.optBoolean("ok")) return failure(id, "failed", tree.optString("error"))
         val windows = tree.optJSONArray("windows") ?: JSONArray()
+        val picture = pictureSize() ?: intArrayOf(tree.optInt("w"), tree.optInt("h"))
+        for (i in 0 until windows.length()) {
+            val window = windows.getJSONObject(i)
+            toPicture(window.optJSONArray("bounds"))
+            val nodes = window.optJSONArray("nodes") ?: continue
+            for (j in 0 until nodes.length()) toPicture(nodes.getJSONObject(j).optJSONArray("b"))
+        }
         val interactive = tree.optBoolean("interactive", true)
         val result = JSONObject().put("type", "result").put("id", id).put("ok", true)
         val screenOff = windows.length() == 0 && !interactive
@@ -823,13 +860,13 @@ object PhoneController {
             result.put("ok", false).put("code", "screen_off")
                 .put("error", "The phone's own screen is off, so the screen cannot be read as elements. The picture is current; the person can wake the phone.")
         } else {
-            result.put("screen", JSONObject().put("w", tree.optInt("w")).put("h", tree.optInt("h")).put("windows", windows))
+            result.put("screen", JSONObject().put("w", picture[0]).put("h", picture[1]).put("windows", windows))
         }
         // After an action on an app with nothing to read the picture is the answer: send it now, not after
         // another round trip. A plain read of such a screen is asked again with a picture only if needed
         // (a wait polls it, and a picture each time would be thrown away).
         if (wantImage || screenOff || (opaqueScreen && acted)) {
-            val shot = helper.call("screenshot", JSONObject().put("maxWidth", minOf(tree.optInt("w", MODEL_IMAGE_WIDTH), MODEL_IMAGE_WIDTH)).put("quality", 60), 15_000)
+            val shot = helper.call("screenshot", JSONObject().put("maxWidth", picture[0]).put("quality", 60), 15_000)
             if (shot.optBoolean("ok")) result.put("image", shot.getString("jpeg"))
         }
         // The display draws only when something changes. After an action with no new frame the picture is
