@@ -42,8 +42,19 @@ var axLib struct {
 	createString     func(alloc uintptr, text string, encoding uint32) uintptr
 	release          func(ref uintptr)
 
+	// Batched reads load apart from the rest (see loadBatchAX): without
+	// them an element is read one attribute at a time.
+	batch          bool
+	copyMultiple   func(element, attributes uintptr, options uint32, values *uintptr) int32
+	valueType      func(value uintptr) uint32
+	arrayCreate    func(alloc uintptr, values *uintptr, n int64, callbacks uintptr) uintptr
+	nullTypeID     func() uint64
+	arrayCallbacks uintptr // kCFTypeArrayCallBacks, used by address
+
 	system uintptr
 	attrs  map[string]uintptr
+	// walkSet is what reading an element for the tree asks for.
+	walkSet attrSet
 }
 
 const (
@@ -52,10 +63,14 @@ const (
 	axErrorCannotComplete = -25204
 	axValueCGPoint        = 1
 	axValueCGSize         = 2
+	axValueAXError        = 5
 	cfNumberDouble        = 13
 	axMaxDepth            = 30
 	axBudget              = 3 * time.Second
 	axLongString          = 4096
+	// axElementTimeout is how long one request to an element may take, never
+	// more than the walk has left.
+	axElementTimeout = time.Second
 )
 
 var (
@@ -128,6 +143,121 @@ func loadAX() bool {
 	return axLib.ok
 }
 
+// loadBatchAX loads what reading several attributes in one call needs. It
+// follows agent-desktop's approach (github.com/vercel-labs/agent-desktop,
+// Apache-2.0): AXUIElementCopyMultipleAttributeValues with a slot per
+// attribute, where a slot that failed holds an AXError value instead. Any
+// symbol missing leaves batch off, and elements are read one attribute at a
+// time as before; it never turns accessibility itself off.
+func loadBatchAX(libs map[string]uintptr) {
+	for _, fn := range []struct {
+		ptr  any
+		lib  string
+		name string
+	}{
+		{&axLib.copyMultiple, "ApplicationServices", "AXUIElementCopyMultipleAttributeValues"},
+		{&axLib.valueType, "ApplicationServices", "AXValueGetType"},
+		{&axLib.arrayCreate, "CoreFoundation", "CFArrayCreate"},
+		{&axLib.nullTypeID, "CoreFoundation", "CFNullGetTypeID"},
+	} {
+		if _, err := purego.Dlsym(libs[fn.lib], fn.name); err != nil {
+			log.Printf("screen: reading elements one attribute at a time: no %s", fn.name)
+			return
+		}
+		purego.RegisterLibFunc(fn.ptr, libs[fn.lib], fn.name)
+	}
+	// A data symbol: its address is the callbacks structure.
+	callbacks, err := purego.Dlsym(libs["CoreFoundation"], "kCFTypeArrayCallBacks")
+	if err != nil || callbacks == 0 {
+		log.Printf("screen: reading elements one attribute at a time: no kCFTypeArrayCallBacks")
+		return
+	}
+	axLib.arrayCallbacks = callbacks
+	axLib.batch = true
+}
+
+// attrSet is a list of attributes read together, with the CFArray of their
+// names a batch call takes, kept for the life of the process.
+type attrSet struct {
+	names []string
+	array uintptr // 0 without batch
+}
+
+func newAttrSet(names ...string) attrSet {
+	set := attrSet{names: names}
+	if !axLib.batch {
+		return set
+	}
+	refs := make([]uintptr, len(names))
+	for i, name := range names {
+		if refs[i] = axLib.attrs[name]; refs[i] == 0 {
+			return set
+		}
+	}
+	set.array = axLib.arrayCreate(0, &refs[0], int64(len(refs)), axLib.arrayCallbacks)
+	return set
+}
+
+// axReadMany reads set's attributes of element, in one request when it can.
+// Slot i is the value of set.names[i], or 0 when there is none: no value,
+// an error, or null. The slots are borrowed; done releases them, after the
+// caller has finished with them. A request that failed because the app
+// didn't answer, or the element is gone, is not retried one attribute at a
+// time, which would cost a timeout each.
+func axReadMany(element uintptr, set attrSet) (slots []uintptr, done func()) {
+	slots = make([]uintptr, len(set.names))
+	if set.array != 0 {
+		var values uintptr
+		code := axLib.copyMultiple(element, set.array, 0, &values)
+		if code == 0 && values != 0 && axLib.typeID(values) == axLib.arrayTypeID() && axLib.arrayCount(values) == int64(len(slots)) {
+			for i := range slots {
+				if v := axLib.arrayAt(values, int64(i)); axSlotUsable(v) {
+					slots[i] = v
+				}
+			}
+			return slots, func() { axLib.release(values) }
+		}
+		if values != 0 {
+			axLib.release(values)
+		}
+		if code == axErrorCannotComplete || code == axErrorInvalidElement || code == axErrorAPIDisabled {
+			return slots, func() {}
+		}
+	}
+	for i, name := range set.names {
+		slots[i], _ = axCopy(element, name)
+	}
+	return slots, func() {
+		for _, v := range slots {
+			if v != 0 {
+				axLib.release(v)
+			}
+		}
+	}
+}
+
+// axSlotUsable says whether a batch slot holds a value: not nothing, not
+// kCFNull and not the AXError value a failed attribute leaves.
+func axSlotUsable(v uintptr) bool {
+	if v == 0 {
+		return false
+	}
+	switch axLib.typeID(v) {
+	case axLib.nullTypeID():
+		return false
+	case axLib.valueTypeID():
+		return axLib.valueType(v) != axValueAXError
+	}
+	return true
+}
+
+// elementTimeout is the messaging timeout for one element: the usual, but
+// not past the walk's deadline.
+func elementTimeout(deadline time.Time) float32 {
+	left := min(axElementTimeout, time.Until(deadline))
+	return float32(max(left, 100*time.Millisecond).Seconds())
+}
+
 // Elements reads the focused app's focused window. A hung app costs at most
 // the messaging timeout per request and the walk at most axBudget.
 func (b *macBackend) Elements(ctx context.Context, limit int) (ElementTree, error) {
@@ -172,12 +302,17 @@ func walkElements(ctx context.Context, tree *ElementTree, root uintptr, limit in
 			tree.Truncated = true
 			return
 		}
-		e := Element{Depth: depth, Role: axString(element, "AXRole"), Title: axString(element, "AXTitle"),
-			Frame: axFrame(element), Enabled: axBool(element, "AXEnabled", true), Focused: axBool(element, "AXFocused", false)}
+		axLib.setTimeout(element, elementTimeout(deadline))
+		slots, done := axReadMany(element, axLib.walkSet)
+		defer done()
+		const role, title, description, position, size, enabled, focused, children = 0, 1, 2, 3, 4, 5, 6, 7
+		e := Element{Depth: depth, Role: cfStringOf(slots[role]), Title: cfStringOf(slots[title]),
+			Frame: cfFrame(slots[position], slots[size]), Enabled: cfBoolOf(slots[enabled], true), Focused: cfBoolOf(slots[focused], false)}
 		if e.Title == "" {
-			e.Title = axString(element, "AXDescription")
+			e.Title = cfStringOf(slots[description])
 		}
-		// A password is never read, so it can't be shown or kept.
+		// A password is never read, so it can't be shown or kept: its value
+		// is read only now that its role is known, and not in the batch.
 		if e.Role != "AXSecureTextField" {
 			e.Value = axValueText(element)
 		}
@@ -189,17 +324,13 @@ func walkElements(ctx context.Context, tree *ElementTree, root uintptr, limit in
 		if depth >= axMaxDepth {
 			return
 		}
-		children, code := axCopy(element, "AXChildren")
-		if code != 0 || children == 0 {
-			return
-		}
-		defer axLib.release(children)
-		if axLib.typeID(children) != axLib.arrayTypeID() {
+		list := slots[children]
+		if list == 0 || axLib.typeID(list) != axLib.arrayTypeID() {
 			return
 		}
 		// Children belong to the array, which outlives this loop.
-		for i, n := int64(0), axLib.arrayCount(children); i < n; i++ {
-			walk(axLib.arrayAt(children, i), depth+1)
+		for i, n := int64(0), axLib.arrayCount(list); i < n; i++ {
+			walk(axLib.arrayAt(list, i), depth+1)
 		}
 	}
 	walk(root, 0)
@@ -221,7 +352,12 @@ func axString(element uintptr, attribute string) string {
 		return ""
 	}
 	defer axLib.release(value)
-	if axLib.typeID(value) != axLib.stringTypeID() {
+	return cfStringOf(value)
+}
+
+// cfStringOf is a string value's text, or "" for anything else.
+func cfStringOf(value uintptr) string {
+	if value == 0 || axLib.typeID(value) != axLib.stringTypeID() {
 		return ""
 	}
 	return cfString(value)
@@ -245,6 +381,10 @@ func axValueText(element uintptr) string {
 		return ""
 	}
 	defer axLib.release(value)
+	return cfValueText(value)
+}
+
+func cfValueText(value uintptr) string {
 	switch axLib.typeID(value) {
 	case axLib.stringTypeID():
 		return cfString(value)
@@ -268,29 +408,29 @@ func axBool(element uintptr, attribute string, missing bool) bool {
 		return missing
 	}
 	defer axLib.release(value)
-	if axLib.typeID(value) != axLib.booleanTypeID() {
+	return cfBoolOf(value, missing)
+}
+
+// cfBoolOf is a boolean value, or missing when there is none.
+func cfBoolOf(value uintptr, missing bool) bool {
+	if value == 0 || axLib.typeID(value) != axLib.booleanTypeID() {
 		return missing
 	}
 	return axLib.boolValue(value)
 }
 
-// axFrame is the element's frame in global points, which are the main
-// display's framebuffer pixels: capture runs at the display's point size.
-func axFrame(element uintptr) image.Rectangle {
+// cfFrame is the element's frame from its position and size values, in global
+// points, which are the main display's framebuffer pixels: capture runs at
+// the display's point size.
+func cfFrame(position, size uintptr) image.Rectangle {
 	var at cgPoint
-	var size struct{ W, H float64 }
-	if !axGeometry(element, "AXPosition", axValueCGPoint, unsafe.Pointer(&at)) ||
-		!axGeometry(element, "AXSize", axValueCGSize, unsafe.Pointer(&size)) {
+	var extent struct{ W, H float64 }
+	if !cfGeometry(position, axValueCGPoint, unsafe.Pointer(&at)) || !cfGeometry(size, axValueCGSize, unsafe.Pointer(&extent)) {
 		return image.Rectangle{}
 	}
-	return image.Rect(int(math.Round(at.X)), int(math.Round(at.Y)), int(math.Round(at.X+size.W)), int(math.Round(at.Y+size.H)))
+	return image.Rect(int(math.Round(at.X)), int(math.Round(at.Y)), int(math.Round(at.X+extent.W)), int(math.Round(at.Y+extent.H)))
 }
 
-func axGeometry(element uintptr, attribute string, kind uint32, out unsafe.Pointer) bool {
-	value, code := axCopy(element, attribute)
-	if code != 0 || value == 0 {
-		return false
-	}
-	defer axLib.release(value)
-	return axLib.typeID(value) == axLib.valueTypeID() && axLib.valueGetValue(value, kind, out)
+func cfGeometry(value uintptr, kind uint32, out unsafe.Pointer) bool {
+	return value != 0 && axLib.typeID(value) == axLib.valueTypeID() && axLib.valueGetValue(value, kind, out)
 }
