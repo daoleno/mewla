@@ -297,9 +297,16 @@ func formatApps(apps []App) string {
 // Actions most elements offer; they alone don't make an element worth a line.
 var commonActions = map[string]bool{"AXScrollToVisible": true, "AXShowMenu": true}
 
+// readStats counts what an answer holds, for the audit: lines shown, and
+// whether the app had more than was shown.
+type readStats struct {
+	rows      int
+	truncated bool
+}
+
 // formatAppTree lists an app's elements with the ids an agent acts on. An
 // element on the screen also gets the point to click, in screenshot pixels.
-func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent func(image.Point) (int, int)) string {
+func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent func(image.Point) (int, int)) (string, readStats) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "App: %s, pid %d", oneLine(app.Name), app.PID)
 	if app.Active {
@@ -365,7 +372,7 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	default:
 		b.WriteString("Nothing readable: this app shows little to accessibility; use screenshots.\n")
 	}
-	return b.String()
+	return b.String(), readStats{rows: shown, truncated: hidden > 0 || tree.Truncated}
 }
 
 // Shortcut is a menu item's keyboard shortcut: command with a character,

@@ -153,6 +153,11 @@ type AgentResult struct {
 	Image  []byte `json:"image,omitempty"`
 	Width  int    `json:"width,omitempty"`
 	Height int    `json:"height,omitempty"`
+
+	// rows and truncated count what a read of an app answered with, for the
+	// audit: counts only, never content. They are not part of the answer.
+	rows      int
+	truncated bool
 }
 
 // AgentState is what the app shows while an agent uses the screen.
@@ -308,6 +313,7 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	if action.Action == "steps" {
 		return s.runSteps(ctx, worker, action.Steps)
 	}
+	started := time.Now()
 	if _, err := s.AgentReady(ctx); err != nil {
 		return AgentResult{}, err
 	}
@@ -327,7 +333,7 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 			agent.mu.Lock()
 			agent.lastUse = time.Now()
 			agent.mu.Unlock()
-			s.audit(worker, action, err)
+			s.audit(worker, action, AgentResult{}, started, err)
 			return AgentResult{}, err
 		}
 	}
@@ -342,7 +348,7 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	agent.inflight--
 	agent.lastUse = time.Now()
 	agent.mu.Unlock()
-	s.audit(worker, action, err)
+	s.audit(worker, action, result, started, err)
 	return result, err
 }
 
@@ -718,7 +724,8 @@ func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult,
 	a.tree, a.treeApp = &tree, app
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return AgentResult{Text: formatAppTree(app, tree, a.latest.Rect, a.toAgent)}, nil
+	text, stats := formatAppTree(app, tree, a.latest.Rect, a.toAgent)
+	return AgentResult{Text: text, rows: stats.rows, truncated: stats.truncated}, nil
 }
 
 // elementSettle lets an app redraw after an element action, before the app
@@ -1626,12 +1633,21 @@ type auditLine struct {
 	TextLength int       `json:"text_length,omitempty"`
 	TextHash   string    `json:"text_sha256,omitempty"`
 	Error      string    `json:"error,omitempty"`
+	// How fast and how big, to measure reading: Ms is the action's whole
+	// time, waiting for a person included; Rows and Truncated are for a read
+	// of an app; Bytes is the answer's text and picture. Counts, never content.
+	Ms        int64 `json:"ms"`
+	Rows      int   `json:"rows,omitempty"`
+	Truncated bool  `json:"truncated,omitempty"`
+	Bytes     int   `json:"bytes"`
 }
 
-// audit records what an agent did, never what it typed or saw.
-func (s *Service) audit(worker string, action AgentAction, actErr error) {
+// audit records what an agent did, never what it typed or saw. started is
+// when the action began, for its duration.
+func (s *Service) audit(worker string, action AgentAction, result AgentResult, started time.Time, actErr error) {
 	line := auditLine{Time: time.Now().UTC(), Worker: worker, Action: action.Action, Coordinate: action.Coordinate, Start: action.StartCoordinate, App: action.App,
-		Element: action.Element, Does: action.ElementAction}
+		Element: action.Element, Does: action.ElementAction, Ms: time.Since(started).Milliseconds(),
+		Rows: result.rows, Truncated: result.truncated, Bytes: len(result.Text) + len(result.Image)}
 	switch {
 	case action.Action == "type", action.Action == "element" && action.Text != "":
 		sum := sha256.Sum256([]byte(action.Text))

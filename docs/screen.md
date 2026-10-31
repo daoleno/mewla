@@ -182,9 +182,11 @@ missing, and **Open Settings** opens the right page on the Mac.
   ends a minute after its last action.
 - **What is kept.** Each action is recorded on the Mac in
   `~/.mewla/screen-agent-audit.jsonl` (readable only by you, kept 30 days):
-  which agent, which action, which app and control, where, which keys. What
-  it typed or filled in is kept only as a length and a fingerprint;
-  screenshots and what it read are not kept.
+  which agent, which action, which app and control, where, which keys, how
+  long it took, and how big the answer was (with the number of lines and
+  whether the app had more than was read). What it typed or filled in is kept
+  only as a length and a fingerprint; screenshots and what it read are not
+  kept.
 
 Brain has agents ask you before they send, pay, delete or change an account,
 and use the screen only when no command, file or website route will do. Text
