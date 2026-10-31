@@ -73,7 +73,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     # Its own job on the iOS image, so a retired workaround turns this red
     # without stopping the iOS caches from being refreshed.
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +87,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     # Same image as ios-release.yml: the cache keys hash the Xcode, SDK and
     # CocoaPods versions.
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       MEWLA_IOS_APP_VARIANT: preview

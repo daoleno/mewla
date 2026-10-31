@@ -12,7 +12,7 @@ import React, {
 import {
   type PressableProps,
   StyleSheet,
-  View,
+  View, type ViewInstance,
 } from "react-native";
 import { useIsFocused } from "expo-router";
 import { useAppColors } from "../../constants/tokens";
@@ -246,7 +246,7 @@ function MainActionButton({
   drawerVisible: boolean;
 }) {
   const colors = useAppColors();
-  const ref = useRef<View>(null);
+  const ref = useRef<ViewInstance>(null);
   useWebTooltip(ref, action.tooltip ?? action.accessibilityLabel);
   const disabled = Boolean(action.disabled);
   return (

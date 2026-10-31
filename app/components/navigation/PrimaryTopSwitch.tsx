@@ -141,7 +141,8 @@ export function PrimaryTopSwitch({
   const fallbackPosition = useRef(
     new Animated.Value(primaryRoutePagerIndex(activeRoute)),
   ).current;
-  const position = pagerPosition ?? fallbackPosition;
+  // Both nodes interpolate the same way; the union of their call signatures is not callable.
+  const position = (pagerPosition ?? fallbackPosition) as Animated.Value;
   const brainSelected = activeRoute === "brain";
   const listSelected = activeRoute === "list";
   const pendingRouteRef = useRef<PrimaryRouteName | null>(null);

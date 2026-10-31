@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
+  View, type ScrollViewInstance,
 } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale, Typography } from "../../constants/tokens";
@@ -59,7 +59,7 @@ export function ClaudeChoiceCard({
   const [typing, setTyping] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const tabsRef = useRef<ScrollView>(null);
+  const tabsRef = useRef<ScrollViewInstance>(null);
   const tabOffsets = useRef<Record<number, number>>({});
 
   useEffect(() => {

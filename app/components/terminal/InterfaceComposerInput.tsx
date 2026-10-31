@@ -5,9 +5,8 @@ import {
   Text,
   TextInput,
   View,
-  type NativeSyntheticEvent,
-  type TextInput as TextInputInstance,
-  type TextInputContentSizeChangeEventData,
+  type TextInputInstance,
+  type TextInputContentSizeChangeEvent,
 } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
@@ -58,7 +57,7 @@ export function InterfaceComposerInput({
   const centerInputText =
     draftEmpty || (!multilineDraft && inputHeight <= MIN_INPUT_HEIGHT);
   const handleContentSizeChange = useCallback(
-    (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => {
+    (event: TextInputContentSizeChangeEvent) => {
       const measuredHeight = Math.ceil(event.nativeEvent.contentSize.height);
       setInputHeight(
         Math.max(MIN_INPUT_HEIGHT, Math.min(maxInputHeight, measuredHeight)),
@@ -190,7 +189,7 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     // Web: no browser outline inside the pill; the capsule's own border
     // carries keyboard focus (InterfaceComposerExpandingDock).
-    ...(Platform.OS === "web" ? { outlineStyle: "none" as const } : null),
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
   },
   inputCentered: {
     paddingTop: Platform.OS === "android" ? 0 : 8,

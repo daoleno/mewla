@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
+  View, type TextInputInstance,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
@@ -42,7 +42,7 @@ const loader: SessionFilePreviewLoader = {
     };
   },
   binary: async (_server, _daemon, request) => ({
-    uri: Image.resolveAssetSource(images[request.path]).uri,
+    uri: Image.resolveAssetSource(images[request.path])?.uri ?? "",
     headers: {},
   }),
   text: async () => {
@@ -171,7 +171,7 @@ function ReadingSurface({
   );
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
   return (
     <InterfaceChatKeyboardFrame
       enabled

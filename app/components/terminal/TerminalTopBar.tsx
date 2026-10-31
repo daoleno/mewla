@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import type { ViewInstance } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { AgentKind } from "../../services/workerPresentation";
 import type { TerminalFlavor } from "../../services/terminalFlavor";
@@ -28,7 +29,7 @@ export interface TerminalTopBarProps {
   terminalFlavor?: TerminalFlavor;
   backgroundColor: string;
   chrome: TerminalThemeChrome;
-  menuAnchorRef: React.RefObject<import("react-native").View | null>;
+  menuAnchorRef: React.RefObject<ViewInstance | null>;
   interfaceRenderMode: StoredInterfaceRenderMode;
   gitDiffDisabled: boolean;
   gitDiffPresentation: TerminalTopBarGitDiffPresentation;

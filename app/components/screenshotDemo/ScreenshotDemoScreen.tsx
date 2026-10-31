@@ -11,7 +11,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  View,
+  View, type TextInputInstance, type ViewInstance,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRootNavigationState, useRouter } from "expo-router";
 import { useWindowDimensions } from "react-native";
@@ -432,9 +432,9 @@ function ChatDemo() {
     () => buildChatChrome(appTheme),
     [appTheme],
   );
-  const menuAnchorRef = useRef<View>(null);
+  const menuAnchorRef = useRef<ViewInstance>(null);
   const scrollRef = useRef<FlatList<TimelineItem>>(null);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const insets = useSafeAreaInsets();
   const requestedDraft = Array.isArray(params.draft)
     ? params.draft[0]
@@ -687,7 +687,7 @@ function GitDiffDemo() {
 function TerminalPaletteDemo() {
   const { theme: appTheme } = useAppTheme();
   const { chromeColors, terminalTheme } = useTerminalThemeChrome();
-  const menuAnchorRef = useRef<View>(null);
+  const menuAnchorRef = useRef<ViewInstance>(null);
   return (
     <SafeAreaView
       style={[styles.flex, { backgroundColor: chromeColors.appBackground }]}
@@ -817,7 +817,7 @@ function BrainChatDemo({ empty, running, loading = false, events, work }: { empt
     [appTheme],
   );
   const scrollRef = useRef<FlatList<TimelineItem>>(null);
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [providerActivityStartedAt] = useState(() =>
@@ -1051,12 +1051,12 @@ function ComposerStatesDemo() {
     () => buildChatChrome(appTheme),
     [appTheme],
   );
-  const compactRef = useRef<TextInput>(null);
-  const draftRef = useRef<TextInput>(null);
-  const expandedRef = useRef<TextInput>(null);
-  const runningRef = useRef<TextInput>(null);
-  const longLabelRef = useRef<TextInput>(null);
-  const routedRef = useRef<TextInput>(null);
+  const compactRef = useRef<TextInputInstance>(null);
+  const draftRef = useRef<TextInputInstance>(null);
+  const expandedRef = useRef<TextInputInstance>(null);
+  const runningRef = useRef<TextInputInstance>(null);
+  const longLabelRef = useRef<TextInputInstance>(null);
+  const routedRef = useRef<TextInputInstance>(null);
   const [compactDraft, setCompactDraft] = useState("");
   const [expandedDraft, setExpandedDraft] = useState("");
   const [runningDraft, setRunningDraft] = useState("");

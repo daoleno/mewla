@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { Platform, StyleSheet, View, type TextInput as TextInputInstance } from "react-native";
+import { Platform, StyleSheet, View, type TextInputInstance } from "react-native";
 import Reanimated, {
   useAnimatedStyle,
   useReducedMotion,

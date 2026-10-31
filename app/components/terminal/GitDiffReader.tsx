@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, VirtualizedList, useWindowDimensions, type ViewToken, type CellRendererProps } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, VirtualizedList, useWindowDimensions, type ListViewToken, type VirtualizedListInstance } from "react-native";
+import type { CellRendererProps } from "@react-native/virtualized-lists";
 import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
 import type { GitDiffPage, GitDiffPageRequest, GitDiffScope } from "../../services/gitDiff";
 import { ContinuousCorners, Radii, TouchTarget, TypeScale } from "../../constants/tokens";
@@ -46,7 +47,7 @@ export function GitDiffReader({ path, scope, loadPage, chrome, theme, position, 
   const initialHorizontalOffset = useRef(horizontalOffset.current).current;
   const visibleRow = useRef(state.targetRow ?? state.start);
   const interacted = useRef(false);
-  const list = useRef<VirtualizedList<IndexedDiffRow>>(null);
+  const list = useRef<VirtualizedListInstance>(null);
   const targetRow = useRef(state.targetRow);
   const initialCount = useRef(state.targetRow == null ? 12 : Math.max(12, state.targetRow - state.start + 1));
   const positionFrame = useRef<number | null>(null);
@@ -55,7 +56,7 @@ export function GitDiffReader({ path, scope, loadPage, chrome, theme, position, 
   const readingStyle = useRef({ wrap, fontSize });
   const onPositionRef = useRef(onPosition);
   onPositionRef.current = onPosition;
-  const viewability = useRef(({ viewableItems }: { viewableItems: ViewToken<IndexedDiffRow>[] }) => {
+  const viewability = useRef(({ viewableItems }: { viewableItems: ListViewToken[] }) => {
     const first = viewableItems.find(item => item.isViewable);
     if (first) visibleRow.current = first.item.index;
   });
@@ -116,9 +117,9 @@ export function GitDiffReader({ path, scope, loadPage, chrome, theme, position, 
   onTargetLayout.current = positionTarget;
   const edgeIndicator = (edge: "next" | "previous") => state.loading === edge ? (
     <View style={styles.pending}><ActivityIndicator size="small" accessibilityLabel="Loading diff" color={chrome.accent} /></View>
-  ) : null;
+  ) : undefined;
   const rows = (
-    <VirtualizedList<IndexedDiffRow>
+    <VirtualizedList
       key={state.anchor}
       ref={list}
       data={state}

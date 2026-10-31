@@ -1,4 +1,7 @@
-import type { ImageSourcePropType } from "react-native";
+import type { ImageSource } from "expo-image";
+
+/** What a pet frame is drawn from: a bundled asset or a URI. */
+export type PetImageSource = ImageSource | number;
 import type { BrainCatState } from "../mewla/brainCatState";
 
 /**
@@ -8,7 +11,7 @@ import type { BrainCatState } from "../mewla/brainCatState";
 export type PetClipName = BrainCatState | "going_back";
 
 export interface PetClip {
-  source: ImageSourcePropType;
+  source: PetImageSource;
   loop: boolean;
   /** One pass through every frame. */
   durationMs: number;
@@ -22,7 +25,7 @@ export interface PetClip {
 export interface PetPack {
   id: string;
   name: { en: string; zh: string };
-  portrait: ImageSourcePropType;
+  portrait: PetImageSource;
   clips: Record<PetClipName, PetClip>;
 }
 

@@ -13,7 +13,7 @@ import {
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  type TextInput,
+  type TextInput, type TextInputInstance,
 } from "react-native";
 import { useReducedMotion, useSharedValue } from "react-native-reanimated";
 import { agentKindFromProvider } from "../../services/workerPresentation";
@@ -1088,7 +1088,7 @@ export function useRelativeTimeLabel(targetTimestamp?: string) {
 }
 
 export function useInterfaceComposerInput({ enabled }: { enabled: boolean }) {
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const [focused, setFocused] = useState(false);
 
   const clearNativeText = useCallback(() => {

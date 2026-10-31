@@ -5,7 +5,7 @@ import React, {
   useImperativeHandle,
   useRef,
 } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View, type ViewInstance } from "react-native";
 import type { SessionFileMediaStatus } from "../../services/sessionFileMedia";
 import { sessionFileMediaFirstFrameUri } from "./sessionFileMediaWebViewHtml";
 import type {
@@ -65,7 +65,7 @@ export const SessionFileMediaSurface = forwardRef<
   ref,
 ) {
   const mediaRef = useRef<HTMLMediaElement | null>(null);
-  const frameRef = useRef<View | null>(null);
+  const frameRef = useRef<ViewInstance | null>(null);
   const callbacks = useRef({ onStatus, onError, onFullscreenChange });
   callbacks.current = { onStatus, onError, onFullscreenChange };
 

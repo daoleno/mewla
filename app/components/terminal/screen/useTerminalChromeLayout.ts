@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type View } from "react-native";
+import { type ViewInstance } from "react-native";
 import {
   buildMenuPosition,
   type MenuAnchorLayout,
@@ -18,7 +18,7 @@ export function useTerminalChromeLayout({
 }: UseTerminalChromeLayoutInput) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchorLayout | null>(null);
-  const menuAnchorRef = useRef<View | null>(null);
+  const menuAnchorRef = useRef<ViewInstance | null>(null);
 
   const menuPosition = useMemo(
     () => buildMenuPosition(menuAnchor, windowWidth, popoverWidth),
