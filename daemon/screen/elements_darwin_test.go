@@ -5,6 +5,7 @@ package screen
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,11 +43,13 @@ func processTrusted() (trusted, known bool) {
 }
 
 // batchedReadTargets are the apps the comparison reads, in order of
-// preference: ones with plenty of elements and nothing that ticks.
-var batchedReadTargets = []string{"Finder", "Notes", "System Settings"}
+// preference: ones with plenty of elements and nothing that ticks. They are
+// bundle ids, not names: a Mac in Chinese shows Finder as 访达, Notes as 备忘录
+// and System Settings as 系统设置.
+var batchedReadTargets = []string{"com.apple.finder", "com.apple.Notes", "com.apple.systempreferences"}
 
 // Reading with batched requests gives what reading one attribute at a time
-// does. It reads an app picked by name from the window list, so it does not
+// does. It reads an app picked by bundle id from the window list, so it does not
 // matter which app is in front: the terminal that runs `go test` is, and
 // focus-based reads would see that. It needs a Mac, Accessibility granted to
 // the process that runs the test, and Finder or Notes with a window open.
@@ -89,7 +92,7 @@ func TestBatchedReadsMatchSingleReads(t *testing.T) {
 		}
 		for _, name := range batchedReadTargets {
 			for _, app := range apps {
-				if app.Name == name && target.PID == 0 {
+				if strings.EqualFold(app.BundleID, name) && target.PID == 0 {
 					target = app
 				}
 			}
@@ -112,7 +115,7 @@ func TestBatchedReadsMatchSingleReads(t *testing.T) {
 	if target.PID == 0 {
 		names := make([]string, len(apps))
 		for i, app := range apps {
-			names[i] = app.Name
+			names[i] = app.Name + " <" + app.BundleID + ">"
 		}
 		macAXUnavailable(t, "none of %v has a window; open one. Apps with windows: %v", batchedReadTargets, names)
 	}
@@ -122,7 +125,7 @@ func TestBatchedReadsMatchSingleReads(t *testing.T) {
 	if len(single.Elements) == 0 || len(batched.Elements) == 0 {
 		macAXUnavailable(t, "%s (pid %d) answered with no elements: one by one %d, batched %d; it may have no window open, or accessibility is not granted", target.Name, target.PID, len(single.Elements), len(batched.Elements))
 	}
-	t.Logf("%s: %d elements one by one in %v, %d batched in %v", target.Name, len(single.Elements), singleTook, len(batched.Elements), batchedTook)
+	t.Logf("%s <%s>: %d elements one by one in %v, %d batched in %v", target.Name, target.BundleID, len(single.Elements), singleTook, len(batched.Elements), batchedTook)
 	if single.Truncated != batched.Truncated {
 		t.Logf("truncation differs: single %v, batched %v", single.Truncated, batched.Truncated)
 	}
