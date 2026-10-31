@@ -805,7 +805,7 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 		var text string
 		var stats readStats
 		var ok bool
-		if text, stats, why, ok = diffAnswer(*previous, tree, beforeRows, afterRows); ok {
+		if text, stats, why, ok = diffAnswer(*previous, tree, beforeRows, afterRows, action.Element); ok {
 			return AgentResult{Text: did + text, rows: stats.rows, diff: true}, nil
 		}
 	}

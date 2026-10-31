@@ -3,12 +3,15 @@ package screen
 import (
 	"fmt"
 	"image"
+	"sort"
 	"strings"
 )
 
 // appRow is one line of an app read: an element an agent is shown.
 type appRow struct {
 	id    int
+	depth int    // nesting under its window, not capped as the indent is
+	role  string // without the AX prefix
 	line  string // the whole line, indented
 	title string
 	value string
@@ -57,7 +60,7 @@ func appRows(tree ElementTree, screen image.Rectangle, toAgent func(image.Point)
 			x, y := toAgent(image.Pt((e.Frame.Min.X+e.Frame.Max.X)/2, (e.Frame.Min.Y+e.Frame.Max.Y)/2))
 			line += fmt.Sprintf(" at (%d, %d)", x, y)
 		}
-		rows = append(rows, appRow{id: tree.id(i), line: line, title: title, value: value, window: e.Depth == 0})
+		rows = append(rows, appRow{id: tree.id(i), depth: e.Depth, role: strings.TrimPrefix(e.Role, "AX"), line: line, title: title, value: value, window: e.Depth == 0})
 	}
 	return rows
 }
@@ -96,11 +99,116 @@ func describeElement(tree ElementTree, i int) string {
 	return text
 }
 
+// rowChange is one line of a difference: a row added, changed or gone.
+type rowChange struct {
+	id   int
+	role string
+	line string
+}
+
+// changedRows are the rows that differ between two reads, by element id: the
+// new and changed ones in reading order, then the ones that are gone.
+func changedRows(beforeRows, afterRows []appRow) []rowChange {
+	old := make(map[int]appRow, len(beforeRows))
+	for _, row := range beforeRows {
+		old[row.id] = row
+	}
+	current := make(map[int]bool, len(afterRows))
+	var changes []rowChange
+	for _, row := range afterRows {
+		current[row.id] = true
+		prev, existed := old[row.id]
+		switch {
+		case !existed:
+			changes = append(changes, rowChange{row.id, row.role, "+ " + strings.TrimLeft(row.line, " ")})
+		case prev.line != row.line:
+			line := "~ " + strings.TrimLeft(row.line, " ")
+			switch {
+			case prev.value != row.value:
+				line += fmt.Sprintf(` (was = "%s")`, prev.value)
+			case prev.title != row.title:
+				line += fmt.Sprintf(` (was "%s")`, prev.title)
+			}
+			changes = append(changes, rowChange{row.id, row.role, line})
+		}
+	}
+	for _, row := range beforeRows {
+		if !current[row.id] {
+			changes = append(changes, rowChange{row.id, row.role, "- " + strings.TrimLeft(row.line, " ")})
+		}
+	}
+	return changes
+}
+
+// rowIndex is the position of the row with id, or -1.
+func rowIndex(rows []appRow, id int) int {
+	for i, row := range rows {
+		if row.id == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// insideIDs are the ids of the rows that nest under rows[at]: the run after
+// it that lies deeper.
+func insideIDs(rows []appRow, at int, into map[int]bool) {
+	if at < 0 {
+		return
+	}
+	for _, row := range rows[at+1:] {
+		if row.depth <= rows[at].depth {
+			return
+		}
+		into[row.id] = true
+	}
+}
+
+// breakdown says where a large difference is, so a read that gave up on
+// comparing shows what churned: how much of it is inside the element acted
+// on and which roles the rest are.
+func breakdown(changes []rowChange, inside map[int]bool, acted string) string {
+	in, out := 0, 0
+	roles := map[string]int{}
+	for _, c := range changes {
+		if inside[c.id] {
+			in++
+		} else {
+			out++
+			roles[c.role]++
+		}
+	}
+	names := make([]string, 0, len(roles))
+	for role := range roles {
+		names = append(names, role)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if roles[names[i]] != roles[names[j]] {
+			return roles[names[i]] > roles[names[j]]
+		}
+		return names[i] < names[j]
+	})
+	for i, role := range names[:min(len(names), 4)] {
+		names[i] = fmt.Sprintf("%s ×%d", role, roles[role])
+	}
+	text := fmt.Sprintf("%d rows changed", len(changes))
+	if acted != "" {
+		text += fmt.Sprintf(", %d inside %s and %d elsewhere", in, acted, out)
+	}
+	if out > 0 {
+		text += " (elsewhere: " + strings.Join(names[:min(len(names), 4)], ", ") + ")"
+	}
+	return text
+}
+
 // diffAnswer says what changed between two reads of one app, by element id:
-// rows added, gone and changed, and where the focus went. ok is false when a
+// rows added, gone and changed, and where the focus went. acted is the
+// element the action was on, or 0: what changes under it (a text area whose
+// lines are rebuilt when its text is) is not listed row by row but counted
+// with that element, which is shown as it reads now. ok is false when a
 // difference would mislead or save little, and why says so: the caller then
 // gives the whole read.
-func diffAnswer(before, after ElementTree, beforeRows, afterRows []appRow) (text string, stats readStats, why string, ok bool) {
+func diffAnswer(before, after ElementTree, beforeRows, afterRows []appRow, acted int) (text string, stats readStats, why string, ok bool) {
 	switch {
 	case before.PID != after.PID:
 		return "", readStats{}, "it is another app", false
@@ -117,36 +225,47 @@ func diffAnswer(before, after ElementTree, beforeRows, afterRows []appRow) (text
 			return "", readStats{}, "a window opened or closed", false
 		}
 	}
-	old := make(map[int]appRow, len(beforeRows))
-	for _, row := range beforeRows {
-		old[row.id] = row
-	}
-	current := make(map[int]bool, len(afterRows))
-	var lines []string
-	for _, row := range afterRows {
-		current[row.id] = true
-		prev, existed := old[row.id]
-		switch {
-		case !existed:
-			lines = append(lines, "+ "+strings.TrimLeft(row.line, " "))
-		case prev.line != row.line:
-			line := "~ " + strings.TrimLeft(row.line, " ")
-			switch {
-			case prev.value != row.value:
-				line += fmt.Sprintf(` (was = "%s")`, prev.value)
-			case prev.title != row.title:
-				line += fmt.Sprintf(` (was "%s")`, prev.title)
-			}
-			lines = append(lines, line)
+	changes := changedRows(beforeRows, afterRows)
+	inside := map[int]bool{}
+	actedAt := -1
+	if acted != 0 {
+		// Only an element that is still there is shown as it reads now.
+		if actedAt = rowIndex(afterRows, acted); actedAt >= 0 {
+			insideIDs(afterRows, actedAt, inside)
+			insideIDs(beforeRows, rowIndex(beforeRows, acted), inside)
 		}
 	}
-	for _, row := range beforeRows {
-		if !current[row.id] {
-			lines = append(lines, "- "+strings.TrimLeft(row.line, " "))
+	var lines []string
+	changedInside, actedLine := 0, -1
+	for _, c := range changes {
+		switch {
+		case inside[c.id]:
+			changedInside++
+		default:
+			if c.id == acted {
+				actedLine = len(lines)
+			}
+			lines = append(lines, c.line)
+		}
+	}
+	if changedInside > 0 {
+		note := fmt.Sprintf(" — %d rows inside it changed with it", changedInside)
+		if changedInside == 1 {
+			note = " — 1 row inside it changed with it"
+		}
+		if actedLine >= 0 {
+			lines[actedLine] += note
+		} else {
+			// Only what is under it changed: it is still said how it reads.
+			lines = append(lines, "~ "+strings.TrimLeft(afterRows[actedAt].line, " ")+note)
 		}
 	}
 	if len(lines) > diffMaxRows || len(lines)*2 > len(afterRows) {
-		return "", readStats{}, "much of it changed", false
+		actedName := ""
+		if actedAt >= 0 {
+			actedName = fmt.Sprintf("[%d] %s", acted, afterRows[actedAt].role)
+		}
+		return "", readStats{}, "much of it changed: " + breakdown(changes, inside, actedName), false
 	}
 	var b strings.Builder
 	if len(lines) == 0 {
