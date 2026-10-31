@@ -51,7 +51,11 @@ type FakeBackend struct {
 	RunningApps    []FakeApp
 	Retained       int
 	ElementActions []FakeElementAction
-	AppKeys        []FakeAppKey
+	// OnElementAction, when set, runs after an element action on a fake app,
+	// to change its elements as the app would: a sheet opening, a field
+	// clearing. It runs holding the backend's lock.
+	OnElementAction func(app *FakeApp, index int, action string)
+	AppKeys         []FakeAppKey
 	// SkyLight lets clicks reach an app behind others; AppClicks are those
 	// clicks and Raised the apps brought to the front.
 	SkyLight  bool
@@ -560,7 +564,8 @@ func (f *FakeBackend) ActOnElement(_ context.Context, e Element, action, value s
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	pid, index := int(e.ref>>16), int(e.ref&0xffff)-1
-	for _, app := range f.RunningApps {
+	for i := range f.RunningApps {
+		app := &f.RunningApps[i]
 		if app.PID != pid || index < 0 || index >= len(app.Elements) {
 			continue
 		}
@@ -572,6 +577,9 @@ func (f *FakeBackend) ActOnElement(_ context.Context, e Element, action, value s
 			live.Value = value
 		}
 		f.ElementActions = append(f.ElementActions, FakeElementAction{PID: app.PID, Index: index, Action: action, Value: value})
+		if f.OnElementAction != nil {
+			f.OnElementAction(app, index, action)
+		}
 		return nil
 	}
 	return ErrStaleElement

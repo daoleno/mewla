@@ -314,48 +314,13 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	}
 	b.WriteString(".\nEach line: [id] role \"name\" = \"value\" {actions} at (x, y). Act on an element by its id; an element keeps its id while it stays the same, and an id whose element is gone is refused.\n")
 	shown, hidden := 0, 0
-	for i, e := range tree.Elements {
-		title, value := oneLine(e.Title), oneLine(e.Value)
-		if e.Role == "AXSecureTextField" {
-			value = ""
-		}
-		special := false
-		for _, action := range e.Actions {
-			special = special || !commonActions[action]
-		}
-		if title == "" && value == "" && !actionableRoles[e.Role] && !special && e.Role != "AXWindow" {
-			continue
-		}
+	for _, row := range appRows(tree, screen, toAgent) {
 		if shown == elementsShown {
 			hidden++
 			continue
 		}
 		shown++
-		line := strings.Repeat("  ", min(e.Depth, 8)) + fmt.Sprintf("[%d] %s", tree.id(i), strings.TrimPrefix(e.Role, "AX"))
-		if title != "" {
-			line += ` "` + title + `"`
-		}
-		if value != "" {
-			line += ` = "` + value + `"`
-		}
-		if len(e.Actions) > 0 {
-			names := make([]string, len(e.Actions))
-			for j, action := range e.Actions {
-				names[j] = strings.TrimPrefix(action, "AX")
-			}
-			line += " {" + strings.Join(names, ", ") + "}"
-		}
-		if !e.Enabled {
-			line += " (disabled)"
-		}
-		if e.Focused {
-			line += " (focused)"
-		}
-		if !e.Frame.Empty() && e.Frame.Overlaps(screen) {
-			x, y := toAgent(image.Pt((e.Frame.Min.X+e.Frame.Max.X)/2, (e.Frame.Min.Y+e.Frame.Max.Y)/2))
-			line += fmt.Sprintf(" at (%d, %d)", x, y)
-		}
-		b.WriteString(line + "\n")
+		b.WriteString(row.line + "\n")
 	}
 	if hidden > 0 {
 		fmt.Fprintf(&b, "(%d more not shown)\n", hidden)
