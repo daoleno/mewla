@@ -14,7 +14,7 @@ import (
 // process through lsof's field output (-F), which is a stable machine format.
 // Like any unprivileged lister it sees only the user's own processes.
 func listListeningSockets() ([]listeningSocket, error) {
-	out, err := procspawn.Command("lsof listeners", "lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pfdn").Output()
+	out, err := procspawn.Command("lsof listeners", procspawn.SystemTool("lsof"), "-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pfdn").Output()
 	if err != nil {
 		// lsof exits 1 when nothing matches or some file could not be read,
 		// and still prints what it found.

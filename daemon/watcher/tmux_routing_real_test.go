@@ -268,6 +268,24 @@ func waitForHarness(t *testing.T, summary string, ready func() bool) {
 	t.Fatalf("timed out waiting for %s", summary)
 }
 
+// waitForHarnessObserved is waitForHarness for a condition on something read
+// from tmux: a timeout reports the last value seen, so a host where tmux names
+// things differently (macOS) shows what it saw instead of only timing out.
+func waitForHarnessObserved(t *testing.T, summary string, timeout time.Duration, ready func() (bool, string)) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	last := ""
+	for time.Now().Before(deadline) {
+		ok, seen := ready()
+		if ok {
+			return
+		}
+		last = seen
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timed out after %v waiting for %s; last seen %q", timeout, summary, last)
+}
+
 func TestTmuxTestFirewallRejectsAmbientSockets(t *testing.T) {
 	requireTmux(t)
 	root := shortTmuxTestDir(t)
@@ -392,9 +410,17 @@ func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-w", "-t", ambientTarget, "automatic-rename", "off").CombinedOutput(); err != nil {
 		t.Fatalf("freeze ambient automatic-rename: %v: %s", err, out)
 	}
-	waitForHarness(t, "ambient shell ready", func() bool {
+	// The pane starts the default shell, which execs /bin/sh. tmux names the
+	// foreground process by its own rules per OS (a login shell can read "-sh"
+	// and a path can come back whole), so compare the shell's base name, and
+	// give a slow shell startup longer than the 5s of the other waits.
+	waitForHarnessObserved(t, "ambient shell ready", 20*time.Second, func() (bool, string) {
 		out, displayErr := tmuxHarnessCommand(h.selected, "display-message", "-p", "-t", ambientTarget, "#{pane_current_command}").Output()
-		return displayErr == nil && strings.TrimSpace(string(out)) == "sh"
+		if displayErr != nil {
+			return false, displayErr.Error()
+		}
+		command := strings.TrimSpace(string(out))
+		return strings.TrimPrefix(filepath.Base(command), "-") == "sh", command
 	})
 	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-wg", "@mewla_worker_created", "1").CombinedOutput(); err != nil {
 		t.Fatalf("set inherited collision marker: %v: %s", err, out)

@@ -91,6 +91,11 @@ func waitTunnel(t *testing.T, tunnel *quickTunnel, owner *serviceTunnels) Servic
 }
 
 func TestQuickTunnelOriginLifetimeAndStopDoNotKillOrigin(t *testing.T) {
+	// Quick Tunnels need parent-death process ownership (PR_SET_PDEATHSIG),
+	// which only the Linux daemon host has; see service_tunnels_other.go.
+	if runtime.GOOS != "linux" {
+		t.Skipf("Quick Tunnels require a Linux daemon host with parent-death process ownership; %s has none", runtime.GOOS)
+	}
 	directory := t.TempDir()
 	binary := filepath.Join(directory, "cloudflared")
 	executable, err := os.Executable()
