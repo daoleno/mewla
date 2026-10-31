@@ -72,8 +72,11 @@ bytes waiting in the link), the computer's encoding, the hop into the viewer or
 the viewer's own drawing. "Reduced quality" is added while the picture is
 sent at lower quality to keep up. The second line has the round trip, the time
 from your tap until the screen redraws, updates per second and bandwidth, with
-the computer's power state below. A **Locked** tag appears in the corner when
-the computer is locked. Tap the badge to hide it.
+the computer's power state below. Small tags in the opposite corner say only
+what needs saying and never move the screen: **Locked** when the computer is
+locked, and **Keep awake** (tap it to turn the hold on), **Lid closed** or **On
+battery** when sleeping is a risk; close a tag with its ✕. Tap the badge to
+hide it.
 
 Screen sends only the parts of the screen that changed, and always the newest
 screen: a slow connection drops frames instead of queueing them. It watches how
@@ -138,8 +141,9 @@ Accessibility permissions. The Mac's page in Settings says which permission is
 missing, and **Open Settings** opens the right page on the Mac.
 
 - **You come first.** Opening Screen while an agent works shows who is using
-  it; **Take over** ends the agent's control and opens the screen. When the
-  agent is done, the screen opens by itself. While you view it, agents wait.
+  it with **Take over**, **Watch** and **Stop**; **Take over** ends the agent's
+  control and opens the screen. When the agent is done, the screen opens by
+  itself. While you view it, agents wait.
   Someone using the Mac's own keyboard or trackpad pauses the agent at once,
   letting go of any key or button it holds; it carries on 10 seconds after
   their last input. An action that comes in the last few seconds of that

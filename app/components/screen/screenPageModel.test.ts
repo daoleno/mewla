@@ -58,12 +58,12 @@ describe("power", () => {
     power: { source: "ac", percent: 90, keeping_awake: true }, ...patch,
   });
   test("a closed lid outranks every other warning", () => {
-    expect(powerWarning(status({ power: { source: "battery", lid_closed: true, keeping_awake: true } }))?.title).toBe("The lid is closed");
+    expect(powerWarning(status({ power: { source: "battery", lid_closed: true, keeping_awake: true } }))).toEqual({ label: "Lid closed", action: null });
   });
   test("sleep allowed, then battery, then nothing", () => {
-    expect(powerWarning(status({ keep_awake: false }))?.title).toBe("This computer may sleep");
+    expect(powerWarning(status({ keep_awake: false }))).toEqual({ label: "Keep awake", action: "keep-awake" });
     expect(powerWarning(status({ keep_awake: false, approved: false }))).toBeNull();
-    expect(powerWarning(status({ power: { source: "battery", percent: 40, keeping_awake: true } }))?.title).toBe("On battery");
+    expect(powerWarning(status({ power: { source: "battery", percent: 40, keeping_awake: true } }))).toEqual({ label: "On battery", action: null });
     expect(powerWarning(status({}))).toBeNull();
     expect(powerWarning(status({ power: undefined }))).toBeNull();
   });
@@ -79,20 +79,21 @@ describe("unsupported computers", () => {
     supported: false, platform, reason, disabled: false, approved: false, ready: false, keep_awake: false,
   });
   test("away from a Mac, the app points to switching computers", () => {
-    const linux = unsupportedScreen(status("linux", "Screen works only on Macs for now"), "manjaro", true);
+    const linux = unsupportedScreen(status("linux", "Screen works only on Macs for now"), true);
     expect(linux.title).toBe("Screen needs a Mac");
-    expect(linux.detail).toBe("manjaro isn't a Mac.");
+    expect(linux.detail).toBeNull();
     expect(linux.canChooseComputer).toBe(true);
   });
   test("a browser can't switch, so it says where to go instead", () => {
-    const web = unsupportedScreen(status("linux"), "manjaro", false);
+    const web = unsupportedScreen(status("linux"), false);
     expect(web.canChooseComputer).toBe(false);
     expect(web.detail).toContain("Open Mewla from a Mac");
   });
   test("a Mac that can't start keeps its own reason", () => {
-    const mac = unsupportedScreen(status("darwin", "Screen needs macOS 13 or later"), "MacBook", true);
+    const mac = unsupportedScreen(status("darwin", "Screen needs macOS 13 or later"), true);
     expect(mac.detail).toBe("Screen needs macOS 13 or later");
     expect(mac.canChooseComputer).toBe(false);
+    expect(unsupportedScreen(status("darwin"), true).detail).toBeNull();
   });
 });
 

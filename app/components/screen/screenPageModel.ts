@@ -66,41 +66,33 @@ export function powerSummary(power: ScreenPower | undefined, keepAwake: boolean)
  * What to say when this computer can't share its screen. Screen works only
  * on Macs for now, so anywhere else the way forward is the Mewla on a Mac,
  * which the app can switch to; a browser stays bound to the computer that
- * served it.
+ * served it. The title is the state; a detail appears only where there is
+ * something to act on or the computer gave its own reason.
  */
 export function unsupportedScreen(
   status: ScreenStatus,
-  name: string,
   canSwitchComputer: boolean,
-): { title: string; detail: string; canChooseComputer: boolean } {
+): { title: string; detail: string | null; canChooseComputer: boolean } {
   if (status.platform === "darwin") {
-    return { title: "Screen can't start on this Mac", detail: status.reason || `${name} can't share its screen with Mewla.`, canChooseComputer: false };
+    return { title: "Screen can't start on this Mac", detail: status.reason || null, canChooseComputer: false };
   }
   return {
     title: "Screen needs a Mac",
-    // The app switches computers with its button; a browser stays bound to
-    // the computer that served it.
-    detail: canSwitchComputer ? `${name} isn't a Mac.` : `${name} isn't a Mac. Open Mewla from a Mac.`,
+    detail: canSwitchComputer ? null : "Open Mewla from a Mac.",
     canChooseComputer: canSwitchComputer,
   };
 }
 
-/** The one power risk worth interrupting the user for, if any. */
-export function powerWarning(status: ScreenStatus | null): { title: string; detail: string } | null {
+/**
+ * The one power risk worth a pill on the viewer, if any. The label is the
+ * state, or the action when the pill itself fixes it.
+ */
+export function powerWarning(status: ScreenStatus | null): { label: string; action: "keep-awake" | null } | null {
   const power = status?.power;
   if (!status || !power || !status.approved) return null;
-  if (power.lid_closed) {
-    return {
-      title: "The lid is closed",
-      detail: "A laptop with its lid closed sleeps unless an external display is connected. Keep the lid open while you're away.",
-    };
-  }
-  if (!status.keep_awake) {
-    return { title: "This computer may sleep", detail: "Once it sleeps you can't reach it until someone wakes it. Turn on Keep awake." };
-  }
-  if (power.source === "battery") {
-    return { title: "On battery", detail: "It stays awake while idle, but connect the charger before you leave so it can't run down." };
-  }
+  if (power.lid_closed) return { label: "Lid closed", action: null };
+  if (!status.keep_awake) return { label: "Keep awake", action: "keep-awake" };
+  if (power.source === "battery") return { label: "On battery", action: null };
   return null;
 }
 
