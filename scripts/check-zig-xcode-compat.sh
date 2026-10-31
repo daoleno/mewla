@@ -1,39 +1,79 @@
 #!/usr/bin/env bash
-# Fail when the Zig/Xcode workaround is no longer needed, so it gets deleted
+# Fail when a Zig/Xcode workaround is no longer needed, so it gets deleted
 # instead of living on. Run on a macOS runner with the Xcode the iOS build uses.
-# Exit 0: still needed. Exit 1: retired, delete the workaround. Exit 2: the SDK
+# There are two workarounds (see scripts/lib/zig-xcode-compat.sh) and each is
+# checked and reported on its own, so retiring one never hides the other.
+# Exit 0: both still needed. Exit 1: one is retired, delete it. Exit 2: a
 # layout changed and the workaround's premise needs a fresh look.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
+TOOL_CACHE="${MEWLA_TOOL_CACHE:-$ROOT/.cache/mewla-tools}"
+# shellcheck source=lib/zig.sh
+source "$ROOT/scripts/lib/zig.sh"
 # shellcheck source=lib/zig-xcode-compat.sh
 source "$ROOT/scripts/lib/zig-xcode-compat.sh"
+
+status=0
+retired() { status=$(( status == 2 ? 2 : 1 )); }
+changed() { status=2; }
 
 sdk="$(realpath "$(xcrun --sdk macosx --show-sdk-path)")"
 case "$(mewla_libsystem_arm64_support "$sdk")" in
   arm64e-only)
-    echo "The Zig/Xcode workaround is still needed: $sdk lists libSystem as arm64e only."
+    echo "libSystem workaround: still needed; $sdk lists libSystem as arm64e only."
     ;;
   native)
     cat >&2 <<MESSAGE
-error: the Zig/Xcode workaround is retired.
+error: the libSystem workaround is retired.
   $sdk
   lists arm64-macos in usr/lib/libSystem.B.tbd, which is what Zig requires.
   Delete it:
-    - scripts/zig-xcode-compat/
+    - scripts/zig-xcode-compat/xcrun
     - prepare_macos_sdk_for_zig and its use in scripts/build-libghostty-ios.sh
-      (build against the SDK from xcrun directly)
-    - scripts/lib/zig-xcode-compat.sh and this check, and the step that runs it
-      in .github/workflows/native-cache.yml
-    - the scripts/zig-xcode-compat/** entries in .github/workflows/native-cache.yml
-      and .github/actions/ios-native/action.yml
+      (build against the SDK from xcrun directly), and the PATH entry for
+      scripts/zig-xcode-compat there
+    - mewla_libsystem_arm64_support in scripts/lib/zig-xcode-compat.sh
+    - the scripts/zig-xcode-compat/** cache-key entries in
+      .github/actions/ios-native/action.yml, if nothing is left in that directory
 MESSAGE
-    exit 1
+    retired
     ;;
   *)
     echo "error: cannot read the arm64 targets of libSystem in $sdk; its layout changed." >&2
     echo "       Re-read prepare_macos_sdk_for_zig in scripts/build-libghostty-ios.sh." >&2
-    exit 2
+    changed
     ;;
 esac
+
+ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
+probe_log="$(mktemp "${TMPDIR:-/tmp}/mewla-zig-probe-log.XXXXXX")"
+export MEWLA_ZIG_PROBE_LOG="$probe_log"
+case "$(mewla_zig_libcxx_support "$ZIG_BIN")" in
+  broken)
+    echo "libcxx workaround: still needed; Zig $("$ZIG_BIN" version)'s libcxx fails on INFINITY with $sdk."
+    ;;
+  fixed)
+    cat >&2 <<MESSAGE
+error: the libcxx workaround is retired.
+  Zig $("$ZIG_BIN" version)'s own libcxx compiles for macOS with $sdk.
+  Delete it:
+    - the zig.lib_patches entry in app/modules/terminal-vt/native.lock.json
+      and scripts/zig-xcode-compat/zig-*-libcxx-infinity.patch
+    - mewla_patched_zig_lib and mewla_zig_libcxx_support in
+      scripts/lib/zig-xcode-compat.sh, their use in scripts/build-libghostty-ios.sh
+      (stop setting ZIG_LIB_DIR) and the zig_lib_patches checks in
+      scripts/verify-libghostty-ios.sh
+MESSAGE
+    retired
+    ;;
+  *)
+    echo "error: the libcxx probe failed in a way the workaround isn't for; its premise needs a fresh look:" >&2
+    sed 's/^/  /' "$probe_log" >&2
+    changed
+    ;;
+esac
+rm -f "$probe_log"
+exit "$status"

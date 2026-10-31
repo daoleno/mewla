@@ -37,8 +37,10 @@ source "$ROOT/scripts/lib/zig.sh"
 source "$ROOT/scripts/lib/zig-xcode-compat.sh"
 ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 
-# Retire this and scripts/zig-xcode-compat/ once scripts/check-zig-xcode-compat.sh
-# (run in native-cache.yml) fails because Xcode no longer needs them.
+# Two workarounds, each retired on its own once scripts/check-zig-xcode-compat.sh
+# (run in native-cache.yml) fails because it is no longer needed: the libSystem
+# SDK clone below with scripts/zig-xcode-compat/xcrun, and the patched Zig lib
+# dir (the Xcode 27 SDK leaves INFINITY undeclared in Zig's libcxx).
 prepare_macos_sdk_for_zig() {
   local sdk
   sdk="$(realpath "$(xcrun --sdk macosx --show-sdk-path)")"
@@ -83,6 +85,7 @@ PY
 }
 
 MACOS_SDKROOT="$(prepare_macos_sdk_for_zig)"
+ZIG_LIB="$(mewla_patched_zig_lib "$ZIG_BIN" "$LOCK" "$ROOT" "$TOOL_CACHE")"
 
 GHOSTTY_SRC="${GHOSTTY_SRC:-$GHOSTTY_CACHE}"
 if [[ ! -d "$GHOSTTY_SRC/.git" ]]; then
@@ -104,12 +107,13 @@ fi
 
 echo "Building libghostty-vt XCFramework"
 echo "  ghostty: $GHOSTTY_SRC @ $GHOSTTY_COMMIT"
-echo "  zig:     $($ZIG_BIN version)"
+echo "  zig:     $($ZIG_BIN version) (lib $ZIG_LIB)"
 
 (
   cd "$GHOSTTY_SRC"
   PATH="$ROOT/scripts/zig-xcode-compat:$PATH" \
     MEWLA_MACOS_SDKROOT="$MACOS_SDKROOT" \
+    ZIG_LIB_DIR="$ZIG_LIB" \
     "$ZIG_BIN" build -Demit-lib-vt=true -Doptimize=ReleaseFast
 )
 
@@ -140,6 +144,10 @@ manifest = {
     "schema_version": 1,
     "ghostty_commit": lock["ghostty"]["commit"],
     "zig_version": lock["zig"]["version"],
+    "zig_lib_patches": [
+        {"path": patch["path"], "sha256": patch["sha256"]}
+        for patch in lock["zig"].get("lib_patches") or []
+    ],
     "host": platform.platform(),
     "xcframework": framework.name,
     "files": sum(1 for path in framework.rglob("*") if path.is_file()),

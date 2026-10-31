@@ -56,12 +56,21 @@ PY
   shasum -a 256 -c SHA256SUMS
 )
 
-python3 - "$MANIFEST" "$GHOSTTY_COMMIT" <<'PY'
+python3 - "$MANIFEST" "$LOCK" <<'PY'
 import json, sys
 manifest = json.load(open(sys.argv[1]))
-assert manifest["ghostty_commit"] == sys.argv[2]
+lock = json.load(open(sys.argv[2]))
+assert manifest["ghostty_commit"] == lock["ghostty"]["commit"]
 assert manifest["release_grade"] is True
-print("ok: manifest matches pinned Ghostty commit")
+# The framework was built with exactly the Zig lib patches the lock names.
+expected = [
+    {"path": patch["path"], "sha256": patch["sha256"]}
+    for patch in lock["zig"].get("lib_patches") or []
+]
+assert manifest.get("zig_lib_patches") == expected, (
+    f"zig_lib_patches are {manifest.get('zig_lib_patches')!r}, the lock names {expected!r}"
+)
+print("ok: manifest matches pinned Ghostty commit and Zig lib patches")
 PY
 
 find "$FRAMEWORK" -path '*/Headers/ghostty/vt.h' -print -quit | grep -q . \
