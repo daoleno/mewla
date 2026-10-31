@@ -55,6 +55,10 @@ type FakeBackend struct {
 	// to change its elements as the app would: a sheet opening, a field
 	// clearing. It runs holding the backend's lock.
 	OnElementAction func(app *FakeApp, index int, action string)
+	// OnPrint, when set, runs at the start of each fingerprint of a fake app,
+	// with the fingerprint's number, to change the app while it is watched.
+	// It runs holding the backend's lock.
+	OnPrint func(app *FakeApp, call int)
 	// Reads and Prints count the reads and fingerprints of fake apps.
 	Reads, Prints int
 	AppKeys       []FakeAppKey
@@ -524,9 +528,14 @@ func (f *FakeBackend) PrintApp(_ context.Context, pid int) (AppPrint, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Prints++
-	for _, app := range f.RunningApps {
+	for i := range f.RunningApps {
+		app := f.RunningApps[i]
 		if app.PID != pid {
 			continue
+		}
+		if f.OnPrint != nil {
+			f.OnPrint(&f.RunningApps[i], f.Prints)
+			app = f.RunningApps[i]
 		}
 		var print AppPrint
 		if app.OtherDesktop && !app.Active {
