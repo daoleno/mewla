@@ -126,27 +126,50 @@ mewla_zig_lib_already_patched() {
   return "$found"
 }
 
+# mewla_zig_libc_file ZIG_BIN SDKROOT OUT writes the file for Zig's --libc flag
+# that Ghostty's build gives its libraries (pkg/apple-sdk setLibCFile: the paths
+# of std.zig.LibCInstallation.findNative, whose headers are the SDK's
+# usr/include). On macOS that is exactly `zig libc`; elsewhere (the checks that
+# run on Linux) it is written from SDKROOT in the same format. Fails when
+# there is neither.
+mewla_zig_libc_file() {
+  local zig="$1" sdkroot="$2" out="$3"
+  if [[ "$(uname -s)" == Darwin ]]; then
+    local -a native_env=(env -u ZIG_LIB_DIR)
+    if [[ -n "$sdkroot" ]]; then
+      native_env+=(PATH="$_MEWLA_COMPAT_LIB_DIR/../zig-xcode-compat:$PATH" MEWLA_MACOS_SDKROOT="$sdkroot")
+    fi
+    if "${native_env[@]}" "$zig" libc >"$out" 2>/dev/null && grep -q '^include_dir=.' "$out"; then
+      return 0
+    fi
+  fi
+  [[ -n "$sdkroot" && -d "$sdkroot/usr/include" ]] || return 1
+  printf 'include_dir=%s\nsys_include_dir=%s\ncrt_dir=\nmsvc_lib_dir=\nkernel32_lib_dir=\ngcc_dir=\n' \
+    "$sdkroot/usr/include" "$sdkroot/usr/include" >"$out"
+}
+
 # mewla_zig_libcxx_support ZIG_BIN [SDKROOT] prints one word, from building a
-# C++ program for the macOS target with the stock Zig lib dir. Building or
-# linking a C++ program is what makes Zig build its own libcxx, and the answer
-# comes from that libcxx build. It is built the ways that matter, each with
-# empty caches, because a single configuration once said "fixed" where the real
-# Ghostty build failed (Zig builds libcxx per optimize mode, so one mode's
-# success says nothing about another's):
-#   debug-exe          `zig c++`, Debug: libcxx built Debug, with the UBSan runtime
-#   releasefast-dylib  `zig build-lib -dynamic -O ReleaseFast -lc++`: what
-#                      Ghostty's "compile lib ghostty-vt ReleaseFast
-#                      aarch64-macos.13.0" does; the libcxx sub-compilation
-#                      that failed on INFINITY is the ReleaseFast one
-# and the result is:
-#   broken   libcxx fails on INFINITY in any of them: the condition the
+# C++ program for the macOS target with the stock Zig lib dir and empty caches.
+# Building one is what makes Zig build its own libcxx, and the answer comes from
+# that libcxx build, made the way Ghostty's build makes it:
+#   - with Zig's --libc file naming the SDK (Ghostty's apple-sdk package calls
+#     setLibCFile). This is what decides the outcome. Without it Zig compiles
+#     libcxx against its own bundled darwin headers, which define INFINITY, so
+#     a probe without it says "builds" whatever the Xcode SDK holds; with it,
+#     libcxx sees the SDK's math.h, which is where INFINITY goes missing.
+#   - as `zig build-lib -dynamic -O ReleaseFast -lc++` for aarch64-macos.13.0
+#     (the "compile lib ghostty-vt ReleaseFast aarch64-macos.13.0" step), and
+#     also as a Debug build, since Zig builds libcxx per optimize mode.
+# The result is:
+#   broken   libcxx fails on INFINITY in either build: the condition the
 #            workaround exists for
-#   fixed    every one builds; the libcxx workaround is no longer needed
-#   unknown  one fails some other way and none on INFINITY
-# SDKROOT is the SDK from mewla_prepare_macos_sdk_for_zig; without it Zig finds
-# the SDK itself. $MEWLA_ZIG_PROBE_LOG, when set, gets one "== variant NAME:
-# RESULT" line per configuration followed by that configuration's compiler
-# output, so a Mac run shows which configuration builds and which does not.
+#   fixed    both build; the libcxx workaround is no longer needed
+#   unknown  one fails some other way, none on INFINITY, or there is no SDK to
+#            name in a libc file (so the build could not be reproduced)
+# SDKROOT is the SDK from mewla_prepare_macos_sdk_for_zig. $MEWLA_ZIG_PROBE_LOG,
+# when set, gets the libc file, one "== variant NAME: RESULT" line per build
+# followed by its compiler output, and the -isystem directories the libcxx
+# compile of random.cpp used, so a Mac run shows whether libcxx saw the SDK.
 mewla_zig_libcxx_support() {
   local zig="$1" sdkroot="${2:-}"
   local work
@@ -154,32 +177,52 @@ mewla_zig_libcxx_support() {
   printf '#include <random>\nint main() { std::mt19937 g(1); return static_cast<int>(g() & 1) * 0; }\n' >"$work/probe.cpp"
   local combined="$work/probe.log" overall=fixed saw_other=0 name result
   : >"$combined"
+  local libc_file="$work/libc.txt"
+  if mewla_zig_libc_file "$zig" "$sdkroot" "$libc_file"; then
+    { echo "== libc file (--libc), as Ghostty's build passes it"; cat "$libc_file"; } >>"$combined"
+  else
+    { echo "== no libc file: no SDK to name, so libcxx would be built against Zig's bundled headers"; } >>"$combined"
+    overall=unknown
+    saw_other=1
+    libc_file=""
+  fi
   local -a probe_env=(env -u ZIG_LIB_DIR)
   if [[ -n "$sdkroot" ]]; then
     probe_env+=(PATH="$_MEWLA_COMPAT_LIB_DIR/../zig-xcode-compat:$PATH" MEWLA_MACOS_SDKROOT="$sdkroot")
   fi
+  local -a libc_args=()
+  [[ -z "$libc_file" ]] || libc_args=(--libc "$libc_file")
   for name in debug-exe releasefast-dylib; do
     local -a command
     case "$name" in
       debug-exe)
-        command=("$zig" c++ -target aarch64-macos.13.0 -std=c++20 "$work/probe.cpp" -o "$work/$name.out") ;;
+        command=("$zig" build-exe -O Debug -target aarch64-macos.13.0 -lc++ ${libc_args[@]+"${libc_args[@]}"}
+                 "$work/probe.cpp" "-femit-bin=$work/$name.out") ;;
       releasefast-dylib)
-        command=("$zig" build-lib -dynamic -O ReleaseFast -target aarch64-macos.13.0 -lc++
-                 "$work/probe.cpp" "-femit-bin=$work/$name.dylib") ;;
+        command=("$zig" build-lib -dynamic -O ReleaseFast -target aarch64-macos.13.0 -lc++ ${libc_args[@]+"${libc_args[@]}"}
+                 --verbose-cc "$work/probe.cpp" "-femit-bin=$work/$name.dylib") ;;
     esac
     # One cache per optimize mode: libcxx is built per mode, never reused across modes.
     local cache="$work/cache-${name%%-*}"
-    local log="$work/$name.log"
-    if "${probe_env[@]}" ZIG_GLOBAL_CACHE_DIR="$cache/global" ZIG_LOCAL_CACHE_DIR="$cache/local" "${command[@]}" >"$log" 2>&1; then
+    local raw="$work/$name.raw" log="$work/$name.log"
+    if "${probe_env[@]}" ZIG_GLOBAL_CACHE_DIR="$cache/global" ZIG_LOCAL_CACHE_DIR="$cache/local" "${command[@]}" >"$raw" 2>&1; then
       result=builds
-    elif grep -q "undeclared identifier 'INFINITY'" "$log"; then
+    elif grep -q "undeclared identifier 'INFINITY'" "$raw"; then
       result=INFINITY
       overall=broken
     else
       result=other-failure
       saw_other=1
     fi
-    { echo "== variant $name: $result"; cat "$log"; } >>"$combined"
+    # --verbose-cc prints every compiler command line; keep only the compiler's
+    # own output, and from the libcxx compile of random.cpp its include dirs.
+    grep -v -- ' --no-default-config ' "$raw" >"$log" || true
+    {
+      echo "== variant $name: $result"
+      cat "$log"
+      grep -- 'libcxx/src/random.cpp .*--no-default-config' "$raw" | head -n1 \
+        | tr ' ' '\n' | awk '$0 == "-isystem" { getline; print "  libcxx include dir: " $0 }'
+    } >>"$combined"
   done
   if [[ "$overall" != broken && "$saw_other" == 1 ]]; then
     overall=unknown

@@ -66,8 +66,9 @@ while IFS= read -r patch_file; do
   header_state="$(mewla_zig_lib_patch_state "$stock_lib" "$patch_file")"
 done < <(mewla_lock_lib_patches "$LOCK" "$ROOT")
 echo "libcxx probe: build=$libcxx_state, stock header (${stock_lib:-?}) vs the lock's patch: $header_state"
-# One line per configuration the probe built (see mewla_zig_libcxx_support).
-sed -n 's/^== variant /  libcxx probe variant /p' "$probe_log"
+# The probe's own account of what it built and which headers libcxx saw (see
+# mewla_zig_libcxx_support): the libc file, one line per build, include dirs.
+sed -n -e 's/^== variant /  libcxx probe variant /p' -e 's/^  libcxx include dir: /  libcxx include dir: /p' -e 's/^== \(libc file\|no libc file\)/  libcxx probe \1/p' "$probe_log"
 if mewla_zig_lib_already_patched "$ZIG_BIN" "$LOCK" "$ROOT"; then
   libcxx_state=patched
 elif [[ "$libcxx_state" == fixed && "$header_state" == unpatched ]]; then

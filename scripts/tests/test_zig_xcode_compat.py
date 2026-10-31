@@ -30,9 +30,10 @@ HEADER_PATH = "libcxx/include/__random/clamp_to_integral.h"
 
 
 def fake_zig(directory: Path, lib_dir: Path, compile_result: str, release_result: str | None = None) -> Path:
-    """A zig that answers version, env, c++ (Debug) and build-lib (ReleaseFast), as the real one would for the cases the scripts tell apart.
+    """A zig that answers version, env, build-exe (the Debug probe) and build-lib (the ReleaseFast one), as the real one would for the cases the scripts tell apart.
 
-    release_result, when given, is what the ReleaseFast build-lib says while c++ says compile_result."""
+    release_result, when given, is what the ReleaseFast build-lib says while build-exe says compile_result.
+    Every build's arguments are appended to zig-args.log next to the fake."""
     messages = {
         "ok": "exit 0",
         "infinity": 'echo "clamp_to_integral.h:47:58: note: use of undeclared identifier \'INFINITY\'" >&2; exit 1',
@@ -44,8 +45,8 @@ def fake_zig(directory: Path, lib_dir: Path, compile_result: str, release_result
         'case "$1" in\n'
         "  version) echo 0.15.2 ;;\n"
         f'  env) echo \'.{{ .lib_dir = "{lib_dir}", }}\' | sed \'s/^.{{ //; s/ }}$//\' ;;\n'
-        f"  c++) {messages[compile_result]} ;;\n"
-        f"  build-lib|build-exe) {messages[release_result or compile_result]} ;;\n"
+        f'  build-exe) echo "$@" >>"$(dirname "$0")/zig-args.log"; {messages[compile_result]} ;;\n'
+        f'  build-lib) echo "$@" >>"$(dirname "$0")/zig-args.log"; {messages[release_result or compile_result]} ;;\n'
         "esac\n"
     )
     zig.chmod(0o755)
@@ -64,6 +65,7 @@ def fake_lib(directory: Path, header_tail: str = HEADER_TAIL) -> Path:
 def sdk_with_targets(parent: Path, targets: str | None) -> Path:
     sdk = parent / "MacOSX.sdk"
     (sdk / "usr/lib").mkdir(parents=True)
+    (sdk / "usr/include").mkdir()
     if targets is not None:
         (sdk / "usr/lib/libSystem.B.tbd").write_text(
             f"--- !tapi-tbd\ntbd-version: 4\ntargets: [ {targets} ]\ninstall-name: /usr/lib/libSystem.B.dylib\n"
@@ -155,9 +157,42 @@ class ZigXcodeCompatTests(unittest.TestCase):
         self.assertIn("libcxx probe variant releasefast-dylib: INFINITY", result.stdout)
 
     def test_the_probe_builds_libcxx_the_way_ghostty_does(self):
-        text = LIBRARY.read_text()
-        self.assertIn("build-lib -dynamic -O ReleaseFast -target aarch64-macos.13.0", " ".join(text.split()))
-        self.assertIn("-lc++", text)
+        # Ghostty's apple-sdk package gives every library a --libc file naming
+        # the Xcode SDK; without it Zig compiles libcxx against its bundled
+        # headers, which define INFINITY, so a probe lacking it can only say
+        # "builds". Check what the probe really passes.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sdk = sdk_with_targets(root, "x86_64-macos, arm64e-macos")
+            zig = fake_zig(root, fake_lib(root), "ok")
+            out = subprocess.run(
+                ["bash", "-c", f'source "{LIBRARY}"; MEWLA_ZIG_PROBE_LOG="{root}/probe.log" mewla_zig_libcxx_support "{zig}" "{sdk}"'],
+                capture_output=True, text=True, check=True, env={**os.environ, "TMPDIR": str(root)},
+            )
+            self.assertEqual(out.stdout.strip(), "fixed")
+            lines = (root / "zig-args.log").read_text().splitlines()
+            self.assertEqual(len(lines), 2, lines)
+            debug, release = lines
+            self.assertIn("-dynamic -O ReleaseFast -target aarch64-macos.13.0 -lc++", release)
+            self.assertIn("-O Debug -target aarch64-macos.13.0 -lc++", debug)
+            for line in lines:
+                tokens = line.split()
+                libc_file = Path(tokens[tokens.index("--libc") + 1])
+                # the file was removed with the probe's scratch; its text is in the log
+                self.assertEqual(libc_file.name, "libc.txt")
+            log = (root / "probe.log").read_text()
+            self.assertIn(f"include_dir={sdk}/usr/include", log)
+            self.assertIn(f"sys_include_dir={sdk}/usr/include", log)
+
+    def test_a_probe_with_no_sdk_to_name_does_not_claim_the_workaround_is_retired(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            zig = fake_zig(root, fake_lib(root), "ok")
+            out = subprocess.run(
+                ["bash", "-c", f'source "{LIBRARY}"; mewla_zig_libcxx_support "{zig}" ""'],
+                capture_output=True, text=True, check=True, env={**os.environ, "TMPDIR": str(root)},
+            )
+            self.assertEqual(out.stdout.strip(), "unknown")
 
     def test_an_unrelated_libcxx_failure_is_not_taken_for_the_known_one(self):
         result = self.check("x86_64-macos, arm64e-macos", libcxx="other")
