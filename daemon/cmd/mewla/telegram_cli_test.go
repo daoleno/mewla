@@ -103,7 +103,7 @@ func TestTelegramSetupRoundTripsThroughExactLocalControlSocket(t *testing.T) {
 	done := make(chan error, 1)
 	server := &control.Server{Path: socketPath, Handler: &controlApp{telegram: manager}}
 	go func() { done <- server.Run(ctx) }()
-	waitForCLISocketPath(t, socketPath)
+	waitForCLISocketAccepting(t, socketPath)
 
 	var stdout, stderr bytes.Buffer
 	err = runTelegramCommandWithDeps(

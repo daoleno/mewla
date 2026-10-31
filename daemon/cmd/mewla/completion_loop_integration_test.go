@@ -118,7 +118,7 @@ func TestBDD_004_CLIReportToDecisionAndSessionRemoval(t *testing.T) {
 	serverDone := make(chan error, 1)
 	go func() { serverDone <- (&control.Server{Path: socket, Handler: app}).Run(ctx) }()
 	t.Cleanup(func() { cancel(); waitForCLIControlServerShutdown(t, serverDone) })
-	waitForCLISocketPath(t, socket)
+	waitForCLISocketAccepting(t, socket)
 	id, changes := service.SubscribeWork()
 	t.Cleanup(func() { service.UnsubscribeWork(id) })
 	var stderr bytes.Buffer
