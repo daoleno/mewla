@@ -1,16 +1,16 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml:2:13-83
-INJECTED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml:2:13-83
+ADDED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml:2:13-83
+INJECTED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml:2:13-83
 	package
-		INJECTED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml
+		INJECTED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml
 	xmlns:android
-		ADDED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml:2:23-81
+		ADDED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml:2:23-81
 uses-sdk
-INJECTED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml reason: use-sdk injection requested
-INJECTED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml
-INJECTED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml
+INJECTED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml reason: use-sdk injection requested
+INJECTED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml
+INJECTED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml
 	android:targetSdkVersion
-		INJECTED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml
+		INJECTED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml
 	android:minSdkVersion
-		INJECTED from /home/daoleno/.mewla/worktrees/mewla-gestures/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4797257001048272956.xml
+		INJECTED from /home/daoleno/workspace/mewla/app/modules/touch-cancel/android/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest4190075061212049547.xml
