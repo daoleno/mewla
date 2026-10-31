@@ -1,6 +1,6 @@
 import { DateStyle, formatDate } from "../../../services/dateFormat";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../../constants/tokens";
@@ -42,7 +42,7 @@ export default function FriendsPostScreen() {
   const [commentMenu, setCommentMenu] = useState<FriendsComment | null>(null);
   const [postMenu, setPostMenu] = useState(false);
   const [videoPlaying, setVideoPlaying] = useState(false);
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
 
   const load = useCallback(() => {
     if (!currentServer || !id) return;

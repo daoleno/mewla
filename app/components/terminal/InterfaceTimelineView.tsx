@@ -11,7 +11,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type ScrollViewProps,
-  type ViewToken,
+  type ListViewToken, type ViewInstance,
 } from "react-native";
 import Reanimated, {
   measure,
@@ -192,7 +192,7 @@ export function InterfaceTimelineView({
     {},
   );
   const readingPositionRef = React.useRef(readingPosition);
-  const viewportRef = React.useRef<View>(null);
+  const viewportRef = React.useRef<ViewInstance>(null);
   readingPositionRef.current = readingPosition;
   const renderProjectionCacheRef =
     React.useRef<TimelineRenderProjectionCache | null>(null);
@@ -400,7 +400,7 @@ export function InterfaceTimelineView({
     onTouchActiveChange?.(false);
   }, [onTouchActiveChange]);
   const handleViewableItemsChanged = React.useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
       if (!isTimelineProjectionPerfEnabled()) {
         perfSawVisibleRowsRef.current = false;
         perfBlankStartedAtRef.current = null;
@@ -508,7 +508,7 @@ export function InterfaceTimelineView({
                   request={turnFocusSpacer}
                   onLayout={onTurnFocusSpacerLayout}
                 />
-              ) : null
+              ) : undefined
             }
             CellRendererComponent={renderTimelineCell}
             keyExtractor={(item) => item.id}
@@ -617,7 +617,7 @@ function TurnFocusTimelineCell({
   measurementRef: React.RefObject<TurnFocusCellMeasurement>;
   readingPositionRef: React.RefObject<TimelineReadingPosition | undefined>;
 }) {
-  const cellRef = React.useRef<View>(null);
+  const cellRef = React.useRef<ViewInstance>(null);
   React.useLayoutEffect(
     () => () => readingPositionRef.current?.onCellUnmount(item.id),
     [item.id, readingPositionRef],

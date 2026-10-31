@@ -8,7 +8,7 @@ import {
   Pressable,
   StyleSheet,
   useWindowDimensions,
-  View,
+  View, type ViewInstance,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { Radii, shadow, useAppTheme } from "../../constants/tokens";
@@ -74,7 +74,7 @@ export function MessageMenuOverlay({
   onClose(): void;
 }) {
   const { colors, theme } = useAppTheme();
-  const rootRef = useRef<View>(null);
+  const rootRef = useRef<ViewInstance>(null);
   const [frame, setFrame] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const { height: windowHeight } = useWindowDimensions();
   const keyboardHeight = useKeyboardTop();

@@ -3,7 +3,7 @@ import {
   StyleSheet,
   Text,
   View,
-  type TextInput as TextInputInstance,
+  type TextInputInstance,
 } from "react-native";
 import { ContinuousCorners, TypeScale } from "../../constants/tokens";
 import type {

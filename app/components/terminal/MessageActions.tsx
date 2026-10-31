@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, View, type DimensionValue, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, View, type DimensionValue, type ViewStyle, type ViewInstance } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -67,7 +67,7 @@ const HIGHLIGHT_RADIUS = 20;
  * the touch: the finger's window position less its position inside the view.
  */
 function pressedRect(
-  view: View | null,
+  view: ViewInstance | null,
   touch: { windowX: number; windowY: number; viewX: number; viewY: number },
 ): Promise<MessageMenuAnchor["rect"] | null> {
   return new Promise((resolve) => {
@@ -114,7 +114,7 @@ export function MessageActionSurface({
   const desktop = useDesktopWeb();
   const [hovered, setHovered] = useState(false);
   const parentSelectable = useContext(TimelineTextSelectableContext);
-  const bubbleRef = useRef<View>(null);
+  const bubbleRef = useRef<ViewInstance>(null);
   const kinds = useMemo(
     () => (actions ? messageActionKinds(subject, actions.environment) : []),
     [actions, subject],
@@ -214,7 +214,7 @@ export function ReplyActionRow({
 }) {
   const actions = useMessageActions();
   const desktop = useDesktopWeb();
-  const moreRef = useRef<View>(null);
+  const moreRef = useRef<ViewInstance>(null);
   const { copied, copy } = useCopyFeedback(messageCopyText(subject));
   if (!actions || !actions.replyIds.has(subject.id) || subject.streaming) return null;
   const kinds = messageActionKinds(subject, actions.environment);

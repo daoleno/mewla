@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
-  type View as ViewInstance,
+  type ViewInstance,
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";

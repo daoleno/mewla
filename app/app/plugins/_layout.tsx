@@ -12,7 +12,7 @@ import { retainPluginReturn } from "../../services/pluginOnboarding";
 import { serverDisplayName } from "../../services/serverDisplayName";
 
 // Extensions. A deep-linked service or tool page still has the index below it.
-export const unstable_settings = { initialRouteName: "index" };
+export const unstable_settings = { anchor: "index" };
 
 export default function PluginsLayout() {
   const { currentServerId, currentServer, servers, isCurrentServer } = useCurrentServer();

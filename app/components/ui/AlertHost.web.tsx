@@ -43,8 +43,8 @@ Alert.alert = (title, message, buttons, options) => {
     ...pendingAlerts,
     {
       id: ++nextAlertId,
-      title,
-      message,
+      title: title ?? "",
+      message: message ?? undefined,
       buttons: buttons?.length ? buttons : [{ text: "OK" }],
       options,
     },

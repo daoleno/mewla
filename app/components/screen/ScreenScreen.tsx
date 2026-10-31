@@ -7,7 +7,7 @@ import {
   StyleSheet,
   TextInput,
   useWindowDimensions,
-  View,
+  View, type TextInputInstance,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -112,7 +112,7 @@ export function ScreenScreen() {
   // The power pill the person closed; a different warning shows again.
   const [dismissedPower, setDismissedPower] = useState<string | null>(null);
   const host = useRef<ScreenViewerHostHandle>(null);
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
   const connection = useRef<ScreenConnection | null>(null);
   // The path the live viewer opened on, and whether it has retried its loss.
   const openedVia = useRef<TransportPath | null>(null);

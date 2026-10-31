@@ -50,7 +50,7 @@ permissions:
 jobs:
   archive:
     name: Signed archive and IPA
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 180
     environment: ${{ (github.event_name == 'push' || inputs.app_identity == 'preview') && 'app-store-connect-preview' || 'app-store-connect' }}
     env:

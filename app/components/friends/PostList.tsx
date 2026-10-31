@@ -90,7 +90,7 @@ export function PostList({ path, header = null, emptyTitle, emptyDetail, reloadT
     <FlatList
       data={posts ?? []}
       keyExtractor={(post) => post.id}
-      ListHeaderComponent={header}
+      ListHeaderComponent={header ?? undefined}
       renderItem={({ item }) => (
         <PostCard
           post={item}
@@ -112,7 +112,7 @@ export function PostList({ path, header = null, emptyTitle, emptyDetail, reloadT
       ListEmptyComponent={
         <EmptyState size="inline" title={error ? "Could not load" : emptyTitle} detail={error ?? emptyDetail} icon={error ? "cloud-offline" : "people"} />
       }
-      ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.textTertiary} style={styles.footer} /> : null}
+      ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.textTertiary} style={styles.footer} /> : undefined}
       onEndReachedThreshold={0.6}
       onEndReached={() => {
         if (!next || loadingMore) return;

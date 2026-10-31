@@ -3,16 +3,16 @@ import {
   AccessibilityInfo,
   findNodeHandle,
   Platform,
-  type View,
+  type View, type ViewInstance,
 } from "react-native";
 
 interface DrawerFocusContainmentOptions {
-  closeButtonRef: RefObject<View | null>;
-  drawerRef: RefObject<View | null>;
+  closeButtonRef: RefObject<ViewInstance | null>;
+  drawerRef: RefObject<ViewInstance | null>;
   drawerVisible: boolean;
-  menuButtonRef: RefObject<View | null>;
+  menuButtonRef: RefObject<ViewInstance | null>;
   onMenuFocusRestored(): void;
-  primaryRef: RefObject<View | null>;
+  primaryRef: RefObject<ViewInstance | null>;
   restoreMenuFocus: boolean;
   routeFocused: boolean;
 }
@@ -26,11 +26,11 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-function asElement(node: View | null): HTMLElement | null {
+function asElement(node: ViewInstance | null): HTMLElement | null {
   return Platform.OS === "web" ? (node as unknown as HTMLElement | null) : null;
 }
 
-function setInert(node: View | null, inert: boolean): void {
+function setInert(node: ViewInstance | null, inert: boolean): void {
   const element = asElement(node);
   if (element == null) {
     return;
@@ -43,7 +43,7 @@ function setInert(node: View | null, inert: boolean): void {
   }
 }
 
-function focusHost(node: View | null): boolean {
+function focusHost(node: ViewInstance | null): boolean {
   if (node == null) {
     return false;
   }

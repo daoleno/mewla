@@ -5,6 +5,7 @@ import {
   TextInput,
   View,
   type StyleProp,
+  type TextInputInstance,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
@@ -33,7 +34,7 @@ export interface MobileSingleLineInputProps extends TextInputProps {
  * the chat composer uses. Uncontrolled callers keep the native placeholder.
  */
 export const MobileSingleLineInput = forwardRef<
-  TextInput,
+  TextInputInstance,
   MobileSingleLineInputProps
 >(function MobileSingleLineInput(
   {

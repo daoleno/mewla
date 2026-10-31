@@ -140,7 +140,7 @@ export function GitDiffRepoBrowser({
       ListEmptyComponent={
         repoBrowserLoading ? (
           <EmptyState size="inline" busy title="Loading folder" />
-        ) : repoBrowserError ? null : (
+        ) : repoBrowserError ? undefined : (
           <GitDiffStateCard
             icon="folder-open"
             title="Empty folder"

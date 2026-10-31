@@ -16,7 +16,7 @@ export function ImageReviewFixture({ chrome }: { chrome: TerminalThemeChrome }) 
   const queue = useRef<AttachmentUploadQueue | null>(null);
   const generation = useRef(0);
   const imageOwner = useMemo(() => ({ key: `image-review:${owner}`, async resolve(path: string) {
-    return { uri: Image.resolveAssetSource(path === "tall.png" ? require("../../assets/reading-fixture/tall.png") : require("../../assets/reading-fixture/normal.png")).uri, headers: {} };
+    return { uri: Image.resolveAssetSource(path === "tall.png" ? require("../../assets/reading-fixture/tall.png") : require("../../assets/reading-fixture/normal.png"))?.uri ?? "", headers: {} };
   } }), [owner]);
   useEffect(() => {
     generation.current++;
