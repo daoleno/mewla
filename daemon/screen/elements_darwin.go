@@ -127,7 +127,7 @@ func loadAX() bool {
 		for _, name := range []string{
 			"AXFocusedApplication", "AXFocusedWindow", "AXChildren", "AXRole", "AXTitle",
 			"AXDescription", "AXValue", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXWindows", "AXFrontmost", "AXParent",
-			"AXMenuBar", "AXMenuItemCmdChar", "AXMenuItemCmdModifiers", "AXFocusedUIElement",
+			"AXMenuBar", "AXMenuItemCmdChar", "AXMenuItemCmdModifiers", "AXFocusedUIElement", "AXSubrole",
 		} {
 			ref := axLib.createString(0, name, cfStringEncodingUTF8)
 			if ref == 0 {
@@ -135,6 +135,10 @@ func loadAX() bool {
 			}
 			axLib.attrs[name] = ref
 		}
+		loadBatchAX(libs)
+		axLib.walkSet = newAttrSet("AXRole", "AXTitle", "AXDescription", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXChildren", "AXSubrole")
+		axLib.printAppSet = newAttrSet("AXWindows", "AXFocusedWindow", "AXFocusedUIElement")
+		axLib.printWindowSet = newAttrSet("AXTitle", "AXChildren")
 		axLib.system = axLib.createSystemWide()
 		if axLib.system == 0 {
 			return
@@ -308,15 +312,16 @@ func walkElements(ctx context.Context, tree *ElementTree, root uintptr, limit in
 		axLib.setTimeout(element, elementTimeout(deadline))
 		slots, done := axReadMany(element, axLib.walkSet)
 		defer done()
-		const role, title, description, position, size, enabled, focused, children = 0, 1, 2, 3, 4, 5, 6, 7
-		e := Element{Depth: depth, Role: cfStringOf(slots[role]), Title: cfStringOf(slots[title]),
+		const role, title, description, position, size, enabled, focused, children, subrole = 0, 1, 2, 3, 4, 5, 6, 7, 8
+		e := Element{Depth: depth, Role: cfStringOf(slots[role]), Subrole: cfStringOf(slots[subrole]), Title: cfStringOf(slots[title]),
 			Frame: cfFrame(slots[position], slots[size]), Enabled: cfBoolOf(slots[enabled], true), Focused: cfBoolOf(slots[focused], false)}
 		if e.Title == "" {
 			e.Title = cfStringOf(slots[description])
 		}
 		// A password is never read, so it can't be shown or kept: its value
-		// is read only now that its role is known, and not in the batch.
-		if e.Role != "AXSecureTextField" {
+		// is read only now that its role and subrole are known, and not in
+		// the batch.
+		if !e.secureField() {
 			e.Value = axValueText(element)
 		}
 		if keep != nil && !keep(element, &e) {
