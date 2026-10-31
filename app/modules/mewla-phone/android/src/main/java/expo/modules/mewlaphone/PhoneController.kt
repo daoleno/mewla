@@ -33,6 +33,7 @@ object PhoneController {
     private const val TAG = "MewlaPhone"
     private const val MIN_SDK = Build.VERSION_CODES.R
     private const val STALL_MS = 25_000L
+    private const val REPLACE_EVERY_MS = 60_000L
     private const val WRITE_SECURE = "android.permission.WRITE_SECURE_SETTINGS"
 
     /** Told what the App must show or forward to the daemon; called from worker threads. */
@@ -435,6 +436,8 @@ object PhoneController {
         return use(started, hello!!, stale = false)
     }
 
+    private var nextReplaceAt = 0L
+
     /** True while the helper in use is one an earlier install left; the keeper replaces it when it can. */
     @Volatile private var staleHelper = false
 
@@ -463,6 +466,10 @@ object PhoneController {
      */
     private fun replaceStaleHelper() = synchronized(helperLock) {
         if (!staleHelper || client?.isClosed != false || activeWorker != null) return@synchronized
+        val now = android.os.SystemClock.elapsedRealtime()
+        // Finding the Wireless debugging port takes seconds under the lock every request waits on: not every tick.
+        if (now < nextReplaceAt) return@synchronized
+        nextReplaceAt = now + REPLACE_EVERY_MS
         // Nothing is wrong with the helper in use, so this never raises the system's network prompt to replace it.
         if (Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) != 1) return@synchronized
         runCatching { startHelper() }
@@ -498,6 +505,12 @@ object PhoneController {
     private var strikes = 0
     private var switchedOnAt = 0L
     @Volatile private var pausedUntil = 0L
+
+    /** The person asked for the helper (Start): the pause the keeper put on raising the system's network prompt does not apply to them. */
+    fun startedByPerson() {
+        strikes = 0
+        pausedUntil = 0
+    }
 
     /** Once, through the helper's own shell: lets this App turn Wireless debugging back on and its accessibility service on without the person. */
     private fun grantSelfHealing(adb: AdbConnection) {

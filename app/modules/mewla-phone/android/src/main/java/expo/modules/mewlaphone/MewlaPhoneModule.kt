@@ -70,6 +70,7 @@ class MewlaPhoneModule : Module() {
 
         AsyncFunction("ensureHelper") {
             try {
+                PhoneController.startedByPerson()
                 PhoneController.ensureHelper()
                 true
             } catch (e: Exception) {
