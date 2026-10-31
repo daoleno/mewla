@@ -122,12 +122,14 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (true) {
             val now = SystemClock.uptimeMillis()
-            val drew = lastFrameAt >= actionAt || now - actionAt >= minWaitMs
-            if (drew && now - lastFrameAt >= quietMs) return true
+            if (SettlePolicy.settled(now, actionAt, lastFrameAt, quietMs, minWaitMs)) return true
             if (now >= deadline) return false
-            Thread.sleep(40)
+            Thread.sleep(SETTLE_POLL_MS)
         }
     }
+
+    /** Whether the display drew after the last action, so a picture of it shows what the action led to. */
+    fun drewSinceAction(): Boolean = SettlePolicy.drewSince(actionAt, lastFrameAt)
 
     /** The screen now as a JPEG no wider than [maxWidth]; null before the first frame. */
     fun jpeg(maxWidth: Int, quality: Int): ByteArray? = synchronized(lock) {
@@ -196,6 +198,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     }
 
     private companion object {
+        const val SETTLE_POLL_MS = 20L
         // DisplayManager.VIRTUAL_DISPLAY_FLAG_*; several are hidden constants.
         const val FLAG_PUBLIC = 1 shl 0
         const val FLAG_OWN_CONTENT_ONLY = 1 shl 3

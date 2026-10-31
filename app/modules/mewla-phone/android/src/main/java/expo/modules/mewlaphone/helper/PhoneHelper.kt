@@ -41,6 +41,7 @@ internal class PhoneHelper(
 ) {
     private val injector by lazy { Injector() }
     private val reader by lazy { ScreenReader() }
+    private val clipboard by lazy { ShellClipboard(context) }
     @Volatile private var screen: AgentScreen? = null
     @Volatile private var client: Client? = null
     private val actionLock = Any()
@@ -182,7 +183,7 @@ internal class PhoneHelper(
             val took = android.os.SystemClock.uptimeMillis() - began
             if (took > 1_000) Log.w(TAG, "tree: interactive=$on read took $took ms")
             tree.put("ok", true).put("w", s.width).put("h", s.height).put("interactive", on)
-                .put("display_alive", s.alive()).put("frames", s.frameCount()).put("frame_age_ms", s.frameAgeMs())
+                .put("display_alive", s.alive()).put("drew_since_action", s.drewSinceAction()).put("frames", s.frameCount()).put("frame_age_ms", s.frameAgeMs())
         }
         "settle" -> {
             val s = screen ?: return fail("no display")
@@ -212,7 +213,7 @@ internal class PhoneHelper(
         }
         "text" -> typeText(r.getString("value"), r.optBoolean("replace", false))
         "apps" -> apps()
-        "launch" -> launch(r.getString("package"))
+        "launch" -> launch(r.getString("package"), r.optInt("user", 0))
         "shutdown" -> {
             screen?.release()
             Thread { Thread.sleep(100); exitProcess(0) }.start()
@@ -244,36 +245,111 @@ internal class PhoneHelper(
         }.onFailure { Log.w(TAG, "setDisplayImePolicy failed", it) }
     }
 
+    /**
+     * Types into the focused field the most direct way that works, and checks the field took it:
+     * set its text, else paste through the clipboard, else key events. Apps that draw their own
+     * field (WeChat's search) can accept a set-text and show nothing; the check reads the field back.
+     */
     private fun typeText(value: String, replace: Boolean): JSONObject {
         val s = screen ?: return fail("no display")
-        val current = reader.focusedText(s.displayId) ?: return fail("no field has focus")
-        val next = if (replace) value else current + value
-        return if (reader.setFocusedText(s.displayId, next)) ok() else fail("the field refused the text")
+        val d = s.displayId
+        val field = reader.focusedField(d)
+        // Without a readable field the existing text is unknown: add to it at the caret, never replace it.
+        val next = if (field == null) value else if (replace) value else field.text + value
+        val replaceAll = field != null || replace
+        val verifiable = field != null && !field.password
+        fun landed(): Boolean {
+            Thread.sleep(TEXT_READBACK_MS)
+            return TextCheck.landed(next, reader.focusedField(d)?.text)
+        }
+        if (field != null && reader.setFocusedText(d, next) && (!verifiable || landed())) return typed("set_text", verifiable)
+        if (clipboard.set(if (replaceAll) next else value)) {
+            if (replaceAll) injector.selectAll(d)
+            if (injector.paste(d) && (!verifiable || landed())) return typed("paste", verifiable)
+        }
+        if (replaceAll) {
+            injector.selectAll(d)
+            injector.key(d, KeyEvent.KEYCODE_DEL)
+        }
+        if (injector.typeKeys(d, if (replaceAll) next else value) && (!verifiable || landed())) return typed("keys", verifiable)
+        return fail(
+            if (field == null) "no field has focus, and the text did not go in by paste or keys either"
+            else "the field did not take the text by set text, paste or keys",
+        )
     }
+
+    private fun typed(method: String, verified: Boolean) = ok().put("method", method).put("verified", verified)
 
     private fun apps(): JSONObject {
         val pm = context.packageManager
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val list = JSONArray()
+        val labels = HashMap<String, String>()
         for (info in pm.queryIntentActivities(intent, 0)) {
-            list.put(JSONObject().put("package", info.activityInfo.packageName).put("label", info.loadLabel(pm).toString()))
+            val label = info.loadLabel(pm).toString()
+            labels[info.activityInfo.packageName] = label
+            list.put(JSONObject().put("package", info.activityInfo.packageName).put("label", label))
+        }
+        // App clones (应用分身) and work profiles run as another Android user: each of their apps is
+        // an entry of its own, told apart by its user id.
+        val chinese = java.util.Locale.getDefault().language == "zh"
+        for (user in otherUsers()) {
+            for (pkg in clonePackages(user.id)) {
+                list.put(
+                    JSONObject().put("package", pkg).put("user", user.id)
+                        .put("label", Clones.label(labels[pkg] ?: pkg, user.id, chinese)),
+                )
+            }
         }
         return ok().put("apps", list)
     }
 
-    private fun launch(pkg: String): JSONObject {
+    /** The phone's users besides the person's own, read from the shell; none when it cannot be asked. */
+    private fun otherUsers(): List<PhoneUser> =
+        runCatching { Clones.parseUsers(shell("pm", "list", "users")) }.onFailure { Log.w(TAG, "pm list users failed", it) }.getOrDefault(emptyList())
+
+    private fun clonePackages(userId: Int): List<String> = runCatching {
+        Clones.parsePackages(
+            shell(
+                "cmd", "package", "query-activities", "--components", "--user", userId.toString(),
+                "-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER,
+            ),
+        )
+    }.onFailure { Log.w(TAG, "query-activities for user $userId failed", it) }.getOrDefault(emptyList())
+
+    /** Runs a shell command and returns its output; fails after 15 s. */
+    private fun shell(vararg command: String): String {
+        val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+        val output = process.inputStream.bufferedReader().readText()
+        if (!process.waitFor(15, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            error("${command.first()} timed out")
+        }
+        return output
+    }
+
+    private fun launch(pkg: String, user: Int): JSONObject {
         val s = screen ?: return fail("no display")
-        val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return fail("not installed").put("code", "not_installed")
         // Starting an app on the agent's display moves its task there, so an app the person is
         // looking at on their own screen is never launched.
-        if (visibleOnMainScreen(pkg)) return fail("the person is using this app on their own screen").put("code", "in_use_on_main")
-        val component = intent.component?.flattenToShortString() ?: return fail("no launcher activity")
+        if (visibleOnMainScreen(pkg, user)) return fail("the person is using this app on their own screen").put("code", "in_use_on_main")
+        // The person's own app starts by its launcher component; a clone by the launcher intent as
+        // its own user, which the system resolves for that user.
+        val component = if (user == 0) {
+            val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return fail("not installed").put("code", "not_installed")
+            intent.component?.flattenToShortString() ?: return fail("no launcher activity")
+        } else {
+            null
+        }
         var target = s
         var recovered = false
         for (attempt in 0..1) {
             val began = android.os.SystemClock.uptimeMillis()
-            val started = startOn(target.displayId, component)
-            if (started != null) return fail(started.replace("%PKG%", pkg))
+            val started = startOn(target.displayId, pkg, component, user)
+            if (started != null) {
+                val why = started.replace("%PKG%", pkg)
+                return fail(if (user != 0) "$why (app clone, user $user)" else why)
+            }
             // An app that is up on a live display draws within a moment. If nothing was ever drawn, the
             // display is stale (the system dropped it, or the helper outlived what it was made for):
             // make a fresh one and start the app there once.
@@ -287,19 +363,37 @@ internal class PhoneHelper(
             setImePolicy(target.displayId)
             recovered = true
         }
-        return ok().put("component", component).put("recovered", recovered).put("display", target.displayId)
+        return ok().put("component", component ?: "$pkg@$user").put("recovered", recovered).put("display", target.displayId)
     }
 
-    /** `am start` on [displayId]; null when it started, else why not. */
-    private fun startOn(displayId: Int, component: String): String? {
-        val process = ProcessBuilder("am", "start", "--display", displayId.toString(), "-n", component, "-f", "0x10000000")
-            .redirectErrorStream(true).start()
+    /** `am start` on [displayId] as [user]; null when it started, else why not. */
+    private fun startOn(displayId: Int, pkg: String, component: String?, user: Int): String? {
+        val command = mutableListOf("am", "start", "--display", displayId.toString())
+        if (user != 0) command += listOf("--user", user.toString())
+        if (component != null) {
+            command += listOf("-n", component)
+        } else {
+            command += listOf("-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER, "-p", pkg)
+        }
+        command += listOf("-f", "0x10000000")
+        var output = runAm(command) ?: return "starting %PKG% timed out"
+        if (user != 0 && Clones.needsStart(output)) {
+            // A clone's user that is not running yet: start it once and try again.
+            runAm(listOf("am", "start-user", "-w", user.toString()))
+            output = runAm(command) ?: return "starting %PKG% timed out"
+        }
+        return if (output.contains("Error", ignoreCase = true)) output.trim().take(200) else null
+    }
+
+    /** The output of an `am` command, or null when it did not finish in time. */
+    private fun runAm(command: List<String>): String? {
+        val process = ProcessBuilder(command).redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().readText()
         if (!process.waitFor(15, TimeUnit.SECONDS)) {
             process.destroyForcibly()
-            return "starting %PKG% timed out"
+            return null
         }
-        return if (output.contains("Error", ignoreCase = true)) output.trim().take(200) else null
+        return output
     }
 
     /**
@@ -322,7 +416,7 @@ internal class PhoneHelper(
      * most recent first, so when the platform does not say which tasks are visible the first
      * task on the main display is the one in front.
      */
-    private fun visibleOnMainScreen(pkg: String): Boolean = try {
+    private fun visibleOnMainScreen(pkg: String, user: Int): Boolean = try {
         val manager = context.getSystemService(ActivityManager::class.java)!!
         @Suppress("DEPRECATION")
         val tasks = manager.getRunningTasks(50)
@@ -334,7 +428,9 @@ internal class PhoneHelper(
             val visible = runCatching { info.javaClass.getField("isVisible").getBoolean(info) }.getOrNull() ?: front
             front = false
             val owner = (info.topActivity ?: info.baseActivity)?.packageName
-            if (visible && owner == pkg) shown = true
+            // A clone is another user's task: the person's own app of the same package is not it.
+            val taskUser = runCatching { info.javaClass.getField("userId").getInt(info) }.getOrDefault(0)
+            if (visible && owner == pkg && taskUser == user) shown = true
         }
         shown
     } catch (e: Exception) {
@@ -361,6 +457,7 @@ internal class PhoneHelper(
         private const val TAG = "MewlaPhoneHelper"
         private const val LONG_PRESS_MS = 700L
         private const val DRAW_WAIT_MS = 3_000L
+        private const val TEXT_READBACK_MS = 150L
         /** Bumped when the app and helper stop understanding each other; the app restarts a helper that differs. */
         const val PROTOCOL = 1
 

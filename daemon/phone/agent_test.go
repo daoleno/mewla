@@ -239,15 +239,15 @@ func TestSwipeIsTheFingersWayThroughTheMiddle(t *testing.T) {
 
 func TestResolvingAnAppFromWhatTheAgentSays(t *testing.T) {
 	apps := []App{
-		{"com.google.android.apps.maps", "Maps"},
-		{"com.google.android.apps.photos", "Photos"},
-		{"com.google.android.gm", "Gmail"},
-		{"com.google.android.apps.googleone", "Google One"},
-		{"com.google.android.googlequicksearchbox", "Google"},
-		{"com.android.chrome", "Chrome"},
-		{"org.example.notes", "Notes"},
-		{"org.example.notes.pro", "Notes Pro"},
-		{"org.other.mapview", "Map View"},
+		{Package: "com.google.android.apps.maps", Label: "Maps"},
+		{Package: "com.google.android.apps.photos", Label: "Photos"},
+		{Package: "com.google.android.gm", Label: "Gmail"},
+		{Package: "com.google.android.apps.googleone", Label: "Google One"},
+		{Package: "com.google.android.googlequicksearchbox", Label: "Google"},
+		{Package: "com.android.chrome", Label: "Chrome"},
+		{Package: "org.example.notes", Label: "Notes"},
+		{Package: "org.example.notes.pro", Label: "Notes Pro"},
+		{Package: "org.other.mapview", Label: "Map View"},
 	}
 	for query, want := range map[string]string{
 		"Maps":                         "com.google.android.apps.maps", // exact label, though "Map View" has a prefix
@@ -280,7 +280,7 @@ func TestResolvingAnAppFromWhatTheAgentSays(t *testing.T) {
 func TestLaunchReadsTheAppListOnceAndAgainOnlyForAnAppItDoesNotKnow(t *testing.T) {
 	p := &scriptedPhone{
 		screen: appScreen(node("TextView", "", "Home", "", plain, [4]int{0, 0, 10, 10})),
-		apps:   []App{{"com.android.chrome", "Chrome"}, {"com.google.android.gm", "Gmail"}},
+		apps:   []App{{Package: "com.android.chrome", Label: "Chrome"}, {Package: "com.google.android.gm", Label: "Gmail"}},
 	}
 	a, _, conn := newAgent(t, StateReady, p)
 	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -306,7 +306,7 @@ func TestLaunchReadsTheAppListOnceAndAgainOnlyForAnAppItDoesNotKnow(t *testing.T
 		t.Fatalf("the list was read %d times within seconds", n)
 	}
 	p.mu.Lock()
-	p.apps = append(p.apps, App{"com.spotify.music", "Spotify"})
+	p.apps = append(p.apps, App{Package: "com.spotify.music", Label: "Spotify"})
 	p.mu.Unlock()
 	clock = clock.Add(time.Minute)
 	act(t, a, AgentAction{Action: ActLaunch, App: "Spotify"})
@@ -516,5 +516,48 @@ func TestACallerThatGivesUpEndsTheAction(t *testing.T) {
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestAppClonesAreSeparateEntriesTheAgentCanName(t *testing.T) {
+	apps := []App{
+		{Package: "com.tencent.mm", Label: "微信"},
+		{Package: "com.tencent.mm", Label: "微信 (分身 999)", User: 999},
+		{Package: "com.only.clone", Label: "Only Clone", User: 999},
+	}
+	for query, want := range map[string]string{
+		"微信":                 "com.tencent.mm",
+		"com.tencent.mm":     "com.tencent.mm", // a bare package is the person's own app
+		"微信 (分身 999)":        "com.tencent.mm@999",
+		"com.tencent.mm@999": "com.tencent.mm@999",
+		"分身":                 "com.tencent.mm@999",
+		"com.only.clone":     "com.only.clone@999", // no own app by that package: the clone
+	} {
+		app, err := ResolveApp(apps, query)
+		if err != nil || app.Key() != want {
+			t.Fatalf("%q resolved to %+v, %v; want %s", query, app, err, want)
+		}
+	}
+}
+
+func TestLaunchingAClonePassesItsUser(t *testing.T) {
+	p := &scriptedPhone{
+		screen: appScreen(node("TextView", "", "Home", "", plain, [4]int{0, 0, 10, 10})),
+		apps:   []App{{Package: "com.tencent.mm", Label: "微信"}, {Package: "com.tencent.mm", Label: "微信 (分身 999)", User: 999}},
+	}
+	a, _, conn := newAgent(t, StateReady, p)
+	listing := act(t, a, AgentAction{Action: ActApps})
+	if !strings.Contains(listing.Text, "微信 (分身 999) — com.tencent.mm@999") {
+		t.Fatalf("clone not listed as its own entry:\n%s", listing.Text)
+	}
+	act(t, a, AgentAction{Action: ActLaunch, App: "com.tencent.mm@999"})
+	reqs := conn.requests()
+	if got := args[LaunchArgs](t, reqs[len(reqs)-1]); got.Package != "com.tencent.mm" || got.User != 999 {
+		t.Fatalf("launch %+v", got)
+	}
+	act(t, a, AgentAction{Action: ActLaunch, App: "微信"})
+	reqs = conn.requests()
+	if got := args[LaunchArgs](t, reqs[len(reqs)-1]); got.User != 0 {
+		t.Fatalf("own app launched as user %d", got.User)
 	}
 }

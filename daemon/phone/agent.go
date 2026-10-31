@@ -469,7 +469,7 @@ func (a *Agent) listApps(ctx context.Context, w worker) (AgentResult, error) {
 			fmt.Fprintf(&b, "… %d more not shown\n", len(apps)-maxApps)
 			break
 		}
-		fmt.Fprintf(&b, "%s — %s\n", app.Label, app.Package)
+		fmt.Fprintf(&b, "%s — %s\n", app.Label, app.Key())
 	}
 	return AgentResult{Text: strings.TrimRight(b.String(), "\n")}, nil
 }
@@ -518,10 +518,10 @@ func (a *Agent) launch(ctx context.Context, w worker, act AgentAction, t *trace)
 	if err != nil {
 		return AgentResult{}, err
 	}
-	t.app = app.Package
-	reply, err := a.do(ctx, w, OpLaunch, LaunchArgs{Package: app.Package}, act.Image)
+	t.app = app.Key()
+	reply, err := a.do(ctx, w, OpLaunch, LaunchArgs{Package: app.Package, User: app.User}, act.Image)
 	if e := (*Error)(nil); errors.As(err, &e) && e.Code == CodeNotInstalled {
-		return AgentResult{}, &Error{CodeNotInstalled, fmt.Sprintf("%s (%s) is not installed on the phone.", app.Label, app.Package)}
+		return AgentResult{}, &Error{CodeNotInstalled, fmt.Sprintf("%s (%s) is not installed on the phone.", app.Label, app.Key())}
 	}
 	return a.finish(ctx, w, reply, err, "")
 }
@@ -533,24 +533,32 @@ func (e *noApp) Error() string {
 	return fmt.Sprintf("no app on the phone matches %q; phone_apps lists them", e.query)
 }
 
-// ResolveApp picks the app a name means: a package or a label that matches exactly, else a label
-// that starts with it, else one that contains it. Several matches at the best level are an error
-// that lists them, so the agent says which.
+// ResolveApp picks the app a name means: a package (or package@user) or a label that matches
+// exactly, else a label that starts with it, else one that contains it. A bare package names the
+// person's own app, and a clone only when there is no own app by that package; a clone is named
+// by package@user or by its label. Several matches at the best level are an error that lists
+// them, so the agent says which.
 func ResolveApp(apps []App, query string) (App, error) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	tiers := [4][]App{}
+	var clonesByPackage []App
 	for _, app := range apps {
-		label, pkg := strings.ToLower(app.Label), strings.ToLower(app.Package)
+		label, pkg, key := strings.ToLower(app.Label), strings.ToLower(app.Package), strings.ToLower(app.Key())
 		switch {
-		case pkg == q:
+		case key == q:
 			tiers[0] = append(tiers[0], app)
+		case pkg == q:
+			clonesByPackage = append(clonesByPackage, app)
 		case label == q:
 			tiers[1] = append(tiers[1], app)
 		case strings.HasPrefix(label, q):
 			tiers[2] = append(tiers[2], app)
-		case strings.Contains(label, q) || strings.Contains(pkg, q):
+		case strings.Contains(label, q) || strings.Contains(key, q):
 			tiers[3] = append(tiers[3], app)
 		}
+	}
+	if len(tiers[0]) == 0 {
+		tiers[0] = clonesByPackage
 	}
 	for _, found := range tiers {
 		switch len(found) {
@@ -565,7 +573,7 @@ func ResolveApp(apps []App, query string) (App, error) {
 				names = append(names, fmt.Sprintf("and %d more", len(found)-8))
 				break
 			}
-			names = append(names, fmt.Sprintf("%s (%s)", app.Label, app.Package))
+			names = append(names, fmt.Sprintf("%s (%s)", app.Label, app.Key()))
 		}
 		return App{}, fmt.Errorf("%q matches several apps: %s. Launch one by its package.", query, strings.Join(names, ", "))
 	}

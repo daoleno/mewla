@@ -661,11 +661,17 @@ object PhoneController {
         var settleQuiet = 300L
         var settleMax = 2_500L
         var settleMin = 700L
+        // An app that draws its own UI answers in bursts after a lull; settle on more quiet there.
+        if (opaqueScreen) {
+            settleQuiet = 600
+            settleMin = 1_000
+        }
+        var note: String? = null
         when (op) {
             "screen" -> {}
             "launch" -> {
                 if (args.optString("package") == app.packageName) return failure(id, "failed", "Mewla's own screen is not for agents.")
-                val reply = helper.call("launch", JSONObject().put("package", args.getString("package")), 30_000)
+                val reply = helper.call("launch", JSONObject().put("package", args.getString("package")).put("user", args.optInt("user", 0)), 30_000)
                 if (!reply.optBoolean("ok")) return failure(id, reply.optString("code", "failed").ifEmpty { "failed" }, reply.optString("error"))
                 settleQuiet = 500
                 settleMax = 5_000
@@ -678,8 +684,10 @@ object PhoneController {
                 JSONObject().put("x1", args.getInt("x1")).put("y1", args.getInt("y1")).put("x2", args.getInt("x2")).put("y2", args.getInt("y2"))
                     .put("ms", args.optInt("ms", 300)),
             ).let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
-            "text" -> helper.call("text", JSONObject().put("value", args.getString("value")).put("replace", args.optBoolean("replace")))
-                .let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
+            "text" -> helper.call("text", JSONObject().put("value", args.getString("value")).put("replace", args.optBoolean("replace"))).let {
+                if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error"))
+                note = typedNote(it.optString("method"), it.optBoolean("verified"))
+            }
             "key" -> helper.call("key", JSONObject().put("name", args.getString("name")))
                 .let { if (!it.optBoolean("ok")) return failure(id, "failed", it.optString("error")) }
             "wait" -> {
@@ -689,7 +697,15 @@ object PhoneController {
             else -> return failure(id, "failed", "Unknown phone op $op")
         }
         if (op != "screen") helper.call("settle", JSONObject().put("quiet_ms", settleQuiet).put("timeout_ms", settleMax).put("min_wait_ms", settleMin), settleMax + 3_000)
-        return snapshot(id, helper, wantImage)
+        return snapshot(id, helper, wantImage, acted = op != "screen" && op != "wait").also { result ->
+            note?.let { result.put("note", listOf(it, result.optString("note")).filter { n -> n.isNotEmpty() }.joinToString(" ")) }
+        }
+    }
+
+    private fun typedNote(method: String, verified: Boolean): String? = when {
+        method == "set_text" && verified -> null
+        method == "set_text" -> "Typed by setting the field's text; it could not be read back to check."
+        else -> "The field did not take set-text, so the text went in by $method" + if (verified) "." else "; it could not be read back to check."
     }
 
     private fun handoff(id: String, request: JSONObject, helper: HelperClient, args: JSONObject, wantImage: Boolean): JSONObject {
@@ -732,23 +748,35 @@ object PhoneController {
 
     private fun even(v: Double) = (Math.round(v / 2.0) * 2).toInt()
 
+    /** Whether the last reading had nothing the agent could name: an app that draws its own UI. */
+    @Volatile private var opaqueScreen = false
+
     /** What is on the agent's display now, in the daemon's Screen shape, with a picture when asked or needed. */
-    private fun snapshot(id: String, helper: HelperClient, wantImage: Boolean): JSONObject {
+    private fun snapshot(id: String, helper: HelperClient, wantImage: Boolean, acted: Boolean = false): JSONObject {
         val tree = helper.call("tree")
         if (!tree.optBoolean("ok")) return failure(id, "failed", tree.optString("error"))
         val windows = tree.optJSONArray("windows") ?: JSONArray()
         val interactive = tree.optBoolean("interactive", true)
         val result = JSONObject().put("type", "result").put("id", id).put("ok", true)
         val screenOff = windows.length() == 0 && !interactive
+        var elements = 0
+        for (i in 0 until windows.length()) elements += windows.getJSONObject(i).optJSONArray("nodes")?.length() ?: 0
+        // With nothing to read the picture is the screen: send it now, not after another round trip.
+        opaqueScreen = !screenOff && elements == 0
         if (screenOff) {
             result.put("ok", false).put("code", "screen_off")
                 .put("error", "The phone's own screen is off, so the screen cannot be read as elements. The picture is current; the person can wake the phone.")
         } else {
             result.put("screen", JSONObject().put("w", tree.optInt("w")).put("h", tree.optInt("h")).put("windows", windows))
         }
-        if (wantImage || screenOff) {
+        if (wantImage || screenOff || opaqueScreen) {
             val shot = helper.call("screenshot", JSONObject().put("maxWidth", tree.optInt("w", 720)).put("quality", 60), 15_000)
             if (shot.optBoolean("ok")) result.put("image", shot.getString("jpeg"))
+        }
+        // The display draws only when something changes. After an action with no new frame the picture is
+        // the screen from before it; say so, so the agent waits and reads again instead of trusting it.
+        if (acted && !tree.optBoolean("drew_since_action", true)) {
+            result.put("note", "Nothing was drawn on the screen after the action: the screen may be unchanged, or the app has not redrawn yet. Wait a moment and read again before acting on it.")
         }
         return result
     }
