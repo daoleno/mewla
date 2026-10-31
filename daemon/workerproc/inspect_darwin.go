@@ -25,10 +25,19 @@ func Environ(pid int) []string {
 
 // Descendants returns every process below root, breadth first, from one ps
 // snapshot of the process tree.
+//
+// ps lists itself, as a child of whoever ran it. By the time the caller uses
+// the list that pid is gone, and a lsof aimed at it exits 1, so ps's own pid
+// is left out.
 func Descendants(root int) []int {
-	out, err := procspawn.Command("ps ppid", "ps", "-axo", "pid=,ppid=").Output()
+	command := procspawn.Command("ps ppid", procspawn.SystemTool("ps"), "-axo", "pid=,ppid=")
+	out, err := command.Output()
 	if err != nil {
 		return nil
+	}
+	self := 0
+	if command.Process != nil {
+		self = command.Process.Pid
 	}
 	children := map[int][]int{}
 	for _, line := range strings.Split(string(out), "\n") {
@@ -38,7 +47,7 @@ func Descendants(root int) []int {
 		}
 		pid, pidErr := strconv.Atoi(fields[0])
 		ppid, ppidErr := strconv.Atoi(fields[1])
-		if pidErr != nil || ppidErr != nil || pid <= 0 {
+		if pidErr != nil || ppidErr != nil || pid <= 0 || pid == self {
 			continue
 		}
 		children[ppid] = append(children[ppid], pid)
