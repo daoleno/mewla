@@ -375,3 +375,60 @@ func TestSettingATextAreaAnswersWithTheAreaNotItsLines(t *testing.T) {
 		t.Errorf("the answer (%d bytes) isn't much smaller than the read (%d)", len(set.Text), len(state))
 	}
 }
+
+// A pop-up button's menu is a child of the button. What a press opens is what
+// the agent picks from, so it is listed row by row, never folded into the
+// button.
+func TestAPressedPopUpButtonsMenuItemsAreListedWithTheirIds(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	app := FakeApp{App: App{Name: "Prefs", PID: 606, Active: true}}
+	app.Elements = append(app.Elements, Element{Role: "AXWindow", Title: "Prefs", Enabled: true})
+	for i := 0; i < 20; i++ {
+		app.Elements = append(app.Elements, Element{Depth: 1, Role: "AXCheckBox", Title: fmt.Sprintf("Option %d", i), Enabled: true, Actions: []string{"AXPress"}})
+	}
+	app.Elements = append(app.Elements, Element{Depth: 1, Role: "AXPopUpButton", Title: "Language", Value: "English", Enabled: true, Actions: []string{"AXPress"}})
+	backend.RunningApps = []FakeApp{app}
+	backend.OnElementAction = func(app *FakeApp, index int, action string) {
+		if app.Elements[index].Role != "AXPopUpButton" || action != "AXPress" {
+			return
+		}
+		app.Elements = append(app.Elements[:index+1], Element{Depth: 2, Role: "AXMenu", Enabled: true},
+			Element{Depth: 3, Role: "AXMenuItem", Title: "English", Enabled: true, Actions: []string{"AXPress"}},
+			Element{Depth: 3, Role: "AXMenuItem", Title: "Deutsch", Enabled: true, Actions: []string{"AXPress"}},
+			Element{Depth: 3, Role: "AXMenuItem", Title: "Français", Enabled: true, Actions: []string{"AXPress"}})
+	}
+	state := act(t, s, "%7", AgentAction{Action: "app_state"}).Text
+	pressed := act(t, s, "%7", AgentAction{Action: "element", Element: idOf(t, state, `PopUpButton "Language"`), ElementAction: "press"})
+	if !pressed.diff {
+		t.Fatalf("a menu opening is a small difference:\n%s", pressed.Text)
+	}
+	for _, want := range []string{`+ [`, `Menu`, `MenuItem "English"`, `MenuItem "Deutsch"`, `MenuItem "Français"`} {
+		if !strings.Contains(pressed.Text, want) {
+			t.Errorf("missing %q:\n%s", want, pressed.Text)
+		}
+	}
+	if strings.Contains(pressed.Text, "inside it changed") {
+		t.Errorf("the menu was folded into the button:\n%s", pressed.Text)
+	}
+	// And an item is acted on by the id it was given.
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Match: &ElementMatch{Role: "MenuItem", Title: "Deutsch"}, ElementAction: "press"}); err != nil {
+		t.Fatalf("pick a menu item: %v", err)
+	}
+}
+
+// A small change under a text area is still listed row by row: folding is for
+// a difference that is too large to give.
+func TestSmallChangesUnderASetValueElementAreListed(t *testing.T) {
+	smallBefore := noteTree(2, "old", 0)
+	smallAfter := noteTree(2, "new", 1000)
+	for i := 0; i < 30; i++ {
+		smallBefore.Elements = append(smallBefore.Elements, Element{Depth: 1, Role: "AXButton", Title: fmt.Sprintf("B%d", i), Enabled: true})
+		smallAfter.Elements = append(smallAfter.Elements, Element{Depth: 1, Role: "AXButton", Title: fmt.Sprintf("B%d", i), Enabled: true})
+		smallBefore.IDs = append(smallBefore.IDs, 3000+i)
+		smallAfter.IDs = append(smallAfter.IDs, 3000+i)
+	}
+	text, stats, why, ok := diffAnswer(smallBefore, smallAfter, rowsOf(smallBefore), rowsOf(smallAfter), smallBefore.id(6))
+	if !ok || stats.rows != 5 || strings.Contains(text, "inside it changed") || !strings.Contains(text, "old line 0") && !strings.Contains(text, "new line 0") {
+		t.Fatalf("a small difference is listed row by row: %v %q rows %d\n%s", ok, why, stats.rows, text)
+	}
+}

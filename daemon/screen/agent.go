@@ -805,7 +805,12 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 		var text string
 		var stats readStats
 		var ok bool
-		if text, stats, why, ok = diffAnswer(*previous, tree, beforeRows, afterRows, action.Element); ok {
+		// Only a value that was set rebuilds what lies under its element.
+		collapse := 0
+		if name == "set_value" {
+			collapse = action.Element
+		}
+		if text, stats, why, ok = diffAnswer(*previous, tree, beforeRows, afterRows, collapse); ok {
 			return AgentResult{Text: did + text, rows: stats.rows, diff: true}, nil
 		}
 	}
