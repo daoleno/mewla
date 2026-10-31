@@ -15,6 +15,8 @@
 #    Zig's lib dir with the patches of native.lock.json's zig.lib_patches
 #    applied, selected with ZIG_LIB_DIR; the Zig install stays untouched.
 #
+_MEWLA_COMPAT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # mewla_libsystem_arm64_support SDK prints one word:
 #   native       the SDK already lists arm64-macos; no workaround is needed
 #   arm64e-only  the SDK lists only arm64e; the workaround is needed
@@ -34,9 +36,77 @@ mewla_libsystem_arm64_support() {
   fi
 }
 
+# mewla_prepare_macos_sdk_for_zig TOOL_CACHE prints the macOS SDK Zig should
+# use (the build sets MEWLA_MACOS_SDKROOT to it for scripts/zig-xcode-compat/xcrun):
+# the SDK xcrun names when its libSystem stub lists arm64, otherwise a
+# copy-on-write clone of it with arm64 added. Xcode itself is never touched.
+mewla_prepare_macos_sdk_for_zig() {
+  local tool_cache="$1" sdk
+  sdk="$(realpath "$(xcrun --sdk macosx --show-sdk-path)")"
+  local libsystem="$sdk/usr/lib/libSystem.B.tbd"
+
+  case "$(mewla_libsystem_arm64_support "$sdk")" in
+    native)
+      echo "$sdk"
+      return
+      ;;
+    arm64e-only) ;;
+    *)
+      echo "error: unsupported libSystem target list in $libsystem" >&2
+      return 1
+      ;;
+  esac
+
+  # Xcode 26.6's macOS 26.5 SDK advertises the top-level libSystem stub as
+  # arm64e-only. Apple's linker accepts it for arm64 hosts, while Zig 0.15.2
+  # intentionally requires an exact target match. Give Zig a clone with arm64
+  # added to those target lists.
+  local xcode_build
+  xcode_build="$(xcodebuild -version | awk '/Build version/ {print $3}')"
+  local compat_sdk="$tool_cache/macos-sdk-$xcode_build-arm64"
+  local marker="$compat_sdk/.zig-arm64-libsystem"
+  if [[ ! -f "$marker" ]]; then
+    echo "Preparing Zig-compatible macOS SDK clone for Xcode $xcode_build..." >&2
+    rm -rf "$compat_sdk"
+    mkdir -p "$(dirname "$compat_sdk")"
+    if [[ "$(uname -s)" == Darwin ]]; then
+      cp -cR "$sdk" "$compat_sdk"
+    else
+      cp -R "$sdk" "$compat_sdk"
+    fi
+    python3 - "$compat_sdk/usr/lib/libSystem.B.tbd" <<'PY'
+import pathlib, sys
+path = pathlib.Path(sys.argv[1])
+text = path.read_text()
+text = text.replace("arm64e-macos", "arm64-macos, arm64e-macos")
+text = text.replace("arm64e-maccatalyst", "arm64-maccatalyst, arm64e-maccatalyst")
+path.write_text(text)
+PY
+    touch "$marker"
+  fi
+  echo "$compat_sdk"
+}
+
 # mewla_zig_stock_lib ZIG_BIN prints the lib dir Zig itself uses.
 mewla_zig_stock_lib() {
   env -u ZIG_LIB_DIR "$1" env | sed -n 's/^ *\.lib_dir = "\(.*\)",$/\1/p'
+}
+
+# mewla_lock_lib_patches LOCK ROOT prints the absolute path of each patch in
+# the lock's zig.lib_patches, one per line.
+mewla_lock_lib_patches() {
+  python3 -c 'import json, pathlib, sys
+for patch in json.load(open(sys.argv[1]))["zig"].get("lib_patches") or []:
+    print(pathlib.Path(sys.argv[2]) / patch["path"])' "$1" "$2"
+}
+
+# mewla_zig_lib_patch_state LIB PATCH prints unpatched, applied or mismatch by
+# reading the text the patch changes. It does not ask `patch`: Apple's patch
+# 2.0-12u11 (macOS) answers "Unreversed (or previously applied) patch
+# detected! Ignore -R? [y]" with yes on an unpatched tree, and so takes the
+# stock header for a patched one.
+mewla_zig_lib_patch_state() {
+  python3 -I "$_MEWLA_COMPAT_LIB_DIR/zig_lib_patch_state.py" "$1" "$2"
 }
 
 # mewla_zig_lib_already_patched ZIG_BIN LOCK ROOT succeeds when Zig's own lib
@@ -45,35 +115,38 @@ mewla_zig_stock_lib() {
 # and the libcxx probe would call the workaround retired; the fix is a Zig
 # unpacked afresh from the pinned tarball.
 mewla_zig_lib_already_patched() {
-  local zig="$1" lock="$2" root="$3" stock path
+  local zig="$1" lock="$2" root="$3" stock path found=1
   stock="$(mewla_zig_stock_lib "$zig")"
   [[ -d "$stock" ]] || return 1
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
-    patch --quiet --dry-run --reverse -F0 -p1 -d "$stock" -i "$path" >/dev/null 2>&1 || return 1
-  done < <(python3 -c 'import json, pathlib, sys
-for patch in json.load(open(sys.argv[1]))["zig"].get("lib_patches") or []:
-    print(pathlib.Path(sys.argv[2]) / patch["path"])' "$lock" "$root")
-  return 0
+    [[ "$(mewla_zig_lib_patch_state "$stock" "$path")" == applied ]] || return 1
+    found=0
+  done < <(mewla_lock_lib_patches "$lock" "$root")
+  return "$found"
 }
 
-# mewla_zig_libcxx_support ZIG_BIN prints one word, from compiling the stock
-# Zig's own libcxx header the way the build does, for the macOS target with
-# the SDK that xcrun names:
-#   fixed    it compiles; the libcxx workaround is no longer needed
-#   broken   it fails on INFINITY, the condition the workaround exists for
-#   unknown  it fails some other way, or there was nothing to compile
-# The failing output is left in $MEWLA_ZIG_PROBE_LOG when that is set.
+# mewla_zig_libcxx_support ZIG_BIN [SDKROOT] prints one word, from building a
+# C++ program for the macOS target the way the iOS build does, with the stock
+# Zig lib dir and empty caches. Linking a C++ program is what makes Zig build
+# its own libcxx (compiling <random> alone does not, and compiled where the
+# build failed), so the answer comes from the same libcxx build:
+#   fixed    it builds; the libcxx workaround is no longer needed
+#   broken   libcxx fails on INFINITY, the condition the workaround exists for
+#   unknown  it fails some other way, or there was nothing to build
+# SDKROOT is the SDK from mewla_prepare_macos_sdk_for_zig; without it Zig finds
+# the SDK itself. The output is left in $MEWLA_ZIG_PROBE_LOG when that is set.
 mewla_zig_libcxx_support() {
-  local zig="$1"
+  local zig="$1" sdkroot="${2:-}"
   local work
   work="$(mktemp -d "${TMPDIR:-/tmp}/mewla-zig-probe.XXXXXX")" || { echo unknown; return; }
-  printf '#include <random>\nint main() { return 0; }\n' >"$work/probe.cpp"
+  printf '#include <random>\nint main() { std::mt19937 g(1); return static_cast<int>(g() & 1) * 0; }\n' >"$work/probe.cpp"
   local log="$work/probe.log" result
-  # Zig's lib dir and caches are the stock ones: a patched copy or a cached
-  # libcxx from an earlier build would hide the condition.
-  if env -u ZIG_LIB_DIR ZIG_GLOBAL_CACHE_DIR="$work/global" ZIG_LOCAL_CACHE_DIR="$work/local" \
-      "$zig" c++ -target aarch64-macos.13.0 -std=c++20 -c "$work/probe.cpp" -o "$work/probe.o" >"$log" 2>&1; then
+  local -a probe_env=(env -u ZIG_LIB_DIR ZIG_GLOBAL_CACHE_DIR="$work/global" ZIG_LOCAL_CACHE_DIR="$work/local")
+  if [[ -n "$sdkroot" ]]; then
+    probe_env+=(PATH="$_MEWLA_COMPAT_LIB_DIR/../zig-xcode-compat:$PATH" MEWLA_MACOS_SDKROOT="$sdkroot")
+  fi
+  if "${probe_env[@]}" "$zig" c++ -target aarch64-macos.13.0 -std=c++20 "$work/probe.cpp" -o "$work/probe" >"$log" 2>&1; then
     result=fixed
   elif grep -q "undeclared identifier 'INFINITY'" "$log"; then
     result=broken
@@ -155,13 +228,24 @@ PY
   local path sha
   while IFS=$'\t' read -r path sha; do
     [[ -n "$path" ]] || continue
-    # --forward refuses a patch that is already applied; -F0 allows no fuzz.
-    if ! patch --quiet --forward -F0 -p1 -d "$partial" -i "$path" >&2; then
-      if mewla_zig_lib_already_patched "$zig" "$lock" "$root"; then
+    # Decide from the text, not from patch's exit code or prompts: only an
+    # unpatched file is patched, and the result is read back afterwards.
+    case "$(mewla_zig_lib_patch_state "$partial" "$path")" in
+      unpatched) ;;
+      applied)
         echo "error: $stock is already patched (a hand patch?). Remove that Zig and let the build unpack the pinned one afresh; also unset ZIG_LIB_DIR and clear any Zig cache built with the hand patch." >&2
-      else
+        rm -rf "$partial"
+        return 1
+        ;;
+      *)
         echo "error: $path does not apply to $stock; Zig's lib changed under it" >&2
-      fi
+        rm -rf "$partial"
+        return 1
+        ;;
+    esac
+    if ! patch --quiet --forward -F0 -p1 -d "$partial" -i "$path" >&2 \
+        || [[ "$(mewla_zig_lib_patch_state "$partial" "$path")" != applied ]]; then
+      echo "error: $path did not apply to $stock ($(patch --version 2>&1 | head -n1))" >&2
       rm -rf "$partial"
       return 1
     fi

@@ -78,7 +78,7 @@ class ZigXcodeCompatTests(unittest.TestCase):
             )
             return result.stdout.strip()
 
-    def check(self, targets, libcxx="infinity"):
+    def check(self, targets, libcxx="infinity", header_tail=HEADER_TAIL):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             sdk = sdk_with_targets(root, targets)
@@ -87,7 +87,10 @@ class ZigXcodeCompatTests(unittest.TestCase):
             xcrun = bin_dir / "xcrun"
             xcrun.write_text(f'#!/bin/sh\necho "{sdk}"\n')
             xcrun.chmod(0o755)
-            zig = fake_zig(bin_dir, fake_lib(root), libcxx)
+            xcodebuild = bin_dir / "xcodebuild"
+            xcodebuild.write_text('#!/bin/sh\necho "Xcode 27.0"\necho "Build version TESTBUILD"\n')
+            xcodebuild.chmod(0o755)
+            zig = fake_zig(bin_dir, fake_lib(root, header_tail), libcxx)
             env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "ZIG_BIN": str(zig), "MEWLA_TOOL_CACHE": str(root / "tools"), "TMPDIR": str(root)}
             return subprocess.run(["bash", str(CHECK)], capture_output=True, text=True, env=env)
 
@@ -116,7 +119,8 @@ class ZigXcodeCompatTests(unittest.TestCase):
         self.assertIn("layout changed", result.stderr)
 
     def test_the_libcxx_workaround_retires_on_its_own(self):
-        result = self.check("x86_64-macos, arm64e-macos", libcxx="ok")
+        # A Zig that fixed it itself has changed the line the patch is for.
+        result = self.check("x86_64-macos, arm64e-macos", libcxx="ok", header_tail=HEADER_TAIL.replace("INFINITY", "HUGE_VALF"))
         self.assertEqual(result.returncode, 1)
         self.assertIn("libcxx workaround is retired", result.stderr)
         self.assertIn("zig.lib_patches", result.stderr)
@@ -129,6 +133,14 @@ class ZigXcodeCompatTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("libSystem workaround is retired", result.stderr)
         self.assertIn("libcxx workaround: still needed", result.stdout)
+
+    def test_a_probe_that_compiles_the_unfixed_header_is_not_believed(self):
+        # The stock header still has the bare INFINITY the patch exists for, so
+        # a probe that builds is not reproducing the failure: no "retired".
+        result = self.check("x86_64-macos, arm64e-macos", libcxx="ok")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("probe and Zig's header disagree", result.stderr)
+        self.assertNotIn("libcxx workaround is retired", result.stderr)
 
     def test_an_unrelated_libcxx_failure_is_not_taken_for_the_known_one(self):
         result = self.check("x86_64-macos, arm64e-macos", libcxx="other")
@@ -203,6 +215,57 @@ class ZigXcodeCompatTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("the lock says", result.stderr)
 
+    def state(self, lib, patch=PATCH):
+        return subprocess.run(
+            ["bash", "-c", f'source "{LIBRARY}"; mewla_zig_lib_patch_state "{lib}" "{patch}"'],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+    def test_the_patch_state_is_read_from_the_text_not_from_patch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(self.state(fake_lib(root)), "unpatched")
+            patched = HEADER_TAIL.replace("INFINITY", "numeric_limits<_RealT>::infinity()")
+            b = root / "b"
+            b.mkdir()
+            self.assertEqual(self.state(fake_lib(b, patched)), "applied")
+            other = root / "c"
+            other.mkdir()
+            self.assertEqual(self.state(fake_lib(other, HEADER_TAIL.replace("INFINITY", "HUGE_VALF"))), "mismatch")
+            self.assertEqual(self.state(root / "missing"), "mismatch")
+
+    def test_patch_prompting_to_ignore_reverse_does_not_matter(self):
+        """Apple's patch says "Unreversed patch detected! Ignore -R?" and exits 0 on an unpatched tree.
+
+        A stand-in for that patch must not make the stock header look patched,
+        nor stop the patch from being applied."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real = shutil.which("patch")
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            apple = bin_dir / "patch"
+            apple.write_text(
+                "#!/bin/sh\n"
+                'for a in "$@"; do if [ "$a" = --reverse ] || [ "$a" = -R ]; then '
+                'echo "Unreversed (or previously applied) patch detected!  Ignore -R? [y]" >&2; exit 0; fi; done\n'
+                f'exec {real} "$@"\n'
+            )
+            apple.chmod(0o755)
+            lib = fake_lib(root)
+            zig = fake_zig(root, lib, "ok")
+            env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+            already = subprocess.run(
+                ["bash", "-c", f'source "{LIBRARY}"; mewla_zig_lib_already_patched "{zig}" "{LOCK}" "{ROOT}"'],
+                capture_output=True, text=True, env=env,
+            )
+            self.assertNotEqual(already.returncode, 0, "the stock header was taken for a patched one")
+            built = subprocess.run(
+                ["bash", "-c", f'source "{LIBRARY}"; mewla_patched_zig_lib "{zig}" "{LOCK}" "{ROOT}" "{root / "tools"}"'],
+                capture_output=True, text=True, env=env,
+            )
+            self.assertEqual(built.returncode, 0, built.stderr)
+
     def test_the_lock_names_a_patch_that_is_the_file_in_the_tree(self):
         import hashlib
         patches = json.loads(LOCK.read_text())["zig"]["lib_patches"]
@@ -211,8 +274,11 @@ class ZigXcodeCompatTests(unittest.TestCase):
 
     def test_the_build_script_and_the_check_share_one_predicate(self):
         build = (ROOT / "scripts/build-libghostty-ios.sh").read_text()
-        self.assertIn("mewla_libsystem_arm64_support", build)
+        # The SDK clone lives in the library, so the check's probe builds against the same SDK.
+        self.assertIn("mewla_prepare_macos_sdk_for_zig", build)
         self.assertIn("lib/zig-xcode-compat.sh", build)
+        self.assertIn("mewla_prepare_macos_sdk_for_zig", CHECK.read_text())
+        self.assertIn("mewla_libsystem_arm64_support", LIBRARY.read_text())
 
     def test_the_build_uses_the_patched_lib_and_records_it(self):
         build = (ROOT / "scripts/build-libghostty-ios.sh").read_text()
@@ -224,7 +290,7 @@ class ZigXcodeCompatTests(unittest.TestCase):
 
     def test_the_ios_cache_key_covers_what_the_workarounds_are_made_of(self):
         action = (ROOT / ".github/actions/ios-native/action.yml").read_text()
-        for name in ("scripts/lib/zig-xcode-compat.sh", "scripts/zig-xcode-compat/**", "scripts/build-libghostty-ios.sh"):
+        for name in ("scripts/lib/zig-xcode-compat.sh", "scripts/lib/zig_lib_patch_state.py", "scripts/zig-xcode-compat/**", "scripts/build-libghostty-ios.sh"):
             self.assertGreaterEqual(action.count(name), 2, f"{name} must be in both cache keys")
 
 
