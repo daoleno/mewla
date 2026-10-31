@@ -59,7 +59,7 @@ func newFixture(t *testing.T) *fixture {
 	return &fixture{media: mediaStore, local: local, client: client}
 }
 
-func TestEnableSubmitPostAndTurnOff(t *testing.T) {
+func TestEnableSubmitPostTurnOffOnAndDelete(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	t.Setenv("HOME", t.TempDir())
@@ -125,22 +125,71 @@ func TestEnableSubmitPostAndTurnOff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Turning off removes the person on the server and everything here.
-	if err := f.local.Disable(ctx); err != nil {
+	// Turning off only stops Friends here: the person, the capped draft and
+	// the account stay, and nothing acts until it is turned back on.
+	if err := f.local.Disable(); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := f.local.Enabled(); ok {
 		t.Fatal("still on locally")
 	}
-	if _, err := f.client.Me(ctx); err == nil {
-		t.Fatal("server still has the person")
+	if state, ok := f.local.Account(); !ok || state.Handle != "alice" || !state.Off {
+		t.Fatalf("account after off = %+v %v", state, ok)
+	}
+	if _, err := f.client.Me(ctx); err != nil {
+		t.Fatalf("server lost the person on off: %v", err)
 	}
 	if _, err := f.local.Submit(ctx, "after off", ""); !errors.Is(err, friends.ErrNotLinked) {
 		t.Fatalf("submit after off = %v", err)
 	}
+	if err := f.local.Discard(capped.DraftID); !errors.Is(err, friends.ErrNotLinked) {
+		t.Fatalf("discard while off = %v", err)
+	}
+	if _, err := f.local.PostDraft(ctx, capped.DraftID, "", nil); !errors.Is(err, friends.ErrNotLinked) {
+		t.Fatalf("post draft while off = %v", err)
+	}
+	if err := f.local.Disable(); err != nil {
+		t.Fatalf("off twice: %v", err)
+	}
+
+	// On again resumes the same person and draft with no new sign-in, and
+	// what happened meanwhile is not news.
+	state, _ := f.local.Account()
+	state.NotifySeq = 7
+	if err := friends.NewStore(f.local.StateDir).SaveState(state); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.local.Enable(ctx, "Mochi", "cat", "UTC"); err != nil {
+		t.Fatal(err)
+	}
+	resumed, ok := f.local.Enabled()
+	if !ok || resumed.Handle != "alice" || resumed.Off || resumed.NotifySeq != 0 {
+		t.Fatalf("resumed = %+v %v", resumed, ok)
+	}
+	if err := f.local.Discard(capped.DraftID); err != nil {
+		t.Fatalf("draft lost across off: %v", err)
+	}
+
+	// Deleting the account is separate: the person goes from the server and
+	// everything here, which leaves Friends off.
+	if err := f.local.DeleteAccount(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.local.Account(); ok {
+		t.Fatal("account kept after delete")
+	}
+	if _, ok := f.local.Enabled(); ok {
+		t.Fatal("still on after delete")
+	}
+	if _, err := f.client.Me(ctx); err == nil {
+		t.Fatal("server still has the person")
+	}
+	if _, err := f.local.Submit(ctx, "after delete", ""); !errors.Is(err, friends.ErrNotLinked) {
+		t.Fatalf("submit after delete = %v", err)
+	}
 }
 
-func TestDisableKeepsLocalStateWhenTheServerCannotBeReached(t *testing.T) {
+func TestDeleteAccountKeepsLocalStateWhenTheServerCannotBeReached(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	t.Setenv("HOME", t.TempDir())
@@ -148,11 +197,33 @@ func TestDisableKeepsLocalStateWhenTheServerCannotBeReached(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.local.NewClient = func() (*friends.Client, error) { return nil, friends.ErrSignedOut }
-	if err := f.local.Disable(ctx); !errors.Is(err, friends.ErrSignedOut) {
-		t.Fatalf("disable signed out = %v", err)
+	if err := f.local.DeleteAccount(ctx); !errors.Is(err, friends.ErrSignedOut) {
+		t.Fatalf("delete signed out = %v", err)
 	}
-	if _, ok := f.local.Enabled(); !ok {
+	if _, ok := f.local.Account(); !ok {
 		t.Fatal("local state was dropped although the server still has the person")
+	}
+}
+
+// An account that was only turned off can still be deleted.
+func TestDeleteAccountWorksWhileOff(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	t.Setenv("HOME", t.TempDir())
+	if _, err := f.local.Enable(ctx, "Mochi", "cat", "UTC"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.local.Disable(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.local.DeleteAccount(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := f.local.Account(); ok {
+		t.Fatal("account kept after delete")
+	}
+	if _, err := f.client.Me(ctx); err == nil {
+		t.Fatal("server still has the person")
 	}
 }
 

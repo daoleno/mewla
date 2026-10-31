@@ -197,3 +197,68 @@ func TestFriendsPlaybookIsGatedAndWriteOnly(t *testing.T) {
 		t.Errorf("playbook is %d bytes; keep it lazy-loadable", len(content))
 	}
 }
+
+// A feature that is off is not announced: its playbook is neither written nor
+// listed, an untouched copy goes, and turning the feature on brings it back.
+func TestGatedPlaybookFollowsItsFeature(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PlaybookCatalog(); err != nil {
+		t.Fatal(err)
+	}
+	path := store.playbookPath("friends.md")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("ungated playbook not seeded: %v", err)
+	}
+
+	on := false
+	store.GateSeed("playbooks/friends.md", func() bool { return on })
+	catalog, err := store.PlaybookCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range catalog.Playbooks {
+		if entry.Name == "friends" {
+			t.Fatalf("friends listed while off: %#v", catalog.Playbooks)
+		}
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("untouched friends playbook stayed on disk while off: %v", err)
+	}
+	if containsString(store.shownPlaybookPaths(), "playbooks/friends.md") || len(store.shownPlaybookPaths()) != 4 {
+		t.Fatalf("shown paths = %v", store.shownPlaybookPaths())
+	}
+
+	on = true
+	catalog, err = store.PlaybookCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, entry := range catalog.Playbooks {
+		found = found || entry.Name == "friends"
+	}
+	if !found {
+		t.Fatalf("friends missing while on: %#v", catalog.Playbooks)
+	}
+
+	// A playbook the owner edited is never deleted, only left out of the list.
+	if err := os.WriteFile(path, []byte("---\ndescription: mine\n---\nmine\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	on = false
+	catalog, err = store.PlaybookCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range catalog.Playbooks {
+		if entry.Name == "friends" {
+			t.Fatalf("edited friends playbook listed while off")
+		}
+	}
+	if raw, err := os.ReadFile(path); err != nil || !strings.Contains(string(raw), "mine") {
+		t.Fatalf("edited playbook lost: %v", err)
+	}
+}

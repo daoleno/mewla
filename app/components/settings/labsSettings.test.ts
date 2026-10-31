@@ -23,7 +23,7 @@ describe("Settings → Labs", () => {
 
   test("a feature's controls live on its page", () => {
     const friends = read("./FriendsSettings.tsx");
-    for (const text of ["Post without asking", "Let it attach pictures and video", "Open Friends", "Turn off Friends?"]) {
+    for (const text of ["Post without asking", "Let it attach pictures and video", "Open Friends", "Delete Friends account"]) {
       expect(friends).toContain(text);
       expect(labs).not.toContain(text);
     }
@@ -42,6 +42,17 @@ describe("Settings is one visual system", () => {
       expect(source).toContain("<ListSection");
       expect(source).not.toContain("SegmentedControl");
     }
+  });
+
+  test("turning Friends off is only the switch; deleting is its own confirmed row", () => {
+    const friends = read("./FriendsSettings.tsx");
+    expect(friends).toContain("void friends.turnOff()");
+    expect(friends).not.toContain("Turn off Friends?");
+    expect(friends).not.toContain("Delete and turn off");
+    expect(friends).toContain('title="Delete Friends account?"');
+    expect(friends).toContain(".deleteAccount()");
+    expect(read("../../services/friendsAccount.ts")).toContain('op: "delete_account"');
+    expect(read("../../services/friendsAccount.ts")).not.toContain('op: "disable"');
   });
 
   test("no explanatory footers or filler subtitles", () => {

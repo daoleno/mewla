@@ -11,7 +11,7 @@ import { FriendsSheet } from "../friends/FriendsSheet";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
 import { useFriendsLabs } from "../../store/friendsLabs";
 
-/** Settings → Labs → Friends: the switch, the account, what it may post without asking, and the way in. */
+/** Settings → Labs → Friends: the switch, the account and its deletion, what it may post without asking, and the way in. */
 export function FriendsSettings() {
   const { colors } = useAppTheme();
   const router = useRouter();
@@ -19,7 +19,8 @@ export function FriendsSettings() {
   const friends = useFriendsLabs();
   const [autoSheet, setAutoSheet] = useState(false);
   const [mediaSheet, setMediaSheet] = useState(false);
-  const [offSheet, setOffSheet] = useState(false);
+  const [deleteSheet, setDeleteSheet] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const { phase, status, signIn, error, available, enabled } = friends;
   const busy = phase === "working";
@@ -29,9 +30,7 @@ export function FriendsSettings() {
     : phase === "signing_in"
       ? "Sign in to Mewla to continue"
       : busy
-        ? enabled
-          ? "Working…"
-          : "Turning on…"
+        ? "Turning on…"
         : !available && !enabled
           ? "Connect a computer first"
           : undefined;
@@ -53,12 +52,12 @@ export function FriendsSettings() {
               trailing={
                 <InkSwitch
                   value={enabled || busy || phase === "signing_in"}
-                  disabled={busy || (!available && !enabled)}
+                  disabled={busy || deleting || (!available && !enabled)}
                   accessibilityLabel="Friends"
                   onValueChange={(next) => {
                     if (next) void friends.turnOn();
                     else if (phase === "signing_in") friends.cancelSignIn();
-                    else setOffSheet(true);
+                    else void friends.turnOff();
                   }}
                 />
               }
@@ -107,13 +106,14 @@ export function FriendsSettings() {
             </ListSection>
           ) : null}
 
-          {enabled && status?.handle ? (
+          {status?.handle ? (
             <ListSection title="Friends account">
               <ListRow
                 title={`@${status.handle}`}
-                subtitle={status.account ? `Signed in as ${status.account}` : "Signed in"}
-                leading={me ? <FriendsAvatar author={me} size={40} /> : undefined}
+                subtitle={status.signed_in ? (status.account ? `Signed in as ${status.account}` : "Signed in") : undefined}
+                leading={enabled && me ? <FriendsAvatar author={me} size={40} /> : undefined}
               />
+              <ListRow title="Delete Friends account" destructive disabled={busy} onPress={() => setDeleteSheet(true)} />
             </ListSection>
           ) : null}
         </View>
@@ -152,18 +152,24 @@ export function FriendsSettings() {
         onClose={() => setMediaSheet(false)}
       />
       <FriendsSheet
-        visible={offSheet}
-        title="Turn off Friends?"
+        visible={deleteSheet}
+        title="Delete Friends account?"
         points={[
           { icon: "trash", text: "Your posts, comments, likes, bookmarks and follows are deleted" },
           { icon: "edit", text: "Drafts on your computer are discarded" },
         ]}
-        confirmLabel="Delete and turn off"
-        cancelLabel="Keep Friends"
+        confirmLabel="Delete account"
+        cancelLabel="Keep account"
         destructive
-        busy={busy}
-        onConfirm={() => void friends.turnOff().then((done) => done && setOffSheet(false))}
-        onClose={() => setOffSheet(false)}
+        busy={deleting}
+        onConfirm={() => {
+          setDeleting(true);
+          void friends
+            .deleteAccount()
+            .then((done) => done && setDeleteSheet(false))
+            .finally(() => setDeleting(false));
+        }}
+        onClose={() => setDeleteSheet(false)}
       />
     </>
   );

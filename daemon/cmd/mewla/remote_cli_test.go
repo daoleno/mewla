@@ -232,8 +232,9 @@ func TestLoginReusesTheFriendsAccountAndLogoutKeepsItWhileFriendsIsOn(t *testing
 		t.Fatalf("logout lost the Friends account: %#v ok=%v err=%v", account, ok, err)
 	}
 
-	// With Friends off nothing needs the account, so logout signs out fully.
-	if err := friends.NewStore(stateDir).Clear(); err != nil {
+	// With Friends turned off (its account kept) nothing needs the sign-in,
+	// so logout signs out fully.
+	if err := (&friends.Local{StateDir: stateDir}).Disable(); err != nil {
 		t.Fatal(err)
 	}
 	out.Reset()

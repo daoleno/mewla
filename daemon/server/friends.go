@@ -79,8 +79,8 @@ type friendsStatus struct {
 
 // callable is what the phone may ask the service for through this computer:
 // the App screens, and nothing that changes whether Friends is on. Turning on,
-// turning off and auto-post go through their own operations because this
-// computer has to act on them too.
+// turning off, deleting the account and auto-post go through their own
+// operations because this computer has to act on them too.
 var callable = regexp.MustCompile(`^/(feed|posts|comments|people|bookmarks|blocks|reports|notifications)(/[A-Za-z0-9_@.-]+)*(\?[A-Za-z0-9_=&.%-]*)?$`)
 
 func friendsCallAllowed(method, path string) bool {
@@ -97,8 +97,8 @@ func friendsCallAllowed(method, path string) bool {
 }
 
 // handleFriends is the paired phone's one door to Friends: it reads the state,
-// signs the computer in to a Mewla account, turns Friends on and off, works the
-// draft queue, and passes the App's screens through to the service as this
+// signs the computer in to a Mewla account, turns Friends on and off, deletes
+// the Friends account, works the draft queue, and passes the App's screens through to the service as this
 // computer's account. The phone holds no Friends credential of its own.
 func (s *Server) handleFriends(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -179,11 +179,17 @@ func (s *Server) friendsStatusNow(ctx context.Context) friendsStatus {
 	if config, ok, _ := remote.LoadAccount(local.StateDir); ok {
 		status.SignedIn, status.Account, status.RemoteAccess = true, config.Machine.AccountLogin, config.RemoteAccess
 	}
-	state, enabled := local.Enabled()
-	if !enabled {
+	state, kept := local.Account()
+	if !kept {
 		return status
 	}
-	status.Enabled, status.Handle = true, state.Handle
+	// A turned-off account is still there to be turned on or deleted, but
+	// it has no drafts and no profile to show.
+	status.Handle = state.Handle
+	if state.Off {
+		return status
+	}
+	status.Enabled = true
 	if drafts, err := friends.NewStore(local.StateDir).Drafts(); err == nil && drafts != nil {
 		status.Drafts = drafts
 	}
@@ -217,8 +223,14 @@ func (s *Server) friendsAction(w http.ResponseWriter, r *http.Request, action fr
 			return
 		}
 		s.writeFriendsStatus(w, ctx)
-	case "disable":
-		if err := local.Disable(ctx); err != nil {
+	case "off":
+		if err := local.Disable(); err != nil {
+			friendsFail(w, err)
+			return
+		}
+		s.writeFriendsStatus(w, ctx)
+	case "delete_account":
+		if err := local.DeleteAccount(ctx); err != nil {
 			friendsFail(w, err)
 			return
 		}
@@ -238,12 +250,20 @@ func (s *Server) friendsAction(w http.ResponseWriter, r *http.Request, action fr
 		}
 		s.writeFriendsStatus(w, ctx)
 	case "draft_media_remove":
+		if _, ok := local.Enabled(); !ok {
+			friendsFail(w, friends.ErrNotLinked)
+			return
+		}
 		if _, err := friends.NewStore(local.StateDir).RemoveDraftMedia(action.DraftID, action.Index); err != nil {
 			friendsFail(w, err)
 			return
 		}
 		s.writeFriendsStatus(w, ctx)
 	case "draft_media":
+		if _, ok := local.Enabled(); !ok {
+			friendsFail(w, friends.ErrNotLinked)
+			return
+		}
 		s.friendsDraftMedia(w, local.StateDir, action.DraftID, action.File)
 	case "post_draft":
 		post, err := local.PostDraft(ctx, action.DraftID, action.Text, action.Reviewed)

@@ -44,3 +44,19 @@ func TestDraftsNeedALinkAreCappedAndExpire(t *testing.T) {
 		t.Fatalf("after clear = %v", err)
 	}
 }
+
+func TestOffKeepsTheAccountButNothingActsOnIt(t *testing.T) {
+	store := NewStore(t.TempDir())
+	if err := store.SaveState(State{Handle: "me", EnabledAt: time.Now(), Off: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.State(); err != ErrNotLinked {
+		t.Fatalf("state while off = %v", err)
+	}
+	if state, err := store.Account(); err != nil || state.Handle != "me" || !state.Off {
+		t.Fatalf("account while off = %+v %v", state, err)
+	}
+	if _, err := store.AddDraft("hello", ""); err != ErrNotLinked {
+		t.Fatalf("draft while off = %v", err)
+	}
+}

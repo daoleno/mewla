@@ -84,7 +84,10 @@ func friendsStatus(args []string, stdout, stderr io.Writer) error {
 	}
 	store := friends.NewStore(dir)
 	state, stateErr := store.State()
-	drafts, _ := store.Drafts()
+	drafts := []friends.Draft{}
+	if stateErr == nil {
+		drafts, _ = store.Drafts()
+	}
 	status := map[string]any{"linked": stateErr == nil, "drafts": len(drafts), "max_drafts": friends.MaxPendingDrafts}
 	if stateErr == nil {
 		status["handle"] = state.Handle
@@ -210,7 +213,11 @@ func friendsDrafts(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	drafts, err := friends.NewStore(dir).Drafts()
+	store := friends.NewStore(dir)
+	if _, err := store.State(); err != nil {
+		return err
+	}
+	drafts, err := store.Drafts()
 	if err != nil {
 		return err
 	}

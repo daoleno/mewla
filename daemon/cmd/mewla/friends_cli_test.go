@@ -50,6 +50,22 @@ func TestFriendsDraftScrubsAndNeedsALinkToKeep(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &listed); err != nil || len(listed.Drafts) != 1 || listed.Drafts[0].Source != "A work title" {
 		t.Fatalf("drafts = %q, %v", out, err)
 	}
+
+	// Turned off: the account and the draft stay, but the agent sees an
+	// unlinked Friends and can neither keep nor list anything.
+	if err := (&friends.Local{StateDir: dir}).Disable(); err != nil {
+		t.Fatal(err)
+	}
+	out, err = runFriendsForTest(t, dir, "", "status", "-json")
+	if err != nil || !strings.Contains(out, `"linked":false`) || !strings.Contains(out, `"drafts":0`) || strings.Contains(out, "owner") {
+		t.Fatalf("status while off = %q, %v", out, err)
+	}
+	if _, err := runFriendsForTest(t, dir, "", "draft", "Deleted a lot of code today."); err != friends.ErrNotLinked {
+		t.Fatalf("keeping while off = %v", err)
+	}
+	if _, err := runFriendsForTest(t, dir, "", "drafts", "-json"); err != friends.ErrNotLinked {
+		t.Fatalf("listing while off = %v", err)
+	}
 }
 
 func TestFriendsHasNoSocialCommands(t *testing.T) {
