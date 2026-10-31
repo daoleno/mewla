@@ -26,6 +26,8 @@ const StateOffline = "offline"
 const (
 	// DefaultTimeout bounds one op the phone answers quickly.
 	DefaultTimeout = 30 * time.Second
+	// DefaultAliveEvery is how often a Worker that holds the phone is checked to still be running.
+	DefaultAliveEvery = 3 * time.Second
 	// DefaultIdle is how long the phone's display stays with an agent that does nothing.
 	DefaultIdle = 60 * time.Second
 	// DefaultReconnect is how long an agent's action waits for a phone that dropped to come back
@@ -53,10 +55,17 @@ func (e *Error) Is(target error) bool {
 	return ok && t.Code == e.Code
 }
 
+// The not-ready message is what is wrong plus what to do about it. The phone often becomes ready
+// within a minute of the person opening Mewla, so an agent waits a little before it gives up.
+const (
+	notReadyMessage = "Phone use isn't ready on the phone: the person has to open Mewla → Phone on their phone."
+	notReadyAdvice  = " It is often ready within a minute of them opening Mewla: wait about 15 seconds and try again, for up to a minute. If it is still not ready, tell them and stop."
+)
+
 // What an agent is told when the phone cannot be used now.
 var (
 	ErrNotConnected = &Error{CodeNotConnected, "The phone is not connected to this computer. Tell the person to open Mewla on their phone, and stop."}
-	ErrNotReady     = &Error{CodeNotReady, "Phone use isn't ready on the phone: the person has to open Mewla → Phone on their phone. Tell them, and stop."}
+	ErrNotReady     = &Error{CodeNotReady, notReadyMessage + notReadyAdvice}
 	ErrPerson       = &Error{CodePersonInControl, "The person is using the agent's screen on the phone right now. Stop and tell them; do not retry in a loop. It is yours again when they hand it back."}
 	ErrStopped      = &Error{CodeStopped, "The person stopped the agent on the phone. Stop and report; do not retry until they hand it back."}
 	ErrTimeout      = &Error{CodeTimeout, "The phone did not answer in time. It may be asleep or offline; report this instead of retrying in a loop."}
@@ -95,6 +104,9 @@ type Options struct {
 	// Reconnect is how long an action waits for a missing connection; DefaultReconnect, or a
 	// negative value to refuse at once.
 	Reconnect time.Duration
+	// AliveEvery is how often the agent using the phone is checked to still be running, once
+	// SetAlive has told the manager how; DefaultAliveEvery.
+	AliveEvery time.Duration
 }
 
 // Active is the agent using the phone.
@@ -142,6 +154,18 @@ type Manager struct {
 	lastAct  time.Time
 	inflight int
 	idle     Timer
+	// alive says whether a Worker is still running; with it, a Worker that ends gives the phone's
+	// display back at once instead of after the idle wait. It is called without mu held.
+	alive func(worker string) bool
+	watch Timer
+}
+
+// SetAlive tells the manager how to ask whether a Worker is still running.
+func (m *Manager) SetAlive(alive func(worker string) bool) {
+	m.mu.Lock()
+	m.alive = alive
+	m.armAliveLocked()
+	m.mu.Unlock()
 }
 
 // NewManager makes a manager with no phone connected.
@@ -157,6 +181,9 @@ func NewManager(opts Options) *Manager {
 	}
 	if opts.Reconnect == 0 {
 		opts.Reconnect = DefaultReconnect
+	}
+	if opts.AliveEvery <= 0 {
+		opts.AliveEvery = DefaultAliveEvery
 	}
 	return &Manager{opts: opts, sem: make(chan struct{}, 1), up: make(chan struct{})}
 }
@@ -414,7 +441,7 @@ func (l *Link) refusalLocked() error {
 		return ErrPerson
 	case l.state != StateReady:
 		if l.problem != "" {
-			return &Error{CodeNotReady, strings.TrimSuffix(ErrNotReady.Message, ". Tell them, and stop.") + " (" + l.problem + "). Tell them, and stop."}
+			return &Error{CodeNotReady, strings.TrimSuffix(notReadyMessage, ".") + " (" + l.problem + ")." + notReadyAdvice}
 		}
 		return ErrNotReady
 	}
@@ -619,6 +646,7 @@ func (m *Manager) Do(ctx context.Context, worker, workerName, op string, args an
 		if m.active == nil {
 			m.active = &Active{Worker: worker, Name: workerName, Since: m.opts.Clock.Now()}
 		}
+		m.armAliveLocked()
 		if workerName != "" {
 			m.active.Name = workerName
 		}
@@ -721,6 +749,51 @@ func (m *Manager) armIdleLocked() {
 		return
 	}
 	m.idle = m.opts.Clock.AfterFunc(m.opts.Idle, m.idleFired)
+}
+
+// armAliveLocked starts the periodic check that the agent using the phone still runs.
+func (m *Manager) armAliveLocked() {
+	if m.alive == nil || m.active == nil || m.watch != nil {
+		return
+	}
+	m.watch = m.opts.Clock.AfterFunc(m.opts.AliveEvery, m.aliveFired)
+}
+
+// aliveFired gives the display back when the Worker that holds it has finished or been closed.
+// An action in flight is never cut: a handoff waits for the person for minutes.
+func (m *Manager) aliveFired() {
+	m.mu.Lock()
+	m.watch = nil
+	if m.active == nil || m.alive == nil {
+		m.mu.Unlock()
+		return
+	}
+	if m.inflight > 0 {
+		m.armAliveLocked()
+		m.mu.Unlock()
+		return
+	}
+	worker, alive := m.active.Worker, m.alive
+	m.mu.Unlock()
+
+	running := alive(worker)
+
+	m.mu.Lock()
+	if m.active == nil || m.active.Worker != worker {
+		// Gone or replaced while asking.
+		m.armAliveLocked()
+		m.mu.Unlock()
+		return
+	}
+	if running || m.inflight > 0 {
+		m.armAliveLocked()
+		m.mu.Unlock()
+		return
+	}
+	m.active = nil
+	m.stopIdleLocked()
+	m.mu.Unlock()
+	m.freeDisplay()
 }
 
 func (m *Manager) idleFired() {

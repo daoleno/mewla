@@ -342,6 +342,45 @@ func TestAnAgentThatGoesQuietGivesTheDisplayBack(t *testing.T) {
 	}
 }
 
+func TestAWorkerThatEndsGivesTheDisplayBackAtOnce(t *testing.T) {
+	clock := newClock()
+	m := NewManager(Options{Clock: clock})
+	running := true
+	var asked []string
+	var mu sync.Mutex
+	m.SetAlive(func(worker string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		asked = append(asked, worker)
+		return running
+	})
+	_, conn := connect(t, m, StateReady, okResult(nil))
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	// A running Worker keeps the phone well past the check, and long before the idle wait is over.
+	clock.Advance(DefaultAliveEvery)
+	clock.Advance(DefaultAliveEvery)
+	if st := m.Status(); st.Active == nil || len(conn.ops()) != 1 {
+		t.Fatalf("a running Worker lost the phone: %+v %v", st.Active, conn.ops())
+	}
+	mu.Lock()
+	running = false
+	mu.Unlock()
+	clock.Advance(DefaultAliveEvery)
+	eventually(t, "release", func() bool { return strings.Join(conn.ops(), ",") == "tap,release" })
+	if st := m.Status(); st.Active != nil {
+		t.Fatalf("still active %+v", st.Active)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, w := range asked {
+		if w != "w1" {
+			t.Fatalf("asked about %q", w)
+		}
+	}
+}
+
 func TestTheDisplayIsNotReleasedFromUnderTheAgentOrThePerson(t *testing.T) {
 	clock := newClock()
 	m := NewManager(Options{Clock: clock})
@@ -583,6 +622,11 @@ func TestAPhoneInSetupSaysWhatToDoAndWhyWhenItKnows(t *testing.T) {
 	_, err := tap(m, "w1")
 	if code(err) != CodeNotReady || !strings.Contains(err.Error(), "open Mewla → Phone") || strings.Contains(err.Error(), "(") {
 		t.Fatalf("no reason known: %v", err)
+	}
+	// An agent waits and tries again for a short while before it gives up, since the phone is
+	// often ready within a minute of the person opening Mewla.
+	if !strings.Contains(err.Error(), "try again") || strings.Contains(err.Error(), "Tell them, and stop") {
+		t.Fatalf("not-ready advice: %v", err)
 	}
 	sendFrame(t, link, State{Type: TypeState, State: StateSetup, Problem: "Wireless debugging is off"})
 	_, err = tap(m, "w1")
