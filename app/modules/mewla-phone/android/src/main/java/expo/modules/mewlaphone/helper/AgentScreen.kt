@@ -3,6 +3,9 @@ package expo.modules.mewlaphone.helper
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
@@ -26,10 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class AgentScreen(context: Context, val width: Int, val height: Int, val dpi: Int) {
     private val thread = HandlerThread("mewla-agent-frames").apply { start() }
     private val handler = Handler(thread.looper)
-    private val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 3)
+    private val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
     private val lock = Any()
     private var held: Image? = null
     private var scratch: Bitmap? = null
+    private val scalePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val display: VirtualDisplay
     private val manager: DisplayManager
     @Volatile private var released = false
@@ -200,13 +204,19 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         }
         plane.buffer.rewind()
         bitmap.copyPixelsFromBuffer(plane.buffer)
-        val cropped = if (strideWidth != width) Bitmap.createBitmap(bitmap, 0, 0, width, height) else bitmap
         val target = maxWidth.coerceIn(1, width)
-        val scaled = if (target < width) Bitmap.createScaledBitmap(cropped, target, maxOf(1, height * target / width), true) else cropped
         val out = ByteArrayOutputStream(64 * 1024)
-        scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
-        if (scaled !== cropped) scaled.recycle()
-        if (cropped !== bitmap) cropped.recycle()
+        if (target < width) {
+            // Scaled straight from the frame's rows, with no copy of the whole (full-size) frame first.
+            val scaled = Bitmap.createBitmap(target, maxOf(1, height * target / width), Bitmap.Config.ARGB_8888)
+            Canvas(scaled).drawBitmap(bitmap, Rect(0, 0, width, height), Rect(0, 0, scaled.width, scaled.height), scalePaint)
+            scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+            scaled.recycle()
+        } else {
+            val cropped = if (strideWidth != width) Bitmap.createBitmap(bitmap, 0, 0, width, height) else bitmap
+            cropped.compress(Bitmap.CompressFormat.JPEG, quality, out)
+            if (cropped !== bitmap) cropped.recycle()
+        }
         return out.toByteArray()
     }
 

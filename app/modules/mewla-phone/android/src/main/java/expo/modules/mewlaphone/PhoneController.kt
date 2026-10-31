@@ -1,13 +1,15 @@
 package expo.modules.mewlaphone
 
 import android.content.Context
+import android.hardware.display.DisplayManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
+import android.view.Display
 import expo.modules.mewlaphone.adb.AdbConnectPort
 import expo.modules.mewlaphone.adb.AdbConnection
 import expo.modules.mewlaphone.adb.AdbConnectionException
@@ -33,6 +35,8 @@ object PhoneController {
     private const val TAG = "MewlaPhone"
     private const val MIN_SDK = Build.VERSION_CODES.R
     private const val STALL_MS = 25_000L
+    // The agent display has the phone's real pixels; pictures for the model are scaled down to this width.
+    private const val MODEL_IMAGE_WIDTH = 720
     private const val REPLACE_EVERY_MS = 60_000L
     private const val WRITE_SECURE = "android.permission.WRITE_SECURE_SETTINGS"
 
@@ -778,20 +782,19 @@ object PhoneController {
         return snapshot(id, helper, wantImage)
     }
 
-    /** The agent's display at roughly the size of this phone's, so apps lay out as they do for the person. */
+    /** The agent's display at the phone's real pixels and density, so apps lay out exactly as they do for the person. */
     private fun ensureDisplay(helper: HelperClient) {
         // Always asked, never assumed: the helper answers at once for a live display of this size and makes
         // a new one when the system dropped the old (a link drop or the screen going off can leave a stale one).
-        val bounds = app.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
-        val width = minOf(bounds.width(), bounds.height()).toDouble()
-        val height = maxOf(bounds.width(), bounds.height()).toDouble()
-        val scale = minOf(1.0, 720.0 / width)
-        val w = even(width * scale)
-        val h = even(height * scale)
-        val dpi = Math.round(app.resources.displayMetrics.densityDpi * scale).toInt().coerceAtLeast(160)
+        val real = DisplayMetrics().also {
+            app.getSystemService(DisplayManager::class.java).getDisplay(Display.DEFAULT_DISPLAY).getRealMetrics(it)
+        }
+        val w = minOf(real.widthPixels, real.heightPixels)
+        val h = maxOf(real.widthPixels, real.heightPixels)
+        val dpi = real.densityDpi
         val reply = helper.call("display", JSONObject().put("w", w).put("h", h).put("dpi", dpi))
         if (!reply.optBoolean("ok")) throw IllegalStateException(reply.optString("error", "no display"))
-        displayInfo = "${w}x$h asked ${dpi}dpi, system ${reply.optInt("effective_dpi")}dpi; phone ${reply.optInt("main_w")}x${reply.optInt("main_h")} ${reply.optInt("main_dpi")}dpi (app sees ${app.resources.displayMetrics.densityDpi}dpi ${bounds.width()}x${bounds.height()})"
+        displayInfo = "${w}x$h asked ${dpi}dpi, system ${reply.optInt("effective_dpi")}dpi; phone ${reply.optInt("main_w")}x${reply.optInt("main_h")} ${reply.optInt("main_dpi")}dpi (app sees ${app.resources.displayMetrics.densityDpi}dpi)"
         Log.i(TAG, "agent display $displayInfo")
         display = intArrayOf(w, h)
         publish()
@@ -800,8 +803,6 @@ object PhoneController {
 
     /** The agent display's size and density next to the phone's own, as the daemon is told it. */
     @Volatile private var displayInfo: String? = null
-
-    private fun even(v: Double) = (Math.round(v / 2.0) * 2).toInt()
 
     /** Whether the last reading had nothing the agent could name: an app that draws its own UI. */
     @Volatile private var opaqueScreen = false
@@ -828,7 +829,7 @@ object PhoneController {
         // another round trip. A plain read of such a screen is asked again with a picture only if needed
         // (a wait polls it, and a picture each time would be thrown away).
         if (wantImage || screenOff || (opaqueScreen && acted)) {
-            val shot = helper.call("screenshot", JSONObject().put("maxWidth", tree.optInt("w", 720)).put("quality", 60), 15_000)
+            val shot = helper.call("screenshot", JSONObject().put("maxWidth", minOf(tree.optInt("w", MODEL_IMAGE_WIDTH), MODEL_IMAGE_WIDTH)).put("quality", 60), 15_000)
             if (shot.optBoolean("ok")) result.put("image", shot.getString("jpeg"))
         }
         // The display draws only when something changes. After an action with no new frame the picture is
