@@ -19,7 +19,7 @@ import { currentTransportPath, directPathBecameAvailable, recheckDirectPath, typ
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
 import type { ScreenStreamStats } from "../../services/screenStream";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
-import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
+import { ActionMenu, Button, EmptyState, IconButton } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
@@ -109,6 +109,8 @@ export function ScreenScreen() {
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const [watching, setWatching] = useState(false);
+  // The power pill the person closed; a different warning shows again.
+  const [dismissedPower, setDismissedPower] = useState<string | null>(null);
   const host = useRef<ScreenViewerHostHandle>(null);
   const input = useRef<TextInput>(null);
   const connection = useRef<ScreenConnection | null>(null);
@@ -235,7 +237,7 @@ export function ScreenScreen() {
           void connect();
           return;
         }
-        setReason(why || "The connection to the screen ended.");
+        setReason(why || null);
         setPhase("lost");
       },
     }, watch);
@@ -249,6 +251,7 @@ export function ScreenScreen() {
 
   useEffect(() => {
     setStatus(null);
+    setDismissedPower(null);
     void connect();
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") void connect();
@@ -342,7 +345,7 @@ export function ScreenScreen() {
         if (connection.current) {
           connection.current.close();
           connection.current = null;
-          setReason("The screen viewer stopped. Reconnect to continue.");
+          setReason(null);
           setPhase("lost");
         }
         break;
@@ -444,27 +447,23 @@ export function ScreenScreen() {
   const title = status?.name || serverName;
   const agentName = status?.agent?.name || "the agent";
   const menuItems: ActionMenuItem[] = watching ? [
-    { key: "take-over", icon: "hand", label: "Take over", detail: `Stops ${agentName} and gives you the screen`, onPress: () => void connect("takeOver") },
-    { key: "stop-agent", icon: "close", label: `Stop ${agentName}`, destructive: true, disabled: busy, onPress: () => void stopAgent() },
     { key: "fit", icon: "expand", label: "Fit screen", onPress: () => toViewer({ type: "fit" }) },
     { key: "disconnect", icon: "exit", label: "Stop watching", onPress: () => { disconnect(); setWatching(false); setPhase("agent"); } },
   ] : [
     {
       key: "mode", icon: mode === "touch" ? "hand" : "navigate",
       label: mode === "touch" ? "Use as trackpad" : "Touch to click",
-      detail: mode === "touch" ? "Move a pointer with your finger" : "Tap where you want to click",
       onPress: () => changeMode(mode === "touch" ? "trackpad" : "touch"),
     },
     { key: "fit", icon: "expand", label: "Fit screen", onPress: () => toViewer({ type: "fit" }) },
     ...(status?.approved ? [{
       key: "awake", icon: "power", disabled: busy,
       label: status.keep_awake ? "Let this computer sleep" : "Keep this computer awake",
-      detail: status.keep_awake ? "It can't be reached while asleep" : "The display may still sleep",
       onPress: () => void setKeepAwake(!status.keep_awake),
     } satisfies ActionMenuItem] : []),
     { key: "stats", icon: "pulse", label: showStats ? "Hide connection stats" : "Show connection stats", onPress: () => setShowStats(!showStats) },
     phase === "live"
-      ? { key: "disconnect", icon: "exit", label: "Disconnect", onPress: () => { disconnect(); setReason("Disconnected."); setPhase("lost"); } }
+      ? { key: "disconnect", icon: "exit", label: "Disconnect", onPress: () => { disconnect(); setReason(null); setPhase("lost"); } }
       : { key: "reconnect", icon: "refresh", label: "Reconnect", onPress: () => void connect() },
   ];
   const header = (
@@ -481,12 +480,12 @@ export function ScreenScreen() {
   if (!currentServer) {
     return (
       <View style={[styles.root, styles.center, { backgroundColor: colors.bgPrimary }]}>
-        <EmptyState icon="server" title="No current server" detail="Choose one in Settings." action={{ label: "Open Settings", onPress: () => router.push("/settings") }} />
+        <EmptyState icon="server" title="No current server" action={{ label: "Open Settings", onPress: () => router.push("/settings") }} />
       </View>
     );
   }
 
-  const warning = powerWarning(status);
+  const warning = phase === "live" ? powerWarning(status) : null;
   const quality = connectionQuality(rtt);
   const qualityColor = quality === "good" ? colors.success : quality === "fair" ? colors.warning : quality === "poor" ? colors.dangerText : colors.textTertiary;
   const power = powerSummary(status?.power, status?.keep_awake ?? false);
@@ -498,6 +497,8 @@ export function ScreenScreen() {
   const readoutHeadline = streamHeadline(readout);
   const viewerVisible = phase === "connecting" || phase === "live";
   const active = activeModifiers(mods);
+  const cornerTop = landscape ? Math.max(insets.top, Spacing.sm) : Spacing.sm;
+  const agentLabel = status?.agent?.name || "An agent";
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bgPrimary, paddingLeft: landscape ? insets.left : 0, paddingRight: landscape ? insets.right : 0 }]}>
@@ -512,68 +513,87 @@ export function ScreenScreen() {
         </ScrollView>
       ) : null}
       {phase === "agent" && status?.agent ? (
-        <View style={styles.notice}>
-          <InlineNotice icon="desktop" title={`${status.agent.name || "An agent"} is using ${title}`}
-            detail="Watch it work, or take over to use the screen yourself, which stops it. The screen opens by itself when it is done."
-            action={{ label: "Take over", onPress: () => void connect("takeOver"), disabled: busy }} />
+        <View style={[styles.root, styles.center]}>
+          <Icon name="desktop" size={40} color={colors.textTertiary} />
+          <AppText variant="title" style={styles.agentTitle}>{agentLabel} is using the screen</AppText>
           <View style={styles.agentActions}>
+            <Button label="Take over" icon="hand" size="sm" variant="filled" onPress={() => void connect("takeOver")} disabled={busy} />
             <Button label="Watch" icon="eye" size="sm" onPress={() => void connect("watch")} disabled={busy} />
-            <Button label={`Stop ${status.agent.name || "the agent"}`} size="sm" variant="outlined" onPress={() => void stopAgent()} disabled={busy} />
+            <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${agentLabel}`} onPress={() => void stopAgent()} disabled={busy} />
           </View>
         </View>
       ) : null}
-      {watching && phase === "live" && status?.agent ? (
-        <View style={styles.notice}>
-          <InlineNotice icon="eye" title={`Watching ${status.agent.name || "an agent"}`}
-            detail="Only watching: your taps don't reach the screen. Take over or stop it from the menu."
-            action={{ label: "Take over", onPress: () => void connect("takeOver"), disabled: busy }} />
-        </View>
-      ) : null}
       {phase === "checking" && !status ? (
-        <View style={[styles.root, styles.center]}><EmptyState busy title={`Opening ${serverName}'s screen…`} /></View>
-      ) : null}
-      {phase === "lost" ? (
-        <View style={styles.notice}>
-          {locked ? (
-            // A state, not a sentence: the Mac is locked, so there is nothing to explain.
-            <InlineNotice tone="warning" icon="lock" title="Mac is locked"
-              action={{ label: "Reconnect", onPress: () => void connect() }} />
-          ) : (
-            <InlineNotice tone="warning" title="Not connected to the screen" detail={reason}
-              action={{ label: "Reconnect", onPress: () => void connect() }} />
-          )}
-        </View>
-      ) : null}
-      {warning && phase !== "setup" ? (
-        <View style={styles.notice}>
-          <InlineNotice tone="warning" icon="power" title={warning.title} detail={warning.detail}
-            action={status && !status.keep_awake ? { label: "Keep awake", onPress: () => void setKeepAwake(true), disabled: busy } : undefined} />
-        </View>
+        <View style={[styles.root, styles.center]}><EmptyState busy /></View>
       ) : null}
       <View style={[styles.root, !viewerVisible && phase !== "lost" ? styles.hidden : null]}>
         <ScreenViewerHost ref={host} onMessage={onViewerMessage} backgroundColor={colors.bgElevated}
           accessibilityLabel={`Screen of ${title}`} />
         {phase === "connecting" ? (
           <View pointerEvents="none" style={[styles.center, StyleSheet.absoluteFill]}>
-            <EmptyState busy title="Connecting…" />
+            <EmptyState busy />
+          </View>
+        ) : null}
+        {phase === "lost" ? (
+          <View style={[styles.center, StyleSheet.absoluteFill, { backgroundColor: colors.bgPrimary }]}>
+            <Icon name={locked ? "lock" : "cloud-offline"} size={40} color={colors.textTertiary} />
+            <AppText variant="title" style={styles.agentTitle}>{locked ? "Mac is locked" : "Disconnected"}</AppText>
+            {reason && !locked ? <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.agentTitle}>{reason}</AppText> : null}
+            <Button label="Reconnect" icon="refresh" size="sm" variant="filled" onPress={() => void connect()} style={styles.reconnect} />
           </View>
         ) : null}
         {showStats && phase === "live" ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Hide connection stats" onPress={() => setShowStats(false)}
-            style={[styles.stats, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle, top: landscape ? Math.max(insets.top, Spacing.sm) : Spacing.sm }]}>
-            <View style={[styles.dot, { backgroundColor: qualityColor }]} />
-            <AppText variant="micro" style={{ color: colors.textSecondary }}>
-              {readoutHeadline ? `${readoutHeadline}\n` : ""}
-              {formatStats(readout)}
-              {power ? `\n${power}` : ""}
-            </AppText>
-          </Pressable>
+          <View pointerEvents="box-none" style={[styles.corner, styles.cornerLeft, { top: cornerTop }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Hide connection stats" onPress={() => setShowStats(false)}
+              style={[styles.chip, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}>
+              <View style={[styles.dot, { backgroundColor: qualityColor }]} />
+              <AppText variant="micro" style={{ color: colors.textSecondary }}>
+                {readoutHeadline ? `${readoutHeadline}\n` : ""}
+                {formatStats(readout)}
+                {power ? `\n${power}` : ""}
+              </AppText>
+            </Pressable>
+          </View>
         ) : null}
-        {locked && phase === "live" ? (
-          <View accessibilityLabel="Mac is locked"
-            style={[styles.lockedChip, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle, top: landscape ? Math.max(insets.top, Spacing.sm) : Spacing.sm }]}>
-            <Icon name="lock" size={14} color={colors.textSecondary} />
-            <AppText variant="micro" style={{ color: colors.textSecondary }}>Locked</AppText>
+        {phase === "live" ? (
+          <View pointerEvents="box-none" style={[styles.corner, styles.cornerRight, { top: cornerTop }]}>
+            {watching ? (
+              // Taps don't reach the screen: the eye says so, the actions are right there.
+              <View accessibilityLabel={`Watching ${agentLabel}`}
+                style={[styles.chip, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}>
+                <Icon name="eye" size={14} color={colors.textSecondary} />
+                <Pressable accessibilityRole="button" accessibilityLabel="Take over" hitSlop={8} disabled={busy}
+                  onPress={() => void connect("takeOver")} style={styles.chipAction}>
+                  <Icon name="hand" size={14} color={colors.accentStrong} />
+                  <AppText variant="micro" style={{ color: colors.accentStrong }}>Take over</AppText>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Stop ${agentLabel}`} hitSlop={8} disabled={busy}
+                  onPress={() => void stopAgent()} style={styles.chipAction}>
+                  <Icon name="stop" size={14} color={colors.dangerText} />
+                </Pressable>
+              </View>
+            ) : null}
+            {locked ? (
+              <View accessibilityLabel="Mac is locked"
+                style={[styles.chip, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}>
+                <Icon name="lock" size={14} color={colors.textSecondary} />
+                <AppText variant="micro" style={{ color: colors.textSecondary }}>Locked</AppText>
+              </View>
+            ) : null}
+            {warning && dismissedPower !== warning.label ? (
+              <View style={[styles.chip, { backgroundColor: colors.warningSoft, borderColor: colors.borderSubtle }]}>
+                <Pressable accessibilityRole={warning.action ? "button" : "text"} accessibilityLabel={warning.label}
+                  disabled={!warning.action || busy} hitSlop={6}
+                  onPress={() => void setKeepAwake(true)} style={styles.chipAction}>
+                  <Icon name="power" size={14} color={colors.warning} />
+                  <AppText variant="micro" style={{ color: colors.warning }}>{warning.label}</AppText>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" hitSlop={8}
+                  onPress={() => setDismissedPower(warning.label)} style={styles.chipAction}>
+                  <Icon name="close" size={12} color={colors.textTertiary} />
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -629,25 +649,20 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
 }) {
   const { colors } = useAppTheme();
   if (!status.supported) {
-    const unsupported = unsupportedScreen(status, name, Platform.OS !== "web");
+    const unsupported = unsupportedScreen(status, Platform.OS !== "web");
     return <EmptyState icon="desktop" title={unsupported.title} detail={unsupported.detail}
       action={unsupported.canChooseComputer ? { label: "Choose a computer", icon: "swap-horizontal", onPress: onChooseComputer } : undefined} />;
   }
   if (status.disabled) {
-    return <EmptyState icon="lock" title="Screen is turned off on this computer"
-      detail={`To allow devices again, run mewla screen enable on ${name}.`}
+    return <EmptyState icon="lock" title="Screen is off"
+      detail={`Run mewla screen enable on ${name}.`}
       action={{ label: "Check again", icon: "refresh", onPress: onCheck }} />;
   }
   if (!status.approved) {
     return (
-      <View style={styles.setupBlock}>
-        <EmptyState icon="desktop" title={busy ? `Waiting for Allow on ${name}…` : "Turn on Screen"}
-          detail={busy
-            ? "Someone at the computer has to click Allow. It also asks for the system permissions Screen needs."
-            : `See and control ${name} from here. ${name} asks once whether to allow this device, so someone has to be at it.`}
-          action={{ label: busy ? "Waiting…" : "Turn on Screen", icon: "desktop", onPress: onEnable, loading: busy }} />
-        {reason && !busy ? <InlineNotice tone="warning" title="Not turned on" detail={reason} /> : null}
-      </View>
+      <EmptyState icon="desktop" title={busy ? `Waiting for Allow on ${name}…` : undefined}
+        detail={busy ? null : reason}
+        action={{ label: busy ? "Waiting…" : "Turn on Screen", icon: "desktop", onPress: onEnable, loading: busy }} />
     );
   }
   const missing = (status.permissions ?? []).filter((p) => !p.granted);
@@ -656,7 +671,6 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
   return (
     <View style={styles.setupBlock}>
       <EmptyState icon="shield-check" title={`Allow Screen on ${name}`}
-        detail={`${name} still needs these permissions. Turn Mewla on in the settings it shows; this page follows along.`}
         action={restart ? undefined : { label: `Ask on ${name}`, icon: "desktop", onPress: onEnable, loading: busy }} />
       {missing.map((p) => (
         <View key={p.id} style={[styles.permission, { borderColor: colors.borderSubtle, backgroundColor: colors.bgSurface }]}>
@@ -671,7 +685,7 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
       {restart
         ? <Button label={busy ? "Restarting Mewla…" : "Restart Mewla"} icon="refresh" loading={busy} onPress={onRestart} />
         : <Button label="Check again" icon="refresh" variant="outlined" onPress={onCheck} />}
-      {reason ? <InlineNotice tone="warning" title="Something went wrong" detail={reason} /> : null}
+      {reason ? <AppText variant="caption" tone="danger" numberOfLines={2} style={styles.reasonLine}>{reason}</AppText> : null}
     </View>
   );
 }
@@ -705,18 +719,20 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   hidden: { display: "none" },
   center: { justifyContent: "center", alignItems: "center", padding: Spacing.lg },
-  notice: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm },
-  agentActions: { flexDirection: "row", gap: Spacing.sm, paddingTop: Spacing.sm },
-  stats: {
-    position: "absolute", left: Spacing.sm, flexDirection: "row", alignItems: "center", gap: Spacing.xs,
+  agentTitle: { textAlign: "center" },
+  agentActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: Spacing.sm, paddingTop: Spacing.sm },
+  reconnect: { marginTop: Spacing.sm },
+  reasonLine: { textAlign: "center" },
+  // Overlays sit in a corner of the viewer and never move it; the gaps between them pass touches through.
+  corner: { position: "absolute", gap: Spacing.xs },
+  cornerLeft: { left: Spacing.sm, alignItems: "flex-start" },
+  cornerRight: { right: Spacing.sm, alignItems: "flex-end" },
+  chip: {
+    flexDirection: "row", alignItems: "center", gap: Spacing.xs,
     paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radii.sm, borderWidth: StyleSheet.hairlineWidth, opacity: 0.92,
     ...ContinuousCorners,
   },
-  lockedChip: {
-    position: "absolute", right: Spacing.sm, flexDirection: "row", alignItems: "center", gap: Spacing.xs,
-    paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radii.sm, borderWidth: StyleSheet.hairlineWidth, opacity: 0.92,
-    ...ContinuousCorners,
-  },
+  chipAction: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
   dot: { width: 8, height: 8, borderRadius: 4 },
   tray: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.xs },
   keys: { gap: Spacing.xs, paddingHorizontal: Spacing.sm, alignItems: "center" },
