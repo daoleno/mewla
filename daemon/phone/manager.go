@@ -414,7 +414,7 @@ func (l *Link) refusalLocked() error {
 		return ErrPerson
 	case l.state != StateReady:
 		if l.problem != "" {
-			return &Error{CodeNotReady, strings.TrimSuffix(ErrNotReady.Message, " Tell them, and stop.") + " (" + l.problem + "). Tell them, and stop."}
+			return &Error{CodeNotReady, strings.TrimSuffix(ErrNotReady.Message, ". Tell them, and stop.") + " (" + l.problem + "). Tell them, and stop."}
 		}
 		return ErrNotReady
 	}
