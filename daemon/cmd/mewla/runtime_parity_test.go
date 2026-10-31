@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -128,10 +129,27 @@ func parityFreePort(t *testing.T) int {
 	return port
 }
 
+// parityGoBin is the directory of the go this test run was built with. The
+// DEV runner shells out to `go build`, and the fixed PATH below drops go
+// wherever it is not in a system directory (Homebrew's /opt/homebrew/bin, a
+// downloaded toolchain), so the toolchain that runs the tests is added to it.
+func parityGoBin() string {
+	if root := runtime.GOROOT(); root != "" {
+		bin := filepath.Join(root, "bin")
+		if _, err := os.Stat(filepath.Join(bin, "go")); err == nil {
+			return bin
+		}
+	}
+	if path, err := exec.LookPath("go"); err == nil {
+		return filepath.Dir(path)
+	}
+	return ""
+}
+
 func parityEnv(home, tmuxDir string) []string {
 	env := []string{
 		"HOME=" + home,
-		"PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/lib/go/bin",
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/lib/go/bin:" + parityGoBin(),
 		"TMPDIR=" + home,
 		"TMUX=",
 		"TMUX_TMPDIR=" + tmuxDir,
