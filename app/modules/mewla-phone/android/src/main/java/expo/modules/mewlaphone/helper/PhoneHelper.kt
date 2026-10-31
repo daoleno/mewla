@@ -340,19 +340,20 @@ internal class PhoneHelper(
         // Starting an app on the agent's display moves its task there, so an app the person is
         // looking at on their own screen is never launched.
         if (visibleOnMainScreen(pkg, user)) return fail("the person is using this app on their own screen").put("code", "in_use_on_main")
-        // The person's own app starts by its launcher component; a clone by the launcher intent as
-        // its own user, which the system resolves for that user.
+        // Every app starts by its launcher component. The person's own comes from the package manager;
+        // a clone's from the same query the app list uses, for its user: an implicit launcher intent
+        // does not resolve for a clone's user on every phone.
         val component = if (user == 0) {
             val intent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return fail("not installed").put("code", "not_installed")
             intent.component?.flattenToShortString() ?: return fail("no launcher activity")
         } else {
-            null
+            cloneComponent(pkg, user) ?: return fail("not installed (app clone, user $user)").put("code", "not_installed")
         }
         var target = s
         var recovered = false
         for (attempt in 0..1) {
             val began = android.os.SystemClock.uptimeMillis()
-            val started = startOn(target.displayId, pkg, component, user)
+            val started = startOn(target.displayId, component, user)
             if (started != null) {
                 val why = started.replace("%PKG%", pkg)
                 return fail(if (user != 0) "$why (app clone, user $user)" else why)
@@ -370,26 +371,51 @@ internal class PhoneHelper(
             setImePolicy(target.displayId)
             recovered = true
         }
-        return ok().put("component", component ?: "$pkg@$user").put("recovered", recovered).put("display", target.displayId)
+        return ok().put("component", component).put("recovered", recovered).put("display", target.displayId)
     }
 
-    /** `am start` on [displayId] as [user]; null when it started, else why not. */
-    private fun startOn(displayId: Int, pkg: String, component: String?, user: Int): String? {
-        val command = mutableListOf("am", "start", "--display", displayId.toString())
-        if (user != 0) command += listOf("--user", user.toString())
-        if (component != null) {
-            command += listOf("-n", component)
-        } else {
-            command += listOf("-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER, "-p", pkg)
+    /**
+     * The launcher component of [pkg] for clone [user], from `cmd package query-activities`. A user that is
+     * not running is started once when the first answer has nothing for the package.
+     */
+    private fun cloneComponent(pkg: String, user: Int): String? {
+        fun query() = runCatching {
+            Clones.parseComponents(
+                shell(
+                    "cmd", "package", "query-activities", "--components", "--user", user.toString(),
+                    "-a", Intent.ACTION_MAIN, "-c", Intent.CATEGORY_LAUNCHER,
+                ),
+            )[pkg]
+        }.onFailure { Log.w(TAG, "query-activities for user $user failed", it) }.getOrNull()
+        query()?.let { return it }
+        runAm(listOf("am", "start-user", "-w", user.toString()))
+        return query()
+    }
+
+    /**
+     * Starts [component] on [displayId] as [user]; null when it started, else why not. A clone's user that
+     * is not running is started once. When `am start` still refuses, `cmd activity start-activity` gets the
+     * same start, and the error carries what both said.
+     */
+    private fun startOn(displayId: Int, component: String, user: Int): String? {
+        fun args(vararg head: String): List<String> {
+            val command = head.toMutableList()
+            command += listOf("--display", displayId.toString())
+            if (user != 0) command += listOf("--user", user.toString())
+            return command + listOf("-n", component, "-f", "0x10000000")
         }
-        command += listOf("-f", "0x10000000")
-        var output = runAm(command) ?: return "starting %PKG% timed out"
+        val am = args("am", "start")
+        var output = runAm(am) ?: return "starting %PKG% timed out"
         if (user != 0 && Clones.needsStart(output)) {
             // A clone's user that is not running yet: start it once and try again.
             runAm(listOf("am", "start-user", "-w", user.toString()))
-            output = runAm(command) ?: return "starting %PKG% timed out"
+            output = runAm(am) ?: return "starting %PKG% timed out"
         }
-        return if (output.contains("Error", ignoreCase = true)) output.trim().take(200) else null
+        if (!Clones.failed(output)) return null
+        val first = output
+        output = runAm(args("cmd", "activity", "start-activity")) ?: return "starting %PKG% timed out"
+        if (!Clones.failed(output)) return null
+        return Clones.refusal(first, output)
     }
 
     /** The output of an `am` command, or null when it did not finish in time. */
