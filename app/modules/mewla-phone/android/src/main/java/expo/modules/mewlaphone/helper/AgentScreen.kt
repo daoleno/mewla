@@ -13,6 +13,9 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * The agent's own screen: a virtual display whose frames land in an ImageReader. Apps launched on it
@@ -40,6 +43,10 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     @Volatile private var frames = 0L
     @Volatile private var actionAt = 0L
     private var pushPending = false
+    // Frames go to the app from a thread of their own and are dropped while it is still busy: a
+    // slow or stalled reader on the app's side must never hold up taking frames from the display.
+    private val pusher: ExecutorService = Executors.newSingleThreadExecutor { Thread(it, "mewla-agent-push").apply { isDaemon = true } }
+    private val pushing = AtomicBoolean(false)
 
     val displayId: Int
 
@@ -64,14 +71,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     }
 
     private fun onImage() {
-        if (released) return
-        val image = runCatching { reader.acquireLatestImage() }.getOrNull() ?: return
-        synchronized(lock) {
-            held?.close()
-            held = image
-        }
-        lastFrameAt = SystemClock.uptimeMillis()
-        frames++
+        if (!drain()) return
         if (sink == null || pushPending) return
         val wait = lastPushAt + intervalMs - SystemClock.uptimeMillis()
         if (wait > 0) {
@@ -82,11 +82,38 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         }
     }
 
+    /**
+     * Takes the newest frame the display has drawn, if there is one, as the held frame. Any thread may
+     * ask, so a screenshot or a settle sees what the display drew even when the frame thread is late.
+     */
+    private fun drain(): Boolean {
+        if (released) return false
+        val image = synchronized(lock) {
+            val next = runCatching { reader.acquireLatestImage() }.getOrNull()
+            if (next != null) {
+                held?.close()
+                held = next
+            }
+            next
+        } ?: return false
+        lastFrameAt = SystemClock.uptimeMillis()
+        frames++
+        return true
+    }
+
     private fun push() {
         val target = sink ?: return
+        if (!pushing.compareAndSet(false, true)) return
         lastPushAt = SystemClock.uptimeMillis()
-        val jpeg = jpeg(maxWidth, quality) ?: return
-        target(jpeg)
+        val width = maxWidth
+        val q = quality
+        pusher.execute {
+            try {
+                jpeg(width, q)?.let(target)
+            } finally {
+                pushing.set(false)
+            }
+        }
     }
 
     /** Whether the system still has this display: a removed one keeps its object but never draws again. */
@@ -122,6 +149,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (true) {
             val now = SystemClock.uptimeMillis()
+            drain()
             if (SettlePolicy.settled(now, actionAt, lastFrameAt, quietMs, minWaitMs)) return true
             if (now >= deadline) return false
             Thread.sleep(SETTLE_POLL_MS)
@@ -132,9 +160,12 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     fun drewSinceAction(): Boolean = SettlePolicy.drewSince(actionAt, lastFrameAt)
 
     /** The screen now as a JPEG no wider than [maxWidth]; null before the first frame. */
-    fun jpeg(maxWidth: Int, quality: Int): ByteArray? = synchronized(lock) {
-        val image = held ?: return blank(maxWidth, quality)
-        encode(image, maxWidth, quality)
+    fun jpeg(maxWidth: Int, quality: Int): ByteArray? {
+        drain()
+        return synchronized(lock) {
+            val image = held ?: return@synchronized blank(maxWidth, quality)
+            encode(image, maxWidth, quality)
+        }
     }
 
     /** A display nothing has drawn on yet is black: say so with a picture instead of none. */
@@ -173,6 +204,7 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         if (released) return
         released = true
         sink = null
+        pusher.shutdownNow()
         runCatching { display.release() }
         handler.post {
             synchronized(lock) {

@@ -769,7 +769,10 @@ object PhoneController {
         } else {
             result.put("screen", JSONObject().put("w", tree.optInt("w")).put("h", tree.optInt("h")).put("windows", windows))
         }
-        if (wantImage || screenOff || opaqueScreen) {
+        // After an action on an app with nothing to read the picture is the answer: send it now, not after
+        // another round trip. A plain read of such a screen is asked again with a picture only if needed
+        // (a wait polls it, and a picture each time would be thrown away).
+        if (wantImage || screenOff || (opaqueScreen && acted)) {
             val shot = helper.call("screenshot", JSONObject().put("maxWidth", tree.optInt("w", 720)).put("quality", 60), 15_000)
             if (shot.optBoolean("ok")) result.put("image", shot.getString("jpeg"))
         }
