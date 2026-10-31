@@ -109,11 +109,20 @@ internal class ScreenReader {
         return obj
     }
 
-    /** The focused input field on [displayId], or null. */
+    /** The focused input field on [displayId], or null. Some apps report their field only as a focused editable node. */
     fun focusedInput(displayId: Int): AccessibilityNodeInfo? {
-        for (window in windows(displayId)) {
-            val root = window.root ?: continue
-            root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let { return it }
+        val roots = windows(displayId).mapNotNull { it.root }
+        for (root in roots) root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.let { return it }
+        for (root in roots) editableFocused(root, 0)?.let { return it }
+        return null
+    }
+
+    private fun editableFocused(node: AccessibilityNodeInfo, depth: Int): AccessibilityNodeInfo? {
+        if (depth > MAX_DEPTH) return null
+        if (node.isEditable && node.isFocused) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            editableFocused(child, depth + 1)?.let { return it }
         }
         return null
     }
@@ -125,11 +134,14 @@ internal class ScreenReader {
         return field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
     }
 
-    /** The focused field's current text (empty while it shows only its hint). */
-    fun focusedText(displayId: Int): String? {
+    /** What is in the focused field now. */
+    class Field(val text: String, val password: Boolean)
+
+    /** The focused field's current text (empty while it shows only its hint), or null with no field focused. */
+    fun focusedField(displayId: Int): Field? {
         val field = focusedInput(displayId) ?: return null
-        if (field.isShowingHintText) return ""
-        return field.text?.toString() ?: ""
+        val text = if (field.isShowingHintText) "" else field.text?.toString() ?: ""
+        return Field(text, field.isPassword)
     }
 
     private fun AccessibilityNodeInfo.recycleCompat() {
@@ -139,6 +151,7 @@ internal class ScreenReader {
 
     companion object {
         const val FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES = 1
+        const val MAX_DEPTH = 80
         const val MAX_NODES = 700
         const val MAX_TEXT = 300
         const val CLICKABLE = 1

@@ -69,12 +69,25 @@ internal class Injector {
         return touch(MotionEvent.ACTION_UP, down, x2, y2, displayId)
     }
 
-    fun key(displayId: Int, keyCode: Int): Boolean {
+    fun key(displayId: Int, keyCode: Int, meta: Int = 0): Boolean {
         val now = SystemClock.uptimeMillis()
-        val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD)
+        val down = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, meta, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD)
         if (!send(down, displayId)) return false
-        val up = KeyEvent(now, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0, 0, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD)
+        val up = KeyEvent(now, SystemClock.uptimeMillis(), KeyEvent.ACTION_UP, keyCode, 0, meta, KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD)
         return send(up, displayId)
+    }
+
+    /** Select all in the focused field (Ctrl+A). */
+    fun selectAll(displayId: Int): Boolean = key(displayId, KeyEvent.KEYCODE_A, KeyEvent.META_CTRL_ON or KeyEvent.META_CTRL_LEFT_ON)
+
+    /** Paste the clipboard into the focused field. */
+    fun paste(displayId: Int): Boolean = key(displayId, KeyEvent.KEYCODE_PASTE)
+
+    /** Types [text] as key events, which only characters a keyboard has can be; false when one is not. */
+    fun typeKeys(displayId: Int, text: String): Boolean {
+        val events = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray()) ?: return false
+        for (event in events) if (!send(event, displayId)) return false
+        return true
     }
 
     private companion object {

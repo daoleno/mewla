@@ -4,7 +4,10 @@
 // contract; the App mirrors it in app/services/phoneProtocol.ts.
 package phone
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 // Version is the protocol version a phone announces in Hello. A daemon that does not know it
 // refuses the connection, and the App says the phone needs updating.
@@ -117,6 +120,9 @@ type Request struct {
 type ScreenArgs struct{}
 type LaunchArgs struct {
 	Package string `json:"package"`
+	// User is the Android user the app runs as: 0 (empty) for the person's own, another for an
+	// app clone (ColorOS 应用分身, a work profile).
+	User int `json:"user,omitempty"`
 }
 type TapArgs struct {
 	X    int  `json:"x"`
@@ -171,6 +177,17 @@ type Result struct {
 type App struct {
 	Package string `json:"package"`
 	Label   string `json:"label"`
+	// User is the Android user the app belongs to; 0 (empty) is the person's own. A clone of an
+	// app has the main app's package under another user.
+	User int `json:"user,omitempty"`
+}
+
+// Key is how an agent names the app: its package, with @user for a clone.
+func (a App) Key() string {
+	if a.User == 0 {
+		return a.Package
+	}
+	return fmt.Sprintf("%s@%d", a.Package, a.User)
 }
 
 // Screen is the helper's reading of the agent's display: its windows top first, each with the

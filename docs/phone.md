@@ -76,8 +76,8 @@ Agents Mewla starts get a `mewla_phone` tool set while Phone use is on:
 | Tool | What it does |
 |---|---|
 | `phone_screen` | Reads the screen as a list of elements with stable numbers, and a picture when asked |
-| `phone_apps`, `phone_launch` | Lists the apps and opens one on the agent's own screen |
-| `phone_tap`, `phone_swipe`, `phone_type`, `phone_key` | Presses, scrolls, types (any language) and presses Back, Home or Enter |
+| `phone_apps`, `phone_launch` | Lists the apps and opens one on the agent's own screen. An app clone (应用分身, a work profile) is its own entry, such as `微信 (分身 999) — com.tencent.mm@999`; a bare package is always the app of your own |
+| `phone_tap`, `phone_swipe`, `phone_type`, `phone_key` | Presses, scrolls, types (any language) and presses Back, Home or Enter. Typing sets the field's text, and if the field does not show it, pastes through the clipboard, then sends key events; the agent is told which way it went |
 | `phone_wait` | Waits for the screen to settle or for some text to appear |
 | `phone_handoff` | Asks you to do something (a login, a code, a payment) and waits until you say Done |
 
@@ -131,6 +131,7 @@ back on when it can.
   is not ready tells an agent so (*Phone use isn't ready on the phone: open
   Mewla → Phone*, with the reason when it knows it) instead of showing a black
   screen.
+- The hidden screen draws only when something changes. After an action with no new frame, the answer says the picture may be older than the screen. Apps that draw their own UI (WeChat) are given a longer settle and always come with a picture.
 - Apps that block screen capture (banking, some video apps) show a black
   picture, and apps that block automation may refuse. The agent is told.
 - Mewla's Accessibility service only acts while **Set up** runs, only inside
