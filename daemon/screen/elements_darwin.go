@@ -55,6 +55,9 @@ var axLib struct {
 	attrs  map[string]uintptr
 	// walkSet is what reading an element for the tree asks for.
 	walkSet attrSet
+	// printAppSet and printWindowSet are what fingerprinting an app asks of
+	// it and of its front window.
+	printAppSet, printWindowSet attrSet
 }
 
 const (
@@ -124,7 +127,7 @@ func loadAX() bool {
 		for _, name := range []string{
 			"AXFocusedApplication", "AXFocusedWindow", "AXChildren", "AXRole", "AXTitle",
 			"AXDescription", "AXValue", "AXPosition", "AXSize", "AXEnabled", "AXFocused", "AXWindows", "AXFrontmost", "AXParent",
-			"AXMenuBar", "AXMenuItemCmdChar", "AXMenuItemCmdModifiers",
+			"AXMenuBar", "AXMenuItemCmdChar", "AXMenuItemCmdModifiers", "AXFocusedUIElement",
 		} {
 			ref := axLib.createString(0, name, cfStringEncodingUTF8)
 			if ref == 0 {

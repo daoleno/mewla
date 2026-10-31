@@ -55,7 +55,9 @@ type FakeBackend struct {
 	// to change its elements as the app would: a sheet opening, a field
 	// clearing. It runs holding the backend's lock.
 	OnElementAction func(app *FakeApp, index int, action string)
-	AppKeys         []FakeAppKey
+	// Reads and Prints count the reads and fingerprints of fake apps.
+	Reads, Prints int
+	AppKeys       []FakeAppKey
 	// SkyLight lets clicks reach an app behind others; AppClicks are those
 	// clicks and Raised the apps brought to the front.
 	SkyLight  bool
@@ -493,6 +495,7 @@ func (f *FakeBackend) Apps(context.Context) ([]App, error) {
 func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTree, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.Reads++
 	for _, app := range f.RunningApps {
 		if app.PID != pid {
 			continue
@@ -514,6 +517,41 @@ func (f *FakeBackend) ReadApp(_ context.Context, pid int, limit int) (ElementTre
 	}
 	return ElementTree{}, errors.New("the app quit")
 }
+
+// PrintApp fingerprints a fake app by its top-level elements, those directly
+// under the first, the first focused element and the first one's title.
+func (f *FakeBackend) PrintApp(_ context.Context, pid int) (AppPrint, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Prints++
+	for _, app := range f.RunningApps {
+		if app.PID != pid {
+			continue
+		}
+		var print AppPrint
+		if app.OtherDesktop && !app.Active {
+			return print, nil
+		}
+		for i, e := range app.Elements {
+			switch {
+			case e.Depth == 0:
+				print.Windows++
+				if print.Windows == 1 {
+					print.Title = e.Title
+				}
+			case e.Depth == 1 && print.Windows == 1:
+				print.Children++
+			}
+			if e.Focused && print.Focus == 0 {
+				print.Focus = uintptr(i + 1)
+			}
+		}
+		return print, nil
+	}
+	return AppPrint{}, errors.New("the app quit")
+}
+
+var _ appPrinter = (*FakeBackend)(nil)
 
 // PressAt presses the last fake element of the app whose frame holds the
 // point and that offers AXPress, when HitTest is on.
