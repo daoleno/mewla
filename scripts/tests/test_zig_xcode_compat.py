@@ -29,8 +29,10 @@ _LIBCPP_HIDE_FROM_ABI _IntT __clamp_to_integral(_RealT __r) _NOEXCEPT {
 HEADER_PATH = "libcxx/include/__random/clamp_to_integral.h"
 
 
-def fake_zig(directory: Path, lib_dir: Path, compile_result: str) -> Path:
-    """A zig that answers version, env and c++, as the real one would for the cases the scripts tell apart."""
+def fake_zig(directory: Path, lib_dir: Path, compile_result: str, release_result: str | None = None) -> Path:
+    """A zig that answers version, env, c++ (Debug) and build-lib (ReleaseFast), as the real one would for the cases the scripts tell apart.
+
+    release_result, when given, is what the ReleaseFast build-lib says while c++ says compile_result."""
     messages = {
         "ok": "exit 0",
         "infinity": 'echo "clamp_to_integral.h:47:58: note: use of undeclared identifier \'INFINITY\'" >&2; exit 1',
@@ -43,6 +45,7 @@ def fake_zig(directory: Path, lib_dir: Path, compile_result: str) -> Path:
         "  version) echo 0.15.2 ;;\n"
         f'  env) echo \'.{{ .lib_dir = "{lib_dir}", }}\' | sed \'s/^.{{ //; s/ }}$//\' ;;\n'
         f"  c++) {messages[compile_result]} ;;\n"
+        f"  build-lib|build-exe) {messages[release_result or compile_result]} ;;\n"
         "esac\n"
     )
     zig.chmod(0o755)
@@ -78,7 +81,7 @@ class ZigXcodeCompatTests(unittest.TestCase):
             )
             return result.stdout.strip()
 
-    def check(self, targets, libcxx="infinity", header_tail=HEADER_TAIL):
+    def check(self, targets, libcxx="infinity", header_tail=HEADER_TAIL, release=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             sdk = sdk_with_targets(root, targets)
@@ -90,7 +93,7 @@ class ZigXcodeCompatTests(unittest.TestCase):
             xcodebuild = bin_dir / "xcodebuild"
             xcodebuild.write_text('#!/bin/sh\necho "Xcode 27.0"\necho "Build version TESTBUILD"\n')
             xcodebuild.chmod(0o755)
-            zig = fake_zig(bin_dir, fake_lib(root, header_tail), libcxx)
+            zig = fake_zig(bin_dir, fake_lib(root, header_tail), libcxx, release)
             env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "ZIG_BIN": str(zig), "MEWLA_TOOL_CACHE": str(root / "tools"), "TMPDIR": str(root)}
             return subprocess.run(["bash", str(CHECK)], capture_output=True, text=True, env=env)
 
@@ -141,6 +144,20 @@ class ZigXcodeCompatTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("probe and Zig's header disagree", result.stderr)
         self.assertNotIn("libcxx workaround is retired", result.stderr)
+
+    def test_one_configuration_that_fails_is_enough_to_need_the_workaround(self):
+        # The real Ghostty build failed in ReleaseFast where a Debug `zig c++`
+        # probe passed: any configuration failing on INFINITY means "needed".
+        result = self.check("x86_64-macos, arm64e-macos", libcxx="ok", release="infinity")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("libcxx workaround: still needed", result.stdout)
+        self.assertIn("libcxx probe variant debug-exe: builds", result.stdout)
+        self.assertIn("libcxx probe variant releasefast-dylib: INFINITY", result.stdout)
+
+    def test_the_probe_builds_libcxx_the_way_ghostty_does(self):
+        text = LIBRARY.read_text()
+        self.assertIn("build-lib -dynamic -O ReleaseFast -target aarch64-macos.13.0", " ".join(text.split()))
+        self.assertIn("-lc++", text)
 
     def test_an_unrelated_libcxx_failure_is_not_taken_for_the_known_one(self):
         result = self.check("x86_64-macos, arm64e-macos", libcxx="other")

@@ -127,37 +127,68 @@ mewla_zig_lib_already_patched() {
 }
 
 # mewla_zig_libcxx_support ZIG_BIN [SDKROOT] prints one word, from building a
-# C++ program for the macOS target the way the iOS build does, with the stock
-# Zig lib dir and empty caches. Linking a C++ program is what makes Zig build
-# its own libcxx (compiling <random> alone does not, and compiled where the
-# build failed), so the answer comes from the same libcxx build:
-#   fixed    it builds; the libcxx workaround is no longer needed
-#   broken   libcxx fails on INFINITY, the condition the workaround exists for
-#   unknown  it fails some other way, or there was nothing to build
+# C++ program for the macOS target with the stock Zig lib dir. Building or
+# linking a C++ program is what makes Zig build its own libcxx, and the answer
+# comes from that libcxx build. It is built the ways that matter, each with
+# empty caches, because a single configuration once said "fixed" where the real
+# Ghostty build failed (Zig builds libcxx per optimize mode, so one mode's
+# success says nothing about another's):
+#   debug-exe          `zig c++`, Debug: libcxx built Debug, with the UBSan runtime
+#   releasefast-dylib  `zig build-lib -dynamic -O ReleaseFast -lc++`: what
+#                      Ghostty's "compile lib ghostty-vt ReleaseFast
+#                      aarch64-macos.13.0" does; the libcxx sub-compilation
+#                      that failed on INFINITY is the ReleaseFast one
+# and the result is:
+#   broken   libcxx fails on INFINITY in any of them: the condition the
+#            workaround exists for
+#   fixed    every one builds; the libcxx workaround is no longer needed
+#   unknown  one fails some other way and none on INFINITY
 # SDKROOT is the SDK from mewla_prepare_macos_sdk_for_zig; without it Zig finds
-# the SDK itself. The output is left in $MEWLA_ZIG_PROBE_LOG when that is set.
+# the SDK itself. $MEWLA_ZIG_PROBE_LOG, when set, gets one "== variant NAME:
+# RESULT" line per configuration followed by that configuration's compiler
+# output, so a Mac run shows which configuration builds and which does not.
 mewla_zig_libcxx_support() {
   local zig="$1" sdkroot="${2:-}"
   local work
   work="$(mktemp -d "${TMPDIR:-/tmp}/mewla-zig-probe.XXXXXX")" || { echo unknown; return; }
   printf '#include <random>\nint main() { std::mt19937 g(1); return static_cast<int>(g() & 1) * 0; }\n' >"$work/probe.cpp"
-  local log="$work/probe.log" result
-  local -a probe_env=(env -u ZIG_LIB_DIR ZIG_GLOBAL_CACHE_DIR="$work/global" ZIG_LOCAL_CACHE_DIR="$work/local")
+  local combined="$work/probe.log" overall=fixed saw_other=0 name result
+  : >"$combined"
+  local -a probe_env=(env -u ZIG_LIB_DIR)
   if [[ -n "$sdkroot" ]]; then
     probe_env+=(PATH="$_MEWLA_COMPAT_LIB_DIR/../zig-xcode-compat:$PATH" MEWLA_MACOS_SDKROOT="$sdkroot")
   fi
-  if "${probe_env[@]}" "$zig" c++ -target aarch64-macos.13.0 -std=c++20 "$work/probe.cpp" -o "$work/probe" >"$log" 2>&1; then
-    result=fixed
-  elif grep -q "undeclared identifier 'INFINITY'" "$log"; then
-    result=broken
-  else
-    result=unknown
+  for name in debug-exe releasefast-dylib; do
+    local -a command
+    case "$name" in
+      debug-exe)
+        command=("$zig" c++ -target aarch64-macos.13.0 -std=c++20 "$work/probe.cpp" -o "$work/$name.out") ;;
+      releasefast-dylib)
+        command=("$zig" build-lib -dynamic -O ReleaseFast -target aarch64-macos.13.0 -lc++
+                 "$work/probe.cpp" "-femit-bin=$work/$name.dylib") ;;
+    esac
+    # One cache per optimize mode: libcxx is built per mode, never reused across modes.
+    local cache="$work/cache-${name%%-*}"
+    local log="$work/$name.log"
+    if "${probe_env[@]}" ZIG_GLOBAL_CACHE_DIR="$cache/global" ZIG_LOCAL_CACHE_DIR="$cache/local" "${command[@]}" >"$log" 2>&1; then
+      result=builds
+    elif grep -q "undeclared identifier 'INFINITY'" "$log"; then
+      result=INFINITY
+      overall=broken
+    else
+      result=other-failure
+      saw_other=1
+    fi
+    { echo "== variant $name: $result"; cat "$log"; } >>"$combined"
+  done
+  if [[ "$overall" != broken && "$saw_other" == 1 ]]; then
+    overall=unknown
   fi
   if [[ -n "${MEWLA_ZIG_PROBE_LOG:-}" ]]; then
-    cp "$log" "$MEWLA_ZIG_PROBE_LOG" 2>/dev/null || true
+    cp "$combined" "$MEWLA_ZIG_PROBE_LOG" 2>/dev/null || true
   fi
   rm -rf "$work"
-  echo "$result"
+  echo "$overall"
 }
 
 # mewla_patched_zig_lib ZIG_BIN LOCK ROOT TOOL_CACHE prints a lib dir for ZIG_LIB_DIR:

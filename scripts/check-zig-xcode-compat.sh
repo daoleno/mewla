@@ -66,12 +66,14 @@ while IFS= read -r patch_file; do
   header_state="$(mewla_zig_lib_patch_state "$stock_lib" "$patch_file")"
 done < <(mewla_lock_lib_patches "$LOCK" "$ROOT")
 echo "libcxx probe: build=$libcxx_state, stock header (${stock_lib:-?}) vs the lock's patch: $header_state"
+# One line per configuration the probe built (see mewla_zig_libcxx_support).
+sed -n 's/^== variant /  libcxx probe variant /p' "$probe_log"
 if mewla_zig_lib_already_patched "$ZIG_BIN" "$LOCK" "$ROOT"; then
   libcxx_state=patched
 elif [[ "$libcxx_state" == fixed && "$header_state" == unpatched ]]; then
-  # The header still has the line the patch exists for, yet the probe compiled
-  # it: the probe is not seeing what the build sees (a compile of <random>
-  # alone is not a libcxx build), so it cannot call the workaround retired.
+  # The header still has the line the patch exists for, yet every probe
+  # configuration built libcxx: the probe is not seeing what the build sees, so
+  # it cannot call the workaround retired.
   libcxx_state=disagrees
 fi
 case "$libcxx_state" in
@@ -84,9 +86,10 @@ case "$libcxx_state" in
     cat >&2 <<MESSAGE
 error: the libcxx probe and Zig's header disagree.
   The stock header under $stock_lib still has the line
-  scripts/zig-xcode-compat/ patches (bare INFINITY), but compiling <random>
-  for macOS with $sdk succeeded. The probe is not reproducing
-  the failing libcxx build, so the workaround cannot be called retired.
+  scripts/zig-xcode-compat/ patches (bare INFINITY), but building libcxx for
+  macOS with $sdk succeeded in every configuration the probe tries
+  (the variant lines above). The probe is not reproducing the failing libcxx
+  build, so the workaround cannot be called retired.
   Build the pinned Ghostty with the patch removed from the lock (or run
   "$ZIG_BIN" build on it with ZIG_LIB_DIR unset) and report whether libcxx
   fails; if it does, the probe's flags need to match the build's.
