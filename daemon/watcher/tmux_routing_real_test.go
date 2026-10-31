@@ -410,17 +410,24 @@ func TestRealTmuxOwnedLifecycleAndAmbientCollisionContainment(t *testing.T) {
 	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-w", "-t", ambientTarget, "automatic-rename", "off").CombinedOutput(); err != nil {
 		t.Fatalf("freeze ambient automatic-rename: %v: %s", err, out)
 	}
-	// The pane starts the default shell, which execs /bin/sh. tmux names the
-	// foreground process by its own rules per OS (a login shell can read "-sh"
-	// and a path can come back whole), so compare the shell's base name, and
-	// give a slow shell startup longer than the 5s of the other waits.
-	waitForHarnessObserved(t, "ambient shell ready", 20*time.Second, func() (bool, string) {
-		out, displayErr := tmuxHarnessCommand(h.selected, "display-message", "-p", "-t", ambientTarget, "#{pane_current_command}").Output()
+	// The pane starts the default shell, which execs /bin/sh. What tmux calls
+	// that process is the OS's business: Linux reads "sh", macOS reports the
+	// binary behind /bin/sh ("bash"), and a login shell can read "-sh". The
+	// test never depends on the name, only on it having stopped changing before
+	// it is recorded, so wait for the pane's command to read the same twice in
+	// a row rather than for a literal shell name.
+	var lastCommand string
+	var stableSince time.Time
+	waitForHarnessObserved(t, "ambient shell to settle", 20*time.Second, func() (bool, string) {
+		out, displayErr := tmuxHarnessCommand(h.selected, "display-message", "-p", "-t", ambientTarget, "#{pane_dead} #{pane_current_command}").Output()
 		if displayErr != nil {
 			return false, displayErr.Error()
 		}
-		command := strings.TrimSpace(string(out))
-		return strings.TrimPrefix(filepath.Base(command), "-") == "sh", command
+		observed := strings.TrimSpace(string(out))
+		if observed != lastCommand {
+			lastCommand, stableSince = observed, time.Now()
+		}
+		return strings.HasPrefix(observed, "0 ") && time.Since(stableSince) >= 300*time.Millisecond, observed
 	})
 	if out, err := tmuxHarnessCommand(h.selected, "set-option", "-wg", "@mewla_worker_created", "1").CombinedOutput(); err != nil {
 		t.Fatalf("set inherited collision marker: %v: %s", err, out)
