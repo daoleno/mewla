@@ -260,6 +260,36 @@ img { max-width: 100%; }
 .bg-row b { display: block; font-weight: 600; }
 .bg-row small { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--soft); }
 .bg-row small::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #3fae5c; }
+/* Phone use: the agent's own screen floats over the chat; one tap adds a note */
+.pu-head { margin-top: clamp(90px, 10vw, 140px); }
+.pu { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); justify-items: center; max-width: 940px; margin: clamp(36px, 5vw, 56px) auto 0; }
+@media (min-width: 820px) { .pu { grid-template-columns: auto minmax(0, 380px); justify-content: center; align-items: center; gap: 56px; } }
+.pu-phone { position: relative; width: min(100%, 360px); height: 600px; padding: 12px 12px 0; border: 9px solid var(--dark); border-radius: 38px; background: var(--card); overflow: hidden; box-shadow: 0 30px 60px -24px rgba(20, 12, 6, .45); }
+.pu-phone .msg { max-width: 90%; padding: 10px 14px; font-size: 14px; border-radius: 18px; }
+.pu-phone .msg.brain { margin-top: 10px; align-items: flex-start; }
+.pu-phone .msg.brain img { width: 22px; height: 22px; border-radius: 6px; }
+.pu-input { position: absolute; left: 12px; right: 12px; bottom: 12px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 999px; background: var(--tint); font-size: 14px; color: var(--faint); }
+.pu-float { position: absolute; right: 10px; bottom: 60px; width: 54%; aspect-ratio: 9 / 17; border: 4px solid var(--dark); border-radius: 22px; background: #fff; overflow: hidden; box-shadow: 0 22px 40px -10px rgba(20, 12, 6, .5), 0 0 0 1px rgba(255, 255, 255, .6); }
+.pu-scr { position: relative; height: 100%; padding: 0 10px; font-family: var(--sans); }
+.pu-sb { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 0 18px; font-size: 11px; font-weight: 600; }
+.pu-sb i { width: 8px; height: 8px; border-radius: 50%; background: var(--dark); }
+.pu-title { margin: 10px 4px 8px; font: 800 20px/1.1 var(--display); letter-spacing: -.02em; }
+.pu-list { list-style: none; margin: 0; padding: 0; }
+.pu-list li { padding: 8px 8px; margin-bottom: 6px; border-radius: 10px; background: var(--tint); line-height: 1.25; }
+.pu-list b { display: block; font-size: 13px; font-weight: 600; }
+.pu-list small { font-size: 11px; color: var(--soft); }
+.pu-list .pu-new { background: var(--red-soft); }
+.pu-list .pu-new small { color: var(--red-ink); }
+.pu-fab { position: absolute; right: 12px; bottom: 14px; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 14px; background: var(--red); color: #fff; box-shadow: 0 6px 14px -4px rgba(200, 55, 43, .6); }
+.pu-fab svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+.pu-grip { position: absolute; left: 6px; top: 6px; width: 14px; height: 14px; border-top: 3px solid var(--faint); border-left: 3px solid var(--faint); border-top-left-radius: 8px; }
+.pu-ctl { width: 100%; max-width: 380px; }
+.js .pu .pu-float, .js .pu .pu-new { opacity: 0; }
+.js .pu.in .pu-float { animation: pu-pop .55s var(--ease) .3s both; }
+.js .pu.in .tapr { animation: sc-ring .7s ease-out 1.7s both; }
+.js .pu.in .pu-new { animation: pu-note .5s var(--ease) 2s both; }
+@keyframes pu-pop { from { opacity: 0; transform: translateY(26px) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes pu-note { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 .sw { position: relative; width: 42px; height: 24px; border-radius: 999px; background: #2c6fe0; flex: none; }
 .sw::after { content: ""; position: absolute; right: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; }
 
@@ -674,5 +704,6 @@ img { max-width: 100%; }
   .js .cp .msg, .js .cp .cm, .js .cp .cm-ok, .js .cp .sl-new, .js .cp .sl-main .sl-ch, .js .cp .sl-main .sl-note, .js .cp .cr { opacity: 1; }
   .js .cp .sl-dlg { opacity: 0; visibility: hidden; }
   .js .cp .cur { transform: none; }
+  .js .pu .pu-float, .js .pu .pu-new { opacity: 1; }
   .toy { display: none; }
 }
