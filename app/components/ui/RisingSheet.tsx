@@ -17,6 +17,7 @@ import Animated, {
   Easing,
   interpolate,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Spring } from "../../constants/motion";
 import { ContinuousCorners, Radii, shadow, useAppColors } from "../../constants/tokens";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
@@ -60,6 +61,9 @@ export function RisingSheet({
 }: RisingSheetProps) {
   const colors = useAppColors();
   const desktop = useDesktopWeb();
+  const insets = useSafeAreaInsets();
+  // Beside a foldable's rail, not under it; backdrops still cover the window.
+  const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
   const progress = useSharedValue(0);
 
   useEffect(() => {
@@ -117,7 +121,7 @@ export function RisingSheet({
         animationType="none"
         onRequestClose={onClose}
       >
-        <Animated.View style={[styles.root, cardAnimStyle, cardStyle]}>
+        <Animated.View style={[styles.root, sideInsets, cardAnimStyle, cardStyle]}>
           {children}
         </Animated.View>
       </Modal>
@@ -134,7 +138,7 @@ export function RisingSheet({
         ]}
         onPress={onClose}
       />
-      <View style={[styles.cardSlot, alignStyle]}>
+      <View style={[styles.cardSlot, alignStyle, sideInsets]}>
         <Animated.View style={[cardAnimStyle, cardStyle]}>
           {children}
         </Animated.View>
@@ -162,7 +166,7 @@ export function RisingSheet({
             ]}
             onPress={onClose}
           />
-          <View style={[styles.cardSlot, alignStyle]}>
+          <View style={[styles.cardSlot, alignStyle, sideInsets]}>
             <Animated.View style={[cardAnimStyle, cardStyle]}>
               {children}
             </Animated.View>

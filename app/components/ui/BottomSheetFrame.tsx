@@ -187,6 +187,9 @@ export function BottomSheetFrame({
 
   if (!visible) return null;
 
+  // The card stays out of a foldable's rail; the backdrop still covers it.
+  const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
+
   return (
     <Modal
       visible
@@ -198,13 +201,13 @@ export function BottomSheetFrame({
     >
       {keyboardAvoiding ? (
         <KeyboardAvoidingView
-          style={[styles.root, dialog && styles.dialogRoot, rootStyle]}
+          style={[styles.root, dialog && styles.dialogRoot, sideInsets, rootStyle]}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           {body}
         </KeyboardAvoidingView>
       ) : (
-        <View style={[styles.root, dialog && styles.dialogRoot, rootStyle]}>{body}</View>
+        <View style={[styles.root, dialog && styles.dialogRoot, sideInsets, rootStyle]}>{body}</View>
       )}
     </Modal>
   );

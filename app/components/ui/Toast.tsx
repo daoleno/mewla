@@ -86,7 +86,11 @@ function ToastView({ toast, onDismiss }: { toast: ToastEntry; onDismiss(): void 
   const icon = toast.tone === "error" ? "alert-circle-fill" : toast.tone === "success" ? "check-circle-fill" : "info-fill";
   const ink = toast.tone === "error" ? colors.dangerText : toast.tone === "success" ? colors.success : colors.accentStrong;
   return (
-    <View pointerEvents="box-none" style={[styles.layer, { top: insets.top + 8 }]}>
+    <View pointerEvents="box-none" style={[
+        styles.layer,
+        // Beside a foldable's rail, not under it.
+        { top: insets.top + 8, left: insets.left + 16, right: insets.right + 16 },
+      ]}>
       <Animated.View entering={FadeInUp.springify().damping(20)} exiting={FadeOutUp.duration(160)}>
         <Pressable onPress={onDismiss} accessibilityRole="alert" accessibilityLabel={toast.title}>
           <GlassSurface material="thick" radius={24} elevation="float" style={styles.toast}>
@@ -122,8 +126,6 @@ export function useOptionalToast() {
 const styles = StyleSheet.create({
   layer: {
     position: "absolute",
-    left: 16,
-    right: 16,
     alignItems: "center",
     zIndex: 1000,
     elevation: 1000,

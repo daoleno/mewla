@@ -43,10 +43,8 @@ import { ensurePushPermission } from "../services/pushPermission";
 import { terminalRouteParams } from "../services/workerRouteId";
 import { useAppTheme } from "../constants/tokens";
 import { useStackScreenOptions } from "../components/navigation/stackScreenOptions";
-import {
-  DesktopWebShell,
-  desktopScreenLayout,
-} from "../components/navigation/DesktopWebShell";
+import { DesktopWebShell } from "../components/navigation/DesktopWebShell";
+import { appScreenLayout } from "../components/navigation/HorizontalSafeAreaFrame";
 import { ToastProvider } from "../components/ui/Toast";
 import { AlertHost } from "../components/ui/AlertHost";
 import { appFontAssets } from "../constants/appFontAssets";
@@ -699,7 +697,7 @@ const AppNavigator = memo(function AppNavigator({
     <DesktopWebShell>
     <Stack
       screenOptions={screenOptions}
-      screenLayout={desktopScreenLayout}
+      screenLayout={appScreenLayout}
     >
       <Stack.Screen name="(primary)" options={{ headerShown: false }} />
       <Stack.Screen name="calendar" options={{ title: "Calendar" }} />

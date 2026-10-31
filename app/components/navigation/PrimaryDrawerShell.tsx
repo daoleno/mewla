@@ -19,6 +19,7 @@ import {
 import { useIsFocused } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContentWidth, Spacing, TypeScale, useAppColors } from "../../constants/tokens";
+import { SIDEBAR_WIDTH, shouldDockSidebar } from "../../constants/windowRoom";
 import { SESSIONS_TEXT_INSET } from "../workers/SessionsListView";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { Icon } from "../icons/Icon";
@@ -29,6 +30,7 @@ import {
 } from "./PrimaryPageAction";
 import { PrimaryDrawer, usePrimaryDrawerController } from "./PrimaryDrawer";
 import { PrimaryDrawerPanel } from "./PrimaryDrawerPanel";
+import { PrimarySplitLayout } from "./PrimarySplitLayout";
 import {
   PrimarySurfaceInteractionProvider,
 } from "./PrimarySurfaceInteraction";
@@ -70,10 +72,6 @@ interface PrimaryAppBarProps {
   /** Docked: how the page's content sits under the bar. */
   layout?: PrimaryAppBarLayout | null;
 }
-
-/** From this width the drawer docks as a permanent sidebar (tablet, desktop). */
-export const PRIMARY_SIDEBAR_BREAKPOINT = 1024;
-const PRIMARY_SIDEBAR_WIDTH = 264;
 
 function PrimaryAppBar({
   activePrimaryRoute,
@@ -186,11 +184,12 @@ export function PrimaryDrawerShell({
   onSelectPrimaryRoute,
 }: PrimaryDrawerShellProps) {
   const colors = useAppColors();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const routeFocused = useIsFocused();
   const drawerWidth = Math.min(320, Math.max(240, windowWidth - 52));
-  const docked = windowWidth >= PRIMARY_SIDEBAR_BREAKPOINT;
+  // Room for a sidebar beside a page (see windowRoom): the drawer then docks.
+  const docked = shouldDockSidebar(windowWidth, windowHeight);
   const [appBarLayouts, setAppBarLayouts] = useState<Partial<Record<PrimaryRouteName, PrimaryAppBarLayout>>>({});
   const setAppBarLayout = useCallback((route: PrimaryRouteName, layout: PrimaryAppBarLayout | null) => {
     setAppBarLayouts((current) => {
@@ -223,7 +222,9 @@ export function PrimaryDrawerShell({
     navigatingAwayRef.current = false;
   }, []);
   const drawer = usePrimaryDrawerController(handleDrawerChange);
-  const drawerOpen = drawer.open;
+  // A docked sidebar has no drawer: whatever the controller still holds
+  // (folding open mid-drag, say) is closed below and counts as closed here.
+  const drawerOpen = drawer.open && !docked;
   const requestDrawer = drawer.request;
 
   const beginOpenInteraction = useCallback(() => {
@@ -245,6 +246,13 @@ export function PrimaryDrawerShell({
   const consumeMenuFocusReturn = useCallback(() => {
     setRestoreMenuFocus(false);
   }, []);
+
+  const drawerHeldOpen = drawer.open;
+  useEffect(() => {
+    if (docked && drawerHeldOpen) {
+      requestDrawer(false);
+    }
+  }, [docked, drawerHeldOpen, requestDrawer]);
 
   useEffect(() => {
     if (!routeFocused && drawerOpen) {
@@ -324,108 +332,93 @@ export function PrimaryDrawerShell({
     </View>
   );
 
-  if (docked) {
-    return (
-      <PrimaryAppBarLayoutContext.Provider value={setAppBarLayout}>
+  const sidebar =
+    docked && !sidebarHosted ? (
+      <View
+        role="navigation"
+        accessibilityLabel="Navigation"
+        style={[styles.sidebar, { borderRightColor: colors.borderSubtle }]}
+      >
+        <PrimaryDrawerPanel
+          closeButtonRef={closeButtonRef}
+          drawerVisible
+          activePrimaryRoute={activePrimaryRoute}
+          onSelectPrimaryRoute={onSelectPrimaryRoute}
+          onClose={closeDrawer}
+          onClosePressIn={() => undefined}
+          onNavigateAway={() => undefined}
+          docked
+        />
+      </View>
+    ) : null;
+
+  // One tree for both layouts: docking only fills the sidebar slot and the
+  // drawer's own content, so the page below keeps its place and its state.
+  return (
+    <PrimaryAppBarLayoutContext.Provider value={setAppBarLayout}>
       <PrimaryPageActionProvider>
         <PrimarySelectionBarProvider>
-          <PrimarySurfaceInteractionProvider drawerPhase="closed" routeFocused={routeFocused}>
-            <View style={[styles.root, styles.dockedRoot, { backgroundColor: colors.bgPrimary }]}>
-              {sidebarHosted ? null : <View
-                role="navigation"
-                accessibilityLabel="Navigation"
-                style={[styles.sidebar, { borderRightColor: colors.borderSubtle }]}
+          <PrimarySurfaceInteractionProvider
+            drawerPhase={drawerOpen ? "open" : "closed"}
+            routeFocused={routeFocused}
+          >
+            <PrimarySplitLayout
+              sidebar={sidebar}
+              style={{ backgroundColor: colors.bgPrimary }}
+            >
+              <PrimaryDrawer
+                controller={drawer}
+                drawer={docked ? null : drawerContent}
+                drawerStyle={{
+                  backgroundColor: colors.bgPrimary,
+                  borderRightColor: colors.borderSubtle,
+                  borderRightWidth: StyleSheet.hairlineWidth,
+                }}
+                drawerWidth={drawerWidth}
+                onDragStart={beginOpenInteraction}
+                overlayAccessibilityLabel="Close navigation drawer"
+                overlayColor={colors.modalBackdrop}
+                style={[styles.root, { backgroundColor: colors.bgPrimary }]}
+                // Brain is the pager's leading page, so a rightward swipe anywhere
+                // on it can only mean the drawer; on Sessions it pages back to
+                // Brain. Closing swipes work on every page while the drawer is open.
+                swipeToOpenEnabled={!docked && routeFocused && activePrimaryRoute === "brain"}
+                windowWidth={windowWidth}
               >
-                <PrimaryDrawerPanel
-                  closeButtonRef={closeButtonRef}
-                  drawerVisible
-                  activePrimaryRoute={activePrimaryRoute}
-                  onSelectPrimaryRoute={onSelectPrimaryRoute}
-                  onClose={closeDrawer}
-                  onClosePressIn={() => undefined}
-                  onNavigateAway={() => undefined}
-                  docked
-                />
-              </View>}
-              <View ref={primaryRef} collapsable={false} style={styles.primary}>
-                <PrimaryAppBar
-                  activePrimaryRoute={activePrimaryRoute}
-                  docked
-                  drawerVisible={false}
-                  menuButtonRef={menuButtonRef}
-                  onOpenDrawer={openDrawer}
-                  onOpenPressIn={beginOpenInteraction}
-                  onSelectPrimaryRoute={onSelectPrimaryRoute}
-                  topInset={insets.top}
-                  layout={appBarLayouts[activePrimaryRoute]}
-                />
-                <View style={styles.content}>{children}</View>
-              </View>
-            </View>
+                {/* Never flattened: toggling pointerEvents would otherwise create
+                    and remove this native view on every open/close, re-parenting
+                    the whole primary surface under in-flight touches. */}
+                <View
+                  {...primaryWebProps}
+                  ref={primaryRef}
+                  collapsable={false}
+                  style={styles.primary}
+                  pointerEvents={drawerOpen ? "none" : "auto"}
+                  accessibilityElementsHidden={drawerOpen}
+                  aria-hidden={drawerOpen}
+                  importantForAccessibility={
+                    drawerOpen ? "no-hide-descendants" : "auto"
+                  }
+                >
+                  <PrimaryAppBar
+                    activePrimaryRoute={activePrimaryRoute}
+                    docked={docked}
+                    drawerVisible={drawerOpen}
+                    menuButtonRef={menuButtonRef}
+                    onOpenDrawer={openDrawer}
+                    onOpenPressIn={beginOpenInteraction}
+                    onSelectPrimaryRoute={onSelectPrimaryRoute}
+                    topInset={insets.top}
+                    layout={docked ? appBarLayouts[activePrimaryRoute] : null}
+                  />
+                  <View style={styles.content}>{children}</View>
+                </View>
+              </PrimaryDrawer>
+            </PrimarySplitLayout>
           </PrimarySurfaceInteractionProvider>
         </PrimarySelectionBarProvider>
       </PrimaryPageActionProvider>
-      </PrimaryAppBarLayoutContext.Provider>
-    );
-  }
-
-  return (
-    <PrimaryPageActionProvider>
-      <PrimarySelectionBarProvider>
-      <PrimarySurfaceInteractionProvider
-        drawerPhase={drawerOpen ? "open" : "closed"}
-        routeFocused={routeFocused}
-      >
-        <PrimaryDrawer
-          controller={drawer}
-          drawer={drawerContent}
-          drawerStyle={{
-            backgroundColor: colors.bgPrimary,
-            borderRightColor: colors.borderSubtle,
-            borderRightWidth: StyleSheet.hairlineWidth,
-          }}
-          drawerWidth={drawerWidth}
-          onDragStart={beginOpenInteraction}
-          overlayAccessibilityLabel="Close navigation drawer"
-          overlayColor={colors.modalBackdrop}
-          style={[styles.root, { backgroundColor: colors.bgPrimary }]}
-          // Brain is the pager's leading page, so a rightward swipe anywhere
-          // on it can only mean the drawer; on Sessions it pages back to
-          // Brain. Closing swipes work on every page while the drawer is open.
-          swipeToOpenEnabled={routeFocused && activePrimaryRoute === "brain"}
-          windowWidth={windowWidth}
-        >
-          {/* Never flattened: toggling pointerEvents would otherwise create
-              and remove this native view on every open/close, re-parenting
-              the whole primary surface under in-flight touches. */}
-          <View
-            {...primaryWebProps}
-            ref={primaryRef}
-            collapsable={false}
-            style={styles.primary}
-            pointerEvents={drawerOpen ? "none" : "auto"}
-            accessibilityElementsHidden={drawerOpen}
-            aria-hidden={drawerOpen}
-            importantForAccessibility={
-              drawerOpen ? "no-hide-descendants" : "auto"
-            }
-          >
-            <PrimaryAppBar
-              activePrimaryRoute={activePrimaryRoute}
-              docked={false}
-              drawerVisible={drawerOpen}
-              menuButtonRef={menuButtonRef}
-              onOpenDrawer={openDrawer}
-              onOpenPressIn={beginOpenInteraction}
-              onSelectPrimaryRoute={onSelectPrimaryRoute}
-              topInset={insets.top}
-            />
-            <View style={styles.content}>{children}</View>
-          </View>
-        </PrimaryDrawer>
-      </PrimarySurfaceInteractionProvider>
-      </PrimarySelectionBarProvider>
-    </PrimaryPageActionProvider>
+    </PrimaryAppBarLayoutContext.Provider>
   );
 }
 
@@ -466,11 +459,8 @@ const styles = StyleSheet.create({
   drawerContent: {
     flex: 1,
   },
-  dockedRoot: {
-    flexDirection: "row",
-  },
   sidebar: {
-    width: PRIMARY_SIDEBAR_WIDTH,
+    width: SIDEBAR_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
   },
   dockedRow: {

@@ -116,6 +116,8 @@ export function MermaidFullscreenModal({
             backgroundColor: chrome.appBackground,
             paddingTop: insets.top,
             paddingBottom: insets.bottom,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
           },
         ]}
       >

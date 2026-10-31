@@ -129,12 +129,12 @@ function Float() {
 
   const area = useMemo(
     () => ({
-      left: 0,
+      left: insets.left,
       top: insets.top + HEADER,
-      right: box.width,
+      right: box.width - insets.right,
       bottom: box.height - (keyboard > 0 ? keyboard : insets.bottom) - COMPOSER,
     }),
-    [box.height, box.width, insets.bottom, insets.top, keyboard],
+    [box.height, box.width, insets.bottom, insets.left, insets.right, insets.top, keyboard],
   );
   const ratio = status && status.w > 0 && status.h > 0 ? status.w / status.h : 9 / 20;
   // The window is the agent display's exact shape, so the picture fills it; it never reaches the composer or the keyboard.
