@@ -56,12 +56,16 @@ says who is using your phone.
 - While an agent works, its screen also floats as a live window over every
   other page of Mewla, so you can keep chatting with Brain and watch at once. It
   has the agent screen's exact shape and starts at a bit over half the screen's
-  width. Drag the handle in its inner corner, or pinch, to resize it (from about a
-  third of the screen to nearly all of it); double-tap it to go between the
-  default and a large size. Drag it: it snaps to a corner, and it remembers its
-  corner and size. It stays above the chat input and the keyboard. Tap it for Take over (which opens the Phone page), Stop and
-  expand. When the agent needs you, it shows a pulsing ring. It disappears when
-  the agent finishes or you Stop, and on the Phone page itself.
+  width, in the bottom-right corner above the chat input, so most of the
+  conversation stays readable. Until the agent's screen has drawn anything, it shows
+  a light card that says what is going on (*Opening 微信…*, *Couldn't open 微信*)
+  instead of a black slab. Drag the handle in its inner corner, or pinch, to resize
+  it (from about a third of the screen to nearly all of it); double-tap it to go
+  between the default and a large size. Drag it: it snaps to a corner, and it
+  remembers its corner and size. It stays above the chat input and the keyboard.
+  Tap it for Take over (which opens the Phone page), Stop and expand. When the
+  agent needs you, it shows a pulsing ring. It disappears when the agent finishes
+  (its Worker ends or is closed) or you Stop, and on the Phone page itself.
 - Leave Mewla from any page while an agent works and its screen floats in a small
   window (Android's picture-in-picture), still live and showing only the agent's
   screen; tap it for Take over and Stop. Coming back returns it to the in-app
@@ -76,7 +80,7 @@ Agents Mewla starts get a `mewla_phone` tool set while Phone use is on:
 | Tool | What it does |
 |---|---|
 | `phone_screen` | Reads the screen as a list of elements with stable numbers, and a picture when asked |
-| `phone_apps`, `phone_launch` | Lists the apps and opens one on the agent's own screen. An app clone (应用分身, a work profile) is its own entry, such as `微信 (分身 999) — com.tencent.mm@999`; a bare package is always the app of your own |
+| `phone_apps`, `phone_launch` | Lists the apps and opens one on the agent's own screen. An app clone (应用分身, a work profile) is its own entry, such as `微信 (分身 999) — com.tencent.mm@999`; a bare package is always the app of your own. A clone is opened by its launcher component as its own user, read from the same query that lists it |
 | `phone_tap`, `phone_swipe`, `phone_type`, `phone_key` | Presses, scrolls, types (any language) and presses Back, Home or Enter. Typing sets the field's text, and if the field does not read back the text, pastes through the clipboard (your own clipboard is put back; never for a password), then sends key events; the agent is told which way it went |
 | `phone_steps` | Runs up to 12 actions (launch, tap, type, swipe, key, wait) in one call and returns only the last screen, so a whole flow (search, type, open the first result) costs one model turn. Elements can be named by their text (`match`), waited for up to 4 seconds. A step that fails ends the batch and the answer says which one and shows the screen as it stands |
 | `phone_wait` | Waits for the screen to settle or for some text to appear |
@@ -131,7 +135,9 @@ back on when it can.
   Mewla may not switch Wireless debugging on yet, that one switch. A phone that
   is not ready tells an agent so (*Phone use isn't ready on the phone: open
   Mewla → Phone*, with the reason when it knows it) instead of showing a black
-  screen.
+  screen. The agent is told to wait about 15 seconds and try again for up to a
+  minute, since the phone is often ready within a minute of the person opening
+  Mewla, and to tell the person only if it still is not.
 - The hidden screen draws only when something changes. After an action with no new frame, the answer says the picture may be older than the screen. Apps that draw their own UI (WeChat) are given a longer settle and always come with a picture.
 - If an app reports none of its views as visible (WeChat on the hidden screen did), the reader trusts each element's position instead, and elements also carry their state description and tooltip as their description.
 - Apps that block screen capture (banking, some video apps) show a black
