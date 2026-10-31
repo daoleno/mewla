@@ -202,13 +202,13 @@ func breakdown(changes []rowChange, inside map[int]bool, acted string) string {
 }
 
 // diffAnswer says what changed between two reads of one app, by element id:
-// rows added, gone and changed, and where the focus went. acted is the
-// element the action was on, or 0: what changes under it (a text area whose
-// lines are rebuilt when its text is) is not listed row by row but counted
-// with that element, which is shown as it reads now. ok is false when a
-// difference would mislead or save little, and why says so: the caller then
-// gives the whole read.
-func diffAnswer(before, after ElementTree, beforeRows, afterRows []appRow, acted int) (text string, stats readStats, why string, ok bool) {
+// rows added, gone and changed, and where the focus went. collapse is the
+// element whose value was set, or 0: when the difference is too large to give
+// row by row, what changes under it (a text area whose lines are rebuilt when
+// its text is) is counted with that element, which is shown as it reads now.
+// ok is false when a difference would mislead or save little, and why says
+// so: the caller then gives the whole read.
+func diffAnswer(before, after ElementTree, beforeRows, afterRows []appRow, collapse int) (text string, stats readStats, why string, ok bool) {
 	switch {
 	case before.PID != after.PID:
 		return "", readStats{}, "it is another app", false
@@ -226,46 +226,57 @@ func diffAnswer(before, after ElementTree, beforeRows, afterRows []appRow, acted
 		}
 	}
 	changes := changedRows(beforeRows, afterRows)
-	inside := map[int]bool{}
-	actedAt := -1
-	if acted != 0 {
-		// Only an element that is still there is shown as it reads now.
-		if actedAt = rowIndex(afterRows, acted); actedAt >= 0 {
-			insideIDs(afterRows, actedAt, inside)
-			insideIDs(beforeRows, rowIndex(beforeRows, acted), inside)
-		}
+	tooMuch := func(rows int) bool { return rows > diffMaxRows || rows*2 > len(afterRows) }
+	lines := make([]string, len(changes))
+	for i, c := range changes {
+		lines[i] = c.line
 	}
-	var lines []string
-	changedInside, actedLine := 0, -1
-	for _, c := range changes {
-		switch {
-		case inside[c.id]:
-			changedInside++
-		default:
-			if c.id == acted {
+	if tooMuch(len(lines)) {
+		// Only now, and only for the element whose value was set, is what
+		// changed under it counted with it: a text area rebuilds its lines
+		// when its text changes. Pressing a pop-up button puts a menu and its
+		// items under it, and those rows are what the agent needs, so a
+		// difference that fits is always given row by row.
+		inside := map[int]bool{}
+		actedAt := -1
+		if collapse != 0 {
+			// Only an element that is still there is shown as it reads now.
+			if actedAt = rowIndex(afterRows, collapse); actedAt >= 0 {
+				insideIDs(afterRows, actedAt, inside)
+				insideIDs(beforeRows, rowIndex(beforeRows, collapse), inside)
+			}
+		}
+		lines = lines[:0]
+		changedInside, actedLine := 0, -1
+		for _, c := range changes {
+			if inside[c.id] {
+				changedInside++
+				continue
+			}
+			if c.id == collapse {
 				actedLine = len(lines)
 			}
 			lines = append(lines, c.line)
 		}
-	}
-	if changedInside > 0 {
-		note := fmt.Sprintf(" — %d rows inside it changed with it", changedInside)
-		if changedInside == 1 {
-			note = " — 1 row inside it changed with it"
+		if changedInside > 0 {
+			note := fmt.Sprintf(" — %d rows inside it changed with it", changedInside)
+			if changedInside == 1 {
+				note = " — 1 row inside it changed with it"
+			}
+			if actedLine >= 0 {
+				lines[actedLine] += note
+			} else {
+				// Only what is under it changed: it is still said how it reads.
+				lines = append(lines, "~ "+strings.TrimLeft(afterRows[actedAt].line, " ")+note)
+			}
 		}
-		if actedLine >= 0 {
-			lines[actedLine] += note
-		} else {
-			// Only what is under it changed: it is still said how it reads.
-			lines = append(lines, "~ "+strings.TrimLeft(afterRows[actedAt].line, " ")+note)
+		if tooMuch(len(lines)) {
+			actedName := ""
+			if actedAt >= 0 {
+				actedName = fmt.Sprintf("[%d] %s", collapse, afterRows[actedAt].role)
+			}
+			return "", readStats{}, "much of it changed: " + breakdown(changes, inside, actedName), false
 		}
-	}
-	if len(lines) > diffMaxRows || len(lines)*2 > len(afterRows) {
-		actedName := ""
-		if actedAt >= 0 {
-			actedName = fmt.Sprintf("[%d] %s", acted, afterRows[actedAt].role)
-		}
-		return "", readStats{}, "much of it changed: " + breakdown(changes, inside, actedName), false
 	}
 	var b strings.Builder
 	if len(lines) == 0 {
