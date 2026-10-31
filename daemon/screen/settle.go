@@ -2,14 +2,31 @@ package screen
 
 import (
 	"context"
+	"log"
+	"os"
 	"time"
 )
+
+// settleTrace logs what settling saw; it is for measuring on a real Mac.
+var settleTrace = os.Getenv("MEWLA_SCREEN_SETTLE_TRACE") != ""
 
 // AppPrint is a cheap fingerprint of an app's windows, to tell whether it is
 // still changing: how many windows it has, how many elements its front
 // window holds directly, which element has the focus and the window's title.
 // It misses a change deeper down, so what must be found is read, not
 // assumed.
+//
+// That is a known limit, not an oversight. A pane that fills in after the
+// window has stopped changing at this level (System Settings > Storage
+// showing "Calculating…" until the app has measured the disk) looks quiet
+// here: its elements sit deeper than the window's direct children, and what
+// they say changes with no change in the counts, focus or title. A deeper
+// fingerprint would cost more requests on every poll of every app, and would
+// still not tell app work that outlasts settleMax from a pane that is done.
+// Quiet settle covers the redraw that follows an action; for content that
+// arrives later the agent waits for what it expects (wait_for, with a match)
+// rather than for quiet. MEWLA_SCREEN_SETTLE_TRACE=1 logs every fingerprint
+// and how each wait ended, to see on a real app what a deeper one would add.
 type AppPrint struct {
 	Windows  int
 	Children int
@@ -48,13 +65,27 @@ type settler struct {
 // then reports. An error is the wait itself being ended.
 func (s settler) quiet(ctx context.Context) (settled bool, err error) {
 	start := s.now()
+	prints := 0
+	if settleTrace {
+		defer func() {
+			log.Printf("screen: settle after %v: %d fingerprints, settled %v, err %v", s.now().Sub(start), prints, settled, err)
+		}()
+	}
+	print := func(ctx context.Context) (AppPrint, error) {
+		p, err := s.print(ctx)
+		prints++
+		if settleTrace {
+			log.Printf("screen: settle fingerprint %d at %v: %+v (err %v)", prints, s.now().Sub(start), p, err)
+		}
+		return p, err
+	}
 	left := func() time.Duration { return s.max - s.now().Sub(start) }
 	if s.first > 0 {
 		if err := s.sleep(ctx, min(s.first, max(left(), 0))); err != nil {
 			return false, err
 		}
 	}
-	previous, perr := s.print(ctx)
+	previous, perr := print(ctx)
 	if perr != nil {
 		return false, nil
 	}
@@ -62,7 +93,7 @@ func (s settler) quiet(ctx context.Context) (settled bool, err error) {
 		if err := s.sleep(ctx, min(s.every, left())); err != nil {
 			return false, err
 		}
-		current, perr := s.print(ctx)
+		current, perr := print(ctx)
 		if perr != nil {
 			return false, nil
 		}
