@@ -263,9 +263,16 @@ internal class PhoneHelper(
             return TextCheck.landed(next, reader.focusedField(d)?.text)
         }
         if (field != null && reader.setFocusedText(d, next) && (!verifiable || landed())) return typed("set_text", verifiable)
-        if (clipboard.set(if (replaceAll) next else value)) {
-            if (replaceAll) injector.selectAll(d)
-            if (injector.paste(d) && (!verifiable || landed())) return typed("paste", verifiable)
+        // Never through the clipboard for a password: it would sit in the keyboard's clipboard history.
+        if (field?.password != true) {
+            var pasted = false
+            val used = clipboard.with(if (replaceAll) next else value) {
+                if (replaceAll) injector.selectAll(d)
+                pasted = injector.paste(d)
+                // The field reads the clipboard a moment after the key: put it back only once it has.
+                Thread.sleep(TEXT_READBACK_MS)
+            }
+            if (used && pasted && (!verifiable || landed())) return typed("paste", verifiable)
         }
         if (replaceAll) {
             injector.selectAll(d)

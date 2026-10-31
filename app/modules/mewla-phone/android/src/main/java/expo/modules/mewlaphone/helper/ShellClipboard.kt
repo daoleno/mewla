@@ -20,11 +20,23 @@ internal class ShellClipboard(private val context: Context) {
         }.onFailure { Log.w(TAG, "no clipboard", it) }.getOrNull()
     }
 
-    /** Puts [text] on the clipboard; false when the system refuses. */
-    fun set(text: String): Boolean = runCatching {
-        manager!!.setPrimaryClip(ClipData.newPlainText("mewla", text))
-        true
-    }.onFailure { Log.w(TAG, "setPrimaryClip failed", it) }.getOrDefault(false)
+    /**
+     * Puts [text] on the clipboard for as long as [use] runs, then puts back what was there, so the
+     * person's own clipboard is theirs again. False, without calling [use], when the system refuses.
+     */
+    fun with(text: String, use: () -> Unit): Boolean {
+        val cm = manager ?: return false
+        val before = runCatching { cm.primaryClip }.getOrNull()
+        val set = runCatching { cm.setPrimaryClip(ClipData.newPlainText("mewla", text)) }
+            .onFailure { Log.w(TAG, "setPrimaryClip failed", it) }.isSuccess
+        if (!set) return false
+        try {
+            use()
+        } finally {
+            runCatching { if (before != null) cm.setPrimaryClip(before) else cm.clearPrimaryClip() }
+        }
+        return true
+    }
 
     private companion object {
         const val TAG = "MewlaPhoneHelper"
