@@ -132,8 +132,13 @@ func waitForSocketPath(t *testing.T, path string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
+		// The file appears at bind, before listen; only a connection that
+		// gets through says the server is accepting.
 		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSocket != 0 {
-			return
+			if conn, err := net.Dial("unix", path); err == nil {
+				conn.Close()
+				return
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
