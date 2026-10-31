@@ -23,6 +23,7 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/friends"
 	"github.com/daoleno/mewla/daemon/friendsvc"
+	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/remote"
 )
 
@@ -88,7 +89,7 @@ func TestFriendsThroughThePairedPhone(t *testing.T) {
 		t.Fatalf("starts off: %+v", st)
 	}
 	// A body swapped under a signature is refused.
-	swapped, _ := json.Marshal(map[string]any{"op": "disable"})
+	swapped, _ := json.Marshal(map[string]any{"op": "delete_account"})
 	sum := sha256.Sum256([]byte(`{"op":"enable"}`))
 	if code, _ := do(http.MethodPost, "mewla-friends:POST:/friends:sha256="+hex.EncodeToString(sum[:]), swapped); code != http.StatusUnauthorized {
 		t.Fatalf("swapped body: %d", code)
@@ -146,14 +147,63 @@ func TestFriendsThroughThePairedPhone(t *testing.T) {
 		}
 	}
 
-	// Turning off deletes the person and clears this computer.
-	if code, raw := act(map[string]any{"op": "disable"}); code != http.StatusOK {
+	// Turning off only stops Friends here: the person, the sign-in and the
+	// drafts stay, and nothing on this computer acts for Friends.
+	keptDraft, err := local.Submit(context.Background(), "A draft that waits through the off switch.", "")
+	if err != nil || keptDraft.DraftID == "" {
+		t.Fatalf("second submit = %+v %v", keptDraft, err)
+	}
+	if code, raw := act(map[string]any{"op": "off"}); code != http.StatusOK {
 		t.Fatalf("disable: %d %s", code, raw)
 	}
-	if st := status(); st.Enabled {
-		t.Fatalf("still on: %+v", st)
+	if st := status(); st.Enabled || st.Handle != "owner" || !st.SignedIn || len(st.Drafts) != 0 || st.Me != nil {
+		t.Fatalf("after off: %+v", st)
 	}
 	var count int
+	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM people`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("server has %d people after off (%v)", count, err)
+	}
+	if _, err := local.Submit(context.Background(), "Nothing drafts while it is off.", ""); !errors.Is(err, friends.ErrNotLinked) {
+		t.Fatalf("submit while off = %v", err)
+	}
+	for _, op := range []map[string]any{
+		{"op": "call", "method": "GET", "path": "/feed"},
+		{"op": "auto_post", "enabled": true, "tz": "UTC"},
+		{"op": "post_draft", "draft_id": keptDraft.DraftID},
+		{"op": "discard_draft", "draft_id": keptDraft.DraftID},
+		{"op": "draft_media", "draft_id": keptDraft.DraftID, "file": "x.png"},
+		{"op": "draft_media_remove", "draft_id": keptDraft.DraftID, "index": 0},
+	} {
+		if code, raw := act(op); code != http.StatusConflict || !strings.Contains(string(raw), "not_enabled") {
+			t.Errorf("%v while off = %d %s", op["op"], code, raw)
+		}
+	}
+	if drafts, _ := friends.NewStore(manager.StorageDir()).Drafts(); len(drafts) != 1 {
+		t.Fatalf("drafts after off = %+v", drafts)
+	}
+
+	// The old "disable" meant delete everything; an App that still sends it
+	// is refused rather than answered with the wrong meaning.
+	if code, _ := act(map[string]any{"op": "disable"}); code != http.StatusBadRequest {
+		t.Fatalf("old disable op = %d, want 400", code)
+	}
+
+	// Turning it back on resumes the same person with its draft.
+	if code, raw := act(map[string]any{"op": "enable", "agent_name": "Mochi", "pet_id": "cat", "tz": "UTC"}); code != http.StatusOK {
+		t.Fatalf("enable again: %d %s", code, raw)
+	}
+	if st := status(); !st.Enabled || st.Handle != "owner" || len(st.Drafts) != 1 || st.Me == nil {
+		t.Fatalf("after on again: %+v", st)
+	}
+
+	// Deleting the account is its own operation: it removes the person and
+	// clears this computer, which leaves Friends off.
+	if code, raw := act(map[string]any{"op": "delete_account"}); code != http.StatusOK {
+		t.Fatalf("delete_account: %d %s", code, raw)
+	}
+	if st := status(); st.Enabled || st.Handle != "" || len(st.Drafts) != 0 {
+		t.Fatalf("after delete: %+v", st)
+	}
 	if err := store.DB().QueryRow(`SELECT COUNT(*) FROM people`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("server still has %d people (%v)", count, err)
 	}
@@ -328,5 +378,53 @@ func TestFriendsDraftMediaThroughThePairedPhone(t *testing.T) {
 	}
 	if code, raw := act(map[string]any{"op": "post_draft", "draft_id": out.DraftID, "reviewed": []string{draft.Media[1].File}}); code != http.StatusOK {
 		t.Fatalf("post draft: %d %s", code, raw)
+	}
+}
+
+type recordingFriendsPusher struct {
+	notificationPusher
+	sent []push.Message
+}
+
+func (p *recordingFriendsPusher) Send(message push.Message) error {
+	p.sent = append(p.sent, message)
+	return nil
+}
+
+// Friends turned off is silent: no push about drafts that are kept, and the
+// count the phone was last told does not move.
+func TestFriendsNotifierIsSilentWhileOff(t *testing.T) {
+	manager, _, _ := sessionFileAuthFixture(t)
+	srv := New(manager, nil, nil, nil, nil, nil, nil)
+	pusher := &recordingFriendsPusher{}
+	srv.pusher = pusher
+	store := friends.NewStore(manager.StorageDir())
+	if err := store.SaveState(friends.State{Handle: "owner", EnabledAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AddDraft("A waiting draft.", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	local := srv.friendsLocal()
+	if err := local.Disable(); err != nil {
+		t.Fatal(err)
+	}
+	srv.friendsNotifyOnce(context.Background())
+	if len(pusher.sent) != 0 {
+		t.Fatalf("pushed while off: %+v", pusher.sent)
+	}
+	if state, err := store.Account(); err != nil || state.DraftsPushed != 0 {
+		t.Fatalf("state moved while off: %+v %v", state, err)
+	}
+
+	state, _ := store.Account()
+	state.Off = false
+	if err := store.SaveState(state); err != nil {
+		t.Fatal(err)
+	}
+	srv.friendsNotifyOnce(context.Background())
+	if len(pusher.sent) != 1 || !strings.Contains(pusher.sent[0].Body, "1 draft") {
+		t.Fatalf("on again: %+v", pusher.sent)
 	}
 }

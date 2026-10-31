@@ -23,17 +23,22 @@ const (
 	DraftTTL = 7 * 24 * time.Hour
 )
 
-// ErrNotLinked means Friends is off on this computer.
+// ErrNotLinked means Friends is off on this computer: never turned on, turned
+// off, or deleted.
 var ErrNotLinked = errors.New("Friends is not set up on this computer; turn it on in the app (Settings, Labs)")
 
 // ErrTooManyDrafts means the person has drafts waiting.
 var ErrTooManyDrafts = fmt.Errorf("%d drafts are already waiting for the owner; write no more until they are handled", MaxPendingDrafts)
 
-// State is what this computer remembers while Friends is on. It exists only
-// then: turning Friends off removes it with the drafts.
+// State is what this computer remembers of the Friends account. Turning
+// Friends off only sets Off and keeps the rest; deleting the account removes
+// it with the drafts.
 type State struct {
 	Handle    string    `json:"handle"`
 	EnabledAt time.Time `json:"enabled_at"`
+	// Off is set while Friends is turned off here: nothing drafts, posts,
+	// polls or notifies, and the account and drafts wait to be turned back on.
+	Off bool `json:"off,omitempty"`
 	// NotifySeq is the newest Friends notification already pushed to the phone.
 	NotifySeq int64 `json:"notify_seq"`
 	// DraftsPushed is how many drafts the phone was last told were waiting.
@@ -73,7 +78,7 @@ func (s *Store) statePath() string { return filepath.Join(s.Dir, "state.json") }
 
 func (s *Store) ensure() error { return os.MkdirAll(filepath.Join(s.Dir, "drafts"), 0o700) }
 
-// SaveState records that Friends is on.
+// SaveState records the Friends account and whether it is on.
 func (s *Store) SaveState(state State) error {
 	if err := s.ensure(); err != nil {
 		return err
@@ -85,8 +90,22 @@ func (s *Store) SaveState(state State) error {
 	return atomicfile.Write(s.statePath(), raw, 0o600)
 }
 
-// State returns the saved state, or ErrNotLinked when Friends is off.
+// State returns the saved state while Friends is on, or ErrNotLinked when it
+// is off. Everything that acts for Friends goes through here.
 func (s *Store) State() (State, error) {
+	state, err := s.Account()
+	if err != nil {
+		return State{}, err
+	}
+	if state.Off {
+		return State{}, ErrNotLinked
+	}
+	return state, nil
+}
+
+// Account returns the saved state whether Friends is on or turned off, or
+// ErrNotLinked when there is no account here.
+func (s *Store) Account() (State, error) {
 	raw, err := os.ReadFile(s.statePath())
 	if errors.Is(err, os.ErrNotExist) {
 		return State{}, ErrNotLinked
@@ -101,7 +120,7 @@ func (s *Store) State() (State, error) {
 	return state, nil
 }
 
-// Clear forgets the state and every draft.
+// Clear forgets the account and every draft.
 func (s *Store) Clear() error { return os.RemoveAll(s.Dir) }
 
 // MediaDir is where a draft keeps its prepared media.

@@ -455,13 +455,13 @@ func writeRemoteStatus(w io.Writer, stateDir string) {
 // A service that does not serve Friends has nothing to delete.
 func deleteFriendsData(ctx context.Context, stateDir string, authManager *auth.Manager, stderr io.Writer) error {
 	local := &friends.Local{StateDir: stateDir, Auth: authManager}
-	_, wasOn := local.Enabled()
-	err := local.Disable(ctx)
+	_, hadAccount := local.Account()
+	err := local.DeleteAccount(ctx)
 	var refused *friends.ServiceError
 	if errors.As(err, &refused) && refused.Status == http.StatusNotFound {
 		return nil
 	}
-	if err == nil && wasOn {
+	if err == nil && hadAccount {
 		fmt.Fprintln(stderr, "Deleted your Friends account and everything you posted there.")
 	}
 	return err

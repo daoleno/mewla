@@ -70,8 +70,14 @@ export function enableFriends(server: StoredServer, agentName: string, petId: st
   return friendsAction(server, { op: "enable", agent_name: agentName, pet_id: petId, tz: deviceTimeZone() });
 }
 
+/** Turns Friends off on the computer. The account, its posts, the sign-in and the drafts are kept. */
 export function disableFriends(server: StoredServer): Promise<FriendsStatus> {
-  return friendsAction(server, { op: "disable" });
+  return friendsAction(server, { op: "off" });
+}
+
+/** Deletes the Friends account and everything it made, and the computer's drafts. Friends is off after. */
+export function deleteFriendsAccount(server: StoredServer): Promise<FriendsStatus> {
+  return friendsAction(server, { op: "delete_account" });
 }
 
 export function setAutoPost(server: StoredServer, enabled: boolean): Promise<FriendsStatus> {

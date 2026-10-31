@@ -64,6 +64,9 @@ type Store struct {
 	// current (DisplayedObjective).
 	objectiveExpiryMu sync.Mutex
 	objectiveExpiry   *time.Timer
+	// seedGates holds back a seeded workspace file (slash path) while its
+	// feature is off, so Brain is not told about a feature that is not there.
+	seedGates map[string]func() bool
 }
 
 func DefaultRoot() (string, error) {

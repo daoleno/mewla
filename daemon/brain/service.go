@@ -811,7 +811,7 @@ func (s *Service) Housekeeping() (HousekeepingReport, error) {
 		Notes:                context.Notes,
 		UnmanagedPaths:       unmanaged,
 		PolicyPaths:          []string{"policies/delegation.md", "policies/engine.md", "policies/handoff.md"},
-		PlaybookPaths:        seedPlaybookPaths(),
+		PlaybookPaths:        s.store.shownPlaybookPaths(),
 		WorklogPath:          s.store.WorklogPath(),
 		OpenDelegatedWorkers: delegated,
 		ChangedPaths:         changedPaths,
@@ -829,6 +829,9 @@ func workspaceContentIdentity(store *Store) (map[string]workspaceFileIdentity, e
 	identities := make(map[string]workspaceFileIdentity)
 	paths := standardWorkspaceRelativePaths()
 	for _, relativePath := range paths {
+		if !store.seedShown(relativePath) {
+			continue
+		}
 		path := filepath.Join(store.WorkspacePath(), filepath.FromSlash(relativePath))
 		raw, exists, err := readOptionalFile(path)
 		if err != nil {

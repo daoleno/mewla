@@ -35,6 +35,24 @@ func workspaceSeeds() []workspaceSeed {
 	return seeds
 }
 
+// GateSeed shows the seeded workspace file at path (slash separated, for
+// example "playbooks/friends.md") only while on reports true. While it is
+// off the file is not written, an untouched copy is removed, and the
+// playbook catalog leaves it out; a file the user edited stays on disk.
+func (s *Store) GateSeed(path string, on func() bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.seedGates == nil {
+		s.seedGates = map[string]func() bool{}
+	}
+	s.seedGates[path] = on
+}
+
+func (s *Store) seedShown(path string) bool {
+	on := s.seedGates[path]
+	return on == nil || on()
+}
+
 type seedManifest struct {
 	Files map[string]string `json:"files"`
 }
@@ -74,6 +92,15 @@ func (s *Store) seedWorkspaceFiles() error {
 			return fmt.Errorf("read Brain workspace seed %s: %w", seed.path, err)
 		}
 		seedDigest := sha256Hex([]byte(seed.content))
+		if !s.seedShown(seed.path) {
+			if exists && manifest.Files[seed.path] == sha256Hex(raw) {
+				if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				delete(manifest.Files, seed.path)
+			}
+			continue
+		}
 		switch {
 		case !exists || strings.TrimSpace(string(raw)) == "":
 		case sha256Hex(raw) == seedDigest:

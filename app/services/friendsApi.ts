@@ -113,7 +113,9 @@ export interface FriendsStatus {
   account?: string;
   /** Whether the computer is also reachable through the relay; Friends never turns it on. Computers older than this field omit it. */
   remote_access?: boolean;
+  /** Friends is on. A turned-off account keeps its `handle` but is not enabled. */
   enabled: boolean;
+  /** The Friends account kept on the computer, on or off. */
   handle?: string;
   me?: FriendsMe;
   drafts: FriendsDraft[];

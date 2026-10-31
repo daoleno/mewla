@@ -19,7 +19,7 @@ interface FriendsSheetProps {
   onClose(): void;
 }
 
-/** The confirm sheet for turning on auto-post and turning Friends off. */
+/** The confirm sheet for turning on auto-post and deleting the Friends account. */
 export function FriendsSheet({ visible, title, points, confirmLabel, cancelLabel, destructive, busy, onConfirm, onClose }: FriendsSheetProps) {
   const { colors } = useAppTheme();
   return (

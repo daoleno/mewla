@@ -38,6 +38,7 @@ import (
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/friends"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
@@ -373,6 +374,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)
 	}
+	// Brain hears of the Friends playbook only while Friends is on.
+	brainStore.GateSeed("playbooks/friends.md", func() bool {
+		_, on := (&friends.Local{StateDir: authManager.StorageDir()}).Enabled()
+		return on
+	})
 	brainService := brain.NewService(brainStore, w, execs)
 	w.SetTurnLedger(brainService)
 	// A Worker whose agent announces its conversation is re-proved when it

@@ -48,6 +48,18 @@ func seedPlaybookPaths() []string {
 	return paths
 }
 
+// shownPlaybookPaths is seedPlaybookPaths without the playbooks whose feature
+// is off.
+func (s *Store) shownPlaybookPaths() []string {
+	paths := []string{}
+	for _, path := range seedPlaybookPaths() {
+		if s.seedShown(path) {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
 func (s *Store) PlaybookCatalog() (PlaybookCatalog, error) {
 	if s == nil {
 		return PlaybookCatalog{}, fmt.Errorf("brain store is not configured")
@@ -75,6 +87,9 @@ func (s *Store) playbookCatalogLocked() (PlaybookCatalog, error) {
 		}
 		name := entry.Name()
 		if !strings.HasSuffix(strings.ToLower(name), ".md") || strings.EqualFold(name, "README.md") {
+			continue
+		}
+		if !s.seedShown(playbooksDirName + "/" + name) {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(dir, name))

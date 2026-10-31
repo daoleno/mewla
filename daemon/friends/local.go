@@ -60,8 +60,16 @@ func (l *Local) Enabled() (State, bool) {
 	return state, err == nil
 }
 
+// Account reports whether this computer keeps a Friends account, on or turned
+// off, and as whom.
+func (l *Local) Account() (State, bool) {
+	state, err := l.store().Account()
+	return state, err == nil
+}
+
 // Enable creates (or finds) this account's Friends person and turns Friends
-// on here. Another computer of the same account gets the same person.
+// on here. Another computer of the same account gets the same person, and a
+// computer where Friends was only turned off picks up where it stopped.
 func (l *Local) Enable(ctx context.Context, agentName, petID, tz string) (Me, error) {
 	client, err := l.client()
 	if err != nil {
@@ -72,21 +80,44 @@ func (l *Local) Enable(ctx context.Context, agentName, petID, tz string) (Me, er
 		return Me{}, err
 	}
 	store := l.store()
-	state, err := store.State()
+	state, err := store.Account()
 	if err != nil {
 		state = State{EnabledAt: time.Now().UTC()}
 	}
-	state.Handle = me.Handle
+	if state.Off || state.Handle != me.Handle {
+		// What happened while it was off is not news.
+		state.NotifySeq = 0
+	}
+	state.Handle, state.Off = me.Handle, false
 	if err := store.SaveState(state); err != nil {
 		return Me{}, err
 	}
 	return me, nil
 }
 
-// Disable deletes the Friends person and everything they made on the server,
-// then forgets Friends and every draft here. If the server cannot be reached
-// nothing is forgotten here either, so the person can try again.
-func (l *Local) Disable(ctx context.Context) error {
+// Disable turns Friends off here and nothing else: the account, its posts, the
+// sign-in and the drafts are all kept, and Enable turns it back on.
+func (l *Local) Disable() error {
+	store := l.store()
+	state, err := store.Account()
+	if errors.Is(err, ErrNotLinked) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if state.Off {
+		return nil
+	}
+	state.Off = true
+	return store.SaveState(state)
+}
+
+// DeleteAccount deletes the Friends person and everything they made on the
+// server, then forgets Friends and every draft here, which leaves Friends off.
+// If the server cannot be reached nothing is forgotten here either, so the
+// person can try again.
+func (l *Local) DeleteAccount(ctx context.Context) error {
 	client, err := l.client()
 	if err != nil {
 		return err
@@ -266,6 +297,9 @@ func (l *Local) sendWithMedia(ctx context.Context, client *Client, text, via, re
 // for a draft with no media.
 func (l *Local) PostDraft(ctx context.Context, id, text string, reviewed []string) (Post, error) {
 	store := l.store()
+	if _, err := store.State(); err != nil {
+		return Post{}, err
+	}
 	draft, err := store.Draft(id)
 	if err != nil {
 		return Post{}, err
@@ -318,6 +352,9 @@ func sameFiles(media []MediaFile, reviewed []string) bool {
 // Discard throws a draft away.
 func (l *Local) Discard(id string) error {
 	store := l.store()
+	if _, err := store.State(); err != nil {
+		return err
+	}
 	if _, err := store.Draft(id); err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ import { AppState, Linking } from "react-native";
 import { PET_PACKS, DEFAULT_PET_ID } from "../components/pets/petPacks";
 import { findPetPack } from "../components/pets/petModel";
 import {
+  deleteFriendsAccount,
   disableFriends,
   enableFriends,
   getFriendsStatus,
@@ -33,8 +34,10 @@ interface FriendsLabsValue {
   refresh(): Promise<void>;
   /** On: signs the computer in first when it is not, then creates the Friends person. */
   turnOn(): Promise<void>;
-  /** Off: deletes the Friends account and the computer's drafts. Ask first. */
-  turnOff(): Promise<boolean>;
+  /** Off: stops Friends on the computer and keeps the account, its posts and the drafts. */
+  turnOff(): Promise<void>;
+  /** Deletes the Friends account, everything it made and the computer's drafts; Friends is off after. Ask first. */
+  deleteAccount(): Promise<boolean>;
   setAutoPost(enabled: boolean): Promise<void>;
   setAutoMedia(media: boolean): Promise<void>;
   cancelSignIn(): void;
@@ -134,17 +137,33 @@ export function FriendsLabsProvider({ children }: { children: ReactNode }) {
 
   const turnOff = useCallback(async () => {
     const server = serverRef.current;
+    if (!server) return;
+    setError(null);
+    // The switch flips at once; it flips back if the computer cannot be told.
+    const before = status;
+    setStatus((current) => (current ? { ...current, enabled: false, me: undefined, drafts: [] } : current));
+    try {
+      const next = await disableFriends(server);
+      if (serverRef.current?.id === server.id) setStatus(next);
+    } catch (reason) {
+      if (serverRef.current?.id === server.id) {
+        setStatus(before);
+        setError(reason instanceof Error ? reason.message : "Friends did not turn off");
+      }
+    }
+  }, [status]);
+
+  const deleteAccount = useCallback(async () => {
+    const server = serverRef.current;
     if (!server) return false;
     setError(null);
-    setWorking(true);
     try {
-      setStatus(await disableFriends(server));
+      const next = await deleteFriendsAccount(server);
+      if (serverRef.current?.id === server.id) setStatus(next);
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Friends did not turn off");
+      setError(reason instanceof Error ? reason.message : "Friends account was not deleted");
       return false;
-    } finally {
-      setWorking(false);
     }
   }, []);
 
@@ -195,12 +214,13 @@ export function FriendsLabsProvider({ children }: { children: ReactNode }) {
       refresh,
       turnOn,
       turnOff,
+      deleteAccount,
       setAutoPost: changeAutoPost,
       setAutoMedia: changeAutoMedia,
       cancelSignIn,
       openSignInPage,
     }),
-    [signIn, working, enabled, status, error, currentServer, refresh, turnOn, turnOff, changeAutoPost, changeAutoMedia, cancelSignIn, openSignInPage],
+    [signIn, working, enabled, status, error, currentServer, refresh, turnOn, turnOff, deleteAccount, changeAutoPost, changeAutoMedia, cancelSignIn, openSignInPage],
   );
   return <FriendsLabsContext.Provider value={value}>{children}</FriendsLabsContext.Provider>;
 }
