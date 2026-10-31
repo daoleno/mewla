@@ -40,14 +40,19 @@ internal class ScreenReader {
     fun read(displayId: Int): JSONObject {
         val out = JSONArray()
         for (window in windows(displayId)) {
-            val root = window.root ?: continue
+            val root = rootOf(window) ?: continue
+            val box = Rect().also { window.getBoundsInScreen(it) }
             val nodes = JSONArray()
             try {
-                walk(root, 0, nodes)
+                walk(root, 0, nodes, box, lenient = false)
+                // An app can report none of its views as visible to the user while they are drawn (WeChat on a
+                // virtual display): read the same tree again, trusting each node's bounds instead.
+                if (nodes.length() == 0 && window.type == AccessibilityWindowInfo.TYPE_APPLICATION) {
+                    walk(root, 0, nodes, box, lenient = true)
+                }
             } finally {
                 root.recycleCompat()
             }
-            val box = Rect().also { window.getBoundsInScreen(it) }
             out.put(
                 JSONObject()
                     .put("id", window.id)
@@ -64,14 +69,33 @@ internal class ScreenReader {
         return JSONObject().put("windows", out)
     }
 
-    private fun walk(node: AccessibilityNodeInfo, depth: Int, out: JSONArray) {
-        if (out.length() >= MAX_NODES) return
-        if (!node.isVisibleToUser) return
+    /** A window's root; an app in the middle of an animation can answer none for a moment, so ask again. */
+    private fun rootOf(window: AccessibilityWindowInfo): AccessibilityNodeInfo? {
+        for (attempt in 0 until ROOT_TRIES) {
+            window.root?.let { return it }
+            if (attempt < ROOT_TRIES - 1) Thread.sleep(ROOT_RETRY_MS)
+        }
+        return null
+    }
+
+    /**
+     * Adds the meaningful nodes below [node]. Strictly, a node the app calls invisible hides its whole
+     * subtree. Leniently only a node with nothing on [window] hides its subtree: bounds off the
+     * window are scrolled away, an empty rectangle is not drawn.
+     */
+    private fun walk(node: AccessibilityNodeInfo, depth: Int, out: JSONArray, window: Rect, lenient: Boolean) {
+        if (out.length() >= MAX_NODES || depth > MAX_DEPTH) return
+        if (lenient) {
+            val box = Rect().also { node.getBoundsInScreen(it) }
+            if (box.isEmpty || !Rect.intersects(box, window)) return
+        } else if (!node.isVisibleToUser) {
+            return
+        }
         if (keep(node)) out.put(describe(node, depth))
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             try {
-                walk(child, depth + 1, out)
+                walk(child, depth + 1, out, window, lenient)
             } finally {
                 child.recycleCompat()
             }
@@ -81,6 +105,7 @@ internal class ScreenReader {
     /** Containers with nothing to say are skipped; their children keep their place through depth. */
     private fun keep(node: AccessibilityNodeInfo): Boolean =
         !node.text.isNullOrEmpty() || !node.contentDescription.isNullOrEmpty() || !node.hintText.isNullOrEmpty() ||
+            !node.stateDescription.isNullOrEmpty() || !node.tooltipText.isNullOrEmpty() ||
             node.isClickable || node.isLongClickable || node.isEditable || node.isScrollable || node.isCheckable
 
     private fun describe(node: AccessibilityNodeInfo, depth: Int): JSONObject {
@@ -104,7 +129,10 @@ internal class ScreenReader {
         node.viewIdResourceName?.let { obj.put("r", it.substringAfter(":id/")) }
         // A password's text is never read.
         if (!node.isPassword) node.text?.let { obj.put("t", it.toString().take(MAX_TEXT)) }
-        node.contentDescription?.let { obj.put("x", it.toString().take(MAX_TEXT)) }
+        // What a view says about itself in any of its words: description, else its state, else its tooltip.
+        val said = node.contentDescription?.takeIf { it.isNotEmpty() } ?: node.stateDescription?.takeIf { it.isNotEmpty() }
+            ?: node.tooltipText?.takeIf { it.isNotEmpty() }
+        said?.let { obj.put("x", it.toString().take(MAX_TEXT)) }
         node.hintText?.let { obj.put("h", it.toString().take(MAX_TEXT)) }
         return obj
     }
@@ -152,6 +180,8 @@ internal class ScreenReader {
     companion object {
         const val FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES = 1
         const val MAX_DEPTH = 80
+        const val ROOT_TRIES = 3
+        const val ROOT_RETRY_MS = 60L
         const val MAX_NODES = 700
         const val MAX_TEXT = 300
         const val CLICKABLE = 1

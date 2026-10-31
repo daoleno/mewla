@@ -660,7 +660,7 @@ object PhoneController {
         ensureDisplay(helper)
         var settleQuiet = 300L
         var settleMax = 2_500L
-        var settleMin = 700L
+        var settleMin = 500L
         // An app that draws its own UI answers in bursts after a lull; settle on more quiet there.
         if (opaqueScreen) {
             settleQuiet = 600
