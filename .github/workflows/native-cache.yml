@@ -78,8 +78,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check the SDK
-        # Fails, naming what to delete, once the Xcode on this runner lists
-        # arm64 in libSystem (see the script).
+        # Fails, naming what to delete, once the Xcode on this runner no
+        # longer needs the libSystem SDK clone or the libcxx lib patch (see
+        # the script).
         run: ./scripts/check-zig-xcode-compat.sh
 
   ios:

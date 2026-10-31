@@ -31,7 +31,18 @@
         "sha256": "3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b",
         "archive_root": "zig-aarch64-macos-0.15.2"
       }
-    }
+    },
+    "lib_patches": [
+      {
+        "path": "scripts/zig-xcode-compat/zig-0.15.2-libcxx-infinity.patch",
+        "sha256": "fc99ce88d18715e0d80520215504f7cc4bc7ff7f7201570878c82109a657f1a4",
+        "applies_to_zig_version": "0.15.2",
+        "target": "libcxx/include/__random/clamp_to_integral.h",
+        "subject": "libcxx: spell INFINITY as numeric_limits<_RealT>::infinity()",
+        "needed_for": "iOS build with the Xcode 27 macOS SDK, where INFINITY is undeclared inside Zig's libcxx",
+        "applied_to": "a private copy of Zig's lib dir (ZIG_LIB_DIR); the Zig install is never modified"
+      }
+    ]
   },
   "android": {
     "min_api": 29,

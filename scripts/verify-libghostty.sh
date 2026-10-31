@@ -94,6 +94,25 @@ for key, d in downloads.items():
     assert re.fullmatch(r"[0-9a-f]{64}", d.get("sha256", "")), f"zig sha256 missing for {key}"
     assert d.get("archive_root")
 
+zig_patches = lock["zig"].get("lib_patches")
+assert isinstance(zig_patches, list), "zig.lib_patches must be a list"
+seen_zig_patches = set()
+for patch in zig_patches:
+    required = {"path", "sha256", "applies_to_zig_version", "target", "subject", "needed_for"}
+    assert required.issubset(patch), f"zig lib patch metadata missing: {required - set(patch)}"
+    rel = patch["path"]
+    assert isinstance(rel, str) and rel.endswith(".patch")
+    assert rel not in seen_zig_patches, f"duplicate zig lib patch path: {rel}"
+    seen_zig_patches.add(rel)
+    zig_patch = (root / rel).resolve()
+    assert zig_patch.is_relative_to(root), f"zig lib patch escapes repository: {rel}"
+    assert zig_patch.is_file(), f"zig lib patch missing: {rel}"
+    assert re.fullmatch(r"[0-9a-f]{64}", patch["sha256"])
+    assert hashlib.sha256(zig_patch.read_bytes()).hexdigest() == patch["sha256"], f"zig lib patch sha256 mismatch: {rel}"
+    zig_version = lock["zig"]["version"]
+    assert patch["applies_to_zig_version"] == zig_version, f"zig lib patch is for Zig {patch['applies_to_zig_version']}, the lock pins {zig_version}"
+    assert f"--- a/{patch['target']}" in zig_patch.read_text(encoding="utf-8"), f"zig lib patch does not touch {patch['target']}"
+
 abis = lock["abis"]
 assert len(abis) >= 1
 seen = set()
