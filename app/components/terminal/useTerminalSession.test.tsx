@@ -19,6 +19,7 @@ if (!process.env.MEWLA_TERMINAL_SESSION_HOOK_CHILD) {
   type Listener = (payload: any) => void;
   const listeners = new Map<string, Set<Listener>>();
   const opens: unknown[][] = [];
+  const resizes: unknown[][] = [];
   let connected = false;
   const fakeClient = {
     on(event: string, listener: Listener) {
@@ -37,11 +38,13 @@ if (!process.env.MEWLA_TERMINAL_SESSION_HOOK_CHILD) {
       opens.push(args);
     },
     closeTerminal() {},
-    resizeTerminal() {},
+    resizeTerminal(...args: unknown[]) {
+      resizes.push(args);
+    },
     sendTerminalInput() {},
   };
   mock.module("../../services/websocket", () => ({ wsClient: fakeClient }));
-  const { useTerminalSession } = await import("./useTerminalSession");
+  const { useTerminalSession, TERMINAL_RESIZE_SETTLE_MS } = await import("./useTerminalSession");
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
   type Session = ReturnType<typeof useTerminalSession>;
@@ -80,6 +83,32 @@ if (!process.env.MEWLA_TERMINAL_SESSION_HOOK_CHILD) {
 
       expect(probe.session().resize(100, 30)).toBe(true);
       expect(opens).toEqual([["server-1", "target-1", "tmux", 100, 30]]);
+      probe.unmount();
+    });
+
+    test("a live session sends only the settled size after a fold's steps", async () => {
+      connected = true;
+      opens.length = 0;
+      resizes.length = 0;
+      const probe = mount();
+      probe.session().resize(50, 30);
+      act(() =>
+        fakeClient.emit("terminal_opened", {
+          serverId: "server-1",
+          session_id: "s1",
+          cols: 50,
+          rows: 30,
+          backend: "tmux",
+        }),
+      );
+
+      // Unfold: the width steps twice (the rail's inset lands a frame late).
+      expect(probe.session().resize(110, 30)).toBe(true);
+      expect(probe.session().resize(98, 30)).toBe(true);
+      expect(resizes).toEqual([]);
+
+      await new Promise((resolve) => setTimeout(resolve, TERMINAL_RESIZE_SETTLE_MS + 60));
+      expect(resizes).toEqual([["server-1", "s1", 98, 30]]);
       probe.unmount();
     });
   });
