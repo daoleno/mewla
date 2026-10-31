@@ -25,7 +25,7 @@ func rowsOf(tree ElementTree) []appRow {
 }
 
 func diffOf(before, after ElementTree) (string, readStats, string, bool) {
-	return diffAnswer(before, after, rowsOf(before), rowsOf(after))
+	return diffAnswer(before, after, rowsOf(before), rowsOf(after), 0)
 }
 
 func TestDiffNamesWhatChangedById(t *testing.T) {
@@ -196,5 +196,182 @@ func TestElementActionsAnswerWithWhatChanged(t *testing.T) {
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
 	if !strings.Contains(string(audit), `"diff":true`) || strings.Contains(string(audit), "Ada") {
 		t.Fatalf("audit:\n%s", audit)
+	}
+}
+
+// A note: a window with a few buttons, and a text area whose lines are the
+// elements under it, so editing the text rebuilds all of them.
+func noteTree(lines int, text string, firstLineID int) ElementTree {
+	tree := bigTree(5)
+	tree.Elements = append(tree.Elements, Element{Depth: 1, Role: "AXTextArea", Title: "Note", Value: text, Enabled: true, Focused: true})
+	for i := 0; i < lines; i++ {
+		tree.Elements = append(tree.Elements, Element{Depth: 2, Role: "AXStaticText", Value: fmt.Sprintf("%s line %d", text, i), Enabled: true})
+	}
+	tree.IDs = make([]int, len(tree.Elements))
+	for i := range tree.IDs {
+		tree.IDs[i] = i + 1
+		if i > 6 {
+			tree.IDs[i] = firstLineID + i + 1 // the lines of a rebuilt text area are new elements
+		}
+	}
+	return tree
+}
+
+func TestDiffCountsWhatChangedUnderTheActedElementWithIt(t *testing.T) {
+	before := noteTree(60, "old", 0)
+	after := noteTree(70, "new", 1000)
+	textArea := before.id(6)
+
+	// Without being told what was acted on, the rebuilt lines are "much of it".
+	if _, _, why, ok := diffOf(before, after); ok || !strings.Contains(why, "much of it changed") {
+		t.Fatalf("every line changed: %v %q", ok, why)
+	}
+
+	text, stats, why, ok := diffAnswer(before, after, rowsOf(before), rowsOf(after), textArea)
+	if !ok {
+		t.Fatalf("a rebuilt subtree under the edited element is one change: %s", why)
+	}
+	for _, want := range []string{
+		`~ [7] TextArea "Note" = "new" (focused)`,
+		`(was = "old")`,
+		"rows inside it changed with it",
+		"Focus: still [7] TextArea \"Note\".",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q in:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "line 3") || stats.rows != 1 {
+		t.Errorf("the lines were listed, or miscounted (%d):\n%s", stats.rows, text)
+	}
+
+	// A change elsewhere is still its own line.
+	elsewhere := noteTree(70, "new", 1000)
+	elsewhere.Elements[2].Title = "Renamed"
+	text, stats, why, ok = diffAnswer(before, elsewhere, rowsOf(before), rowsOf(elsewhere), textArea)
+	if !ok || stats.rows != 2 || !strings.Contains(text, `~ [3] Button "Renamed"`) {
+		t.Fatalf("a change outside the element: %v %q\n%s", ok, why, text)
+	}
+}
+
+func TestDiffSaysTheActedElementWhenOnlyWhatIsUnderItChanged(t *testing.T) {
+	before := noteTree(60, "same", 0)
+	after := noteTree(60, "same", 1000)
+	text, stats, why, ok := diffAnswer(before, after, rowsOf(before), rowsOf(after), before.id(6))
+	if !ok || stats.rows != 1 {
+		t.Fatalf("%v %q\n%s", ok, why, text)
+	}
+	if !strings.Contains(text, `~ [7] TextArea "Note" = "same" (focused) — 120 rows inside it changed with it`) {
+		t.Errorf("the element itself should say how it reads:\n%s", text)
+	}
+}
+
+func TestDiffStillFallsBackWithAnActedElement(t *testing.T) {
+	before := noteTree(60, "old", 0)
+	acted := before.id(6)
+
+	window := noteTree(60, "new", 1000)
+	window.Elements = append(window.Elements, Element{Role: "AXWindow", Title: "Second", Enabled: true})
+	window.IDs = append(window.IDs, 5000)
+	if _, _, why, ok := diffAnswer(before, window, rowsOf(before), rowsOf(window), acted); ok || !strings.Contains(why, "window") {
+		t.Errorf("a new window: %v %q", ok, why)
+	}
+
+	cut := noteTree(60, "new", 1000)
+	cut.Truncated = true
+	if _, _, why, ok := diffAnswer(before, cut, rowsOf(before), rowsOf(cut), acted); ok || !strings.Contains(why, "more than was read") {
+		t.Errorf("a cut read: %v %q", ok, why)
+	}
+
+	// An element that is gone from the new read can't be shown as it reads,
+	// so nothing under it is folded away.
+	gone := noteTree(0, "new", 1000)
+	gone.Elements = gone.Elements[:6]
+	gone.IDs = gone.IDs[:6]
+	if text, _, _, ok := diffAnswer(before, gone, rowsOf(before), rowsOf(gone), acted); ok {
+		t.Errorf("sixty-one rows gone should not be one change:\n%s", text)
+	}
+}
+
+func TestDiffFallbackSaysWhereTheChangesAre(t *testing.T) {
+	before := noteTree(60, "old", 0)
+	after := noteTree(60, "new", 1000)
+	for i := 1; i <= 5; i++ {
+		after.Elements[i].Title += " changed"
+	}
+	// Fifty of the sixty-eight rows change outside the acted element.
+	other := bigTree(60)
+	other.Elements = append(other.Elements, Element{Depth: 1, Role: "AXTextArea", Title: "Note", Enabled: true})
+	for i := 1; i <= 45; i++ {
+		other.Elements[i].Title += " changed"
+	}
+	_, _, why, ok := diffAnswer(bigTree(60), other, rowsOf(bigTree(60)), rowsOf(other), 0)
+	if ok || !strings.Contains(why, "much of it changed: 46 rows changed") || !strings.Contains(why, "Button ×45") {
+		t.Errorf("elsewhere is named by role: %v %q", ok, why)
+	}
+	_, _, why, ok = diffAnswer(before, after, rowsOf(before), rowsOf(after), 0)
+	if ok || !strings.Contains(why, "much of it changed") {
+		t.Errorf("%v %q", ok, why)
+	}
+	// With the element named, the breakdown separates inside from elsewhere.
+	many := noteTree(60, "new", 1000)
+	for i := 0; i < 40; i++ {
+		many.Elements = append(many.Elements, Element{Depth: 1, Role: "AXButton", Title: fmt.Sprintf("New %d", i), Enabled: true})
+		many.IDs = append(many.IDs, 2000+i)
+	}
+	_, _, why, ok = diffAnswer(before, many, rowsOf(before), rowsOf(many), before.id(6))
+	if ok || !strings.Contains(why, "inside [7] TextArea") || !strings.Contains(why, "41 elsewhere") || !strings.Contains(why, "Button ×40") {
+		t.Errorf("%v %q", ok, why)
+	}
+}
+
+func TestDiffNeverShowsAPasswordUnderTheActedElement(t *testing.T) {
+	secret := func(value string) ElementTree {
+		tree := bigTree(30)
+		tree.Elements = append(tree.Elements, Element{Depth: 1, Role: "AXGroup", Title: "Login", Enabled: true},
+			Element{Depth: 2, Role: "AXTextField", Subrole: "AXSecureTextField", Title: "Password", Value: value, Enabled: true})
+		return tree
+	}
+	before, after := secret("hunter2"), secret("hunter3")
+	text, _, why, ok := diffAnswer(before, after, rowsOf(before), rowsOf(after), before.id(31))
+	if !ok {
+		t.Fatal(why)
+	}
+	if strings.Contains(text, "hunter") {
+		t.Errorf("a password leaked into the difference:\n%s", text)
+	}
+}
+
+// Setting a text area's value rebuilds the lines under it; the answer is the
+// area as it reads now, not the lines.
+func TestSettingATextAreaAnswersWithTheAreaNotItsLines(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	app := FakeApp{App: App{Name: "Notes", PID: 505, Active: true}}
+	app.Elements = append(app.Elements, Element{Role: "AXWindow", Title: "Notes", Enabled: true})
+	for i := 0; i < 12; i++ {
+		app.Elements = append(app.Elements, Element{Depth: 1, Role: "AXButton", Title: fmt.Sprintf("Folder %d", i), Enabled: true, Actions: []string{"AXPress"}})
+	}
+	app.Elements = append(app.Elements, Element{Depth: 1, Role: "AXTextArea", Title: "Note", Value: "old", Enabled: true, Actions: []string{"AXConfirm"}})
+	for i := 0; i < 40; i++ {
+		app.Elements = append(app.Elements, Element{Depth: 2, Role: "AXStaticText", Value: fmt.Sprintf("old line %d", i), Enabled: true})
+	}
+	backend.RunningApps = []FakeApp{app}
+	backend.OnElementAction = func(app *FakeApp, index int, action string) {
+		if app.Elements[index].Role != "AXTextArea" {
+			return
+		}
+		app.Elements = app.Elements[:index+1]
+		for i := 0; i < 55; i++ {
+			// A different role: the lines are new elements, with new ids.
+			app.Elements = append(app.Elements, Element{Depth: 2, Role: "AXGroup", Title: fmt.Sprintf("new line %d", i), Enabled: true})
+		}
+	}
+	state := act(t, s, "%7", AgentAction{Action: "app_state"}).Text
+	set := act(t, s, "%7", AgentAction{Action: "element", Element: idOf(t, state, `TextArea "Note"`), ElementAction: "set_value", Text: "new"})
+	if !set.diff || !strings.Contains(set.Text, `TextArea "Note" = "new"`) || !strings.Contains(set.Text, "rows inside it changed with it") || strings.Contains(set.Text, "new line 3") {
+		t.Fatalf("set_value:\n%s", set.Text)
+	}
+	if len(set.Text)*3 > len(state) {
+		t.Errorf("the answer (%d bytes) isn't much smaller than the read (%d)", len(set.Text), len(state))
 	}
 }
