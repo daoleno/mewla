@@ -51,14 +51,46 @@ esac
 ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 probe_log="$(mktemp "${TMPDIR:-/tmp}/mewla-zig-probe-log.XXXXXX")"
 export MEWLA_ZIG_PROBE_LOG="$probe_log"
-libcxx_state="$(mewla_zig_libcxx_support "$ZIG_BIN")"
+# The probe builds libcxx the way the build does, so it gets the same SDK.
+probe_sdk=""
+if [[ "$(mewla_libsystem_arm64_support "$sdk")" != unknown ]]; then
+  probe_sdk="$(mewla_prepare_macos_sdk_for_zig "$TOOL_CACHE")" || probe_sdk=""
+fi
+libcxx_state="$(mewla_zig_libcxx_support "$ZIG_BIN" "$probe_sdk")"
+# What the stock header says, read from its text: unpatched (still the line the
+# patch changes), applied (a hand patch) or mismatch (Zig changed the header).
+stock_lib="$(mewla_zig_stock_lib "$ZIG_BIN")"
+header_state=mismatch
+while IFS= read -r patch_file; do
+  [[ -n "$patch_file" ]] || continue
+  header_state="$(mewla_zig_lib_patch_state "$stock_lib" "$patch_file")"
+done < <(mewla_lock_lib_patches "$LOCK" "$ROOT")
+echo "libcxx probe: build=$libcxx_state, stock header (${stock_lib:-?}) vs the lock's patch: $header_state"
 if mewla_zig_lib_already_patched "$ZIG_BIN" "$LOCK" "$ROOT"; then
   libcxx_state=patched
+elif [[ "$libcxx_state" == fixed && "$header_state" == unpatched ]]; then
+  # The header still has the line the patch exists for, yet the probe compiled
+  # it: the probe is not seeing what the build sees (a compile of <random>
+  # alone is not a libcxx build), so it cannot call the workaround retired.
+  libcxx_state=disagrees
 fi
 case "$libcxx_state" in
   patched)
     echo "error: $ZIG_BIN's own lib dir already carries the libcxx patch (a hand patch?), so the probe can't tell whether the workaround is needed." >&2
     echo "       Remove that Zig (let the check unpack the pinned one afresh), unset ZIG_LIB_DIR, and run the check again." >&2
+    changed
+    ;;
+  disagrees)
+    cat >&2 <<MESSAGE
+error: the libcxx probe and Zig's header disagree.
+  The stock header under $stock_lib still has the line
+  scripts/zig-xcode-compat/ patches (bare INFINITY), but compiling <random>
+  for macOS with $sdk succeeded. The probe is not reproducing
+  the failing libcxx build, so the workaround cannot be called retired.
+  Build the pinned Ghostty with the patch removed from the lock (or run
+  "$ZIG_BIN" build on it with ZIG_LIB_DIR unset) and report whether libcxx
+  fails; if it does, the probe's flags need to match the build's.
+MESSAGE
     changed
     ;;
   broken)

@@ -39,52 +39,10 @@ ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 
 # Two workarounds, each retired on its own once scripts/check-zig-xcode-compat.sh
 # (run in native-cache.yml) fails because it is no longer needed: the libSystem
-# SDK clone below with scripts/zig-xcode-compat/xcrun, and the patched Zig lib
-# dir (the Xcode 27 SDK leaves INFINITY undeclared in Zig's libcxx).
-prepare_macos_sdk_for_zig() {
-  local sdk
-  sdk="$(realpath "$(xcrun --sdk macosx --show-sdk-path)")"
-  local libsystem="$sdk/usr/lib/libSystem.B.tbd"
-
-  case "$(mewla_libsystem_arm64_support "$sdk")" in
-    native)
-      echo "$sdk"
-      return
-      ;;
-    arm64e-only) ;;
-    *)
-      echo "error: unsupported libSystem target list in $libsystem" >&2
-      exit 1
-      ;;
-  esac
-
-  # Xcode 26.6's macOS 26.5 SDK advertises the top-level libSystem stub as
-  # arm64e-only. Apple's linker accepts it for arm64 hosts, while Zig 0.15.2
-  # intentionally requires an exact target match. Keep Xcode untouched and
-  # give Zig a copy-on-write SDK clone with arm64 added to those target lists.
-  local xcode_build
-  xcode_build="$(xcodebuild -version | awk '/Build version/ {print $3}')"
-  local compat_sdk="$TOOL_CACHE/macos-sdk-$xcode_build-arm64"
-  local marker="$compat_sdk/.zig-arm64-libsystem"
-  if [[ ! -f "$marker" ]]; then
-    echo "Preparing Zig-compatible macOS SDK clone for Xcode $xcode_build..." >&2
-    rm -rf "$compat_sdk"
-    mkdir -p "$(dirname "$compat_sdk")"
-    cp -cR "$sdk" "$compat_sdk"
-    python3 - "$compat_sdk/usr/lib/libSystem.B.tbd" <<'PY'
-import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-text = path.read_text()
-text = text.replace("arm64e-macos", "arm64-macos, arm64e-macos")
-text = text.replace("arm64e-maccatalyst", "arm64-maccatalyst, arm64e-maccatalyst")
-path.write_text(text)
-PY
-    touch "$marker"
-  fi
-  echo "$compat_sdk"
-}
-
-MACOS_SDKROOT="$(prepare_macos_sdk_for_zig)"
+# SDK clone (mewla_prepare_macos_sdk_for_zig) with scripts/zig-xcode-compat/xcrun,
+# and the patched Zig lib dir (the Xcode 27 SDK leaves INFINITY undeclared in
+# Zig's libcxx).
+MACOS_SDKROOT="$(mewla_prepare_macos_sdk_for_zig "$TOOL_CACHE")" || exit 1
 ZIG_LIB="$(mewla_patched_zig_lib "$ZIG_BIN" "$LOCK" "$ROOT" "$TOOL_CACHE")"
 
 GHOSTTY_SRC="${GHOSTTY_SRC:-$GHOSTTY_CACHE}"

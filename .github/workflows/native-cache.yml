@@ -26,6 +26,7 @@ on:
       - scripts/verify-libghostty-ios.sh
       - scripts/zig-xcode-compat/**
       - scripts/lib/zig-xcode-compat.sh
+      - scripts/lib/zig_lib_patch_state.py
       - scripts/check-zig-xcode-compat.sh
       - .github/actions/ios-native/**
       - .github/workflows/native-cache.yml

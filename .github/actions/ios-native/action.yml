@@ -35,14 +35,14 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: app/modules/terminal-vt/libs/ios
-        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/lib/zig_lib_patch_state.py', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
     - name: Restore or save verified iOS Ghostty output
       id: ghostty-output-cache-rw
       if: ${{ inputs.save-caches == 'true' }}
       uses: actions/cache@v4
       with:
         path: app/modules/terminal-vt/libs/ios
-        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/lib/zig_lib_patch_state.py', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
 
     # Ghostty build inputs: the pinned Zig and the Ghostty source clone.
     - name: Restore pinned Zig and Ghostty source
@@ -52,7 +52,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**') }}
+        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/lib/zig_lib_patch_state.py', 'scripts/zig-xcode-compat/**') }}
     - name: Restore or save pinned Zig and Ghostty source
       if: ${{ steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' && inputs.save-caches == 'true' }}
       uses: actions/cache@v4
@@ -60,7 +60,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**') }}
+        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/zig-xcode-compat.sh', 'scripts/lib/zig_lib_patch_state.py', 'scripts/zig-xcode-compat/**') }}
 
     - name: Build iOS Ghostty XCFramework when the cache misses
       if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' && steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' }}
