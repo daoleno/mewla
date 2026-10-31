@@ -314,6 +314,11 @@ func isolateTmuxServer(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("create isolated tmux tmpdir: %v", err)
 	}
+	// tmux reports the real path of its socket, and /tmp is a symlink to
+	// /private/tmp on macOS: name the directory the way tmux will.
+	if resolved, err := filepath.EvalSymlinks(tmuxTmpDir); err == nil {
+		tmuxTmpDir = resolved
+	}
 	t.Setenv("TMUX_TMPDIR", tmuxTmpDir)
 	cleanupEnv := isolatedTmuxEnv(os.Environ(), tmuxTmpDir)
 	t.Cleanup(func() {

@@ -231,8 +231,19 @@ func bootFreeLoopbackAddr(t *testing.T) string {
 	return addr
 }
 
+// requireSystemdBootHost skips where the systemd boot path can't run: it
+// finds the unit's processes through /proc cgroups, which only Linux has. The
+// launchd path is tested in boot_launchd_test.go.
+func requireSystemdBootHost(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skipf("the systemd boot path reads /proc cgroups; %s has none", runtime.GOOS)
+	}
+}
+
 func bootCurrentCgroup(t *testing.T) string {
 	t.Helper()
+	requireSystemdBootHost(t)
 	data, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
 		t.Fatal(err)
@@ -275,6 +286,7 @@ func bootWriteInstalledUnit(t *testing.T, config bootConfig) (string, string) {
 // daemon (the fake lock acquisition stands in for that daemon).
 func bootFreshInstallEnvironment(t *testing.T) (bootConfig, *fakeBootRunner) {
 	t.Helper()
+	requireSystemdBootHost(t)
 	config, _ := newBootTestEnvironment(t)
 	executable, err := os.Executable()
 	if err != nil {
@@ -1170,6 +1182,7 @@ func TestBootUninstallStopFailureRetainsConfiguration(t *testing.T) {
 // cgroup, fd links and fdinfo lock records.
 func bootUseProcFixture(t *testing.T, pids ...int) {
 	t.Helper()
+	requireSystemdBootHost(t)
 	root := t.TempDir()
 	for _, pid := range pids {
 		if err := os.Symlink("/proc/"+strconv.Itoa(pid), filepath.Join(root, strconv.Itoa(pid))); err != nil {

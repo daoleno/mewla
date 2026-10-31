@@ -604,3 +604,37 @@ func TestParseCodexConversation_KeepsSandboxMessageDropsPastedAgentsPreamble(t *
 	}
 	assertEvent(t, got.Events[0], "user_message", "user", "", "Can you set up a Daytona sandbox?")
 }
+
+// A process's open files are printed by their real paths (lsof, /proc), while
+// the Codex database may record the same file through a symlink: macOS's
+// /var is /private/var, and ~/.codex is often a link into a dotfiles repo.
+func TestOpenRolloutMatchesThroughASymlinkedCodexHome(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "real", ".codex", "sessions", "2026", "06", "22")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rollout := filepath.Join(real, "rollout-2026-06-22T16-07-10-019eee5e-7dec-71b1-bc2b-adcb2bad1c4c.jsonl")
+	if err := os.WriteFile(rollout, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(filepath.Join(root, "real"), link); err != nil {
+		t.Fatal(err)
+	}
+	recorded := filepath.Join(link, ".codex", "sessions", "2026", "06", "22", filepath.Base(rollout))
+	candidates := []codexTranscriptCandidate{{Path: recorded}}
+
+	if _, ok := matchCodexTranscriptToOpenRollouts(candidates, []string{rollout}); !ok {
+		t.Fatal("the recorded path is the open file reached through a symlink")
+	}
+	other := filepath.Join(real, "rollout-2026-06-22T16-07-10-aaaaaaaa-7dec-71b1-bc2b-adcb2bad1c4c.jsonl")
+	if _, ok := matchCodexTranscriptToOpenRollouts(candidates, []string{other}); ok {
+		t.Fatal("another rollout matched")
+	}
+	// A file that is gone is still compared by its path.
+	gone := filepath.Join(root, "gone", filepath.Base(rollout))
+	if _, ok := matchCodexTranscriptToOpenRollouts([]codexTranscriptCandidate{{Path: gone}}, []string{gone + " (deleted)"}); !ok {
+		t.Fatal("a deleted rollout should match its own path")
+	}
+}
