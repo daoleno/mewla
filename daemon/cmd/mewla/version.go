@@ -14,7 +14,7 @@ import (
 // Version is the product version for banners and release ldflags.
 // Default must match app/app.base.json expo.version.
 // Override: -ldflags "-X main.Version=<semver>"
-var Version = "0.2.84"
+var Version = "0.2.85"
 
 // versionInfo is the machine-readable shape of `mewla version --json`.
 type versionInfo struct {
