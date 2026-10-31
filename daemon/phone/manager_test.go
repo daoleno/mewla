@@ -367,6 +367,11 @@ func TestAWorkerThatEndsGivesTheDisplayBackAtOnce(t *testing.T) {
 	mu.Lock()
 	running = false
 	mu.Unlock()
+	// One miss is not enough: it may be a moment of the Worker changing state.
+	clock.Advance(DefaultAliveEvery)
+	if st := m.Status(); st.Active == nil {
+		t.Fatalf("released on a single miss")
+	}
 	clock.Advance(DefaultAliveEvery)
 	eventually(t, "release", func() bool { return strings.Join(conn.ops(), ",") == "tap,release" })
 	if st := m.Status(); st.Active != nil {
@@ -379,6 +384,27 @@ func TestAWorkerThatEndsGivesTheDisplayBackAtOnce(t *testing.T) {
 			t.Fatalf("asked about %q", w)
 		}
 	}
+}
+
+func TestAReleaseOwedWhileThePhoneIsInSetupIsPaidWhenItIsReadyAgain(t *testing.T) {
+	clock := newClock()
+	m := NewManager(Options{Clock: clock})
+	m.SetAlive(func(string) bool { return false })
+	link, conn := connect(t, m, StateReady, okResult(nil))
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatal(err)
+	}
+	// The phone drops into setup, and the Worker ends meanwhile: nothing can be sent now.
+	sendFrame(t, link, State{Type: TypeState, State: StateSetup, Problem: "Wireless debugging is off"})
+	clock.Advance(DefaultAliveEvery)
+	clock.Advance(DefaultAliveEvery)
+	eventually(t, "worker dropped", func() bool { return m.Status().Active == nil })
+	if ops := conn.ops(); strings.Join(ops, ",") != "tap" {
+		t.Fatalf("a phone in setup was sent %v", ops)
+	}
+	// Ready again: the display that was owed goes back, so the App stops showing a dead Worker.
+	sendFrame(t, link, State{Type: TypeState, State: StateReady})
+	eventually(t, "owed release", func() bool { return strings.Join(conn.ops(), ",") == "tap,release" })
 }
 
 func TestTheDisplayIsNotReleasedFromUnderTheAgentOrThePerson(t *testing.T) {

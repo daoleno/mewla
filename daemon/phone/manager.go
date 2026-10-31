@@ -26,6 +26,8 @@ const StateOffline = "offline"
 const (
 	// DefaultTimeout bounds one op the phone answers quickly.
 	DefaultTimeout = 30 * time.Second
+	// aliveMisses is how many checks in a row must find the Worker gone before it loses the phone.
+	aliveMisses = 2
 	// DefaultAliveEvery is how often a Worker that holds the phone is checked to still be running.
 	DefaultAliveEvery = 3 * time.Second
 	// DefaultIdle is how long the phone's display stays with an agent that does nothing.
@@ -156,8 +158,12 @@ type Manager struct {
 	idle     Timer
 	// alive says whether a Worker is still running; with it, a Worker that ends gives the phone's
 	// display back at once instead of after the idle wait. It is called without mu held.
-	alive func(worker string) bool
-	watch Timer
+	alive  func(worker string) bool
+	watch  Timer
+	misses int
+	// releaseOwed is set when the display was to be given back but the phone could not take that
+	// now (in setup, or not connected); it is sent once the phone is ready again.
+	releaseOwed bool
 }
 
 // SetAlive tells the manager how to ask whether a Worker is still running.
@@ -251,6 +257,7 @@ func (m *Manager) Attach(hello Hello, conn Conn) (*Link, error) {
 		old.dead = true
 		old.failPending(ErrReplaced)
 	}
+	m.payOwedReleaseLocked(l)
 	m.mu.Unlock()
 	if old != nil {
 		old.conn.Close(CloseReplaced, "Another connection from your phone took this one's place.")
@@ -340,6 +347,16 @@ func (m *Manager) onState(l *Link, s State) {
 	}
 	if s.State != StateReady {
 		l.failPending(l.refusalLocked())
+	}
+	m.payOwedReleaseLocked(l)
+}
+
+// payOwedReleaseLocked gives the display back that was owed while the phone could not take it,
+// once the phone is ready and nobody holds it.
+func (m *Manager) payOwedReleaseLocked(l *Link) {
+	if m.releaseOwed && m.active == nil && m.link == l && l.state == StateReady {
+		m.releaseOwed = false
+		m.freeDisplay()
 	}
 }
 
@@ -628,6 +645,7 @@ func (m *Manager) Do(ctx context.Context, worker, workerName, op string, args an
 	if l == nil {
 		m.mu.Unlock()
 		if worker == "" {
+			m.releaseOwed = true
 			return Reply{}, nil
 		}
 		return Reply{}, ErrNotConnected
@@ -635,6 +653,8 @@ func (m *Manager) Do(ctx context.Context, worker, workerName, op string, args an
 	if worker == "" {
 		// The daemon's own release: the person's screen is never taken from them.
 		if l.person || l.state == StateSetup {
+			// Owed, not dropped: the display goes back once the phone can take it.
+			m.releaseOwed = true
 			m.mu.Unlock()
 			return Reply{}, nil
 		}
@@ -645,7 +665,9 @@ func (m *Manager) Do(ctx context.Context, worker, workerName, op string, args an
 		}
 		if m.active == nil {
 			m.active = &Active{Worker: worker, Name: workerName, Since: m.opts.Clock.Now()}
+			m.misses = 0
 		}
+		m.releaseOwed = false
 		m.armAliveLocked()
 		if workerName != "" {
 			m.active.Name = workerName
@@ -786,10 +808,18 @@ func (m *Manager) aliveFired() {
 		return
 	}
 	if running || m.inflight > 0 {
+		m.misses = 0
 		m.armAliveLocked()
 		m.mu.Unlock()
 		return
 	}
+	// One miss can be a moment of the Worker's state changing; two in a row mean it is gone.
+	if m.misses++; m.misses < aliveMisses {
+		m.armAliveLocked()
+		m.mu.Unlock()
+		return
+	}
+	m.misses = 0
 	m.active = nil
 	m.stopIdleLocked()
 	m.mu.Unlock()
