@@ -133,6 +133,7 @@ back on when it can.
   Mewla → Phone*, with the reason when it knows it) instead of showing a black
   screen.
 - The hidden screen draws only when something changes. After an action with no new frame, the answer says the picture may be older than the screen. Apps that draw their own UI (WeChat) are given a longer settle and always come with a picture.
+- If an app reports none of its views as visible (WeChat on the hidden screen did), the reader trusts each element's position instead, and elements also carry their state description and tooltip as their description.
 - Apps that block screen capture (banking, some video apps) show a black
   picture, and apps that block automation may refuse. The agent is told.
 - Mewla's Accessibility service only acts while **Set up** runs, only inside
