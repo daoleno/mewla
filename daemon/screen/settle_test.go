@@ -98,7 +98,7 @@ func quickSettle(t *testing.T) {
 
 // An element action answers when the app has gone quiet, not after a fixed
 // moment: an app that goes on drawing is waited for, and its last row is in
-// the answer.
+// the answer. The app changes with each look at it, so no timing is involved.
 func TestElementActionWaitsForTheAppToGoQuiet(t *testing.T) {
 	quickSettle(t)
 	s, backend, _ := newAgentService(t)
@@ -107,52 +107,56 @@ func TestElementActionWaitsForTheAppToGoQuiet(t *testing.T) {
 		if app.Elements[index].Title != "Open" {
 			return
 		}
-		// Rows come in faster than the app is looked at, for a while.
-		go func() {
-			for i := 0; i < 12; i++ {
-				time.Sleep(5 * time.Millisecond)
-				backend.mu.Lock()
-				app.Elements = append(app.Elements, Element{Depth: 1, Role: "AXButton", Title: fmt.Sprintf("Late %d", i), Enabled: true, Actions: []string{"AXPress"}})
-				backend.mu.Unlock()
+		first := backend.Prints + 1
+		backend.OnPrint = func(app *FakeApp, call int) {
+			if n := call - first; n >= 0 && n < 6 {
+				app.Elements = append(app.Elements, Element{Depth: 1, Role: "AXButton", Title: fmt.Sprintf("Late %d", n), Enabled: true, Actions: []string{"AXPress"}})
 			}
-		}()
+		}
 	}
 	state := act(t, s, "%7", AgentAction{Action: "app_state"}).Text
 	answer := act(t, s, "%7", AgentAction{Action: "element", Element: idOf(t, state, `Button "Open"`), ElementAction: "press"}).Text
-	if !strings.Contains(answer, `Button "Late 11"`) {
+	if !strings.Contains(answer, `Button "Late 5"`) {
 		t.Fatalf("the last row isn't in the answer:\n%s", answer)
 	}
-	if backend.Prints < 3 {
-		t.Fatalf("the app wasn't looked at: %d fingerprints", backend.Prints)
+	// Six looks that differ, then one that agrees with the one before.
+	if backend.Prints != 7 {
+		t.Fatalf("%d fingerprints", backend.Prints)
 	}
 }
 
 // wait_for watches the fingerprint and reads the app when it changes, and
-// still finds what appears without changing it.
+// still finds what appears without changing it. The app changes at a look,
+// not at a time.
 func TestWaitForReadsOnChangeAndAtTheRecheck(t *testing.T) {
 	quickSettle(t)
 	s, backend, _ := newAgentService(t)
 	backend.RunningApps = []FakeApp{bigApp()}
-	appendLater := func(after time.Duration, e Element) {
-		go func() {
-			time.Sleep(after)
-			backend.mu.Lock()
-			defer backend.mu.Unlock()
-			backend.RunningApps[0].Elements = append(backend.RunningApps[0].Elements, e)
-		}()
+	onLook := func(n int, change func(app *FakeApp)) {
+		backend.mu.Lock()
+		defer backend.mu.Unlock()
+		at := backend.Prints + n
+		backend.OnPrint = func(app *FakeApp, call int) {
+			if call == at {
+				change(app)
+			}
+		}
 	}
 
-	// A sheet appears under the window: the fingerprint changes.
-	appendLater(80*time.Millisecond, Element{Depth: 1, Role: "AXSheet", Title: "Welcome", Enabled: true})
+	// A sheet appears under the window at the second look: the fingerprint
+	// changes, and the app is read again.
+	onLook(2, func(app *FakeApp) {
+		app.Elements = append(app.Elements, Element{Depth: 1, Role: "AXSheet", Title: "Welcome", Enabled: true})
+	})
 	found := act(t, s, "%7", AgentAction{Action: "wait_for", Duration: 5, Match: &ElementMatch{Role: "Sheet", Title: "Welcome"}}).Text
 	if !strings.HasPrefix(found, "Found [") {
 		t.Fatalf("not found:\n%s", found)
 	}
 	backend.mu.Lock()
-	reads := backend.Reads
+	reads, prints := backend.Reads, backend.Prints
 	backend.mu.Unlock()
-	if reads > 4 {
-		t.Fatalf("waiting read the app %d times", reads)
+	if reads != 2 || prints < 3 {
+		t.Fatalf("expected a read, a change seen and a read; got %d reads and %d fingerprints", reads, prints)
 	}
 
 	// A button deep in the window appears: no fingerprint changes, so the
@@ -160,16 +164,21 @@ func TestWaitForReadsOnChangeAndAtTheRecheck(t *testing.T) {
 	backend.mu.Lock()
 	backend.RunningApps[0].Elements = append(backend.RunningApps[0].Elements, Element{Depth: 2, Role: "AXGroup", Title: "Deep", Enabled: true})
 	backend.mu.Unlock()
-	appendLater(50*time.Millisecond, Element{Depth: 3, Role: "AXButton", Title: "Buried", Enabled: true})
+	onLook(2, func(app *FakeApp) {
+		app.Elements = append(app.Elements, Element{Depth: 3, Role: "AXButton", Title: "Buried", Enabled: true})
+	})
 	start := time.Now()
 	if got := act(t, s, "%7", AgentAction{Action: "wait_for", Duration: 5, Match: &ElementMatch{Role: "Button", Title: "Buried"}}).Text; !strings.HasPrefix(got, "Found [") {
 		t.Fatalf("a change the fingerprint can't see was missed:\n%s", got)
 	}
-	if took := time.Since(start); took > 2*time.Second {
-		t.Fatalf("took %v", took)
+	if took := time.Since(start); took < waitForRecheck || took > 3*time.Second {
+		t.Fatalf("found after %v, expected about the recheck, %v", took, waitForRecheck)
 	}
 
 	// Nothing appears: it gives up at its limit, not before.
+	backend.mu.Lock()
+	backend.OnPrint = nil
+	backend.mu.Unlock()
 	start = time.Now()
 	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait_for", Duration: 0.5, Match: &ElementMatch{Role: "Button", Title: "Never"}})
 	if err == nil || !strings.Contains(err.Error(), "did not appear") || time.Since(start) < 450*time.Millisecond {

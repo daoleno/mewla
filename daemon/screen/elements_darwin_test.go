@@ -17,28 +17,30 @@ func TestBatchedReadsMatchSingleReads(t *testing.T) {
 	if !loadAX() || !axLib.batch {
 		t.Skip("accessibility or batched reads are not available here")
 	}
-	read := func(batched bool) ElementTree {
+	read := func(batched bool) (ElementTree, error) {
 		set := axLib.walkSet
 		if !batched {
 			axLib.walkSet.array = 0
 			defer func() { axLib.walkSet = set }()
 		}
-		tree, err := readFocusedWindow(context.Background(), elementsRead)
-		if err != nil {
-			t.Skipf("no window to read: %v", err)
-		}
-		return tree
+		return readFocusedWindow(context.Background(), elementsRead)
 	}
+	// Skipping happens out here: withPool locks the thread and owns an
+	// autorelease pool, and the callback must return normally.
 	var single, batched ElementTree
+	var singleErr, batchedErr error
 	var singleTook, batchedTook time.Duration
 	withPool(func() {
 		start := time.Now()
-		single = read(false)
+		single, singleErr = read(false)
 		singleTook = time.Since(start)
 		start = time.Now()
-		batched = read(true)
+		batched, batchedErr = read(true)
 		batchedTook = time.Since(start)
 	})
+	if singleErr != nil || batchedErr != nil {
+		t.Skipf("no window to read: %v / %v", singleErr, batchedErr)
+	}
 	t.Logf("%d elements one by one in %v, %d batched in %v", len(single.Elements), singleTook, len(batched.Elements), batchedTook)
 	if single.Truncated != batched.Truncated && len(single.Elements) == len(batched.Elements) {
 		t.Logf("truncation differs: single %v, batched %v", single.Truncated, batched.Truncated)
