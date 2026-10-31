@@ -20,6 +20,19 @@ internal object Clones {
         .mapNotNull { component.find(it.trim())?.groupValues?.get(1) }
         .distinct().toList()
 
+    /**
+     * The launcher component of each package in that output, as the system wrote it (`com.tencent.mm/.ui.LauncherUI`),
+     * which `am start -n` takes as it is: the first one a package lists.
+     */
+    fun parseComponents(output: String): Map<String, String> {
+        val found = LinkedHashMap<String, String>()
+        for (line in output.lineSequence()) {
+            val m = component.find(line.trim()) ?: continue
+            found.putIfAbsent(m.groupValues[1], line.trim())
+        }
+        return found
+    }
+
     /** How a clone is told from the app it copies; the user id makes two clones different. */
     fun label(base: String, userId: Int, chinese: Boolean): String = if (chinese) "$base (分身 $userId)" else "$base (clone $userId)"
 
@@ -27,4 +40,11 @@ internal object Clones {
     fun needsStart(output: String): Boolean =
         output.contains("is stopped", ignoreCase = true) || output.contains("not running", ignoreCase = true) ||
             output.contains("User is not started", ignoreCase = true)
+
+    /** Whether the output of `am start` is a refusal. */
+    fun failed(output: String): Boolean = output.contains("Error", ignoreCase = true)
+
+    /** What both starts said, raw, in one line for the agent's error. */
+    fun refusal(amStart: String, startActivity: String): String =
+        "am start: ${amStart.trim().take(200)}; cmd activity start-activity: ${startActivity.trim().take(200)}"
 }
