@@ -58,8 +58,8 @@ says who is using your phone.
   has the agent screen's exact shape and starts at a bit over half the screen's
   width, in the bottom-right corner above the chat input, so most of the
   conversation stays readable. Until the agent's screen has drawn anything, it shows
-  a light card that says what is going on (*Opening 微信…*, *Couldn't open 微信*)
-  instead of a black slab. Drag the handle in its inner corner, or pinch, to resize
+  a light card with a spinner (and the app's name, *微信*, once it is opening, or
+  *Couldn't open 微信*) instead of a black slab. Drag the handle in its inner corner, or pinch, to resize
   it (from about a third of the screen to nearly all of it); double-tap it to go
   between the default and a large size. Drag it: it snaps to a corner, and it
   remembers its corner and size. It stays above the chat input and the keyboard.
