@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { PhoneStatus } from "../../modules/mewla-phone/src";
 import {
+  DEFAULT_FLOAT_CORNER,
   FLOAT_DEFAULT,
   FLOAT_LARGE,
   floatOrigin,
+  floatPlaceholder,
   clampFloatFraction,
   floatSize,
   parseFloatFraction,
@@ -40,6 +42,9 @@ const ready: PhoneStatus = {
   h: 1600,
   agent: null,
   handoff: null,
+  drawn: true,
+  opening: null,
+  launch_failed: null,
 };
 
 describe("phone setup", () => {
@@ -212,8 +217,23 @@ describe("phone float", () => {
 
   test("remembers only a corner it knows", () => {
     expect(parseFloatCorner("bottom-left")).toBe("bottom-left");
-    expect(parseFloatCorner("middle")).toBe("top-right");
-    expect(parseFloatCorner(null)).toBe("top-right");
+    expect(parseFloatCorner("middle")).toBe("bottom-right");
+    expect(parseFloatCorner(null)).toBe("bottom-right");
+  });
+
+  test("starts in the bottom-right corner, above the composer, so most of the chat stays readable", () => {
+    expect(DEFAULT_FLOAT_CORNER).toBe("bottom-right");
+    const area = { left: 0, top: 100, right: 400, bottom: 700 };
+    const size = { width: 220, height: 480 };
+    expect(floatOrigin(DEFAULT_FLOAT_CORNER, area, size, 12)).toEqual({ x: 168, y: 208 });
+  });
+
+  test("says what is going on while the agent's screen has nothing on it", () => {
+    expect(floatPlaceholder({ drawn: true, opening: null, launch_failed: null })).toBeNull();
+    expect(floatPlaceholder({ drawn: true, opening: "微信", launch_failed: null })).toBeNull();
+    expect(floatPlaceholder({ drawn: false, opening: "微信 (分身 999)", launch_failed: null })).toBe("Opening 微信 (分身 999)…");
+    expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: "微信 (分身 999)" })).toBe("Couldn't open 微信 (分身 999)");
+    expect(floatPlaceholder({ drawn: false, opening: null, launch_failed: null })).toBe("Getting the screen ready…");
   });
 });
 

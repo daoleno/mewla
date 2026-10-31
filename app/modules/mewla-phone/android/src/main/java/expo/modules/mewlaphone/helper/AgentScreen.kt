@@ -109,7 +109,8 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
         val q = quality
         pusher.execute {
             try {
-                jpeg(width, q)?.let(target)
+                // A display nothing has drawn on stays without a picture, so the App can say so instead of showing black.
+                jpeg(width, q, blankOk = false)?.let(target)
             } finally {
                 pushing.set(false)
             }
@@ -160,10 +161,10 @@ internal class AgentScreen(context: Context, val width: Int, val height: Int, va
     fun drewSinceAction(): Boolean = SettlePolicy.drewSince(actionAt, lastFrameAt)
 
     /** The screen now as a JPEG no wider than [maxWidth]; null before the first frame. */
-    fun jpeg(maxWidth: Int, quality: Int): ByteArray? {
+    fun jpeg(maxWidth: Int, quality: Int, blankOk: Boolean = true): ByteArray? {
         drain()
         return synchronized(lock) {
-            val image = held ?: return@synchronized blank(maxWidth, quality)
+            val image = held ?: return@synchronized if (blankOk) blank(maxWidth, quality) else null
             encode(image, maxWidth, quality)
         }
     }

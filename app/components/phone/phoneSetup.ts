@@ -98,9 +98,21 @@ export function phoneFloatVisible(status: PhoneStatus | null, pathname: string):
   return pathname !== "/phone" && !pathname.startsWith("/phone/");
 }
 
+/**
+ * What the float says while the agent's display has nothing on it, or null once it shows a picture:
+ * a black slab tells nobody anything, so it says what is going on.
+ */
+export function floatPlaceholder(status: Pick<PhoneStatus, "drawn" | "opening" | "launch_failed">): string | null {
+  if (status.drawn) return null;
+  if (status.opening) return `Opening ${status.opening}…`;
+  if (status.launch_failed) return `Couldn't open ${status.launch_failed}`;
+  return "Getting the screen ready…";
+}
+
 export type FloatCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
-export const DEFAULT_FLOAT_CORNER: FloatCorner = "top-right";
+/** Bottom-right, above the composer: the chat's text is read from the left, so most of it stays in view. */
+export const DEFAULT_FLOAT_CORNER: FloatCorner = "bottom-right";
 
 export function parseFloatCorner(value: string | null): FloatCorner {
   return value === "top-left" || value === "top-right" || value === "bottom-left" || value === "bottom-right"

@@ -41,6 +41,12 @@ export interface PhoneStatus {
   agent: string | null;
   /** What the agent asked the person to do, or null. */
   handoff: string | null;
+  /** The agent's display has shown a picture since it was made; until then there is nothing to show. */
+  drawn: boolean;
+  /** The app being opened on the agent's display now, or null. */
+  opening: string | null;
+  /** The app the last launch could not open, or null. */
+  launch_failed: string | null;
 }
 
 export interface PhoneNativeModule {
