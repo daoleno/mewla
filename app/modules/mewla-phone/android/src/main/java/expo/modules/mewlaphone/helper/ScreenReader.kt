@@ -168,7 +168,7 @@ internal class ScreenReader {
     /** The focused field's current text (empty while it shows only its hint), or null with no field focused. */
     fun focusedField(displayId: Int): Field? {
         val field = focusedInput(displayId) ?: return null
-        val text = if (field.isShowingHintText) "" else field.text?.toString() ?: ""
+        val text = TextCheck.existing(field.text?.toString(), field.hintText?.toString(), field.isShowingHintText)
         return Field(text, field.isPassword)
     }
 

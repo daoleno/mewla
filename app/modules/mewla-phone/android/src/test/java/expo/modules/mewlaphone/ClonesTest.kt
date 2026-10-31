@@ -76,4 +76,17 @@ class TextCheckTest {
         assertTrue(!expo.modules.mewlaphone.helper.TextCheck.landed("Sylvan", null))
         assertTrue(expo.modules.mewlaphone.helper.TextCheck.landed("你好", "你好"))
     }
+
+    @Test
+    fun aHintIsNeverTheTextAlreadyInTheField() {
+        val check = expo.modules.mewlaphone.helper.TextCheck
+        // The usual way: the field says it shows its hint.
+        assertEquals("", check.existing("输入消息", "输入消息", true))
+        // Telegram: the hint comes as the text and nothing says so.
+        assertEquals("", check.existing("输入消息", "输入消息", false))
+        // Real text stays, also when a hint exists.
+        assertEquals("Hello", check.existing("Hello", "输入消息", false))
+        assertEquals("", check.existing(null, null, false))
+        assertEquals("输入消息", check.existing("输入消息", null, false))
+    }
 }
