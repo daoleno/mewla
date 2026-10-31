@@ -16,12 +16,14 @@ import { useAppTheme } from "../../constants/tokens";
 import { MewlaPhone, PhoneLiveView } from "../../modules/mewla-phone/src";
 import { getPhoneFloatCorner, getPhoneFloatSize, setPhoneFloatCorner, setPhoneFloatSize } from "../../services/storage";
 import { usePhoneUse } from "../../store/phoneUse";
+import { AppText } from "../ui/AppText";
 import { IconButton } from "../ui/IconButton";
 import {
   DEFAULT_FLOAT_CORNER,
   FLOAT_DEFAULT,
   clampFloatFraction,
   floatOrigin,
+  floatPlaceholder,
   floatSize,
   nearestFloatCorner,
   parseFloatCorner,
@@ -141,9 +143,9 @@ function Float() {
     [area.bottom, area.top, box, fraction, ratio],
   );
 
-  const x = useSharedValue(area.right - EDGE - size.width);
-  const y = useSharedValue(area.top + EDGE);
   const origin = useMemo(() => floatOrigin(corner, area, size, EDGE), [area, corner, size]);
+  const x = useSharedValue(origin.x);
+  const y = useSharedValue(origin.y);
 
   // The gestures are made once and read what changes through this, so a resize that re-renders at
   // every move never replaces the gesture that is in progress.
@@ -295,6 +297,9 @@ function Float() {
     openPhone();
   };
 
+  // Until the agent's screen has drawn, a light card says what is going on instead of a black slab.
+  const placeholder = status ? floatPlaceholder(status) : null;
+  const failed = placeholder !== null && !!status?.launch_failed && !status.opening;
   const frameWidth = Math.min(FRAME_MAX, Math.max(FRAME_MIN, Math.ceil((size.width * PixelRatio.get()) / FRAME_STEP) * FRAME_STEP));
   // The handle sits in the corner opposite the one the float is anchored to, so dragging it outward grows the window.
   const handleLeft = corner.endsWith("right");
@@ -306,7 +311,7 @@ function Float() {
         accessibilityLabel="Agent screen"
         style={[
           styles.frame,
-          { width: size.width, height: size.height, backgroundColor: "#000", shadowColor: "#000" },
+          { width: size.width, height: size.height, backgroundColor: placeholder ? colors.bgSurface : "#000", shadowColor: "#000" },
           frameStyle,
         ]}
       >
@@ -315,6 +320,13 @@ function Float() {
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               {PhoneLiveView ? <PhoneLiveView style={StyleSheet.absoluteFill} fps={FLOAT_FPS} maxWidth={frameWidth} /> : null}
             </View>
+            {placeholder ? (
+              <View style={styles.placeholder} pointerEvents="none" accessibilityLiveRegion="polite">
+                <AppText variant="caption" tone={failed ? "danger" : "secondary"} style={styles.placeholderText}>
+                  {placeholder}
+                </AppText>
+              </View>
+            ) : null}
             {controls ? (
               <View style={styles.controls}>
                 <IconButton icon="expand" size={BUTTON} iconSize={16} color="#fff" accessibilityLabel="Open" onPress={openPhone} style={styles.button} />
@@ -340,6 +352,7 @@ function Float() {
             <View
               style={[
                 styles.grip,
+                { borderColor: placeholder ? colors.textTertiary : "rgba(255,255,255,0.9)" },
                 handleLeft ? { borderLeftWidth: 3, borderTopLeftRadius: handleTop ? 6 : 0, borderBottomLeftRadius: handleTop ? 0 : 6 } : { borderRightWidth: 3, borderTopRightRadius: handleTop ? 6 : 0, borderBottomRightRadius: handleTop ? 0 : 6 },
                 handleTop ? { borderTopWidth: 3 } : { borderBottomWidth: 3 },
               ]}
@@ -381,5 +394,7 @@ const styles = StyleSheet.create({
   handleRight: { right: 0, alignItems: "flex-end" },
   handleTop: { top: 0, justifyContent: "flex-start" },
   handleBottom: { bottom: 0, justifyContent: "flex-end" },
-  grip: { width: GRIP, height: GRIP, borderColor: "rgba(255,255,255,0.9)" },
+  grip: { width: GRIP, height: GRIP },
+  placeholder: { ...fill, alignItems: "center", justifyContent: "center", padding: 12 },
+  placeholderText: { textAlign: "center" },
 });

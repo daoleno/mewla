@@ -67,6 +67,25 @@ object PhoneController {
         private set
     private var handoff: Handoff? = null
 
+    /** Whether the agent's display has shown a picture since it was made; until then the float says what is going on instead of showing black. */
+    @Volatile private var drawn = false
+    /** The app being opened on the agent's display, and the one that could not be, by the name the agent knows it by. */
+    @Volatile private var opening: String? = null
+    @Volatile private var launchFailed: String? = null
+
+    /** A new or gone display has drawn nothing yet. */
+    private fun resetPicture() {
+        drawn = false
+        opening = null
+        launchFailed = null
+        PhoneLiveViews.last = null
+    }
+
+    private fun appLabel(pkg: String, user: Int): String {
+        val base = runCatching { app.packageManager.getApplicationLabel(app.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)
+        return if (user == 0) base else expo.modules.mewlaphone.helper.Clones.label(base, user, java.util.Locale.getDefault().language == "zh")
+    }
+
     private class Handoff(val id: String, val reason: String) {
         val done = CountDownLatch(1)
     }
@@ -185,6 +204,9 @@ object PhoneController {
             .put("w", display?.get(0) ?: 0)
             .put("h", display?.get(1) ?: 0)
             .put("agent", activeWorker ?: JSONObject.NULL)
+            .put("drawn", drawn)
+            .put("opening", opening ?: JSONObject.NULL)
+            .put("launch_failed", launchFailed ?: JSONObject.NULL)
             .put("handoff", handoff?.reason ?: JSONObject.NULL)
     }
 
@@ -444,11 +466,18 @@ object PhoneController {
     /** Makes [candidate] the helper: its frames and its end are watched, and the display it already has is known. */
     private fun use(candidate: HelperClient, hello: JSONObject, stale: Boolean): HelperClient {
         staleHelper = stale
-        candidate.onFrame = { jpeg -> listener?.onFrame(jpeg) }
+        candidate.onFrame = { jpeg ->
+            if (!drawn) {
+                drawn = true
+                publish()
+            }
+            listener?.onFrame(jpeg)
+        }
         candidate.onClosed = {
             if (client === candidate) {
                 client = null
                 display = null
+                resetPicture()
                 publish()
             }
         }
@@ -528,6 +557,7 @@ object PhoneController {
         val c = client ?: return
         client = null
         display = null
+        resetPicture()
         staleHelper = false
         runCatching { c.call("shutdown", timeoutMs = 2_000) }
         c.close()
@@ -622,6 +652,7 @@ object PhoneController {
                 "release" -> {
                     helper.call("display_release")
                     display = null
+                    resetPicture()
                     activeWorker = null
                     publish()
                     JSONObject().put("type", "result").put("id", id).put("ok", true)
@@ -671,8 +702,21 @@ object PhoneController {
             "screen" -> {}
             "launch" -> {
                 if (args.optString("package") == app.packageName) return failure(id, "failed", "Mewla's own screen is not for agents.")
-                val reply = helper.call("launch", JSONObject().put("package", args.getString("package")).put("user", args.optInt("user", 0)), 30_000)
-                if (!reply.optBoolean("ok")) return failure(id, reply.optString("code", "failed").ifEmpty { "failed" }, reply.optString("error"))
+                val label = appLabel(args.getString("package"), args.optInt("user", 0))
+                opening = label
+                launchFailed = null
+                publish()
+                val reply = try {
+                    helper.call("launch", JSONObject().put("package", args.getString("package")).put("user", args.optInt("user", 0)), 30_000)
+                } finally {
+                    opening = null
+                }
+                if (!reply.optBoolean("ok")) {
+                    launchFailed = label
+                    publish()
+                    return failure(id, reply.optString("code", "failed").ifEmpty { "failed" }, reply.optString("error"))
+                }
+                publish()
                 settleQuiet = 500
                 settleMax = 5_000
                 settleMin = 2_000
