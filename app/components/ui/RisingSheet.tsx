@@ -22,6 +22,8 @@ import { Spring } from "../../constants/motion";
 import { ContinuousCorners, Radii, shadow, useAppColors } from "../../constants/tokens";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 
+const CARD_GUTTER = 12;
+
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
@@ -64,6 +66,12 @@ export function RisingSheet({
   const insets = useSafeAreaInsets();
   // Beside a foldable's rail, not under it; backdrops still cover the window.
   const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
+  // The card slot's own gutter is paddingHorizontal, which a bare paddingLeft
+  // would override: add the insets to it instead.
+  const slotInsets = {
+    paddingLeft: CARD_GUTTER + insets.left,
+    paddingRight: CARD_GUTTER + insets.right,
+  };
   const progress = useSharedValue(0);
 
   useEffect(() => {
@@ -138,7 +146,7 @@ export function RisingSheet({
         ]}
         onPress={onClose}
       />
-      <View style={[styles.cardSlot, alignStyle, sideInsets]}>
+      <View style={[styles.cardSlot, alignStyle, slotInsets]}>
         <Animated.View style={[cardAnimStyle, cardStyle]}>
           {children}
         </Animated.View>
@@ -166,7 +174,7 @@ export function RisingSheet({
             ]}
             onPress={onClose}
           />
-          <View style={[styles.cardSlot, alignStyle, sideInsets]}>
+          <View style={[styles.cardSlot, alignStyle, slotInsets]}>
             <Animated.View style={[cardAnimStyle, cardStyle]}>
               {children}
             </Animated.View>
@@ -188,7 +196,7 @@ const styles = StyleSheet.create({
   },
   cardSlot: {
     flex: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: CARD_GUTTER,
   },
   center: {
     justifyContent: "center",
