@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -828,8 +830,40 @@ func startCLIControlServer(t *testing.T, stateDir string) (*captureCLIControlHan
 	go func() {
 		done <- server.Run(ctx)
 	}()
-	waitForCLISocketPath(t, socketPath)
-	return handler, done, cancel
+	waitForCLISocketAccepting(t, socketPath)
+	return handler, done, func() {
+		// A test that failed gets the state of the socket while the server is
+		// still up, which is what says why a CLI call found no daemon.
+		if t.Failed() {
+			t.Logf("control server at failure: %s", describeCLIControlSocket(socketPath, done))
+		}
+		cancel()
+	}
+}
+
+// describeCLIControlSocket reports what a client would meet at the control
+// socket right now: the file, the result of a connect, and whether the server
+// has already stopped (and why). It reads done without waiting.
+func describeCLIControlSocket(path string, done <-chan error) string {
+	var parts []string
+	if info, err := os.Lstat(path); err != nil {
+		parts = append(parts, "lstat: "+err.Error())
+	} else {
+		parts = append(parts, "lstat mode: "+info.Mode().String())
+	}
+	if conn, err := net.DialTimeout("unix", path, time.Second); err != nil {
+		parts = append(parts, "connect: "+err.Error())
+	} else {
+		_ = conn.Close()
+		parts = append(parts, "connect: ok")
+	}
+	select {
+	case err := <-done:
+		parts = append(parts, "server already stopped, err="+fmt.Sprint(err))
+	default:
+		parts = append(parts, "server still running")
+	}
+	return strings.Join(parts, "; ")
 }
 
 func waitForCLIControlServerShutdown(t *testing.T, done chan error) {
@@ -844,16 +878,62 @@ func waitForCLIControlServerShutdown(t *testing.T, done chan error) {
 	}
 }
 
-func waitForCLISocketPath(t *testing.T, path string) {
+// waitForCLISocketAccepting waits until the control socket takes a
+// connection. The socket file alone is not enough: net.Listen binds the path
+// before it listens, and a client that connects in between is refused
+// (ECONNREFUSED), which the CLI reports as "Mewla isn't running here" and
+// which sends a device revoke down its offline path without ever reaching the
+// server. Loaded machines make that gap long enough to hit.
+func waitForCLISocketAccepting(t *testing.T, path string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	var last error
 	for time.Now().Before(deadline) {
-		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSocket != 0 {
+		if info, err := os.Lstat(path); err != nil {
+			last = err
+		} else if info.Mode()&os.ModeSocket == 0 {
+			last = fmt.Errorf("%s is not a socket", path)
+		} else if conn, err := net.DialTimeout("unix", path, time.Second); err == nil {
+			_ = conn.Close()
 			return
+		} else {
+			last = err
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for control socket at %s", path)
+	t.Fatalf("timed out waiting for control socket at %s to accept: %v", path, last)
+}
+
+// A path that is bound but not yet listening shows as a socket file and
+// refuses connections: the state the old readiness check took for ready.
+func TestBoundButNotListeningSocketIsNotReady(t *testing.T) {
+	path := filepath.Join(shortControlStateDir(t), "bound.sock")
+	fd, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Close(fd)
+	if err := syscall.Bind(fd, &syscall.SockaddrUnix{Name: path}); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(path); err != nil || info.Mode()&os.ModeSocket == 0 {
+		t.Fatalf("bound path is not a socket file: %v %v", info, err)
+	}
+	_, err = control.Call(path, control.Request{Type: "device_revoke", ID: "x"})
+	if !errors.Is(err, control.ErrNotRunning) {
+		t.Fatalf("call to a bound-only socket = %v, want ErrNotRunning", err)
+	}
+	if _, err := net.DialTimeout("unix", path, time.Second); err == nil {
+		t.Fatal("a socket that is not listening accepted a connection")
+	}
+	if err := syscall.Listen(fd, 1); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialTimeout("unix", path, time.Second)
+	if err != nil {
+		t.Fatalf("connect after listen: %v", err)
+	}
+	_ = conn.Close()
 }
 
 func TestFirstDeviceStartupPrintsQRAndLink(t *testing.T) {

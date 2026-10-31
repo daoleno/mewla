@@ -30,7 +30,7 @@ func TestWorkUpdateCompletionCLICommitsCanonicalContract(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- server.Run(ctx) }()
 	t.Cleanup(func() { cancel(); waitForCLIControlServerShutdown(t, done) })
-	waitForCLISocketPath(t, socket)
+	waitForCLISocketAccepting(t, socket)
 	var stderr bytes.Buffer
 	if err := runBrainCommand([]string{"work", "update", "--state-dir", root, "--id", item.ID, "--completion", "until_done", "--done-criteria", "Brain accepts verified result"}, &stderr); err != nil {
 		t.Fatalf("CLI update: %v %s", err, stderr.String())
