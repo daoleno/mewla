@@ -12,10 +12,12 @@ export interface PhoneStep {
 
 /** The checks in the order they can be done; the first undone one is what the screen offers. */
 export function phoneSteps(status: PhoneStatus): PhoneStep[] {
+  // A paired phone remembers Mewla: reinstalling the App keeps that, so only the helper is left. Wireless
+  // debugging counts as done too when the App may turn it back on itself (the secure-settings grant).
   return [
-    { id: "developer", title: "Developer options", hint: "Tap Build number 7 times", done: status.developer_options },
+    { id: "developer", title: "Developer options", hint: "Tap Build number 7 times", done: status.developer_options || status.paired },
     { id: "wifi", title: "Wi‑Fi", done: status.wifi },
-    { id: "wireless", title: "Wireless debugging", done: status.wireless_debugging },
+    { id: "wireless", title: "Wireless debugging", done: status.wireless_debugging || (status.paired && status.self_healing) },
     { id: "pair", title: "Pairing", done: status.paired },
     { id: "helper", title: "Helper", done: status.helper },
   ];
@@ -25,7 +27,7 @@ export function nextPhoneStep(status: PhoneStatus): PhoneStep | null {
   return phoneSteps(status).find((step) => !step.done) ?? null;
 }
 
-export type PhoneSetupAction = "allow" | "setup" | "wifi" | "start";
+export type PhoneSetupAction = "allow" | "setup" | "wifi" | "wireless" | "start";
 
 export interface PhoneSetupPlan {
   /** What the one big button does now. */
@@ -51,8 +53,10 @@ export function phoneSetupPlan(status: PhoneStatus, running: boolean): PhoneSetu
   const next = nextPhoneStep(status);
   const guide = status.guide;
   if (!next) return { action: "start", label: "Start", current: null, note: null };
-  if (next.id === "helper") return { action: "start", label: "Start", current: "helper", note: null };
+  if (next.id === "helper") return { action: "start", label: "Start", current: "helper", note: status.problem ?? null };
   if (next.id === "wifi") return { action: "wifi", label: "Open Wi‑Fi", current: "wifi", note: null };
+  // Already paired: never walk the pairing again. The one thing left is the switch the App may not flip itself.
+  if (status.paired) return { action: "wireless", label: "Turn on Wireless debugging", current: "wireless", note: status.problem ?? null };
   if (!status.accessibility) {
     return {
       action: "allow",

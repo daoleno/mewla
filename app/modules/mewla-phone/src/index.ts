@@ -22,6 +22,8 @@ export interface PhoneStatus {
   wifi: boolean;
   paired: boolean;
   helper: boolean;
+  /** Why the helper is not up (what its last start attempt ran into), or null. */
+  problem: string | null;
   accessibility: boolean;
   /** Android may block switching the accessibility service on until "Allow restricted settings" is chosen in App info (Android 13+, not installed from the Play Store). */
   restricted: boolean;

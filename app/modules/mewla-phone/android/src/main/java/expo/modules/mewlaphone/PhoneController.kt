@@ -142,11 +142,12 @@ object PhoneController {
                     ensureLink()
                 }
                 if (client?.isClosed == false) {
+                    if (staleHelper) replaceStaleHelper()
                     wait = 5_000L
                 } else if (prefs.paired && !pairing && onWifi()) {
                     val up = runCatching { ensureHelper() }.onFailure { Log.i(TAG, "helper not up yet: ${it.message}") }.isSuccess
                     publish()
-                    wait = if (up) 5_000L else (wait * 2).coerceIn(4_000L, 120_000L)
+                    wait = if (up) 5_000L else (wait * 2).coerceIn(4_000L, 30_000L)
                 } else {
                     wait = 5_000L
                 }
@@ -173,6 +174,7 @@ object PhoneController {
             .put("wifi", onWifi())
             .put("paired", prefs.paired)
             .put("helper", helperUp)
+            .put("problem", problem ?: JSONObject.NULL)
             .put("accessibility", SettingsReading.serviceRunning)
             .put("restricted", accessibilityRestricted())
             .put("self_healing", selfHealing)
@@ -370,15 +372,51 @@ object PhoneController {
     }
 
     /**
-     * A connected helper of this app's version: reuses the running one, else starts it through
-     * Wireless debugging (turning that back on first when this app may). Throws when it cannot.
+     * A connected helper: reuses the running one of this install, else starts a fresh one through
+     * Wireless debugging (turning that back on first when this app may). A helper left by an earlier
+     * install is only retired once a fresh one can be started; when it cannot (Wireless debugging is
+     * off and this app may not turn it on), the old one keeps serving instead of leaving no helper.
+     * Throws when there is none, with [problem] saying why.
      */
     fun ensureHelper(): HelperClient = synchronized(helperLock) {
         client?.takeIf { !it.isClosed }?.let { return it }
-        val endpoint = HelperEndpoint.load(app)
-        HelperClient.connect(endpoint)?.let { existing ->
-            if (adopt(existing)) return existing
+        try {
+            findOrStartHelper().also { noteProblem(null) }
+        } catch (e: Exception) {
+            noteProblem(e.message ?: e.javaClass.simpleName)
+            throw e
         }
+    }
+
+    /** Why the helper is not up, for the person's screen and the agent's error; null while it is up. */
+    @Volatile var problem: String? = null
+        private set
+
+    private fun noteProblem(message: String?) {
+        if (problem == message) return
+        problem = message
+        if (::app.isInitialized) publish()
+    }
+
+    private fun findOrStartHelper(): HelperClient {
+        val running = HelperClient.connect(HelperEndpoint.load(app))
+        val hello = running?.let { runCatching { it.call("hello", timeoutMs = 5_000) }.getOrNull() }
+        val kind = HelperAdoption.classify(hello, PhoneHelper.PROTOCOL, HelperLauncher.installStamp(app))
+        if (running != null && kind == HelperKind.CURRENT) return use(running, hello!!, stale = false)
+        try {
+            return startHelper()
+        } catch (e: Exception) {
+            if (running != null && kind == HelperKind.STALE && !running.isClosed) {
+                Log.i(TAG, "keeping the helper of an earlier install: ${e.message}")
+                return use(running, hello!!, stale = true)
+            }
+            running?.close()
+            throw e
+        }
+    }
+
+    /** Starts a fresh helper, replacing any other. Everything that can fail without touching the old helper is checked first. */
+    private fun startHelper(): HelperClient {
         if (!prefs.paired) throw IllegalStateException("not paired")
         ensureWirelessDebugging()
         val started = connectAdb().use { adb ->
@@ -388,18 +426,21 @@ object PhoneController {
             grantSelfHealing(adb)
             HelperLauncher.start(app, adb)
         }
-        if (!adopt(started)) throw IllegalStateException("the helper does not speak this version")
-        started
+        val hello = runCatching { started.call("hello", timeoutMs = 5_000) }.getOrNull()
+        if (HelperAdoption.classify(hello, PhoneHelper.PROTOCOL, HelperLauncher.installStamp(app)) != HelperKind.CURRENT) {
+            runCatching { started.call("shutdown", timeoutMs = 2_000) }
+            started.close()
+            throw IllegalStateException("the helper does not speak this version")
+        }
+        return use(started, hello!!, stale = false)
     }
 
-    /** Keeps [candidate] when it is this App install's helper; otherwise shuts it down so a fresh one can start. */
-    private fun adopt(candidate: HelperClient): Boolean {
-        val hello = runCatching { candidate.call("hello", timeoutMs = 5_000) }.getOrNull()
-        if (hello?.optInt("protocol") != PhoneHelper.PROTOCOL || hello.optLong("build") != HelperLauncher.installStamp(app)) {
-            runCatching { candidate.call("shutdown", timeoutMs = 2_000) }
-            candidate.close()
-            return false
-        }
+    /** True while the helper in use is one an earlier install left; the keeper replaces it when it can. */
+    @Volatile private var staleHelper = false
+
+    /** Makes [candidate] the helper: its frames and its end are watched, and the display it already has is known. */
+    private fun use(candidate: HelperClient, hello: JSONObject, stale: Boolean): HelperClient {
+        staleHelper = stale
         candidate.onFrame = { jpeg -> listener?.onFrame(jpeg) }
         candidate.onClosed = {
             if (client === candidate) {
@@ -413,7 +454,20 @@ object PhoneController {
         publish()
         // Views mounted while the link was down asked for frames that could not be requested then.
         PhoneLiveViews.resume()
-        return true
+        return candidate
+    }
+
+    /**
+     * Retires a helper an earlier install left, once a fresh one can be started. Only while no agent
+     * is on the phone, since the fresh one takes the agent's display with it.
+     */
+    private fun replaceStaleHelper() = synchronized(helperLock) {
+        if (!staleHelper || client?.isClosed != false || activeWorker != null) return@synchronized
+        // Nothing is wrong with the helper in use, so this never raises the system's network prompt to replace it.
+        if (Settings.Global.getInt(app.contentResolver, "adb_wifi_enabled", 0) != 1) return@synchronized
+        runCatching { startHelper() }
+            .onSuccess { Log.i(TAG, "replaced the helper of an earlier install") }
+            .onFailure { Log.i(TAG, "keeping the helper of an earlier install: ${it.message}") }
     }
 
     /** With WRITE_SECURE_SETTINGS (granted once through the helper) Wireless debugging is turned back on without the person. */
@@ -461,6 +515,7 @@ object PhoneController {
         val c = client ?: return
         client = null
         display = null
+        staleHelper = false
         runCatching { c.call("shutdown", timeoutMs = 2_000) }
         c.close()
     }
@@ -538,7 +593,7 @@ object PhoneController {
             val helper = try {
                 ensureHelper()
             } catch (e: Exception) {
-                return failure(id, "not_ready", "Phone use is not ready on the phone: ${e.message}")
+                return failure(id, "not_ready", "Phone use isn't ready on the phone: open Mewla \u2192 Phone${e.message?.let { " ($it)" }.orEmpty()}")
             }
             keepScreenOn()
             activeWorker = request.optString("worker_name").ifEmpty { request.optString("worker") }.ifEmpty { "An agent" }

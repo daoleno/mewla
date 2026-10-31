@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -54,7 +56,7 @@ func (e *Error) Is(target error) bool {
 // What an agent is told when the phone cannot be used now.
 var (
 	ErrNotConnected = &Error{CodeNotConnected, "The phone is not connected to this computer. Tell the person to open Mewla on their phone, and stop."}
-	ErrNotReady     = &Error{CodeNotReady, "Phone use is not set up on the phone yet: the person has to finish setup in the Mewla app on their phone. Tell them, and stop."}
+	ErrNotReady     = &Error{CodeNotReady, "Phone use isn't ready on the phone: the person has to open Mewla → Phone on their phone. Tell them, and stop."}
 	ErrPerson       = &Error{CodePersonInControl, "The person is using the agent's screen on the phone right now. Stop and tell them; do not retry in a loop. It is yours again when they hand it back."}
 	ErrStopped      = &Error{CodeStopped, "The person stopped the agent on the phone. Stop and report; do not retry until they hand it back."}
 	ErrTimeout      = &Error{CodeTimeout, "The phone did not answer in time. It may be asleep or offline; report this instead of retrying in a loop."}
@@ -168,6 +170,7 @@ type Link struct {
 
 	hello   Hello
 	state   string // the phone's last report
+	problem string // why a phone in setup could not start its helper, as it said
 	stopped bool   // latched by Stop, cleared only by give_back
 	person  bool   // the person is driving the agent's screen
 	w, h    int
@@ -289,7 +292,11 @@ func (m *Manager) onState(l *Link, s State) {
 	if !knownState(s.State) {
 		s.State = StateSetup
 	}
+	if l.state != s.State {
+		log.Printf("phone: state %s -> %s%s", l.state, s.State, problemSuffix(trimProblem(s.Problem)))
+	}
 	l.state = s.State
+	l.problem = trimProblem(s.Problem)
 	// The phone says whose hands the agent's screen is in; a stop it reports is latched until
 	// give_back, like one the person pressed.
 	l.person = s.State == StatePersonInCharge
@@ -406,9 +413,28 @@ func (l *Link) refusalLocked() error {
 	case l.person:
 		return ErrPerson
 	case l.state != StateReady:
+		if l.problem != "" {
+			return &Error{CodeNotReady, strings.TrimSuffix(ErrNotReady.Message, " Tell them, and stop.") + " (" + l.problem + "). Tell them, and stop."}
+		}
 		return ErrNotReady
 	}
 	return nil
+}
+
+// trimProblem keeps the phone's reason to a sentence: it goes into an agent's error.
+func trimProblem(problem string) string {
+	problem = strings.TrimSpace(problem)
+	if r := []rune(problem); len(r) > 160 {
+		return string(r[:160])
+	}
+	return problem
+}
+
+func problemSuffix(problem string) string {
+	if problem == "" {
+		return ""
+	}
+	return " (" + problem + ")"
 }
 
 func (l *Link) effectiveLocked() string {

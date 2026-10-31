@@ -89,6 +89,8 @@ type State struct {
 	State string `json:"state"`
 	W     int    `json:"w,omitempty"`
 	H     int    `json:"h,omitempty"`
+	// Problem is why the phone is in setup when its last attempt to start the helper failed.
+	Problem string `json:"problem,omitempty"`
 }
 
 // Event is something the person did on the phone.

@@ -123,6 +123,14 @@ back on when it can.
   itself while Phone use is on. An agent that asks while the connection is down
   waits up to 30 seconds for it to return; after that it is told the phone is
   not connected rather than left waiting.
+- After you update or reinstall Mewla over a paired phone, nothing is paired
+  again: Mewla starts a helper of the new version by itself once Wireless
+  debugging is on (it switches it on itself when it may). Until then the old
+  helper keeps working, and the **Phone** page offers one **Start**, or, if
+  Mewla may not switch Wireless debugging on yet, that one switch. A phone that
+  is not ready tells an agent so (*Phone use isn't ready on the phone: open
+  Mewla → Phone*, with the reason when it knows it) instead of showing a black
+  screen.
 - Apps that block screen capture (banking, some video apps) show a black
   picture, and apps that block automation may refuse. The agent is told.
 - Mewla's Accessibility service only acts while **Set up** runs, only inside
