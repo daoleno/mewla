@@ -423,7 +423,7 @@ func TestWaitForTextPollsTheScreen(t *testing.T) {
 	if !strings.Contains(res.Text, `"never" did not appear within 2 seconds`) || !strings.Contains(res.Text, "Loading") {
 		t.Fatalf("not found:\n%s", res.Text)
 	}
-	if n := len(conn.ops()) - before; n != 5 { // 0, 0.5, 1, 1.5, 2 seconds
+	if n := len(conn.ops()) - before; n != 9 { // every 0.25 s: 0 to 2 seconds
 		t.Fatalf("%d polls", n)
 	}
 

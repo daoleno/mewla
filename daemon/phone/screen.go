@@ -2,6 +2,7 @@ package phone
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -445,4 +446,66 @@ func (e *Elements) Resolve(id int) (Element, error) {
 		return Element{}, fmt.Errorf("there is no element [%d]: read the screen and use an id from it", id)
 	}
 	return Element{}, fmt.Errorf("element [%d] is not on the screen any more: read the screen again and use an id from it", id)
+}
+
+// Match is the element on the latest reading that text names: the one whose text, description or
+// hint equals it, else the one that contains it, ignoring case. Several candidates are narrowed to
+// those an agent can press or fill; if more than one is left the agent is told which, so it names
+// one by id. found is false when nothing matches, which is not the same as an ambiguous match.
+func (e *Elements) Match(text string) (el Element, found bool, err error) {
+	q := strings.ToLower(strings.TrimSpace(text))
+	if q == "" {
+		return Element{}, false, nil
+	}
+	e.mu.Lock()
+	var exact, partial []Element
+	for _, c := range e.live {
+		labels := []string{c.Text, c.Desc, c.Hint}
+		isExact, isPartial := false, false
+		for _, l := range labels {
+			l = strings.ToLower(l)
+			if l == q {
+				isExact = true
+			} else if strings.Contains(l, q) {
+				isPartial = true
+			}
+		}
+		switch {
+		case isExact:
+			exact = append(exact, c)
+		case isPartial:
+			partial = append(partial, c)
+		}
+	}
+	e.mu.Unlock()
+	for _, group := range [][]Element{exact, partial} {
+		if len(group) == 0 {
+			continue
+		}
+		sort.Slice(group, func(i, j int) bool { return group[i].ID < group[j].ID })
+		if len(group) > 1 {
+			var pressable []Element
+			for _, c := range group {
+				if c.Flags&interactiveMask != 0 {
+					pressable = append(pressable, c)
+				}
+			}
+			if len(pressable) > 0 {
+				group = pressable
+			}
+		}
+		if len(group) == 1 {
+			return group[0], true, nil
+		}
+		parts := make([]string, 0, len(group))
+		for i, c := range group {
+			if i == 5 {
+				parts = append(parts, fmt.Sprintf("and %d more", len(group)-5))
+				break
+			}
+			parts = append(parts, fmt.Sprintf("[%d] %s", c.ID, quoted(c.Label())))
+		}
+		return Element{}, true, fmt.Errorf("%q matches several elements: %s. Use the id of the one you mean.", text, strings.Join(parts, ", "))
+	}
+	return Element{}, false, nil
 }

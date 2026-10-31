@@ -159,7 +159,7 @@ func TestPhoneUseThroughTheControlSocket(t *testing.T) {
 			t.Errorf("%s: a description of %d characters is not terse", tool.Name, len(tool.Description))
 		}
 	}
-	want := "phone_apps,phone_handoff,phone_key,phone_launch,phone_screen,phone_swipe,phone_tap,phone_type,phone_wait"
+	want := "phone_apps,phone_handoff,phone_key,phone_launch,phone_screen,phone_steps,phone_swipe,phone_tap,phone_type,phone_wait"
 	if got := strings.Join(sortedStrings(names), ","); got != want {
 		t.Fatalf("tools %s", got)
 	}
@@ -214,6 +214,10 @@ func TestPhoneUseThroughTheControlSocket(t *testing.T) {
 		if last != c.op {
 			t.Fatalf("%s sent %s", c.tool, last)
 		}
+	}
+	// A batch is one call that ends on one screen.
+	if r, raw := call(session, "phone_steps", map[string]any{"steps": []map[string]any{{"action": "key", "key": "back"}, {"action": "tap", "element": 1}}}); r.IsError || !strings.Contains(text(r), "2. tap: done") {
+		t.Fatalf("steps: %s", raw)
 	}
 	// A handoff waits for the person; here the phone answers at once.
 	if r, raw := call(session, "phone_handoff", map[string]any{"reason": "Sign in"}); r.IsError || !strings.Contains(text(r), "Compose") {
