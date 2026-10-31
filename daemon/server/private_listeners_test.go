@@ -39,8 +39,23 @@ func testTLSConfig(t *testing.T) *tls.Config {
 
 // privateTestServer runs the private listeners on loopback aliases, with the
 // address source and the port under the test's control.
+// requireLoopbackAliases skips where an address of 127.0.0.0/8 other than
+// 127.0.0.1 can't be bound: Linux routes the whole block to loopback, macOS
+// configures only 127.0.0.1 and needs an `ifconfig lo0 alias` for the rest.
+func requireLoopbackAliases(t *testing.T, addresses ...string) {
+	t.Helper()
+	for _, address := range addresses {
+		listener, err := net.Listen("tcp4", net.JoinHostPort(address, "0"))
+		if err != nil {
+			t.Skipf("cannot bind %s on this host: %v", address, err)
+		}
+		_ = listener.Close()
+	}
+}
+
 func privateTestServer(t *testing.T, detect func() []net.IP) (*Server, int) {
 	t.Helper()
+	requireLoopbackAliases(t, "127.0.0.2", "127.0.0.3")
 	authManager, err := auth.NewManager(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

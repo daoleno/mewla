@@ -3,6 +3,7 @@ package hostdeps
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -149,5 +150,26 @@ func TestAgentsFollowAgentOrder(t *testing.T) {
 			t.Fatalf("install menu %q out of AgentOrder", agent.ID)
 		}
 		last = rank
+	}
+}
+
+func TestSystemPathDirsAreSearchedAfterPATHAndCanBeReplaced(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir())
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "mewla-fake-agent"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LookPath("mewla-fake-agent"); err == nil {
+		t.Fatal("found a tool in no search directory")
+	}
+	restore := SetSystemPathDirs(dir)
+	if path, err := LookPath("mewla-fake-agent"); err != nil || path != filepath.Join(dir, "mewla-fake-agent") {
+		t.Fatalf("a system installer directory is searched: %q %v", path, err)
+	}
+	restore()
+	if _, err := LookPath("mewla-fake-agent"); err == nil {
+		t.Fatal("the replaced directories were not put back")
 	}
 }

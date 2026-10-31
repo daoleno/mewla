@@ -261,6 +261,24 @@ func Agents(p Platform) []Agent {
 	return agents
 }
 
+// systemPathDirs are the installer directories outside the home directory:
+// Homebrew on Apple Silicon.
+var systemPathDirs = func() []string {
+	if runtime.GOOS == "darwin" {
+		return []string{"/opt/homebrew/bin"}
+	}
+	return nil
+}()
+
+// SetSystemPathDirs replaces the installer directories outside the home
+// directory and returns what puts them back. Tests use it to look only where
+// they put fakes: a real Mac has Homebrew's agents in /opt/homebrew/bin.
+func SetSystemPathDirs(dirs ...string) (restore func()) {
+	previous := systemPathDirs
+	systemPathDirs = slices.Clone(dirs)
+	return func() { systemPathDirs = previous }
+}
+
 // ExtraPathDirs are directories installers put binaries in that a fresh shell
 // may not have on PATH yet: the native agent installers' ~/.local/bin,
 // OpenCode 2's ~/.opencode/bin and Homebrew on Apple Silicon.
@@ -269,10 +287,7 @@ func ExtraPathDirs(home string) []string {
 	if home != "" {
 		dirs = append(dirs, filepath.Join(home, ".local", "bin"), filepath.Join(home, ".opencode", "bin"))
 	}
-	if runtime.GOOS == "darwin" {
-		dirs = append(dirs, "/opt/homebrew/bin")
-	}
-	return dirs
+	return append(dirs, systemPathDirs...)
 }
 
 // LookPath finds name on PATH, then in ExtraPathDirs, so a tool installed a

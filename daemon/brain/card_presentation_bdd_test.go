@@ -67,11 +67,19 @@ func TestBDD_BrainCardUnicodeDeliveryHistoryAndAcceptance(t *testing.T) {
 	if delivered == "" || input.Summary != progress.Summary {
 		t.Fatal("actual emitted input failed parser or changed summary")
 	}
-	// Recreate the exact pre-fix byte-cut + JSON escape behavior, rather than
-	// treating corruption in a new message as legitimate user prose.
-	input.Summary = strings.Repeat("中", 60)[:157] + "..."
+	// Recreate the exact pre-fix byte-cut + JSON escape wire format, rather
+	// than treating corruption in a new message as legitimate user prose. The
+	// pre-fix encoder wrote the byte-cut rune as the six characters \ufffd;
+	// today's encoders may write the character itself (encoding/json under
+	// GOEXPERIMENT=jsonv2 does), so the escape is spelled out here and not
+	// left to whichever encoder runs the test.
+	input.Summary = "SUMMARY-PLACEHOLDER"
 	legacyJSON, _ := json.Marshal(input)
-	legacy := "<mewla_work_event>\n" + string(legacyJSON) + "\n</mewla_work_event>"
+	legacySummary := strings.Repeat("中", 52) + `\ufffd...` // 157 bytes cut mid-rune
+	legacy := "<mewla_work_event>\n" + strings.Replace(string(legacyJSON), input.Summary, legacySummary, 1) + "\n</mewla_work_event>"
+	if strings.Contains(legacy, "SUMMARY-PLACEHOLDER") || !strings.Contains(legacy, `中\ufffd...`) {
+		t.Fatalf("legacy envelope was not built as the historical wire format: %q", legacy)
+	}
 	if _, ok := work.ParseCanonicalDirectWorkEventInput(legacy); ok {
 		t.Fatal("strict admission unexpectedly accepted legacy normalization")
 	}

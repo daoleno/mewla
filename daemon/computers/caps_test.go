@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
 func installFake(t *testing.T, dir, name string) {
@@ -20,6 +22,9 @@ func installFake(t *testing.T, dir, name string) {
 
 func freshCaps(t *testing.T) Caps {
 	t.Helper()
+	// Only the directories a test fills are looked in: a real Mac has agents
+	// of its own in /opt/homebrew/bin.
+	t.Cleanup(hostdeps.SetSystemPathDirs())
 	capsMu.Lock()
 	capsAt = time.Time{}
 	capsMu.Unlock()

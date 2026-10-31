@@ -242,8 +242,8 @@ func matchCodexTranscriptToOpenRollouts(candidates []codexTranscriptCandidate, p
 
 	openPaths := make(map[string]struct{}, len(paths))
 	for _, path := range paths {
-		if normalized := normalizeOpenFilePath(path); normalized != "" {
-			openPaths[normalized] = struct{}{}
+		if key := openFileKey(path); key != "" {
+			openPaths[key] = struct{}{}
 		}
 	}
 	if len(openPaths) == 0 {
@@ -252,7 +252,7 @@ func matchCodexTranscriptToOpenRollouts(candidates []codexTranscriptCandidate, p
 
 	var matched []codexTranscriptCandidate
 	for _, candidate := range candidates {
-		if _, ok := openPaths[normalizeOpenFilePath(candidate.Path)]; ok {
+		if _, ok := openPaths[openFileKey(candidate.Path)]; ok {
 			matched = append(matched, candidate)
 		}
 	}
@@ -372,6 +372,22 @@ func isCodexRolloutPath(path string) bool {
 	return strings.Contains(normalized, "/.codex/sessions/") &&
 		strings.HasPrefix(filepath.Base(normalized), "rollout-") &&
 		strings.HasSuffix(normalized, ".jsonl")
+}
+
+// openFileKey names a file so that the path a process has open and the path
+// a database records for it agree: both are resolved through symlinks, which
+// the open path always has been (lsof and /proc print the real path) and the
+// recorded one may not (macOS /var is /private/var; ~/.codex is often a link).
+// A file that is gone keeps its cleaned path.
+func openFileKey(path string) string {
+	path = normalizeOpenFilePath(path)
+	if path == "" {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }
 
 func normalizeOpenFilePath(path string) string {
