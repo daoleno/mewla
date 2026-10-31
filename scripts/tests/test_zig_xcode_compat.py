@@ -171,6 +171,27 @@ class ZigXcodeCompatTests(unittest.TestCase):
             self.assertIn("does not apply", result.stderr)
             self.assertEqual(list((root / "tools").iterdir()), [], "a failed copy must not be left to be reused")
 
+    def test_a_hand_patched_zig_is_named_not_mistaken_for_a_fixed_one(self):
+        patched = HEADER_TAIL.replace("INFINITY", "numeric_limits<_RealT>::infinity()")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lib = fake_lib(root, patched)
+            result = self.patched_lib(root, lib)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("already patched", result.stderr)
+            # The check can't read a patched Zig as "compiles, so retired".
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            sdk = sdk_with_targets(root, "x86_64-macos, arm64e-macos")
+            xcrun = bin_dir / "xcrun"
+            xcrun.write_text(f'#!/bin/sh\necho "{sdk}"\n')
+            xcrun.chmod(0o755)
+            zig = fake_zig(bin_dir, lib, "ok")
+            env = {"PATH": f"{bin_dir}:{os.environ['PATH']}", "ZIG_BIN": str(zig), "MEWLA_TOOL_CACHE": str(root / "tools"), "TMPDIR": str(root)}
+            check = subprocess.run(["bash", str(CHECK)], capture_output=True, text=True, env=env)
+            self.assertEqual(check.returncode, 2)
+            self.assertIn("already carries the libcxx patch", check.stderr)
+
     def test_a_patch_that_differs_from_the_lock_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

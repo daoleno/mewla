@@ -34,6 +34,29 @@ mewla_libsystem_arm64_support() {
   fi
 }
 
+# mewla_zig_stock_lib ZIG_BIN prints the lib dir Zig itself uses.
+mewla_zig_stock_lib() {
+  env -u ZIG_LIB_DIR "$1" env | sed -n 's/^ *\.lib_dir = "\(.*\)",$/\1/p'
+}
+
+# mewla_zig_lib_already_patched ZIG_BIN LOCK ROOT succeeds when Zig's own lib
+# dir already carries the lock's lib patches, as after a hand patch from
+# before the build did this itself. The build would then fail to apply them
+# and the libcxx probe would call the workaround retired; the fix is a Zig
+# unpacked afresh from the pinned tarball.
+mewla_zig_lib_already_patched() {
+  local zig="$1" lock="$2" root="$3" stock path
+  stock="$(mewla_zig_stock_lib "$zig")"
+  [[ -d "$stock" ]] || return 1
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    patch --quiet --dry-run --reverse -F0 -p1 -d "$stock" -i "$path" >/dev/null 2>&1 || return 1
+  done < <(python3 -c 'import json, pathlib, sys
+for patch in json.load(open(sys.argv[1]))["zig"].get("lib_patches") or []:
+    print(pathlib.Path(sys.argv[2]) / patch["path"])' "$lock" "$root")
+  return 0
+}
+
 # mewla_zig_libcxx_support ZIG_BIN prints one word, from compiling the stock
 # Zig's own libcxx header the way the build does, for the macOS target with
 # the SDK that xcrun names:
@@ -108,7 +131,7 @@ PY
   name="$(head -n1 <<<"$plan")"
 
   local stock
-  stock="$(env -u ZIG_LIB_DIR "$zig" env | sed -n 's/^ *\.lib_dir = "\(.*\)",$/\1/p')"
+  stock="$(mewla_zig_stock_lib "$zig")"
   if [[ -z "$stock" || ! -d "$stock/libcxx" ]]; then
     echo "error: cannot find Zig's lib dir with libcxx (zig env gave '$stock')" >&2
     return 1
@@ -134,7 +157,11 @@ PY
     [[ -n "$path" ]] || continue
     # --forward refuses a patch that is already applied; -F0 allows no fuzz.
     if ! patch --quiet --forward -F0 -p1 -d "$partial" -i "$path" >&2; then
-      echo "error: $path does not apply to $stock; Zig's lib changed under it" >&2
+      if mewla_zig_lib_already_patched "$zig" "$lock" "$root"; then
+        echo "error: $stock is already patched (a hand patch?). Remove that Zig and let the build unpack the pinned one afresh; also unset ZIG_LIB_DIR and clear any Zig cache built with the hand patch." >&2
+      else
+        echo "error: $path does not apply to $stock; Zig's lib changed under it" >&2
+      fi
       rm -rf "$partial"
       return 1
     fi

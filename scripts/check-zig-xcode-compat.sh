@@ -51,7 +51,16 @@ esac
 ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 probe_log="$(mktemp "${TMPDIR:-/tmp}/mewla-zig-probe-log.XXXXXX")"
 export MEWLA_ZIG_PROBE_LOG="$probe_log"
-case "$(mewla_zig_libcxx_support "$ZIG_BIN")" in
+libcxx_state="$(mewla_zig_libcxx_support "$ZIG_BIN")"
+if mewla_zig_lib_already_patched "$ZIG_BIN" "$LOCK" "$ROOT"; then
+  libcxx_state=patched
+fi
+case "$libcxx_state" in
+  patched)
+    echo "error: $ZIG_BIN's own lib dir already carries the libcxx patch (a hand patch?), so the probe can't tell whether the workaround is needed." >&2
+    echo "       Remove that Zig (let the check unpack the pinned one afresh), unset ZIG_LIB_DIR, and run the check again." >&2
+    changed
+    ;;
   broken)
     echo "libcxx workaround: still needed; Zig $("$ZIG_BIN" version)'s libcxx fails on INFINITY with $sdk."
     ;;
