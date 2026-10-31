@@ -92,7 +92,7 @@ function Setup({ status }: { status: PhoneStatus }) {
       // Silent when the secure-settings grant exists; otherwise the system's page for Mewla's service.
       if (!MewlaPhone.enableAccessibility()) MewlaPhone.openAccessibilitySettings();
     } else if (plan.action === "setup") await setUp();
-    else if (plan.action === "wifi") MewlaPhone.openWirelessDebugging();
+    else if (plan.action === "wifi" || plan.action === "wireless") MewlaPhone.openWirelessDebugging();
     else await MewlaPhone.ensureHelper();
   };
 

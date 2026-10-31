@@ -131,7 +131,7 @@ func TestAResultTheAgentCannotUseCarriesItsCode(t *testing.T) {
 		{Result{Code: CodeStopped, Error: "You pressed Stop."}, CodeStopped, "You pressed Stop. Stop and report"},
 		{Result{Code: CodeNotInstalled}, CodeNotInstalled, "not installed"},
 		{Result{Code: CodeInUse}, CodeInUse, "using that app"},
-		{Result{Code: CodeNotReady}, CodeNotReady, "set up"},
+		{Result{Code: CodeNotReady}, CodeNotReady, "isn't ready"},
 		{Result{Error: "boom"}, CodeFailed, "boom"},
 	} {
 		r := c.res
@@ -574,5 +574,27 @@ func TestAnActionGivesUpWhenThePhoneStaysAway(t *testing.T) {
 	start = time.Now()
 	if _, err := m.Do(context.Background(), "", "", OpRelease, nil, false); err != nil || time.Since(start) > 50*time.Millisecond {
 		t.Fatalf("release: %v after %v", err, time.Since(start))
+	}
+}
+
+func TestAPhoneInSetupSaysWhatToDoAndWhyWhenItKnows(t *testing.T) {
+	m := NewManager(Options{})
+	link, conn := connect(t, m, StateSetup, okResult(nil))
+	_, err := tap(m, "w1")
+	if code(err) != CodeNotReady || !strings.Contains(err.Error(), "open Mewla → Phone") || strings.Contains(err.Error(), "(") {
+		t.Fatalf("no reason known: %v", err)
+	}
+	sendFrame(t, link, State{Type: TypeState, State: StateSetup, Problem: "Wireless debugging is off"})
+	_, err = tap(m, "w1")
+	if code(err) != CodeNotReady || !strings.Contains(err.Error(), "open Mewla → Phone") || !strings.Contains(err.Error(), "(Wireless debugging is off)") {
+		t.Fatalf("with the phone's reason: %v", err)
+	}
+	if len(conn.ops()) != 0 {
+		t.Fatalf("a phone in setup was sent %v", conn.ops())
+	}
+	// Ready again: nothing is refused, and the old reason is gone.
+	sendFrame(t, link, State{Type: TypeState, State: StateReady})
+	if _, err := tap(m, "w1"); err != nil {
+		t.Fatalf("after it became ready: %v", err)
 	}
 }

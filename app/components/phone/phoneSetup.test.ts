@@ -29,6 +29,7 @@ const ready: PhoneStatus = {
   wifi: true,
   paired: true,
   helper: true,
+  problem: null,
   accessibility: false,
   restricted: false,
   self_healing: true,
@@ -253,5 +254,22 @@ describe("phone setup plan", () => {
   test("off Wi-Fi the Wi-Fi page is offered, and a paired phone only needs its helper started", () => {
     expect(phoneSetupPlan({ ...fresh, accessibility: true, wifi: false, developer_options: true }, false).action).toBe("wifi");
     expect(phoneSetupPlan({ ...ready, helper: false }, false)).toMatchObject({ action: "start", current: "helper" });
+  });
+
+  test("after a reinstall over a paired phone it is one Start, never the pairing walk again", () => {
+    // Wireless debugging went off while the App was away, but the App may turn it back on by itself.
+    const reinstalled = { ...ready, helper: false, wireless_debugging: false, developer_options: false, self_healing: true };
+    expect(nextPhoneStep(reinstalled)?.id).toBe("helper");
+    expect(phoneSetupPlan(reinstalled, false)).toMatchObject({ action: "start", label: "Start", current: "helper" });
+  });
+
+  test("a paired phone whose Wireless debugging the App may not turn on offers that one switch, not Allow or Set up", () => {
+    const off = { ...ready, helper: false, wireless_debugging: false, self_healing: false, accessibility: false };
+    expect(phoneSetupPlan(off, false)).toMatchObject({ action: "wireless", current: "wireless" });
+    expect(phoneSetupPlan({ ...off, accessibility: true }, false).action).toBe("wireless");
+  });
+
+  test("why the helper is not up is shown under its row", () => {
+    expect(phoneSetupPlan({ ...ready, helper: false, problem: "Wireless debugging is off" }, false).note).toBe("Wireless debugging is off");
   });
 });

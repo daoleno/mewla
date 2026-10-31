@@ -20,6 +20,8 @@ export interface PhoneStateFrame {
   state: PhoneState;
   w?: number;
   h?: number;
+  /** Why the helper is not up, when the state is setup. */
+  problem?: string;
 }
 
 export type PhoneEventKind = "stop" | "take_over" | "give_back" | "handed_off";
