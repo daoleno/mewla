@@ -45,6 +45,7 @@ const ready: PhoneStatus = {
   drawn: true,
   opening: null,
   launch_failed: null,
+  display_info: null,
 };
 
 describe("phone setup", () => {

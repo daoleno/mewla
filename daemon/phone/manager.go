@@ -120,14 +120,16 @@ type Active struct {
 
 // Status is what the App shows about the phone.
 type Status struct {
-	Connected  bool    `json:"connected"`
-	State      string  `json:"state"` // the phone's State* value, or StateOffline
-	Model      string  `json:"model,omitempty"`
-	SDK        int     `json:"sdk,omitempty"`
-	AppVersion string  `json:"app_version,omitempty"`
-	W          int     `json:"w,omitempty"`
-	H          int     `json:"h,omitempty"`
-	Active     *Active `json:"active,omitempty"`
+	Connected  bool   `json:"connected"`
+	State      string `json:"state"` // the phone's State* value, or StateOffline
+	Model      string `json:"model,omitempty"`
+	SDK        int    `json:"sdk,omitempty"`
+	AppVersion string `json:"app_version,omitempty"`
+	W          int    `json:"w,omitempty"`
+	H          int    `json:"h,omitempty"`
+	// Display is the agent display's size and density next to the phone's own (a size that looks wrong on the phone starts here).
+	Display string  `json:"display,omitempty"`
+	Active  *Active `json:"active,omitempty"`
 }
 
 // Reply is the phone's answer to one op. When the phone answered but refused, Do returns it
@@ -207,6 +209,7 @@ type Link struct {
 	stopped bool   // latched by Stop, cleared only by give_back
 	person  bool   // the person is driving the agent's screen
 	w, h    int
+	display string
 
 	pending *pending
 }
@@ -339,6 +342,10 @@ func (m *Manager) onState(l *Link, s State) {
 	}
 	if s.W > 0 && s.H > 0 {
 		l.w, l.h = s.W, s.H
+	}
+	if s.Display != "" && s.Display != l.display {
+		log.Printf("phone: agent display %s", s.Display)
+		l.display = s.Display
 	}
 	if s.State == StatePersonInCharge && l.pending != nil && l.pending.op == OpHandoff {
 		// A handoff is the phone putting the person in charge: it is what the request asked for,
@@ -578,7 +585,7 @@ func (m *Manager) Status() Status {
 	defer m.mu.Unlock()
 	status := Status{State: StateOffline}
 	if l := m.link; l != nil {
-		status = Status{Connected: true, State: l.effectiveLocked(), Model: l.hello.Model, SDK: l.hello.SDK, AppVersion: l.hello.AppVersion, W: l.w, H: l.h}
+		status = Status{Connected: true, State: l.effectiveLocked(), Model: l.hello.Model, SDK: l.hello.SDK, AppVersion: l.hello.AppVersion, W: l.w, H: l.h, Display: l.display}
 	}
 	if m.active != nil {
 		active := *m.active
