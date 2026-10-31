@@ -160,10 +160,10 @@ export class PhoneLink {
       return;
     }
     const problem = status.state === "setup" ? status.problem ?? undefined : undefined;
-    const key = `${status.state}:${status.w}:${status.h}:${problem ?? ""}`;
+    const key = `${status.state}:${status.w}:${status.h}:${problem ?? ""}:${status.display_info ?? ""}`;
     if (key === this.lastState) return;
     this.lastState = key;
-    const frame: PhoneStateFrame = { type: "state", state: status.state, w: status.w || undefined, h: status.h || undefined, problem };
+    const frame: PhoneStateFrame = { type: "state", state: status.state, w: status.w || undefined, h: status.h || undefined, problem, display: status.display_info ?? undefined };
     this.send(frame);
   }
 

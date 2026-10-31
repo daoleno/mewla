@@ -203,6 +203,7 @@ object PhoneController {
             .put("state", state())
             .put("w", display?.get(0) ?: 0)
             .put("h", display?.get(1) ?: 0)
+            .put("display_info", displayInfo ?: JSONObject.NULL)
             .put("agent", activeWorker ?: JSONObject.NULL)
             .put("drawn", drawn)
             .put("opening", opening ?: JSONObject.NULL)
@@ -790,11 +791,15 @@ object PhoneController {
         val dpi = Math.round(app.resources.displayMetrics.densityDpi * scale).toInt().coerceAtLeast(160)
         val reply = helper.call("display", JSONObject().put("w", w).put("h", h).put("dpi", dpi))
         if (!reply.optBoolean("ok")) throw IllegalStateException(reply.optString("error", "no display"))
-        Log.i(TAG, "agent display ${w}x$h asked ${dpi}dpi, system has ${reply.optInt("effective_dpi")}dpi; phone ${reply.optInt("main_w")}x${reply.optInt("main_h")} ${reply.optInt("main_dpi")}dpi (app sees ${app.resources.displayMetrics.densityDpi}dpi ${bounds.width()}x${bounds.height()})")
+        displayInfo = "${w}x$h asked ${dpi}dpi, system ${reply.optInt("effective_dpi")}dpi; phone ${reply.optInt("main_w")}x${reply.optInt("main_h")} ${reply.optInt("main_dpi")}dpi (app sees ${app.resources.displayMetrics.densityDpi}dpi ${bounds.width()}x${bounds.height()})"
+        Log.i(TAG, "agent display $displayInfo")
         display = intArrayOf(w, h)
         publish()
         PhoneLiveViews.resume()
     }
+
+    /** The agent display's size and density next to the phone's own, as the daemon is told it. */
+    @Volatile private var displayInfo: String? = null
 
     private fun even(v: Double) = (Math.round(v / 2.0) * 2).toInt()
 

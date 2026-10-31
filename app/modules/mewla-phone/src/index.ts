@@ -37,6 +37,8 @@ export interface PhoneStatus {
   /** The agent's display size; 0 until the display exists. */
   w: number;
   h: number;
+  /** The display's density as asked and as the system has it, next to the phone's own screen; null until the display exists. */
+  display_info: string | null;
   /** The agent working now, or null. */
   agent: string | null;
   /** What the agent asked the person to do, or null. */

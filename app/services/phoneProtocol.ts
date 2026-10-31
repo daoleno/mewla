@@ -22,6 +22,8 @@ export interface PhoneStateFrame {
   h?: number;
   /** Why the helper is not up, when the state is setup. */
   problem?: string;
+  /** The agent display's density as asked and as the system has it, next to the phone's own screen. */
+  display?: string;
 }
 
 export type PhoneEventKind = "stop" | "take_over" | "give_back" | "handed_off";

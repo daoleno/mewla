@@ -94,6 +94,8 @@ type State struct {
 	H     int    `json:"h,omitempty"`
 	// Problem is why the phone is in setup when its last attempt to start the helper failed.
 	Problem string `json:"problem,omitempty"`
+	// Display is the agent display's density as asked and as the system has it, next to the phone's own screen.
+	Display string `json:"display,omitempty"`
 }
 
 // Event is something the person did on the phone.
