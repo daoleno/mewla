@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"sort"
@@ -143,4 +144,25 @@ func Label(program string, args []string) string {
 		}
 	}
 	return program
+}
+
+// systemToolDirs are where the operating system keeps its own tools (ps,
+// lsof, caffeinate). They are searched before PATH because a daemon started
+// by launchd or systemd, or a test with a narrowed PATH, may not have them on it.
+var systemToolDirs = []string{"/bin", "/usr/bin", "/usr/sbin", "/sbin"}
+
+// SystemTool is the path of an operating-system tool: the first of /bin,
+// /usr/bin, /usr/sbin and /sbin that has it, then PATH. When there is none it
+// returns name unchanged, so running it fails with the usual "not found".
+func SystemTool(name string) string {
+	for _, dir := range systemToolDirs {
+		path := dir + "/" + name
+		if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return path
+		}
+	}
+	if path, err := exec.LookPath(name); err == nil {
+		return path
+	}
+	return name
 }

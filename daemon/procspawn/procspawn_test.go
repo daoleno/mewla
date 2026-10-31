@@ -30,3 +30,13 @@ func TestHandlerListsLabelsLargestFirst(t *testing.T) {
 		t.Fatalf("body = %s", body)
 	}
 }
+
+func TestSystemToolFindsOSToolsWithoutPATH(t *testing.T) {
+	t.Setenv("PATH", "")
+	if got := SystemTool("sh"); got != "/bin/sh" && got != "/usr/bin/sh" {
+		t.Fatalf("SystemTool(sh) = %q with an empty PATH, want a system directory path", got)
+	}
+	if got := SystemTool("mewla-no-such-tool"); got != "mewla-no-such-tool" {
+		t.Fatalf("a missing tool should come back unchanged, got %q", got)
+	}
+}
