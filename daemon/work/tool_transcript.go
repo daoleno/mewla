@@ -340,17 +340,24 @@ func lsofOpenCodexRolloutPaths(processIDs []int) []string {
 	if len(ids) == 0 {
 		return nil
 	}
-	lsof, err := exec.LookPath("lsof")
-	if err != nil {
-		return nil
-	}
 	codexLookupCost.Subprocesses.Add(1)
-	out, err := procspawn.Command("lsof codex", lsof, "-w", "-p", strings.Join(ids, ","), "-Fn").Output()
-	if err != nil {
+	out, err := runLsofOpenFiles(ids)
+	if err != nil && len(out) == 0 {
 		return nil
 	}
 	return parseLsofCodexRolloutPaths(string(out))
 }
+
+// runLsofOpenFiles runs lsof -Fn for the pids. lsof exits 1 when any listed
+// process is gone or unreadable, yet still prints the files of the others, so
+// output with an exit error is kept: a descendant that exited between the
+// process listing and this run must not hide the files of its parent.
+func runLsofOpenFiles(ids []string) ([]byte, error) {
+	return procspawn.Command("lsof codex", lsofTool(), "-w", "-p", strings.Join(ids, ","), "-Fn").Output()
+}
+
+// lsofTool is lsof's path; tests replace it.
+var lsofTool = func() string { return procspawn.SystemTool("lsof") }
 
 func parseLsofCodexRolloutPaths(output string) []string {
 	var paths []string

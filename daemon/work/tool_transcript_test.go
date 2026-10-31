@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -471,6 +473,22 @@ VALUES ('019eee5e-7dec-71b1-bc2b-adcb2bad1c4c', ` + sqlString(rolloutPath) + `, 
 		t.Fatalf("findCodexTranscript: %v", err)
 	}
 	if !ok {
+		// Say what the open-file lookup saw, so a run on another OS shows which
+		// step lost the file: the process listing, lsof, or the path match.
+		pids := append([]int{os.Getpid()}, procDescendantPIDs(os.Getpid())...)
+		raw, lsofErr := runLsofOpenFiles(func() []string {
+			ids := make([]string, len(pids))
+			for i, pid := range pids {
+				ids[i] = strconv.Itoa(pid)
+			}
+			return ids
+		}())
+		rawText := string(raw)
+		if len(rawText) > 1500 {
+			rawText = rawText[:1500] + "..."
+		}
+		t.Logf("lookup diagnostics: lsof %q, pids %v, lsof error %v, open rollouts %v, lsof output:\n%s",
+			lsofTool(), pids, lsofErr, openCodexRolloutPathsForProcess(os.Getpid()), rawText)
 		t.Fatal("expected stale rollout to match while current process has it open")
 	}
 	if got.Path != rolloutPath || got.Row.ID != "019eee5e-7dec-71b1-bc2b-adcb2bad1c4c" {
@@ -636,5 +654,25 @@ func TestOpenRolloutMatchesThroughASymlinkedCodexHome(t *testing.T) {
 	gone := filepath.Join(root, "gone", filepath.Base(rollout))
 	if _, ok := matchCodexTranscriptToOpenRollouts([]codexTranscriptCandidate{{Path: gone}}, []string{gone + " (deleted)"}); !ok {
 		t.Fatal("a deleted rollout should match its own path")
+	}
+}
+
+// lsof exits 1 when a listed process is gone but still prints the others'
+// files; on macOS the process listing includes the ps that made it, which has
+// exited by the time lsof runs. The files must still be found.
+func TestLsofOpenFilesKeepsOutputWhenLsofExitsNonzero(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "lsof")
+	body := "#!/bin/sh\nprintf 'p100\\nn/home/u/.codex/sessions/2026/05/21/rollout-2026-05-21T08-00-00-x.jsonl\\n'\necho 'lsof: status error on 101: No such process' >&2\nexit 1\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	previous := lsofTool
+	lsofTool = func() string { return script }
+	defer func() { lsofTool = previous }()
+	got := lsofOpenCodexRolloutPaths([]int{100, 101})
+	want := []string{"/home/u/.codex/sessions/2026/05/21/rollout-2026-05-21T08-00-00-x.jsonl"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("paths = %v, want %v", got, want)
 	}
 }
