@@ -41,6 +41,10 @@ module.exports = () => {
     readEnv("ANDROID_DISTRIBUTION"),
     readEnv("IOS_DISTRIBUTION"),
   );
+  // Only the Preview identity has an availability feed (ios-testflight-available.yml).
+  if (extra.distribution.ios === "testflight" && iosIdentity.variant !== "preview") {
+    throw new Error("MEWLA_IOS_DISTRIBUTION=testflight requires the Preview iOS identity");
+  }
 
   return {
     ...baseConfig,
@@ -138,8 +142,8 @@ function resolveDistribution(android, ios) {
       "MEWLA_ANDROID_DISTRIBUTION must be github-apk, play-store or none",
     );
   }
-  if (!["app-store", "none"].includes(resolved.ios)) {
-    throw new Error("MEWLA_IOS_DISTRIBUTION must be app-store or none");
+  if (!["app-store", "testflight", "none"].includes(resolved.ios)) {
+    throw new Error("MEWLA_IOS_DISTRIBUTION must be app-store, testflight or none");
   }
   return resolved;
 }

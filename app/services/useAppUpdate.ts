@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 import * as Device from "expo-device";
 import { useSyncExternalStore } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, Linking, Platform } from "react-native";
 import { appVersion } from "../constants/appVersion";
 import { getAppUpdateModule } from "../modules/app-update/src";
 import {
@@ -9,23 +9,32 @@ import {
   type AndroidUpdateArtifact,
   type AppUpdateState,
   appUpdatePending,
+  installedBuild,
+  isNewerTestFlightBuild,
   isNewerVersion,
   LATEST_MANIFEST_URL,
   LATEST_SIGNATURE_URL,
   resolveDistributionChannel,
   shouldCheckForUpdate,
+  type TestFlightBuild,
+  TESTFLIGHT_MANIFEST_URL,
+  TESTFLIGHT_SIGNATURE_URL,
+  testFlightUrls,
   verifyAndroidUpdateManifest,
+  verifyTestFlightManifest,
 } from "./appUpdate";
 
 // One owner for the whole app, so a download keeps going while Settings is closed.
 // Checks run on their own (launch, return to foreground) and on a tap of the
 // About row; only a newer release puts the dot on Settings.
+const channel = resolveDistributionChannel(Platform.OS, Constants.expoConfig?.extra);
 let state: AppUpdateState = initialState();
 let lastCheckAt = 0;
 const listeners = new Set<() => void>();
 
 function initialState(): AppUpdateState {
-  const channel = resolveDistributionChannel(Platform.OS, Constants.expoConfig?.extra);
+  // TestFlight builds only learn about a newer build and open TestFlight; no native module.
+  if (channel === "testflight") return { kind: "idle" };
   if (channel !== "github-apk" || !getAppUpdateModule()) return { kind: "hidden" };
   // The GitHub APK is arm64 only; other devices can't install it.
   if (!Device.supportedCpuArchitectures?.includes(ANDROID_UPDATE_ABI)) return { kind: "hidden" };
@@ -58,12 +67,41 @@ async function fetchLatestAndroidUpdate(): Promise<AndroidUpdateArtifact | null>
   return verifyAndroidUpdateManifest(manifest, signature);
 }
 
+/** The newest TestFlight build testers can install, or null when it isn't newer than this one. */
+async function fetchNewerTestFlightBuild(): Promise<TestFlightBuild | null> {
+  const bundleIdentifier = Constants.expoConfig?.ios?.bundleIdentifier ?? "";
+  const installed = installedBuild(appVersion, Constants.expoConfig?.ios?.buildNumber);
+  if (!installed) return null;
+  const [manifest, signature] = await Promise.all([
+    fetchBytes(TESTFLIGHT_MANIFEST_URL),
+    fetchBytes(TESTFLIGHT_SIGNATURE_URL),
+  ]);
+  const build = verifyTestFlightManifest(manifest, signature, bundleIdentifier);
+  return isNewerTestFlightBuild(build, installed) ? build : null;
+}
+
+async function openTestFlight(build: TestFlightBuild) {
+  for (const url of testFlightUrls(build)) {
+    try {
+      await Linking.openURL(url);
+      return;
+    } catch (error) {
+      console.warn("[app-update] couldn't open", url, error);
+    }
+  }
+}
+
 async function check(manual = false) {
   // A failed automatic check waits for the next scheduled one, like a successful one.
   if (!shouldCheckForUpdate(state, lastCheckAt, Date.now(), manual)) return;
   lastCheckAt = Date.now();
   setState({ kind: "checking" });
   try {
+    if (channel === "testflight") {
+      const build = await fetchNewerTestFlightBuild();
+      setState(build ? { kind: "testflightAvailable", update: build } : { kind: "current" });
+      return;
+    }
     const update = await fetchLatestAndroidUpdate();
     setState(update && isNewerVersion(update.version, appVersion) ? { kind: "available", update } : { kind: "current" });
   } catch (error) {
@@ -135,6 +173,9 @@ function press() {
     case "current":
     case "checkFailed":
       void check(true);
+      return;
+    case "testflightAvailable":
+      void openTestFlight(state.update);
       return;
     case "available":
     case "failed":

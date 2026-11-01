@@ -74,6 +74,17 @@ describe("native platform config", () => {
     ).toThrow("MEWLA_IOS_DISTRIBUTION");
   });
 
+  it("marks only Preview TestFlight builds as the testflight channel", () => {
+    const preview = withIdentityEnv(
+      { MEWLA_IOS_APP_VARIANT: "preview", MEWLA_IOS_DISTRIBUTION: "testflight" },
+      () => createConfig(),
+    );
+    expect(preview.extra.distribution.ios).toBe("testflight");
+    expect(() =>
+      withIdentityEnv({ MEWLA_IOS_DISTRIBUTION: "testflight" }, () => createConfig()),
+    ).toThrow("Preview");
+  });
+
   it("routes remote push through Mewla's EAS project and FCM app without per-user setup", () => {
     expect(config.extra.eas.projectId).toBe("1b76d386-969b-4841-ae68-f32895ad2301");
     expect(config.android.googleServicesFile).toBe("./google-services.json");
