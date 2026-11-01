@@ -288,9 +288,10 @@ fact is at least 3 minutes old, so a Work Brain just created is not judged
 before its Worker starts), the Work is a candidate. A `WorkJudge` is given the
 Work's objective, its recent events including the Worker's result, and the chat
 between the user and Brain since the last event, and returns `done`,
-`cancelled` or `keep` with a reason. The production judge runs the user's own
-Claude Code once, headless, with a cheap model, no tools, no settings or hooks,
-no saved session, in an empty scratch directory. The call never runs under the
+`cancelled` or `keep` with a reason. The production judge runs the user's own Claude Code once, headless, the way
+Watch's judgment does (`watch/judge_agents.go`): Sonnet in print mode, no
+tools, MCP servers, hooks or saved session, only the user's own settings
+(they carry how this person signs in), in an empty directory. The call never runs under the
 Host lane lock.
 
 `done` and `cancelled` close the Work as actor `runtime`, pinned to the Work
