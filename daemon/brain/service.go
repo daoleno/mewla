@@ -3744,10 +3744,10 @@ func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	switch {
 	case len(fields) > 0 && func() bool { _, err := hostLookPath(fields[0]); return err != nil }():
 		problem.Code = "not_installed"
-		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not installed on this computer.", name, fields[0])
+		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not installed on this computer. Run mewla deps there to install an agent; Brain starts by itself.", name, fields[0])
 	case hostAuth(executor.ID) == HostAuthUnauthenticated:
 		problem.Code = "not_signed_in"
-		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer.", name, name)
+		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID))
 	case time.Since(processStartedAt) > hostStartGrace:
 		problem.Code = "not_started"
 		problem.Detail = fmt.Sprintf("Brain's %s session did not start. Run mewla doctor on the computer to see why.", name)

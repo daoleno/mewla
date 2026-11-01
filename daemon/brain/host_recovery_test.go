@@ -3,6 +3,7 @@ package brain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,5 +58,21 @@ func TestAnOpenButNeverReadyHostIsReportedAndRetried(t *testing.T) {
 	service.noteHostActivation(errors.New("tmux unavailable"))
 	if service.hostActivationStuck() {
 		t.Fatal("unrelated error marked the host not ready")
+	}
+}
+
+// Every problem the computer states ends with what to do about it.
+func TestHostProblemDetailsNameTheNextStep(t *testing.T) {
+	processStartedAt = processStartedAt.Add(-time.Hour)
+	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
+	missing := hostFixture(t, map[string]bool{}, nil)
+	problem := missing.hostProblem(missing.hostExecutor())
+	if problem == nil || problem.Code != "not_installed" || !strings.Contains(problem.Detail, "mewla deps") {
+		t.Fatalf("not installed: %+v", problem)
+	}
+	signedOut := hostFixture(t, map[string]bool{"claude": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated})
+	problem = signedOut.hostProblem(signedOut.hostExecutor())
+	if problem == nil || problem.Code != "not_signed_in" || !strings.Contains(problem.Detail, "claude auth login") {
+		t.Fatalf("not signed in: %+v", problem)
 	}
 }

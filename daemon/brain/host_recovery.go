@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
@@ -108,4 +109,15 @@ func (s *Service) hostHoldsNoConversation(host HostSession) bool {
 	}
 	_, hasTurn, err := s.store.Turn(host.ID)
 	return err == nil && !hasTurn
+}
+
+// hostSignInStep is the sentence that tells a person how to sign in to an agent
+// on the computer: its official login command where Mewla knows it.
+func hostSignInStep(executorID string) string {
+	for _, agent := range hostdeps.Agents(hostdeps.Detect()) {
+		if agent.ID == executorID && agent.Login != "" {
+			return "Run " + agent.Login
+		}
+	}
+	return "Sign in to " + executorID + " by running it"
 }
