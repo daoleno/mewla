@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -260,6 +261,50 @@ func TestUserTextNeverSaysLink(t *testing.T) {
 	} {
 		if got := UserText(message); strings.Contains(got, "Link") {
 			t.Fatalf("%q -> %q", message, got)
+		}
+	}
+}
+
+// An iPhone's WebSocket stack cannot speak TLS 1.3 (the handshake failed with
+// -9836 against a TLS 1.3-only computer), so the hosted hostname accepts TLS
+// 1.2; the transport certificate path, which pinned phones and relays use,
+// stays TLS 1.3.
+func TestHostedHostnameAcceptsTLS12ButTheTransportPathStaysTLS13(t *testing.T) {
+	identity, err := link.LoadOrCreateTransportIdentity(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosted := identity.Certificate
+	certs := &CertManager{cert: &hosted}
+	const hostname = "studio-3f9a2c.mewla.test"
+	config := ServerTLSConfig(identity.Certificate, hostname, certs)
+
+	handshake := func(serverName string, min, max uint16) (uint16, error) {
+		clientConn, serverConn := net.Pipe()
+		defer clientConn.Close()
+		defer serverConn.Close()
+		server := tls.Server(serverConn, config)
+		go func() { _ = server.Handshake() }()
+		_ = clientConn.SetDeadline(time.Now().Add(5 * time.Second))
+		client := tls.Client(clientConn, &tls.Config{
+			ServerName: serverName, MinVersion: min, MaxVersion: max, InsecureSkipVerify: true,
+		})
+		err := client.Handshake()
+		return client.ConnectionState().Version, err
+	}
+
+	if version, err := handshake(hostname, tls.VersionTLS12, tls.VersionTLS12); err != nil || version != tls.VersionTLS12 {
+		t.Fatalf("TLS 1.2 for the hosted hostname: version %x err %v", version, err)
+	}
+	if version, err := handshake(hostname, tls.VersionTLS13, tls.VersionTLS13); err != nil || version != tls.VersionTLS13 {
+		t.Fatalf("TLS 1.3 for the hosted hostname: version %x err %v", version, err)
+	}
+	for _, name := range []string{"other-111111.mewla.test", ""} {
+		if _, err := handshake(name, tls.VersionTLS12, tls.VersionTLS12); err == nil {
+			t.Fatalf("TLS 1.2 was accepted for %q, which is the TLS 1.3-only transport path", name)
+		}
+		if _, err := handshake(name, tls.VersionTLS13, tls.VersionTLS13); err != nil {
+			t.Fatalf("TLS 1.3 for %q: %v", name, err)
 		}
 	}
 }
