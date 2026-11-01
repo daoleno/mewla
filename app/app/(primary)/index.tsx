@@ -74,7 +74,7 @@ import {
   BrainCompanionContext,
   type BrainCompanion,
 } from "../../components/mewla/BrainCompanion";
-import { brainCatTap, presenceWorkGroup, resolveBrainCatPresence } from "../../components/mewla/brainCatState";
+import { brainCatTap, brainEmptyCopy, presenceWorkGroup, resolveBrainCatPresence } from "../../components/mewla/brainCatState";
 import {
   brainWorkActions,
   brainWorkAskDraft,
@@ -87,9 +87,6 @@ import { confirmDestructive } from "../../components/ui/confirmDestructive";
 import { useToast } from "../../components/ui/Toast";
 import { BrainStatusState } from "../../components/mewla/BrainStatusState";
 
-const BRAIN_EMPTY_TITLE = "Ready when you are";
-const BRAIN_EMPTY_BODY =
-  "Brain naps in the seal until you ask, then gets to work and brings back what it finds.";
 
 export default function BrainScreen() {
   const router = useRouter();
@@ -790,8 +787,9 @@ export default function BrainScreen() {
                 onSwitchToTerminal={openBrainTerminal}
                 // Brain is who you talk to; the host executor is an implementation detail.
                 placeholder="Tell Brain…"
-                emptyTitle={BRAIN_EMPTY_TITLE}
-                emptyBody={BRAIN_EMPTY_BODY}
+                // An empty chat must not say "Ready" while the computer is out of reach.
+                emptyTitle={brainEmptyCopy(brainCompanion.presence).title}
+                emptyBody={brainEmptyCopy(brainCompanion.presence).body}
                 renderComposerAccessory={brainWaking ? undefined : renderBrainComposerAccessory}
                 composerPickerOpen={brainWaking ? undefined : brainMentionPickerOpen}
                 composerModelControl={brainWaking ? null : brainModelSheet.composerControl}
