@@ -72,6 +72,10 @@ type Service struct {
 	// defaultHostLogged logs once which agent Brain picked by default when
 	// more than one is installed and none was chosen.
 	defaultHostLogged sync.Once
+	// hostProblemKey is the host problem last logged, so a failing host is
+	// named once when it starts failing and once when it recovers.
+	hostProblemMu  sync.Mutex
+	hostProblemKey string
 
 	// sessionConversationHook overrides the provider conversation reader for
 	// the Session projection surface. Tests inject sanitized fixtures; nil
@@ -631,9 +635,7 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	}
 	hostExecutor.Host = true
 	snapshot.HostExecutor = &hostExecutor
-	if host.ID == "" {
-		snapshot.HostProblem = s.hostProblem(hostExecutor)
-	}
+	snapshot.HostProblem = s.projectHostProblem(host, hostExecutor)
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
@@ -681,9 +683,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	}
 	hostExecutor.Host = true
 	snapshot.HostExecutor = &hostExecutor
-	if host.ID == "" {
-		snapshot.HostProblem = s.hostProblem(hostExecutor)
-	}
+	snapshot.HostProblem = s.projectHostProblem(host, hostExecutor)
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
@@ -3663,6 +3663,44 @@ func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 const hostStartGrace = 45 * time.Second
 
 var processStartedAt = time.Now()
+
+// hostObserved is whether the Brain host the store recorded is a Session the
+// watcher sees. A recorded host whose pane is gone still projects as a
+// WorkerRef ("Session not observed"), so the id alone does not mean it runs.
+func (s *Service) hostObserved(id string) bool {
+	if strings.TrimSpace(id) == "" {
+		return false
+	}
+	if s == nil || s.watcher == nil {
+		return true
+	}
+	return s.watcher.GetWorker(id) != nil
+}
+
+// projectHostProblem is the problem to put on the snapshot, nil while the host
+// runs. A change is logged once: without it a host that never starts leaves no
+// line anywhere while the phone waits.
+func (s *Service) projectHostProblem(host WorkerRef, executor work.WorkerExecutor) *HostProblem {
+	var problem *HostProblem
+	if !s.hostObserved(host.ID) {
+		problem = s.hostProblem(executor)
+	}
+	key := ""
+	if problem != nil {
+		key = problem.Code + ":" + problem.Executor
+	}
+	s.hostProblemMu.Lock()
+	previous := s.hostProblemKey
+	s.hostProblemKey = key
+	s.hostProblemMu.Unlock()
+	switch {
+	case key != previous && problem != nil:
+		log.Printf("brain host problem: %s (%s): %s", problem.Code, problem.Executor, problem.Detail)
+	case key != previous:
+		log.Printf("brain host problem cleared")
+	}
+	return problem
+}
 
 // hostProblem names why there is no Brain host. A command that is not
 // installed or an agent verified signed out is certain and reported at once;

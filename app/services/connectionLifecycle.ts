@@ -95,7 +95,9 @@ export function brainScreenSurface({
   hostProblem?: boolean;
 }): "chat" | "waking" | "status" | "unavailable" | "host_down" {
   if (!hasServer) return "status";
-  if (connection !== "offline" && hydrated && !hasHostWorker && hostProblem) return "host_down";
+  // The computer only states a problem while the host is not running, even if it
+  // still records the host's id, so it outranks "has a host worker".
+  if (connection !== "offline" && hydrated && hostProblem) return "host_down";
   if (!shouldShowBrainLoadingState({ hydrated, hasHostWorker })) {
     return structuredEvents ? "chat" : "unavailable";
   }
