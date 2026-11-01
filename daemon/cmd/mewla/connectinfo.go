@@ -371,6 +371,13 @@ func printFirstDevicePairing(w io.Writer, manager *auth.Manager, book *addressbo
 	if len(manager.ListDevices()) != 0 {
 		return false, nil
 	}
+	// With remote access on, the phone QR is a Mewla Link pairing that only
+	// mewla pair can make once this computer's route is registered. The one
+	// built here from the address book would be the hosted address as a direct
+	// pairing, which an iPhone cannot connect to, so leave it to mewla pair.
+	if _, remoteOn, _ := remote.LoadRemote(manager.StorageDir()); remoteOn {
+		return false, nil
+	}
 	if !interactive {
 		fmt.Fprintf(w, "No phone or browser is paired yet. Run %s to show a pairing code.\n", pairCommand(stateDir))
 		return false, nil

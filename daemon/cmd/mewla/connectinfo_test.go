@@ -24,6 +24,7 @@ import (
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/link"
+	"github.com/daoleno/mewla/daemon/remote"
 )
 
 func TestNormalizeEndpoint(t *testing.T) {
@@ -1097,5 +1098,37 @@ func TestPrivateLogFileTightensAnExistingLog(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+// With remote access on, the QR built from the address book would be the hosted
+// address as a direct pairing; mewla pair makes the Link one once the route is
+// registered, so the daemon's own startup prints no phone QR.
+func TestFirstDeviceStartupLeavesTheQRToPairWhenRemoteAccessIsOn(t *testing.T) {
+	manager, err := auth.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := addressbook.New(manager.StorageDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = book.Add("https://studio-3f9a2c.mewla.test", addressbook.SourceManual)
+	if err := remote.SaveConfig(manager.StorageDir(), remote.Config{
+		ServiceURL:   "https://svc.test",
+		RemoteAccess: true,
+		Machine: remote.Machine{
+			MachineID: "mach_1", AccountLogin: "octo", Hostname: "studio-3f9a2c.mewla.test",
+			Label: "studio-3f9a2c", RouteID: strings.Repeat("ab", 16), Grant: "g",
+			GrantExpiresAtMS: time.Now().Add(time.Hour).UnixMilli(),
+			Relays:           []remote.Relay{{Name: "r1", ControlAddress: "127.0.0.1:1", ControlServerName: "relay.test", ClientDomain: "mewla.test", ClientPort: 19443}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	printed, err := printFirstDevicePairing(&output, manager, book, "", true)
+	if err != nil || printed || output.Len() != 0 {
+		t.Fatalf("printed = %v, err = %v, output:\n%s", printed, err, output.String())
 	}
 }

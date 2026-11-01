@@ -2443,12 +2443,12 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		return fmt.Errorf("build pairing links: %w", err)
 	}
 	if phoneAddress == "" {
-		connectLink, address, err := buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing)
-		if err != nil {
-			// One more try: the admission crosses the relay and a slow or lossy
-			// path can lose the first.
-			connectLink, address, err = buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing)
-		}
+		connectLink, address, err := requestRemotePairingLink(
+			func() (string, string, error) {
+				return buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing)
+			},
+			remotePairingBudget, time.Now, time.Sleep, stderr,
+		)
 		remoteURL := ""
 		if config, ok, _ := remote.LoadRemote(stateDir); ok {
 			remoteURL = config.URL()
