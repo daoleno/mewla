@@ -430,6 +430,13 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	wireDeadline := time.Now().Add(3 * time.Second)
+	for !strings.Contains(logs.String(), "pairing stream via local closed") {
+		if time.Now().After(wireDeadline) {
+			t.Fatalf("pairing stream left no wire account: %q", logs.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 
 	if _, err := dialPinnedLink(
 		clientListener.Addr().String(),
