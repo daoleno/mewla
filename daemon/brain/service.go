@@ -74,8 +74,10 @@ type Service struct {
 	defaultHostLogged sync.Once
 	// hostProblemKey is the host problem last logged, so a failing host is
 	// named once when it starts failing and once when it recovers.
-	hostProblemMu  sync.Mutex
-	hostProblemKey string
+	hostProblemMu    sync.Mutex
+	hostProblemKey   string
+	hostProblemSince time.Time
+	lastHostHeal     time.Time
 
 	// sessionConversationHook overrides the provider conversation reader for
 	// the Session projection surface. Tests inject sanitized fixtures; nil
@@ -900,7 +902,13 @@ func (s *Service) ReadWorkspaceFile(path string) (WorkspaceFile, error) {
 	return s.store.ReadWorkspaceFile(path)
 }
 
+// SetHostExecutor is a person's choice of Brain's agent: it is kept, and Mewla
+// never moves Brain off it by itself.
 func (s *Service) SetHostExecutor(executorID string) (Snapshot, error) {
+	return s.setHostExecutor(executorID, true)
+}
+
+func (s *Service) setHostExecutor(executorID string, explicit bool) (Snapshot, error) {
 	if s == nil || s.store == nil {
 		return Snapshot{}, fmt.Errorf("brain store is not configured")
 	}
@@ -923,7 +931,11 @@ func (s *Service) SetHostExecutor(executorID string) (Snapshot, error) {
 	if host, err := s.store.HostSession(); err == nil {
 		previousHost = host
 	}
-	if err := s.store.SetHostExecutorID(executor.ID); err != nil {
+	setExecutor := s.store.setImplicitHostExecutorID
+	if explicit {
+		setExecutor = s.store.SetHostExecutorID
+	}
+	if err := setExecutor(executor.ID); err != nil {
 		return Snapshot{}, err
 	}
 	snapshot, err := s.EnsureHostSnapshot()
@@ -3692,6 +3704,12 @@ func (s *Service) projectHostProblem(host WorkerRef, executor work.WorkerExecuto
 	s.hostProblemMu.Lock()
 	previous := s.hostProblemKey
 	s.hostProblemKey = key
+	if key != previous {
+		s.hostProblemSince = time.Time{}
+		if key != "" {
+			s.hostProblemSince = time.Now()
+		}
+	}
 	s.hostProblemMu.Unlock()
 	switch {
 	case key != previous && problem != nil:
@@ -3759,6 +3777,85 @@ func (s *Service) verifiedAlternativeHost(current string) string {
 		}
 	}
 	return ""
+}
+
+const (
+	hostHealInterval = 30 * time.Second
+	// hostHealGrace is how long a host that simply has not started may stay
+	// down before Brain moves to an agent verified signed in. Not installed or
+	// verified signed out is certain and moves at once.
+	hostHealGrace    = 2 * time.Minute
+	hostHealCooldown = 5 * time.Minute
+)
+
+// RunHostSelfHeal keeps onboarding from leaving a person stuck: Brain's agent
+// that Mewla picked by default (never one a person chose) and that turns out
+// not installed, not signed in or not starting moves to an installed agent
+// verified signed in.
+func (s *Service) RunHostSelfHeal(ctx context.Context) {
+	if s == nil || s.store == nil {
+		return
+	}
+	ticker := time.NewTicker(hostHealInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.healImplicitHost()
+		}
+	}
+}
+
+// healImplicitHost moves a default-picked, failing host to a verified agent and
+// reports whether it moved. An agent a person chose, an environment override
+// and a host with nothing verified to move to are all left alone.
+func (s *Service) healImplicitHost() bool {
+	if s == nil || s.store == nil || brainHostExecutorOverride() != "" {
+		return false
+	}
+	if s.store.HostExecutorExplicit() != "" {
+		return false
+	}
+	executor := s.hostExecutor()
+	host, err := s.projectedHostWorker(executor)
+	if err != nil {
+		return false
+	}
+	problem := s.projectHostProblem(host, executor)
+	target, reason := "", ""
+	switch {
+	case problem != nil && (problem.Code == "not_installed" || problem.Code == "not_signed_in"):
+		target, reason = problem.SuggestExecutor, problem.Code
+	case problem != nil && problem.Code == "not_started":
+		s.hostProblemMu.Lock()
+		since := s.hostProblemSince
+		s.hostProblemMu.Unlock()
+		if !since.IsZero() && time.Since(since) >= hostHealGrace {
+			target, reason = problem.SuggestExecutor, problem.Code
+		}
+	case problem == nil && hostAuth(executor.ID) == HostAuthUnauthenticated:
+		// The host runs, but its agent sits at a sign-in prompt.
+		target, reason = s.verifiedAlternativeHost(executor.ID), string(HostAuthUnauthenticated)
+	}
+	if target == "" || target == executor.ID {
+		return false
+	}
+	s.hostProblemMu.Lock()
+	recent := !s.lastHostHeal.IsZero() && time.Since(s.lastHostHeal) < hostHealCooldown
+	if !recent {
+		s.lastHostHeal = time.Now()
+	}
+	s.hostProblemMu.Unlock()
+	if recent {
+		return false
+	}
+	log.Printf("brain host: %s is not working (%s) and was not chosen by you; moving Brain to %s, which is signed in. Choose your own: mewla brain use <agent>", executor.ID, reason, target)
+	if _, err := s.setHostExecutor(target, false); err != nil {
+		log.Printf("brain host: moving to %s failed: %v", target, err)
+	}
+	return true
 }
 
 func hostAuthRank(state HostAuthState) int {
