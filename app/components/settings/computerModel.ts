@@ -47,7 +47,9 @@ export interface ComputerProblem {
 /**
  * The things on a computer someone can act on, one line each. States nothing
  * can change from here (a headless server without a desktop, a screen agents
- * can't use on this system, tools still getting ready) show nothing.
+ * can't use on this system, tools still getting ready) show nothing, and so do
+ * a missing Chrome or Node.js: they are not a problem for someone who never
+ * started browser setup. Browser use stays reachable through one quiet row.
  */
 export function computerProblems(status: AgentUseStatus | null): ComputerProblem[] {
   if (!status) return [];
@@ -65,10 +67,12 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
   const browser = status.browser;
   switch (browser.state) {
     case "no_extension":
+      // Not a problem: nobody has started browser setup. One plain row is the
+      // way in; the person who taps it is then walked through the rest.
       problems.push({
         key: "browser",
-        text: "Chrome needs the Playwright extension.",
-        action: { label: "Add extension", does: { kind: "fix", fix: browser.fix ?? "install_extension", target: "browser" } },
+        text: "Let agents use Chrome",
+        action: { label: "Set up", does: { kind: "fix", fix: browser.fix ?? "install_extension", target: "browser" } },
       });
       break;
     case "no_key":
@@ -87,12 +91,6 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
         action: { label: "Paste key", does: { kind: "paste_key" } },
       });
       break;
-    case "no_chrome":
-      problems.push({ key: "browser", text: "Install Google Chrome so agents can use a browser." });
-      break;
-    case "no_node":
-      problems.push({ key: "browser", text: "Install a recent Node.js so agents can use a browser." });
-      break;
     case "failed":
       problems.push({
         key: "browser",
@@ -101,7 +99,7 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
       });
       break;
     default:
-      // ready, off, preparing, no_desktop: nothing to do from here.
+      // ready, off, preparing, no_desktop, no_chrome, no_node: nothing to show.
       break;
   }
 

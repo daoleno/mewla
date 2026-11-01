@@ -9,9 +9,10 @@ leave your other tabs alone. Nothing to configure; there is one switch.
 
 It is on unless you turn it off. The first time, Chrome needs one extension:
 
-1. Open **Settings** and tap the computer. Its page reads *Chrome needs the
-   Playwright extension.*
-2. Tap **Add extension**. Chrome on that computer opens the Playwright
+1. Open **Settings** and tap the computer. Its page has a quiet row,
+   *Let agents use Chrome*. A missing Chrome or Node.js is not shown there as a
+   problem; `mewla agent-use` on the computer says what is missing.
+2. Tap **Set up**. Chrome on that computer opens the Playwright
    Extension in the Chrome Web Store. Click **Add to Chrome** there, or
    through [Screen](screen.md) if you are not at the computer.
 3. The extension shows a key (`PLAYWRIGHT_MCP_EXTENSION_TOKEN`) on its own
@@ -62,7 +63,7 @@ the Mac's Chrome. See [Your other computers](computers.md).
 | The row says | What to do |
 | --- | --- |
 | Google Chrome isn't installed | Install Google Chrome. Chrome from Flatpak or Snap is not supported. |
-| Add the Playwright extension to Chrome | Tap the row below it, then **Add to Chrome**. |
+| Let agents use Chrome | Tap **Set up**, then **Add to Chrome**. |
 | Open the Playwright extension in Chrome and copy its key | Tap **Open it**, copy the key the extension shows, then run `mewla agent-use key` on the computer and paste it (or tap **Paste key** to use your phone's clipboard). |
 | Sign in to this computer's desktop | On Linux, agents open Chrome in your desktop session. With nobody signed in to the desktop there is no Chrome to use; sign in and the row turns ready. |
 | Install Node.js 20 or later | Install Node.js on that computer; Mewla finds it in the usual places, including version managers. |

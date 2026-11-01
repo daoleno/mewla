@@ -37,13 +37,20 @@ describe("computerStatusWord", () => {
 });
 
 describe("computerProblems", () => {
-  test("a Mac without the extension shows one line and one button", () => {
+  test("a Mac without the extension shows one neutral row that starts setup, not a problem", () => {
     const problems = computerProblems(macMissingExtension);
     expect(problems).toHaveLength(1);
-    expect(problems[0].text).toBe("Chrome needs the Playwright extension.");
-    expect(problems[0].action?.label).toBe("Add extension");
+    expect(problems[0].text).toBe("Let agents use Chrome");
+    expect(problems[0].text).not.toMatch(/needs|Playwright/);
+    expect(problems[0].action?.label).toBe("Set up");
     expect(problems[0].action?.does).toEqual({ kind: "fix", fix: "install_extension", target: "browser" });
     expect(computerProblemsMayChange(macMissingExtension)).toBe(true);
+  });
+
+  test("a missing Chrome or Node.js is not shown to someone who never started setup", () => {
+    for (const state of ["no_chrome", "no_node"] as const) {
+      expect(computerProblems({ ...macMissingExtension, browser: { state, summary: "" } })).toEqual([]);
+    }
   });
 
   test("a headless Linux server shows nothing and is not polled", () => {
