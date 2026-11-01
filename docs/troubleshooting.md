@@ -112,6 +112,11 @@ Authorization header are never logged.
   user that runs `mewla`. One is enough. The Brain tab says which step is
   missing (`mewla deps` installs one, `claude auth login` or `codex login`
   signs in) and leaves that screen by itself once it is done; no restart needed.
+- `mewla doctor` also asks the running Mewla and warns when an agent is ready in
+  your terminal but not for Mewla: a sign-in that lives in your shell's
+  environment (an API key or token you export) is invisible to Mewla when it
+  starts at login. Sign in once with the agent's own login so it is kept for
+  every program, or stop Mewla and start it again from that terminal.
 - If the Brain tab says its agent is "open but not ready", the agent is waiting
   at a sign-in or first-run question in its terminal. Run that agent once on the
   computer, finish its questions, and Brain continues.
