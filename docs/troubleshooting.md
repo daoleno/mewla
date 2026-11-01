@@ -116,7 +116,11 @@ Authorization header are never logged.
   your terminal but not for Mewla: a sign-in that lives in your shell's
   environment (an API key or token you export) is invisible to Mewla when it
   starts at login. Sign in once with the agent's own login so it is kept for
-  every program, or stop Mewla and start it again from that terminal.
+  every program, or stop Mewla and start it again from that terminal. It also
+  warns the other way: when the running Mewla has an agent signed in that your
+  terminal does not see (a different PATH or environment), Brain uses the running
+  Mewla's view, not the terminal's. `mewla doctor` looks for agents where Mewla
+  does: on PATH, then `~/.local/bin` and the other native-installer folders.
 - If the Brain tab says its agent is "open but not ready", the agent is waiting
   at a sign-in or first-run question in its terminal. Run that agent once on the
   computer, finish its questions, and Brain continues.
