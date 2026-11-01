@@ -8,6 +8,8 @@
 export interface PairSegment {
   name: string;
   ms: number;
+  /** What happened in that hop, e.g. the error a request ended with. */
+  detail?: string;
 }
 
 /** A pairing slower than this (the confirm prompt is the person's, not ours) says where it went. */
@@ -27,9 +29,11 @@ export class PairTimeline {
   }
 
   /** Closes the hop that ran since the previous mark under `name`. */
-  mark(name: string): void {
+  mark(name: string, detail?: string): void {
     const at = this.now();
-    this.marks.push({ name, ms: Math.max(0, at - this.last) });
+    this.marks.push(
+      detail ? { name, ms: Math.max(0, at - this.last), detail } : { name, ms: Math.max(0, at - this.last) },
+    );
     this.last = at;
   }
 
@@ -180,8 +184,8 @@ export function abandonPairTimeline(reason: string): PairTimelineReport | null {
 }
 
 /** Marks the running pairing, if any. */
-export function markPairTimeline(name: string): void {
-  active?.mark(name);
+export function markPairTimeline(name: string, detail?: string): void {
+  active?.mark(name, detail);
 }
 
 export function slowPairingToast(finished: PairTimelineReport): {

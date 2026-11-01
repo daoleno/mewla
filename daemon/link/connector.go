@@ -370,6 +370,7 @@ func (connector *Connector) serveStream(
 	candidate RelayCandidate,
 	open linkproto.Message,
 ) error {
+	streamOpened := time.Now()
 	conn, err := dialControl(ctx, connector.config, candidate)
 	if err != nil {
 		return err
@@ -413,7 +414,7 @@ func (connector *Connector) serveStream(
 	}
 	handler := connector.handler
 	if open.Alias != "" {
-		handler = connector.pairingAdmissionHandler(ctx, candidate, open)
+		handler = connector.pairingAdmissionHandler(ctx, candidate, open, streamOpened)
 	}
 	if client != nil {
 		handler = withClientAddr(handler, client)
@@ -449,10 +450,26 @@ func (connector *Connector) pairingAdmissionHandler(
 	ctx context.Context,
 	candidate RelayCandidate,
 	open linkproto.Message,
+	streamOpened time.Time,
 ) http.Handler {
 	var consumeOnce sync.Once
 	var consumeErr error
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		// One line per pairing says when the phone's request arrived, how long
+		// the relay commit took and what was answered, so a pairing that looks
+		// stuck on the phone can be placed on this side or the other.
+		arrived := time.Since(streamOpened)
+		var commit time.Duration
+		recorder := &answerRecorder{ResponseWriter: writer}
+		writer = recorder
+		defer func() {
+			log.Printf(
+				"Mewla Link pairing admission via %s: %s %s arrived %s after the stream opened, relay commit %s, answered %d (%d bytes) after %s",
+				candidate.Name, request.Method, request.URL.Path,
+				arrived.Round(time.Millisecond), commit.Round(time.Millisecond),
+				recorder.status, recorder.bytes, time.Since(streamOpened).Round(time.Millisecond),
+			)
+		}()
 		writer.Header().Set("Connection", "close")
 		request.Close = true
 		if request.Method != http.MethodPost || request.URL.Path != "/pair" {
@@ -464,6 +481,8 @@ func (connector *Connector) pairingAdmissionHandler(
 			return
 		}
 		consumeOnce.Do(func() {
+			committing := time.Now()
+			defer func() { commit = time.Since(committing) }()
 			consumeErr = connector.consumeAdmission(ctx, candidate, open)
 			if consumeErr != nil {
 				log.Printf("Mewla Link pairing admission via %s was not committed: %v", candidate.Name, consumeErr)
@@ -973,3 +992,29 @@ func connectionTLSHandler(conn net.Conn, next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// answerRecorder remembers the status and size of what a handler answered.
+type answerRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (recorder *answerRecorder) WriteHeader(status int) {
+	if recorder.status == 0 {
+		recorder.status = status
+	}
+	recorder.ResponseWriter.WriteHeader(status)
+}
+
+func (recorder *answerRecorder) Write(data []byte) (int, error) {
+	if recorder.status == 0 {
+		recorder.status = http.StatusOK
+	}
+	written, err := recorder.ResponseWriter.Write(data)
+	recorder.bytes += written
+	return written, err
+}
+
+// Unwrap lets http.ResponseController reach the real writer.
+func (recorder *answerRecorder) Unwrap() http.ResponseWriter { return recorder.ResponseWriter }

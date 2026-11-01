@@ -67,6 +67,14 @@ public final class LinkTransportModule: Module {
       self.stopAll()
     }
 
+    // What the tunnel saw, hop by hop, for a pairing that did not finish.
+    AsyncFunction("events") { (key: String) -> [String] in
+      self.lock.lock()
+      let proxy = self.proxies[key]
+      self.lock.unlock()
+      return proxy?.events.snapshot() ?? []
+    }
+
     OnDestroy {
       self.stopAll()
     }
@@ -129,6 +137,30 @@ private func validate(
   }
 }
 
+// A short, capped account of one tunnel's life: connections, TLS states and the
+// size and time of every chunk that crossed, so a request that gets no answer
+// can be placed on the phone, the relay or the computer.
+fileprivate final class TunnelEvents {
+  private let lock = NSLock()
+  private let started = DispatchTime.now().uptimeNanoseconds
+  private var lines: [String] = []
+
+  func add(_ text: String) {
+    let elapsed = (DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+    lock.lock()
+    if lines.count < 120 {
+      lines.append("+\(elapsed)ms \(text)")
+    }
+    lock.unlock()
+  }
+
+  func snapshot() -> [String] {
+    lock.lock()
+    defer { lock.unlock() }
+    return lines
+  }
+}
+
 private final class PinnedProxy {
   private let registryOwner = UUID()
   // File-visible so LinkTransportModule can read start(completion:) payload fields.
@@ -143,6 +175,7 @@ private final class PinnedProxy {
   private let measureBeforeListen: Bool
   private let queue = DispatchQueue(label: "dev.mewla.link.transport")
   private let lock = NSLock()
+  fileprivate let events = TunnelEvents()
   private var listener: NWListener?
   private var connections: [ObjectIdentifier: Bridge] = [:]
   private var stopped = false
@@ -305,7 +338,8 @@ private final class PinnedProxy {
       return
     }
 
-    let bridge = Bridge(local: local, remote: makeRemoteConnection()) { [weak self] identifier in
+    events.add("accepted a local connection")
+    let bridge = Bridge(local: local, remote: makeRemoteConnection(), events: events) { [weak self] identifier in
       self?.lock.lock()
       self?.connections.removeValue(forKey: identifier)
       self?.lock.unlock()
@@ -379,6 +413,7 @@ fileprivate func subjectPublicKeyInfoPrefix(forRawKeyCount count: Int) -> Data? 
 private final class Bridge {
   private let local: NWConnection
   private let remote: NWConnection
+  private let events: TunnelEvents
   private let finished: (ObjectIdentifier) -> Void
   private let lock = NSLock()
   private var directionsFinished = 0
@@ -387,21 +422,27 @@ private final class Bridge {
   init(
     local: NWConnection,
     remote: NWConnection,
+    events: TunnelEvents,
     finished: @escaping (ObjectIdentifier) -> Void
   ) {
     self.local = local
     self.remote = remote
+    self.events = events
     self.finished = finished
   }
 
   func start(queue: DispatchQueue) {
+    local.stateUpdateHandler = { [events = self.events] state in
+      events.add("local \(state)")
+    }
     local.start(queue: queue)
     remote.stateUpdateHandler = { [weak self] state in
       guard let self else { return }
+      self.events.add("remote \(state)")
       switch state {
       case .ready:
-        self.pump(from: self.local, to: self.remote)
-        self.pump(from: self.remote, to: self.local)
+        self.pump(from: self.local, to: self.remote, label: "up")
+        self.pump(from: self.remote, to: self.local, label: "down")
       case .failed, .cancelled:
         self.stop()
       default:
@@ -419,15 +460,17 @@ private final class Bridge {
     }
     stopped = true
     lock.unlock()
+    events.add("bridge stopped")
     local.cancel()
     remote.cancel()
     finished(ObjectIdentifier(self))
   }
 
-  private func pump(from source: NWConnection, to destination: NWConnection) {
+  private func pump(from source: NWConnection, to destination: NWConnection, label: String) {
     source.receive(minimumIncompleteLength: 1, maximumLength: 32 * 1024) {
       [weak self] data, _, complete, error in
       guard let self else { return }
+      self.events.add("\(label) read \(data?.count ?? 0)B complete=\(complete) error=\(String(describing: error))")
       if let error {
         _ = error
         self.stop()
@@ -437,12 +480,13 @@ private final class Bridge {
         content: data,
         isComplete: complete,
         completion: .contentProcessed { sendError in
+          self.events.add("\(label) wrote \(data?.count ?? 0)B error=\(String(describing: sendError))")
           if sendError != nil {
             self.stop()
           } else if complete {
             self.directionFinished()
           } else {
-            self.pump(from: source, to: destination)
+            self.pump(from: source, to: destination, label: label)
           }
         }
       )

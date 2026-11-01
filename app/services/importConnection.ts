@@ -23,6 +23,7 @@ import { resolveBrowserPairingURL } from "./browserPairingOrigin";
 import { confirmPairingScope } from "./confirmPairingScope";
 import { PairingCancelledError } from "./pairingScope";
 import {
+  pairingLinkTunnelEvents,
   releasePairingConfirmTransport,
   releasePairingLinkTransport,
   resolvePairingConfirmURL,
@@ -152,6 +153,9 @@ async function pairOverLink(
       transport: "link",
     });
   } catch (error) {
+    // The tunnel is still open here: what it saw is the only account of where
+    // an answer that never came was lost.
+    markPairTimeline("pair-tunnel", (await pairingLinkTunnelEvents(link.routeId)).join(" | "));
     if (
       !(error instanceof PairingUnreachableError) &&
       !(error instanceof PairingCodeRejectedError)

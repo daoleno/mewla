@@ -17,6 +17,7 @@ interface LinkTransportNativeModule {
   ): Promise<PinnedTunnelResult>;
   stop(key: string): Promise<void>;
   stopAll(): Promise<void>;
+  events?(key: string): Promise<string[]>;
 }
 
 let cached: LinkTransportNativeModule | null | undefined;
@@ -54,4 +55,13 @@ export function stopPinnedTunnel(key: string): Promise<void> {
 
 export function stopAllPinnedTunnels(): Promise<void> {
   return nativeModule().stopAll();
+}
+
+/** What a tunnel saw, for a pairing that did not finish; empty where there is nothing to say. */
+export async function pinnedTunnelEvents(key: string): Promise<string[]> {
+  try {
+    return (await nativeModule().events?.(key)) ?? [];
+  } catch {
+    return [];
+  }
 }

@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net"
 	"net/http"
@@ -36,7 +37,29 @@ import (
 
 const testConnectorToken = "0123456789abcdef0123456789abcdef"
 
+// lockedBuffer collects log output from the connector's goroutines.
+type lockedBuffer struct {
+	mu   sync.Mutex
+	data bytes.Buffer
+}
+
+func (buffer *lockedBuffer) Write(p []byte) (int, error) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.data.Write(p)
+}
+
+func (buffer *lockedBuffer) String() string {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.data.String()
+}
+
 func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
+	logs := &lockedBuffer{}
+	previousOutput := log.Writer()
+	log.SetOutput(logs)
+	t.Cleanup(func() { log.SetOutput(previousOutput) })
 	relayTLS, relayRoots, relayServerName := relayTLSFixture(t)
 	clientListener := listenLocal(t)
 	controlTCP := listenLocal(t)
@@ -396,6 +419,17 @@ func TestOpaqueRelayConnectorHealthAndAdmissionReplay(t *testing.T) {
 		}
 	}
 	pathsMu.Unlock()
+
+	// The pairing leaves one line saying when its request arrived and what
+	// was answered, so a pairing that looks stuck on the phone can be placed.
+	deadline := time.Now().Add(2 * time.Second)
+	for !strings.Contains(logs.String(), "pairing admission via local: POST /pair") ||
+		!strings.Contains(logs.String(), "answered 200") {
+		if time.Now().After(deadline) {
+			t.Fatalf("pairing admission left no account of the request: %q", logs.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 
 	if _, err := dialPinnedLink(
 		clientListener.Addr().String(),

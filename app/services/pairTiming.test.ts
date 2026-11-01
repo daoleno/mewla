@@ -32,6 +32,18 @@ describe("PairTimeline", () => {
     expect(timeline.summary()).toBe("parse 5ms · tunnel 70.0s");
   });
 
+  test("a hop keeps what happened in it", () => {
+    const c = clock();
+    const timeline = new PairTimeline(c.now);
+    c.advance(60_000);
+    timeline.mark("pair-error", "TypeError: Network request timed out");
+    timeline.mark("done");
+    expect(timeline.segments()).toEqual([
+      { name: "pair-error", ms: 60_000, detail: "TypeError: Network request timed out" },
+      { name: "done", ms: 0 },
+    ]);
+  });
+
   test("the confirm prompt waits on a person and is never counted or blamed", () => {
     const c = clock();
     const timeline = new PairTimeline(c.now);

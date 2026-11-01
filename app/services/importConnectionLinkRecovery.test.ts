@@ -31,6 +31,7 @@ if (!isolated) {
   const secureValues = new Map<string, string>();
   const tunnelStarts: string[] = [];
   const tunnelStops: string[] = [];
+  const tunnelEventReads: string[] = [];
   let tunnelPort = 0;
 
   mock.module("react-native", () => ({
@@ -88,6 +89,10 @@ if (!isolated) {
     },
     stopPinnedTunnel: async (key: string) => {
       tunnelStops.push(key);
+    },
+    pinnedTunnelEvents: async (key: string) => {
+      tunnelEventReads.push(key);
+      return ["+0ms accepted a local connection", "+61000ms bridge stopped"];
     },
   }));
 
@@ -205,6 +210,7 @@ if (!isolated) {
   beforeEach(() => {
     tunnelStarts.length = 0;
     tunnelStops.length = 0;
+    tunnelEventReads.length = 0;
     trusted.clear();
     tunnelPort = daemonPort;
   });
@@ -239,6 +245,8 @@ if (!isolated) {
       expect(tunnelStops).toEqual([`pair:${routeId}`, `pair-confirm:${routeId}`]);
       expect(progress[0]).toBe("Connecting to swift-hill-a9de through Mewla…");
       progress.forEach(expectNoInternalDetails);
+      // The tunnel's account is read while it is still open, before it is released.
+      expect(tunnelEventReads).toEqual([`pair:${routeId}`]);
     });
 
     test("a rescan of a spent code connects when this phone is already trusted", async () => {

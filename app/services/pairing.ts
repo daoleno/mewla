@@ -58,6 +58,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
       }),
     });
   } catch (error) {
+    markPairTimeline("pair-error", describeFailure(error));
     throw input.transport === "link"
       ? new PairingUnreachableError(LINK_UNREACHABLE_MESSAGE)
       : buildPairingNetworkError(pairURL, error);
@@ -114,6 +115,11 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
     daemonId: pairedDaemonId,
     daemonPublicKey: pairedDaemonPublicKey,
   };
+}
+
+function describeFailure(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`.slice(0, 200);
+  return String(error).slice(0, 200);
 }
 
 export const LINK_UNREACHABLE_MESSAGE =
