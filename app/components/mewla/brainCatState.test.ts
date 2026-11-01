@@ -122,3 +122,13 @@ describe("presenceWorkGroup", () => {
     expect(presenceWorkGroup({ state: "idle" })).toBeNull();
   });
 });
+
+describe("brainEmptyCopy", () => {
+  test("an empty chat is ready only while the computer is reachable", async () => {
+    const { brainEmptyCopy } = await import("./brainCatState");
+    expect(brainEmptyCopy({ state: "idle" }).title).toBe("Ready when you are");
+    expect(brainEmptyCopy({ state: "offline" }).title).toBe("Can't reach your computer");
+    expect(brainEmptyCopy({ state: "offline", reconnecting: true }).title).toBe("Reconnecting");
+    expect(brainEmptyCopy({ state: "offline" }).body).toContain("reconnects by itself");
+  });
+});

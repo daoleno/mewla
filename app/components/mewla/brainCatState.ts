@@ -113,6 +113,23 @@ export function brainCatTailLabel(presence: BrainCatPresence): string | null {
   }
 }
 
+/**
+ * What an empty Brain chat says. It follows the cat: a chat that is empty
+ * because the computer is out of reach must not say Brain is ready.
+ */
+export function brainEmptyCopy(presence: BrainCatPresence): { title: string; body: string } {
+  if (presence.state === "offline") {
+    return {
+      title: brainCatTailLabel(presence) ?? "Can't reach your computer",
+      body: "It reconnects by itself when your computer is awake and online.",
+    };
+  }
+  return {
+    title: "Ready when you are",
+    body: "Brain naps in the seal until you ask, then gets to work and brings back what it finds.",
+  };
+}
+
 /** The Work list group the tail row counts, if it counts one. */
 export function presenceWorkGroup(presence: BrainCatPresence): BrainWorkGroup | null {
   switch (presence.state) {
