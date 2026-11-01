@@ -22,6 +22,8 @@ import { Icon } from "../icons/Icon";
 interface BrainExecutorSheetProps {
   visible: boolean;
   executors: BrainExecutorRef[];
+  /** Some configured agents are not installed: one line says how to add them. */
+  moreToInstall?: boolean;
   hostAdapterId?: string;
   switchingAdapterId: string | null;
   error?: string | null;
@@ -32,6 +34,7 @@ interface BrainExecutorSheetProps {
 export function BrainExecutorSheet({
   visible,
   executors,
+  moreToInstall = false,
   hostAdapterId,
   switchingAdapterId,
   error,
@@ -147,6 +150,7 @@ export function BrainExecutorSheet({
         })}
       </ScrollView>
 
+      {moreToInstall ? <Text style={styles.more}>Install more with mewla deps</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </BottomSheetFrame>
   );
@@ -173,6 +177,12 @@ function createStyles(theme: ResolvedTheme) {
     },
     list: {
       gap: 10,
+    },
+    more: {
+      ...UiTextMetrics,
+      ...TypeScale.compact,
+      color: colors.textTertiary,
+      marginTop: 12,
     },
     row: {
       minHeight: 64,

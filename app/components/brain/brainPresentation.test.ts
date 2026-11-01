@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { describe, expect, test } from "bun:test";
+import { brainReducer, initialBrainState } from "../../store/brain";
 import {
+  brainExecutorChoices,
   brainWorkspaceEntryAccessibilityLabel,
   brainWorkspaceEntryIconName,
   brainWorkspaceMarkdownPath,
@@ -75,5 +77,39 @@ describe("switchExecutorAccessibilityLabel", () => {
     expect(switchExecutorAccessibilityLabel(null)).toBe(
       "Switch Brain host, unavailable",
     );
+  });
+});
+
+describe("brainExecutorChoices", () => {
+  const executors = ["claude", "codex", "grok", "pi"].map((id) => ({ id, name: id }));
+  const snapshot = (executor_states: unknown) =>
+    brainReducer(initialBrainState, {
+      type: "BRAIN_SNAPSHOT",
+      serverId: "s1",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
+      brain: { executors, executor_states },
+    } as any).byServer["s1"]!;
+
+  test("offers only installed agents, signed-in ones first, and says more can be installed", () => {
+    const brain = snapshot({
+      claude: { installed: true },
+      codex: { installed: true, signed_in: true },
+      grok: { installed: false, signed_in: true },
+    });
+    const { choices, moreToInstall } = brainExecutorChoices(brain.executors!, brain.executor_states);
+    expect(choices.map((item) => item.id)).toEqual(["codex", "claude"]);
+    expect(moreToInstall).toBe(true);
+  });
+
+  test("lists nothing when no agent is installed, and no install line when all are", () => {
+    const none = snapshot({});
+    expect(brainExecutorChoices(none.executors!, none.executor_states)).toEqual({ choices: [], moreToInstall: true });
+    // A computer that sends no states cannot say anything is installed.
+    expect(brainExecutorChoices(executors, undefined).choices).toEqual([]);
+    const all = snapshot(Object.fromEntries(executors.map((item) => [item.id, { installed: true }])));
+    const result = brainExecutorChoices(all.executors!, all.executor_states);
+    expect(result.choices.map((item) => item.id)).toEqual(["claude", "codex", "grok", "pi"]);
+    expect(result.moreToInstall).toBe(false);
   });
 });

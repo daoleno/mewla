@@ -204,3 +204,26 @@ func TestHostProblemListsTheOtherInstalledAgents(t *testing.T) {
 		t.Fatalf("host signed out: %+v", problem)
 	}
 }
+
+// The executor sheet offers only what is installed, signed-in ones first, so
+// the snapshot says which executors are installed and verified signed in.
+func TestSnapshotSaysWhichExecutorsAreInstalledAndSignedIn(t *testing.T) {
+	service := hostFixture(t, map[string]bool{"claude": true, "codex": true},
+		map[string]HostAuthState{"claude": HostAuthAuthenticated, "codex": HostAuthUnauthenticated})
+	snapshot, err := service.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]ExecutorState{
+		"claude": {Installed: true, SignedIn: true},
+		"codex":  {Installed: true},
+	}
+	if len(snapshot.ExecutorStates) != len(want) {
+		t.Fatalf("states = %+v, want only the installed executors %+v (grok is not installed)", snapshot.ExecutorStates, want)
+	}
+	for id, state := range want {
+		if snapshot.ExecutorStates[id] != state {
+			t.Fatalf("%s = %+v, want %+v (all: %+v)", id, snapshot.ExecutorStates[id], state, snapshot.ExecutorStates)
+		}
+	}
+}

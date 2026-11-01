@@ -21,6 +21,7 @@ import { BrainWorkEventDetailSheet } from "../../components/brain/BrainWorkEvent
 import { SessionModelSheet } from "../../components/providers/SessionModelSheet";
 import { useSessionProviderSheet } from "../../components/terminal/screen/useSessionProviderSheet";
 import {
+  brainExecutorChoices,
   brainProviderLabel,
   switchExecutorAccessibilityLabel,
 } from "../../components/brain/brainPresentation";
@@ -267,8 +268,13 @@ export default function BrainScreen() {
     focusActive: screenFocused,
   });
   const canUseStructuredBrainInterface = ready && brainSurface === "chat";
-  const availableExecutors = activeBrain?.executors ?? [];
-  const canSwitchAdapter = availableExecutors.length > 1;
+  // Only an installed agent is a choice; signed-in ones come first.
+  const { choices: availableExecutors, moreToInstall: moreExecutorsToInstall } = useMemo(
+    () => brainExecutorChoices(activeBrain?.executors ?? [], activeBrain?.executor_states),
+    [activeBrain?.executors, activeBrain?.executor_states],
+  );
+  // Switching needs an installed agent other than the one Brain runs on.
+  const canSwitchAdapter = availableExecutors.some((executor) => executor.id !== hostExecutor?.id);
   const openAdapterSheet = useCallback(() => {
     if (!canSwitchAdapter || !activeServer) {
       return;
@@ -878,6 +884,7 @@ export default function BrainScreen() {
       <BrainExecutorSheet
         visible={adapterSheetVisible}
         executors={availableExecutors}
+        moreToInstall={moreExecutorsToInstall}
         hostAdapterId={hostExecutor?.id}
         switchingAdapterId={switchingAdapterId}
         error={adapterSwitchError}

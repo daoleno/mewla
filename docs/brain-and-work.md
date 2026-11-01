@@ -305,7 +305,8 @@ not installed, is not signed in, did not start, or is open but never became read
 take and a one-tap switch to an installed agent that is signed in. **Switch
 executor** appears there only when the computer has another agent installed; with
 none installed the sentence (`mewla deps`) is the next step and there is nothing
-to switch to. Nothing needs a
+to switch to. The executor list offers only installed agents, signed-in ones
+first, with one line (`Install more with mewla deps`) when others are missing. Nothing needs a
 restart: Mewla checks again every few seconds, starts Brain's host as soon as the
 agent is installed or signed in, and starts it again after a reboot (a host that
 never held a conversation restarts by itself; one holding a conversation Mewla

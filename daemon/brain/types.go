@@ -49,6 +49,14 @@ type HostProblem struct {
 	InstalledExecutors []string `json:"installed_executors,omitempty"`
 }
 
+// ExecutorState is what a client needs to offer an executor as a choice: only
+// an installed agent is one, and a signed-in one is the better one.
+type ExecutorState struct {
+	Installed bool `json:"installed"`
+	// SignedIn is true only when Mewla verified the sign-in; unknown is false.
+	SignedIn bool `json:"signed_in,omitempty"`
+}
+
 type Snapshot struct {
 	Personality  string                `json:"personality"`
 	CurrentWork  []CurrentWork         `json:"current_work"`
@@ -60,10 +68,12 @@ type Snapshot struct {
 	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`
 	HostProblem  *HostProblem          `json:"host_problem,omitempty"`
 	Executors    []work.WorkerExecutor `json:"executors"`
-	ChatThreadID string                `json:"chat_thread_id,omitempty"`
-	Workspace    string                `json:"workspace,omitempty"`
-	WorklogPath  string                `json:"worklog_path,omitempty"`
-	GeneratedAt  time.Time             `json:"generated_at"`
+	// ExecutorStates is each executor's install and sign-in state, by id.
+	ExecutorStates map[string]ExecutorState `json:"executor_states,omitempty"`
+	ChatThreadID   string                   `json:"chat_thread_id,omitempty"`
+	Workspace      string                   `json:"workspace,omitempty"`
+	WorklogPath    string                   `json:"worklog_path,omitempty"`
+	GeneratedAt    time.Time                `json:"generated_at"`
 }
 
 type BrainContext struct {
