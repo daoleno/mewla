@@ -12,6 +12,8 @@ export interface ComputerPanelProps {
   /** The switch; null until the computer has answered. */
   agentsEnabled: boolean | null;
   problems: ComputerProblem[];
+  /** The Mewla version the computer runs; absent until it has said. */
+  version?: string | null;
   /** What to do about the connection itself, with its one button. */
   connectionProblem?: { text: string; detail?: string | null; label: string; onPress: () => void } | null;
   /** A line after an action, or what went wrong. */
@@ -95,6 +97,12 @@ export function ComputerPanel(props: ComputerPanelProps) {
           />
         ))}
       </ListSection>
+
+      {props.version ? (
+        <ListSection>
+          <ListRow title="Mewla" value={`Version ${props.version}`} accessibilityLabel={`Mewla on this computer, Version ${props.version}`} />
+        </ListSection>
+      ) : null}
 
       <ListSection title="Name">
         <View style={styles.field}>

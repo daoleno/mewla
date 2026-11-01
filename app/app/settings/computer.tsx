@@ -8,6 +8,7 @@ import { ContentWidth, useAppColors } from "../../constants/tokens";
 import { ComputerPanel } from "../../components/settings/ComputerPanel";
 import {
   computerProblems,
+  computerUpdateProblem,
   computerProblemsMayChange,
   computerStatusWord,
   type ComputerAction,
@@ -15,6 +16,8 @@ import {
 } from "../../components/settings/computerModel";
 import { confirmDestructive } from "../../components/ui";
 import { changeAgentUse, getAgentUse, type AgentUseChange, type AgentUseStatus } from "../../services/agentUse";
+import { getDaemonUpdate, installDaemonUpdate, type DaemonUpdateStatus } from "../../services/daemonUpdate";
+import { MIN_COMPUTER_VERSION } from "../../constants/computerVersion";
 import { cancelCalendarNotifications } from "../../services/calendarNotifications";
 import {
   checkComputer,
@@ -43,6 +46,7 @@ export default function ComputerScreen() {
   const [servers, setServers] = useState<Storage.StoredServer[] | null>(null);
   const [check, setCheck] = useState<ComputerCheck | undefined>(undefined);
   const [agentUse, setAgentUse] = useState<AgentUseStatus | null>(null);
+  const [daemonUpdate, setDaemonUpdate] = useState<DaemonUpdateStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ key: string; text: string } | null>(null);
   const [draftName, setDraftName] = useState("");
@@ -119,6 +123,31 @@ export default function ComputerScreen() {
     if (reachable) void loadAgentUse();
   }, [reachable, serverKey, loadAgentUse]);
 
+  // The computer's version and update. Its restart drops the connection for a
+  // moment, so while it updates a missed look just waits for the next one.
+  const loadDaemonUpdate = useCallback(async () => {
+    const target = serverRef.current;
+    if (!target) return;
+    try {
+      const next = await getDaemonUpdate(target);
+      if (serverRef.current?.id === target.id) setDaemonUpdate(next);
+    } catch {
+      // Keep what was shown.
+    }
+  }, []);
+
+  useEffect(() => {
+    setDaemonUpdate(null);
+    if (reachable) void loadDaemonUpdate();
+  }, [reachable, serverKey, loadDaemonUpdate]);
+
+  const updating = daemonUpdate?.updating === true;
+  useEffect(() => {
+    if (!updating) return;
+    const timer = setInterval(() => void loadDaemonUpdate(), 3000);
+    return () => clearInterval(timer);
+  }, [updating, loadDaemonUpdate]);
+
   // While someone is fixing something on the computer, look again now and then.
   const mayChange = reachable && computerProblemsMayChange(agentUse);
   useEffect(() => {
@@ -151,6 +180,18 @@ export default function ComputerScreen() {
 
   const onAction = (problem: ComputerProblem, action: ComputerAction) => {
     switch (action.kind) {
+      case "update":
+        void (async () => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setNote(null);
+          try {
+            const next = await installDaemonUpdate(server);
+            if (serverRef.current?.id === server.id) setDaemonUpdate({ ...next, updating: true });
+          } catch (reason) {
+            setNote({ key: problem.key, text: reason instanceof Error ? reason.message : String(reason) });
+          }
+        })();
+        return;
       case "stop_agent":
         void apply(problem.key, { stop_agent: true });
         return;
@@ -182,7 +223,9 @@ export default function ComputerScreen() {
   const apartNames = computersApartFrom(server)
     .map((daemonId) => others.find((other) => other.daemonId === daemonId)?.name)
     .filter((name): name is string => Boolean(name));
+  const updateProblem = reachable ? computerUpdateProblem(daemonUpdate, MIN_COMPUTER_VERSION) : null;
   const problems: ComputerProblem[] = [
+    ...(updateProblem ? [updateProblem] : []),
     ...(reachable ? computerProblems(agentUse) : []),
     ...apartNames.map((name) => ({
       key: `apart:${name}`,
@@ -284,6 +327,7 @@ export default function ComputerScreen() {
           reachable={reachable}
           agentsEnabled={agentUse ? agentUse.enabled : null}
           problems={problems}
+          version={reachable ? daemonUpdate?.version : null}
           connectionProblem={connectionProblem}
           note={note}
           busy={busy}
