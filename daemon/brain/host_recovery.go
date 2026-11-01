@@ -16,6 +16,20 @@ import (
 // launched; the host starts once the cause is fixed (see HostRecoveryDue).
 var ErrHostNotRunnable = errors.New("brain host agent cannot run yet")
 
+// hostUnsupported says why an installed agent will not run on this computer
+// (a version Mewla does not support), "" when nothing is known against it. The
+// daemon installs doctor's verdict with SetHostUnsupportedProbe.
+var hostUnsupported = func(string) string { return "" }
+
+// SetHostUnsupportedProbe installs doctor's "installed but not runnable" verdict.
+func SetHostUnsupportedProbe(probe func(executorID string) string) {
+	if probe == nil {
+		hostUnsupported = func(string) string { return "" }
+		return
+	}
+	hostUnsupported = probe
+}
+
 // hostRunnable reports whether the executor's command is installed and not
 // verified signed out. Unknown sign-in is runnable: Mewla does not guess.
 func (s *Service) hostRunnable(executor work.WorkerExecutor) error {
@@ -31,6 +45,9 @@ func (s *Service) hostRunnable(executor work.WorkerExecutor) error {
 	}
 	if hostAuth(executor.ID) == HostAuthUnauthenticated {
 		return fmt.Errorf("%w: %s is not signed in", ErrHostNotRunnable, executor.ID)
+	}
+	if reason := hostUnsupported(executor.ID); reason != "" {
+		return fmt.Errorf("%w: %s", ErrHostNotRunnable, reason)
 	}
 	return nil
 }

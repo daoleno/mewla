@@ -76,3 +76,39 @@ func TestHostProblemDetailsNameTheNextStep(t *testing.T) {
 		t.Fatalf("not signed in: %+v", problem)
 	}
 }
+
+// An agent that is installed but of a version Mewla does not support (OpenCode
+// 1.x) gets no pane, says why with doctor's own words, and starts once fixed.
+func TestAnUnsupportedAgentIsNotLaunchedAndSaysWhy(t *testing.T) {
+	processStartedAt = processStartedAt.Add(-time.Hour)
+	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
+	service := hostFixture(t, map[string]bool{"claude": true}, nil)
+	fw := &fakeWatcher{}
+	service.watcher = fw
+	reason := "OpenCode 1.1.25 found; Mewla supports OpenCode 2 only. Upgrade: curl -fsSL https://opencode.ai/v2/install | bash"
+	hostUnsupported = func(id string) string {
+		if id == "claude" {
+			return reason
+		}
+		return ""
+	}
+	t.Cleanup(func() { SetHostUnsupportedProbe(nil) })
+
+	if _, err := service.EnsureHostSnapshot(); !errors.Is(err, ErrHostNotRunnable) {
+		t.Fatalf("error = %v, want ErrHostNotRunnable", err)
+	}
+	if len(fw.created) != 0 {
+		t.Fatalf("launched an unsupported agent: %#v", fw.created)
+	}
+	problem := service.hostProblem(service.hostExecutor())
+	if problem == nil || problem.Code != "unsupported" || !strings.Contains(problem.Detail, "supports OpenCode 2 only") || !strings.Contains(problem.Detail, "starts by itself") {
+		t.Fatalf("problem = %+v", problem)
+	}
+	if service.HostRecoveryDue() {
+		t.Fatal("recovery due while the version is still unsupported")
+	}
+	hostUnsupported = func(string) string { return "" }
+	if !service.HostRecoveryDue() {
+		t.Fatal("recovery not due after the upgrade")
+	}
+}
