@@ -401,6 +401,9 @@ func TestBrainHostRawCustomBypassSkipsPrepareBinding(t *testing.T) {
 	})
 	service.SetSessionRouteLifecycle(routes)
 	t.Setenv("MEWLA_BRAIN_HOST_EXECUTOR", "custom")
+	previousLookPath := hostLookPath
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	t.Cleanup(func() { hostLookPath = previousLookPath })
 
 	if _, err := service.EnsureHostSnapshot(); err != nil {
 		t.Fatal(err)

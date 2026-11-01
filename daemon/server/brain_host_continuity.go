@@ -16,6 +16,13 @@ var brainHostContinuityRetryDelays = []time.Duration{
 	2 * time.Second, 5 * time.Second, 15 * time.Second, 30 * time.Second, time.Minute,
 }
 
+// brainHostRecoveryInterval is how often a Brain with no host checks whether its
+// agent can run now; brainHostRecoveryMaxHold caps the wait after failed starts.
+const (
+	brainHostRecoveryInterval = 15 * time.Second
+	brainHostRecoveryMaxHold  = 5 * time.Minute
+)
+
 // brainHostContinuityRetryDelay returns the wait before the next attempt, or
 // false when err is not transient or the bounded schedule is exhausted. A Host
 // whose launch shell has not yet reached the provider is transient too: the
@@ -57,10 +64,28 @@ func (s *Server) runBrainHostContinuity(ctx context.Context) {
 		retry = time.After(delay)
 	}
 	reconcile()
+	// A host that was not runnable (agent not installed or signed out) or died
+	// starts again once its cause is fixed, without restarting Mewla. Probing is
+	// a PATH lookup and a cached sign-in answer; failed starts back off.
+	recovery := time.NewTicker(brainHostRecoveryInterval)
+	defer recovery.Stop()
+	var recoveryHold time.Time
+	recoveryFailures := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-recovery.C:
+			if retry != nil || time.Now().Before(recoveryHold) || !s.brain.HostRecoveryDue() {
+				continue
+			}
+			attempt = 0
+			if err := s.reconcileBrainHostContinuity(); err != nil {
+				recoveryFailures++
+				recoveryHold = time.Now().Add(min(brainHostRecoveryInterval<<recoveryFailures, brainHostRecoveryMaxHold))
+			} else {
+				recoveryFailures, recoveryHold = 0, time.Time{}
+			}
 		case <-s.brainHostRecovery:
 			if ctx.Err() != nil {
 				return
