@@ -1691,6 +1691,35 @@ func samePreparedBrainInputAdmission(left, right BrainInputAdmission) bool {
 		left.CreatedAt.Equal(right.CreatedAt)
 }
 
+// brainInputAdmissionOwnerOnOtherThread finds the admission that already owns
+// candidate's request id on another thread. Only a Pending, Accepted or
+// Uncertain row owns it: a NotSubmitted one provably never reached the
+// provider. The Accepted row that projected the input wins, then the earliest.
+// The same id carrying a different input fails closed.
+func brainInputAdmissionOwnerOnOtherThread(admissions []BrainInputAdmission, candidate BrainInputAdmission) (BrainInputAdmission, bool, error) {
+	var owner BrainInputAdmission
+	found := false
+	for _, existing := range admissions {
+		if existing.RequestID != candidate.RequestID || existing.ThreadID == candidate.ThreadID ||
+			existing.State == BrainInputAdmissionNotSubmitted {
+			continue
+		}
+		if existing.DisplayBody != candidate.DisplayBody || existing.BodySHA256 != candidate.BodySHA256 {
+			return BrainInputAdmission{}, false, fmt.Errorf("Brain input admission identity belongs to different input")
+		}
+		better := !found
+		if found {
+			ownerAccepted, existingAccepted := owner.State == BrainInputAdmissionAccepted, existing.State == BrainInputAdmissionAccepted
+			better = (existingAccepted && !ownerAccepted) ||
+				(existingAccepted == ownerAccepted && existing.CreatedAt.Before(owner.CreatedAt))
+		}
+		if better {
+			owner, found = existing, true
+		}
+	}
+	return owner, found, nil
+}
+
 // PrepareBrainInputAdmission persists the exact no-replay intent before the
 // provider mutation boundary. Duplicate request/thread identities are returned
 // without another write and must never cause another provider submission.
@@ -1744,6 +1773,14 @@ func (s *Store) PrepareBrainInputAdmission(candidate BrainInputAdmission) (Brain
 			return rearmed, true, nil
 		}
 		return existing, false, nil
+	}
+	// A receipt names one input, whichever conversation is current when it
+	// arrives. The same input delivered again after the thread changed is the
+	// original admission, not a second provider submission.
+	if owner, found, err := brainInputAdmissionOwnerOnOtherThread(database.BrainInputAdmissions, candidate); err != nil {
+		return BrainInputAdmission{}, false, err
+	} else if found {
+		return owner, false, nil
 	}
 	if candidate.HostGeneration != "" {
 		if active := database.HostForegroundTurn; active != nil &&
@@ -2019,30 +2056,49 @@ func (s *Store) BrainInputAdmission(requestID, threadID string) (BrainInputAdmis
 // membership is derived from the idempotent timeline identity plus any provider
 // echo reconcileAdmissionEchoes would still credit from durable rows, so no
 // second durable acknowledgement field or repair queue is needed.
+//
+// An admission whose identity another input already holds is never selected:
+// a replay of the same input needs no row of its own, and a different input is
+// returned by unprojectedBrainInputAdmissions as a conflict, so one bad record
+// cannot hide the admissions behind it.
 func (s *Store) UnprojectedBrainInputAdmissions(limit int) ([]BrainInputAdmission, bool, error) {
+	out, more, _, err := s.unprojectedBrainInputAdmissions(limit)
+	return out, more, err
+}
+
+func (s *Store) unprojectedBrainInputAdmissions(limit int) ([]BrainInputAdmission, bool, []error, error) {
 	if limit <= 0 {
-		return nil, false, fmt.Errorf("positive Brain input admission limit required")
+		return nil, false, nil, fmt.Errorf("positive Brain input admission limit required")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	database, err := s.loadPresentationLocked()
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
 	allItems, err := s.readAllTimelineItemsLocked()
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
 	echoPending := map[string]bool{}
 	reconciledThreads := map[string]bool{}
 	out := make([]BrainInputAdmission, 0, limit)
+	var conflicts []error
 	for _, admission := range database.BrainInputAdmissions {
 		if admission.State != BrainInputAdmissionAccepted {
 			continue
 		}
 		canonicalIndex, err := brainInputAdmissionCanonicalIndex(allItems, admission)
+		if errors.Is(err, errBrainInputAdmissionReplay) {
+			continue
+		}
+		var conflict *admissionIdentityConflict
+		if errors.As(err, &conflict) {
+			conflicts = append(conflicts, err)
+			continue
+		}
 		if err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		if canonicalIndex >= 0 {
 			if !reconciledThreads[admission.ThreadID] {
@@ -2057,11 +2113,11 @@ func (s *Store) UnprojectedBrainInputAdmissions(limit int) ([]BrainInputAdmissio
 			}
 		}
 		if len(out) == limit {
-			return out, true, nil
+			return out, true, conflicts, nil
 		}
 		out = append(out, admission)
 	}
-	return out, false, nil
+	return out, false, conflicts, nil
 }
 
 func (s *Store) AppendWorkEvent(event WorkEvent) (WorkEvent, bool, error) {

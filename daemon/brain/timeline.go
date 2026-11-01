@@ -85,8 +85,35 @@ func brainInputAdmissionTimelineItem(admission BrainInputAdmission) TimelineItem
 	}
 }
 
+// errBrainInputAdmissionReplay marks an admission whose receipt was already
+// admitted, with the identical input, on another thread or Session. The input
+// owns exactly one presentation row; the replay has none of its own.
+var errBrainInputAdmissionReplay = errors.New("Brain input admission replays an input projected elsewhere")
+
+// admissionIdentityConflict is a timeline identity held by a different input
+// than the admission claiming it. Retrying never changes it, so callers report
+// it once instead of retrying.
+type admissionIdentityConflict struct{ identity string }
+
+func (e *admissionIdentityConflict) Error() string {
+	return fmt.Sprintf("timeline identity %q belongs to different Brain input admission", e.identity)
+}
+
+// timelineItemReplaysBrainInputAdmission reports whether the row holding the
+// admission's identity carries the very same input (exact body and digest) but
+// was projected for another thread or Session: the same receipt delivered again
+// after the conversation changed.
+func timelineItemReplaysBrainInputAdmission(item TimelineItem, admission BrainInputAdmission) bool {
+	return strings.TrimSpace(item.ID) == AdmissionTimelineItemID(admission.RequestID) &&
+		strings.TrimSpace(item.Role) == "user" && strings.TrimSpace(item.Body) == admission.DisplayBody &&
+		strings.TrimSpace(item.Kind) == timelineKindUserMessage && item.BrainAdmission &&
+		strings.TrimSpace(item.AdmissionSHA256) == admission.BodySHA256
+}
+
 // brainInputAdmissionCanonicalIndex finds the admission's own timeline row.
-// A row holding its identity for any other input is a hard error.
+// A row holding its identity for the same input on another thread yields
+// errBrainInputAdmissionReplay; one holding it for any other input is an
+// *admissionIdentityConflict.
 func brainInputAdmissionCanonicalIndex(allItems []TimelineItem, admission BrainInputAdmission) (int, error) {
 	canonicalID := AdmissionTimelineItemID(admission.RequestID)
 	for index, existing := range allItems {
@@ -94,10 +121,10 @@ func brainInputAdmissionCanonicalIndex(allItems []TimelineItem, admission BrainI
 			continue
 		}
 		if !timelineItemMatchesBrainInputAdmission(existing, admission) {
-			return -1, fmt.Errorf(
-				"timeline identity %q belongs to different Brain input admission",
-				existing.ID,
-			)
+			if timelineItemReplaysBrainInputAdmission(existing, admission) {
+				return -1, errBrainInputAdmissionReplay
+			}
+			return -1, &admissionIdentityConflict{identity: existing.ID}
 		}
 		return index, nil
 	}
@@ -138,6 +165,9 @@ func (s *Store) ProjectBrainInputAdmission(admission BrainInputAdmission) error 
 		return err
 	}
 	canonicalIndex, err := brainInputAdmissionCanonicalIndex(allItems, admission)
+	if errors.Is(err, errBrainInputAdmissionReplay) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

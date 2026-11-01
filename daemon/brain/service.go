@@ -332,13 +332,14 @@ func (r *cleanupRefusal) Error() string { return r.err.Error() }
 func (r *cleanupRefusal) Unwrap() error { return r.err }
 
 // OnlyCleanupRefusals reports whether err is made up entirely of refused
-// completed-Session cleanups: there is nothing left to retry, only to report.
+// completed-Session cleanups and Brain inputs whose timeline identity another
+// input holds: there is nothing left to retry, only to report.
 // Any other failure in the same pass, a transient one, makes it false.
 func OnlyCleanupRefusals(err error) bool {
 	switch e := err.(type) {
 	case nil:
 		return true
-	case *cleanupRefusal:
+	case *cleanupRefusal, *admissionIdentityConflict:
 		return true
 	case interface{ Unwrap() []error }:
 		for _, child := range e.Unwrap() {
@@ -384,13 +385,16 @@ func (s *Service) ReconcileSignalSystemStartup(workers []*classifier.Worker, lim
 	if s == nil || s.store == nil {
 		return true, nil
 	}
-	admissions, admissionMore, err := s.store.UnprojectedBrainInputAdmissions(limit)
+	admissions, admissionMore, conflicts, err := s.store.unprojectedBrainInputAdmissions(limit)
 	if err != nil {
 		return false, err
 	}
+	// One admission that cannot be projected must not keep the rest of the
+	// pass (live handlings, cleanup, lane) from running.
+	pending := slices.Clone(conflicts)
 	for _, admission := range admissions {
 		if err := s.store.ProjectBrainInputAdmission(admission); err != nil {
-			return false, err
+			pending = append(pending, fmt.Errorf("project Brain input %q: %w", admission.RequestID, err))
 		}
 	}
 	byID := make(map[string]*classifier.Worker, len(workers))
@@ -430,7 +434,7 @@ func (s *Service) ReconcileSignalSystemStartup(workers []*classifier.Worker, lim
 	}
 	cleanupErr := s.ReconcileCompletedSessions()
 	_, dispatchErr := s.ReconcileHostLane()
-	return !admissionMore && !handlingMore, errors.Join(cleanupErr, dispatchErr)
+	return !admissionMore && !handlingMore, errors.Join(append(pending, cleanupErr, dispatchErr)...)
 }
 
 func (s *Service) sessionLivenessProbe(sessionID string) (modelprofiles.SessionLiveness, error) {
