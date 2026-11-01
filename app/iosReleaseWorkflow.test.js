@@ -27,6 +27,47 @@ const postprocessWorkflow = fs.readFileSync(
   'utf8',
 );
 
+const availabilityWorkflow = fs.readFileSync(
+  path.join(__dirname, '..', '.github', 'workflows', 'ios-testflight-available.yml'),
+  'utf8',
+);
+
+describe('iOS TestFlight update channel', () => {
+  it('marks only Preview TestFlight archives as the testflight channel, at job level', () => {
+    const jobEnv = workflow.slice(workflow.indexOf('    env:\n      MEWLA_IOS_APP_VARIANT'));
+    expect(jobEnv.slice(0, jobEnv.indexOf('    steps:'))).toContain(
+      "MEWLA_IOS_DISTRIBUTION: ${{ ((github.event_name == 'push' || inputs.app_identity == 'preview') && (github.event_name == 'push' || inputs.destination == 'testflight')) && 'testflight' || '' }}",
+    );
+  });
+
+  it('keeps the ASC key, the update signing key and the write token in separate jobs', () => {
+    const jobs = availabilityWorkflow.split(/\n  (?=discover:|sign:|publish:)/).slice(1);
+    const [discover, sign, publish] = jobs;
+    expect(discover).toContain('environment: app-store-connect-preview');
+    expect(discover).toContain('secrets.ZEN_ASC_API_KEY_BASE64');
+    expect(discover).not.toContain('ZEN_UPDATE_SIGNING_KEY_BASE64');
+    expect(discover).not.toContain('contents: write');
+    expect(sign).toContain('secrets.ZEN_UPDATE_SIGNING_KEY_BASE64');
+    expect(sign).not.toContain('ZEN_ASC');
+    expect(sign).not.toContain('contents: write');
+    expect(publish).toContain('contents: write');
+    expect(publish).not.toContain('secrets.ZEN_');
+  });
+
+  it('publishes to a rolling non-Latest prerelease, never to a versioned release', () => {
+    expect(availabilityWorkflow).toContain('MEWLA_TESTFLIGHT_TAG: ios-testflight');
+    expect(availabilityWorkflow).toContain('--prerelease --latest=false');
+    expect(availabilityWorkflow).toContain('./scripts/sign-release-manifest.sh out/testflight-manifest.json');
+    expect(availabilityWorkflow).toContain('"distribution": "testflight"');
+  });
+
+  it('uses the Preview app id variable and group, with no hardcoded app id', () => {
+    expect(availabilityWorkflow).toContain('vars.MEWLA_ASC_PREVIEW_APP_ID');
+    expect(availabilityWorkflow).toContain('--beta-group-name "Mewla Preview"');
+    expect(availabilityWorkflow).not.toMatch(/\b67\d{8}\b/);
+  });
+});
+
 describe('iOS signed release identity contract', () => {
   it('resumes TestFlight processing against the configured Mewla Preview app', () => {
     expect(postprocessWorkflow).toContain('MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}');

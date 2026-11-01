@@ -1,0 +1,190 @@
+name: iOS TestFlight availability
+
+# Tells installed Preview builds when a newer build is really installable in TestFlight.
+# Upload and VALID processing are not enough: the public "Mewla Preview" group only gets
+# the build after Beta App Review, so this polls App Store Connect for the external
+# IN_BETA_TESTING state and then publishes a signed manifest the app verifies.
+#
+# Like release-artifacts.yml, the job holding the ASC key, the job holding the update
+# signing key and the job holding the write token are three different jobs.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-testflight-available
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  MEWLA_TESTFLIGHT_TAG: ios-testflight
+
+jobs:
+  discover:
+    name: Find the build testers can install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: app-store-connect-preview
+    outputs:
+      found: ${{ steps.find.outputs.found }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ask App Store Connect
+        id: find
+        env:
+          MEWLA_ASC_APP_ID: ${{ vars.MEWLA_ASC_PREVIEW_APP_ID }}
+          MEWLA_ASC_KEY_ID: ${{ secrets.ZEN_ASC_KEY_ID }}
+          MEWLA_ASC_API_KEY_BASE64: ${{ secrets.ZEN_ASC_API_KEY_BASE64 }}
+          ASC_KEY_PATH: ${{ runner.temp }}/mewla-asc-individual-key.p8
+        run: |
+          set -euo pipefail
+          [[ "$MEWLA_ASC_APP_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "error: configure the numeric MEWLA_ASC_PREVIEW_APP_ID variable for Mewla Preview" >&2
+            exit 1
+          }
+          test -n "$MEWLA_ASC_KEY_ID"
+          printf '%s' "$MEWLA_ASC_API_KEY_BASE64" | base64 --decode > "$ASC_KEY_PATH"
+          chmod 600 "$ASC_KEY_PATH"
+          test -s "$ASC_KEY_PATH"
+          ./scripts/testflight-available-build.py \
+            --app-id "$MEWLA_ASC_APP_ID" \
+            --key-id "$MEWLA_ASC_KEY_ID" \
+            --key-path "$ASC_KEY_PATH" \
+            --beta-group-name "Mewla Preview" \
+            --output "$RUNNER_TEMP/available.json"
+          if [[ "$(cat "$RUNNER_TEMP/available.json")" == "{}" ]]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            mkdir -p available
+            cp "$RUNNER_TEMP/available.json" available/available.json
+          fi
+
+      - name: Remove temporary Individual API key
+        if: always()
+        run: rm -f "${{ runner.temp }}/mewla-asc-individual-key.p8"
+
+      - name: Keep the discovery result
+        if: ${{ steps.find.outputs.found == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-available
+          path: available/available.json
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    name: Sign the availability manifest
+    needs: discover
+    if: ${{ needs.discover.outputs.found == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      changed: ${{ steps.manifest.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: testflight-available
+          path: available
+
+      - name: Build the manifest and skip anything not newer than the published one
+        id: manifest
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsSL --retry 3 \
+            "https://github.com/${{ github.repository }}/releases/download/${MEWLA_TESTFLIGHT_TAG}/testflight-manifest.json" \
+            -o "$RUNNER_TEMP/previous.json" || echo '{}' > "$RUNNER_TEMP/previous.json"
+          BUNDLE_ID="$(node -p "require('./app/iosIdentity').resolveIOSIdentity('preview').bundleIdentifier")"
+          python3 - "$BUNDLE_ID" available/available.json "$RUNNER_TEMP/previous.json" out/testflight-manifest.json "$GITHUB_OUTPUT" <<'PY'
+          import json, sys
+          bundle, found_path, previous_path, manifest_path, output = sys.argv[1:]
+          found = json.load(open(found_path, encoding="utf-8"))
+          try:
+              previous = json.load(open(previous_path, encoding="utf-8"))
+          except ValueError:
+              previous = {}
+          manifest = {
+              "schema_version": 1,
+              "product": "mewla",
+              "platform": "ios",
+              "distribution": "testflight",
+              "bundle_identifier": bundle,
+              "marketing_version": found["marketing_version"],
+              "build_number": found["build_number"],
+              "app_id": found["app_id"],
+          }
+          if found.get("public_link"):
+              manifest["public_link"] = found["public_link"]
+          def rank(item):
+              try:
+                  return (tuple(int(p) for p in item["marketing_version"].split(".")), int(item["build_number"]))
+              except (KeyError, ValueError, AttributeError):
+                  return ((-1,), -1)
+          # Publish only forward: an expired or withdrawn build never rolls the app back.
+          changed = rank(manifest) > rank(previous) or (
+              rank(manifest) == rank(previous) and manifest != {k: previous.get(k) for k in manifest}
+          )
+          if changed:
+              with open(manifest_path, "w", encoding="utf-8") as handle:
+                  json.dump(manifest, handle, sort_keys=True, indent=2)
+                  handle.write("\n")
+          with open(output, "a", encoding="utf-8") as handle:
+              handle.write(f"changed={'true' if changed else 'false'}\n")
+          PY
+
+      - name: Sign the exact manifest bytes
+        if: ${{ steps.manifest.outputs.changed == 'true' }}
+        env:
+          MEWLA_UPDATE_SIGNING_KEY_BASE64: ${{ secrets.ZEN_UPDATE_SIGNING_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          ./scripts/sign-release-manifest.sh out/testflight-manifest.json
+
+      - name: Stage the signed manifest
+        if: ${{ steps.manifest.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-manifest
+          path: out
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish to the rolling ios-testflight release
+    needs: sign
+    if: ${{ needs.sign.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: testflight-manifest
+          path: out
+
+      - name: Upload the signed manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          test -s out/testflight-manifest.json
+          test "$(wc -c < out/testflight-manifest.json.sig)" -eq 64
+          # A rolling prerelease under a non-version tag: never "Latest", so daemon
+          # self-update and the release workflows' exact asset sets never see it.
+          gh release view "$MEWLA_TESTFLIGHT_TAG" >/dev/null 2>&1 || gh release create "$MEWLA_TESTFLIGHT_TAG" \
+            --target "${{ github.sha }}" \
+            --prerelease --latest=false \
+            --title "iOS TestFlight availability" \
+            --notes "Signed record of the newest Mewla Preview build installable in TestFlight. Rewritten automatically; not a product release."
+          gh release upload "$MEWLA_TESTFLIGHT_TAG" \
+            out/testflight-manifest.json out/testflight-manifest.json.sig --clobber
