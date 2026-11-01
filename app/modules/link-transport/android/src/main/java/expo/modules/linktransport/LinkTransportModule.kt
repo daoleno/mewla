@@ -59,6 +59,13 @@ class LinkTransportModule : Module() {
             stopAll()
         }
 
+        // The iOS tunnel keeps an account of its connections for a pairing that
+        // did not finish; Android's blocking sockets raise their failure to the
+        // caller directly, so there is nothing further to report.
+        AsyncFunction("events") { _: String ->
+            emptyList<String>()
+        }
+
         OnDestroy {
             stopAll()
         }

@@ -489,6 +489,17 @@ export async function resolvePairingLinkURL(input: {
   return resolveOnDemandLinkURL(`pair:${input.routeId}`, input);
 }
 
+/** What the pairing tunnel saw, read before it is released; empty when there is nothing to say. */
+export async function pairingLinkTunnelEvents(routeId: string): Promise<string[]> {
+  // A diagnostic never decides how a pairing ends.
+  try {
+    const { pinnedTunnelEvents } = await import("../modules/link-transport/src");
+    return await pinnedTunnelEvents(`pair:${routeId}`);
+  } catch {
+    return [];
+  }
+}
+
 export async function releasePairingLinkTransport(
   routeId: string,
 ): Promise<void> {
