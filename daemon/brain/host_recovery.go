@@ -105,10 +105,24 @@ func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem
 	s.hostProblemMu.Lock()
 	since := s.hostNotReadySince
 	s.hostProblemMu.Unlock()
-	if since.IsZero() || time.Since(since) < hostNotReadyGrace {
+	if since.IsZero() {
 		return nil
 	}
 	name := executor.ID
+	// Mewla's own view says signed out and the pane really is not ready: the
+	// pane's login shell had no sign-in either, so say so at once instead of
+	// leaving the phone waiting out the grace.
+	if hostAuth(executor.ID) == HostAuthUnauthenticated {
+		return &HostProblem{
+			Code:            "not_signed_in",
+			Executor:        executor.ID,
+			Detail:          fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID)),
+			SuggestExecutor: s.verifiedAlternativeHost(executor.ID),
+		}
+	}
+	if time.Since(since) < hostNotReadyGrace {
+		return nil
+	}
 	return &HostProblem{
 		Code:            "not_ready",
 		Executor:        executor.ID,
