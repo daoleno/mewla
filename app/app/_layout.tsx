@@ -73,6 +73,7 @@ import { syncComputers } from "../services/computerSync";
 import { importConnection } from "../services/importConnection";
 import { confirmPairingScopeFor } from "../services/confirmPairingScope";
 import { readInitialConnectLink } from "../services/initialConnectLink";
+import { POST_PAIR_ROUTE } from "../services/postPairRoute";
 import { CalendarAlertHost } from "../components/calendar/CalendarAlertHost";
 import { EnrollmentApprovalHost } from "../components/enrollment/EnrollmentApprovalHost";
 import { PairingCancelledError } from "../services/pairingScope";
@@ -254,9 +255,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
           onImported: async (importedServer) => {
             await refreshServers(importedServer.id);
             markPairTimeline("refresh");
-            routerRef.current.replace({
-              pathname: "/list",
-            });
+            routerRef.current.replace(POST_PAIR_ROUTE);
             markPairTimeline("route");
             // A new computer starts working with the others in the background.
             void syncComputers().then(() => refreshServers());

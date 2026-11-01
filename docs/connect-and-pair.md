@@ -162,6 +162,9 @@ open **Settings > Pair a computer** in the app, then scan the QR code, import a
 screenshot or photo of it, or paste the printed link. Opening a `mewla://` link
 on the phone works too.
 
+After pairing a computer, the app opens Brain, where the first message goes,
+whether that is the first computer or one added later.
+
 After pairing, the app reconnects with the stored address and device key. The
 computer shows up under the name it calls itself, such as your Mac's name. To
 rename it or change the address later, tap it in **Settings**.
