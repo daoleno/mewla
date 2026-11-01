@@ -2,8 +2,11 @@ package watcher
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 func TestPollUnavailableInventoryRetainsLiveOwnership(t *testing.T) {
@@ -132,5 +135,40 @@ func TestWaitForSnapshotCompletesOnlyAfterFullPollAndCancels(t *testing.T) {
 	<-done
 	if err := w.WaitForSnapshot(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A computer with no tmux server running (after a reboot, or tmux never used)
+// has an empty first inventory. Treating it as unavailable left the Watcher
+// never ready, so Brain's host, which starts after the first inventory, never
+// started and the Brain tab stayed on "Waking up".
+func TestFirstInventoryWithNoTmuxServerIsReadyAndEmpty(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", t.TempDir())
+	t.Setenv("PATH", writeFakeTmux(t, `echo 'no server running on fixture' >&2; exit 1`))
+	noServer := filepath.Join(t.TempDir(), "no-server")
+	w := New(time.Second)
+	w.tmuxSocketPath = noServer
+	w.listPanes = w.listTmuxPanes
+	if w.SnapshotReady() {
+		t.Fatal("ready before any poll")
+	}
+	w.poll()
+	if !w.SnapshotReady() {
+		t.Fatal("first inventory with no tmux server never became ready")
+	}
+	if err := w.WaitForSnapshot(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Once an inventory has completed, a vanished server is Unknown again:
+	// only the first observation may read "no server" as "no Sessions".
+	w2 := New(time.Second)
+	w2.tmuxSocketPath = noServer
+	w2.listPanes = w2.listTmuxPanes
+	w2.workers["%1"] = &classifier.Worker{ID: "%1"}
+	w2.poll()
+	if w2.SnapshotReady() {
+		t.Fatal("an unavailable inventory with a known Session advertised readiness")
 	}
 }
