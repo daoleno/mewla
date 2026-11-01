@@ -21,6 +21,7 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
+	"golang.org/x/sys/unix"
 )
 
 // releaseBuild is "1" only in binaries built by the release script
@@ -34,6 +35,9 @@ const (
 	autoUpdateFirst    = 2 * time.Minute
 	autoUpdateIdleWait = 5 * time.Minute
 	updateGate         = 60 * time.Second
+	// A failure that is not the new version's fault (a full disk) is not
+	// tried again automatically for a day.
+	transientRetryAfter = 24 * time.Hour
 )
 
 // Linux only. On macOS the daemon runs from inside the signed Mewla.app;
@@ -91,10 +95,16 @@ func newDaemonUpdater(version, stateDir, addr, daemonID string, idle func() bool
 		installed = resolved
 	}
 	return &daemonUpdater{
-		version: version, supported: selfUpdateSupported(version), stateDir: stateDir, addr: addr, daemonID: daemonID,
+		version: version, supported: selfUpdateSupported(version) && installDirWritable(installed), stateDir: stateDir, addr: addr, daemonID: daemonID,
 		installed: installed, newClient: selfupdate.NewClient, idle: idle, handover: handover,
 		interval: autoUpdateInterval, first: autoUpdateFirst, idleWait: autoUpdateIdleWait,
 	}
+}
+
+// installDirWritable: staging and swapping happen beside the installed binary,
+// so a root-owned install cannot update itself and must not offer to.
+func installDirWritable(installed string) bool {
+	return unix.Access(filepath.Dir(installed), unix.W_OK) == nil
 }
 
 func (u *daemonUpdater) Status() server.DaemonUpdateStatus {
@@ -102,7 +112,11 @@ func (u *daemonUpdater) Status() server.DaemonUpdateStatus {
 	defer u.mu.Unlock()
 	status := server.DaemonUpdateStatus{Version: u.version, Supported: u.supported, Latest: u.latest, Updating: u.updating}
 	if failure, ok := selfupdate.LastFailure(u.stateDir); ok && u.supported && failure.Version != u.version {
-		status.Error = fmt.Sprintf("Mewla %s did not start; still on %s", failure.Version, u.version)
+		if failure.Permanent() {
+			status.Error = fmt.Sprintf("Mewla %s did not start; still on %s", failure.Version, u.version)
+		} else {
+			status.Error = fmt.Sprintf("Mewla %s could not be installed; still on %s", failure.Version, u.version)
+		}
 	}
 	return status
 }
@@ -129,23 +143,38 @@ func (u *daemonUpdater) Run(ctx context.Context) {
 			}
 		}
 		u.mu.Lock()
-		pending := u.latest != ""
+		pending := u.latest != "" && !u.heldBack()
 		u.mu.Unlock()
 		switch {
 		case !pending:
 			wait = u.interval
 		case u.idle():
-			if err := u.install(ctx); err != nil {
+			switch err := u.install(ctx, true); {
+			case err == nil:
+				return
+			case errors.Is(err, errNotIdle), errors.Is(err, errInProgress):
+				wait = u.idleWait
+			default:
 				log.Printf("update: %v", err)
 				wait = u.interval
-			} else {
-				return
 			}
 		default:
 			wait = u.idleWait
 		}
 	}
 }
+
+// heldBack: the newest release failed to install earlier for a reason that
+// is not its fault and its retry time has not come. Called with u.mu held.
+func (u *daemonUpdater) heldBack() bool {
+	failure, ok := selfupdate.LastFailure(u.stateDir)
+	return ok && failure.Version == u.latest && failure.HoldsAutomatic(time.Now())
+}
+
+var (
+	errNotIdle    = errors.New("a Worker started; waiting for it to finish")
+	errInProgress = errors.New("an update is already in progress")
+)
 
 func (u *daemonUpdater) check(ctx context.Context) error {
 	_, err := u.latestRelease(ctx)
@@ -168,7 +197,7 @@ func (u *daemonUpdater) latestRelease(ctx context.Context) (*selfupdate.Candidat
 	if err != nil {
 		return nil, err
 	}
-	if failure, ok := selfupdate.LastFailure(u.stateDir); ok && candidate != nil && failure.Version == candidate.Version {
+	if failure, ok := selfupdate.LastFailure(u.stateDir); ok && candidate != nil && failure.Version == candidate.Version && failure.Permanent() {
 		candidate = nil
 	}
 	u.latest = ""
@@ -183,15 +212,8 @@ func (u *daemonUpdater) Install() error {
 	if !u.supported {
 		return server.ErrUpdateUnavailable
 	}
-	u.mu.Lock()
-	if u.updating {
-		u.mu.Unlock()
-		return nil
-	}
-	u.updating = true
-	u.mu.Unlock()
 	go func() {
-		if err := u.install(context.Background()); err != nil {
+		if err := u.install(context.Background(), false); err != nil && !errors.Is(err, errInProgress) {
 			log.Printf("update: %v", err)
 		}
 	}()
@@ -199,9 +221,15 @@ func (u *daemonUpdater) Install() error {
 }
 
 // install downloads, verifies and stages the newest release, then ends the
-// daemon so main can hand over to it. On any error nothing has changed.
-func (u *daemonUpdater) install(ctx context.Context) (err error) {
+// daemon so main can hand over to it. Only one runs at a time. On any error
+// nothing has changed. auto is the periodic path, which re-checks that the
+// computer is still idle once the download is staged.
+func (u *daemonUpdater) install(ctx context.Context, auto bool) (err error) {
 	u.mu.Lock()
+	if u.updating {
+		u.mu.Unlock()
+		return errInProgress
+	}
 	u.updating = true
 	u.mu.Unlock()
 	defer func() {
@@ -231,6 +259,11 @@ func (u *daemonUpdater) install(ctx context.Context) (err error) {
 	staged, err := selfupdate.Stage(u.installed, binary, candidate.Version)
 	if err != nil {
 		return fmt.Errorf("stage update: %w", err)
+	}
+	if auto && !u.idle() {
+		// The download took minutes; something started meanwhile.
+		_ = os.Remove(staged)
+		return errNotIdle
 	}
 	u.handover(&updateHandover{
 		Installed: u.installed, Staged: staged, Version: candidate.Version,
@@ -304,13 +337,18 @@ func runUpdateHandover(h *updateHandover, args []string) error {
 		log.Printf("mewla: updated to %s", h.Version)
 	} else {
 		log.Printf("mewla: update to %s did not take, staying on the current version: %s", h.Version, outcome.Reason)
-		if outcome.Bad {
-			if err := selfupdate.RecordFailure(h.StateDir, selfupdate.Failure{Version: h.Version, Reason: outcome.Reason, At: time.Now()}); err != nil {
-				log.Printf("mewla: remember failed update: %v", err)
-			}
-		}
 		if ctx.Err() != nil {
-			return nil // the service is being stopped
+			return nil // the service is being stopped: nothing to blame, no cooldown
+		}
+		failure := selfupdate.Failure{Version: h.Version, Reason: outcome.Reason, At: time.Now()}
+		if !outcome.Bad {
+			// Not the new version's fault (a full disk, a filesystem that
+			// refuses): leave it alone for a day instead of restarting the
+			// daemon every few minutes.
+			failure.RetryAfter = failure.At.Add(transientRetryAfter)
+		}
+		if err := selfupdate.RecordFailure(h.StateDir, failure); err != nil {
+			log.Printf("mewla: remember failed update: %v", err)
 		}
 	}
 	return syscall.Exec(h.Installed, append([]string{os.Args[0]}, args...), os.Environ())

@@ -189,6 +189,19 @@ func (h Handover) Run(ctx context.Context) Outcome {
 	return Outcome{Adopted: true}
 }
 
+var linkFile = os.Link
+
+func copyExecutable(from, to string) error {
+	info, err := os.Stat(from)
+	if err != nil {
+		return err
+	}
+	if err := copyFile(from, to); err != nil {
+		return err
+	}
+	return os.Chmod(to, info.Mode().Perm())
+}
+
 // promote makes staged the installed binary and keeps the old one as .prev.
 // The installed path never goes missing: the old file is linked to .prev
 // first, then staged is renamed over it in one step.
@@ -201,8 +214,11 @@ func promote(installed, staged string) error {
 	if err := os.Remove(prev); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := os.Link(target, prev); err != nil {
-		return fmt.Errorf("keep the previous version: %w", err)
+	if err := linkFile(target, prev); err != nil {
+		// Not every filesystem links; a copy keeps the previous version too.
+		if copyErr := copyExecutable(target, prev); copyErr != nil {
+			return fmt.Errorf("keep the previous version: %w", errors.Join(err, copyErr))
+		}
 	}
 	if err := os.Rename(staged, target); err != nil {
 		return err
@@ -219,7 +235,18 @@ type Failure struct {
 	Version string    `json:"version"`
 	Reason  string    `json:"reason"`
 	At      time.Time `json:"at"`
+	// RetryAfter is set when the new version itself was not at fault (a full
+	// disk, a stop in the middle): the automatic path leaves the version alone
+	// until then, and the Update button may still try. Zero means the version
+	// failed to run and is never tried again.
+	RetryAfter time.Time `json:"retry_after,omitempty"`
 }
+
+// Permanent: the new version itself failed.
+func (f Failure) Permanent() bool { return f.RetryAfter.IsZero() }
+
+// HoldsAutomatic: the automatic path must not try this version now.
+func (f Failure) HoldsAutomatic(now time.Time) bool { return f.Permanent() || now.Before(f.RetryAfter) }
 
 // RecordFailure remembers a rolled-back version so it is not tried again.
 func RecordFailure(stateDir string, failure Failure) error {
