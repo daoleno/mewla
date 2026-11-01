@@ -53,3 +53,38 @@ func TestDoctorJSONSchemaSmoke(t *testing.T) {
 		t.Fatalf("unexpected JSON: %s", raw)
 	}
 }
+
+func TestDaemonViewWarningsNameWhatOnlyTheShellSees(t *testing.T) {
+	ready := doctor.ExecutorCheck{ID: "claude", Name: "Claude Code", BinaryFound: true, VerifiedAuthenticated: true}
+	here := doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{ready}}
+
+	if got := daemonViewWarnings(here, nil); len(got) != 0 {
+		t.Fatalf("no daemon running must warn nothing, got %v", got)
+	}
+
+	same := &doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{ready}}
+	if got := daemonViewWarnings(here, same); len(got) != 0 {
+		t.Fatalf("matching views must warn nothing, got %v", got)
+	}
+
+	// Signed in through the shell's environment: the daemon, started at login
+	// without it, sees the same binary signed out.
+	signedOut := ready
+	signedOut.VerifiedAuthenticated = false
+	got := daemonViewWarnings(here, &doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{signedOut}})
+	if len(got) != 1 || !strings.Contains(got[0], "Claude Code is signed in here") || !strings.Contains(got[0], "run mewla") {
+		t.Fatalf("want one sign-in warning with its fix, got %v", got)
+	}
+
+	// A binary on the shell's PATH only.
+	missing := doctor.ExecutorCheck{ID: "claude", Name: "Claude Code"}
+	got = daemonViewWarnings(here, &doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{missing}})
+	if len(got) != 1 || !strings.Contains(got[0], "not on the running Mewla's") {
+		t.Fatalf("want one PATH warning, got %v", got)
+	}
+
+	// The daemon does better than the terminal: nothing to fix.
+	if got := daemonViewWarnings(doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{signedOut}}, same); len(got) != 0 {
+		t.Fatalf("daemon ahead of the terminal must warn nothing, got %v", got)
+	}
+}
