@@ -50,8 +50,10 @@ import { importFailureToast, importProgressToast } from "../services/importFeedb
 import {
   finishPairTimeline,
   markPairTimeline,
+  setPairTimelineSink,
   slowPairingToast,
 } from "../services/pairTiming";
+import { rememberPairTiming } from "../services/pairTimingStore";
 import { AlertHost } from "../components/ui/AlertHost";
 import { appFontAssets } from "../constants/appFontAssets";
 import { ThemeProvider } from "../theme";
@@ -207,6 +209,8 @@ interface ConnectionLifecycleProps {
   /** Null while the app starts; then where it went: pairing, or the app. */
   onBootstrapResolved(destination: LaunchDestination | null): void;
 }
+
+setPairTimelineSink(rememberPairTiming);
 
 const ConnectionLifecycle = memo(function ConnectionLifecycle({
   onBootstrapResolved,

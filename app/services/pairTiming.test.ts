@@ -5,6 +5,8 @@ import {
   finishPairTimeline,
   markPairTimeline,
   PairTimeline,
+  type PairTimelineReport,
+  setPairTimelineSink,
   slowPairingToast,
   startPairTimeline,
 } from "./pairTiming";
@@ -85,5 +87,48 @@ describe("active pairing", () => {
     expect(report?.slowest).toEqual({ name: "failed", ms: 45_000 });
     bindPairTimeline("srv-c");
     expect(finishPairTimeline("srv-c")).toBeNull();
+  });
+});
+
+describe("kept reports", () => {
+  test("a finished and a failed pairing both reach the sink with their hops", () => {
+    const kept: PairTimelineReport[] = [];
+    setPairTimelineSink((report) => kept.push(report));
+    const c = clock();
+    startPairTimeline(c.now);
+    c.advance(70);
+    markPairTimeline("tunnel");
+    bindPairTimeline("srv-d");
+    c.advance(76_000);
+    finishPairTimeline("srv-d");
+    startPairTimeline(c.now);
+    abandonPairTimeline("failed");
+    setPairTimelineSink(null);
+    expect(kept.map((report) => report.outcome)).toEqual(["connected", "failed"]);
+    expect(kept[0].segments).toEqual([
+      { name: "tunnel", ms: 70 },
+      { name: "connected", ms: 76_000 },
+    ]);
+  });
+
+  test("a computer that never connects still leaves its timeline", async () => {
+    const kept: PairTimelineReport[] = [];
+    setPairTimelineSink((report) => kept.push(report));
+    const realSetTimeout = globalThis.setTimeout;
+    const fired: Array<() => void> = [];
+    globalThis.setTimeout = ((callback: () => void) => {
+      fired.push(callback);
+      return 0;
+    }) as unknown as typeof setTimeout;
+    try {
+      startPairTimeline(clock().now);
+      bindPairTimeline("srv-e");
+      fired.at(-1)?.();
+    } finally {
+      globalThis.setTimeout = realSetTimeout;
+      setPairTimelineSink(null);
+    }
+    expect(kept.map((report) => report.outcome)).toEqual(["unfinished"]);
+    expect(kept[0].segments.at(-1)?.name).toBe("waiting");
   });
 });
