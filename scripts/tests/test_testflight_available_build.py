@@ -95,7 +95,10 @@ class InstallableBuildTests(unittest.TestCase):
                 "public_link": "https://testflight.apple.com/join/nMQheDCE",
             },
         )
-        self.assertIn("/betaGroups/g1/builds?", client.paths[-1])
+        # /betaGroups/{id}/builds rejects include (real API, HTTP 400), so /builds is filtered instead.
+        self.assertTrue(client.paths[-1].startswith("/builds?"))
+        self.assertIn("filter%5BbetaGroups%5D=g1", client.paths[-1])
+        self.assertIn("include=preReleaseVersion%2CbuildBetaDetail", client.paths[-1])
 
     def test_ignores_unexpected_link_and_requires_the_group(self):
         client = FakeClient(
