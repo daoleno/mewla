@@ -7,6 +7,12 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  accessoryBottomOffset as resolveAccessoryBottomOffset,
+  androidKeyboardInset,
+  nextAndroidBaseWindow,
+  type KeyboardFrame,
+} from "./terminalKeyboardInset";
 
 interface UseTerminalAccessoryLayoutInput {
   accessoryVisible: boolean;
@@ -20,54 +26,76 @@ export function useTerminalAccessoryLayout({
   ctrlDisabled = false,
 }: UseTerminalAccessoryLayoutInput) {
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [androidKeyboardInset, setAndroidKeyboardInset] = useState(0);
+  const [androidInset, setAndroidInset] = useState(0);
   const [accessoryHeight, setAccessoryHeight] = useState(68);
   const [ctrlArmed, setCtrlArmed] = useState(false);
-  const keyboardHeightRef = useRef(0);
-  const baseWindowHeightRef = useRef(windowHeight);
+  const [keyboardFrame, setKeyboardFrame] = useState<KeyboardFrame | null>(null);
+  const baseWindowRef = useRef<{ width: number; height: number } | null>({
+    width: windowWidth,
+    height: windowHeight,
+  });
 
   useEffect(() => {
+    const handleFrame = (event: KeyboardEvent) => {
+      const end = event?.endCoordinates;
+      setKeyboardFrame({ screenY: end?.screenY ?? 0, height: end?.height ?? 0 });
+    };
     const handleShow = (event: KeyboardEvent) => {
-      keyboardHeightRef.current = event?.endCoordinates?.height ?? 0;
+      handleFrame(event);
       setKeyboardVisible(true);
     };
     const handleHide = () => {
-      keyboardHeightRef.current = 0;
-      setAndroidKeyboardInset(0);
+      setKeyboardFrame(null);
+      setAndroidInset(0);
       setKeyboardVisible(false);
     };
 
-    const showSub = Keyboard.addListener("keyboardDidShow", handleShow);
-    const hideSub = Keyboard.addListener("keyboardDidHide", handleHide);
+    const subs = [
+      Keyboard.addListener("keyboardDidShow", handleShow),
+      Keyboard.addListener("keyboardDidHide", handleHide),
+    ];
+    // A rotation or a fold moves the keyboard without showing it again; only
+    // iOS reports that.
+    if (Platform.OS === "ios") {
+      subs.push(Keyboard.addListener("keyboardDidChangeFrame", handleFrame));
+    }
     return () => {
-      showSub.remove();
-      hideSub.remove();
+      for (const sub of subs) sub.remove();
     };
   }, []);
 
+  // The window changed under a keyboard that is up (rotation, fold): take the
+  // keyboard's frame as it is now, not as it was when it showed.
   useEffect(() => {
-    if (!keyboardVisible) {
-      baseWindowHeightRef.current = windowHeight;
+    if (Platform.OS !== "ios" || !keyboardVisible) return;
+    const metrics = Keyboard.metrics();
+    if (metrics) {
+      setKeyboardFrame({ screenY: metrics.screenY, height: metrics.height });
     }
-  }, [keyboardVisible, windowHeight]);
+  }, [keyboardVisible, windowWidth, windowHeight]);
+
+  useEffect(() => {
+    baseWindowRef.current = nextAndroidBaseWindow(
+      baseWindowRef.current,
+      { width: windowWidth, height: windowHeight },
+      keyboardVisible,
+    );
+  }, [keyboardVisible, windowWidth, windowHeight]);
 
   useEffect(() => {
     if (!keyboardVisible || Platform.OS !== "android") return;
 
-    const keyboardHeight = keyboardHeightRef.current;
-    if (!keyboardHeight) return;
-
-    const adjustResizeHandled = Math.max(
-      0,
-      baseWindowHeightRef.current - windowHeight,
+    const next = androidKeyboardInset(
+      keyboardFrame?.height ?? 0,
+      baseWindowRef.current?.height ?? null,
+      windowHeight,
     );
-    const remainingInset = Math.max(0, keyboardHeight - adjustResizeHandled);
-    setAndroidKeyboardInset((previous) =>
-      Math.abs(previous - remainingInset) <= 1 ? previous : remainingInset,
+    setAndroidInset((previous) =>
+      Math.abs(previous - next) <= 1 ? previous : next,
     );
-  }, [keyboardVisible, windowHeight]);
+  }, [keyboardVisible, keyboardFrame, windowWidth, windowHeight]);
 
   useEffect(() => {
     if (!keyboardVisible) {
@@ -96,11 +124,16 @@ export function useTerminalAccessoryLayout({
     );
   }, []);
 
-  // Both platforms use an absolute dock. iOS uses the keyboard event height
-  // directly; Android subtracts the portion already handled by window resize.
-  const accessoryBottomOffset = Platform.OS === "ios"
-    ? (keyboardVisible ? keyboardHeightRef.current : insets.bottom)
-    : (keyboardVisible ? androidKeyboardInset : insets.bottom);
+  // Both platforms use an absolute dock. iOS lifts it by the part of the window
+  // the keyboard covers now; Android by the part window resize did not handle.
+  const accessoryBottomOffset = resolveAccessoryBottomOffset({
+    platform: Platform.OS,
+    keyboardVisible,
+    safeAreaBottom: insets.bottom,
+    windowHeight,
+    keyboardFrame,
+    androidInset,
+  });
   const outputBottomInset = accessoryVisible
     ? accessoryHeight + accessoryBottomOffset
     : 0;
