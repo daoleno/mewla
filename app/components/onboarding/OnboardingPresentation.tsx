@@ -48,6 +48,7 @@ export function OnboardingPresentation({ serverName, connection, error, pairing,
   const [step, setStep] = useState<OnboardingStep>(paired ? "connected" : initialStep);
   const [cameFrom, setCameFrom] = useState<OnboardingStep | null>(null);
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  const [scanning, setScanning] = useState(false);
   const go = (next: OnboardingStep) => {
     setCameFrom(step);
     setStep(next);
@@ -151,10 +152,10 @@ export function OnboardingPresentation({ serverName, connection, error, pairing,
         ) : step === "scan" ? splitStep(
           <>
             {header(2, "ON THIS PHONE", "Scan the code in your terminal")}
-            <OnboardingScanner compact={compact} paused={pairing} onCode={onCode} />
+            <OnboardingScanner compact={compact} paused={pairing} onCode={onCode} onSearching={setScanning} />
             <View style={styles.status} accessibilityLiveRegion="polite">
               {pairing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : null}
-              <AppText variant="compact" tone="secondary">{pairing ? "Pairing…" : "Looking for a Mewla code…"}</AppText>
+              {pairing || scanning ? <AppText variant="compact" tone="secondary">{pairing ? "Pairing…" : "Looking for a Mewla code…"}</AppText> : null}
             </View>
           </>,
           <>

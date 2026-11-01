@@ -2,14 +2,14 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAppColors } from "../../constants/tokens";
-import { cameraGate, cameraMayRun } from "../../services/cameraGate";
+import { cameraGate, cameraIsSearching, cameraMayRun } from "../../services/cameraGate";
 import { AppText } from "../ui/AppText";
 
 /**
  * The viewfinder on the scan step. The camera runs only while this step is on
  * screen and the app is in front; `paused` stops reading while a code pairs.
  */
-export function OnboardingScanner({ paused, compact = false, onCode }: { paused: boolean; /** A short window: a smaller viewfinder. */ compact?: boolean; onCode(data: string): void }) {
+export function OnboardingScanner({ paused, compact = false, onCode, onSearching }: { paused: boolean; /** A short window: a smaller viewfinder. */ compact?: boolean; onCode(data: string): void; /** Whether the camera is really looking for a code (not asking, denied or failed). */ onSearching?(searching: boolean): void }) {
   const colors = useAppColors();
   // The first time this step shows, the system asks for the camera on its own:
   // a viewfinder that waits for a tap on a dark window reads as a black screen.
@@ -23,6 +23,10 @@ export function OnboardingScanner({ paused, compact = false, onCode }: { paused:
 
   const gate = Platform.OS === "web" ? "loading" : cameraGate(permission);
   const openSettings = () => void Linking.openSettings();
+  const searching = cameraIsSearching(gate, mountError, foreground);
+  useEffect(() => {
+    onSearching?.(searching);
+  }, [onSearching, searching]);
   return (
     <View style={[styles.finder, compact && styles.finderCompact, { borderColor: colors.border }]}>
       {mountError ? (
