@@ -17,7 +17,8 @@ import {
 import { confirmDestructive } from "../../components/ui";
 import { changeAgentUse, getAgentUse, type AgentUseChange, type AgentUseStatus } from "../../services/agentUse";
 import { getDaemonUpdate, installDaemonUpdate, type DaemonUpdateStatus } from "../../services/daemonUpdate";
-import { MIN_COMPUTER_VERSION } from "../../constants/computerVersion";
+import { appVersion } from "../../constants/appVersion";
+import { MIN_COMPUTER_VERSION, effectiveMinComputerVersion } from "../../constants/computerVersion";
 import { cancelCalendarNotifications } from "../../services/calendarNotifications";
 import {
   checkComputer,
@@ -223,7 +224,7 @@ export default function ComputerScreen() {
   const apartNames = computersApartFrom(server)
     .map((daemonId) => others.find((other) => other.daemonId === daemonId)?.name)
     .filter((name): name is string => Boolean(name));
-  const updateProblem = reachable ? computerUpdateProblem(daemonUpdate, MIN_COMPUTER_VERSION) : null;
+  const updateProblem = reachable ? computerUpdateProblem(daemonUpdate, effectiveMinComputerVersion(MIN_COMPUTER_VERSION, appVersion)) : null;
   const problems: ComputerProblem[] = [
     ...(updateProblem ? [updateProblem] : []),
     ...(reachable ? computerProblems(agentUse) : []),
