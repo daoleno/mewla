@@ -59,6 +59,33 @@ export function nextAndroidBaseWindow(
   return null;
 }
 
+/** What the platform says about the keyboard covering the window right now. */
+export interface KeyboardCoverSnapshot {
+  imeVisible: boolean;
+  imeHeight: number;
+  evidence: string;
+}
+
+/** Evidence strings of the native query when it actually looked at the window. */
+const AUTHORITATIVE_EVIDENCE = new Set(["keyboard_layout_guide", "window_insets_ime"]);
+
+/**
+ * Whether the keyboard is up, for the key bar's toggle and its offset.
+ *
+ * Show/hide events can be missed (a rotation or a fold dismisses the keyboard
+ * without a hide event), so an event alone never says the keyboard is up. It
+ * is up when an event said so and the window, asked now, is covered by it. A
+ * query that could not look (no native module, no window) decides nothing.
+ */
+export function keyboardCoversWindow(
+  shownByEvent: boolean,
+  snapshot: KeyboardCoverSnapshot | null,
+): boolean {
+  if (!shownByEvent) return false;
+  if (!snapshot || !AUTHORITATIVE_EVIDENCE.has(snapshot.evidence)) return true;
+  return snapshot.imeVisible && snapshot.imeHeight > 0;
+}
+
 export interface AccessoryOffsetInput {
   platform: "ios" | "android" | string;
   keyboardVisible: boolean;

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getKeyboardForegroundSnapshot } from "keyboard-lifecycle";
 import {
+  AppState,
   Keyboard,
   Platform,
   useWindowDimensions,
@@ -11,8 +13,13 @@ import {
   accessoryBottomOffset as resolveAccessoryBottomOffset,
   androidKeyboardInset,
   nextAndroidBaseWindow,
+  keyboardCoversWindow,
+  type KeyboardCoverSnapshot,
   type KeyboardFrame,
 } from "./terminalKeyboardInset";
+
+/** How long a rotation or fold takes to settle before the keyboard is asked again. */
+const COVER_SETTLE_MS = 350;
 
 interface UseTerminalAccessoryLayoutInput {
   accessoryVisible: boolean;
@@ -27,7 +34,10 @@ export function useTerminalAccessoryLayout({
 }: UseTerminalAccessoryLayoutInput) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [shownByEvent, setShownByEvent] = useState(false);
+  const [coverSnapshot, setCoverSnapshot] = useState<KeyboardCoverSnapshot | null>(null);
+  const snapshotRevisionRef = useRef(0);
+  const keyboardVisible = keyboardCoversWindow(shownByEvent, coverSnapshot);
   const [androidInset, setAndroidInset] = useState(0);
   const [accessoryHeight, setAccessoryHeight] = useState(68);
   const [ctrlArmed, setCtrlArmed] = useState(false);
@@ -44,12 +54,14 @@ export function useTerminalAccessoryLayout({
     };
     const handleShow = (event: KeyboardEvent) => {
       handleFrame(event);
-      setKeyboardVisible(true);
+      setCoverSnapshot(null);
+      setShownByEvent(true);
     };
     const handleHide = () => {
       setKeyboardFrame(null);
       setAndroidInset(0);
-      setKeyboardVisible(false);
+      setCoverSnapshot(null);
+      setShownByEvent(false);
     };
 
     const subs = [
@@ -65,6 +77,38 @@ export function useTerminalAccessoryLayout({
       for (const sub of subs) sub.remove();
     };
   }, []);
+
+  // Ask the platform whether a keyboard covers the window now. Events alone
+  // are not enough: a rotation or a fold can dismiss the keyboard without a
+  // hide event, and the toggle would then keep offering to hide it. The latest
+  // answer wins; a rotation is asked again once it has settled.
+  const refreshCover = useCallback(() => {
+    const revision = ++snapshotRevisionRef.current;
+    void getKeyboardForegroundSnapshot("", revision)
+      .then((snapshot) => {
+        if (snapshotRevisionRef.current !== revision) return;
+        setCoverSnapshot({
+          imeVisible: snapshot.imeVisible,
+          imeHeight: snapshot.imeHeight,
+          evidence: snapshot.evidence,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!shownByEvent) return;
+    refreshCover();
+    const settled = setTimeout(refreshCover, COVER_SETTLE_MS);
+    return () => clearTimeout(settled);
+  }, [shownByEvent, keyboardFrame, windowWidth, windowHeight, refreshCover]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshCover();
+    });
+    return () => sub.remove();
+  }, [refreshCover]);
 
   // The window changed under a keyboard that is up (rotation, fold): take the
   // keyboard's frame as it is now, not as it was when it showed.

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   accessoryBottomOffset,
   androidKeyboardInset,
+  keyboardCoversWindow,
   keyboardOverlap,
   nextAndroidBaseWindow,
 } from "./terminalKeyboardInset";
@@ -142,5 +143,62 @@ describe("nextAndroidBaseWindow", () => {
   test("a rotation with the keyboard up no longer double-insets", () => {
     const base = nextAndroidBaseWindow(portrait, { width: 900, height: 250 }, true);
     expect(androidKeyboardInset(150, base?.height ?? null, 250)).toBe(0);
+  });
+});
+
+describe("keyboardCoversWindow", () => {
+  const covering = { imeVisible: true, imeHeight: 291, evidence: "keyboard_layout_guide" };
+  const rotatedAway = { imeVisible: false, imeHeight: 0, evidence: "keyboard_layout_guide" };
+
+  test("is down without a show event", () => {
+    expect(keyboardCoversWindow(false, null)).toBe(false);
+    expect(keyboardCoversWindow(false, covering)).toBe(false);
+  });
+
+  test("is up when shown and the window is covered", () => {
+    expect(keyboardCoversWindow(true, covering)).toBe(true);
+    expect(
+      keyboardCoversWindow(true, { imeVisible: true, imeHeight: 200, evidence: "window_insets_ime" }),
+    ).toBe(true);
+  });
+
+  test("is down when a missed hide left it 'shown' but nothing covers the window", () => {
+    expect(keyboardCoversWindow(true, rotatedAway)).toBe(false);
+    expect(
+      keyboardCoversWindow(true, { imeVisible: true, imeHeight: 0, evidence: "keyboard_layout_guide" }),
+    ).toBe(false);
+  });
+
+  test("trusts the event until the platform has answered", () => {
+    expect(keyboardCoversWindow(true, null)).toBe(true);
+  });
+
+  test("a query that could not look decides nothing", () => {
+    for (const evidence of [
+      "native_module_unavailable",
+      "window_unavailable",
+      "activity_unavailable",
+      "insets_unavailable",
+      "snapshot_failed",
+    ]) {
+      expect(
+        keyboardCoversWindow(true, { imeVisible: false, imeHeight: 0, evidence }),
+      ).toBe(true);
+    }
+  });
+
+  test("the key bar drops to the safe area once nothing covers the window", () => {
+    const shown = true;
+    const visible = keyboardCoversWindow(shown, rotatedAway);
+    expect(
+      accessoryBottomOffset({
+        platform: "ios",
+        keyboardVisible: visible,
+        safeAreaBottom: 34,
+        windowHeight: 951,
+        keyboardFrame: { screenY: 660, height: 291 },
+        androidInset: 0,
+      }),
+    ).toBe(34);
   });
 });

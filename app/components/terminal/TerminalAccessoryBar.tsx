@@ -101,7 +101,11 @@ export function TerminalAccessoryBar({
       return;
     }
 
-    terminalRef.current?.resumeInput();
+    // A rotation or a fold can dismiss the keyboard while the input still
+    // counts as focused, and focusing a focused input shows nothing: drop the
+    // focus first so one tap always brings the keyboard up.
+    terminalRef.current?.blur();
+    requestAnimationFrame(() => terminalRef.current?.resumeInput());
   };
 
   // For tap keys: send on press (after release), consistent with modifier toggle.
