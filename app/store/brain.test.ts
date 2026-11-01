@@ -307,15 +307,18 @@ describe("Brain host problem", () => {
     } as any);
 
   test("keeps the computer's reason, including a code this app does not know", () => {
-    const known = snapshotWith({ code: "not_ready", executor: "grok", detail: " Sign in to grok. ", suggest_executor: "claude" });
+    const known = snapshotWith({ code: "not_ready", executor: "grok", detail: " Sign in to grok. ", suggest_executor: "claude", installed_executors: ["claude", 7, ""] });
     expect(known.byServer["server-1"]?.host_problem).toEqual({
       code: "not_ready",
       executor: "grok",
       detail: "Sign in to grok.",
       suggest_executor: "claude",
+      installed_executors: ["claude"],
     });
     const newer = snapshotWith({ code: "something_newer", executor: "x", detail: "Do this." });
     expect(newer.byServer["server-1"]?.host_problem?.detail).toBe("Do this.");
+    // A computer that lists no installed agents leaves nothing to switch to.
+    expect(newer.byServer["server-1"]?.host_problem?.installed_executors).toEqual([]);
   });
 
   test("drops a problem with no sentence to show", () => {

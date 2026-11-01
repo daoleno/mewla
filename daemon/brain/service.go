@@ -3709,6 +3709,7 @@ func (s *Service) projectHostProblem(host WorkerRef, executor work.WorkerExecuto
 	}
 	key := ""
 	if problem != nil {
+		problem.InstalledExecutors = s.installedAlternativeHosts(problem.Executor)
 		key = problem.Code + ":" + problem.Executor
 	}
 	s.hostProblemMu.Lock()
@@ -3762,6 +3763,32 @@ func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	}
 	problem.SuggestExecutor = s.verifiedAlternativeHost(executor.ID)
 	return problem
+}
+
+// installedAlternativeHosts are the configured agents other than current whose
+// command is on this computer's PATH, in AgentOrder.
+func (s *Service) installedAlternativeHosts(current string) []string {
+	if s == nil || s.execs == nil {
+		return nil
+	}
+	var installed []string
+	for _, id := range hostdeps.AgentOrder() {
+		if id == current {
+			continue
+		}
+		executor, ok := s.execs.WorkerExecutor(id)
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(executor.Command)
+		if len(fields) == 0 {
+			continue
+		}
+		if _, err := hostLookPath(fields[0]); err == nil {
+			installed = append(installed, id)
+		}
+	}
+	return installed
 }
 
 // verifiedAlternativeHost is the first installed agent, in AgentOrder, that

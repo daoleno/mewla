@@ -43,6 +43,10 @@ type HostProblem struct {
 	// SuggestExecutor is an installed agent Mewla verified as signed in, when
 	// the host's own is not one: `mewla brain use <id>` moves Brain to it.
 	SuggestExecutor string `json:"suggest_executor,omitempty"`
+	// InstalledExecutors are the other configured agents installed on this
+	// computer, signed in or not. A client offers to switch Brain's executor
+	// only when there is one to switch to.
+	InstalledExecutors []string `json:"installed_executors,omitempty"`
 }
 
 type Snapshot struct {

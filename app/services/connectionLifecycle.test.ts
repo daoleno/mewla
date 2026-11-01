@@ -2,6 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   brainScreenSurface,
+  canSwitchBrainExecutorFromProblem,
   createConnectedReadRefreshHandler,
   decideDisconnectLifecycle,
   shouldShowBrainLoadingState,
@@ -242,6 +243,22 @@ describe("Brain screen while it wakes", () => {
     expect(
       brainScreenSurface({ ...noHost, hasHostWorker: true, structuredEvents: true, connection: "connected" }),
     ).toBe("chat");
+  });
+
+  test("'Switch executor' on a host problem needs another installed agent to switch to", () => {
+    const problemFor = (installed?: string[]) =>
+      brainReducer(initialBrainState, {
+        type: "BRAIN_SNAPSHOT",
+        serverId: "s1",
+        serverName: "Mewla",
+        serverUrl: "ws://mewla",
+        brain: { host_problem: { code: "not_installed", executor: "claude", detail: "Install one.", installed_executors: installed } },
+      } as any).byServer["s1"]!.host_problem!;
+    // Nothing installed (or a computer that does not say): the button is a dead end.
+    expect(canSwitchBrainExecutorFromProblem(problemFor([]))).toBe(false);
+    expect(canSwitchBrainExecutorFromProblem(problemFor(undefined))).toBe(false);
+    // Another agent is installed, signed in or not: the person may switch.
+    expect(canSwitchBrainExecutorFromProblem(problemFor(["codex"]))).toBe(true);
   });
 
   test("no computer or an offline one keeps the status card", () => {

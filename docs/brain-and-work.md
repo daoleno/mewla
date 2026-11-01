@@ -302,7 +302,10 @@ log names it and the `mewla brain use` command that changes it. When Brain has
 no running host, the app's Brain tab says why instead of waiting: the agent is
 not installed, is not signed in, did not start, or is open but never became ready
 (a sign-in or first-run prompt waiting in its terminal), each with the step to
-take and a one-tap switch to an installed agent that is signed in. Nothing needs a
+take and a one-tap switch to an installed agent that is signed in. **Switch
+executor** appears there only when the computer has another agent installed; with
+none installed the sentence (`mewla deps`) is the next step and there is nothing
+to switch to. Nothing needs a
 restart: Mewla checks again every few seconds, starts Brain's host as soon as the
 agent is installed or signed in, and starts it again after a reboot (a host that
 never held a conversation restarts by itself; one holding a conversation Mewla

@@ -56,7 +56,7 @@ import { shouldShowBrainWorkColumn } from "../../constants/windowRoom";
 import { wsClient } from "../../services/websocket";
 import type { SendAttachment } from "../../services/structuredWebSocketTransport";
 import { terminalRouteParams } from "../../services/workerRouteId";
-import { brainScreenSurface } from "../../services/connectionLifecycle";
+import { brainScreenSurface, canSwitchBrainExecutorFromProblem } from "../../services/connectionLifecycle";
 import {
   isTargetedBrainThreadReadOnly,
   nextBrainChatMount,
@@ -801,7 +801,11 @@ export default function BrainScreen() {
                 suggested={availableExecutors.find((item) => item.id === activeBrain.host_problem?.suggest_executor)}
                 switching={Boolean(switchingAdapterId)}
                 onUseSuggested={(adapter) => void switchExecutor(adapter)}
-                onSwitchExecutor={canSwitchAdapter ? openAdapterSheet : undefined}
+                onSwitchExecutor={
+                  canSwitchAdapter && canSwitchBrainExecutorFromProblem(activeBrain.host_problem)
+                    ? openAdapterSheet
+                    : undefined
+                }
               />
             ) : brainSurface === "status" ? (
               <BrainStatusState
