@@ -6,7 +6,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, Platform, StyleSheet, View } from "react-native";
+import {
+  AppState,
+  Keyboard,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type KeyboardEvent,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useGenericKeyboardHandler } from "react-native-keyboard-controller";
 import { runOnUIAsync } from "react-native-worklets";
@@ -17,7 +25,11 @@ import Reanimated, {
   useSharedValue,
   type SharedValue,
 } from "react-native-reanimated";
-import { getKeyboardForegroundSnapshot } from "keyboard-lifecycle";
+import {
+  getKeyboardForegroundSnapshot,
+  keyboardDiagEnabled,
+  keyboardDiagLog,
+} from "keyboard-lifecycle";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { withAlpha } from "./colorWithAlpha";
 import {
@@ -61,6 +73,23 @@ interface InterfaceChatKeyboardFrameProps {
 // publish interactive samples.
 const KEYBOARD_GEOMETRY_PLATFORM = Platform.OS;
 
+// Opt-in (-MewlaKeyboardDiag YES / debug.mewla.keyboard=1): one JSON line per
+// native sample, snapshot answer and gate change, so a log says which of the
+// gate's conditions kept the Composer down.
+function diagLine(line: Record<string, unknown>) {
+  keyboardDiagLog(JSON.stringify({ scope: "interface", ...line }));
+}
+
+function diagNativeSample(
+  name: string,
+  height: number,
+  progress: number,
+  callbackRevision: number,
+  gate: StructuredChatKeyboardLifecycleGate,
+) {
+  diagLine({ at: "sample", name, height, progress, callbackRevision, gate });
+}
+
 export function InterfaceChatKeyboardFrame({
   enabled,
   composerFocused = false,
@@ -74,6 +103,36 @@ export function InterfaceChatKeyboardFrame({
   portal,
 }: InterfaceChatKeyboardFrameProps) {
   const overlayEnabled = Boolean(composer);
+  const { width: diagWindowWidth, height: diagWindowHeight } =
+    useWindowDimensions();
+  useEffect(() => {
+    if (!keyboardDiagEnabled) return;
+    const names =
+      Platform.OS === "ios"
+        ? ([
+            "keyboardWillShow",
+            "keyboardDidShow",
+            "keyboardWillChangeFrame",
+            "keyboardDidChangeFrame",
+            "keyboardWillHide",
+            "keyboardDidHide",
+          ] as const)
+        : (["keyboardDidShow", "keyboardDidHide"] as const);
+    const subs = names.map((name) =>
+      Keyboard.addListener(name, (event: KeyboardEvent) => {
+        const end = event?.endCoordinates;
+        diagLine({
+          at: "rn-event",
+          name,
+          screenY: end?.screenY,
+          height: end?.height,
+          width: end?.width,
+          window: { width: diagWindowWidth, height: diagWindowHeight },
+        });
+      }),
+    );
+    return () => subs.forEach((sub) => sub.remove());
+  }, [diagWindowWidth, diagWindowHeight]);
   const { composerHeight, handleComposerLayout } = useInterfaceComposerLayout({
     enabled: overlayEnabled,
   });
@@ -131,6 +190,18 @@ export function InterfaceChatKeyboardFrame({
           composerFocused: false,
           evidence: "snapshot_failed",
         }))
+        .then((snapshot) => {
+          if (keyboardDiagEnabled) {
+            diagLine({
+              at: "snapshot",
+              requestedRevision: sourceRevision,
+              foregroundReconciliation,
+              snapshot,
+              composerNativeId,
+            });
+          }
+          return snapshot;
+        })
         .then((snapshot) =>
           runOnUIAsync(
             dispatchStructuredChatAuthoritativeSnapshot,
@@ -146,6 +217,16 @@ export function InterfaceChatKeyboardFrame({
           ),
         )
         .then((result) => {
+          if (keyboardDiagEnabled) {
+            diagLine({
+              at: "snapshot-dispatch",
+              requestedRevision: sourceRevision,
+              resultRevision: result.revision,
+              accepted: result.accepted,
+              shouldBlurComposer: result.shouldBlurComposer,
+              gate: keyboardLifecycleGate.value,
+            });
+          }
           if (!disposedRef.current && result.shouldBlurComposer) {
             onKeyboardLifecycleInvalidate?.(
               foregroundReconciliation ? "foreground_closed" : "ime_closed",
@@ -231,6 +312,15 @@ export function InterfaceChatKeyboardFrame({
     {
       onStart: (event) => {
         "worklet";
+        if (keyboardDiagEnabled) {
+          runOnJS(diagNativeSample)(
+            "onStart",
+            event.height,
+            event.progress,
+            nativeCallbackRevision,
+            keyboardLifecycleGate.value,
+          );
+        }
         acceptNativeKeyboardSample(
           keyboardLifecycleGate,
           nativeCallbackRevision,
@@ -249,6 +339,15 @@ export function InterfaceChatKeyboardFrame({
       },
       onMove: (event) => {
         "worklet";
+        if (keyboardDiagEnabled) {
+          runOnJS(diagNativeSample)(
+            "onMove",
+            event.height,
+            event.progress,
+            nativeCallbackRevision,
+            keyboardLifecycleGate.value,
+          );
+        }
         acceptNativeKeyboardSample(
           keyboardLifecycleGate,
           nativeCallbackRevision,
@@ -267,6 +366,15 @@ export function InterfaceChatKeyboardFrame({
       },
       onInteractive: (event) => {
         "worklet";
+        if (keyboardDiagEnabled) {
+          runOnJS(diagNativeSample)(
+            "onInteractive",
+            event.height,
+            event.progress,
+            nativeCallbackRevision,
+            keyboardLifecycleGate.value,
+          );
+        }
         acceptNativeKeyboardSample(
           keyboardLifecycleGate,
           nativeCallbackRevision,
@@ -277,6 +385,15 @@ export function InterfaceChatKeyboardFrame({
       },
       onEnd: (event) => {
         "worklet";
+        if (keyboardDiagEnabled) {
+          runOnJS(diagNativeSample)(
+            "onEnd",
+            event.height,
+            event.progress,
+            nativeCallbackRevision,
+            keyboardLifecycleGate.value,
+          );
+        }
         acceptNativeKeyboardSample(
           keyboardLifecycleGate,
           nativeCallbackRevision,
