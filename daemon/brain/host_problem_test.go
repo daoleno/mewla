@@ -170,3 +170,37 @@ func TestSnapshotReportsAHostProblemForARecordedButUnobservedHost(t *testing.T) 
 		t.Fatalf("recovery not logged: %q", logged.String())
 	}
 }
+
+// A "Switch executor" button is a way out only when another agent is on the
+// computer; with none installed it is a dead end, so the problem says which
+// others are installed (signed in or not).
+func TestHostProblemListsTheOtherInstalledAgents(t *testing.T) {
+	processStartedAt = processStartedAt.Add(-time.Hour)
+	t.Cleanup(func() { processStartedAt = processStartedAt.Add(time.Hour) })
+
+	project := func(t *testing.T, installed map[string]bool, auth map[string]HostAuthState, host string) *HostProblem {
+		t.Helper()
+		service := hostFixture(t, installed, auth)
+		if err := service.store.SetHostSession("brain-host:@1", host); err != nil {
+			t.Fatal(err)
+		}
+		service.watcher = &fakeWatcher{sessions: map[string]*classifier.Worker{}}
+		return service.projectHostProblem(WorkerRef{ID: "brain-host:@1"}, service.hostExecutor())
+	}
+
+	if problem := project(t, map[string]bool{}, nil, "claude"); problem == nil ||
+		problem.Code != "not_installed" || len(problem.InstalledExecutors) != 0 {
+		t.Fatalf("nothing installed: %+v", problem)
+	}
+	// Installed but never verified signed in still counts: the person may know better.
+	problem := project(t, map[string]bool{"codex": true, "grok": true}, nil, "claude")
+	if problem == nil || problem.Code != "not_installed" || problem.SuggestExecutor != "" ||
+		strings.Join(problem.InstalledExecutors, ",") != "codex,grok" {
+		t.Fatalf("others installed, none verified: %+v", problem)
+	}
+	// The host itself is never its own alternative.
+	problem = project(t, map[string]bool{"claude": true, "codex": true}, map[string]HostAuthState{"claude": HostAuthUnauthenticated}, "claude")
+	if problem == nil || problem.Code != "not_signed_in" || strings.Join(problem.InstalledExecutors, ",") != "codex" {
+		t.Fatalf("host signed out: %+v", problem)
+	}
+}

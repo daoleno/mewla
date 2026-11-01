@@ -103,3 +103,12 @@ export function brainScreenSurface({
   }
   return connection === "offline" ? "status" : "waking";
 }
+
+/**
+ * "Switch executor" on "Brain can't start" is a way out only when the computer
+ * has another agent installed to switch to. With none installed it is a dead
+ * end; the problem's own sentence already says what to install.
+ */
+export function canSwitchBrainExecutorFromProblem(problem: { installed_executors: readonly string[] }): boolean {
+  return problem.installed_executors.length > 0;
+}

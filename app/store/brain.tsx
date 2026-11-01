@@ -158,6 +158,8 @@ export type BrainHostProblem = {
   detail: string;
   /** An installed agent verified signed in that Brain can move to. */
   suggest_executor?: string;
+  /** Other configured agents installed on the computer, signed in or not. */
+  installed_executors: string[];
 };
 
 export type BrainSnapshot = {
@@ -268,6 +270,9 @@ function normalizeHostProblem(raw: unknown): BrainHostProblem | undefined {
     detail,
     suggest_executor:
       typeof value.suggest_executor === "string" && value.suggest_executor ? value.suggest_executor : undefined,
+    installed_executors: Array.isArray(value.installed_executors)
+      ? value.installed_executors.filter((id): id is string => typeof id === "string" && id !== "")
+      : [],
   };
 }
 
