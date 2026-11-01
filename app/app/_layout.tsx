@@ -45,7 +45,8 @@ import { useAppTheme } from "../constants/tokens";
 import { useStackScreenOptions } from "../components/navigation/stackScreenOptions";
 import { DesktopWebShell } from "../components/navigation/DesktopWebShell";
 import { appScreenLayout } from "../components/navigation/HorizontalSafeAreaFrame";
-import { ToastProvider } from "../components/ui/Toast";
+import { ToastProvider, useOptionalToast } from "../components/ui/Toast";
+import { importFailureToast, importProgressToast } from "../services/importFeedback";
 import { AlertHost } from "../components/ui/AlertHost";
 import { appFontAssets } from "../constants/appFontAssets";
 import { ThemeProvider } from "../theme";
@@ -213,6 +214,9 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
   const calendarDispatch = useCalendarDispatch();
   const { refreshServers } = useCurrentServer();
   const routerRef = useRef(router);
+  const toast = useOptionalToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const handledConnectLinksRef = useRef(new Set<string>());
   const rootSegment = segments[0];
   const rootSegmentRef = useRef(rootSegment);
@@ -237,6 +241,7 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
       try {
         const savedServer = await importConnection(trimmed, {
           confirmScope: () => confirmPairingScopeFor(trimmed),
+          onProgress: (message) => toastRef.current?.show(importProgressToast(message)),
           onImported: async (importedServer) => {
             await refreshServers(importedServer.id);
             routerRef.current.replace({
@@ -255,6 +260,8 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
         handledConnectLinksRef.current.delete(trimmed);
         if (error instanceof PairingCancelledError) return false;
         console.log("Failed to import connect link:", error);
+        const failure = importFailureToast(error);
+        if (failure) toastRef.current?.show(failure);
         return false;
       }
     },

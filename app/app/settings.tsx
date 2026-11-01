@@ -534,7 +534,7 @@ export default function SettingsScreen() {
                 </Text>
                 <Text style={styles.scannerNoticeText}>
                   {cameraGate(cameraPermission) === "denied"
-                    ? "The camera is off for Mewla. Turn it on in Settings, or paste the pairing link instead."
+                    ? "The camera is off for Mewla. Turn it on in Settings, or paste the link instead."
                     : "Allow camera access to scan a mewla pairing QR code."}
                 </Text>
                 <AnimatedPressable
