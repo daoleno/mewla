@@ -58,6 +58,10 @@ jobs:
       MEWLA_IOS_BUILD_NUMBER: ${{ github.event_name == 'workflow_dispatch' && inputs.build_number || '' }}
       MEWLA_IOS_DESTINATION: ${{ github.event_name == 'push' && 'testflight' || inputs.destination }}
       MEWLA_IOS_REF: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
+      # A Preview build that goes to TestFlight learns of newer TestFlight builds
+      # (ios-testflight-available.yml) and opens TestFlight; every other build stays silent.
+      # Job-level so the prebuild config and the archive's embedded config agree.
+      MEWLA_IOS_DISTRIBUTION: ${{ ((github.event_name == 'push' || inputs.app_identity == 'preview') && (github.event_name == 'push' || inputs.destination == 'testflight')) && 'testflight' || '' }}
       # The Dynamic Island / Live Activity / widget extension is a second signed target. It is
       # built only once the repository variable MEWLA_IOS_LIVE is "1", which is set after its App
       # IDs, App Group and provisioning profile exist (docs/ios-ci-release.md). A manual dispatch can
