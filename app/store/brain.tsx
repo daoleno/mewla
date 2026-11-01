@@ -150,10 +150,20 @@ export type BrainExecutorRef = {
   host?: boolean;
 };
 
+/** Why Brain has no running host, said by the computer (see daemon brain.HostProblem). */
+export type BrainHostProblem = {
+  code: "not_installed" | "not_signed_in" | "not_started";
+  executor: string;
+  detail: string;
+  /** An installed agent verified signed in that Brain can move to. */
+  suggest_executor?: string;
+};
+
 export type BrainSnapshot = {
   workers?: BrainWorkerRef[];
   host_worker?: BrainWorkerRef | null;
   host_executor?: BrainExecutorRef | null;
+  host_problem?: BrainHostProblem;
   executors?: BrainExecutorRef[];
   chat_thread_id?: string;
   current_work?: BrainCurrentWork[];
@@ -226,6 +236,7 @@ function normalizeSnapshot(
       hostExecutor && typeof hostExecutor === "object"
         ? normalizeExecutorRef(hostExecutor)
         : undefined,
+    host_problem: normalizeHostProblem(raw?.host_problem),
     executors: executors.map(normalizeExecutorRef).filter((adapter) => adapter.id),
     chat_thread_id:
       typeof raw?.chat_thread_id === "string" ? raw.chat_thread_id : undefined,
@@ -240,6 +251,22 @@ function normalizeSnapshot(
       typeof raw?.worklog_path === "string" ? raw.worklog_path : undefined,
     generated_at:
       typeof raw?.generated_at === "string" ? raw.generated_at : undefined,
+  };
+}
+
+function normalizeHostProblem(raw: unknown): BrainHostProblem | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const value = raw as Record<string, unknown>;
+  const code = value.code;
+  if (code !== "not_installed" && code !== "not_signed_in" && code !== "not_started") return undefined;
+  const detail = typeof value.detail === "string" ? value.detail.trim() : "";
+  if (!detail) return undefined;
+  return {
+    code,
+    executor: typeof value.executor === "string" ? value.executor : "",
+    detail,
+    suggest_executor:
+      typeof value.suggest_executor === "string" && value.suggest_executor ? value.suggest_executor : undefined,
   };
 }
 
@@ -625,6 +652,7 @@ function brainServerStatesEqual(
     left.worklog_path === right.worklog_path &&
     workerRefsEqual(left.host_worker, right.host_worker) &&
     executorRefsEqual(left.host_executor, right.host_executor) &&
+    JSON.stringify(left.host_problem ?? null) === JSON.stringify(right.host_problem ?? null) &&
     workerRefArraysEqual(left.workers ?? [], right.workers ?? []) &&
     executorRefArraysEqual(left.executors ?? [], right.executors ?? []) &&
     currentWorkArraysEqual(left.current_work ?? [], right.current_work ?? []) &&

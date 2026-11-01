@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -630,6 +631,9 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	}
 	hostExecutor.Host = true
 	snapshot.HostExecutor = &hostExecutor
+	if host.ID == "" {
+		snapshot.HostProblem = s.hostProblem(hostExecutor)
+	}
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
@@ -677,6 +681,9 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	}
 	hostExecutor.Host = true
 	snapshot.HostExecutor = &hostExecutor
+	if host.ID == "" {
+		snapshot.HostProblem = s.hostProblem(hostExecutor)
+	}
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
@@ -3584,6 +3591,30 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 // hostLookPath finds executor commands; tests replace it.
 var hostLookPath = exec.LookPath
 
+// HostAuthState is what Mewla knows of an agent CLI's sign-in: "authenticated"
+// (verified), "unauthenticated" (verified not signed in) or "unknown".
+type HostAuthState string
+
+const (
+	HostAuthAuthenticated   HostAuthState = "authenticated"
+	HostAuthUnauthenticated HostAuthState = "unauthenticated"
+	HostAuthUnknown         HostAuthState = "unknown"
+)
+
+// hostAuth reports an executor's sign-in. The daemon installs doctor's probe
+// with SetHostAuthProbe; without one every executor is unknown. Tests replace it.
+var hostAuth = func(string) HostAuthState { return HostAuthUnknown }
+
+// SetHostAuthProbe installs the sign-in probe the Brain host choice and the
+// host problem report use. It must be cheap to call repeatedly (cached).
+func SetHostAuthProbe(probe func(executorID string) HostAuthState) {
+	if probe == nil {
+		hostAuth = func(string) HostAuthState { return HostAuthUnknown }
+		return
+	}
+	hostAuth = probe
+}
+
 // installedHostExecutor picks, before any Brain host has been chosen, the
 // first configured executor whose command is installed, in hostdeps'
 // AgentOrder, so a computer with only Claude Code installed does not start
@@ -3607,6 +3638,12 @@ func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 	if len(installed) == 0 {
 		return work.WorkerExecutor{}, false
 	}
+	// An agent Mewla verified as signed in runs Brain before one whose sign-in
+	// is unknown, and that before one verified signed out: the first agent
+	// installed in AgentOrder may be a CLI the person never logged in to.
+	slices.SortStableFunc(installed, func(a, b work.WorkerExecutor) int {
+		return hostAuthRank(hostAuth(a.ID)) - hostAuthRank(hostAuth(b.ID))
+	})
 	if len(installed) > 1 {
 		s.defaultHostLogged.Do(func() {
 			others := make([]string, 0, len(installed)-1)
@@ -3618,6 +3655,82 @@ func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 		})
 	}
 	return installed[0], true
+}
+
+// hostStartGrace is how long a daemon may run without a Brain host before a
+// host that merely did not start is reported; a host being started is normal
+// for a few seconds, and a client must not flash a failure for it.
+const hostStartGrace = 45 * time.Second
+
+var processStartedAt = time.Now()
+
+// hostProblem names why there is no Brain host. A command that is not
+// installed or an agent verified signed out is certain and reported at once;
+// a host that simply has not appeared is reported once it is overdue.
+func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
+	command := strings.TrimSpace(executor.Command)
+	if command == "" {
+		command = executor.ID
+	}
+	name := executor.ID
+	problem := &HostProblem{Executor: executor.ID}
+	fields := strings.Fields(command)
+	switch {
+	case len(fields) > 0 && func() bool { _, err := hostLookPath(fields[0]); return err != nil }():
+		problem.Code = "not_installed"
+		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not installed on this computer.", name, fields[0])
+	case hostAuth(executor.ID) == HostAuthUnauthenticated:
+		problem.Code = "not_signed_in"
+		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer.", name, name)
+	case time.Since(processStartedAt) > hostStartGrace:
+		problem.Code = "not_started"
+		problem.Detail = fmt.Sprintf("Brain's %s session did not start. Run mewla doctor on the computer to see why.", name)
+		if hostAuth(executor.ID) == HostAuthUnknown {
+			problem.Detail = fmt.Sprintf("Brain's %s session did not start, and Mewla cannot tell whether %s is signed in. Run mewla doctor on the computer to see why.", name, name)
+		}
+	default:
+		return nil
+	}
+	problem.SuggestExecutor = s.verifiedAlternativeHost(executor.ID)
+	return problem
+}
+
+// verifiedAlternativeHost is the first installed agent, in AgentOrder, that
+// Mewla verified as signed in and that is not the current host.
+func (s *Service) verifiedAlternativeHost(current string) string {
+	if s == nil || s.execs == nil {
+		return ""
+	}
+	for _, id := range hostdeps.AgentOrder() {
+		if id == current {
+			continue
+		}
+		executor, ok := s.execs.WorkerExecutor(id)
+		if !ok {
+			continue
+		}
+		fields := strings.Fields(executor.Command)
+		if len(fields) == 0 {
+			continue
+		}
+		if _, err := hostLookPath(fields[0]); err != nil {
+			continue
+		}
+		if hostAuth(id) == HostAuthAuthenticated {
+			return id
+		}
+	}
+	return ""
+}
+
+func hostAuthRank(state HostAuthState) int {
+	switch state {
+	case HostAuthAuthenticated:
+		return 0
+	case HostAuthUnauthenticated:
+		return 2
+	}
+	return 1
 }
 
 // HostExecutorID names the executor running Brain. Launches Brain does not

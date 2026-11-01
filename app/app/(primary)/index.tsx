@@ -66,6 +66,7 @@ import { useWorkers, type ConnectionState } from "../../store/workers";
 import {
   useBrain,
   type BrainExecutorRef,
+  type BrainHostProblem,
 } from "../../store/brain";
 import type { BrainWorkResultEvent } from "../../components/brain/brainWorkEvent";
 import { useCurrentServer } from "../../store/currentServer";
@@ -254,6 +255,7 @@ export default function BrainScreen() {
     hydrated: Boolean(activeBrain?.hydrated),
     hasHostWorker: Boolean(hostWorker?.id),
     structuredEvents: Boolean(hostExecutor?.capabilities?.structured_events),
+    hostProblem: Boolean(activeBrain?.host_problem),
   });
   // Until Brain's first snapshot the chat shows the waking cat and the
   // composer waits. The cat owns loading and connection; the composer only
@@ -795,6 +797,14 @@ export default function BrainScreen() {
                 composerModelControl={brainWaking ? null : brainModelSheet.composerControl}
                 onComposerModelControlPress={() => brainModelSheet.open()}
               />
+            ) : brainSurface === "host_down" && activeBrain?.host_problem ? (
+              <BrainHostDownState
+                problem={activeBrain.host_problem}
+                suggested={availableExecutors.find((item) => item.id === activeBrain.host_problem?.suggest_executor)}
+                switching={Boolean(switchingAdapterId)}
+                onUseSuggested={(adapter) => void switchExecutor(adapter)}
+                onSwitchExecutor={canSwitchAdapter ? openAdapterSheet : undefined}
+              />
             ) : brainSurface === "status" ? (
               <BrainStatusState
                 hasServer={Boolean(activeServer)}
@@ -905,6 +915,42 @@ export default function BrainScreen() {
         onClose={closeWorkspaceViewer}
       />
     </SafeAreaView>
+  );
+}
+
+/** Brain has no host and the computer says why: the problem, not an endless "Waking up". */
+function BrainHostDownState({
+  problem,
+  suggested,
+  switching,
+  onUseSuggested,
+  onSwitchExecutor,
+}: {
+  problem: BrainHostProblem;
+  suggested?: BrainExecutorRef;
+  switching: boolean;
+  onUseSuggested: (adapter: BrainExecutorRef) => void;
+  onSwitchExecutor?: () => void;
+}) {
+  return (
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
+      <EmptyState
+        icon="alert-circle"
+        title="Brain can't start"
+        detail={problem.detail}
+        action={
+          suggested
+            ? {
+                label: switching ? "Switching…" : `Use ${suggested.name || suggested.id}`,
+                icon: "swap-horizontal",
+                onPress: () => onUseSuggested(suggested),
+              }
+            : onSwitchExecutor
+              ? { label: "Switch executor", icon: "swap-horizontal", onPress: onSwitchExecutor }
+              : undefined
+        }
+      />
+    </ScrollView>
   );
 }
 

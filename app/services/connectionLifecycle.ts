@@ -84,14 +84,18 @@ export function brainScreenSurface({
   hydrated,
   hasHostWorker,
   structuredEvents,
+  hostProblem = false,
 }: {
   hasServer: boolean;
   connection: ConnectionState;
   hydrated: boolean;
   hasHostWorker: boolean;
   structuredEvents: boolean;
-}): "chat" | "waking" | "status" | "unavailable" {
+  /** The computer says why Brain has no host (it will not wake by waiting). */
+  hostProblem?: boolean;
+}): "chat" | "waking" | "status" | "unavailable" | "host_down" {
   if (!hasServer) return "status";
+  if (connection !== "offline" && hydrated && !hasHostWorker && hostProblem) return "host_down";
   if (!shouldShowBrainLoadingState({ hydrated, hasHostWorker })) {
     return structuredEvents ? "chat" : "unavailable";
   }
