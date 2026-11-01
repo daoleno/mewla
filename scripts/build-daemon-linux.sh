@@ -53,7 +53,8 @@ fi
 "$ROOT/scripts/build-web-ui.sh"
 
 PUBLISHER_FLAGS="$(python3 "$ROOT/scripts/plugin-publisher-flags.py")"
-LDFLAGS="-s -w -buildid= -X main.Version=${VERSION} ${PUBLISHER_FLAGS}"
+# releaseBuild marks a binary that may update itself; local and dev builds never do.
+LDFLAGS="-s -w -buildid= -X main.Version=${VERSION} -X main.releaseBuild=1 ${PUBLISHER_FLAGS}"
 
 build_one() {
   local goos="$1"

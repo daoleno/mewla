@@ -125,10 +125,33 @@ mewla update          # verify and install it
 does, from GitHub's `releases/latest` redirect, so it needs no GitHub API call
 and API rate limits don't apply. Betas are not offered; install one with
 `MEWLA_VERSION`. It checks the release's signed manifest and the archive
-checksum before it replaces the binary. It does not restart a running daemon; stop and
-start `mewla` when convenient. On macOS with the service installed, it also
-replaces `Mewla.app` and restarts the service, keeping your address,
-directories and `PATH`. Your `tmux` sessions and agents keep running.
+checksum before it replaces the binary. Run by hand it does not restart a
+running daemon; stop and start `mewla` when convenient. On macOS with the
+service installed, it also replaces `Mewla.app` and restarts the service,
+keeping your address, directories and `PATH`. Your `tmux` sessions and agents
+keep running.
+
+### Automatic updates
+
+A released `mewla` on Linux checks every six hours and installs a newer stable
+release once no Brain turn or Worker is running. **Settings → your computer**
+in the app shows the version the computer runs and, when a newer release
+exists, an **Update** button that does the same right away. When the app and
+the computer no longer fit together, the same row says so with the same button.
+
+An update never leaves the computer without a working Mewla. The running
+process shuts down, then starts the new binary itself and replaces the
+installed one only after the new daemon answers on its health endpoint as the
+new version. If it exits, hangs or never answers, the old process kills it, puts
+the databases back and starts the old version again; that version is not tried
+again. The previous binary stays next to the installed one as `mewla.prev`.
+A power cut in the middle leaves the old binary in place, and the next start
+puts the databases back.
+
+Development builds, betas and macOS (until it is verified) do not update
+themselves. `MEWLA_NO_AUTOUPDATE=1` turns automatic updates off. Updating from
+a version that predates this (0.2.87 and older) is still the manual
+`mewla update`.
 
 ## Keep it running
 
