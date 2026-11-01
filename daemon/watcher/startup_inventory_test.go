@@ -2,6 +2,8 @@ package watcher
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -170,5 +172,34 @@ func TestFirstInventoryWithNoTmuxServerIsReadyAndEmpty(t *testing.T) {
 	w2.poll()
 	if w2.SnapshotReady() {
 		t.Fatal("an unavailable inventory with a known Session advertised readiness")
+	}
+}
+
+// After a reboot the tmux server is gone and a Session recorded by the earlier
+// run cannot be probed on a server. A process that never saw a server and finds
+// the socket unreachable proves the recorded Session is gone, so Brain's host
+// can be replaced; once a server has been seen, a vanished one stays Unknown.
+func TestAbsenceAfterRebootButNotAfterAServerWasSeen(t *testing.T) {
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", t.TempDir())
+	t.Setenv("PATH", writeFakeTmux(t, `echo 'no server running on fixture' >&2; exit 1`))
+	w := New(time.Second)
+	// A unix socket path is limited to ~108 bytes; a long test temp dir would
+	// make the dial fail for the wrong reason.
+	shortDir, err := os.MkdirTemp("/tmp", "mw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(shortDir) })
+	w.tmuxSocketPath = filepath.Join(shortDir, "s")
+
+	absent, err := w.ResolveDelegatedAbsence("%1")
+	if err != nil || !absent {
+		t.Fatalf("never saw a server: absent=%v err=%v, want absent", absent, err)
+	}
+
+	w.sawTmuxServer.Store(true)
+	if _, err := w.ResolveDelegatedAbsence("%1"); !errors.Is(err, ErrOwnershipProbeUnavailable) {
+		t.Fatalf("server seen then gone: err=%v, want Unknown (ErrOwnershipProbeUnavailable)", err)
 	}
 }

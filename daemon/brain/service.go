@@ -2899,7 +2899,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	}
 	command, replaceDetail = discovery.command, discovery.replaceDetail
 	resumeToken := discovery.resumeToken
-	if automatic && replaceReason == hostReplaceReasonMissingTmux && resumeToken == "" {
+	if automatic && replaceReason == hostReplaceReasonMissingTmux && resumeToken == "" && !s.hostHoldsNoConversation(hostSession) {
 		return WorkerRef{}, fmt.Errorf("brain host %q has no proven native session identity; refusing automatic blank replacement", id)
 	}
 	// No pane for an agent that cannot run: a missing CLI or one verified signed

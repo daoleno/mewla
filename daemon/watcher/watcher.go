@@ -354,6 +354,7 @@ type Watcher struct {
 	agentTools            func(command string, worker bool) string
 	nextEpoch             int64
 	snapshotReady         bool
+	sawTmuxServer         atomic.Bool // an inventory has succeeded on the selected server
 	snapshotReadyCh       chan struct{}
 	eventMu               sync.Mutex       // serialize projection publication without holding mu under backpressure
 	inventoryMu           sync.Mutex       // register resource ownership after in-flight inventory/reconciliation
@@ -1472,7 +1473,15 @@ func (w *Watcher) ResolveDelegatedAbsence(target string) (bool, error) {
 	if target == "" {
 		return false, fmt.Errorf("missing session id")
 	}
-	present, owned, err := probeTmuxTargetOwnershipOn(w.socketPathFor(target), target, true)
+	socket := w.socketPathFor(target)
+	present, owned, err := probeTmuxTargetOwnershipOn(socket, target, true)
+	if err != nil && errors.Is(err, ErrOwnershipProbeUnavailable) && !w.sawTmuxServer.Load() && tmuxSocketUnreachable(socket) {
+		// This process never saw a tmux server and nothing listens on the
+		// selected socket now: a Session recorded by an earlier run (a reboot, a
+		// restart after tmux exited) is gone. A server that vanishes after being
+		// seen stays Unknown.
+		return true, nil
+	}
 	return !present || !owned, err
 }
 
@@ -1548,6 +1557,7 @@ func (w *Watcher) poll() {
 		// and Brain's host, which starts after the first inventory, never starts.
 		windows = nil
 	} else {
+		w.sawTmuxServer.Store(true)
 		w.resourceManager().Reconcile(windows)
 	}
 	w.inventoryMu.Unlock()
