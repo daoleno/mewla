@@ -2902,6 +2902,11 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	if automatic && replaceReason == hostReplaceReasonMissingTmux && resumeToken == "" {
 		return WorkerRef{}, fmt.Errorf("brain host %q has no proven native session identity; refusing automatic blank replacement", id)
 	}
+	// No pane for an agent that cannot run: a missing CLI or one verified signed
+	// out leaves a dead pane and a tmux server that exits with it.
+	if err := s.hostRunnable(executor); err != nil {
+		return WorkerRef{}, err
+	}
 	// A live Claude process may be on another socket or not yet observed.
 	// Never resume its provider session solely because watcher inventory is empty.
 	if executor.Provider == work.WorkerProviderClaude || work.InferWorkerProvider(executor.Command, executor.ID) == work.WorkerProviderClaude {

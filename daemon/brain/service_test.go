@@ -2439,7 +2439,10 @@ func TestServiceSnapshotAuditsProviderMismatchReplacement(t *testing.T) {
 	}
 }
 
-func TestServiceSnapshotFallsBackToTheFirstAgentInOrder(t *testing.T) {
+// With no agent installed Brain still names the first agent in order as its
+// host, but launches no pane for a command that is not there: the host starts
+// once that agent is installed (HostRecoveryDue).
+func TestServiceSnapshotNamesTheFirstAgentInOrderButLaunchesNothingUninstalled(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -2453,6 +2456,24 @@ func TestServiceSnapshotFallsBackToTheFirstAgentInOrder(t *testing.T) {
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
 
+	if _, err := service.EnsureHostSnapshot(); !errors.Is(err, ErrHostNotRunnable) {
+		t.Fatalf("EnsureHostSnapshot error = %v, want ErrHostNotRunnable", err)
+	}
+	if len(fw.created) != 0 {
+		t.Fatalf("launched a pane for an uninstalled agent: %#v", fw.created)
+	}
+	if id := service.HostExecutorID(); id != "claude" {
+		t.Fatalf("host executor = %q, want the first agent in order", id)
+	}
+	if service.HostRecoveryDue() {
+		t.Fatal("recovery due while the agent is still not installed")
+	}
+
+	// The agent is installed after Mewla started: the host is due, and starts.
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	if !service.HostRecoveryDue() {
+		t.Fatal("recovery not due after the agent was installed")
+	}
 	snapshot, err := service.EnsureHostSnapshot()
 	if err != nil {
 		t.Fatal(err)
@@ -2462,6 +2483,38 @@ func TestServiceSnapshotFallsBackToTheFirstAgentInOrder(t *testing.T) {
 	}
 	if len(fw.created) != 1 || !strings.HasPrefix(fw.created[0].opts.Command, "claude") {
 		t.Fatalf("created host = %#v", fw.created)
+	}
+}
+
+// An agent Mewla verified signed out gets no pane (it would sit at a sign-in
+// prompt nobody sees); signing in makes the host due.
+func TestHostIsNotLaunchedForASignedOutAgentUntilItSignsIn(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := hostLookPath
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	t.Cleanup(func() { hostLookPath = previous })
+	SetHostAuthProbe(func(string) HostAuthState { return HostAuthUnauthenticated })
+	t.Cleanup(func() { SetHostAuthProbe(nil) })
+	fw := &fakeWatcher{}
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude"},
+	}))
+
+	if _, err := service.EnsureHostSnapshot(); !errors.Is(err, ErrHostNotRunnable) {
+		t.Fatalf("EnsureHostSnapshot error = %v, want ErrHostNotRunnable", err)
+	}
+	if len(fw.created) != 0 || service.HostRecoveryDue() {
+		t.Fatalf("signed-out agent: created=%#v due=%v", fw.created, service.HostRecoveryDue())
+	}
+	SetHostAuthProbe(func(string) HostAuthState { return HostAuthAuthenticated })
+	if !service.HostRecoveryDue() {
+		t.Fatal("recovery not due after signing in")
+	}
+	if _, err := service.EnsureHostSnapshot(); err != nil || len(fw.created) != 1 {
+		t.Fatalf("after sign-in: err=%v created=%#v", err, fw.created)
 	}
 }
 
