@@ -12,7 +12,6 @@ import (
 
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/watcher"
-	"github.com/daoleno/mewla/daemon/work"
 )
 
 // A Work is open only while something real is pending. The split here is
@@ -68,8 +67,18 @@ type settler struct {
 	failed  map[string]time.Time
 }
 
-// HostExecutor is the agent Brain's Host runs on.
-func (s *Service) HostExecutor() work.WorkerExecutor { return s.hostExecutor() }
+// HostCommandLine is the command line the Brain Host runs: the live Host's
+// own when it exists, else its configured executor's.
+func (s *Service) HostCommandLine() string {
+	if s.watcher != nil {
+		if host, err := s.store.HostSession(); err == nil && strings.TrimSpace(host.ID) != "" {
+			if worker := s.watcher.GetWorker(host.ID); worker != nil && strings.TrimSpace(worker.Command) != "" {
+				return worker.Command
+			}
+		}
+	}
+	return s.hostExecutor().Command
+}
 
 // SetWorkJudge installs the model that judges undisposed Work. Without one
 // nothing is settled by the runtime.
