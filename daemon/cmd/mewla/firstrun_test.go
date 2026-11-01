@@ -107,7 +107,7 @@ func TestEnrollmentRequestPrintKeepsControlSequencesOut(t *testing.T) {
 	if strings.ContainsAny(text, "\x1b\x07") {
 		t.Fatalf("control characters reached the terminal: %q", text)
 	}
-	if !strings.Contains(text, "Number: 482") || !strings.Contains(text, "mewla devices approve -id req_1 -number 482") {
+	if !strings.Contains(text, "Number: 482") || !strings.Contains(text, "mewla devices approve 482") {
 		t.Fatalf("missing number or command: %q", text)
 	}
 }

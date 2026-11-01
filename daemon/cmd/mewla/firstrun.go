@@ -229,7 +229,7 @@ func printEnrollmentRequest(w io.Writer, stateDir string, request enrollment.Req
 	}
 	fmt.Fprintf(w, "\n%s at %s asks to use this computer.\n", name, printableText(request.Origin))
 	fmt.Fprintf(w, "  Number: %s   Approve only if the browser shows the same number:\n", request.Number)
-	fmt.Fprintf(w, "  %s -id %s -number %s\n", command, request.ID, request.Number)
+	fmt.Fprintf(w, "  %s %s\n", command, request.Number)
 	fmt.Fprintf(w, "  It expires at %s. Ignore it to refuse.\n\n", request.ExpiresAt.Local().Format("15:04"))
 }
 
