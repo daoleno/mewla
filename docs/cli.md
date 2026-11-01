@@ -34,8 +34,8 @@ mewla address add <https-url> # an HTTPS tunnel or proxy in front of this comput
 mewla address remove <address>
 mewla devices list [--json]
 mewla devices pending         # browsers waiting for approval
-mewla devices approve -id <id> -number <shown-number>
-mewla devices deny -id <id> -number <shown-number>
+mewla devices approve <shown-number>   # the number the waiting browser shows
+mewla devices deny <shown-number>
 mewla devices revoke -id <device-id>
 ```
 
