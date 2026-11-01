@@ -66,7 +66,7 @@ terminal result and does not create a Review, notification, or Brain turn.
 | Expired Attempt | Loss-grace deadline with no new progress | Release ownership as lost, never as completed | One loss decision |
 | Owned Attempt | Producer disappears | Record uncertain/lost outcome, never fabricated success | One loss decision |
 | Active decision | Exact session_terminal wait naming its Attempt | Close decision, retain Attempt; do not add a Wake beside it | None |
-| Delivered decision | Handling ends without a valid disposition | Retain ended capability and visible unresolved decision | None until explicit recovery |
+| Delivered decision | Handling ends without a valid disposition | Retain the ended capability; the Work is left to the settle judgment ([Settlement](#settlement)) | None |
 | Ended decision | Explicit actor replay | Clear handler; allow a fresh handling | One authorized delivery |
 | Ended decision | Genuinely new actionable fact | Replace decision and invalidate old capability | One new decision; unchanged content cannot reopen it |
 | Any producer decision | New exact terminal evidence | Supersede prior decision and capability | Fresh result for Brain |
@@ -203,7 +203,7 @@ and redelivery decisions; they are not prerequisites to normal delegation.
 | --- | --- | --- |
 | Decomposition, ordering, coordination | Brain constrained by runtime choreography | Brain decides from context and user boundaries |
 | Follow-up | Send with review capability, then resolve to activate | One accepted send activates execution atomically |
-| Completion | Bounded provider end or criteria flag could complete Work | All reports are results; only Brain/operator decision accepts Work |
+| Completion | Bounded provider end or criteria flag could complete Work | All reports are results; Brain, the user, or the runtime's settle judgment accepts Work |
 | Unknown input | Unresolved admission prevented another mutation | Preserve uncertainty; Brain may submit a new attempt |
 | Notification | Resolve instruction and frozen metadata gate | Factual result; no mandatory acknowledgement |
 | Missed check-in | Clock exception woke Brain | Runtime supervises progress and reports actual loss |
@@ -268,6 +268,42 @@ and includes the saved Work (and resolved Event for a typed disposition). It
 does not imply acceptance failed. Cleanup during a decision is scoped to its
 Work; unrelated historical cleanup conflicts remain visible in reconciliation.
 
+### Settlement
+
+A Work is open only while something real is pending. Two kinds of decision
+keep it that way, and they are kept apart on purpose.
+
+**Facts, decided in code.** A Work is never touched while a Worker Attempt is
+live, a prompt is in flight, Brain is reading its result, a question awaits the
+user, or a wait awaits a future input. A closed Calendar run closes its Work
+(a failed run cancels it; Calendar already posts the failure to the thread),
+and a newer occurrence of the same item supersedes an older open one. A newer
+resource-pressure sample, or recovery, supersedes an older pressure Work unless
+Brain is reading it right now. A prompt that never became an Attempt, whose
+Session runs no turn, stops fencing the Work after 10 minutes and is marked
+delivery-unknown; it is never replayed.
+
+**Judgment, made by a model.** When none of those facts holds (and the last
+fact is at least 3 minutes old, so a Work Brain just created is not judged
+before its Worker starts), the Work is a candidate. A `WorkJudge` is given the
+Work's objective, its recent events including the Worker's result, and the chat
+between the user and Brain since the last event, and returns `done`,
+`cancelled` or `keep` with a reason. The production judge runs the user's own
+Claude Code once, headless, with a cheap model, no tools, no settings or hooks,
+no saved session, in an empty scratch directory. The call never runs under the
+Host lane lock.
+
+`done` and `cancelled` close the Work as actor `runtime`, pinned to the Work
+revision the judge saw, so a Brain or user action in the meantime wins.
+`keep` records `brain.settle_kept` for that revision and the Work is judged
+again only after a new fact. If no judge is available, or the call fails or
+returns anything but the three outcomes, nothing changes and the call is
+retried after 10 minutes. There is no fallback rule.
+
+**Undo.** A runtime close is the only reopenable close. Brain's `work update`
+or `worker send -work-id` on such a Work reopens it first (`work.reopened`).
+A close by Brain or the user stays final.
+
 Executable Given/When/Then contracts, deterministic CI commands and the bounded
 opt-in provider gate are documented in [Behavior Testing](behavior-testing.md).
 
@@ -298,11 +334,13 @@ Event with `source_name: user`, so Brain reads the decision as a fact.
 | `snooze` | Records `snoozed_until`; no lifecycle change, nothing scheduled | `user.snoozed` |
 
 **Who accepts Work.** Brain accepts Work after review, and the user can
-close it directly. A user close is final: Brain does not re-record or reopen
-it. "Ask Brain about this" sends nothing by itself; it puts the Work's
-reference in Brain's composer for the user to finish. A close that races an
-in-flight Host delivery fails with `brain_work_close_conflict`, and the app
-says to retry.
+close it directly; both closes are final. When Brain reads a result and
+records nothing, the runtime settles the Work by default (see
+[Settlement](#settlement)); that close is by actor `runtime` and Brain's next
+action on the Work reopens it. "Ask Brain about this" sends nothing by itself;
+it puts the Work's reference in Brain's composer for the user to finish. A
+close that races an in-flight Host delivery fails with
+`brain_work_close_conflict`, and the app says to retry.
 
 **Questions.** Brain sets `question` and up to four `choices` with
 `mewla brain work update -id <work> -status waiting -question "<q>" -choice
@@ -316,13 +354,9 @@ a disposition, or a reply still awaiting Brain. It adds `attention_since` (the
 open review's birth, the wait's start, or the question's time, which does
 not move while the Work waits; `updated_at` changes on every projection sync)
 and `attention_reason`. The app derives the rest; elapsed time never writes
-daemon state:
-
-- an open `turn_lost`, `lease_expired` or `submission_*` review with no live
-  Attempt is **Outcome unknown**: ask Brain to check, or close;
-- a result back for over a day with no decision is **No decision**: Accept,
-  ask Brain, or dismiss;
-- a snoozed Work shows under Waiting until its time, then needs you again.
+daemon state. These are backstops for what the daemon cannot decide: a review
+no Host has received, a user reply Brain has not answered, or a judge that is
+unavailable.
 
 ## Worker Upgrade
 

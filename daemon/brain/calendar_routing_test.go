@@ -196,7 +196,7 @@ func TestRouteCalendarEventResultIsRecordedOnceAndFinishesTheWork(t *testing.T) 
 	}
 }
 
-func TestRouteCalendarEventFailureReachesBrainWithoutRoutingError(t *testing.T) {
+func TestRouteCalendarEventFailureClosesItsWork(t *testing.T) {
 	store, service := newCalendarRouteService(t)
 	workID := calendarWorkID("item-1", "run-1")
 	calendarRouteRoute(t, service, calendarRouteItem("item-1", calendarRouteRun("run-1", calendar.StatusRunning, "")), nil)
@@ -208,11 +208,29 @@ func TestRouteCalendarEventFailureReachesBrainWithoutRoutingError(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if item.Status == WorkDone || item.Status == WorkCancelled {
-		t.Fatalf("failure must stay open for Brain: %+v", item)
+	// Calendar already posts the failure to the thread, so the run's Work has
+	// nothing left pending and must not linger as open.
+	if item.Status != WorkCancelled {
+		t.Fatalf("a failed run must close its Work: %+v", item)
 	}
 	if kinds := calendarRouteEventKinds(t, store, workID); kinds["calendar.failure"] != 1 {
 		t.Fatalf("failure event must be recorded once: %+v", kinds)
+	}
+}
+
+func TestRouteCalendarEventSupersedesAnOlderOpenOccurrence(t *testing.T) {
+	store, service := newCalendarRouteService(t)
+	calendarRouteRoute(t, service, calendarRouteItem("item-1", calendarRouteRun("run-1", calendar.StatusRunning, "")), nil)
+	older, err := store.Work(calendarWorkID("item-1", "run-1"))
+	if err != nil || older.Status == WorkDone || older.Status == WorkCancelled {
+		t.Fatalf("first occurrence = %+v err=%v", older, err)
+	}
+	calendarRouteRoute(t, service, calendarRouteItem("item-1", calendarRouteRun("run-2", calendar.StatusRunning, "")), nil)
+	if older, _ = store.Work(older.ID); older.Status != WorkCancelled {
+		t.Fatalf("an older open occurrence survived the next run: %+v", older)
+	}
+	if current, _ := store.Work(calendarWorkID("item-1", "run-2")); current.Status == WorkCancelled || current.Status == WorkDone {
+		t.Fatalf("the current occurrence was closed: %+v", current)
 	}
 }
 

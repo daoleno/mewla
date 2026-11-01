@@ -224,7 +224,8 @@ func roundTo(value float64, places int) float64 {
 // supersedeResourcePressureWork cancels earlier pressure Work that Brain has
 // not engaged: each event carries the full current state, so an unreviewed
 // older transition is stale and would otherwise accumulate as open Work.
-// Work with a delivery lease, an Attempt or a Brain decision is left alone.
+// Work Brain is reading right now or that has an Attempt is left alone; a
+// result whose handling already ended is as stale as an unread one.
 func (s *Service) supersedeResourcePressureWork(currentID string) error {
 	items, err := s.store.ListWork()
 	if err != nil {
@@ -235,7 +236,8 @@ func (s *Service) supersedeResourcePressureWork(currentID string) error {
 	for _, item := range items {
 		if item.ID == currentID || !strings.HasPrefix(item.ID, resourcePressureWorkPrefix) ||
 			item.Status == WorkDone || item.Status == WorkCancelled ||
-			item.AttemptSessionID != "" || item.Review == nil || item.Review.Lease != nil {
+			item.AttemptSessionID != "" || item.Review == nil ||
+			(item.Review.Lease != nil && item.Review.Lease.HandlingEndedAt == nil) {
 			continue
 		}
 		if _, err := s.UpdateWork(item.ID, WorkUpdate{Status: &cancelled, NextAction: &next}); err != nil {

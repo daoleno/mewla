@@ -2718,9 +2718,9 @@ func (s *Store) ConsumeReviewDelivery(workID, claimToken, providerTurnID string)
 
 // EndReviewDelivery ends exactly the admitted review lease without a typed
 // disposition (Host turn ended or Host died after delivery). The delivered
-// bytes remain permanently consumed; the unresolved Work action stays the same
-// review event and requires explicit recovery before another delivery (I7).
-// An audit note records the ended handling.
+// bytes remain permanently consumed and are never replayed (I7). Ending the
+// handling is what lets the Host lane pass settle the Work (settle.go): a
+// result Brain read and left without a follow-up is accepted by default.
 func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (WorkReviewAction, bool, error) {
 	workID = strings.TrimSpace(workID)
 	handlingID = strings.TrimSpace(handlingID)
@@ -2745,13 +2745,6 @@ func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (Wo
 		action, _ := reviewActionFromReview(database, review)
 		return action, false, nil
 	}
-	dedupeKey := "brain:reconcile:handling:" + lease.HandlingID
-	for _, event := range database.BrainWorkEvents {
-		if event.WorkID == workID && event.DedupeKey == dedupeKey {
-			action, _ := reviewActionFromReview(database, review)
-			return action, false, nil
-		}
-	}
 	// A follow-up Brain already sent is a disposition in flight: its provider
 	// acceptance resolves this review. If it is aborted instead, the next lane
 	// pass finds the Host Turn ended and ends the handling here.
@@ -2759,22 +2752,12 @@ func (s *Store) EndReviewDelivery(workID, handlingID, providerTurnID string) (Wo
 		action, _ := reviewActionFromReview(database, review)
 		return action, false, nil
 	}
-	// Delivered input stays consumed. An unresolved decision is visible for
-	// explicit recovery, never a reason to spend another automatic Host turn.
+	// Delivered input stays consumed, never a reason to spend another Host turn.
 	if _, releaseErr := s.fsm.ReleaseReview(lifecycle.WorkID(workID), lifecycle.TurnToken(providerTurnID)); releaseErr != nil {
 		return WorkReviewAction{}, false, releaseErr
 	}
 	if syncErr := s.fsmSyncWorkLocked(&database, workID, now); syncErr != nil {
 		return WorkReviewAction{}, false, syncErr
-	}
-	audit := WorkEvent{
-		ID: uuid.NewString(), WorkID: workID, Kind: "brain.reconcile_required",
-		DedupeKey: dedupeKey, PayloadRef: "work:" + workID,
-		SourceName: "brain", Summary: "The previous Host turn ended without a durable disposition.",
-		Actionable: false, CreatedAt: now,
-	}
-	if _, err := appendWorkEventLocked(&database, itemIndex, audit, true); err != nil {
-		return WorkReviewAction{}, false, err
 	}
 	if err := s.persistPresentationLocked(database); err != nil {
 		return WorkReviewAction{}, false, err

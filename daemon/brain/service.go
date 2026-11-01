@@ -84,6 +84,10 @@ type Service struct {
 	sessionConversationReaders map[string]*work.ProviderConversationReader
 
 	dispatchMu sync.Mutex
+
+	// judge decides undisposed Work (settle.go); nil leaves such Work as is.
+	judge  WorkJudge
+	settle settler
 	// inFlightHostInputs protects only the live Prepare -> provider mutation ->
 	// Admit/Abort critical section. It is deliberately process-local: durable
 	// BrainInputAdmission + watcher receipt state remain the restart authority.
@@ -216,6 +220,12 @@ func (s *Service) BrainUpdateWork(id string, update WorkUpdate) (Work, error) {
 		return Work{}, fmt.Errorf("brain store is not configured")
 	}
 	id = strings.TrimSpace(id)
+	if update != (WorkUpdate{}) {
+		// Brain acting on a Work the runtime settled undoes the settlement.
+		if _, err := s.store.ReopenSettledWork(id, "Brain updated the Work."); err != nil {
+			return Work{}, err
+		}
+	}
 	handling, live, err := s.store.LiveReviewHandling(id)
 	if err != nil {
 		return Work{}, err
@@ -1087,6 +1097,10 @@ func (s *Service) reconcileHostLaneLocked() (bool, error) {
 	}
 	if err := s.reconcileReviewLeasesLocked(); err != nil {
 		return false, err
+	}
+	// A settle failure retries on the next pass and never blocks delivery.
+	if err := s.settleWorkLocked(); err != nil {
+		log.Printf("brain Work settlement: %v", err)
 	}
 	hostSession, err := s.store.HostSession()
 	if err != nil {
@@ -2700,13 +2714,14 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 			payloadRef = event.ScheduledResult.ID
 		}
 	case calendar.StatusFailed:
-		// The failure stays open for Brain to inspect through its actionable
-		// Event: needs_input is derived from lifecycle evidence, never set by
-		// a producer.
+		// Calendar already posts "<title> failed" with the reason to the thread,
+		// so the run's Work has nothing left pending: it ends here, with the
+		// failure event as its record.
+		status := WorkCancelled
+		empty := ""
 		var noWake *WorkWake
-		update = WorkUpdate{Wake: &noWake}
+		update = WorkUpdate{Status: &status, NextAction: &empty, WaitFor: &empty, Wake: &noWake}
 		kind = "calendar.failure"
-		actionable = true
 		terminal = true
 		if event.ScheduledResult != nil {
 			payloadRef = event.ScheduledResult.ID
@@ -2756,11 +2771,39 @@ func (s *Service) RouteCalendarEvent(event calendar.Event) (bool, error) {
 			return false, err
 		}
 	}
+	// One schedule never accumulates open Works: a newer occurrence supersedes
+	// any earlier one still waiting.
+	if err := s.supersedeCalendarWork(event.Item.ID, candidate.ID); err != nil {
+		return false, err
+	}
 	if !created && !producerWoke {
 		return false, nil
 	}
 	woke, dispatchErr := s.ReconcileHostLane()
 	return woke || producerWoke || recorded.Actionable, dispatchErr
+}
+
+// supersedeCalendarWork cancels the open Works of earlier occurrences of one
+// Calendar item. Calendar runs an item's occurrences one after another, so an
+// earlier one that is still open can only be stale.
+func (s *Service) supersedeCalendarWork(itemID, currentID string) error {
+	items, err := s.store.ListWork()
+	if err != nil {
+		return err
+	}
+	prefix := "calendar:" + strings.TrimSpace(itemID) + ":"
+	cancelled := WorkCancelled
+	next := "Superseded by a newer occurrence."
+	for _, item := range items {
+		if item.ID == currentID || item.Status == WorkDone || item.Status == WorkCancelled ||
+			!strings.HasPrefix(item.ContextRef, prefix) || item.AttemptSessionID != "" {
+			continue
+		}
+		if _, err := s.UpdateWork(item.ID, WorkUpdate{Status: &cancelled, NextAction: &next}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func latestCalendarRun(item calendar.Item) (calendar.Run, bool) {
