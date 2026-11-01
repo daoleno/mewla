@@ -22,3 +22,13 @@ export function cameraGate(
 export function cameraMayRun(appState: string): boolean {
   return appState !== "background";
 }
+
+/**
+ * Whether the scanner is really looking for a code. "Looking for a Mewla
+ * code…" is only true then: with the camera off, still asking, or failed to
+ * start, the line beside the viewfinder would promise something that is not
+ * happening.
+ */
+export function cameraIsSearching(gate: CameraGate, mountError: string | null, foreground: boolean): boolean {
+  return gate === "camera" && !mountError && foreground;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { cameraGate, cameraMayRun } from "./cameraGate";
+import { cameraGate, cameraIsSearching, cameraMayRun } from "./cameraGate";
 
 describe("camera gate", () => {
   test("every permission state has something to show", () => {
@@ -16,5 +16,16 @@ describe("camera gate", () => {
     expect(cameraMayRun("inactive")).toBe(true);
     expect(cameraMayRun("unknown")).toBe(true);
     expect(cameraMayRun("background")).toBe(false);
+  });
+});
+
+describe("camera searching", () => {
+  test("only a running camera is looking for a code", () => {
+    expect(cameraIsSearching("camera", null, true)).toBe(true);
+    expect(cameraIsSearching("denied", null, true)).toBe(false);
+    expect(cameraIsSearching("request", null, true)).toBe(false);
+    expect(cameraIsSearching("loading", null, true)).toBe(false);
+    expect(cameraIsSearching("camera", "could not start", true)).toBe(false);
+    expect(cameraIsSearching("camera", null, false)).toBe(false);
   });
 });
