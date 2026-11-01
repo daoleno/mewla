@@ -77,7 +77,9 @@ type Service struct {
 	hostProblemMu    sync.Mutex
 	hostProblemKey   string
 	hostProblemSince time.Time
-	lastHostHeal     time.Time
+	// hostNotReadySince is when the host pane first stayed unready for input.
+	hostNotReadySince time.Time
+	lastHostHeal      time.Time
 
 	// sessionConversationHook overrides the provider conversation reader for
 	// the Session projection surface. Tests inject sanitized fixtures; nil
@@ -2864,6 +2866,7 @@ func (s *Service) ReconcileHostContinuity() (bool, error) {
 		return false, err
 	}
 	_, continuityErr := s.ensureHostContinuity(s.hostExecutor(), true)
+	s.noteHostActivation(continuityErr)
 	// Capture identity even if activation failed or its receipt is ambiguous.
 	// The process can already own a resumable conversation at that point.
 	_, bindingErr := s.BindHostProviderTranscript()
@@ -3701,6 +3704,8 @@ func (s *Service) projectHostProblem(host WorkerRef, executor work.WorkerExecuto
 	var problem *HostProblem
 	if !s.hostObserved(host.ID) {
 		problem = s.hostProblem(executor)
+	} else {
+		problem = s.hostNotReadyProblem(executor)
 	}
 	key := ""
 	if problem != nil {

@@ -295,3 +295,31 @@ describe("Brain host_worker prompt", () => {
     expect(answered.byServer["server-1"]?.host_worker?.prompt).toBeUndefined();
   });
 });
+
+describe("Brain host problem", () => {
+  const snapshotWith = (host_problem: unknown) =>
+    brainReducer(initialBrainState, {
+      type: "BRAIN_SNAPSHOT",
+      serverId: "server-1",
+      serverName: "Mewla",
+      serverUrl: "ws://mewla",
+      brain: { host_problem },
+    } as any);
+
+  test("keeps the computer's reason, including a code this app does not know", () => {
+    const known = snapshotWith({ code: "not_ready", executor: "grok", detail: " Sign in to grok. ", suggest_executor: "claude" });
+    expect(known.byServer["server-1"]?.host_problem).toEqual({
+      code: "not_ready",
+      executor: "grok",
+      detail: "Sign in to grok.",
+      suggest_executor: "claude",
+    });
+    const newer = snapshotWith({ code: "something_newer", executor: "x", detail: "Do this." });
+    expect(newer.byServer["server-1"]?.host_problem?.detail).toBe("Do this.");
+  });
+
+  test("drops a problem with no sentence to show", () => {
+    expect(snapshotWith({ code: "not_ready", executor: "grok", detail: "  " }).byServer["server-1"]?.host_problem).toBeUndefined();
+    expect(snapshotWith({ detail: "no code" }).byServer["server-1"]?.host_problem).toBeUndefined();
+  });
+});
