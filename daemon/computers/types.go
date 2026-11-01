@@ -1,5 +1,5 @@
 // Package computers lets one Mewla computer hand work to another. The channel
-// carries messages between the two Brains and nothing else: each computer runs
+// carries requests, replies and questions between local owners: each computer runs
 // its own Brain, Workers, files and logged-in apps, and only the request, its
 // questions and its results cross the network.
 package computers
@@ -95,18 +95,35 @@ type frame struct {
 	Error   string          `json:"error,omitempty"`
 }
 
+// Origin is local routing authority. It is never sent to another computer.
+// PaneGeneration prevents a recycled tmux target from inheriting a reply.
+type Origin struct {
+	SessionID      string `json:"session_id,omitempty"`
+	PaneGeneration string `json:"pane_generation,omitempty"`
+	WorkID         string `json:"work_id,omitempty"`
+}
+
+// Delivery separates the permanent message identity from an admission attempt.
+type Delivery struct {
+	Identity string `json:"identity"`
+	Receipt  string `json:"receipt"`
+	Body     string `json:"body"`
+	Origin   Origin `json:"origin"`
+}
+
 // Request is the control-socket and admin-route request.
 type Request struct {
-	Action   string   `json:"action"` // list, send, status, invite, add, remove
-	Computer string   `json:"computer,omitempty"`
-	Kind     string   `json:"kind,omitempty"`
-	ReplyTo  string   `json:"reply_to,omitempty"`
-	UserSaid string   `json:"user_said,omitempty"`
-	Text     string   `json:"text,omitempty"`
-	ID       string   `json:"id,omitempty"`
-	Invite   string   `json:"invite,omitempty"`
-	Name     string   `json:"name,omitempty"`
-	URLs     []string `json:"urls,omitempty"`
+	SenderSession string   `json:"sender_session,omitempty"`
+	Action        string   `json:"action"` // list, send, status, invite, add, remove
+	Computer      string   `json:"computer,omitempty"`
+	Kind          string   `json:"kind,omitempty"`
+	ReplyTo       string   `json:"reply_to,omitempty"`
+	UserSaid      string   `json:"user_said,omitempty"`
+	Text          string   `json:"text,omitempty"`
+	ID            string   `json:"id,omitempty"`
+	Invite        string   `json:"invite,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	URLs          []string `json:"urls,omitempty"`
 	// ExpectedDaemonID pins the invite to the computer the caller already
 	// trusts (the app passes the key it pinned when it paired).
 	ExpectedDaemonID string `json:"expected_daemon_id,omitempty"`

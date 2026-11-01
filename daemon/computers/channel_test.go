@@ -121,7 +121,8 @@ func (c *computer) restart() {
 
 func (c *computer) url() string { return "http://" + c.addr }
 
-func (c *computer) deliver(receipt, body string) (string, error) {
+func (c *computer) deliver(d computers.Delivery) (string, error) {
+	receipt, body := d.Receipt, d.Body
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.receipts = append(c.receipts, receipt)

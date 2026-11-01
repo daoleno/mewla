@@ -48,10 +48,19 @@ type handoff struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type deliveryRecord struct {
+	Pending     *Delivery `json:"pending,omitempty"`
+	Disposition string    `json:"disposition"`
+	Error       string    `json:"error,omitempty"`
+}
+
 type persisted struct {
-	Peers    []outboundPeer `json:"peers"`
-	Outbox   []outboxItem   `json:"outbox"`
-	Handoffs []handoff      `json:"handoffs,omitempty"`
+	// Routing and delivery identities outlive the bounded presentation history.
+	Origins    map[string]Origin         `json:"origins,omitempty"`
+	Deliveries map[string]deliveryRecord `json:"deliveries,omitempty"`
+	Peers      []outboundPeer            `json:"peers"`
+	Outbox     []outboxItem              `json:"outbox"`
+	Handoffs   []handoff                 `json:"handoffs,omitempty"`
 }
 
 const (

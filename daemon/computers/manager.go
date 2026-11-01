@@ -32,15 +32,16 @@ var (
 
 const maxFrameBytes = 1 << 20
 
-// DeliverFunc hands one envelope to this computer's Brain with an idempotent
-// receipt and reports a brain.ExternalInputDisposition value.
-type DeliverFunc func(receipt, body string) (string, error)
+// DeliverFunc submits an envelope to its local owner using existing Session
+// input or Work events, and reports a brain.ExternalInputDisposition value.
+type DeliverFunc func(Delivery) (string, error)
 
 type Options struct {
-	StateDir string
-	Auth     *auth.Manager
-	Deliver  DeliverFunc
-	Version  string
+	StateDir      string
+	Auth          *auth.Manager
+	Deliver       DeliverFunc
+	ResolveOrigin func(sessionID string) (Origin, error)
+	Version       string
 	// Name is how this computer introduces itself; the hostname by default.
 	Name string
 	// Addresses lists the URLs other computers may use to reach this one.
@@ -55,15 +56,16 @@ type Manager struct {
 	opts Options
 	dir  string
 
-	mu       sync.Mutex
-	state    persisted
-	conns    map[string]*peerConn
-	hellos   map[string]Hello
-	lastSeen map[string]time.Time
-	lastErr  map[string]string
-	loops    map[string]context.CancelFunc
-	runCtx   context.Context
-	inflight map[string]bool
+	deliveryMu sync.Mutex
+	mu         sync.Mutex
+	state      persisted
+	conns      map[string]*peerConn
+	hellos     map[string]Hello
+	lastSeen   map[string]time.Time
+	lastErr    map[string]string
+	loops      map[string]context.CancelFunc
+	runCtx     context.Context
+	inflight   map[string]bool
 	// running tracks every live channel and outbound loop so Run returns
 	// only after they stop touching the state file.
 	running sync.WaitGroup
@@ -104,6 +106,12 @@ func NewManager(opts Options) (*Manager, error) {
 	state, err := loadState(dir)
 	if err != nil {
 		return nil, err
+	}
+	if state.Origins == nil {
+		state.Origins = map[string]Origin{}
+	}
+	if state.Deliveries == nil {
+		state.Deliveries = map[string]deliveryRecord{}
 	}
 	m := &Manager{
 		opts: opts, dir: dir, state: state,
@@ -460,9 +468,9 @@ func (m *Manager) requeueInflightLocked(key string) {
 	}
 }
 
-// applyResult follows the Brain's delivery answer. The same receipt always
-// returns its first answer, so resending with it never delivers twice; an
-// uncertain delivery is never resent, like a Telegram message.
+// applyResult follows the recipient's delivery answer. Retries retain the
+// message identity even when a failed admission needs a new attempt receipt.
+// An uncertain delivery is never resent.
 func (m *Manager) applyResult(key string, result DeliveryResult) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -482,8 +490,8 @@ func (m *Manager) applyResult(key string, result DeliveryResult) {
 		case DispositionPending:
 			item.State, item.NextAttemptAt = StateQueued, now.Add(retryPending)
 		default:
-			// Not submitted: the other Brain was unavailable. A fresh receipt
-			// lets the next attempt be a new submission.
+			// Not submitted: the recipient was unavailable. A new admission
+			// receipt may retry, under the same message-level delivery identity.
 			item.State, item.NextAttemptAt = StateQueued, now.Add(retryNotSubmitted)
 			item.Message.Attempt++
 		}
@@ -492,25 +500,64 @@ func (m *Manager) applyResult(key string, result DeliveryResult) {
 	}
 }
 
-// deliver hands a peer's message to this computer's Brain.
+// deliver claims a message identity durably before touching a recipient. An
+// interrupted admission is uncertain, never replayed into a different recipient.
+// Only a proven not-submitted outcome permits another admission attempt.
 func (m *Manager) deliver(key string, message Message) DeliveryResult {
 	result := DeliveryResult{ID: message.ID, Attempt: message.Attempt}
 	if m.opts.Deliver == nil || strings.TrimSpace(message.ID) == "" || strings.TrimSpace(message.Text) == "" {
-		result.Disposition = DispositionNotSubmitted
-		result.Error = "Brain is not available on this computer"
+		result.Disposition, result.Error = DispositionNotSubmitted, "Recipient is not available on this computer"
 		return result
 	}
+	m.deliveryMu.Lock()
+	defer m.deliveryMu.Unlock()
+	identity := "computer:" + key + ":" + message.ID
 	m.mu.Lock()
+	previous, exists := m.state.Deliveries[identity]
+	if exists && previous.Pending == nil {
+		result.Disposition, result.Error = previous.Disposition, previous.Error
+		m.mu.Unlock()
+		return result
+	}
 	from := m.peerNameLocked(key)
+	origin := m.state.Origins["computer:"+key+":"+message.ReplyTo]
+	m.state.Deliveries[identity] = deliveryRecord{Disposition: DispositionUncertain, Error: "Delivery interrupted before its outcome was recorded"}
+	if err := saveState(m.dir, m.state); err != nil {
+		delete(m.state.Deliveries, identity)
+		m.mu.Unlock()
+		result.Disposition, result.Error = DispositionNotSubmitted, err.Error()
+		return result
+	}
 	m.mu.Unlock()
-	receipt := fmt.Sprintf("computer:%s:%s:%d", key, message.ID, message.Attempt)
-	disposition, err := m.opts.Deliver(receipt, Envelope(from, message))
-	result.Disposition = disposition
+	// A failed provider admission is terminal for that receipt. Transport retries
+	// may use a new admission receipt; the message-level claim above never changes.
+	delivery := Delivery{Identity: identity, Receipt: fmt.Sprintf("%s:%d", identity, message.Attempt), Body: Envelope(from, message), Origin: origin}
+	if previous.Pending != nil {
+		delivery = *previous.Pending
+	}
+	var err error
+	result.Disposition, err = m.opts.Deliver(delivery)
 	if err != nil {
 		result.Error = err.Error()
 	}
+	// An unspecified outcome is not proof that the recipient was untouched.
 	if result.Disposition == "" {
-		result.Disposition = DispositionNotSubmitted
+		result.Disposition = DispositionUncertain
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if result.Disposition == DispositionNotSubmitted {
+		delete(m.state.Deliveries, identity)
+	} else {
+		record := deliveryRecord{Disposition: result.Disposition, Error: result.Error}
+		if result.Disposition == DispositionPending {
+			record.Pending = &delivery
+		}
+		m.state.Deliveries[identity] = record
+	}
+	if err := saveState(m.dir, m.state); err != nil {
+		result.Disposition, result.Error = DispositionUncertain, err.Error()
+		m.state.Deliveries[identity] = deliveryRecord{Disposition: result.Disposition, Error: result.Error}
 	}
 	return result
 }
@@ -750,8 +797,19 @@ func (m *Manager) send(req Request) (Result, error) {
 	if len(text) > 64<<10 || len(req.UserSaid) > 16<<10 {
 		return Result{}, errors.New("message is too long; send a short brief and let the other Brain ask")
 	}
+	origin := Origin{}
+	if strings.TrimSpace(req.SenderSession) != "" {
+		if m.opts.ResolveOrigin == nil {
+			return Result{}, errors.New("Worker sender routing is unavailable")
+		}
+		var err error
+		origin, err = m.opts.ResolveOrigin(strings.TrimSpace(req.SenderSession))
+		if err != nil {
+			return Result{}, err
+		}
+	}
 	thread := ""
-	if m.opts.Thread != nil {
+	if origin.SessionID == "" && m.opts.Thread != nil {
 		thread = m.opts.Thread()
 	}
 	m.mu.Lock()
@@ -778,6 +836,8 @@ func (m *Manager) send(req Request) (Result, error) {
 		},
 		State: StateQueued, UpdatedAt: now, NextAttemptAt: now,
 	}
+	routeKey := "computer:" + key + ":" + item.Message.ID
+	m.state.Origins[routeKey] = origin
 	m.state.Outbox = append(m.state.Outbox, item)
 	if thread != "" {
 		m.state.Handoffs = append(m.state.Handoffs, handoff{
@@ -787,6 +847,7 @@ func (m *Manager) send(req Request) (Result, error) {
 		})
 	}
 	if err := saveState(m.dir, m.state); err != nil {
+		delete(m.state.Origins, routeKey)
 		m.state.Outbox = m.state.Outbox[:len(m.state.Outbox)-1]
 		if thread != "" {
 			m.state.Handoffs = m.state.Handoffs[:len(m.state.Handoffs)-1]

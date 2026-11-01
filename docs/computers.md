@@ -3,8 +3,8 @@
 Brain on one computer can hand a task to another computer that runs Mewla:
 your Mac with its logged-in apps and browser, a Mac mini that stays on, a
 Linux box with your repositories. The other computer does the task with its
-own Brain, agents, files and logins, and the answer comes back to the Brain you
-asked. Only messages cross between the two computers; nothing else is copied.
+own Brain, agents, files and logins. Replies and questions return to whoever
+sent the request: Brain or the sending Worker. Only messages cross between the two computers; nothing else is copied.
 
 ## Connect two computers
 
@@ -71,12 +71,41 @@ that computer: its Brain shows the request marked as coming from your other
 computer, and its Workers, terminals and [Screen](screen.md) are there as
 usual.
 
+## Replies to Workers
+
+A Worker can use the same `mewla computers send` command. Mewla records its
+Session and Work automatically from its managed launch identity. A reply or
+question with `--reply-to <message-id>` arrives as input in that Session and
+wakes it just like a Brain follow-up; the Worker does not need a polling loop.
+Brain can read the message in the Work's events without relaying it.
+
+If the original Session is gone, the reply stays with its Work for Brain to
+handle. If that Work no longer exists, it goes to Brain's chat. A recycled
+Session target does not inherit the old Session's replies. Messages sent by
+Brain, Calendar's host, or a terminal without a Worker identity go to Brain.
+
+Answer a remote question directly, referencing the question's own message ID:
+
+```sh
+mewla computers send mac --kind answer --reply-to <question-id> "Use the release branch."
+```
+
+The same rule applies in both directions: a question sent by a remote Worker
+gets its answer in that Worker's Session. The remote computer can only refer
+to message IDs; it cannot choose a local Session or Work.
+
 ## When a computer is offline
 
 A message to a sleeping or offline computer waits on the sending computer and
 is delivered when it is back, for up to a day. A computer that goes to sleep in
 the middle of a task carries on when it wakes, and its answer arrives then.
-Each message is delivered once, even if the connection drops while it is sent.
+Delivery is deduplicated by computer and message ID, independently of retry
+attempts, daemon restarts and Brain conversation changes. A definite failure
+before submission may retry. If a crash interrupts submission before its
+outcome is recorded, delivery is **uncertain** and is not automatically
+replayed. Check the recipient before choosing to send a new message.
+Routing and delivery identities remain after the bounded card/outbox history
+is pruned, so a long job can still reply to its original asker.
 
 ## Commands
 
@@ -90,7 +119,8 @@ mewla computers remove mac               # forget a computer (see below)
 ## What the other computer may do
 
 A computer you connect gets its own key, with less access than your phone: it
-can only send messages to this computer's Brain and receive its answers. It
+can only send new requests to this computer's Brain and reply to messages
+sent by its Brain or Workers. It
 cannot open terminals or files, see the screen, or manage devices. It shows up
 in `mewla devices list` as *(computer)*. **Remove computer** in the app ends
 it at once and for good. `mewla computers remove` or `mewla devices revoke`

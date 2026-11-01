@@ -660,15 +660,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 	srv.SetComputerName(computers.FriendlyName())
 	hostName, _ := os.Hostname()
 	computerManager, err := computers.NewManager(computers.Options{
-		Auth:    authManager,
-		Version: Version,
-		Name:    computers.ShortHostname(hostName),
-		// Another computer's Brain reaches this one's through the same
-		// receipt-deduplicated entry Telegram uses.
-		Deliver: func(receipt, body string) (string, error) {
-			disposition, err := brainService.SubmitExternalUserInput(receipt, body)
-			return string(disposition), err
-		},
+		Auth:          authManager,
+		Version:       Version,
+		Name:          computers.ShortHostname(hostName),
+		ResolveOrigin: controlHandler.computerOrigin,
+		Deliver:       controlHandler.deliverComputerMessage,
 		// A message Brain sends shows as a card in its current conversation.
 		Thread: func() string {
 			thread, _ := brainService.ChatThreadID()

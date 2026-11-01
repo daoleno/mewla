@@ -40,6 +40,9 @@ func runComputersCommand(args []string, stderr io.Writer) error {
 	action := args[0]
 	rest := args[1:]
 	req := computers.Request{Action: action}
+	if action == "send" {
+		req.SenderSession = strings.TrimSpace(os.Getenv("MEWLA_WORKER_ID"))
+	}
 	// The computer (or invite) comes first so flags can follow it.
 	if (action == "send" || action == "add" || action == "remove") && len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
 		if action == "add" {
