@@ -122,7 +122,7 @@ func TestHandoverRollsBackWhenTheNewVersionExitsAtOnce(t *testing.T) {
 
 func TestHandoverRollsBackWhenTheNewVersionHangs(t *testing.T) {
 	f := newHandoverFixture(t)
-	staged := stage(t, f, "echo schema-2 > '"+f.database+"'; sleep 60")
+	staged := stage(t, f, "echo schema-2 > '"+f.database+"'; exec sleep 60")
 	h := f.handover(t, staged, func() error { return os.ErrNotExist })
 	h.Gate = 700 * time.Millisecond
 	start := time.Now()
@@ -226,5 +226,36 @@ func assertRolledBack(t *testing.T, f handoverFixture, staged string, outcome Ou
 		if _, err := os.Stat(leftover); !os.IsNotExist(err) {
 			t.Fatalf("%s should not exist after a rollback", leftover)
 		}
+	}
+}
+
+func TestPromoteFallsBackToACopyWhenTheFilesystemCannotLink(t *testing.T) {
+	f := newHandoverFixture(t)
+	staged := stage(t, f, "exit 0")
+	defer func(previous func(string, string) error) { linkFile = previous }(linkFile)
+	linkFile = func(string, string) error { return os.ErrPermission }
+	if err := promote(f.installed, staged); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.read(t, f.installed); !strings.Contains(got, "2.0.0") {
+		t.Fatalf("installed = %q", got)
+	}
+	prev := f.installed + PrevSuffix
+	if got := f.read(t, prev); !strings.Contains(got, "1.0.0") {
+		t.Fatalf("previous = %q", got)
+	}
+	if info, err := os.Stat(prev); err != nil || info.Mode().Perm()&0o100 == 0 {
+		t.Fatalf("the kept previous binary must stay executable: %v %v", info, err)
+	}
+}
+
+func TestFailureCooldown(t *testing.T) {
+	now := time.Now()
+	if !(Failure{Version: "2.0.0"}).HoldsAutomatic(now) {
+		t.Fatal("a version that failed to run is never retried")
+	}
+	cooling := Failure{Version: "2.0.0", RetryAfter: now.Add(time.Hour)}
+	if cooling.Permanent() || !cooling.HoldsAutomatic(now) || cooling.HoldsAutomatic(now.Add(2*time.Hour)) {
+		t.Fatal("a transient failure holds the automatic path only until its retry time")
 	}
 }

@@ -210,7 +210,7 @@ func TestUpdateButtonInstallsNow(t *testing.T) {
 
 func TestNothingToInstallWhenCurrent(t *testing.T) {
 	f := newUpdaterFixture(t, "0.2.88", "0.2.88", versionScript("0.2.88"))
-	if err := f.updater.install(context.Background()); err != server.ErrUpdateUnavailable {
+	if err := f.updater.install(context.Background(), false); err != server.ErrUpdateUnavailable {
 		t.Fatalf("install when current = %v", err)
 	}
 	if status := f.updater.Status(); status.Latest != "" {
@@ -223,7 +223,7 @@ func TestRolledBackVersionIsNotOfferedAgain(t *testing.T) {
 	if err := selfupdate.RecordFailure(f.stateDir, selfupdate.Failure{Version: "0.2.88", Reason: "exited", At: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.updater.install(context.Background()); err != server.ErrUpdateUnavailable {
+	if err := f.updater.install(context.Background(), false); err != server.ErrUpdateUnavailable {
 		t.Fatalf("install of a rolled-back version = %v", err)
 	}
 	status := f.updater.Status()
@@ -237,7 +237,7 @@ func TestRolledBackVersionIsNotOfferedAgain(t *testing.T) {
 
 func TestBrokenDownloadChangesNothing(t *testing.T) {
 	f := newUpdaterFixture(t, "0.2.87", "0.2.88", []byte("#!/bin/sh\nexit 1\n")) // does not run
-	err := f.updater.install(context.Background())
+	err := f.updater.install(context.Background(), false)
 	if err == nil || !strings.Contains(err.Error(), "stage update") {
 		t.Fatalf("install = %v", err)
 	}
@@ -287,5 +287,111 @@ func TestProbeUpdatedDaemonNeedsTheSameInstallationOnTheNewVersion(t *testing.T)
 	}
 	if probeUpdatedDaemon("127.0.0.1:1", "d1", "0.2.88") == nil {
 		t.Fatal("nothing listening must not pass the gate")
+	}
+}
+
+func TestAnIdleMachineThatBecomesBusyDuringTheDownloadIsLeftAlone(t *testing.T) {
+	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
+	// Idle when the loop looks, busy when the staged download is re-checked,
+	// idle again on the next look.
+	var calls atomic.Int32
+	f.updater.idle = func() bool { return calls.Add(1) != 2 }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go f.updater.Run(ctx)
+	select {
+	case h := <-f.handovers:
+		if calls.Load() < 3 {
+			t.Fatalf("handed over after only %d idle checks; the one after staging was skipped", calls.Load())
+		}
+		if _, err := os.Stat(h.Staged); err != nil {
+			t.Fatalf("staged binary missing for the second attempt: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("never updated once idle again")
+	}
+	if atomic.LoadInt32(f.downloads) != 2 {
+		t.Fatalf("downloads = %d, want the busy attempt and the idle one", atomic.LoadInt32(f.downloads))
+	}
+}
+
+func TestOnlyOneInstallRunsAtATime(t *testing.T) {
+	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
+	if err := f.updater.install(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	staged := f.installed + selfupdate.StagedSuffix
+	if err := f.updater.install(context.Background(), true); err != errInProgress {
+		t.Fatalf("second install = %v, want errInProgress", err)
+	}
+	if err := f.updater.install(context.Background(), false); err != errInProgress {
+		t.Fatalf("button during an install = %v, want errInProgress", err)
+	}
+	if _, err := os.Stat(staged); err != nil {
+		t.Fatalf("a second install must not disturb the staged binary: %v", err)
+	}
+	if len(f.handovers) != 1 || atomic.LoadInt32(f.downloads) != 1 {
+		t.Fatalf("handovers %d, downloads %d; want one of each", len(f.handovers), atomic.LoadInt32(f.downloads))
+	}
+}
+
+func TestAFailureThatIsNotTheVersionsFaultCoolsDownTheAutomaticPathOnly(t *testing.T) {
+	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
+	failure := selfupdate.Failure{Version: "0.2.88", Reason: "back up databases: no space left", At: time.Now(), RetryAfter: time.Now().Add(time.Hour)}
+	if err := selfupdate.RecordFailure(f.stateDir, failure); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go f.updater.Run(ctx)
+	select {
+	case <-f.handovers:
+		t.Fatal("the automatic path retried inside the cooldown")
+	case <-time.After(300 * time.Millisecond):
+	}
+	cancel()
+	if status := f.updater.Status(); status.Latest != "0.2.88" || !strings.Contains(status.Error, "could not be installed") {
+		t.Fatalf("status = %+v, want the release still offered with the reason", status)
+	}
+	// The button is the person asking again.
+	if err := f.updater.Install(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-f.handovers:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the button must retry a cooled-down version")
+	}
+}
+
+func TestACooldownThatHasPassedIsRetriedAutomatically(t *testing.T) {
+	f := newUpdaterFixture(t, "0.2.87", "0.2.88", versionScript("0.2.88"))
+	failure := selfupdate.Failure{Version: "0.2.88", Reason: "disk full", At: time.Now().Add(-48 * time.Hour), RetryAfter: time.Now().Add(-24 * time.Hour)}
+	if err := selfupdate.RecordFailure(f.stateDir, failure); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go f.updater.Run(ctx)
+	select {
+	case <-f.handovers:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a version past its cooldown should be tried again")
+	}
+}
+
+func TestAReadOnlyInstallDirectoryDoesNotOfferToUpdate(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	dir := t.TempDir()
+	if !installDirWritable(filepath.Join(dir, "mewla")) {
+		t.Fatal("a writable directory was refused")
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o700)
+	if installDirWritable(filepath.Join(dir, "mewla")) {
+		t.Fatal("a read-only install directory must not offer to update")
 	}
 }

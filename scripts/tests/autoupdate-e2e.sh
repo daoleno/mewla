@@ -44,10 +44,17 @@ check() { # check "description" command...
 cleanup() {
   set +e
   for unit in "${UNITS[@]}"; do
+    # KillMode=process leaves anything but the main process behind on a plain
+    # stop; the test owns the whole unit, so take it all down.
+    systemctl --user kill -s KILL --kill-whom=all "$unit" 2>/dev/null
     systemctl --user stop "$unit" 2>/dev/null
     rm -f "$HOME/.config/systemd/user/$unit"
   done
-  [[ ${#UNITS[@]} -gt 0 ]] && systemctl --user daemon-reload
+  if [[ ${#UNITS[@]} -gt 0 ]]; then
+    systemctl --user daemon-reload
+    # The SIGKILL above leaves the units in a failed state that would linger.
+    systemctl --user reset-failed "${UNITS[@]}" 2>/dev/null
+  fi
   for scenario in "${SCENARIOS[@]}"; do
     /usr/bin/tmux -S "$S/$scenario/tmux.sock" kill-server 2>/dev/null
   done
@@ -211,7 +218,7 @@ scenario_powercut() {
   local name=powercut version="${FAKE_VERSION[powercut]}"
   log "powercut: whole unit SIGKILLed while the new version is on trial"
   old_build "$name"
-  fake_binary "$S/new-$name" "$version" 'sleep 600'
+  fake_binary "$S/new-$name" "$version" 'exec sleep 600'
   make_release "$name" "$version" "$S/new-$name"
   start_daemon "$name" "$S/old-$name"
   wait_for 90 "old daemon up" healthy_as "$name" "$OLD_VERSION" || { fail "old daemon never came up"; journal "$name"; return; }
@@ -240,7 +247,7 @@ for scenario in "${SCENARIOS[@]}"; do
     case "$scenario" in
       good) scenario_good ;;
       bad) scenario_fake bad 'echo "new version failing on purpose" >&2; exit 1' 0 ;;
-      hang) scenario_fake hang 'sleep 600' 60 ;;
+      hang) scenario_fake hang 'exec sleep 600' 60 ;;
       powercut) scenario_powercut ;;
       *) echo "unknown scenario $scenario"; exit 2 ;;
     esac
