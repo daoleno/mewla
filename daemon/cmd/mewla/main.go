@@ -2796,8 +2796,26 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if fs.NArg() != 0 || strings.TrimSpace(id) == "" || strings.TrimSpace(number) == "" {
-			return fmt.Errorf("-id and -number are required")
+		// The number the browser shows is enough: `mewla devices approve 482913`.
+		if strings.TrimSpace(number) == "" && fs.NArg() == 1 {
+			number = fs.Arg(0)
+		} else if fs.NArg() != 0 {
+			return fmt.Errorf("usage: mewla devices %s NUMBER", args[0])
+		}
+		if strings.TrimSpace(number) == "" {
+			return fmt.Errorf("usage: mewla devices %s NUMBER (the number the browser shows)", args[0])
+		}
+		if strings.TrimSpace(id) == "" {
+			list, err := callControl(cliConfig{stateDir: stateDir}, control.Request{Type: "enrollment_list"})
+			if err != nil {
+				return err
+			}
+			if err := controlResponseError(list); err != nil {
+				return err
+			}
+			if id, err = enrollmentIDForNumber(list.Enrollments, number); err != nil {
+				return err
+			}
 		}
 		approve := args[0] == "approve"
 		resp, err := callControl(cliConfig{stateDir: stateDir}, control.Request{Type: "enrollment_decide", EnrollmentID: id, VerificationNumber: number, Approve: &approve})
@@ -2812,6 +2830,25 @@ func runDevicesCommand(args []string, stderr io.Writer) error {
 	default:
 		return fmt.Errorf("unknown devices command: %s", args[0])
 	}
+}
+
+// enrollmentIDForNumber is the one pending request that shows number. No match
+// or several (two browsers drew the same number) ask for -id instead of guessing.
+func enrollmentIDForNumber(pending []enrollment.Request, number string) (string, error) {
+	number = strings.TrimSpace(number)
+	var matches []enrollment.Request
+	for _, item := range pending {
+		if strings.TrimSpace(item.Number) == number {
+			matches = append(matches, item)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0].ID, nil
+	case 0:
+		return "", fmt.Errorf("no browser is waiting with number %s; it may have expired. Run mewla devices pending to see who is waiting", number)
+	}
+	return "", fmt.Errorf("%d browsers show number %s; pick one with -id (mewla devices pending lists them)", len(matches), number)
 }
 
 func writeDeviceRevokeResult(

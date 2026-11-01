@@ -80,7 +80,7 @@ export function BrowserEnrollmentScreen() {
       <View style={styles.content}>
         <AppText variant="caption" tone="secondary" style={styles.center}>Connect to Mewla</AppText>
         <AppText variant="display" accessibilityRole="header" style={styles.center}>{waiting ? "Waiting for approval" : state === "denied" ? "Request denied" : state === "expired" ? "Request expired" : "Could not connect"}</AppText>
-        <AppText tone="secondary" style={styles.center}>{waiting ? "Approve this number on your computer or a paired phone." : state === "denied" ? "This browser wasn’t approved." : state === "expired" ? "This number expired." : error}</AppText>
+        <AppText tone="secondary" style={styles.center}>{waiting ? (prompt ? `On your computer, run mewla devices approve ${prompt.verificationNumber} — or approve on a paired phone.` : "Approve this number on your computer or a paired phone.") : state === "denied" ? "This browser wasn’t approved." : state === "expired" ? "This number expired." : error}</AppText>
         {waiting && prompt ? <AppText variant="display" accessibilityLabel={`Verification number ${prompt.verificationNumber}`} style={styles.number}>{prompt.verificationNumber}</AppText> : null}
         {waiting ? <ActivityIndicator color={colors.accent} /> : <Button label={state === "expired" ? "New number" : "Try again"} variant="filled" onPress={() => { try { sessionStorage.removeItem("mewla:enrollment:v1"); } catch {} setAttempt((value) => value + 1); }} />}
         {waiting && error ? <AppText tone="secondary" accessibilityLiveRegion="polite" style={styles.center}>{error}</AppText> : null}
