@@ -248,17 +248,44 @@ func (manager *CertManager) accountKey() (crypto.Signer, error) {
 // ServerTLSConfig serves the WebPKI certificate to clients asking for the
 // hosted hostname and the self-signed transport certificate to everyone else
 // (pinned phones and self-hosted relays). Both carry the same key.
+//
+// Pinned phones and relays speak TLS 1.3 only, and that is all this accepts
+// from them. A client that asks for the hosted hostname and verifies the
+// WebPKI certificate (a phone pasted or scanned into a direct address, a
+// browser) may also use TLS 1.2 with forward-secret AEAD suites: an iPhone's
+// WebSocket stack (CFStream, Secure Transport) cannot speak TLS 1.3 and failed
+// the handshake with -9836 against a TLS 1.3-only computer.
 func ServerTLSConfig(fallback tls.Certificate, hostname string, certs *CertManager) *tls.Config {
-	return &tls.Config{
-		MinVersion: tls.VersionTLS13,
-		NextProtos: []string{"http/1.1"},
-		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			if certs != nil && strings.EqualFold(strings.TrimSuffix(hello.ServerName, "."), hostname) {
-				if cert := certs.Certificate(); cert != nil {
-					return cert, nil
-				}
+	getCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if certs != nil && strings.EqualFold(strings.TrimSuffix(hello.ServerName, "."), hostname) {
+			if cert := certs.Certificate(); cert != nil {
+				return cert, nil
 			}
-			return &fallback, nil
-		},
+		}
+		return &fallback, nil
 	}
+	base := &tls.Config{
+		MinVersion:     tls.VersionTLS13,
+		NextProtos:     []string{"http/1.1"},
+		GetCertificate: getCertificate,
+	}
+	base.GetConfigForClient = func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+		if certs == nil || certs.Certificate() == nil ||
+			!strings.EqualFold(strings.TrimSuffix(hello.ServerName, "."), hostname) {
+			return nil, nil
+		}
+		hosted := base.Clone()
+		hosted.GetConfigForClient = nil
+		hosted.MinVersion = tls.VersionTLS12
+		hosted.CipherSuites = []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+		}
+		return hosted, nil
+	}
+	return base
 }
