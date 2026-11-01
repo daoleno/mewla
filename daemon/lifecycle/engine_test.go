@@ -988,3 +988,28 @@ func countEngineEvents(e *Engine, workID WorkID, kind Kind, sourceID string) int
 	}
 	return n
 }
+
+func TestReopenUndoesOnlyARuntimeClose(t *testing.T) {
+	e, err := openAt(t, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	define(t, e, "w-runtime", PolicyBounded)
+	define(t, e, "w-user", PolicyBounded)
+	if _, err := e.Complete("w-runtime", 0, ActorRuntime, "relayed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Complete("w-user", 0, "user", "done"); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := e.Reopen("w-runtime", "Brain acted")
+	if err != nil || reopened.Status.Terminal() || reopened.TerminalAt != nil || reopened.ClosedBy != "" {
+		t.Fatalf("runtime close not undone: %+v err=%v", reopened, err)
+	}
+	if _, err := e.Reopen("w-user", "x"); !errors.Is(err, ErrTerminal) {
+		t.Fatalf("user close reopened: %v", err)
+	}
+	if _, err := e.Reopen("w-runtime", "x"); !errors.Is(err, ErrTerminal) {
+		t.Fatalf("an open Work accepted Reopen: %v", err)
+	}
+}
