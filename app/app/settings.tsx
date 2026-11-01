@@ -72,6 +72,7 @@ import type { TelegramConnectionStatus } from "../services/websocket";
 import {
   useWorkerServerSummary,
 } from "../store/workers";
+import { cameraGate } from "../services/cameraGate";
 import * as Storage from "../services/storage";
 import { AnimatedPressable } from "../components/ui/AnimatedPressable";
 import {
@@ -227,6 +228,8 @@ export default function SettingsScreen() {
     }
     releasePairScan(scanClaimRef.current);
     setCameraMountError(null);
+    // First use: the system asks as the scanner opens, not after a second tap.
+    if (cameraGate(cameraPermission) === "request") void requestCameraPermission();
     setPairPresentation((current) => openPairScanner(current));
   };
 
@@ -520,17 +523,19 @@ export default function SettingsScreen() {
                 </Text>
                 <Text style={styles.scannerNoticeText}>{cameraMountError}</Text>
               </View>
-            ) : !cameraPermission ? (
+            ) : cameraGate(cameraPermission) === "loading" ? (
               <View style={styles.scannerNoticeCard}>
                 <Text style={styles.scannerNoticeTitle}>Loading camera</Text>
               </View>
-            ) : !cameraPermission.granted ? (
+            ) : cameraGate(cameraPermission) !== "camera" ? (
               <View style={styles.scannerNoticeCard}>
                 <Text style={styles.scannerNoticeTitle}>
                   Camera permission required
                 </Text>
                 <Text style={styles.scannerNoticeText}>
-                  Allow camera access to scan a mewla pairing QR code.
+                  {cameraGate(cameraPermission) === "denied"
+                    ? "The camera is off for Mewla. Turn it on in Settings, or paste the pairing link instead."
+                    : "Allow camera access to scan a mewla pairing QR code."}
                 </Text>
                 <AnimatedPressable
                   style={[
@@ -540,11 +545,15 @@ export default function SettingsScreen() {
                   preset="press"
                   scale={0.96}
                   accessibilityRole="button"
-                  accessibilityLabel="Grant camera access"
-                  onPress={() => void requestCameraPermission()}
+                  accessibilityLabel={cameraGate(cameraPermission) === "denied" ? "Open Settings" : "Grant camera access"}
+                  onPress={() =>
+                    cameraGate(cameraPermission) === "denied"
+                      ? void Linking.openSettings()
+                      : void requestCameraPermission()
+                  }
                 >
                   <Text style={styles.scannerPrimaryBtnText}>
-                    Grant Camera Access
+                    {cameraGate(cameraPermission) === "denied" ? "Open Settings" : "Grant Camera Access"}
                   </Text>
                 </AnimatedPressable>
               </View>
