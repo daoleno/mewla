@@ -265,6 +265,12 @@ func (s *Store) PrepareInputAdmission(candidate watcher.InputAdmission) (watcher
 		TranscriptProvider: candidate.TranscriptBinding.Provider, TranscriptFlag: candidate.TranscriptBinding.PiFlag,
 		TranscriptPath: candidate.TranscriptBinding.PiPath, Purpose: purpose, PurposeID: purposeID,
 	}
+	if st.Status.Terminal() && st.ClosedBy == lifecycle.ActorRuntime {
+		// A follow-up to the Worker of a runtime-settled Work reopens it.
+		if _, err := s.ReopenSettledWork(string(st.ID), "A follow-up was sent to the Worker."); err != nil {
+			return watcher.InputAdmission{}, false, err
+		}
+	}
 	applied, next, err := s.fsm.PrepareAdmission(st.ID, input)
 	if err != nil {
 		return watcher.InputAdmission{}, false, err
@@ -1942,9 +1948,7 @@ func (s *Store) AppendDeliveryNote(workID, eventID, kind, dedupeKey, summary str
 //     same action identity is re-claimable (row 12) — no second fact is
 //     created, so no second card is possible.
 //   - discard: the actor abandons the current action; the event is cleared
-//     with audit. If Work is still non-terminal, one fresh
-//     brain.reconcile_required fact re-requires the same queue item so the
-//     Brain still decides the disposition (row 13).
+//     with audit; a still-open Work settles by the usual rule (settle.go).
 func (s *Store) ResolveReviewLease(workID string, resolution ReviewLeaseResolution, actor, reason string) (WorkReviewAction, bool, error) {
 	workID = strings.TrimSpace(workID)
 	actor = strings.TrimSpace(actor)

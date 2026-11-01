@@ -45,14 +45,15 @@ func hostHandlingFixture(t *testing.T) (*Store, *Service, Work, WorkReviewAction
 	return store, service, item, claimed
 }
 
-func hasReconcileRequired(t *testing.T, store *Store, workID string) bool {
+// handlingEnded reports whether the Work's delivered review ended without a
+// disposition.
+func handlingEnded(t *testing.T, store *Store, workID string) bool {
 	t.Helper()
-	for _, event := range mustWorkEvents(t, store, workID) {
-		if event.Kind == "brain.reconcile_required" {
-			return true
-		}
+	item, err := store.Work(workID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return false
+	return item.Review != nil && item.Review.Lease != nil && item.Review.Lease.HandlingEndedAt != nil
 }
 
 // The live Host reported its pane as "unknown" a few seconds after delivery
@@ -68,8 +69,8 @@ func TestHostStateNoiseDoesNotEndARunningHandling(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if hasReconcileRequired(t, store, item.ID) {
-		t.Fatal("a running Host Turn was reported as ended without a disposition")
+	if handlingEnded(t, store, item.ID) {
+		t.Fatal("a running Host Turn ended its handling")
 	}
 	if lease := requireReviewDelivered(t, store, item.ID); lease.HandlingEndedAt != nil {
 		t.Fatalf("handling ended while its Turn runs: %+v", lease)
@@ -86,8 +87,8 @@ func TestHostStateNoiseDoesNotEndARunningHandling(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if !hasReconcileRequired(t, store2, item2.ID) {
-		t.Fatal("a Turn that ended with no disposition was not reported")
+	if !handlingEnded(t, store2, item2.ID) {
+		t.Fatal("a Turn that ended with no disposition did not end its handling")
 	}
 }
 
@@ -113,8 +114,8 @@ func TestHostTurnEndWaitsForAFollowUpInFlight(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if hasReconcileRequired(t, store, item.ID) {
-		t.Fatal("Host turn end reported a missing disposition while a follow-up was in flight")
+	if handlingEnded(t, store, item.ID) {
+		t.Fatal("Host turn end ended the handling while a follow-up was in flight")
 	}
 	if _, err := store.FSM().AcceptAdmissionBySignal(lifecycle.WorkID(item.ID), followUp, "worker"); err != nil {
 		t.Fatal(err)
@@ -125,8 +126,8 @@ func TestHostTurnEndWaitsForAFollowUpInFlight(t *testing.T) {
 	if after, _ := store.Work(item.ID); after.Review != nil {
 		t.Fatalf("accepted follow-up left the review open: %+v", after.Review)
 	}
-	if hasReconcileRequired(t, store, item.ID) {
-		t.Fatal("accepted follow-up still produced reconcile_required")
+	if handlingEnded(t, store, item.ID) {
+		t.Fatal("accepted follow-up left an ended handling")
 	}
 }
 
@@ -184,8 +185,8 @@ func TestBrainWorkUpdateIsTheDispositionOfTheLiveHandling(t *testing.T) {
 				t.Fatalf("status = %s, want waiting", after.Status)
 			}
 			endHostTurn(t, store, service, claimed)
-			if hasReconcileRequired(t, store, item.ID) {
-				t.Fatal("a disposed handling still raised reconcile_required at the end of the Host turn")
+			if handlingEnded(t, store, item.ID) {
+				t.Fatal("a disposed handling ended at the end of the Host turn")
 			}
 		})
 	}
@@ -199,8 +200,8 @@ func TestBrainWorkUpdateIsTheDispositionOfTheLiveHandling(t *testing.T) {
 			t.Fatalf("after done: %+v", after)
 		}
 		endHostTurn(t, store, service, claimed)
-		if hasReconcileRequired(t, store, item.ID) {
-			t.Fatal("accepted Work still raised reconcile_required")
+		if handlingEnded(t, store, item.ID) {
+			t.Fatal("accepted Work has an ended handling")
 		}
 	})
 

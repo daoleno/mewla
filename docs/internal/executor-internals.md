@@ -118,7 +118,7 @@ followed. For a Worker that Brain delegated (it has a Work and a turn;
    `-escalate -basis "<why>"` hands it to the user.
    Brain's answer (any option) also resolves the `needs_input` review it was
    handed with a `wait` on the Worker's Session Turn, so ending the Host turn
-   raises no `brain.reconcile_required` and Brain is not woken again; the user's
+   leaves no unresolved review and Brain is not woken again; the user's
    later answer is not Brain's disposition and does not touch the review.
 3. **The user, only if needed.** On `escalate`, or if Brain does not answer within
    two minutes, the approval becomes an ordinary approval card in the app.
@@ -312,7 +312,7 @@ The Ghostty native build uses a disposable worktree because it must apply verifi
 
 ## When a Brain handling ends
 
-A review event handed to the Brain host is one handling, bound to the host's exact provider Turn. Brain records its disposition while the Turn runs: a follow-up (`mewla worker send -work-id`), accepting or cancelling the Work, or answering a Worker prompt. The handling ends, and `brain.reconcile_required` is written, only when the ledger shows that exact Turn terminal (done, failed, unknown or ownership lost) with no disposition and no follow-up in flight. The projected pane state of the host is never the end: it reads `unknown` while the Turn is still running, and trusting it ended every handling a few seconds after delivery. A follow-up that is prepared but not yet accepted by the provider counts as a disposition in flight; its acceptance resolves the review, and an aborted one ends the handling on the next lane pass.
+A review event handed to the Brain host is one handling, bound to the host's exact provider Turn. Brain records its disposition while the Turn runs: a follow-up (`mewla worker send -work-id`), accepting or cancelling the Work, or answering a Worker prompt. The handling ends only when the ledger shows that exact Turn terminal (done, failed, unknown or ownership lost) with no disposition and no follow-up in flight. The projected pane state of the host is never the end: it reads `unknown` while the Turn is still running, and trusting it ended every handling a few seconds after delivery. A follow-up that is prepared but not yet accepted by the provider counts as a disposition in flight; its acceptance resolves the review, and an aborted one ends the handling on the next lane pass.
 
 `mewla brain work update` on a Work is also the disposition while a handling of that Work is live, with no handling id passed: `-status waiting` or `needs_input` waits on the Work's Brain thread, `-status done`/`cancelled` accepts or cancels, and anything else (`-status running`, `-question`, prose fields) continues. Without a live handling it is an ordinary update, and `-status running` is refused. `mewla brain work resolve` stays for an exact-capability disposition.
 

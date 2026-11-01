@@ -12,21 +12,20 @@ import (
 )
 
 // Process signals come from the Work store: turns lost or stalled, automatic
-// resumes, reconcile requests, ambiguous deliveries, input requests, failed
+// resumes, ambiguous deliveries, input requests, failed
 // turns, repeated follow-up sends and Work reopened after closing.
 
 // processKinds maps Work event kinds to signal kinds.
 var processKinds = map[string]string{
-	"turn_lost":                "turn_lost",
-	"lease_expired":            "lease_expired",
-	"session.stale":            "stalled",
-	"session.auto_resumed":     "auto_resumed",
-	"brain.reconcile_required": "reconcile_required",
-	"delivery.ambiguous":       "delivery_ambiguous",
-	"session.needs_input":      "needs_input",
-	"session.failed":           "session_failed",
-	"turn_failed":              "turn_failed",
-	"submission_failed":        "submission_failed",
+	"turn_lost":            "turn_lost",
+	"lease_expired":        "lease_expired",
+	"session.stale":        "stalled",
+	"session.auto_resumed": "auto_resumed",
+	"delivery.ambiguous":   "delivery_ambiguous",
+	"session.needs_input":  "needs_input",
+	"session.failed":       "session_failed",
+	"turn_failed":          "turn_failed",
+	"submission_failed":    "submission_failed",
 }
 
 const (

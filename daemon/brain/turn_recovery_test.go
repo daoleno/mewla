@@ -249,7 +249,7 @@ func TestStoppedWorkerThenLateDoneReachesBrainExactlyOnce(t *testing.T) {
 
 // Brain's answer to a Worker's blocked action is its disposition of the review
 // that raised it, so ending the Host turn does not ask Brain to reconcile.
-func TestAnsweredWorkerBlockResolvesTheReviewAndLeavesNoReconcile(t *testing.T) {
+func TestAnsweredWorkerBlockResolvesTheReview(t *testing.T) {
 	setup := func(t *testing.T) (*Store, *Service, Work) {
 		store, err := NewStore(t.TempDir())
 		if err != nil {
@@ -309,10 +309,8 @@ func TestAnsweredWorkerBlockResolvesTheReviewAndLeavesNoReconcile(t *testing.T) 
 		if _, ended, err := store.EndReviewDelivery(item.ID, claimed.HandlingID, claimed.ProviderTurnID); err != nil || ended {
 			t.Fatalf("EndReviewDelivery after answer = %v, %v", ended, err)
 		}
-		for _, event := range mustWorkEvents(t, store, item.ID) {
-			if event.Kind == "brain.reconcile_required" {
-				t.Fatalf("answer left a reconcile event: %+v", event)
-			}
+		if handlingEnded(t, store, item.ID) {
+			t.Fatal("answer left an ended handling")
 		}
 		// Answering again changes nothing.
 		if ok, err := store.ResolveAnsweredWorkerBlock("worker"); err != nil || ok {
@@ -330,18 +328,14 @@ func TestAnsweredWorkerBlockResolvesTheReviewAndLeavesNoReconcile(t *testing.T) 
 		}
 	})
 
-	t.Run("without an answer the unresolved turn still asks for reconciliation", func(t *testing.T) {
+	t.Run("without an answer the handling ends and the Work is left to the judge", func(t *testing.T) {
 		store, _, item := setup(t)
 		claimed, _ := claimAndDeliverTestReview(t, store, "host")
 		if _, ended, err := store.EndReviewDelivery(item.ID, claimed.HandlingID, claimed.ProviderTurnID); err != nil || !ended {
 			t.Fatalf("EndReviewDelivery = %v, %v", ended, err)
 		}
-		found := false
-		for _, event := range mustWorkEvents(t, store, item.ID) {
-			found = found || event.Kind == "brain.reconcile_required"
-		}
-		if !found {
-			t.Fatal("control: an unanswered handling should still record reconcile_required")
+		if !handlingEnded(t, store, item.ID) {
+			t.Fatal("control: an unanswered handling should be ended")
 		}
 	})
 }

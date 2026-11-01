@@ -125,8 +125,12 @@ Every slip carries its next step:
 | Ended with no result | "Outcome unknown": ask Brain to check, or close it |
 
 Your reply goes to Brain as a message about that Work, and the slip says
-"With Brain" until Brain acts on it. A result that has waited more than a day
-for a decision moves to Needs you, so nothing sits there forever.
+"With Brain" until Brain acts on it. You never have to close finished Work:
+once Brain has read a result and nothing is pending, Mewla asks a small model
+whether the Work is over and closes it if so. Brain reopens a Work closed that
+way as soon as it acts on it again. A result no Brain has received, or one
+Mewla could not judge, moves to Needs you after a day, so nothing sits there
+forever.
 
 Brain asks with buttons by setting a question on the Work:
 
