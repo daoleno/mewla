@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, AppState, Linking, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAppColors } from "../../constants/tokens";
 import { cameraGate, cameraMayRun } from "../../services/cameraGate";
 import { AppText } from "../ui/AppText";
-import { Button } from "../ui/Button";
 
 /**
  * The viewfinder on the scan step. The camera runs only while this step is on
@@ -31,7 +30,7 @@ export function OnboardingScanner({ paused, compact = false, onCode }: { paused:
           <AppText variant="compact" style={styles.askText}>
             The camera could not start. Check that Mewla may use it in Settings, or paste the link instead.
           </AppText>
-          <Button size="sm" variant="tinted" icon="camera" label="Open Settings" onPress={openSettings} />
+          <FinderButton label="Open Settings" onPress={openSettings} />
         </View>
       ) : gate === "camera" && foreground ? (
         <CameraView
@@ -46,14 +45,14 @@ export function OnboardingScanner({ paused, compact = false, onCode }: { paused:
           <AppText variant="compact" style={styles.askText}>
             Mewla reads the code with the camera.
           </AppText>
-          <Button size="sm" variant="tinted" icon="camera" label="Allow camera" onPress={() => void requestPermission()} />
+          <FinderButton label="Allow camera" onPress={() => void requestPermission()} />
         </View>
       ) : gate === "denied" ? (
         <View style={styles.ask}>
           <AppText variant="compact" style={styles.askText}>
             The camera is off for Mewla. Turn it on in Settings, or paste the link instead.
           </AppText>
-          <Button size="sm" variant="tinted" icon="camera" label="Open Settings" onPress={openSettings} />
+          <FinderButton label="Open Settings" onPress={openSettings} />
         </View>
       ) : gate === "loading" && Platform.OS !== "web" ? (
         <View style={styles.ask}>
@@ -67,6 +66,18 @@ export function OnboardingScanner({ paused, compact = false, onCode }: { paused:
   );
 }
 
+/**
+ * The finder is a dark window in both themes, so its button is light on dark in
+ * both: a themed tinted button was nearly invisible on it in the light theme.
+ */
+function FinderButton({ label, onPress }: { label: string; onPress(): void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.finderButton, pressed && { opacity: 0.8 }]}>
+      <AppText variant="compact" style={styles.finderButtonText}>{label}</AppText>
+    </Pressable>
+  );
+}
+
 const ARM = 26;
 const styles = StyleSheet.create({
   // The finder is a dark window in both themes, like the camera behind it.
@@ -74,6 +85,8 @@ const styles = StyleSheet.create({
   finderCompact: { maxWidth: 200, alignSelf: "flex-start" },
   ask: { alignItems: "center", gap: 14, paddingHorizontal: 28 },
   askText: { color: "#F4F0EA", textAlign: "center" },
+  finderButton: { backgroundColor: "#F4F0EA", borderRadius: 999, paddingHorizontal: 18, paddingVertical: 10, minHeight: 44, justifyContent: "center" },
+  finderButtonText: { color: "#0A0908", fontWeight: "600" },
   corner: { position: "absolute", width: ARM, height: ARM, borderColor: "#F4F0EA", opacity: 0.9 },
   tl: { top: 18, left: 18, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 10 },
   tr: { top: 18, right: 18, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 10 },
