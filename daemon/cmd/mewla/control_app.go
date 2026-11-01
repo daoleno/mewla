@@ -19,7 +19,9 @@ import (
 	"github.com/daoleno/mewla/daemon/computers"
 	"github.com/daoleno/mewla/daemon/connections"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
+	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/phone"
@@ -110,6 +112,10 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleComputerControl(req)
 	case "phone":
 		return a.handlePhoneControl(req)
+	case "executor_check":
+		// The agents as the daemon sees them: its own PATH and environment,
+		// which are what Brain's host launches with, not the terminal's.
+		return control.Response{OK: true, Context: doctor.CheckExecutors(doctor.Options{LookPath: hostdeps.LookPath})}
 	case "agent_use":
 		if a.agentUse == nil {
 			return control.ErrorResponse("agent_use_unavailable", "Agent use is not running")
