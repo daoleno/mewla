@@ -33,6 +33,18 @@ type WorkerRef struct {
 	Delegated bool       `json:"delegated,omitempty"`
 }
 
+// HostProblem says why Brain has no running host, so a client shows the
+// actual problem instead of waiting for a host that is not coming.
+type HostProblem struct {
+	// Code is not_installed, not_signed_in or not_started.
+	Code     string `json:"code"`
+	Executor string `json:"executor"`
+	Detail   string `json:"detail"`
+	// SuggestExecutor is an installed agent Mewla verified as signed in, when
+	// the host's own is not one: `mewla brain use <id>` moves Brain to it.
+	SuggestExecutor string `json:"suggest_executor,omitempty"`
+}
+
 type Snapshot struct {
 	Personality  string                `json:"personality"`
 	CurrentWork  []CurrentWork         `json:"current_work"`
@@ -42,6 +54,7 @@ type Snapshot struct {
 	Workers      []WorkerRef           `json:"workers"`
 	HostWorker   *WorkerRef            `json:"host_worker,omitempty"`
 	HostExecutor *work.WorkerExecutor  `json:"host_executor,omitempty"`
+	HostProblem  *HostProblem          `json:"host_problem,omitempty"`
 	Executors    []work.WorkerExecutor `json:"executors"`
 	ChatThreadID string                `json:"chat_thread_id,omitempty"`
 	Workspace    string                `json:"workspace,omitempty"`

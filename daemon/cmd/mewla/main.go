@@ -388,6 +388,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		_, on := (&friends.Local{StateDir: authManager.StorageDir()}).Enabled()
 		return on
 	})
+	installHostAuthProbe()
 	brainService := brain.NewService(brainStore, w, execs)
 	brainService.SetWorkJudge(brain.NewHeadlessJudge(brainService.HostExecutor, filepath.Join(brainRoot, "judge")))
 	w.SetTurnLedger(brainService)

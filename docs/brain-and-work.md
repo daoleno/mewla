@@ -296,8 +296,12 @@ mewla brain use claude
 The thread and its history move with Brain. First run asks which agent Brain
 uses when more than one is ready and keeps that answer. A start without a
 terminal (a service, CI) never asks: Brain takes the first installed agent in
-the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, and the daemon
-log names it and the `mewla brain use` command that changes it. In the app, Brain's ⋮ menu has
+the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, preferring one
+`mewla doctor` verified as signed in over one it could not verify, and the daemon
+log names it and the `mewla brain use` command that changes it. When Brain has
+no running host, the app's Brain tab says why instead of waiting: the agent is
+not installed, is not signed in, or did not start, with a one-tap switch to an
+installed agent that is signed in. In the app, Brain's ⋮ menu has
 **Switch executor**, **New chat** (a fresh thread), **Open terminal** (Brain's
 own Session) and **Browse workspace**.
 

@@ -39,6 +39,8 @@ const PROBE_TIMEOUT_MS = 4000;
 
 export async function diagnoseConnectionIssue(input: {
   server: StoredServer;
+  /** What the phone's own socket said when it failed to open (error or close text). */
+  socketError?: string;
 }): Promise<ConnectionIssue> {
   const daemonId = normalizeDaemonId(input.server.daemonId);
   const daemonPublicKey = normalizePublicKeyHex(input.server.daemonPublicKey);
@@ -184,7 +186,8 @@ export async function diagnoseConnectionIssue(input: {
     return createIssue(
       "websocket_upgrade_failed",
       "WebSocket session failed after probes passed",
-      "HTTP reachability, daemon identity, and device authorization all succeeded, but the live WebSocket session still failed to open.",
+      "HTTP reachability, daemon identity, and device authorization all succeeded, but the live WebSocket session still failed to open." +
+        (input.socketError ? ` The phone's socket reported: ${input.socketError}.` : ""),
       "Check that your tunnel or reverse proxy forwards WebSocket Upgrade and Connection headers, and does not downgrade the connection to plain HTTP polling.",
       probeResponse.status,
     );

@@ -229,6 +229,17 @@ describe("Brain screen while it wakes", () => {
     ).toBe("Connecting…");
   });
 
+  test("a hydrated Brain with no host and a stated problem is not 'waking' forever", () => {
+    const noHost = { ...base, hydrated: true, hasHostWorker: false };
+    expect(brainScreenSurface({ ...noHost, connection: "connected" })).toBe("waking");
+    expect(brainScreenSurface({ ...noHost, connection: "connected", hostProblem: true })).toBe("host_down");
+    // Offline stays the status card, and a running host is the chat whatever was said before.
+    expect(brainScreenSurface({ ...noHost, connection: "offline", hostProblem: true })).toBe("status");
+    expect(
+      brainScreenSurface({ ...noHost, hasHostWorker: true, structuredEvents: true, connection: "connected", hostProblem: true }),
+    ).toBe("chat");
+  });
+
   test("no computer or an offline one keeps the status card", () => {
     expect(brainScreenSurface({ ...base, hasServer: false, connection: "offline" })).toBe("status");
     expect(brainScreenSurface({ ...base, connection: "offline" })).toBe("status");

@@ -238,6 +238,7 @@ export interface BrainContextPayload {
   personality?: string;
   host_worker?: any;
   host_executor?: any;
+  host_problem?: any;
   executors?: any[];
   workers?: any[];
   generated_at?: string;
@@ -573,9 +574,10 @@ class ServerSocket {
     this.startConnectAttempt();
   }
 
-  private async reportConnectionIssue(attemptId: number) {
+  private async reportConnectionIssue(attemptId: number, socketError = "") {
     const issue = await diagnoseConnectionIssue({
       server: this.meta.server,
+      socketError,
     });
 
     if (attemptId !== this.attemptSequence) {
@@ -722,7 +724,10 @@ class ServerSocket {
           }
         }
         if (!opened) {
-          void this.reportConnectionIssue(attemptId);
+          void this.reportConnectionIssue(
+            attemptId,
+            [errorText, closeText].filter(Boolean).join(" · "),
+          );
         }
         this.scheduleReconnect(lived >= HEALTHY_CONNECTION_MS);
       };
@@ -754,7 +759,7 @@ class ServerSocket {
           handleEnd("error");
         }
       };
-    } catch {
+    } catch (error) {
       if (attemptId !== this.attemptSequence) {
         return;
       }
@@ -765,7 +770,10 @@ class ServerSocket {
         this.emit("connecting", {});
         void transportFailed(this.meta.server);
       }
-      void this.reportConnectionIssue(attemptId);
+      void this.reportConnectionIssue(
+        attemptId,
+        socketErrorText(error),
+      );
       this.scheduleReconnect();
     }
   }
