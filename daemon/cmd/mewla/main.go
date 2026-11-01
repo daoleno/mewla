@@ -380,7 +380,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return on
 	})
 	brainService := brain.NewService(brainStore, w, execs)
-	brainService.SetWorkJudge(brain.NewHeadlessJudge(brainService.HostCommandLine, filepath.Join(brainRoot, "judge")))
+	brainService.SetWorkJudge(brain.NewHeadlessJudge(brainService.HostExecutor, filepath.Join(brainRoot, "judge")))
 	w.SetTurnLedger(brainService)
 	// A Worker whose agent announces its conversation is re-proved when it
 	// announces another, not every 30 seconds; one the Hub has no binding for

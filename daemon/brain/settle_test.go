@@ -261,14 +261,3 @@ func TestWorkerSendAfterARuntimeCloseReopensTheWork(t *testing.T) {
 		t.Fatal("a send reopened a user-closed Work")
 	}
 }
-
-func TestCommandFlagJSONRejoinsTheHostSettings(t *testing.T) {
-	command := `claude --model claude-opus-5-5 --permission-mode bypassPermissions --settings {"env":{"A":"b c"},"permissions":{}} --session-id x`
-	got := commandFlagJSON(strings.Fields(command), "--settings")
-	if got != `{"env":{"A":"b c"},"permissions":{}}` {
-		t.Fatalf("settings = %q", got)
-	}
-	if commandFlagJSON(strings.Fields("claude --model m"), "--settings") != "" {
-		t.Fatal("found settings in a command without them")
-	}
-}
