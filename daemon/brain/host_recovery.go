@@ -12,7 +12,7 @@ import (
 )
 
 // ErrHostNotRunnable means Brain's agent cannot run on this computer yet: its
-// command is not installed, or Mewla verified it signed out. Nothing is
+// command is not installed or of an unsupported version. Nothing is
 // launched; the host starts once the cause is fixed (see HostRecoveryDue).
 var ErrHostNotRunnable = errors.New("brain host agent cannot run yet")
 
@@ -30,8 +30,12 @@ func SetHostUnsupportedProbe(probe func(executorID string) string) {
 	hostUnsupported = probe
 }
 
-// hostRunnable reports whether the executor's command is installed and not
-// verified signed out. Unknown sign-in is runnable: Mewla does not guess.
+// hostRunnable reports whether the executor's command is installed and of a
+// version Mewla supports. Sign-in is not part of it: the pane starts in the
+// person's login shell, whose environment can hold a sign-in (ANTHROPIC_*
+// variables) that Mewla's own, narrower environment does not see, so a
+// "signed out" verdict here is not proof. A host that really sits at a sign-in
+// prompt is reported once it has been open and unready for a while.
 func (s *Service) hostRunnable(executor work.WorkerExecutor) error {
 	command := strings.TrimSpace(executor.Command)
 	if command == "" {
@@ -42,9 +46,6 @@ func (s *Service) hostRunnable(executor work.WorkerExecutor) error {
 		if _, err := hostLookPath(fields[0]); err != nil {
 			return fmt.Errorf("%w: %s is not installed", ErrHostNotRunnable, fields[0])
 		}
-	}
-	if hostAuth(executor.ID) == HostAuthUnauthenticated {
-		return fmt.Errorf("%w: %s is not signed in", ErrHostNotRunnable, executor.ID)
 	}
 	if reason := hostUnsupported(executor.ID); reason != "" {
 		return fmt.Errorf("%w: %s", ErrHostNotRunnable, reason)

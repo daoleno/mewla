@@ -2486,9 +2486,11 @@ func TestServiceSnapshotNamesTheFirstAgentInOrderButLaunchesNothingUninstalled(t
 	}
 }
 
-// An agent Mewla verified signed out gets no pane (it would sit at a sign-in
-// prompt nobody sees); signing in makes the host due.
-func TestHostIsNotLaunchedForASignedOutAgentUntilItSignsIn(t *testing.T) {
+// Mewla judges sign-in in its own environment, but the Brain pane starts in
+// the person's login shell, whose environment can hold a sign-in (ANTHROPIC_*
+// variables) Mewla never sees. A "signed out" verdict therefore never keeps
+// the pane from starting: refusing would leave a working setup with no way out.
+func TestHostStartsEvenWhenMewlaSeesTheAgentSignedOut(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -2503,18 +2505,11 @@ func TestHostIsNotLaunchedForASignedOutAgentUntilItSignsIn(t *testing.T) {
 		"claude": {Name: "claude", Command: "claude"},
 	}))
 
-	if _, err := service.EnsureHostSnapshot(); !errors.Is(err, ErrHostNotRunnable) {
-		t.Fatalf("EnsureHostSnapshot error = %v, want ErrHostNotRunnable", err)
+	if _, err := service.EnsureHostSnapshot(); err != nil {
+		t.Fatalf("EnsureHostSnapshot error = %v", err)
 	}
-	if len(fw.created) != 0 || service.HostRecoveryDue() {
-		t.Fatalf("signed-out agent: created=%#v due=%v", fw.created, service.HostRecoveryDue())
-	}
-	SetHostAuthProbe(func(string) HostAuthState { return HostAuthAuthenticated })
-	if !service.HostRecoveryDue() {
-		t.Fatal("recovery not due after signing in")
-	}
-	if _, err := service.EnsureHostSnapshot(); err != nil || len(fw.created) != 1 {
-		t.Fatalf("after sign-in: err=%v created=%#v", err, fw.created)
+	if len(fw.created) != 1 {
+		t.Fatalf("signed-out verdict kept the host from starting: created=%#v", fw.created)
 	}
 }
 
