@@ -2443,10 +2443,21 @@ func runPairCommand(args []string, stderr io.Writer) error {
 		return fmt.Errorf("build pairing links: %w", err)
 	}
 	if phoneAddress == "" {
-		if connectLink, address, err := buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing); err != nil {
-			fmt.Fprintf(stderr, "Remote access pairing unavailable: %v\n", err)
-		} else if connectLink != "" {
-			links.phoneAddress, links.phoneLink = address, connectLink
+		connectLink, address, err := buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing)
+		if err != nil {
+			// One more try: the admission crosses the relay and a slow or lossy
+			// path can lose the first.
+			connectLink, address, err = buildRemotePairingLink(stateDir, pairingInfo.DaemonID, pairingInfo.DaemonPublicKey, pairing)
+		}
+		remoteURL := ""
+		if config, ok, _ := remote.LoadRemote(stateDir); ok {
+			remoteURL = config.URL()
+		}
+		var applyErr error
+		if links, applyErr = applyRemotePairing(links, remoteURL, connectLink, address, err, stderr); applyErr != nil {
+			return applyErr
+		}
+		if err == nil && connectLink != "" {
 			phoneAddress = address
 		}
 	}
@@ -2484,6 +2495,28 @@ func runPairCommand(args []string, stderr io.Writer) error {
 	devices, _ := listDevices(cfg.stateDir)
 	printPairing(stderr, pairingStatusFor(stateDir, len(devices)), links, cfg.stateDir)
 	return nil
+}
+
+// applyRemotePairing puts the remote access Link pairing in the phone QR. When
+// remote access is on but its admission failed, the phone QR the address book
+// would give is that same hosted address as a direct pairing: a phone that
+// scans it is saved without the pinned Mewla Link route, then dials the
+// computer's own TLS server, which not every phone stack can (an iPhone's
+// WebSocket fails against TLS 1.3 only). Showing it as if nothing happened
+// leaves a person stuck on a connection that never opens, so it is an error
+// that says why instead. Another address ranked first (Wi-Fi, Tailscale) stays.
+func applyRemotePairing(links pairingLinks, remoteURL, connectLink, address string, admissionErr error, stderr io.Writer) (pairingLinks, error) {
+	if admissionErr == nil {
+		if connectLink != "" {
+			links.phoneAddress, links.phoneLink = address, connectLink
+		}
+		return links, nil
+	}
+	if remoteURL != "" && strings.TrimRight(links.phoneAddress, "/") == strings.TrimRight(remoteURL, "/") {
+		return links, fmt.Errorf("could not set up phone pairing through remote access: %v\nMake sure mewla is running and remote access is connected (mewla address list), then run mewla pair again", admissionErr)
+	}
+	fmt.Fprintf(stderr, "Remote access pairing unavailable: %v\n", admissionErr)
+	return links, nil
 }
 
 // buildLinkPairingLink admits one phone through the configured Mewla Link
