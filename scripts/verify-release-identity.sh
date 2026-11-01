@@ -87,7 +87,10 @@ verify_ios_identity() {
   local variant="$1"
   local expected_name="$2"
   local expected_bundle="$3"
-  MEWLA_IOS_APP_VARIANT="$variant" \
+  # Identity, not distribution: the Preview CI that runs this has
+  # MEWLA_IOS_DISTRIBUTION=testflight, which app.config.js refuses for the
+  # production identity this also checks.
+  MEWLA_IOS_APP_VARIANT="$variant" MEWLA_IOS_DISTRIBUTION=none \
     node - "$expected_name" "$expected_bundle" "$EXPECTED_PACKAGE" "$EXPECTED_IOS_BUILD_NUMBER" "$EXPECTED_VERSION" <<'JS'
 const createConfig = require('./app/app.config.js');
 const expectedDisplayName = process.argv[2];

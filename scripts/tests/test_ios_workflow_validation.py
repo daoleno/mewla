@@ -87,6 +87,23 @@ class IOSWorkflowValidationTests(unittest.TestCase):
         result, _ = self.validate(postprocess=True, MEWLA_IOS_VERSION="$(exit 0)")
         self.assertNotEqual(result.returncode, 0)
 
+    def test_identity_verifier_passes_under_the_testflight_distribution(self):
+        # Preview CI exports MEWLA_IOS_DISTRIBUTION=testflight before verifying
+        # the tracked identity; the verifier also checks the production identity,
+        # which app.config.js refuses for testflight.
+        result = subprocess.run(
+            ["./scripts/verify-release-identity.sh"],
+            cwd=ROOT,
+            env={
+                "PATH": os.environ["PATH"],
+                "MEWLA_IOS_APP_VARIANT": "preview",
+                "MEWLA_IOS_DISTRIBUTION": "testflight",
+            },
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -226,6 +226,10 @@ jobs:
           JS
 
       - name: Verify tracked release identity
+        # Identity, not distribution: a tag prepared before the verifier set this
+        # itself (v0.2.88) still passes with the workflow's testflight distribution.
+        env:
+          MEWLA_IOS_DISTRIBUTION: none
         run: ./scripts/verify-release-identity.sh
 
       # Restore-only: native-cache.yml on main is the only writer, because a
