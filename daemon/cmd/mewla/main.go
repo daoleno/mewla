@@ -816,6 +816,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 			},
 		},
 		{
+			name: "Brain host self-heal",
+			run: func(ctx context.Context) error {
+				if err := w.WaitForSnapshot(ctx); err != nil {
+					return err
+				}
+				brainService.RunHostSelfHeal(ctx)
+				return nil
+			},
+		},
+		{
 			name: "Brain transcript capture",
 			run: func(ctx context.Context) error {
 				brainService.RunHostTranscriptCapture(ctx)

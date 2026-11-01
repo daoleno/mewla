@@ -318,18 +318,59 @@ func (s *Store) writeReplaceHostSessionBinding(path string, value any) error {
 	return writeHostSessionFile(path, value)
 }
 
+// SetHostExecutorID is a person's choice of Brain's agent (mewla brain use,
+// the app's Switch executor, first run, setup): it is remembered as explicit
+// and Mewla never moves Brain off it by itself.
 func (s *Store) SetHostExecutorID(executorID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer s.rev.Add(1)
+	if err := setHostExecutorID(s.HostSessionPath(), executorID); err != nil {
+		return err
+	}
+	return markHostExecutorExplicit(hostExecutorExplicitPath(s.Root), executorID)
+}
+
+// setImplicitHostExecutorID moves Brain to another agent without recording a
+// person's choice, so a later heal may move it again.
+func (s *Store) setImplicitHostExecutorID(executorID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	defer s.rev.Add(1)
 	return setHostExecutorID(s.HostSessionPath(), executorID)
 }
 
+// HostExecutorExplicit is the agent a person chose for Brain, or "" when
+// Brain's agent was only picked by default. An install that predates the
+// record has none, and is treated as picked by default.
+func (s *Store) HostExecutorExplicit() string {
+	raw, err := os.ReadFile(hostExecutorExplicitPath(s.Root))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func hostExecutorExplicitPath(root string) string {
+	return filepath.Join(root, "state", "host_executor_explicit")
+}
+
+func markHostExecutorExplicit(path, executorID string) error {
+	executorID = strings.TrimSpace(executorID)
+	if executorID == "" {
+		return nil
+	}
+	return atomicfile.Write(path, []byte(executorID+"\n"), 0o600)
+}
+
 // SaveHostExecutorID is SetHostExecutorID for a Brain root that no running
 // daemon owns: first run saves the agent chosen for Brain without opening
 // the Store.
 func SaveHostExecutorID(root, executorID string) error {
-	return setHostExecutorID(hostSessionPath(root), executorID)
+	if err := setHostExecutorID(hostSessionPath(root), executorID); err != nil {
+		return err
+	}
+	return markHostExecutorExplicit(hostExecutorExplicitPath(root), executorID)
 }
 
 // LoadHostSession reads the Brain host binding under root without opening
