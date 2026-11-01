@@ -374,9 +374,10 @@ func TestScreenViewerHearsLockStateAndStreamStats(t *testing.T) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	unlocked := false
-	for stats.Path == "" {
+	// Lock polling and stream stats run independently; either can arrive first.
+	for stats.Path == "" || len(locked) < 2 {
 		if time.Now().After(deadline) {
-			t.Fatalf("no stats; saw %v", seen)
+			t.Fatalf("waiting for stats and both lock states; saw %v (lock states %v)", seen, locked)
 		}
 		_ = conn.SetReadDeadline(deadline)
 		kind, data, err := conn.ReadMessage()
