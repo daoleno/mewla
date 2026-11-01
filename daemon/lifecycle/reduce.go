@@ -81,6 +81,7 @@ func Reduce(prev *State, ev Event) *State {
 		s.Status = StatusCancelled
 		now := ev.At
 		s.TerminalAt = &now
+		s.ClosedBy = payload[CancelledPayload](ev).Actor
 		s.Review = nil
 		s.Wake = nil
 
@@ -92,8 +93,19 @@ func Reduce(prev *State, ev Event) *State {
 		s.Status = StatusDone
 		now := ev.At
 		s.TerminalAt = &now
+		s.ClosedBy = payload[CancelledPayload](ev).Actor
 		s.Review = nil
 		s.Wake = nil
+
+	case KWorkReopened:
+		// Only a runtime settlement is reopenable; an explicit Brain or user
+		// close stays final.
+		if !terminal(s) || s.ClosedBy != ActorRuntime {
+			return noop(s, ev)
+		}
+		s.Status = StatusQueued
+		s.TerminalAt = nil
+		s.ClosedBy = ""
 
 	case KAdmissionPrepared:
 		p := payload[AdmissionPreparedPayload](ev)

@@ -34,6 +34,11 @@ func (s Status) Terminal() bool {
 	return s == StatusDone || s == StatusCancelled
 }
 
+// ActorRuntime is the actor of a close the runtime decided by default: the
+// result was delivered to Brain, or nothing was left pending. Unlike a Brain
+// or user close it can be reopened by the next Brain action on the Work.
+const ActorRuntime = "runtime"
+
 // Policy selects the completion rule applied when a turn settles ok.
 type Policy string
 
@@ -50,6 +55,7 @@ const (
 	KWorkAmended               Kind = "work.amended"
 	KWorkCancelled             Kind = "work.cancelled"
 	KWorkCompleted             Kind = "work.completed"
+	KWorkReopened              Kind = "work.reopened"
 	KAdmissionPrepared         Kind = "admission.prepared"
 	KAdmissionRearmed          Kind = "admission.rearmed"
 	KAdmissionAmbiguous        Kind = "admission.ambiguous"
@@ -156,7 +162,7 @@ func decodePayload(kind Kind, raw json.RawMessage) (any, error) {
 			return nil, err
 		}
 		return p, nil
-	case KWorkCompleted:
+	case KWorkCompleted, KWorkReopened:
 		var p CancelledPayload
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
@@ -596,6 +602,9 @@ type State struct {
 	CreatedAt       time.Time                     `json:"created_at"`
 	UpdatedAt       time.Time                     `json:"updated_at"`
 	TerminalAt      *time.Time                    `json:"terminal_at,omitempty"`
+	// ClosedBy names the actor of an explicit close. Only a runtime settlement
+	// (ActorRuntime) can be reopened; Brain and user closes are final.
+	ClosedBy string `json:"closed_by,omitempty"`
 }
 
 // Clone returns a complete deep copy, including the internal source-dedupe

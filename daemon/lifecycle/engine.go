@@ -854,6 +854,23 @@ func (e *Engine) Complete(id WorkID, expectedRevision uint64, actor, reason stri
 	})
 }
 
+// Reopen returns a runtime-settled Work to the open state. A Work closed by
+// Brain or the user is final and refuses with ErrTerminal.
+func (e *Engine) Reopen(id WorkID, reason string) (*State, error) {
+	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
+		if st == nil {
+			return nil, ErrUnknownWork
+		}
+		if !terminal(st) || st.ClosedBy != ActorRuntime {
+			return nil, ErrTerminal
+		}
+		return []Event{{
+			WorkID: id, Kind: KWorkReopened, SourceID: "reopen:" + e.newID(), At: now,
+			Payload: CancelledPayload{Actor: "brain", Reason: reason},
+		}}, nil
+	})
+}
+
 // SetWait parks a non-owned Work on a typed external producer.
 func (e *Engine) SetWait(id WorkID, kind WakeKind, ref string) (*State, error) {
 	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
