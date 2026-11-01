@@ -8,7 +8,12 @@ import {
   AUTO_CHECK_INTERVAL_MS,
   MANUAL_CHECK_COOLDOWN_MS,
   compareVersions,
+  installedBuild,
+  isNewerTestFlightBuild,
   isNewerVersion,
+  parseTestFlightManifest,
+  testFlightUrls,
+  verifyTestFlightManifest,
   parseAndroidUpdateManifest,
   publicKeyFromPKIX,
   resolveDistributionChannel,
@@ -254,5 +259,94 @@ describe("update check pacing", () => {
       expect(shouldCheckForUpdate(state, last, later, true)).toBe(false);
       expect(shouldCheckForUpdate(state, last, later, false)).toBe(false);
     }
+  });
+});
+
+describe("TestFlight availability", () => {
+  const bundle = "com.daoleno.mewla.preview";
+  const keys = nacl.sign.keyPair();
+  function manifest(overrides: Record<string, unknown> = {}) {
+    return JSON.stringify({
+      schema_version: 1,
+      product: "mewla",
+      platform: "ios",
+      distribution: "testflight",
+      bundle_identifier: bundle,
+      marketing_version: "0.2.88",
+      build_number: 130,
+      app_id: "6790486999",
+      public_link: "https://testflight.apple.com/join/nMQheDCE",
+      ...overrides,
+    });
+  }
+  const sign = (text: string) => nacl.sign.detached(new TextEncoder().encode(text), keys.secretKey);
+
+  test("only an iOS build with the testflight channel checks TestFlight", () => {
+    const extra = { distribution: { ios: "testflight", android: "github-apk" } };
+    expect(resolveDistributionChannel("ios", extra)).toBe("testflight");
+    expect(resolveDistributionChannel("android", { distribution: { android: "testflight" } })).toBe("none");
+    expect(resolveDistributionChannel("ios", {})).toBe("none");
+  });
+
+  test("reads a signed manifest for this app", () => {
+    const text = manifest();
+    const bytes = new TextEncoder().encode(text);
+    expect(verifyTestFlightManifest(bytes, sign(text), bundle, keys.publicKey)).toEqual({
+      version: "0.2.88",
+      buildNumber: 130,
+      appId: "6790486999",
+      publicLink: "https://testflight.apple.com/join/nMQheDCE",
+    });
+  });
+
+  test("rejects a bad signature, another app, and malformed fields", () => {
+    const text = manifest();
+    const bytes = new TextEncoder().encode(text);
+    const tampered = new TextEncoder().encode(manifest({ build_number: 131 }));
+    expect(() => verifyTestFlightManifest(tampered, sign(text), bundle, keys.publicKey)).toThrow("signature");
+    expect(() => parseTestFlightManifest(text, "com.daoleno.mewla")).toThrow("this app");
+    expect(() => parseTestFlightManifest(text, "")).toThrow("this app");
+    expect(() => parseTestFlightManifest(manifest({ marketing_version: "0.2.88-beta.1" }), bundle)).toThrow("version");
+    expect(() => parseTestFlightManifest(manifest({ build_number: "130" }), bundle)).toThrow("build number");
+    expect(() => parseTestFlightManifest(manifest({ app_id: "abc" }), bundle)).toThrow("app id");
+    expect(() => parseTestFlightManifest(manifest({ public_link: "https://evil.example/join/x" }), bundle)).toThrow("link");
+    expect(() => parseTestFlightManifest(manifest({ platform: "android" }), bundle)).toThrow("supported");
+    expect(() => parseTestFlightManifest("nope", bundle)).toThrow("JSON");
+    expect(parseTestFlightManifest(manifest({ public_link: undefined }), bundle).publicLink).toBeUndefined();
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  test("decides availability from the marketing version, then the build number", () => {
+    const build = (version: string, buildNumber: number) => ({ version, buildNumber, appId: "1" });
+    const installed = installedBuild("0.2.87", "126")!;
+    expect(isNewerTestFlightBuild(build("0.2.88", 1), installed)).toBe(true);
+    expect(isNewerTestFlightBuild(build("0.2.87", 127), installed)).toBe(true);
+    expect(isNewerTestFlightBuild(build("0.2.87", 126), installed)).toBe(false);
+    expect(isNewerTestFlightBuild(build("0.2.86", 999), installed)).toBe(false);
+  });
+
+  test("a beta binary compares by its marketing version, so it never announces itself", () => {
+    const installed = installedBuild("0.2.88-beta.1", "130")!;
+    expect(installed).toEqual({ version: "0.2.88", buildNumber: 130 });
+    expect(isNewerTestFlightBuild({ version: "0.2.88", buildNumber: 130, appId: "1" }, installed)).toBe(false);
+    expect(isNewerTestFlightBuild({ version: "0.2.88", buildNumber: 131, appId: "1" }, installed)).toBe(true);
+  });
+
+  test("builds without a real version or build number stay silent", () => {
+    expect(installedBuild("dev", "1")).toBeNull();
+    expect(installedBuild("0.2.87", undefined)).toBeNull();
+    expect(installedBuild("0.2.87", "1.5")).toBeNull();
+  });
+
+  test("the row matches Android's, and tapping opens TestFlight's app page before the invite link", () => {
+    const update = { version: "0.2.88", buildNumber: 130, appId: "6790486999", publicLink: "https://testflight.apple.com/join/nMQheDCE" };
+    const state = { kind: "testflightAvailable", update } as const;
+    expect(appUpdateRow(state)).toEqual({ title: "Update available", subtitle: "v0.2.88", action: "Update", actionable: true });
+    expect(appUpdatePending(state)).toBe(true);
+    expect(testFlightUrls(update)).toEqual([
+      "itms-beta://beta.itunes.apple.com/v1/app/6790486999",
+      "https://testflight.apple.com/join/nMQheDCE",
+    ]);
+    expect(testFlightUrls({ ...update, publicLink: undefined })[1]).toBe("https://testflight.apple.com");
   });
 });

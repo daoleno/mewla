@@ -3,12 +3,13 @@ import nacl from "tweetnacl";
 
 /**
  * Build-time distribution channel. GitHub APK builds update themselves from
- * the signed release manifest; store builds and "none" (iOS today, local
- * builds) leave updates to the store and show nothing.
+ * the signed release manifest; TestFlight builds are told when a newer build is
+ * installable there and open TestFlight; store builds and "none" (local builds)
+ * leave updates to the store and show nothing.
  */
-export type DistributionChannel = "github-apk" | "play-store" | "app-store" | "none";
+export type DistributionChannel = "github-apk" | "play-store" | "app-store" | "testflight" | "none";
 
-const CHANNELS: readonly DistributionChannel[] = ["github-apk", "play-store", "app-store", "none"];
+const CHANNELS: readonly DistributionChannel[] = ["github-apk", "play-store", "app-store", "testflight", "none"];
 
 export const ANDROID_PACKAGE = "com.daoleno.mewla";
 export const ANDROID_UPDATE_ABI = "arm64-v8a";
@@ -20,6 +21,13 @@ export const UPDATE_PUBLIC_KEY_PKIX = "MCowBQYDK2VwAyEAD+GvALNRsWlmuB8FL5nwWchsL
 const ED25519_PKIX_PREFIX = [0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00];
 const MAX_APK_BYTES = 512 << 20;
 
+// CI publishes this signed file to a rolling release once TestFlight really offers a build
+// to testers (not merely once the build uploaded); see .github/workflows/ios-testflight-available.yml.
+export const TESTFLIGHT_RELEASE_URL = `${RELEASES_URL}/download/ios-testflight`;
+export const TESTFLIGHT_MANIFEST_URL = `${TESTFLIGHT_RELEASE_URL}/testflight-manifest.json`;
+export const TESTFLIGHT_SIGNATURE_URL = `${TESTFLIGHT_MANIFEST_URL}.sig`;
+const TESTFLIGHT_PUBLIC_LINK = /^https:\/\/testflight\.apple\.com\/join\/[A-Za-z0-9]+$/;
+
 export function resolveDistributionChannel(platform: string, extra: unknown): DistributionChannel {
   const distribution = isRecord(extra) && isRecord(extra.distribution) ? extra.distribution : {};
   const configured = platform === "android" || platform === "ios" ? distribution[platform] : undefined;
@@ -27,7 +35,7 @@ export function resolveDistributionChannel(platform: string, extra: unknown): Di
     const channel = configured as DistributionChannel;
     // A channel only applies to the platform that can honour it.
     if (platform === "android" && (channel === "github-apk" || channel === "play-store")) return channel;
-    if (platform === "ios" && channel === "app-store") return channel;
+    if (platform === "ios" && (channel === "app-store" || channel === "testflight")) return channel;
     return "none";
   }
   return platform === "android" ? "github-apk" : "none";
@@ -170,6 +178,103 @@ export function parseAndroidUpdateManifest(text: string): AndroidUpdateArtifact 
   };
 }
 
+/** The newest build TestFlight offers testers, as the signed manifest vouches for it. */
+export interface TestFlightBuild {
+  /** Numeric marketing version (CFBundleShortVersionString), e.g. 0.2.88. */
+  version: string;
+  buildNumber: number;
+  appId: string;
+  publicLink?: string;
+}
+
+/** What the running iOS binary is: its numeric marketing version and CFBundleVersion. */
+export interface InstalledBuild {
+  version: string;
+  buildNumber: number;
+}
+
+/**
+ * The running binary's own identity. A beta release such as 0.2.88-beta.1 ships
+ * marketing version 0.2.88, so the semver app version is reduced the same way the
+ * iOS config does. Null when the build number isn't a plain integer (dev builds).
+ */
+export function installedBuild(appVersion: string, buildNumber: unknown): InstalledBuild | null {
+  const version = appVersion.trim().replace(/^v/, "").split(/[-+]/, 1)[0];
+  const number = typeof buildNumber === "string" && /^[1-9]\d*$/.test(buildNumber) ? Number(buildNumber) : NaN;
+  if (!parseVersion(version) || !Number.isSafeInteger(number)) return null;
+  return { version, buildNumber: number };
+}
+
+/** Whether TestFlight offers something newer than the running build: version first, then build. */
+export function isNewerTestFlightBuild(candidate: TestFlightBuild, installed: InstalledBuild): boolean {
+  const order = compareVersions(candidate.version, installed.version);
+  if (order === null) return false;
+  return order > 0 || (order === 0 && candidate.buildNumber > installed.buildNumber);
+}
+
+/**
+ * Verify the TestFlight availability manifest signature over its exact bytes, then
+ * read the build it names. Throws on anything not trustworthy, including a manifest
+ * for another app identity.
+ */
+export function verifyTestFlightManifest(
+  manifestBytes: Uint8Array,
+  signature: Uint8Array,
+  bundleIdentifier: string,
+  publicKey: Uint8Array = publicKeyFromPKIX(UPDATE_PUBLIC_KEY_PKIX),
+): TestFlightBuild {
+  if (signature.length !== nacl.sign.signatureLength || !nacl.sign.detached.verify(manifestBytes, signature, publicKey)) {
+    throw new Error("TestFlight signature didn't verify.");
+  }
+  return parseTestFlightManifest(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes), bundleIdentifier);
+}
+
+export function parseTestFlightManifest(text: string, bundleIdentifier: string): TestFlightBuild {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(text);
+  } catch {
+    throw new Error("TestFlight manifest isn't valid JSON.");
+  }
+  if (
+    !isRecord(manifest) ||
+    manifest.schema_version !== 1 ||
+    manifest.product !== "mewla" ||
+    manifest.platform !== "ios" ||
+    manifest.distribution !== "testflight"
+  ) {
+    throw new Error("TestFlight manifest isn't supported.");
+  }
+  if (!bundleIdentifier || manifest.bundle_identifier !== bundleIdentifier) {
+    throw new Error("TestFlight manifest doesn't describe this app.");
+  }
+  const version = manifest.marketing_version;
+  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version) || !parseVersion(version)) {
+    throw new Error("TestFlight manifest has no valid version.");
+  }
+  const buildNumber = manifest.build_number;
+  if (typeof buildNumber !== "number" || !Number.isSafeInteger(buildNumber) || buildNumber < 1) {
+    throw new Error("TestFlight manifest has no valid build number.");
+  }
+  const appId = manifest.app_id;
+  if (typeof appId !== "string" || !/^[1-9]\d*$/.test(appId)) {
+    throw new Error("TestFlight manifest has no valid app id.");
+  }
+  const publicLink = manifest.public_link;
+  if (publicLink !== undefined && (typeof publicLink !== "string" || !TESTFLIGHT_PUBLIC_LINK.test(publicLink))) {
+    throw new Error("TestFlight manifest has an invalid link.");
+  }
+  return { version, buildNumber, appId, ...(publicLink ? { publicLink } : {}) };
+}
+
+/** Where the update button goes, best first: the app's own TestFlight page, then the invite link. */
+export function testFlightUrls(build: TestFlightBuild): string[] {
+  return [
+    `itms-beta://beta.itunes.apple.com/v1/app/${build.appId}`,
+    build.publicLink ?? "https://testflight.apple.com",
+  ];
+}
+
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -181,6 +286,7 @@ export type AppUpdateState =
   | { kind: "current" }
   | { kind: "checkFailed" }
   | { kind: "available"; update: AndroidUpdateArtifact }
+  | { kind: "testflightAvailable"; update: TestFlightBuild }
   | { kind: "downloading"; update: AndroidUpdateArtifact; progress: number }
   | { kind: "needsPermission"; update: AndroidUpdateArtifact; fileName: string }
   | { kind: "ready"; update: AndroidUpdateArtifact; fileName: string }
@@ -243,6 +349,8 @@ export function appUpdateRow(state: AppUpdateState): AppUpdateRowModel | null {
     case "checkFailed":
       return { title: "Check for updates", action: "Retry", actionable: true };
     case "available":
+      return { title: "Update available", subtitle: `v${state.update.version}`, action: "Update", actionable: true };
+    case "testflightAvailable":
       return { title: "Update available", subtitle: `v${state.update.version}`, action: "Update", actionable: true };
     case "downloading":
       return {
