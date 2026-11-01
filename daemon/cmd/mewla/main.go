@@ -89,6 +89,8 @@ func directClaudePID(sessionID string) (int, bool) {
 }
 
 func main() {
+	// MEWLA_STATE_ROOT relocates all state for a throwaway daemon; see statedir.
+	statedir.InitFromEnv()
 	// The pane tmux shim re-enters here for every `tmux` a Worker types; answer
 	// before any state, config or socket initialisation.
 	if len(os.Args) > 1 && os.Args[1] == "tmux-guard" {

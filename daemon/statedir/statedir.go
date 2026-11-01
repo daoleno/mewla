@@ -1,12 +1,48 @@
 // Package statedir owns the default Mewla state root (~/.mewla).
 package statedir
 
-import "path/filepath"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+)
 
 // DirName is the state root under the user's home directory.
 const DirName = ".mewla"
 
-// Default returns the state root for home.
+// RootEnv relocates the whole state root (identity, paired devices, Brain,
+// Calendar, Work, worktrees, executors.toml) for a daemon and its CLI, without
+// changing HOME: agent CLIs keep their sign-ins under the real HOME, so a
+// throwaway daemon for onboarding or release tests cannot use a fresh HOME.
+const RootEnv = "MEWLA_STATE_ROOT"
+
+var override atomic.Pointer[string]
+
+// Default returns the state root for home, or the relocated root.
 func Default(home string) string {
+	if root := override.Load(); root != nil {
+		return *root
+	}
 	return filepath.Join(home, DirName)
+}
+
+// SetRoot relocates the state root for this process; "" restores the default.
+func SetRoot(dir string) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		override.Store(nil)
+		return
+	}
+	override.Store(&dir)
+}
+
+// InitFromEnv applies RootEnv. Only an absolute path counts: a relative one
+// would move state with the working directory. It runs from main, so tests
+// that pass their own home are never redirected by a Worker's environment.
+func InitFromEnv() {
+	dir := strings.TrimSpace(os.Getenv(RootEnv))
+	if dir != "" && filepath.IsAbs(dir) {
+		SetRoot(dir)
+	}
 }

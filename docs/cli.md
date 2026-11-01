@@ -23,6 +23,12 @@ mewla boot install|status|uninstall   # start at login: systemd user service (Li
 `-state-dir DIR` selects a state directory other than `~/.mewla`. Pass the same
 value to every command that should use it.
 
+To run a second, throwaway Mewla beside your own (to test onboarding, say) set
+`MEWLA_STATE_ROOT=/absolute/dir` for the daemon and for every command that talks
+to it, and give it its own `-addr` port. That moves all of Mewla's state (devices,
+Brain, Calendar, Work) and leaves `HOME` alone, so your agents stay signed in and
+your own Mewla is untouched.
+
 ## Pair and manage devices
 
 ```sh
