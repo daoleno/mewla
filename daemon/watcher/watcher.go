@@ -1515,6 +1515,19 @@ func (w *Watcher) Run(ctx context.Context) error {
 	}
 }
 
+// firstInventoryWithoutServer reports whether err only says no tmux server is
+// running, before any inventory has completed and with no Session known. Later,
+// a missing server stays Unknown: it may be a crash that must not read as the
+// loss of every Session.
+func (w *Watcher) firstInventoryWithoutServer(err error) bool {
+	if !errors.Is(err, ErrTmuxServerGone) {
+		return false
+	}
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return !w.snapshotReady && len(w.workers) == 0
+}
+
 func (w *Watcher) poll() {
 	listPanes, capturePane, snapshotProcesses := w.pollReaders()
 	w.inventoryMu.Lock()
@@ -1523,12 +1536,20 @@ func (w *Watcher) poll() {
 	w.mu.RUnlock()
 	windows, err := listPanes()
 	if err != nil {
-		// An unavailable inventory proves neither Session loss nor released
-		// resources. Retain both until a successful authoritative observation.
-		w.inventoryMu.Unlock()
-		return
+		if !w.firstInventoryWithoutServer(err) {
+			// An unavailable inventory proves neither Session loss nor released
+			// resources. Retain both until a successful authoritative observation.
+			w.inventoryMu.Unlock()
+			return
+		}
+		// Nothing listens on the tmux socket and nothing was ever observed:
+		// the first inventory is empty. Without this a computer with no tmux
+		// server running (after a reboot, or never used) never becomes ready,
+		// and Brain's host, which starts after the first inventory, never starts.
+		windows = nil
+	} else {
+		w.resourceManager().Reconcile(windows)
 	}
-	w.resourceManager().Reconcile(windows)
 	w.inventoryMu.Unlock()
 	processes := snapshotProcesses()
 	processSnapshotAt := time.Now()
