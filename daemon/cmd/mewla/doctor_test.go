@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/daoleno/mewla/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
 func TestDoctorHelp(t *testing.T) {
@@ -83,8 +86,35 @@ func TestDaemonViewWarningsNameWhatOnlyTheShellSees(t *testing.T) {
 		t.Fatalf("want one PATH warning, got %v", got)
 	}
 
-	// The daemon does better than the terminal: nothing to fix.
-	if got := daemonViewWarnings(doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{signedOut}}, same); len(got) != 0 {
-		t.Fatalf("daemon ahead of the terminal must warn nothing, got %v", got)
+	// The daemon does better than the terminal (the terminal's PATH or sign-in
+	// environment differs): nothing to fix, but the terminal's host line is not
+	// Brain's, and the output says so.
+	for name, terminal := range map[string]doctor.ExecutorCheck{"signed out here": signedOut, "missing here": missing} {
+		got := daemonViewWarnings(doctor.ExecutorsCheck{Items: []doctor.ExecutorCheck{terminal}}, same)
+		if len(got) != 1 || !strings.Contains(got[0], "signed in for the running Mewla") || !strings.Contains(got[0], "Brain can use it") {
+			t.Fatalf("%s: want one warning that Brain uses the daemon's view, got %v", name, got)
+		}
+	}
+}
+
+// The terminal looks for agents where the daemon does, so ~/.local/bin (where
+// the native installers put claude) is not "missing" just because the shell's
+// PATH lacks it.
+func TestDoctorFindsAgentsWhereTheDaemonDoes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", t.TempDir())
+	restore := hostdeps.SetSystemPathDirs()
+	t.Cleanup(restore)
+	bin := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	found, err := doctorOptions("", "").LookPath("claude")
+	if err != nil || found != filepath.Join(bin, "claude") {
+		t.Fatalf("LookPath = %q, %v; want the native installer's ~/.local/bin/claude", found, err)
 	}
 }

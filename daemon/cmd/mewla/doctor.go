@@ -10,6 +10,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/doctor"
+	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
 func runDoctorCommand(args []string, stderr io.Writer) error {
@@ -33,10 +34,7 @@ func runDoctorCommand(args []string, stderr io.Writer) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	report, err := doctor.Run(doctor.Options{
-		StateDir: stateDir,
-		Addr:     addr,
-	})
+	report, err := doctor.Run(doctorOptions(stateDir, addr))
 	if err != nil {
 		return err
 	}
@@ -58,6 +56,14 @@ func runDoctorCommand(args []string, stderr io.Writer) error {
 		return doctor.ErrNotReady
 	}
 	return nil
+}
+
+// doctorOptions finds agents the way the running Mewla does: on PATH, then in
+// the directories the native installers use (~/.local/bin), so an agent the
+// daemon runs is not reported missing here just because the shell's PATH
+// lacks it.
+func doctorOptions(stateDir, addr string) doctor.Options {
+	return doctor.Options{StateDir: stateDir, Addr: addr, LookPath: hostdeps.LookPath}
 }
 
 // daemonExecutors is the agents as the running daemon sees them, or nil when
@@ -94,7 +100,18 @@ func daemonViewWarnings(here doctor.ExecutorsCheck, daemon *doctor.ExecutorsChec
 	var warnings []string
 	for _, item := range here.Items {
 		theirs, ok := seen[item.ID]
-		if !ok || !item.BinaryFound {
+		if !ok {
+			continue
+		}
+		// The other way round: Brain runs on what the running Mewla sees, so a
+		// terminal that finds the agent missing or signed out (a different PATH
+		// or environment) must not leave "NOT READY" or another agent's name as
+		// the last word on a Brain that works.
+		if theirs.VerifiedAuthenticated && !item.VerifiedAuthenticated {
+			warnings = append(warnings, fmt.Sprintf("%s is signed in for the running Mewla, so Brain can use it, but this terminal does not see it signed in (a different PATH or sign-in environment). The agent checks and host above come from this terminal, not from the running Mewla.", item.Name))
+			continue
+		}
+		if !item.BinaryFound {
 			continue
 		}
 		switch {
