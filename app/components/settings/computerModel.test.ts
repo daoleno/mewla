@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentUseStatus } from "../../services/agentUse";
-import { computerProblems, computerProblemsMayChange, computerStatusWord } from "./computerModel";
+import { computerProblems, computerProblemsMayChange, computerStatusWord, computerUpdateProblem } from "./computerModel";
 
 const macMissingExtension: AgentUseStatus = {
   enabled: true,
@@ -80,5 +80,48 @@ describe("computerProblems", () => {
     ]);
     const headless = computerProblems({ enabled: true, browser: { state: "no_key", summary: "" } });
     expect(headless.map((problem) => problem.action?.does)).toEqual([{ kind: "paste_key" }]);
+  });
+});
+
+describe("computerUpdateProblem", () => {
+  const min = "0.2.88";
+  test("a computer too old to report a version says nothing", () => {
+    expect(computerUpdateProblem(null, min)).toBeNull();
+  });
+
+  test("a newer release is one line and one Update button", () => {
+    expect(computerUpdateProblem({ version: "0.2.88", supported: true, latest: "0.2.89" }, min)).toEqual({
+      key: "update",
+      text: "Update available · 0.2.89",
+      action: { label: "Update", does: { kind: "update" } },
+    });
+  });
+
+  test("an up to date computer shows nothing", () => {
+    expect(computerUpdateProblem({ version: "0.2.89", supported: true }, min)).toBeNull();
+  });
+
+  test("a computer that does not update itself offers no button", () => {
+    expect(computerUpdateProblem({ version: "0.2.88", supported: false, latest: "0.2.89" }, min)).toBeNull();
+  });
+
+  test("an app and computer that no longer fit say so with the same button", () => {
+    expect(computerUpdateProblem({ version: "0.2.88", supported: true, latest: "0.2.90" }, "0.2.90")).toEqual({
+      key: "update",
+      text: "This computer needs an update to work with this app.",
+      action: { label: "Update", does: { kind: "update" } },
+    });
+    // It cannot update itself: the line stays, the button does not.
+    expect(computerUpdateProblem({ version: "0.2.88", supported: false }, "0.2.90")?.action).toBeUndefined();
+  });
+
+  test("while updating, no button; a failed update keeps its reason", () => {
+    expect(computerUpdateProblem({ version: "0.2.88", supported: true, latest: "0.2.89", updating: true }, min)).toEqual({
+      key: "update",
+      text: "Updating…",
+    });
+    expect(
+      computerUpdateProblem({ version: "0.2.88", supported: true, error: "Mewla 0.2.89 did not start; still on 0.2.88" }, min)?.text,
+    ).toBe("Mewla 0.2.89 did not start; still on 0.2.88");
   });
 });

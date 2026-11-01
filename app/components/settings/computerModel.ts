@@ -1,4 +1,6 @@
 import type { AgentUseFix, AgentUseStatus } from "../../services/agentUse";
+import { compareVersions } from "../../services/appUpdate";
+import type { DaemonUpdateStatus } from "../../services/daemonUpdate";
 import type { ComputerCheck } from "../../services/computerTeam";
 import type { ConnectionIssueCode } from "../../services/connectionIssue";
 import type { ConnectionState } from "../../store/workers";
@@ -33,7 +35,8 @@ export function computerStatusWord(input: {
 export type ComputerAction =
   | { kind: "fix"; fix: AgentUseFix; target: "browser" | "computer" }
   | { kind: "paste_key" }
-  | { kind: "stop_agent" };
+  | { kind: "stop_agent" }
+  | { kind: "update" };
 
 export interface ComputerProblem {
   key: string;
@@ -122,4 +125,23 @@ export function computerProblemsMayChange(status: AgentUseStatus | null): boolea
     ["no_extension", "no_key", "preparing", "failed"].includes(status.browser.state) ||
     status.computer?.state === "permission"
   );
+}
+
+/**
+ * The computer's Mewla needs, or is getting, an update: one line, and the one
+ * button when it can update itself. An app and computer that no longer fit
+ * together say so with the same button.
+ */
+export function computerUpdateProblem(update: DaemonUpdateStatus | null, minVersion: string): ComputerProblem | null {
+  if (!update) return null;
+  const button = update.supported ? { label: "Update", does: { kind: "update" } as ComputerAction } : undefined;
+  if (update.updating) return { key: "update", text: "Updating…" };
+  if (compareVersions(update.version, minVersion) === -1) {
+    return { key: "update", text: "This computer needs an update to work with this app.", action: button };
+  }
+  if (update.latest && update.supported) {
+    return { key: "update", text: `Update available · ${update.latest}`, action: button };
+  }
+  if (update.error) return { key: "update", text: update.error };
+  return null;
 }
