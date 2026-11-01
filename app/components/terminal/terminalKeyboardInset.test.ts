@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   accessoryBottomOffset,
   androidKeyboardInset,
-  keyboardCoversWindow,
+  keyboardIsUp,
   keyboardOverlap,
   nextAndroidBaseWindow,
 } from "./terminalKeyboardInset";
@@ -146,59 +148,60 @@ describe("nextAndroidBaseWindow", () => {
   });
 });
 
-describe("keyboardCoversWindow", () => {
-  const covering = { imeVisible: true, imeHeight: 291, evidence: "keyboard_layout_guide" };
-  const rotatedAway = { imeVisible: false, imeHeight: 0, evidence: "keyboard_layout_guide" };
+describe("keyboardIsUp", () => {
+  const covering = { screenY: 660, height: 291 };
 
   test("is down without a show event", () => {
-    expect(keyboardCoversWindow(false, null)).toBe(false);
-    expect(keyboardCoversWindow(false, covering)).toBe(false);
+    expect(keyboardIsUp("ios", false, 951, covering)).toBe(false);
+    expect(keyboardIsUp("android", false, 951, covering)).toBe(false);
   });
 
-  test("is up when shown and the window is covered", () => {
-    expect(keyboardCoversWindow(true, covering)).toBe(true);
-    expect(
-      keyboardCoversWindow(true, { imeVisible: true, imeHeight: 200, evidence: "window_insets_ime" }),
-    ).toBe(true);
+  test("iOS: up while the latest frame overlaps the window", () => {
+    expect(keyboardIsUp("ios", true, 951, covering)).toBe(true);
   });
 
-  test("is down when a missed hide left it 'shown' but nothing covers the window", () => {
-    expect(keyboardCoversWindow(true, rotatedAway)).toBe(false);
-    expect(
-      keyboardCoversWindow(true, { imeVisible: true, imeHeight: 0, evidence: "keyboard_layout_guide" }),
-    ).toBe(false);
+  test("iOS: a 'shown' keyboard whose frame is below the window is down", () => {
+    expect(keyboardIsUp("ios", true, 951, { screenY: 951, height: 257 })).toBe(false);
+    expect(keyboardIsUp("ios", true, 951, null)).toBe(false);
   });
 
-  test("trusts the event until the platform has answered", () => {
-    expect(keyboardCoversWindow(true, null)).toBe(true);
+  test("iOS: follows the frame and the window through a rotation", () => {
+    // Up in a 669pt-high window, then the window grows and the frame moves.
+    expect(keyboardIsUp("ios", true, 669, { screenY: 469, height: 200 })).toBe(true);
+    expect(keyboardIsUp("ios", true, 951, { screenY: 660, height: 291 })).toBe(true);
+    // The same shown keyboard dismissed by the rotation: frame off-screen.
+    expect(keyboardIsUp("ios", true, 951, { screenY: 951, height: 291 })).toBe(false);
   });
 
-  test("a query that could not look decides nothing", () => {
-    for (const evidence of [
-      "native_module_unavailable",
-      "window_unavailable",
-      "activity_unavailable",
-      "insets_unavailable",
-      "snapshot_failed",
-    ]) {
-      expect(
-        keyboardCoversWindow(true, { imeVisible: false, imeHeight: 0, evidence }),
-      ).toBe(true);
+  test("iOS: the toggle, the bar offset and the grid inset agree", () => {
+    for (const frame of [covering, { screenY: 951, height: 257 }]) {
+      const up = keyboardIsUp("ios", true, 951, frame);
+      const offset = accessoryBottomOffset({
+        platform: "ios",
+        keyboardVisible: up,
+        safeAreaBottom: 34,
+        windowHeight: 951,
+        keyboardFrame: frame,
+        androidInset: 0,
+      });
+      expect(offset).toBe(up ? 291 : 34);
     }
   });
 
-  test("the key bar drops to the safe area once nothing covers the window", () => {
-    const shown = true;
-    const visible = keyboardCoversWindow(shown, rotatedAway);
-    expect(
-      accessoryBottomOffset({
-        platform: "ios",
-        keyboardVisible: visible,
-        safeAreaBottom: 34,
-        windowHeight: 951,
-        keyboardFrame: { screenY: 660, height: 291 },
-        androidInset: 0,
-      }),
-    ).toBe(34);
+  test("Android: the show event with a height decides", () => {
+    expect(keyboardIsUp("android", true, 700, { screenY: 0, height: 300 })).toBe(true);
+    expect(keyboardIsUp("android", true, 700, null)).toBe(false);
+  });
+});
+
+describe("terminal key bar keyboard state", () => {
+  test("the toggle never waits on a native query that can disagree with the frame", () => {
+    const hook = readFileSync(
+      join(import.meta.dir, "useTerminalAccessoryLayout.ts"),
+      "utf8",
+    );
+    expect(hook).toContain("keyboardIsUp(");
+    expect(hook).not.toContain("setCoverSnapshot");
+    expect(hook).not.toContain("Keyboard.metrics()?.");
   });
 });

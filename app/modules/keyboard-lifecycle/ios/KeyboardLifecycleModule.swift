@@ -6,6 +6,17 @@ public final class KeyboardLifecycleModule: Module {
   public func definition() -> ModuleDefinition {
     Name("KeyboardLifecycle")
 
+    // Opt-in diagnostics: launch with `-MewlaKeyboardDiag YES` (iOS parses
+    // launch arguments into UserDefaults) and read the lines with
+    // `log stream --predicate 'eventMessage CONTAINS "MewlaKeyboardDiag"'`.
+    Function("diagEnabled") { () -> Bool in
+      UserDefaults.standard.bool(forKey: "MewlaKeyboardDiag")
+    }
+
+    Function("diagLog") { (message: String) in
+      NSLog("[MewlaKeyboardDiag] %@", message)
+    }
+
     AsyncFunction("getForegroundSnapshot") { (composerNativeId: String, revision: Int) -> [String: Any] in
       guard let window = Self.foregroundWindow() else {
         return Self.closedSnapshot(revision: revision, evidence: "window_unavailable")
