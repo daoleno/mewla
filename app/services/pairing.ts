@@ -1,4 +1,5 @@
 import * as Crypto from "expo-crypto";
+import { markPairTimeline } from "./pairTiming";
 import {
   buildAuthorizationHeader,
   getOrCreateLocalDeviceIdentity,
@@ -39,6 +40,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
   }
 
   const identity = await getOrCreateLocalDeviceIdentity();
+  markPairTimeline("identity");
   let response: Response;
   try {
     response = await fetch(pairURL, {
@@ -61,6 +63,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
       : buildPairingNetworkError(pairURL, error);
   }
 
+  markPairTimeline("pair-request");
   if (!response.ok) {
     const detail = (await response.text()).trim();
     if (response.status === 401) {
@@ -106,6 +109,7 @@ export async function enrollWithDaemon(input: PairingInput): Promise<{
     throw new Error("Pairing target failed daemon identity proof.");
   }
 
+  markPairTimeline("pair-verify");
   return {
     daemonId: pairedDaemonId,
     daemonPublicKey: pairedDaemonPublicKey,
