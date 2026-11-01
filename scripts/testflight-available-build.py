@@ -15,7 +15,7 @@ import pathlib
 import re
 import sys
 import urllib.parse
-from typing import Any
+from typing import Any, Callable
 
 _SPEC = importlib.util.spec_from_file_location(
     "asc_upload", pathlib.Path(__file__).with_name("app-store-connect-upload.py")
@@ -23,15 +23,24 @@ _SPEC = importlib.util.spec_from_file_location(
 asc_upload = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(asc_upload)
 
-# ExternalBetaState reported by App Store Connect once testers can install the build.
-INSTALLABLE_STATE = "IN_BETA_TESTING"
+# ExternalBetaState values seen from App Store Connect for a build that Beta App Review let
+# into the public group: BETA_APPROVED (observed on every reviewed Mewla build) and
+# IN_BETA_TESTING. Anything earlier (READY_FOR_BETA_SUBMISSION, WAITING_FOR_BETA_REVIEW,
+# IN_BETA_REVIEW, BETA_REJECTED, ...) is not installable.
+INSTALLABLE_STATES = frozenset({"BETA_APPROVED", "IN_BETA_TESTING"})
 MARKETING_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 BUILD_NUMBER = re.compile(r"^[1-9]\d*$")
 PUBLIC_LINK = re.compile(r"^https://testflight\.apple\.com/join/[A-Za-z0-9]+$")
 
 
-def select_installable_build(document: dict[str, Any]) -> dict[str, Any] | None:
-    """Pick the highest (marketing version, build number) testers can install."""
+def select_installable_build(
+    document: dict[str, Any], detail_lookup: Callable[[str], str | None] | None = None
+) -> dict[str, Any] | None:
+    """Pick the highest (marketing version, build number) testers can install.
+
+    The list response links a build's beta detail only for some builds; for the others
+    detail_lookup(build id) asks for it directly, newest first, stopping at the first hit.
+    """
 
     included = {
         (item.get("type"), item.get("id")): item for item in document.get("included", [])
@@ -43,14 +52,10 @@ def select_installable_build(document: dict[str, Any]) -> dict[str, Any] | None:
             return {}
         return included.get((ref.get("type"), ref.get("id")), {})
 
-    best: tuple[tuple[int, ...], int] | None = None
-    result: dict[str, Any] | None = None
+    candidates: list[tuple[tuple[tuple[int, ...], int], dict[str, Any], dict[str, Any]]] = []
     for build in document.get("data", []):
         attributes = build.get("attributes", {})
         if attributes.get("expired") is not False or attributes.get("processingState") != "VALID":
-            continue
-        detail = related(build, "buildBetaDetail").get("attributes", {})
-        if detail.get("externalBuildState") != INSTALLABLE_STATE:
             continue
         marketing = related(build, "preReleaseVersion").get("attributes", {}).get("version")
         number = attributes.get("version")
@@ -62,10 +67,14 @@ def select_installable_build(document: dict[str, Any]) -> dict[str, Any] | None:
         ):
             continue
         rank = (tuple(int(part) for part in marketing.split(".")), int(number))
-        if best is None or rank > best:
-            best = rank
-            result = {"marketing_version": marketing, "build_number": int(number)}
-    return result
+        candidates.append((rank, build, {"marketing_version": marketing, "build_number": int(number)}))
+    for _, build, result in sorted(candidates, key=lambda item: item[0], reverse=True):
+        state = related(build, "buildBetaDetail").get("attributes", {}).get("externalBuildState")
+        if state is None and detail_lookup is not None:
+            state = detail_lookup(build["id"])
+        if state in INSTALLABLE_STATES:
+            return result
+    return None
 
 
 def print_build_states(document: dict[str, Any]) -> None:
@@ -118,7 +127,13 @@ def find_installable_build(
     )
     document = client.api_request("GET", f"/builds?{query}")
     print_build_states(document)
-    build = select_installable_build(document)
+    def external_state(build_id: str) -> str | None:
+        detail = client.api_request("GET", f"/builds/{build_id}/buildBetaDetail").get("data") or {}
+        state = detail.get("attributes", {}).get("externalBuildState")
+        print(f"beta detail lookup for build {build_id}: external={state}")
+        return state
+
+    build = select_installable_build(document, external_state)
     if build is None:
         return None
     build["app_id"] = app_id
