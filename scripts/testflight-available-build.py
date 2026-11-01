@@ -84,7 +84,9 @@ def print_build_states(document: dict[str, Any]) -> None:
         print(
             f"build {attribute('preReleaseVersion', 'version')} ({attributes.get('version')}) "
             f"processing={attributes.get('processingState')} expired={attributes.get('expired')} "
-            f"external={attribute('buildBetaDetail', 'externalBuildState')}"
+            f"external={attribute('buildBetaDetail', 'externalBuildState')} "
+            f"internal={attribute('buildBetaDetail', 'internalBuildState')} "
+            f"detail_linked={bool((relationships.get('buildBetaDetail', {}) or {}).get('data'))}"
         )
 
 
@@ -111,7 +113,7 @@ def find_installable_build(
             "include": "preReleaseVersion,buildBetaDetail",
             "fields[builds]": "version,expired,processingState,preReleaseVersion,buildBetaDetail",
             "fields[preReleaseVersions]": "version",
-            "fields[buildBetaDetails]": "externalBuildState",
+            "fields[buildBetaDetails]": "externalBuildState,internalBuildState",
         }
     )
     document = client.api_request("GET", f"/builds?{query}")
