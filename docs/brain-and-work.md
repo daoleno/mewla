@@ -300,8 +300,13 @@ the order Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode, preferring one
 `mewla doctor` verified as signed in over one it could not verify, and the daemon
 log names it and the `mewla brain use` command that changes it. When Brain has
 no running host, the app's Brain tab says why instead of waiting: the agent is
-not installed, is not signed in, or did not start, with a one-tap switch to an
-installed agent that is signed in. In the app, Brain's ⋮ menu has
+not installed, is not signed in, did not start, or is open but never became ready
+(a sign-in or first-run prompt waiting in its terminal), each with the step to
+take and a one-tap switch to an installed agent that is signed in. Nothing needs a
+restart: Mewla checks again every few seconds, starts Brain's host as soon as the
+agent is installed or signed in, and starts it again after a reboot (a host that
+never held a conversation restarts by itself; one holding a conversation Mewla
+cannot resume is never replaced blind). In the app, Brain's ⋮ menu has
 **Switch executor**, **New chat** (a fresh thread), **Open terminal** (Brain's
 own Session) and **Browse workspace**.
 

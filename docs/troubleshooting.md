@@ -109,7 +109,12 @@ Authorization header are never logged.
 ## It paired, but no Sessions appear or agents fail to start
 
 - Install and sign in to at least one agent CLI on the computer, as the same
-  user that runs `mewla`. One is enough.
+  user that runs `mewla`. One is enough. The Brain tab says which step is
+  missing (`mewla deps` installs one, `claude auth login` or `codex login`
+  signs in) and leaves that screen by itself once it is done; no restart needed.
+- If the Brain tab says its agent is "open but not ready", the agent is waiting
+  at a sign-in or first-run question in its terminal. Run that agent once on the
+  computer, finish its questions, and Brain continues.
 - Check that `tmux` works for that user.
 - If you have `~/.mewla/executors.toml`, check its commands; a typo there makes
   launches fail. Restart `mewla` after editing it.

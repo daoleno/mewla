@@ -227,9 +227,12 @@ You can answer on the computer too:
 
 ```sh
 mewla devices pending
-mewla devices approve -id REQUEST_ID -number 042
-mewla devices deny -id REQUEST_ID -number 042
+mewla devices approve 042
+mewla devices deny 042
 ```
+
+The number the browser shows is enough. If two waiting browsers show the same
+number, the command asks for `-id REQUEST_ID` (listed by `mewla devices pending`).
 
 ## Manage addresses
 
