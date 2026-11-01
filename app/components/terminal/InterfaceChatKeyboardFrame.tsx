@@ -36,6 +36,12 @@ import {
   reapplyStructuredChatWindowModeLease,
   useStructuredChatWindowMode,
 } from "./chatKeyboardWindowMode";
+import {
+  nextIosKeyboardFrame,
+  snapshotWithKeyboardFrame,
+  type IosKeyboardFrameEventName,
+} from "./iosKeyboardSnapshot";
+import type { KeyboardFrame } from "./terminalKeyboardInset";
 import { useInterfaceComposerLayout } from "./useInterfaceComposerLayout";
 import { StructuredChatContentFade } from "./StructuredChatContentFade";
 import {
@@ -154,6 +160,15 @@ export function InterfaceChatKeyboardFrame({
     initialKeyboardLifecycleGate.revision,
   );
   const appStateRef = useRef(AppState.currentState);
+  // iOS: the keyboard's frame as the events last reported it, and the window it
+  // is measured against. See iosKeyboardSnapshot.ts for why this, and not the
+  // native layout guide, decides whether the keyboard covers the Composer.
+  const nativeCallbackRevisionRef = useRef(nativeCallbackRevision);
+  nativeCallbackRevisionRef.current = nativeCallbackRevision;
+  const windowHeightRef = useRef(diagWindowHeight);
+  windowHeightRef.current = diagWindowHeight;
+  const iosKeyboardFrameRef = useRef<KeyboardFrame | null>(null);
+  const iosKeyboardFrameVersionRef = useRef(0);
   useStructuredChatWindowMode(enabled);
   const disposedRef = useRef(false);
   useEffect(() => {
@@ -182,6 +197,7 @@ export function InterfaceChatKeyboardFrame({
         return;
       }
       nativeSnapshotRequestsRef.current.add(requestKey);
+      let frameVersionAtRead = iosKeyboardFrameVersionRef.current;
       void getKeyboardForegroundSnapshot(composerNativeId, sourceRevision)
         .catch(() => ({
           revision: sourceRevision,
@@ -190,6 +206,19 @@ export function InterfaceChatKeyboardFrame({
           composerFocused: false,
           evidence: "snapshot_failed",
         }))
+        .then((native) => {
+          if (Platform.OS !== "ios") {
+            return native;
+          }
+          // Read at answer time, so a frame that arrived while the native
+          // query was in flight is the one used.
+          frameVersionAtRead = iosKeyboardFrameVersionRef.current;
+          return snapshotWithKeyboardFrame(
+            native,
+            windowHeightRef.current,
+            iosKeyboardFrameRef.current,
+          );
+        })
         .then((snapshot) => {
           if (keyboardDiagEnabled) {
             diagLine({
@@ -235,10 +264,52 @@ export function InterfaceChatKeyboardFrame({
         })
         .finally(() => {
           nativeSnapshotRequestsRef.current.delete(requestKey);
+          // A frame event whose own re-read was folded into this one arrived
+          // after the frame was read: ask again for the newer frame.
+          if (
+            Platform.OS === "ios" &&
+            !disposedRef.current &&
+            iosKeyboardFrameVersionRef.current !== frameVersionAtRead
+          ) {
+            requestAuthoritativeSnapshot(
+              nativeCallbackRevisionRef.current,
+              foregroundReconciliation,
+            );
+          }
         });
     },
     [composerNativeId, keyboardLifecycleGate, onKeyboardLifecycleInvalidate],
   );
+
+  useEffect(() => {
+    if (Platform.OS !== "ios") {
+      return;
+    }
+    const names: IosKeyboardFrameEventName[] = [
+      "keyboardWillShow",
+      "keyboardDidShow",
+      "keyboardWillChangeFrame",
+      "keyboardDidChangeFrame",
+      "keyboardWillHide",
+      "keyboardDidHide",
+    ];
+    const subs = names.map((name) =>
+      Keyboard.addListener(name, (event: KeyboardEvent) => {
+        const end = event?.endCoordinates;
+        const update = nextIosKeyboardFrame(
+          name,
+          end ? { screenY: end.screenY, height: end.height } : null,
+          windowHeightRef.current,
+        );
+        iosKeyboardFrameRef.current = update.frame;
+        iosKeyboardFrameVersionRef.current += 1;
+        if (update.reread) {
+          requestAuthoritativeSnapshot(nativeCallbackRevisionRef.current, false);
+        }
+      }),
+    );
+    return () => subs.forEach((sub) => sub.remove());
+  }, [requestAuthoritativeSnapshot]);
 
   useLayoutEffect(() => {
     void runOnUIAsync(
