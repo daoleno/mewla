@@ -119,7 +119,7 @@ func run(args []string, stderr io.Writer) error {
 		case "dsh-session":
 			return runDSHSessionCLI(args[1:])
 		case "serve":
-			return runDaemon(args[1:], stderr)
+			return runDaemonUpdating(args[1:], stderr)
 		case "pair":
 			return runPairCommand(args[1:], stderr)
 		case "web":
@@ -190,7 +190,7 @@ func run(args []string, stderr io.Writer) error {
 			return err
 		}
 	}
-	return runDaemon(args, stderr)
+	return runDaemonUpdating(args, stderr)
 }
 
 func isSetupUserError(err error) bool {
@@ -248,6 +248,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	defer lifecycleLock.Close()
 	restrictLogOutputs()
+	if releaseBuild == "1" {
+		// A handover cut short by a power loss or reboot left the databases
+		// as the new version migrated them; put them back before opening any.
+		if installed, err := os.Executable(); err == nil {
+			if err := selfupdate.RecoverInterrupted(authManager.StorageDir(), installed); err != nil {
+				return fmt.Errorf("recover from an interrupted update: %w", err)
+			}
+		}
+	}
 
 	ctx, stopSignals := signal.NotifyContext(
 		context.Background(),
@@ -637,6 +646,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
+	srv.SetVersion(Version)
+	updater := newDaemonUpdater(Version, authManager.StorageDir(), cfg.addr, authManager.DaemonID(),
+		func() bool { return workersIdle(w.SnapshotReady, w.Workers) },
+		func(h *updateHandover) { restartDaemon(h) })
+	srv.SetDaemonUpdater(updater)
+	go updater.Run(ctx)
 	srv.SetPhone(phoneManager)
 	go srv.RunFriendsNotifier(ctx)
 	srv.SetComputerName(computers.FriendlyName())
@@ -934,6 +949,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	if errors.Is(context.Cause(ctx), errDaemonRestart) {
 		return errDaemonRestart
+	}
+	var handover *updateHandover
+	if errors.As(context.Cause(ctx), &handover) {
+		return handover
 	}
 	return nil
 }

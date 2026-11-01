@@ -139,6 +139,8 @@ type Server struct {
 	computers                    *computers.Manager
 	computerName                 string
 	agentUse                     *agentuse.Service
+	daemonUpdater                DaemonUpdater
+	version                      string
 	providerConversationLoader   func(reader *work.ProviderConversationReader, workerID string) (work.CodexConversation, error)
 	promptPaneOverride           PanePrompts
 	answerClaudeChoiceOverride   func(workerID string, questions []watcher.ClaudeChoiceQuestion, answers []watcher.ClaudeChoiceAnswer) error
@@ -502,6 +504,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/computers/invite", s.handleComputersInvite)
 	mux.HandleFunc("/computers", s.handleComputers)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
+	mux.HandleFunc("/daemon-update", s.handleDaemonUpdate)
 	mux.HandleFunc("/phone", s.handlePhone)
 	mux.HandleFunc("/phone/device", s.handlePhoneDevice)
 	mux.Handle("/friends", s.appRoute(webUI, http.HandlerFunc(s.handleFriends)))
@@ -3972,6 +3975,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":            "ok",
 		"daemon_id":         s.auth.DaemonID(),
 		"daemon_public_key": s.auth.PublicKeyHex(),
+		"version":           s.version,
 	}
 	challenge, challenged := r.URL.Query()["challenge"]
 	if !challenged {

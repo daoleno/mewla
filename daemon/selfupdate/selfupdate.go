@@ -27,18 +27,25 @@ import (
 )
 
 const (
+	ManifestAsset = "release-manifest.json"
+	// ArchiveBinary is the executable inside mewla-<os>-<arch>.tar.gz.
+	ArchiveBinary     = "mewla"
+	ManifestSignature = "release-manifest.json.sig"
+	maxManifestSize   = 1 << 20
+	maxSignatureSize  = 1 << 10
+	maxDaemonArchive  = 256 << 20
+	CacheTTL          = 24 * time.Hour
+)
+
+// These are variables, not constants, so the end-to-end test can build a
+// daemon that trusts a test key and a local release server (go build -ldflags
+// "-X github.com/daoleno/mewla/daemon/selfupdate.UpdatePublicKeyPKIX=...").
+// Release builds never set them.
+var (
 	// DefaultReleasesURL is where releases are published. Mewla finds the
 	// newest stable one from its /latest redirect, as install.sh does, so
 	// updates need no GitHub API call and no API rate limit.
-	DefaultReleasesURL = "https://github.com/daoleno/mewla/releases"
-	ManifestAsset      = "release-manifest.json"
-	// ArchiveBinary is the executable inside mewla-<os>-<arch>.tar.gz.
-	ArchiveBinary       = "mewla"
-	ManifestSignature   = "release-manifest.json.sig"
-	maxManifestSize     = 1 << 20
-	maxSignatureSize    = 1 << 10
-	maxDaemonArchive    = 256 << 20
-	CacheTTL            = 24 * time.Hour
+	DefaultReleasesURL  = "https://github.com/daoleno/mewla/releases"
 	UpdatePublicKeyPKIX = "MCowBQYDK2VwAyEAD+GvALNRsWlmuB8FL5nwWchsLuXI7tasTGYSqkdabzw="
 )
 
