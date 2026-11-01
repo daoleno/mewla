@@ -47,6 +47,7 @@ import {
 import type { ResolvedTheme } from "../theme";
 import { DARK_APP_COLORS } from "../theme/primitives";
 import { importConnection } from "../services/importConnection";
+import { POST_PAIR_ROUTE } from "../services/postPairRoute";
 import { PairingCancelledError } from "../services/pairingScope";
 import {
   closePairPresentation,
@@ -288,9 +289,12 @@ export default function SettingsScreen() {
       setPairPresentation(completePairImport());
       setDraftImportValue("");
       setCameraMountError(null);
+      router.dismissAll();
+      // First pairing shows the connecting steps; a computer added later opens Brain.
       if (params.pairingRequired === "1") {
-        router.dismissAll();
         router.replace({ pathname: "/onboarding", params: { paired: "1" } });
+      } else {
+        router.replace(POST_PAIR_ROUTE);
       }
       return true;
     } catch (error: any) {
