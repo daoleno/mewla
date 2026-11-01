@@ -3745,6 +3745,9 @@ func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	case len(fields) > 0 && func() bool { _, err := hostLookPath(fields[0]); return err != nil }():
 		problem.Code = "not_installed"
 		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not installed on this computer. Run mewla deps there to install an agent; Brain starts by itself.", name, fields[0])
+	case hostUnsupported(executor.ID) != "":
+		problem.Code = "unsupported"
+		problem.Detail = fmt.Sprintf("Brain is set to run on %s. %s Brain starts by itself afterwards.", name, hostUnsupported(executor.ID))
 	case hostAuth(executor.ID) == HostAuthUnauthenticated:
 		problem.Code = "not_signed_in"
 		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID))

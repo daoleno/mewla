@@ -36,7 +36,7 @@ type WorkerRef struct {
 // HostProblem says why Brain has no running host, so a client shows the
 // actual problem instead of waiting for a host that is not coming.
 type HostProblem struct {
-	// Code is not_installed, not_signed_in, not_started or not_ready.
+	// Code is not_installed, unsupported, not_signed_in, not_started or not_ready.
 	Code     string `json:"code"`
 	Executor string `json:"executor"`
 	Detail   string `json:"detail"`
