@@ -3613,6 +3613,15 @@ func (s *Service) hostExecutor() work.WorkerExecutor {
 // hostLookPath finds executor commands; tests replace it.
 var hostLookPath = exec.LookPath
 
+// SetHostLookPath replaces how Brain finds an executor's command and returns
+// a function that restores the previous lookup. Tests of other packages use it
+// so their outcome does not depend on which agent CLIs the machine has.
+func SetHostLookPath(look func(name string) (string, error)) (restore func()) {
+	previous := hostLookPath
+	hostLookPath = look
+	return func() { hostLookPath = previous }
+}
+
 // HostAuthState is what Mewla knows of an agent CLI's sign-in: "authenticated"
 // (verified), "unauthenticated" (verified not signed in) or "unknown".
 type HostAuthState string

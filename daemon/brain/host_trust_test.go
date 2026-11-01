@@ -11,7 +11,10 @@ import (
 )
 
 // TestMain keeps a Claude Brain Host launched by any test from trusting its
-// workspace in the real ~/.claude.json of whoever runs the suite.
+// workspace in the real ~/.claude.json of whoever runs the suite. It also
+// makes every executor command "installed" by default, so a test's outcome
+// does not depend on which agent CLIs the machine running it has (CI has
+// none). A test about a missing agent replaces hostLookPath itself.
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "mewla-brain-test-home-")
 	if err != nil {
@@ -19,6 +22,7 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("HOME", home)
 	os.Unsetenv("CLAUDE_CONFIG_DIR")
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)
