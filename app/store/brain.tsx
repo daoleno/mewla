@@ -152,7 +152,8 @@ export type BrainExecutorRef = {
 
 /** Why Brain has no running host, said by the computer (see daemon brain.HostProblem). */
 export type BrainHostProblem = {
-  code: "not_installed" | "not_signed_in" | "not_started";
+  /** not_installed, not_signed_in, not_started or not_ready; a newer computer may say more. */
+  code: string;
   executor: string;
   detail: string;
   /** An installed agent verified signed in that Brain can move to. */
@@ -257,8 +258,8 @@ function normalizeSnapshot(
 function normalizeHostProblem(raw: unknown): BrainHostProblem | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const value = raw as Record<string, unknown>;
-  const code = value.code;
-  if (code !== "not_installed" && code !== "not_signed_in" && code !== "not_started") return undefined;
+  const code = typeof value.code === "string" ? value.code.trim() : "";
+  if (!code) return undefined;
   const detail = typeof value.detail === "string" ? value.detail.trim() : "";
   if (!detail) return undefined;
   return {

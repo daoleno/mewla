@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -42,10 +44,58 @@ func (s *Service) HostRecoveryDue() bool {
 	}
 	executor := s.hostExecutor()
 	host, err := s.projectedHostWorker(executor)
-	if err != nil || s.hostObserved(host.ID) {
+	if err != nil {
 		return false
 	}
+	if s.hostObserved(host.ID) {
+		// A pane that is open but never became ready is retried too: the person
+		// may have signed in at its prompt since.
+		return s.hostActivationStuck()
+	}
 	return s.hostRunnable(executor) == nil
+}
+
+// hostNotReadyGrace is how long a host's pane may stay open and unready before
+// the computer says so: a slow agent start is normal for a while.
+const hostNotReadyGrace = 60 * time.Second
+
+// noteHostActivation records whether the last host reconcile left the agent open
+// but never ready for input (a sign-in prompt, a first-run question), the state
+// a person cannot see from the phone.
+func (s *Service) noteHostActivation(err error) {
+	s.hostProblemMu.Lock()
+	defer s.hostProblemMu.Unlock()
+	switch {
+	case err == nil:
+		s.hostNotReadySince = time.Time{}
+	case errors.Is(err, watcher.ErrWorkerInputNotReady) && s.hostNotReadySince.IsZero():
+		s.hostNotReadySince = time.Now()
+	}
+}
+
+func (s *Service) hostActivationStuck() bool {
+	s.hostProblemMu.Lock()
+	defer s.hostProblemMu.Unlock()
+	return !s.hostNotReadySince.IsZero()
+}
+
+// hostNotReadyProblem names an agent whose pane is open but has not become
+// ready for input for a while. Agents whose sign-in Mewla cannot probe (Grok,
+// Pi) end up here when they were never signed in.
+func (s *Service) hostNotReadyProblem(executor work.WorkerExecutor) *HostProblem {
+	s.hostProblemMu.Lock()
+	since := s.hostNotReadySince
+	s.hostProblemMu.Unlock()
+	if since.IsZero() || time.Since(since) < hostNotReadyGrace {
+		return nil
+	}
+	name := executor.ID
+	return &HostProblem{
+		Code:            "not_ready",
+		Executor:        executor.ID,
+		Detail:          fmt.Sprintf("Brain's %s session is open but not ready. It may be waiting for you to sign in: run %s on this computer, finish its first-run steps, and Brain continues by itself.", name, name),
+		SuggestExecutor: s.verifiedAlternativeHost(executor.ID),
+	}
 }
 
 // hostHoldsNoConversation reports that the recorded host never held anything a
