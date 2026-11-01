@@ -1080,5 +1080,23 @@ func (trace *wireTrace) Close() error {
 			read, readErr, written, lastWrite.Round(time.Millisecond), writeErr,
 		)
 	}
+	return trace.lingeringClose()
+}
+
+// pairingCloseLinger bounds how long a closed pairing stream waits for the
+// phone to finish reading the answer.
+var pairingCloseLinger = 3 * time.Second
+
+// lingeringClose ends the stream the way TCP intends: say we are done, then
+// wait for the other side to finish and close. The answer to a pairing is the
+// last thing written on a stream that is torn down at once, and over the
+// relay that abrupt teardown has reached phones as a bare close with the
+// answer missing; the one-time code was spent and the phone waited a minute.
+func (trace *wireTrace) lingeringClose() error {
+	if writer, ok := trace.Conn.(interface{ CloseWrite() error }); ok {
+		_ = writer.CloseWrite()
+	}
+	_ = trace.Conn.SetReadDeadline(time.Now().Add(pairingCloseLinger))
+	_, _ = io.Copy(io.Discard, trace.Conn)
 	return trace.Conn.Close()
 }

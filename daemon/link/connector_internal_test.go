@@ -112,3 +112,62 @@ func establishedTLSPipe(t *testing.T) (*tls.Conn, *tls.Conn) {
 	}
 	return client, server
 }
+
+func tcpPair(t *testing.T) (net.Conn, net.Conn) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, _ := listener.Accept()
+		accepted <- conn
+	}()
+	client, err := net.Dial("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	return <-accepted, client
+}
+
+// The answer to a pairing is the last thing on a stream that is closed right
+// after it. The close waits for the phone to finish instead of cutting in
+// behind the answer, but never longer than the linger.
+func TestPairingStreamClosesAfterThePhoneIsDone(t *testing.T) {
+	server, phone := tcpPair(t)
+	trace := newWireTrace("test", server, time.Now())
+	closed := make(chan struct{})
+	go func() {
+		_ = trace.Close()
+		close(closed)
+	}()
+
+	select {
+	case <-closed:
+		t.Fatal("the stream was closed while the phone was still reading")
+	case <-time.After(150 * time.Millisecond):
+	}
+	_ = phone.Close()
+	select {
+	case <-closed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the stream stayed open after the phone finished")
+	}
+}
+
+func TestPairingStreamCloseGivesUpOnAPhoneThatNeverFinishes(t *testing.T) {
+	previous := pairingCloseLinger
+	pairingCloseLinger = 100 * time.Millisecond
+	t.Cleanup(func() { pairingCloseLinger = previous })
+	server, _ := tcpPair(t)
+	trace := newWireTrace("test", server, time.Now())
+
+	started := time.Now()
+	_ = trace.Close()
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("close waited %s for a phone that never finished", elapsed)
+	}
+}
