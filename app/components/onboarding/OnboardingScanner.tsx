@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { AppState, Linking, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, Platform, StyleSheet, View } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useAppColors } from "../../constants/tokens";
+import { cameraGate, cameraMayRun } from "../../services/cameraGate";
 import { AppText } from "../ui/AppText";
 import { Button } from "../ui/Button";
 
@@ -11,35 +12,52 @@ import { Button } from "../ui/Button";
  */
 export function OnboardingScanner({ paused, compact = false, onCode }: { paused: boolean; /** A short window: a smaller viewfinder. */ compact?: boolean; onCode(data: string): void }) {
   const colors = useAppColors();
-  const [permission, requestPermission] = useCameraPermissions();
-  const [foreground, setForeground] = useState(AppState.currentState === "active");
+  // The first time this step shows, the system asks for the camera on its own:
+  // a viewfinder that waits for a tap on a dark window reads as a black screen.
+  const [permission, requestPermission] = useCameraPermissions({ request: true });
+  const [mountError, setMountError] = useState<string | null>(null);
+  const [foreground, setForeground] = useState(cameraMayRun(AppState.currentState ?? "active"));
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", (next) => setForeground(next === "active"));
+    const subscription = AppState.addEventListener("change", (next) => setForeground(cameraMayRun(next)));
     return () => subscription.remove();
   }, []);
 
-  const camera = Platform.OS !== "web" && permission?.granted && foreground;
+  const gate = Platform.OS === "web" ? "loading" : cameraGate(permission);
+  const openSettings = () => void Linking.openSettings();
   return (
     <View style={[styles.finder, compact && styles.finderCompact, { borderColor: colors.border }]}>
-      {camera ? (
+      {mountError ? (
+        <View style={styles.ask}>
+          <AppText variant="compact" style={styles.askText}>
+            The camera could not start. Check that Mewla may use it in Settings, or paste the link instead.
+          </AppText>
+          <Button size="sm" variant="tinted" icon="camera" label="Open Settings" onPress={openSettings} />
+        </View>
+      ) : gate === "camera" && foreground ? (
         <CameraView
           style={StyleSheet.absoluteFill}
           facing="back"
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={paused ? undefined : ({ data }) => onCode(data || "")}
+          onMountError={(event) => setMountError(event?.message || "camera")}
         />
-      ) : permission && !permission.granted && Platform.OS !== "web" ? (
+      ) : gate === "request" ? (
         <View style={styles.ask}>
           <AppText variant="compact" style={styles.askText}>
-            {permission.canAskAgain ? "Mewla reads the code with the camera." : "The camera is off for Mewla. Turn it on in Settings, or paste the link instead."}
+            Mewla reads the code with the camera.
           </AppText>
-          <Button
-            size="sm"
-            variant="tinted"
-            icon="camera"
-            label={permission.canAskAgain ? "Allow camera" : "Open Settings"}
-            onPress={() => void (permission.canAskAgain ? requestPermission() : Linking.openSettings())}
-          />
+          <Button size="sm" variant="tinted" icon="camera" label="Allow camera" onPress={() => void requestPermission()} />
+        </View>
+      ) : gate === "denied" ? (
+        <View style={styles.ask}>
+          <AppText variant="compact" style={styles.askText}>
+            The camera is off for Mewla. Turn it on in Settings, or paste the link instead.
+          </AppText>
+          <Button size="sm" variant="tinted" icon="camera" label="Open Settings" onPress={openSettings} />
+        </View>
+      ) : gate === "loading" && Platform.OS !== "web" ? (
+        <View style={styles.ask}>
+          <ActivityIndicator color="#F4F0EA" />
         </View>
       ) : null}
       {(["tl", "tr", "bl", "br"] as const).map((corner) => (
