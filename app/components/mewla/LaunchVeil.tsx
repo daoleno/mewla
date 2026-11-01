@@ -14,7 +14,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
 import { useThemeContext } from "../../theme";
-import { heroCatBox } from "../onboarding/onboardingModel";
+import { onboardingHeroBox } from "../onboarding/onboardingModel";
 import { findPetPack } from "../pets/petModel";
 import { DEFAULT_PET_ID, PET_PACKS } from "../pets/petPacks";
 import {
@@ -125,7 +125,7 @@ export function LaunchVeil({ destination, onDone }: { destination: LaunchDestina
   const to: CatBox | null = !frame || !from
     ? null
     : destination === "onboarding"
-      ? heroCatBox({ width: frame.width, height: frame.height, top: insets.top, bottom: insets.bottom })
+      ? onboardingHeroBox({ width: frame.width, height: frame.height, ...insets })
       : { ...from, cy: from.cy - 28 };
   const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value }));
   const faceStyle = useAnimatedStyle(() => ({ opacity: face.value }));

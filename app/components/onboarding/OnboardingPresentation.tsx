@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, type ReactNode } from "react";
 import { ActivityIndicator, BackHandler, Linking, Platform, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
@@ -22,6 +22,8 @@ import {
   catBoxForStep,
   cornerCatBox,
   heroCatBox,
+  heroZoneWidth,
+  isCompactFrame,
   previousOnboardingStep,
   type OnboardingStep,
 } from "./onboardingModel";
@@ -69,6 +71,9 @@ export function OnboardingPresentation({ serverName, connection, error, pairing,
 
   const frame = size ? { ...size, top: insets.top, bottom: insets.bottom } : null;
   const hero = frame ? heroCatBox(frame) : null;
+  // A short window (a phone on its side) puts the cat in a column of its own.
+  const compact = frame ? isCompactFrame(frame) : false;
+  const zone = frame ? heroZoneWidth(frame) : 0;
   const connected = connection === "connected";
   const connecting = connection === "connecting";
   const catState: BrainCatState = step === "welcome" ? "attention"
@@ -76,7 +81,7 @@ export function OnboardingPresentation({ serverName, connection, error, pairing,
     : step === "scan" ? (pairing ? "attention" : "delegating")
     : connected ? "attention" : connecting ? "delegating" : "offline";
   const header = (number: number, place: string, title: string) => (
-    <View style={[styles.header, frame ? { minHeight: cornerCatBox(frame).cy + cornerCatBox(frame).size / 2 - insets.top } : null]}>
+    <View style={[styles.header, compact ? styles.headerCompact : frame ? { minHeight: cornerCatBox(frame).cy + cornerCatBox(frame).size / 2 - insets.top } : null]}>
       <View style={styles.eyebrow}>
         <View style={[styles.number, { borderColor: colors.borderStrong }]}>
           <AppText variant="micro" tone="secondary">{number}</AppText>
@@ -87,6 +92,32 @@ export function OnboardingPresentation({ serverName, connection, error, pairing,
     </View>
   );
   const belowHero = hero ? hero.cy + hero.size / 2 + 28 - insets.top : 260;
+  /** Welcome and connected: the cat above the text, or beside it when the window is short. */
+  const heroStep = (center: ReactNode, actions: ReactNode, live?: boolean) => compact ? (
+    <View style={[styles.column, styles.columnCompact, { marginLeft: zone }]}>
+      <ScrollView contentContainerStyle={styles.heroScrollCompact}>
+        <View style={styles.centerCompact} accessibilityLiveRegion={live ? "polite" : undefined}>{center}</View>
+        <View style={[styles.actions, styles.actionsCompact]}>{actions}</View>
+      </ScrollView>
+    </View>
+  ) : (
+    <View style={[styles.column, { paddingTop: belowHero }]}>
+      <View style={styles.center} accessibilityLiveRegion={live ? "polite" : undefined}>{center}</View>
+      <View style={styles.actions}>{actions}</View>
+    </View>
+  );
+  /** Install and scan: the content scrolls, the buttons stay in reach, beside it when the window is short. */
+  const splitStep = (content: ReactNode, actions: ReactNode) => compact ? (
+    <View style={[styles.column, styles.columnCompact, styles.split]}>
+      <ScrollView style={styles.splitMain} contentContainerStyle={styles.scroll}>{content}</ScrollView>
+      <View style={[styles.actions, styles.splitSide]}>{actions}</View>
+    </View>
+  ) : (
+    <View style={styles.column}>
+      <ScrollView contentContainerStyle={styles.scroll}>{content}</ScrollView>
+      <View style={styles.actions}>{actions}</View>
+    </View>
+  );
 
   return (
     <View
@@ -97,68 +128,59 @@ export function OnboardingPresentation({ serverName, connection, error, pairing,
       }}
     >
       <Animated.View key={step} entering={FadeIn.duration(240).delay(140)} exiting={FadeOut.duration(120)} style={styles.step}>
-        {step === "welcome" ? (
-          <View style={[styles.column, { paddingTop: belowHero }]}>
-            <View style={styles.center}>
-              <Text accessibilityRole="header" style={[styles.welcomeTitle, { color: colors.textPrimary }]}>{WELCOME_TITLE.replace(". ", ".\n")}</Text>
-              <AppText tone="secondary" style={styles.lede}>{WELCOME_LEDE}</AppText>
+        {step === "welcome" ? heroStep(
+          <>
+            <Text accessibilityRole="header" style={[styles.welcomeTitle, { color: colors.textPrimary }]}>{WELCOME_TITLE.replace(". ", ".\n")}</Text>
+            <AppText tone="secondary" style={styles.lede}>{WELCOME_LEDE}</AppText>
+          </>,
+          <>
+            <Button variant="filled" size="lg" block label="Set up my computer" onPress={() => go("install")} />
+            <Button variant="plain" label="Mewla already running? Scan its code" onPress={() => go("scan")} />
+          </>,
+        ) : step === "install" ? splitStep(
+          <>
+            {header(1, "ON YOUR COMPUTER", "Install Mewla")}
+            <CommandCard />
+            <AppText variant="caption" tone="tertiary">{INSTALL_NOTE}</AppText>
+            <AppText tone="secondary" style={styles.then}>
+              Then run <Text style={[styles.inlineCode, { color: colors.textPrimary, backgroundColor: colors.bgElevated }]}>{START_COMMAND}</Text>. {START_NOTE}
+            </AppText>
+            <AppText variant="compact" tone="tertiary">It prints a QR code. Keep it on screen for the next step.</AppText>
+          </>,
+          <Button variant="filled" size="lg" block label="Next: scan the code" onPress={() => go("scan")} />,
+        ) : step === "scan" ? splitStep(
+          <>
+            {header(2, "ON THIS PHONE", "Scan the code in your terminal")}
+            <OnboardingScanner compact={compact} paused={pairing} onCode={onCode} />
+            <View style={styles.status} accessibilityLiveRegion="polite">
+              {pairing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : null}
+              <AppText variant="compact" tone="secondary">{pairing ? "Pairing…" : "Looking for a Mewla code…"}</AppText>
             </View>
-            <View style={styles.actions}>
-              <Button variant="filled" size="lg" block label="Set up my computer" onPress={() => go("install")} />
-              <Button variant="plain" label="Mewla already running? Scan its code" onPress={() => go("scan")} />
-            </View>
-          </View>
-        ) : step === "install" ? (
-          <View style={styles.column}>
-            <ScrollView contentContainerStyle={styles.scroll}>
-              {header(1, "ON YOUR COMPUTER", "Install Mewla")}
-              <CommandCard />
-              <AppText variant="caption" tone="tertiary">{INSTALL_NOTE}</AppText>
-              <AppText tone="secondary" style={styles.then}>
-                Then run <Text style={[styles.inlineCode, { color: colors.textPrimary, backgroundColor: colors.bgElevated }]}>{START_COMMAND}</Text>. {START_NOTE}
-              </AppText>
-              <AppText variant="compact" tone="tertiary">It prints a QR code. Keep it on screen for the next step.</AppText>
-            </ScrollView>
-            <View style={styles.actions}>
-              <Button variant="filled" size="lg" block label="Next: scan the code" onPress={() => go("scan")} />
-            </View>
-          </View>
-        ) : step === "scan" ? (
-          <View style={styles.column}>
-            <ScrollView contentContainerStyle={styles.scroll}>
-              {header(2, "ON THIS PHONE", "Scan the code in your terminal")}
-              <OnboardingScanner paused={pairing} onCode={onCode} />
-              <View style={styles.status} accessibilityLiveRegion="polite">
-                {pairing ? <ActivityIndicator size="small" color={colors.textSecondary} /> : null}
-                <AppText variant="compact" tone="secondary">{pairing ? "Pairing…" : "Looking for a Mewla code…"}</AppText>
-              </View>
-            </ScrollView>
-            <View style={styles.actions}>
-              <Button variant="outlined" size="lg" block icon="clipboard" label="Paste a pairing link" disabled={pairing} onPress={onPaste} />
-              <AnimatedPressable accessibilityRole="link" accessibilityLabel="Other ways to connect"
-                onPress={() => void Linking.openURL(OTHER_WAYS_URL)} style={styles.link}>
-                <AppText variant="label" tone="secondary">Other ways to connect</AppText>
-                <Icon name="open-external" size={14} color={colors.textSecondary} />
-              </AnimatedPressable>
-            </View>
-          </View>
-        ) : (
-          <View style={[styles.column, { paddingTop: belowHero }]}>
-            <View style={styles.center} accessibilityLiveRegion="polite">
-              <Text accessibilityRole="header" style={[styles.welcomeTitle, { color: colors.textPrimary }]}>
-                {connected ? "Brain is home." : connecting ? "Connecting…" : "Can't reach your computer"}
-              </Text>
-              <AppText tone="secondary" style={styles.lede}>
-                {connected ? `Connected to ${serverName || "your computer"}.` : connecting ? serverName : error || `Check that mewla is running on ${serverName || "your computer"}.`}
-              </AppText>
-              {connecting ? <ActivityIndicator color={colors.textSecondary} /> : null}
-            </View>
-            <View style={styles.actions}>
-              {connected ? <Button variant="filled" size="lg" block icon="arrow-forward" label="Open Brain" onPress={onContinue} /> : null}
-              {!connected && !connecting ? <Button variant="filled" size="lg" block icon="refresh" label="Retry connection" onPress={onRetry} /> : null}
-              {!connected ? <Button variant="plain" icon="settings" label="Server settings" onPress={onSettings} /> : null}
-            </View>
-          </View>
+          </>,
+          <>
+            <Button variant="outlined" size="lg" block icon="clipboard" label="Paste a pairing link" disabled={pairing} onPress={onPaste} />
+            <AnimatedPressable accessibilityRole="link" accessibilityLabel="Other ways to connect"
+              onPress={() => void Linking.openURL(OTHER_WAYS_URL)} style={styles.link}>
+              <AppText variant="label" tone="secondary">Other ways to connect</AppText>
+              <Icon name="open-external" size={14} color={colors.textSecondary} />
+            </AnimatedPressable>
+          </>,
+        ) : heroStep(
+          <>
+            <Text accessibilityRole="header" style={[styles.welcomeTitle, { color: colors.textPrimary }]}>
+              {connected ? "Brain is home." : connecting ? "Connecting…" : "Can't reach your computer"}
+            </Text>
+            <AppText tone="secondary" style={styles.lede}>
+              {connected ? `Connected to ${serverName || "your computer"}.` : connecting ? serverName : error || `Check that mewla is running on ${serverName || "your computer"}.`}
+            </AppText>
+            {connecting ? <ActivityIndicator color={colors.textSecondary} /> : null}
+          </>,
+          <>
+            {connected ? <Button variant="filled" size="lg" block icon="arrow-forward" label="Open Brain" onPress={onContinue} /> : null}
+            {!connected && !connecting ? <Button variant="filled" size="lg" block icon="refresh" label="Retry connection" onPress={onRetry} /> : null}
+            {!connected ? <Button variant="plain" icon="settings" label="Server settings" onPress={onSettings} /> : null}
+          </>,
+          true,
         )}
       </Animated.View>
       {frame && hero ? (
@@ -204,6 +226,15 @@ const styles = StyleSheet.create({
   lede: { textAlign: "center", maxWidth: 320 },
   actions: { gap: 8, alignItems: "stretch" },
   header: { gap: 10, paddingTop: 22, paddingRight: 100, justifyContent: "flex-end", paddingBottom: 6 },
+  // The cat has its own column, so the title keeps the full width.
+  headerCompact: { paddingRight: 0, paddingTop: 12 },
+  columnCompact: { width: "auto", maxWidth: "100%", alignSelf: "stretch", paddingBottom: 8 },
+  heroScrollCompact: { flexGrow: 1, justifyContent: "center", gap: 20, paddingVertical: 12 },
+  centerCompact: { alignItems: "center", gap: 12 },
+  actionsCompact: { maxWidth: 360, width: "100%", alignSelf: "center" },
+  split: { flexDirection: "row", gap: 24 },
+  splitMain: { flex: 1 },
+  splitSide: { width: 220, justifyContent: "flex-end" },
   eyebrow: { flexDirection: "row", alignItems: "center", gap: 8 },
   number: { width: 20, height: 20, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
   stepTitle: { fontSize: 30, lineHeight: 36 },
