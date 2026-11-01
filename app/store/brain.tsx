@@ -150,6 +150,12 @@ export type BrainExecutorRef = {
   host?: boolean;
 };
 
+/** What a client needs to offer an executor: installed ones are choices; signed-in ones come first. */
+export type BrainExecutorState = {
+  installed: boolean;
+  signed_in: boolean;
+};
+
 /** Why Brain has no running host, said by the computer (see daemon brain.HostProblem). */
 export type BrainHostProblem = {
   /** not_installed, not_signed_in, not_started or not_ready; a newer computer may say more. */
@@ -168,6 +174,8 @@ export type BrainSnapshot = {
   host_executor?: BrainExecutorRef | null;
   host_problem?: BrainHostProblem;
   executors?: BrainExecutorRef[];
+  /** By executor id. An executor with no entry is not installed. */
+  executor_states?: Record<string, BrainExecutorState>;
   chat_thread_id?: string;
   current_work?: BrainCurrentWork[];
   open_work?: BrainOpenWork[];
@@ -241,6 +249,7 @@ function normalizeSnapshot(
         : undefined,
     host_problem: normalizeHostProblem(raw?.host_problem),
     executors: executors.map(normalizeExecutorRef).filter((adapter) => adapter.id),
+    executor_states: normalizeExecutorStates(raw?.executor_states),
     chat_thread_id:
       typeof raw?.chat_thread_id === "string" ? raw.chat_thread_id : undefined,
     current_work: Array.isArray(raw?.current_work)
@@ -255,6 +264,17 @@ function normalizeSnapshot(
     generated_at:
       typeof raw?.generated_at === "string" ? raw.generated_at : undefined,
   };
+}
+
+function normalizeExecutorStates(raw: unknown): Record<string, BrainExecutorState> {
+  const out: Record<string, BrainExecutorState> = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    const state = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+    if (!id || !state || state.installed !== true) continue;
+    out[id] = { installed: true, signed_in: state.signed_in === true };
+  }
+  return out;
 }
 
 function normalizeHostProblem(raw: unknown): BrainHostProblem | undefined {
@@ -661,6 +681,7 @@ function brainServerStatesEqual(
     JSON.stringify(left.host_problem ?? null) === JSON.stringify(right.host_problem ?? null) &&
     workerRefArraysEqual(left.workers ?? [], right.workers ?? []) &&
     executorRefArraysEqual(left.executors ?? [], right.executors ?? []) &&
+    JSON.stringify(left.executor_states ?? {}) === JSON.stringify(right.executor_states ?? {}) &&
     currentWorkArraysEqual(left.current_work ?? [], right.current_work ?? []) &&
     openWorkArraysEqual(left.open_work ?? [], right.open_work ?? []) &&
     workBacklogEqual(left.work_backlog, right.work_backlog) &&

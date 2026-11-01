@@ -1,5 +1,5 @@
 import { sessionFileMediaKindForPath } from "../../services/sessionFileMedia";
-import type { BrainExecutorRef } from "../../store/brain";
+import type { BrainExecutorRef, BrainExecutorState } from "../../store/brain";
 
 export function brainProviderLabel(value?: string): string {
   const normalized = value?.trim().toLowerCase();
@@ -17,6 +17,22 @@ export function brainProviderLabel(value?: string): string {
     default:
       return value?.trim() || "Custom";
   }
+}
+
+/**
+ * The executors a person can choose: the ones installed on the computer,
+ * signed-in ones first (otherwise in the computer's order). The rest are not
+ * choices; `moreToInstall` says there are some, for one line pointing at
+ * `mewla deps`.
+ */
+export function brainExecutorChoices(
+  executors: readonly BrainExecutorRef[],
+  states: Readonly<Record<string, BrainExecutorState>> | undefined,
+): { choices: BrainExecutorRef[]; moreToInstall: boolean } {
+  const installed = executors.filter((executor) => states?.[executor.id]?.installed);
+  const signedIn = installed.filter((executor) => states?.[executor.id]?.signed_in);
+  const others = installed.filter((executor) => !states?.[executor.id]?.signed_in);
+  return { choices: [...signedIn, ...others], moreToInstall: installed.length < executors.length };
 }
 
 export function brainAdapterLabel(adapter?: BrainExecutorRef | null): string {

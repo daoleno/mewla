@@ -641,6 +641,7 @@ func (s *Service) EnsureHostSnapshot() (Snapshot, error) {
 	snapshot.HostExecutor = &hostExecutor
 	snapshot.HostProblem = s.projectHostProblem(host, hostExecutor)
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
+	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(presentDelegatedSessions(snapshot.Workers))
@@ -689,6 +690,7 @@ func (s *Service) ProjectionSnapshot() (Snapshot, error) {
 	snapshot.HostExecutor = &hostExecutor
 	snapshot.HostProblem = s.projectHostProblem(host, hostExecutor)
 	snapshot.Executors = s.workerExecutors(hostExecutor.ID)
+	snapshot.ExecutorStates = s.executorStates(snapshot.Executors)
 	snapshot.ChatThreadID = chatThreadID
 	snapshot.Workers = s.workerRefs(host.ID)
 	inventory, err := s.store.ProjectWorkInventory(presentDelegatedSessions(snapshot.Workers))
@@ -3946,6 +3948,23 @@ func (s *Service) workerExecutors(hostExecutorID string) []work.WorkerExecutor {
 		return executors[i].ID < executors[j].ID
 	})
 	return executors
+}
+
+// executorStates says which of the executors are installed on this computer
+// and which of those Mewla verified signed in.
+func (s *Service) executorStates(executors []work.WorkerExecutor) map[string]ExecutorState {
+	states := make(map[string]ExecutorState, len(executors))
+	for _, executor := range executors {
+		fields := strings.Fields(executor.Command)
+		if len(fields) == 0 {
+			continue
+		}
+		if _, err := hostLookPath(fields[0]); err != nil {
+			continue
+		}
+		states[executor.ID] = ExecutorState{Installed: true, SignedIn: hostAuth(executor.ID) == HostAuthAuthenticated}
+	}
+	return states
 }
 
 func (s *Service) hostWorkerMatches(worker *classifier.Worker, executor work.WorkerExecutor) bool {
