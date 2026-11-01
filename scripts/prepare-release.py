@@ -126,6 +126,30 @@ def run_git(root: Path, *args: str, check: bool = True) -> str:
     return result.stdout.strip()
 
 
+MIN_COMPUTER_VERSION_RE = re.compile(
+    r'export const MIN_COMPUTER_VERSION = "(?P<version>[^"]+)";'
+)
+
+
+def validate_min_computer_version(root: Path, next_version: str) -> None:
+    """The oldest computer the app accepts must not be newer than the release
+    that ships the app: a release asking for a Mewla that does not exist yet
+    would show every user "this computer needs an update"."""
+    relative = "app/constants/computerVersion.ts"
+    path = root / relative
+    if not path.is_file():
+        return
+    match = MIN_COMPUTER_VERSION_RE.search(path.read_text(encoding="utf-8"))
+    if match is None:
+        raise PrepareError(f"{relative} must declare MIN_COMPUTER_VERSION")
+    minimum = match.group("version")
+    if release_precedence(minimum) > release_precedence(next_version):
+        raise PrepareError(
+            f"{relative} MIN_COMPUTER_VERSION {minimum} is newer than the release "
+            f"{next_version}; lower it to {next_version} or earlier before releasing"
+        )
+
+
 def read_text(root: Path, relative: str) -> str:
     path = root / relative
     if not path.is_file():
@@ -431,6 +455,7 @@ def prepare(root: Path, target_version: str | None = None) -> dict[str, object]:
         )
     }
     validate_changelog(root, sources["CHANGELOG.md"], current_version, next_tag)
+    validate_min_computer_version(root, next_version)
     certificate = extract_certificate(
         sources["scripts/verify-release-identity.sh"]
     )

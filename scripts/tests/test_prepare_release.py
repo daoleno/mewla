@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -41,6 +42,7 @@ FIXTURE_PATHS = (
     "scripts/verify-release-identity.sh",
     "docs/install-daemon.md",
     "docs/ios-ci-release.md",
+    "app/constants/computerVersion.ts",
 ) + INDEXED_NOTE_PATHS
 CERTIFICATE = prepare_release.extract_certificate(
     (ROOT / "scripts/verify-release-identity.sh").read_text(encoding="utf-8")
@@ -514,6 +516,20 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
                 self.assertFalse(
                     (root / f"docs/releases/{NEXT_TAG}.md").exists()
                 )
+
+    def test_rejects_a_minimum_computer_version_newer_than_the_release(self):
+        root = self.create_repo()
+        target = root / "app/constants/computerVersion.ts"
+        text = target.read_text(encoding="utf-8")
+        target.write_text(
+            re.sub(r'MIN_COMPUTER_VERSION = "[^"]+"', 'MIN_COMPUTER_VERSION = "99.0.0"', text),
+            encoding="utf-8",
+        )
+        git(root, "add", "--all")
+        git(root, "commit", "-m", "Raise the minimum computer version")
+        result = self.run_script(root)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MIN_COMPUTER_VERSION 99.0.0 is newer than the release", result.stderr)
 
     def test_fails_closed_when_there_are_no_commits(self):
         result = self.run_script(
