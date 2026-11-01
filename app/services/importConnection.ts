@@ -1,5 +1,11 @@
 import { parseConnectLink } from "./connection";
 import {
+  abandonPairTimeline,
+  bindPairTimeline,
+  markPairTimeline,
+  startPairTimeline,
+} from "./pairTiming";
+import {
   markOnboarded,
   saveServer,
   setServerAutoConnect,
@@ -43,7 +49,22 @@ export async function importConnection(
     return null;
   }
 
+  startPairTimeline();
+  markPairTimeline("parse");
+  try {
+    return await importParsed(payload, options);
+  } catch (error) {
+    abandonPairTimeline(error instanceof PairingCancelledError ? "cancelled" : "failed");
+    throw error;
+  }
+}
+
+async function importParsed(
+  payload: ImportPayload,
+  options: ImportConnectionOptions,
+): Promise<StoredServer | null> {
   if (!await (options.confirmScope ?? confirmPairingScope)()) throw new PairingCancelledError();
+  markPairTimeline("confirm");
 
   const primaryLinkURL = payload.link
     ? payload.link.candidates.find(
@@ -67,6 +88,7 @@ export async function importConnection(
       daemonId: payload.daemonId,
       daemonPublicKey: payload.daemonPublicKey,
     });
+    markPairTimeline("resolve");
     pairing = await enrollWithDaemon({
       serverUrl: pairingURL,
       daemonId: payload.daemonId,
@@ -76,6 +98,7 @@ export async function importConnection(
     });
   }
 
+  markPairTimeline("pair");
   const primaryStableURL = payload.link ? primaryLinkURL : pairingURL;
   const savedServer = await saveServer({
     name: payload.name || "",
@@ -92,8 +115,11 @@ export async function importConnection(
     })),
   });
 
+  markPairTimeline("save");
+  bindPairTimeline(savedServer.id);
   await markOnboarded();
   await setServerAutoConnect(savedServer.id, true);
+  markPairTimeline("onboard");
   await options.onImported?.(savedServer);
   return savedServer;
 }
@@ -117,6 +143,7 @@ async function pairOverLink(
       transportPin: link.transportPin,
       url: payload.url,
     });
+    markPairTimeline("tunnel");
     return await enrollWithDaemon({
       serverUrl: pairingURL,
       daemonId: payload.daemonId,
@@ -136,6 +163,7 @@ async function pairOverLink(
     await releasePairingLinkTransport(link.routeId);
   }
 
+  markPairTimeline("pair-failed");
   options.onProgress?.("Checking whether this phone is already paired…");
   let confirmed: Awaited<ReturnType<typeof confirmPairedDevice>>;
   try {

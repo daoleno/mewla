@@ -47,6 +47,11 @@ import { DesktopWebShell } from "../components/navigation/DesktopWebShell";
 import { appScreenLayout } from "../components/navigation/HorizontalSafeAreaFrame";
 import { ToastProvider, useOptionalToast } from "../components/ui/Toast";
 import { importFailureToast, importProgressToast } from "../services/importFeedback";
+import {
+  finishPairTimeline,
+  markPairTimeline,
+  slowPairingToast,
+} from "../services/pairTiming";
 import { AlertHost } from "../components/ui/AlertHost";
 import { appFontAssets } from "../constants/appFontAssets";
 import { ThemeProvider } from "../theme";
@@ -244,9 +249,11 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
           onProgress: (message) => toastRef.current?.show(importProgressToast(message)),
           onImported: async (importedServer) => {
             await refreshServers(importedServer.id);
+            markPairTimeline("refresh");
             routerRef.current.replace({
               pathname: "/list",
             });
+            markPairTimeline("route");
             // A new computer starts working with the others in the background.
             void syncComputers().then(() => refreshServers());
           },
@@ -301,12 +308,15 @@ const ConnectionLifecycle = memo(function ConnectionLifecycle({
         serverId: data.serverId,
         connectionState: "connecting",
       });
-    const onConnected = (data: any) =>
+    const onConnected = (data: any) => {
       dispatch({
         type: "SET_SERVER_CONNECTION_STATE",
         serverId: data.serverId,
         connectionState: "connected",
       });
+      const pairing = finishPairTimeline(data.serverId);
+      if (pairing?.slow) toastRef.current?.show(slowPairingToast(pairing));
+    };
     const onDisconnected = (data: any) => {
       const decision = decideDisconnectLifecycle(data?.reason);
       dispatch({
