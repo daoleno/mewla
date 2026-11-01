@@ -98,6 +98,7 @@ The MVP deliberately uses standard, widely implemented primitives:
 | Boundary                       | Protocol                                                       | Reason                                                                                        |
 | ------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Phone to daemon, through relay | TLS 1.3 with X.509 Ed25519 certificate and Pairing V2 SPKI pin | True end-to-end confidentiality/authentication; relay has no inner key                        |
+| Direct address to a hosted computer | TLS 1.2 or 1.3 with the computer's WebPKI certificate, only for its `*.m.mewla.ai` hostname | An iPhone's WebSocket stack cannot speak TLS 1.3; forward-secret AEAD suites only. The pinned path stays TLS 1.3 |
 | Inner application stream       | HTTP/1.1, WebSocket Upgrade, Range and streaming bodies        | Preserves every current full-origin route without an application rewrite                      |
 | Connector control/data         | TLS 1.3 TCP, ALPN/frame protocol version 2                     | Length-bounded control, atomic pairing-admission commit, and explicit mixed-version failure   |
 | Relay routing                  | bounded TLS ClientHello SNI inspection                         | Routes before forwarding while preserving the complete inner ClientHello                      |

@@ -23,6 +23,13 @@ TLS 1.3 through the relay and verifies the Pairing V2 SPKI pin; only the daemon
 possesses that inner TLS key. The relay terminates a separate outer connector
 TLS session but sees only encrypted inner records.
 
+A client that asks for the computer's own hosted hostname and verifies its WebPKI
+certificate (a phone saved with a direct address, a browser) may also use TLS 1.2
+with ECDHE AEAD suites only (`remote.ServerTLSConfig`). An iPhone's React Native
+WebSocket (CFStream/Secure Transport) cannot speak TLS 1.3 and failed with -9836
+against a TLS 1.3-only computer. Any other server name, which is what pinned
+phones and relays use, stays TLS 1.3 only.
+
 An enrolled device that can control a live Terminal is trusted with the host
 authority already exposed by that Session. Session File Preview is read-only
 and bounded, but it is not a workspace sandbox: absolute paths and symlinks
