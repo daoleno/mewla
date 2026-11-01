@@ -1,5 +1,6 @@
 package expo.modules.keyboardlifecycle
 
+import android.util.Log
 import android.view.View
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -11,6 +12,12 @@ import expo.modules.kotlin.modules.ModuleDefinition
 class KeyboardLifecycleModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("KeyboardLifecycle")
+
+    // Opt-in diagnostics: `adb shell setprop debug.mewla.keyboard 1`, then
+    // `adb logcat -s MewlaKeyboardDiag`.
+    Function("diagEnabled") { diagEnabled() }
+
+    Function("diagLog") { message: String -> Log.i("MewlaKeyboardDiag", message) }
 
     AsyncFunction("getForegroundSnapshot") { composerNativeId: String, revision: Int ->
       val activity = appContext.activityProvider?.currentActivity
@@ -41,6 +48,14 @@ class KeyboardLifecycleModule : Module() {
         "evidence" to "window_insets_ime"
       )
     }.runOnQueue(Queues.MAIN)
+  }
+
+  private fun diagEnabled(): Boolean = try {
+    val properties = Class.forName("android.os.SystemProperties")
+    val get = properties.getMethod("get", String::class.java, String::class.java)
+    get.invoke(null, "debug.mewla.keyboard", "0") == "1"
+  } catch (_: Exception) {
+    false
   }
 
   private fun View.isWithin(ancestor: View): Boolean {

@@ -13,6 +13,8 @@ interface KeyboardLifecycleNativeModule {
     composerNativeId: string,
     revision: number,
   ): Promise<KeyboardForegroundSnapshot>;
+  diagEnabled(): boolean;
+  diagLog(message: string): void;
 }
 
 const nativeModule =
@@ -34,4 +36,25 @@ export function getKeyboardForegroundSnapshot(
     });
   }
   return nativeModule.getForegroundSnapshot(composerNativeId, revision);
+}
+
+/**
+ * Opt-in diagnostics for a build that has no JS console: iOS launch argument
+ * `-MewlaKeyboardDiag YES`, Android `setprop debug.mewla.keyboard 1`.
+ */
+export const keyboardDiagEnabled: boolean = (() => {
+  try {
+    return nativeModule?.diagEnabled() === true;
+  } catch {
+    return false;
+  }
+})();
+
+export function keyboardDiagLog(message: string): void {
+  if (!keyboardDiagEnabled) return;
+  try {
+    nativeModule?.diagLog(message);
+  } catch {
+    // Diagnostics never get in the way.
+  }
 }

@@ -44,4 +44,21 @@ describe("Mewla keyboard lifecycle native authority", () => {
     expect(android).toContain('"revision" to revision');
     expect(ios).toContain('"revision": revision');
   });
+
+  test("both platforms expose the same opt-in diagnostic, off unless asked", () => {
+    const android = source(
+      "android/src/main/java/expo/modules/keyboardlifecycle/KeyboardLifecycleModule.kt",
+    );
+    const ios = source("ios/KeyboardLifecycleModule.swift");
+    const js = source("src/index.ts");
+
+    expect(ios).toContain('Function("diagEnabled")');
+    expect(ios).toContain('UserDefaults.standard.bool(forKey: "MewlaKeyboardDiag")');
+    expect(ios).toContain('NSLog("[MewlaKeyboardDiag] %@", message)');
+    expect(android).toContain('Function("diagEnabled")');
+    expect(android).toContain('"debug.mewla.keyboard"');
+    expect(android).toContain('Log.i("MewlaKeyboardDiag", message)');
+    expect(js).toContain("nativeModule?.diagEnabled() === true");
+    expect(js).toContain("if (!keyboardDiagEnabled) return;");
+  });
 });

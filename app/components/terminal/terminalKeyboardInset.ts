@@ -59,31 +59,22 @@ export function nextAndroidBaseWindow(
   return null;
 }
 
-/** What the platform says about the keyboard covering the window right now. */
-export interface KeyboardCoverSnapshot {
-  imeVisible: boolean;
-  imeHeight: number;
-  evidence: string;
-}
-
-/** Evidence strings of the native query when it actually looked at the window. */
-const AUTHORITATIVE_EVIDENCE = new Set(["keyboard_layout_guide", "window_insets_ime"]);
-
 /**
- * Whether the keyboard is up, for the key bar's toggle and its offset.
- *
- * Show/hide events can be missed (a rotation or a fold dismisses the keyboard
- * without a hide event), so an event alone never says the keyboard is up. It
- * is up when an event said so and the window, asked now, is covered by it. A
- * query that could not look (no native module, no window) decides nothing.
+ * Whether the keyboard is up, for the key bar's toggle and its offset: one
+ * fact for both. On iOS a show event is not enough, because a rotation or a
+ * fold can leave a "shown" keyboard whose frame covers nothing (or dismiss it
+ * without a hide event): it is up while its latest frame overlaps the window.
+ * Android's resize-based frame has no such coordinates; its events decide.
  */
-export function keyboardCoversWindow(
+export function keyboardIsUp(
+  platform: "ios" | "android" | string,
   shownByEvent: boolean,
-  snapshot: KeyboardCoverSnapshot | null,
+  windowHeight: number,
+  frame: KeyboardFrame | null,
 ): boolean {
   if (!shownByEvent) return false;
-  if (!snapshot || !AUTHORITATIVE_EVIDENCE.has(snapshot.evidence)) return true;
-  return snapshot.imeVisible && snapshot.imeHeight > 0;
+  if (platform === "ios") return keyboardOverlap(windowHeight, frame) > 0;
+  return (frame?.height ?? 0) > 0;
 }
 
 export interface AccessoryOffsetInput {
