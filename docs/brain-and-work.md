@@ -306,7 +306,9 @@ take and a one-tap switch to an installed agent that is signed in. Nothing needs
 restart: Mewla checks again every few seconds, starts Brain's host as soon as the
 agent is installed or signed in, and starts it again after a reboot (a host that
 never held a conversation restarts by itself; one holding a conversation Mewla
-cannot resume is never replaced blind). In the app, Brain's ⋮ menu has
+cannot resume is never replaced blind). Brain's pane starts in your login
+shell, so an agent Mewla sees as signed out still starts: it may be signed in
+through that shell. If it is not, it shows as open but not ready. In the app, Brain's ⋮ menu has
 **Switch executor**, **New chat** (a fresh thread), **Open terminal** (Brain's
 own Session) and **Browse workspace**.
 
