@@ -68,6 +68,26 @@ def select_installable_build(document: dict[str, Any]) -> dict[str, Any] | None:
     return result
 
 
+def print_build_states(document: dict[str, Any]) -> None:
+    """Log each build's state (no secrets) so a wrong state name shows in the run log."""
+
+    included = {(i.get("type"), i.get("id")): i for i in document.get("included", [])}
+    for build in document.get("data", []):
+        attributes = build.get("attributes", {})
+        relationships = build.get("relationships", {})
+
+        def attribute(name: str, key: str) -> Any:
+            ref = (relationships.get(name, {}) or {}).get("data")
+            item = included.get(((ref or {}).get("type"), (ref or {}).get("id")), {})
+            return item.get("attributes", {}).get(key)
+
+        print(
+            f"build {attribute('preReleaseVersion', 'version')} ({attributes.get('version')}) "
+            f"processing={attributes.get('processingState')} expired={attributes.get('expired')} "
+            f"external={attribute('buildBetaDetail', 'externalBuildState')}"
+        )
+
+
 def find_installable_build(
     client: Any, app_id: str, group_name: str
 ) -> dict[str, Any] | None:
@@ -82,8 +102,11 @@ def find_installable_build(
     if len(matches) != 1:
         raise RuntimeError(f"expected exactly one beta group named {group_name!r}; found {len(matches)}")
     group = matches[0]
+    # /betaGroups/{id}/builds takes no include, so list the app's builds filtered to the group.
     query = urllib.parse.urlencode(
         {
+            "filter[app]": app_id,
+            "filter[betaGroups]": group["id"],
             "limit": "200",
             "include": "preReleaseVersion,buildBetaDetail",
             "fields[builds]": "version,expired,processingState,preReleaseVersion,buildBetaDetail",
@@ -91,7 +114,8 @@ def find_installable_build(
             "fields[buildBetaDetails]": "externalBuildState",
         }
     )
-    document = client.api_request("GET", f"/betaGroups/{group['id']}/builds?{query}")
+    document = client.api_request("GET", f"/builds?{query}")
+    print_build_states(document)
     build = select_installable_build(document)
     if build is None:
         return None
