@@ -406,7 +406,13 @@ func (connector *Connector) serveStream(
 	client := clientaddr.Parse(open.ClientAddr)
 	gated := connector.gate.admit(conn, clientaddr.Key(client))
 	defer gated.close()
-	inner := tls.Server(conn, connector.serverTLSConfig())
+	var transport net.Conn = conn
+	if open.Alias != "" {
+		// A pairing is one request on one stream; its wire account says whether
+		// the answer left this computer when a phone reports none arrived.
+		transport = newWireTrace(candidate.Name, conn, streamOpened)
+	}
+	inner := tls.Server(transport, connector.serverTLSConfig())
 	handshakeCtx, cancel := context.WithTimeout(ctx, connector.config.ControlTimeout)
 	defer cancel()
 	if err := inner.HandshakeContext(handshakeCtx); err != nil {
@@ -1018,3 +1024,61 @@ func (recorder *answerRecorder) Write(data []byte) (int, error) {
 
 // Unwrap lets http.ResponseController reach the real writer.
 func (recorder *answerRecorder) Unwrap() http.ResponseWriter { return recorder.ResponseWriter }
+
+// wireTrace counts what crossed a stream's transport and says it once when the
+// stream closes: bytes each way, when the last write left and how it ended.
+type wireTrace struct {
+	net.Conn
+	name      string
+	opened    time.Time
+	mu        sync.Mutex
+	read      int
+	written   int
+	lastWrite time.Duration
+	writeErr  error
+	readErr   error
+	closed    bool
+}
+
+func newWireTrace(name string, conn net.Conn, opened time.Time) *wireTrace {
+	return &wireTrace{Conn: conn, name: name, opened: opened}
+}
+
+func (trace *wireTrace) Read(p []byte) (int, error) {
+	count, err := trace.Conn.Read(p)
+	trace.mu.Lock()
+	trace.read += count
+	if err != nil && trace.readErr == nil {
+		trace.readErr = err
+	}
+	trace.mu.Unlock()
+	return count, err
+}
+
+func (trace *wireTrace) Write(p []byte) (int, error) {
+	count, err := trace.Conn.Write(p)
+	trace.mu.Lock()
+	trace.written += count
+	trace.lastWrite = time.Since(trace.opened)
+	if err != nil && trace.writeErr == nil {
+		trace.writeErr = err
+	}
+	trace.mu.Unlock()
+	return count, err
+}
+
+func (trace *wireTrace) Close() error {
+	trace.mu.Lock()
+	first := !trace.closed
+	trace.closed = true
+	read, written, lastWrite, writeErr, readErr := trace.read, trace.written, trace.lastWrite, trace.writeErr, trace.readErr
+	trace.mu.Unlock()
+	if first {
+		log.Printf(
+			"Mewla Link pairing stream via %s closed %s after it opened: read %d bytes (%v), wrote %d bytes (last at %s, error %v)",
+			trace.name, time.Since(trace.opened).Round(time.Millisecond),
+			read, readErr, written, lastWrite.Round(time.Millisecond), writeErr,
+		)
+	}
+	return trace.Conn.Close()
+}

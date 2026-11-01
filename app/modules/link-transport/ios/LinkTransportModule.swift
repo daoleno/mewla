@@ -418,6 +418,8 @@ private final class Bridge {
   private let lock = NSLock()
   private var directionsFinished = 0
   private var stopped = false
+  private var queue: DispatchQueue?
+  private static let halfClosedGraceSeconds: Double = 5
 
   init(
     local: NWConnection,
@@ -432,6 +434,7 @@ private final class Bridge {
   }
 
   func start(queue: DispatchQueue) {
+    self.queue = queue
     local.stateUpdateHandler = { [events = self.events] state in
       events.add("local \(state)")
     }
@@ -476,8 +479,13 @@ private final class Bridge {
         self.stop()
         return
       }
+      // The end of a side is a half-close: only the final message context
+      // tells the other connection its peer is done. With the default context
+      // `isComplete` merely ends a message, the far side never saw the end,
+      // and a request that got no answer waited for its own 60 s timeout.
       destination.send(
         content: data,
+        contentContext: complete ? .finalMessage : .defaultMessage,
         isComplete: complete,
         completion: .contentProcessed { sendError in
           self.events.add("\(label) wrote \(data?.count ?? 0)B error=\(String(describing: sendError))")
@@ -500,6 +508,12 @@ private final class Bridge {
     lock.unlock()
     if done {
       stop()
+      return
+    }
+    // One side is done; the other gets a short time to finish what it is
+    // sending, then the pair is closed so nothing is left half open.
+    queue?.asyncAfter(deadline: .now() + Bridge.halfClosedGraceSeconds) { [weak self] in
+      self?.stop()
     }
   }
 }
