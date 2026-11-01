@@ -9,7 +9,7 @@ import { Button } from "../ui/Button";
  * The viewfinder on the scan step. The camera runs only while this step is on
  * screen and the app is in front; `paused` stops reading while a code pairs.
  */
-export function OnboardingScanner({ paused, onCode }: { paused: boolean; onCode(data: string): void }) {
+export function OnboardingScanner({ paused, compact = false, onCode }: { paused: boolean; /** A short window: a smaller viewfinder. */ compact?: boolean; onCode(data: string): void }) {
   const colors = useAppColors();
   const [permission, requestPermission] = useCameraPermissions();
   const [foreground, setForeground] = useState(AppState.currentState === "active");
@@ -20,7 +20,7 @@ export function OnboardingScanner({ paused, onCode }: { paused: boolean; onCode(
 
   const camera = Platform.OS !== "web" && permission?.granted && foreground;
   return (
-    <View style={[styles.finder, { borderColor: colors.border }]}>
+    <View style={[styles.finder, compact && styles.finderCompact, { borderColor: colors.border }]}>
       {camera ? (
         <CameraView
           style={StyleSheet.absoluteFill}
@@ -53,6 +53,7 @@ const ARM = 26;
 const styles = StyleSheet.create({
   // The finder is a dark window in both themes, like the camera behind it.
   finder: { backgroundColor: "#0A0908", borderWidth: StyleSheet.hairlineWidth, width: "100%", aspectRatio: 1, maxHeight: 320, alignSelf: "center", borderRadius: 24, overflow: "hidden", justifyContent: "center" },
+  finderCompact: { maxWidth: 200, alignSelf: "flex-start" },
   ask: { alignItems: "center", gap: 14, paddingHorizontal: 28 },
   askText: { color: "#F4F0EA", textAlign: "center" },
   corner: { position: "absolute", width: ARM, height: ARM, borderColor: "#F4F0EA", opacity: 0.9 },
