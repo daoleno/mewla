@@ -3839,9 +3839,9 @@ func (s *Service) healImplicitHost() bool {
 	problem := s.projectHostProblem(host, executor)
 	target, reason := "", ""
 	switch {
-	case problem != nil && (problem.Code == "not_installed" || problem.Code == "not_signed_in"):
+	case problem != nil && (problem.Code == "not_installed" || problem.Code == "not_signed_in" || problem.Code == "unsupported"):
 		target, reason = problem.SuggestExecutor, problem.Code
-	case problem != nil && problem.Code == "not_started":
+	case problem != nil && (problem.Code == "not_started" || problem.Code == "not_ready"):
 		s.hostProblemMu.Lock()
 		since := s.hostProblemSince
 		s.hostProblemMu.Unlock()
