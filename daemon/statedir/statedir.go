@@ -28,13 +28,32 @@ func Default(home string) string {
 }
 
 // SetRoot relocates the state root for this process; "" restores the default.
+// The path is resolved through any symlink first (macOS /tmp is one): private
+// directories under the root refuse a symlinked path.
 func SetRoot(dir string) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
 		override.Store(nil)
 		return
 	}
+	dir = Canonical(dir)
 	override.Store(&dir)
+}
+
+// Canonical resolves symlinks in path. Parts that do not exist yet are kept as
+// written, under the resolved part that does; any error returns path unchanged.
+func Canonical(path string) string {
+	rest := ""
+	for at := filepath.Clean(path); ; at = filepath.Dir(at) {
+		if resolved, err := filepath.EvalSymlinks(at); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		parent := filepath.Dir(at)
+		if parent == at {
+			return path
+		}
+		rest = filepath.Join(filepath.Base(at), rest)
+	}
 }
 
 // InitFromEnv applies RootEnv. Only an absolute path counts: a relative one
