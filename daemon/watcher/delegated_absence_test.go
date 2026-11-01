@@ -19,6 +19,9 @@ func TestResolveDelegatedAbsenceUsesAuthoritativeInventory(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("PATH", writeFakeTmux(t, tc.script))
 			w := New(0)
+			// A server that was seen and is now unreachable is Unknown. (One
+			// this process never saw is the reboot case: startup_inventory_test.go.)
+			w.sawTmuxServer.Store(true)
 			gone, err := w.ResolveDelegatedAbsence("%1")
 			if tc.unknown {
 				if !errors.Is(err, ErrOwnershipProbeUnavailable) {

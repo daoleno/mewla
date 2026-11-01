@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/watcher"
@@ -107,9 +108,10 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 		name     string
 		session  string
 		probeErr error
+		hadTurn  bool
 	}{
-		{"missing native identity", "", nil},
-		{"unknown tmux liveness", "saved-thread", errors.New("socket unreachable")},
+		{"missing native identity after a turn was admitted", "", nil, true},
+		{"unknown tmux liveness", "saved-thread", errors.New("socket unreachable"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			store, err := NewStore(t.TempDir())
@@ -118,6 +120,15 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 			}
 			if err := store.ReplaceHostSessionBinding("missing:@1", "codex", tc.session, "", ""); err != nil {
 				t.Fatal(err)
+			}
+			if tc.hadTurn {
+				item := createSignalTestWork(t, store, "host had a turn", "missing:@1")
+				bootstrapAdmittedTurnFixture(t, store, item.ID, watcher.AdmittedTurn{
+					SessionID: "missing:@1", TurnID: "t1", AcceptedAt: time.Now().UTC(),
+				})
+				if _, has, err := store.Turn("missing:@1"); err != nil || !has {
+					t.Fatalf("fixture turn missing: %v %v", has, err)
+				}
 			}
 			before, _ := os.ReadFile(store.HostSessionPath())
 			fw := &fakeWatcher{probeErr: tc.probeErr}
@@ -130,6 +141,29 @@ func TestAutomaticHostContinuityFailsClosed(t *testing.T) {
 				t.Fatal("uncertain recovery mutated host")
 			}
 		})
+	}
+}
+
+// A computer rebooted before its first message has a recorded host that never
+// held a conversation: nothing to lose, so Brain starts again by itself.
+func TestAutomaticHostContinuityRestartsAHostThatNeverHeldAConversation(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReplaceHostSessionBinding("missing:@1", "codex", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	previous := hostLookPath
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	t.Cleanup(func() { hostLookPath = previous })
+	fw := &fakeWatcher{}
+	service := NewService(store, fw, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	if changed, err := service.ReconcileHostContinuity(); err != nil || !changed {
+		t.Fatalf("restart after reboot: %v %v", changed, err)
+	}
+	if len(fw.created) != 1 {
+		t.Fatalf("created = %#v, want one new host", fw.created)
 	}
 }
 

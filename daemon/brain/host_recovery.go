@@ -47,3 +47,15 @@ func (s *Service) HostRecoveryDue() bool {
 	}
 	return s.hostRunnable(executor) == nil
 }
+
+// hostHoldsNoConversation reports that the recorded host never held anything a
+// blank replacement could lose: no provider conversation was ever identified and
+// no turn was ever admitted to it. A computer rebooted before its first
+// message restarts Brain; one with a conversation it cannot resume still refuses.
+func (s *Service) hostHoldsNoConversation(host HostSession) bool {
+	if strings.TrimSpace(host.ProviderSessionID) != "" || strings.TrimSpace(host.TranscriptPath) != "" {
+		return false
+	}
+	_, hasTurn, err := s.store.Turn(host.ID)
+	return err == nil && !hasTurn
+}
