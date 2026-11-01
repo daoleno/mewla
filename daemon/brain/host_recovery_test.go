@@ -112,3 +112,37 @@ func TestAnUnsupportedAgentIsNotLaunchedAndSaysWhy(t *testing.T) {
 		t.Fatal("recovery not due after the upgrade")
 	}
 }
+
+// A signed-out agent still gets its pane (the login shell may hold a sign-in
+// Mewla cannot see). When that pane then sits unready and Mewla's view says
+// signed out, the phone is told at once, not after the grace; a pane that
+// becomes ready never counts as stuck, so a shell-environment sign-in is not
+// reported.
+func TestAnUnreadyPaneOfASignedOutAgentSaysSoAtOnce(t *testing.T) {
+	service := hostFixture(t, map[string]bool{"claude": true},
+		map[string]HostAuthState{"claude": HostAuthUnauthenticated})
+	if err := service.store.SetHostSession("brain-host:@1", "claude"); err != nil {
+		t.Fatal(err)
+	}
+	service.watcher = &fakeWatcher{sessions: map[string]*classifier.Worker{
+		"brain-host:@1": {ID: "brain-host:@1", Hidden: true, Command: "claude"},
+	}}
+	notReady := fmt.Errorf("deliver Brain Host activation: %w", fmt.Errorf("%w for %q", watcher.ErrWorkerInputNotReady, "claude"))
+
+	// The pane is up and became ready: signed in through the shell, nothing to say.
+	if snapshot, err := service.Snapshot(); err != nil || snapshot.HostProblem != nil {
+		t.Fatalf("ready pane: %v %+v", err, snapshot.HostProblem)
+	}
+	// It never becomes ready: say how to sign in right away.
+	service.noteHostActivation(notReady)
+	snapshot, _ := service.Snapshot()
+	if snapshot.HostProblem == nil || snapshot.HostProblem.Code != "not_signed_in" ||
+		!strings.Contains(snapshot.HostProblem.Detail, "claude auth login") {
+		t.Fatalf("host problem = %+v", snapshot.HostProblem)
+	}
+	// Signing in clears it.
+	service.noteHostActivation(nil)
+	if snapshot, _ = service.Snapshot(); snapshot.HostProblem != nil {
+		t.Fatalf("not cleared: %+v", snapshot.HostProblem)
+	}
+}
