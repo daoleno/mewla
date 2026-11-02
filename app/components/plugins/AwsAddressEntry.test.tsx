@@ -61,6 +61,7 @@ if (!process.env.MEWLA_AWS_ADDRESS_TEST_CHILD) {
     clipboard.mockResolvedValueOnce("https://us-east-1.signin.aws.amazon.com/oauth?iam_user=true&backwards_compatible=true&redirect_uri=http%3A%2F%2F127.0.0.1%3A9876%2Fplugins%2Foauth%2Fcallback&state=test");
     await act(async () => button(tree, "Paste address").props.onPress());
     expect(tree.root.findByType("notice" as any).props.title).toBe("AWS sign-in didn't finish");
+    expect(tree.root.findByType("notice" as any).props.detailNumberOfLines).toBe(0);
     expect(notice(tree)).toContain("clear signin.aws.amazon.com cookies");
     expect(notice(tree)).toContain("Open AWS again");
     expect(notice(tree)).toContain("AWSMCPSignInOAuthAccessPolicy");

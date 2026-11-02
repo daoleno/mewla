@@ -18,6 +18,8 @@ export type InlineNoticeTone = "neutral" | "accent" | "warning" | "danger";
 interface InlineNoticeProps {
   title: string;
   detail?: string | null;
+  /** Zero keeps all recovery instructions visible. Defaults to three lines. */
+  detailNumberOfLines?: number;
   tone?: InlineNoticeTone;
   icon?: IconName;
   busy?: boolean;
@@ -32,6 +34,7 @@ interface InlineNoticeProps {
 export function InlineNotice({
   title,
   detail,
+  detailNumberOfLines = 3,
   tone = "neutral",
   icon,
   busy = false,
@@ -65,7 +68,7 @@ export function InlineNotice({
           {title}
         </AppText>
         {detail ? (
-          <AppText variant="caption" tone="secondary" numberOfLines={3}>
+          <AppText variant="caption" tone="secondary" numberOfLines={detailNumberOfLines}>
             {detail}
           </AppText>
         ) : null}
