@@ -1,7 +1,7 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Cloudflare, AWS, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
+GitHub, Slack, Cloudflare, AWS, Google Cloud, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
 services. Plugins are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
@@ -52,6 +52,7 @@ Mewla's own app registration with the provider:
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | AWS | **Sign in to AWS**: AWS's own sign-in page, through AWS's MCP server. Nothing to install on the server and no keys. AWS returns only to the computer Mewla runs on: from another device you paste back the address the page ended on | Works everywhere; the button is on the service's page |
+| Google Cloud | Browser sign-in with a desktop OAuth client and PKCE; a remote browser pastes the loopback return address | Requires the operator’s Google client and production verification; no user-entered project field |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
@@ -349,3 +350,56 @@ and similar) answers every lookup with an address in `198.18.0.0/15` and routes
 by name, so Mewla connects to a *name* that resolves there. HTTPS still checks
 the certificate for that name. If your network answers with some other private
 address, the connection fails with "this network answers with a private address".
+
+## Google Cloud
+
+Google Cloud appears beside AWS in Extensions. Connect in your browser once;
+Mewla keeps the OAuth refresh token in its credential vault. It uses Google's
+[Cloud CLI remote MCP server](https://docs.cloud.google.com/sdk/use-gcloud-mcp)
+(public preview), with no local gcloud installation or API key. Google supports
+many gcloud and bq commands, but not every command; its service restrictions
+still apply. Per-service MCP servers are not connected in this version.
+
+The desktop OAuth flow uses PKCE and a loopback callback. On the daemon's
+computer it returns automatically. On another computer or phone, copy the full
+`http://127.0.0.1:…/plugins/oauth/callback?…` address after Google sign-in into
+Mewla and choose Continue. This forwards the existing loopback response; it does
+not request Google's retired out-of-band redirect. Cross-device acceptance still
+needs verification with the publisher's real Google client.
+
+Brain discovers accessible projects with `list_projects`, including pagination.
+The `execution_project` on an MCP call pays for Cloud CLI execution and must have
+billing and Cloud CLI Execution API enabled. The command's `--project=ID` (gcloud)
+or `--project_id=ID` (bq) selects the resources. Brain should use the project your
+task names and ask when that choice is ambiguous. Project discovery needs no
+Cloud CLI API and has no setup field.
+
+The execution project needs `roles/mcp.toolUser` and permission to consume its
+services (normally `roles/serviceusage.serviceUsageConsumer`); accessed resources
+need their own IAM permissions. A blocked account shows setup guidance and a
+Google Cloud Console link. Mewla never enables APIs, billing or IAM roles on its
+own. Refresh the account after changing prerequisites.
+
+Reads are enabled on connection. `read` accepts a reviewed set of gcloud command
+paths and flags; `execute` handles other gcloud commands and bq commands. Enable
+changes in the account card before using execute. Changes, destructive commands,
+IAM or billing operations, and SQL require your authorization for the task.
+Unknown commands cannot bypass read by including words such as `list`.
+Mewla sends one command per request and never retries it automatically.
+
+The publisher/operator must configure a Google Desktop OAuth client before
+Connect is available. Google remote MCP does not offer dynamic registration.
+Use the existing `mewla connections oauth-configure --integration gcp
+--oauth-config-file /private/client.json` command. The private JSON has
+`client_id`, `client_secret`, and `redirect_url` set to an empty string; Mewla
+uses its actual loopback port at sign-in. Credentials belong in the vault, never
+in source or vendor-specific environment variables. Normal users only sign in;
+they are not asked to create clients or enter credentials.
+
+Requested scopes are `cloud-platform` and the basic email identity scope.
+Public distribution remains gated on a Mewla-owned client, Google's applicable
+app verification, and live consent/call validation. Google's Console is the
+source of truth for sensitive versus restricted scope classification; confirm
+`cloud-platform` there before declaring that CASA is unnecessary. Testing-mode
+Google refresh tokens can expire after seven days. Mewla supports refreshing
+valid grants and reconnecting the same account when Google revokes them.

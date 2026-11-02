@@ -55,11 +55,11 @@ export function connectLabel(plugin: Pick<PluginIntegration, "id" | "name">): st
 }
 
 /**
- * The sign-in that renews an AWS account: the same browser sign-in as
+ * The sign-in that renews an account with a loopback return: the same browser sign-in as
  * connecting, naming the card it came from so that card is renewed in place.
  */
-export function awsSignInInput(account: Pick<PluginAccount, "id" | "integration">): { integration: string; account_id: string } | null {
-  return account.integration === "aws" ? { integration: "aws", account_id: account.id } : null;
+export function loopbackSignInInput(account: Pick<PluginAccount, "id" | "integration">): { integration: string; account_id: string } | null {
+  return ["aws", "gcp"].includes(account.integration) ? { integration: account.integration, account_id: account.id } : null;
 }
 
 /**

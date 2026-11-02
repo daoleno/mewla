@@ -28,6 +28,7 @@ export type AwsAccountDetails = {
   checked_at?: string;
 };
 export type PluginAccount = {
+  setup?: { message: string; url: string };
   id: string;
   integration: string;
   name: string;
