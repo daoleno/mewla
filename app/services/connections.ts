@@ -31,7 +31,8 @@ export type PluginAccount = {
   profile?: string;
   profile_kind?: string;
   profile_status?: string;
-  setup?: { message: string; url: string };
+  project?: string;
+  active?: boolean;
   id: string;
   integration: string;
   name: string;
