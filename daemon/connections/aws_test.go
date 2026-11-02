@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -951,5 +952,48 @@ func TestParseAWSPrincipal(t *testing.T) {
 		if who, _ := parseAWSPrincipal(arn); strings.HasPrefix(who, "arn:") {
 			t.Errorf("%s: the headline is an ARN", arn)
 		}
+	}
+}
+
+func TestAWSDisconnectedAccountRenewsWithoutDuplicate(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprint("explicit=", explicit), func(t *testing.T) {
+			f, m, original := connectedAWS(t)
+			mustHandle(t, m, Request{Action: "permissions", ID: original.ID, Group: "write", Allowed: true})
+			mustHandle(t, m, Request{Action: "disconnect", ID: original.ID})
+			in := &Input{Integration: "aws"}
+			if explicit {
+				in.AccountID = original.ID
+			}
+			renewed := f.signIn(m, in)
+			if renewed.ID != original.ID || len(m.records) != 1 || !renewed.Enabled || renewed.Status != "connected" {
+				t.Fatalf("sign-in did not renew the disconnected card: id=%s, enabled=%v, status=%s, records=%d", renewed.ID, renewed.Enabled, renewed.Status, len(m.records))
+			}
+			if m.records[renewed.ID].Grants["execute"] != "" {
+				t.Fatal("disconnected write permission was restored")
+			}
+			if _, err := invokeAWS(m, renewed, "whoami", `{}`); err != nil {
+				t.Fatalf("renewed account cannot identify itself: %v", err)
+			}
+		})
+	}
+}
+
+func TestRetiredAWSProfilesRequestIsNotAMissingAccount(t *testing.T) {
+	m := newAWSFixture(t).manager()
+	_, err := m.Handle(context.Background(), Request{Action: "aws_profiles"})
+	if err == nil || !strings.Contains(err.Error(), "unknown plugin operation") || strings.Contains(err.Error(), "account not found") {
+		t.Fatalf("obsolete web client diagnostic: %v", err)
+	}
+}
+
+func TestAWSConnectPrefersCurrentCardOverDisconnectedDuplicate(t *testing.T) {
+	f, m, original := connectedAWS(t)
+	old := cloneAccount(*original)
+	old.ID, old.Status, old.Enabled = "000-disconnected", "disconnected", false
+	m.records[old.ID] = &record{Account: old, Grants: map[string]string{}}
+	renewed := f.signIn(m, nil)
+	if renewed.ID != original.ID || len(m.records) != 2 || m.records[old.ID].Account.Status != "disconnected" {
+		t.Fatalf("sign-in revived a duplicate instead of renewing current card: %s", renewed.ID)
 	}
 }
