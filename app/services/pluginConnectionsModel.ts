@@ -74,6 +74,17 @@ export function signInAddressFromText(text: string | null | undefined): string {
   return bare && /[?&]state=/.test(address) ? address : "";
 }
 
+/** An AWS-hosted page means sign-in has not returned its result to Mewla. */
+export function isAwsSignInAddress(text: string): boolean {
+  const address = text.trim();
+  if (!address || address.length > 8192 || /\s/.test(address)) return false;
+  try {
+    const url = new URL(address.includes("://") ? address : `https://${address}`);
+    if (!/^https?:$/.test(url.protocol) || url.username || url.password) return false;
+    return ["signin.aws.amazon.com", "signin.aws"].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
+  } catch { return false; }
+}
+
 /**
  * Whether an account can be disconnected. Hyperliquid's mainnet account is how
  * Brain reads the exchange, with or without a key: it is turned off, or loses its key.

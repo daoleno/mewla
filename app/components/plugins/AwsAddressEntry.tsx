@@ -4,7 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import { Radii, useAppColors } from "../../constants/tokens";
 import { AppText, Button, InlineNotice } from "../ui";
 import { outlinedSurface } from "../ui/outlinedSurface";
-import { signInAddressFromText } from "../../services/pluginConnectionsModel";
+import { isAwsSignInAddress, signInAddressFromText } from "../../services/pluginConnectionsModel";
 
 /** The loopback address copied from a browser on another computer. */
 export function AwsAddressEntry({ onSubmit }: { onSubmit(address: string): Promise<void> }) {
@@ -14,8 +14,9 @@ export function AwsAddressEntry({ onSubmit }: { onSubmit(address: string): Promi
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const input = useRef<TextInputInstance>(null);
+  const unfinishedSignIn = isAwsSignInAddress(address);
   const submit = async () => {
-    if (submitting.current) return;
+    if (submitting.current || unfinishedSignIn) return;
     const callback = signInAddressFromText(address);
     if (!callback) {
       setError("Paste the full address starting with http://127.0.0.1 from the page AWS opened after sign-in, even if that page could not load.");
@@ -56,9 +57,13 @@ export function AwsAddressEntry({ onSubmit }: { onSubmit(address: string): Promi
         returnKeyType="done"
       />
     </View>
-    {error ? <InlineNotice tone="danger" title="Check the address" detail={error} /> : null}
+    {unfinishedSignIn ? <InlineNotice
+      tone="warning"
+      title="AWS sign-in didn't finish"
+      detail={"Sign out of AWS or clear signin.aws.amazon.com cookies, then choose Open AWS again.\n\nIf it still fails, ask your admin to grant AWSMCPSignInOAuthAccessPolicy (signin:AuthorizeOAuth2Access + signin:CreateOAuth2Token). Root needs no extra policy."}
+    /> : error ? <InlineNotice tone="danger" title="Check the address" detail={error} /> : null}
     <Button label="Paste address" variant="tinted" block disabled={busy} onPress={() => void paste()} />
-    <Button label="Continue" variant="filled" block loading={busy} disabled={!address.trim()} onPress={() => void submit()} testID="sign-in-address-continue" />
+    <Button label="Continue" variant="filled" block loading={busy} disabled={!address.trim() || unfinishedSignIn} onPress={() => void submit()} testID="sign-in-address-continue" />
   </>;
 }
 

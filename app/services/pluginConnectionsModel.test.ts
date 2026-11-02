@@ -6,6 +6,7 @@ import {
   accountTone,
   awsAccountSummary,
   signInAddressFromText,
+  isAwsSignInAddress,
   awsSignInInput,
   bulkToolNames,
   canDisconnect,
@@ -280,6 +281,21 @@ describe("AWS", () => {
     for (const stray of ["", null, undefined, "short", "two words here", "https://example.com/?state=x&code=y-and-more", "http://127.0.0.1:9877/plugins/oauth/callback?code=abc", "http://127.0.0.1:9877/x\nnext?state=1", "a".repeat(9000)]) {
       expect(signInAddressFromText(stray)).toBe("");
     }
+  });
+
+  test("AWS sign-in pages are distinguished from callbacks and lookalike hosts", () => {
+    for (const address of [
+      "https://us-east-1.signin.aws.amazon.com/oauth?iam_user=true&backwards_compatible=true&redirect_uri=http%3A%2F%2F127.0.0.1%3A9876%2Fplugins%2Foauth%2Fcallback&state=test",
+      "https://signin.aws.amazon.com/signin",
+      "https://us-east-1.oauth.signin.aws/v1/authorize?state=test",
+      "  US-EAST-1.SIGNIN.AWS.AMAZON.COM/oauth  ",
+    ]) expect(isAwsSignInAddress(address)).toBe(true);
+    for (const address of [
+      "", "123456", "http://127.0.0.1:9876/plugins/oauth/callback?state=test&code=test",
+      "https://signin.aws.amazon.com.evil.example/oauth", "https://notsignin.aws/oauth",
+      "https://evil.example/?next=https://signin.aws.amazon.com/oauth",
+      "https://signin.aws.amazon.com@evil.example/oauth", "ftp://signin.aws.amazon.com/oauth",
+    ]) expect(isAwsSignInAddress(address)).toBe(false);
   });
 
   test("the service row says Reconnect for an expired account", () => {

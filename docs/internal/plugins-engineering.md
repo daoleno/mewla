@@ -107,3 +107,15 @@ background status polling cannot clear these errors or swallow Continue. Flow
 expiry comes from the status request, never from matching words in an address
 validation error. The daemon still checks the exact registered callback and
 state before consuming the single-use authorization code and PKCE verifier.
+
+Pasting an AWS-hosted sign-in URL (`signin.aws.amazon.com` or `signin.aws`,
+including their subdomains) immediately explains that AWS sign-in did not finish.
+It never extracts the nested `redirect_uri` or submits that URL as a callback.
+The card suggests signing out or clearing AWS sign-in cookies, then Open AWS
+again; it also names `AWSMCPSignInOAuthAccessPolicy` for the IAM identity and
+explains that root needs no extra policy. These are recovery checks, not a
+diagnosis from the URL: [aws/aws-cli#10186](https://github.com/aws/aws-cli/issues/10186)
+records the stale-session 400 path, while [AWS's MCP prerequisites](https://docs.aws.amazon.com/signin/latest/userguide/aws-mcp-server.html)
+document `signin:AuthorizeOAuth2Access` and `signin:CreateOAuth2Token`. An
+unauthenticated request cannot establish which error an under-permissioned IAM
+identity will receive after login.
