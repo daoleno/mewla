@@ -10,7 +10,7 @@ import { ContentWidth, Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
-import { awsSignInInput, connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { loopbackSignInInput, connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -348,10 +348,10 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     return !!response;
   };
   const recover = (account: PluginAccount, action: AccountRecoveryAction) => {
-    // An AWS account signs in again with the same browser sign-in as connecting,
+    // A loopback account signs in again with the same browser sign-in as connecting,
     // naming itself so it is renewed in place.
-    const awsSignIn = action === "reconnect" ? awsSignInInput(account) : null;
-    if (awsSignIn) void connect(account.integration, { input: awsSignIn });
+    const signIn = action === "reconnect" ? loopbackSignInInput(account) : null;
+    if (signIn) void connect(account.integration, { input: signIn });
     else if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
     else if (action === "disconnect") void disconnect(account);
     else void connect(account.integration, { writes: reconnectsWithWrites(account) });

@@ -7,7 +7,7 @@ import {
   awsAccountSummary,
   signInAddressFromText,
   isAwsSignInAddress,
-  awsSignInInput,
+  loopbackSignInInput,
   bulkToolNames,
   canDisconnect,
   connectLabel,
@@ -265,8 +265,8 @@ describe("AWS", () => {
   test("an expired session offers the same Sign in to AWS button, naming its own card", () => {
     const expired = aws({ id: "aws-3", status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired. Sign in again." }] });
     expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" });
-    expect(awsSignInInput(expired)).toEqual({ integration: "aws", account_id: "aws-3" });
-    expect(awsSignInInput(account({ integration: "github" }))).toBeNull();
+    expect(loopbackSignInInput(expired)).toEqual({ integration: "aws", account_id: "aws-3" });
+    expect(loopbackSignInInput(account({ integration: "github" }))).toBeNull();
     expect(connectLabel({ id: "aws", name: "AWS" })).toBe("Sign in to AWS");
     expect(connectLabel({ id: "github", name: "GitHub" })).toBe("Connect GitHub");
     // No terminal command anywhere.
@@ -326,4 +326,10 @@ describe("awsAccountSummary", () => {
     expect(awsAccountSummary({ ...base })).toBeNull();
     expect(awsAccountSummary({ integration: "github", identity: "x", aws: { account_id: "1", who: "x" } })).toBeNull();
   });
+});
+
+// Google uses the same cross-device return and preserves the existing account.
+test("Google Cloud reconnect keeps its account identity", () => {
+  expect(loopbackSignInInput({ id: "gcp-account", integration: "gcp" })).toEqual({ integration: "gcp", account_id: "gcp-account" });
+  expect(loopbackSignInInput({ id: "other", integration: "github" })).toBeNull();
 });

@@ -19,7 +19,7 @@ export function AwsAddressEntry({ onSubmit }: { onSubmit(address: string): Promi
     if (submitting.current || unfinishedSignIn) return;
     const callback = signInAddressFromText(address);
     if (!callback) {
-      setError("Paste the full address starting with http://127.0.0.1 from the page AWS opened after sign-in, even if that page could not load.");
+      setError("Paste the full address starting with http://127.0.0.1 from the page opened after sign-in, even if that page could not load.");
       return;
     }
     submitting.current = true; setBusy(true); setError("");

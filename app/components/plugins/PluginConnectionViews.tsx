@@ -2,7 +2,7 @@ import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { ActivityIndicator, StyleSheet, Switch, View, type SwitchProps } from "react-native";
+import { ActivityIndicator, Linking, StyleSheet, Switch, View, type SwitchProps } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
@@ -44,6 +44,7 @@ const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
   aws: "cube",
+  gcp: "server",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
@@ -304,7 +305,7 @@ export function ConnectStatusCard({
   if (phase === "opening") return <StatusCard busy title={`Opening ${serviceName}…`} />;
   if ((phase === "waiting" || phase === "verifying") && flow?.flow.address_required) {
     return (
-      <StatusCard title={`Finish signing in to ${serviceName}`} detail="After AWS sign-in, a page starting with http://127.0.0.1 may fail to load on this computer. Copy its full address, paste it below, then choose Continue.">
+      <StatusCard title={`Finish signing in to ${serviceName}`} detail="After sign-in, a page starting with http://127.0.0.1 may fail to load on this computer. Copy its full address, paste it below, then choose Continue.">
         <AwsAddressEntry key={flow.flow.id} onSubmit={onSubmitAddress} />
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block disabled={phase === "verifying"} onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
@@ -520,6 +521,12 @@ export function AccountCard({
             />
           )) : null}
         </>
+      ) : null}
+      {account.setup ? (
+        <View style={styles.confirm}>
+          <InlineNotice tone="warning" title={`Finish ${plugin.name} setup`} detail={account.setup.message} />
+          <Button label={`Open ${plugin.name}`} variant="plain" icon="open-external" onPress={() => { const url = account.setup?.url; if (url) void Linking.openURL(url); }} />
+        </View>
       ) : null}
       {custom ? null : [group("read"), group("write")]}
       <ListRow
