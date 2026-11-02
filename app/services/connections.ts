@@ -1,4 +1,5 @@
 export type PluginIntegration = {
+  cli?: { version: string; managed: boolean };
   id: string;
   name: string;
   available: boolean;
@@ -28,6 +29,7 @@ export type AwsAccountDetails = {
   checked_at?: string;
 };
 export type PluginAccount = {
+  checking?: boolean;
   profile?: string;
   profile_kind?: string;
   profile_status?: string;

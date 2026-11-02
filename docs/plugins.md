@@ -51,8 +51,8 @@ Mewla's own app registration with the provider:
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
-| AWS | Local AWS CLI profiles. Sign in remotely and paste the code; install the official CLI with one tap if needed | Phone and web manage the same profiles on the current server |
-| Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; one-tap Linux and macOS installation |
+| AWS | Local AWS CLI profiles. Sign in remotely and paste the code; Mewla maintains the official CLI automatically | Phone and web manage the same profiles on the current server |
+| Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; automatic Linux and macOS SDK updates |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
@@ -133,13 +133,27 @@ permissions there.
 Extensions shows the profiles from the current computer's AWS CLI, including
 login sessions, SSO, static keys and credential processes. Each card shows its
 kind, status, account ID and alias when available. Refresh to pick up profiles
-added or removed in a terminal. Identity checks are cached for one minute.
+added or removed in a terminal. The list appears immediately from the last known
+state. Profile discovery, identity and expiry checks refresh in the background
+at most once a minute; open pages receive the results automatically. A quiet
+**Checking…** pill marks rows being refreshed. Other services never wait for these checks.
 
-**Sign in.** Add an account or choose **Sign in again**. Mewla runs the installed
+**Sign in.** Add an account or choose **Sign in again**. Mewla runs its managed official
 AWS CLI's remote sign-in. Open AWS, sign in on any device, and paste the code
 AWS shows into Mewla. This is the same flow on phones and desktop computers.
 The AWS CLI keeps its own session; Mewla keeps no copy of credentials.
-If the CLI is missing, choose **Install and sign in**.
+Mewla installs and updates its own official CLI inside its state directory,
+without sudo or changing your system installation. It checks at most daily,
+updates in the background, and waits for a check before the first command or
+after seven days without a successful check. Running commands keep their
+original installation. Packages must pass signature and smoke checks before
+activation. If an update fails, Mewla keeps the working version; if it cannot
+install its own CLI, it can use a local AWS CLI 2.32 or later. The service details
+show the selected version and whether it is managed by Mewla. `mewla aws --version`
+reports that same executable without requiring an enabled account.
+
+All versions share your existing `~/.aws` profiles and sign-in caches. There is
+no separate Mewla credential directory and no update setting to maintain.
 
 **Use a profile.** Turn its switch on to let agents use it. Existing valid
 profiles need no new sign-in. Reads are allowed by default; changes remain off
@@ -323,16 +337,20 @@ OAuth exchange and refresh. There is no Mewla Google client, MCP API or MCP role
 The normal gcloud configuration/credential directory is the single source of
 truth, including `CLOUDSDK_CONFIG` when configured. ADC is separate and unchanged.
 
-When gcloud is absent, Install and sign in installs the pinned official archive
-under Mewla's CLI directory without sudo or shell startup changes. The installer
-checks SHA256, stages and verifies the SDK, and only then publishes its launcher.
-Download, verification or installation failures show one explanation and Retry;
-failed and interrupted staging is cleaned up before the next attempt. Downloads
-are bounded to 90 seconds and the whole install to three minutes. Unsupported
-hosts show exactly what to install, a link to Google's instructions and Check
-again. Installing into `~/google-cloud-sdk` is discovered without restarting the
-daemon. Automatic installation supports Linux/macOS x86_64 and Arm64; macOS needs
-Python 3.10–3.15.
+Mewla maintains its own official SDK without sudo or shell startup changes.
+A checksum-verified official archive bootstraps Google's component updater;
+subsequent releases come from the SDK's official update channel, so they do not
+wait for a Mewla release or a changed pinned digest. Updates run in an independent
+SDK copy with temporary installer settings, then pass version and smoke checks
+before an atomic switch. Running commands keep their SDK; normal commands always
+use your existing gcloud configuration directory. The update cadence and quiet
+version details match AWS. Offline or unsupported hosts can use a local gcloud
+400.0.0 or later, including installations in `~/google-cloud-sdk`.
+
+Automatic installation supports Linux/macOS x86_64 and Arm64; macOS needs
+Python 3.10–3.15. `mewla gcloud --version` shows the selected executable's version.
+Accounts and configurations refresh in the background and update open pages
+without blocking the service list.
 
 Agents use `mewla gcloud projects list`, or select an enabled account with
 `mewla gcloud --account person@example.com compute instances list --project ID`.

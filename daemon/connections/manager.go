@@ -33,6 +33,11 @@ type record struct {
 }
 
 type Manager struct {
+	snapshots       *connectionSnapshots
+	cloudInfo       map[string]*CLIInfo
+	transient       bool
+	cloudDiscovered func()
+
 	mu           sync.Mutex // mutations and invocation are linearized; revoke waits for an in-flight call
 	path         string
 	vault        modelprofiles.CredentialStore
@@ -68,6 +73,8 @@ func New(dir string) (*Manager, error) {
 // Isolated protocol clients/tests do not read the host credential configuration.
 func (m *Manager) EnableLocalCloudCLI() {
 	m.cloud = newCloudRuntime(filepath.Join(filepath.Dir(m.path), "cli"))
+	m.cloud.enableUpdates()
+	m.cacheListLocked()
 }
 
 // EnsureDefaults adds the accounts every server has without setup. It makes no
@@ -75,11 +82,12 @@ func (m *Manager) EnableLocalCloudCLI() {
 func (m *Manager) EnsureDefaults() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	defer m.cacheListLocked()
 	return m.ensureHyperliquidReader()
 }
 
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
-	m := &Manager{path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
+	m := &Manager{snapshots: newConnectionSnapshots(), cloudInfo: map[string]*CLIInfo{}, path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -97,6 +105,7 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 	if err := m.removeOldAWS(); err != nil {
 		return nil, err
 	}
+	m.cacheListLocked()
 	return m, nil
 }
 
@@ -134,6 +143,9 @@ func (m *Manager) removeRetired() error {
 	return nil
 }
 func (m *Manager) save() error {
+	if m.transient {
+		return nil
+	}
 	records := map[string]*record{}
 	for id, r := range m.records {
 		if !m.isPending(id) {
@@ -150,6 +162,8 @@ func (m *Manager) save() error {
 	if err := atomicfile.Write(m.path, raw, 0o600); err != nil {
 		return errors.New("plugin catalog could not be saved")
 	}
+	// Remote MCP invocations also save outside Handle's ordinary dispatch path.
+	m.cacheListLocked()
 	return nil
 }
 
@@ -187,6 +201,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	if len(raw) > MaxRequestBytes {
 		return Response{}, errors.New("plugin request is too large")
 	}
+	if q.Action == "list" {
+		m.refreshCloudProfiles()
+		return m.cachedList(), nil
+	}
 	if q.Action == "invoke" {
 		// A remote MCP tool that waits for its work (Onlora's wait_s) can take
 		// minutes; it runs outside the manager lock.
@@ -208,10 +226,17 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	case "get", "describe":
 		_ = m.syncRemoteTools(parent, q.ID, false, 4*time.Second)
 	}
+	// Installation waits outside the account lock and command deadline.
+	if q.Action == "cloud_run" && m.cloud != nil {
+		if err := m.cloud.prepare(parent, q.Integration); err != nil {
+			return Response{}, err
+		}
+	}
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	defer m.cacheListLocked()
 	if ctx.Err() != nil {
 		return Response{}, safeError(ctx.Err())
 	}
@@ -225,25 +250,6 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return m.renameAWSProfile(ctx, q)
 	case "cloud_delete":
 		return m.deleteCloudProfile(ctx, q)
-	case "list":
-		if m.cloud != nil {
-			for _, provider := range m.cloud.providers {
-				if err := provider.syncProfiles(m, ctx, false); err != nil {
-					return Response{}, err
-				}
-			}
-		}
-		accounts := make([]Account, 0, len(m.records))
-		for _, r := range m.records {
-			if m.isPending(r.Account.ID) {
-				continue
-			}
-			a := m.projection(r)
-			a.Tools = nil
-			accounts = append(accounts, a)
-		}
-		sort.Slice(accounts, func(i, j int) bool { return accounts[i].Name < accounts[j].Name })
-		return Response{Catalog: m.catalog(), Accounts: accounts, OAuthConfigured: m.oauthConfigured()}, nil
 	case "oauth_configure":
 		return m.configureOAuth(q.Input)
 	case "oauth_start":

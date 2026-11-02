@@ -130,9 +130,11 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 		}
 	}
 	type check struct {
-		r   *record
-		out cloudOutput
-		err error
+		r     *record
+		out   cloudOutput
+		err   error
+		name  string
+		state string
 	}
 	checks := []*check{}
 	names := []string{}
@@ -166,6 +168,9 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 		}
 		checks = append(checks, &check{r: r})
 	}
+	if m.cloudDiscovered != nil {
+		m.cloudDiscovered()
+	}
 	// Bounded parallel identity checks prevent one expired profile from blocking
 	// every card. The cache lasts only a minute and does not cache the profile list.
 	var wg sync.WaitGroup
@@ -184,6 +189,37 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 			probe, cancel := context.WithTimeout(ctx, 4*time.Second)
 			defer cancel()
 			c.out, c.err = m.cloudCommand(probe, "aws", c.r.CLI.Profile, []string{"sts", "get-caller-identity", "--output", "json", "--region", c.r.Account.Region})
+			var identity awsIdentity
+			if c.err == nil && c.out.ExitCode == 0 && json.Unmarshal([]byte(c.out.Stdout), &identity) == nil && identity.Account != "" {
+				// Aliases are optional. A denial never invalidates the identity.
+				probe, cancel := context.WithTimeout(ctx, 2*time.Second)
+				aliases, e := m.cloudCommand(probe, "aws", c.r.CLI.Profile, []string{"iam", "list-account-aliases", "--output", "json", "--region", c.r.Account.Region})
+				cancel()
+				if e == nil && aliases.ExitCode == 0 {
+					var v struct {
+						Aliases []string `json:"AccountAliases"`
+					}
+					if json.Unmarshal([]byte(aliases.Stdout), &v) == nil && len(v.Aliases) > 0 {
+						c.name = v.Aliases[0]
+					}
+				}
+				if c.name == "" {
+					probe, cancel := context.WithTimeout(ctx, 2*time.Second)
+					info, e := m.cloudCommand(probe, "aws", c.r.CLI.Profile, []string{"account", "get-account-information", "--output", "json", "--region", awsDefaultRegion})
+					cancel()
+					if e == nil && info.ExitCode == 0 {
+						var value struct {
+							Name  string `json:"AccountName"`
+							State string `json:"AccountState"`
+						}
+						if json.Unmarshal([]byte(info.Stdout), &value) == nil {
+							c.name = value.Name
+							c.state = value.State
+						}
+					}
+				}
+			}
+
 		}(c)
 	}
 	wg.Wait()
@@ -204,33 +240,10 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 			if previous != nil && previous.AccountID == id.Account {
 				r.Account.AWS.AccountName = previous.AccountName
 			}
-			// Aliases are optional. A denial never invalidates the identity.
-			probe, cancel := context.WithTimeout(ctx, 2*time.Second)
-			aliases, e := m.cloudCommand(probe, "aws", r.CLI.Profile, []string{"iam", "list-account-aliases", "--output", "json", "--region", r.Account.Region})
-			cancel()
-			if e == nil && aliases.ExitCode == 0 {
-				var v struct {
-					Aliases []string `json:"AccountAliases"`
-				}
-				if json.Unmarshal([]byte(aliases.Stdout), &v) == nil && len(v.Aliases) > 0 {
-					r.Account.AWS.AccountName = v.Aliases[0]
-				}
+			if c.name != "" {
+				r.Account.AWS.AccountName = c.name
 			}
-			if r.Account.AWS.AccountName == "" {
-				probe, cancel := context.WithTimeout(ctx, 2*time.Second)
-				info, e := m.cloudCommand(probe, "aws", r.CLI.Profile, []string{"account", "get-account-information", "--output", "json", "--region", awsDefaultRegion})
-				cancel()
-				if e == nil && info.ExitCode == 0 {
-					var value struct {
-						Name  string `json:"AccountName"`
-						State string `json:"AccountState"`
-					}
-					if json.Unmarshal([]byte(info.Stdout), &value) == nil {
-						r.Account.AWS.AccountName = value.Name
-						r.Account.AWS.AccountState = value.State
-					}
-				}
-			}
+			r.Account.AWS.AccountState = c.state
 
 		} else {
 			r.Account.Status = "authorization_required"

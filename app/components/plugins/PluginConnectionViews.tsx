@@ -237,6 +237,11 @@ export function ServiceHeader({ plugin, state }: { plugin: PluginIntegration; st
             {plugin.description}
           </AppText>
         ) : null}
+        {plugin.cli ? (
+          <AppText variant="compact" tone="secondary">
+            {plugin.id === "aws" ? "AWS CLI" : "Google Cloud CLI"} {plugin.cli.version} · {plugin.cli.managed ? "managed by Mewla" : "local installation"}
+          </AppText>
+        ) : null}
       </View>
     </View>
   );

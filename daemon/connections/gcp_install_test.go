@@ -120,8 +120,9 @@ type installFlowGcloud struct {
 	fail   bool
 }
 
-func (p *installFlowGcloud) binary() string         { return "gcloud-install-test-not-on-path" }
-func (p *installFlowGcloud) installPaths() []string { return nil }
+func (p *installFlowGcloud) validateExecutable(context.Context, string) error { return nil }
+func (p *installFlowGcloud) binary() string                                   { return "gcloud-install-test-not-on-path" }
+func (p *installFlowGcloud) installPaths() []string                           { return nil }
 func (p *installFlowGcloud) installSupport() (string, string) {
 	if p.manual {
 		return gcpInstallSupport("unsupported/test")

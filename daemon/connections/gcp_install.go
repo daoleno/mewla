@@ -16,6 +16,10 @@ import (
 
 type gcpArchive struct{ name, digest string }
 
+// Bootstrap pins are refreshed in the Mewla release checklist; the official
+// SDK component updater supplies current releases independently of these pins.
+const gcpBootstrapVersion = "591.0.0"
+
 var gcpArchives = map[string]gcpArchive{
 	"linux/amd64":  {"linux-x86_64", "78c570f5fcfe58a9311bd98c06b75530595e3cae6277aad75a676a39e6ee7b63"},
 	"linux/arm64":  {"linux-arm", "f5e5df0433f77c0e7f5df9fd4bce2e46c7b7967e79cf66e31b1164d3d4c86546"},
@@ -52,7 +56,7 @@ func (gcloudCLI) install(ctx context.Context, dir string) error {
 		message, _ := gcpInstallSupport(runtime.GOOS + "/" + runtime.GOARCH)
 		return errors.New(message)
 	}
-	return installGCPArchive(ctx, dir, pkg, &http.Client{Timeout: 90 * time.Second}, runCloudProcess)
+	return updateGCPSDK(ctx, dir, pkg, &http.Client{Timeout: 90 * time.Second}, runCloudProcess)
 }
 
 // Network and process boundaries are injectable for fault tests; the real
@@ -117,7 +121,7 @@ func installGCPArchive(ctx context.Context, dir string, pkg gcpArchive, client *
 		return failed()
 	}
 	defer os.RemoveAll(scratch)
-	req, _ := http.NewRequestWithContext(ctx, "GET", "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-591.0.0-"+pkg.name+".tar.gz", nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-"+gcpBootstrapVersion+"-"+pkg.name+".tar.gz", nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		return errors.New("Couldn't download gcloud. Check your connection and retry.")

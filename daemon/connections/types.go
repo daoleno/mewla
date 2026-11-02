@@ -27,12 +27,13 @@ const MaxToolSchemaBytes = 256 << 10
 const MaxToolSchemasBytes = 2 << 20
 
 type Integration struct {
-	ID                string `json:"id"`
-	Name              string `json:"name"`
-	Available         bool   `json:"available"`
-	SetupURL          string `json:"setup_url"`
-	Description       string `json:"description"`
-	UnavailableReason string `json:"unavailable_reason,omitempty"`
+	CLI               *CLIInfo `json:"cli,omitempty"`
+	ID                string   `json:"id"`
+	Name              string   `json:"name"`
+	Available         bool     `json:"available"`
+	SetupURL          string   `json:"setup_url"`
+	Description       string   `json:"description"`
+	UnavailableReason string   `json:"unavailable_reason,omitempty"`
 }
 
 type Tool struct {
@@ -58,6 +59,7 @@ type Event struct {
 }
 
 type Account struct {
+	Checking           bool       `json:"checking,omitempty"`
 	Project            string     `json:"project,omitempty"`
 	Active             bool       `json:"active,omitempty"`
 	Profile            string     `json:"profile,omitempty"`

@@ -116,7 +116,8 @@ type testGcloudCLI struct {
 	path string
 }
 
-func (p testGcloudCLI) binary() string { return p.path }
+func (p testGcloudCLI) validateExecutable(context.Context, string) error { return nil }
+func (p testGcloudCLI) binary() string                                   { return p.path }
 func testGCPManager(t *testing.T) (*Manager, *[]gcpConfiguration, *[]gcpCredential, *[]string) {
 	t.Helper()
 	m, _, _, _ := testCloudManager(t)

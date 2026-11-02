@@ -33,6 +33,9 @@ func (m *Manager) startCloud(ctx context.Context, in *Input) (Response, error) {
 	m.connectFlows[f.ID] = f
 	if _, err := m.cloud.executable(in.Integration); err != nil {
 		m.cloudInstallPrompt(f)
+		if m.cloud.updates != nil && !f.InstallManual {
+			m.startManagedCloudInstall(f, false)
+		}
 		return flowResult(f), nil
 	}
 	if err := m.launchCloudLogin(ctx, f); err != nil {
@@ -51,6 +54,31 @@ func (m *Manager) cloudInstallPrompt(f *connectFlow) {
 		f.InstallManual = message != ""
 		f.Message, f.InstallURL = message, address
 	}
+}
+
+// An onboarding flow observes the shared update without owning or cancelling it.
+func (m *Manager) startManagedCloudInstall(f *connectFlow, force bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	login := &cloudLogin{cancel: cancel, output: &boundedBuffer{limit: 32768}, done: make(chan struct{})}
+	f.cli = login
+	f.InstallRequired = false
+	f.InstallFailed = false
+	f.Installing = true
+	f.Message = ""
+	done := m.cloud.refresh(f.Integration, force)
+	go func() {
+		defer close(login.done)
+		defer cancel()
+		if done != nil {
+			select {
+			case <-done:
+			case <-ctx.Done():
+				login.err = ctx.Err()
+				return
+			}
+		}
+		_, login.err = m.cloud.resolveExecutable(f.Integration)
+	}()
 }
 
 func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
@@ -124,6 +152,10 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 				return flowResult(f), nil
 			}
 			if f.InstallManual {
+				return flowResult(f), nil
+			}
+			if m.cloud.updates != nil {
+				m.startManagedCloudInstall(f, true)
 				return flowResult(f), nil
 			}
 			installCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -211,6 +243,15 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 	if m.cloud == nil || m.cloud.providers[q.Integration] == nil {
 		return Response{}, errors.New("Cloud CLI is unavailable")
+	}
+	// Version probes do not need an account or cloud authorization.
+	if len(q.CLIArgs) == 1 && q.CLIArgs[0] == "--version" {
+		binary, err := m.cloud.executable(q.Integration)
+		if err != nil {
+			return Response{}, err
+		}
+		out, err := m.cloud.run(ctx, binary, q.CLIArgs, m.cloud.providers[q.Integration].environment())
+		return Response{CLIOutput: &out}, err
 	}
 	if err := m.cloud.providers[q.Integration].syncProfiles(m, ctx, false); err != nil {
 		return Response{}, err

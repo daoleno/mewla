@@ -48,12 +48,18 @@ type cloudRuntime struct {
 	providers    map[string]cloudProvider
 	run          func(context.Context, string, []string, []string) (cloudOutput, error)
 	checked      map[string]time.Time
+	updates      *cloudUpdates
 }
 
 func newCloudRuntime(dir string) *cloudRuntime {
 	return &cloudRuntime{profileFiles: awsProfileFiles, dir: dir, providers: map[string]cloudProvider{"aws": awsCLI{}, "gcp": gcloudCLI{}}, run: runCloudProcess, checked: map[string]time.Time{}}
 }
 func (c *cloudRuntime) executable(id string) (string, error) {
+	c.refresh(id, false)
+	return c.resolveExecutable(id)
+}
+
+func (c *cloudRuntime) resolveExecutable(id string) (string, error) {
 	p := c.providers[id]
 	if p == nil {
 		return "", errors.New("Cloud CLI is not supported")
@@ -68,15 +74,19 @@ func (c *cloudRuntime) executable(id string) (string, error) {
 		}
 		return true
 	}
-	if path, err := exec.LookPath(p.binary()); err == nil && validate(path) {
-		return path, nil
-	}
 	paths := []string{filepath.Join(c.dir, id, "bin", p.binary())}
+	if path, err := exec.LookPath(p.binary()); err == nil {
+		paths = append(paths, path)
+	}
 	if provider, ok := p.(interface{ installPaths() []string }); ok {
 		paths = append(paths, provider.installPaths()...)
 	}
 	for _, path := range paths {
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0111 != 0) && validate(path) {
+			// Bind the command to an immutable generation before activation changes.
+			if resolved, err := filepath.EvalSymlinks(path); err == nil {
+				return resolved, nil
+			}
 			return path, nil
 		}
 	}
@@ -221,6 +231,18 @@ func cloudForbidden(args []string) error {
 
 // Close reaps all interactive logins owned by this daemon.
 func (m *Manager) Close() {
+	if m.snapshots != nil {
+		m.snapshots.mu.Lock()
+		m.snapshots.cancel()
+		m.snapshots.mu.Unlock()
+		m.snapshots.wg.Wait()
+	}
+	if m.cloud != nil && m.cloud.updates != nil {
+		m.cloud.updates.mu.Lock()
+		m.cloud.updates.cancel()
+		m.cloud.updates.mu.Unlock()
+		m.cloud.updates.wg.Wait()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, f := range m.connectFlows {

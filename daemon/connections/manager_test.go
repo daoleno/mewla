@@ -36,6 +36,23 @@ func testManager(t *testing.T, rt roundTripFunc) *Manager {
 }
 func mustHandle(t *testing.T, m *Manager, q Request) Response {
 	t.Helper()
+	// Most fixtures ask for the settled state; async behavior is tested by calling
+	// Handle directly in cloud_refresh_test.go with a blocked CLI.
+	if q.Action == "list" {
+		m.mu.Lock()
+		if m.cloud != nil {
+			for id, p := range m.cloud.providers {
+				if err := p.syncProfiles(m, context.Background(), false); err != nil {
+					t.Fatal(err)
+				}
+				m.snapshots.mu.Lock()
+				m.snapshots.checked[id] = time.Now()
+				m.snapshots.mu.Unlock()
+			}
+		}
+		m.cacheListLocked()
+		m.mu.Unlock()
+	}
 	r, err := m.Handle(context.Background(), q)
 	if err != nil {
 		t.Fatal(err)

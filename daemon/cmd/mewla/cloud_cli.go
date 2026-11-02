@@ -47,7 +47,7 @@ func runCloudCommand(integration string, args []string, stderr io.Writer) error 
 		if name == "gcp" {
 			name = "gcloud"
 		}
-		fmt.Fprintf(stderr, "Usage: mewla %s [--profile NAME] [--mewla-authorize] <CLI arguments>\nRead commands run directly. Other commands require enabled writes and explicit task-specific user authorization (--mewla-authorize). Profiles are managed in Extensions and the local vendor CLI. Output is the CLI's own output; JSON by default. Commands are never retried.\n", name)
+		fmt.Fprintf(stderr, "Usage: mewla %s [--profile NAME] [--mewla-authorize] <CLI arguments>\nRead commands run directly. Other commands require enabled writes and explicit task-specific user authorization (--mewla-authorize). Mewla keeps its official CLI up to date; --version shows the selected CLI. Profiles are shared with the local vendor CLI. Output is the CLI's own output; JSON by default. Commands are never retried.\n", name)
 		return nil
 	}
 	q, err := cloudCLIRequest(integration, args)
@@ -58,7 +58,7 @@ func runCloudCommand(integration string, args []string, stderr io.Writer) error 
 	if err != nil {
 		return err
 	}
-	response, err := control.CallWithTimeout(socket, control.Request{Type: "connections", ConnectionRequest: &q}, time.Minute)
+	response, err := control.CallWithTimeout(socket, control.Request{Type: "connections", ConnectionRequest: &q}, 5*time.Minute)
 	if err != nil {
 		return err
 	}
