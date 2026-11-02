@@ -18,7 +18,7 @@ func TestGCPCLIClassification(t *testing.T) {
 			t.Fatalf("read %v: %v", args, err)
 		}
 	}
-	for _, args := range [][]string{{"projects", "delete", "list"}, {"iam", "roles", "list"}, {"billing", "accounts", "list"}, {"sql", "instances", "list"}, {"secrets", "versions", "access", "latest"}, {"run", "services", "describe", "secret-env"}, {"projects", "list", "--unknown=value"}, {"projects", "list", "--impersonate-service-account=x"}, {"compute", "ssh", "host"}, {"auth", "print-access-token"}, {"projects", "list", "--flags-file=/etc/passwd"}, {"projects", "list", "--conf=other"}, {"projects", "list", "--account=other"}} {
+	for _, args := range [][]string{{"projects", "delete", "list"}, {"iam", "roles", "list"}, {"billing", "accounts", "list"}, {"sql", "instances", "list"}, {"secrets", "versions", "access", "latest"}, {"run", "services", "describe", "secret-env"}, {"projects", "list", "--unknown=value"}, {"projects", "list", "--impersonate-service-account=x"}, {"compute", "ssh", "host"}, {"auth", "print-access-token"}, {"secrets", "versions", "add", "example", "--data-file=/etc/passwd"}, {"projects", "list", "--flags-file=/etc/passwd"}, {"projects", "list", "--conf=other"}, {"projects", "list", "--account=other"}} {
 		read, err := p.classify(args)
 		if err == nil && read {
 			t.Fatalf("unsafe read: %v", args)
