@@ -363,7 +363,7 @@ func contains(list []string, s string) bool {
 
 // OAuthCallback is intentionally public: an unguessable, expiring single-use
 // state and PKCE bind it to setup authorized via the paired/control boundary.
-// Neither tokens nor authorization codes appear in the browser response.
+// Unknown states stay in the browser so a return to another computer can be recovered.
 func (m *Manager) OAuthCallback(w http.ResponseWriter, req *http.Request) {
 	m.BrowserOAuthCallback(w, req, false)
 }
@@ -382,6 +382,15 @@ func (m *Manager) BrowserOAuthCallback(w http.ResponseWriter, req *http.Request,
 	defer cancel()
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	values := req.URL.Query()
+	if len(values["state"]) != 1 || values.Get("state") == "" {
+		http.Error(w, "Invalid authorization response", http.StatusBadRequest)
+		return
+	}
+	if _, owns := m.pending[values.Get("state")]; !owns {
+		foreignOAuthReturn(w)
+		return
+	}
 	m.finishOAuth(w, req, ctx, false, webUI)
 }
 
