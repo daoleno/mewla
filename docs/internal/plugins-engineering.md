@@ -119,3 +119,7 @@ release containing this fix (after 0.2.88); updating zen alone cannot change a
 callback already handled by a Mac daemon.
 
 Cloud profiles share a compact account list: the service row summarizes sign-in counts, valid profiles precede unchecked ones, and expired/invalid profiles are collapsed. Selecting a row reveals its existing permissions and delete confirmation. Filtering appears above eight profiles and matches profile, account identity, alias and project. Sign-in status is independent of whether agents have access. Add/sign-in stays above the list.
+
+AWS profile names are the actual CLI section names. After sign-in the completion card suggests account/role naming; Rename in an account's detail uses `cloud_rename` with `profile`, validates a unique CLI-safe name, backs up config and credentials, atomically replaces each file (rolling back on failure), updates `source_profile` references and carries agent/write grants to the new profile ID. A terminal rename appears on the next refresh; as a new external profile it starts with agents disabled.
+
+Expiry is read locally from the matching AWS login cache (SHA-256 of login_session) or SSO cache (SHA-1 of session name/start URL). Static keys show none. AWS login `accessToken.expiresAt` is rotating credential expiry, not a promised sign-in deadline; automatic refresh may extend it. The detail states this, and identity verification determines whether the account belongs in Expired. No token/key is returned. Gcloud user credentials have no invented sign-in expiry.

@@ -54,6 +54,7 @@ export default function PluginServiceScreen() {
       onRecover={(action) => { close(); flow.recover(account, action); }}
       onSetEnabled={(on) => flow.setEnabled(account, on)}
       onDisconnect={() => flow.disconnect(account)}
+      onRename={(name) => flow.renameProfile(account, name)}
       onRemoveKey={trading ? () => flow.removeKey(account) : undefined}
       onOpenTools={() => router.push({ pathname: `${pluginServicePath(plugin.id)}/tools`, params: { account: account.id } } as never)}
     />;

@@ -87,7 +87,8 @@ type testAWSCLI struct {
 	path string
 }
 
-func (p testAWSCLI) binary() string { return p.path }
+func (p testAWSCLI) validateExecutable(context.Context, string) error { return nil }
+func (p testAWSCLI) binary() string                                   { return p.path }
 func TestCloudProfileListAndDeleteAreScoped(t *testing.T) {
 	m, config, creds, calls := testCloudManager(t)
 	original := "# keep comment\n[profile keep]\nregion = eu-west-1\n[profile throwaway]\nlogin_session = test-session\n[services private]\nfoo = bar\n"
