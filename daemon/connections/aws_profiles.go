@@ -160,7 +160,7 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 		}
 		r.Account.ProfileKind = awsProfileKind(fields[name])
 		r.Account.Profile = name
-		r.Account.ProfileExpiresAt, r.Account.ProfileExpirySource = awsProfileExpiry(config, fields[name])
+		r.Account.ProfileSignInBy, r.Account.ProfileSignInLimit = awsProfileExpiry(config, fields[name], r.CLI)
 		if !force && time.Since(m.cloud.checked[name]) < time.Minute {
 			continue
 		}
@@ -245,7 +245,7 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 	}
 	for _, name := range names {
 		if r := m.awsProfileRecord(name); r != nil {
-			r.Account.ProfileExpiresAt, r.Account.ProfileExpirySource = awsProfileExpiry(config, fields[name])
+			r.Account.ProfileSignInBy, r.Account.ProfileSignInLimit = awsProfileExpiry(config, fields[name], r.CLI)
 		}
 	}
 	if changed {

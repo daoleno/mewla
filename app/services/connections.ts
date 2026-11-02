@@ -31,8 +31,8 @@ export type PluginAccount = {
   profile?: string;
   profile_kind?: string;
   profile_status?: string;
-  profile_expires_at?: string;
-  profile_expiry_source?: string;
+  profile_sign_in_by?: string;
+  profile_sign_in_limit?: "maximum" | "sso";
   project?: string;
   active?: boolean;
   id: string;

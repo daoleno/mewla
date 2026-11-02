@@ -143,7 +143,8 @@ func TestCloudProfileListAndDeleteAreScoped(t *testing.T) {
 }
 func TestCloudRunUsesProfileAndBothGates(t *testing.T) {
 	m, config, _, calls := testCloudManager(t)
-	os.WriteFile(config, []byte("[profile test]\nregion=us-east-1\n"), 0600)
+	os.WriteFile(config, []byte("[profile test]\nregion=us-east-1\nlogin_session=identity\n"), 0600)
+	writeLoginTimingCache(t, config, "identity", "session", "2026-11-02T09:00:00Z")
 	mustHandle(t, m, Request{Action: "list"})
 	r := m.awsProfileRecord("test")
 	r.Account.Enabled = true
@@ -231,7 +232,8 @@ func TestCloudOutputNeverBecomesHistory(t *testing.T) {
 
 func TestCloudCompletedLoginReusesProfileAndCodeOnce(t *testing.T) {
 	m, config, _, _ := testCloudManager(t)
-	os.WriteFile(config, []byte("[profile test]\nregion=us-east-1\n"), 0600)
+	os.WriteFile(config, []byte("[profile test]\nregion=us-east-1\nlogin_session=identity\n"), 0600)
+	writeLoginTimingCache(t, config, "identity", "session", "2026-11-02T09:00:00Z")
 	mustHandle(t, m, Request{Action: "list"})
 	id := m.awsProfileRecord("test").Account.ID
 	script := filepath.Join(t.TempDir(), "aws")
@@ -245,7 +247,15 @@ func TestCloudCompletedLoginReusesProfileAndCodeOnce(t *testing.T) {
 	if result.Account == nil || result.Account.ID != id || !result.Account.Enabled || len(m.records) != 1 {
 		t.Fatal("login duplicated or failed to adopt profile")
 	}
+	r := m.awsProfileRecord("test")
+	if r.CLI.LoginAt == nil || result.Account.ProfileSignInBy == nil {
+		t.Fatal("successful login did not record timing")
+	}
+	loginAt := *r.CLI.LoginAt
 	replay := mustHandle(t, m, Request{Action: "connect_finish", FlowID: f.ID, Callback: code})
+	if !r.CLI.LoginAt.Equal(loginAt) {
+		t.Fatal("replay extended session timing")
+	}
 	if replay.Account.ID != id || len(m.records) != 1 {
 		t.Fatal("replay changed account")
 	}

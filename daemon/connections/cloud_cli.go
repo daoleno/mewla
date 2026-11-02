@@ -30,10 +30,12 @@ type cloudProvider interface {
 	install(context.Context, string) error
 }
 type cloudAccount struct {
-	Account        string   `json:"account,omitempty"`
-	Configuration  string   `json:"configuration,omitempty"`
-	Configurations []string `json:"configurations,omitempty"`
-	Profile        string   `json:"profile"`
+	LoginAt        *time.Time `json:"login_at,omitempty"`
+	LoginSession   string     `json:"login_session,omitempty"`
+	Account        string     `json:"account,omitempty"`
+	Configuration  string     `json:"configuration,omitempty"`
+	Configurations []string   `json:"configurations,omitempty"`
+	Profile        string     `json:"profile"`
 }
 type cloudOutput struct {
 	Stdout   string `json:"stdout"`

@@ -58,21 +58,21 @@ type Event struct {
 }
 
 type Account struct {
-	Project             string     `json:"project,omitempty"`
-	Active              bool       `json:"active,omitempty"`
-	Profile             string     `json:"profile,omitempty"`
-	ProfileKind         string     `json:"profile_kind,omitempty"`
-	ProfileStatus       string     `json:"profile_status,omitempty"`
-	ProfileExpiresAt    *time.Time `json:"profile_expires_at,omitempty"`
-	ProfileExpirySource string     `json:"profile_expiry_source,omitempty"`
-	ID                  string     `json:"id"`
-	Integration         string     `json:"integration"`
-	Name                string     `json:"name"`
-	Identity            string     `json:"identity"`
-	Endpoint            string     `json:"endpoint,omitempty"`
-	TrustedNetworks     []string   `json:"trusted_networks,omitempty"`
-	AuthMethod          string     `json:"auth_method,omitempty"`
-	Scopes              []string   `json:"scopes,omitempty"`
+	Project            string     `json:"project,omitempty"`
+	Active             bool       `json:"active,omitempty"`
+	Profile            string     `json:"profile,omitempty"`
+	ProfileKind        string     `json:"profile_kind,omitempty"`
+	ProfileStatus      string     `json:"profile_status,omitempty"`
+	ProfileSignInBy    *time.Time `json:"profile_sign_in_by,omitempty"`
+	ProfileSignInLimit string     `json:"profile_sign_in_limit,omitempty"`
+	ID                 string     `json:"id"`
+	Integration        string     `json:"integration"`
+	Name               string     `json:"name"`
+	Identity           string     `json:"identity"`
+	Endpoint           string     `json:"endpoint,omitempty"`
+	TrustedNetworks    []string   `json:"trusted_networks,omitempty"`
+	AuthMethod         string     `json:"auth_method,omitempty"`
+	Scopes             []string   `json:"scopes,omitempty"`
 	// Hyperliquid: an account is one network ("mainnet" or "testnet"). Address
 	// is the account a trading key trades for, empty on the keyless reader.
 	// Signer is the API wallet's public address when a trading key is saved.
