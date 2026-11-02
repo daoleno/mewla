@@ -221,7 +221,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     };
   }, [check, fail, finish, remember, router, send, serverId, valid]);
   useEffect(() => {
-    if (phase !== "waiting" || !flow) return;
+    if (phase !== "waiting" || !flow || flow.flow.install_required) return;
     const timer = setInterval(() => { if (AppState.currentState === "active") void check(); }, 3000);
     return () => clearInterval(timer);
   }, [check, flow, phase]);

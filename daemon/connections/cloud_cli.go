@@ -29,7 +29,10 @@ type cloudProvider interface {
 	install(context.Context, string) error
 }
 type cloudAccount struct {
-	Profile string `json:"profile"`
+	Account        string   `json:"account,omitempty"`
+	Configuration  string   `json:"configuration,omitempty"`
+	Configurations []string `json:"configurations,omitempty"`
+	Profile        string   `json:"profile"`
 }
 type cloudOutput struct {
 	Stdout   string `json:"stdout"`
@@ -55,9 +58,14 @@ func (c *cloudRuntime) executable(id string) (string, error) {
 	if path, err := exec.LookPath(p.binary()); err == nil {
 		return path, nil
 	}
-	path := filepath.Join(c.dir, id, "bin", p.binary())
-	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
-		return path, nil
+	paths := []string{filepath.Join(c.dir, id, "bin", p.binary())}
+	if provider, ok := p.(interface{ installPaths() []string }); ok {
+		paths = append(paths, provider.installPaths()...)
+	}
+	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
+			return path, nil
+		}
 	}
 	return "", errors.New("Install the CLI to continue")
 }
@@ -153,7 +161,13 @@ func (m *Manager) cloudCommand(ctx context.Context, integration, profile string,
 	}
 	p := m.cloud.providers[integration]
 	// The caller's argv cannot replace profile, endpoint, config or credential routing.
-	return m.cloud.run(ctx, binary, p.commandArgs(profile, args), p.environment())
+	argv := p.commandArgs(profile, args)
+	if router, ok := p.(interface {
+		accountArgs(*Manager, string, []string) []string
+	}); ok {
+		argv = router.accountArgs(m, profile, args)
+	}
+	return m.cloud.run(ctx, binary, argv, p.environment())
 }
 func cloudArgs(args []string) bool {
 	if len(args) < 2 || len(args) > 256 {

@@ -31,6 +31,10 @@ const NativeReturnRelay = "https://connect.mewla.ai" + pluginreturn.Path
 
 type ConnectFlow struct {
 	CodeRequired     bool      `json:"code_required,omitempty"`
+	InstallManual    bool      `json:"install_manual,omitempty"`
+	InstallFailed    bool      `json:"install_failed,omitempty"`
+	InstallURL       string    `json:"install_url,omitempty"`
+	Installing       bool      `json:"installing,omitempty"`
 	InstallRequired  bool      `json:"install_required,omitempty"`
 	ID               string    `json:"id"`
 	Integration      string    `json:"integration"`

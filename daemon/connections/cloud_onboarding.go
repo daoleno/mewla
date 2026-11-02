@@ -32,7 +32,7 @@ func (m *Manager) startCloud(ctx context.Context, in *Input) (Response, error) {
 	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", Expires: time.Now().Add(10 * time.Minute)}, profile: profile, renewID: in.AccountID}
 	m.connectFlows[f.ID] = f
 	if _, err := m.cloud.executable(in.Integration); err != nil {
-		f.InstallRequired = true
+		m.cloudInstallPrompt(f)
 		return flowResult(f), nil
 	}
 	if err := m.launchCloudLogin(ctx, f); err != nil {
@@ -41,6 +41,18 @@ func (m *Manager) startCloud(ctx context.Context, in *Input) (Response, error) {
 	}
 	return flowResult(f), nil
 }
+
+// Providers describe manual setup only when their installer cannot run here.
+// The shared flow owns retry/check-again, deadlines and process cleanup.
+func (m *Manager) cloudInstallPrompt(f *connectFlow) {
+	f.InstallRequired = true
+	if provider, ok := m.cloud.providers[f.Integration].(interface{ installSupport() (string, string) }); ok {
+		message, address := provider.installSupport()
+		f.InstallManual = message != ""
+		f.Message, f.InstallURL = message, address
+	}
+}
+
 func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 	binary, err := m.cloud.executable(f.Integration)
 	if err != nil {
@@ -60,6 +72,10 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 	}
 	f.cli = login
 	f.InstallRequired = false
+	f.InstallManual = false
+	f.InstallFailed = false
+	f.Installing = false
+	f.Message = ""
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
 	timer := time.NewTimer(8 * time.Second)
@@ -99,12 +115,25 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 	p := m.cloud.providers[f.Integration]
 	if f.InstallRequired {
 		if q.Action == "connect_finish" {
-			// Install is owned by this bounded flow and reaped even if the UI closes.
-			installCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			// Re-resolve PATH and vendor install locations on every attempt. Manual
+			// installation and a recovered installation need no daemon restart.
+			if _, err := m.cloud.executable(f.Integration); err == nil {
+				if err = m.launchCloudLogin(ctx, f); err != nil {
+					return Response{}, err
+				}
+				return flowResult(f), nil
+			}
+			if f.InstallManual {
+				return flowResult(f), nil
+			}
+			installCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			login := &cloudLogin{cancel: cancel, output: &boundedBuffer{limit: 32768}, done: make(chan struct{})}
 			f.cli = login
 			f.InstallRequired = false
-			f.Message = "Installing cloud CLI…"
+			f.InstallFailed = false
+			f.Installing = true
+			f.Expires = time.Now().Add(10 * time.Minute)
+			f.Message = ""
 			go func() { login.err = p.install(installCtx, m.cloud.dir+"/"+f.Integration); cancel(); close(login.done) }()
 		}
 		return flowResult(f), nil
@@ -112,11 +141,13 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 	if f.cli == nil {
 		return Response{}, errors.New("Start sign-in again")
 	}
-	if f.Message == "Installing cloud CLI…" {
+	if f.Installing {
 		select {
 		case <-f.cli.done:
+			f.Installing = false
 			if f.cli.err != nil {
-				f.Status = "failed"
+				f.InstallRequired = true
+				f.InstallFailed = true
 				f.Message = f.cli.err.Error()
 				return flowResult(f), nil
 			}
@@ -186,7 +217,7 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 		if candidate.Account.Integration != q.Integration || candidate.CLI == nil || !candidate.Account.Enabled {
 			continue
 		}
-		if q.Profile != "" && candidate.CLI.Profile != q.Profile {
+		if q.Profile != "" && m.cloud.providers[q.Integration].profileRecord(m, q.Profile) != candidate {
 			continue
 		}
 		if r != nil {
@@ -213,7 +244,7 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 	if !read && !q.Authorize {
 		return Response{}, callRefused("This command needs task-specific user authorization. With that authorization, pass --mewla-authorize.")
 	}
-	out, err := m.cloudCommand(ctx, q.Integration, r.CLI.Profile, q.CLIArgs)
+	out, err := m.cloudCommand(ctx, q.Integration, firstNonEmpty(q.Profile, r.CLI.Profile), q.CLIArgs)
 	if err != nil {
 		return Response{}, err
 	}
