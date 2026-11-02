@@ -1,5 +1,7 @@
 结论：已复现并修复本次 `plugin account not found` 的真实原因，修复已提交到 main，真实开发站点已能进入 AWS 官方授权页面。**完整验收仍受阻：尚未完成用户真实 AWS 登录、真实 `whoami` 和真实账户再次登录；不能把本次交付标记为端到端验收完成。**
 
+后续用户遇到 AWS 官方页面的 `Bad Request`，这是第二个故障。已对真实 AWS 做 DCR/授权 URL 对照：旧 client、新 client 和真实 zen 页面生成的 URL 均能进入 IAM 登录表单。当前尚未在用户浏览器中证实第二个故障的根因；AWS 已确认的过期浏览器会话问题是有依据的候选，正在通过 Brain 请求隐私窗口对照。没有把第二个问题误标为已修复。
+
 失败请求不是携带了过期账户 ID 的请求，而是旧 Web 包发出的 `{"action":"aws_profiles"}`，根本没有 `id`。该操作已从后端删除，后端却继续查询 `m.records[""]`，返回了误导性的账户不存在错误。
 
 ## 已证实的原因与复现
@@ -92,3 +94,51 @@
 - **待人工接续：**用户在刷新后的真实 AWS 页面登录，返回后确认 Connected；随后运行该账户的 `whoami`，再使用同一张卡的 Sign in again，确认 ID 和账户数量不变。若从另一台设备登录，按页面提示把最终 loopback 回调地址粘回原页面。不要将该地址或授权码写入报告或提交。
 - 没有进行 Android/iOS 真机回归；本次未修改 TS/TSX，连接修复位于各端共用的 daemon。
 - 不具备“一个真实 Connected 账户且工具已工作”的截图。因此当前状态是**代码修复与可执行验证完成，真实登录验收受阻**，不是任务全部完成。
+
+## 后续：AWS 官方页面 Bad Request 的真实服务对照
+
+用户补充的错误发生在 `us-east-1.signin.aws.amazon.com/oauth`，携带 `iam_user=true`、`backwards_compatible=true`。Brain 随后确认原始链接确实包含 43 字符的 `code_challenge` 和 `state`，`code_challenge_method=S256`；最初转述只是省略了 challenge。
+
+在 2026-11-02 11:42–11:53（Asia/Shanghai）直接请求真实 AWS，并用隔离、未登录的 agent-browser 会话实际点击授权页的 Continue：
+
+| 对照 | 真实 AWS 结果 |
+| --- | --- |
+| 用户原 client `dcr/99e3741b-a03b-4885-9b87-edbae3b15e89` + 完整参数 | `/v1/authorize` 302 → `/v1/sessions` 200；Continue 后出现 IAM 登录表单 |
+| 新 DCR 注册，回调与用户链接完全相同 | 注册 HTTP 200，响应确认 `http://127.0.0.1:9876/plugins/oauth/callback`；授权和 Continue 同样到 IAM 登录表单 |
+| 使用旧 client 重复打开同一未完成的授权链接 | 再次成功到 IAM 登录表单 |
+| 旧 client + Chrome Mac User-Agent + zen Referer | HTTP 200 授权页面，两次一致 |
+| 新 client + 切换 AWS 新登录体验 | 到 “Sign in to AWS” 邮箱登录页 |
+| 旧 client + 在测试浏览器启用 AWS 多会话 | 到 IAM 登录表单 |
+| 随机不存在的 DCR client | `/v1/authorize` HTTP 400 |
+| 新 client，但回调改为未注册的另一个 loopback 端口 | `/v1/authorize` HTTP 400 |
+| 不携带 `code_challenge` 的负例 | `/v1/authorize` HTTP 400；这不是用户实际请求的情况 |
+| 尝试直接注册 zen 的 HTTPS 回调 | HTTP 400 `invalid_redirect_uri`，明确拒绝该 URI |
+| 从真实 zen 页面点击 Sign in to AWS，然后点击 AWS Continue | 使用原 client 和完整九参数，最终出现 IAM 登录表单；已保存截图和脱敏参数记录 |
+
+因此，**已保存 client 当前有效、注册的 loopback 回调与授权请求匹配、这组参数当前被 AWS 接受**。不能用“重新注册 client”或改为 zen HTTPS 回调来冒充已经确认的根因修复。测试仅创建了一个不含用户授权的公开 DCR client，没有完成 AWS 登录或修改 AWS 资源。
+
+AWS 的回调白名单本身支持 localhost/127.0.0.1，并不接受任意应用域名；因此即使入口在 zen，Mewla 使用 loopback 并在异机登录时让用户粘回地址仍是当前的约束。参见 [AWS MCP OAuth 回调规则](https://docs.aws.amazon.com/signin/latest/userguide/aws-mcp-server.html)。注册接口的本次实测也直接证实 zen HTTPS 回调被拒绝。
+
+发现 AWS 官方仓库中的 [aws/aws-cli#10186](https://github.com/aws/aws-cli/issues/10186)：已有用户报告过期浏览器会话导致同样的 `/v1/sessions → /oauth?iam_user=true&backwards_compatible=true → 400`；AWS 维护者确认错误来自 SignIn 服务，并将 issue 标记为 service-api。这与用户现象一致，但**仅为待验证候选原因**，不能代替用户浏览器的 A/B 证据。
+
+已通过最新 turn 的 progress `--attention user_input` 请 Brain 让用户保留原 Mewla 页，用新发起的授权链接在隐私窗口试一次，并确认错误出现的具体一步。Mewla 本地 flow 过期/被取消会影响最终回调，本地状态本身不会使 AWS 已接受的公开 client 失效。浏览器授权完成后的重复提交尚未用真实账户测试。
+
+本轮没有修改 OAuth 生产代码，没有清空有效注册，也没有加入盲目重复注册或私有 AWS 跳转参数。现有的过期注册替换、token endpoint `invalid_client` 后忘记注册，以及 callback 防重放测试定向复跑通过。
+
+本轮证据（授权 URL 对照文件仅含本轮独立诊断生成的 state/PKCE challenge，没有用户授权码或令牌）：
+
+- [真实 zen 发起并到达 IAM 登录表单](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/live-actual-url-login.png)
+- [旧 client 登录表单](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/saved-login.png)
+- [新 client 登录表单](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/fresh-login.png)
+- [HTTP 授权对照](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/probe-results.json)
+- [下一跳 oauth 对照](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/hop-results.json)
+- [新 DCR 返回及注册回调](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/registration-response.json)
+- [新 client 的完整诊断授权 URL](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/fresh-full.url)
+- [旧 client 的完整诊断授权 URL](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/saved-full.url)
+- [真实 zen 原始授权 URL 的脱敏 HTTP 证明](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/live-actual-http-proof.json)
+- [真实登录页九参数与 state/challenge 长度](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/live-login-metadata.json)
+- [现有登录/注册/回调测试](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/existing-flow-tests.log)
+
+![真实 zen 发起并到达 IAM 登录表单](/home/daoleno/.mewla/t/RrrgZV/aws-authorize-evidence/live-actual-url-login.png)
+
+本轮收尾：已取消本 Worker 新发起的未完成登录，撤销新建测试浏览器配对并关闭三个测试浏览器；仅保留上述诊断证据。原有 AWS 账户仍为八条 disconnected，未删除或改写。等待 Brain 转回用户隐私窗口对照及具体失败步骤后继续定位；没有将任务置为 done。
