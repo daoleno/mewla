@@ -251,6 +251,9 @@ func removeAWSSection(raw []byte, name string, config bool) []byte {
 }
 func (m *Manager) deleteCloudProfile(ctx context.Context, q Request) (Response, error) {
 	r := m.records[q.ID]
+	if r != nil && r.CLI != nil && r.Account.Integration == "gcp" {
+		return m.deleteGCPProfile(ctx, q)
+	}
 	if r == nil || r.CLI == nil || r.Account.Integration != "aws" {
 		return Response{}, errors.New("Refresh the profiles first")
 	}

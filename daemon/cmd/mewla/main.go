@@ -152,6 +152,8 @@ func run(args []string, stderr io.Writer) error {
 			return runCalendarCommand(args[1:], stderr)
 		case "browser":
 			return runBrowserCommand(args[1:], stderr)
+		case "gcloud":
+			return runCloudCommand("gcp", args[1:], stderr)
 		case "aws":
 			return runCloudCommand("aws", args[1:], stderr)
 		case "connections":
@@ -2629,6 +2631,7 @@ Agents and tools
   worker       List, spawn, inspect, message, progress, and close Mewla Workers
   providers    Set the image model behind Codex image_gen
   aws          Run AWS CLI commands through the connected profile
+  gcloud       Run Google Cloud CLI commands through the connected configuration
   connections  Plugins shared by Brain and Workers
   calendar     List, create, update, cancel or run scheduled Brain work
   watch        Inspect what Watch collects about your projects

@@ -35,7 +35,11 @@ func cloudCLIRequest(integration string, args []string) (connections.Request, er
 }
 func runCloudCommand(integration string, args []string, stderr io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" {
-		fmt.Fprintf(stderr, "Usage: mewla %s [--profile NAME] [--mewla-authorize] <CLI arguments>\nRead commands run directly. Other commands require enabled writes and explicit task-specific user authorization (--mewla-authorize). Profiles are managed in Extensions and the local vendor CLI. Output is the CLI's own output; JSON by default. Commands are never retried.\n", integration)
+		name := integration
+		if name == "gcp" {
+			name = "gcloud"
+		}
+		fmt.Fprintf(stderr, "Usage: mewla %s [--profile NAME] [--mewla-authorize] <CLI arguments>\nRead commands run directly. Other commands require enabled writes and explicit task-specific user authorization (--mewla-authorize). Profiles are managed in Extensions and the local vendor CLI. Output is the CLI's own output; JSON by default. Commands are never retried.\n", name)
 		return nil
 	}
 	q, err := cloudCLIRequest(integration, args)

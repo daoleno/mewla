@@ -3,230 +3,219 @@ package connections
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/oauth2"
 )
 
-func TestGCPCommandsFailClosed(t *testing.T) {
-	for _, tc := range []struct {
-		words    []string
-		read, ok bool
-	}{
-		{[]string{"gcloud", "compute", "instances", "list", "--project=resource-project", "--format=json"}, true, true},
-		{[]string{"gcloud", "projects", "get-iam-policy", "my-project"}, true, true},
-		{[]string{"gcloud", "compute", "instances", "describe", "one", "--zone=us-east1-a", "--project=my-project"}, true, true},
-		{[]string{"gcloud", "compute", "instances", "delete", "list"}, true, false},
-		{[]string{"gcloud", "compute", "instances", "list", "--impersonate-service-account=admin"}, true, false},
-		{[]string{"gcloud", "compute", "instances", "list", "--flags-file=evil"}, true, false},
-		{[]string{"gcloud", "compute", "instances", "list", "--format=json;delete"}, true, false},
-		{[]string{"gcloud", "compute", "instances", "list", "--log-http"}, true, false},
-		{[]string{"gcloud", "compute", "instances", "list", ";", "gcloud", "projects", "delete", "p"}, true, false},
-		{[]string{"gcloud", "secrets", "versions", "access", "latest"}, true, false},
-		{[]string{"gcloud", "container", "clusters", "get-credentials", "cluster"}, true, false},
-		{[]string{"bq", "query", "SELECT 1"}, true, false},
-		{[]string{"bq", "query", "SELECT * FROM `p.d.t` LIMIT 1", "--project_id=my-project"}, false, true},
-		{[]string{"gcloud", "compute", "instances", "delete", "one", "--project=my-project"}, false, true},
-		{[]string{"gcloud", "compute", "instances", "delete", "one"}, false, false},
-		{[]string{"gcloud", "auth", "print-access-token"}, false, false},
-		{[]string{"sh", "-c", "gcloud projects list"}, false, false},
-	} {
-		args := make([]any, len(tc.words))
-		for i, w := range tc.words {
-			args[i] = w
+func TestGCPCLIClassification(t *testing.T) {
+	p := gcloudCLI{}
+	for _, args := range [][]string{{"projects", "list"}, {"compute", "instances", "list", "--project", "example"}, {"storage", "buckets", "describe", "gs://bucket", "--format=json"}} {
+		read, err := p.classify(args)
+		if err != nil || !read {
+			t.Fatalf("read %v: %v", args, err)
 		}
-		command, _, err := gcpCommand(args, tc.read, "quota-project")
-		if (err == nil) != tc.ok {
-			t.Errorf("%q read=%v: %s, %v", tc.words, tc.read, command, err)
+	}
+	for _, args := range [][]string{{"projects", "delete", "list"}, {"iam", "roles", "list"}, {"billing", "accounts", "list"}, {"sql", "instances", "list"}, {"secrets", "versions", "access", "latest"}, {"run", "services", "describe", "secret-env"}, {"projects", "list", "--unknown=value"}, {"projects", "list", "--impersonate-service-account=x"}, {"compute", "ssh", "host"}, {"auth", "print-access-token"}, {"projects", "list", "--flags-file=/etc/passwd"}, {"projects", "list", "--conf=other"}, {"projects", "list", "--account=other"}} {
+		read, err := p.classify(args)
+		if err == nil && read {
+			t.Fatalf("unsafe read: %v", args)
 		}
-
+	}
+	args := p.commandArgs("work", []string{"projects", "list"})
+	if strings.Join(args, " ") != "projects list --configuration work --format=json --quiet" {
+		t.Fatal(args)
+	}
+	t.Setenv("CLOUDSDK_CORE_ACCOUNT", "other")
+	t.Setenv("CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE", "https://evil.test")
+	t.Setenv("CLOUDSDK_CONFIG", "/canonical/config")
+	env := strings.Join(p.environment(), "\n")
+	if strings.Contains(env, "other") || strings.Contains(env, "evil.test") || !strings.Contains(env, "CLOUDSDK_CONFIG=/canonical/config") {
+		t.Fatal("credential routing overridden")
+	}
+}
+func TestGCPRemoteLogin(t *testing.T) {
+	p := gcloudCLI{}
+	address := "https://accounts.google.com/o/oauth2/auth?client_id=vendor&response_type=code&code_challenge=test"
+	if p.loginURL("Open:\n"+address+"\nCode:") != address || p.loginURL("https://accounts.google.com.evil.test/o/oauth2/auth?client_id=x&response_type=code") != "" {
+		t.Fatal("URL parsing")
+	}
+	if !p.validateCode(address, "4/valid_authorization-code") || p.validateCode(address, "x\nsecond-line") {
+		t.Fatal("code validation")
+	}
+	args := strings.Join(p.loginArgs("test"), " ")
+	if !strings.Contains(args, "--no-launch-browser --force") || strings.Contains(args, "--no-browser") {
+		t.Fatal(args)
 	}
 }
 
-func TestGCPOAuthLoopbackAndPasteLifecycle(t *testing.T) {
-	for _, paste := range []bool{false, true} {
-		t.Run(map[bool]string{false: "loopback", true: "paste"}[paste], func(t *testing.T) {
-			var tokenExchanges, refreshes, mcpCalls int
-			var state, challenge string
-			m := testManager(t, func(req *http.Request) (*http.Response, error) {
-				switch req.URL.Host {
-				case "oauth2.googleapis.com":
-					_ = req.ParseForm()
-					if req.URL.Path == "/revoke" {
-						return reply(200, `{}`), nil
-					}
-					if req.Form.Get("client_id") != "test-client" || req.Form.Get("client_secret") != "test-client-secret" {
-						t.Fatal("configured client lost")
-					}
-					if req.Form.Get("grant_type") == "refresh_token" {
-						refreshes++
-						if req.Form.Get("refresh_token") != "refresh-test" {
-							t.Fatal("refresh token lost")
-						}
-					} else {
-						tokenExchanges++
-						if req.Form.Get("redirect_uri") != "http://127.0.0.1:19879/plugins/oauth/callback" || oauth2.S256ChallengeFromVerifier(req.Form.Get("code_verifier")) != challenge {
-							t.Fatal("PKCE or redirect mismatch")
-						}
-					}
-					resp := reply(200, `{"access_token":"access-test","refresh_token":"refresh-test","expires_in":3600,"token_type":"Bearer"}`)
-					resp.Header.Set("Content-Type", "application/json")
-					return resp, nil
-				case "www.googleapis.com":
-					return reply(200, `{"email":"person@example.com","sub":"person-id"}`), nil
-				case "cloudresourcemanager.googleapis.com":
-					return reply(200, `{"projects":[{"projectId":"my-project","state":"ACTIVE"}]}`), nil
-				case "serviceusage.googleapis.com":
-					return reply(200, `{"state":"DISABLED"}`), nil
-				case "cloudcli.googleapis.com":
-					mcpCalls++
-					if req.Header.Get("Authorization") != "Bearer access-test" || req.Header.Get("x-goog-user-project") != "my-project" || req.Header.Get("MCP-Protocol-Version") != "2026-07-28" || req.Header.Get("Mcp-Name") != "run_gcloud_command" {
-						t.Fatal("missing authentication or routing headers")
-					}
-					return reply(200, `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"[]"}]}}`), nil
-				default:
-					t.Fatalf("unexpected endpoint %s", req.URL.Host)
-					return nil, nil
-				}
-			})
-			m.SetLoopbackPort(19879)
-			if _, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: "gcp"}}); err == nil {
-				t.Fatal("started without client")
-			}
-			mustHandle(t, m, Request{Action: "oauth_configure", Input: &Input{Integration: "gcp", OAuthClient: &OAuthClientConfig{ClientID: "test-client", ClientSecret: "test-client-secret"}}})
-			flow := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "gcp"}}).Flow
-			u, _ := url.Parse(flow.AuthorizationURL)
-			q := u.Query()
-			state = q.Get("state")
-			challenge = q.Get("code_challenge")
-			if u.Host != "accounts.google.com" || q.Get("client_id") != "test-client" || q.Get("access_type") != "offline" || q.Get("prompt") != "consent" || !strings.Contains(q.Get("scope"), gcpScope) || !flow.AddressRequired {
-				t.Fatal("incorrect Google authorization request")
-			}
-			callback := "http://127.0.0.1:19879/plugins/oauth/callback?state=" + state + "&code=code-test"
-			if paste {
-				mustHandle(t, m, Request{Action: "connect_finish", FlowID: flow.ID, Callback: callback})
-			} else {
-				w := httptest.NewRecorder()
-				m.BrowserOAuthCallback(w, httptest.NewRequest("GET", callback, nil), false)
-				if w.Code != 200 {
-					t.Fatalf("callback: %s", w.Body.String())
-				}
-			}
-			done := mustHandle(t, m, Request{Action: "connect_status", FlowID: flow.ID})
-			if done.Account == nil {
-				t.Fatalf("not connected: %+v", done.Flow)
-			}
-			a := done.Account
-			if a.Identity != "person@example.com" || a.Setup == nil || !strings.Contains(a.Setup.URL, "my-project") || a.Access.Read != "allowed" || a.Access.Write == "allowed" {
-				t.Fatalf("account: %+v", a)
-			}
-			args := json.RawMessage(`{"execution_project":"my-project","command":["gcloud","projects","list"]}`)
-			if _, err := m.Handle(context.Background(), Request{Action: "invoke", ID: a.ID, Tool: "execute", Arguments: args}); err == nil {
-				t.Fatal("write without grant")
-			}
-			if mcpCalls != 0 {
-				t.Fatal("unauthorized write reached Google")
-			}
-			mustHandle(t, m, Request{Action: "invoke", ID: a.ID, Tool: "read", Arguments: args})
-			mustHandle(t, m, Request{Action: "permissions", ID: a.ID, Group: "write", Allowed: true})
-			mustHandle(t, m, Request{Action: "invoke", ID: a.ID, Tool: "execute", Arguments: json.RawMessage(`{"execution_project":"my-project","command":["gcloud","compute","instances","stop","one","--project=my-project"]}`)})
-			if mcpCalls != 2 {
-				t.Fatal("explicit write grant was not honored")
-			}
-			if m.records[a.ID].Account.Setup != nil {
-				t.Fatal("successful call did not clear setup notice")
-			}
-			r := m.records[a.ID]
-			raw, _, _ := m.vault.Get("integration:" + a.ID)
-			var saved oauthSecret
-			_ = json.Unmarshal([]byte(raw), &saved)
-			saved.Token.Expiry = time.Now().Add(-time.Hour)
-			data, _ := json.Marshal(saved)
-			_ = m.vault.Set("integration:"+a.ID, string(data))
-			if _, err := m.accountToken(context.Background(), r); err != nil || refreshes != 1 {
-				t.Fatalf("refresh failed: %v", err)
-			}
-			// A callback is consumed once, including when submitted from another device.
-			w := httptest.NewRecorder()
-			m.BrowserOAuthCallback(w, httptest.NewRequest("GET", callback, nil), false)
-			if w.Code == 200 || tokenExchanges != 1 {
-				t.Fatal("callback replay accepted")
-			}
-			mustHandle(t, m, Request{Action: "disconnect", ID: a.ID})
-			if _, ok, _ := m.vault.Get("integration:" + a.ID); ok {
-				t.Fatal("disconnect kept credentials")
-			}
-		})
-	}
+type testGcloudCLI struct {
+	gcloudCLI
+	path string
 }
 
-func TestGCPTransportErrorsAndSSE(t *testing.T) {
-	for _, tc := range []struct {
-		name              string
-		status            int
-		body, contentType string
-		network           bool
-		want              string
-	}{
-		{name: "permission", status: 403, want: "roles/mcp.toolUser"},
-		{name: "auth", status: 401, want: "authorization"},
-		{name: "network", network: true, want: "not retried"},
-		{name: "rpc", status: 200, body: `{"id":1,"error":{"code":-1,"message":"rejected"}}`, want: "rejected"},
-		{name: "tool", status: 200, body: `{"id":1,"result":{"isError":true,"content":[{"text":"denied"}]}}`, want: "denied"},
-		{name: "exit", status: 200, body: `{"id":1,"result":{"structuredContent":{"response":{"exitCode":"1","stderr":"no permission"}},"content":[]}}`, want: "Command exited with code 1"},
-		{name: "sse", status: 200, contentType: "text/event-stream", body: "event: message\ndata: {\"id\":1,\"result\":{\"content\":[]}}\n\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			calls := 0
-			m := testManager(t, func(req *http.Request) (*http.Response, error) {
-				calls++
-				raw, _ := io.ReadAll(req.Body)
-				if !strings.Contains(string(raw), `"project":"projects/my-project"`) {
-					t.Fatal("missing execution project")
+func (p testGcloudCLI) binary() string { return p.path }
+func testGCPManager(t *testing.T) (*Manager, *[]gcpConfiguration, *[]gcpCredential, *[]string) {
+	t.Helper()
+	m, _, _, _ := testCloudManager(t)
+	t.Setenv("CLOUDSDK_CONFIG", t.TempDir())
+	configs := []gcpConfiguration{{Name: "keep", Active: true, Properties: map[string]map[string]string{"core": {"account": "same@example.com", "project": "project-a"}}}, {Name: "throwaway", Properties: map[string]map[string]string{"core": {"account": "same@example.com", "project": "project-b"}}}}
+	creds := []gcpCredential{{Account: "same@example.com"}, {Account: "unused@example.com"}}
+	calls := []string{}
+	m.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
+	m.cloud.run = func(_ context.Context, _ string, args, env []string) (cloudOutput, error) {
+		call := strings.Join(args, " ")
+		calls = append(calls, call)
+		var value any = map[string]any{"ok": true}
+		switch {
+		case strings.HasPrefix(call, "config configurations list"):
+			value = configs
+		case strings.HasPrefix(call, "auth list"):
+			value = creds
+		case strings.HasPrefix(call, "auth print-access-token"):
+			return cloudOutput{Stdout: "sensitive-token-never-persist"}, nil
+		case strings.HasPrefix(call, "config configurations delete"):
+			for i, c := range configs {
+				if c.Name == args[3] {
+					configs = append(configs[:i], configs[i+1:]...)
+					break
 				}
-				if tc.network {
-					return nil, errors.New("broken")
-				}
-				resp := reply(tc.status, tc.body)
-				resp.Header.Set("Content-Type", tc.contentType)
-				return resp, nil
-			})
-			r := &record{Account: Account{Integration: "gcp", Endpoint: gcpMCPEndpoint}}
-			_, err := m.gcpRPC(context.Background(), r, "test-access", "my-project", "run_gcloud_command", "gcloud projects list")
-			if tc.want == "" && err != nil || tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)) {
-				t.Fatalf("unexpected: %v", err)
 			}
-			if calls != 1 {
-				t.Fatalf("retried %d times", calls)
-			}
-		})
-	}
-}
-
-func TestGCPProjectDiscoveryPagination(t *testing.T) {
-	m := testManager(t, func(req *http.Request) (*http.Response, error) {
-		if req.URL.Host != "cloudresourcemanager.googleapis.com" || req.URL.Query().Get("pageToken") != "next +/" {
-			t.Fatal("incorrect discovery pagination")
 		}
-		return reply(200, `{"projects":[],"nextPageToken":"another"}`), nil
-	})
-	raw, err := m.gcpProjects(context.Background(), &record{Account: Account{Endpoint: gcpMCPEndpoint}}, "access", "next +/")
-	if err != nil || !strings.Contains(string(raw), "another") {
-		t.Fatal("discovery failed")
+		raw, _ := json.Marshal(value)
+		return cloudOutput{Stdout: string(raw)}, nil
+	}
+	return m, &configs, &creds, &calls
+}
+func TestGCPProfilesAreLiveAndGrantsFollowIdentity(t *testing.T) {
+	m, configs, _, _ := testGCPManager(t)
+	mustHandle(t, m, Request{Action: "list"})
+	if len(m.records) != 3 {
+		t.Fatal("missing configs or unbound credentials")
+	}
+	r := m.gcpProfileRecord("throwaway")
+	id := r.Account.ID
+	if r.Account.Enabled || r.Account.Project != "project-b" || r.Account.ProfileStatus != "valid" {
+		t.Fatal(r.Account)
+	}
+	r.Account.Enabled = true
+	m.setGroup(r, "write", true)
+	(*configs)[1].Properties["core"]["account"] = "changed@example.com"
+	if err := m.syncGCPProfiles(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if r.Account.ID != id || r.Account.Enabled || r.Account.Status == "connected" {
+		t.Fatal("identity change retained grants")
+	}
+	*configs = (*configs)[:1]
+	if err := m.syncGCPProfiles(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if m.gcpProfileRecord("throwaway") != nil {
+		t.Fatal("deleted configuration retained")
+	}
+	raw, _ := json.Marshal(m.records)
+	if strings.Contains(string(raw), "sensitive-token") {
+		t.Fatal("token persisted")
 	}
 }
-
-func TestGCPResourceAndQuotaProjectsStayDistinct(t *testing.T) {
-	args := []any{"gcloud", "compute", "instances", "list", "--project=resource-project", "--billing-project=other-quota"}
-	command, _, err := gcpCommand(args, true, "mcp-project")
-	if err != nil || strings.Contains(command, "mcp-project") || !strings.Contains(command, "other-quota") || !strings.Contains(command, "resource-project") {
-		t.Fatalf("project boundary lost: %s %v", command, err)
+func TestGCPDeleteProtectsSharedAccounts(t *testing.T) {
+	m, _, _, calls := testGCPManager(t)
+	mustHandle(t, m, Request{Action: "list"})
+	r := m.gcpProfileRecord("throwaway")
+	if _, err := m.Handle(context.Background(), Request{Action: "cloud_delete", ID: r.Account.ID, ConfirmProfile: "keep"}); err == nil {
+		t.Fatal("missing exact confirmation")
+	}
+	mustHandle(t, m, Request{Action: "cloud_delete", ID: r.Account.ID, ConfirmProfile: "throwaway"})
+	for _, call := range *calls {
+		if strings.HasPrefix(call, "auth revoke") {
+			t.Fatal("revoked a shared credential")
+		}
+	}
+	if m.gcpProfileRecord("keep") == nil {
+		t.Fatal("other config removed")
+	}
+	backups, _ := filepath.Glob(filepath.Join(m.cloud.dir, "backups", "gcp-*", "config_throwaway"))
+	if len(backups) != 1 {
+		t.Fatal("backup absent")
+	}
+	info, _ := os.Stat(backups[0])
+	if info.Mode().Perm() != 0600 {
+		t.Fatal("backup mode")
+	}
+	orphan := m.gcpProfileRecord("account:unused@example.com")
+	mustHandle(t, m, Request{Action: "cloud_delete", ID: orphan.Account.ID, ConfirmProfile: orphan.CLI.Profile})
+	found := false
+	for _, call := range *calls {
+		if strings.HasPrefix(call, "auth revoke unused@example.com ") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("exact orphan account not revoked")
+	}
+}
+func TestGCPRunBothAuthorizationGates(t *testing.T) {
+	m, _, _, calls := testGCPManager(t)
+	mustHandle(t, m, Request{Action: "list"})
+	r := m.gcpProfileRecord("throwaway")
+	r.Account.Enabled = true
+	q := Request{Action: "cloud_run", Integration: "gcp", Profile: "throwaway", CLIArgs: []string{"projects", "list"}}
+	mustHandle(t, m, q)
+	q.CLIArgs = []string{"projects", "delete", "example"}
+	n := len(*calls)
+	if _, err := m.Handle(context.Background(), q); err == nil {
+		t.Fatal("writes disabled")
+	}
+	m.setGroup(r, "write", true)
+	if _, err := m.Handle(context.Background(), q); err == nil {
+		t.Fatal("missing task authorization")
+	}
+	if len(*calls) != n {
+		t.Fatal("denied command reached CLI")
+	}
+	q.Authorize = true
+	mustHandle(t, m, q)
+	if len(*calls) != n+1 {
+		t.Fatal("authorized command did not run once")
+	}
+}
+func TestGCPCopyCodeFlowOnSharedCore(t *testing.T) {
+	m, _, _, _ := testGCPManager(t)
+	script := filepath.Join(t.TempDir(), "gcloud")
+	os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' 'https://accounts.google.com/o/oauth2/auth?client_id=vendor&response_type=code'\nread code\n"), 0700)
+	m.cloud.providers["gcp"] = testGcloudCLI{path: script}
+	f := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "gcp", Profile: "throwaway"}}).Flow
+	if !f.CodeRequired || f.AddressRequired || f.WebReturn {
+		t.Fatal("wrong remote flow")
+	}
+	mustHandle(t, m, Request{Action: "connect_finish", FlowID: f.ID, Callback: "4/valid_authorization-code"})
+	select {
+	case <-m.connectFlows[f.ID].cli.done:
+	case <-time.After(time.Second):
+		t.Fatal("login blocked")
+	}
+	result := mustHandle(t, m, Request{Action: "connect_status", FlowID: f.ID})
+	if result.Account == nil || !result.Account.Enabled || result.Account.Profile != "throwaway" {
+		t.Fatal("login not adopted")
+	}
+}
+func TestRetiredGCPOAuthRemoved(t *testing.T) {
+	m, _, _, _ := testGCPManager(t)
+	m.records["old-gcp"] = &record{Account: Account{ID: "old-gcp", Integration: "gcp"}, OAuth: &oauthAccount{}}
+	m.vault.Set("integration:old-gcp", "retired")
+	m.vault.Set("oauth-client:gcp", "retired")
+	if err := m.removeOldAWS(); err != nil {
+		t.Fatal(err)
+	}
+	if m.records["old-gcp"] != nil {
+		t.Fatal("old MCP card survived")
+	}
+	for _, key := range []string{"integration:old-gcp", "oauth-client:gcp"} {
+		if _, ok, _ := m.vault.Get(key); ok {
+			t.Fatal("old OAuth secret survived")
+		}
 	}
 }

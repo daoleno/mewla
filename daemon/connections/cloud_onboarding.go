@@ -47,6 +47,13 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 		return err
 	}
 	p := m.cloud.providers[f.Integration]
+	if preparer, ok := p.(interface {
+		prepareLogin(*Manager, context.Context, string) error
+	}); ok {
+		if err := preparer.prepareLogin(m, ctx, f.profile); err != nil {
+			return err
+		}
+	}
 	login, err := startCloudLogin(binary, p.loginArgs(f.profile), p.environment())
 	if err != nil {
 		return err
@@ -70,7 +77,7 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 		case <-ctx.Done():
 			return nil
 		case <-login.done:
-			return errors.New("AWS CLI could not start remote sign-in. Install or update AWS CLI v2 and try again.")
+			return errors.New("Cloud CLI could not start remote sign-in. Install or update the CLI and try again.")
 		}
 	}
 }
@@ -97,7 +104,7 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 			login := &cloudLogin{cancel: cancel, output: &boundedBuffer{limit: 32768}, done: make(chan struct{})}
 			f.cli = login
 			f.InstallRequired = false
-			f.Message = "Installing AWS CLI…"
+			f.Message = "Installing cloud CLI…"
 			go func() { login.err = p.install(installCtx, m.cloud.dir+"/"+f.Integration); cancel(); close(login.done) }()
 		}
 		return flowResult(f), nil
@@ -105,7 +112,7 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 	if f.cli == nil {
 		return Response{}, errors.New("Start sign-in again")
 	}
-	if f.Message == "Installing AWS CLI…" {
+	if f.Message == "Installing cloud CLI…" {
 		select {
 		case <-f.cli.done:
 			if f.cli.err != nil {
@@ -128,20 +135,20 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 	if q.Action == "connect_finish" && !f.cli.sent {
 		code := strings.TrimSpace(q.Callback)
 		if !p.validateCode(f.AuthorizationURL, code) {
-			return Response{}, errors.New("Paste the code AWS shows after sign-in. It must belong to this sign-in.")
+			return Response{}, errors.New("Paste the authorization code shown after sign-in.")
 		}
 		if _, err := io.WriteString(f.cli.stdin, code+"\n"); err != nil {
 			return Response{}, errors.New("This sign-in ended. Start again.")
 		}
 		f.cli.sent = true
 		f.CodeRequired = false
-		f.Message = "Checking your AWS account…"
+		f.Message = "Checking your account…"
 	}
 	select {
 	case <-f.cli.done:
 		if f.cli.err != nil {
 			f.Status = "failed"
-			f.Message = "AWS CLI did not finish sign-in. Start again."
+			f.Message = "Cloud CLI did not finish sign-in. Start again."
 			return flowResult(f), nil
 		}
 		delete(m.cloud.checked, f.profile)
@@ -151,7 +158,7 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 		r := p.profileRecord(m, f.profile)
 		if r == nil || r.Account.Status != "connected" {
 			f.Status = "failed"
-			f.Message = "AWS signed in, but its profile could not be verified. Refresh and try again."
+			f.Message = "Sign-in finished, but the profile could not be verified. Refresh and try again."
 			return flowResult(f), nil
 		}
 		r.Account.Enabled = true

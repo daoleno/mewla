@@ -68,11 +68,11 @@
     },
     "gcp": {
       "credential": {
-        "error": "Google Cloud uses browser sign-in; connect it from Extensions",
+        "error": "Google Cloud uses CLI sign-in; connect it from Extensions",
         "requests": []
       },
       "no_credential": {
-        "error": "Google Cloud uses browser sign-in; connect it from Extensions",
+        "error": "Google Cloud uses CLI sign-in; connect it from Extensions",
         "requests": []
       },
       "spec_on_other": {
@@ -80,7 +80,7 @@
         "requests": []
       },
       "trusted": {
-        "error": "Google Cloud uses browser sign-in; connect it from Extensions",
+        "error": "Google Cloud uses CLI sign-in; connect it from Extensions",
         "requests": []
       },
       "unnamed": {
@@ -613,7 +613,7 @@
       "id": "gcp",
       "name": "Google Cloud",
       "available": true,
-      "setup_url": "https://docs.cloud.google.com/sdk/use-gcloud-mcp",
+      "setup_url": "https://docs.cloud.google.com/sdk/gcloud/reference/auth/login",
       "description": "Projects, compute, storage, databases and more"
     },
     {
@@ -633,7 +633,6 @@
   ],
   "configure": {
     "all_configured": [
-      "gcp",
       "github",
       "linear",
       "notion",
@@ -677,23 +676,15 @@
     },
     "gcp": {
       "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_no_redirect": [
-        "gcp"
-      ],
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
       "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "id_secret_valid": [
-        "gcp"
-      ],
-      "id_valid": [
-        "gcp"
-      ],
-      "mcp_resource": [
-        "gcp"
-      ],
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
       "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
       "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
-      "no_id_no_address": "this service requires a publisher-owned client ID",
-      "no_id_valid": "this service requires a publisher-owned client ID"
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
     },
     "github": {
       "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
@@ -1393,73 +1384,11 @@
         "requests": []
       },
       "direct_operator": {
-        "account": {
-          "auth_method": "oauth",
-          "enabled": true,
-          "endpoint": "https://cloudcli.googleapis.com/mcp",
-          "integration": "gcp",
-          "name": "Google Cloud",
-          "scopes": [
-            "https://www.googleapis.com/auth/cloud-platform",
-            "https://www.googleapis.com/auth/userinfo.email"
-          ],
-          "status": "authorization_required",
-          "trusted_networks": null
-        },
-        "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline\u0026client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026prompt=consent\u0026redirect_uri=http%3A%2F%2F127.0.0.1%3A9877%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email\u0026state=%3Cstate%3E",
-        "oauth": {
-          "auth_style": 1,
-          "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-          "client_id": "op",
-          "issuer": "https://accounts.google.com",
-          "redirect_url": "http://127.0.0.1:9877/plugins/oauth/callback",
-          "resource": "",
-          "revoke_url": "https://oauth2.googleapis.com/revoke",
-          "token_url": "https://oauth2.googleapis.com/token"
-        },
-        "pending": [
-          {
-            "allow_writes": false,
-            "client_secret": false,
-            "mobile": false,
-            "web": false
-          }
-        ],
+        "error": "OAuth is not supported for this plugin",
         "requests": []
       },
       "direct_operator_other": {
-        "account": {
-          "auth_method": "oauth",
-          "enabled": true,
-          "endpoint": "https://cloudcli.googleapis.com/mcp",
-          "integration": "gcp",
-          "name": "Google Cloud",
-          "scopes": [
-            "https://www.googleapis.com/auth/cloud-platform",
-            "https://www.googleapis.com/auth/userinfo.email"
-          ],
-          "status": "authorization_required",
-          "trusted_networks": null
-        },
-        "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline\u0026client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026prompt=consent\u0026redirect_uri=http%3A%2F%2F127.0.0.1%3A9877%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email\u0026state=%3Cstate%3E",
-        "oauth": {
-          "auth_style": 1,
-          "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-          "client_id": "op",
-          "issuer": "https://accounts.google.com",
-          "redirect_url": "http://127.0.0.1:9877/plugins/oauth/callback",
-          "resource": "",
-          "revoke_url": "https://oauth2.googleapis.com/revoke",
-          "token_url": "https://oauth2.googleapis.com/token"
-        },
-        "pending": [
-          {
-            "allow_writes": false,
-            "client_secret": false,
-            "mobile": false,
-            "web": false
-          }
-        ],
+        "error": "OAuth is not supported for this plugin",
         "requests": []
       },
       "direct_trusted": {
@@ -1475,61 +1404,23 @@
         "requests": []
       },
       "native": {
-        "error": "Google Cloud sign-in is not set up yet.",
+        "error": "Sign-in is not set up for this service yet.",
         "requests": []
       },
       "native_custom_endpoint": {
-        "error": "Google Cloud sign-in is not set up yet.",
+        "error": "Sign-in is not set up for this service yet.",
         "requests": []
       },
       "native_operator_secret": {
-        "account": {
-          "auth_method": "oauth",
-          "enabled": true,
-          "endpoint": "https://cloudcli.googleapis.com/mcp",
-          "integration": "gcp",
-          "name": "Google Cloud",
-          "scopes": [
-            "https://www.googleapis.com/auth/cloud-platform",
-            "https://www.googleapis.com/auth/userinfo.email"
-          ],
-          "status": "authorization_required",
-          "trusted_networks": null
-        },
-        "flow": {
-          "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline\u0026client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026prompt=consent\u0026redirect_uri=http%3A%2F%2F127.0.0.1%3A9877%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email\u0026state=%3Cstate%3E",
-          "has_account": true,
-          "integration": "gcp",
-          "status": "waiting",
-          "user_code": "",
-          "web_return": false
-        },
-        "oauth": {
-          "auth_style": 1,
-          "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-          "client_id": "op",
-          "issuer": "https://accounts.google.com",
-          "redirect_url": "http://127.0.0.1:9877/plugins/oauth/callback",
-          "resource": "",
-          "revoke_url": "https://oauth2.googleapis.com/revoke",
-          "token_url": "https://oauth2.googleapis.com/token"
-        },
-        "pending": [
-          {
-            "allow_writes": false,
-            "client_secret": true,
-            "mobile": false,
-            "web": false
-          }
-        ],
+        "error": "OAuth is not supported for this plugin",
         "requests": []
       },
       "native_writes_publishers": {
-        "error": "Google Cloud sign-in is not set up yet.",
+        "error": "Sign-in is not set up for this service yet.",
         "requests": []
       },
       "web": {
-        "error": "Google Cloud sign-in is not set up yet.",
+        "error": "Sign-in is not set up for this service yet.",
         "requests": []
       },
       "web_bad_origin": {
@@ -1537,7 +1428,7 @@
         "requests": []
       },
       "web_writes_publishers": {
-        "error": "Google Cloud sign-in is not set up yet.",
+        "error": "Sign-in is not set up for this service yet.",
         "requests": []
       }
     },
@@ -3922,7 +3813,7 @@
     "none": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3935,7 +3826,7 @@
     "operator_github": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "",
       "hyperliquid": "",
       "linear": "",
@@ -3948,7 +3839,7 @@
     "operator_notion": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3961,7 +3852,7 @@
     "operator_slack_app": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3974,7 +3865,7 @@
     "operator_slack_no_secret_callback": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3987,7 +3878,7 @@
     "operator_slack_relay": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -4000,7 +3891,7 @@
     "operator_slack_secret_app": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -4013,7 +3904,7 @@
     "operator_slack_secret_callback": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -4026,7 +3917,7 @@
     "publisher": {
       "aws": "",
       "cloudflare": "",
-      "gcp": "Google Cloud sign-in is not set up yet.",
+      "gcp": "",
       "github": "",
       "hyperliquid": "",
       "linear": "",
