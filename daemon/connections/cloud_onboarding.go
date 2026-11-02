@@ -82,7 +82,8 @@ func (m *Manager) startManagedCloudInstall(f *connectFlow, force bool) {
 }
 
 func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
-	binary, err := m.cloud.executable(f.Integration)
+	binary, lease, err := m.cloud.acquireExecutable(f.Integration)
+	defer closeCloudLease(lease)
 	if err != nil {
 		return err
 	}
@@ -246,7 +247,8 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 	}
 	// Version probes do not need an account or cloud authorization.
 	if len(q.CLIArgs) == 1 && q.CLIArgs[0] == "--version" {
-		binary, err := m.cloud.executable(q.Integration)
+		binary, lease, err := m.cloud.acquireExecutable(q.Integration)
+		defer closeCloudLease(lease)
 		if err != nil {
 			return Response{}, err
 		}

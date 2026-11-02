@@ -129,9 +129,22 @@ together when the bootstrap is superseded; run the installer fault tests and an
 official package smoke test. The bootstrap is not the automatic update source. Installer settings are isolated from the person's
 gcloud config; ordinary command settings remain shared. Both installers reject
 downgrades and activate with an atomic symlink rename only after validation.
-Commands resolve that symlink to an immutable path before starting. Published
-generations are retained because running vendor CLIs may lazily load their files;
-failed staging is removed. This trades disk space for uninterrupted commands.
+Commands resolve the launcher and acquire a generation lease under the same
+filesystem gate used for activation/pruning. The lease is held for the entire
+command or interactive login and inherited by the child process on Linux/macOS.
+Each provider keeps the active generation and its recorded predecessor; pruning
+deletes older generations only when it can acquire their lease exclusively.
+A candidate's predecessor is published atomically with its launcher, so failed
+activation cannot alter the current rollback pair. Installers also lease staging
+directories. Maintenance runs on first provider use after daemon start and after
+update attempts (including no-op/offline checks); held generations are reconsidered
+on the next pass after their command exits.
+
+`cli/backups` contains profile-mutation snapshots, not SDK packages. Keep the
+two newest directories plus any backup held by an active mutation. Creation and
+pruning share a filesystem gate; the mutation retains its lease through rollback
+and failures. Backup release immediately re-runs pruning. Credential/config
+files outside Mewla's backup directory are not part of this maintenance.
 
 `catalog[].cli` projects the selected version and managed/local source from the
 background refresh, never from a synchronous list-time process. `--version` is
