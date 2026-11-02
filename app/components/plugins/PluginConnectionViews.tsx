@@ -1,5 +1,6 @@
 import { cloudProfilesSummary } from "../../services/cloudProfilesModel";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
+import { CloudProfileNameEntry } from "./CloudProfileNameEntry";
 import { CloudCodeEntry } from "./CloudCodeEntry";
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
@@ -182,6 +183,7 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
       leading={<View style={off ? styles.muted : undefined}><ServiceGlyph id={plugin.id} /></View>}
       title={plugin.name}
       subtitle={subtitle}
+      subtitleNumberOfLines={1}
       trailing={trailing}
       accessory={state.kind === "unavailable" ? undefined : "chevron"}
       numberOfLines={2}
@@ -262,6 +264,7 @@ export function ConnectStatusCard({
   onUseServerAccount,
   onImport,
   onSubmitAddress,
+  onRename,
 }: {
   /** Null for a return that names no service (a stale or replayed sign-in). */
   serviceName: string | null;
@@ -284,6 +287,7 @@ export function ConnectStatusCard({
   onImport(): void;
   /** The address a sign-in ended on, pasted back when the browser could not reach this server. */
   onSubmitAddress(address: string): Promise<void>;
+  onRename?(account: PluginAccount, name: string): Promise<boolean>;
 }) {
   const { colors } = useAppTheme();
   if (serviceName === null) {
@@ -367,6 +371,7 @@ export function ConnectStatusCard({
         {changes.kind !== "none" && !changesOn ? (
           <Button label="Allow changes too" variant="tinted" block loading={allowing} onPress={() => onAllowChanges(connected)} accessibilityHint={job?.write} />
         ) : null}
+        {connected.integration === "aws" && connected.profile && onRename ? <CloudProfileNameEntry key={connected.id} account={connected} suggest onSave={async (name) => { const saved = await onRename(connected, name); if (saved) onDismiss(); return saved; }} /> : null}
         <Button label="Done" variant="plain" block onPress={onDismiss} />
       </StatusCard>
     );
@@ -452,6 +457,7 @@ export function AccountCard({
   onDisconnect,
   onRemoveKey,
   onOpenTools,
+  onRename,
 }: {
   plugin: PluginIntegration;
   account: PluginAccount;
@@ -465,7 +471,9 @@ export function AccountCard({
   /** Hyperliquid: delete the saved API wallet key; the account stays, read only. */
   onRemoveKey?(): Promise<boolean>;
   onOpenTools(): void;
+  onRename?(name: string): Promise<boolean>;
 }) {
+  const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmingKey, setConfirmingKey] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -513,6 +521,8 @@ export function AccountCard({
           </View>
         }
       />
+      {account.integration === "aws" && account.profile && onRename ? renaming ? <CloudProfileNameEntry key={account.id} account={account} onSave={async (name) => { const saved = await onRename(name); if (saved) setRenaming(false); return saved; }} /> : <ListRow title="Rename profile" icon="edit" onPress={() => setRenaming(true)} /> : null}
+      {account.profile_expires_at ? <ListRow icon="time" title="Credential expiry" subtitle={`${formatDate(account.profile_expires_at, DateStyle.fullDateTime, { timeZoneName: "short" })} · ${account.profile_expiry_source || "CLI cache"}`} numberOfLines={3} /> : null}
       {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle={`Use ${plugin.name} remote sign-in for this ${account.integration === "gcp" ? "account" : "profile"}.`} trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
       {!account.profile && recovery ? (
         <ListRow

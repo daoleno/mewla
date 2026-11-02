@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -55,7 +56,17 @@ func (c *cloudRuntime) executable(id string) (string, error) {
 	if p == nil {
 		return "", errors.New("Cloud CLI is not supported")
 	}
-	if path, err := exec.LookPath(p.binary()); err == nil {
+	validate := func(path string) bool {
+		if provider, ok := p.(interface {
+			validateExecutable(context.Context, string) error
+		}); ok {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return provider.validateExecutable(ctx, path) == nil
+		}
+		return true
+	}
+	if path, err := exec.LookPath(p.binary()); err == nil && validate(path) {
 		return path, nil
 	}
 	paths := []string{filepath.Join(c.dir, id, "bin", p.binary())}
@@ -63,7 +74,7 @@ func (c *cloudRuntime) executable(id string) (string, error) {
 		paths = append(paths, provider.installPaths()...)
 	}
 	for _, path := range paths {
-		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0111 != 0 {
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0111 != 0) && validate(path) {
 			return path, nil
 		}
 	}

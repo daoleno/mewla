@@ -31,6 +31,8 @@ export type PluginAccount = {
   profile?: string;
   profile_kind?: string;
   profile_status?: string;
+  profile_expires_at?: string;
+  profile_expiry_source?: string;
   project?: string;
   active?: boolean;
   id: string;
@@ -77,7 +79,8 @@ export type ConnectionRequest = {
   callback?: string;
   group?: "read" | "write";
   confirm_profile?: string;
-  action: "cloud_delete" | "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
+  profile?: string;
+  action: "cloud_rename" | "cloud_delete" | "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
   id?: string;
   tool?: string;
   /** policy: several tools at once, all of them or none. confirm_updates and dismiss_updates: the updated tools shown. */

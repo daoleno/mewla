@@ -343,6 +343,11 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     if (group === "write" && allowed && account.access?.write_consent) { void connect(account.integration, { writes: true }); return; }
     void send({ action: "permissions", id: account.id, group, allowed }, `${group}:${account.id}`);
   };
+  const renameProfile = async (account: PluginAccount, name: string) => {
+    const response = await send({ action: "cloud_rename", id: account.id, profile: name }, `rename:${account.id}`);
+    if (response && valid()) { if (connectedId === account.id && response.account) setConnectedId(response.account.id); await send({ action: "list" }); }
+    return !!response;
+  };
   const disconnect = async (account: PluginAccount) => {
     const response = await send(account.profile ? { action: "cloud_delete", id: account.id, confirm_profile: account.profile } : { action: "disconnect", id: account.id }, `disconnect:${account.id}`);
     if (response && valid()) { if (connectedId === account.id) dismiss(); if (account.profile) await send({ action: "list" }); }
@@ -385,7 +390,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   /** How a notice names an account's service: a custom service by its own name. */
   const serviceLabel = (account: PluginAccount) => account.integration === "mcp" || account.integration === "openapi" ? account.name : plugin(account.integration)?.name ?? account.name;
   return {
-    serverId, serverName, connection, deferredName,
+    renameProfile, serverId, serverName, connection, deferredName,
     catalog, accounts, details, loaded, running, busy: running !== null, error, phase, flow, service, connectError,
     connected: accounts.find((account) => account.id === connectedId) ?? null,
     rows: pluginCatalogRows(catalog, accounts, pluginJobs),
@@ -414,6 +419,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
       {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
       {flow.error && !catalogFailed ? <InlineNotice tone="danger" title="That didn't go through" detail={flow.error} /> : null}
       {flow.serverId && (flow.service || flow.connectError) ? <ConnectStatusCard
+        onRename={flow.renameProfile}
         serviceName={flow.plugin(flow.service)?.name ?? null}
         phase={flow.phase}
         flow={flow.flow}

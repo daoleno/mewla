@@ -95,6 +95,7 @@ export interface ListRowProps {
   accessibilityHint?: string;
   accessibilityRole?: "button" | "radio" | "link" | "switch" | "none";
   numberOfLines?: number;
+  subtitleNumberOfLines?: number;
 }
 
 /** One row of a ListSection. Pressable when `onPress` is set. */
@@ -117,6 +118,7 @@ export function ListRow({
   accessibilityHint,
   accessibilityRole,
   numberOfLines = 1,
+  subtitleNumberOfLines = 2,
 }: ListRowProps) {
   const { colors } = useAppTheme();
   // Seal & Slip: a bare soft-ink glyph, no coloured tile; the label leads.
@@ -136,7 +138,7 @@ export function ListRow({
         {title}
       </AppText>
       {subtitle ? (
-        <AppText variant="caption" tone="tertiary" numberOfLines={2}>
+        <AppText variant="caption" tone="tertiary" numberOfLines={subtitleNumberOfLines}>
           {subtitle}
         </AppText>
       ) : null}
