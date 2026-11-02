@@ -306,3 +306,12 @@ Daemon archives contain `mewla`, `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. Relea
 - Gradle caches only dependency/build state under the runner's Gradle home, saved by a debug-signed `main` build with no secrets. Zig/Ghostty source and unsigned native-output keys include the native lock and build/verification inputs; every cache hit still runs release-grade manifest, checksum, ABI, and notice verification.
 - No cache path includes a keystore, updater signing key, signed APK, or staged release output. Release tag runs never save a cache.
 - Pinned Zig archives are SHA-256 verified before extraction under `$MEWLA_TOOL_CACHE` (`$RUNNER_TEMP/tools` in CI; not `/usr/local`). No `sudo` or unverified installers.
+
+### Cloud CLI bootstrap maintenance
+
+Before a Mewla release, check the official Google Cloud SDK versioned archives
+and refresh `gcpBootstrapVersion` and all four platform SHA256 values in
+`daemon/connections/gcp_install.go` together when the bootstrap is superseded.
+Verify the official archives and run the cloud installer failure/rollback tests.
+These pins bootstrap Google's own updater; normal SDK updates do not depend on a
+Mewla release. AWS uses signed current packages and needs no version pin.

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -173,19 +174,40 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 	if hint := awsInstallHint(a.goos, a.arch); hint != "" {
 		return errors.New(hint)
 	}
+	address := "https://awscli.amazonaws.com/AWSCLIV2.pkg"
+	if a.goos == "linux" {
+		arch := "x86_64"
+		if a.arch == "arm64" {
+			arch = "aarch64"
+		}
+		address = "https://awscli.amazonaws.com/awscli-exe-linux-" + arch + ".zip"
+	}
+	// ETag is only a bandwidth hint; activation still requires signature verification.
+	etag := ""
+	request, _ := http.NewRequestWithContext(ctx, http.MethodHead, address, nil)
+	if response, err := a.client.Do(request); err == nil {
+		response.Body.Close()
+		if response.StatusCode == http.StatusOK {
+			etag = response.Header.Get("ETag")
+		}
+	}
+	var previous struct {
+		ETag    string `json:"etag"`
+		Version string `json:"version"`
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "package.json"))
+	_ = json.Unmarshal(data, &previous)
+	if etag != "" && previous.ETag == etag {
+		check, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		if version, err := cloudExecutableVersion(check, "aws", filepath.Join(dir, "bin", "aws"), a.run, awsCLI{}.environment()); err == nil && version == previous.Version {
+			return nil
+		}
+	}
 	if err := os.MkdirAll(filepath.Join(dir, "versions"), 0700); err != nil {
 		return errAWSInstall
 	}
-	// Recover an interrupted process without touching the active generation.
-	active, _ := filepath.EvalSymlinks(filepath.Join(dir, "bin", "aws"))
-	stale, _ := filepath.Glob(filepath.Join(dir, "versions", "install-*"))
-	for _, path := range stale {
-		if !strings.HasPrefix(active, path+string(filepath.Separator)) {
-			if err := os.RemoveAll(path); err != nil {
-				return errAWSInstall
-			}
-		}
-	}
+	// Retain published generations: a running command may still load their files.
 	generation, err := os.MkdirTemp(filepath.Join(dir, "versions"), "install-")
 	if err != nil {
 		return errAWSInstall
@@ -257,6 +279,14 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 	if e != nil || out.ExitCode != 0 || !validAWSVersion(out.Stdout) {
 		return errAWSInstall
 	}
+	version := strings.TrimPrefix(awsVersion.FindString(strings.TrimSpace(out.Stdout)), "aws-cli/")
+	if current, err := cloudExecutableVersion(checkCtx, "aws", filepath.Join(dir, "bin", "aws"), a.run, env); err == nil && cloudVersionLess(version, current) {
+		return errors.New("The AWS download is older than the installed CLI")
+	}
+	out, e = a.run(checkCtx, installed, []string{"sts", "get-caller-identity", "--generate-cli-skeleton", "input"}, env)
+	if e != nil || out.ExitCode != 0 || !strings.HasPrefix(strings.TrimSpace(out.Stdout), "{") {
+		return errAWSInstall
+	}
 	if err = ctx.Err(); err != nil {
 		return errAWSInstall
 	}
@@ -274,6 +304,11 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 		return errAWSInstall
 	}
 	published = true
+	if etag != "" {
+		previous.ETag, previous.Version = etag, version
+		data, _ := json.Marshal(previous)
+		_ = os.WriteFile(filepath.Join(dir, "package.json"), data, 0600)
+	}
 	_ = os.RemoveAll(downloads)
 	return nil
 }

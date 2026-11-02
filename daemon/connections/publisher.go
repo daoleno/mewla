@@ -51,6 +51,9 @@ func (m *Manager) unavailableReason(kind string) string {
 func (m *Manager) catalog() []Integration {
 	catalog := []Integration{}
 	for _, item := range Catalog() {
+		if m.cloud != nil {
+			item.CLI = m.cloudInfo[item.ID]
+		}
 		item.UnavailableReason = m.unavailableReason(item.ID)
 		item.Available = item.UnavailableReason == ""
 		catalog = append(catalog, item)

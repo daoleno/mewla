@@ -111,6 +111,13 @@ func (m *Manager) syncGCPProfiles(ctx context.Context, force bool) error {
 			r.Account.Project = chosen.Properties["core"]["project"]
 			r.Account.Active = chosen.Active
 		}
+	}
+	if m.cloudDiscovered != nil {
+		m.cloudDiscovered()
+	}
+	for account := range seen {
+		profile := "account:" + account
+		r := m.gcpProfileRecord(profile)
 		key := "gcp:" + account
 		if !force && time.Since(m.cloud.checked[key]) < time.Minute {
 			continue

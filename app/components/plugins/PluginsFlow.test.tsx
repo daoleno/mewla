@@ -33,10 +33,25 @@ if (!process.env.MEWLA_PLUGIN_FLOW_TEST_CHILD) {
   mock.module("../../services/pluginBrowser", () => ({ openPluginAuthorization: async () => ({ type: "external" }) }));
   const flow = { id: "aws-flow", integration: "aws", status: "waiting", address_required: true, authorization_url: "https://example.com", expires: new Date(Date.now() + 3600000).toISOString() };
   const request = mock(async (_server: string, req: any): Promise<any> => req.action === "list" ? { catalog: [], accounts: [] } : { flow });
-  mock.module("../../services/websocket", () => ({ wsClient: { requestConnections: request, on: noop, off: noop } }));
+  const handlers = new Map<string, (data: any) => void>();
+  mock.module("../../services/websocket", () => ({ wsClient: { requestConnections: request, on: (type: string, fn: (data: any) => void) => handlers.set(type, fn), off: (type: string) => handlers.delete(type) } }));
   const { PluginsFlowProvider, usePluginsFlow } = await import("./PluginsFlow");
   let state!: ReturnType<typeof usePluginsFlow>;
   function Capture() { state = usePluginsFlow(); return null; }
+
+  test("background connection updates apply only to the current server and unsubscribe", async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => { tree = TestRenderer.create(<PluginsFlowProvider serverId="server" serverName="Server" connection="connected" deferReturn={async () => {}}><Capture /></PluginsFlowProvider>); });
+    const account = { id: "cloud", name: "Cloud", integration: "aws", checking: true };
+    await act(async () => handlers.get("connections_changed")?.({ serverId: "old-server", connections: { accounts: [account] } }));
+    expect(state.accounts).toEqual([]);
+    await act(async () => handlers.get("connections_changed")?.({ serverId: "server", connections: { accounts: [account] } }));
+    expect(state.accounts[0].checking).toBe(true);
+    await act(async () => handlers.get("connections_changed")?.({ serverId: "server", connections: { accounts: [{ ...account, checking: false, profile_status: "valid" }] } }));
+    expect(state.accounts[0].profile_status).toBe("valid");
+    await act(async () => tree.unmount());
+    expect(handlers.has("connections_changed")).toBe(false);
+  });
 
   test("bad address is retryable, polling keeps the flow, and Continue during polling is delivered", async () => {
     let tree!: TestRenderer.ReactTestRenderer;

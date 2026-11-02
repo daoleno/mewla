@@ -10,6 +10,9 @@ func (s *Server) SetConnections(manager *connections.Manager) {
 	s.connections = manager
 	if manager != nil {
 		manager.SetWebOrigins(s.servesWebOrigin)
+		manager.SetChanged(func(response connections.Response) {
+			s.broadcastJSON(map[string]any{"type": "connections_changed", "connections": response})
+		})
 	}
 }
 func (s *Server) handleConnections(conn *websocket.Conn, raw clientMessage) {

@@ -100,6 +100,13 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       if (next.tools) setDetails((old) => ({ ...old, [next.id]: next }));
     }
   }, [valid]);
+  useEffect(() => {
+    const changed = (payload: { serverId: string; connections?: ConnectionResponse }) => {
+      if (payload.serverId === serverId && payload.connections && valid()) apply(payload.connections);
+    };
+    wsClient.on("connections_changed", changed);
+    return () => wsClient.off("connections_changed", changed);
+  }, [apply, serverId, valid]);
   const send = useCallback(async (request: ConnectionRequest, key?: string): Promise<ConnectionResponse | undefined> => {
     if (!serverId || !valid() || mutation.current) return;
     mutation.current = true; setRunning(key ?? request.action); setError("");

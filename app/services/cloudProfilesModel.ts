@@ -14,6 +14,7 @@ export function cloudProfileExpiry(a: PluginAccount, now = Date.now()): { label:
 }
 
 export function cloudProfileStatus(a: PluginAccount): { label: string; tone: "success" | "warning" | "neutral" } {
+  if (a.checking) return { label: "Checking…", tone: "neutral" };
   switch (a.profile_status) {
     case "valid": return { label: "Signed in", tone: "success" };
     case "expired": return { label: "Expired", tone: "warning" };

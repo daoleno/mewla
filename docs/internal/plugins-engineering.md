@@ -76,9 +76,14 @@ Run meaningful connection regressions, `GOMAXPROCS=2 go test -p 1 ./...`, daemon
 
 ### CLI cloud accounts
 
-AWS uses the installed AWS CLI and its own ~/.aws config, credentials and caches.
-Profiles are refreshed from those files on every list, with STS identity checks
-cached for one minute. Newly discovered profiles are disabled for agents until
+AWS uses the managed official AWS CLI and the person's ~/.aws config, credentials
+and caches. Lists return an immutable snapshot without acquiring the account
+mutation lock or starting a CLI. Per-provider background refreshes are deduplicated
+for one minute, with a shared four-command limit. Discovery publishes rows before
+status checks finish; `connections_changed` pushes snapshots to paired clients,
+which ignore updates from any other server. `checking` is transient presentation
+state. Refreshes merge only records unchanged since their snapshot, so deletes
+and permission changes win over stale work. Newly discovered profiles are disabled for agents until
 the person enables them. Add and Sign in again always run `aws login --remote`
 with a named profile, regardless of where the browser runs. Mewla validates the
 returned code/state before feeding the CLI; the CLI owns PKCE and credential storage.
@@ -103,7 +108,34 @@ and their vault credentials are removed, with no compatibility path.
 environment, remote login argv, URL/code validation, command classification and
 installer. cloudRuntime owns execution limits and cloudLogin owns process lifetime.
 Provider profile enumeration/deletion and identity discovery remain vendor specific.
-The fixed official AWS installer is offered when the executable is missing.
+Managed binaries take precedence over PATH. Update attempts are recorded under
+`cli/<provider>/update.json` at most once every 24 hours, including failures and
+daemon restarts. An hourly scheduler checks providers already used; first command
+use and a seven-day gap wait for the shared update (bounded to three minutes).
+The installer lock also prevents two processes from updating the same directory.
+A failed update preserves the active generation and falls back to a validated
+local executable when needed (AWS >=2.32, gcloud >=400).
+
+AWS verifies the official detached PGP signature on Linux and AWS's Apple team
+signature on macOS. ETag plus the installed version avoids unchanged downloads;
+version and model-loading smoke checks run before activation. Google bootstraps
+from a SHA256-pinned archive, then uses `gcloud components update --quiet` in an
+independent SDK copy. Google's HTTPS rapid-channel manifest and component updater
+provide new versions and checksum verification without refreshing Mewla's bootstrap
+pins on every SDK release. As a Mewla release maintenance step, check Google's
+[versioned archives](https://docs.cloud.google.com/sdk/docs/downloads-versioned-archives)
+and refresh `gcpBootstrapVersion` plus all four `gcpArchives` SHA256 digests
+together when the bootstrap is superseded; run the installer fault tests and an
+official package smoke test. The bootstrap is not the automatic update source. Installer settings are isolated from the person's
+gcloud config; ordinary command settings remain shared. Both installers reject
+downgrades and activate with an atomic symlink rename only after validation.
+Commands resolve that symlink to an immutable path before starting. Published
+generations are retained because running vendor CLIs may lazily load their files;
+failed staging is removed. This trades disk space for uninterrupted commands.
+
+`catalog[].cli` projects the selected version and managed/local source from the
+background refresh, never from a synchronous list-time process. `--version` is
+the only account-free `cloud_run` probe; cloud command authorization is unchanged.
 
 An OAuth callback can land on a different Mewla computer using the same loopback
 port. Unknown state must never redirect away or exchange the code: the callback
