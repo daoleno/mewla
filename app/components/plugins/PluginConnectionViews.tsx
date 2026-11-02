@@ -45,8 +45,6 @@ const SERVICE_LOGOS: Record<string, React.ComponentProps<typeof Ionicons>["name"
 const SERVICE_ICONS: Record<string, IconName> = {
   mcp: "server",
   openapi: "code",
-  aws: "cube",
-  gcp: "server",
 };
 
 export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
@@ -294,8 +292,15 @@ export function ConnectStatusCard({
       </StatusCard>
     ) : null;
   }
-  if (flow?.flow.install_required) return <StatusCard title={`Install ${serviceName} CLI`} detail="Install the official CLI on this computer, then sign in.">
-    <Button label="Install and sign in" variant="filled" block loading={starting || phase === "verifying"} onPress={() => void onSubmitAddress("")} />
+  if (flow?.flow.install_required && flow.flow.status === "waiting") {
+    const install = flow.flow;
+    return <StatusCard title={install.message || `Install ${serviceName} CLI`} detail={install.message ? undefined : "Install the official CLI on this computer, then sign in."}>
+      {install.install_manual && install.install_url ? <Button label={`Download ${serviceName} CLI`} icon="open-external" variant="plain" block onPress={() => void Linking.openURL(install.install_url!)} /> : null}
+      <Button label={install.install_manual ? "Check again" : install.install_failed ? "Retry" : "Install and sign in"} variant="filled" block loading={starting || phase === "verifying"} onPress={() => void onSubmitAddress("")} />
+      <Button label="Cancel" variant="plain" block onPress={onCancel} />
+    </StatusCard>;
+  }
+  if (flow?.flow.installing && flow.flow.status === "waiting") return <StatusCard busy title={`Installing ${serviceName} CLI…`}>
     <Button label="Cancel" variant="plain" block onPress={onCancel} />
   </StatusCard>;
   if (flow?.flow.code_required && (phase === "waiting" || phase === "verifying")) return <StatusCard title={`Sign in to ${serviceName}`} detail={`Open ${serviceName}, sign in, then paste the code shown there.`}>
