@@ -116,7 +116,10 @@ func (gcloudCLI) classify(args []string) (bool, error) {
 	}
 	for _, a := range args {
 		key, _, _ := strings.Cut(a, "=")
-		for _, blocked := range []string{"--account", "--configuration", "--impersonate-service-account", "--access-token-file", "--credential-file-override", "--flags-file", "--log-http", "--trace-token", "--verbosity", "--billing-project", "--endpoint", "--universe-domain"} {
+		if strings.HasPrefix(key, "--") && (strings.Contains(key, "file") || strings.HasSuffix(key, "-directory") || strings.HasSuffix(key, "-dir")) {
+			return false, callRefused("Local file arguments are unavailable through this connection")
+		}
+		for _, blocked := range []string{"--account", "--configuration", "--impersonate-service-account", "--access-token-file", "--credential-file-override", "--flags-file", "--log-http", "--trace-token", "--verbosity", "--billing-project", "--endpoint", "--universe-domain", "--source", "--destination", "--output", "--command", "--script", "--shell-command"} {
 			if strings.HasPrefix(key, "--") && strings.HasPrefix(blocked, key) {
 				return false, callRefused("This option cannot override the connected account or load local files")
 			}
