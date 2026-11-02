@@ -31,7 +31,7 @@ export function CloudProfileList({ accounts, renderDetails }: {
           <AppText variant="compact" numberOfLines={1}>{name}</AppText>
           {account.integration === "aws" && account.aws?.account_id ? <View style={styles.identity}>
             {account.aws.account_name ? <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.alias}>{account.aws.account_name}</AppText> : null}
-            <AppText variant="caption" tone="secondary" numberOfLines={1}>{account.aws.account_name ? " · " : ""}{account.aws.account_id}</AppText>
+            <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.accountID}>{account.aws.account_name ? " · " : ""}{account.aws.account_id}</AppText>
           </View> : identity ? <AppText variant="caption" tone="secondary" numberOfLines={1}>{identity}</AppText> : null}
         </View>
         <View style={styles.state}><StatusPill label={status.label} tone={status.tone} />{expiry ? <AppText variant="caption" tone={expiry.soon ? "secondary" : "tertiary"} numberOfLines={1}>{expiry.label}</AppText> : null}</View>
@@ -57,6 +57,7 @@ const styles = StyleSheet.create({
   row: { minHeight: 52, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 },
   name: { flex: 1, minWidth: 0 },
   identity: { flexDirection: "row", alignItems: "center", minWidth: 0 },
+  accountID: { flexShrink: 0 },
   alias: { flexShrink: 1, minWidth: 0 },
   state: { alignItems: "flex-end", gap: 3 },
   group: { flex: 1 },
