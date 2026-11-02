@@ -64,6 +64,9 @@ type AccountSetup struct {
 }
 
 type Account struct {
+	Profile         string        `json:"profile,omitempty"`
+	ProfileKind     string        `json:"profile_kind,omitempty"`
+	ProfileStatus   string        `json:"profile_status,omitempty"`
 	ID              string        `json:"id"`
 	Integration     string        `json:"integration"`
 	Name            string        `json:"name"`
@@ -111,6 +114,7 @@ type Access struct {
 }
 
 type Input struct {
+	Profile         string   `json:"profile,omitempty"`
 	Integration     string   `json:"integration"`
 	Name            string   `json:"name"`
 	Endpoint        string   `json:"endpoint,omitempty"`
@@ -132,14 +136,19 @@ type Input struct {
 }
 
 type Request struct {
-	FlowID   string `json:"flow_id,omitempty"`
-	Callback string `json:"callback,omitempty"`
-	Group    string `json:"group,omitempty"`
-	Action   string `json:"action"`
-	ID       string `json:"id,omitempty"`
-	Input    *Input `json:"input,omitempty"`
-	Query    string `json:"query,omitempty"`
-	Tool     string `json:"tool,omitempty"`
+	CLIArgs        []string `json:"cli_args,omitempty"`
+	Integration    string   `json:"integration,omitempty"`
+	Profile        string   `json:"profile,omitempty"`
+	Authorize      bool     `json:"authorize,omitempty"`
+	ConfirmProfile string   `json:"confirm_profile,omitempty"`
+	FlowID         string   `json:"flow_id,omitempty"`
+	Callback       string   `json:"callback,omitempty"`
+	Group          string   `json:"group,omitempty"`
+	Action         string   `json:"action"`
+	ID             string   `json:"id,omitempty"`
+	Input          *Input   `json:"input,omitempty"`
+	Query          string   `json:"query,omitempty"`
+	Tool           string   `json:"tool,omitempty"`
 	// Tools sets one policy for several tools at once (the policy action).
 	Tools     []string        `json:"tools,omitempty"`
 	Arguments json.RawMessage `json:"arguments,omitempty"`
@@ -158,6 +167,7 @@ type Match struct {
 }
 
 type Response struct {
+	CLIOutput        *cloudOutput    `json:"cli_output,omitempty"`
 	Flow             *ConnectFlow    `json:"flow,omitempty"`
 	Catalog          []Integration   `json:"catalog,omitempty"`
 	Accounts         []Account       `json:"accounts,omitempty"`

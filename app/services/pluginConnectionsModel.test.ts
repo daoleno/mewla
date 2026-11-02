@@ -6,8 +6,7 @@ import {
   accountTone,
   awsAccountSummary,
   signInAddressFromText,
-  isAwsSignInAddress,
-  loopbackSignInInput,
+  accountSignInInput,
   bulkToolNames,
   canDisconnect,
   connectLabel,
@@ -265,8 +264,8 @@ describe("AWS", () => {
   test("an expired session offers the same Sign in to AWS button, naming its own card", () => {
     const expired = aws({ id: "aws-3", status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired. Sign in again." }] });
     expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" });
-    expect(loopbackSignInInput(expired)).toEqual({ integration: "aws", account_id: "aws-3" });
-    expect(loopbackSignInInput(account({ integration: "github" }))).toBeNull();
+    expect(accountSignInInput(expired)).toEqual({ integration: "aws", account_id: "aws-3" });
+    expect(accountSignInInput(account({ integration: "github" }))).toBeNull();
     expect(connectLabel({ id: "aws", name: "AWS" })).toBe("Sign in to AWS");
     expect(connectLabel({ id: "github", name: "GitHub" })).toBe("Connect GitHub");
     // No terminal command anywhere.
@@ -281,21 +280,6 @@ describe("AWS", () => {
     for (const stray of ["", null, undefined, "short", "two words here", "https://example.com/?state=x&code=y-and-more", "http://127.0.0.1:9877/plugins/oauth/callback?code=abc", "http://127.0.0.1:9877/x\nnext?state=1", "a".repeat(9000)]) {
       expect(signInAddressFromText(stray)).toBe("");
     }
-  });
-
-  test("AWS sign-in pages are distinguished from callbacks and lookalike hosts", () => {
-    for (const address of [
-      "https://us-east-1.signin.aws.amazon.com/oauth?iam_user=true&backwards_compatible=true&redirect_uri=http%3A%2F%2F127.0.0.1%3A9876%2Fplugins%2Foauth%2Fcallback&state=test",
-      "https://signin.aws.amazon.com/signin",
-      "https://us-east-1.oauth.signin.aws/v1/authorize?state=test",
-      "  US-EAST-1.SIGNIN.AWS.AMAZON.COM/oauth  ",
-    ]) expect(isAwsSignInAddress(address)).toBe(true);
-    for (const address of [
-      "", "123456", "http://127.0.0.1:9876/plugins/oauth/callback?state=test&code=test",
-      "https://signin.aws.amazon.com.evil.example/oauth", "https://notsignin.aws/oauth",
-      "https://evil.example/?next=https://signin.aws.amazon.com/oauth",
-      "https://signin.aws.amazon.com@evil.example/oauth", "ftp://signin.aws.amazon.com/oauth",
-    ]) expect(isAwsSignInAddress(address)).toBe(false);
   });
 
   test("the service row says Reconnect for an expired account", () => {
@@ -330,6 +314,6 @@ describe("awsAccountSummary", () => {
 
 // Google uses the same cross-device return and preserves the existing account.
 test("Google Cloud reconnect keeps its account identity", () => {
-  expect(loopbackSignInInput({ id: "gcp-account", integration: "gcp" })).toEqual({ integration: "gcp", account_id: "gcp-account" });
-  expect(loopbackSignInInput({ id: "other", integration: "github" })).toBeNull();
+  expect(accountSignInInput({ id: "gcp-account", integration: "gcp" })).toEqual({ integration: "gcp", account_id: "gcp-account" });
+  expect(accountSignInInput({ id: "other", integration: "github" })).toBeNull();
 });

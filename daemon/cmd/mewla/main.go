@@ -152,6 +152,8 @@ func run(args []string, stderr io.Writer) error {
 			return runCalendarCommand(args[1:], stderr)
 		case "browser":
 			return runBrowserCommand(args[1:], stderr)
+		case "aws":
+			return runCloudCommand("aws", args[1:], stderr)
 		case "connections":
 			return runConnectionsCommand(args[1:], stderr)
 		case "watch":
@@ -697,6 +699,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
+	connectionManager.EnableLocalCloudCLI()
+	defer connectionManager.Close()
 	if err := connectionManager.EnsureDefaults(); err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
@@ -2624,6 +2628,7 @@ Agents and tools
   memory       Search Brain chat for what the user said or decided
   worker       List, spawn, inspect, message, progress, and close Mewla Workers
   providers    Set the image model behind Codex image_gen
+  aws          Run AWS CLI commands through the connected profile
   connections  Plugins shared by Brain and Workers
   calendar     List, create, update, cancel or run scheduled Brain work
   watch        Inspect what Watch collects about your projects

@@ -539,6 +539,9 @@ func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx cont
 	return ""
 }
 func (m *Manager) accountToken(ctx context.Context, r *record) (string, error) {
+	if r.CLI != nil {
+		return "", nil
+	}
 	raw, ok, err := m.vault.Get("integration:" + r.Account.ID)
 	if err != nil {
 		return "", errors.New("credential store unavailable")

@@ -2,11 +2,11 @@
   "add": {
     "aws": {
       "credential": {
-        "error": "AWS uses browser sign-in; connect it from Extensions",
+        "error": "AWS uses CLI sign-in; connect it from Extensions",
         "requests": []
       },
       "no_credential": {
-        "error": "AWS uses browser sign-in; connect it from Extensions",
+        "error": "AWS uses CLI sign-in; connect it from Extensions",
         "requests": []
       },
       "spec_on_other": {
@@ -14,7 +14,7 @@
         "requests": []
       },
       "trusted": {
-        "error": "AWS uses browser sign-in; connect it from Extensions",
+        "error": "AWS uses CLI sign-in; connect it from Extensions",
         "requests": []
       },
       "unnamed": {
@@ -606,8 +606,8 @@
       "id": "aws",
       "name": "AWS",
       "available": true,
-      "setup_url": "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/oauth-authentication.html",
-      "description": "The whole AWS API: EC2, RDS, S3, CloudWatch and more, through AWS's own MCP server"
+      "setup_url": "https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html",
+      "description": "Your local AWS CLI profiles: compute, storage, databases and more"
     },
     {
       "id": "gcp",
@@ -831,42 +831,27 @@
   "connect": {
     "aws": {
       "direct": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
       },
       "direct_custom": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
       },
       "direct_mobile": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
       },
       "direct_operator": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
       },
       "direct_operator_other": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
       },
       "direct_trusted": {
-        "error": "internal network trust is only available for custom MCP",
+        "error": "Sign-in is not set up for this service yet.",
         "requests": []
       },
       "direct_unnamed_long": {
@@ -874,57 +859,36 @@
         "requests": []
       },
       "direct_writes": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
       },
       "native": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Cloud CLI is unavailable",
+        "requests": []
       },
       "native_custom_endpoint": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Cloud CLI is unavailable",
+        "requests": []
       },
       "native_operator_secret": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Cloud CLI is unavailable",
+        "requests": []
       },
       "native_writes_publishers": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Cloud CLI is unavailable",
+        "requests": []
       },
       "web": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Cloud CLI is unavailable",
+        "requests": []
       },
       "web_bad_origin": {
-        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "error": "Cloud CLI is unavailable",
         "requests": []
       },
       "web_writes_publishers": {
-        "error": "OAuth dynamic registration failed; this provider may require a registered client",
-        "requests": [
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}",
-          "POST https://us-east-1.oauth.signin.aws/v1/register body={\"application_type\":\"native\",\"client_name\":\"Mewla\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:9877/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
-        ]
+        "error": "Cloud CLI is unavailable",
+        "requests": []
       }
     },
     "bogus": {

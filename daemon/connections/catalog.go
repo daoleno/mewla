@@ -361,17 +361,9 @@ func buildCatalog() []*entry {
 			},
 		},
 		{
-			Integration: Integration{ID: "aws", Name: "AWS", Available: true, SetupURL: "https://docs.aws.amazon.com/agent-toolkit/latest/userguide/oauth-authentication.html", Description: "The whole AWS API: EC2, RDS, S3, CloudWatch and more, through AWS's own MCP server"},
-			Driver:      "aws", Endpoint: awsMCPEndpoint, Tools: awsTools,
-			AddRefusal: "AWS uses browser sign-in; connect it from Extensions",
-			OAuth: &oauthSpec{
-				Source: clientOperator, Loopback: true, KeepGrants: true,
-				Scopes: func(bool) []string { return nil },
-				Static: &staticOAuth{
-					Issuer: awsIssuer, AuthURL: awsIssuer + "/v1/authorize", TokenURL: awsIssuer + "/v1/token", Registration: awsIssuer + "/v1/register",
-					AuthMethods: []string{"none"}, Resource: awsMCPEndpoint,
-				},
-			},
+			Integration: Integration{ID: "aws", Name: "AWS", Available: true, SetupURL: "https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html", Description: "Your local AWS CLI profiles: compute, storage, databases and more"},
+			Driver:      "aws", Endpoint: "https://aws.amazon.com", Tools: awsTools,
+			AddRefusal: "AWS uses CLI sign-in; connect it from Extensions",
 		},
 		{
 			Integration: Integration{ID: "gcp", Name: "Google Cloud", Available: true, SetupURL: "https://docs.cloud.google.com/sdk/use-gcloud-mcp", Description: "Projects, compute, storage, databases and more"},

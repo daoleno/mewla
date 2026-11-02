@@ -15,7 +15,7 @@ The catalog names the current server and its connection state. It lists **Connec
 | GitHub | Official device authorization, or preview and explicitly import a server-signed-in identity through `gh` | Dev, local and release builds use the committed Mewla-owned public client ID. Live device-code issuance and the official login page are verified; user login/consent remains. Existing identity import is not first-time signup proof. |
 | Slack | Official public-client PKCE with user scopes and rotating tokens | Mewla's app (`A0CA39R2DS6`) lives in the Mewla workspace `T0CA7628ECC` owned by daodaoonline@gmail.com; its public client ID is in `release/plugin-publishers.json` and release CI requires it. Public distribution is on (activated 2026-10-18), so any workspace can install it. The app's sign-in returns through `https://connect.mewla.ai/plugins/return` (`connections.NativeReturnRelay`), which forwards only code, state and error to `mewla://plugins`, exactly like Cloudflare. `mewla://plugins` stays registered for daemons from 0.2.26 and earlier, which redirect there directly. No shared client secret or public daemon callback. |
 | Hyperliquid | No provider sign-in. Public info reads, with the address as a per-call argument, and L1 signing with an API wallet key (`daemon/connections/hyperliquid*.go`) | `Manager.EnsureDefaults` (called once from `cmd/mewla/main.go`, no network call) keeps one keyless mainnet reader on, which a mainnet key upgrades in place so Brain never sees two read sets. The mainnet account refuses `disconnect` (it is switched off, or loses its key with `remove_key`); a reader that an earlier version let the person disconnect is revived in place, on, at the next start. A key is the only input: `userRole` maps the signer to its master user (verified live: `{"role":"agent","data":{"user":…}}`), mainnet first then testnet, so the key names its account and network; `user`, `vault`, `subAccount` and `missing` are refused in a line. Then `extraAgents` must list it unexpired. Tool definitions are unchanged, so existing accounts keep their grants. The key is stored per account in the vault. Signing is a Go port of the official Python SDK (`signing.py`: msgpack action hash, phantom agent, EIP-712 `Exchange` domain, source `a`/`b`) and is tested against vectors the SDK itself produced (`testdata/hyperliquid_vectors.json`, regenerated with the SDK under `python -I`). Only `order`, `batchModify`, `cancel`, `cancelByCloid`, `updateLeverage` and `scheduleCancel` are signed; user-signed actions (`withdraw3`, `usdSend`, `spotSend`, `sendAsset`) and `vaultTransfer` have no code path. |
-| AWS | AWS Sign-In OAuth for AWS's managed MCP server (`aws-mcp.us-east-1.api.aws/mcp`), a loopback return on the daemon's own port (`oauthSpec.Loopback`) with Mewla's own dynamic client, kept per return address for 80 days (`daemon/connections/aws.go`, `oauth.go`) | AWS's client registration accepts only a short list of return addresses (loopback, `claude.ai`, `vscode://` and the like; `mewla://` and `connect.mewla.ai` are refused), so the browser can reach Mewla only on the computer the daemon runs on. From any other device the person pastes the address the browser ended on (`connect_finish` with `callback`, checked against the registered address and the flow's own state); the flow waits an hour. The server has no per-operation tool, only `run_script` (Python over `call_boto3`), so the `aws` driver stays and each call is one fixed script: service, operation, region and params reach it as one JSON string decoded at run time, never as source (`awsScript`, `TestAWSScriptCarriesNoModelText`). `awsKind` classes an operation by name, with credential- and secret-returning `Get*` operations and decrypted SSM reads as writes. Tools: `whoami`, `search`, `docs` (the server's documentation tools), `read` and `execute`. Refresh tokens rotate and work once, and AWS ends a session after 12 hours; the manager lock serializes refreshes (`TestAWSRefreshRotatesOnceAndIsKept`). Accounts connected through the AWS CLI are marked "sign in again" when the daemon starts and keep their name, identity and grants until a sign-in renews them in place (`markLegacyAWS`, `nameAndDeduplicate`, `oauthSpec.KeepGrants`). |
+| AWS | The installed AWS CLI; local profiles are the source of truth | Always `aws login --remote --profile`, one copy-code flow. `mewla aws` passes literal argv through read/execute authorization gates. No AWS MCP or DCR. |
 | Cloudflare | Official remote MCP, DCR + PKCE | DCR accepts only https and loopback returns. The web UI registers its own `/plugins/oauth/callback`; the app registers Mewla's return page `https://connect.mewla.ai/plugins/return` (`connections.NativeReturnRelay`, served by `cmd/mewla-account`), which forwards `code`/`state`/`error`/`iss` to `mewla://plugins`. The daemon redeems with that registered return and the PKCE verifier it holds. |
 
 Google is gone (user decision 2026-10-27: Mewla will not pay for the yearly CASA assessment Gmail's restricted scopes need, and Google Calendar was removed with it). The old Google Workspace account (`google`) and the later `google-calendar` and `gmail` plugins are retired: at start `removeRetired` posts each stored token to the account's revoke URL (best effort, 5 s), then deletes the account and its key. The `daemon/googleauth` exchange and its `/google/*` routes in `mewla-account` are deleted. fal and Image generation were deleted (user decision 2026-10-18, no compatibility): `removeRetired` in `daemon/connections/manager.go` deletes their accounts and vault keys when the daemon starts. Onlora covers generation.
@@ -74,51 +74,37 @@ Run meaningful connection regressions, `GOMAXPROCS=2 go test -p 1 ./...`, daemon
 
 `TestPluginsOwnedRuntime` provides disposable production pairing/WebSocket/control dispatch without starting Brain or schedulers. Keep its state private and remove it after verification. A live `mewla-dev` watcher can restart the Brain host when original Go source changes; build in isolation, then use the current private checkpoint/recovery loading procedure to integrate and load safely. Never reset the original provider, tmux or state.
 
-AWS sign-in can renew a disconnected account after the provider verifies the
-same identity (or the same AWS account for an explicitly selected card). It keeps
-the card ID and name, enables it, and starts with the new sign-in's permissions;
-permissions cleared by disconnect are not restored. Disconnected records remain
-as reusable cards and are not automatically deleted.
+### CLI cloud accounts
 
-### AWS sign-in from another computer
+AWS uses the installed AWS CLI and its own ~/.aws config, credentials and caches.
+Profiles are refreshed from those files on every list, with STS identity checks
+cached for one minute. Newly discovered profiles are disabled for agents until
+the person enables them. Add and Sign in again always run `aws login --remote`
+with a named profile, regardless of where the browser runs. Mewla validates the
+returned code/state before feeding the CLI; the CLI owns PKCE and credential storage.
+Login processes expire after ten minutes and cancellation reaps the child.
 
-AWS MCP dynamic client registration rejects the AWS CLI hosted code-display
-callback (`https://us-east-1.signin.aws.amazon.com/v1/sessions/confirmation`)
-with `invalid_redirect_uri`. The CLI cross-device client is distinct from the
-DCR client used for MCP; do not substitute it or change a registered callback
-when building the authorization URL. See AWS's [DCR redirect allowlist](https://docs.aws.amazon.com/signin/latest/userguide/aws-mcp-server.html)
-and [authorization API](https://docs.aws.amazon.com/signin/latest/APIReference/API_dataplane-signin_AuthorizeOAuth2Access.html).
-A fresh registration on 2026-11-02 confirmed that loopback registration and
-MCP-resource authorization succeed, while the hosted confirmation URI fails
-registration and cannot replace or omit the registered redirect at authorization.
-The [CLI implementation](https://github.com/aws/aws-cli/blob/v2/awscli/customizations/login/utils.py)
-uses its cross-device client, decodes the displayed value into `code` and `state`,
-checks state, and exchanges the code with its original PKCE verifier. The page's
-existence does not make it an allowed redirect for an MCP DCR client.
+`mewla aws [--profile NAME] <AWS args>` runs literal argv, never a shell. A reviewed
+service/operation allowlist admits reads. Everything else needs enabled execute
+and task-specific `--mewla-authorize`; secret-returning operations are excluded
+from reads. The paired API carries the same argv using `cloud_run`. No credentials,
+endpoint overrides, local file loaders or sign-in management through this tool.
+JSON is the default; the CLI output is transported unchanged and never logged.
+Because ~/.aws is shared, this is an agent authorization boundary, not an OS
+sandbox against a local process invoking bare aws or reading its owner's files.
 
-Keep the automatic loopback callback when the browser can reach the daemon.
-Otherwise, the AWS card has an outlined address field and an explicit Paste
-address action (clipboard access runs only on a user gesture). A new address
-flow scrolls its card into view, including when Add another account was clicked
-at the bottom of the page. Continue accepts
-nonempty input and explains malformed input. Submission keeps the field mounted,
-retains its value and displays server validation errors until an edit or retry;
-background status polling cannot clear these errors or swallow Continue. Flow
-expiry comes from the status request, never from matching words in an address
-validation error. The daemon still checks the exact registered callback and
-state before consuming the single-use authorization code and PKCE verifier.
+Deletion requires confirmation naming the profile/account. Config and credentials
+are backed up with private permissions before changes; only matching sections are
+removed atomically. AWS logout clears a login cache only if no other profile uses
+that login_session. Shared sessions and SSO caches remain for the other profiles.
+CLI deletions disappear from Mewla on the next refresh. Retired AWS OAuth records
+and their vault credentials are removed, with no compatibility path.
 
-Pasting an AWS-hosted sign-in URL (`signin.aws.amazon.com` or `signin.aws`,
-including their subdomains) immediately explains that AWS sign-in did not finish.
-It never extracts the nested `redirect_uri` or submits that URL as a callback.
-The card suggests signing out or clearing AWS sign-in cookies, then Open AWS
-again; it also names `AWSMCPSignInOAuthAccessPolicy` for the IAM identity and
-explains that root needs no extra policy. These are recovery checks, not a
-diagnosis from the URL: [aws/aws-cli#10186](https://github.com/aws/aws-cli/issues/10186)
-records the stale-session 400 path, while [AWS's MCP prerequisites](https://docs.aws.amazon.com/signin/latest/userguide/aws-mcp-server.html)
-document `signin:AuthorizeOAuth2Access` and `signin:CreateOAuth2Token`. An
-unauthenticated request cannot establish which error an under-permissioned IAM
-identity will receive after login.
+`cloudProvider` in cloud_cli.go defines the next gcloud adapter boundary: executable,
+environment, remote login argv, URL/code validation, command classification and
+installer. cloudRuntime owns execution limits and cloudLogin owns process lifetime.
+Provider profile enumeration/deletion and identity discovery remain vendor specific.
+The fixed official AWS installer is offered when the executable is missing.
 
 An OAuth callback can land on a different Mewla computer using the same loopback
 port. Unknown state must never redirect away or exchange the code: the callback
