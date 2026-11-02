@@ -52,7 +52,7 @@ Mewla's own app registration with the provider:
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | AWS | Local AWS CLI profiles. Sign in remotely and paste the code; install the official CLI with one tap if needed | Phone and web manage the same profiles on the current server |
-| Google Cloud | Browser sign-in with a desktop OAuth client and PKCE; a remote browser pastes the loopback return address | Requires the operator’s Google client and production verification; no user-entered project field |
+| Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; one-tap Linux and macOS installation |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in from the phone app, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack's app returns only to the Mewla app: connect Slack from the phone |
@@ -309,53 +309,38 @@ address, the connection fails with "this network answers with a private address"
 
 ## Google Cloud
 
-Google Cloud appears beside AWS in Extensions. Connect in your browser once;
-Mewla keeps the OAuth refresh token in its credential vault. It uses Google's
-[Cloud CLI remote MCP server](https://docs.cloud.google.com/sdk/use-gcloud-mcp)
-(public preview), with no local gcloud installation or API key. Google supports
-many gcloud and bq commands, but not every command; its service restrictions
-still apply. Per-service MCP servers are not connected in this version.
+Extensions uses the local Google Cloud CLI and its normal configuration and credential
+store. Existing configurations and accounts appear on refresh, with their default
+project, active state and briefly cached credential status. Enable a configuration
+for agent use; new local configurations are disabled until you choose them.
 
-The desktop OAuth flow uses PKCE and a loopback callback. On the daemon's
-computer it returns automatically. On another computer or phone, copy the full
-`http://127.0.0.1:…/plugins/oauth/callback?…` address after Google sign-in into
-Mewla and choose Continue. This forwards the existing loopback response; it does
-not request Google's retired out-of-band redirect. Cross-device acceptance still
-needs verification with the publisher's real Google client.
+Connect always starts `gcloud auth login --no-launch-browser --force`. Open Google's
+URL on any trusted device, sign in, then paste its authorization code in Mewla.
+Google's CLI owns the OAuth exchange and token refresh. No Mewla OAuth client,
+Cloud CLI Execution API or MCP role is needed. If gcloud is missing, Install and
+sign in downloads the official pinned CLI into Mewla's directory without sudo or
+shell startup changes. Automatic installation supports Linux and macOS on x86_64 and Arm64;
+macOS needs Python 3.10–3.15. Other hosts can use a locally installed gcloud.
 
-Brain discovers accessible projects with `list_projects`, including pagination.
-The `execution_project` on an MCP call pays for Cloud CLI execution and must have
-billing and Cloud CLI Execution API enabled. The command's `--project=ID` (gcloud)
-or `--project_id=ID` (bq) selects the resources. Brain should use the project your
-task names and ask when that choice is ambiguous. Project discovery needs no
-Cloud CLI API and has no setup field.
+Agents use `mewla gcloud projects list` or
+`mewla gcloud --profile CONFIGURATION compute instances list --project PROJECT`.
+The daemon passes literal argv to gcloud, with JSON output by default. Reviewed
+metadata reads run directly. Other commands, secrets, IAM, billing and SQL need
+enabled writes and the user's authorization for that task, then
+`--mewla-authorize`. Local execution, credential export and file transfer are
+unavailable through this connection. Commands are never retried by Mewla.
+Project selection follows gcloud's configuration or an explicit `--project`;
+ask the user when the intended resource project is ambiguous. `bq` is not exposed.
 
-The execution project needs `roles/mcp.toolUser` and permission to consume its
-services (normally `roles/serviceusage.serviceUsageConsumer`); accessed resources
-need their own IAM permissions. A blocked account shows setup guidance and a
-Google Cloud Console link. Mewla never enables APIs, billing or IAM roles on its
-own. Refresh the account after changing prerequisites.
+Delete requires confirmation naming the configuration. Mewla backs up the affected
+local files, revokes its exact account using `gcloud auth revoke`, and removes the
+configuration with gcloud. If another configuration shares that account, its
+credentials are preserved. Unassigned credential accounts can be revoked too.
+Gcloud protects its active configuration: activate another configuration before
+deleting it. ADC is a separate credential store and is never changed by this flow.
+Terminal changes appear after refresh (the list is cached for four seconds).
 
-Reads are enabled on connection. `read` accepts a reviewed set of gcloud command
-paths and flags; `execute` handles other gcloud commands and bq commands. Enable
-changes in the account card before using execute. Changes, destructive commands,
-IAM or billing operations, and SQL require your authorization for the task.
-Unknown commands cannot bypass read by including words such as `list`.
-Mewla sends one command per request and never retries it automatically.
-
-The publisher/operator must configure a Google Desktop OAuth client before
-Connect is available. Google remote MCP does not offer dynamic registration.
-Use the existing `mewla connections oauth-configure --integration gcp
---oauth-config-file /private/client.json` command. The private JSON has
-`client_id`, `client_secret`, and `redirect_url` set to an empty string; Mewla
-uses its actual loopback port at sign-in. Credentials belong in the vault, never
-in source or vendor-specific environment variables. Normal users only sign in;
-they are not asked to create clients or enter credentials.
-
-Requested scopes are `cloud-platform` and the basic email identity scope.
-Public distribution remains gated on a Mewla-owned client, Google's applicable
-app verification, and live consent/call validation. Google's Console is the
-source of truth for sensitive versus restricted scope classification; confirm
-`cloud-platform` there before declaring that CASA is unnecessary. Testing-mode
-Google refresh tokens can expire after seven days. Mewla supports refreshing
-valid grants and reconnecting the same account when Google revokes them.
+Because credentials are shared with the vendor CLI, Mewla's authorization checks
+apply to `mewla gcloud` and connection tools; they do not sandbox a worker that can
+run bare gcloud under the same OS user. Disabling an account in Mewla removes agent
+access through Mewla, while Delete removes the vendor credentials/configuration.

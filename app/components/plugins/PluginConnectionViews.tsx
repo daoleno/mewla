@@ -492,7 +492,7 @@ export function AccountCard({
       <ListRow
         icon="person-circle"
         title={account.name}
-        subtitle={account.profile ? [account.profile_kind, account.profile_status, account.aws?.account_id, account.aws?.account_name].filter(Boolean).join(" · ") : aws ? aws.subtitle || undefined : [custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : ""].filter(Boolean).join(" · ") || undefined}
+        subtitle={account.profile ? [account.profile_kind, account.profile_status, account.active ? "Active" : "", account.project, account.integration === "gcp" ? account.identity : "", account.aws?.account_id, account.aws?.account_name].filter(Boolean).join(" · ") : aws ? aws.subtitle || undefined : [custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : ""].filter(Boolean).join(" · ") || undefined}
         numberOfLines={2}
         disabled={!account.enabled}
         trailing={
@@ -507,7 +507,7 @@ export function AccountCard({
           </View>
         }
       />
-      {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle="Use AWS remote sign-in for this profile." trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
+      {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle={`Use ${plugin.name} remote sign-in for this profile.`} trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
       {!account.profile && recovery ? (
         <ListRow
           icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
@@ -534,12 +534,6 @@ export function AccountCard({
           )) : null}
         </>
       ) : null}
-      {account.setup ? (
-        <View style={styles.confirm}>
-          <InlineNotice tone="warning" title={`Finish ${plugin.name} setup`} detail={account.setup.message} />
-          <Button label={`Open ${plugin.name}`} variant="plain" icon="open-external" onPress={() => { const url = account.setup?.url; if (url) void Linking.openURL(url); }} />
-        </View>
-      ) : null}
       {custom ? null : [group("read"), group("write")]}
       <ListRow
         icon="list"
@@ -565,7 +559,7 @@ export function AccountCard({
       {confirming ? (
         <BottomSheetFrame visible onClose={() => { if (!removing) setConfirming(false); }}><View style={styles.confirm}>
           <AppText variant="compact" tone="secondary">
-            {account.profile ? `Delete profile ${account.profile}${account.aws?.account_id ? ` (${account.aws.account_id})` : ""} from this computer? It will also disappear from the AWS CLI. A backup is kept.` : `Disconnect ${account.name}? Brain loses access right away, and Mewla removes its saved sign-in.`}
+            {account.profile ? `Delete profile ${account.profile}${account.aws?.account_id ? ` (${account.aws.account_id})` : ""} from this computer? It will also disappear from ${plugin.name === "Google Cloud" ? "gcloud. Its account is revoked unless another configuration uses it" : "the AWS CLI"}. A backup is kept.` : `Disconnect ${account.name}? Brain loses access right away, and Mewla removes its saved sign-in.`}
           </AppText>
           <View style={styles.confirmActions}>
             <Button label="Keep" variant="plain" size="sm" disabled={removing} onPress={() => setConfirming(false)} />
