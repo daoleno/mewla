@@ -40,6 +40,7 @@ type devRunner struct {
 	stdout     io.Writer
 	stderr     io.Writer
 	child      *runningProcess
+	webDirty   bool
 }
 
 func main() {
@@ -66,6 +67,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		daemonArgs: args,
 		stdout:     stdout,
 		stderr:     stderr,
+		webDirty:   true,
 	}
 
 	if err := runner.rebuild(); err != nil {
@@ -79,13 +81,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 		_ = runner.stop(syscall.SIGINT)
 	}()
 
-	tree, err := newWatchTree(root)
+	tree, err := newWatchTree(filepath.Dir(root))
 	if err != nil {
 		return err
 	}
 	defer tree.Close()
 
-	fmt.Fprintf(stderr, "  Dev     Watching %s\n", root)
+	fmt.Fprintf(stderr, "  Dev     Watching %s\n", tree.root)
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
@@ -124,6 +126,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 			}
 
 			pending[rel] = struct{}{}
+			if webSourcePath(rel) {
+				runner.webDirty = true
+			}
 			debounce = resetTimer(debounce)
 			debounceC = debounce.C
 		case err, ok := <-tree.watcher.Errors:
@@ -186,6 +191,10 @@ func (t *watchTree) addTree(root string) error {
 		}
 		if !d.IsDir() {
 			return nil
+		}
+		// Only source trees that contribute to the daemon or embedded app.
+		if filepath.Dir(path) == t.root && d.Name() != "daemon" && d.Name() != "app" && d.Name() != "scripts" && d.Name() != "patches" {
+			return filepath.SkipDir
 		}
 		if ignoredDirName(d.Name()) {
 			return filepath.SkipDir
@@ -259,6 +268,12 @@ func (t *watchTree) relevantPath(path string) (string, bool) {
 		}
 	}
 
+	if webSourcePath(filepath.ToSlash(rel)) {
+		return filepath.ToSlash(rel), true
+	}
+	if !strings.HasPrefix(filepath.ToSlash(rel), "daemon/") {
+		return "", false
+	}
 	base := filepath.Base(rel)
 	if base == "go.mod" || base == "go.sum" {
 		return filepath.ToSlash(rel), true
@@ -274,7 +289,25 @@ func (t *watchTree) relevantPath(path string) (string, bool) {
 	}
 }
 
+// Web source and daemon code must be exported together; an old export can
+// otherwise keep calling operations the current daemon has removed.
+func webSourcePath(rel string) bool {
+	if strings.HasPrefix(rel, "app/") {
+		return !strings.Contains(rel, ".test.") && !strings.Contains(rel, ".spec.")
+	}
+	return rel == "package.json" || rel == "bun.lock" || rel == "scripts/build-web-ui.sh" || strings.HasPrefix(rel, "patches/")
+}
+
 func (r *devRunner) rebuild() error {
+	if r.webDirty {
+		cmd := exec.Command("bash", filepath.Join(r.root, "..", "scripts", "build-web-ui.sh"))
+		cmd.Dir = filepath.Dir(r.root)
+		cmd.Stdout, cmd.Stderr = r.stdout, r.stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("web UI build failed: %w", err)
+		}
+		r.webDirty = false
+	}
 	built := r.binary + ".building"
 	flags, err := publisherFlags(r.root)
 	if err != nil {
@@ -396,7 +429,7 @@ func resetTimer(timer *time.Timer) *time.Timer {
 
 func ignoredDirName(name string) bool {
 	switch name {
-	case ".git", "bin", "tmp":
+	case ".git", "bin", "tmp", "node_modules", "dist", ".expo", "build", ".gradle", "Pods", ".idea":
 		return true
 	default:
 		return false

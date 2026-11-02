@@ -62,3 +62,58 @@ func TestDevBuildUsesReleasePublisherIdentity(t *testing.T) {
 		t.Fatal("missing publisher configuration silently ignored")
 	}
 }
+
+func TestDevWatchesWebSourcesWithoutBuildOutputs(t *testing.T) {
+	root := t.TempDir()
+	for _, dir := range []string{"daemon/connections", "app/components/plugins", "app/node_modules/pkg", "daemon/webui/dist", "scripts"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tree, err := newWatchTree(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.Close()
+	for _, path := range []string{"app/components/plugins/PluginsFlow.tsx", "app/assets/icon.png", "app/package.json", "bun.lock", "scripts/build-web-ui.sh", "daemon/connections/onboarding.go"} {
+		if _, ok := tree.relevantPath(filepath.Join(root, path)); !ok {
+			t.Errorf("change would leave the running build stale: %s", path)
+		}
+	}
+	for _, path := range []string{"app/components/plugins/flow.test.ts", "app/node_modules/pkg/index.js", "app/dist/index.html", "daemon/webui/dist/index.html.gz", "daemon/tmp/mewla-dev", "daemon/connections/aws_test.go", "docs/plugins.md"} {
+		if _, ok := tree.relevantPath(filepath.Join(root, path)); ok {
+			t.Errorf("unnecessary rebuild: %s", path)
+		}
+	}
+	if _, ok := tree.watched[filepath.Join(root, "app/components/plugins")]; !ok {
+		t.Fatal("web sources are not watched")
+	}
+	if _, ok := tree.watched[filepath.Join(root, "app/node_modules/pkg")]; ok {
+		t.Fatal("watching dependencies")
+	}
+}
+
+func TestDevFailedWebExportKeepsPreviousBinary(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "scripts"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "daemon"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "scripts/build-web-ui.sh"), []byte("exit 42\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(root, "mewla")
+	if err := os.WriteFile(binary, []byte("previous daemon"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &devRunner{root: filepath.Join(root, "daemon"), binary: binary, webDirty: true}
+	if err := runner.rebuild(); err == nil || !strings.Contains(err.Error(), "web UI build failed") {
+		t.Fatalf("export failure: %v", err)
+	}
+	got, err := os.ReadFile(binary)
+	if err != nil || string(got) != "previous daemon" || !runner.webDirty {
+		t.Fatalf("failed export replaced daemon or cleared retry: %s, %v", got, err)
+	}
+}

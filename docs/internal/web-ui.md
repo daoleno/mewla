@@ -97,3 +97,15 @@ bun install
 ./scripts/build-web-ui.sh   # or: bun run web:build
 cd daemon && go build ./cmd/mewla
 ```
+
+For development, `cd daemon && go run ./cmd/mewla-dev` exports the current web
+sources before its first daemon build. It watches the app, web build script,
+workspace dependencies and daemon sources. App changes re-export the web UI
+before rebuilding the daemon; generated bundles and dependencies do not trigger
+another rebuild. A failed export keeps the previous daemon running.
+
+An already running dev watcher keeps its own compiled code until its next launch.
+When changing the watcher itself, stage the web bundle with `bun run web:build`
+before the next normal Go source reload. Never assume a Go-only reload refreshed
+the embedded app. An obsolete web operation now asks the person to reload or
+update Mewla instead of claiming that an account is missing.
