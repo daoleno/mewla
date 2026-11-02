@@ -53,7 +53,7 @@
     { "name": "Brotli", "license": "MIT", "url": "https://github.com/google/brotli", "text": "texts/brotli.txt", "maven": ["org.brotli"] },
     { "name": "JUnit", "license": "EPL-1.0", "url": "https://github.com/junit-team/junit4", "text": "texts/junit.txt", "maven": ["junit"] },
     { "name": "Hamcrest", "license": "BSD-3-Clause", "url": "https://github.com/hamcrest/JavaHamcrest", "text": "texts/hamcrest.txt", "maven": ["org.hamcrest"] },
-    { "name": "Pika", "license": "MIT", "url": "https://github.com/lukmccall/pika", "text": "texts/pika.txt", "maven": ["io.github.lukmccall.pika"] },
+    { "name": "Pika", "license": "MIT", "url": "https://github.com/lukmccall/pika", "text": "texts/pika.txt", "maven": ["io.github.lukmccall.pika", "io.github.expo.pika"] },
     { "name": "gradle-simple", "license": "MIT", "url": "https://github.com/jitpack/gradle-simple", "text": "texts/gradle-simple.txt", "maven": ["com.github.jitpack"] },
     { "name": "Google Play services, ML Kit and Play Install Referrer", "license": "Google terms", "url": "https://developers.google.com/ml-kit/terms", "note": "Proprietary Google libraries, used under the Android Software Development Kit License (https://developer.android.com/studio/terms) and the ML Kit Terms of Service (https://developers.google.com/ml-kit/terms). On Android, QR code scanning uses ML Kit.", "maven": ["com.google.android.gms", "com.google.mlkit", "com.google.android.odml", "com.android.installreferrer"] }
   ],
@@ -65,8 +65,8 @@
     "github.com/react/metro": "texts/repo-facebook-metro.txt"
   },
   "npmProvided": {
-    "$comment": "Native artifacts built from a JavaScript package that is listed with the bundle's packages.",
+    "$comment": "Native artifacts supplied by a JavaScript package listed with the bundle's packages. io.github.expo includes Expo Modules v2 and Kolibri, which share Expo's MIT notice; Pika retains its separate notice above.",
     "pods": ["React", "React-*", "RCT*", "FBLazyVector", "Yoga", "ReactCodegen", "ReactAppDependencyProvider", "ReactCommon", "Expo*", "EX*", "expo-*", "RN*", "react-native-*", "Mewla*", "TerminalVt", "LinkTransport", "KeyboardLifecycle", "AppUpdate", "FileUpload"],
-    "maven": ["host.exp.exponent", "expo.modules", "com.facebook.react", "com.facebook.yoga"]
+    "maven": ["host.exp.exponent", "expo.modules", "io.github.expo", "com.facebook.react", "com.facebook.yoga"]
   }
 }
