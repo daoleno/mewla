@@ -98,7 +98,9 @@ existence does not make it an allowed redirect for an MCP DCR client.
 
 Keep the automatic loopback callback when the browser can reach the daemon.
 Otherwise, the AWS card has an outlined address field and an explicit Paste
-address action (clipboard access runs only on a user gesture). Continue accepts
+address action (clipboard access runs only on a user gesture). A new address
+flow scrolls its card into view, including when Add another account was clicked
+at the bottom of the page. Continue accepts
 nonempty input and explains malformed input. Submission keeps the field mounted,
 retains its value and displays server validation errors until an edit or retry;
 background status polling cannot clear these errors or swallow Continue. Flow

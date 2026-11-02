@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Linking, Platform, StyleSheet, View } from "react-native";
 import { Stack, useGlobalSearchParams, useRouter } from "expo-router";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { KeyboardAwareScrollView, type KeyboardAwareScrollViewRef } from "react-native-keyboard-controller";
 import * as Clipboard from "expo-clipboard";
 import { openPluginAuthorization } from "../../services/pluginBrowser";
 import { secureStorage } from "../../services/secureStorage";
@@ -399,9 +399,17 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
   const router = useRouter();
   const flow = usePluginsFlow();
   const catalogFailed = catalog && !flow.catalog.length;
+  const scroll = useRef<KeyboardAwareScrollViewRef>(null);
+  const addressFlowId = flow.flow?.flow.address_required && (flow.phase === "waiting" || flow.phase === "verifying") ? flow.flow.flow.id : null;
+  useEffect(() => {
+    if (!addressFlowId) return;
+    // Adding an account from the bottom can anchor the new card offscreen.
+    const frame = requestAnimationFrame(() => scroll.current?.scrollTo({ y: 0, animated: false }));
+    return () => cancelAnimationFrame(frame);
+  }, [addressFlowId]);
   return <View style={{ flex: 1, backgroundColor: colors.bgPrimary }}>
     <Stack.Screen options={{ title }} />
-    <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
+    <KeyboardAwareScrollView ref={scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={Spacing.lg}>
       {flow.deferredName ? <InlineNotice tone="warning" icon="swap-horizontal" title={`Authorization saved for ${flow.deferredName}`} detail="Switch to that server in Settings to finish." action={{ label: "Settings", onPress: () => router.push("/settings") }} /> : null}
       {flow.error && !catalogFailed ? <InlineNotice tone="danger" title="That didn't go through" detail={flow.error} /> : null}
       {flow.serverId && (flow.service || flow.connectError) ? <ConnectStatusCard
