@@ -117,3 +117,5 @@ codes through that message history; use the copy page until an authenticated
 ownership protocol exists. Macs running released code need the next daemon
 release containing this fix (after 0.2.88); updating zen alone cannot change a
 callback already handled by a Mac daemon.
+
+Cloud profiles share a compact account list: the service row summarizes sign-in counts, valid profiles precede unchecked ones, and expired/invalid profiles are collapsed. Selecting a row reveals its existing permissions and delete confirmation. Filtering appears above eight profiles and matches profile, account identity, alias and project. Sign-in status is independent of whether agents have access. Add/sign-in stays above the list.
