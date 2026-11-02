@@ -148,8 +148,19 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 			m.records[r.Account.ID] = r
 			changed = true
 		}
+		if r.Account.AWS == nil {
+			if identity := firstNonEmpty(fields[name]["login_session"], fields[name]["role_arn"]); strings.HasPrefix(identity, "arn:") {
+				parts := strings.SplitN(identity, ":", 6)
+				if len(parts) == 6 && len(parts[4]) == 12 {
+					r.Account.Identity = identity
+					r.Account.AWS = &AWSDetails{AccountID: parts[4]}
+					r.Account.AWS.Who, r.Account.AWS.Session = parseAWSPrincipal(identity)
+				}
+			}
+		}
 		r.Account.ProfileKind = awsProfileKind(fields[name])
 		r.Account.Profile = name
+		r.Account.ProfileExpiresAt, r.Account.ProfileExpirySource = awsProfileExpiry(config, fields[name])
 		if !force && time.Since(m.cloud.checked[name]) < time.Minute {
 			continue
 		}
@@ -205,6 +216,22 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 					r.Account.AWS.AccountName = v.Aliases[0]
 				}
 			}
+			if r.Account.AWS.AccountName == "" {
+				probe, cancel := context.WithTimeout(ctx, 2*time.Second)
+				info, e := m.cloudCommand(probe, "aws", r.CLI.Profile, []string{"account", "get-account-information", "--output", "json", "--region", awsDefaultRegion})
+				cancel()
+				if e == nil && info.ExitCode == 0 {
+					var value struct {
+						Name  string `json:"AccountName"`
+						State string `json:"AccountState"`
+					}
+					if json.Unmarshal([]byte(info.Stdout), &value) == nil {
+						r.Account.AWS.AccountName = value.Name
+						r.Account.AWS.AccountState = value.State
+					}
+				}
+			}
+
 		} else {
 			r.Account.Status = "authorization_required"
 			r.Account.ProfileStatus = "invalid"
@@ -214,6 +241,11 @@ func (m *Manager) syncAWSProfiles(ctx context.Context, force bool) error {
 			if c.err != nil {
 				r.Account.ProfileStatus = "unavailable"
 			}
+		}
+	}
+	for _, name := range names {
+		if r := m.awsProfileRecord(name); r != nil {
+			r.Account.ProfileExpiresAt, r.Account.ProfileExpirySource = awsProfileExpiry(config, fields[name])
 		}
 	}
 	if changed {

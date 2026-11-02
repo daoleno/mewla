@@ -1,16 +1,10 @@
 package connections
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/xml"
-	"errors"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -109,104 +103,13 @@ func (awsCLI) classify(args []string) (bool, error) {
 	return strings.Contains(" "+awsReads[args[0]]+" ", " "+args[1]+" "), nil
 }
 func (awsCLI) install(ctx context.Context, dir string) error {
-	if runtime.GOOS == "darwin" {
-		return installAWSMac(ctx, dir)
-	}
-	if runtime.GOOS != "linux" {
-		return errors.New("Automatic AWS CLI installation currently requires Linux; install AWS CLI v2 on this computer")
-	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	req, _ := http.NewRequestWithContext(ctx, "GET", "https://awscli.amazonaws.com/v2/install.sh", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return errors.New("AWS installer download failed")
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return errors.New("AWS installer download failed")
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil || len(raw) >= 1<<20 {
-		return errors.New("AWS installer download was incomplete")
-	}
-	temp, err := os.CreateTemp(dir, "installer-*.sh")
-	if err != nil {
-		return err
-	}
-	path := temp.Name()
-	defer os.Remove(path)
-	if _, err = temp.Write(raw); err != nil {
-		temp.Close()
-		return err
-	}
-	temp.Close()
-	// Fixed official installer, never caller-supplied shell text. It verifies the
-	// vendor package and supports a per-user install without sudo.
-	cmd := exec.CommandContext(ctx, "bash", path)
-	ownCloudProcess(cmd)
-	cmd.Env = append(awsCLI{}.environment(), "XDG_DATA_HOME="+dir, "XDG_BIN_HOME="+filepath.Join(dir, "bin"))
-	cmd.WaitDelay = 1e9
-	ownCloudProcess(cmd)
-	if err = cmd.Run(); err != nil {
-		return errors.New("AWS CLI installation failed")
-	}
-	return nil
+	return newAWSInstaller().install(ctx, dir)
 }
-
-// Apple's official per-user installer supports a custom location without sudo.
-func installAWSMac(ctx context.Context, dir string) error {
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	scratch, err := os.MkdirTemp(dir, "install-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(scratch)
-	req, _ := http.NewRequestWithContext(ctx, "GET", "https://awscli.amazonaws.com/AWSCLIV2.pkg", nil)
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return errors.New("AWS installer download failed")
-	}
-	defer response.Body.Close()
-	if response.StatusCode != 200 {
-		return errors.New("AWS installer download failed")
-	}
-	pkg := filepath.Join(scratch, "AWSCLIV2.pkg")
-	file, err := os.OpenFile(pkg, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	size, err := io.Copy(file, io.LimitReader(response.Body, 256<<20))
-	file.Close()
-	if err != nil || size >= 256<<20 {
-		return errors.New("AWS installer download was incomplete")
-	}
-	var escaped bytes.Buffer
-	_ = xml.EscapeText(&escaped, []byte(dir))
-	choices := filepath.Join(scratch, "choices.xml")
-	raw := `<?xml version="1.0"?><plist version="1.0"><array><dict><key>choiceAttribute</key><string>customLocation</string><key>attributeSetting</key><string>` + escaped.String() + `</string><key>choiceIdentifier</key><string>default</string></dict></array></plist>`
-	if err = os.WriteFile(choices, []byte(raw), 0600); err != nil {
-		return err
-	}
-	// Verify the signed package with the OS before executing its installer.
-	verify := exec.CommandContext(ctx, "/usr/sbin/pkgutil", "--check-signature", pkg)
-	ownCloudProcess(verify)
-	signature, err := verify.Output()
-	if err != nil || !bytes.Contains(signature, []byte("Amazon")) {
-		return errors.New("AWS installer signature could not be verified")
-	}
-	cmd := exec.CommandContext(ctx, "/usr/sbin/installer", "-pkg", pkg, "-target", "CurrentUserHomeDirectory", "-applyChoiceChangesXML", choices)
-	ownCloudProcess(cmd)
-	if err = cmd.Run(); err != nil {
-		return errors.New("AWS CLI installation failed")
-	}
-	if err = os.MkdirAll(filepath.Join(dir, "bin"), 0700); err != nil {
-		return err
-	}
-	return os.Symlink(filepath.Join(dir, "aws-cli", "aws"), filepath.Join(dir, "bin", "aws"))
+func (awsCLI) installSupport() (string, string) {
+	return awsInstallHint(runtime.GOOS, runtime.GOARCH), "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"
+}
+func (awsCLI) validateExecutable(ctx context.Context, path string) error {
+	return validateAWSExecutable(ctx, path)
 }
 
 func (awsCLI) commandArgs(profile string, args []string) []string {
@@ -217,3 +120,17 @@ func (awsCLI) syncProfiles(m *Manager, ctx context.Context, force bool) error {
 }
 func (awsCLI) profileRecord(m *Manager, profile string) *record { return m.awsProfileRecord(profile) }
 func (awsCLI) validProfile(profile string) bool                 { return validAWSProfile(profile) }
+
+func (awsCLI) installPaths() []string {
+	if runtime.GOOS == "windows" {
+		if base := os.Getenv("ProgramFiles"); base != "" {
+			return []string{filepath.Join(base, "Amazon", "AWSCLIV2", "aws.exe")}
+		}
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	return []string{filepath.Join(home, ".local", "bin", "aws"), "/usr/local/bin/aws"}
+}
