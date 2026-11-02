@@ -78,6 +78,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   const alive = useRef(true);
   const mutation = useRef(false);
   const completion = useRef(false);
+  const checking = useRef<Promise<void> | null>(null);
   const browserOpen = useRef(false);
   const starting = useRef(false);
   const attempt = useRef(0);
@@ -141,27 +142,36 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       fail(failure instanceof Error ? failure.message : "Could not verify authorization. Try again.");
     } finally { completion.current = false; }
   }, [fail, remember, serverId, settle, valid]);
-  const check = useCallback(async () => {
-    const active = pending.current;
-    if (!active || !valid() || completion.current) return;
-    if (Date.parse(active.flow.expires) <= Date.now()) {
-      fail("This sign-in expired. Start again."); await remember(null); return;
-    }
-    if (active.callback) { await finish(active.callback); return; }
-    completion.current = true;
-    try { await settle(await wsClient.requestConnections(active.serverId, { action: "connect_status", flow_id: active.flow.id })); }
-    catch (failure) {
-      // The server answered: it no longer has this sign-in (it expired or restarted).
-      if ((failure as { code?: string }).code === "plugin_request_failed") {
-        fail(failure instanceof Error ? failure.message : "This sign-in expired. Start again."); await remember(null);
-      // The server can't be asked yet (a page load, a reconnect). The sign-in
-      // still waits there; reconnecting checks it again.
-      } else if (valid() && pending.current) setPhase("waiting");
-    }
-    finally {
-      completion.current = false;
-      if (pending.current?.callback && valid()) void finish(pending.current.callback);
-    }
+  const check = useCallback(() => {
+    if (checking.current) return checking.current;
+    const run = async () => {
+      const active = pending.current;
+      if (!active || !valid() || completion.current) return;
+      if (Date.parse(active.flow.expires) <= Date.now()) {
+        fail("This sign-in expired. Start again."); await remember(null); return;
+      }
+      if (active.callback) { await finish(active.callback); return; }
+      completion.current = true;
+      try {
+        const result = await wsClient.requestConnections(active.serverId, { action: "connect_status", flow_id: active.flow.id });
+        if (pending.current?.flow.id === active.flow.id) await settle(result);
+      }
+      catch (failure) {
+        if (pending.current?.flow.id !== active.flow.id) return;
+        // The server answered: it no longer has this sign-in (it expired or restarted).
+        if ((failure as { code?: string }).code === "plugin_request_failed") {
+          fail(failure instanceof Error ? failure.message : "This sign-in expired. Start again."); await remember(null);
+        // The server can't be asked yet (a page load, a reconnect). The sign-in
+        // still waits there; reconnecting checks it again.
+        } else if (valid() && pending.current) setPhase("waiting");
+      }
+      finally {
+        completion.current = false;
+        if (pending.current?.callback && valid()) void finish(pending.current.callback);
+      }
+    };
+    checking.current = run().finally(() => { checking.current = null; });
+    return checking.current;
   }, [fail, finish, remember, settle, valid]);
   // List once the server can answer: a request sent while the socket still
   // connects (a page load, a reconnect) would fail and leave the page on an
@@ -305,16 +315,20 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
   /** Hands the address the browser ended on to the sign-in waiting for it; the server checks it is this sign-in's own. */
   const submitAddress = async (address: string) => {
     const active = pending.current;
-    if (!active || !valid() || completion.current) return;
+    if (!active || !valid()) return;
+    // Wait for polling, but never send this address to a replacement sign-in.
+    await checking.current;
+    if (pending.current?.flow.id !== active.flow.id || !valid() || completion.current) return;
     completion.current = true; setPhase("verifying"); setConnectError("");
     try {
-      await settle(await wsClient.requestConnections(active.serverId, { action: "connect_finish", flow_id: active.flow.id, callback: address }));
+      const result = await wsClient.requestConnections(active.serverId, { action: "connect_finish", flow_id: active.flow.id, callback: address });
+      if (pending.current?.flow.id === active.flow.id) await settle(result);
     } catch (failure) {
-      // The server answered: that is not this sign-in's address, or the sign-in has ended. Either way it can be tried again from the card.
-      if (valid()) {
-        if ((failure as { code?: string }).code === "plugin_request_failed" && /expired|ended|no longer/i.test(failure instanceof Error ? failure.message : "")) {
-          fail(failure instanceof Error ? failure.message : "This sign-in expired. Start again."); await remember(null);
-        } else { setPhase("waiting"); setConnectError(failure instanceof Error ? failure.message : "Could not send the address. Try again."); }
+      if (valid() && pending.current?.flow.id === active.flow.id) {
+        // Keep editable input and its error. The next status check determines
+        // whether the flow has expired; human-readable errors are not status.
+        setPhase("waiting");
+        throw failure;
       }
     } finally { completion.current = false; }
   };
@@ -412,7 +426,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
         onChooseTools={(account) => { flow.dismiss(); router.push({ pathname: `${pluginServicePath(account.integration)}/tools`, params: { account: account.id } } as never); }}
         onUseServerAccount={flow.service === "github" ? () => void flow.useServerGitHub() : undefined}
         onImport={() => void flow.importGitHub()}
-        onSubmitAddress={(address) => void flow.submitAddress(address)}
+        onSubmitAddress={flow.submitAddress}
       /> : null}
       {!flow.serverId ? <NoServerState onOpenSettings={() => router.push("/settings")} /> : children}
     </KeyboardAwareScrollView>

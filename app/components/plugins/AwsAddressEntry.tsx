@@ -1,46 +1,68 @@
-import React, { useEffect, useRef, useState } from "react";
-import { AppState } from "react-native";
+import React, { useRef, useState } from "react";
+import { StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Field } from "./CustomServiceForm";
-import { Button } from "../ui";
+import { Radii, useAppColors } from "../../constants/tokens";
+import { AppText, Button, InlineNotice } from "../ui";
+import { outlinedSurface } from "../ui/outlinedSurface";
 import { signInAddressFromText } from "../../services/pluginConnectionsModel";
 
-/**
- * The last step of a sign-in that returns to the server's own address, when the
- * browser is on another device and the page did not load. It fills from the
- * clipboard when the person comes back from the browser, so the usual path is
- * copy, return, Continue. Typing replaces it.
- */
-export function AwsAddressEntry({ onSubmit }: { onSubmit(address: string): void }) {
+/** The loopback address copied from a browser on another computer. */
+export function AwsAddressEntry({ onSubmit }: { onSubmit(address: string): Promise<void> }) {
+  const colors = useAppColors();
   const [address, setAddress] = useState("");
-  const typed = useRef(false);
-  useEffect(() => {
-    let alive = true;
-    const fill = async () => {
-      try {
-        const found = signInAddressFromText(await Clipboard.getStringAsync());
-        if (alive && found && !typed.current) setAddress(found);
-      } catch { /* The clipboard can be off limits; the field is still there. */ }
-    };
-    void fill();
-    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void fill(); });
-    return () => { alive = false; subscription.remove(); };
-  }, []);
-  const ready = signInAddressFromText(address) !== "";
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
+  const input = useRef<TextInputInstance>(null);
+  const submit = async () => {
+    if (submitting.current) return;
+    const callback = signInAddressFromText(address);
+    if (!callback) {
+      setError("Paste the full address starting with http://127.0.0.1 from the page AWS opened after sign-in, even if that page could not load.");
+      return;
+    }
+    submitting.current = true; setBusy(true); setError("");
+    try { await onSubmit(callback); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "Could not send the address. Try again."); }
+    finally { submitting.current = false; setBusy(false); }
+  };
+  const paste = async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      setAddress(text); setError(text.trim() ? "" : "The clipboard is empty. Copy the address from the browser first.");
+    } catch {
+      setError("Clipboard access is unavailable. Paste directly into the address field.");
+    }
+    input.current?.focus();
+  };
   return <>
-    <Field
-      label="Address from the browser"
-      accessibilityLabel="Address the sign-in ended on"
-      testID="sign-in-address"
-      autoCapitalize="none"
-      autoCorrect={false}
-      autoComplete="off"
-      keyboardType="url"
-      value={address}
-      onChangeText={(text) => { typed.current = true; setAddress(text); }}
-      onSubmitEditing={() => { if (ready) onSubmit(address.trim()); }}
-      returnKeyType="done"
-    />
-    <Button label="Continue" variant="filled" block disabled={!ready} onPress={() => onSubmit(address.trim())} testID="sign-in-address-continue" />
+    <View style={styles.field}>
+      <AppText variant="caption" tone="secondary">Address from the browser</AppText>
+      <TextInput
+        ref={input}
+        accessibilityLabel="Address the sign-in ended on"
+        testID="sign-in-address"
+        placeholder="http://127.0.0.1:…/plugins/oauth/callback?…"
+        placeholderTextColor={colors.textTertiary}
+        style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.bgElevated, borderColor: colors.border }]}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="off"
+        keyboardType="url"
+        editable={!busy}
+        value={address}
+        onChangeText={(text) => { setAddress(text); setError(""); }}
+        onSubmitEditing={() => void submit()}
+        returnKeyType="done"
+      />
+    </View>
+    {error ? <InlineNotice tone="danger" title="Check the address" detail={error} /> : null}
+    <Button label="Paste address" variant="tinted" block disabled={busy} onPress={() => void paste()} />
+    <Button label="Continue" variant="filled" block loading={busy} disabled={!address.trim()} onPress={() => void submit()} testID="sign-in-address-continue" />
   </>;
 }
+
+const styles = StyleSheet.create({
+  field: { gap: 8 },
+  input: { ...outlinedSurface(Radii.md), minHeight: 48, fontSize: 16, paddingHorizontal: 12, paddingVertical: 12 },
+});

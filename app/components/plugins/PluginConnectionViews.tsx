@@ -281,7 +281,7 @@ export function ConnectStatusCard({
   onUseServerAccount?(): void;
   onImport(): void;
   /** The address a sign-in ended on, pasted back when the browser could not reach this server. */
-  onSubmitAddress(address: string): void;
+  onSubmitAddress(address: string): Promise<void>;
 }) {
   const { colors } = useAppTheme();
   if (serviceName === null) {
@@ -302,6 +302,15 @@ export function ConnectStatusCard({
     );
   }
   if (phase === "opening") return <StatusCard busy title={`Opening ${serviceName}…`} />;
+  if ((phase === "waiting" || phase === "verifying") && flow?.flow.address_required) {
+    return (
+      <StatusCard title={`Finish signing in to ${serviceName}`} detail="After AWS sign-in, a page starting with http://127.0.0.1 may fail to load on this computer. Copy its full address, paste it below, then choose Continue.">
+        <AwsAddressEntry key={flow.flow.id} onSubmit={onSubmitAddress} />
+        <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block disabled={phase === "verifying"} onPress={onOpen} />
+        <Button label="Cancel" variant="plain" block onPress={onCancel} />
+      </StatusCard>
+    );
+  }
   if (phase === "verifying") return <StatusCard busy title={`Checking your ${serviceName} account…`} detail="This takes a moment." />;
   if (phase === "waiting" && code) {
     return (
@@ -311,15 +320,6 @@ export function ConnectStatusCard({
         </AppText>
         <Button label={`Copy code and open ${serviceName}`} icon="open-external" variant="filled" block onPress={onOpen} />
         {onUseServerAccount ? <Button label="Use the GitHub login on this server" variant="plain" block onPress={onUseServerAccount} /> : null}
-        <Button label="Cancel" variant="plain" block onPress={onCancel} />
-      </StatusCard>
-    );
-  }
-  if (phase === "waiting" && flow?.flow.address_required) {
-    return (
-      <StatusCard busy title={`Finish signing in to ${serviceName}`} detail={error || "This finishes by itself on the computer running Mewla. On this device the page won't load: copy its address anyway and paste it here."}>
-        <AwsAddressEntry onSubmit={onSubmitAddress} />
-        <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>
     );

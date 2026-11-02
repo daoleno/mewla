@@ -79,3 +79,29 @@ same identity (or the same AWS account for an explicitly selected card). It keep
 the card ID and name, enables it, and starts with the new sign-in's permissions;
 permissions cleared by disconnect are not restored. Disconnected records remain
 as reusable cards and are not automatically deleted.
+
+### AWS sign-in from another computer
+
+AWS MCP dynamic client registration rejects the AWS CLI hosted code-display
+callback (`https://us-east-1.signin.aws.amazon.com/v1/sessions/confirmation`)
+with `invalid_redirect_uri`. The CLI cross-device client is distinct from the
+DCR client used for MCP; do not substitute it or change a registered callback
+when building the authorization URL. See AWS's [DCR redirect allowlist](https://docs.aws.amazon.com/signin/latest/userguide/aws-mcp-server.html)
+and [authorization API](https://docs.aws.amazon.com/signin/latest/APIReference/API_dataplane-signin_AuthorizeOAuth2Access.html).
+A fresh registration on 2026-11-02 confirmed that loopback registration and
+MCP-resource authorization succeed, while the hosted confirmation URI fails
+registration and cannot replace or omit the registered redirect at authorization.
+The [CLI implementation](https://github.com/aws/aws-cli/blob/v2/awscli/customizations/login/utils.py)
+uses its cross-device client, decodes the displayed value into `code` and `state`,
+checks state, and exchanges the code with its original PKCE verifier. The page's
+existence does not make it an allowed redirect for an MCP DCR client.
+
+Keep the automatic loopback callback when the browser can reach the daemon.
+Otherwise, the AWS card has an outlined address field and an explicit Paste
+address action (clipboard access runs only on a user gesture). Continue accepts
+nonempty input and explains malformed input. Submission keeps the field mounted,
+retains its value and displays server validation errors until an edit or retry;
+background status polling cannot clear these errors or swallow Continue. Flow
+expiry comes from the status request, never from matching words in an address
+validation error. The daemon still checks the exact registered callback and
+state before consuming the single-use authorization code and PKCE verifier.
