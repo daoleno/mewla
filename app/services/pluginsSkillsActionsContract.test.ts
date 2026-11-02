@@ -253,7 +253,7 @@ describe("Plugins connection route contract", () => {
   test("server switches remount the flow and every page shares one keyboard-aware scroll view", () => {
     expect(layout).toContain('key={currentServerId ?? "none"}');
     expect(layout).toContain('anchor: "index"');
-    expect(flow.match(/<KeyboardAwareScrollView/g)?.length).toBe(1);
+    expect(flow.match(/<KeyboardAwareScrollView(?:\s|>)/g)?.length).toBe(1);
     for (const route of routes) {
       expect(route).toContain("<PluginsPage");
       expect(route).not.toContain("KeyboardAwareScrollView");
