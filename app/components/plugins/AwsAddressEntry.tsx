@@ -60,6 +60,7 @@ export function AwsAddressEntry({ onSubmit }: { onSubmit(address: string): Promi
     {unfinishedSignIn ? <InlineNotice
       tone="warning"
       title="AWS sign-in didn't finish"
+      detailNumberOfLines={0}
       detail={"Sign out of AWS or clear signin.aws.amazon.com cookies, then choose Open AWS again.\n\nIf it still fails, ask your admin to grant AWSMCPSignInOAuthAccessPolicy (signin:AuthorizeOAuth2Access + signin:CreateOAuth2Token). Root needs no extra policy."}
     /> : error ? <InlineNotice tone="danger" title="Check the address" detail={error} /> : null}
     <Button label="Paste address" variant="tinted" block disabled={busy} onPress={() => void paste()} />
