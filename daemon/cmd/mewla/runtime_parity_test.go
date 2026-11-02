@@ -103,6 +103,12 @@ func paritySnapshot(t *testing.T, moduleDir string) string {
 			t.Fatal(err)
 		}
 	}
+	// This lifecycle fixture already copied the embedded assets above. Keep
+	// its web export local and deterministic; the real exporter is exercised
+	// by web builds, not by tests of daemon identity and process ownership.
+	if err := os.WriteFile(filepath.Join(destination, "..", "scripts", "build-web-ui.sh"), []byte("test -d daemon/webui/dist\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	return destination
 }
 
