@@ -221,6 +221,8 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return m.connect(ctx, q)
 	case "cloud_run":
 		return m.runCloud(ctx, q)
+	case "cloud_rename":
+		return m.renameAWSProfile(ctx, q)
 	case "cloud_delete":
 		return m.deleteCloudProfile(ctx, q)
 	case "list":
