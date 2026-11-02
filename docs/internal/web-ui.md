@@ -72,6 +72,12 @@ mewla devices revoke -id <device-id>
 
 ## Differences from the mobile apps
 
+Brain and Sessions keep their mounted state when switching tabs. On desktop,
+the inactive page is hidden from keyboard navigation and screen readers by a
+screen wrapper subscribed to `useIsFocused()`. Do not read
+`navigation.isFocused()` in `screenOptions` to control visibility: it can still
+refer to the previous tab during render and leave the selected page hidden.
+
 | Feature                          | Web                                                     |
 | -------------------------------- | ------------------------------------------------------- |
 | Brain, Sessions, Work, Settings  | Same as mobile                                          |
@@ -88,6 +94,26 @@ weaker than the platform keychain the mobile apps use, so only pair browser
 profiles you control.
 
 ## Building
+
+Web routes load with the initial app bundle (`expo-router.asyncRoutes.web` is
+`false`). Switching pages must not fetch route code: a slow tunnel otherwise
+leaves Expo's production Suspense fallback empty, and a failed or obsolete
+chunk can unmount the whole app. Once the app opens, every main page remains
+available while its server connection reconnects. Keep this setting explicit
+when upgrading Expo, whose web default is asynchronous routes.
+
+To exercise cold and repeated tab/page switches against a built export, pair
+an owned `agent-browser` session, then run:
+
+```bash
+bun scripts/tests/web-navigation.mjs SESSION http://127.0.0.1:PORT /tmp/web-evidence
+```
+
+The browser regression rejects subsequent JavaScript requests, checks visible
+page content, disconnects only that browser, repeats navigation offline, and
+checks its automatic reconnect. Run it on an isolated Linux daemon; it expects
+Screen's Mac requirement message. Screenshots and results belong outside the
+repository.
 
 Release and CI daemon builds embed the web export. A source build without it
 serves a short message instead of the app. To embed it locally:
