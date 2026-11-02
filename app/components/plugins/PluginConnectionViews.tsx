@@ -1,3 +1,4 @@
+import { cloudProfilesSummary } from "../../services/cloudProfilesModel";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
 import { CloudCodeEntry } from "./CloudCodeEntry";
 import { DateStyle, formatDate } from "../../services/dateFormat";
@@ -157,7 +158,7 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
   const { plugin, accounts, state } = row;
   const custom = plugin.id === "mcp" || plugin.id === "openapi";
   const form = connectsWithForm(plugin.id);
-  const names = accounts.map((account) => account.name).join(" · ");
+  const names = plugin.id === "aws" || plugin.id === "gcp" ? cloudProfilesSummary(accounts) : accounts.length > 2 ? `${accounts.length} accounts` : accounts.map((account) => account.name).join(" · ");
   // Every account turned off: the row stays open, only quieter.
   const off = serviceOff(accounts);
   const subtitle = state.kind === "unavailable" ? plugin.unavailable_reason || "Sign-in is not set up yet." : names || plugin.description;

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { CloudProfileList } from "../../../components/plugins/CloudProfileList";
 import { CustomServiceForm } from "../../../components/plugins/CustomServiceForm";
 import { HyperliquidForm } from "../../../components/plugins/HyperliquidForm";
 import { AccountCard, ConnectOffer, ServiceHeader, ToolUpdatesNotice } from "../../../components/plugins/PluginConnectionViews";
@@ -42,8 +43,23 @@ export default function PluginServiceScreen() {
       : !accounts.length
         ? <ConnectOffer plugin={plugin} job={job} serverName={flow.serverName} connecting={connecting} disabled={!!otherConnecting} onConnect={connect} onUseServerAccount={github} />
         : plugin.available ? <Button label={`Add another ${plugin.name} account`} icon="add" variant="tinted" block loading={connecting} disabled={!!otherConnecting} onPress={connect} /> : null;
+  const cloud = plugin.id === "aws" || plugin.id === "gcp";
+  const accountCard = (account: typeof accounts[number], close = () => {}) => <AccountCard
+      key={account.id}
+      plugin={plugin}
+      account={account}
+      job={job}
+      running={flow.running}
+      onAccess={(group, allowed) => flow.setAccess(account, group, allowed)}
+      onRecover={(action) => { close(); flow.recover(account, action); }}
+      onSetEnabled={(on) => flow.setEnabled(account, on)}
+      onDisconnect={() => flow.disconnect(account)}
+      onRemoveKey={trading ? () => flow.removeKey(account) : undefined}
+      onOpenTools={() => router.push({ pathname: `${pluginServicePath(plugin.id)}/tools`, params: { account: account.id } } as never)}
+    />;
   return <PluginsPage title={plugin.name}>
     <ServiceHeader plugin={plugin} />
+    {cloud ? tail : null}
     {accounts.map((account) => <ToolUpdatesNotice
       key={`updates:${account.id}`}
       account={account}
@@ -51,19 +67,7 @@ export default function PluginServiceScreen() {
       running={flow.running}
       onConfirm={(names) => flow.confirmUpdates(account, names)}
     />)}
-    {accounts.map((account) => <AccountCard
-      key={account.id}
-      plugin={plugin}
-      account={account}
-      job={job}
-      running={flow.running}
-      onAccess={(group, allowed) => flow.setAccess(account, group, allowed)}
-      onRecover={(action) => flow.recover(account, action)}
-      onSetEnabled={(on) => flow.setEnabled(account, on)}
-      onDisconnect={() => flow.disconnect(account)}
-      onRemoveKey={trading ? () => flow.removeKey(account) : undefined}
-      onOpenTools={() => router.push({ pathname: `${pluginServicePath(plugin.id)}/tools`, params: { account: account.id } } as never)}
-    />)}
-    {tail}
+    {cloud ? <CloudProfileList key={`${flow.serverId}:${plugin.id}`} accounts={accounts} renderDetails={accountCard} /> : accounts.map((account) => accountCard(account))}
+    {!cloud ? tail : null}
   </PluginsPage>;
 }
