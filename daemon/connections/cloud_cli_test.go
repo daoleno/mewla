@@ -64,6 +64,8 @@ func testCloudManager(t *testing.T) (*Manager, string, string, *[]string) {
 	config := filepath.Join(dir, "config")
 	creds := filepath.Join(dir, "credentials")
 	m.cloud = newCloudRuntime(filepath.Join(dir, "cli"))
+	// Tests opt into only their fixture provider, never another installed cloud CLI.
+	delete(m.cloud.providers, "gcp")
 	m.cloud.profileFiles = func() (string, string, error) { return config, creds, nil }
 	calls := []string{}
 	var mu sync.Mutex
