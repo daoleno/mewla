@@ -132,10 +132,15 @@ func TestWebConnectReturnsToPlugins(t *testing.T) {
 		t.Fatal("return leaked a credential")
 	}
 
-	// A refresh replays the consumed state: friendly redirect, account kept.
+	// A replay cannot be distinguished from another computer: preserve its address without exchanging it again.
 	callback := base + "/plugins/oauth/callback?" + url.Values{"state": {authorize.Query().Get("state")}, "code": {"web-code"}}.Encode()
-	if replay := visit(callback); replay.Path != "/plugins" || replay.Query().Get("plugin_error") != "expired" {
-		t.Fatalf("replay returned to %v", replay)
+	replay, err := browser.Get(callback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay.Body.Close()
+	if replay.StatusCode != http.StatusBadRequest || replay.Header.Get("Location") != "" {
+		t.Fatal("replay redirected or was accepted")
 	}
 	if mustHandle(t, m, Request{Action: "get", ID: status.Account.ID}).Account.Status != "connected" {
 		t.Fatal("replay disturbed the connected account")

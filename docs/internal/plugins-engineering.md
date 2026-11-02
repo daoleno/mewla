@@ -119,3 +119,15 @@ records the stale-session 400 path, while [AWS's MCP prerequisites](https://docs
 document `signin:AuthorizeOAuth2Access` and `signin:CreateOAuth2Token`. An
 unauthenticated request cannot establish which error an under-permissioned IAM
 identity will receive after login.
+
+An OAuth callback can land on a different Mewla computer using the same loopback
+port. Unknown state must never redirect away or exchange the code: the callback
+page retains its original URL and provides a full-address Copy action. The page
+uses no-store, no-referrer and a nonce-bound script; callback values are not
+rendered into HTML or logged. Known states retain their single-use behavior.
+The computers channel currently transports durable Brain messages, not an OAuth
+state-owner lookup or ephemeral credential handoff. Do not send authorization
+codes through that message history; use the copy page until an authenticated
+ownership protocol exists. Macs running released code need the next daemon
+release containing this fix (after 0.2.88); updating zen alone cannot change a
+callback already handled by a Mac daemon.
