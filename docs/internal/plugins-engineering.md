@@ -84,8 +84,7 @@ with a named profile, regardless of where the browser runs. Mewla validates the
 returned code/state before feeding the CLI; the CLI owns PKCE and credential storage.
 Login processes expire after ten minutes and cancellation reaps the child.
 
-`mewla aws [--profile NAME] <AWS args>` runs literal argv, never a shell. A reviewed
-service/operation allowlist admits reads. Everything else needs enabled execute
+`mewla aws [--profile NAME] <AWS args>` runs literal argv, never a shell. AWS `get-`, `list-`, and `describe-` operations across all services run as reads, plus `s3 ls` and S3 head operations. An explicit deny list keeps credential/secret readers and local object downloads gated. SSM parameter reads require authorization with `--with-decryption` (including abbreviations) or structured CLI input. Everything else needs enabled execute
 and task-specific `--mewla-authorize`; secret-returning operations are excluded
 from reads. The paired API carries the same argv using `cloud_run`. No credentials,
 endpoint overrides, local file loaders or sign-in management through this tool.

@@ -58,27 +58,47 @@ func (awsCLI) validateCode(address, code string) bool {
 	return err == nil && e == nil && len(values["code"]) == 1 && values.Get("code") != "" && len(values["state"]) == 1 && values.Get("state") == u.Query().Get("state")
 }
 
-// Reviewed service/operation pairs, not a prefix heuristic: GetSessionToken,
-// GetObject, GetParameter and Lambda code/configuration can reveal secrets.
-var awsReads = map[string]string{
-	"sts":            "get-caller-identity",
-	"ec2":            "describe-instances describe-instance-status describe-volumes describe-vpcs describe-subnets describe-security-groups describe-images describe-regions describe-availability-zones describe-tags",
-	"rds":            "describe-db-instances describe-db-clusters describe-db-snapshots describe-events",
-	"s3api":          "list-buckets list-objects list-objects-v2 head-bucket get-bucket-location get-bucket-tagging",
-	"s3":             "ls",
-	"cloudwatch":     "list-metrics get-metric-data get-metric-statistics describe-alarms",
-	"logs":           "describe-log-groups describe-log-streams",
-	"ecs":            "list-clusters list-services list-tasks describe-clusters describe-services",
-	"eks":            "list-clusters describe-cluster",
-	"lambda":         "list-functions",
-	"iam":            "list-users list-roles list-policies list-account-aliases get-account-summary",
-	"organizations":  "list-accounts describe-organization describe-account list-roots",
-	"account":        "get-account-information",
-	"cloudformation": "list-stacks describe-stacks list-stack-resources",
-	"route53":        "list-hosted-zones list-resource-record-sets",
-	"dynamodb":       "list-tables describe-table",
-	"tagging":        "get-resources get-tag-keys get-tag-values",
-	"ce":             "get-cost-and-usage get-cost-forecast",
+// Vendor verbs cover new services without a hand-maintained read allowlist.
+// Credential/secret readers and commands writing a local download stay gated.
+var awsSensitiveReads = map[string]string{
+	"sts":                 "get-session-token get-federation-token",
+	"secretsmanager":      "get-secret-value batch-get-secret-value",
+	"kms":                 "get-parameters-for-import",
+	"ec2":                 "get-password-data",
+	"ecr":                 "get-authorization-token",
+	"ecr-public":          "get-authorization-token",
+	"codeartifact":        "get-authorization-token",
+	"eks":                 "get-token",
+	"cognito-identity":    "get-credentials-for-identity get-open-id-token get-open-id-token-for-developer-identity",
+	"cognito-idp":         "get-tokens-from-refresh-token describe-user-pool-client",
+	"redshift":            "get-cluster-credentials get-cluster-credentials-with-iam",
+	"redshift-serverless": "get-credentials",
+	"lightsail":           "get-instance-access-details",
+	"apigateway":          "get-api-key get-api-keys",
+	"appsync":             "list-api-keys",
+	"connect":             "get-federation-token",
+	"gamelift":            "get-instance-access get-compute-auth-token get-compute-access",
+	"grafana":             "list-workspace-service-account-tokens",
+	"lambda":              "get-function get-function-configuration",
+	"s3api":               "get-object get-object-torrent",
+}
+var awsCommandWord = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+func awsSSMDecryption(args []string) bool {
+	for _, arg := range args {
+		key, _, _ := strings.Cut(arg, "=")
+		if !strings.HasPrefix(key, "--") {
+			continue
+		}
+		// AWS accepts unambiguous flag abbreviations. Structured inputs can also
+		// request WithDecryption, so they require authorization for parameter reads.
+		for _, sensitive := range []string{"--with-decryption", "--cli-input-json", "--cli-input-yaml"} {
+			if strings.HasPrefix(sensitive, key) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (awsCLI) classify(args []string) (bool, error) {
@@ -88,7 +108,7 @@ func (awsCLI) classify(args []string) (bool, error) {
 	if err := cloudForbidden(args); err != nil {
 		return false, err
 	}
-	if !regexp.MustCompile(`^[a-z][a-z0-9-]*$`).MatchString(args[0]) || !regexp.MustCompile(`^[a-z][a-z0-9-]*$`).MatchString(args[1]) {
+	if !awsCommandWord.MatchString(args[0]) || !awsCommandWord.MatchString(args[1]) {
 		return false, callRefused("Start with the AWS service and command")
 	}
 	switch args[0] {
@@ -100,7 +120,17 @@ func (awsCLI) classify(args []string) (bool, error) {
 			return false, callRefused("Skeleton generation is not a cloud operation")
 		}
 	}
-	return strings.Contains(" "+awsReads[args[0]]+" ", " "+args[1]+" "), nil
+	service, operation := args[0], args[1]
+	if strings.Contains(" "+awsSensitiveReads[service]+" ", " "+operation+" ") {
+		return false, nil
+	}
+	if service == "ssm" && strings.Contains(" get-parameter get-parameters get-parameters-by-path get-parameter-history ", " "+operation+" ") && awsSSMDecryption(args[2:]) {
+		return false, nil
+	}
+	if service == "s3" && operation == "ls" || service == "s3api" && (operation == "head-object" || operation == "head-bucket") {
+		return true, nil
+	}
+	return strings.HasPrefix(operation, "get-") || strings.HasPrefix(operation, "list-") || strings.HasPrefix(operation, "describe-"), nil
 }
 func (awsCLI) install(ctx context.Context, dir string) error {
 	return newAWSInstaller().install(ctx, dir)

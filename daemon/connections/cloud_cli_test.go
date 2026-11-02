@@ -20,7 +20,7 @@ func TestAWSCLIPolicy(t *testing.T) {
 			t.Fatalf("read refused: %v", args)
 		}
 	}
-	for _, args := range [][]string{{"ec2", "terminate-instances"}, {"sts", "get-session-token"}, {"secretsmanager", "get-secret-value"}, {"ssm", "get-parameters"}, {"s3api", "get-object"}, {"lambda", "get-function"}, {"madeup", "get-secret"}} {
+	for _, args := range [][]string{{"ec2", "terminate-instances"}, {"sts", "get-session-token"}, {"secretsmanager", "get-secret-value"}, {"ssm", "get-parameters", "--with-decryption"}, {"s3api", "get-object"}, {"lambda", "get-function"}, {"madeup", "delete-resource"}} {
 		read, err := awsCLI{}.classify(args)
 		if err != nil || read {
 			t.Fatalf("unsafe classification: %v", args)
