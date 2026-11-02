@@ -19,7 +19,7 @@ export function CloudProfileList({ accounts, renderDetails }: {
   const showExpired = expanded || (groups.filterVisible && !!query.trim());
   const rows = (items: PluginAccount[]) => items.map(account => {
     const status = cloudProfileStatus(account);
-    const name = account.profile || account.name;
+    const name = account.integration === "gcp" ? account.name : account.profile || account.name;
     const identity = cloudProfileIdentity(account);
     const open = selected === account.id;
     return <View key={account.id}>

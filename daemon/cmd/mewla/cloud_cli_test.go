@@ -14,3 +14,10 @@ func TestCloudCLIArgsStayLiteral(t *testing.T) {
 		t.Fatal("missing profile accepted")
 	}
 }
+
+func TestGcloudSelectsAccountWithoutPassingCredentialOverride(t *testing.T) {
+	q, err := cloudCLIRequest("gcp", []string{"--account", "person@example.com", "projects", "list"})
+	if err != nil || q.Profile != "account:person@example.com" || !reflect.DeepEqual(q.CLIArgs, []string{"projects", "list"}) {
+		t.Fatal(q, err)
+	}
+}

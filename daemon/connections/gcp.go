@@ -32,7 +32,7 @@ func invokeGCP(m *Manager, ctx context.Context, r *record, _ string, t Tool, arg
 		return nil, errAuth
 	}
 	if t.Name == "whoami" {
-		return json.Marshal(map[string]any{"account": r.Account.Identity, "configuration": r.Account.Profile, "project": r.Account.Project, "active": r.Account.Active})
+		return json.Marshal(map[string]any{"account": r.Account.Identity, "configuration": r.CLI.Configuration, "project": r.Account.Project, "active": r.Account.Active})
 	}
 	values, _ := args["args"].([]any)
 	argv := []string{}

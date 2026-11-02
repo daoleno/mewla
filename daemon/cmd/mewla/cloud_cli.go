@@ -17,6 +17,14 @@ func cloudCLIRequest(integration string, args []string) (connections.Request, er
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
+		case integration == "gcp" && arg == "--account":
+			i++
+			if i >= len(args) {
+				return q, errors.New("--account needs an email address")
+			}
+			q.Profile = "account:" + args[i]
+		case integration == "gcp" && strings.HasPrefix(arg, "--account="):
+			q.Profile = "account:" + strings.TrimPrefix(arg, "--account=")
 		case arg == "--mewla-authorize":
 			q.Authorize = true
 		case arg == "--profile":

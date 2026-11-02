@@ -8,6 +8,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,8 +48,16 @@ func (m *Manager) gcpLocalProfiles(ctx context.Context) ([]gcpConfiguration, []g
 }
 func (m *Manager) gcpProfileRecord(profile string) *record {
 	for _, r := range m.records {
-		if r.Account.Integration == "gcp" && r.CLI != nil && r.CLI.Profile == profile {
+		if r.Account.Integration != "gcp" || r.CLI == nil || r.CLI.Account == "" {
+			continue
+		}
+		if r.CLI.Profile == profile || r.CLI.Account == profile {
 			return r
+		}
+		for _, name := range r.CLI.Configurations {
+			if name == profile {
+				return r
+			}
 		}
 	}
 	return nil
@@ -63,73 +73,65 @@ func (m *Manager) syncGCPProfiles(ctx context.Context, force bool) error {
 	if err != nil {
 		return err
 	}
-	accounts := map[string]bool{}
-	used := map[string]bool{}
+	sort.Slice(configs, func(i, j int) bool { return configs[i].Name < configs[j].Name })
 	seen := map[string]bool{}
-	for _, c := range creds {
-		accounts[c.Account] = true
-	}
-	for _, c := range configs {
-		used[c.Properties["core"]["account"]] = true
-	}
-	// Credentials not attached to a named configuration remain visible/manageable.
-	for account := range accounts {
-		if !used[account] && validGCPAccount(account) {
-			configs = append(configs, gcpConfiguration{Name: "account:" + account, Properties: map[string]map[string]string{"core": {"account": account}}})
-		}
-	}
-	for _, c := range configs {
-		if !(gcloudCLI{}).validProfile(c.Name) {
+	// The vendor credential store defines accounts. Empty configurations and
+	// configurations whose account was revoked are never connection cards.
+	for _, credential := range creds {
+		account := credential.Account
+		if !validGCPAccount(account) {
 			continue
 		}
-		seen[c.Name] = true
-		r := m.gcpProfileRecord(c.Name)
+		seen[account] = true
+		profile := "account:" + account
+		r := m.gcpProfileRecord(profile)
 		if r == nil {
-			sum := sha256.Sum256([]byte(c.Name))
-			r = &record{CLI: &cloudAccount{Profile: c.Name}, Account: Account{ID: "gcp-cli-" + hex.EncodeToString(sum[:12]), Integration: "gcp", Name: c.Name, Profile: c.Name, AuthMethod: "cli", Tools: gcpTools(), History: []Event{}}, Grants: map[string]string{}}
+			sum := sha256.Sum256([]byte(account))
+			r = &record{CLI: &cloudAccount{Profile: profile, Account: account}, Account: Account{ID: "gcp-cli-" + hex.EncodeToString(sum[:12]), Integration: "gcp", Name: account, Identity: account, Profile: profile, AuthMethod: "cli", ProfileKind: "gcloud account", Tools: gcpTools(), History: []Event{}}, Grants: map[string]string{}}
 			m.setGroup(r, "read", true)
 			m.records[r.Account.ID] = r
 		}
-		account := c.Properties["core"]["account"]
-		changedIdentity := r.Account.Identity != account
-		if changedIdentity {
-			r.Account.Enabled = false
-			m.setGroup(r, "write", false)
+		r.CLI.Configuration = ""
+		r.CLI.Configurations = nil
+		r.Account.Project = ""
+		r.Account.Active = false
+		var chosen *gcpConfiguration
+		for i := range configs {
+			c := &configs[i]
+			if c.Properties["core"]["account"] != account {
+				continue
+			}
+			r.CLI.Configurations = append(r.CLI.Configurations, c.Name)
+			if chosen == nil || c.Active || !chosen.Active && chosen.Properties["core"]["project"] == "" && c.Properties["core"]["project"] != "" {
+				chosen = c
+			}
 		}
-		r.Account.Identity = account
-		r.Account.Project = c.Properties["core"]["project"]
-		r.Account.Active = c.Active
-		r.Account.ProfileKind = "gcloud configuration"
-		if strings.HasPrefix(c.Name, "account:") {
-			r.Account.Name = account
-			r.Account.ProfileKind = "gcloud account"
+		if chosen != nil {
+			r.CLI.Configuration = chosen.Name
+			r.Account.Project = chosen.Properties["core"]["project"]
+			r.Account.Active = chosen.Active
 		}
-		key := "gcp:" + c.Name
-		if !force && !changedIdentity && time.Since(m.cloud.checked[key]) < time.Minute {
+		key := "gcp:" + account
+		if !force && time.Since(m.cloud.checked[key]) < time.Minute {
 			continue
 		}
+		probe, cancel := context.WithTimeout(ctx, 5*time.Second)
+		out, e := m.cloudCommand(probe, "gcp", profile, []string{"auth", "print-access-token"})
+		cancel()
 		r.Account.Status = "authorization_required"
-		r.Account.ProfileStatus = "signed out"
-		if accounts[account] {
-			probe, cancel := context.WithTimeout(ctx, 5*time.Second)
-			// Verify refreshability without exposing or storing the resulting token.
-			out, e := m.cloudCommand(probe, "gcp", c.Name, []string{"auth", "print-access-token", "--account", account})
-			cancel()
-			if e == nil && out.ExitCode == 0 && strings.TrimSpace(out.Stdout) != "" {
-				now := time.Now().UTC()
-				r.Account.Status = "connected"
-				r.Account.ProfileStatus = "valid"
-				r.Account.VerifiedAt = &now
-			} else {
-				r.Account.ProfileStatus = "expired"
-			}
+		r.Account.ProfileStatus = "expired"
+		if e == nil && out.ExitCode == 0 && strings.TrimSpace(out.Stdout) != "" {
+			now := time.Now().UTC()
+			r.Account.Status = "connected"
+			r.Account.ProfileStatus = "valid"
+			r.Account.VerifiedAt = &now
 		}
 		m.cloud.checked[key] = time.Now()
 	}
 	for id, r := range m.records {
-		if r.Account.Integration == "gcp" && r.CLI != nil && !seen[r.CLI.Profile] {
+		if r.Account.Integration == "gcp" && r.CLI != nil && (r.CLI.Account == "" || !seen[r.CLI.Account]) {
 			delete(m.records, id)
-			delete(m.cloud.checked, "gcp:"+r.CLI.Profile)
+			delete(m.cloud.checked, "gcp:"+r.CLI.Account)
 		}
 	}
 	m.cloud.checked["gcp:list"] = time.Now()
@@ -147,12 +149,30 @@ func gcpConfigDir() (string, error) {
 }
 func (m *Manager) deleteGCPProfile(ctx context.Context, q Request) (Response, error) {
 	r := m.records[q.ID]
-	name := r.CLI.Profile
-	if q.ConfirmProfile != name {
-		return Response{}, errors.New("Confirm the exact configuration name before deleting")
+	account := r.CLI.Account
+	if account == "" || q.ConfirmProfile != r.CLI.Profile {
+		return Response{}, errors.New("Confirm the Google account before deleting")
+	}
+	configs, creds, err := m.gcpLocalProfiles(ctx)
+	if err != nil {
+		return Response{}, err
+	}
+	targets := map[string]bool{}
+	signedIn := map[string]bool{}
+	active := ""
+	for _, c := range creds {
+		signedIn[c.Account] = true
+	}
+	for _, c := range configs {
+		if c.Active {
+			active = c.Name
+		}
+		if c.Properties["core"]["account"] == account {
+			targets[c.Name] = true
+		}
 	}
 	for _, f := range m.connectFlows {
-		if f.Integration == "gcp" && f.profile == name && f.Status == "waiting" && f.cli != nil {
+		if f.Integration == "gcp" && (f.profile == r.CLI.Profile || targets[f.profile] || f.renewID == r.Account.ID) && f.Status == "waiting" && f.cli != nil {
 			f.cli.cancel()
 			select {
 			case <-f.cli.done:
@@ -163,39 +183,6 @@ func (m *Manager) deleteGCPProfile(ctx context.Context, q Request) (Response, er
 			f.AuthorizationURL = ""
 		}
 	}
-	configs, creds, err := m.gcpLocalProfiles(ctx)
-	if err != nil {
-		return Response{}, err
-	}
-	account := ""
-	found := false
-	shared := false
-	if strings.HasPrefix(name, "account:") {
-		account = strings.TrimPrefix(name, "account:")
-		for _, c := range creds {
-			if c.Account == account {
-				found = true
-			}
-		}
-	} else {
-		for _, c := range configs {
-			if c.Name == name {
-				found = true
-				account = c.Properties["core"]["account"]
-				if c.Active {
-					return Response{}, errors.New("This is gcloud's active configuration. Activate another configuration in gcloud before deleting it.")
-				}
-			}
-		}
-	}
-	if !found {
-		return Response{}, errors.New("Configuration changed; refresh before deleting")
-	}
-	for _, c := range configs {
-		if c.Name != name && account != "" && c.Properties["core"]["account"] == account {
-			shared = true
-		}
-	}
 	dir, err := gcpConfigDir()
 	if err != nil {
 		return Response{}, err
@@ -204,8 +191,8 @@ func (m *Manager) deleteGCPProfile(ctx context.Context, q Request) (Response, er
 	if err = os.MkdirAll(backup, 0700); err != nil {
 		return Response{}, err
 	}
-	files := []string{"credentials.db", "access_tokens.db", "active_config"}
-	if !strings.HasPrefix(name, "account:") {
+	files := []string{"credentials.db", "credentials.db-wal", "access_tokens.db", "access_tokens.db-wal", "active_config"}
+	for name := range targets {
 		files = append(files, filepath.Join("configurations", "config_"+name))
 	}
 	for _, file := range files {
@@ -217,27 +204,51 @@ func (m *Manager) deleteGCPProfile(ctx context.Context, q Request) (Response, er
 			return Response{}, e
 		}
 	}
-	credentialed := false
-	for _, c := range creds {
-		if c.Account == account {
-			credentialed = true
+	run := func(args ...string) bool {
+		out, e := m.cloudCommand(ctx, "gcp", "", args)
+		return e == nil && out.ExitCode == 0
+	}
+	// Account deletion includes all configurations for that account. Choose an
+	// unaffected configuration, or create an empty one, before vendor deletion.
+	if targets[active] {
+		fallback := ""
+		names := map[string]bool{}
+		for _, c := range configs {
+			names[c.Name] = true
+			if targets[c.Name] {
+				continue
+			}
+			if fallback == "" || signedIn[c.Properties["core"]["account"]] {
+				fallback = c.Name
+			}
+		}
+		if fallback == "" {
+			fallback = "default"
+			for n := 0; names[fallback]; n++ {
+				fallback = "mewla-default-" + strconv.Itoa(n+1)
+			}
+			if !run("config", "configurations", "create", fallback, "--no-activate") {
+				return Response{}, errors.New("Could not reset the active Google account. Try again.")
+			}
+		}
+		if !run("config", "configurations", "activate", fallback) {
+			return Response{}, errors.New("Could not switch the active Google account. Try again.")
 		}
 	}
-	if credentialed && !shared {
-		out, e := m.cloudCommand(ctx, "gcp", "", []string{"auth", "revoke", account})
-		if e != nil || out.ExitCode != 0 {
-			return Response{}, errors.New("Google sign-out failed; configuration and backup were kept")
+	if signedIn[account] && !run("auth", "revoke", account) {
+		if targets[active] {
+			_ = run("config", "configurations", "activate", active)
 		}
+		return Response{}, errors.New("Google sign-out failed. Your account and backup were kept; try again.")
 	}
-	if !strings.HasPrefix(name, "account:") {
-		out, e := m.cloudCommand(ctx, "gcp", "", []string{"config", "configurations", "delete", name})
-		if e != nil || out.ExitCode != 0 {
-			return Response{}, errors.New("Configuration removal failed; refresh to check sign-in. Backup retained.")
+	for name := range targets {
+		if !run("config", "configurations", "delete", name) {
+			return Response{}, errors.New("Google account signed out, but a local configuration could not be removed. Refresh and try again.")
 		}
 	}
 	delete(m.records, r.Account.ID)
 	delete(m.cloud.checked, "gcp:list")
-	delete(m.cloud.checked, "gcp:"+name)
+	delete(m.cloud.checked, "gcp:"+account)
 	if err = m.save(); err != nil {
 		return Response{}, err
 	}

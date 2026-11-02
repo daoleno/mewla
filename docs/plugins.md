@@ -309,38 +309,50 @@ address, the connection fails with "this network answers with a private address"
 
 ## Google Cloud
 
-Extensions uses the local Google Cloud CLI and its normal configuration and credential
-store. Existing configurations and accounts appear on refresh, with their default
-project, active state and briefly cached credential status. Enable a configuration
-for agent use; new local configurations are disabled until you choose them.
+Extensions lists the accounts in `gcloud auth list`, each with its default project
+and briefly cached sign-in status. Multiple configurations for the same account
+appear as one account. Empty configurations, including a fresh `default`, are
+hidden. The active configuration for an account supplies its project; otherwise
+Mewla uses its first configuration with a project. Existing accounts start with
+agent use disabled. Expired accounts share the collapsed Expired group with AWS.
 
-Connect always starts `gcloud auth login --no-launch-browser --force`. Open Google's
-URL on any trusted device, sign in, then paste its authorization code in Mewla.
-Google's CLI owns the OAuth exchange and token refresh. No Mewla OAuth client,
-Cloud CLI Execution API or MCP role is needed. If gcloud is missing, Install and
-sign in downloads the official pinned CLI into Mewla's directory without sudo or
-shell startup changes. Automatic installation supports Linux and macOS on x86_64 and Arm64;
-macOS needs Python 3.10–3.15. Other hosts can use a locally installed gcloud.
+Connect always starts the CLI's remote flow,
+`gcloud auth login --no-launch-browser --force`. Open Google's URL on any trusted
+device, sign in, and paste the authorization code into Mewla. Google owns the
+OAuth exchange and refresh. There is no Mewla Google client, MCP API or MCP role.
+The normal gcloud configuration/credential directory is the single source of
+truth, including `CLOUDSDK_CONFIG` when configured. ADC is separate and unchanged.
 
-Agents use `mewla gcloud projects list` or
-`mewla gcloud --profile CONFIGURATION compute instances list --project PROJECT`.
-The daemon passes literal argv to gcloud, with JSON output by default. Reviewed
-metadata reads run directly. Other commands, secrets, IAM, billing and SQL need
-enabled writes and the user's authorization for that task, then
-`--mewla-authorize`. Local execution, credential export and file transfer are
-unavailable through this connection. Commands are never retried by Mewla.
-Project selection follows gcloud's configuration or an explicit `--project`;
-ask the user when the intended resource project is ambiguous. `bq` is not exposed.
+When gcloud is absent, Install and sign in installs the pinned official archive
+under Mewla's CLI directory without sudo or shell startup changes. The installer
+checks SHA256, stages and verifies the SDK, and only then publishes its launcher.
+Download, verification or installation failures show one explanation and Retry;
+failed and interrupted staging is cleaned up before the next attempt. Downloads
+are bounded to 90 seconds and the whole install to three minutes. Unsupported
+hosts show exactly what to install, a link to Google's instructions and Check
+again. Installing into `~/google-cloud-sdk` is discovered without restarting the
+daemon. Automatic installation supports Linux/macOS x86_64 and Arm64; macOS needs
+Python 3.10–3.15.
 
-Delete requires confirmation naming the configuration. Mewla backs up the affected
-local files, revokes its exact account using `gcloud auth revoke`, and removes the
-configuration with gcloud. If another configuration shares that account, its
-credentials are preserved. Unassigned credential accounts can be revoked too.
-Gcloud protects its active configuration: activate another configuration before
-deleting it. ADC is a separate credential store and is never changed by this flow.
-Terminal changes appear after refresh (the list is cached for four seconds).
+Agents use `mewla gcloud projects list`, or select an enabled account with
+`mewla gcloud --account person@example.com compute instances list --project ID`.
+`--profile CONFIGURATION` can select an account through an existing gcloud
+configuration. Multiple enabled accounts require an explicit selection.
+Commands use literal argv and return CLI output, JSON by default. Reviewed
+metadata reads run directly; other commands, secrets, IAM, billing and SQL need
+enabled writes plus the user's task-specific authorization (`--mewla-authorize`).
+Local execution, file inputs/transfers and credential export are unavailable.
+Mewla never automatically retries commands. An account without a configuration
+does not inherit another account's project: use an explicit `--project`.
+`bq` is not exposed.
 
-Because credentials are shared with the vendor CLI, Mewla's authorization checks
-apply to `mewla gcloud` and connection tools; they do not sandbox a worker that can
-run bare gcloud under the same OS user. Disabling an account in Mewla removes agent
-access through Mewla, while Delete removes the vendor credentials/configuration.
+Delete account confirms the email, backs up affected local files, revokes that
+exact account with `gcloud auth revoke`, and removes its configurations. If one
+is active, Mewla switches to another account's configuration or creates an empty
+configuration itself. Other accounts remain signed in; the person never needs
+to manage gcloud configurations to delete an account. Terminal sign-in/revoke
+changes appear on refresh (four-second list cache, one-minute credential check).
+
+Because the credentials are shared, Mewla's authorization checks apply to
+`mewla gcloud` and connection tools, not a worker running bare gcloud as the same
+OS user. Disabling agent use keeps the account in gcloud; Delete signs it out.

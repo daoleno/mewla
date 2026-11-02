@@ -89,72 +89,102 @@ func testGCPManager(t *testing.T) (*Manager, *[]gcpConfiguration, *[]gcpCredenti
 	}
 	return m, &configs, &creds, &calls
 }
-func TestGCPProfilesAreLiveAndGrantsFollowIdentity(t *testing.T) {
-	m, configs, _, _ := testGCPManager(t)
+func TestGCPAccountsHideEmptyConfigsAndFollowCredentialStore(t *testing.T) {
+	m, configs, creds, _ := testGCPManager(t)
+	*configs = append(*configs, gcpConfiguration{Name: "default", Properties: map[string]map[string]string{}})
 	mustHandle(t, m, Request{Action: "list"})
-	if len(m.records) != 3 {
-		t.Fatal("missing configs or unbound credentials")
+	if len(m.records) != 2 {
+		t.Fatal("accounts were duplicated or empty config shown")
 	}
-	r := m.gcpProfileRecord("throwaway")
+	r := m.gcpProfileRecord("account:same@example.com")
 	id := r.Account.ID
-	if r.Account.Enabled || r.Account.Project != "project-b" || r.Account.ProfileStatus != "valid" {
+	if r.Account.Name != "same@example.com" || r.Account.Project != "project-a" || !r.Account.Active || r.Account.Enabled {
 		t.Fatal(r.Account)
 	}
 	r.Account.Enabled = true
 	m.setGroup(r, "write", true)
-	(*configs)[1].Properties["core"]["account"] = "changed@example.com"
+	(*configs)[0].Properties["core"]["project"] = "new-project"
 	if err := m.syncGCPProfiles(context.Background(), true); err != nil {
 		t.Fatal(err)
 	}
-	if r.Account.ID != id || r.Account.Enabled || r.Account.Status == "connected" {
-		t.Fatal("identity change retained grants")
+	if r.Account.ID != id || !r.Account.Enabled || r.Account.Project != "new-project" {
+		t.Fatal("config change lost account identity or project")
 	}
-	*configs = (*configs)[:1]
+	*creds = (*creds)[1:]
 	if err := m.syncGCPProfiles(context.Background(), true); err != nil {
 		t.Fatal(err)
 	}
-	if m.gcpProfileRecord("throwaway") != nil {
-		t.Fatal("deleted configuration retained")
+	if m.gcpProfileRecord("account:same@example.com") != nil {
+		t.Fatal("CLI-revoked account remained")
 	}
-	raw, _ := json.Marshal(m.records)
-	if strings.Contains(string(raw), "sensitive-token") {
-		t.Fatal("token persisted")
+	*creds = nil
+	if err := m.syncGCPProfiles(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.records) != 0 {
+		t.Fatal("empty configs became accounts")
 	}
 }
-func TestGCPDeleteProtectsSharedAccounts(t *testing.T) {
-	m, _, _, calls := testGCPManager(t)
+func TestGCPDeleteActiveAccountKeepsOtherAccounts(t *testing.T) {
+	m, configs, _, calls := testGCPManager(t)
+	*configs = append(*configs, gcpConfiguration{Name: "other", Properties: map[string]map[string]string{"core": {"account": "unused@example.com", "project": "other-project"}}})
 	mustHandle(t, m, Request{Action: "list"})
-	r := m.gcpProfileRecord("throwaway")
-	if _, err := m.Handle(context.Background(), Request{Action: "cloud_delete", ID: r.Account.ID, ConfirmProfile: "keep"}); err == nil {
+	r := m.gcpProfileRecord("account:same@example.com")
+	if _, err := m.Handle(context.Background(), Request{Action: "cloud_delete", ID: r.Account.ID, ConfirmProfile: "wrong"}); err == nil {
 		t.Fatal("missing exact confirmation")
 	}
-	mustHandle(t, m, Request{Action: "cloud_delete", ID: r.Account.ID, ConfirmProfile: "throwaway"})
+	mustHandle(t, m, Request{Action: "cloud_delete", ID: r.Account.ID, ConfirmProfile: r.CLI.Profile})
+	var operations []string
 	for _, call := range *calls {
-		if strings.HasPrefix(call, "auth revoke") {
-			t.Fatal("revoked a shared credential")
+		if strings.HasPrefix(call, "auth revoke") || strings.HasPrefix(call, "config configurations activate") || strings.HasPrefix(call, "config configurations delete") {
+			operations = append(operations, call)
 		}
 	}
-	if m.gcpProfileRecord("keep") == nil {
-		t.Fatal("other config removed")
+	if len(operations) != 4 || !strings.HasPrefix(operations[0], "config configurations activate other ") || !strings.HasPrefix(operations[1], "auth revoke same@example.com ") {
+		t.Fatal("active account was not switched before exact revoke", operations)
 	}
-	backups, _ := filepath.Glob(filepath.Join(m.cloud.dir, "backups", "gcp-*", "config_throwaway"))
+	if m.gcpProfileRecord("account:unused@example.com") == nil {
+		t.Fatal("other account removed")
+	}
+	for _, c := range *configs {
+		if c.Properties["core"]["account"] == "same@example.com" {
+			t.Fatal("account configuration remained")
+		}
+	}
+	backups, _ := filepath.Glob(filepath.Join(m.cloud.dir, "backups", "gcp-*", "config_keep"))
 	if len(backups) != 1 {
 		t.Fatal("backup absent")
 	}
 	info, _ := os.Stat(backups[0])
 	if info.Mode().Perm() != 0600 {
-		t.Fatal("backup mode")
+		t.Fatal("backup permissions")
 	}
-	orphan := m.gcpProfileRecord("account:unused@example.com")
-	mustHandle(t, m, Request{Action: "cloud_delete", ID: orphan.Account.ID, ConfirmProfile: orphan.CLI.Profile})
+}
+func TestGCPDeleteOnlyAccountResetsActiveConfiguration(t *testing.T) {
+	m, _, _, calls := testGCPManager(t)
+	mustHandle(t, m, Request{Action: "list"})
+	r := m.gcpProfileRecord("account:same@example.com")
+	mustHandle(t, m, Request{Action: "cloud_delete", ID: r.Account.ID, ConfirmProfile: r.CLI.Profile})
 	found := false
 	for _, call := range *calls {
-		if strings.HasPrefix(call, "auth revoke unused@example.com ") {
+		if strings.HasPrefix(call, "config configurations create default --no-activate") {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("exact orphan account not revoked")
+		t.Fatal("no neutral configuration created for active-account deletion")
+	}
+}
+func TestGCPUnboundAccountNeverInheritsAnotherProject(t *testing.T) {
+	m, _, _, _ := testGCPManager(t)
+	mustHandle(t, m, Request{Action: "list"})
+	args := (gcloudCLI{}).accountArgs(m, "account:unused@example.com", []string{"projects", "list"})
+	if !strings.Contains(strings.Join(args, " "), "--account unused@example.com --project=") {
+		t.Fatal("unbound account inherited default config", args)
+	}
+	args = (gcloudCLI{}).accountArgs(m, "account:same@example.com", []string{"projects", "list"})
+	if !strings.Contains(strings.Join(args, " "), "--account same@example.com --configuration keep") {
+		t.Fatal("account routing not explicit", args)
 	}
 }
 func TestGCPRunBothAuthorizationGates(t *testing.T) {
@@ -198,7 +228,7 @@ func TestGCPCopyCodeFlowOnSharedCore(t *testing.T) {
 		t.Fatal("login blocked")
 	}
 	result := mustHandle(t, m, Request{Action: "connect_status", FlowID: f.ID})
-	if result.Account == nil || !result.Account.Enabled || result.Account.Profile != "throwaway" {
+	if result.Account == nil || !result.Account.Enabled || result.Account.Profile != "account:same@example.com" {
 		t.Fatal("login not adopted")
 	}
 }
