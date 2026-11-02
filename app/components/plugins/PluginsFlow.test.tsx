@@ -83,4 +83,26 @@ if (!process.env.MEWLA_PLUGIN_FLOW_TEST_CHILD) {
     expect(request.mock.calls.filter(([, req]) => req.action === "connect_finish")).toHaveLength(finishCount);
     await act(async () => tree.unmount());
   });
+  test("an install failure remains retryable in the same flow", async () => {
+    stored.clear();
+    const installFlow = { ...flow, id: "gcp-install", integration: "gcp", address_required: false, authorization_url: "", install_required: true };
+    request.mockImplementation(async (_server: string, req: any) => req.action === "list" ? { catalog: [], accounts: [] } : { flow: installFlow });
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => { tree = TestRenderer.create(<PluginsFlowProvider serverId="server" serverName="Server" connection="connected" deferReturn={async () => {}}><Capture /></PluginsFlowProvider>); });
+    await act(async () => state.connect("gcp"));
+    request.mockResolvedValueOnce({ flow: { ...installFlow, install_required: false, installing: true } });
+    await act(async () => state.submitAddress(""));
+    expect(state.flow?.flow.installing).toBe(true);
+    request.mockResolvedValueOnce({ flow: { ...installFlow, install_failed: true, message: "Couldn't download gcloud. Check your connection and retry." } });
+    await act(async () => state.check());
+    expect(state.phase).toBe("waiting");
+    expect(state.flow?.flow.id).toBe("gcp-install");
+    expect(state.flow?.flow.install_failed).toBe(true);
+    request.mockResolvedValueOnce({ flow: { ...installFlow, install_required: false, code_required: true, authorization_url: "https://accounts.google.com/o/oauth2/auth" } });
+    await act(async () => state.submitAddress(""));
+    expect(state.flow?.flow.code_required).toBe(true);
+    expect(request.mock.calls.at(-1)?.[1]).toEqual({ action: "connect_finish", flow_id: "gcp-install", callback: "" });
+    await act(async () => tree.unmount());
+  });
+
 }

@@ -88,6 +88,10 @@ export type ConnectionRequest = {
 export type ConnectFlow = {
   code_required?: boolean;
   install_required?: boolean;
+  install_manual?: boolean;
+  install_failed?: boolean;
+  install_url?: string;
+  installing?: boolean;
   id: string;
   integration: string;
   status: "waiting" | "confirm" | "connected" | "cancelled" | "failed";
