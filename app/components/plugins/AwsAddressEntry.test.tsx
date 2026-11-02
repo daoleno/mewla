@@ -55,6 +55,27 @@ if (!process.env.MEWLA_AWS_ADDRESS_TEST_CHILD) {
     await act(async () => tree.unmount());
   });
 
+  test("pasted AWS error pages explain unfinished sign-in and allow a callback retry", async () => {
+    const submit = mock(async () => {});
+    const tree = await render(submit);
+    clipboard.mockResolvedValueOnce("https://us-east-1.signin.aws.amazon.com/oauth?iam_user=true&backwards_compatible=true&redirect_uri=http%3A%2F%2F127.0.0.1%3A9876%2Fplugins%2Foauth%2Fcallback&state=test");
+    await act(async () => button(tree, "Paste address").props.onPress());
+    expect(tree.root.findByType("notice" as any).props.title).toBe("AWS sign-in didn't finish");
+    expect(notice(tree)).toContain("clear signin.aws.amazon.com cookies");
+    expect(notice(tree)).toContain("Open AWS again");
+    expect(notice(tree)).toContain("AWSMCPSignInOAuthAccessPolicy");
+    expect(notice(tree)).toContain("signin:AuthorizeOAuth2Access + signin:CreateOAuth2Token");
+    expect(notice(tree)).toContain("Root needs no extra policy");
+    await act(async () => button(tree, "Continue").props.onPress());
+    expect(submit).not.toHaveBeenCalled();
+    expect(notice(tree)).not.toContain("Paste the full address");
+    await act(async () => input(tree).props.onChangeText(callback));
+    expect(tree.root.findAllByType("notice" as any)).toHaveLength(0);
+    await act(async () => button(tree, "Continue").props.onPress());
+    expect(submit).toHaveBeenCalledWith(callback);
+    await act(async () => tree.unmount());
+  });
+
   test("server errors and pasted input survive rerenders; pending submit runs only once", async () => {
     let reject!: (error: Error) => void;
     const submit = mock(() => new Promise<void>((_, fail) => { reject = fail; }));
