@@ -253,6 +253,11 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 			}
 		}
 		return Response{Matches: matches}, nil
+	case "get", "updates", "describe", "invoke", "enable", "disable", "disconnect", "permissions", "policy", "remove_key", "confirm_updates", "dismiss_updates", "refresh":
+		// These operations address a saved account. Reject obsolete client
+		// operations before interpreting an absent ID as a missing account.
+	default:
+		return Response{}, errors.New("unknown plugin operation; reload or update Mewla")
 	}
 	r, ok := m.records[q.ID]
 	if !ok {
@@ -353,8 +358,6 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		current := r.Account.Tools
 		r.Account.Tools = previous
 		m.adoptTools(r, current)
-	default:
-		return Response{}, errors.New("unknown plugin operation")
 	}
 	if err := m.save(); err != nil {
 		_ = json.Unmarshal(before, r)

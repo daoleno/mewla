@@ -73,3 +73,9 @@ The daemon uses maintained Go MCP, OAuth2, OpenAPI and JSON-schema packages. The
 Run meaningful connection regressions, `GOMAXPROCS=2 go test -p 1 ./...`, daemon build and app TypeScript. Export Android and iOS serially with `NODE_OPTIONS=--max-old-space-size=2048`, Metro `--max-workers 1`. Build the normal matching native package; start only one small emulator after bundling exits. Protocol fixtures prove protocol behavior, not real vendor consent.
 
 `TestPluginsOwnedRuntime` provides disposable production pairing/WebSocket/control dispatch without starting Brain or schedulers. Keep its state private and remove it after verification. A live `mewla-dev` watcher can restart the Brain host when original Go source changes; build in isolation, then use the current private checkpoint/recovery loading procedure to integrate and load safely. Never reset the original provider, tmux or state.
+
+AWS sign-in can renew a disconnected account after the provider verifies the
+same identity (or the same AWS account for an explicitly selected card). It keeps
+the card ID and name, enables it, and starts with the new sign-in's permissions;
+permissions cleared by disconnect are not restored. Disconnected records remain
+as reusable cards and are not automatically deleted.

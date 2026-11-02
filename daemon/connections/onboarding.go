@@ -307,10 +307,19 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 	for id := range m.records {
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
+	// Prefer a current card over a disconnected duplicate of the same
+	// identity. An explicit renewal still selects only its original card.
+	sort.Slice(ids, func(i, j int) bool {
+		iDisconnected := m.records[ids[i]].Account.Status == "disconnected"
+		jDisconnected := m.records[ids[j]].Account.Status == "disconnected"
+		if iDisconnected != jDisconnected {
+			return !iDisconnected
+		}
+		return ids[i] < ids[j]
+	})
 	for _, id := range ids {
 		existing := m.records[id]
-		if existing == r || existing.Account.Status == "disconnected" || existing.Account.Integration != r.Account.Integration {
+		if existing == r || existing.Account.Integration != r.Account.Integration || existing.Account.Status == "disconnected" && r.Account.Integration != "aws" {
 			continue
 		}
 		// "Sign in again" on a card renews that card, if the same AWS account
@@ -335,6 +344,11 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 		_ = m.vault.Delete("integration:" + oldID)
 		if e := lookup(r.Account.Integration); e != nil && e.OAuth != nil && e.OAuth.KeepGrants {
 			keepAccount(r, existing)
+			// A disconnected card has no active grants to preserve and must
+			// become usable after a new, verified consent.
+			if existing.Account.Status == "disconnected" {
+				r.Account.Enabled = true
+			}
 		}
 		r.Account.ID = id
 		m.records[id] = r
