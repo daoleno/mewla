@@ -12,17 +12,77 @@ import (
 
 func TestGCPCLIClassification(t *testing.T) {
 	p := gcloudCLI{}
-	for _, args := range [][]string{{"projects", "list"}, {"compute", "instances", "list", "--project", "example"}, {"storage", "buckets", "describe", "gs://bucket", "--format=json"}} {
-		read, err := p.classify(args)
-		if err != nil || !read {
-			t.Fatalf("read %v: %v", args, err)
-		}
+	reads := [][]string{
+		{"projects", "list"},
+		{"compute", "instances", "list", "--project", "example"},
+		{"storage", "buckets", "describe", "gs://bucket", "--format=json"},
+		{"iam", "roles", "list"}, {"billing", "accounts", "list"},
+		{"billing", "projects", "describe", "example"}, {"sql", "instances", "list"},
+		{"projects", "get-iam-policy", "example"},
+		{"iam", "service-accounts", "get-iam-policy", "a@example.com"},
+		{"run", "services", "describe", "service"},
+		{"alpha", "new-service", "deep", "resources", "list", "--new-read-option=true"},
+		{"beta", "new-service", "deep", "resources", "describe", "resource"},
+		{"new-service", "resources", "get-status", "resource"},
+		{"new-service", "resources", "list-details"},
+		{"auth", "list"}, {"beta", "auth", "list"},
+		{"kms", "keys", "versions", "get-public-key", "1"},
+		{"projects", "list", "--unknown=value"},
 	}
-	for _, args := range [][]string{{"projects", "delete", "list"}, {"iam", "roles", "list"}, {"billing", "accounts", "list"}, {"sql", "instances", "list"}, {"secrets", "versions", "access", "latest"}, {"run", "services", "describe", "secret-env"}, {"projects", "list", "--unknown=value"}, {"projects", "list", "--impersonate-service-account=x"}, {"compute", "ssh", "host"}, {"auth", "print-access-token"}, {"secrets", "versions", "add", "example", "--data-file=/etc/passwd"}, {"projects", "list", "--flags-file=/etc/passwd"}, {"projects", "list", "--conf=other"}, {"projects", "list", "--account=other"}} {
-		read, err := p.classify(args)
-		if err == nil && read {
-			t.Fatalf("unsafe read: %v", args)
-		}
+	for _, args := range reads {
+		t.Run("read/"+strings.Join(args, " "), func(t *testing.T) {
+			read, err := p.classify(args)
+			if err != nil || !read {
+				t.Fatalf("read=%v err=%v", read, err)
+			}
+		})
+	}
+	executes := [][]string{
+		{"projects", "delete", "list"},
+		{"compute", "instances", "add-metadata", "describe"},
+		{"new-service", "resources", "update", "get-iam-policy"},
+		{"storage", "rm", "list"},
+		{"artifacts", "print-settings", "list"},
+		{"new-service", "resources", "mutate", "--filter", "list"},
+		{"secrets", "versions", "access", "latest"},
+		{"beta", "secrets", "versions", "access", "list"},
+		{"kms", "decrypt"}, {"kms", "asymmetric-decrypt"},
+		{"iam", "service-accounts", "keys", "create", "list"},
+		{"sql", "generate-login-token"},
+		{"services", "api-keys", "get-key-string", "key"},
+		{"redis", "instances", "get-auth-string", "instance"},
+		{"new-service", "resources", "get-client-secret", "id"},
+		{"new-service", "resources", "get-token", "id"},
+		{"new-service", "resources", "--filter", "list"},
+	}
+	for _, args := range executes {
+		t.Run("execute/"+strings.Join(args, " "), func(t *testing.T) {
+			read, err := p.classify(args)
+			if err != nil || read {
+				t.Fatalf("read=%v err=%v; expected execute", read, err)
+			}
+		})
+	}
+	blocked := [][]string{
+		{"--project=example", "auth", "print-access-token"},
+		{"projects", "list", "--impersonate-service-account=x"},
+		{"compute", "ssh", "host"}, {"compute", "start-iap-tunnel", "host"},
+		{"container", "clusters", "get-credentials", "cluster"},
+		{"auth", "print-access-token"}, {"auth", "print-identity-token"},
+		{"beta", "auth", "print-access-token"}, {"beta", "config", "list"},
+		{"secrets", "versions", "add", "example", "--data-file=/etc/passwd"},
+		{"projects", "list", "--flags-file=/etc/passwd"},
+		{"projects", "list", "--conf=other"}, {"projects", "list", "--account=other"},
+		{"compute", "instances", "describe", "x", "--command=cat /etc/passwd"},
+		{"storage", "cp", "gs://bucket/object", "/tmp/object"},
+	}
+	for _, args := range blocked {
+		t.Run("blocked/"+strings.Join(args, " "), func(t *testing.T) {
+			read, err := p.classify(args)
+			if err == nil || read {
+				t.Fatalf("read=%v err=%v; expected refusal", read, err)
+			}
+		})
 	}
 	args := p.commandArgs("work", []string{"projects", "list"})
 	if strings.Join(args, " ") != "projects list --configuration work --format=json --quiet" {
@@ -194,6 +254,19 @@ func TestGCPRunBothAuthorizationGates(t *testing.T) {
 	r.Account.Enabled = true
 	q := Request{Action: "cloud_run", Integration: "gcp", Profile: "throwaway", CLIArgs: []string{"projects", "list"}}
 	mustHandle(t, m, q)
+	// Ordinary reads in previously unlisted groups must reach the CLI with
+	// writes disabled and without task authorization.
+	for _, args := range [][]string{{"billing", "accounts", "list"}, {"projects", "get-iam-policy", "example"}, {"sql", "instances", "describe", "example"}} {
+		q.CLIArgs = args
+		mustHandle(t, m, q)
+	}
+	for _, args := range [][]string{{"secrets", "versions", "access", "latest"}, {"services", "api-keys", "get-key-string", "key"}, {"kms", "decrypt"}, {"sql", "generate-login-token"}} {
+		q.CLIArgs = args
+		before := len(*calls)
+		if _, err := m.Handle(context.Background(), q); err == nil || len(*calls) != before {
+			t.Fatalf("sensitive read bypassed writes gate: %v", args)
+		}
+	}
 	q.CLIArgs = []string{"projects", "delete", "example"}
 	n := len(*calls)
 	if _, err := m.Handle(context.Background(), q); err == nil {

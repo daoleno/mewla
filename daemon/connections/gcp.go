@@ -11,8 +11,8 @@ func gcpTools() []Tool {
 	props := map[string]any{"args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "minItems": 2, "maxItems": 256}, "authorize": map[string]any{"type": "boolean", "description": "True only with explicit user authorization for this task."}}
 	return []Tool{
 		hlTool("whoami", "Show the local gcloud account, configuration and default project.", true, map[string]any{}),
-		hlTool("read", "Run a reviewed gcloud read. Prefer mewla gcloud <args>. Secrets, IAM, billing and SQL require execute.", true, props, "args"),
-		hlTool("execute", "Run gcloud with enabled writes and task-specific user authorization. Prefer mewla gcloud --mewla-authorize <args>. Destructive, IAM, billing, SQL and secret access need authorization. Never retried.", false, props, "args"),
+		hlTool("read", "Run gcloud list, describe and get-style reads in any command group. Prefer mewla gcloud <args>. Secret and credential readers require execute or are unavailable.", true, props, "args"),
+		hlTool("execute", "Run gcloud with enabled writes and task-specific user authorization. Prefer mewla gcloud --mewla-authorize <args>. Changes (including IAM/billing), SQL execution and secret access need authorization. Never retried.", false, props, "args"),
 	}
 }
 func discoverGCP(m *Manager, ctx context.Context, r *record, _ string) ([]Tool, error) {
