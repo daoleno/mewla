@@ -79,6 +79,8 @@ type staticOAuth struct {
 	// ScopeParam names the authorization parameter that carries the scopes
 	// when the service does not use the standard "scope".
 	ScopeParam string
+	AuthParams map[string]string
+	RevokeURL  string
 	// Registration is the RFC 7591 endpoint: Mewla registers a client of its own
 	// (and keeps it) instead of using a published one. Resource is the RFC 8707
 	// resource every grant and refresh names.
@@ -213,6 +215,7 @@ func registerDrivers() {
 		"openapi":     {discover: discoverOpenAPI, invoke: invokeOpenAPI, unverified: true},
 		"mcp":         {discover: discoverMCPToken},
 		"aws":         {discover: discoverAWS, invoke: invokeAWSDriver},
+		"gcp":         {discover: discoverGCP, invoke: invokeGCP},
 	}
 }
 
@@ -368,6 +371,18 @@ func buildCatalog() []*entry {
 					Issuer: awsIssuer, AuthURL: awsIssuer + "/v1/authorize", TokenURL: awsIssuer + "/v1/token", Registration: awsIssuer + "/v1/register",
 					AuthMethods: []string{"none"}, Resource: awsMCPEndpoint,
 				},
+			},
+		},
+		{
+			Integration: Integration{ID: "gcp", Name: "Google Cloud", Available: true, SetupURL: "https://docs.cloud.google.com/sdk/use-gcloud-mcp", Description: "Projects, compute, storage, databases and more"},
+			Driver:      "gcp", Endpoint: gcpMCPEndpoint, Tools: gcpTools,
+			AddRefusal: "Google Cloud uses browser sign-in; connect it from Extensions",
+			OAuth: &oauthSpec{
+				Source: clientPublisher, Configurable: true, PublisherClientID: true, Loopback: true, KeepGrants: true,
+				Public:        func() (OAuthClientConfig, bool) { return OAuthClientConfig{}, false },
+				ExtraRedirect: &redirectRule{URL: ""},
+				Scopes:        func(bool) []string { return []string{gcpScope, "https://www.googleapis.com/auth/userinfo.email"} },
+				Static:        &staticOAuth{Issuer: "https://accounts.google.com", AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token", RevokeURL: "https://oauth2.googleapis.com/revoke", AuthMethods: []string{"client_secret_post"}, AuthParams: map[string]string{"access_type": "offline", "prompt": "consent"}},
 			},
 		},
 		{

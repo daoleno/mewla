@@ -66,6 +66,28 @@
         "requests": []
       }
     },
+    "gcp": {
+      "credential": {
+        "error": "Google Cloud uses browser sign-in; connect it from Extensions",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "Google Cloud uses browser sign-in; connect it from Extensions",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "only OpenAPI plugins accept a document",
+        "requests": []
+      },
+      "trusted": {
+        "error": "Google Cloud uses browser sign-in; connect it from Extensions",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "account name is required (up to 80 characters)",
+        "requests": []
+      }
+    },
     "github": {
       "credential": {
         "account": {
@@ -588,6 +610,13 @@
       "description": "The whole AWS API: EC2, RDS, S3, CloudWatch and more, through AWS's own MCP server"
     },
     {
+      "id": "gcp",
+      "name": "Google Cloud",
+      "available": true,
+      "setup_url": "https://docs.cloud.google.com/sdk/use-gcloud-mcp",
+      "description": "Projects, compute, storage, databases and more"
+    },
+    {
       "id": "mcp",
       "name": "Remote MCP",
       "available": true,
@@ -604,6 +633,7 @@
   ],
   "configure": {
     "all_configured": [
+      "gcp",
       "github",
       "linear",
       "notion",
@@ -644,6 +674,26 @@
       "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
       "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
       "no_id_valid": "OAuth is not supported for this plugin"
+    },
+    "gcp": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": [
+        "gcp"
+      ],
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": [
+        "gcp"
+      ],
+      "id_valid": [
+        "gcp"
+      ],
+      "mcp_resource": [
+        "gcp"
+      ],
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "this service requires a publisher-owned client ID",
+      "no_id_valid": "this service requires a publisher-owned client ID"
     },
     "github": {
       "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
@@ -1363,6 +1413,168 @@
           "GET https://mcp.cloudflare.com/.well-known/oauth-protected-resource/mcp",
           "POST https://auth.example/register body={\"client_name\":\"Mewla\",\"client_uri\":\"https://mewla.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"logo_uri\":\"https://mewla.ai/mark.png\",\"policy_uri\":\"https://mewla.ai/privacy/\",\"redirect_uris\":[\"https://mewla.example/plugins/oauth/callback\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
         ]
+      }
+    },
+    "gcp": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://cloudcli.googleapis.com/mcp",
+          "integration": "gcp",
+          "name": "Google Cloud",
+          "scopes": [
+            "https://www.googleapis.com/auth/cloud-platform",
+            "https://www.googleapis.com/auth/userinfo.email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline\u0026client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026prompt=consent\u0026redirect_uri=http%3A%2F%2F127.0.0.1%3A9877%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+          "client_id": "op",
+          "issuer": "https://accounts.google.com",
+          "redirect_url": "http://127.0.0.1:9877/plugins/oauth/callback",
+          "resource": "",
+          "revoke_url": "https://oauth2.googleapis.com/revoke",
+          "token_url": "https://oauth2.googleapis.com/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": []
+      },
+      "direct_operator_other": {
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://cloudcli.googleapis.com/mcp",
+          "integration": "gcp",
+          "name": "Google Cloud",
+          "scopes": [
+            "https://www.googleapis.com/auth/cloud-platform",
+            "https://www.googleapis.com/auth/userinfo.email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline\u0026client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026prompt=consent\u0026redirect_uri=http%3A%2F%2F127.0.0.1%3A9877%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email\u0026state=%3Cstate%3E",
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+          "client_id": "op",
+          "issuer": "https://accounts.google.com",
+          "redirect_url": "http://127.0.0.1:9877/plugins/oauth/callback",
+          "resource": "",
+          "revoke_url": "https://oauth2.googleapis.com/revoke",
+          "token_url": "https://oauth2.googleapis.com/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "error": "Google Cloud sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "error": "Google Cloud sign-in is not set up yet.",
+        "requests": []
+      },
+      "native_operator_secret": {
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://cloudcli.googleapis.com/mcp",
+          "integration": "gcp",
+          "name": "Google Cloud",
+          "scopes": [
+            "https://www.googleapis.com/auth/cloud-platform",
+            "https://www.googleapis.com/auth/userinfo.email"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?access_type=offline\u0026client_id=op\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026prompt=consent\u0026redirect_uri=http%3A%2F%2F127.0.0.1%3A9877%2Fplugins%2Foauth%2Fcallback\u0026response_type=code\u0026scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fuserinfo.email\u0026state=%3Cstate%3E",
+          "has_account": true,
+          "integration": "gcp",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+          "client_id": "op",
+          "issuer": "https://accounts.google.com",
+          "redirect_url": "http://127.0.0.1:9877/plugins/oauth/callback",
+          "resource": "",
+          "revoke_url": "https://oauth2.googleapis.com/revoke",
+          "token_url": "https://oauth2.googleapis.com/token"
+        },
+        "pending": [
+          {
+            "allow_writes": false,
+            "client_secret": true,
+            "mobile": false,
+            "web": false
+          }
+        ],
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "error": "Google Cloud sign-in is not set up yet.",
+        "requests": []
+      },
+      "web": {
+        "error": "Google Cloud sign-in is not set up yet.",
+        "requests": []
+      },
+      "web_bad_origin": {
+        "error": "Sign-in can't return to this address. Open Mewla at its configured web address and try again.",
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "error": "Google Cloud sign-in is not set up yet.",
+        "requests": []
       }
     },
     "github": {
@@ -3285,6 +3497,11 @@
       "account_name": "Cloudflare",
       "service": "Cloudflare"
     },
+    "gcp": {
+      "account": "Google Cloud",
+      "account_name": "Google Cloud",
+      "service": "Google Cloud"
+    },
     "github": {
       "account": "GitHub",
       "account_name": "GitHub",
@@ -3705,6 +3922,11 @@
         "get_me": "",
         "notion-search": ""
       },
+      "gcp": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
+      },
       "github": {
         "execute": "",
         "get_me": "",
@@ -3736,6 +3958,7 @@
     "none": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3748,6 +3971,7 @@
     "operator_github": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "",
       "hyperliquid": "",
       "linear": "",
@@ -3760,6 +3984,7 @@
     "operator_notion": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3772,6 +3997,7 @@
     "operator_slack_app": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3784,6 +4010,7 @@
     "operator_slack_no_secret_callback": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3796,6 +4023,7 @@
     "operator_slack_relay": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3808,6 +4036,7 @@
     "operator_slack_secret_app": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3820,6 +4049,7 @@
     "operator_slack_secret_callback": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "GitHub sign-in is not set up yet.",
       "hyperliquid": "",
       "linear": "",
@@ -3832,6 +4062,7 @@
     "publisher": {
       "aws": "",
       "cloudflare": "",
+      "gcp": "Google Cloud sign-in is not set up yet.",
       "github": "",
       "hyperliquid": "",
       "linear": "",
@@ -4527,6 +4758,11 @@
       "method:oauth": false
     },
     "cloudflare": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "gcp": {
       "method:": false,
       "method:mcp_oauth": true,
       "method:oauth": false

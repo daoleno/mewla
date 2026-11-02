@@ -192,7 +192,10 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
-		client, ok, callback = OAuthClientConfig{RedirectURL: redirect}, true, ""
+		if oauth.Source == clientRegistered || oauth.Source == clientOperator {
+			client, ok = OAuthClientConfig{}, true
+		}
+		client.RedirectURL, callback = redirect, ""
 	}
 	registers := oauth != nil && (oauth.Source == clientRegistered || oauth.Source == clientOperator)
 	if !ok && callback != "" && registers {
@@ -242,7 +245,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	var meta oauthMetadata
 	if oauth.Static != nil {
 		r.Account.AuthMethod = "oauth"
-		meta = oauthMetadata{Issuer: oauth.Static.Issuer, AuthorizationEndpoint: oauth.Static.AuthURL, TokenEndpoint: oauth.Static.TokenURL, RegistrationEndpoint: oauth.Static.Registration, AuthMethods: oauth.Static.AuthMethods}
+		meta = oauthMetadata{Issuer: oauth.Static.Issuer, AuthorizationEndpoint: oauth.Static.AuthURL, TokenEndpoint: oauth.Static.TokenURL, RegistrationEndpoint: oauth.Static.Registration, AuthMethods: oauth.Static.AuthMethods, RevocationEndpoint: oauth.Static.RevokeURL}
 		r.Account.Scopes = oauth.Scopes(in.AllowWrites)
 	} else {
 		meta, err = m.discoverOAuth(ctx, r)
@@ -265,7 +268,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if client.ClientSecret != "" && contains(meta.AuthMethods, "client_secret_basic") {
 		style = oauth2.AuthStyleInHeader
 	}
-	if loopback {
+	if loopback && client.ClientID == "" {
 		client.ClientID = m.savedRegistration(in.Integration, client.RedirectURL)
 	}
 	if client.ClientID == "" {
@@ -329,6 +332,11 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if oauth.Static != nil && oauth.Static.ScopeParam != "" {
 		config.Scopes = nil
 		options = append(options, oauth2.SetAuthURLParam(oauth.Static.ScopeParam, strings.Join(r.Account.Scopes, ",")))
+	}
+	if oauth.Static != nil {
+		for key, value := range oauth.Static.AuthParams {
+			options = append(options, oauth2.SetAuthURLParam(key, value))
+		}
 	}
 	authURL := config.AuthCodeURL(state, options...)
 	m.records[r.Account.ID] = r
