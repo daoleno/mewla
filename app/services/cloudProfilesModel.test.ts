@@ -27,5 +27,11 @@ test("filter includes cloud account identity and project", () => {
   expect(cloudProfileGroups([aws], "production").signedIn).toHaveLength(1);
   const gcp = { ...profile("work", "valid", "gcp"), identity: "user@example.com", project: "my-project" };
   expect(cloudProfileGroups([gcp], "my-project").signedIn).toHaveLength(1);
-  expect(cloudProfileIdentity(gcp)).toBe("user@example.com");
+  expect(cloudProfileIdentity(gcp)).toBe("my-project");
+});
+
+test("Google Cloud rows summarize accounts without exposing configuration selectors", () => {
+  const account = { ...profile("account:person@example.com", "valid", "gcp"), name: "person@example.com", identity: "person@example.com" };
+  expect(cloudProfilesSummary([account])).toBe("person@example.com");
+  expect(cloudProfileIdentity(account)).toBe("No default project");
 });

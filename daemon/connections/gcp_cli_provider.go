@@ -51,6 +51,37 @@ func (gcloudCLI) commandArgs(profile string, args []string) []string {
 	}
 	return append(out, "--quiet")
 }
+func (p gcloudCLI) accountArgs(m *Manager, profile string, args []string) []string {
+	account := strings.TrimPrefix(profile, "account:")
+	configuration := ""
+	if r := m.gcpProfileRecord(profile); r != nil {
+		account = r.CLI.Account
+		configuration = r.CLI.Configuration
+		for _, name := range r.CLI.Configurations {
+			if name == profile {
+				configuration = name
+			}
+		}
+	} else if !strings.HasPrefix(profile, "account:") {
+		return p.commandArgs(profile, args)
+	}
+	out := append([]string{}, args...)
+	out = append(out, "--account", account)
+	if configuration == "" {
+		// An unbound account must not inherit another account's default project.
+		project := false
+		for _, a := range args {
+			if a == "--project" || strings.HasPrefix(a, "--project=") {
+				project = true
+			}
+		}
+		if !project {
+			out = append(out, "--project=")
+		}
+	}
+	return p.commandArgs(configuration, out)
+}
+
 func (gcloudCLI) loginArgs(profile string) []string {
 	args := []string{"auth", "login", "--no-launch-browser", "--force"}
 	if strings.HasPrefix(profile, "account:") {

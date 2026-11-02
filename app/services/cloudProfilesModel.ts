@@ -8,7 +8,7 @@ export function cloudProfileStatus(a: PluginAccount): { label: string; tone: "su
   }
 }
 export function cloudProfileIdentity(a: PluginAccount): string {
-  return a.aws?.account_name || a.aws?.account_id || (a.integration === "gcp" ? a.identity || a.project : "") || "";
+  return a.integration === "gcp" ? a.project || "No default project" : a.aws?.account_name || a.aws?.account_id || "";
 }
 export function cloudProfileGroups(accounts: PluginAccount[], query = "") {
   const needle = query.trim().toLocaleLowerCase();
@@ -23,6 +23,6 @@ export function cloudProfileGroups(accounts: PluginAccount[], query = "") {
 export function cloudProfilesSummary(accounts: PluginAccount[]): string {
   if (!accounts.length) return "";
   const { signedIn, expired, unchecked } = cloudProfileGroups(accounts);
-  if (accounts.length <= 2 && signedIn.length === accounts.length) return signedIn.map(a => a.profile || a.name).join(" · ");
+  if (accounts.length <= 2 && signedIn.length === accounts.length) return signedIn.map(a => a.integration === "gcp" ? a.name : a.profile || a.name).join(" · ");
   return [signedIn.length ? `${signedIn.length} signed in` : "", expired.length ? `${expired.length} expired` : "", unchecked.length ? `${unchecked.length} unchecked` : ""].filter(Boolean).join(" · ");
 }

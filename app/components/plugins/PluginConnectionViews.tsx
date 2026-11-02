@@ -161,7 +161,7 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
   const names = plugin.id === "aws" || plugin.id === "gcp" ? cloudProfilesSummary(accounts) : accounts.length > 2 ? `${accounts.length} accounts` : accounts.map((account) => account.name).join(" · ");
   // Every account turned off: the row stays open, only quieter.
   const off = serviceOff(accounts);
-  const subtitle = state.kind === "unavailable" ? plugin.unavailable_reason || "Sign-in is not set up yet." : names || plugin.description;
+  const subtitle = state.kind === "unavailable" ? plugin.unavailable_reason || "Sign-in is not set up yet." : plugin.id === "gcp" && !accounts.length ? "Nothing connected yet" : names || plugin.description;
   let trailing: React.ReactNode;
   let label = plugin.name;
   if (state.kind === "connect") {
@@ -513,7 +513,7 @@ export function AccountCard({
           </View>
         }
       />
-      {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle={`Use ${plugin.name} remote sign-in for this profile.`} trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
+      {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle={`Use ${plugin.name} remote sign-in for this ${account.integration === "gcp" ? "account" : "profile"}.`} trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
       {!account.profile && recovery ? (
         <ListRow
           icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
@@ -565,15 +565,15 @@ export function AccountCard({
       {confirming ? (
         <BottomSheetFrame visible onClose={() => { if (!removing) setConfirming(false); }}><View style={styles.confirm}>
           <AppText variant="compact" tone="secondary">
-            {account.profile ? `Delete profile ${account.profile}${account.aws?.account_id ? ` (${account.aws.account_id})` : ""} from this computer? It will also disappear from ${plugin.name === "Google Cloud" ? "gcloud. Its account is revoked unless another configuration uses it" : "the AWS CLI"}. A backup is kept.` : `Disconnect ${account.name}? Brain loses access right away, and Mewla removes its saved sign-in.`}
+            {account.integration === "gcp" ? `Delete ${account.identity || account.name} from this computer? This signs it out of gcloud and removes its configurations. Other accounts are kept.` : account.profile ? `Delete profile ${account.profile}${account.aws?.account_id ? ` (${account.aws.account_id})` : ""} from this computer? It will also disappear from the AWS CLI. A backup is kept.` : `Disconnect ${account.name}? Brain loses access right away, and Mewla removes its saved sign-in.`}
           </AppText>
           <View style={styles.confirmActions}>
             <Button label="Keep" variant="plain" size="sm" disabled={removing} onPress={() => setConfirming(false)} />
-            <Button label={account.profile ? "Delete profile" : "Disconnect"} variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then(() => setConfirming(false))} />
+            <Button label={account.integration === "gcp" ? "Delete account" : account.profile ? "Delete profile" : "Disconnect"} variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then(() => setConfirming(false))} />
           </View>
         </View></BottomSheetFrame>
       ) : !account.profile && !canDisconnect(account) ? null : (
-        <ListRow icon="remove-circle" title={account.profile ? "Delete profile" : "Disconnect"} destructive disabled={busy} onPress={() => setConfirming(true)} />
+        <ListRow icon="remove-circle" title={account.integration === "gcp" ? "Delete account" : account.profile ? "Delete profile" : "Disconnect"} destructive disabled={busy} onPress={() => setConfirming(true)} />
       )}
     </ListSection>
   );
