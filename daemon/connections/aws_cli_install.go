@@ -204,14 +204,11 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 			return nil
 		}
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "versions"), 0700); err != nil {
-		return errAWSInstall
-	}
-	// Retain published generations: a running command may still load their files.
-	generation, err := os.MkdirTemp(filepath.Join(dir, "versions"), "install-")
+	generation, lease, err := newCloudGeneration(dir, "install-")
 	if err != nil {
 		return errAWSInstall
 	}
+	defer closeCloudLease(lease)
 	published := false
 	defer func() {
 		if !published {
@@ -290,17 +287,7 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 	if err = ctx.Err(); err != nil {
 		return errAWSInstall
 	}
-	// Publish only a fully verified generation. Installer-created absolute
-	// symlinks keep working because the generation itself never moves.
-	bin := filepath.Join(dir, "bin")
-	if err = os.MkdirAll(bin, 0700); err != nil {
-		return errAWSInstall
-	}
-	link := filepath.Join(generation, "activate-aws")
-	if err = os.Symlink(installed, link); err != nil {
-		return errAWSInstall
-	}
-	if err = os.Rename(link, filepath.Join(bin, "aws")); err != nil {
+	if err = activateCloudGeneration(dir, "aws", installed); err != nil {
 		return errAWSInstall
 	}
 	published = true
@@ -310,5 +297,6 @@ func (a *awsInstaller) install(ctx context.Context, dir string) error {
 		_ = os.WriteFile(filepath.Join(dir, "package.json"), data, 0600)
 	}
 	_ = os.RemoveAll(downloads)
+	pruneCloudGenerations(dir, "aws")
 	return nil
 }

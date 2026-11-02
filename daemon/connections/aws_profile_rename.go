@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"github.com/daoleno/mewla/daemon/atomicfile"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -90,10 +89,11 @@ func (m *Manager) renameAWSProfile(ctx context.Context, q Request) (Response, er
 	if !exists {
 		return Response{}, errors.New("This profile changed in the CLI. Refresh and try again")
 	}
-	backup := filepath.Join(m.cloud.dir, "backups", "rename-"+time.Now().UTC().Format("20060102T150405.000000000"))
-	if err = os.MkdirAll(backup, 0700); err != nil {
+	backup, releaseBackup, err := newCloudBackup(m.cloud.dir, "rename-"+time.Now().UTC().Format("20060102T150405.000000000"))
+	if err != nil {
 		return Response{}, err
 	}
+	defer releaseBackup()
 	for i, path := range paths {
 		if err = atomicfile.Write(filepath.Join(backup, filepath.Base(path)), before[i], 0600); err != nil {
 			return Response{}, errors.New("Profile backup failed; nothing was renamed")

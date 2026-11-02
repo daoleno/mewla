@@ -146,7 +146,10 @@ Mewla installs and updates its own official CLI inside its state directory,
 without sudo or changing your system installation. It checks at most daily,
 updates in the background, and waits for a check before the first command or
 after seven days without a successful check. Running commands keep their
-original installation. Packages must pass signature and smoke checks before
+original installation. Mewla keeps the active and previous installation; older
+versions are removed once no command holds them. The two newest profile-change
+backups are retained, with active backup operations protected until completion.
+Packages must pass signature and smoke checks before
 activation. If an update fails, Mewla keeps the working version; if it cannot
 install its own CLI, it can use a local AWS CLI 2.32 or later. The service details
 show the selected version and whether it is managed by Mewla. `mewla aws --version`

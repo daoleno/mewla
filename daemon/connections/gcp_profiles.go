@@ -194,10 +194,11 @@ func (m *Manager) deleteGCPProfile(ctx context.Context, q Request) (Response, er
 	if err != nil {
 		return Response{}, err
 	}
-	backup := filepath.Join(m.cloud.dir, "backups", "gcp-"+time.Now().UTC().Format("20060102T150405.000000000"))
-	if err = os.MkdirAll(backup, 0700); err != nil {
+	backup, releaseBackup, err := newCloudBackup(m.cloud.dir, "gcp-"+time.Now().UTC().Format("20060102T150405.000000000"))
+	if err != nil {
 		return Response{}, err
 	}
+	defer releaseBackup()
 	files := []string{"credentials.db", "credentials.db-wal", "access_tokens.db", "access_tokens.db-wal", "active_config"}
 	for name := range targets {
 		files = append(files, filepath.Join("configurations", "config_"+name))

@@ -60,9 +60,18 @@ func (c *cloudRuntime) executable(id string) (string, error) {
 }
 
 func (c *cloudRuntime) resolveExecutable(id string) (string, error) {
+	binary, lease, err := c.resolveExecutableLease(id)
+	closeCloudLease(lease)
+	return binary, err
+}
+func (c *cloudRuntime) acquireExecutable(id string) (string, *os.File, error) {
+	c.refresh(id, false)
+	return c.resolveExecutableLease(id)
+}
+func (c *cloudRuntime) resolveExecutableLease(id string) (string, *os.File, error) {
 	p := c.providers[id]
 	if p == nil {
-		return "", errors.New("Cloud CLI is not supported")
+		return "", nil, errors.New("Cloud CLI is not supported")
 	}
 	validate := func(path string) bool {
 		if provider, ok := p.(interface {
@@ -74,7 +83,13 @@ func (c *cloudRuntime) resolveExecutable(id string) (string, error) {
 		}
 		return true
 	}
-	paths := []string{filepath.Join(c.dir, id, "bin", p.binary())}
+	managed := filepath.Join(c.dir, id, "bin", p.binary())
+	paths := []string{}
+	if _, err := os.Stat(managed); err == nil {
+		if markCloudManagedRoot(filepath.Join(c.dir, id)) == nil {
+			paths = append(paths, managed)
+		}
+	}
 	if path, err := exec.LookPath(p.binary()); err == nil {
 		paths = append(paths, path)
 	}
@@ -82,15 +97,16 @@ func (c *cloudRuntime) resolveExecutable(id string) (string, error) {
 		paths = append(paths, provider.installPaths()...)
 	}
 	for _, path := range paths {
-		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0111 != 0) && validate(path) {
-			// Bind the command to an immutable generation before activation changes.
-			if resolved, err := filepath.EvalSymlinks(path); err == nil {
-				return resolved, nil
-			}
-			return path, nil
+		resolved, lease, err := holdCloudBinary(path)
+		if err != nil {
+			continue
 		}
+		if info, err := os.Stat(resolved); err == nil && info.Mode().IsRegular() && (runtime.GOOS == "windows" || info.Mode()&0111 != 0) && validate(resolved) {
+			return resolved, lease, nil
+		}
+		closeCloudLease(lease)
 	}
-	return "", errors.New("Install the CLI to continue")
+	return "", nil, errors.New("Install the CLI to continue")
 }
 
 // boundedBuffer drains output without retaining unbounded data; it is also used
@@ -116,15 +132,21 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 }
 func (b *boundedBuffer) String() string { b.mu.Lock(); defer b.mu.Unlock(); return string(b.data) }
 func runCloudProcess(ctx context.Context, binary string, args, env []string) (cloudOutput, error) {
+	binary, lease, err := holdCloudBinary(binary)
+	if err != nil {
+		return cloudOutput{}, err
+	}
+	defer closeCloudLease(lease)
 	cmd := exec.CommandContext(ctx, binary, args...)
 	ownCloudProcess(cmd)
+	inheritCloudLease(cmd, lease)
 	cmd.Env = env
 	cmd.WaitDelay = time.Second
 	out := &boundedBuffer{limit: MaxResultBytes}
 	stderr := &boundedBuffer{limit: 16384}
 	cmd.Stdout = out
 	cmd.Stderr = stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	result := cloudOutput{Stdout: out.String(), Stderr: stderr.String()}
 	if ctx.Err() != nil {
 		return result, ctx.Err()
@@ -153,9 +175,20 @@ type cloudLogin struct {
 }
 
 func startCloudLogin(binary string, args, env []string) (*cloudLogin, error) {
+	binary, lease, err := holdCloudBinary(binary)
+	if err != nil {
+		return nil, err
+	}
+	started := false
+	defer func() {
+		if !started {
+			closeCloudLease(lease)
+		}
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	cmd := exec.CommandContext(ctx, binary, args...)
 	ownCloudProcess(cmd)
+	inheritCloudLease(cmd, lease)
 	cmd.Env = env
 	cmd.WaitDelay = time.Second
 	input, err := cmd.StdinPipe()
@@ -171,14 +204,16 @@ func startCloudLogin(binary string, args, env []string) (*cloudLogin, error) {
 		input.Close()
 		return nil, errors.New("CLI sign-in could not start")
 	}
-	go func() { login.err = cmd.Wait(); input.Close(); cancel(); close(login.done) }()
+	started = true
+	go func() { login.err = cmd.Wait(); input.Close(); cancel(); closeCloudLease(lease); close(login.done) }()
 	return login, nil
 }
 func (m *Manager) cloudCommand(ctx context.Context, integration, profile string, args []string) (cloudOutput, error) {
 	if m.cloud == nil {
 		return cloudOutput{}, errors.New("Cloud CLI is unavailable")
 	}
-	binary, err := m.cloud.executable(integration)
+	binary, lease, err := m.cloud.acquireExecutable(integration)
+	defer closeCloudLease(lease)
 	if err != nil {
 		return cloudOutput{}, err
 	}

@@ -41,13 +41,11 @@ func updateGCPSDK(ctx context.Context, dir string, pkg gcpArchive, client *http.
 	if versionErr == nil && !cloudVersionLess(version, manifest.Version) {
 		return nil
 	}
-	if err = os.MkdirAll(filepath.Join(dir, "versions"), 0700); err != nil {
-		return err
-	}
-	generation, err := os.MkdirTemp(filepath.Join(dir, "versions"), "sdk-")
+	generation, lease, err := newCloudGeneration(dir, "sdk-")
 	if err != nil {
 		return err
 	}
+	defer closeCloudLease(lease)
 	published := false
 	defer func() {
 		if !published {
@@ -102,17 +100,11 @@ func updateGCPSDK(ctx context.Context, dir string, pkg gcpArchive, client *http.
 	if err = ctx.Err(); err != nil {
 		return err
 	}
-	if err = os.MkdirAll(filepath.Join(dir, "bin"), 0700); err != nil {
-		return err
-	}
-	link := filepath.Join(generation, "activate-gcloud")
-	if err = os.Symlink(binary, link); err != nil {
-		return err
-	}
-	if err = os.Rename(link, filepath.Join(dir, "bin", "gcloud")); err != nil {
+	if err = activateCloudGeneration(dir, "gcloud", binary); err != nil {
 		return err
 	}
 	published = true
+	pruneCloudGenerations(dir, "gcloud")
 	return nil
 }
 func cloudInstallEnvironment(env []string, config string) []string {

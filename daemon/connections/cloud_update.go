@@ -28,12 +28,13 @@ type cloudUpdates struct {
 	active map[string]chan struct{}
 	used   map[string]bool
 	// Memory also throttles attempts when the state directory cannot be written.
-	attempted map[string]time.Time
+	attempted  map[string]time.Time
+	maintained map[string]bool
 }
 
 func (c *cloudRuntime) enableUpdates() {
 	ctx, cancel := context.WithCancel(context.Background())
-	u := &cloudUpdates{ctx: ctx, cancel: cancel, active: map[string]chan struct{}{}, used: map[string]bool{}, attempted: map[string]time.Time{}}
+	u := &cloudUpdates{ctx: ctx, cancel: cancel, active: map[string]chan struct{}{}, used: map[string]bool{}, attempted: map[string]time.Time{}, maintained: map[string]bool{}}
 	c.updates = u
 	u.wg.Add(1)
 	go func() {
@@ -78,6 +79,15 @@ func (c *cloudRuntime) refresh(id string, force bool) <-chan struct{} {
 		return nil
 	}
 	u.used[id] = true
+	if !u.maintained[id] {
+		u.maintained[id] = true
+		u.wg.Add(1)
+		go func() {
+			defer u.wg.Done()
+			pruneCloudGenerations(filepath.Join(c.dir, id), c.providers[id].binary())
+			pruneCloudBackups(c.dir)
+		}()
+	}
 	if done := u.active[id]; done != nil {
 		return done
 	}
@@ -104,6 +114,8 @@ func (c *cloudRuntime) refresh(id string, force bool) <-chan struct{} {
 			return
 		}
 		defer unlock()
+		defer pruneCloudGenerations(dir, c.providers[id].binary())
+		defer pruneCloudBackups(c.dir)
 		state = c.updateState(id)
 		if !force && !state.Attempted.IsZero() && time.Since(state.Attempted) < cloudUpdateInterval {
 			return
@@ -152,7 +164,8 @@ func (c *cloudRuntime) info(id string) *CLIInfo {
 	if c.providers[id] == nil {
 		return nil
 	}
-	binary, err := c.executable(id)
+	binary, lease, err := c.acquireExecutable(id)
+	defer closeCloudLease(lease)
 	if err != nil {
 		return nil
 	}

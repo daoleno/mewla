@@ -326,10 +326,11 @@ func (m *Manager) deleteCloudProfile(ctx context.Context, q Request) (Response, 
 	paths := []string{config, creds}
 	before := make([][]byte, 2)
 	after := make([][]byte, 2)
-	backup := filepath.Join(m.cloud.dir, "backups", time.Now().UTC().Format("20060102T150405.000000000"))
-	if err = os.MkdirAll(backup, 0700); err != nil {
+	backup, releaseBackup, err := newCloudBackup(m.cloud.dir, time.Now().UTC().Format("20060102T150405.000000000"))
+	if err != nil {
 		return Response{}, err
 	}
+	defer releaseBackup()
 	for i, path := range paths {
 		before[i], err = readOptional(path)
 		if err != nil {
