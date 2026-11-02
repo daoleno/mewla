@@ -27,7 +27,13 @@ export function CloudProfileList({ accounts, renderDetails }: {
     const open = selected === account.id;
     return <View key={account.id}>
       <Pressable accessibilityRole="button" accessibilityLabel={[name, identity, status.label].filter(Boolean).join(", ")} accessibilityHint="Show account actions" accessibilityState={{ expanded: open }} onPress={() => setSelected(open ? null : account.id)} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.65 : 1 }]}>
-        <View style={styles.name}><AppText variant="compact" numberOfLines={1}>{name}</AppText>{identity ? <AppText variant="caption" tone="secondary" numberOfLines={1}>{identity}</AppText> : null}</View>
+        <View style={styles.name}>
+          <AppText variant="compact" numberOfLines={1}>{name}</AppText>
+          {account.integration === "aws" && account.aws?.account_id ? <View style={styles.identity}>
+            {account.aws.account_name ? <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.alias}>{account.aws.account_name}</AppText> : null}
+            <AppText variant="caption" tone="secondary" numberOfLines={1}>{account.aws.account_name ? " · " : ""}{account.aws.account_id}</AppText>
+          </View> : identity ? <AppText variant="caption" tone="secondary" numberOfLines={1}>{identity}</AppText> : null}
+        </View>
         <View style={styles.state}><StatusPill label={status.label} tone={status.tone} />{expiry ? <AppText variant="caption" tone={expiry.soon ? "secondary" : "tertiary"} numberOfLines={1}>{expiry.label}</AppText> : null}</View>
         <Icon name={open ? "chevron-down" : "chevron-right"} size={16} color={colors.textTertiary} />
       </Pressable>
@@ -50,6 +56,8 @@ export function CloudProfileList({ accounts, renderDetails }: {
 const styles = StyleSheet.create({
   row: { minHeight: 52, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 },
   name: { flex: 1, minWidth: 0 },
+  identity: { flexDirection: "row", alignItems: "center", minWidth: 0 },
+  alias: { flexShrink: 1, minWidth: 0 },
   state: { alignItems: "flex-end", gap: 3 },
   group: { flex: 1 },
   details: { paddingHorizontal: 8, paddingBottom: 8 },
