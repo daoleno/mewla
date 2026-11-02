@@ -338,9 +338,13 @@ Agents use `mewla gcloud projects list`, or select an enabled account with
 `mewla gcloud --account person@example.com compute instances list --project ID`.
 `--profile CONFIGURATION` can select an account through an existing gcloud
 configuration. Multiple enabled accounts require an explicit selection.
-Commands use literal argv and return CLI output, JSON by default. Reviewed
-metadata reads run directly; other commands, secrets, IAM, billing and SQL need
-enabled writes plus the user's task-specific authorization (`--mewla-authorize`).
+Commands use literal argv and return CLI output, JSON by default. List, describe
+and get-style operations (including get-iam-policy) are reads in any command group,
+including IAM, billing and SQL metadata. Secret/credential readers such as secrets
+versions access, KMS decrypt and SQL generate-login-token are excluded. Changes
+and SQL execution need enabled writes plus the user's task-specific authorization
+(`--mewla-authorize`); local credential export remains unavailable. Put the command
+path before its options.
 Local execution, file inputs/transfers and credential export are unavailable.
 Mewla never automatically retries commands. An account without a configuration
 does not inherit another account's project: use an explicit `--project`.

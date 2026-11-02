@@ -126,23 +126,29 @@ func (gcloudCLI) prepareLogin(m *Manager, ctx context.Context, p string) error {
 	return nil
 }
 
-var gcpReadPaths = func() map[string]bool {
-	out := map[string]bool{}
-	for _, group := range []string{"projects", "compute instances", "compute disks", "compute networks", "compute subnetworks", "compute firewall-rules", "compute forwarding-rules", "compute addresses", "compute regions", "compute zones", "compute machine-types", "compute snapshots", "compute images", "container clusters", "storage buckets", "storage objects", "services", "logging sinks", "logging metrics", "pubsub topics", "pubsub subscriptions", "artifacts repositories", "spanner instances", "spanner databases"} {
-		for _, verb := range []string{"list", "describe"} {
-			out[group+" "+verb] = true
-		}
-	}
-	// Full service descriptions may contain literal environment secrets.
-	for _, group := range []string{"run services", "run jobs", "run revisions", "functions", "scheduler jobs"} {
-		out[group+" list"] = true
-	}
-	return out
-}()
-var gcpSafeReadFlags = map[string]bool{"--project": true, "--region": true, "--zone": true, "--location": true, "--filter": true, "--limit": true, "--page-size": true, "--sort-by": true, "--flatten": true, "--format": true, "--uri": true, "--organization": true, "--folder": true}
+// Read classification is independent of the command group. Credential-returning
+// operations stay outside reads even when their names begin with get/list.
+var gcpSensitiveReadVerbs = map[string]bool{
+	"access": true, "decrypt": true, "asymmetric-decrypt": true,
+	"print-access-token": true, "print-identity-token": true,
+	"generate-access-token": true, "generate-identity-token": true, "generate-login-token": true,
+	"get-auth-string": true, "get-key-string": true, "get-password": true,
+	"get-login-password": true, "get-client-secret": true, "get-credentials": true,
+	"get-token": true, "get-access-token": true, "get-identity-token": true,
+	"get-secret": true, "get-secret-value": true,
+}
+
+// Stop at a non-read operation before considering its positional arguments:
+// `projects delete list` must not become a read because the project is "list".
+// These are operation verbs, not an allowlist of supported service groups.
+var gcpNonReadVerbs = strings.Fields("abandon abort accept ack acknowledge activate add adopt advance allow apply approve archive assign asymmetric attach authorize batch build cancel change clean clear clone close commit compose configure convert copy create deactivate deauthorize debug delete deny deploy deprecate destroy detach disable dismiss download drain drop edit enable encrypt enroll execute expand export failover force generate grant import ingest init insert install instantiate invalidate issue kill lease link load lock login logout mark merge migrate modify mount move mv mutate patch pause perform post predict print promote provision publish pull purge push query reboot recover recreate redact redeploy reencrypt register reimage reject release relocate remove rm rename renew repair replace replay replicate request reschedule reset resize resolve restart restore resume retry revert revoke rollback rotate run save scan seed seek send set setup show sign simulate snapshot start stop stream submit subscribe suspend switch sync terminate test train transfer trigger undelete undeploy unenroll uninstall unlink unlock unmount unpause unpublish unregister unset update upgrade upload upsert write lookup fetch find read search validate verify wait watch")
+
+func gcpReadVerb(verb string) bool {
+	return verb == "list" || verb == "describe" || verb == "get" || strings.HasPrefix(verb, "list-") || strings.HasPrefix(verb, "describe-") || strings.HasPrefix(verb, "get-")
+}
 
 func (gcloudCLI) classify(args []string) (bool, error) {
-	if !cloudArgs(args) {
+	if !cloudArgs(args) || strings.HasPrefix(args[0], "-") {
 		return false, callRefused("Pass gcloud command arguments as literal words")
 	}
 	for _, a := range args {
@@ -159,8 +165,12 @@ func (gcloudCLI) classify(args []string) (bool, error) {
 			return false, callRefused("Local file loading is unavailable")
 		}
 	}
-	switch args[0] {
-	case "auth", "config", "components", "init", "info", "interactive", "topic", "meta", "alpha", "beta":
+	group := args[0]
+	if (group == "alpha" || group == "beta") && len(args) > 1 {
+		group = args[1]
+	}
+	switch group {
+	case "config", "components", "init", "info", "interactive", "topic", "meta":
 		return false, callRefused("Manage local CLI configuration and sign-in in Extensions")
 	}
 	// Commands that execute local programs, start tunnels or export credentials
@@ -171,27 +181,36 @@ func (gcloudCLI) classify(args []string) (bool, error) {
 			return false, callRefused("Local execution, file transfer and credential export are unavailable through this connection")
 		}
 	}
-	for n := 2; n <= len(args) && n <= 4; n++ {
-		if !gcpReadPaths[strings.Join(args[:n], " ")] {
-			continue
+	command := args
+	if command[0] == "alpha" || command[0] == "beta" {
+		command = command[1:]
+	}
+	if len(command) < 2 {
+		return false, nil
+	}
+	// Local auth management and credential export remain unavailable. Listing
+	// the signed-in account identities is a read, including in preview groups.
+	if command[0] == "auth" && command[1] != "list" {
+		return false, callRefused("Manage local CLI configuration and sign-in in Extensions")
+	}
+	for _, verb := range command[1:] {
+		if strings.HasPrefix(verb, "-") {
+			// Flags and their values cannot supply the operation name. Put the
+			// command path before its options, as in `projects list --project P`.
+			return false, nil
 		}
-		for i := n; i < len(args); i++ {
-			a := args[i]
-			if !strings.HasPrefix(a, "-") {
-				continue
-			}
-			key, _, has := strings.Cut(a, "=")
-			if !gcpSafeReadFlags[key] {
+		if gcpSensitiveReadVerbs[verb] {
+			return false, nil
+		}
+		if gcpReadVerb(verb) {
+			return true, nil
+		}
+		base, _, _ := strings.Cut(verb, "-")
+		for _, action := range gcpNonReadVerbs {
+			if base == action {
 				return false, nil
 			}
-			if !has && key != "--uri" {
-				i++
-				if i >= len(args) {
-					return false, callRefused("Missing flag value")
-				}
-			}
 		}
-		return true, nil
 	}
 	return false, nil
 }
