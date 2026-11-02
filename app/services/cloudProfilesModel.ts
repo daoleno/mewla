@@ -2,12 +2,15 @@ import type { PluginAccount } from "./connections";
 export function cloudProfileName(a: PluginAccount): string { return a.integration === "gcp" ? a.name || a.identity : a.profile || a.name; }
 
 export function cloudProfileExpiry(a: PluginAccount, now = Date.now()): { label: string; soon: boolean } | null {
- const at = Date.parse(a.profile_expires_at || "");
- if (!Number.isFinite(at)) return null;
- const delta = at - now;
- const minutes = Math.max(1, Math.ceil(Math.abs(delta) / 60000));
- const value = minutes >= 1440 ? `${Math.floor(minutes / 1440)}d` : minutes >= 60 ? `${Math.floor(minutes / 60)}h` : `${minutes}m`;
- return { label: delta > 0 ? `Expires in ${value}` : `Expired ${value} ago`, soon: delta > 0 && delta <= 3600000 };
+  const at = Date.parse(a.profile_sign_in_by || "");
+  if (!Number.isFinite(at) || !a.profile_sign_in_limit || a.profile_status !== "valid") return null;
+  const delta = at - now;
+  // A clock cannot establish authentication failure. Let the CLI refresh and
+  // identity check determine whether this profile needs sign-in again.
+  if (delta <= 0) return null;
+  const minutes = Math.max(1, Math.ceil(delta / 60000));
+  const value = minutes >= 1440 ? `${Math.floor(minutes / 1440)}d` : minutes >= 60 ? `${Math.floor(minutes / 60)}h` : `${minutes}m`;
+  return { label: a.profile_sign_in_limit === "maximum" ? `Up to ${value} left` : `Sign in in ${value}`, soon: delta <= 3600000 };
 }
 
 export function cloudProfileStatus(a: PluginAccount): { label: string; tone: "success" | "warning" | "neutral" } {

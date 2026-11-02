@@ -192,6 +192,9 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 			f.Message = "Sign-in finished, but the profile could not be verified. Refresh and try again."
 			return flowResult(f), nil
 		}
+		if recorder, ok := p.(interface{ loginCompleted(*Manager, *record) }); ok {
+			recorder.loginCompleted(m, r)
+		}
 		r.Account.Enabled = true
 		m.setGroup(r, "read", true)
 		if err := m.save(); err != nil {

@@ -522,7 +522,7 @@ export function AccountCard({
         }
       />
       {account.integration === "aws" && account.profile && onRename ? renaming ? <CloudProfileNameEntry key={account.id} account={account} onSave={async (name) => { const saved = await onRename(name); if (saved) setRenaming(false); return saved; }} /> : <ListRow title="Rename profile" icon="edit" onPress={() => setRenaming(true)} /> : null}
-      {account.profile_expires_at ? <ListRow icon="time" title="Credential expiry" subtitle={`${formatDate(account.profile_expires_at, DateStyle.fullDateTime, { timeZoneName: "short" })} · ${account.profile_expiry_source || "CLI cache"}`} numberOfLines={3} /> : null}
+      {account.profile_sign_in_by ? <ListRow icon="time" title="Sign in again by" subtitle={`${formatDate(account.profile_sign_in_by, DateStyle.fullDateTime, { timeZoneName: "short" })} · ${account.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} numberOfLines={3} /> : null}
       {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle={`Use ${plugin.name} remote sign-in for this ${account.integration === "gcp" ? "account" : "profile"}.`} trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
       {!account.profile && recovery ? (
         <ListRow
