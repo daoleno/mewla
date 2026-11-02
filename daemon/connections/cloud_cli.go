@@ -45,7 +45,7 @@ type cloudRuntime struct {
 }
 
 func newCloudRuntime(dir string) *cloudRuntime {
-	return &cloudRuntime{profileFiles: awsProfileFiles, dir: dir, providers: map[string]cloudProvider{"aws": awsCLI{}}, run: runCloudProcess, checked: map[string]time.Time{}}
+	return &cloudRuntime{profileFiles: awsProfileFiles, dir: dir, providers: map[string]cloudProvider{"aws": awsCLI{}, "gcp": gcloudCLI{}}, run: runCloudProcess, checked: map[string]time.Time{}}
 }
 func (c *cloudRuntime) executable(id string) (string, error) {
 	p := c.providers[id]

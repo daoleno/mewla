@@ -225,8 +225,10 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return m.deleteCloudProfile(ctx, q)
 	case "list":
 		if m.cloud != nil {
-			if err := m.syncAWSProfiles(ctx, false); err != nil {
-				return Response{}, err
+			for _, provider := range m.cloud.providers {
+				if err := provider.syncProfiles(m, ctx, false); err != nil {
+					return Response{}, err
+				}
 			}
 		}
 		accounts := make([]Account, 0, len(m.records))
@@ -683,7 +685,7 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 func (m *Manager) removeOldAWS() error {
 	changed := false
 	for id, r := range m.records {
-		if r.Account.Integration == "aws" && r.CLI == nil {
+		if (r.Account.Integration == "aws" || r.Account.Integration == "gcp") && r.CLI == nil {
 			if err := m.vault.Delete("integration:" + id); err != nil {
 				return err
 			}
@@ -691,8 +693,10 @@ func (m *Manager) removeOldAWS() error {
 			changed = true
 		}
 	}
-	if err := m.vault.Delete("oauth-registration:aws"); err != nil {
-		return err
+	for _, key := range []string{"oauth-registration:aws", "oauth-registration:gcp", "oauth-client:gcp"} {
+		if err := m.vault.Delete(key); err != nil {
+			return err
+		}
 	}
 	if changed {
 		return m.save()
