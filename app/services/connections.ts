@@ -28,6 +28,9 @@ export type AwsAccountDetails = {
   checked_at?: string;
 };
 export type PluginAccount = {
+  profile?: string;
+  profile_kind?: string;
+  profile_status?: string;
   setup?: { message: string; url: string };
   id: string;
   integration: string;
@@ -72,15 +75,18 @@ export type ConnectionRequest = {
   flow_id?: string;
   callback?: string;
   group?: "read" | "write";
-  action: "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
+  confirm_profile?: string;
+  action: "cloud_delete" | "connect_start" | "connect_status" | "connect_finish" | "connect_cancel" | "github_preview" | "github_import" | "permissions" | "oauth_configure" | "oauth_start" | "list" | "add" | "get" | "refresh" | "enable" | "disable" | "disconnect" | "policy" | "confirm_updates" | "dismiss_updates" | "remove_key";
   id?: string;
   tool?: string;
   /** policy: several tools at once, all of them or none. confirm_updates and dismiss_updates: the updated tools shown. */
   tools?: string[];
   allowed?: boolean;
-  input?: { integration: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; account_id?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
+  input?: { integration: string; profile?: string; name?: string; endpoint?: string; credential?: string; network?: "mainnet" | "testnet"; account_id?: string; spec?: unknown; trusted_networks?: string[]; allow_writes?: boolean; web_origin?: string; oauth_client?: { client_id?: string; client_secret?: string; redirect_url: string; resource_url?: string } };
 };
 export type ConnectFlow = {
+  code_required?: boolean;
+  install_required?: boolean;
   id: string;
   integration: string;
   status: "waiting" | "confirm" | "connected" | "cancelled" | "failed";

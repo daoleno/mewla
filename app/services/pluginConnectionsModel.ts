@@ -55,10 +55,10 @@ export function connectLabel(plugin: Pick<PluginIntegration, "id" | "name">): st
 }
 
 /**
- * The sign-in that renews an account with a loopback return: the same browser sign-in as
+ * The sign-in that renews an account using its provider flow, as when
  * connecting, naming the card it came from so that card is renewed in place.
  */
-export function loopbackSignInInput(account: Pick<PluginAccount, "id" | "integration">): { integration: string; account_id: string } | null {
+export function accountSignInInput(account: Pick<PluginAccount, "id" | "integration">): { integration: string; account_id: string } | null {
   return ["aws", "gcp"].includes(account.integration) ? { integration: account.integration, account_id: account.id } : null;
 }
 
@@ -75,15 +75,7 @@ export function signInAddressFromText(text: string | null | undefined): string {
 }
 
 /** An AWS-hosted page means sign-in has not returned its result to Mewla. */
-export function isAwsSignInAddress(text: string): boolean {
-  const address = text.trim();
-  if (!address || address.length > 8192 || /\s/.test(address)) return false;
-  try {
-    const url = new URL(address.includes("://") ? address : `https://${address}`);
-    if (!/^https?:$/.test(url.protocol) || url.username || url.password) return false;
-    return ["signin.aws.amazon.com", "signin.aws"].some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`));
-  } catch { return false; }
-}
+
 
 /**
  * Whether an account can be disconnected. Hyperliquid's mainnet account is how

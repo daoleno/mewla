@@ -10,7 +10,7 @@ import { ContentWidth, Spacing, useAppColors } from "../../constants/tokens";
 import { InlineNotice } from "../ui";
 import { ConnectStatusCard, NoServerState } from "./PluginConnectionViews";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
-import { loopbackSignInInput, connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
+import { accountSignInInput, connectsWithForm, enabledRequest, pluginCatalogRows, reconnectsWithWrites, toolPolicyRequest, toolUpdatesRequest, withToolsAllowed, type AccountRecoveryAction } from "../../services/pluginConnectionsModel";
 import { wsClient } from "../../services/websocket";
 import { type ConnectionRequest, type ConnectionResponse, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { connectInput, finishPluginReturn, isPluginCallbackUrl, matchesPluginReturn, pendingConnectionKey, pluginJobs, pluginReturnError, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -127,6 +127,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     } else if (result.flow?.status === "waiting") {
       // A waiting flow can carry why its last check didn't get through; the next check is in a few seconds.
       setPhase("waiting"); setConnectError(result.flow.message ?? "");
+      if (pending.current) await remember({ ...pending.current, flow: result.flow });
     }
   }, [apply, fail, remember, valid]);
   const finish = useCallback(async (url: string) => {
@@ -243,7 +244,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       setPhase("waiting");
       if (active.flow.user_code) await Clipboard.setStringAsync(active.flow.user_code);
       // A code to enter or an address to paste back ends in the app, not in a return link, so the page opens as plain browsing, in the full browser where its address can be copied.
-      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code || !!active.flow.address_required, Platform.OS === "web" ? active.flow.web_return ? "same-tab" : "new-tab" : undefined);
+      const result = await openPluginAuthorization(active.flow.authorization_url, !!active.flow.user_code || !!active.flow.address_required || !!active.flow.code_required, Platform.OS === "web" ? active.flow.web_return ? "same-tab" : "new-tab" : undefined);
       if (result.type === "external") { await check(); return; }
       if (!valid()) {
         if (result.type === "success") await deferReturn(result.url);
@@ -292,7 +293,7 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
       await remember(active);
       // Device authorization asks for a code on GitHub. Let people see and
       // copy it before leaving Mewla, instead of opening a page with no code.
-      if (active.flow.user_code) setPhase("waiting");
+      if (active.flow.user_code || active.flow.install_required || !active.flow.authorization_url) setPhase("waiting");
       else await openBrowser(active);
     } catch (failure) {
       fail(failure instanceof Error ? failure.message : "Could not start this connection. Try again.");
@@ -343,14 +344,14 @@ function usePluginsFlowState({ serverId, serverName, connection, deferredName, d
     void send({ action: "permissions", id: account.id, group, allowed }, `${group}:${account.id}`);
   };
   const disconnect = async (account: PluginAccount) => {
-    const response = await send({ action: "disconnect", id: account.id }, `disconnect:${account.id}`);
-    if (response && valid() && connectedId === account.id) dismiss();
+    const response = await send(account.profile ? { action: "cloud_delete", id: account.id, confirm_profile: account.profile } : { action: "disconnect", id: account.id }, `disconnect:${account.id}`);
+    if (response && valid()) { if (connectedId === account.id) dismiss(); if (account.profile) await send({ action: "list" }); }
     return !!response;
   };
   const recover = (account: PluginAccount, action: AccountRecoveryAction) => {
-    // A loopback account signs in again with the same browser sign-in as connecting,
+    // A cloud profile signs in again using the same provider flow as connecting,
     // naming itself so it is renewed in place.
-    const signIn = action === "reconnect" ? loopbackSignInInput(account) : null;
+    const signIn = action === "reconnect" ? accountSignInInput(account) : null;
     if (signIn) void connect(account.integration, { input: signIn });
     else if (action === "refresh") void send({ action: "refresh", id: account.id }, `recover:${account.id}`);
     else if (action === "disconnect") void disconnect(account);
@@ -400,7 +401,7 @@ export function PluginsPage({ title, catalog = false, children }: { title: strin
   const flow = usePluginsFlow();
   const catalogFailed = catalog && !flow.catalog.length;
   const scroll = useRef<KeyboardAwareScrollViewRef>(null);
-  const addressFlowId = flow.flow?.flow.address_required && (flow.phase === "waiting" || flow.phase === "verifying") ? flow.flow.flow.id : null;
+  const addressFlowId = (flow.flow?.flow.address_required || flow.flow?.flow.code_required || flow.flow?.flow.install_required) && (flow.phase === "waiting" || flow.phase === "verifying") ? flow.flow.flow.id : null;
   useEffect(() => {
     if (!addressFlowId) return;
     // Adding an account from the bottom can anchor the new card offscreen.

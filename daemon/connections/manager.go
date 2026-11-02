@@ -24,6 +24,7 @@ import (
 type record struct {
 	Account Account           `json:"account"`
 	Spec    json.RawMessage   `json:"spec,omitempty"`
+	CLI     *cloudAccount     `json:"cli,omitempty"`
 	OAuth   *oauthAccount     `json:"oauth,omitempty"`
 	Grants  map[string]string `json:"grants"` // grant is bound to the full discovered tool definition
 	// Updates holds tools the service added or changed that wait for the
@@ -43,7 +44,8 @@ type Manager struct {
 	githubToken  func(context.Context) (string, error)
 	webOrigin    func(origin string) bool
 	toolsSeen    map[string]time.Time // when each MCP account's tool list was last read
-	loopbackPort int                  // the port this daemon serves on; see SetLoopbackPort
+	cloud        *cloudRuntime
+	loopbackPort int // the port this daemon serves on; see SetLoopbackPort
 }
 
 // SetWebOrigins admits web UI origins for browser sign-in returns. Without it,
@@ -60,6 +62,12 @@ func New(dir string) (*Manager, error) {
 		m.networkOwned = true
 	}
 	return m, err
+}
+
+// EnableLocalCloudCLI binds local CLI profiles only in the owning daemon.
+// Isolated protocol clients/tests do not read the host credential configuration.
+func (m *Manager) EnableLocalCloudCLI() {
+	m.cloud = newCloudRuntime(filepath.Join(filepath.Dir(m.path), "cli"))
 }
 
 // EnsureDefaults adds the accounts every server has without setup. It makes no
@@ -86,7 +94,9 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 	if err := m.removeRetired(); err != nil {
 		return nil, err
 	}
-	m.markLegacyAWS()
+	if err := m.removeOldAWS(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 
@@ -209,7 +219,16 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	switch q.Action {
 	case "connect_start", "connect_status", "connect_finish", "connect_cancel", "github_preview", "github_import":
 		return m.connect(ctx, q)
+	case "cloud_run":
+		return m.runCloud(ctx, q)
+	case "cloud_delete":
+		return m.deleteCloudProfile(ctx, q)
 	case "list":
+		if m.cloud != nil {
+			if err := m.syncAWSProfiles(ctx, false); err != nil {
+				return Response{}, err
+			}
+		}
 		accounts := make([]Account, 0, len(m.records))
 		for _, r := range m.records {
 			if m.isPending(r.Account.ID) {
@@ -264,9 +283,6 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 		return Response{}, errors.New("plugin account not found")
 	}
 	if q.Action == "get" || q.Action == "updates" {
-		if q.Action == "get" && awsDetailsStale(r, time.Now()) {
-			m.awsRefreshDetails(ctx, r)
-		}
 		a := m.projection(r)
 		return Response{Account: &a}, nil
 	}
@@ -663,14 +679,23 @@ func (m *Manager) invoke(ctx context.Context, r *record, q Request) (Response, e
 	return Response{Result: result}, nil
 }
 
-// markLegacyAWS flags the AWS accounts connected through the AWS CLI. They stay
-// as they were, with their name, identity and grants, and read "Sign in again":
-// signing in renews them in place (see nameAndDeduplicate). Nothing else about
-// them runs, since the CLI is no longer used.
-func (m *Manager) markLegacyAWS() {
-	for _, r := range m.records {
-		if r.Account.Integration == "aws" && r.OAuth == nil && r.Account.Status != "disconnected" {
-			r.Account.Status = "authorization_required"
+// AWS's retired MCP grants are dead data; profiles are the source of truth.
+func (m *Manager) removeOldAWS() error {
+	changed := false
+	for id, r := range m.records {
+		if r.Account.Integration == "aws" && r.CLI == nil {
+			if err := m.vault.Delete("integration:" + id); err != nil {
+				return err
+			}
+			delete(m.records, id)
+			changed = true
 		}
 	}
+	if err := m.vault.Delete("oauth-registration:aws"); err != nil {
+		return err
+	}
+	if changed {
+		return m.save()
+	}
+	return nil
 }

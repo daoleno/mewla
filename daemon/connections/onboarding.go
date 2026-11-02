@@ -30,6 +30,8 @@ const NativeCallback = "mewla://plugins"
 const NativeReturnRelay = "https://connect.mewla.ai" + pluginreturn.Path
 
 type ConnectFlow struct {
+	CodeRequired     bool      `json:"code_required,omitempty"`
+	InstallRequired  bool      `json:"install_required,omitempty"`
 	ID               string    `json:"id"`
 	Integration      string    `json:"integration"`
 	Status           string    `json:"status"`
@@ -48,6 +50,8 @@ type ConnectFlow struct {
 }
 type connectFlow struct {
 	ConnectFlow
+	cli         *cloudLogin
+	profile     string
 	state       string
 	secret      string
 	deviceCode  string
@@ -76,6 +80,9 @@ func (m *Manager) expireFlows() {
 	}
 	for id, flow := range m.connectFlows {
 		if time.Now().After(flow.Expires) {
+			if flow.cli != nil {
+				flow.cli.cancel()
+			}
 			delete(m.connectFlows, id)
 		}
 	}
@@ -117,6 +124,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("Too many connections in progress. Try again shortly.")
 		}
 		in := *q.Input
+		if in.Integration == "aws" || m.cloud != nil && m.cloud.providers[in.Integration] != nil {
+			return m.startCloud(ctx, &in)
+		}
 		in.Mobile = true
 		in.callback = NativeCallback
 		if in.WebOrigin != "" {
@@ -152,6 +162,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 	f, ok := m.connectFlows[q.FlowID]
 	if !ok {
 		return Response{}, errors.New("This connection expired. Connect again.")
+	}
+	if f.profile != "" {
+		return m.continueCloud(ctx, q, f)
 	}
 	if q.Action == "connect_cancel" {
 		if r := m.records[f.AccountID]; r != nil && r.Account.Status == "connected" && !m.isPending(r.Account.ID) {
@@ -285,11 +298,8 @@ func (m *Manager) connectedFlow(f *connectFlow) (Response, error) {
 	return result, nil
 }
 func (m *Manager) nameAndDeduplicate(r *record) {
-	if r.Account.Identity != "" && !strings.Contains(r.Account.Identity, "identity not provided") && r.Account.Integration != "aws" {
+	if r.Account.Identity != "" && !strings.Contains(r.Account.Identity, "identity not provided") {
 		r.Account.Name = r.Account.Identity
-	}
-	if r.Account.Integration == "aws" {
-		m.nameAWS(r)
 	}
 	if r.Account.Identity == "" || strings.Contains(r.Account.Identity, "identity not provided") {
 		return
@@ -319,13 +329,12 @@ func (m *Manager) nameAndDeduplicate(r *record) {
 	})
 	for _, id := range ids {
 		existing := m.records[id]
-		if existing == r || existing.Account.Integration != r.Account.Integration || existing.Account.Status == "disconnected" && r.Account.Integration != "aws" {
+		if existing == r || existing.Account.Integration != r.Account.Integration || existing.Account.Status == "disconnected" {
 			continue
 		}
-		// "Sign in again" on a card renews that card, if the same AWS account
-		// signed in; any other sign-in renews the account of the same identity.
+		// An explicit renewal selects its original card.
 		if renew != "" {
-			if id != renew || r.Account.Integration == "aws" && awsAccountID(existing) != awsAccountID(r) {
+			if id != renew {
 				continue
 			}
 		} else if existing.Account.Identity != r.Account.Identity {
@@ -557,24 +566,6 @@ func keepAccount(r, old *record) {
 	for _, t := range r.Account.Tools {
 		if fp, ok := old.Grants[t.Name]; ok && fp == fingerprint(t) {
 			r.Grants[t.Name] = fp
-		}
-	}
-	if r.Account.Integration == "aws" {
-		awsAdoptName(r, old.Account.AWS)
-	}
-}
-
-// nameAWS names a new AWS account after the AWS account, else by its ID, and
-// tells two accounts of the same AWS account apart by who is signed in.
-func (m *Manager) nameAWS(r *record) {
-	r.Account.Name = "AWS " + awsAccountID(r)
-	if d := r.Account.AWS; d != nil && d.AccountName != "" {
-		r.Account.Name = d.AccountName
-	}
-	for _, other := range m.records {
-		if other != r && other.Account.Integration == "aws" && other.Account.Status != "disconnected" && other.Account.Name == r.Account.Name && awsAccountID(other) == awsAccountID(r) && r.Account.AWS != nil && r.Account.AWS.Who != "" {
-			r.Account.Name += " (" + r.Account.AWS.Who + ")"
-			return
 		}
 	}
 }

@@ -1,3 +1,5 @@
+import { BottomSheetFrame } from "../ui/BottomSheetFrame";
+import { CloudCodeEntry } from "./CloudCodeEntry";
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,7 +30,7 @@ import {
   type ToolsSwitch,
 } from "../../services/pluginConnectionsModel";
 import { Icon, type IconName } from "../icons/Icon";
-import { AwsAddressEntry } from "./AwsAddressEntry";
+import { SignInAddressEntry } from "./SignInAddressEntry";
 import { ServiceMark } from "./ServiceMarks";
 import { hasServiceMark } from "./serviceMarkPaths";
 
@@ -292,6 +294,15 @@ export function ConnectStatusCard({
       </StatusCard>
     ) : null;
   }
+  if (flow?.flow.install_required) return <StatusCard title={`Install ${serviceName} CLI`} detail="Install the official CLI on this computer, then sign in.">
+    <Button label="Install and sign in" variant="filled" block loading={starting || phase === "verifying"} onPress={() => void onSubmitAddress("")} />
+    <Button label="Cancel" variant="plain" block onPress={onCancel} />
+  </StatusCard>;
+  if (flow?.flow.code_required && (phase === "waiting" || phase === "verifying")) return <StatusCard title={`Sign in to ${serviceName}`} detail={`Open ${serviceName}, sign in, then paste the code shown there.`}>
+    <CloudCodeEntry key={flow.flow.id} serviceName={serviceName} onSubmit={onSubmitAddress} />
+    <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block onPress={onOpen} />
+    <Button label="Cancel" variant="plain" block onPress={onCancel} />
+  </StatusCard>;
   const code = flow?.flow.user_code;
   const identity = flow?.flow.status === "confirm" ? flow.flow.identity || `${serviceName} account` : null;
   if (identity !== null) {
@@ -306,7 +317,7 @@ export function ConnectStatusCard({
   if ((phase === "waiting" || phase === "verifying") && flow?.flow.address_required) {
     return (
       <StatusCard title={`Finish signing in to ${serviceName}`} detail="After sign-in, a page starting with http://127.0.0.1 may fail to load on this computer. Copy its full address, paste it below, then choose Continue.">
-        <AwsAddressEntry key={flow.flow.id} onSubmit={onSubmitAddress} />
+        <SignInAddressEntry key={flow.flow.id} onSubmit={onSubmitAddress} />
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block disabled={phase === "verifying"} onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>
@@ -327,7 +338,7 @@ export function ConnectStatusCard({
   }
   if (phase === "waiting") {
     return (
-      <StatusCard busy title={`Waiting for ${serviceName}`} detail={error || undefined}>
+      <StatusCard busy title={`Waiting for ${serviceName}`} detail={flow?.flow.message || error || undefined}>
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>
@@ -481,7 +492,7 @@ export function AccountCard({
       <ListRow
         icon="person-circle"
         title={account.name}
-        subtitle={aws ? aws.subtitle || undefined : [custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : ""].filter(Boolean).join(" · ") || undefined}
+        subtitle={account.profile ? [account.profile_kind, account.profile_status, account.aws?.account_id, account.aws?.account_name].filter(Boolean).join(" · ") : aws ? aws.subtitle || undefined : [custom ? endpointHost(account.endpoint) : account.identity !== account.name ? account.identity : "", account.verified_at ? `Checked ${formatDate(account.verified_at, DateStyle.dateTime)}` : ""].filter(Boolean).join(" · ") || undefined}
         numberOfLines={2}
         disabled={!account.enabled}
         trailing={
@@ -496,7 +507,8 @@ export function AccountCard({
           </View>
         }
       />
-      {recovery ? (
+      {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle="Use AWS remote sign-in for this profile." trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
+      {!account.profile && recovery ? (
         <ListRow
           icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
           iconColor={undefined}
@@ -551,17 +563,17 @@ export function AccountCard({
         <ListRow icon="key" title="Remove trading key" subtitle={`API wallet ${account.signer.slice(0, 6)}…${account.signer.slice(-4)}`} destructive disabled={busy} onPress={() => setConfirmingKey(true)} />
       ) : null}
       {confirming ? (
-        <View style={styles.confirm}>
+        <BottomSheetFrame visible onClose={() => { if (!removing) setConfirming(false); }}><View style={styles.confirm}>
           <AppText variant="compact" tone="secondary">
-            Disconnect {account.name}? Brain loses access right away, and Mewla removes its saved sign-in.
+            {account.profile ? `Delete profile ${account.profile}${account.aws?.account_id ? ` (${account.aws.account_id})` : ""} from this computer? It will also disappear from the AWS CLI. A backup is kept.` : `Disconnect ${account.name}? Brain loses access right away, and Mewla removes its saved sign-in.`}
           </AppText>
           <View style={styles.confirmActions}>
             <Button label="Keep" variant="plain" size="sm" disabled={removing} onPress={() => setConfirming(false)} />
-            <Button label="Disconnect" variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then((done) => { if (!done) setConfirming(false); })} />
+            <Button label={account.profile ? "Delete profile" : "Disconnect"} variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then(() => setConfirming(false))} />
           </View>
-        </View>
-      ) : !canDisconnect(account) ? null : (
-        <ListRow icon="remove-circle" title="Disconnect" destructive disabled={busy} onPress={() => setConfirming(true)} />
+        </View></BottomSheetFrame>
+      ) : !account.profile && !canDisconnect(account) ? null : (
+        <ListRow icon="remove-circle" title={account.profile ? "Delete profile" : "Disconnect"} destructive disabled={busy} onPress={() => setConfirming(true)} />
       )}
     </ListSection>
   );
