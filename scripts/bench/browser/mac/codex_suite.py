@@ -68,20 +68,27 @@ def measure(path):
     calls, pending = [], {}
     first = last = None
     turns = 0
+    in_round = False
     tokens = {}
     answer = ''
+    ASSISTANT = ('reasoning', 'function_call', 'custom_tool_call', 'mcp_tool_call', 'local_shell_call', 'agent_message')
     for r in rows:
         p = r.get('payload') or {}
         t = ts(r['timestamp']) if r.get('timestamp') else None
         if t and p.get('type') == 'task_started' and first is None: first = t
-        if t: last = t
+        kind = p.get('type')
+        is_assistant = kind in ASSISTANT or (kind == 'message' and p.get('role') == 'assistant')
+        if is_assistant and not in_round:
+            turns += 1; in_round = True          # a model response round starts
+        elif kind in ('function_call_output', 'custom_tool_call_output', 'mcp_tool_call_output') or (kind == 'message' and p.get('role') == 'user'):
+            in_round = False                      # tool results or user input end the round
+        if t and (is_assistant or kind in ('task_complete', 'turn_complete')): last = t
         if p.get('type') in ('function_call', 'custom_tool_call', 'mcp_tool_call'):
             pending[p.get('call_id') or p.get('id')] = (p.get('name'), t, len(json.dumps(p.get('arguments', p.get('input', '')))))
         if p.get('type') in ('function_call_output', 'custom_tool_call_output', 'mcp_tool_call_output'):
             name, t0, argb = pending.pop(p.get('call_id'), (None, None, 0))
             if t0 and t: calls.append({'tool': name, 'ms': round((t - t0) * 1000), 'arg_bytes': argb, 'out_bytes': len(json.dumps(p.get('output', '')))})
         if p.get('type') == 'token_count' and p.get('info'):
-            turns += 1
             tokens = p['info'].get('total_token_usage', tokens)
         if p.get('type') == 'message' and p.get('role') == 'assistant':
             answer = ''.join(c.get('text', '') for c in p.get('content', []) if isinstance(c, dict))
@@ -91,9 +98,24 @@ def measure(path):
             'model_turns': turns, 'tool_calls': len(calls), 'calls': calls, 'tokens': tokens, 'answer': answer,
             'log_wall_ms': round((last - first) * 1000) if first and last else None}
 
-def newest_after(t0):
-    files = [f for f in glob.glob(SESSIONS + '/**/rollout-*.jsonl', recursive=True) if os.path.getmtime(f) >= t0 - 1]
-    return max(files, key=os.path.getmtime) if files else None
+def thread_id(stdout):
+    """The launched child's own session id, from its --json event stream."""
+    for line in stdout.splitlines():
+        try:
+            m = json.loads(line)
+        except ValueError:
+            continue
+        tid = m.get('thread_id') or (m.get('msg') or {}).get('session_id') or (m.get('msg') or {}).get('thread_id')
+        if tid:
+            return tid
+    return None
+
+def rollout_for(tid):
+    """Exactly the child's rollout (never another active session)."""
+    if not tid:
+        return None
+    files = glob.glob(SESSIONS + '/**/rollout-*' + tid + '.jsonl', recursive=True)
+    return files[0] if files else None
 
 def run(a):
     server = ThreadingHTTPServer(('127.0.0.1', PORT), fixture.H)
@@ -110,13 +132,20 @@ def run(a):
             if a.extra: cmd += shlex.split(a.extra)
             cmd.append(a.prefix + prompt)
             t0 = time.time()
-            p = subprocess.run(cmd, capture_output=True, text=True, timeout=a.timeout)
+            timed_out = False
+            try:
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=a.timeout)
+            except subprocess.TimeoutExpired as e:
+                timed_out = True
+                p = subprocess.CompletedProcess(cmd, -9, (e.stdout or b'').decode() if isinstance(e.stdout, bytes) else (e.stdout or ''), '')
             wall = (time.time() - t0) * 1000
             events = json.loads(urllib.request.urlopen(BASE + '/__events').read())
-            log = newest_after(t0)
+            log = rollout_for(thread_id(p.stdout))
             m = measure(log) if log else {}
-            ok = bool(m.get('answer')) and bool(check(m['answer'], events))
-            row = {'task': tid, 'rep': rep, 'prefix': a.prefix, 'ok': ok, 'wall_ms': round(wall), 'exit': p.returncode, 'log': log and os.path.relpath(log, SESSIONS), **m}
+            ok = (not timed_out) and bool(m.get('answer')) and bool(check(m['answer'], events))
+            # A prefix such as "@Chrome " is only text; which tools actually ran is the evidence.
+            tools_used = sorted({c['tool'] for c in m.get('calls', []) if c.get('tool')})
+            row = {'task': tid, 'rep': rep, 'prefix': a.prefix, 'ok': ok, 'timed_out': timed_out, 'tools_used': tools_used, 'wall_ms': round(wall), 'exit': p.returncode, 'log': log and os.path.relpath(log, SESSIONS), **m}
             results.append(row)
             print(json.dumps({k: row[k] for k in ('task', 'rep', 'ok', 'wall_ms', 'model_turns', 'tool_calls') if k in row}), flush=True)
             json.dump(results, open(a.out, 'w'), indent=1)
