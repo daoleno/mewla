@@ -92,9 +92,9 @@ echo "== VideoToolbox encoder"
 [ -n "$FULL" ] && MEWLA_SCREEN_VT_BENCH=1 $GO test ./screen -run 'TestVideoToolboxEncodesScreenFrames|TestAVCC' -count=1 -v 2>&1 | tail -15 | tee "$OUT/vt.txt"
 
 # ---- 3. real capture: tiles against video over simulated links ------------
-# Opens a Safari window with a long page and scrolls it by wheel events for
-# about two minutes; nobody should be using this Mac meanwhile. The window
-# (titled mewla-scroll-fixture) is left open: close it afterwards. No AppleScript
+# Opens Safari tabs with a long page that scrolls itself (requestAnimationFrame; no input events) for
+# about two minutes; nobody should be using this Mac meanwhile. The tabs
+# (titled mewla-scroll-fixture ...) are left open: close them afterwards. No AppleScript
 # is used, so no Automation permission is needed.
 echo "== real screen, simulated links"
 export MEWLA_SCREEN_VIDEO=on MEWLA_SCREEN_BENCH_OUT="$OUT"
