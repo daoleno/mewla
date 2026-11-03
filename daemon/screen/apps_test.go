@@ -511,7 +511,7 @@ func TestAnAppThatQuitIsSaidToBeGone(t *testing.T) {
 	button := idOf(t, state, `Button "New Note"`)
 	backend.RunningApps = backend.RunningApps[1:]
 	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "element", Element: button, ElementAction: "press"})
-	if !errors.Is(err, ErrStaleElement) || err.Error() != "Notes (pid 101) quit or closed its windows since it was read; open it with open_app, then read it again" {
+	if !errors.Is(err, ErrStaleElement) || !strings.HasSuffix(err.Error(), "Notes (pid 101) quit or closed its windows since it was read; open it with open_app, then read it again") || !strings.HasPrefix(err.Error(), "Not delivered") {
 		t.Fatalf("press: %v", err)
 	}
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "app_state", App: "Notes"}); err == nil || !strings.Contains(err.Error(), "open it with open_app") {
