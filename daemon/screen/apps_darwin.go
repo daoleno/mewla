@@ -229,6 +229,9 @@ func readApp(ctx context.Context, pid int, limit int) (ElementTree, error) {
 	defer axLib.release(app)
 	axLib.setTimeout(app, 1)
 	tree := ElementTree{App: axString(app, "AXTitle"), PID: pid}
+	if appBundle(pid).chromium {
+		tree.Note = webAX.ensure(ctx, pid, macWebOps, time.Now, time.Sleep)
+	}
 	windows, code := axCopy(app, "AXWindows")
 	switch {
 	case code == axErrorAPIDisabled:

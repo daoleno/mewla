@@ -313,6 +313,7 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 		b.WriteString(", in front")
 	}
 	b.WriteString(".\nEach line: [id] role \"name\" = \"value\" {actions} at (x, y). Act on an element by its id; an element keeps its id while it stays the same, and an id whose element is gone is refused.\n")
+	b.WriteString(tree.Note)
 	shown, hidden := 0, 0
 	for _, row := range appRows(tree, screen, toAgent) {
 		if shown == elementsShown {
