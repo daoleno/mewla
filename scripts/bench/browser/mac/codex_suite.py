@@ -151,6 +151,55 @@ def run(a):
             json.dump(results, open(a.out, 'w'), indent=1)
     server.shutdown()
 
+# ---- Desktop runs: something else (a computer-use Worker) types the prompt into the app;
+# these two steps bracket one run and read its rollout from ~/.codex/sessions.
+def user_texts(rows):
+    """Every user message in the rollout, joined (the first is often AGENTS.md or environment context)."""
+    out = []
+    for r in rows:
+        p = r.get('payload') or {}
+        if p.get('type') == 'message' and p.get('role') == 'user':
+            out.append(''.join(c.get('text', '') for c in p.get('content', []) if isinstance(c, dict)))
+        if p.get('type') == 'user_message':
+            out.append(p.get('message', ''))
+    return '\n'.join(out)
+
+def task_by_id(tid):
+    return next(t for t in TASKS if t[0] == tid)
+
+def begin(a):
+    """Reset the fixture's event log, remember the start time, print the exact prompt to type."""
+    tid, prompt, _ = task_by_id(a.task)
+    urllib.request.urlopen(urllib.request.Request(BASE + '/__reset', method='POST', data=b'')).read()
+    json.dump({'task': tid, 't0': time.time()}, open(a.state, 'w'))
+    print(a.prefix + prompt)
+
+def end(a):
+    """Find the rollout this run wrote (a user message holds the task's prompt), measure it, check it, append to --out."""
+    st = json.load(open(a.state))
+    tid, prompt, check = task_by_id(st['task'])
+    needle = prompt[:60]
+    found = None
+    for f in sorted(glob.glob(SESSIONS + '/**/rollout-*.jsonl', recursive=True), key=os.path.getmtime, reverse=True):
+        if os.path.getmtime(f) < st['t0'] - 2:
+            break
+        try:
+            rows = read_rollout(f)
+        except Exception:
+            continue
+        if needle in user_texts(rows):
+            found = f
+            break
+    events = json.loads(urllib.request.urlopen(BASE + '/__events').read())
+    m = measure(found) if found else {}
+    ok = bool(m.get('answer')) and bool(check(m['answer'], events))
+    row = {'task': tid, 'prefix': a.prefix, 'ok': ok, 'tools_used': sorted({c['tool'] for c in m.get('calls', []) if c.get('tool')}),
+           'driver_wall_ms': round((time.time() - st['t0']) * 1000), 'log': found and os.path.relpath(found, SESSIONS), **m}
+    out = json.load(open(a.out)) if os.path.exists(a.out) else []
+    out.append(row)
+    json.dump(out, open(a.out, 'w'), indent=1)
+    print(json.dumps({k: row.get(k) for k in ('task', 'ok', 'log_wall_ms', 'model_turns', 'tool_calls', 'tools_used', 'originator')}))
+
 if __name__ == '__main__':
     ap = argparse.ArgumentParser(); sub = ap.add_subparsers(dest='cmd', required=True)
     sub.add_parser('parity')
@@ -158,5 +207,8 @@ if __name__ == '__main__':
     r.add_argument('--codex', required=True); r.add_argument('--reps', type=int, default=1); r.add_argument('--only')
     r.add_argument('--prefix', default=''); r.add_argument('--model'); r.add_argument('--effort'); r.add_argument('--extra')
     r.add_argument('--timeout', type=int, default=600); r.add_argument('--out', default='runs.json')
+    for name in ('begin', 'end'):
+        d = sub.add_parser(name)
+        d.add_argument('task', nargs='?'); d.add_argument('--prefix', default=''); d.add_argument('--state', default='desktop-state.json'); d.add_argument('--out', default='desktop-runs.json')
     args = ap.parse_args()
-    parity() if args.cmd == 'parity' else run(args)
+    {'parity': lambda: parity(), 'run': lambda: run(args), 'begin': lambda: begin(args), 'end': lambda: end(args)}[args.cmd]()
