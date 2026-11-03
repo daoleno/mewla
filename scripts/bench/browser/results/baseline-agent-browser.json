@@ -1,0 +1,91 @@
+{
+ "side": "ab",
+ "reps": 15,
+ "table": {
+  "cold_start": {
+   "n": 1,
+   "p50": 30,
+   "p95": 30,
+   "bytes_p50": 38,
+   "errors": 0
+  },
+  "navigate": {
+   "n": 15,
+   "p50": 18,
+   "p95": 461,
+   "bytes_p50": 38,
+   "errors": 0
+  },
+  "snapshot_busy_full": {
+   "n": 15,
+   "p50": 454,
+   "p95": 531,
+   "bytes_p50": 272107,
+   "errors": 0
+  },
+  "snapshot_busy_interactive": {
+   "n": 15,
+   "p50": 449,
+   "p95": 464,
+   "bytes_p50": 120029,
+   "errors": 0
+  },
+  "find": {
+   "n": 15,
+   "p50": 3,
+   "p95": 5,
+   "bytes_p50": 11,
+   "errors": 0
+  },
+  "click": {
+   "n": 15,
+   "p50": 17,
+   "p95": 18,
+   "bytes_p50": 9,
+   "errors": 0
+  },
+  "fill": {
+   "n": 15,
+   "p50": 3,
+   "p95": 10,
+   "bytes_p50": 9,
+   "errors": 0
+  },
+  "type_keys": {
+   "n": 15,
+   "p50": 4,
+   "p95": 6,
+   "bytes_p50": 9,
+   "errors": 0
+  },
+  "wait_for_change": {
+   "n": 15,
+   "p50": 415,
+   "p95": 431,
+   "bytes_p50": null,
+   "errors": 0
+  },
+  "screenshot": {
+   "n": 15,
+   "p50": 33,
+   "p95": 35,
+   "bytes_p50": 44,
+   "errors": 0
+  },
+  "extract_table": {
+   "n": 15,
+   "p50": 3,
+   "p95": 6,
+   "bytes_p50": 1408,
+   "errors": 0
+  },
+  "multi_tab": {
+   "n": 8,
+   "p50": 46,
+   "p95": 52,
+   "bytes_p50": null,
+   "errors": 0
+  }
+ },
+ "errors": {}
+}
