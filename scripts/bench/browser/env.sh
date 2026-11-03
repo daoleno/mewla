@@ -30,13 +30,9 @@ up)
     mkdir -p "$BENCH_DIR/ext" && rm -rf "$BENCH_DIR/ext/dist" && cp -r "$BENCH_DIR/ext/src/packages/extension/dist" "$BENCH_DIR/ext/dist"
   fi
   if ! curl -s -m1 "localhost:$CDP_PORT/json/version" >/dev/null; then
-    # Throttling flags: a headed Chrome on a bare display paints rarely, and
-    # Playwright's actionability waits for animation frames. Same flags for
-    # every tool, so no side is favoured.
     DISPLAY=:$DISPLAY_NUM nohup "$CFT" --user-data-dir="$BENCH_DIR/profile" --remote-debugging-port="$CDP_PORT" \
       --load-extension="$BENCH_DIR/ext/dist" --no-first-run --no-default-browser-check --no-sandbox \
-      --disable-renderer-backgrounding --disable-background-timer-throttling --disable-backgrounding-occluded-windows \
-      --disable-features=CalculateNativeWinOcclusion about:blank >"$BENCH_DIR/chrome.log" 2>&1 &
+      about:blank >"$BENCH_DIR/chrome.log" 2>&1 &
     echo $! >"$BENCH_DIR/chrome.pid"
     for _ in $(seq 40); do curl -s -m1 "localhost:$CDP_PORT/json/version" >/dev/null && break; sleep 0.25; done
   fi
