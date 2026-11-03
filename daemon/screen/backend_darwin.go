@@ -105,6 +105,10 @@ type cmTime struct {
 	Epoch     int64
 }
 
+// captureDisplayID is the display a session captures: the main one, unless
+// an agent works on a display of its own.
+var captureDisplayID = func() uint32 { return mac.CGMainDisplayID() }
+
 func loadMac() error {
 	mac.once.Do(func() { mac.err = loadMacFunctions() })
 	return mac.err
@@ -570,7 +574,7 @@ type macSession struct {
 
 func (s *macSession) start(ctx context.Context, content objc.ID) error {
 	displays := content.Send(objc.RegisterName("displays"))
-	main := mac.CGMainDisplayID()
+	main := captureDisplayID()
 	var display objc.ID
 	for i := uint64(0); i < objc.Send[uint64](displays, selCount); i++ {
 		d := displays.Send(selObjectAt, i)
@@ -586,6 +590,17 @@ func (s *macSession) start(ctx context.Context, content objc.ID) error {
 	width := objc.Send[int64](display, objc.RegisterName("width"))
 	height := objc.Send[int64](display, objc.RegisterName("height"))
 	s.input = newMacInput(1)
+	// Another display than the main one is placed elsewhere in the global
+	// space: event points are its pixels plus where it starts.
+	if main != mac.CGMainDisplayID() {
+		if displays, err := activeDisplays(); err == nil {
+			for _, d := range displays {
+				if d.ID == main {
+					s.input.origin = d.Bounds.Min
+				}
+			}
+		}
+	}
 
 	empty := objc.ID(objc.GetClass("NSArray")).Send(objc.RegisterName("array"))
 	filter := objc.ID(objc.GetClass("SCContentFilter")).Send(selAlloc).Send(objc.RegisterName("initWithDisplay:excludingWindows:"), display, empty)
