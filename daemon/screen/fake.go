@@ -711,3 +711,95 @@ func fixturePage(width, height int) *image.RGBA {
 }
 
 func clamp8(v int) uint8 { return uint8(min(max(v, 0), 255)) }
+
+// fakeMenuTitles splits a fake menu item's Path into its titles.
+func fakeMenuTitles(path string) []string {
+	var titles []string
+	for _, part := range strings.Split(path, ">") {
+		titles = append(titles, strings.TrimSpace(part))
+	}
+	return titles
+}
+
+// MenuItems lists what is under path in the fake app's menus: the titles that
+// follow it in the items' Paths, once each.
+func (f *FakeBackend) MenuItems(_ context.Context, pid int, path []string) ([]MenuItem, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, app := range f.RunningApps {
+		if app.PID != pid {
+			continue
+		}
+		var items []MenuItem
+	paths:
+		for _, item := range app.Menu {
+			titles := fakeMenuTitles(item.Path)
+			if len(titles) <= len(path) {
+				continue
+			}
+			for i, want := range path {
+				if !sameMenuTitle(titles[i], want) {
+					continue paths
+				}
+			}
+			next := titles[len(path)]
+			dup := false
+			for _, seen := range items {
+				dup = dup || seen.Title == next
+			}
+			if dup {
+				continue
+			}
+			it := MenuItem{Title: next, Submenu: len(titles) > len(path)+1, Disabled: item.Disabled && len(titles) == len(path)+1}
+			if len(titles) == len(path)+1 && item.Char != "" {
+				it.Shortcut = shortcutFrom(item.Char, item.Modifiers).String()
+			}
+			items = append(items, it)
+		}
+		if len(items) == 0 && len(path) > 0 {
+			return nil, fmt.Errorf("no menu item %q", strings.Join(path, " > "))
+		}
+		return items, nil
+	}
+	return nil, errors.New("the app quit")
+}
+
+// PressMenuPath chooses the fake app's menu item at path.
+func (f *FakeBackend) PressMenuPath(_ context.Context, pid int, path []string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.RunningApps {
+		app := &f.RunningApps[i]
+		if app.PID != pid {
+			continue
+		}
+		for _, item := range app.Menu {
+			titles := fakeMenuTitles(item.Path)
+			if len(titles) != len(path) {
+				continue
+			}
+			same := true
+			for j := range path {
+				same = same && sameMenuTitle(titles[j], path[j])
+			}
+			if !same {
+				continue
+			}
+			if item.Disabled {
+				return item.Path, fmt.Errorf("%s is turned off in the app's menus right now, so it wasn't chosen", item.Path)
+			}
+			f.MenuPresses = append(f.MenuPresses, item.Path)
+			app.Elements = append(app.Elements, item.Adds...)
+			if item.Activates {
+				for j := range f.RunningApps {
+					f.RunningApps[j].Active = f.RunningApps[j].PID == pid
+				}
+			}
+			return item.Path, nil
+		}
+		return "", fmt.Errorf("no menu item %q", strings.Join(path, " > "))
+	}
+	return "", errors.New("the app quit")
+}
+
+var _ menuPather = (*FakeBackend)(nil)

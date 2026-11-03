@@ -368,6 +368,13 @@ func (s Shortcut) String() string {
 	return text + "+" + strings.ToLower(s.Char)
 }
 
+// shortcutFrom reads a menu item's shortcut as accessibility gives it:
+// the character and AXMenuItemCmdModifiers (command is implied unless bit 3,
+// no command, is set).
+func shortcutFrom(char string, modifiers int64) Shortcut {
+	return Shortcut{Char: strings.ToUpper(char), Shift: modifiers&1 != 0, Option: modifiers&2 != 0, Control: modifiers&4 != 0}
+}
+
 // axModifiers is the shortcut's modifiers as accessibility gives a menu
 // item's (AXMenuItemCmdModifiers): command is implied, unless bit 3 says
 // otherwise; shift, option and control are bits 0 to 2.
