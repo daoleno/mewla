@@ -16,9 +16,10 @@ System Settings (General), a Finder window, and Slack/Cursor with a window open.
 ## Task suite (the same prompt for every arm)
 - `python3 tasks.py setup DIR` makes the scratch files and `DIR/expected.json` (fill the TODO entries by hand).
 - `python3 tasks.py prompt ID DIR` prints a task's prompt; `check ID DIR ANSWER_FILE` judges the outcome; `reset DIR` between arms.
-- agent-desktop arm: `python3 arm_ad.py DIR OUT` (claude -p, Bash only, no Mewla MCP, claude-sonnet-5-5).
-- Mewla arm: spawn a Mewla Worker (claude, claude-sonnet-5-5, with the computer MCP) per task with the prompt; then
-  `python3 metrics.py claude <the Worker's transcript> --since ... --until ...` for wall-clock, turns, tool calls, tokens.
+- `python3 arm.py ad DIR OUT` — agent-desktop arm: `claude -p`, Bash only, agent-desktop's own guide, claude-sonnet-5-5.
+- `python3 arm.py mewla DIR OUT` — Mewla arm: the same `claude -p` with only Mewla's computer MCP tools; run it inside a live
+  Mewla Worker (MEWLA_WORKER_ID) so the daemon accepts the calls. Both write one JSON per task (wall, turns, tokens, success).
+- `python3 bench.py first --apps 'Visual Studio Code'` — first read of an Electron app nobody has switched on.
 - Codex arm: give the same prompt to the Codex desktop app; `python3 metrics.py codex ~/.codex/sessions/.../rollout-*.jsonl`.
 
 ## Virtual display spike
