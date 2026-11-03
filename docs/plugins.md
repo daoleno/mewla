@@ -70,8 +70,9 @@ video.
 
 ## What Brain can do
 
-Tap a service's row to open its page. Every connected account is listed there,
-each with its status and two switches:
+Tap a service's row to open its page. Its accounts are listed there the same way
+for every service: one row each with its name and status, and a lone account
+starts open. Tap a row to open that account's controls, two of them switches:
 
 - **Read and search**: on after sign-in.
 - **Make changes when asked**: off until you turn it on. If the service only
@@ -116,8 +117,8 @@ its card on the service page show one action: **Reconnect** when sign-in
 expired, **Turn on** when it is off, **Check again** after a failed call, or
 **Retry** when removing its credentials did not finish.
 
-To add a second account, use **Add another account** at the bottom of the
-service's page. It is the same sign-in as Connect.
+To add a second account, use **Add another account** on the service's page. It
+is the same sign-in as Connect.
 
 ## Cloudflare
 
