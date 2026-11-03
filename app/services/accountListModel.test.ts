@@ -12,6 +12,8 @@ test("every service shows an account as name, what tells it apart, and status", 
   expect(accountRow(account({ integration: "mcp", name: "Docs", identity: "", endpoint: "https://mcp.example.com/mcp" })).identity).toBe("mcp.example.com");
   const aws = accountRow(account({ integration: "aws", profile: "prod", profile_status: "valid", aws: { account_id: "123456789012", account_name: "Production", who: "Root" } } as Partial<PluginAccount>));
   expect(aws).toMatchObject({ name: "prod", identity: "Production · 123456789012", status: { label: "Signed in", tone: "success" } });
+  expect(accountRow(account({ integration: "hyperliquid", name: "Hyperliquid", identity: "", network: "testnet" } as Partial<PluginAccount>)).identity).toBe("Testnet");
+  expect(accountRow(account({ integration: "hyperliquid", name: "Hyperliquid", identity: "", network: "mainnet" } as Partial<PluginAccount>)).identity).toBe("");
   expect(endpointHost("not a url")).toBe("");
 });
 
