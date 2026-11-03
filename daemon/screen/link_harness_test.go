@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -102,12 +103,18 @@ func shapedPipe(shape linkShape) (viewer, server net.Conn) {
 }
 
 type linkResult struct {
-	fps     float64
-	kbps    float64
-	ackP50  float64
-	quality int
-	flight  int
-	sharp   bool
+	// encodeMs is the median encode time of the last second, videoPct the
+	// share of its updates that were video, cpuPct this process's CPU time
+	// over the run as a share of one core.
+	encodeMs float64
+	videoPct int
+	cpuPct   float64
+	fps      float64
+	kbps     float64
+	ackP50   float64
+	quality  int
+	flight   int
+	sharp    bool
 }
 
 // measureLink streams a scrolling page over shape for a while and reports
@@ -122,17 +129,28 @@ func measureLink(t *testing.T, shape linkShape, adaptive bool, video videoFactor
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	session, _ := fake.Start(ctx)
+	return measureSession(t, ctx, session, func(step int) {
+		if shape.small {
+			_ = session.Pointer(100+step*7%900, 100+step*5%600, 0)
+		} else {
+			fake.ScrollTick()
+		}
+	}, shape, adaptive, video)
+}
+
+// measureSession is measureLink over any session: drive is called 30 times a
+// second to make the screen move.
+func measureSession(t *testing.T, ctx context.Context, session Session, drive func(step int), shape linkShape, adaptive bool, video videoFactory) linkResult {
+	t.Helper()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	go func() {
 		for step := 0; ; step++ {
 			time.Sleep(time.Second / 30)
 			if ctx.Err() != nil {
 				return
 			}
-			if shape.small {
-				_ = session.Pointer(100+step*7%900, 100+step*5%600, 0)
-			} else {
-				fake.ScrollTick()
-			}
+			drive(step)
 		}
 	}()
 	conn, server := shapedPipe(shape)
@@ -187,6 +205,7 @@ func measureLink(t *testing.T, shape linkShape, adaptive bool, video videoFactor
 
 	warm, window := 2500*time.Millisecond, 5*time.Second
 	began := time.Now()
+	cpuBefore := cpuTime()
 	var updates, bytesIn int
 	var measuredFrom time.Time
 	for time.Since(began) < warm+window {
@@ -205,16 +224,29 @@ func measureLink(t *testing.T, shape linkShape, adaptive bool, video videoFactor
 		}
 	}
 	seconds := time.Since(measuredFrom).Seconds()
+	cpu := (cpuTime() - cpuBefore).Seconds() / time.Since(began).Seconds() * 100
 	mu.Lock()
 	res := linkResult{
+		encodeMs: last.EncodeMs, cpuPct: cpu,
 		fps: float64(updates) / seconds, kbps: float64(bytesIn) * 8 / 1000 / seconds,
 		ackP50: last.AckMs, quality: last.Quality, flight: last.InFlight,
+	}
+	if last.Updates > 0 {
+		res.videoPct = last.Video * 100 / last.Updates
 	}
 	mu.Unlock()
 	conn.Close()
 	<-done
 	_ = summary
 	return res
+}
+
+func cpuTime() time.Duration {
+	var usage syscall.Rusage
+	if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) != nil {
+		return 0
+	}
+	return time.Duration(usage.Utime.Nano() + usage.Stime.Nano())
 }
 
 // skimmer reads server messages and counts their bytes, skipping pixel data.
