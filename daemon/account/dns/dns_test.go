@@ -130,3 +130,86 @@ func TestCloudflare(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestChalltestsrvAddress(t *testing.T) {
+	rec := &recorder{}
+	server := httptest.NewServer(rec)
+	defer server.Close()
+	provider := &Challtestsrv{BaseURL: server.URL, Client: server.Client()}
+	ctx := context.Background()
+	if err := provider.SetA(ctx, "studio.m.test", "203.0.113.7"); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.ClearA(ctx, "studio.m.test"); err != nil {
+		t.Fatal(err)
+	}
+	set, clear := rec.requests[0], rec.requests[1]
+	if set.path != "/add-a" || set.body["host"] != "studio.m.test." || set.body["address"] != "203.0.113.7" {
+		t.Fatalf("set = %+v", set)
+	}
+	if clear.path != "/clear-a" || clear.body["host"] != "studio.m.test." {
+		t.Fatalf("clear = %+v", clear)
+	}
+}
+
+// An override is exactly one A record of the machine's own name: a new one is
+// created, an existing one is updated in place, extras are removed, and a
+// wildcard record of the same zone is never touched.
+func TestCloudflareAddressRecords(t *testing.T) {
+	rec := &recorder{}
+	existing := `[]`
+	rec.reply = func(r *http.Request) (int, string) {
+		if r.Method == http.MethodGet {
+			return http.StatusOK, `{"success":true,"errors":[],"result":` + existing + `}`
+		}
+		return http.StatusOK, `{"success":true,"errors":[],"result":{"id":"rec-x"}}`
+	}
+	server := httptest.NewServer(rec)
+	defer server.Close()
+	provider := &Cloudflare{ZoneID: "zone-1", Token: "cf-token", BaseURL: server.URL, Client: server.Client()}
+	ctx := context.Background()
+
+	if err := provider.SetA(ctx, "Studio.M.Test.", "203.0.113.7"); err != nil {
+		t.Fatal(err)
+	}
+	list, create := rec.requests[0], rec.requests[1]
+	if list.method != http.MethodGet || !strings.Contains(list.query, "type=A") || !strings.Contains(list.query, "name=studio.m.test") {
+		t.Fatalf("list = %+v", list)
+	}
+	if create.method != http.MethodPost || create.body["type"] != "A" || create.body["name"] != "studio.m.test" ||
+		create.body["content"] != "203.0.113.7" || create.body["ttl"] != float64(60) {
+		t.Fatalf("create = %+v", create)
+	}
+
+	rec.requests = nil
+	existing = `[{"id":"rec-1","type":"A","name":"studio.m.test","content":"198.51.100.1"},
+		{"id":"rec-2","type":"A","name":"studio.m.test","content":"198.51.100.2"},
+		{"id":"rec-w","type":"A","name":"*.m.test","content":"198.51.100.3"}]`
+	if err := provider.SetA(ctx, "studio.m.test", "203.0.113.7"); err != nil {
+		t.Fatal(err)
+	}
+	update, extra := rec.requests[1], rec.requests[2]
+	if update.method != http.MethodPut || update.path != "/client/v4/zones/zone-1/dns_records/rec-1" || update.body["content"] != "203.0.113.7" {
+		t.Fatalf("update = %+v", update)
+	}
+	if extra.method != http.MethodDelete || extra.path != "/client/v4/zones/zone-1/dns_records/rec-2" || len(rec.requests) != 3 {
+		t.Fatalf("requests = %+v", rec.requests)
+	}
+
+	rec.requests = nil
+	if err := provider.ClearA(ctx, "studio.m.test"); err != nil {
+		t.Fatal(err)
+	}
+	var deleted []string
+	for _, request := range rec.requests[1:] {
+		deleted = append(deleted, request.path)
+	}
+	if len(deleted) != 2 || strings.Contains(strings.Join(deleted, " "), "rec-w") {
+		t.Fatalf("clear deleted %v, want rec-1 and rec-2 and never the wildcard", deleted)
+	}
+
+	rec.requests, existing = nil, `[]`
+	if err := provider.ClearA(ctx, "nobody.m.test"); err != nil || len(rec.requests) != 1 {
+		t.Fatalf("clearing a name with no record: err=%v requests=%+v", err, rec.requests)
+	}
+}

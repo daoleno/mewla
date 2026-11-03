@@ -58,6 +58,20 @@ func (d *recordingDNS) SetTXT(_ context.Context, fqdn, value string) error {
 	return nil
 }
 
+func (d *recordingDNS) SetA(_ context.Context, fqdn, ip string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.calls = append(d.calls, dnsCall{"set-a", fqdn, ip})
+	return nil
+}
+
+func (d *recordingDNS) ClearA(_ context.Context, fqdn string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.calls = append(d.calls, dnsCall{"clear-a", fqdn, ""})
+	return nil
+}
+
 func (d *recordingDNS) ClearTXT(_ context.Context, fqdn, value string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()

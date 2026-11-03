@@ -60,6 +60,16 @@ func TestRelayFlags(t *testing.T) {
 		loaded[1].ControlAddress != "10.0.0.1:8443" || loaded[1].Name != "us" {
 		t.Fatalf("loaded = %+v", loaded)
 	}
+	if err := relays.Set("name=hk,control=hk.example.com:8443,ip=203.0.113.9,client-domain=hk.m.example.com,feature=relay-dns"); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = relays.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hk := loaded[2]; hk.IP != "203.0.113.9" || hk.ClientDomain != "hk.m.example.com" || hk.Feature != "relay-dns" {
+		t.Fatalf("hk = %+v", hk)
+	}
 	if err := os.WriteFile(caFile, []byte("not pem"), 0o600); err != nil {
 		t.Fatal(err)
 	}

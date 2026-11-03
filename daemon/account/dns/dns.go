@@ -14,11 +14,16 @@ import (
 	"time"
 )
 
-// Provider sets and clears one TXT record value. fqdn is given without a
-// trailing dot.
+// Provider sets and clears one TXT record value, and points a name at one
+// IPv4 address. fqdn is given without a trailing dot.
 type Provider interface {
 	SetTXT(ctx context.Context, fqdn, value string) error
 	ClearTXT(ctx context.Context, fqdn, value string) error
+	// SetA makes fqdn's only A record ip (a short TTL), replacing any other.
+	SetA(ctx context.Context, fqdn, ip string) error
+	// ClearA removes every A record of exactly fqdn, so a wildcard covers it
+	// again. A name with none is not an error.
+	ClearA(ctx context.Context, fqdn string) error
 }
 
 const maxResponseBytes = 1 << 20
@@ -45,6 +50,14 @@ func (c *Challtestsrv) SetTXT(ctx context.Context, fqdn, value string) error {
 
 func (c *Challtestsrv) ClearTXT(ctx context.Context, fqdn, _ string) error {
 	return c.post(ctx, "/clear-txt", map[string]string{"host": dnsName(fqdn)})
+}
+
+func (c *Challtestsrv) SetA(ctx context.Context, fqdn, ip string) error {
+	return c.post(ctx, "/add-a", map[string]string{"host": dnsName(fqdn), "address": ip})
+}
+
+func (c *Challtestsrv) ClearA(ctx context.Context, fqdn string) error {
+	return c.post(ctx, "/clear-a", map[string]string{"host": dnsName(fqdn)})
 }
 
 func (c *Challtestsrv) post(ctx context.Context, path string, body any) error {
@@ -141,6 +154,65 @@ func (c *Cloudflare) ClearTXT(ctx context.Context, fqdn, value string) error {
 		}
 	}
 	return nil
+}
+
+// SetA keeps exactly one A record for fqdn, with the address ip: the first
+// existing record is updated in place and any others are deleted.
+func (c *Cloudflare) SetA(ctx context.Context, fqdn, ip string) error {
+	name := strings.TrimSuffix(strings.ToLower(fqdn), ".")
+	existing, err := c.aRecords(ctx, name)
+	if err != nil {
+		return err
+	}
+	record := cloudflareRecord{Type: "A", Name: name, Content: ip, TTL: 60}
+	if len(existing) == 0 {
+		_, err = c.do(ctx, http.MethodPost, c.recordsPath(), record)
+		return err
+	}
+	if _, err := c.do(ctx, http.MethodPut, c.recordsPath()+"/"+url.PathEscape(existing[0].ID), record); err != nil {
+		return err
+	}
+	for _, extra := range existing[1:] {
+		if _, err := c.do(ctx, http.MethodDelete, c.recordsPath()+"/"+url.PathEscape(extra.ID), nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Cloudflare) ClearA(ctx context.Context, fqdn string) error {
+	existing, err := c.aRecords(ctx, strings.TrimSuffix(strings.ToLower(fqdn), "."))
+	if err != nil {
+		return err
+	}
+	for _, record := range existing {
+		if _, err := c.do(ctx, http.MethodDelete, c.recordsPath()+"/"+url.PathEscape(record.ID), nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// aRecords lists the A records whose name is exactly name (never a wildcard).
+func (c *Cloudflare) aRecords(ctx context.Context, name string) ([]cloudflareRecord, error) {
+	query := url.Values{}
+	query.Set("type", "A")
+	query.Set("name", name)
+	result, err := c.do(ctx, http.MethodGet, c.recordsPath()+"?"+query.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	var records []cloudflareRecord
+	if err := json.Unmarshal(result, &records); err != nil {
+		return nil, errors.New("cloudflare: malformed record list")
+	}
+	exact := records[:0]
+	for _, record := range records {
+		if record.ID != "" && record.Type == "A" && strings.EqualFold(strings.TrimSuffix(record.Name, "."), name) {
+			exact = append(exact, record)
+		}
+	}
+	return exact, nil
 }
 
 func (c *Cloudflare) recordsPath() string {

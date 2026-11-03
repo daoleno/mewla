@@ -25,6 +25,15 @@ var ErrSignedOut = errors.New("this computer is no longer signed in to its Mewla
 // ErrLoginPending is returned by PollLogin until the person finishes in the browser.
 var ErrLoginPending = errors.New("sign-in is not finished yet")
 
+// featuresHeader tells the service what this daemon can do. relay-dns means it
+// reports the relay it is connected to (ReportRelay), so the service may offer
+// it relays beyond the first and point its hostname at the one it is on. The
+// value must match account.FeatureRelayDNS.
+const (
+	featuresHeader = "X-Mewla-Features"
+	featuresValue  = "relay-dns"
+)
+
 // Client calls the hosted service, signing every request with the daemon key.
 type Client struct {
 	BaseURL string
@@ -99,6 +108,13 @@ func (client *Client) Rename(ctx context.Context, name string) (Machine, error) 
 	return machine, err
 }
 
+// ReportRelay tells the service which relay this computer is connected to, so
+// its hostname resolves to that relay. It is safe to repeat.
+func (client *Client) ReportRelay(ctx context.Context, relay string) error {
+	_, err := client.do(ctx, http.MethodPut, "/v1/machine/relay", map[string]string{"relay": relay}, nil)
+	return err
+}
+
 func (client *Client) SetACMEChallenge(ctx context.Context, fqdn, value string) error {
 	_, err := client.do(ctx, http.MethodPut, "/v1/machine/acme-challenge", map[string]string{"fqdn": fqdn, "value": value}, nil)
 	return err
@@ -138,6 +154,7 @@ func (client *Client) do(ctx context.Context, method, path string, body any, out
 		request.Header.Set("Content-Type", "application/json")
 	}
 	request.Header.Set("Authorization", client.authorization(method, path, raw))
+	request.Header.Set(featuresHeader, featuresValue)
 	response, err := client.HTTP.Do(request)
 	if err != nil {
 		return 0, fmt.Errorf("reach remote access service: %w", err)
