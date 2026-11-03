@@ -134,7 +134,7 @@ def run(a):
             t0 = time.time()
             timed_out = False
             try:
-                p = subprocess.run(cmd, capture_output=True, text=True, timeout=a.timeout)
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=a.timeout, stdin=subprocess.DEVNULL)
             except subprocess.TimeoutExpired as e:
                 timed_out = True
                 p = subprocess.CompletedProcess(cmd, -9, (e.stdout or b'').decode() if isinstance(e.stdout, bytes) else (e.stdout or ''), '')

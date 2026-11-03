@@ -9,7 +9,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startFixture, events } from './fixture.mjs';
-import { tasks } from './tasks.mjs';
+import { tasks as baseTasks } from './tasks.mjs';
+import { longTasks } from './tasks-long.mjs';
+// --long runs only the longer tasks; --only picks by id from both sets.
+const tasks = [...(process.argv.includes('--long') ? [] : baseTasks), ...(process.argv.includes('--long') || process.argv.includes('--with-long') ? longTasks : [])];
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) => (v.startsWith('--') ? [...a, [v.slice(2), all[i + 1]]] : a), []));
 const side = args.side, reps = Number(args.reps || 3), model = args.model || 'claude-sonnet-5-5';
