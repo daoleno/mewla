@@ -65,6 +65,9 @@ type serverMessage struct {
 	rects []image.Rectangle
 	encs  []int32
 	fence string
+	// video holds the payload of each H.264 rect with its flags.
+	video      [][]byte
+	videoFlags []uint32
 }
 
 // next reads one server message, applying framebuffer updates to v.fb.
@@ -134,6 +137,10 @@ func (v *testViewer) next() serverMessage {
 				default:
 					v.t.Fatalf("unexpected tight control %#x", ctl)
 				}
+			case encH264:
+				head := v.read(8)
+				msg.videoFlags = append(msg.videoFlags, binary.BigEndian.Uint32(head[4:]))
+				msg.video = append(msg.video, v.read(int(binary.BigEndian.Uint32(head))))
 			case pseudoDesktopSize:
 				v.fb = image.NewRGBA(image.Rect(0, 0, r.Dx(), r.Dy()))
 			default:

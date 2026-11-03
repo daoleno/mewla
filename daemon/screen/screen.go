@@ -357,7 +357,7 @@ func (s *Service) Open(ctx context.Context, deviceID string, obs *Observer) (net
 		defer session.Close()
 		defer server.Close()
 		defer release()
-		_ = serveRFB(ctx, server, session, computerName(), obs)
+		_ = serveRFBVideo(ctx, server, session, computerName(), obs, defaultVideo)
 	}()
 	return viewer, nil
 }

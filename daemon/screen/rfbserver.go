@@ -99,6 +99,7 @@ type rfbState struct {
 	mu          sync.Mutex
 	format      pixelFormat
 	tight       bool
+	h264        bool
 	quality     int
 	desktopSize bool
 	fence       bool
@@ -116,12 +117,15 @@ type rfbState struct {
 	sendLog map[uint64]sentRecord
 	ctl     *streamController
 	metrics *streamMetrics
+	video   *videoPath
 }
 
 type sentRecord struct {
 	at     time.Time
 	bytes  int
 	refine bool
+	// video marks an H.264 frame; key one that starts the stream afresh.
+	video, key bool
 }
 
 // ackedTo records the fence answer for update n; callers hold state.mu.
@@ -137,9 +141,17 @@ func (s *rfbState) ackedTo(n uint64, now time.Time) {
 	}
 	age := now.Sub(rec.at)
 	s.metrics.acked(age)
-	// A sharpening of a still screen is a one-off, not the link's pace.
-	if !rec.refine {
-		s.ctl.observe(now, age, rec.bytes)
+	// A sharpening of a still screen, or a video key frame, is a one-off,
+	// not the link's pace.
+	if !rec.refine && !rec.key {
+		size := rec.bytes
+		if rec.video {
+			// The stream's rate is held to the link by videoRate, so its
+			// frames never make the window narrow the way big tiles do.
+			size = min(size, smallUpdate)
+			s.video.observe(now, age, rec.bytes)
+		}
+		s.ctl.observe(now, age, size)
 	}
 }
 
@@ -153,6 +165,12 @@ func (s *rfbState) signal() {
 // serveRFB runs the server half of an RFB session from ClientInit on. Frames
 // come from session; pointer and key events go back to it.
 func serveRFB(ctx context.Context, conn net.Conn, session Session, name string, obs *Observer) error {
+	return serveRFBVideo(ctx, conn, session, name, obs, nil)
+}
+
+// serveRFBVideo is serveRFB for a viewer that may be sent motion as video
+// when it offers H.264; a nil factory keeps every picture a still.
+func serveRFBVideo(ctx context.Context, conn net.Conn, session Session, name string, obs *Observer, video videoFactory) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	go func() {
@@ -181,6 +199,8 @@ func serveRFB(ctx context.Context, conn net.Conn, session Session, name string, 
 		sendLog: map[uint64]sentRecord{}, ctl: newStreamController(), metrics: &streamMetrics{},
 	}
 	state.ctl.fixed = !streamAdaptive
+	state.video = newVideoPath(video)
+	defer state.video.close()
 	defer func() { obs.done(state.metrics.summary()) }()
 	go func() {
 		ticker := time.NewTicker(time.Second)
@@ -401,12 +421,14 @@ func readClient(ctx context.Context, r io.Reader, session Session, state *rfbSta
 func applyEncodings(state *rfbState, raw []byte) bool {
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	state.tight, state.desktopSize, state.fence = false, false, false
+	state.tight, state.h264, state.desktopSize, state.fence = false, false, false, false
 	continuous := false
 	for i := 0; i+4 <= len(raw); i += 4 {
 		switch enc := int32(binary.BigEndian.Uint32(raw[i:])); {
 		case enc == encTight:
 			state.tight = true
+		case enc == encH264:
+			state.h264 = true
 		case enc == pseudoDesktopSize:
 			state.desktopSize = true
 		case enc == pseudoFence:
@@ -440,6 +462,7 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 		}
 		full := state.full
 		format, tight, viewerQuality, desktopSize, fence := state.format, state.tight, state.quality, state.desktopSize, state.fence
+		h264 := state.h264
 		quality := state.ctl.quality(viewerQuality)
 		state.mu.Unlock()
 
@@ -484,20 +507,50 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 			if resized && desktopSize {
 				msg = appendDesktopSize(msg, shown.Rect.Dx(), shown.Rect.Dy())
 			}
-			began := time.Now()
-			update, err := encodeUpdate(shown, rects, format, tight, sendQuality)
-			if err != nil {
-				return err
-			}
-			encoded := time.Since(began)
-			msg = append(msg, update...)
 			dirty := 0
 			for _, r := range rects {
 				dirty += r.Dx() * r.Dy()
-				if tight && sendQuality < viewerQuality {
-					degraded.add(r)
+			}
+			// Motion across much of the screen goes as video to a viewer
+			// that can decode it; a still screen is sharpened with tiles.
+			video := state.video
+			useVideo, videoKey := false, false
+			if refine {
+				video.settle()
+			} else if h264 && tight && len(rects) > 0 {
+				useVideo = video.choose(time.Now(), dirty, shown.Rect.Dx()*shown.Rect.Dy(), resized)
+			}
+			began := time.Now()
+			var update []byte
+			if useVideo {
+				var payload []byte
+				var ok bool
+				if payload, videoKey, ok = video.encode(shown); ok {
+					update = append([]byte{msgFramebufferUpdate, 0, 0, 1}, rectHeader(shown.Rect, encH264)...)
+					update = append(update, payload...)
 				} else {
-					degraded.remove(r)
+					useVideo = false
+				}
+			}
+			if !useVideo {
+				var err error
+				if update, err = encodeUpdate(shown, rects, format, tight, sendQuality); err != nil {
+					return err
+				}
+			}
+			encoded := time.Since(began)
+			msg = append(msg, update...)
+			if useVideo {
+				// Video is softer than the viewer asked for: send the whole
+				// screen again, sharp, once it is still.
+				degraded.add(shown.Rect)
+			} else {
+				for _, r := range rects {
+					if tight && sendQuality < viewerQuality {
+						degraded.add(r)
+					} else {
+						degraded.remove(r)
+					}
 				}
 			}
 			state.mu.Lock()
@@ -507,7 +560,7 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 			seq := state.sent
 			flight := state.ctl.limit()
 			if fence {
-				state.sendLog[seq] = sentRecord{at: time.Now(), bytes: len(msg), refine: refine}
+				state.sendLog[seq] = sentRecord{at: time.Now(), bytes: len(msg), refine: refine, video: useVideo, key: videoKey}
 				for old := range state.sendLog {
 					if old+64 < seq {
 						delete(state.sendLog, old)
@@ -522,7 +575,7 @@ func writeUpdates(ctx context.Context, state *rfbState, frames *frameStore, writ
 			state.metrics.sent(sentUpdate{
 				Seq: captureSeq, Bytes: len(msg), Dirty: dirty, Total: shown.Rect.Dx() * shown.Rect.Dy(),
 				CaptureAge: captureAge, Encode: encoded, Quality: sendQuality, ViewerLevel: viewerQuality,
-				InFlight: flight, Refine: refine,
+				InFlight: flight, Refine: refine, Video: useVideo,
 			})
 			if fence {
 				payload := strconv.FormatUint(seq, 10)
