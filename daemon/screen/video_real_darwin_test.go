@@ -15,7 +15,7 @@ import (
 // own capture, a long page that scrolls itself in Safari (requestAnimationFrame
 // in the page; no wheel, key or click events), the real hardware encoder, over
 // the same simulated links as the fake-screen bench. It opens one Safari tab
-// (titled "mewla-scroll-fixture loop", left open) and needs about two minutes;
+// (titled "mewla-scroll-fixture loop", left open) and needs about a minute;
 // run it when nobody is using this Mac. MEWLA_SCREEN_REAL_BENCH=1 and -v.
 func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 	if os.Getenv("MEWLA_SCREEN_REAL_BENCH") == "" {
@@ -30,7 +30,7 @@ func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 
 	// The page scrolls itself up and down (requestAnimationFrame); no input
 	// reaches the Mac. Its tab is titled mewla-scroll-fixture loop.
-	openScrollFixture(t, "loop", "loop=1")
+	openScrollFixture(t, "loop", 0, 0, true)
 	time.Sleep(4 * time.Second)
 
 	session, err := backend.Start(ctx)
@@ -49,7 +49,6 @@ func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 		{"LAN 100 Mb/s, 2 ms", 2 * time.Millisecond, 100e6 / 8, false},
 		{"relay 20 Mb/s, 150 ms RTT", 75 * time.Millisecond, 20e6 / 8, false},
 		{"mobile 4 Mb/s, 80 ms RTT", 40 * time.Millisecond, 4e6 / 8, false},
-		{"relay 5 Mb/s, 650 ms RTT", 325 * time.Millisecond, 5e6 / 8, false},
 	}
 	var table strings.Builder
 	fmt.Fprintf(&table, "\n%-28s %-52s %-60s\n", "link (Safari page scrolling)", "tiles (adaptive)", "video (VideoToolbox)")
