@@ -19,6 +19,16 @@ function blocker(el) {
   return '';
 }
 
+// Resolves after this document's first animation frame (once per document).
+function firstFrame() {
+  if (window.__mewlaPainted) return true;
+  return new Promise(resolve => {
+    const done = () => { window.__mewlaPainted = true; resolve(true); };
+    requestAnimationFrame(done);
+    setTimeout(done, 1500);
+  });
+}
+
 module.exports.default = async function fastActions({ page }) {
   const proto = Object.getPrototypeOf(page.locator('html'));
   if (proto.__mewlaFastActions) return;
@@ -31,6 +41,10 @@ module.exports.default = async function fastActions({ page }) {
       if (options.force !== undefined || options.trial) return original.apply(this, args);
       const timeout = options.timeout ?? 5000;
       const deadline = Date.now() + timeout;
+      // A page that has not painted a frame yet drops input: a click right
+      // after a navigation does nothing. One frame per page load, not per
+      // click; a tab that never paints is let through after 1.5 s.
+      await this.evaluate(firstFrame, undefined, { timeout: Math.max(100, deadline - Date.now()) });
       let why = '';
       for (;;) {
         why = await this.evaluate(blocker, undefined, { timeout: Math.max(100, deadline - Date.now()) });
