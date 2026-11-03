@@ -72,6 +72,9 @@ type pairConfig struct {
 	stateDir       string
 	linkConfigPath string
 	details        bool
+	// showLink also prints the paste link under the QR, for a terminal whose
+	// QR cannot be scanned (setup over SSH).
+	showLink bool
 }
 
 type cliConfig struct {
@@ -108,7 +111,7 @@ func main() {
 		if errors.Is(err, doctor.ErrNotReady) || errors.Is(err, errDepsMissing) || errors.Is(err, errMewlaNotRunning) {
 			os.Exit(1)
 		}
-		if isSetupUserError(err) {
+		if isSetupUserError(err) || errors.Is(err, errSetupRemoteStopped) || errors.Is(err, errSetupRemoteIncomplete) {
 			os.Exit(1)
 		}
 		log.Fatalf("%v", err)
@@ -2419,6 +2422,10 @@ func runPairCommand(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	return runPair(cfg, stderr)
+}
+
+func runPair(cfg pairConfig, stderr io.Writer) error {
 	pairingInfo, err := requestPairingToken(cfg.stateDir)
 	if err != nil {
 		return err
@@ -2498,6 +2505,11 @@ func runPairCommand(args []string, stderr io.Writer) error {
 	}
 	devices, _ := listDevices(cfg.stateDir)
 	printPairing(stderr, pairingStatusFor(stateDir, len(devices)), links, cfg.stateDir)
+	if cfg.showLink && links.phoneLink != "" {
+		fmt.Fprintln(stderr, "Or paste this link into the app (Settings → Pair a computer):")
+		fmt.Fprintln(stderr, links.phoneLink)
+		fmt.Fprintln(stderr)
+	}
 	return nil
 }
 

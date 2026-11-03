@@ -13,6 +13,9 @@ import (
 )
 
 func runSetupCommand(args []string, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "remote" {
+		return runSetupRemote(args[1:], stderr)
+	}
 	fs := flag.NewFlagSet("mewla setup", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
@@ -90,4 +93,5 @@ func printSetupUsage(w io.Writer) {
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintln(w, "  mewla setup")
 	fmt.Fprintln(w, "  mewla setup --non-interactive --host codex")
+	fmt.Fprintln(w, "  mewla setup remote        sign in, run in the background and pair a phone, from a terminal with no browser (SSH)")
 }

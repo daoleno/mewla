@@ -11,6 +11,7 @@ DRY_RUN=${MEWLA_DRY_RUN:-0}
 NO_PATH_UPDATE=${MEWLA_NO_PATH_UPDATE:-0}
 VERSION=${MEWLA_VERSION:-}
 INSTALL_DIR=${MEWLA_INSTALL_DIR:-}
+SETUP_REMOTE=${MEWLA_SETUP_REMOTE:-0}
 WORK_DIR=
 INSTALL_TEMP=
 
@@ -35,11 +36,13 @@ Options:
   --version vX.Y.Z[-beta.N]  install an exact release
   --install-dir DIR          install into this user-writable directory
   --no-path-update           do not edit a shell profile
+  --remote                   after installing, run `mewla setup remote`: sign in with a
+                             code, run in the background and pair a phone (for SSH)
   --dry-run                  print the planned action without changing files
   -h, --help                 show this help
 
 The same settings may be supplied as MEWLA_VERSION, MEWLA_INSTALL_DIR,
-MEWLA_NO_PATH_UPDATE=1, and MEWLA_DRY_RUN=1.
+MEWLA_NO_PATH_UPDATE=1, MEWLA_DRY_RUN=1 and MEWLA_SETUP_REMOTE=1.
 
 Without MEWLA_VERSION, the installer follows GitHub's releases/latest redirect to
 the newest stable release (no GitHub API call, so API rate limits do not apply).
@@ -76,6 +79,10 @@ while [ "$#" -gt 0 ]; do
       NO_PATH_UPDATE=1
       shift
       ;;
+    --remote)
+      SETUP_REMOTE=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
@@ -92,6 +99,7 @@ done
 
 case $DRY_RUN in 0|1) ;; *) die "MEWLA_DRY_RUN must be 0 or 1" ;; esac
 case $NO_PATH_UPDATE in 0|1) ;; *) die "MEWLA_NO_PATH_UPDATE must be 0 or 1" ;; esac
+case $SETUP_REMOTE in 0|1) ;; *) die "MEWLA_SETUP_REMOTE must be 0 or 1" ;; esac
 
 valid_version() {
   printf '%s\n' "$1" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.(0|[1-9][0-9]*))?$'
@@ -443,6 +451,21 @@ check_tmux() {
   fi
 }
 
+# run_remote_setup hands over to `mewla setup remote` for a person at a
+# terminal with no browser. The installer serves whatever the latest release
+# is, so an older release without the command falls back to the usual next
+# step instead of failing. It never reads the terminal: the script itself may
+# be stdin, and the command prints a code to approve instead of asking.
+run_remote_setup() {
+  binary=$1
+  if ! "$binary" setup remote -h 2>&1 </dev/null | grep -Fq 'mewla setup remote'; then
+    warn "this release has no 'mewla setup remote' yet; start Mewla yourself and run: mewla login, then mewla pair"
+    return 2
+  fi
+  say ""
+  "$binary" setup remote </dev/null
+}
+
 platform_archive
 
 current_uid=$(id -u)
@@ -462,6 +485,12 @@ if [ -z "$VERSION" ] && [ -z "$INSTALL_DIR" ] && [ -n "${EXISTING_MEWLA:-}" ]; t
   say "Using the existing user-owned Mewla installation at $EXISTING_MEWLA."
   say "Delegating to its signed release updater..."
   "$EXISTING_MEWLA" update
+  if [ "$SETUP_REMOTE" -eq 1 ]; then
+    setup_status=0
+    run_remote_setup "$EXISTING_MEWLA" || setup_status=$?
+    [ "$setup_status" -ne 2 ] || setup_status=1
+    exit "$setup_status"
+  fi
   exit 0
 fi
 
@@ -527,6 +556,14 @@ if [ -n "$PROFILE_UPDATED" ]; then
   say "Added $HOME/.local/bin to $PROFILE_UPDATED for new terminals (marker: $PATH_MARKER)."
 fi
 check_tmux "$target"
+
+if [ "$SETUP_REMOTE" -eq 1 ]; then
+  setup_status=0
+  run_remote_setup "$target" || setup_status=$?
+  # Status 2 means this release has no such command: show the usual next
+  # step. Anything else is final; the command already printed how to resume.
+  [ "$setup_status" -eq 2 ] || exit "$setup_status"
+fi
 
 say ""
 say "Next, start Mewla:"
