@@ -786,14 +786,22 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if strings.EqualFold(strings.TrimSpace(action.ElementAction), "read") {
 		return a.readValue(ctx, e, action.Element)
 	}
-	name, err := elementAction(e, action.ElementAction)
+	intent := intentOf(e, action.ElementAction, action.Text)
+	if intent.skip != "" {
+		return AgentResult{Text: fmt.Sprintf("Nothing to do: [%d] is %s. Delivery: not needed.", action.Element, intent.skip)}, nil
+	}
+	asked := action.ElementAction
+	if intent.action != "" {
+		asked = intent.action
+	}
+	name, err := elementAction(e, asked)
 	if err != nil {
 		return AgentResult{}, err
 	}
 	// An accessibility action posts no input event, so it leaves the
 	// agent's last event as it was.
-	if err := actor.ActOnElement(ctx, e, name, action.Text); err != nil {
-		return AgentResult{}, a.gone(ctx, a.treeApp, err)
+	if err := actor.ActOnElement(ctx, e, name, intent.text); err != nil {
+		return AgentResult{}, notDelivered(a.gone(ctx, a.treeApp, err))
 	}
 	if err := a.settleApp(ctx, a.treeApp.PID); err != nil {
 		return AgentResult{}, err
@@ -803,7 +811,11 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err != nil {
 		return AgentResult{Text: "Done; reading the app again failed: " + err.Error()}, nil
 	}
-	did := fmt.Sprintf("Done: %s on [%d]. ", strings.TrimPrefix(name, "AX"), action.Element)
+	var after *Element
+	if i := tree.index(action.Element); i >= 0 {
+		after = &tree.Elements[i]
+	}
+	did := fmt.Sprintf("Done: %s on [%d]. %s ", strings.TrimPrefix(name, "AX"), action.Element, intent.delivery(after))
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	// What changed is the answer, unless it would mislead or save little;

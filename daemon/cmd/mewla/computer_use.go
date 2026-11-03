@@ -110,8 +110,8 @@ const menuToolDescription = `Choose an app's menu item by its name, in the backg
 	`Quit, Log Out, Shut Down, Restart and Empty Trash are refused unless the person asked for exactly that: then set confirm_user_asked.`
 
 const elementToolDescription = `Act on one element from your latest app_state by its id, in the background: ` +
-	`press, focus, set_value (with value, replacing the element's text), show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, ` +
-	`or any action the element lists. It answers with what changed in the app since your last read, by id (+ new, ~ changed, - gone, and where the focus is), not the whole app; rows it doesn't list are as before and keep their ids. When a window opened or closed, or much changed, it gives the whole app instead. Call app_state when you want the whole app. ` +
+	`press, focus, set_value (with value, replacing the element's text), clear, check and uncheck (nothing is pressed when it is already so), show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, ` +
+	`or any action the element lists. It answers with a Delivery line (verified, or sent and not verified: don't repeat an unverified press blindly; a refused action says it is safe to retry) and with what changed in the app since your last read, by id (+ new, ~ changed, - gone, and where the focus is), not the whole app; rows it doesn't list are as before and keep their ids. When a window opened or closed, or much changed, it gives the whole app instead. Call app_state when you want the whole app. ` +
 	`read gives the element's whole text instead (app_state cuts each to a line), up to 20,000 characters, to check what a field or note holds. ` +
 	`If the element changed since you read it, read the app again; nothing is guessed.`
 
@@ -174,7 +174,7 @@ func (in stepInput) action() screen.AgentAction {
 // elementInput is one action on one element of the latest app_state.
 type elementInput struct {
 	ID     int    `json:"id" jsonschema:"the element's id from the latest app_state"`
-	Action string `json:"action" jsonschema:"press, focus, set_value, read, show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, or one of the element's own actions"`
+	Action string `json:"action" jsonschema:"press, focus, set_value, clear, check, uncheck, read, show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, or one of the element's own actions"`
 	Value  string `json:"value,omitempty" jsonschema:"the text for set_value"`
 }
 
