@@ -49,7 +49,10 @@ WRAP
   echo "display :$DISPLAY_NUM cdp $CDP_PORT key-file $BENCH_DIR/ext-key"
   ;;
 down)
-  for f in chrome xvnc; do [ -f "$BENCH_DIR/$f.pid" ] && kill "$(cat "$BENCH_DIR/$f.pid")" 2>/dev/null || true; done
+  # Only this environment's own processes: never a bare `pkill chrome`.
+  pkill -f -- "--user-data-dir=$BENCH_DIR/profile" 2>/dev/null || true
+  [ -f "$BENCH_DIR/xvnc.pid" ] && kill "$(cat "$BENCH_DIR/xvnc.pid")" 2>/dev/null || true
+  agent-browser close --all >/dev/null 2>&1 || true
   sleep 1; rm -rf "$BENCH_DIR/profile" "$BENCH_DIR"/*.pid
   ;;
 esac
