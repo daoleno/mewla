@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -512,22 +511,7 @@ func offerBoot(d *depsPrompt, stateDir string, choice startupChoice) {
 		fmt.Fprintln(d.w, "Mewla runs while this terminal is open. Later: mewla boot install")
 		return
 	}
-	args := []string{}
-	if stateDir != "" {
-		args = append(args, "-state-dir", stateDir)
-	}
-	if choice == choiceLAN {
-		args = append(args, "-lan")
-	}
-	config, err := parseBootConfig("mewla boot install", args)
-	var report bytes.Buffer
-	if err == nil {
-		if bootGOOS == "darwin" {
-			err = bootLaunchdInstall(config, execBootRunner{}, &report)
-		} else {
-			err = bootInstall(config, execBootRunner{}, &report)
-		}
-	}
+	err := installBootService(stateDir, choice == choiceLAN)
 	switch {
 	case err == nil:
 		fmt.Fprintln(d.w, "Mewla now runs in the background and starts with this computer. Turn it off: mewla boot uninstall")

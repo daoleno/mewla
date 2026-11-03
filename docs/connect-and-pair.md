@@ -155,6 +155,10 @@ Colors and the arrow-key menu appear only in an interactive terminal. With
 `NO_COLOR` set, `TERM=dumb`, in CI or when the output goes to a file or a log,
 the screens are plain text and menus take a number.
 
+Pairing a computer you only reach through a terminal, such as over SSH:
+[Set up a computer over SSH](install-daemon.md#set-up-a-computer-over-ssh)
+does sign-in, the background service and this pairing in one command.
+
 ### On the phone
 
 On the app's welcome screen tap **Mewla already running? Scan its code**, or

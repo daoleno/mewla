@@ -118,6 +118,14 @@ case ${1:-} in
     exit "${FAKE_DEPS_STATUS:-0}"
     ;;
   update) printf 'fixture update\n'; exit 0 ;;
+  setup)
+    [ -z "${FAKE_NO_SETUP_REMOTE:-}" ] || exit 2
+    [ "${2:-}" = remote ] || exit 2
+    if [ "${3:-}" = -h ]; then printf 'Usage: mewla setup remote [flags]\n' >&2; exit 0; fi
+    printf 'fixture setup remote\n'
+    [ -t 0 ] && printf 'fixture setup read a terminal\n'
+    exit "${FAKE_SETUP_STATUS:-0}"
+    ;;
   *) exit 2 ;;
 esac
 EOF
@@ -410,6 +418,39 @@ test_tmux_check_and_next_step() {
   pass "checks tmux through mewla deps, falls back for older releases, and ends with the start command"
 }
 
+test_remote_setup_hands_over_or_falls_back() {
+  new_case remote-setup
+  make_archive
+  mkdir -p "$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" MEWLA_SETUP_REMOTE=1
+  assert_contains "$CASE_DIR/output" "fixture setup remote"
+  assert_not_contains "$CASE_DIR/output" "Next, start Mewla"
+  assert_not_contains "$CASE_DIR/output" "read a terminal"
+
+  new_case remote-setup-flag
+  make_archive
+  mkdir -p "$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" MEWLA_NO_PATH_UPDATE=1
+  assert_not_contains "$CASE_DIR/output" "fixture setup remote"
+  assert_contains "$CASE_DIR/output" "Next, start Mewla"
+
+  new_case remote-setup-old-release
+  make_archive
+  mkdir -p "$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" MEWLA_SETUP_REMOTE=1 FAKE_NO_SETUP_REMOTE=1
+  assert_contains "$CASE_DIR/output" "has no 'mewla setup remote' yet"
+  assert_contains "$CASE_DIR/output" "Next, start Mewla"
+  [[ -x "$HOME_DIR/install/mewla" ]] || fail "falling back removed the installed binary"
+
+  new_case remote-setup-failure
+  make_archive
+  mkdir -p "$HOME_DIR/install"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" MEWLA_SETUP_REMOTE=1 FAKE_SETUP_STATUS=1 && fail "a failed setup was reported as success"
+  assert_contains "$CASE_DIR/output" "fixture setup remote"
+  assert_not_contains "$CASE_DIR/output" "Next, start Mewla"
+  pass "--remote hands over to mewla setup remote without reading the terminal, and falls back on releases without it"
+}
+
 test_executable_failure_keeps_previous_install() {
   new_case executable-failure
   make_archive
@@ -442,5 +483,6 @@ test_install_dir_selection
 test_profile_idempotency_and_no_mutation
 test_missing_tools
 test_tmux_check_and_next_step
+test_remote_setup_hands_over_or_falls_back
 test_executable_failure_keeps_previous_install
 printf '1..%d\n' "$PASS"

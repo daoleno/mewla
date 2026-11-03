@@ -88,6 +88,42 @@ On macOS, install `tmux` with `brew install tmux`. If macOS blocks the binary,
 confirm it came from an official Mewla release, then run
 `xattr -d com.apple.quarantine ~/.local/bin/mewla`.
 
+## Set up a computer over SSH
+
+For a Linux box or Mac mini you reach only through a terminal, one command
+installs Mewla, keeps it running and pairs your phone, with no browser on that
+computer and nothing to copy between devices:
+
+```sh
+curl -fsSL https://mewla.ai/install.sh | sh -s -- --remote
+```
+
+After the usual install it runs `mewla setup remote`, which you can also run
+yourself any time:
+
+1. **Sign in.** It prints an address and a short code. Open the address on your
+   phone or any device, enter the code and sign in. No port is opened on the
+   computer and nothing is pasted back.
+2. **Run in the background.** It starts Mewla as a user service that starts
+   with the computer ([`mewla boot install`](#keep-it-running)). Where there is
+   no service manager, such as a container, it starts Mewla detached from your
+   SSH session and says that it will not survive a restart.
+3. **Pair your phone.** It draws the QR code and prints the same link to paste
+   into the app (**Settings > Pair a computer**).
+4. **Wait.** It waits up to 15 minutes, until the code expires, for the phone,
+   then says so.
+
+If no agent CLI is signed in on that computer yet, it ends by naming the step:
+`mewla deps -only agent`. Brain cannot answer until one is.
+
+It is safe to run again: a computer already signed in skips step 1, and a
+running Mewla is left alone. With `-lan` it skips the sign-in and pairs over
+the computer's Wi-Fi/LAN (plain HTTP, trusted networks only). `-no-wait`
+returns after printing the code, and `-address https://…` pairs through an
+address you set up yourself. The installer never reads the terminal, so it
+works from a script. An older release without `setup remote` falls back to the
+usual "Next, start Mewla" line.
+
 ## Supported platforms
 
 | Host | Archive | Status |
