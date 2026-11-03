@@ -133,32 +133,27 @@ func findClaudeTranscript(worker classifier.Worker, now time.Time) (claudeTransc
 	if cwd == "" {
 		return claudeTranscriptCandidate{}, false, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	resumeID := claudeResumeSessionID(worker.Command)
+	configDir, ok, err := claudeWorkerConfigDir(worker)
+	if err != nil || !ok {
 		return claudeTranscriptCandidate{}, false, err
 	}
-	resumeID := claudeResumeSessionID(worker.Command)
-	configDir := firstProcessTreeEnvironValue(worker.ProcessID, "CLAUDE_CONFIG_DIR")
-	if configDir == "" && worker.ProcessID > 0 {
-		if processHome := firstProcessTreeEnvironValue(worker.ProcessID, "HOME"); processHome != "" {
-			home = processHome
+	// The live process registry is exact and follows in-process session
+	// changes (/branch, /resume), which the launch command's --resume cannot.
+	owned, ownedFound := claudeTranscriptCandidate{}, false
+	if candidate, isOwned, found := claudeProcessOwnedTranscript(worker, configDir); isOwned {
+		if found {
+			return candidate, true, nil
 		}
-	}
-	if configDir == "" {
-		configDir = filepath.Join(home, ".claude")
-	}
-	if !filepath.IsAbs(configDir) {
-		// A process-local relative config directory cannot be resolved safely
-		// from the daemon's cwd. Never bind another account's HOME transcript.
-		return claudeTranscriptCandidate{}, false, nil
+		owned, ownedFound = candidate, true
 	}
 	// A transcript Mewla knows by name is read, or waited for, directly. The
 	// listing below is for a Claude opened by hand, which names nothing.
 	if candidate, known, found := claudeKnownTranscript(worker, []string{configDir}, resumeID); known {
 		return candidate, found, nil
 	}
-	if candidate, owned, found := claudeProcessOwnedTranscript(worker, configDir); owned {
-		return candidate, found, nil
+	if ownedFound {
+		return owned, false, nil
 	}
 
 	var candidates []claudeTranscriptCandidate
@@ -228,6 +223,45 @@ func findClaudeTranscript(worker classifier.Worker, now time.Time) (claudeTransc
 		return freshCandidates[0], true, nil
 	}
 	return claudeTranscriptCandidate{}, false, nil
+}
+
+// claudeWorkerConfigDir resolves the Claude config root the Worker's process
+// uses. ok=false means it cannot be resolved safely (relative path).
+func claudeWorkerConfigDir(worker classifier.Worker) (string, bool, error) {
+	configDir := firstProcessTreeEnvironValue(worker.ProcessID, "CLAUDE_CONFIG_DIR")
+	if configDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", false, err
+		}
+		if worker.ProcessID > 0 {
+			if processHome := firstProcessTreeEnvironValue(worker.ProcessID, "HOME"); processHome != "" {
+				home = processHome
+			}
+		}
+		configDir = filepath.Join(home, ".claude")
+	}
+	if !filepath.IsAbs(configDir) {
+		// A process-local relative config directory cannot be resolved safely
+		// from the daemon's cwd. Never bind another account's HOME transcript.
+		return "", false, nil
+	}
+	return configDir, true, nil
+}
+
+// ClaudeLiveSessionTranscript reports the session the Worker's live Claude
+// process has registered, when its transcript exists. It follows in-process
+// session changes such as /branch.
+func ClaudeLiveSessionTranscript(worker classifier.Worker) (sessionID, path string, ok bool) {
+	configDir, resolved, err := claudeWorkerConfigDir(worker)
+	if err != nil || !resolved {
+		return "", "", false
+	}
+	candidate, owned, found := claudeProcessOwnedTranscript(worker, configDir)
+	if !owned || !found || strings.TrimSpace(candidate.ID) == "" {
+		return "", "", false
+	}
+	return candidate.ID, candidate.Path, true
 }
 
 // claudeProcessOwnedTranscript binds the transcript named by Claude's process

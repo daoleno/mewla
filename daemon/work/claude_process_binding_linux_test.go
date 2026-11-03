@@ -201,3 +201,43 @@ func TestProviderConversationReaderClaudeStaleRegistryDoesNotBind(t *testing.T) 
 		t.Fatalf("stale registry record bound a transcript: %#v", got)
 	}
 }
+
+// TestClaudeLiveSessionFollowsInProcessBranch covers a Brain Host launched
+// with --resume OLD that ran /branch: the process registry now names NEW.
+// Both the transcript reader and the saved Host binding must follow NEW, or a
+// relaunch resumes OLD and the App reads a conversation that no longer grows.
+func TestClaudeLiveSessionFollowsInProcessBranch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	configDir := filepath.Join(t.TempDir(), "claude")
+	cwd := "/home/daoleno/.mewla/brain/workspace"
+	now := time.Now().UTC()
+	oldSession := claudeBurstSession{"brain-old", "7485516e-66df-4b91-b59a-2bafe8b6b039", now.Add(-time.Hour), now.Add(-time.Hour)}
+	newSession := claudeBurstSession{"brain-new", "c537a4ab-772c-47b9-9f79-689b056cf7a8", now.Add(-time.Minute), now.Add(-time.Minute)}
+	oldPath := writeClaudeBurstTranscript(t, configDir, cwd, oldSession, now)
+	newPath := writeClaudeBurstTranscript(t, configDir, cwd, newSession, now)
+	pid := startClaudeRegistryProcess(t, configDir, cwd, newSession.sessionID)
+	worker := classifier.Worker{
+		Name: "claude", Command: "claude --resume " + oldSession.sessionID, Cwd: cwd,
+		ProcessID: pid, StartedAt: now.Add(-time.Hour),
+	}
+
+	got, err := NewProviderConversationReader().Load(worker, WorkerProviderClaude, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Available || got.SessionID != newSession.sessionID {
+		t.Fatalf("reader bound session=%q available=%v, want %q", got.SessionID, got.Available, newSession.sessionID)
+	}
+
+	existing := HostTranscriptIdentity{Provider: WorkerProviderClaude, SessionID: oldSession.sessionID, Path: oldPath}
+	resolved := ResolveHostTranscriptIdentityForWorker(worker, existing, WorkerProviderClaude)
+	if resolved.SessionID != newSession.sessionID || resolved.Path != newPath {
+		t.Fatalf("host identity=%#v, want session %q at %q", resolved, newSession.sessionID, newPath)
+	}
+
+	// Without a live registry record the saved binding stays authoritative.
+	worker.ProcessID = 0
+	if kept := ResolveHostTranscriptIdentityForWorker(worker, existing, WorkerProviderClaude); kept.SessionID != oldSession.sessionID {
+		t.Fatalf("binding replaced without live evidence: %#v", kept)
+	}
+}
