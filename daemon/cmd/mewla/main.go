@@ -42,6 +42,7 @@ import (
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/remote"
@@ -171,6 +172,8 @@ func run(args []string, stderr io.Writer) error {
 			return runTelegramCommand(args[1:], stderr)
 		case "devices":
 			return runDevicesCommand(args[1:], stderr)
+		case "agents":
+			return runAgentsCommand(args[1:], stderr)
 		case "computers":
 			return runComputersCommand(args[1:], stderr)
 		case "agent-use":
@@ -700,6 +703,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	srv.SetComputers(computerManager)
 	controlHandler.computers = computerManager
+	outsideAgents, err := outsideagents.New(authManager.StorageDir())
+	if err != nil {
+		return fmt.Errorf("initialize outside agents: %w", err)
+	}
+	srv.SetOutsideAgents(outsideAgents, outsideagents.NewDoor(outsideAgents, outsideAgentsBackend{store: controlHandler.brainStore, service: brainService}))
+	controlHandler.outsideAgents = outsideAgents
 	connectionManager, err := connections.New(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
@@ -2650,6 +2659,7 @@ Agents and tools
   browser      Give a Worker the Browser as an MCP server
   telegram     Set up the Telegram channel to Brain
   service      List or register services Workers can see
+  agents       Let Claude Code, Codex or another MCP agent hand work to Brain
   resources    Print this computer's resource pressure
 
 Flags

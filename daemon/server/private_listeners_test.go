@@ -146,7 +146,7 @@ func TestPrivateListenerOnlyServesDeviceSignedAndProofRoutes(t *testing.T) {
 	base := "https://" + net.JoinHostPort("127.0.0.2", strconv.Itoa(port))
 	client := tlsClient()
 
-	for _, path := range []string{"/pair", "/p/abc", "/enrollment/request", "/enrollment/pending", "/enrollment/decision", "/plugins/oauth/callback", "/", "/index.html", "/ws/x", "/healthz"} {
+	for _, path := range []string{"/pair", "/p/abc", "/enrollment/request", "/enrollment/pending", "/enrollment/decision", "/plugins/oauth/callback", "/", "/index.html", "/ws/x", "/healthz", "/mcp"} {
 		response, err := client.Get(base + path)
 		if err != nil {
 			t.Fatalf("%s: %v", path, err)

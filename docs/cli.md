@@ -130,6 +130,8 @@ mewla computers list|status            # other Mewla computers this Brain can ha
 mewla computers send mac "…"           # hand a task (or an answer) to that computer's Brain
 mewla computers invite | add <invite>  # connect two computers without the app
 mewla computers remove mac
+mewla agents mcp connect [-for claude|codex]   # let Claude Code or Codex hand work to Brain (see Agents outside Mewla)
+mewla agents mcp list|approve|deny|revoke|requests
 
 mewla telegram setup          # asks for the bot token, prints a one-time link to bind your chat
 mewla telegram status|enable|disable
@@ -153,5 +155,5 @@ mewla watch project link-linear --project <id> --team KEY --confirm
 ```
 
 Details: [Services](sessions.md#services), [Calendar](calendar.md),
-[Telegram](notifications.md#telegram), [Plugins](plugins.md),
+[Telegram](notifications.md#telegram), [Plugins](plugins.md), [Agents outside Mewla](outside-agents.md),
 [Resources](usage-and-resources.md#resources), [Watch](watch.md).

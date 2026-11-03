@@ -43,6 +43,7 @@ import (
 	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/pairlink"
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/push"
@@ -137,6 +138,8 @@ type Server struct {
 	calendarScheduler            *calendar.Scheduler
 	telegram                     *telegramchannel.Manager
 	computers                    *computers.Manager
+	outsideAgents                *outsideagents.Manager
+	outsideAgentsDoor            http.Handler
 	computerName                 string
 	agentUse                     *agentuse.Service
 	daemonUpdater                DaemonUpdater
@@ -503,6 +506,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/computer", s.handleComputer)
 	mux.HandleFunc("/computers/invite", s.handleComputersInvite)
 	mux.HandleFunc("/computers", s.handleComputers)
+	mux.HandleFunc("/agents", s.handleAgents)
+	mux.HandleFunc("/mcp", s.handleMCP)
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
 	mux.HandleFunc("/daemon-update", s.handleDaemonUpdate)
 	mux.HandleFunc("/phone", s.handlePhone)
