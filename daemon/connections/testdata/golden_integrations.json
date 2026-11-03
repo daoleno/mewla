@@ -3331,7 +3331,7 @@
           "integration": "slack",
           "status": "waiting",
           "user_code": "",
-          "web_return": true
+          "web_return": false
         },
         "oauth": {
           "auth_style": 1,
@@ -3348,7 +3348,7 @@
             "allow_writes": true,
             "client_secret": false,
             "mobile": false,
-            "web": true
+            "web": false
           }
         ],
         "requests": []
