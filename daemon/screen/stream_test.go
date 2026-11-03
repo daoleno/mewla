@@ -365,3 +365,50 @@ func TestObserverHearsStatsAndASummary(t *testing.T) {
 		t.Fatalf("summary %+v", summary)
 	}
 }
+
+// A relay an ocean away answers in about 650 ms, even a 3 KB update, which is
+// round trip and nothing else: with 4 updates in flight a viewer gets at most
+// 6 a second however little there is to send. Small updates widen the window
+// to what the round trip needs (measured on a real Mac and phone over a relay
+// in Canada: ack p50 650 ms, 3 KB updates, 5 updates a second).
+func TestALongRoundTripOfSmallUpdatesGetsAWideWindow(t *testing.T) {
+	link := simulated{rtt: 620 * time.Millisecond, rate: 625e3, full: 3 << 10}
+	c := newStreamController()
+	fps := link.run(c, 6, 40)
+	fixed := link.run(fixedController(), 6, 40)
+	if c.limit() <= inFlightMax {
+		t.Fatalf("window = %d, want more than %d", c.limit(), inFlightMax)
+	}
+	if c.limit() > inFlightWide {
+		t.Fatalf("window = %d, want at most %d", c.limit(), inFlightWide)
+	}
+	if fps < 3*fixed || fps < 15 {
+		t.Fatalf("%.1f fps against %.1f fixed: the wider window did not help", fps, fixed)
+	}
+	if c.quality(6) != 6 {
+		t.Fatalf("a round-trip-bound link lost quality: %d", c.quality(6))
+	}
+}
+
+// Big updates never get the wide window, and one that grows big loses it.
+func TestBigUpdatesKeepTheNarrowWindow(t *testing.T) {
+	link := simulated{rtt: 620 * time.Millisecond, rate: 2e6, full: 120 << 10}
+	c := newStreamController()
+	link.run(c, 6, 40)
+	if c.limit() > inFlightMax {
+		t.Fatalf("window = %d for big updates, want at most %d", c.limit(), inFlightMax)
+	}
+	small := newStreamController()
+	simulated{rtt: 620 * time.Millisecond, rate: 625e3, full: 3 << 10}.run(small, 6, 40)
+	if small.limit() <= inFlightMax {
+		t.Fatalf("small updates did not widen the window: %d", small.limit())
+	}
+	now := time.Unix(5000, 0)
+	for i := 0; i < 40; i++ {
+		now = now.Add(150 * time.Millisecond)
+		small.observe(now, 650*time.Millisecond, 200<<10)
+	}
+	if small.limit() > inFlightMax {
+		t.Fatalf("window %d stayed wide for updates of 200 KB", small.limit())
+	}
+}
