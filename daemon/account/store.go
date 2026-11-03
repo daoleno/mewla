@@ -51,6 +51,11 @@ CREATE TABLE IF NOT EXISTS logins (
 	created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS logins_key ON logins(daemon_public_key);
+CREATE TABLE IF NOT EXISTS machine_relays (
+	machine_id TEXT PRIMARY KEY REFERENCES machines(id) ON DELETE CASCADE,
+	relay TEXT NOT NULL,
+	updated_at INTEGER NOT NULL
+);
 `
 
 // Login statuses stored in logins.status.
@@ -773,3 +778,43 @@ func boolInt(value bool) int {
 	}
 	return 0
 }
+
+// setMachineRelay records the relay a machine reports it is connected to.
+func (s *Store) setMachineRelay(ctx context.Context, machineID, relay string, nowMS int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO machine_relays (machine_id, relay, updated_at) VALUES (?, ?, ?)
+		 ON CONFLICT(machine_id) DO UPDATE SET relay = excluded.relay, updated_at = excluded.updated_at`,
+		machineID, relay, nowMS)
+	return err
+}
+
+// machineRelay is the relay a machine last reported, "" when it never has.
+func (s *Store) machineRelay(ctx context.Context, machineID string) (string, error) {
+	var relay string
+	err := s.db.QueryRowContext(ctx, `SELECT relay FROM machine_relays WHERE machine_id = ?`, machineID).Scan(&relay)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return relay, err
+}
+
+// relayReports lists every machine's label with the relay it reported.
+func (s *Store) relayReports(ctx context.Context) ([]relayReport, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT m.label, r.relay FROM machine_relays r JOIN machines m ON m.id = r.machine_id ORDER BY m.label`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []relayReport
+	for rows.Next() {
+		var report relayReport
+		if err := rows.Scan(&report.Label, &report.Relay); err != nil {
+			return nil, err
+		}
+		out = append(out, report)
+	}
+	return out, rows.Err()
+}
+
+type relayReport struct{ Label, Relay string }

@@ -172,6 +172,12 @@ func (runtime *Runtime) runSession(ctx context.Context, config Config) {
 	}()
 	defer wait.Wait()
 
+	var reporter *relayReporter
+	if len(config.Machine.Relays) > 1 {
+		// With one relay there is nothing to say, and a service that predates
+		// the report has nowhere to hear it.
+		reporter = &relayReporter{ctx: ctx, client: client, logf: runtime.logf, backoff: relayReportBackoff}
+	}
 	connectorConfig, err := connectorConfigFor(config, grants.Grant)
 	if err == nil {
 		connectorConfig.TLSConfig = ServerTLSConfig(runtime.Identity.Certificate, config.Machine.Hostname, certs)
@@ -183,6 +189,7 @@ func (runtime *Runtime) runSession(ctx context.Context, config Config) {
 			switch {
 			case state.Phase == "connected":
 				runtime.logf("Remote access connected: %s", config.URL())
+				reporter.report(state.Relay)
 			case state.Phase == "offline" && state.LastError != "":
 				runtime.logf("Remote access offline: %s", state.LastError)
 			}
@@ -319,4 +326,62 @@ var userTextReplacer = strings.NewReplacer(
 // UserText rewrites connector errors in remote access terms.
 func UserText(message string) string {
 	return userTextReplacer.Replace(message)
+}
+
+// relayReporter keeps the service told which relay this computer is on. Each
+// connection starts a report that is retried until the service accepts it or
+// a newer connection supersedes it: the hostname must follow the computer, and
+// the service being briefly unreachable must not strand it.
+type relayReporter struct {
+	ctx     context.Context
+	client  relayReporterClient
+	logf    func(format string, args ...any)
+	backoff func(attempt int) time.Duration
+
+	mu     sync.Mutex
+	cancel context.CancelFunc
+}
+
+type relayReporterClient interface {
+	ReportRelay(ctx context.Context, relay string) error
+}
+
+func relayReportBackoff(attempt int) time.Duration {
+	return min(time.Duration(1<<min(attempt, 8))*time.Second, 5*time.Minute)
+}
+
+// report is safe on a nil reporter and never blocks.
+func (reporter *relayReporter) report(relay string) {
+	if reporter == nil || relay == "" {
+		return
+	}
+	reporter.mu.Lock()
+	if reporter.cancel != nil {
+		reporter.cancel()
+	}
+	ctx, cancel := context.WithCancel(reporter.ctx)
+	reporter.cancel = cancel
+	reporter.mu.Unlock()
+	go func() {
+		for attempt := 0; ; attempt++ {
+			err := reporter.client.ReportRelay(ctx, relay)
+			if err == nil || ctx.Err() != nil {
+				return
+			}
+			if errors.Is(err, ErrSignedOut) {
+				// Signed out, or the service has no such endpoint: retrying
+				// helps neither.
+				reporter.logf("Remote access: could not tell the service which relay this computer is on: %v", err)
+				return
+			}
+			if attempt == 0 {
+				reporter.logf("Remote access: could not tell the service which relay this computer is on, retrying: %v", err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(reporter.backoff(attempt)):
+			}
+		}
+	}()
 }

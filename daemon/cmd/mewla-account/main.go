@@ -60,6 +60,7 @@ func run(args []string) error {
 	var challtestsrvURL string
 	var cloudflareZoneID string
 	var checkURL string
+	var clearRelayRecords bool
 	var tlsAddress string
 	var tlsCacheDir string
 	var proxyProtocol bool
@@ -74,7 +75,8 @@ func run(args []string) error {
 	flags.StringVar(&publicURL, "public-url", "", "public base URL of this service (service_url)")
 	flags.StringVar(&clientDomain, "client-domain", "", "parent domain of machine hostnames (<label>.<client-domain>)")
 	flags.IntVar(&clientPort, "client-port", 443, "relay client port advertised to machines")
-	flags.Var(&relays, "relay", "relay as name=...,control=host:port,server-name=...,ca-file=path (repeatable)")
+	flags.Var(&relays, "relay", "relay as name=...,control=host:port,server-name=...,ca-file=path[,ip=IPv4,client-domain=domain,feature=name] (repeatable; the first is the default for every computer, each later one needs ip= and feature=relay-dns)")
+	flags.BoolVar(&clearRelayRecords, "clear-relay-records", false, "delete the address record of every computer that reported a relay, then exit (roll back a second relay before removing its -relay flag)")
 	flags.StringVar(&acmeDirectory, "acme-directory", letsEncryptDirectory, "ACME directory URL advertised to machines")
 	flags.StringVar(&acmeCAFile, "acme-ca-file", "", "optional PEM root for the ACME directory's HTTPS (development)")
 	flags.DurationVar(&grantTTL, "grant-ttl", time.Hour, "route grant lifetime")
@@ -190,6 +192,12 @@ func run(args []string) error {
 		WaitTXT:               waitTXT,
 	})
 	if err != nil {
+		return err
+	}
+
+	if clearRelayRecords {
+		cleared, err := service.ClearRelayRecords(context.Background())
+		fmt.Printf("cleared %d relay address records\n", cleared)
 		return err
 	}
 
@@ -471,6 +479,9 @@ type relayFlag struct {
 	control    string
 	serverName string
 	caFile     string
+	ip         string
+	domain     string
+	feature    string
 }
 
 type relayFlags []relayFlag
@@ -500,6 +511,12 @@ func (r *relayFlags) Set(value string) error {
 			relay.serverName = fieldValue
 		case "ca-file":
 			relay.caFile = fieldValue
+		case "ip":
+			relay.ip = fieldValue
+		case "client-domain":
+			relay.domain = fieldValue
+		case "feature":
+			relay.feature = fieldValue
 		default:
 			return fmt.Errorf("unknown relay field %q", key)
 		}
@@ -536,6 +553,9 @@ func (r relayFlags) load() ([]account.Relay, error) {
 			ControlAddress:    relay.control,
 			ControlServerName: relay.serverName,
 			ControlCAPEM:      caPEM,
+			IP:                relay.ip,
+			ClientDomain:      relay.domain,
+			Feature:           relay.feature,
 		})
 	}
 	return relays, nil

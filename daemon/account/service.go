@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -39,6 +40,7 @@ const (
 	// loginStartsPerIPHour bounds sign-in attempts from one client address
 	// (IPv4 address or IPv6 /64), counted before the signature is checked.
 	loginStartsPerIPHour  = 10
+	relayReportsPerHour   = 60
 	maxPendingLoginsByKey = 5
 	maxMachineNameLength  = 64
 	maxLabelPrefixLength  = 20
@@ -50,12 +52,34 @@ const (
 	txtVisibleTimeout = 20 * time.Second
 )
 
-// Relay is one relay advertised to machines.
+// FeatureRelayDNS is what a daemon that reports its relay (PUT
+// /v1/machine/relay) says in the X-Mewla-Features header of its requests.
+const FeatureRelayDNS = "relay-dns"
+
+// featuresHeader carries a daemon's comma-separated capabilities. It is a hint
+// about what the daemon can do, not a credential: claiming one only lets a
+// computer see more relays than it would otherwise.
+const featuresHeader = "X-Mewla-Features"
+
+// Relay is one relay advertised to machines. The first relay is the default:
+// every computer sees it, and the wildcard DNS record points at it.
 type Relay struct {
 	Name              string
 	ControlAddress    string
 	ControlServerName string
 	ControlCAPEM      string
+	// ClientDomain, when set, is the parent domain of this relay's client
+	// hostnames (pairing aliases and the addresses new phones store); a
+	// wildcard record under it points at this relay. Empty uses the
+	// service's client domain.
+	ClientDomain string
+	// IP is the relay's public IPv4 address. A computer connected to a relay
+	// other than the first gets an A record for its own hostname pointing
+	// here, so browsers and phones paired earlier follow it. Required for any
+	// relay but the first.
+	IP string
+	// Feature, when set, limits the relay to daemons that declare it.
+	Feature string
 }
 
 // Config configures a Service.
@@ -96,6 +120,8 @@ type Service struct {
 	renames reqsign.RateLimiter
 	// loginStarts limits sign-in attempts per client address.
 	loginStarts reqsign.RateLimiter
+	// relayReports limits relay reports (and with them DNS writes) per machine.
+	relayReports reqsign.RateLimiter
 }
 
 // MachineInfo is the daemon's view of its machine.
@@ -189,6 +215,28 @@ func New(config Config) (*Service, error) {
 	if len(config.Relays) == 0 {
 		return nil, errors.New("at least one relay is required")
 	}
+	relays := make([]Relay, 0, len(config.Relays))
+	names := map[string]bool{}
+	for i, relay := range config.Relays {
+		relay.Name = strings.ToLower(strings.TrimSpace(relay.Name))
+		relay.ClientDomain = strings.Trim(strings.ToLower(strings.TrimSpace(relay.ClientDomain)), ".")
+		relay.Feature = strings.TrimSpace(relay.Feature)
+		switch {
+		case relay.Name == "" || names[relay.Name]:
+			return nil, fmt.Errorf("relay name %q is empty or repeated", relay.Name)
+		case i == 0 && relay.Feature != "":
+			return nil, errors.New("the first relay is the default and cannot be limited to a feature")
+		case i > 0 && relay.Feature == "":
+			return nil, fmt.Errorf("relay %s: a relay after the first needs a feature, or daemons that cannot report their relay would register on it and become unreachable", relay.Name)
+		case i > 0 && net.ParseIP(relay.IP).To4() == nil:
+			return nil, fmt.Errorf("relay %s needs its public IPv4 address", relay.Name)
+		case i == 0 && relay.IP != "" && net.ParseIP(relay.IP).To4() == nil:
+			return nil, fmt.Errorf("relay %s has an invalid IPv4 address", relay.Name)
+		}
+		names[relay.Name] = true
+		relays = append(relays, relay)
+	}
+	config.Relays = relays
 	if config.GrantTTL <= 0 {
 		config.GrantTTL = defaultGrantTTL
 	}
@@ -208,6 +256,7 @@ func New(config Config) (*Service, error) {
 	service.acme = reqsign.RateLimiter{Limit: config.ACMEOpsPerHour, Window: time.Hour}
 	service.renames = reqsign.RateLimiter{Limit: renamesPerDay, Window: 24 * time.Hour}
 	service.loginStarts = reqsign.RateLimiter{Limit: loginStartsPerIPHour, Window: time.Hour}
+	service.relayReports = reqsign.RateLimiter{Limit: relayReportsPerHour, Window: time.Hour}
 	return service, nil
 }
 
@@ -229,6 +278,7 @@ func (s *Service) Handler() http.Handler {
 	mux.HandleFunc("DELETE /v1/machine", s.requireSignature(s.handleDeleteMachine))
 	mux.HandleFunc("DELETE /v1/account", s.requireSignature(s.handleDeleteAccount))
 	mux.HandleFunc("PUT /v1/machine/name", s.requireSignature(s.handleRenameMachine))
+	mux.HandleFunc("PUT /v1/machine/relay", s.requireSignature(s.handleMachineRelay))
 	mux.HandleFunc("PUT /v1/machine/acme-challenge", s.requireSignature(s.handleACMEChallenge))
 	mux.HandleFunc("DELETE /v1/machine/acme-challenge", s.requireSignature(s.handleACMEChallenge))
 	if s.config.DeviceHandler != nil {
@@ -473,7 +523,7 @@ func (s *Service) pollIdentity(
 		machine.ID,
 		machine.Label,
 	)
-	info, err := s.machineInfo(machine, account)
+	info, err := s.machineInfo(machine, account, featuresOf(r))
 	if err != nil {
 		s.internalError(w, "sign grant", err)
 		return "", MachineInfo{}, true
@@ -497,7 +547,7 @@ func (s *Service) writeLoginOutcome(w http.ResponseWriter, r *http.Request, logi
 			writeError(w, http.StatusForbidden, "denied")
 			return
 		}
-		info, err := s.machineInfo(machine, account)
+		info, err := s.machineInfo(machine, account, featuresOf(r))
 		if err != nil {
 			s.internalError(w, "sign grant", err)
 			return
@@ -522,7 +572,7 @@ func (s *Service) handleGetMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.config.Store.touchMachine(r.Context(), machine.ID, s.now().UnixMilli())
-	info, err := s.machineInfo(machine, account)
+	info, err := s.machineInfo(machine, account, featuresOf(r))
 	if err != nil {
 		s.internalError(w, "sign grant", err)
 		return
@@ -552,22 +602,135 @@ func (s *Service) handleRenameMachine(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusTooManyRequests, "too many renames today; try again tomorrow")
 		return
 	}
+	oldLabel := current.Label
 	machine, err := s.config.Store.renameMachine(r.Context(), daemonKey(r), name, newLabel)
 	if err != nil {
 		s.internalError(w, "rename machine", err)
 		return
+	}
+	// The override follows the new name; the old one stops resolving.
+	s.clearRelayRecord(r.Context(), oldLabel)
+	if reported, _ := s.config.Store.machineRelay(r.Context(), machine.ID); reported != "" {
+		if relay, ok := s.relayNamed(reported); ok {
+			if err := s.syncRelayRecord(r.Context(), machine.Label, relay); err != nil {
+				s.config.Logf("account: relay record for the new name failed: machine=%s error=%v", machine.ID, err)
+			}
+		}
 	}
 	machine, account, ok := s.currentMachine(w, r)
 	if !ok {
 		return
 	}
 	s.config.Logf("account: machine renamed: machine=%s label=%s", machine.ID, machine.Label)
-	info, err := s.machineInfo(machine, account)
+	info, err := s.machineInfo(machine, account, featuresOf(r))
 	if err != nil {
 		s.internalError(w, "sign grant", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+// featuresOf reads a daemon's declared capabilities.
+func featuresOf(r *http.Request) map[string]bool {
+	features := map[string]bool{}
+	for _, name := range strings.Split(r.Header.Get(featuresHeader), ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			features[name] = true
+		}
+	}
+	return features
+}
+
+// relayNamed finds a configured relay by name.
+func (s *Service) relayNamed(name string) (Relay, bool) {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, relay := range s.config.Relays {
+		if relay.Name == name {
+			return relay, true
+		}
+	}
+	return Relay{}, false
+}
+
+// handleMachineRelay records the relay the computer is connected to and makes
+// the computer's hostname follow it. The first relay is the default, which the
+// wildcard record already covers; for any other the hostname gets its own A
+// record pointing at that relay, so a browser or a phone paired before there
+// were two relays reaches the relay the computer is really on.
+func (s *Service) handleMachineRelay(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Relay string `json:"relay"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	relay, ok := s.relayNamed(request.Relay)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unknown relay")
+		return
+	}
+	if relay.Feature != "" && !featuresOf(r)[relay.Feature] {
+		writeError(w, http.StatusBadRequest, "this computer cannot use that relay")
+		return
+	}
+	machine, _, ok := s.currentMachine(w, r)
+	if !ok {
+		return
+	}
+	if !s.relayReports.Allow(machine.ID, s.now()) {
+		writeError(w, http.StatusTooManyRequests, "rate limited")
+		return
+	}
+	if err := s.config.Store.setMachineRelay(r.Context(), machine.ID, relay.Name, s.now().UnixMilli()); err != nil {
+		s.internalError(w, "record relay", err)
+		return
+	}
+	// The record is written every time, not only on a change: a report is the
+	// daemon retrying after a DNS failure as often as it is a move.
+	if err := s.syncRelayRecord(r.Context(), machine.Label, relay); err != nil {
+		s.config.Logf("account: relay record failed: machine=%s relay=%s error=%v", machine.ID, relay.Name, err)
+		writeError(w, http.StatusBadGateway, "DNS provider failed")
+		return
+	}
+	s.config.Logf("account: machine relay: machine=%s relay=%s", machine.ID, relay.Name)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// syncRelayRecord points label's hostname at relay: an A record for any relay
+// but the default, none for the default.
+func (s *Service) syncRelayRecord(ctx context.Context, label string, relay Relay) error {
+	host := s.hostname(label)
+	if relay.Name == s.config.Relays[0].Name || relay.IP == "" {
+		return s.config.DNS.ClearA(ctx, host)
+	}
+	return s.config.DNS.SetA(ctx, host, relay.IP)
+}
+
+// clearRelayRecord removes label's override, logging rather than failing: the
+// machine is already gone, and ClearRelayRecords sweeps what is left.
+func (s *Service) clearRelayRecord(ctx context.Context, label string) {
+	if err := s.config.DNS.ClearA(ctx, s.hostname(label)); err != nil {
+		s.config.Logf("account: clearing the relay record failed: label=%s error=%v", label, err)
+	}
+}
+
+// ClearRelayRecords deletes the A record of every computer that reported a
+// relay, and forgets the reports: the rollback of a second relay, run before
+// its flag is removed. Computers stay as they are; they report again when they
+// next connect to a relay that has an address.
+func (s *Service) ClearRelayRecords(ctx context.Context) (int, error) {
+	reports, err := s.config.Store.relayReports(ctx)
+	if err != nil {
+		return 0, err
+	}
+	cleared := 0
+	for _, report := range reports {
+		if err := s.config.DNS.ClearA(ctx, s.hostname(report.Label)); err != nil {
+			return cleared, fmt.Errorf("clear %s: %w", s.hostname(report.Label), err)
+		}
+		cleared++
+	}
+	return cleared, nil
 }
 
 func (s *Service) handleDeleteMachine(w http.ResponseWriter, r *http.Request) {
@@ -581,6 +744,8 @@ func (s *Service) handleDeleteMachine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.acme.Forget(machine.ID)
+	s.relayReports.Forget(machine.ID)
+	s.clearRelayRecord(r.Context(), machine.Label)
 	s.config.Logf(
 		"account: machine deleted: machine=%s account=%s label=%s",
 		machine.ID,
@@ -609,6 +774,8 @@ func (s *Service) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	for _, machine := range machines {
 		s.acme.Forget(machine.ID)
+		s.relayReports.Forget(machine.ID)
+		s.clearRelayRecord(r.Context(), machine.Label)
 	}
 	s.config.Logf("account: account deleted: account=%s machines=%d", account.ID, len(machines))
 	w.WriteHeader(http.StatusNoContent)
@@ -684,7 +851,7 @@ func (s *Service) currentMachine(w http.ResponseWriter, r *http.Request) (machin
 	return machine, account, true
 }
 
-func (s *Service) machineInfo(machine machineRecord, account accountRecord) (MachineInfo, error) {
+func (s *Service) machineInfo(machine machineRecord, account accountRecord, features map[string]bool) (MachineInfo, error) {
 	now := s.now()
 	expiresAt := now.Add(s.config.GrantTTL)
 	grant, err := linkproto.SignRouteGrant(s.config.GrantKey, linkproto.RouteGrant{
@@ -701,12 +868,19 @@ func (s *Service) machineInfo(machine machineRecord, account accountRecord) (Mac
 	}
 	relays := make([]RelayInfo, 0, len(s.config.Relays))
 	for _, relay := range s.config.Relays {
+		if relay.Feature != "" && !features[relay.Feature] {
+			continue
+		}
+		domain := relay.ClientDomain
+		if domain == "" {
+			domain = s.config.ClientDomain
+		}
 		relays = append(relays, RelayInfo{
 			Name:              relay.Name,
 			ControlAddress:    relay.ControlAddress,
 			ControlServerName: relay.ControlServerName,
 			ControlCAPEM:      relay.ControlCAPEM,
-			ClientDomain:      s.config.ClientDomain,
+			ClientDomain:      domain,
 			ClientPort:        s.config.ClientPort,
 		})
 	}
