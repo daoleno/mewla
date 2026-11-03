@@ -42,6 +42,10 @@ type Router struct {
 	// ws tracks hijacked Responses WebSocket connections so shutdown tears
 	// them down deterministically.
 	ws *wsConnRegistry
+	// thinking remembers which Anthropic thinking signatures each upstream
+	// issued, so switched routes forward only thinking the new upstream can
+	// verify.
+	thinking *issuedThinkingLedger
 }
 
 // RouteModelCatalog describes the catalog available for request preflight.
@@ -116,10 +120,11 @@ func WithRouterNativeSettings(lookup func(routeID string) (codexctl.NativeSettin
 // NewRouter constructs a loopback routing runtime over table.
 func NewRouter(table *RouteTable, opts ...RouterOption) *Router {
 	r := &Router{
-		table:   table,
-		client:  NewSafeHTTPClient(5 * time.Minute),
-		maxBody: MaxRouteRequestBodyBytes,
-		ws:      newWSConnRegistry(),
+		table:    table,
+		client:   NewSafeHTTPClient(5 * time.Minute),
+		maxBody:  MaxRouteRequestBodyBytes,
+		ws:       newWSConnRegistry(),
+		thinking: newIssuedThinkingLedger(),
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -372,15 +377,28 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 		}
-		if normalizeID(binding.HistoryPortability) == HistoryPortabilityStripOpaque && opaqueHistoryStripRequired(binding.RouteProtocol) {
-			rewritten, _, err = normalizePortableHistoryBody(binding.RouteProtocol, rewritten)
-			if err != nil {
-				if errors.Is(err, ErrRequestBodyNotPortable) {
-					writeRouteError(w, http.StatusBadRequest, ErrRequestBodyNotPortable)
+		if normalizeID(binding.HistoryPortability) == HistoryPortabilityStripOpaque {
+			if normalizeID(binding.RouteProtocol) == RouteProtocolAnthropicMessages {
+				if parsed.Endpoint == EndpointAnthropicMessages || parsed.Endpoint == EndpointAnthropicCountTokens {
+					routeID, domain := binding.RouteID, binding.HistoryDomain
+					rewritten, _, err = dropForeignAnthropicThinking(rewritten, func(sig string) bool {
+						return r.thinking.issued(routeID, domain, sig)
+					})
+					if err != nil {
+						writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
+						return
+					}
+				}
+			} else {
+				rewritten, _, err = normalizePortableHistoryBody(binding.RouteProtocol, rewritten)
+				if err != nil {
+					if errors.Is(err, ErrRequestBodyNotPortable) {
+						writeRouteError(w, http.StatusBadRequest, ErrRequestBodyNotPortable)
+						return
+					}
+					writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
 					return
 				}
-				writeRouteError(w, http.StatusBadRequest, ErrRequestBodyMalformed)
-				return
 			}
 		}
 		if adapt := responsesAdapterFor(binding); parsed.Endpoint == EndpointResponses && adapt != nil {
@@ -418,6 +436,15 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if decodedEncoding {
 		upReq.Header.Del("Content-Encoding")
 	}
+	// Switched Anthropic routes learn the signatures the new upstream issues.
+	// Dropping the client's Accept-Encoding lets the transport negotiate and
+	// decode compression itself, so the recorder sees plain SSE/JSON.
+	learnThinking := parsed.Endpoint == EndpointAnthropicMessages &&
+		normalizeID(binding.RouteProtocol) == RouteProtocolAnthropicMessages &&
+		normalizeID(binding.HistoryPortability) == HistoryPortabilityStripOpaque
+	if learnThinking {
+		upReq.Header.Del("Accept-Encoding")
+	}
 	if err := applyUpstreamAuth(upReq.Header, binding, inboundAuth, r.credentialLookup(), r.creds); err != nil {
 		writeRouteError(w, http.StatusBadGateway, ErrCredentialNotReady)
 		return
@@ -451,8 +478,20 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	copySafeResponseHeaders(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
-	if err := streamCopyFlush(w, resp.Body); err != nil {
+	var src io.Reader = resp.Body
+	var recorder *anthropicThinkingRecorder
+	if learnThinking && resp.StatusCode >= 200 && resp.StatusCode < 300 && resp.Header.Get("Content-Encoding") == "" {
+		routeID, domain := binding.RouteID, binding.HistoryDomain
+		recorder = newAnthropicThinkingRecorder(resp.Header.Get("Content-Type"), func(sig string) {
+			r.thinking.record(routeID, domain, sig)
+		})
+		src = recordingReader(resp.Body, recorder)
+	}
+	if err := streamCopyFlush(w, src); err != nil {
 		return
+	}
+	if recorder != nil {
+		recorder.Finish()
 	}
 }
 
