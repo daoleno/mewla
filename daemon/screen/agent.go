@@ -801,10 +801,25 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err != nil {
 		return AgentResult{}, err
 	}
+	// Listen to the app before acting, so its first notification isn't missed.
+	var watch AppWatch
+	if watcher, ok := a.apps.(appWatcher); ok && axObserverOn {
+		if w, err := watcher.WatchApp(a.treeApp.PID); err == nil {
+			watch = w
+			defer w.Close()
+		}
+	}
 	// An accessibility action posts no input event, so it leaves the
 	// agent's last event as it was.
 	if err := actor.ActOnElement(ctx, e, name, intent.text); err != nil {
 		return AgentResult{}, notDelivered(a.gone(ctx, a.treeApp, err))
+	}
+	announced := false
+	if watch != nil {
+		var err error
+		if announced, err = waitQuiet(ctx, watch.Events(), watchFirst, watchQuiet, watchMax); err != nil {
+			return AgentResult{}, err
+		}
 	}
 	// Accessibility values change as the action runs, so read at once, not
 	// after a wait. The app's fingerprint before and after that read says
@@ -836,6 +851,11 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 		a.mu.Lock()
 		unchanged = len(changedRows(appRows(*previous, a.latest.Rect, a.toAgent), appRows(tree, a.latest.Rect, a.toAgent))) == 0
 		a.mu.Unlock()
+	}
+	// An app that announced its change and went quiet is read once; one that
+	// announced nothing falls back to the fingerprint and the second look.
+	if announced {
+		changing = false
 	}
 	if changing || unchanged {
 		first := settleFirst
