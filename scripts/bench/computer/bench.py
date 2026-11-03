@@ -218,23 +218,64 @@ def walk(node, out):
             walk(v, out)
 
 
+def ad_matches(r):
+    """agent-desktop's find answers with data.matches (a list) or, with --first,
+    data.match (one); read either."""
+    d = r["json"].get("data", {}) or {}
+    if d.get("matches"):
+        return d["matches"]
+    return [d["match"]] if d.get("match") else []
+
+
+def window_ids(node, out):
+    if isinstance(node, dict):
+        for v in node.values():
+            window_ids(v, out)
+    elif isinstance(node, list):
+        for v in node:
+            window_ids(v, out)
+    elif isinstance(node, str) and node.startswith("w-") and node not in out:
+        out.append(node)
+
+
 def ad_run(n, apps, ad, scratch):
     rec = Rec()
     # list-apps can fail on its own (application_inventory_unstable), so every
     # named app is tried; one that isn't running shows as errors with codes.
     present, skipped = list(apps), []
 
+    # An app with several windows is AMBIGUOUS_TARGET without --window-id: take
+    # the first candidate the error names, as an agent would after reading it.
+    target = {}
+
+    def scoped(args):
+        app = args[args.index("--app") + 1] if "--app" in args else None
+        if app in target:
+            return args + ["--window-id", target[app]]
+        return args
+
+    def run(args):
+        r = sh([ad] + scoped(args))
+        app = args[args.index("--app") + 1] if "--app" in args else None
+        if r["code"] == "AMBIGUOUS_TARGET" and app and app not in target:
+            ids = []
+            window_ids(r["json"].get("error", {}), ids)
+            if ids:
+                target[app] = ids[0]
+                r = sh([ad] + scoped(args))
+        return r
+
     def go(name, args, rows=None):
-        r = sh([ad] + args)
+        r = run(args)
         r["trunc"] = bool(r["json"].get("data", {}).get("truncated")) or r["json"].get("data", {}).get("complete") is False
         rec.add(name, r, rows=rows)
         return r
     for _ in range(n):
         go("apps", ["list-apps"])
     for a in present:
-        sh([ad, "snapshot", "--app", a, "-i", "--compact"])
+        run(["snapshot", "--app", a, "-i", "--compact"])
         for _ in range(n):
-            r = sh([ad, "snapshot", "--app", a, "-i", "--compact"])
+            r = run(["snapshot", "--app", a, "-i", "--compact"])
             refs = []
             walk(r["json"].get("data", {}).get("tree", {}), refs)
             r["trunc"] = r["json"].get("data", {}).get("complete") is False
@@ -248,29 +289,29 @@ def ad_run(n, apps, ad, scratch):
             go("wait_for(true)/TextEdit", ["wait", "--window", "", "--app", "TextEdit", "--timeout", "3000"])
         # set-value then the snapshot their docs say to take to verify
         for i in range(n):
-            f = sh([ad, "find", "--app", "TextEdit", "--role", "textfield", "--first"])
+            f = run(["find", "--app", "TextEdit", "--role", "textfield", "--first"])
             ms0, by0 = f["ms"], f["bytes"]
             ms = by = 0
-            matches = f["json"].get("data", {}).get("matches", [])
+            matches = ad_matches(f)
             if not matches:
                 rec.add("set_value->answer/TextEdit", {"error": True, "ms": 0, "bytes": 0, "code": f["code"] or "no_match"})
                 continue
             ref = matches[0]["ref_id"]
             s = sh([ad, "set-value", ref, "bench %d" % i])
-            v = sh([ad, "snapshot", "--app", "TextEdit", "-i", "--compact"])
+            v = run(["snapshot", "--app", "TextEdit", "-i", "--compact"])
             rec.add("set_value->answer/TextEdit", {"ms": s["ms"] + v["ms"], "bytes": s["bytes"] + v["bytes"],
                                                    "error": s["error"], "code": s["code"]}, calls=2)
             rec.add("steps(4)/TextEdit", {"ms": ms0 + s["ms"] + v["ms"] + 0, "bytes": by0 + s["bytes"] + v["bytes"],
                                           "error": s["error"]}, calls=3)
     if "Calculator" in present:
         for _ in range(n):
-            f = sh([ad, "find", "--app", "Calculator", "--role", "button", "--name", "1", "--exact", "--first"])
-            matches = f["json"].get("data", {}).get("matches", [])
+            f = run(["find", "--app", "Calculator", "--role", "button", "--name", "1", "--exact", "--first"])
+            matches = ad_matches(f)
             if not matches:
                 rec.add("press->answer/Calculator", {"error": True, "ms": 0, "bytes": 0, "code": f["code"] or "no_match"})
                 continue
             c = sh([ad, "click", matches[0]["ref_id"]])
-            v = sh([ad, "snapshot", "--app", "Calculator", "-i", "--compact"])
+            v = run(["snapshot", "--app", "Calculator", "-i", "--compact"])
             rec.add("press->answer/Calculator", {"ms": f["ms"] + c["ms"] + v["ms"],
                                                  "bytes": f["bytes"] + c["bytes"] + v["bytes"],
                                                  "error": c["error"], "code": c["code"]}, calls=3)
@@ -282,7 +323,7 @@ def ad_run(n, apps, ad, scratch):
         rec.add("screenshot/screen", r)
     if present:
         for _ in range(n):
-            r = sh([ad, "screenshot", "--app", present[0], shot])
+            r = run(["screenshot", "--app", present[0], shot])
             r["bytes"] = os.path.getsize(shot) if os.path.exists(shot) else r["bytes"]
             rec.add("screenshot/app", r)
     version = sh([ad, "version"])["text"].strip()[:200]
@@ -312,6 +353,26 @@ def report(dirs):
     print("\n".join(lines))
 
 
+def audit(path):
+    """Server-side time per action from Mewla's audit file (lengths and times
+    only): p50/p95 of ms, and bytes, by action and app, to tell the daemon's
+    time from the transport's. Run it after bench.py mewla; it reads the whole file."""
+    by = {}
+    for line in open(path):
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if "ms" not in o:
+            continue
+        by.setdefault((o.get("action"), o.get("app") or ""), []).append((o["ms"], o.get("bytes", 0), o.get("rows", 0)))
+    out = {}
+    for (action, app), v in sorted(by.items()):
+        out["%s/%s" % (action, app)] = {"n": len(v), "p50_ms": pct([x[0] for x in v], 50), "p95_ms": pct([x[0] for x in v], 95),
+                                         "bytes_p50": pct([x[1] for x in v], 50), "rows_p50": pct([x[2] for x in v], 50)}
+    print(json.dumps(out, separators=(",", ":")))
+
+
 def dump_tools(cmd, out):
     """tools/list of any MCP server (no tool is called): names, descriptions and
     input schemas to OUT/tools.json, and a one-line summary on stdout."""
@@ -329,7 +390,7 @@ def dump_tools(cmd, out):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["mewla", "ad", "report", "tools"])
+    ap.add_argument("mode", choices=["mewla", "ad", "report", "tools", "audit"])
     ap.add_argument("dirs", nargs="*")
     ap.add_argument("-n", type=int, default=20)
     ap.add_argument("--out", default=".")
@@ -341,6 +402,8 @@ def main():
     a = ap.parse_args()
     if a.mode == "report":
         return report(a.dirs)
+    if a.mode == "audit":
+        return audit(a.dirs[0] if a.dirs else os.path.expanduser("~/.mewla/screen-agent-audit.jsonl"))
     if a.mode == "tools":
         return dump_tools(a.cmd, a.out)
     apps = [x for x in a.apps.split(",") if x]
