@@ -122,6 +122,13 @@ func (a *agentSession) waitFor(ctx context.Context, action AgentAction) (AgentRe
 	if limit <= 0 || limit > waitForMax {
 		limit = waitForMax
 	}
+	until := strings.ToLower(strings.TrimSpace(action.Until))
+	if until != "" && until != "appears" && until != "gone" && until != "enabled" {
+		return AgentResult{}, fmt.Errorf("wait_for until takes appears, gone or enabled, not %q", action.Until)
+	}
+	if until == "appears" {
+		until = ""
+	}
 	deadline := time.Now().Add(limit)
 	printer, _ := a.apps.(appPrinter)
 	pid := 0
@@ -140,14 +147,33 @@ func (a *agentSession) waitFor(ctx context.Context, action AgentAction) (AgentRe
 		}
 		a.appMu.Lock()
 		id, matchErr := a.tree.match(*action.Match, false)
+		enabled := true
+		if matchErr == nil {
+			if i := a.tree.index(id); i >= 0 {
+				enabled = a.tree.Elements[i].Enabled
+			}
+		}
 		appPID := a.treeApp.PID
 		a.appMu.Unlock()
-		if matchErr == nil {
-			result.Text = fmt.Sprintf("Found [%d].\n", id) + result.Text
-			return result, nil
+		switch until {
+		case "gone":
+			if matchErr != nil {
+				return AgentResult{Text: fmt.Sprintf("%s is gone.", action.Match)}, nil
+			}
+		case "enabled":
+			if matchErr == nil && enabled {
+				result.Text = fmt.Sprintf("Found [%d], enabled.\n", id) + result.Text
+				return result, nil
+			}
+		default:
+			if matchErr == nil {
+				result.Text = fmt.Sprintf("Found [%d].\n", id) + result.Text
+				return result, nil
+			}
 		}
 		if time.Now().After(deadline) {
-			return AgentResult{}, fmt.Errorf("%s did not appear within %s", action.Match, limit.Round(time.Second))
+			what := map[string]string{"": "appear", "gone": "go away", "enabled": "become enabled"}[until]
+			return AgentResult{}, fmt.Errorf("%s did not %s within %s", action.Match, what, limit.Round(time.Second))
 		}
 		if pid == 0 && printer != nil {
 			var err error

@@ -60,3 +60,27 @@ func TestADeliveryThatDidNotTakeIsSaidSo(t *testing.T) {
 		t.Fatalf("a refused check: %s", got)
 	}
 }
+
+func TestWaitForGoneAndEnabled(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = checkboxApp(false)
+	backend.RunningApps[0].Elements[1].Enabled = false
+	// Not gone while it is there; gone once it isn't; enabled once it is.
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait_for", App: "Settings", Until: "gone", Match: &ElementMatch{Role: "CheckBox"}, Duration: 1}); err == nil || !strings.Contains(err.Error(), "did not go away") {
+		t.Fatalf("gone while present: %v", err)
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait_for", App: "Settings", Until: "enabled", Match: &ElementMatch{Role: "CheckBox"}, Duration: 1}); err == nil || !strings.Contains(err.Error(), "did not become enabled") {
+		t.Fatalf("enabled while disabled: %v", err)
+	}
+	backend.RunningApps[0].Elements[1].Enabled = true
+	if got := act(t, s, "%7", AgentAction{Action: "wait_for", App: "Settings", Until: "enabled", Match: &ElementMatch{Role: "CheckBox"}, Duration: 1}).Text; !strings.HasPrefix(got, "Found [") || !strings.Contains(got, "enabled") || strings.Contains(got, "TextField") {
+		t.Fatalf("enabled: %s", got)
+	}
+	backend.RunningApps[0].Elements = backend.RunningApps[0].Elements[:1]
+	if got := act(t, s, "%7", AgentAction{Action: "wait_for", App: "Settings", Until: "gone", Match: &ElementMatch{Role: "CheckBox"}, Duration: 1}).Text; !strings.Contains(got, "is gone") {
+		t.Fatalf("gone: %s", got)
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait_for", App: "Settings", Until: "sometime", Match: &ElementMatch{Role: "CheckBox"}}); err == nil {
+		t.Fatal("an unknown until must be refused")
+	}
+}
