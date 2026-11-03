@@ -219,8 +219,14 @@ func (t *RouteTable) activateStateLocked(current SessionRouteState, profile Prof
 	// changes them). Protocol/route identity and history rules are preserved
 	// below via contractsCompatible + the opaque-cross-domain guard.
 	draft.HistoryState = current.Binding.HistoryState
-	// Sticky portability once enabled — CLIs may resent old opaque blocks forever.
+	// Sticky portability once enabled — Codex may resend old provider state
+	// forever. Anthropic Messages routes never strip (client-owned history is
+	// forwarded byte-for-byte), so a stale flag from an older daemon is dropped.
 	draft.HistoryPortability = current.Binding.HistoryPortability
+	stripRequired := opaqueHistoryStripRequired(draft.RouteProtocol)
+	if !stripRequired {
+		draft.HistoryPortability = ""
+	}
 	historyDegradation := ""
 	// A request admitted under an older binding may still return provider-opaque
 	// history after this activation publishes. Persist that possibility now,
@@ -228,7 +234,7 @@ func (t *RouteTable) activateStateLocked(current SessionRouteState, profile Prof
 	// before the next request; same-domain flights only mark possible opacity.
 	for _, flight := range t.inFlight[current.Binding.RouteID] {
 		draft.HistoryState = HistoryStateMayContainOpaque
-		if flight.historyDomain != draft.HistoryDomain {
+		if stripRequired && flight.historyDomain != draft.HistoryDomain {
 			draft.HistoryPortability = HistoryPortabilityStripOpaque
 			historyDegradation = HistoryDegradationStripOpaque
 		}
@@ -236,9 +242,12 @@ func (t *RouteTable) activateStateLocked(current SessionRouteState, profile Prof
 	opaqueCrossDomain := normalizeID(current.Binding.HistoryState) == HistoryStateMayContainOpaque &&
 		current.Binding.HistoryDomain != draft.HistoryDomain
 	if opaqueCrossDomain {
-		// contractsCompatible already verified the portable same-protocol boundary.
-		draft.HistoryPortability = HistoryPortabilityStripOpaque
-		historyDegradation = HistoryDegradationStripOpaque
+		// contractsCompatible already verified the same-protocol boundary.
+		// Anthropic history moves to the new domain unchanged.
+		if stripRequired {
+			draft.HistoryPortability = HistoryPortabilityStripOpaque
+			historyDegradation = HistoryDegradationStripOpaque
+		}
 	} else if normalizeID(current.Binding.HistoryState) == HistoryStateMayContainOpaque {
 		// Same-domain activate: keep the existing opaque domain owner.
 		draft.HistoryDomain = current.Binding.HistoryDomain

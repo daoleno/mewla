@@ -10,26 +10,23 @@ import (
 
 // History portability / degradation vocabulary (daemon + wire).
 const (
-	// HistoryPortabilityStripOpaque means the Session has explicitly switched
+	// HistoryPortabilityStripOpaque means a Responses Session has switched
 	// HistoryDomain after opaque traffic and the router must strip provider-
-	// specific opaque blocks on every later request (CLIs may resent them).
+	// side state (previous_response_id, reasoning, item_reference) on every
+	// later request (Codex may resend it). Anthropic Messages routes never
+	// strip: their history is client-owned and forwarded byte-for-byte.
 	HistoryPortabilityStripOpaque = "strip_opaque_provider_state"
 	// HistoryDegradationStripOpaque is the honest activation fact recorded when
 	// a cross-domain activate relies on that strip boundary.
 	HistoryDegradationStripOpaque = "strip_opaque_provider_state"
-
-	// Portable placeholder retained when an Anthropic message would otherwise
-	// become empty after stripping thinking-only content. Keeps role adjacency
-	// valid without inventing assistant prose.
-	anthropicThinkingOmittedPlaceholder = "[provider thinking omitted]"
 )
 
 // portableHistoryProtocolsAllowed reports whether an opaque cross-domain
-// activate may proceed under the lightweight same-protocol strip boundary.
-// Evidence (Codex 0.146.1 / Claude Code 2.1.224 against local fakes): both CLIs
-// resend portable text history; opaque provider state is previous_response_id /
-// reasoning items / item_reference (Responses) or thinking/redacted_thinking
-// content blocks (Anthropic). No general translation.
+// activate may proceed. Anthropic Messages history is client-owned (the CLI
+// resends its own transcript, thinking blocks included) and is forwarded
+// byte-for-byte to the new upstream. Responses carries provider-side state
+// (previous_response_id / reasoning items / item_reference) that the router
+// strips; see opaqueHistoryStripRequired. No general translation.
 func portableHistoryProtocolsAllowed(current, next RouteBinding) bool {
 	if normalizeID(current.RouteProtocol) != normalizeID(next.RouteProtocol) {
 		return false
@@ -45,16 +42,21 @@ func portableHistoryProtocolsAllowed(current, next RouteBinding) bool {
 	}
 }
 
+// opaqueHistoryStripRequired reports whether a cross-domain switch on this
+// route protocol needs the router to strip provider state. Only Responses does:
+// a gateway in front of a same-protocol Anthropic client must stay transparent,
+// because upstreams may verify the exact client request bytes.
+func opaqueHistoryStripRequired(routeProtocol string) bool {
+	return normalizeID(routeProtocol) == RouteProtocolResponses
+}
+
 // normalizePortableHistoryBody strips provider-opaque history for a degraded
-// Session. Explicit policy (Codex Responses + Anthropic Messages only):
+// Responses Session. Explicit policy:
 //   - unknown item/content *types* are forwarded unchanged
 //   - known portable types project to an allowlisted field set (drop extras; never
 //     raw-forward provider-specific fields on tools/messages)
-//   - strip known opaque state (previous_response_id, reasoning, item_reference,
-//     thinking / redacted_thinking content)
+//   - strip known opaque state (previous_response_id, reasoning, item_reference)
 //   - keep visible text and refusal
-//   - thinking-only Anthropic assistant messages become an honest placeholder so
-//     role adjacency stays valid
 //   - malformed JSON/shapes fail closed (ErrRequestBodyMalformed)
 func normalizePortableHistoryBody(routeProtocol string, body []byte) ([]byte, string, error) {
 	if len(bytes.TrimSpace(body)) == 0 {
@@ -63,12 +65,6 @@ func normalizePortableHistoryBody(routeProtocol string, body []byte) ([]byte, st
 	switch normalizeID(routeProtocol) {
 	case RouteProtocolResponses:
 		out, err := normalizeResponsesPortableHistory(body)
-		if err != nil {
-			return nil, "", err
-		}
-		return out, HistoryDegradationStripOpaque, nil
-	case RouteProtocolAnthropicMessages:
-		out, err := normalizeAnthropicPortableHistory(body)
 		if err != nil {
 			return nil, "", err
 		}
@@ -192,128 +188,6 @@ func filterResponsesMessageItem(item json.RawMessage) (json.RawMessage, error) {
 	}
 	obj["content"] = json.RawMessage(encoded)
 	return projectJSONObjectFieldsFromMap(obj, []string{"type", "role", "content", "id", "status"})
-}
-
-func normalizeAnthropicPortableHistory(body []byte) ([]byte, error) {
-	obj, err := decodeJSONObject(body)
-	if err != nil {
-		return nil, err
-	}
-	if raw, ok := obj["messages"]; ok {
-		var msgs []json.RawMessage
-		if err := json.Unmarshal(raw, &msgs); err != nil {
-			return nil, fmt.Errorf("%w: anthropic messages must be an array: %v", ErrRequestBodyMalformed, err)
-		}
-		keptMsgs := make([]json.RawMessage, 0, len(msgs))
-		var prevRole string
-		for _, msg := range msgs {
-			kept, role, err := filterAnthropicMessage(msg)
-			if err != nil {
-				return nil, err
-			}
-			if kept == nil {
-				continue
-			}
-			if prevRole != "" && role != "" && prevRole == role {
-				return nil, fmt.Errorf("%w: anthropic role adjacency %q after portable strip", ErrRequestBodyNotPortable, role)
-			}
-			keptMsgs = append(keptMsgs, kept)
-			if role != "" {
-				prevRole = role
-			}
-		}
-		encoded, err := json.Marshal(keptMsgs)
-		if err != nil {
-			return nil, fmt.Errorf("%w: re-encode messages: %v", ErrRequestBodyMalformed, err)
-		}
-		obj["messages"] = json.RawMessage(encoded)
-	}
-	return encodeJSONObject(obj)
-}
-
-func filterAnthropicMessage(msg json.RawMessage) (json.RawMessage, string, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(msg, &obj); err != nil {
-		return nil, "", fmt.Errorf("%w: anthropic message: %v", ErrRequestBodyMalformed, err)
-	}
-	role := jsonRawString(obj["role"])
-	rawContent, ok := obj["content"]
-	if !ok {
-		proj, err := projectJSONObjectFieldsFromMap(obj, []string{"role", "content"})
-		return proj, role, err
-	}
-	var asString string
-	if err := json.Unmarshal(rawContent, &asString); err == nil {
-		proj, err := projectJSONObjectFieldsFromMap(obj, []string{"role", "content"})
-		return proj, role, err
-	}
-	var parts []json.RawMessage
-	if err := json.Unmarshal(rawContent, &parts); err != nil {
-		return nil, "", fmt.Errorf("%w: anthropic content must be string or array: %v", ErrRequestBodyMalformed, err)
-	}
-	kept := make([]json.RawMessage, 0, len(parts))
-	strippedThinkingOnly := false
-	for _, part := range parts {
-		var meta struct {
-			Type string `json:"type"`
-		}
-		if err := json.Unmarshal(part, &meta); err != nil {
-			return nil, "", fmt.Errorf("%w: anthropic content part: %v", ErrRequestBodyMalformed, err)
-		}
-		switch normalizeID(meta.Type) {
-		case "text":
-			// cache_control is request preference metadata, not opaque history.
-			proj, err := projectJSONObjectFields(part, []string{"type", "text", "cache_control"})
-			if err != nil {
-				return nil, "", err
-			}
-			kept = append(kept, proj)
-		case "tool_use":
-			proj, err := projectJSONObjectFields(part, []string{"type", "id", "name", "input"})
-			if err != nil {
-				return nil, "", err
-			}
-			kept = append(kept, proj)
-		case "tool_result":
-			proj, err := projectJSONObjectFields(part, []string{"type", "tool_use_id", "content", "is_error", "cache_control"})
-			if err != nil {
-				return nil, "", err
-			}
-			kept = append(kept, proj)
-		case "image", "document":
-			proj, err := projectJSONObjectFields(part, []string{"type", "source", "media_type", "title", "context", "cache_control"})
-			if err != nil {
-				return nil, "", err
-			}
-			kept = append(kept, proj)
-		case "thinking", "redacted_thinking":
-			strippedThinkingOnly = true
-			continue
-		case "":
-			return nil, "", fmt.Errorf("%w: anthropic content part missing type", ErrRequestBodyMalformed)
-		default:
-			kept = append(kept, part)
-		}
-	}
-	if len(kept) == 0 {
-		if strippedThinkingOnly && normalizeID(role) == "assistant" {
-			placeholder, _ := json.Marshal([]map[string]string{{
-				"type": "text",
-				"text": anthropicThinkingOmittedPlaceholder,
-			}})
-			obj["content"] = json.RawMessage(placeholder)
-			proj, err := projectJSONObjectFieldsFromMap(obj, []string{"role", "content"})
-			return proj, role, err
-		}
-		return nil, "", nil
-	}
-	encoded, err := json.Marshal(kept)
-	if err != nil {
-		return nil, "", fmt.Errorf("%w: re-encode anthropic content: %v", ErrRequestBodyMalformed, err)
-	}
-	obj["content"] = json.RawMessage(encoded)
-	proj, err := projectJSONObjectFieldsFromMap(obj, []string{"role", "content"})
-	return proj, role, err
 }
 
 // projectJSONObjectFields keeps only allowlisted fields (drops extras to avoid

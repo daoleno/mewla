@@ -42,23 +42,6 @@ func assertNoOpaqueResponsesHistory(t *testing.T, body []byte) {
 	}
 }
 
-func assertNoOpaqueAnthropicHistory(t *testing.T, body []byte) {
-	t.Helper()
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(body, &obj); err != nil {
-		t.Fatalf("B body not json: %v", err)
-	}
-	raw, ok := obj["messages"]
-	if !ok {
-		return
-	}
-	s := string(raw)
-	if strings.Contains(s, `"type":"thinking"`) || strings.Contains(s, `"type":"redacted_thinking"`) ||
-		strings.Contains(s, `"signature"`) {
-		t.Fatalf("opaque thinking leaked to B: %s", trimTail(s, 800))
-	}
-}
-
 func waitHits(t *testing.T, mu *sync.Mutex, sink *[][]byte, d time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(d)
