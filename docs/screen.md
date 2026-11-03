@@ -91,6 +91,26 @@ quality while the screen moves, down to a floor that is still readable, and
 sends what changed again at full quality once the screen is still. When nothing is
 late, nothing changes. The screen's size never changes.
 
+### Video for motion
+
+When much of the screen moves (a page scrolling, a video playing, a window being
+dragged) the changes are too many bytes as pictures: 100 to 300 KB a frame, more
+than a phone link carries. A viewer that can decode H.264 (RFB encoding 50, which
+the viewer's noVNC offers when the phone's web view has WebCodecs) then gets that
+motion as an H.264 stream from the computer's hardware encoder, a few KB a frame,
+and gets the sharp picture back as soon as the screen is still. Text and small
+changes (typing, the pointer) stay pictures. Input and the acknowledgements that
+pace the stream are unchanged, and an agent's own use of the screen
+(`mewla_computer`, screenshots, Watch) never uses video. The stream's bit rate
+follows the link: it falls below what was actually delivered when answers get
+late and rises again while they stay prompt.
+
+Video needs a hardware H.264 encoder (every Apple Silicon Mac has one) and a
+viewer that says it can decode it; otherwise nothing changes. It is **off by
+default** until it has been tried on real machines: start Mewla with
+`MEWLA_SCREEN_VIDEO=on` to turn it on, and `MEWLA_SCREEN_VIDEO=off` always
+turns it off. The log line for a session says how many of its updates were video.
+
 ## Keep the computer reachable
 
 While a device is allowed, Mewla keeps the computer awake so you can still
