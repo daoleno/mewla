@@ -50,10 +50,11 @@ What you type in either Chat or Terminal goes to the same `tmux` pane.
 
 ### Copy from the Terminal in a browser
 
-Select text with the mouse and press **Cmd+C** (Mac) or **Ctrl+C**, or
-**Ctrl+Shift+C**; the text goes to your computer's clipboard. With nothing
-selected, Ctrl+C still interrupts the program, and right after a Ctrl+C copy
-the next Ctrl+C interrupts again. A program that uses the mouse, such as `tmux`
+Select text with the mouse and press **Cmd+C** on a Mac, or **Ctrl+C** or
+**Ctrl+Shift+C** on Windows and Linux; the text goes to your computer's
+clipboard. With nothing selected, Ctrl+C still interrupts the program (on a
+Mac it always does), and right after a Ctrl+C copy the next Ctrl+C interrupts
+again. A program that uses the mouse, such as `tmux`
 with `mouse on`, `vim` or an agent's interface, keeps plain drags for itself:
 hold **Shift** (**Option** on a Mac) while you drag to select instead. What
 `tmux` copies when you select with it, and what a program copies with the
