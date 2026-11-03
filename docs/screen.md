@@ -80,9 +80,13 @@ hide it.
 
 Screen sends only the parts of the screen that changed, and always the newest
 screen: a slow connection drops frames instead of queueing them. It watches how
-late the phone's answers are. When they are late it first tries one more update
-in flight, and keeps it only if more updates then arrive each second (a long
-round trip); when that doesn't help (too many bytes), it lowers the picture
+late the phone's answers are. When they are late it first tries more updates
+in flight, and keeps them only if more updates then arrive each second (a long
+round trip). Up to 4 are allowed; while the updates are small (about 16 KB or
+less each, as when scrolling text, typing or moving the pointer) up to 16, since
+with 4 in flight a 650 ms round trip, such as the relay across an ocean, caps
+the picture at 6 updates a second however little there is to send. When that
+doesn't help (too many bytes), it lowers the picture
 quality while the screen moves, down to a floor that is still readable, and
 sends what changed again at full quality once the screen is still. When nothing is
 late, nothing changes. The screen's size never changes.
@@ -233,7 +237,11 @@ whether the phone reaches the computer through the Mewla Link relay or directly,
 and the stage says what holds the picture up.
 
 - **network** is high and the path is **Relay**: the round trip through the
-  relay dominates. A direct address (Tailscale, or Wi-Fi at home) avoids it,
+  relay dominates, and it is set by where the relay is: a relay on another
+  continent adds its distance twice (phone to relay, relay to computer), so
+  even a few KB takes 400 to 700 ms to be answered. Input then reaches the
+  screen that much later too; only a nearer relay or a direct address
+  shortens that. A direct address (Tailscale, or Wi-Fi at home) avoids it,
   and a phone paired through Mewla Link uses one by itself when the computer
   listens on that network and the phone can reach it; see
   [Direct when it can](connect-and-pair.md#direct-when-it-can). If the path

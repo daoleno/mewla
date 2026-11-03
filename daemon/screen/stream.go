@@ -1,6 +1,7 @@
 package screen
 
 import (
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -214,6 +215,17 @@ const (
 	// inFlightBase and inFlightMax bound the unacknowledged updates.
 	inFlightBase = 2
 	inFlightMax  = 4
+	// inFlightWide is the most allowed while updates are small. A long
+	// round trip (a relay an ocean away answers in 650 ms) then leaves the
+	// link empty: 4 updates a round trip is 6 a second, whatever the
+	// bandwidth. Small updates cost nothing to queue, so the window grows to
+	// what the round trip needs, never beyond what a frame a stretch
+	// (frameGap) would fill.
+	inFlightWide = 16
+	// smallUpdate is the average size up to which the wide window is safe:
+	// 16 updates of it are about 256 KB, a second of a modest link.
+	smallUpdate = 16 << 10
+	frameGap    = 33 * time.Millisecond
 	// behindAck is an acknowledgement age that feels late.
 	behindAck = 100 * time.Millisecond
 	// bigUpdate is the average size above which bytes are the suspect.
@@ -255,6 +267,7 @@ type streamController struct {
 	winAcks      int
 	probing      bool
 	probeBase    float64
+	probeFrom    int
 	noProbeUntil time.Time
 }
 
@@ -274,6 +287,10 @@ func (c *streamController) observe(now time.Time, age time.Duration, bytes int) 
 		return
 	}
 	c.winAcks++
+	// Updates that grew since the window widened are the bytes' to limit.
+	if c.inFlight > inFlightMax && c.bytes > smallUpdate {
+		c.inFlight = inFlightMax
+	}
 	if elapsed := now.Sub(c.winStart); elapsed >= probeWindow {
 		c.endWindow(now, float64(c.winAcks)/elapsed.Seconds())
 		c.winStart, c.winAcks = now, 0
@@ -317,16 +334,23 @@ func (c *streamController) endWindow(now time.Time, fps float64) {
 	if c.probing {
 		c.probing = false
 		if fps < c.probeBase*probeGain {
-			c.inFlight--
+			c.inFlight = c.probeFrom
 			c.bound = true
 			c.noProbeUntil = now.Add(probeRest)
 		}
 		return
 	}
 	late := c.ack > ms(behindAck)
-	if late && c.inFlight < inFlightMax && !now.Before(c.noProbeUntil) && c.winAcks >= 2 {
-		c.probing, c.probeBase = true, fps
-		c.inFlight++
+	most, next := inFlightMax, c.inFlight+1
+	if c.bytes <= smallUpdate {
+		// Go straight to what the round trip fills at one update a
+		// frameGap, instead of one step a probe.
+		most = inFlightWide
+		next = max(next, int(math.Ceil(c.ack/ms(frameGap))))
+	}
+	if late && c.inFlight < most && !now.Before(c.noProbeUntil) && c.winAcks >= 2 {
+		c.probing, c.probeBase, c.probeFrom = true, fps, c.inFlight
+		c.inFlight = min(next, most)
 		return
 	}
 }

@@ -20,6 +20,10 @@ type linkShape struct {
 	// in bytes per second.
 	oneWay time.Duration
 	rate   float64
+	// small drives the pointer across a still screen instead of scrolling a
+	// page: updates of a few KB, as when typing, dragging or watching a
+	// cursor, which only the round trip holds back.
+	small bool
 }
 
 // shapedPipe joins a viewer and a server through a link that delays and
@@ -112,18 +116,25 @@ type linkResult struct {
 func measureLink(t *testing.T, shape linkShape, adaptive bool) linkResult {
 	t.Helper()
 	fake := NewFakeBackend(1280, 800)
-	fake.Scroll = 6
+	if !shape.small {
+		fake.Scroll = 6
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	session, _ := fake.Start(ctx)
 	go func() {
-		for range time.Tick(time.Second / 30) {
+		for step := 0; ; step++ {
+			time.Sleep(time.Second / 30)
 			if ctx.Err() != nil {
 				return
 			}
-			fake.ScrollTick()
+			if shape.small {
+				_ = session.Pointer(100+step*7%900, 100+step*5%600, 0)
+			} else {
+				fake.ScrollTick()
+			}
 		}
 	}()
-	session, _ := fake.Start(ctx)
 	conn, server := shapedPipe(shape)
 	var mu sync.Mutex
 	var last StreamStats
@@ -263,10 +274,11 @@ func TestAdaptiveStreamingOverSimulatedLinks(t *testing.T) {
 		t.Skip("a minute of real time: set MEWLA_SCREEN_LINK_BENCH=1 to measure")
 	}
 	shapes := []linkShape{
-		{"LAN 100 Mb/s, 2 ms", 2 * time.Millisecond, 100e6 / 8},
-		{"relay 20 Mb/s, 150 ms RTT", 75 * time.Millisecond, 20e6 / 8},
-		{"mobile 4 Mb/s, 80 ms RTT", 40 * time.Millisecond, 4e6 / 8},
-		{"weak 1.5 Mb/s, 200 ms RTT", 100 * time.Millisecond, 1.5e6 / 8},
+		{"LAN 100 Mb/s, 2 ms", 2 * time.Millisecond, 100e6 / 8, false},
+		{"relay 20 Mb/s, 150 ms RTT", 75 * time.Millisecond, 20e6 / 8, false},
+		{"mobile 4 Mb/s, 80 ms RTT", 40 * time.Millisecond, 4e6 / 8, false},
+		{"weak 1.5 Mb/s, 200 ms RTT", 100 * time.Millisecond, 1.5e6 / 8, false},
+		{"relay 5 Mb/s, 650 ms RTT, small updates", 325 * time.Millisecond, 5e6 / 8, true},
 	}
 	type pair struct{ fixed, adaptive linkResult }
 	results := make([]pair, len(shapes))
