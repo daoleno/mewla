@@ -72,6 +72,7 @@ function runClaude(prompt) {
           if (m.type === 'assistant') for (const c of m.message?.content ?? []) if (c.type === 'tool_use') tools++;
         } catch {}
       }
+      if (args.keep) { try { writeFileSync(path.join(args.keep, `${side}-${Date.now()}.jsonl`), out); } catch {} }
       resolve({ code, wall, result, tools, err: err.slice(0, 300) });
     });
   });

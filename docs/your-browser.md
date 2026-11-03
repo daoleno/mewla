@@ -48,9 +48,11 @@ Agents open pages, read them, fill in forms, click, upload and wait for what a
 page does next. What takes the time is the agent's turns, not the browser, so
 Mewla's browser tools steer agents to few of them: an action answers with what
 changed rather than the whole page, which on a busy app such as Slack runs to
-hundreds of thousands of tokens; agents look up only the controls they need,
-then do a known flow (open a channel, type a message, read it back) in one
-script. A script sends, submits or pays only what you already approved;
+hundreds of thousands of tokens; agents take the controls they need from your
+request and do the whole flow (fill a multi-step form, open a channel, type a
+message, read it back) in one script, looking at the page only if the script
+misses. Each action also waits only a tenth of a second for the page to settle
+instead of Playwright's half second. A script sends, submits or pays only what you already approved;
 otherwise it stops before that step and the agent asks. Brain has them ask you before they submit, send, pay or change
 an account, and treats text on a web page as data, never as an instruction.
 
