@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 )
 
 func checkboxApp(stubborn bool) []FakeApp {
@@ -82,5 +83,36 @@ func TestWaitForGoneAndEnabled(t *testing.T) {
 	}
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "wait_for", App: "Settings", Until: "sometime", Match: &ElementMatch{Role: "CheckBox"}}); err == nil {
 		t.Fatal("an unknown until must be refused")
+	}
+}
+
+// An action whose effect shows at once is answered after one read, with no
+// wait; one that shows nothing is looked at again after the longer wait.
+func TestElementActionReadsOnceWhenItShowedAtOnceAndTwiceWhenNot(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = checkboxApp(false)
+	backend.OnElementAction = func(app *FakeApp, index int, action string) {
+		if action == "AXPress" {
+			app.Elements[index].Value = "1"
+		}
+	}
+	state := act(t, s, "%7", AgentAction{Action: "app_state", App: "Settings"}).Text
+	box := idOf(t, state, `CheckBox "Sync"`)
+	reads := backend.Reads
+	start := time.Now()
+	act(t, s, "%7", AgentAction{Action: "element", Element: box, ElementAction: "press"})
+	if got := backend.Reads - reads; got != 1 {
+		t.Fatalf("a visible change took %d reads", got)
+	}
+	if d := time.Since(start); d > settleFirst {
+		t.Fatalf("a visible change waited %v", d)
+	}
+	// Focusing a field changes the focus row at once too; pressing something
+	// that changes nothing is read twice.
+	reads = backend.Reads
+	backend.OnElementAction = nil
+	act(t, s, "%7", AgentAction{Action: "element", Element: box, ElementAction: "press"})
+	if got := backend.Reads - reads; got != 2 {
+		t.Fatalf("no visible change took %d reads", got)
 	}
 }
