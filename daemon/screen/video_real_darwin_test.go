@@ -6,18 +6,17 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
 // TestRealScreenVideoOverSimulatedLinks measures the real thing: this Mac's
-// own capture, a long page scrolled in Safari by scripted wheel events, the
-// real hardware encoder, over the same simulated links as the fake-screen
-// bench. It opens one Safari window (titled mewla-scroll-fixture, left open) and scrolls it for about two minutes; run
-// it when nobody is using this Mac. MEWLA_SCREEN_REAL_BENCH=1 and -v.
+// own capture, a long page that scrolls itself in Safari (requestAnimationFrame
+// in the page; no wheel, key or click events), the real hardware encoder, over
+// the same simulated links as the fake-screen bench. It opens one Safari tab
+// (titled "mewla-scroll-fixture loop", left open) and needs about two minutes;
+// run it when nobody is using this Mac. MEWLA_SCREEN_REAL_BENCH=1 and -v.
 func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 	if os.Getenv("MEWLA_SCREEN_REAL_BENCH") == "" {
 		t.Skip("opens a Safari window and scrolls it: set MEWLA_SCREEN_REAL_BENCH=1")
@@ -29,24 +28,9 @@ func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 		t.Skipf("Screen is not ready here: %+v", capability)
 	}
 
-	page := filepath.Join(t.TempDir(), "mewla-scroll-fixture.html")
-	var html strings.Builder
-	html.WriteString("<!doctype html><title>mewla-scroll-fixture</title><body style='font:16px Helvetica;margin:40px'>")
-	for i := 0; i < 400; i++ {
-		fmt.Fprintf(&html, "<p style='max-width:900px'>Paragraph %d. The quick brown fox jumps over the lazy dog while a page of ordinary text scrolls past the capture, with a picture every so often.</p>", i)
-		if i%6 == 0 {
-			fmt.Fprintf(&html, "<div style='height:240px;max-width:900px;background:linear-gradient(%ddeg,hsl(%d,70%%,60%%),hsl(%d,70%%,35%%))'></div>", i*7%360, i*37%360, (i*37+120)%360)
-		}
-	}
-	if err := os.WriteFile(page, []byte(html.String()), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := exec.Command("open", "-a", "Safari", page).Run(); err != nil {
-		t.Skipf("no Safari: %v", err)
-	}
-	// The window is left open (no AppleScript: closing it that way needs the
-	// Automation permission, which waits for a person at the Mac). Its title is
-	// mewla-scroll-fixture; the person running this closes it.
+	// The page scrolls itself up and down (requestAnimationFrame); no input
+	// reaches the Mac. Its tab is titled mewla-scroll-fixture loop.
+	openScrollFixture(t, "loop", "loop=1")
 	time.Sleep(4 * time.Second)
 
 	session, err := backend.Start(ctx)
@@ -58,15 +42,8 @@ func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := first.Image.Bounds()
-	cx, cy := b.Dx()/2, b.Dy()/2
-	drive := func(step int) {
-		// One wheel notch every other tick; the page keeps moving.
-		if step%2 == 0 {
-			_ = session.Pointer(cx, cy, 16)
-			_ = session.Pointer(cx, cy, 0)
-		}
-	}
+	_ = first
+	drive := func(step int) {}
 
 	shapes := []linkShape{
 		{"LAN 100 Mb/s, 2 ms", 2 * time.Millisecond, 100e6 / 8, false},

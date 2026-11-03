@@ -13,11 +13,11 @@ import (
 	"image/png"
 	"io"
 	"math"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -47,22 +47,6 @@ func TestRealScreenStillAndSharpness(t *testing.T) {
 	if capability := backend.Capability(ctx); !capability.Ready() {
 		t.Skipf("Screen is not ready here: %+v", capability)
 	}
-	page := filepath.Join(t.TempDir(), "mewla-scroll-fixture.html")
-	var html strings.Builder
-	html.WriteString("<!doctype html><title>mewla-scroll-fixture</title><body style='font:16px Helvetica;margin:40px'>")
-	for i := 0; i < 400; i++ {
-		fmt.Fprintf(&html, "<p style='max-width:900px'>Paragraph %d. The quick brown fox jumps over the lazy dog while a page of ordinary text scrolls past the capture, with a picture every so often.</p>", i)
-		if i%6 == 0 {
-			fmt.Fprintf(&html, "<div style='height:240px;max-width:900px;background:linear-gradient(%ddeg,hsl(%d,70%%,60%%),hsl(%d,70%%,35%%))'></div>", i*7%360, i*37%360, (i*37+120)%360)
-		}
-	}
-	if err := os.WriteFile(page, []byte(html.String()), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := exec.Command("open", "-a", "Safari", page).Run(); err != nil {
-		t.Skipf("no Safari: %v", err)
-	}
-	time.Sleep(4 * time.Second)
 	out := os.Getenv("MEWLA_SCREEN_BENCH_OUT")
 
 	var table strings.Builder
@@ -72,6 +56,10 @@ func TestRealScreenStillAndSharpness(t *testing.T) {
 		video videoFactory
 	}{{"tiles", nil}, {"video", newVTEncoder}} {
 		// A fresh session per mode so one's leftovers do not reach the other.
+		// Its own tab per mode: the page scrolls itself once, 3 s after it
+		// opens, for 4 s, and stays still; no input of any kind.
+		openScrollFixture(t, mode.name, "delay=7000&run=4000")
+		time.Sleep(4 * time.Second)
 		session, err := backend.Start(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -91,23 +79,7 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	t.Helper()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	first, err := session.Frame(ctx, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b := first.Image.Bounds()
-	cx, cy := b.Dx()/2, b.Dy()/2
-	var moving atomic.Bool
-	moving.Store(true)
-	go func() {
-		for step := 0; ctx.Err() == nil; step++ {
-			time.Sleep(time.Second / 30)
-			if moving.Load() && step%2 == 0 {
-				_ = session.Pointer(cx, cy, 16)
-				_ = session.Pointer(cx, cy, 0)
-			}
-		}
-	}()
+	var err error
 	conn, server := shapedPipe(linkShape{"LAN", 2 * time.Millisecond, 100e6 / 8, false})
 	was := streamAdaptive
 	streamAdaptive = true
@@ -151,12 +123,8 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 
 	var updates []got
 	began := time.Now()
-	stopAt := began.Add(5 * time.Second)
-	end := stopAt.Add(3 * time.Second)
+	end := began.Add(14 * time.Second)
 	for time.Now().Before(end) {
-		if moving.Load() && time.Now().After(stopAt) {
-			moving.Store(false)
-		}
 		cur = nil
 		kind, fence, _ := skim.message()
 		switch kind {
@@ -176,27 +144,35 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	}
 
 	// Last moving update: the one before the first quiet gap of 200 ms
-	// after the warm-up.
+	// that follows motion (five updates within half a second).
 	var res stillResult
 	stillIdx := -1
+	moved := false
 	for i := 1; i < len(updates); i++ {
-		if updates[i].at.Sub(began) > 2500*time.Millisecond && updates[i].at.Sub(updates[i-1].at) >= 200*time.Millisecond {
+		if !moved {
+			for j := i; j >= 0 && updates[i].at.Sub(updates[j].at) <= 500*time.Millisecond; j-- {
+				if i-j >= 4 {
+					moved = true
+					break
+				}
+			}
+			continue
+		}
+		if updates[i].at.Sub(updates[i-1].at) >= 200*time.Millisecond {
 			stillIdx = i
 			break
 		}
 	}
 	if stillIdx < 0 {
-		t.Logf("%s: no still update seen (%d updates)", name, len(updates))
+		t.Logf("%s: no still update seen (%d updates, moved=%v)", name, len(updates), moved)
 		return res
 	}
 	for _, u := range updates[:stillIdx] {
-		if u.at.Sub(began) > 2500*time.Millisecond {
-			res.motionUpdates++
-			for _, r := range u.rects {
-				if r.video {
-					res.motionVideoUpdates++
-					break
-				}
+		res.motionUpdates++
+		for _, r := range u.rects {
+			if r.video {
+				res.motionVideoUpdates++
+				break
 			}
 		}
 	}
@@ -292,4 +268,47 @@ type stillRect struct {
 	video bool
 	jpeg  []byte
 	fill  []byte
+}
+
+// openScrollFixture opens, in Safari, a long page that scrolls itself with
+// requestAnimationFrame: no wheel, key or click events reach the Mac. Query
+// parameters: delay (ms after load before it starts), run (ms of scrolling,
+// then it stays still) or loop (scroll up and down for ever). Its title
+// carries the label and query, so the tab can be told from any other.
+func openScrollFixture(t *testing.T, label, query string) {
+	t.Helper()
+	page := filepath.Join(t.TempDir(), "mewla-scroll-fixture-"+label+".html")
+	var html strings.Builder
+	html.WriteString("<!doctype html><title>mewla-scroll-fixture</title><style>html{scroll-behavior:auto}</style><body style='font:16px Helvetica;margin:40px'>")
+	for i := 0; i < 400; i++ {
+		fmt.Fprintf(&html, "<p style='max-width:900px'>Paragraph %d. The quick brown fox jumps over the lazy dog while a page of ordinary text scrolls past the capture, with a picture every so often.</p>", i)
+		if i%6 == 0 {
+			fmt.Fprintf(&html, "<div style='height:240px;max-width:900px;background:linear-gradient(%ddeg,hsl(%d,70%%,60%%),hsl(%d,70%%,35%%))'></div>", i*7%360, i*37%360, (i*37+120)%360)
+		}
+	}
+	html.WriteString(`<script>
+document.title = 'mewla-scroll-fixture ' + ` + "`" + label + " ` + location.search" + `;
+const q = new URLSearchParams(location.search);
+const delay = +q.get('delay') || 0, run = +q.get('run') || 0, loop = q.has('loop'), speed = 900;
+setTimeout(() => {
+  const t0 = performance.now();
+  const tick = (now) => {
+    const el = now - t0;
+    if (!loop && el >= run) return;
+    const max = document.documentElement.scrollHeight - innerHeight;
+    let y = speed * el / 1000;
+    if (loop) { const p = y % (2 * max); y = p < max ? p : 2 * max - p; }
+    scrollTo(0, y);
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}, delay);
+</script>`)
+	if err := os.WriteFile(page, []byte(html.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	u := url.URL{Scheme: "file", Path: page, RawQuery: query}
+	if err := exec.Command("open", "-a", "Safari", u.String()).Run(); err != nil {
+		t.Skipf("no Safari: %v", err)
+	}
 }
