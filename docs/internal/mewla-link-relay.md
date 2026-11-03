@@ -242,6 +242,83 @@ GeoDNS/Anycast may steer a region hostname to its regional process, with
 Pairing V2. Do not build a custom backbone, SD-WAN, or P2P/NAT traversal layer
 for this MVP.
 
+## Asia region (planned, not deployed)
+
+Why: a phone and Mac in China reach the one relay in Quebec through two
+trans-Pacific hops, so even a 3 KB Screen update takes 650 to 1000 ms to be
+acknowledged (measured from the Mac's session logs). A relay in Hong Kong,
+Tokyo or Singapore should bring that to roughly 100 to 200 ms; pick the region
+by measuring (below), not by assumption.
+
+**A second `-relay` is not enough, and adding one today would break Asian
+users.** The daemon (`selectRelay`) registers on only the relay with the lowest
+round trip from the computer and closes the others, but a phone dials
+`<label>.m.mewla.ai`, which the wildcard record sends to Quebec. A Shanghai Mac
+that registers in Hong Kong would be unreachable. The route and the name have
+to agree. Two designs:
+
+| | (a) Per-region hostnames | (b) Per-machine DNS (recommended) |
+| --- | --- | --- |
+| Phone sees | `<label>.hk.m.mewla.ai` and `<label>.m.mewla.ai` as separate Pairing V2 candidates | The one `<label>.m.mewla.ai`, as today |
+| Certificate | Needs a SAN per region (`ServerTLSConfig` matches one name today) and a new certificate per computer, against the Let's Encrypt budget | Unchanged |
+| Existing phones | Need a candidate update or a re-pair | Unchanged |
+| Daemon | Stays registered on every relay, so a phone can use any | Stays on its nearest relay and tells the account service which |
+| Failover | Phone picks another candidate at once | Waits for the DNS TTL (60 s) |
+| Cost | Cert issuance, `ServerTLSConfig`, pairing payload, phone | One signed request, one DNS A record per computer off the default relay |
+
+Design (b), the changes it needs:
+
+1. `mewla-account` learns each relay's public IPv4:
+   `-relay name=hk,control=hk.connect.mewla.ai:8443,server-name=hk.connect.mewla.ai,ca-file=...,ip=<ip>`;
+   the first relay is the default and is covered by the wildcard record.
+2. A signed `POST /v1/machine/relay {relay}` from the daemon (same request
+   signing as the grant renewal). The account service checks the name is
+   configured, then upserts `A <label>.m.mewla.ai -> <relay ip>` (TTL 60) with
+   the Cloudflare provider, or deletes the record when the relay is the
+   default. `dns.Provider` grows `SetA` and `ClearA`; the token already has DNS
+   edit on the zone.
+3. The connector calls it after it registers on a relay other than the default,
+   and again whenever it moves. Admission already asks every candidate and
+   keeps the ones that answer, so pairing needs no change.
+4. **Gate the second relay by capability.** The account must advertise it only
+   to daemons whose signed request says they can report their relay. An older
+   daemon that sees two relays would register in Hong Kong and never report it.
+   Ship the daemon release and the account endpoint first; add `-relay hk` to
+   the account's flags last.
+
+Choosing the region: from the Mac, `curl -w` the TLS connect time to a
+candidate's `:8443` (or `mtr`) for 20 samples per region at different times of
+day, and repeat from the phone's mobile network. Check reachability too: the
+region must connect on `:443` and `:8443` from a mainland carrier, not only from
+the Mac's office network.
+
+Host and Kamal: a small VPS (1 vCPU, 2 GB) is enough for the relay, which only
+forwards bytes; watch the provider's monthly traffic allowance, since a
+Screen video stream is about 2 Mbit/s while it is watched. The host needs
+Docker, user `ubuntu` with the deploy key, and inbound 22, 443 and 8443. It
+gets its own control certificate (P-256, SAN `hk.connect.mewla.ai`) and the
+same `grant.pub` as Quebec (one grant key signs for every relay). DNS, unproxied:
+`A hk.connect.mewla.ai`. Deploy only the relay: a copy of the `relay`
+accessory in a second Kamal config (`config/deploy.asia.yml`, own service name
+and host), booted with `kamal accessory boot relay -c config/deploy.asia.yml`;
+no account role runs there. Verify on the first deploy that Kamal accepts a
+config with accessories only; if it does not, run the same image under a
+systemd unit.
+
+Rollout, drain-safe: (1) boot the relay; nothing points at it. (2) Check
+`/healthz`, `/readyz`, metrics. (3) Release the daemon and deploy the account
+endpoint (both ignore a second relay until it is advertised). (4) Add the
+`-relay hk` flag for capable daemons only and watch `account:` logs: a test
+computer reports `hk`, its record appears, a phone reaches it over Hong Kong.
+(5) Widen.
+
+Rollback, in this order: stop the Asia relay (`kamal accessory stop relay -c
+config/deploy.asia.yml`); its computers re-register in Quebec within seconds.
+Delete the override A records (the account service tags them; list them by
+that tag and delete). Remove `-relay hk` and redeploy the account service.
+Quebec is untouched throughout, and Pairing V1, LAN and Tailscale paths do not
+depend on any of this.
+
 ## Hosted remote access
 
 `config/deploy.yml` deploys the hosted service with Kamal on one host
