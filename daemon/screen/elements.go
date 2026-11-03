@@ -45,6 +45,8 @@ type ElementTree struct {
 	Truncated bool
 	// PID is the app's process, when read by app.
 	PID int
+	// Note is something to tell the agent with this read, once.
+	Note string
 	// IDs are the elements' ids, when an agent's app read gave them out;
 	// otherwise element i's id is i+1.
 	IDs []int
