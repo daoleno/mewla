@@ -7,10 +7,18 @@ import React, {
 } from "react";
 import { StyleSheet, View } from "react-native";
 import { Terminal, type ITheme } from "@xterm/xterm";
+import { ClipboardAddon } from "@xterm/addon-clipboard";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { Typography } from "../../constants/tokens";
 import type { TerminalThemePalette } from "../../constants/terminalThemes";
+import {
+  TerminalClipboard,
+  browserClipboardEnvironment,
+  createProgramClipboardProvider,
+  isMacPlatform,
+  terminalKeyAction,
+} from "./terminalClipboard";
 import { applyCtrlModifier } from "./terminalControl";
 import type {
   TerminalSurfaceHandle,
@@ -106,14 +114,40 @@ export const TerminalSurface = forwardRef<
       cursorBlink: true,
       fontFamily: Typography.terminalFont,
       fontSize: WEB_TERMINAL_FONT_SIZE_PX,
+      // A program that reports the mouse (tmux, vim, Claude Code) owns plain
+      // drags; Shift selects instead, and on a Mac, where Shift does not,
+      // Option does.
+      macOptionClickForcesSelection: true,
       scrollback: 5000,
       theme: xtermTheme(initialThemeRef.current),
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+    const clipboard = new TerminalClipboard(browserClipboardEnvironment());
+    // OSC 52: what a tmux copy-mode yank or an editor copies on the computer
+    // reaches this browser's clipboard.
+    term.loadAddon(new ClipboardAddon(undefined, createProgramClipboardProvider(clipboard)));
     term.open(host);
     termRef.current = term;
     fitRef.current = fitAddon;
+
+    const mac = isMacPlatform();
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type === "keydown") void clipboard.flushPending();
+      const action = terminalKeyAction(event, term.hasSelection(), mac);
+      if (action.kind === "pass") return true;
+      event.preventDefault();
+      if (action.kind === "copy") {
+        const text = term.getSelection();
+        void clipboard.copySelection(text).then((copied) => {
+          if (copied && action.clearSelection && termRef.current === term) term.clearSelection();
+        });
+      }
+      return false;
+    });
+    // A click is a user gesture: finish a program's copy the browser held back.
+    const flushClipboard = () => void clipboard.flushPending();
+    host.addEventListener("pointerup", flushClipboard);
 
     const dataSubscription = term.onData((data) => {
       if (ctrlArmedRef.current) {
@@ -164,6 +198,7 @@ export const TerminalSurface = forwardRef<
       cancelAnimationFrame(frame);
       clearTimeout(settle);
       observer.disconnect();
+      host.removeEventListener("pointerup", flushClipboard);
       dataSubscription.dispose();
       termRef.current = null;
       fitRef.current = null;
