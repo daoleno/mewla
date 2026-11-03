@@ -159,9 +159,21 @@ is sent through a part of macOS Apple doesn't document, which an app behind
 others may ignore, so the agent is told to check what happened. Where that
 isn't available, and for apps built on Chromium, the app comes to the front
 for the click. They can run a short
-list of such steps in one go, such as find, press, type and check. Apps built on web pages, such as Electron apps, show little
-this way; there agents take a screenshot and click, type and scroll on what
-they see, as a person would. It needs nothing beyond what Screen
+list of such steps in one go, such as find, press, type and check. To find
+something they ask for only the elements that match (a role, a name, a value),
+or for what is inside one element or its top levels, rather than the whole
+app. Each action says whether it was delivered: verified, sent and not
+verified (not to be repeated blindly), or refused (safe to retry); `check`
+and `uncheck` press only when the state isn't already the one asked. They can choose or
+list an app's menu items by name (`File > Save As…`), in the background, and
+wait for an element to appear, go away or become enabled. Shortcuts and menu
+items that quit an app, log you out, shut down, restart or empty the Trash are
+refused unless you asked the agent for exactly that. Apps built on web pages
+(Electron apps such as Slack, VS Code and Cursor) are read too: the first read
+of one switches on its web accessibility (`AXManualAccessibility`, confirmed by
+reading it back) and tells the agent; the app builds that part of its tree and
+may use more memory until it is restarted. Where an app still shows little, agents take a screenshot
+and click, type and scroll on what they see, as a person would. It needs nothing beyond what Screen
 already has: **Agents can use this computer** on (Settings → your Mac, on by
 default), Screen not turned off, and Mewla's Screen Recording and
 Accessibility permissions. The Mac's page in Settings says which permission is
