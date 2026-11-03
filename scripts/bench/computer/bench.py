@@ -110,6 +110,7 @@ class Rec:
         if rows is not None:
             e["rows"].append(rows)
         e["trunc"] += int(r.get("trunc", False))
+        e["web_note"] = e.get("web_note", 0) + int(bool(r.get("web_note")))
         e["calls"] = calls
 
     def summary(self):
@@ -121,7 +122,7 @@ class Rec:
                       "bytes_p50": pct(e["bytes"], 50), "rows_p50": pct(e["rows"], 50),
                       "truncated": e["trunc"], "errors": e["errors"],
                       "paused_dropped": e["paused_dropped"], "calls_per_sample": e["calls"],
-                      "error_codes": e["codes"]}
+                      "error_codes": e["codes"], "web_ax_switched": e.get("web_note", 0)}
         return out
 
 
@@ -142,6 +143,7 @@ def mewla_run(n, apps, cmd, scratch):
         def go(name, tool, args, rowsf=False):
             r = m.call(tool, args)
             r["trunc"] = is_trunc(r["text"])
+            r["web_note"] = "web accessibility" in r["text"]  # Mewla switched an Electron app's tree on
             rec.add(name, r, rows=rows_of(r["text"]) if rowsf else None)
             return r
         listing = m.call("apps", {})["text"]
