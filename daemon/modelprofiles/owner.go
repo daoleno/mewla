@@ -1749,6 +1749,12 @@ func shouldBypassProfiles(executorID, profileID, baseCommand string) bool {
 	if looksLikeRawOrCustomCommand(cmd) {
 		return true
 	}
+	// A separate sign-in (its own CLAUDE_CONFIG_DIR or CODEX_HOME) keeps its own
+	// account: the machine-level Model Provider route would replace that login
+	// with a placeholder key. An explicit profile choice above still applies.
+	if strings.Contains(cmd, "CLAUDE_CONFIG_DIR=") || strings.Contains(cmd, "CODEX_HOME=") {
+		return true
+	}
 	if executorID == "" || !SupportsExecutor(executorID) {
 		return true
 	}
