@@ -116,3 +116,17 @@ func TestElementActionReadsOnceWhenItShowedAtOnceAndTwiceWhenNot(t *testing.T) {
 		t.Fatalf("no visible change took %d reads", got)
 	}
 }
+
+// Setting a field to what it already holds is verified at once: one read.
+func TestSettingTheSameValueReadsOnce(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = checkboxApp(false)
+	state := act(t, s, "%7", AgentAction{Action: "app_state", App: "Settings"}).Text
+	field := idOf(t, state, `TextField "Name"`)
+	act(t, s, "%7", AgentAction{Action: "element", Element: field, ElementAction: "set_value", Text: "same"})
+	reads := backend.Reads
+	got := act(t, s, "%7", AgentAction{Action: "element", Element: field, ElementAction: "set_value", Text: "same"}).Text
+	if backend.Reads-reads != 1 || !strings.Contains(got, "Delivery: verified") {
+		t.Fatalf("%d reads: %s", backend.Reads-reads, got)
+	}
+}
