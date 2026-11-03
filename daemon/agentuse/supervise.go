@@ -126,6 +126,7 @@ type supervisor struct {
 var toolAdvice = map[string]string{
 	"browser_run_code_unsafe": "Each tool call costs a model turn, which takes far longer than the browser. Script a whole flow in one call: when the task names the fields and buttons (a form, a wizard with Next buttons, items to add and tick), take their names from the task, or from browser_find, and fill, click and wait in one script with getByLabel, getByRole or getByText and a short timeout on each step, such as { timeout: 3000 }, so a wrong guess fails fast. Only if it fails, look at the page (browser_find, or a snapshot of one part) and script the rest. Return just what you need to read. A send, submit or payment goes in the script only if it is already approved; otherwise stop the script before it, ask, then finish.",
 	"browser_snapshot":        "Actions don't return the page, so take a snapshot only when you need to see it. A busy app's whole page (chat, mail, docs) can run to hundreds of thousands of tokens: prefer browser_find, or pass target to snapshot one part.",
+	"browser_tabs":            "To open or read several pages, do it in one browser_run_code_unsafe script (page.context().newPage(), goto, read what you need, return it all) rather than one call per tab. Use this tool for a single tab operation.",
 	"browser_find":            "The cheap way to learn the controls a flow needs, or to check that it worked: search for the few names you need, not for every button or textbox.",
 }
 
