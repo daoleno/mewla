@@ -61,7 +61,15 @@ func NewDoor(manager *Manager, backend Backend) *Door {
 			return nil
 		}
 		return d.server(agent)
-	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	}, &mcp.StreamableHTTPOptions{
+		Stateless:    true,
+		JSONResponse: true,
+		// The SDK refuses a loopback peer that names a public Host, which is
+		// what a request forwarded by Mewla Link looks like. TransportAllowed
+		// already requires a loopback Host for plain HTTP and accepts a public
+		// one only over TLS, so the rebinding guard is redundant here.
+		DisableLocalhostProtection: true,
+	})
 	return d
 }
 

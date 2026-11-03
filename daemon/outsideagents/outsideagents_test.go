@@ -265,3 +265,26 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 var tlsState = tlsConnectionState()
+
+// A request that Mewla Link forwards arrives over TLS from a loopback peer with
+// the public host name; the SDK's rebinding guard must not refuse it.
+func TestDoorServesTLSWithPublicHostFromLoopback(t *testing.T) {
+	m, _ := New(t.TempDir())
+	token, _ := approvedAgent(t, m, "Remote Claude")
+	server := httptest.NewTLSServer(http.HandlerFunc(NewDoor(m, &fakeBackend{}).ServeHTTP))
+	defer server.Close()
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`
+	req, _ := http.NewRequest("POST", server.URL, strings.NewReader(body))
+	req.Host = "quiet-otter.m.mewla.ai"
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("initialize over TLS with a public Host = %d, want 200", resp.StatusCode)
+	}
+}
