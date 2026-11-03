@@ -113,6 +113,12 @@ export interface StreamReadout {
    * daemon sees only the address a tunnel or proxy connected from.
    */
   viaPath?: ScreenPath | null;
+  /**
+   * Why a relay stream is not direct. "announced" means the computer listed
+   * LAN or Tailscale addresses this phone could not reach (not on that Wi-Fi
+   * or tailnet); "none" means it listed no address at all.
+   */
+  directHint?: "announced" | "none" | null;
 }
 
 const PATH_LABELS: Record<ScreenPath, string> = {
@@ -163,6 +169,8 @@ export function streamHeadline(readout: StreamReadout): string | null {
   const parts: string[] = [];
   const path = readout.viaPath ?? readout.daemon?.path;
   if (path) parts.push(PATH_LABELS[path]);
+  if (path === "relay" && readout.directHint === "announced") parts.push("no LAN/Tailscale route from this phone");
+  if (path === "relay" && readout.directHint === "none") parts.push("computer lists no LAN/Tailscale address");
   const slowest = slowestStage(readout);
   if (slowest) parts.push(`${slowest.label} ${Math.round(slowest.ms)} ms`);
   if (qualityReduced(readout.daemon, readout.viewerQuality)) parts.push("reduced quality");

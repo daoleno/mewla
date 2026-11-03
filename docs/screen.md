@@ -247,7 +247,12 @@ and the stage says what holds the picture up.
   [Direct when it can](connect-and-pair.md#direct-when-it-can). If the path
   stays **Relay** at home, the phone can't reach the computer's private
   address: another Wi-Fi network, client isolation on the router, or a firewall
-  blocking the port.
+  blocking the port. The badge says which case it is: **no LAN/Tailscale route
+  from this phone** means the computer listed private addresses and none could
+  be verified from here (turn Tailscale on on the phone, or join the same
+  Wi-Fi); **computer lists no LAN/Tailscale address** means the computer
+  listens on none, for example because it has no private network address or is
+  started on a non-loopback address.
 - **encode** is high: the computer is busy; a full-screen update normally takes
   about 10 ms.
 - **app** or **draw** is high: the phone is the limit (its bridge into the

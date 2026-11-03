@@ -147,6 +147,11 @@ describe("stream stages", () => {
     expect(streamHeadline(readout({ viaPath: "tailscale", daemon: null }))).toBe("Tailscale · network 142 ms");
     expect(streamHeadline(readout({ viaPath: null, daemon: daemonStats({ path: "lan" }) }))).toContain("LAN");
   });
+  test("a relay stream says why it is not direct", () => {
+    expect(streamHeadline(readout({ viaPath: "relay", directHint: "announced" }))).toBe("Relay · no LAN/Tailscale route from this phone · network 142 ms");
+    expect(streamHeadline(readout({ viaPath: "relay", directHint: "none" }))).toBe("Relay · computer lists no LAN/Tailscale address · network 142 ms");
+    expect(streamHeadline(readout({ viaPath: "lan", directHint: "announced" }))).toBe("LAN · network 142 ms");
+  });
   test("an older daemon's stream still has a headline from what the phone measured", () => {
     expect(streamHeadline(readout({ daemon: null }))).toBe("network 142 ms");
     expect(streamHeadline(readout({ daemon: null, rttMs: null, bridgeMs: null, presentMs: null }))).toBeNull();
