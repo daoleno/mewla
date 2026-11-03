@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { CloudProfileList } from "../../../components/plugins/CloudProfileList";
+import { AccountList } from "../../../components/plugins/AccountList";
 import { CustomServiceForm } from "../../../components/plugins/CustomServiceForm";
 import { HyperliquidForm } from "../../../components/plugins/HyperliquidForm";
 import { AccountCard, ConnectOffer, ServiceHeader, ToolUpdatesNotice } from "../../../components/plugins/PluginConnectionViews";
@@ -68,7 +68,7 @@ export default function PluginServiceScreen() {
       running={flow.running}
       onConfirm={(names) => flow.confirmUpdates(account, names)}
     />)}
-    {cloud ? <CloudProfileList key={`${flow.serverId}:${plugin.id}`} accounts={accounts} renderDetails={accountCard} /> : accounts.map((account) => accountCard(account))}
+    {accounts.length ? <AccountList key={`${flow.serverId}:${plugin.id}`} accounts={accounts} renderDetails={accountCard} /> : null}
     {!cloud ? tail : null}
   </PluginsPage>;
 }

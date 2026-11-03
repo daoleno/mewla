@@ -1,4 +1,5 @@
 import { cloudProfilesSummary } from "../../services/cloudProfilesModel";
+import { endpointHost } from "../../services/accountListModel";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
 import { CloudProfileNameEntry } from "./CloudProfileNameEntry";
 import { CloudCodeEntry } from "./CloudCodeEntry";
@@ -331,7 +332,7 @@ export function ConnectStatusCard({
   if (phase === "opening") return <StatusCard busy title={`Opening ${serviceName}…`} />;
   if ((phase === "waiting" || phase === "verifying") && flow?.flow.address_required) {
     return (
-      <StatusCard title={`Finish signing in to ${serviceName}`} detail="After sign-in, a page starting with http://127.0.0.1 may fail to load on this computer. Copy its full address, paste it below, then choose Continue.">
+      <StatusCard title={`Finish signing in to ${serviceName}`} detail="After sign-in, copy the full address of the page you land on, paste it below, then choose Continue.">
         <SignInAddressEntry key={flow.flow.id} onSubmit={onSubmitAddress} />
         <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block disabled={phase === "verifying"} onPress={onOpen} />
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
@@ -698,11 +699,6 @@ function GroupRow({ title, count, children }: { title: string; count: string; ch
       {children}
     </View>
   );
-}
-
-/** A custom service is known by its address; its account has no identity to show. */
-function endpointHost(endpoint?: string): string {
-  try { return endpoint ? new URL(endpoint).host : ""; } catch { return ""; }
 }
 
 function callTone(status: string): StatusTone {

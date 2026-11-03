@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import type { PluginAccount } from "../../services/connections";
-import { cloudProfileExpiry, cloudProfileGroups, cloudProfileIdentity, cloudProfileName, cloudProfileStatus } from "../../services/cloudProfilesModel";
+import { cloudProfileGroups } from "../../services/cloudProfilesModel";
+import { accountRow, openAccountId } from "../../services/accountListModel";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText, ListSection, StatusPill } from "../ui";
 import { Icon } from "../icons/Icon";
 
-/** Shared vendor-CLI list. Sign-in status is independent of agent permission. */
-export function CloudProfileList({ accounts, renderDetails }: {
+/**
+ * Every service lists its accounts the same way: one collapsed row each (name,
+ * what tells it apart, status), the account's controls on tap. A lone account
+ * starts open. Sign-in status is independent of agent permission.
+ */
+export function AccountList({ accounts, renderDetails }: {
   accounts: PluginAccount[];
   renderDetails(account: PluginAccount, close: () => void): React.ReactNode;
 }) {
@@ -16,17 +21,15 @@ export function CloudProfileList({ accounts, renderDetails }: {
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(timer); }, []);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
+  const selected = openAccountId(accounts, chosen);
   const groups = cloudProfileGroups(accounts, accounts.length > 8 ? query : "");
   const showExpired = expanded || (groups.filterVisible && !!query.trim());
   const rows = (items: PluginAccount[]) => items.map(account => {
-    const status = cloudProfileStatus(account);
-    const name = cloudProfileName(account);
-    const expiry = cloudProfileExpiry(account, now);
-    const identity = cloudProfileIdentity(account);
+    const { name, identity, status, expiry } = accountRow(account, now);
     const open = selected === account.id;
     return <View key={account.id}>
-      <Pressable accessibilityRole="button" accessibilityLabel={[name, identity, status.label].filter(Boolean).join(", ")} accessibilityHint="Show account actions" accessibilityState={{ expanded: open }} onPress={() => setSelected(open ? null : account.id)} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.65 : 1 }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={[name, identity, status.label].filter(Boolean).join(", ")} accessibilityHint="Show account actions" accessibilityState={{ expanded: open }} onPress={() => setChosen(open ? null : account.id)} style={({ pressed }) => [styles.row, { opacity: pressed ? 0.65 : 1 }]}>
         <View style={styles.name}>
           <AppText variant="compact" numberOfLines={1}>{name}</AppText>
           {account.integration === "aws" && account.aws?.account_id ? <View style={styles.identity}>
@@ -37,11 +40,11 @@ export function CloudProfileList({ accounts, renderDetails }: {
         <View style={styles.state}><StatusPill label={status.label} tone={status.tone} />{expiry ? <AppText variant="caption" tone={expiry.soon ? "secondary" : "tertiary"} numberOfLines={1}>{expiry.label}</AppText> : null}</View>
         <Icon name={open ? "chevron-down" : "chevron-right"} size={16} color={colors.textTertiary} />
       </Pressable>
-      {open ? <View style={styles.details}>{renderDetails(account, () => setSelected(null))}</View> : null}
+      {open ? <View style={styles.details}>{renderDetails(account, () => setChosen(null))}</View> : null}
     </View>;
   });
   return <>
-    {groups.filterVisible ? <TextInput accessibilityLabel="Filter profiles" placeholder="Filter profiles" placeholderTextColor={colors.textTertiary} value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} clearButtonMode="while-editing" style={[styles.filter, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.bgSurface }]} /> : null}
+    {groups.filterVisible ? <TextInput accessibilityLabel="Filter accounts" placeholder="Filter accounts" placeholderTextColor={colors.textTertiary} value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} clearButtonMode="while-editing" style={[styles.filter, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.bgSurface }]} /> : null}
     {groups.signedIn.length || groups.unchecked.length ? <ListSection>{rows([...groups.signedIn, ...groups.unchecked])}</ListSection> : null}
     {groups.expired.length ? <ListSection>
       <Pressable accessibilityRole="button" accessibilityLabel={`Expired (${groups.expired.length})`} accessibilityState={{ expanded: showExpired }} onPress={() => setExpanded(!expanded)} style={styles.row}>
@@ -50,7 +53,7 @@ export function CloudProfileList({ accounts, renderDetails }: {
       </Pressable>
       {showExpired ? rows(groups.expired) : null}
     </ListSection> : null}
-    {!groups.signedIn.length && !groups.unchecked.length && !groups.expired.length && query ? <AppText variant="compact" tone="secondary">No matching profiles</AppText> : null}
+    {!groups.signedIn.length && !groups.unchecked.length && !groups.expired.length && query ? <AppText variant="compact" tone="secondary">No matching accounts</AppText> : null}
   </>;
 }
 const styles = StyleSheet.create({

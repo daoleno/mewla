@@ -34,7 +34,7 @@ if (!process.env.MEWLA_SIGNIN_ADDRESS_TEST_CHILD) {
     const submit = mock(async () => {});
     const tree = await render(submit);
     expect(clipboard).not.toHaveBeenCalled();
-    expect(input(tree).props.placeholder).toContain("127.0.0.1");
+    expect(input(tree).props.placeholder).toContain("http");
     await act(async () => input(tree).props.onChangeText("123456"));
     expect(button(tree, "Continue").props.disabled).toBe(false);
     await act(async () => button(tree, "Continue").props.onPress());

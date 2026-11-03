@@ -277,6 +277,9 @@ describe("AWS", () => {
     expect(signInAddressFromText(`  ${address}\n`)).toBe(address);
     expect(signInAddressFromText("127.0.0.1:9877/plugins/oauth/callback?code=abc&state=def")).toBe("127.0.0.1:9877/plugins/oauth/callback?code=abc&state=def");
     expect(signInAddressFromText("http://localhost:9877/plugins/oauth/callback?error=access_denied&state=def")).not.toBe("");
+    const relay = "https://connect.mewla.ai/plugins/return?code=abc&state=web.def";
+    expect(signInAddressFromText(relay)).toBe(relay);
+    expect(signInAddressFromText("https://connect.mewla.ai.evil.example/plugins/return?code=abc&state=web.def")).toBe("");
     for (const stray of ["", null, undefined, "short", "two words here", "https://example.com/?state=x&code=y-and-more", "http://127.0.0.1:9877/plugins/oauth/callback?code=abc", "http://127.0.0.1:9877/x\nnext?state=1", "a".repeat(9000)]) {
       expect(signInAddressFromText(stray)).toBe("");
     }
