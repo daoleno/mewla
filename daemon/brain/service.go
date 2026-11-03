@@ -3640,6 +3640,18 @@ const (
 // with SetHostAuthProbe; without one every executor is unknown. Tests replace it.
 var hostAuth = func(string) HostAuthState { return HostAuthUnknown }
 
+// hostAccount is who an executor is signed in as, when its CLI records it.
+var hostAccount = func(string) string { return "" }
+
+// SetHostAccountProbe installs the probe that names each executor's account.
+func SetHostAccountProbe(probe func(executorID string) string) {
+	if probe == nil {
+		hostAccount = func(string) string { return "" }
+		return
+	}
+	hostAccount = probe
+}
+
 // SetHostAuthProbe installs the sign-in probe the Brain host choice and the
 // host problem report use. It must be cheap to call repeatedly (cached).
 func SetHostAuthProbe(probe func(executorID string) HostAuthState) {
@@ -3662,7 +3674,7 @@ func (s *Service) installedHostExecutor() (work.WorkerExecutor, bool) {
 		if !ok {
 			continue
 		}
-		fields := strings.Fields(executor.Command)
+		fields := strings.Fields(executorProgram(executor))
 		if len(fields) == 0 {
 			continue
 		}
@@ -3756,7 +3768,10 @@ func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	}
 	name := executor.ID
 	problem := &HostProblem{Executor: executor.ID}
-	fields := strings.Fields(command)
+	fields := strings.Fields(executorProgram(executor))
+	if len(fields) == 0 {
+		fields = strings.Fields(command)
+	}
 	switch {
 	case len(fields) > 0 && func() bool { _, err := hostLookPath(fields[0]); return err != nil }():
 		problem.Code = "not_installed"
@@ -3795,7 +3810,7 @@ func (s *Service) installedAlternativeHosts(current string) []string {
 		if !ok {
 			continue
 		}
-		fields := strings.Fields(executor.Command)
+		fields := strings.Fields(executorProgram(executor))
 		if len(fields) == 0 {
 			continue
 		}
@@ -3820,7 +3835,7 @@ func (s *Service) verifiedAlternativeHost(current string) string {
 		if !ok {
 			continue
 		}
-		fields := strings.Fields(executor.Command)
+		fields := strings.Fields(executorProgram(executor))
 		if len(fields) == 0 {
 			continue
 		}
@@ -3968,14 +3983,19 @@ func (s *Service) workerExecutors(hostExecutorID string) []work.WorkerExecutor {
 func (s *Service) executorStates(executors []work.WorkerExecutor) map[string]ExecutorState {
 	states := make(map[string]ExecutorState, len(executors))
 	for _, executor := range executors {
-		fields := strings.Fields(executor.Command)
+		fields := strings.Fields(executorProgram(executor))
 		if len(fields) == 0 {
 			continue
 		}
 		if _, err := hostLookPath(fields[0]); err != nil {
 			continue
 		}
-		states[executor.ID] = ExecutorState{Installed: true, SignedIn: hostAuth(executor.ID) == HostAuthAuthenticated}
+		signedIn := hostAuth(executor.ID) == HostAuthAuthenticated
+		state := ExecutorState{Installed: true, SignedIn: signedIn}
+		if signedIn {
+			state.Account = hostAccount(executor.ID)
+		}
+		states[executor.ID] = state
 	}
 	return states
 }
@@ -4326,4 +4346,13 @@ func (s *Service) MarkInputAdmissionTransportStarted(sessionID, turnID string) e
 		return fmt.Errorf("brain store is not configured")
 	}
 	return s.store.MarkInputAdmissionTransportStarted(sessionID, turnID)
+}
+
+// executorProgram is the executor's launch command without the environment
+// prefix a separate sign-in adds, so the program can be found on PATH.
+func executorProgram(executor work.WorkerExecutor) string {
+	if executor.BareCommand != "" {
+		return executor.BareCommand
+	}
+	return executor.Command
 }

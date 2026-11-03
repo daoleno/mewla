@@ -154,6 +154,8 @@ export type BrainExecutorRef = {
 export type BrainExecutorState = {
   installed: boolean;
   signed_in: boolean;
+  /** Who it is signed in as (an email address), when its CLI records it. */
+  account?: string;
 };
 
 /** Why Brain has no running host, said by the computer (see daemon brain.HostProblem). */
@@ -272,7 +274,8 @@ function normalizeExecutorStates(raw: unknown): Record<string, BrainExecutorStat
   for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
     const state = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
     if (!id || !state || state.installed !== true) continue;
-    out[id] = { installed: true, signed_in: state.signed_in === true };
+    const account = typeof state.account === "string" ? state.account.trim().slice(0, 120) : "";
+    out[id] = { installed: true, signed_in: state.signed_in === true, ...(account ? { account } : {}) };
   }
   return out;
 }
