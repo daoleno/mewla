@@ -15,6 +15,8 @@ export interface ScreenStreamStats {
   updates: number;
   bytes: number;
   dirtyPct: number;
+  /** How many of the updates were H.264 frames; 0 from a daemon without video. */
+  video: number;
   captureSeq: number;
   captureMs: number;
   encodeMs: number;
@@ -38,6 +40,7 @@ export function parseStreamStats(message: Record<string, unknown>): ScreenStream
     updates: finite(message.updates),
     bytes: finite(message.bytes),
     dirtyPct: finite(message.dirty_pct),
+    video: finite(message.video),
     captureSeq: finite(message.capture_seq),
     captureMs: finite(message.capture_ms),
     encodeMs: finite(message.encode_ms),
