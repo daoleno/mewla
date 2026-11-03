@@ -93,12 +93,14 @@ class Rec:
 
     def add(self, name, r, calls=1, rows=None):
         e = self.s.setdefault(name, {"ms": [], "bytes": [], "rows": [], "first_ms": None,
-                                     "trunc": 0, "errors": 0, "paused_dropped": 0, "calls": calls})
+                                     "trunc": 0, "errors": 0, "paused_dropped": 0, "calls": calls, "codes": {}})
         if r.get("paused"):
             e["paused_dropped"] += 1
             return
         if r.get("error"):
             e["errors"] += 1
+            code = str(r.get("code") or "error")[:60]
+            e["codes"][code] = e["codes"].get(code, 0) + 1  # which error, never its text
             return
         if e["first_ms"] is None:
             e["first_ms"] = r["ms"]  # cold; kept apart from the warm samples
@@ -118,7 +120,8 @@ class Rec:
                       "p95_ms": round(pct(e["ms"], 95), 1) if e["ms"] else None,
                       "bytes_p50": pct(e["bytes"], 50), "rows_p50": pct(e["rows"], 50),
                       "truncated": e["trunc"], "errors": e["errors"],
-                      "paused_dropped": e["paused_dropped"], "calls_per_sample": e["calls"]}
+                      "paused_dropped": e["paused_dropped"], "calls_per_sample": e["calls"],
+                      "error_codes": e["codes"]}
         return out
 
 
@@ -194,8 +197,14 @@ def sh(args, timeout=60):
         data = json.loads(p.stdout)
     except Exception:
         data = {}
+    err = data.get("error") or {}
+    code = err.get("code") if isinstance(err, dict) else None
+    if not data:
+        code = "exit%d_nojson" % p.returncode
+    elif not code and not data.get("ok", False):
+        code = "not_ok"
     return {"ms": ms, "bytes": len(p.stdout.encode()), "error": not data.get("ok", False), "json": data,
-            "text": p.stdout}
+            "text": p.stdout, "code": code}
 
 
 def walk(node, out):
@@ -211,9 +220,9 @@ def walk(node, out):
 
 def ad_run(n, apps, ad, scratch):
     rec = Rec()
-    listing = sh([ad, "list-apps"])
-    present = [a for a in apps if a.lower() in listing["text"].lower()]
-    skipped = [a for a in apps if a not in present]
+    # list-apps can fail on its own (application_inventory_unstable), so every
+    # named app is tried; one that isn't running shows as errors with codes.
+    present, skipped = list(apps), []
 
     def go(name, args, rows=None):
         r = sh([ad] + args)
@@ -229,6 +238,7 @@ def ad_run(n, apps, ad, scratch):
             refs = []
             walk(r["json"].get("data", {}).get("tree", {}), refs)
             r["trunc"] = r["json"].get("data", {}).get("complete") is False
+            r["trunc"] = r["json"].get("data", {}).get("complete") is False
             rec.add("app_state/" + a, r, rows=len(refs))
     for a in present:
         for _ in range(n):
@@ -243,13 +253,13 @@ def ad_run(n, apps, ad, scratch):
             ms = by = 0
             matches = f["json"].get("data", {}).get("matches", [])
             if not matches:
-                rec.add("set_value->answer/TextEdit", {"error": True, "ms": 0, "bytes": 0})
+                rec.add("set_value->answer/TextEdit", {"error": True, "ms": 0, "bytes": 0, "code": f["code"] or "no_match"})
                 continue
             ref = matches[0]["ref_id"]
             s = sh([ad, "set-value", ref, "bench %d" % i])
             v = sh([ad, "snapshot", "--app", "TextEdit", "-i", "--compact"])
             rec.add("set_value->answer/TextEdit", {"ms": s["ms"] + v["ms"], "bytes": s["bytes"] + v["bytes"],
-                                                   "error": s["error"]}, calls=2)
+                                                   "error": s["error"], "code": s["code"]}, calls=2)
             rec.add("steps(4)/TextEdit", {"ms": ms0 + s["ms"] + v["ms"] + 0, "bytes": by0 + s["bytes"] + v["bytes"],
                                           "error": s["error"]}, calls=3)
     if "Calculator" in present:
@@ -257,13 +267,13 @@ def ad_run(n, apps, ad, scratch):
             f = sh([ad, "find", "--app", "Calculator", "--role", "button", "--name", "1", "--exact", "--first"])
             matches = f["json"].get("data", {}).get("matches", [])
             if not matches:
-                rec.add("press->answer/Calculator", {"error": True, "ms": 0, "bytes": 0})
+                rec.add("press->answer/Calculator", {"error": True, "ms": 0, "bytes": 0, "code": f["code"] or "no_match"})
                 continue
             c = sh([ad, "click", matches[0]["ref_id"]])
             v = sh([ad, "snapshot", "--app", "Calculator", "-i", "--compact"])
             rec.add("press->answer/Calculator", {"ms": f["ms"] + c["ms"] + v["ms"],
                                                  "bytes": f["bytes"] + c["bytes"] + v["bytes"],
-                                                 "error": c["error"]}, calls=3)
+                                                 "error": c["error"], "code": c["code"]}, calls=3)
     os.makedirs(scratch, exist_ok=True)
     shot = os.path.join(scratch, "shot.png")
     for _ in range(n):
@@ -302,9 +312,24 @@ def report(dirs):
     print("\n".join(lines))
 
 
+def dump_tools(cmd, out):
+    """tools/list of any MCP server (no tool is called): names, descriptions and
+    input schemas to OUT/tools.json, and a one-line summary on stdout."""
+    import shlex
+    m = MCP(shlex.split(cmd))
+    try:
+        res = m.rpc("tools/list", {}).get("result", {})
+    finally:
+        m.close()
+    os.makedirs(out, exist_ok=True)
+    json.dump(res, open(os.path.join(out, "tools.json"), "w"), indent=1)
+    print(json.dumps([{"name": t.get("name"), "desc_chars": len(t.get("description", "")),
+                       "args": sorted((t.get("inputSchema") or {}).get("properties", {}))} for t in res.get("tools", [])]))
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["mewla", "ad", "report"])
+    ap.add_argument("mode", choices=["mewla", "ad", "report", "tools"])
     ap.add_argument("dirs", nargs="*")
     ap.add_argument("-n", type=int, default=20)
     ap.add_argument("--out", default=".")
@@ -312,9 +337,12 @@ def main():
     ap.add_argument("--mewla", default="mewla")
     ap.add_argument("--ad", default="agent-desktop")
     ap.add_argument("--label", default=None)
+    ap.add_argument("--cmd", default="", help="tools: the MCP server command, run as one shell-split command")
     a = ap.parse_args()
     if a.mode == "report":
         return report(a.dirs)
+    if a.mode == "tools":
+        return dump_tools(a.cmd, a.out)
     apps = [x for x in a.apps.split(",") if x]
     os.makedirs(a.out, exist_ok=True)
     scratch = os.path.join(a.out, "scratch")
