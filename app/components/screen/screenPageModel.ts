@@ -169,6 +169,8 @@ export function streamHeadline(readout: StreamReadout): string | null {
   const parts: string[] = [];
   const path = readout.viaPath ?? readout.daemon?.path;
   if (path) parts.push(PATH_LABELS[path]);
+  // Video carries motion; the picture sharpens as soon as the screen is still.
+  if ((readout.daemon?.video ?? 0) > 0) parts.push("video");
   if (path === "relay" && readout.directHint === "announced") parts.push("no LAN/Tailscale route from this phone");
   if (path === "relay" && readout.directHint === "none") parts.push("computer lists no LAN/Tailscale address");
   const slowest = slowestStage(readout);

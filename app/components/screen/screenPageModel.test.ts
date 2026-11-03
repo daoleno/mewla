@@ -118,7 +118,7 @@ describe("viewer messages", () => {
 });
 
 const daemonStats = (over: Partial<ScreenStreamStats> = {}): ScreenStreamStats => ({
-  path: "relay", updates: 24, bytes: 400_000, dirtyPct: 60, captureSeq: 90, captureMs: 12, encodeMs: 10, encodeMaxMs: 15,
+  path: "relay", updates: 24, bytes: 400_000, dirtyPct: 60, video: 0, captureSeq: 90, captureMs: 12, encodeMs: 10, encodeMaxMs: 15,
   ackMs: 180, ackMaxMs: 300, quality: 6, inFlight: 2, ...over,
 });
 const readout = (over = {}) => ({ rttMs: 142, inputMs: 210, fps: 18, kbps: 2100, bridgeMs: 12, presentMs: 30, daemon: daemonStats(), ...over });
@@ -146,6 +146,10 @@ describe("stream stages", () => {
     expect(streamHeadline(readout({ viaPath: "relay", daemon: daemonStats({ path: "direct" }) }))).toBe("Relay · network 142 ms");
     expect(streamHeadline(readout({ viaPath: "tailscale", daemon: null }))).toBe("Tailscale · network 142 ms");
     expect(streamHeadline(readout({ viaPath: null, daemon: daemonStats({ path: "lan" }) }))).toContain("LAN");
+  });
+  test("a stream carrying video says so", () => {
+    expect(streamHeadline(readout({ viaPath: "relay", daemon: daemonStats({ video: 20 }) }))).toBe("Relay · video · network 142 ms");
+    expect(streamHeadline(readout({ viaPath: "relay", daemon: daemonStats({ video: 0 }) }))).toBe("Relay · network 142 ms");
   });
   test("a relay stream says why it is not direct", () => {
     expect(streamHeadline(readout({ viaPath: "relay", directHint: "announced" }))).toBe("Relay · no LAN/Tailscale route from this phone · network 142 ms");

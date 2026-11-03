@@ -109,7 +109,8 @@ Video needs a hardware H.264 encoder (every Apple Silicon Mac has one) and a
 viewer that says it can decode it; otherwise nothing changes. It is **off by
 default** until it has been tried on real machines: start Mewla with
 `MEWLA_SCREEN_VIDEO=on` to turn it on, and `MEWLA_SCREEN_VIDEO=off` always
-turns it off. The log line for a session says how many of its updates were video.
+turns it off. The badge's first line says **video** while motion is going as video, and the
+log line for a session says how many of its updates were.
 
 ## Keep the computer reachable
 
