@@ -805,28 +805,47 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err := actor.ActOnElement(ctx, e, name, intent.text); err != nil {
 		return AgentResult{}, notDelivered(a.gone(ctx, a.treeApp, err))
 	}
-	// A first look comes after a short wait: most actions have shown their
-	// effect by then. If nothing differs from before the action, the app may
-	// only be slow, so it gets the longer wait and a second look.
-	if err := a.settleApp(ctx, a.treeApp.PID, settleFast); err != nil {
+	// Accessibility values change as the action runs, so read at once, not
+	// after a wait. The app's fingerprint before and after that read says
+	// whether it was still changing; if it was, or nothing differs from
+	// before the action (the app may only be slow), wait for quiet and look
+	// again. Where an app can't be fingerprinted, a short wait comes first.
+	app := a.treeApp
+	printer, _ := a.apps.(appPrinter)
+	var before AppPrint
+	known := false
+	if printer != nil {
+		var perr error
+		before, perr = printer.PrintApp(ctx, app.PID)
+		known = perr == nil
+	} else if err := a.sleep(ctx, settleFast); err != nil {
 		return AgentResult{}, err
 	}
-	app := a.treeApp
 	previous, tree, err := a.swapTreeLocked(ctx, app)
 	if err != nil {
 		return AgentResult{Text: "Done; reading the app again failed: " + err.Error()}, nil
 	}
+	changing := false
+	if known {
+		now, perr := printer.PrintApp(ctx, app.PID)
+		changing = perr != nil || now != before
+	}
+	unchanged := false
 	if previous != nil {
 		a.mu.Lock()
-		unchanged := len(changedRows(appRows(*previous, a.latest.Rect, a.toAgent), appRows(tree, a.latest.Rect, a.toAgent))) == 0
+		unchanged = len(changedRows(appRows(*previous, a.latest.Rect, a.toAgent), appRows(tree, a.latest.Rect, a.toAgent))) == 0
 		a.mu.Unlock()
-		if unchanged {
-			if err := a.settleApp(ctx, app.PID, settleFirst); err != nil {
-				return AgentResult{}, err
-			}
-			if _, again, err := a.swapTreeLocked(ctx, app); err == nil {
-				tree = again
-			}
+	}
+	if changing || unchanged {
+		first := settleFirst
+		if changing {
+			first = 0
+		}
+		if err := a.settleApp(ctx, app.PID, first); err != nil {
+			return AgentResult{}, err
+		}
+		if _, again, err := a.swapTreeLocked(ctx, app); err == nil {
+			tree = again
 		}
 	}
 	var after *Element
