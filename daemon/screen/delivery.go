@@ -59,15 +59,15 @@ func (in elementIntent) delivery(after *Element) string {
 	switch in.wantState {
 	case "value":
 		if after == nil || after.secureField() {
-			return "Delivery: sent, not verified. Not safe to repeat blindly; read the element to check."
+			return "Delivery: sent, not verified; read it before repeating."
 		}
 		if strings.TrimSpace(after.Value) == strings.TrimSpace(oneLine(in.wantValue)) || strings.TrimSpace(after.Value) == strings.TrimSpace(in.wantValue) {
-			return "Delivery: verified, the element now holds it."
+			return "Delivery: verified, it holds it."
 		}
 		if strings.HasPrefix(after.Value, strings.TrimSpace(in.wantValue)) || len(in.wantValue) > elementText {
-			return "Delivery: sent; the value is longer than a read shows, so use element read to verify."
+			return "Delivery: sent; too long to compare, use element read."
 		}
-		return "Delivery: sent, but the element shows something else now; read it before trying again."
+		return "Delivery: sent, but it shows something else; read it before retrying."
 	case "checked", "unchecked":
 		if after == nil {
 			return "Delivery: sent, not verified."
@@ -76,11 +76,11 @@ func (in elementIntent) delivery(after *Element) string {
 			if checked == (in.wantState == "checked") {
 				return "Delivery: verified, it is now " + in.wantState + "."
 			}
-			return fmt.Sprintf("Delivery: sent, but it is still %s; the app may have refused. Read it before trying again.", map[bool]string{true: "checked", false: "unchecked"}[checked])
+			return fmt.Sprintf("Delivery: sent, but it is still %s; the app may have refused it.", map[bool]string{true: "checked", false: "unchecked"}[checked])
 		}
-		return "Delivery: sent, not verified (its state isn't readable)."
+		return "Delivery: sent, not verified."
 	}
-	return "Delivery: sent, not verified. Read what changed before repeating it."
+	return "Delivery: sent, not verified; read what changed before repeating it."
 }
 
 // notDelivered words a refused action: nothing reached the app, so trying
