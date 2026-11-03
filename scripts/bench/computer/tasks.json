@@ -1,0 +1,21 @@
+{
+  "note": "Eight Mac tasks, read-only or reversible on scratch files. The same prompt goes to every arm. {S} is the scratch directory. Success is judged by check, never by the agent's own claim.",
+  "tasks": [
+    {"id": "t1-textedit-write", "prompt": "In TextEdit, open the file {S}/scratch.txt, replace all of its text with exactly: mewla bench one. Save it (cmd+s) and tell me when it is saved.",
+     "check": {"file": "{S}/scratch.txt", "equals": "mewla bench one"}},
+    {"id": "t2-finder-rename", "prompt": "In Finder, in the folder {S}, rename the file rename-me.txt to renamed.txt. Tell me when done.",
+     "check": {"exists": "{S}/renamed.txt", "absent": "{S}/rename-me.txt"}},
+    {"id": "t3-finder-read", "prompt": "In Finder, open the folder {S}/many and tell me how many items it holds and the name of the one called largest-*.",
+     "check": {"answer_contains": ["{MANY_COUNT}", "{MANY_LARGEST}"]}},
+    {"id": "t4-settings-read", "prompt": "In System Settings, find the macOS version shown under General > About and tell me the number.",
+     "check": {"answer_contains": ["{MACOS_VERSION}"]}},
+    {"id": "t5-calculator", "prompt": "In Calculator, work out 12 times 34 with its buttons and tell me the number it shows.",
+     "check": {"answer_contains": ["408"]}},
+    {"id": "t6-notes", "prompt": "In Notes, in the folder named MewlaBench (create it if missing, as a plain folder), make a new note whose text is: bench note. Tell me when it is there.",
+     "check": {"manual": "a note 'bench note' exists in folder MewlaBench; the Mac Brain verifies and removes it"}},
+    {"id": "t7-electron-read", "prompt": "In {ELECTRON_APP}, without changing anything or sending anything, tell me {ELECTRON_QUESTION}.",
+     "check": {"answer_contains": ["{ELECTRON_EXPECTED}"]}},
+    {"id": "t8-calendar-read", "prompt": "In Calendar, without changing anything, tell me the title of the first event today after 9:00, or say there is none.",
+     "check": {"answer_contains": ["{CALENDAR_EXPECTED}"]}}
+  ]
+}
