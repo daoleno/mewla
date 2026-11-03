@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,26 @@ func TestRejectsMalformedReturns(t *testing.T) {
 	}
 	if w := serve("POST", "code=a&state=s"); w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST: %d", w.Code)
+	}
+}
+
+// A sign-in a browser started from the web UI can't be handed to mewla://, so
+// the page shows the returned address to paste into Mewla instead.
+func TestWebSignInShowsTheAddressInsteadOfOpeningTheApp(t *testing.T) {
+	w := serve("GET", "code=abc&state=web.s1&scope=x&next=//evil")
+	body := w.Body.String()
+	if w.Code != http.StatusOK || w.Header().Get("Location") != "" || w.Header().Get("Content-Type") != "text/html; charset=utf-8" || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("%d %v", w.Code, w.Header())
+	}
+	if !strings.Contains(body, "https://connect.mewla.ai"+Path+"?code=abc&amp;state=web.s1<") || strings.Contains(body, "evil") || strings.Contains(body, "<script") {
+		t.Fatalf("page %s", body)
+	}
+	denied := serve("GET", "error=access_denied&state=web.s2").Body.String()
+	if !strings.Contains(denied, "Access was not granted") || !strings.Contains(denied, "error=access_denied&amp;state=web.s2") {
+		t.Fatalf("denied page %s", denied)
+	}
+	// The app's sign-in keeps its redirect.
+	if serve("GET", "code=abc&state=s1").Code != http.StatusFound {
+		t.Fatal("an app sign-in no longer redirects to the app")
 	}
 }

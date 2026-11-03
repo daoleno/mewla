@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 )
@@ -55,6 +56,11 @@ type oauthFlow struct {
 	// also paste the address the browser ended on. One state finishes once,
 	// from either.
 	Loopback bool
+	// Paste: the provider returns to Mewla's https page, which a web UI sign-in
+	// can't carry back to the browser tab that started it (the provider
+	// registered that page, not this server). The page shows the returned
+	// address and the person pastes it into the sign-in.
+	Paste bool
 }
 type oauthMetadata struct {
 	Issuer                string   `json:"issuer"`
@@ -215,9 +221,12 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 	if oauth != nil && oauth.NativeViaRelay && client.RedirectURL == NativeCallback {
 		client.RedirectURL = NativeReturnRelay
 	}
-	// A registered app that returns only to the Mewla app (Slack's publisher
-	// app) can't bring a web UI sign-in back; say so before the browser leaves.
-	if callback != "" && callback != NativeCallback && appReturn(client.RedirectURL) {
+	// A registered app that returns only through Mewla's page (Slack's
+	// publisher app) can't land a web UI sign-in on its own origin. The page
+	// shows the returned address for the person to paste (connect_finish); an
+	// app-scheme-only return has nowhere to show it.
+	paste := callback != "" && callback != NativeCallback && appReturn(client.RedirectURL)
+	if paste && client.RedirectURL != NativeReturnRelay {
 		return Response{}, errors.New(serviceName(in.Integration) + " sign-in returns to the Mewla app. Connect " + serviceName(in.Integration) + " from the Mewla app on your phone.")
 	}
 
@@ -324,6 +333,10 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		r.OAuth.Resource = oauth.Static.Resource
 	}
 	state, verifier := oauth2.GenerateVerifier(), oauth2.GenerateVerifier()
+	if paste {
+		// The return page tells a web sign-in from the app's by this prefix.
+		state = pluginreturn.WebStatePrefix + state
+	}
 	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
 	if r.OAuth.Resource != "" {
 		options = append(options, oauth2.SetAuthURLParam("resource", r.OAuth.Resource))
@@ -340,7 +353,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		// The person may be away from the screen the sign-in started on.
 		lifetime = oauthLoopbackLifetime
 	}
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Loopback: loopback, Expires: time.Now().Add(lifetime), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Loopback: loopback, Paste: paste, Expires: time.Now().Add(lifetime), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && client.RedirectURL == callback, AllowWrites: callback != "" && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
@@ -443,7 +456,7 @@ func oauthCode(code string) string {
 func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile, webUI bool) string {
 	state := req.URL.Query().Get("state")
 	flow, ok := m.pending[state]
-	if !ok || flow.Mobile != mobile && !flow.Loopback || time.Now().After(flow.Expires) {
+	if !ok || flow.Mobile != mobile && !flow.Loopback && !flow.Paste || time.Now().After(flow.Expires) {
 		if webUI && !mobile {
 			pluginsReturn(w, req, "", url.Values{"plugin_error": {"expired"}})
 			return "expired"

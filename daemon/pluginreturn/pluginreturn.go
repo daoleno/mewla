@@ -5,9 +5,11 @@
 package pluginreturn
 
 import (
+	"html"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 // Path is where cmd/mewla-account serves Handler.
@@ -15,6 +17,13 @@ const Path = "/plugins/return"
 
 // Target is the app's fixed plugin return. Nothing in a request changes it.
 const Target = "mewla://plugins"
+
+// WebStatePrefix marks a sign-in a browser started from the web UI. The app
+// can open Target; a browser tab can't, so for these the page shows the
+// returned address instead, for the person to paste into the sign-in. The
+// address stays in their own browser and is useless without the PKCE verifier
+// the daemon keeps.
+const WebStatePrefix = "web."
 
 var errorCode = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
@@ -58,5 +67,25 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid sign-in return. Go back to Mewla and connect again.", http.StatusBadRequest)
 		return
 	}
+	if strings.HasPrefix(state, WebStatePrefix) {
+		showAddress(w, r.Host+Path+"?"+forward.Encode(), failure != "")
+		return
+	}
 	http.Redirect(w, r, Target+"?"+forward.Encode(), http.StatusFound)
+}
+
+// showAddress is the page a web sign-in ends on. The address is selected by a
+// single click and the page runs no script.
+func showAddress(w http.ResponseWriter, address string, denied bool) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	lead := "Copy this address, go back to Mewla and paste it."
+	if denied {
+		lead = "Access was not granted. Copy this address and paste it in Mewla to finish."
+	}
+	_, _ = w.Write([]byte(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Back to Mewla</title><style>` +
+		`body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:48px 20px;background:#fff;color:#1b1b1f}` +
+		`main{max-width:560px;margin:0 auto}h1{font-size:22px;margin:0 0 8px}p{margin:0 0 20px;color:#55555c}` +
+		`code{display:block;padding:14px;border:1px solid #d6d6dc;border-radius:12px;background:#f6f6f8;word-break:break-all;user-select:all;-webkit-user-select:all;font:13px/1.5 ui-monospace,monospace}` +
+		`@media(prefers-color-scheme:dark){body{background:#111114;color:#f2f2f5}p{color:#a8a8b0}code{background:#1c1c21;border-color:#34343b}}` +
+		`</style></head><body><main><h1>Back to Mewla</h1><p>` + html.EscapeString(lead) + `</p><code>https://` + html.EscapeString(address) + `</code></main></body></html>`))
 }

@@ -3310,7 +3310,47 @@
         "requests": []
       },
       "web_writes_publishers": {
-        "error": "Slack sign-in returns to the Mewla app. Connect Slack from the Mewla app on your phone.",
+        "account": {
+          "auth_method": "oauth",
+          "enabled": true,
+          "endpoint": "https://slack.com/api",
+          "integration": "slack",
+          "name": "Slack",
+          "scopes": [
+            "channels:read",
+            "channels:history",
+            "search:read",
+            "chat:write"
+          ],
+          "status": "authorization_required",
+          "trusted_networks": null
+        },
+        "flow": {
+          "authorization_url": "https://slack.com/oauth/v2/authorize?client_id=sl\u0026code_challenge=%3Ccode_challenge%3E\u0026code_challenge_method=S256\u0026redirect_uri=https%3A%2F%2Fconnect.mewla.ai%2Fplugins%2Freturn\u0026response_type=code\u0026state=%3Cstate%3E\u0026user_scope=channels%3Aread%2Cchannels%3Ahistory%2Csearch%3Aread%2Cchat%3Awrite",
+          "has_account": true,
+          "integration": "slack",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "oauth": {
+          "auth_style": 1,
+          "auth_url": "https://slack.com/oauth/v2/authorize",
+          "client_id": "sl",
+          "issuer": "https://slack.com",
+          "redirect_url": "https://connect.mewla.ai/plugins/return",
+          "resource": "",
+          "revoke_url": "",
+          "token_url": "https://slack.com/api/oauth.v2.access"
+        },
+        "pending": [
+          {
+            "allow_writes": true,
+            "client_secret": false,
+            "mobile": false,
+            "web": false
+          }
+        ],
         "requests": []
       }
     }
