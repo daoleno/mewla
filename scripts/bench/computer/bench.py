@@ -149,13 +149,18 @@ def mewla_run(n, apps, cmd, scratch):
         skipped = [a for a in apps if a not in present]
         for _ in range(n):
             go("apps", "apps", {})
+        # Per app: state, then find, then state again, so an ordering effect
+        # (an app slowing down as it is read) shows as state/2 differing from state.
         for a in present:
             m.call("app_state", {"app": a})  # warm the app, not counted twice
             for _ in range(n):
                 go("app_state/" + a, "app_state", {"app": a}, rowsf=True)
-        for a in present:
             for _ in range(n):
                 go("find/" + a, "steps", {"steps": [{"action": "expect", "app": a, "match": {"role": "Button"}}]})
+            for _ in range(n):  # the same find as an app_state filter: no steps, small answer
+                go("find(app_state)/" + a, "app_state", {"app": a, "match": {"role": "Button"}}, rowsf=True)
+            for _ in range(n):
+                go("app_state/2/" + a, "app_state", {"app": a}, rowsf=True)
         if "TextEdit" in present:
             m.call("app_state", {"app": "TextEdit"})
             for _ in range(n):
