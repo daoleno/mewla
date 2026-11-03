@@ -55,8 +55,17 @@ Mewla's own app registration with the provider:
 | Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; automatic Linux and macOS SDK updates |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
-| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address, so the browser passes through that page, which sends it straight back to the web UI's Extensions page |
+| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address. On this computer (`http://127.0.0.1`) that page sends the browser straight back to Extensions. From any other web address it shows an address instead: copy it, paste it into the sign-in card in Mewla and choose **Continue** |
 | Hyperliquid | No sign-in and no setup to read; one API wallet key you paste to let Brain trade | Works everywhere; the key field is on the service's page |
+
+Why Slack's return is not forwarded to every web address: the page at
+`connect.mewla.ai` receives a Slack code that only the Mewla that started the
+sign-in can redeem. If the page forwarded it to whatever address a link names,
+an attacker could start a sign-in on their own server, send the Slack link to
+you, and receive the code you approve. So it forwards only to a loopback
+address, which only your own computer can reach, and otherwise shows the code
+for you to paste into your own Mewla. It never passes the code to another page
+in the browser either.
 
 A service that cannot be connected yet shows **Not yet available** with a short
 reason. Accounts you already connected keep working.

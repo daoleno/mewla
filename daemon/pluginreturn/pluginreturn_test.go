@@ -69,14 +69,14 @@ func TestRejectsMalformedReturns(t *testing.T) {
 	}
 }
 
-// A sign-in a browser started from the web UI goes back to that web UI's own
-// callback, named in the state, in the same tab.
-func TestWebSignInReturnsToTheOriginNamedInItsState(t *testing.T) {
+// A web sign-in from this computer's own loopback address goes back to that
+// web UI's callback in the same tab.
+func TestWebSignInOnLoopbackReturnsToItsOrigin(t *testing.T) {
 	for origin, want := range map[string]string{
-		"https://mewla.example":    "https://mewla.example/plugins/oauth/callback",
-		"http://127.0.0.1:9877":    "http://127.0.0.1:9877/plugins/oauth/callback",
-		"http://[::1]:9877":        "http://[::1]:9877/plugins/oauth/callback",
-		"https://mewla.example:44": "https://mewla.example:44/plugins/oauth/callback",
+		"http://127.0.0.1:9877":  "http://127.0.0.1:9877/plugins/oauth/callback",
+		"http://[::1]:9877":      "http://[::1]:9877/plugins/oauth/callback",
+		"http://localhost:3000":  "http://localhost:3000/plugins/oauth/callback",
+		"http://127.0.0.1:65535": "http://127.0.0.1:65535/plugins/oauth/callback",
 	} {
 		state := WebState(origin, "s1")
 		w := serve("GET", url.Values{"code": {"abc"}, "state": {state}, "scope": {"x"}, "next": {"//evil"}}.Encode())
@@ -85,8 +85,8 @@ func TestWebSignInReturnsToTheOriginNamedInItsState(t *testing.T) {
 			t.Fatalf("%s: %d %s", origin, w.Code, w.Header().Get("Location"))
 		}
 	}
-	denied := serve("GET", url.Values{"error": {"access_denied"}, "state": {WebState("https://mewla.example", "s2")}}.Encode())
-	if location, _ := url.Parse(denied.Header().Get("Location")); denied.Code != http.StatusFound || location.Host != "mewla.example" || location.Query().Get("error") != "access_denied" {
+	denied := serve("GET", url.Values{"error": {"access_denied"}, "state": {WebState("http://127.0.0.1:9877", "s2")}}.Encode())
+	if location, _ := url.Parse(denied.Header().Get("Location")); denied.Code != http.StatusFound || location.Host != "127.0.0.1:9877" || location.Query().Get("error") != "access_denied" {
 		t.Fatalf("denied %d %s", denied.Code, denied.Header().Get("Location"))
 	}
 	// The app's sign-in keeps its redirect.
@@ -95,18 +95,35 @@ func TestWebSignInReturnsToTheOriginNamedInItsState(t *testing.T) {
 	}
 }
 
-// Only an https or loopback origin, with nothing after it, is a place to send
-// a browser; anything else in a web state is refused, never followed.
-func TestWebSignInRefusesOtherOrigins(t *testing.T) {
+// The phishing scenario: an attacker starts a sign-in on their own server and
+// sends the victim a link whose state names that server. The relay must not
+// hand the victim's code to it, by redirect or by script; the code appears
+// only on the page the victim is looking at. The same goes for origins that
+// merely look like loopback.
+func TestWebSignInNeverHandsACodeToAnotherOrigin(t *testing.T) {
 	encode := func(origin string) string {
 		return "web." + base64.RawURLEncoding.EncodeToString([]byte(origin)) + ".s"
 	}
 	for _, state := range []string{
-		encode("http://mewla.example"),
-		encode("http://192.168.1.20:9877"),
-		encode("https://mewla.example/path"),
-		encode("https://mewla.example/?x=1"),
-		encode("https://user@mewla.example"),
+		WebState("https://attacker.example", "s"),
+		WebState("https://mewla.example:44", "s"),
+		WebState("http://192.168.1.20:9877", "s"),
+		encode("http://127.0.0.1.evil.com:9877"),
+		encode("http://localhost.evil:9877"),
+		encode("http://127.0.0.1@evil.example:9877"),
+		encode("http://user@127.0.0.1:9877"),
+		encode("http://2130706433:9877"),
+		encode("http://0x7f.0.0.1:9877"),
+		encode("http://0177.0.0.1:9877"),
+		encode("http://127.1:9877"),
+		encode("http://127.0.0.1"),
+		encode("http://127.0.0.1:0"),
+		encode("http://127.0.0.1:65536"),
+		encode("http://127.0.0.1:99999"),
+		encode("http://127.0.0.1:9877/path"),
+		encode("http://127.0.0.1:9877?x=1"),
+		encode("https://127.0.0.1:9877"),
+		encode("http://[::1]"),
 		encode("javascript:alert(1)"),
 		encode("//evil.example"),
 		encode(""),
@@ -114,9 +131,34 @@ func TestWebSignInRefusesOtherOrigins(t *testing.T) {
 		"web.nodot",
 		"web.",
 	} {
-		w := serve("GET", url.Values{"code": {"abc"}, "state": {state}}.Encode())
-		if w.Code != http.StatusBadRequest || w.Header().Get("Location") != "" {
-			t.Fatalf("%q: %d %s", state, w.Code, w.Header().Get("Location"))
+		w := serve("GET", url.Values{"code": {"victim-code"}, "state": {state}}.Encode())
+		body := w.Body.String()
+		csp := w.Header().Get("Content-Security-Policy")
+		if w.Code != http.StatusOK || w.Header().Get("Location") != "" || w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("%q: %d location %q", state, w.Code, w.Header().Get("Location"))
+		}
+		if !strings.Contains(body, "victim-code") || !strings.Contains(body, "Only paste this into your own Mewla.") || strings.Contains(body, "<script") || !strings.Contains(csp, "default-src 'none'") || strings.Contains(csp, "script-src") || strings.Contains(csp, "connect-src") {
+			t.Fatalf("%q: page %s csp %q", state, body, csp)
+		}
+	}
+	page := serve("GET", url.Values{"code": {"abc"}, "state": {"web.x.s"}, "scope": {"evil"}}.Encode()).Body.String()
+	if !strings.Contains(page, "https://connect.mewla.ai"+Path+"?code=abc&amp;state=web.x.s<") || strings.Contains(page, "evil") {
+		t.Fatalf("page %s", page)
+	}
+	denied := serve("GET", url.Values{"error": {"access_denied"}, "state": {WebState("https://attacker.example", "s")}}.Encode()).Body.String()
+	if !strings.Contains(denied, "Access was not granted") {
+		t.Fatalf("denied page %s", denied)
+	}
+}
+
+func TestIsLoopbackOrigin(t *testing.T) {
+	for origin, want := range map[string]bool{
+		"http://127.0.0.1:9877": true, "http://[::1]:1": true, "http://localhost:65535": true,
+		"http://127.0.0.1": false, "http://127.0.0.1:65536": false, "http://127.0.0.1:09877": false,
+		"http://127.0.0.2:9877": false, "https://localhost:9877": false, "http://localhost.:9877": false,
+	} {
+		if IsLoopbackOrigin(origin) != want {
+			t.Errorf("%s: want %v", origin, want)
 		}
 	}
 }

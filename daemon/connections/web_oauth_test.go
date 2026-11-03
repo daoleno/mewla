@@ -175,16 +175,19 @@ func TestWebCallbackLeavesNativeFlow(t *testing.T) {
 
 // Slack's publisher app registers only Mewla's https return page, never a
 // server's own address. A web UI sign-in therefore goes out with the relay as
-// its return address and this server's origin in the state; the page sends
-// the browser on to this server's callback, which finishes it. (Before this a
-// web sign-in was refused: "Slack only connects from the phone".)
-func TestWebConnectReturnsThroughRelayToTheCallback(t *testing.T) {
+// its return address and the web origin in the state. (Before this a web
+// sign-in was refused: "Slack only connects from the phone".)
+//
+// On this computer's own loopback address the page sends the browser on to
+// the server's callback, which finishes the sign-in with no further step.
+func TestWebConnectOnLoopbackReturnsThroughRelayToTheCallback(t *testing.T) {
 	previous := SlackPublicClientID
 	SlackPublicClientID = "public-slack"
 	defer func() { SlackPublicClientID = previous }()
 	m, _ := New(t.TempDir())
-	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
-	web := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: "https://mewla.example"}}).Flow
+	const origin = "http://127.0.0.1:9877"
+	m.SetWebOrigins(func(o string) bool { return o == origin })
+	web := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: origin}}).Flow
 	authorize, _ := url.Parse(web.AuthorizationURL)
 	state := authorize.Query().Get("state")
 	if authorize.Host != "slack.com" || authorize.Query().Get("redirect_uri") != NativeReturnRelay || web.AddressRequired || !web.WebReturn || !strings.HasPrefix(state, "web.") || len(m.pending) != 1 {
@@ -194,11 +197,64 @@ func TestWebConnectReturnsThroughRelayToTheCallback(t *testing.T) {
 	relay := httptest.NewRecorder()
 	pluginreturn.Handler(relay, httptest.NewRequest("GET", NativeReturnRelay+"?"+url.Values{"code": {"returned"}, "state": {state}}.Encode(), nil))
 	back, _ := url.Parse(relay.Header().Get("Location"))
-	if relay.Code != http.StatusFound || back.Scheme+"://"+back.Host+back.Path != "https://mewla.example/plugins/oauth/callback" {
+	if relay.Code != http.StatusFound || back.Scheme+"://"+back.Host+back.Path != origin+"/plugins/oauth/callback" {
 		t.Fatalf("relay sent the browser to %s", relay.Header().Get("Location"))
 	}
-	// The callback redeems the code with the relay as redirect_uri and the PKCE
-	// verifier; Slack rejects the fake code, so the sign-in ends at that step.
+	exchanged := slackRejects(m, t)
+	done := httptest.NewRecorder()
+	m.BrowserOAuthCallback(done, httptest.NewRequest("GET", origin+back.RequestURI(), nil), true)
+	if exchanged().Get("redirect_uri") != NativeReturnRelay || exchanged().Get("code") != "returned" || exchanged().Get("code_verifier") == "" || exchanged().Has("client_secret") {
+		t.Fatalf("exchange %v", exchanged())
+	}
+	if location, _ := url.Parse(done.Header().Get("Location")); done.Code != http.StatusSeeOther || location.Path != "/plugins" || location.Query().Get("plugin_error") != "token" || len(m.pending) != 0 {
+		t.Fatalf("callback answered %d %s", done.Code, done.Header().Get("Location"))
+	}
+	// The phone's own sign-in is unchanged: same return page, no web state.
+	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
+	if native.WebReturn || native.AddressRequired || strings.HasPrefix(mustQuery(t, native.AuthorizationURL).Get("state"), "web.") {
+		t.Fatalf("the app's sign-in changed: %+v", native)
+	}
+}
+
+// From any other web origin the relay never forwards the code: it shows the
+// address on its own page and the person pastes it into their own Mewla.
+func TestWebConnectElsewhereFinishesByPastingTheRelayAddress(t *testing.T) {
+	previous := SlackPublicClientID
+	SlackPublicClientID = "public-slack"
+	defer func() { SlackPublicClientID = previous }()
+	m, _ := New(t.TempDir())
+	m.SetWebOrigins(func(o string) bool { return o == "https://mewla.example" })
+	web := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: "https://mewla.example"}}).Flow
+	authorize, _ := url.Parse(web.AuthorizationURL)
+	state := authorize.Query().Get("state")
+	if authorize.Query().Get("redirect_uri") != NativeReturnRelay || !web.AddressRequired || web.WebReturn || !strings.HasPrefix(state, "web.") {
+		t.Fatalf("web Slack sign-in %s, flow %+v", web.AuthorizationURL, web)
+	}
+	relay := httptest.NewRecorder()
+	pluginreturn.Handler(relay, httptest.NewRequest("GET", NativeReturnRelay+"?"+url.Values{"code": {"pasted"}, "state": {state}}.Encode(), nil))
+	if relay.Code != http.StatusOK || relay.Header().Get("Location") != "" || !strings.Contains(relay.Body.String(), "Only paste this into your own Mewla.") {
+		t.Fatalf("relay answered %d %q", relay.Code, relay.Header().Get("Location"))
+	}
+	// Pasting an address that isn't this sign-in's return is refused.
+	for _, pasted := range []string{
+		"https://evil.example/plugins/return?code=c&state=" + state,
+		NativeReturnRelay + "?code=c&state=other",
+		NativeCallback + "?code=c&state=" + state,
+	} {
+		if _, err := m.Handle(context.Background(), Request{Action: "connect_finish", FlowID: web.ID, Callback: pasted}); err == nil {
+			t.Fatalf("accepted pasted address %q", pasted)
+		}
+	}
+	exchanged := slackRejects(m, t)
+	finish := mustHandle(t, m, Request{Action: "connect_finish", FlowID: web.ID, Callback: NativeReturnRelay + "?" + url.Values{"code": {"pasted"}, "state": {state}}.Encode()}).Flow
+	if exchanged().Get("redirect_uri") != NativeReturnRelay || exchanged().Get("code") != "pasted" || exchanged().Get("code_verifier") == "" || exchanged().Has("client_secret") || finish.Status != "failed" {
+		t.Fatalf("exchange %v, flow %+v", exchanged(), finish)
+	}
+}
+
+// slackRejects answers Slack's token endpoint with a rejection and returns
+// what the daemon sent it.
+func slackRejects(m *Manager, t *testing.T) func() url.Values {
 	exchanged := url.Values{}
 	m.networkOwned = false
 	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -209,19 +265,7 @@ func TestWebConnectReturnsThroughRelayToTheCallback(t *testing.T) {
 		exchanged = req.PostForm
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"ok":false,"error":"invalid_code"}`))}, nil
 	})}
-	done := httptest.NewRecorder()
-	m.BrowserOAuthCallback(done, httptest.NewRequest("GET", "https://mewla.example"+back.RequestURI(), nil), true)
-	if exchanged.Get("redirect_uri") != NativeReturnRelay || exchanged.Get("code") != "returned" || exchanged.Get("code_verifier") == "" || exchanged.Has("client_secret") {
-		t.Fatalf("exchange %v", exchanged)
-	}
-	if location, _ := url.Parse(done.Header().Get("Location")); done.Code != http.StatusSeeOther || location.Path != "/plugins" || location.Query().Get("plugin_error") != "token" || len(m.pending) != 0 {
-		t.Fatalf("callback answered %d %s", done.Code, done.Header().Get("Location"))
-	}
-	// The phone's own sign-in is unchanged: same return page, no web state.
-	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
-	if native.WebReturn || native.AddressRequired || strings.HasPrefix(mustQuery(t, native.AuthorizationURL).Get("state"), "web.") {
-		t.Fatalf("the app's sign-in changed: %+v", native)
-	}
+	return func() url.Values { return exchanged }
 }
 
 func mustQuery(t *testing.T, raw string) url.Values {

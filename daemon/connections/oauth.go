@@ -56,6 +56,11 @@ type oauthFlow struct {
 	// also paste the address the browser ended on. One state finishes once,
 	// from either.
 	Loopback bool
+	// Paste: the provider returns to Mewla's https page, which can't safely
+	// hand the code to a web UI that isn't on this computer (see
+	// pluginreturn). The page shows the returned address and the person pastes
+	// it into the sign-in.
+	Paste bool
 }
 type oauthMetadata struct {
 	Issuer                string   `json:"issuer"`
@@ -219,9 +224,11 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		client.RedirectURL = NativeReturnRelay
 	}
 	// A registered app that returns only through Mewla's page (Slack's
-	// publisher app) can't register this server's own origin. The page sends
-	// the browser on to this server's callback, named in the state; a return
-	// to the app scheme alone has no page to do that.
+	// publisher app) can't register this server's own origin. For a web UI on
+	// this computer (loopback) the page sends the browser on to this server's
+	// callback; for any other origin it shows the address to paste, because
+	// forwarding a code to an origin named in a link would let anyone intercept
+	// it. A return to the app scheme alone has no page to do either.
 	webApp := callback != "" && callback != NativeCallback && appReturn(client.RedirectURL)
 	if webApp && client.RedirectURL != NativeReturnRelay {
 		return Response{}, errors.New(serviceName(in.Integration) + " sign-in returns to the Mewla app. Connect " + serviceName(in.Integration) + " from the Mewla app on your phone.")
@@ -330,8 +337,11 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		r.OAuth.Resource = oauth.Static.Resource
 	}
 	state, verifier := oauth2.GenerateVerifier(), oauth2.GenerateVerifier()
+	paste := false
 	if webApp {
-		state = pluginreturn.WebState(strings.TrimSuffix(callback, webCallbackPath), state)
+		origin := strings.TrimSuffix(callback, webCallbackPath)
+		state = pluginreturn.WebState(origin, state)
+		paste = !pluginreturn.IsLoopbackOrigin(origin)
 	}
 	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
 	if r.OAuth.Resource != "" {
@@ -349,7 +359,7 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 		// The person may be away from the screen the sign-in started on.
 		lifetime = oauthLoopbackLifetime
 	}
-	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Loopback: loopback, Expires: time.Now().Add(lifetime), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && (client.RedirectURL == callback || webApp), AllowWrites: callback != "" && in.AllowWrites}
+	m.pending[state] = &oauthFlow{ID: r.Account.ID, Verifier: verifier, ClientSecret: client.ClientSecret, Loopback: loopback, Paste: paste, Expires: time.Now().Add(lifetime), Mobile: callback == NativeCallback && appReturn(client.RedirectURL), Web: callback != "" && callback != NativeCallback && (client.RedirectURL == callback || webApp && !paste), AllowWrites: callback != "" && in.AllowWrites}
 	account := m.projection(r)
 	return Response{Account: &account, AuthorizationURL: authURL}, nil
 }
@@ -452,7 +462,7 @@ func oauthCode(code string) string {
 func (m *Manager) finishOAuth(w http.ResponseWriter, req *http.Request, ctx context.Context, mobile, webUI bool) string {
 	state := req.URL.Query().Get("state")
 	flow, ok := m.pending[state]
-	if !ok || flow.Mobile != mobile && !flow.Loopback || time.Now().After(flow.Expires) {
+	if !ok || flow.Mobile != mobile && !flow.Loopback && !flow.Paste || time.Now().After(flow.Expires) {
 		if webUI && !mobile {
 			pluginsReturn(w, req, "", url.Values{"plugin_error": {"expired"}})
 			return "expired"
