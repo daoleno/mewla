@@ -170,6 +170,9 @@ func activeDisplays() ([]displayInfo, error) {
 	return out, nil
 }
 
+// spikeWindow is which of an app's windows (AXWindows order) the spike moves.
+var spikeWindow int
+
 // moveFrontWindow puts the app's first window with its top left at p, in
 // global points, through accessibility, which needs no input event.
 func moveFrontWindow(pid int, p image.Point) error {
@@ -187,8 +190,8 @@ func moveFrontWindow(pid int, p image.Point) error {
 		return fmt.Errorf("no windows (accessibility error %d)", code)
 	}
 	defer axLib.release(windows)
-	if axLib.arrayCount(windows) == 0 {
-		return errors.New("no windows")
+	if axLib.arrayCount(windows) <= int64(spikeWindow) {
+		return errors.New("no such window")
 	}
 	at := cgPoint{float64(p.X), float64(p.Y)}
 	value := vdLib.valueCreate(axValueCGPoint, unsafe.Pointer(&at))
@@ -196,7 +199,7 @@ func moveFrontWindow(pid int, p image.Point) error {
 		return errors.New("couldn't make a position")
 	}
 	defer axLib.release(value)
-	if code := appsLib.setAttribute(axLib.arrayAt(windows, 0), axLib.attrs["AXPosition"], value); code != 0 {
+	if code := appsLib.setAttribute(axLib.arrayAt(windows, int64(spikeWindow)), axLib.attrs["AXPosition"], value); code != 0 {
 		return fmt.Errorf("the app refused to move (accessibility error %d)", code)
 	}
 	return nil
@@ -232,10 +235,10 @@ func frontWindowPosition(pid int) (image.Point, bool) {
 		return image.Point{}, false
 	}
 	defer axLib.release(windows)
-	if axLib.arrayCount(windows) == 0 {
+	if axLib.arrayCount(windows) <= int64(spikeWindow) {
 		return image.Point{}, false
 	}
-	value, code := axCopy(axLib.arrayAt(windows, 0), "AXPosition")
+	value, code := axCopy(axLib.arrayAt(windows, int64(spikeWindow)), "AXPosition")
 	if code != 0 || value == 0 {
 		return image.Point{}, false
 	}
