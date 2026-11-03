@@ -246,3 +246,18 @@ func frontWindowPosition(pid int) (image.Point, bool) {
 	}
 	return image.Pt(int(at.X), int(at.Y)), true
 }
+
+// workspaceFrontPID is the pid of the app NSWorkspace calls frontmost. Unlike
+// the accessibility system-wide focus it needs no permission and answers
+// without a window, so it shows when something takes the front.
+func workspaceFrontPID() int {
+	workspace := objc.ID(objc.GetClass("NSWorkspace")).Send(sel("sharedWorkspace"))
+	if workspace == 0 {
+		return 0
+	}
+	app := workspace.Send(sel("frontmostApplication"))
+	if app == 0 {
+		return 0
+	}
+	return int(objc.Send[int32](app, sel("processIdentifier")))
+}

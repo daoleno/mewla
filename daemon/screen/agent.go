@@ -852,6 +852,14 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 		unchanged = len(changedRows(appRows(*previous, a.latest.Rect, a.toAgent), appRows(tree, a.latest.Rect, a.toAgent))) == 0
 		a.mu.Unlock()
 	}
+	// An action whose result is already read back as asked (the field holds
+	// what was set, the box is in the state asked) needs no second look even
+	// if nothing differs from before: it was already so.
+	if unchanged && !changing {
+		if i := tree.index(action.Element); i >= 0 && strings.HasPrefix(intent.delivery(&tree.Elements[i]), "Delivery: verified") {
+			unchanged = false
+		}
+	}
 	// An app that announced its change and went quiet is read once; one that
 	// announced nothing falls back to the fingerprint and the second look.
 	if announced {

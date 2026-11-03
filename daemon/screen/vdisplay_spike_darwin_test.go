@@ -25,6 +25,10 @@ func TestVirtualDisplaySpike(t *testing.T) {
 	if hold <= 0 {
 		t.Skip("set MEWLA_VDISPLAY_SPIKE=<seconds> to run")
 	}
+	// withPool needs the backend's functions loaded.
+	if err := loadMac(); err != nil {
+		t.Fatal(err)
+	}
 	say := func(format string, args ...any) {
 		fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
 	}
@@ -66,7 +70,7 @@ func TestVirtualDisplaySpike(t *testing.T) {
 	var lastPointer cgPoint
 	for deadline := time.Now().Add(time.Duration(hold) * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
 		withPool(func() {
-			if front := frontPID(); front != lastFront {
+			if front := workspaceFrontPID(); front != lastFront {
 				say("front app pid %d (was %d)", front, lastFront)
 				lastFront = front
 			}
