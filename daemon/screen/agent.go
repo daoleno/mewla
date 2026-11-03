@@ -142,6 +142,9 @@ type AgentAction struct {
 	// Match names an element of the latest read by what it is instead of
 	// its id, for element, wait_for and expect.
 	Match *ElementMatch `json:"match,omitempty"`
+	// ConfirmUserAsked says the person asked for a menu item that ends an
+	// app or the session, such as Quit.
+	ConfirmUserAsked bool `json:"confirm_user_asked,omitempty"`
 	// Under, Depth and Match narrow app_state's answer to the inside of an
 	// element, so many levels down, and the elements a match names.
 	Under int `json:"under,omitempty"`
@@ -514,7 +517,7 @@ func (a *agentSession) inBackground(ctx context.Context, action AgentAction) boo
 		if name == "" {
 			name = treeApp()
 		}
-	case "app_state", "wait_for", "type", "key", "hold_key", "screenshot":
+	case "app_state", "wait_for", "type", "key", "hold_key", "screenshot", "menu":
 	default:
 		if _, click := appClicks[action.Action]; click && name != "" {
 			_, background, _, err := a.clickPath(ctx, name)
@@ -1202,6 +1205,8 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		return a.appState(ctx, action.App, appScope{Under: action.Under, Depth: action.Depth, Match: action.Match})
 	case "bring_forward":
 		return a.bringForward(ctx, action.App)
+	case "menu":
+		return a.menuAction(ctx, action)
 	case "element":
 		return a.actOnElement(ctx, action)
 	case "wait_for":
