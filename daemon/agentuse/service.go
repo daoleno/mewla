@@ -32,6 +32,12 @@ var playwrightPackage []byte
 //go:embed playwright/package-lock.json
 var playwrightLock []byte
 
+// fastActions makes Playwright's click, hover and check skip its wait for
+// animation frames (see the file); passed to the browser tools as --init-page.
+//
+//go:embed playwright/fast-actions.cjs
+var fastActions []byte
+
 // Browser states, from the user's side.
 const (
 	BrowserReady       = "ready"
@@ -442,6 +448,10 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 	if err := os.MkdirAll(s.browserFilesDir(), 0o700); err != nil {
 		return nil, nil, err
 	}
+	fastActionsPath := filepath.Join(s.dir, "fast-actions.cjs")
+	if err := atomicfile.Write(fastActionsPath, fastActions, 0o600); err != nil {
+		return nil, nil, err
+	}
 	argv = []string{l.node, l.cli, "--extension", "--executable-path", l.chrome, "--profile-dir-name", l.profile,
 		// An action answers with what changed, not the whole page: a busy
 		// app's page is hundreds of thousands of tokens, which the agent
@@ -454,6 +464,11 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 		// React-style renders. Measured: a 150 ms timer after a click is read
 		// stale at 100, fresh at 500; a fetch is fresh at every value.
 		"--timeout-settle", "100",
+		// A tab an agent works in is never the one on screen, so Chrome gives
+		// it a frame or two a second, and Playwright's click waits for two
+		// frames: one to two seconds each. This checks the same things (there,
+		// enabled, uncovered) without frames; a click takes about 0.1 s.
+		"--init-page", fastActionsPath,
 		// An action's answer doesn't repeat the Playwright code it ran: for
 		// browser_run_code_unsafe that is the agent's whole script again.
 		"--codegen", "none",

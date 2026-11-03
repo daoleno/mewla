@@ -1,6 +1,6 @@
 // Local fixture site for the browser benchmark. Deterministic, no network.
 import http from 'node:http';
-import { wizard, pages, product, todo } from './fixture-long.mjs';
+import { wizard, pages, product, todo, covered } from './fixture-long.mjs';
 
 export const events = [];
 const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -40,7 +40,7 @@ function xhr() {
 const simple = n => page('Tab ' + n, `<h1>Tab ${n}</h1><a href="/form">form</a>`);
 
 const apiSlow = (res) => setTimeout(() => { res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); res.end('XHR done'); }, 120);
-const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/wizard': wizard, '/todo': todo, '/tab2': () => simple(2), '/tab3': () => simple(3) };
+const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/wizard': wizard, '/covered': covered, '/todo': todo, '/tab2': () => simple(2), '/tab3': () => simple(3) };
 
 export function startFixture(port = 8765) {
   const server = http.createServer((req, res) => {

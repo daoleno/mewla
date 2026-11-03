@@ -69,3 +69,7 @@ function count() {
 }`;
   return page('Todo', '<h1>Todo</h1><input id="new" placeholder="What needs doing?"><button type="button" onclick="add()">Add</button><ul id="list"></ul><p id="count">0 left</p>', script);
 }
+
+export function covered() {
+  return page('Covered', '<button id="under" onclick="document.getElementById(\'out\').textContent=\'clicked\'">Under</button><div id="overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.2)"></div><button id="off" disabled>Off</button><div id="out">none</div>');
+}
