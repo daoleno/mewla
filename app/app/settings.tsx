@@ -1,3 +1,4 @@
+import { ExecutorAccountsSection } from "../components/settings/ExecutorAccountsSection";
 import React, {
   useCallback,
   useEffect,
@@ -451,6 +452,7 @@ export default function SettingsScreen() {
               onPress={() => router.push("/settings/agents")}
             />
           </ListSection>
+          <ExecutorAccountsSection serverId={currentServerId} />
 
           {Platform.OS === "web" ? null : (
             <>
