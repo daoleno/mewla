@@ -447,6 +447,13 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 		// app's page is hundreds of thousands of tokens, which the agent
 		// asks for, when it needs it, with browser_find or browser_snapshot.
 		"--snapshot-mode", "none",
+		// Playwright waits 500 ms after every action for the page to settle,
+		// twice if it fired requests, on top of waiting for those requests.
+		// An agent's next call comes seconds later, so most of it is dead
+		// time; 100 ms still lets a script read what a click changed through
+		// React-style renders. Measured: a 150 ms timer after a click is read
+		// stale at 100, fresh at 500; a fetch is fresh at every value.
+		"--timeout-settle", "100",
 		// An action's answer doesn't repeat the Playwright code it ran: for
 		// browser_run_code_unsafe that is the agent's whole script again.
 		"--codegen", "none",

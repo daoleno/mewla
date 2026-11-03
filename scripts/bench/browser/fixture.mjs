@@ -32,12 +32,17 @@ function table() {
   for (let i = 1; i <= 60; i++) rows += `<tr><td>${i}</td><td>Item ${i}</td><td>${(i * 7.5).toFixed(2)}</td><td>${i % 3 ? 'open' : 'closed'}</td></tr>`;
   return page('Table', `<table id="data"><thead><tr><th>ID</th><th>Name</th><th>Price</th><th>State</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
+function xhr() {
+  return page('XHR', `<button id="go" onclick="fetch('/api/slow').then(r=>r.text()).then(t=>{document.getElementById('status').textContent=t})">Load</button><div id="status">Idle</div><button id="timer" onclick="setTimeout(()=>{document.getElementById('status').textContent='Timer done'},150)">Timer</button>`);
+}
 const simple = n => page('Tab ' + n, `<h1>Tab ${n}</h1><a href="/form">form</a>`);
 
-const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/tab2': () => simple(2), '/tab3': () => simple(3) };
+const apiSlow = (res) => setTimeout(() => { res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); res.end('XHR done'); }, 120);
+const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/tab2': () => simple(2), '/tab3': () => simple(3) };
 
 export function startFixture(port = 8765) {
   const server = http.createServer((req, res) => {
+    if (req.url === '/api/slow') return apiSlow(res);
     const route = routes[req.url.split('?')[0]];
     if (!route) { res.writeHead(404); res.end('not found'); return; }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
