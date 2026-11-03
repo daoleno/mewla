@@ -32,6 +32,7 @@ func TestVirtualDisplayStage1(t *testing.T) {
 	if err := loadMac(); err != nil {
 		t.Fatal(err)
 	}
+	spikeWindow, _ = strconv.Atoi(os.Getenv("MEWLA_VDISPLAY_WINDOW"))
 	say := func(format string, args ...any) {
 		fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
 	}
