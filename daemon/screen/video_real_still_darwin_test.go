@@ -23,12 +23,14 @@ import (
 )
 
 type stillResult struct {
-	gapMs, fullMs      float64 // last motion to the first sharp update / to full sharp coverage
-	coverage           float64 // share of the screen the sharp tiles repainted
-	meanDiff, psnr     float64 // against a direct capture, over the repainted text crop
-	edgeRatio          float64 // gradient energy of the viewer's crop over the direct capture's
-	motionUpdates      int
-	motionVideoUpdates int
+	gapMs, fullMs         float64 // last motion to the first sharp update / to full sharp coverage
+	coverage              float64 // share of the screen the sharp tiles repainted
+	meanDiff, psnr        float64 // against a direct capture, over the repainted text crop
+	edgeRatio             float64 // gradient energy of the viewer's crop over the direct capture's
+	motionUpdates         int
+	motionVideoUpdates    int
+	pos0, pos1, posViewer int    // the page's scroll position: before, after (direct), in the viewer's sharp picture
+	invalid               string // why the numbers cannot be trusted, if so
 }
 
 // TestRealScreenStillAndSharpness drives the real Mac screen (a Safari page
@@ -70,7 +72,11 @@ func TestRealScreenStillAndSharpness(t *testing.T) {
 		if r.motionUpdates > 0 {
 			vp = r.motionVideoUpdates * 100 / r.motionUpdates
 		}
-		fmt.Fprintf(&table, "%-8s %9.0f %9.0f %9.0f %9.2f %9.1f %8.2f %9d\n", mode.name, r.gapMs, r.fullMs, r.coverage*100, r.meanDiff, r.psnr, r.edgeRatio, vp)
+		if r.invalid != "" {
+			fmt.Fprintf(&table, "%-8s INVALID: %s\n", mode.name, r.invalid)
+			continue
+		}
+		fmt.Fprintf(&table, "%-8s %9.0f %9.0f %9.0f %9.2f %9.1f %8.2f %9d   scroll %d -> %d\n", mode.name, r.gapMs, r.fullMs, r.coverage*100, r.meanDiff, r.psnr, r.edgeRatio, vp, r.pos0, r.pos1)
 	}
 	t.Log(table.String())
 }
@@ -79,7 +85,12 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	t.Helper()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	var err error
+	var res stillResult
+	before, err := session.Frame(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.pos0, _ = readScrollMarker(before.Image)
 	conn, server := shapedPipe(linkShape{"LAN", 2 * time.Millisecond, 100e6 / 8, false})
 	was := streamAdaptive
 	streamAdaptive = true
@@ -110,10 +121,6 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	}
 	say(set)
 
-	type got struct {
-		at    time.Time
-		rects []stillRect
-	}
 	var cur []stillRect
 	skim := &skimmer{conn: conn, onRect: func(r image.Rectangle, enc int32, body, fill []byte) {
 		cur = append(cur, stillRect{r: r, video: enc == encH264, jpeg: body, fill: fill})
@@ -121,7 +128,11 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	skim.message()
 	say([]byte{msgEnableContinuous, 1, 0, 0, 0, 0, 5, 0, 3, 32})
 
-	var updates []got
+	screen := before.Image.Bounds()
+	run := newStillCanvas(screen) // every picture the viewer got, painted as it came
+	var updates []stillUpdate
+	type posAt struct{ ms, pos int }
+	var trace []posAt
 	began := time.Now()
 	end := began.Add(14 * time.Second)
 	for time.Now().Before(end) {
@@ -132,89 +143,58 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 			time.Sleep(8 * time.Millisecond)
 			say(append([]byte{msgFence, 0, 0, 0, 0, 0, 0, 0, byte(len(fence))}, fence...))
 		case msgFramebufferUpdate:
-			updates = append(updates, got{time.Now(), cur})
+			now := time.Now()
+			updates = append(updates, stillUpdate{now, cur})
+			if run.paint(cur) {
+				if pos, ok := readScrollMarker(run.img); ok {
+					trace = append(trace, posAt{int(now.Sub(began).Milliseconds()), pos})
+				}
+			}
 		}
 	}
 	conn.Close()
 	<-done
-	// The screen is still now: a direct capture to compare with.
+	// The page's scroll has ended long before: a direct capture of the same
+	// still screen to compare with.
 	direct, err := session.Frame(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Last moving update: the one before the first quiet gap of 200 ms
-	// that follows motion (five updates within half a second).
-	var res stillResult
-	stillIdx := -1
-	moved := false
-	for i := 1; i < len(updates); i++ {
-		if !moved {
-			for j := i; j >= 0 && updates[i].at.Sub(updates[j].at) <= 500*time.Millisecond; j-- {
-				if i-j >= 4 {
-					moved = true
-					break
-				}
-			}
-			continue
-		}
-		if updates[i].at.Sub(updates[i-1].at) >= 200*time.Millisecond {
-			stillIdx = i
-			break
+	res.pos1, _ = readScrollMarker(direct.Image)
+	var line strings.Builder
+	for i, p := range trace {
+		if i%12 == 0 || i == len(trace)-1 {
+			fmt.Fprintf(&line, " %dms:%d", p.ms, p.pos)
 		}
 	}
-	if stillIdx < 0 {
-		t.Logf("%s: no still update seen (%d updates, moved=%v)", name, len(updates), moved)
+	t.Logf("%s: scroll position %d before, %d after; per-update (tile pictures only):%s", name, res.pos0, res.pos1, line.String())
+	if res.pos1 == 0 || res.pos1 == res.pos0 {
+		res.invalid = "the page did not scroll"
 		return res
 	}
-	for _, u := range updates[:stillIdx] {
-		res.motionUpdates++
-		for _, r := range u.rects {
-			if r.video {
-				res.motionVideoUpdates++
-				break
-			}
-		}
+	a, ok := analyzeStill(updates, screen.Dx()*screen.Dy())
+	if !ok {
+		res.invalid = fmt.Sprintf("no scroll then still found in %d updates (run %d..%d, gap %v)", len(updates), a.motionFirst, a.motionLast, a.gap)
+		return res
 	}
-	lastMotion := updates[stillIdx-1].at
-	res.gapMs = float64(updates[stillIdx].at.Sub(lastMotion).Milliseconds())
-	screen := direct.Image.Bounds()
-	canvas := image.NewRGBA(screen)
-	painted := make([]bool, screen.Dx()*screen.Dy())
-	paintedN := 0
-	for _, u := range updates[stillIdx:] {
-		for _, r := range u.rects {
-			if r.video {
-				continue
-			}
-			var img image.Image
-			if r.jpeg != nil {
-				if img, err = jpeg.Decode(bytes.NewReader(r.jpeg)); err != nil {
-					continue
-				}
-			} else if len(r.fill) == 3 {
-				img = image.NewUniform(color.RGBA{r.fill[0], r.fill[1], r.fill[2], 255})
-			} else {
-				continue
-			}
-			for y := r.r.Min.Y; y < r.r.Max.Y && y < screen.Max.Y; y++ {
-				for x := r.r.Min.X; x < r.r.Max.X && x < screen.Max.X; x++ {
-					if u, ok := img.(*image.Uniform); ok {
-						canvas.Set(x, y, u.C)
-					} else {
-						canvas.Set(x, y, img.At(img.Bounds().Min.X+x-r.r.Min.X, img.Bounds().Min.Y+y-r.r.Min.Y))
-					}
-					i := (y-screen.Min.Y)*screen.Dx() + x - screen.Min.X
-					if !painted[i] {
-						painted[i] = true
-						paintedN++
-					}
-				}
-			}
-		}
-		if res.fullMs == 0 && float64(paintedN) >= 0.95*float64(len(painted)) {
+	res.motionUpdates = a.motionLast - a.motionFirst + 1
+	res.motionVideoUpdates = a.motionVideo
+	lastMotion := updates[a.motionLast].at
+	res.gapMs = float64(a.gap.Milliseconds())
+	still := newStillCanvas(screen) // only what came after the quiet gap
+	for _, u := range updates[a.stillIdx:] {
+		still.paint(u.rects)
+		if res.fullMs == 0 && still.share() >= 0.95 {
 			res.fullMs = float64(u.at.Sub(lastMotion).Milliseconds())
 		}
+	}
+	canvas, painted, paintedN := still.img, still.painted, still.n
+	if pos, ok := readScrollMarker(canvas); ok {
+		res.posViewer = pos
+	}
+	if res.posViewer != res.pos1 {
+		res.invalid = fmt.Sprintf("the viewer's still picture shows scroll %d, the direct capture %d", res.posViewer, res.pos1)
+		return res
 	}
 	res.coverage = float64(paintedN) / float64(len(painted))
 	// Text crop: the left-hand column of the page, where the paragraphs are.
@@ -263,11 +243,58 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	return res
 }
 
-type stillRect struct {
-	r     image.Rectangle
-	video bool
-	jpeg  []byte
-	fill  []byte
+// stillCanvas is the picture a viewer builds from tight rectangles.
+type stillCanvas struct {
+	img     *image.RGBA
+	painted []bool
+	n       int
+}
+
+func newStillCanvas(r image.Rectangle) *stillCanvas {
+	return &stillCanvas{img: image.NewRGBA(r), painted: make([]bool, r.Dx()*r.Dy())}
+}
+
+func (c *stillCanvas) share() float64 { return float64(c.n) / float64(len(c.painted)) }
+
+// paint draws the tile rectangles (video is not decoded here) and reports
+// whether any touched the top rows, where the scroll marker is.
+func (c *stillCanvas) paint(rects []stillRect) (top bool) {
+	b := c.img.Bounds()
+	for _, r := range rects {
+		var img image.Image
+		switch {
+		case r.video:
+			continue
+		case r.jpeg != nil:
+			dec, err := jpeg.Decode(bytes.NewReader(r.jpeg))
+			if err != nil {
+				continue
+			}
+			img = dec
+		case len(r.fill) == 3:
+			img = image.NewUniform(color.RGBA{r.fill[0], r.fill[1], r.fill[2], 255})
+		default:
+			continue
+		}
+		if r.r.Min.Y < b.Min.Y+400 {
+			top = true
+		}
+		for y := r.r.Min.Y; y < r.r.Max.Y && y < b.Max.Y; y++ {
+			for x := r.r.Min.X; x < r.r.Max.X && x < b.Max.X; x++ {
+				if u, ok := img.(*image.Uniform); ok {
+					c.img.Set(x, y, u.C)
+				} else {
+					c.img.Set(x, y, img.At(img.Bounds().Min.X+x-r.r.Min.X, img.Bounds().Min.Y+y-r.r.Min.Y))
+				}
+				i := (y-b.Min.Y)*b.Dx() + x - b.Min.X
+				if !c.painted[i] {
+					c.painted[i] = true
+					c.n++
+				}
+			}
+		}
+	}
+	return top
 }
 
 // openScrollFixture opens, in Safari, a long page that scrolls itself with
@@ -275,6 +302,8 @@ type stillRect struct {
 // settings are written into the file (Safari drops a file URL's query): delay
 // (ms after load before it starts), run (ms of scrolling, then it stays
 // still) or loop (scroll up and down for ever). Its title carries the label.
+// A marker in the top left corner shows the scroll position in binary (see
+// readScrollMarker), so any captured frame says where the page was.
 func openScrollFixture(t *testing.T, label string, delay, run int, loop bool) {
 	t.Helper()
 	page := filepath.Join(t.TempDir(), "mewla-scroll-fixture-"+label+".html")
@@ -289,15 +318,27 @@ func openScrollFixture(t *testing.T, label string, delay, run int, loop bool) {
 	html.WriteString(`<script>
 document.title = 'mewla-scroll-fixture LABEL';
 const delay = DELAY, run = RUN, loop = LOOP, speed = 900;
+const bar = document.createElement('div');
+bar.style.cssText = 'position:fixed;left:0;top:0;display:flex;z-index:99999';
+const cells = [];
+for (let i = 0; i < 17; i++) { const d = document.createElement('div'); d.style.cssText = 'width:20px;height:20px'; bar.append(d); cells.push(d); }
+document.body.append(bar);
+const mark = () => {
+  const y = Math.round(scrollY) & 0xffff;
+  cells[0].style.background = '#0f0';
+  for (let i = 0; i < 16; i++) cells[i + 1].style.background = (y >> (15 - i)) & 1 ? '#f00' : '#00f';
+};
+mark();
 setTimeout(() => {
   const t0 = performance.now();
   const tick = (now) => {
     const el = now - t0;
-    if (!loop && el >= run) return;
+    if (!loop && el >= run) { mark(); return; }
     const max = document.documentElement.scrollHeight - innerHeight;
     let y = speed * el / 1000;
     if (loop) { const p = y % (2 * max); y = p < max ? p : 2 * max - p; }
     scrollTo(0, y);
+    mark();
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
