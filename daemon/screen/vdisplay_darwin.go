@@ -214,3 +214,35 @@ func pointerAt() cgPoint {
 	defer axLib.release(event)
 	return vdLib.eventAt(event)
 }
+
+// frontWindowPosition is where the app's first window's top left is, in
+// global points, to put it back after a spike.
+func frontWindowPosition(pid int) (image.Point, bool) {
+	if loadVDisplay() != nil {
+		return image.Point{}, false
+	}
+	app := appsLib.createApplication(int32(pid))
+	if app == 0 {
+		return image.Point{}, false
+	}
+	defer axLib.release(app)
+	axLib.setTimeout(app, 2)
+	windows, code := axCopy(app, "AXWindows")
+	if code != 0 || windows == 0 {
+		return image.Point{}, false
+	}
+	defer axLib.release(windows)
+	if axLib.arrayCount(windows) == 0 {
+		return image.Point{}, false
+	}
+	value, code := axCopy(axLib.arrayAt(windows, 0), "AXPosition")
+	if code != 0 || value == 0 {
+		return image.Point{}, false
+	}
+	defer axLib.release(value)
+	var at cgPoint
+	if !axLib.valueGetValue(value, axValueCGPoint, unsafe.Pointer(&at)) {
+		return image.Point{}, false
+	}
+	return image.Pt(int(at.X), int(at.Y)), true
+}

@@ -52,9 +52,14 @@ func TestVirtualDisplaySpike(t *testing.T) {
 	if bounds.Empty() {
 		t.Fatal("the display isn't in the active list")
 	}
-	if pid, _ := strconv.Atoi(os.Getenv("MEWLA_VDISPLAY_MOVE")); pid > 0 {
+	movePID, _ := strconv.Atoi(os.Getenv("MEWLA_VDISPLAY_MOVE"))
+	var home image.Point
+	var homeKnown bool
+	if movePID > 0 {
 		withPool(func() {
-			say("move window of pid %d to %v: %v", pid, bounds.Min, moveFrontWindow(pid, bounds.Min.Add(image.Pt(40, 60))))
+			home, homeKnown = frontWindowPosition(movePID)
+			say("window of pid %d is at %v (known %v)", movePID, home, homeKnown)
+			say("move it to %v: %v", bounds.Min, moveFrontWindow(movePID, bounds.Min.Add(image.Pt(40, 60))))
 		})
 	}
 	var lastFront int
@@ -70,6 +75,9 @@ func TestVirtualDisplaySpike(t *testing.T) {
 			say("pointer %.0f,%.0f", p.X, p.Y)
 			lastPointer = p
 		}
+	}
+	if movePID > 0 && homeKnown {
+		withPool(func() { say("put it back at %v: %v", home, moveFrontWindow(movePID, home)) })
 	}
 	say("closing")
 }
