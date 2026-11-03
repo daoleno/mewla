@@ -59,3 +59,10 @@ func TestScopeUnknownIDAndNothing(t *testing.T) {
 		t.Fatal(text)
 	}
 }
+
+func TestScopeInteractiveKeepsWhatCanBeActedOn(t *testing.T) {
+	text := scoped(t, appScope{Interactive: true})
+	if !strings.Contains(text, `Button "General"`) || strings.Contains(text, "StaticText") || strings.Contains(text, "Group") {
+		t.Fatalf("interactive:\n%s", text)
+	}
+}

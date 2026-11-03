@@ -15,9 +15,14 @@ type appScope struct {
 	Under int
 	Depth int
 	Match *ElementMatch
+	// Interactive keeps only what can be acted on: buttons, fields and the
+	// like, or an element with an action of its own (agent-desktop's -i).
+	Interactive bool
 }
 
-func (s appScope) active() bool { return s.Under != 0 || s.Depth != 0 || s.Match != nil }
+func (s appScope) active() bool {
+	return s.Under != 0 || s.Depth != 0 || s.Match != nil || s.Interactive
+}
 
 // matchesShown is how many matches an answer lists.
 const matchesShown = 25
@@ -72,6 +77,18 @@ func (s appScope) pick(tree ElementTree, rows []appRow) ([]appRow, string, error
 			keep[id] = keep[id] && matched[id]
 		}
 		note = append(note, "matching "+s.Match.String())
+	}
+	if s.Interactive {
+		note = append(note, "elements you can act on")
+		for i, e := range tree.Elements {
+			special := false
+			for _, action := range e.Actions {
+				special = special || !commonActions[action]
+			}
+			if !actionableRoles[e.Role] && !special {
+				keep[tree.id(i)] = false
+			}
+		}
 	}
 	var out []appRow
 	for _, r := range rows {

@@ -149,8 +149,9 @@ type AgentAction struct {
 	ConfirmUserAsked bool `json:"confirm_user_asked,omitempty"`
 	// Under, Depth and Match narrow app_state's answer to the inside of an
 	// element, so many levels down, and the elements a match names.
-	Under int `json:"under,omitempty"`
-	Depth int `json:"depth,omitempty"`
+	Under       int  `json:"under,omitempty"`
+	Depth       int  `json:"depth,omitempty"`
+	Interactive bool `json:"interactive,omitempty"`
 	// Steps are a batch's actions, run in order.
 	Steps []AgentAction `json:"steps,omitempty"`
 }
@@ -1251,7 +1252,7 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 	case "open_app":
 		return a.openApp(ctx, action.App)
 	case "app_state":
-		return a.appState(ctx, action.App, appScope{Under: action.Under, Depth: action.Depth, Match: action.Match})
+		return a.appState(ctx, action.App, appScope{Under: action.Under, Depth: action.Depth, Match: action.Match, Interactive: action.Interactive})
 	case "bring_forward":
 		return a.bringForward(ctx, action.App)
 	case "menu":

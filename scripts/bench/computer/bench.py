@@ -159,6 +159,8 @@ def mewla_run(n, apps, cmd, scratch):
                 go("find/" + a, "steps", {"steps": [{"action": "expect", "app": a, "match": {"role": "Button"}}]})
             for _ in range(n):  # the same find as an app_state filter: no steps, small answer
                 go("find(app_state)/" + a, "app_state", {"app": a, "match": {"role": "Button"}}, rowsf=True)
+            for _ in range(n):  # what agent-desktop's snapshot -i --compact lists: only what can be acted on
+                go("app_state(interactive)/" + a, "app_state", {"app": a, "interactive": True}, rowsf=True)
             for _ in range(n):
                 go("app_state/2/" + a, "app_state", {"app": a}, rowsf=True)
         if "TextEdit" in present:
