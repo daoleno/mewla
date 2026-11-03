@@ -67,7 +67,7 @@ func TestDiffNamesWhatChangedById(t *testing.T) {
 	if strings.Contains(text, `"Item 10"`) || stats.rows != 6 {
 		t.Errorf("unchanged rows were listed, or miscounted (%d):\n%s", stats.rows, text)
 	}
-	full, _ := formatAppTree(App{Name: "Big", PID: 5}, after, image.Rect(0, 0, 100, 100), func(p image.Point) (int, int) { return p.X, p.Y })
+	full, _, _ := formatAppTree(App{Name: "Big", PID: 5}, after, image.Rect(0, 0, 100, 100), func(p image.Point) (int, int) { return p.X, p.Y }, appScope{})
 	if len(text)*2 > len(full) {
 		t.Errorf("the difference (%d bytes) isn't much smaller than the read (%d)", len(text), len(full))
 	}

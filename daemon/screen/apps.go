@@ -306,7 +306,7 @@ type readStats struct {
 
 // formatAppTree lists an app's elements with the ids an agent acts on. An
 // element on the screen also gets the point to click, in screenshot pixels.
-func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent func(image.Point) (int, int)) (string, readStats) {
+func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent func(image.Point) (int, int), scope appScope) (string, readStats, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "App: %s, pid %d", oneLine(app.Name), app.PID)
 	if app.Active {
@@ -314,8 +314,13 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	}
 	b.WriteString(".\nEach line: [id] role \"name\" = \"value\" {actions} at (x, y). Act on an element by its id; an element keeps its id while it stays the same, and an id whose element is gone is refused.\n")
 	b.WriteString(tree.Note)
+	rows, scoped, err := scope.pick(tree, appRows(tree, screen, toAgent))
+	if err != nil {
+		return "", readStats{}, err
+	}
+	b.WriteString(scoped)
 	shown, hidden := 0, 0
-	for _, row := range appRows(tree, screen, toAgent) {
+	for _, row := range rows {
 		if shown == elementsShown {
 			hidden++
 			continue
@@ -331,6 +336,8 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	}
 	switch {
 	case shown > 0:
+	case scope.active():
+		b.WriteString("Nothing in that scope.\n")
 	case app.Hidden:
 		// Accessibility reaches only windows on this screen: not those on
 		// another desktop, or of a hidden app.
@@ -338,7 +345,7 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	default:
 		b.WriteString("Nothing readable: this app shows little to accessibility; use screenshots.\n")
 	}
-	return b.String(), readStats{rows: shown, truncated: hidden > 0 || tree.Truncated}
+	return b.String(), readStats{rows: shown, truncated: hidden > 0 || tree.Truncated}, nil
 }
 
 // Shortcut is a menu item's keyboard shortcut: command with a character,
