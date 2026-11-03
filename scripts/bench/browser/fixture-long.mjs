@@ -35,7 +35,7 @@ function finish() {
 export function pages(url) {
   const p = Number(new URL(url, 'http://x').searchParams.get('p') || 1);
   let rows = '';
-  for (let i = (p - 1) * 10 + 1; i <= p * 10; i++) {
+  for (let i = (p - 1) * 100 + 1; i <= p * 100; i++) {
     rows += `<tr><td>SKU-${String(i).padStart(4, '0')}</td><td>Part ${i}</td><td>$${(i * 3.25 + 10).toFixed(2)}</td></tr>`;
   }
   return page('Catalog p' + p,
