@@ -40,13 +40,15 @@ type appPrinter interface {
 	PrintApp(ctx context.Context, pid int) (AppPrint, error)
 }
 
-// The app is given settleFirst to start reacting, then fingerprinted every
-// settleEvery until two in a row agree, for at most settleMax. waitForRecheck
+// The app is given settleFast to start reacting before a first look at what an
+// action did, and settleFirst before a second look when that showed nothing.
+// Then the app is fingerprinted every settleEvery until two in a row agree, for at most settleMax. waitForRecheck
 // is how long wait_for trusts an unchanged fingerprint before it reads the
 // app anyway.
 var (
 	settleFirst    = 300 * time.Millisecond
-	settleEvery    = 100 * time.Millisecond
+	settleFast     = 100 * time.Millisecond // before a first look at what an action did
+	settleEvery    = 60 * time.Millisecond
 	settleMax      = 2500 * time.Millisecond
 	waitForRecheck = time.Second
 )
@@ -132,8 +134,8 @@ func (a *agentSession) settlerFor(pid int, first, limit time.Duration) *settler 
 
 // settleApp lets an app redraw after an action on it: until it is quiet, or
 // for a fixed moment where it can't be fingerprinted.
-func (a *agentSession) settleApp(ctx context.Context, pid int) error {
-	if st := a.settlerFor(pid, settleFirst, settleMax); st != nil {
+func (a *agentSession) settleApp(ctx context.Context, pid int, first time.Duration) error {
+	if st := a.settlerFor(pid, first, settleMax); st != nil {
 		_, err := st.quiet(ctx)
 		return err
 	}

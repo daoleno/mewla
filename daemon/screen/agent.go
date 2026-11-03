@@ -805,13 +805,29 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err := actor.ActOnElement(ctx, e, name, intent.text); err != nil {
 		return AgentResult{}, notDelivered(a.gone(ctx, a.treeApp, err))
 	}
-	if err := a.settleApp(ctx, a.treeApp.PID); err != nil {
+	// A first look comes after a short wait: most actions have shown their
+	// effect by then. If nothing differs from before the action, the app may
+	// only be slow, so it gets the longer wait and a second look.
+	if err := a.settleApp(ctx, a.treeApp.PID, settleFast); err != nil {
 		return AgentResult{}, err
 	}
 	app := a.treeApp
 	previous, tree, err := a.swapTreeLocked(ctx, app)
 	if err != nil {
 		return AgentResult{Text: "Done; reading the app again failed: " + err.Error()}, nil
+	}
+	if previous != nil {
+		a.mu.Lock()
+		unchanged := len(changedRows(appRows(*previous, a.latest.Rect, a.toAgent), appRows(tree, a.latest.Rect, a.toAgent))) == 0
+		a.mu.Unlock()
+		if unchanged {
+			if err := a.settleApp(ctx, app.PID, settleFirst); err != nil {
+				return AgentResult{}, err
+			}
+			if _, again, err := a.swapTreeLocked(ctx, app); err == nil {
+				tree = again
+			}
+		}
 	}
 	var after *Element
 	if i := tree.index(action.Element); i >= 0 {
