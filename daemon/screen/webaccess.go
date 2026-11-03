@@ -18,7 +18,7 @@ import (
 // webAccessOps is what a platform gives the switch.
 type webAccessOps struct {
 	// state reads the app's AXManualAccessibility: whether it is on, and
-	// whether the app has the attribute at all.
+	// whether the read was answered (an app may answer only once it is set).
 	state func(pid int) (on, supported bool)
 	// enable writes it.
 	enable func(pid int) error
@@ -54,15 +54,17 @@ func (w *webAccess) ensure(ctx context.Context, pid int, ops webAccessOps, clock
 	}
 	w.done[pid] = true
 	w.mu.Unlock()
-	on, supported := ops.state(pid)
-	if !supported || on {
+	// An app may not list the attribute until it is set (Electron answers a
+	// read only once asked), so an unsupported read still gets a try: the
+	// write has to be read back as on to count.
+	if on, _ := ops.state(pid); on {
 		return ""
 	}
 	before := ops.size(ctx, pid)
 	if ops.enable(pid) != nil {
 		return ""
 	}
-	if on, _ := ops.state(pid); !on {
+	if on, supported := ops.state(pid); !on || !supported {
 		return "" // not confirmed: don't claim it
 	}
 	// The tree fills over a second or so: wait until it has grown and
