@@ -119,9 +119,19 @@ func (c *ExecutorConfig) IDForCommand(command string) string {
 	best := ""
 	bestFields := 0
 	for _, name := range c.Roles() {
-		configured := strings.TrimSpace(c.ByName[name].Command)
+		worker := NewWorkerExecutor(name, c.ByName[name])
+		configured := strings.TrimSpace(worker.Command)
 		if configured == command {
 			return name
+		}
+		if worker.ConfigDir != "" {
+			// A separate sign-in is recognized by its own config directory, and
+			// never claimed by a launch that does not carry it.
+			prefix := strings.TrimSuffix(configured, worker.BareCommand)
+			if strings.HasPrefix(command, prefix) {
+				return name
+			}
+			continue
 		}
 		if commandProgram(configured) != program {
 			continue
@@ -137,6 +147,13 @@ func (c *ExecutorConfig) IDForCommand(command string) string {
 
 func commandProgram(command string) string {
 	fields := strings.Fields(command)
+	// "env NAME=value program" runs program.
+	if len(fields) > 0 && fields[0] == "env" {
+		fields = fields[1:]
+		for len(fields) > 0 && strings.Contains(fields[0], "=") && !strings.HasPrefix(fields[0], "-") {
+			fields = fields[1:]
+		}
+	}
 	if len(fields) == 0 {
 		return ""
 	}
