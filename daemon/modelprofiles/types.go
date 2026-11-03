@@ -624,8 +624,8 @@ func contractsCompatible(current, next RouteBinding) error {
 		// Domain may change while history is still empty.
 	case HistoryStateMayContainOpaque:
 		if current.HistoryDomain != next.HistoryDomain {
-			// Lightweight same-protocol portable strip only — never weaken the
-			// opaque guard into blind forward of provider-specific state.
+			// Same protocol only: Anthropic forwards client-owned history
+			// unchanged; Responses goes through the portable strip boundary.
 			if !portableHistoryProtocolsAllowed(current, next) {
 				return fmt.Errorf("%w: opaque history present; domain %q -> %q", ErrBindingHistoryState, current.HistoryDomain, next.HistoryDomain)
 			}

@@ -372,7 +372,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				}
 			}
 		}
-		if normalizeID(binding.HistoryPortability) == HistoryPortabilityStripOpaque {
+		if normalizeID(binding.HistoryPortability) == HistoryPortabilityStripOpaque && opaqueHistoryStripRequired(binding.RouteProtocol) {
 			rewritten, _, err = normalizePortableHistoryBody(binding.RouteProtocol, rewritten)
 			if err != nil {
 				if errors.Is(err, ErrRequestBodyNotPortable) {

@@ -66,61 +66,6 @@ func TestNormalizeResponsesPortableHistoryPreservesUnknownType(t *testing.T) {
 	}
 }
 
-func TestNormalizeAnthropicPortableHistoryStripsThinkingKeepsTextTools(t *testing.T) {
-	in := []byte(`{
-	  "model":"claude",
-	  "thinking":{"type":"enabled","budget_tokens":1000},
-	  "messages":[
-	    {"role":"user","content":[{"type":"text","text":"alpha","cache_control":{"type":"ephemeral"}}]},
-	    {"role":"assistant","content":[
-	      {"type":"thinking","thinking":"secret","signature":"sig"},
-	      {"type":"redacted_thinking","data":"blob"},
-	      {"type":"text","text":"token-1"},
-	      {"type":"tool_use","id":"t1","name":"Bash","input":{"command":"echo hi"},"provider_secret":"leak"}
-	    ]},
-	    {"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"hi"},{"type":"text","text":"beta"}]}
-	  ]
-	}`)
-	out, deg, err := normalizePortableHistoryBody(RouteProtocolAnthropicMessages, in)
-	if err != nil || deg != HistoryDegradationStripOpaque {
-		t.Fatalf("err=%v deg=%q", err, deg)
-	}
-	s := string(out)
-	if strings.Contains(s, `"thinking":"secret"`) || strings.Contains(s, "redacted_thinking") || strings.Contains(s, `"signature"`) {
-		t.Fatalf("opaque thinking leaked: %s", s)
-	}
-	if strings.Contains(s, "provider_secret") {
-		t.Fatalf("unknown tool fields leaked: %s", s)
-	}
-	if !strings.Contains(s, `"token-1"`) || !strings.Contains(s, `"tool_use"`) || !strings.Contains(s, `"tool_result"`) {
-		t.Fatalf("portable text/tools missing: %s", s)
-	}
-	if !strings.Contains(s, `"budget_tokens":1000`) {
-		t.Fatalf("thinking config stripped: %s", s)
-	}
-}
-
-func TestNormalizeAnthropicThinkingOnlyKeepsRoleAdjacency(t *testing.T) {
-	in := []byte(`{
-	  "messages":[
-	    {"role":"user","content":[{"type":"text","text":"alpha"}]},
-	    {"role":"assistant","content":[{"type":"thinking","thinking":"secret","signature":"sig"}]},
-	    {"role":"user","content":[{"type":"text","text":"beta"}]}
-	  ]
-	}`)
-	out, _, err := normalizePortableHistoryBody(RouteProtocolAnthropicMessages, in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := string(out)
-	if !strings.Contains(s, anthropicThinkingOmittedPlaceholder) {
-		t.Fatalf("placeholder missing: %s", s)
-	}
-	if strings.Contains(s, `"signature"`) {
-		t.Fatalf("signature leaked: %s", s)
-	}
-}
-
 func TestPortableHistoryStickySurvivesDurableRestore(t *testing.T) {
 	table := NewRouteTable()
 	a := routedCodex("http://127.0.0.1:9/v1", "gpt-5.6-sol", "gpt-5.6-sol")
@@ -160,17 +105,6 @@ func TestPortableHistoryStickySurvivesDurableRestore(t *testing.T) {
 	}
 	if again.Binding.RouteID != state.Binding.RouteID {
 		t.Fatalf("route id changed on restore")
-	}
-}
-
-func TestNormalizeAnthropicPortableHistoryPreservesUnknownType(t *testing.T) {
-	in := []byte(`{"messages":[{"role":"assistant","content":[{"type":"vendor_memory","data":"x"}]}]}`)
-	out, _, err := normalizePortableHistoryBody(RouteProtocolAnthropicMessages, in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(out), "vendor_memory") || !strings.Contains(string(out), "data") {
-		t.Fatalf("unknown block was lost: %s", out)
 	}
 }
 
@@ -320,5 +254,128 @@ func TestPortableHistoryActivateWhileInFlightSwapsRouteAndMarksOpaque(t *testing
 	got, _ = table.Get("s")
 	if got.Binding.HistoryState != HistoryStateMayContainOpaque {
 		t.Fatalf("2xx should mark opaque: %q", got.Binding.HistoryState)
+	}
+}
+
+// anthropicSwitchBody is a Claude Code-shaped request after a provider switch:
+// thinking signed by the old upstream, HTML-sensitive text, and non-alphabetical
+// key order. A transparent gateway must deliver these exact bytes.
+const anthropicSwitchBody = `{"model":"claude-sonnet-4-6","max_tokens":64,"system":[{"type":"text","text":"You are Claude Code"}],"messages":[{"role":"user","content":"<mewla_work_event>{\"a\":1}</mewla_work_event> & go"},{"role":"assistant","content":[{"type":"thinking","thinking":"plan","signature":"sig-A"},{"type":"text","text":"ok"}]},{"role":"user","content":"next"}],"metadata":{"user_id":"u"}}`
+
+func anthropicCaptureUpstream(t *testing.T, sink *[][]byte, mu *sync.Mutex) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		*sink = append(*sink, body)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func postAnthropic(t *testing.T, rootURL, body string) {
+	t.Helper()
+	resp, err := http.Post(rootURL+"/v1/messages", "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, raw)
+	}
+}
+
+func TestAnthropicProviderSwitchForwardsClientBytesUnchanged(t *testing.T) {
+	var mu sync.Mutex
+	var hitA, hitB [][]byte
+	upA := anthropicCaptureUpstream(t, &hitA, &mu)
+	upB := anthropicCaptureUpstream(t, &hitB, &mu)
+
+	table := NewRouteTable()
+	table.SetLookup(func(string) (string, bool) { return "ready", true })
+	a := routedClaude(upA.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
+	state, err := table.BindLaunch("claude", a, 1, verifiedAuth(a))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(NewRouter(table).Handler())
+	defer srv.Close()
+	root, err := LoopbackClaudeRootURL(srv.Listener.Addr().String(), state.Binding.RouteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postAnthropic(t, root, anthropicSwitchBody)
+
+	b := routedClaude(upB.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
+	got, err := table.Activate("claude", b, 2, state.Generation, verifiedAuth(b))
+	if err != nil {
+		t.Fatalf("cross-provider anthropic switch rejected: %v", err)
+	}
+	if got.Binding.HistoryPortability != "" {
+		t.Fatalf("anthropic route must not strip, portability=%q", got.Binding.HistoryPortability)
+	}
+	postAnthropic(t, root, anthropicSwitchBody)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(hitA) != 1 || len(hitB) != 1 {
+		t.Fatalf("hitA=%d hitB=%d", len(hitA), len(hitB))
+	}
+	for label, got := range map[string][]byte{"A": hitA[0], "B": hitB[0]} {
+		if string(got) != anthropicSwitchBody {
+			t.Fatalf("upstream %s received rewritten body:\n got %s\nwant %s", label, got, anthropicSwitchBody)
+		}
+	}
+}
+
+func TestAnthropicRouteIgnoresStalePersistedStripFlag(t *testing.T) {
+	var mu sync.Mutex
+	var hits [][]byte
+	up := anthropicCaptureUpstream(t, &hits, &mu)
+
+	table := NewRouteTable()
+	table.SetLookup(func(string) (string, bool) { return "ready", true })
+	a := routedClaude(up.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
+	state, err := table.BindLaunch("claude", a, 1, verifiedAuth(a))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An older daemon persisted the strip flag on this Anthropic route.
+	raw, err := EncodeDurableSnapshot(table.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	states, err := DecodeDurableSnapshot(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 {
+		t.Fatalf("states=%d", len(states))
+	}
+	states[0].Binding.HistoryPortability = HistoryPortabilityStripOpaque
+	restored := NewRouteTable()
+	restored.SetLookup(func(string) (string, bool) { return "ready", true })
+	if _, err := restored.Restore(states, registerAllow(nil, a)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := restored.Get("claude"); got.Binding.HistoryPortability != HistoryPortabilityStripOpaque {
+		t.Fatalf("precondition: stale flag not restored: %q", got.Binding.HistoryPortability)
+	}
+	srv := httptest.NewServer(NewRouter(restored).Handler())
+	defer srv.Close()
+	root, err := LoopbackClaudeRootURL(srv.Listener.Addr().String(), state.Binding.RouteID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postAnthropic(t, root, anthropicSwitchBody)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(hits) != 1 || string(hits[0]) != anthropicSwitchBody {
+		t.Fatalf("stale strip flag rewrote the body: %q", hits)
 	}
 }
