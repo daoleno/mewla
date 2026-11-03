@@ -216,8 +216,8 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 			}{"stats", path, locked.Load(), stats})
 		},
 		Done: func(sum screen.StreamSummary) {
-			log.Printf("screen: device %s stream via %s: %d updates (%d sharpened) %d KB, encode p50 %.1f p95 %.1f ms, ack p50 %.0f p95 %.0f ms, quality %d..%d, up to %d in flight",
-				device.ID, path, sum.Updates, sum.Refines, sum.Bytes>>10, sum.EncodeP50, sum.EncodeP95, sum.AckP50, sum.AckP95, sum.LowestQuality, sum.ViewerQuality, sum.MaxInFlight)
+			log.Printf("screen: device %s stream via %s: %d updates (%d sharpened, %d video) %d KB, encode p50 %.1f p95 %.1f ms, ack p50 %.0f p95 %.0f ms, quality %d..%d, up to %d in flight",
+				device.ID, path, sum.Updates, sum.Refines, sum.Video, sum.Bytes>>10, sum.EncodeP50, sum.EncodeP95, sum.AckP50, sum.AckP95, sum.LowestQuality, sum.ViewerQuality, sum.MaxInFlight)
 		},
 	}
 	upstream, err := open(ctx, device.ID, observer)

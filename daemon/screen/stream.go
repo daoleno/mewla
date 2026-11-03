@@ -61,6 +61,8 @@ func (h *histogram) quantile(q float64) float64 {
 type StreamStats struct {
 	Updates int `json:"updates"`
 	Bytes   int `json:"bytes"`
+	// Video is how many of the updates were H.264 frames.
+	Video int `json:"video,omitempty"`
 	// DirtyPct is the share of the screen the updates redrew.
 	DirtyPct int `json:"dirty_pct"`
 	// CaptureSeq is the newest capture sent.
@@ -81,6 +83,7 @@ type StreamStats struct {
 // StreamSummary is one finished session, for one log line.
 type StreamSummary struct {
 	Updates   int
+	Video     int
 	Refines   int
 	Bytes     int64
 	EncodeP50 float64
@@ -96,6 +99,7 @@ type StreamSummary struct {
 
 type streamWindow struct {
 	updates, bytes int
+	video          int
 	dirty, total   int64
 	capture        histogram
 	encode         histogram
@@ -128,6 +132,7 @@ type sentUpdate struct {
 	ViewerLevel int
 	InFlight    int
 	Refine      bool
+	Video       bool
 }
 
 func (m *streamMetrics) sent(u sentUpdate) {
@@ -145,6 +150,10 @@ func (m *streamMetrics) sent(u sentUpdate) {
 	}
 	if u.Refine {
 		m.refines++
+	}
+	if u.Video {
+		m.win.video++
+		m.all.video++
 	}
 	m.seq = u.Seq
 	m.quality, m.flight, m.viewer = u.Quality, u.InFlight, u.ViewerLevel
@@ -171,7 +180,7 @@ func (m *streamMetrics) take() (StreamStats, bool) {
 		return StreamStats{}, false
 	}
 	stats := StreamStats{
-		Updates: w.updates, Bytes: w.bytes, CaptureSeq: m.seq,
+		Updates: w.updates, Bytes: w.bytes, Video: w.video, CaptureSeq: m.seq,
 		CaptureMs: w.capture.quantile(0.5),
 		EncodeMs:  w.encode.quantile(0.5), EncodeMax: w.encode.max,
 		AckMs: w.ack.quantile(0.5), AckMax: w.ack.max,
@@ -188,7 +197,7 @@ func (m *streamMetrics) summary() StreamSummary {
 	defer m.mu.Unlock()
 	a := &m.all
 	return StreamSummary{
-		Updates: a.updates, Refines: m.refines, Bytes: int64(a.bytes),
+		Updates: a.updates, Video: a.video, Refines: m.refines, Bytes: int64(a.bytes),
 		EncodeP50: a.encode.quantile(0.5), EncodeP95: a.encode.quantile(0.95),
 		AckP50: a.ack.quantile(0.5), AckP95: a.ack.quantile(0.95),
 		LowestQuality: m.lowest, ViewerQuality: m.viewer, MaxInFlight: m.maxFlt,

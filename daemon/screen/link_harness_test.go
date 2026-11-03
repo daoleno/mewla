@@ -113,7 +113,7 @@ type linkResult struct {
 // measureLink streams a scrolling page over shape for a while and reports
 // what a viewer saw: updates drawn per second, how late its answers were, the
 // quality and window the daemon settled on, and whether the page ended sharp.
-func measureLink(t *testing.T, shape linkShape, adaptive bool) linkResult {
+func measureLink(t *testing.T, shape linkShape, adaptive bool, video videoFactory) linkResult {
 	t.Helper()
 	fake := NewFakeBackend(1280, 800)
 	if !shape.small {
@@ -140,14 +140,21 @@ func measureLink(t *testing.T, shape linkShape, adaptive bool) linkResult {
 	var last StreamStats
 	var summary StreamSummary
 	obs := &Observer{
-		Stats: func(s StreamStats) { mu.Lock(); last = s; mu.Unlock() },
-		Done:  func(s StreamSummary) { mu.Lock(); summary = s; mu.Unlock() },
+		Stats: func(s StreamStats) {
+			mu.Lock()
+			last = s
+			mu.Unlock()
+			if os.Getenv("MEWLA_SCREEN_LINK_TRACE") != "" {
+				fmt.Printf("  trace: %d updates (%d video) %d KB ack %.0f ms win %d\n", s.Updates, s.Video, s.Bytes>>10, s.AckMs, s.InFlight)
+			}
+		},
+		Done: func(s StreamSummary) { mu.Lock(); summary = s; mu.Unlock() },
 	}
 	was := streamAdaptive
 	streamAdaptive = adaptive
 	defer func() { streamAdaptive = was }()
 	done := make(chan struct{})
-	go func() { _ = serveRFB(ctx, server, session, "Fixture", obs); close(done) }()
+	go func() { _ = serveRFBVideo(ctx, server, session, "Fixture", obs, video); close(done) }()
 
 	// A light client: it reads what the server sends and answers fences after
 	// the time noVNC would take to draw, without decoding the pictures.
@@ -166,6 +173,9 @@ func measureLink(t *testing.T, shape linkShape, adaptive bool) linkResult {
 	}
 	say(append([]byte{msgSetPixelFormat, 0, 0, 0}, novncFormat.bytes()...))
 	encodings := []int32{encTight, encRaw, pseudoQualityLevel0 + 6, pseudoDesktopSize, pseudoFence, pseudoContinuousUpdts}
+	if video != nil {
+		encodings = append([]int32{encH264}, encodings...)
+	}
 	set := []byte{msgSetEncodings, 0, 0, byte(len(encodings))}
 	for _, e := range encodings {
 		set = binary.BigEndian.AppendUint32(set, uint32(e))
@@ -229,6 +239,13 @@ func (k *skimmer) message() (kind byte, fence string, size int) {
 		for i := 0; i < count; i++ {
 			h := k.read(12)
 			size += 12
+			if int32(binary.BigEndian.Uint32(h[8:])) == encH264 {
+				head := k.read(8)
+				n := int(binary.BigEndian.Uint32(head))
+				k.read(n)
+				size += 8 + n
+				continue
+			}
 			if int32(binary.BigEndian.Uint32(h[8:])) != encTight {
 				continue
 			}
@@ -283,8 +300,8 @@ func TestAdaptiveStreamingOverSimulatedLinks(t *testing.T) {
 	type pair struct{ fixed, adaptive linkResult }
 	results := make([]pair, len(shapes))
 	for i, shape := range shapes {
-		results[i].fixed = measureLink(t, shape, false)
-		results[i].adaptive = measureLink(t, shape, true)
+		results[i].fixed = measureLink(t, shape, false, nil)
+		results[i].adaptive = measureLink(t, shape, true, nil)
 	}
 	var table strings.Builder
 	fmt.Fprintf(&table, "\n%-28s %-34s %-34s\n", "link", "fixed (q6, 2 in flight)", "adaptive")
@@ -302,4 +319,32 @@ func TestAdaptiveStreamingOverSimulatedLinks(t *testing.T) {
 			t.Errorf("%s: adaptive %.1f fps is below fixed %.1f fps", shapes[i].name, a.fps, f.fps)
 		}
 	}
+}
+
+// Video against tiles over the same links, with x264 standing in for the
+// Mac's hardware encoder: what a viewer that offers H.264 gets while a page
+// scrolls. Run with MEWLA_SCREEN_LINK_BENCH=1 and -v.
+func TestVideoOverSimulatedLinks(t *testing.T) {
+	if os.Getenv("MEWLA_SCREEN_LINK_BENCH") == "" {
+		t.Skip("a minute of real time: set MEWLA_SCREEN_LINK_BENCH=1 to measure")
+	}
+	if !ffmpegAvailable() {
+		t.Skip("ffmpeg not installed")
+	}
+	shapes := []linkShape{
+		{"LAN 100 Mb/s, 2 ms", 2 * time.Millisecond, 100e6 / 8, false},
+		{"relay 20 Mb/s, 150 ms RTT", 75 * time.Millisecond, 20e6 / 8, false},
+		{"mobile 4 Mb/s, 80 ms RTT", 40 * time.Millisecond, 4e6 / 8, false},
+		{"weak 1.5 Mb/s, 200 ms RTT", 100 * time.Millisecond, 1.5e6 / 8, false},
+		{"relay 5 Mb/s, 650 ms RTT", 325 * time.Millisecond, 5e6 / 8, false},
+	}
+	var table strings.Builder
+	fmt.Fprintf(&table, "\n%-28s %-34s %-34s\n", "link (page scrolling)", "tiles (adaptive)", "video")
+	for _, shape := range shapes {
+		tiles := measureLink(t, shape, true, nil)
+		video := measureLink(t, shape, true, newFFmpegEncoder)
+		fmt.Fprintf(&table, "%-28s %5.1f fps %6.0f kb/s ack %4.0f ms q%d   %5.1f fps %6.0f kb/s ack %4.0f ms win %d\n",
+			shape.name, tiles.fps, tiles.kbps, tiles.ackP50, tiles.quality, video.fps, video.kbps, video.ackP50, video.flight)
+	}
+	t.Log(table.String())
 }
