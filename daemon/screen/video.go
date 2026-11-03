@@ -2,6 +2,7 @@ package screen
 
 import (
 	"encoding/binary"
+	"errors"
 	"image"
 	"os"
 	"sync"
@@ -57,6 +58,10 @@ type videoEncoder interface {
 	Close()
 }
 
+// errVideoDropped means the encoder chose to skip a frame, which leaves its
+// stream as it was; the caller sends tiles for that update instead.
+var errVideoDropped = errors.New("the encoder dropped the frame")
+
 // videoFactory makes an encoder for a screen of this size.
 type videoFactory func(width, height, kbps int) (videoEncoder, error)
 
@@ -65,7 +70,20 @@ type videoFactory func(width, height, kbps int) (videoEncoder, error)
 // it was before video, to compare.
 var defaultVideo videoFactory
 
-func videoEnabled() bool { return os.Getenv("MEWLA_SCREEN_VIDEO") != "off" }
+// videoByDefault is whether a viewer that offers H.264 gets video without
+// MEWLA_SCREEN_VIDEO=on. It stays false until the encoder of every platform
+// that has one has run on a real machine.
+const videoByDefault = false
+
+func videoEnabled() bool {
+	switch os.Getenv("MEWLA_SCREEN_VIDEO") {
+	case "off":
+		return false
+	case "on":
+		return true
+	}
+	return videoByDefault
+}
 
 // videoPath decides, update by update, whether motion goes as video, and
 // owns the encoder. It belongs to the one goroutine that writes updates.
@@ -171,6 +189,9 @@ func (v *videoPath) encode(img *image.RGBA) (payload []byte, key bool, ok bool) 
 		v.applied = kbps
 	}
 	data, isKey, err := v.enc.Encode(img, v.needKey)
+	if errors.Is(err, errVideoDropped) {
+		return nil, false, false
+	}
 	if err != nil || len(data) == 0 {
 		v.failed = true
 		v.active = false

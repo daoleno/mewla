@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"image"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -43,6 +44,8 @@ func contextWithCancel(t *testing.T) (context.Context, context.CancelFunc) {
 	return context.WithCancel(context.Background())
 }
 
+func init() { os.Setenv("MEWLA_SCREEN_VIDEO", "on") }
+
 func fakeVideo(enc *fakeEncoder) videoFactory {
 	return func(w, h, kbps int) (videoEncoder, error) { return enc, nil }
 }
@@ -80,6 +83,7 @@ func TestVideoPathEntersOnTwoBigUpdatesAndLeavesWhenQuiet(t *testing.T) {
 }
 
 func TestVideoPathNeedsAnEncoderAndSwitchOff(t *testing.T) {
+	t.Setenv("MEWLA_SCREEN_VIDEO", "on")
 	if newVideoPath(nil) != nil {
 		t.Fatal("a build without an encoder has a video path")
 	}
