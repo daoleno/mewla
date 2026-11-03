@@ -25,7 +25,7 @@ func (s appScope) active() bool {
 }
 
 // matchesShown is how many matches an answer lists.
-const matchesShown = 25
+const matchesShown = 10
 
 // pick keeps the rows in scope, and says what it kept.
 func (s appScope) pick(tree ElementTree, rows []appRow) ([]appRow, string, error) {
@@ -103,6 +103,9 @@ func (s appScope) pick(tree ElementTree, rows []appRow) ([]appRow, string, error
 			out = out[:matchesShown]
 			text += fmt.Sprintf(", the first %d listed", matchesShown)
 		}
+	}
+	if s.Match != nil {
+		return out, text + ".\n", nil
 	}
 	return out, text + ". Ids are as in the whole app.\n", nil
 }
