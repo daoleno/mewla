@@ -60,6 +60,18 @@ func ResolveHostTranscriptIdentityForWorker(
 		existing = HostTranscriptIdentity{}
 	}
 	if hostIdentityUsable(existing, provider) && provider != WorkerProviderCodex && provider != "" {
+		// A live Claude process may move to a new session in place (/branch);
+		// its registry record is authoritative over the saved binding.
+		if provider == WorkerProviderClaude {
+			if sessionID, path, ok := ClaudeLiveSessionTranscript(worker); ok && sessionID != existing.SessionID {
+				return HostTranscriptIdentity{
+					Provider:  provider,
+					SessionID: sessionID,
+					Path:      path,
+					DataRoot:  hostDataRootForPath(path, provider),
+				}
+			}
+		}
 		existing.Provider = provider
 		return existing
 	}
