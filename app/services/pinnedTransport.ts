@@ -71,6 +71,17 @@ export function transportPathOfURL(serverId: string, url: string): TransportPath
   return null;
 }
 
+/**
+ * Why a computer reached over the relay is not reached directly: "announced"
+ * when it listed LAN or Tailscale addresses that this phone could not verify,
+ * "none" when it listed no address, null while a direct path is in use.
+ */
+export function directPathHint(server: StoredServer): "announced" | "none" | null {
+  const entry = paths.get(server.id);
+  if (!entry || entry.current !== "relay") return null;
+  return directAddressesFor(server).length > 0 ? "announced" : "none";
+}
+
 /** The path the phone is using for a computer, or null before it has chosen. */
 export function currentTransportPath(serverId: string): TransportPath | null {
   const entry = paths.get(serverId);

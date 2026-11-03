@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { hasRoomyHeight } from "../../constants/windowRoom";
 import { useCurrentServer } from "../../store/currentServer";
-import { currentTransportPath, directPathBecameAvailable, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
+import { currentTransportPath, directPathBecameAvailable, directPathHint, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
 import type { ScreenStreamStats } from "../../services/screenStream";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
@@ -498,6 +498,7 @@ export function ScreenScreen() {
     rttMs: rtt, inputMs: stats?.inputMs ?? null, fps: stats?.fps ?? 0, kbps: stats?.kbps ?? 0,
     bridgeMs: stats?.bridgeMs, presentMs: stats?.presentMs, daemon: daemonStats,
     viaPath,
+    directHint: currentServer && viaPath === "relay" ? directPathHint(currentServer) : null,
   };
   const readoutHeadline = streamHeadline(readout);
   const viewerVisible = phase === "connecting" || phase === "live";
