@@ -11,7 +11,10 @@ import (
 type macInput struct {
 	// scale is display points per framebuffer pixel.
 	scale float64
-	now   func() time.Time
+	// origin is where the captured display starts in the global space, in
+	// points; zero for the main display.
+	origin image.Point
+	now    func() time.Time
 
 	buttons   uint8
 	at        image.Point
@@ -82,7 +85,7 @@ func (m *macInput) flags() uint64 {
 }
 
 func (m *macInput) point(p image.Point) (float64, float64) {
-	return float64(p.X) * m.scale, float64(p.Y) * m.scale
+	return float64(p.X)*m.scale + float64(m.origin.X), float64(p.Y)*m.scale + float64(m.origin.Y)
 }
 
 // rfbButtons maps RFB mask bits 1, 2 and 4 to left, middle and right.
