@@ -1,5 +1,6 @@
 // Local fixture site for the browser benchmark. Deterministic, no network.
 import http from 'node:http';
+import { wizard, pages, product, todo } from './fixture-long.mjs';
 
 export const events = [];
 const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -39,7 +40,7 @@ function xhr() {
 const simple = n => page('Tab ' + n, `<h1>Tab ${n}</h1><a href="/form">form</a>`);
 
 const apiSlow = (res) => setTimeout(() => { res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); res.end('XHR done'); }, 120);
-const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/tab2': () => simple(2), '/tab3': () => simple(3) };
+const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/wizard': wizard, '/todo': todo, '/tab2': () => simple(2), '/tab3': () => simple(3) };
 
 export function startFixture(port = 8765) {
   const server = http.createServer((req, res) => {
@@ -47,7 +48,9 @@ export function startFixture(port = 8765) {
     if (req.url === '/__events') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(events)); return; }
     if (req.url === '/__reset') { events.length = 0; res.writeHead(204); res.end(); return; }
     if (req.url === '/__event' && req.method === 'POST') { let b = ''; req.on('data', d => b += d); req.on('end', () => { try { events.push(JSON.parse(b)); } catch {} res.writeHead(204); res.end(); }); return; }
-    const route = routes[req.url.split('?')[0]];
+    const path = req.url.split('?')[0];
+    const route = routes[path] ||
+      (path === '/pages' ? () => pages(req.url) : path.startsWith('/product/') ? () => product(Number(path.split('/')[2])) : null);
     if (!route) { res.writeHead(404); res.end('not found'); return; }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
     res.end(route());
