@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/pluginreturn"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -172,19 +173,86 @@ func TestWebCallbackLeavesNativeFlow(t *testing.T) {
 	}
 }
 
-// Slack's publisher app returns only to the Mewla app, through Mewla's https
-// return page, so the web UI says so instead of sending the browser to a
-// sign-in that can't come back.
-func TestWebConnectRefusesAppOnlyReturn(t *testing.T) {
+// Slack's publisher app registers only Mewla's https return page, never a
+// server's own address. A web UI sign-in therefore returns through that page,
+// which shows the returned address for the person to paste back, instead of
+// being refused (the cause of "Slack only connects from the phone").
+func TestWebConnectReturnsThroughRelayByPaste(t *testing.T) {
 	previous := SlackPublicClientID
 	SlackPublicClientID = "public-slack"
 	defer func() { SlackPublicClientID = previous }()
 	m, _ := New(t.TempDir())
 	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
+	web := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: "https://mewla.example"}}).Flow
+	authorize, _ := url.Parse(web.AuthorizationURL)
+	webState := authorize.Query().Get("state")
+	if authorize.Host != "slack.com" || authorize.Query().Get("redirect_uri") != NativeReturnRelay || !web.AddressRequired || web.WebReturn || !strings.HasPrefix(webState, pluginreturn.WebStatePrefix) {
+		t.Fatalf("web Slack sign-in %s, flow %+v", web.AuthorizationURL, web)
+	}
+	// The phone's own sign-in is unchanged: same return page, no prefix.
+	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
+	if native.AddressRequired || strings.HasPrefix(mustQuery(t, native.AuthorizationURL).Get("state"), pluginreturn.WebStatePrefix) {
+		t.Fatalf("the app's sign-in changed: %+v", native)
+	}
+	// Pasting an address that isn't this sign-in's return is refused.
+	for _, pasted := range []string{
+		"https://evil.example/plugins/return?code=c&state=" + webState,
+		NativeReturnRelay + "?code=c&state=other",
+		NativeCallback + "?code=c&state=" + webState,
+	} {
+		if _, err := m.Handle(context.Background(), Request{Action: "connect_finish", FlowID: web.ID, Callback: pasted}); err == nil {
+			t.Fatalf("accepted pasted address %q", pasted)
+		}
+	}
+	exchanged := url.Values{}
+	m.networkOwned = false
+	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Method+" "+req.URL.String() != "POST https://slack.com/api/oauth.v2.access" {
+			t.Fatalf("unexpected request %s %s", req.Method, req.URL)
+		}
+		_ = req.ParseForm()
+		exchanged = req.PostForm
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(`{"ok":false,"error":"invalid_code"}`))}, nil
+	})}
+	finish := mustHandle(t, m, Request{Action: "connect_finish", FlowID: web.ID, Callback: NativeReturnRelay + "?" + url.Values{"code": {"pasted"}, "state": {webState}}.Encode()}).Flow
+	if exchanged.Get("redirect_uri") != NativeReturnRelay || exchanged.Get("code") != "pasted" || exchanged.Get("code_verifier") == "" || exchanged.Has("client_secret") || finish.Status != "failed" {
+		t.Fatalf("exchange %v, flow %+v", exchanged, finish)
+	}
+}
+
+func mustQuery(t *testing.T, raw string) url.Values {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u.Query()
+}
+
+// A registered app that returns only to the Mewla app scheme has no page to
+// show the address on, so a web sign-in says so before the browser leaves.
+func TestWebConnectRefusesAppSchemeOnlyReturn(t *testing.T) {
+	previous := SlackPublicClientID
+	SlackPublicClientID = ""
+	defer func() { SlackPublicClientID = previous }()
+	m, _ := New(t.TempDir())
+	raw, _ := json.Marshal(OAuthClientConfig{ClientID: "owned", RedirectURL: NativeCallback})
+	if err := m.vault.Set("oauth-client:slack", string(raw)); err != nil {
+		t.Fatal(err)
+	}
+	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
 	_, err := m.Handle(context.Background(), Request{Action: "connect_start", Input: &Input{Integration: "slack", WebOrigin: "https://mewla.example"}})
 	if err == nil || !strings.Contains(err.Error(), "from the Mewla app") || len(m.pending) != 0 {
-		t.Fatalf("web Slack connect: %v", err)
+		t.Fatalf("web connect with an app-scheme-only client: %v", err)
 	}
+}
+
+func TestAppConnectReturnsThroughRelay(t *testing.T) {
+	previous := SlackPublicClientID
+	SlackPublicClientID = "public-slack"
+	defer func() { SlackPublicClientID = previous }()
+	m, _ := New(t.TempDir())
+	m.SetWebOrigins(func(origin string) bool { return origin == "https://mewla.example" })
 	native := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "slack"}}).Flow
 	authorize, _ := url.Parse(native.AuthorizationURL)
 	q := authorize.Query()
