@@ -95,7 +95,6 @@ type virtualDisplay struct {
 
 func sel(name string) objc.SEL { return objc.RegisterName(name) }
 
-
 // newVirtualDisplay makes a display of w x h points that refreshes at hz.
 func newVirtualDisplay(name string, w, h int, hz float64, hiDPI bool) (*virtualDisplay, error) {
 	if err := loadVDisplay(); err != nil {
