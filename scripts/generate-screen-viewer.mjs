@@ -9,8 +9,9 @@
 // - screenViewerRuntime.js: an ES module the web build imports directly; the
 //   web UI's CSP forbids inline and srcdoc scripts.
 // noVNC 1.7 probes H.264 support with a top-level await, which Metro cannot
-// bundle; the probe is rewritten to settle in the background (the viewer never
-// requests H.264).
+// bundle; the probe is rewritten to settle in the background and its promise is
+// published as globalThis.__mewlaH264Ready, which the viewer awaits before it
+// connects so noVNC's first SetEncodings already knows whether to offer H.264.
 //
 // Usage:
 //   bun install
@@ -37,7 +38,7 @@ const noTopLevelAwait = {
       if (!source.includes(TOP_LEVEL_AWAIT)) throw new Error("noVNC browser.js changed; update the top-level await patch");
       return {
         loader: "js",
-        contents: source.replace(TOP_LEVEL_AWAIT, "_checkWebCodecsH264DecodeSupport().then((supported) => { supportsWebCodecsH264Decode = supported; });"),
+        contents: source.replace(TOP_LEVEL_AWAIT, "globalThis.__mewlaH264Ready = _checkWebCodecsH264DecodeSupport().then((supported) => { supportsWebCodecsH264Decode = supported; }, () => {});"),
       };
     });
   },
