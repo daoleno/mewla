@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -602,6 +603,40 @@ type WorkerExecutor struct {
 	Runtime      string             `json:"runtime"`
 	Capabilities WorkerCapabilities `json:"capabilities"`
 	Host         bool               `json:"host,omitempty"`
+	// ConfigDir is the absolute config directory of a separate sign-in; Command
+	// then starts with the environment variable that selects it. BareCommand is
+	// Command without that prefix, for finding the program.
+	ConfigDir   string `json:"config_dir,omitempty"`
+	BareCommand string `json:"-"`
+}
+
+// ConfigDirEnv names the variable that selects a CLI's config directory, or
+// "" for a provider that has no such setting.
+func ConfigDirEnv(provider string) string {
+	switch provider {
+	case WorkerProviderClaude:
+		return "CLAUDE_CONFIG_DIR"
+	case WorkerProviderCodex:
+		return "CODEX_HOME"
+	}
+	return ""
+}
+
+// ExpandConfigDir makes a configured directory absolute (~ is this user's
+// home). It returns "" for an empty or relative path.
+func ExpandConfigDir(dir string) string {
+	dir = strings.TrimSpace(dir)
+	if rest, ok := strings.CutPrefix(dir, "~"); ok && (rest == "" || rest[0] == '/') {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		dir = filepath.Join(home, rest)
+	}
+	if dir == "" || !filepath.IsAbs(dir) {
+		return ""
+	}
+	return filepath.Clean(dir)
 }
 
 // WorkerExecutors returns all configured executors as portable executor records.
@@ -651,6 +686,13 @@ func NewWorkerExecutor(name string, executor Executor) WorkerExecutor {
 		provider = WorkerProviderCustom
 	}
 	runtime := normalizeWorkerRuntime(executor.Runtime)
+	bare, configDir := command, ""
+	if variable := ConfigDirEnv(provider); variable != "" && !strings.Contains(command, variable+"=") {
+		if dir := ExpandConfigDir(executor.ConfigDir); dir != "" {
+			configDir = dir
+			command = "env " + variable + "=" + shellquote.Word(dir) + " " + command
+		}
+	}
 	return WorkerExecutor{
 		ID:           id,
 		Name:         firstNonEmpty(strings.TrimSpace(executor.Name), id),
@@ -658,6 +700,8 @@ func NewWorkerExecutor(name string, executor Executor) WorkerExecutor {
 		Command:      command,
 		Runtime:      runtime,
 		Capabilities: workerCapabilities(provider, runtime),
+		ConfigDir:    configDir,
+		BareCommand:  bare,
 	}
 }
 
