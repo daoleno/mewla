@@ -207,6 +207,11 @@ type ExecutorCheck struct {
 	Status                Status                  `json:"status"`
 	Remediation           Remediation             `json:"remediation,omitempty"`
 	Summary               string                  `json:"summary"`
+	// ConfigDir is set for a separate Claude Code or Codex sign-in.
+	ConfigDir string `json:"config_dir,omitempty"`
+	// Account is who the CLI is signed in as (an email address), when the CLI
+	// records it; empty when unknown. Never a token.
+	Account string `json:"account,omitempty"`
 	// OpenCode-only non-mutating probes. StatusUnknown means the probe was not
 	// run or failed ambiguously; never includes model lists or secrets.
 	ModelsStatus  Status `json:"models_status,omitempty"`
