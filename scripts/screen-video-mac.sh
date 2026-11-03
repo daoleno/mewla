@@ -73,7 +73,8 @@ singapore-ovh:sgp.proof.ovh.net"
 (cd src && git fetch -q origin && git checkout -q "$COMMIT" 2>/dev/null || git checkout -q "origin/$COMMIT")
 echo "source: $(cd src && git rev-parse --short HEAD)"
 export GOPATH="$W/gopath" GOCACHE="$W/gocache" CGO_ENABLED=0
-export GOPROXY="${GOPROXY:-https://proxy.golang.org,https://goproxy.cn,direct}"
+export GOPROXY="${GOPROXY:-https://goproxy.cn,https://proxy.golang.org,direct}"
+[ -n "${PROXY:-}" ] && export HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY" https_proxy="$PROXY" http_proxy="$PROXY"
 GO="$(command -v go || true)"
 if [ -z "$GO" ]; then
   FILE="$(curl -fsSL 'https://go.dev/dl/?mode=json' 2>/dev/null | grep -o 'go1\.2[0-9.]*\.darwin-arm64\.tar\.gz' | head -1)"
@@ -91,7 +92,9 @@ MEWLA_SCREEN_VT_BENCH=1 $GO test ./screen -run 'TestVideoToolboxEncodesScreenFra
 
 # ---- 3. real capture: tiles against video over simulated links ------------
 # Opens a Safari window with a long page and scrolls it by wheel events for
-# about two minutes; nobody should be using this Mac meanwhile.
+# about two minutes; nobody should be using this Mac meanwhile. The window
+# (titled mewla-scroll-fixture) is left open: close it afterwards. No AppleScript
+# is used, so no Automation permission is needed.
 echo "== real screen, simulated links"
 MEWLA_SCREEN_REAL_BENCH=1 $GO test ./screen -run TestRealScreenVideoOverSimulatedLinks -count=1 -v -timeout 15m 2>&1 | tail -20 | tee "$OUT/real.txt"
 
