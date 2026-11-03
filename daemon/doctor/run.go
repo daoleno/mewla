@@ -618,11 +618,12 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 		Provider:     worker.Provider,
 		Configured:   true,
 		Command:      worker.Command,
+		ConfigDir:    worker.ConfigDir,
 		Auth:         AuthUnknown,
 		Capabilities: worker.Capabilities,
 	}
 
-	bin := firstCommandToken(worker.Command)
+	bin := firstCommandToken(worker.BareCommand)
 	if bin == "" {
 		item.Status = StatusFail
 		item.Remediation = RemediationConfigureExecutor
@@ -650,7 +651,10 @@ func (e env) probeExecutor(name string, executor work.Executor) ExecutorCheck {
 			return item
 		}
 	}
-	item.Auth = e.probeAuth(path, worker.Provider)
+	item.Auth = e.probeAuth(path, worker.Provider, worker.ConfigDir)
+	if item.Auth == AuthAuthenticated {
+		item.Account = accountLabel(worker.Provider, worker.ConfigDir)
+	}
 	if worker.Provider == work.WorkerProviderOpenCode {
 		e.probeOpenCodeRuntime(path, &item)
 	}
@@ -780,26 +784,34 @@ func (e env) probeVersion(binaryPath, provider string) string {
 	return normalizeVersion(string(out))
 }
 
-func (e env) probeAuth(binaryPath, provider string) AuthState {
+func (e env) probeAuth(binaryPath, provider, configDir string) AuthState {
 	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
 	defer cancel()
+	run := e.opts.RunCommand
+	// A separate sign-in is asked with its own config directory, not the
+	// daemon's, or every instance would report the default account.
+	if variable := work.ConfigDirEnv(provider); variable != "" && configDir != "" {
+		run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+			return e.opts.RunCommand(ctx, "env", append([]string{variable + "=" + configDir, name}, args...)...)
+		}
+	}
 
 	switch provider {
 	case work.WorkerProviderCodex:
-		out, err := e.opts.RunCommand(ctx, binaryPath, "login", "status")
+		out, err := run(ctx, binaryPath, "login", "status")
 		return parseCodexAuth(out, err)
 	case work.WorkerProviderClaude:
 		// Claude prints its JSON status and exits 1 when logged out.
-		out, _ := e.opts.RunCommand(ctx, binaryPath, "auth", "status", "--json")
+		out, _ := run(ctx, binaryPath, "auth", "status", "--json")
 		return parseClaudeAuth(out)
 	case work.WorkerProviderCursor:
-		out, _ := e.opts.RunCommand(ctx, binaryPath, "status", "--format", "json")
+		out, _ := run(ctx, binaryPath, "status", "--format", "json")
 		return parseCursorAuth(out)
 	case work.WorkerProviderGrok:
 		// Grok has login but no safe official non-interactive status command.
 		return AuthUnknown
 	case work.WorkerProviderOpenCode:
-		out, _ := e.opts.RunCommand(ctx, binaryPath, "auth", "list", "--format", "json")
+		out, _ := run(ctx, binaryPath, "auth", "list", "--format", "json")
 		return parseOpenCodeAuth(out)
 	case work.WorkerProviderPi:
 		return probePiAuth()
