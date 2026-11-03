@@ -591,8 +591,21 @@ export function mountScreenViewer(container, post) {
     resize();
   }
 
+  // noVNC decides whether to offer H.264 when it first speaks, from a probe
+  // that settles a moment after the page loads; wait for it (briefly), so a
+  // phone that can decode video says so.
+  let opening = 0;
   function open() {
     close(false);
+    const ticket = ++opening;
+    const ready = globalThis.__mewlaH264Ready;
+    if (!ready) return start();
+    Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 800))]).then(() => {
+      if (ticket === opening) start();
+    });
+  }
+
+  function start() {
     channel = makeChannel();
     const target = doc.createElement("div");
     target.className = "rfb";
@@ -630,6 +643,7 @@ export function mountScreenViewer(container, post) {
   }
 
   function close(notify) {
+    opening++;
     if (!rfb) return;
     const old = rfb;
     rfb = null;
