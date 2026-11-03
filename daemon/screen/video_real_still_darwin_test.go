@@ -58,7 +58,7 @@ func TestRealScreenStillAndSharpness(t *testing.T) {
 		// A fresh session per mode so one's leftovers do not reach the other.
 		// Its own tab per mode: the page scrolls itself once, 3 s after it
 		// opens, for 4 s, and stays still; no input of any kind.
-		openScrollFixture(t, mode.name, "delay=7000&run=4000")
+		openScrollFixture(t, mode.name, 7000, 4000, false)
 		time.Sleep(4 * time.Second)
 		session, err := backend.Start(ctx)
 		if err != nil {
@@ -271,11 +271,11 @@ type stillRect struct {
 }
 
 // openScrollFixture opens, in Safari, a long page that scrolls itself with
-// requestAnimationFrame: no wheel, key or click events reach the Mac. Query
-// parameters: delay (ms after load before it starts), run (ms of scrolling,
-// then it stays still) or loop (scroll up and down for ever). Its title
-// carries the label and query, so the tab can be told from any other.
-func openScrollFixture(t *testing.T, label, query string) {
+// requestAnimationFrame: no wheel, key or click events reach the Mac. The
+// settings are written into the file (Safari drops a file URL's query): delay
+// (ms after load before it starts), run (ms of scrolling, then it stays
+// still) or loop (scroll up and down for ever). Its title carries the label.
+func openScrollFixture(t *testing.T, label string, delay, run int, loop bool) {
 	t.Helper()
 	page := filepath.Join(t.TempDir(), "mewla-scroll-fixture-"+label+".html")
 	var html strings.Builder
@@ -287,9 +287,8 @@ func openScrollFixture(t *testing.T, label, query string) {
 		}
 	}
 	html.WriteString(`<script>
-document.title = 'mewla-scroll-fixture ' + ` + "`" + label + " ` + location.search" + `;
-const q = new URLSearchParams(location.search);
-const delay = +q.get('delay') || 0, run = +q.get('run') || 0, loop = q.has('loop'), speed = 900;
+document.title = 'mewla-scroll-fixture LABEL';
+const delay = DELAY, run = RUN, loop = LOOP, speed = 900;
 setTimeout(() => {
   const t0 = performance.now();
   const tick = (now) => {
@@ -304,10 +303,11 @@ setTimeout(() => {
   requestAnimationFrame(tick);
 }, delay);
 </script>`)
-	if err := os.WriteFile(page, []byte(html.String()), 0o600); err != nil {
+	body := strings.NewReplacer("DELAY", fmt.Sprint(delay), "RUN", fmt.Sprint(run), "LOOP", fmt.Sprint(loop), "LABEL", label).Replace(html.String())
+	if err := os.WriteFile(page, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	u := url.URL{Scheme: "file", Path: page, RawQuery: query}
+	u := url.URL{Scheme: "file", Path: page}
 	if err := exec.Command("open", "-a", "Safari", u.String()).Run(); err != nil {
 		t.Skipf("no Safari: %v", err)
 	}
