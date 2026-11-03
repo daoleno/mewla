@@ -41,7 +41,7 @@ func TestCheckUncheckClearAreIdempotentAndSayWhetherDelivered(t *testing.T) {
 	if got := act(t, s, "%7", AgentAction{Action: "element", Element: box, ElementAction: "uncheck"}).Text; !strings.Contains(got, "verified, it is now unchecked") {
 		t.Fatalf("uncheck: %s", got)
 	}
-	if got := act(t, s, "%7", AgentAction{Action: "element", Element: field, ElementAction: "set_value", Text: "new"}).Text; !strings.Contains(got, "Delivery: verified, the element now holds it") {
+	if got := act(t, s, "%7", AgentAction{Action: "element", Element: field, ElementAction: "set_value", Text: "new"}).Text; !strings.Contains(got, "Delivery: verified, it holds it") {
 		t.Fatalf("set_value: %s", got)
 	}
 	if got := act(t, s, "%7", AgentAction{Action: "element", Element: field, ElementAction: "clear"}).Text; !strings.Contains(got, "Delivery: verified") {
