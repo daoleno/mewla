@@ -16,7 +16,7 @@ import (
 // TestRealScreenVideoOverSimulatedLinks measures the real thing: this Mac's
 // own capture, a long page scrolled in Safari by scripted wheel events, the
 // real hardware encoder, over the same simulated links as the fake-screen
-// bench. It opens one Safari window for about two minutes and closes it; run
+// bench. It opens one Safari window (titled mewla-scroll-fixture, left open) and scrolls it for about two minutes; run
 // it when nobody is using this Mac. MEWLA_SCREEN_REAL_BENCH=1 and -v.
 func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 	if os.Getenv("MEWLA_SCREEN_REAL_BENCH") == "" {
@@ -44,7 +44,9 @@ func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 	if err := exec.Command("open", "-a", "Safari", page).Run(); err != nil {
 		t.Skipf("no Safari: %v", err)
 	}
-	defer exec.Command("osascript", "-e", `tell application "Safari" to close (every window whose name contains "mewla-scroll-fixture")`).Run()
+	// The window is left open (no AppleScript: closing it that way needs the
+	// Automation permission, which waits for a person at the Mac). Its title is
+	// mewla-scroll-fixture; the person running this closes it.
 	time.Sleep(4 * time.Second)
 
 	session, err := backend.Start(ctx)

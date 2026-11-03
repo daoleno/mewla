@@ -71,8 +71,8 @@ type videoFactory func(width, height, kbps int) (videoEncoder, error)
 var defaultVideo videoFactory
 
 // videoByDefault is whether a viewer that offers H.264 gets video without
-// MEWLA_SCREEN_VIDEO=on. It stays false until the encoder of every platform
-// that has one has run on a real machine.
+// MEWLA_SCREEN_VIDEO=on. The Mac's encoder has run on a real Mac; it stays
+// false until a phone has shown a real Mac's screen through it end to end.
 const videoByDefault = false
 
 func videoEnabled() bool {
