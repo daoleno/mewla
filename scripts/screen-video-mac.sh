@@ -22,6 +22,7 @@ echo "load: $(uptime)"
 # 20 TLS handshakes to public endpoints in each region, with and without this
 # Mac's proxy. TCP connect is about one round trip; "tls" is the whole
 # handshake. Quebec (our relay) is the baseline.
+FULL="${FULL:-}" # FULL=1 also runs the region latency, VideoToolbox and iOS probe sections
 echo "== region latency"
 PROXY="${HTTPS_PROXY:-${https_proxy:-${ALL_PROXY:-${all_proxy:-}}}}"
 if [ -z "$PROXY" ] && command -v scutil >/dev/null; then
@@ -61,7 +62,7 @@ singapore-aws:ec2.ap-southeast-1.amazonaws.com
 singapore-vultr:sgp-ping.vultr.com
 singapore-linode:speedtest.singapore.linode.com
 singapore-ovh:sgp.proof.ovh.net"
-{
+[ -n "$FULL" ] && {
   for entry in $REGIONS; do
     probe "${entry%%:*}" "${entry#*:}" direct
     [ -n "$PROXY" ] && probe "${entry%%:*}" "${entry#*:}" proxy
@@ -88,7 +89,7 @@ echo "go: $($GO version)"
 # ---- 2. the hardware encoder, on synthetic frames --------------------------
 cd "$W/src/daemon"
 echo "== VideoToolbox encoder"
-MEWLA_SCREEN_VT_BENCH=1 $GO test ./screen -run 'TestVideoToolboxEncodesScreenFrames|TestAVCC' -count=1 -v 2>&1 | tail -15 | tee "$OUT/vt.txt"
+[ -n "$FULL" ] && MEWLA_SCREEN_VT_BENCH=1 $GO test ./screen -run 'TestVideoToolboxEncodesScreenFrames|TestAVCC' -count=1 -v 2>&1 | tail -15 | tee "$OUT/vt.txt"
 
 # ---- 3. real capture: tiles against video over simulated links ------------
 # Opens a Safari window with a long page and scrolls it by wheel events for
@@ -96,6 +97,8 @@ MEWLA_SCREEN_VT_BENCH=1 $GO test ./screen -run 'TestVideoToolboxEncodesScreenFra
 # (titled mewla-scroll-fixture) is left open: close it afterwards. No AppleScript
 # is used, so no Automation permission is needed.
 echo "== real screen, simulated links"
+export MEWLA_SCREEN_VIDEO=on MEWLA_SCREEN_BENCH_OUT="$OUT"
+MEWLA_SCREEN_REAL_BENCH=1 $GO test ./screen -run 'TestRealScreenStillAndSharpness' -count=1 -v -timeout 10m 2>&1 | tail -20 | tee "$OUT/still.txt"
 MEWLA_SCREEN_REAL_BENCH=1 $GO test ./screen -run TestRealScreenVideoOverSimulatedLinks -count=1 -v -timeout 15m 2>&1 | tail -20 | tee "$OUT/real.txt"
 
 # ---- 4. iOS WKWebView: secure context, VideoDecoder, one real key frame ----
@@ -155,7 +158,7 @@ class Probe: UIViewController, WKScriptMessageHandler {
   }
 }
 SWIFTEOF
-SDK="$(xcrun --sdk iphonesimulator --show-sdk-path 2>/dev/null)"
+SDK=""; [ -n "$FULL" ] && SDK="$(xcrun --sdk iphonesimulator --show-sdk-path 2>/dev/null)"
 if [ -z "$SDK" ] || [ ! -f ios-probe.swift ]; then
   echo "no iOS simulator SDK or probe files: skipped"
 else
@@ -184,5 +187,5 @@ PL
 fi
 
 # ---- summary ----------------------------------------------------------------
-{ echo "# Screen video, Mac run $(date)"; echo "## region latency"; cat "$OUT/region.txt"; echo "## VideoToolbox"; cat "$OUT/vt.txt"; echo "## real screen"; cat "$OUT/real.txt"; echo "## iOS WKWebView"; cat "$OUT/ios.txt" 2>/dev/null; } > "$OUT/summary.txt"
+{ echo "# Screen video, Mac run $(date)"; echo "## region latency"; cat "$OUT/region.txt"; echo "## VideoToolbox"; cat "$OUT/vt.txt"; echo "## still frame + sharpness"; cat "$OUT/still.txt"; echo "## real screen"; cat "$OUT/real.txt"; echo "## iOS WKWebView"; cat "$OUT/ios.txt" 2>/dev/null; } > "$OUT/summary.txt"
 echo "done: $OUT/summary.txt"

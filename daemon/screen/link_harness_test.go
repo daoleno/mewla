@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"image"
 	"io"
 	"net"
 	"os"
@@ -250,7 +251,12 @@ func cpuTime() time.Duration {
 }
 
 // skimmer reads server messages and counts their bytes, skipping pixel data.
-type skimmer struct{ conn net.Conn }
+type skimmer struct {
+	conn net.Conn
+	// onRect, when set, sees every rectangle of an update: its place, its
+	// encoding, a JPEG body or a fill colour.
+	onRect func(r image.Rectangle, enc int32, jpegBody []byte, fill []byte)
+}
 
 func (k *skimmer) read(n int) []byte {
 	b := make([]byte, n)
@@ -271,11 +277,16 @@ func (k *skimmer) message() (kind byte, fence string, size int) {
 		for i := 0; i < count; i++ {
 			h := k.read(12)
 			size += 12
+			rect := image.Rect(int(binary.BigEndian.Uint16(h[0:])), int(binary.BigEndian.Uint16(h[2:])),
+				int(binary.BigEndian.Uint16(h[0:]))+int(binary.BigEndian.Uint16(h[4:])), int(binary.BigEndian.Uint16(h[2:]))+int(binary.BigEndian.Uint16(h[6:])))
 			if int32(binary.BigEndian.Uint32(h[8:])) == encH264 {
 				head := k.read(8)
 				n := int(binary.BigEndian.Uint32(head))
 				k.read(n)
 				size += 8 + n
+				if k.onRect != nil {
+					k.onRect(rect, encH264, nil, nil)
+				}
 				continue
 			}
 			if int32(binary.BigEndian.Uint32(h[8:])) != encTight {
@@ -284,8 +295,11 @@ func (k *skimmer) message() (kind byte, fence string, size int) {
 			ctl := k.read(1)[0]
 			size++
 			if ctl == tightFill {
-				k.read(3)
+				c := k.read(3)
 				size += 3
+				if k.onRect != nil {
+					k.onRect(rect, encTight, nil, c)
+				}
 				continue
 			}
 			n := 0
@@ -301,8 +315,11 @@ func (k *skimmer) message() (kind byte, fence string, size int) {
 					break
 				}
 			}
-			k.read(n)
+			body := k.read(n)
 			size += n
+			if k.onRect != nil {
+				k.onRect(rect, encTight, body, nil)
+			}
 		}
 	case msgFence:
 		h := k.read(8)
