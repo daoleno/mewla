@@ -1220,6 +1220,11 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		}
 		return a.screenshot(ctx)
 	}
+	if action.Action == "key" || action.Action == "hold_key" {
+		if err := guardedKeys(action.Text); err != nil {
+			return AgentResult{}, err
+		}
+	}
 	if _, click := appClicks[action.Action]; click && action.App != "" {
 		return a.clickInApp(ctx, action)
 	}
