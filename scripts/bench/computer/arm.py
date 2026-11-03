@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""The agent-desktop arm of the task suite: claude -p with Bash only (no Mewla
-computer MCP), the same model as the Mewla arm, the same prompts.
+"""One arm of the task suite: claude -p with a single computer tool, the same
+model and the same prompts for every arm.
 
-  arm_ad.py DIR OUT [--tasks t1,t2] [--ad PATH] [--model claude-sonnet-5-5] [--timeout 600]
+  arm.py ad     DIR OUT [--tasks t1,t2] [--ad PATH]          Bash only, agent-desktop and its own guide
+  arm.py mewla  DIR OUT [--tasks t1,t2] [--mewla PATH]       only Mewla's computer MCP tools; run inside a
+                                                             live Mewla Worker (MEWLA_WORKER_ID) so the daemon
+                                                             accepts the calls
+  common: [--model claude-sonnet-5-5] [--timeout 600]
 
 Per task it writes OUT/<id>.json: wall seconds, turns, tokens, success (judged by
 tasks.py check), and the Claude result's length. The answer text goes to
@@ -16,7 +20,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("arm", choices=["ad", "mewla"])
     ap.add_argument("dir"); ap.add_argument("out")
+    ap.add_argument("--mewla", default="mewla")
     ap.add_argument("--tasks", default="")
     ap.add_argument("--ad", default="agent-desktop")
     ap.add_argument("--model", default="claude-sonnet-5-5")
@@ -25,18 +31,27 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     tasks = json.load(open(os.path.join(HERE, "tasks.json")))["tasks"]
     want = [t for t in a.tasks.split(",") if t]
-    skill = subprocess.run([a.ad, "skills", "get", "desktop"], capture_output=True, text=True).stdout
+    skill = ""
+    if a.arm == "ad":
+        skill = subprocess.run([a.ad, "skills", "get", "desktop"], capture_output=True, text=True).stdout
+    elif not os.environ.get("MEWLA_WORKER_ID"):
+        sys.exit("the mewla arm runs inside a Mewla Worker (MEWLA_WORKER_ID is not set)")
     for t in tasks:
         if want and t["id"] not in want:
             continue
         subprocess.run([sys.executable, "-I", os.path.join(HERE, "tasks.py"), "reset", a.dir])
         prompt = subprocess.run([sys.executable, "-I", os.path.join(HERE, "tasks.py"), "prompt", t["id"], a.dir],
                                 capture_output=True, text=True).stdout.strip()
-        system = ("You operate this Mac with the agent-desktop command (%s) through Bash. Its own guide follows.\n\n%s"
-                  % (a.ad, skill))
-        cmd = ["claude", "-p", prompt, "--model", a.model, "--output-format", "json", "--strict-mcp-config",
-               "--mcp-config", '{"mcpServers":{}}', "--allowedTools", "Bash", "--tools", "Bash",
-               "--append-system-prompt", system, "--permission-mode", "bypassPermissions"]
+        if a.arm == "ad":
+            system = ("You operate this Mac with the agent-desktop command (%s) through Bash. Its own guide follows.\n\n%s"
+                      % (a.ad, skill))
+            tools = ["--allowedTools", "Bash", "--tools", "Bash", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+        else:
+            system = "You operate this Mac with the computer tools you have (apps, app_state, element, menu, steps, computer)."
+            config = json.dumps({"mcpServers": {"mewla-computer": {"command": a.mewla, "args": ["agent-use", "computer-mcp"]}}})
+            tools = ["--tools", "", "--allowedTools", "mcp__mewla-computer", "--strict-mcp-config", "--mcp-config", config]
+        cmd = ["claude", "-p", prompt, "--model", a.model, "--output-format", "json"] + tools + [
+            "--append-system-prompt", system, "--permission-mode", "bypassPermissions"]
         t0 = time.time()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=a.timeout)
@@ -50,7 +65,7 @@ def main():
                                          a.dir, ans], capture_output=True, text=True).stdout or "{}")
         os.remove(ans)
         u = out.get("usage") or {}
-        rec = {"task": t["id"], "arm": "agent-desktop", "wall_s": round(wall, 1), "turns": out.get("num_turns"),
+        rec = {"task": t["id"], "arm": a.arm, "wall_s": round(wall, 1), "turns": out.get("num_turns"),
                "api_s": round((out.get("duration_api_ms") or 0) / 1000, 1), "success": chk.get("ok"),
                "why": chk.get("why"), "result_chars": len(str(out.get("result", ""))), "timeout": out.get("timeout", False),
                "tokens": {"input": u.get("input_tokens"), "output": u.get("output_tokens"),

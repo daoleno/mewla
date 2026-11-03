@@ -362,6 +362,28 @@ def report(dirs):
     print("\n".join(lines))
 
 
+def first_read(apps, cmd):
+    """The very first read of each app after a fresh daemon, for Electron apps
+    nobody switched on: ms, rows, truncation, and whether Mewla said it turned
+    the app's web accessibility on. Then a second read for comparison. No
+    content is printed."""
+    m = MCP(cmd)
+    out = {}
+    try:
+        for a in apps:
+            rows = []
+            for i in range(3):
+                r = m.call("app_state", {"app": a})
+                rows.append({"ms": round(r["ms"]), "rows": rows_of(r["text"]), "bytes": r["bytes"],
+                             "truncated": is_trunc(r["text"]), "error": r["error"],
+                             "switched_on_note": "web accessibility" in r["text"]})
+                time.sleep(1.5)  # Chromium fills its tree over a moment after the switch
+            out[a] = rows
+    finally:
+        m.close()
+    print(json.dumps(out, separators=(",", ":")))
+
+
 def audit(path):
     """Server-side time per action from Mewla's audit file (lengths and times
     only): p50/p95 of ms, and bytes, by action and app, to tell the daemon's
@@ -399,7 +421,7 @@ def dump_tools(cmd, out):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["mewla", "ad", "report", "tools", "audit"])
+    ap.add_argument("mode", choices=["mewla", "ad", "report", "tools", "audit", "first"])
     ap.add_argument("dirs", nargs="*")
     ap.add_argument("-n", type=int, default=20)
     ap.add_argument("--out", default=".")
@@ -411,6 +433,8 @@ def main():
     a = ap.parse_args()
     if a.mode == "report":
         return report(a.dirs)
+    if a.mode == "first":
+        return first_read([x for x in a.apps.split(",") if x], [a.mewla, "agent-use", "computer-mcp"])
     if a.mode == "audit":
         return audit(a.dirs[0] if a.dirs else os.path.expanduser("~/.mewla/screen-agent-audit.jsonl"))
     if a.mode == "tools":
