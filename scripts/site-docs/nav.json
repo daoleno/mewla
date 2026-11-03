@@ -22,6 +22,7 @@
         { "source": "docs/phone.md", "slug": "phone", "title": "Phone use" },
         { "source": "docs/your-browser.md", "slug": "your-browser", "title": "Agents in your browser" },
         { "source": "docs/computers.md", "slug": "computers", "title": "Your other computers" },
+        { "source": "docs/outside-agents.md", "slug": "outside-agents", "title": "Agents outside Mewla" },
         { "source": "docs/watch.md", "slug": "watch", "title": "Watch" }
       ]
     },

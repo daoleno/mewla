@@ -440,6 +440,16 @@ export default function SettingsScreen() {
               accessibilityHint="Choose how Codex and Claude connect to models"
               onPress={() => router.push("/settings/model-providers")}
             />
+            <ListRow
+              title="Outside agents"
+              subtitle={currentServerId ? undefined : "No current server"}
+              icon="brain"
+              accessory="chevron"
+              accessibilityLabel="Outside agents"
+              accessibilityHint="Approve Claude Code or Codex handing work to Brain"
+              disabled={!currentServerId}
+              onPress={() => router.push("/settings/agents")}
+            />
           </ListSection>
 
           {Platform.OS === "web" ? null : (

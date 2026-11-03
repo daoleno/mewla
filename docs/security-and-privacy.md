@@ -52,6 +52,17 @@ Removing a computer from the phone ends its access on your other computers.
 phone connects two computers it holds again on the next Settings visit.
 See [Your other computers](computers.md).
 
+## Agents outside Mewla
+
+An agent that Mewla did not start can hand work to Brain through
+`/mcp`, after you approve it by name once. It holds a random token; Mewla stores
+only its hash, and you can revoke it at any time. The door is served to this
+computer itself and over Mewla Link's HTTPS only, never over plain Wi-Fi/LAN
+HTTP or the direct private listeners. The agent can read Work and request
+things of Brain; it cannot start a Worker, open a terminal or read files, and
+Brain treats its words as relayed, never as your permission. See
+[Agents outside Mewla](outside-agents.md).
+
 ## Agents on the screen
 
 On a Mac with Screen permissions, agents Mewla starts can see the screen and

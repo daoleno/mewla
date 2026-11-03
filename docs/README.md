@@ -23,6 +23,7 @@ New here? [Get started](get-started.md) is one path from install to your first g
 - [Phone use](phone.md): agents use your Android phone on a hidden screen, with you in charge (Labs).
 - [Agents in your browser](your-browser.md): agents use your own Chrome and its logins, in a tab group of their own.
 - [Your other computers](computers.md): let Brain hand a task to your Mac, Mac mini or another computer running Mewla.
+- [Agents outside Mewla](outside-agents.md): let Claude Code or Codex in a terminal hand work to Brain over MCP.
 
 ## Configure it
 

@@ -24,6 +24,7 @@ import (
 	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
@@ -66,6 +67,7 @@ type controlApp struct {
 	browsers          *browser.Manager
 	connections       *connections.Manager
 	computers         *computers.Manager
+	outsideAgents     *outsideagents.Manager
 	resourceSampler   *watcher.ResourceSampler
 	auth              *auth.Manager
 	enrollments       *enrollment.Manager
@@ -134,6 +136,18 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 			return control.ErrorResponse("computers_failed", err.Error())
 		}
 		return control.Response{OK: true, Computers: &result}
+	case "agents":
+		if req.AgentsRequest == nil {
+			return control.ErrorResponse("invalid_request", "Agents request is required")
+		}
+		if a.outsideAgents == nil {
+			return control.ErrorResponse("agents_unavailable", "Outside agents are not running")
+		}
+		result, err := a.outsideAgents.Handle(*req.AgentsRequest)
+		if err != nil {
+			return control.ErrorResponse("agents_failed", err.Error())
+		}
+		return control.Response{OK: true, Agents: &result}
 	case "watch":
 		if req.WatchRequest == nil {
 			return control.ErrorResponse("invalid_request", "Watch request is required")

@@ -18,6 +18,7 @@ import (
 	"github.com/daoleno/mewla/daemon/lifecycle"
 	"github.com/daoleno/mewla/daemon/memorysearch"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
+	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/daoleno/mewla/daemon/statedir"
@@ -34,6 +35,7 @@ type Request struct {
 	ConnectionRequest    *connections.Request                   `json:"connection_request,omitempty"`
 	WatchRequest         *watch.Request                         `json:"watch_request,omitempty"`
 	ComputersRequest     *computers.Request                     `json:"computers_request,omitempty"`
+	AgentsRequest        *outsideagents.ControlRequest          `json:"agents_request,omitempty"`
 	ComputerAction       *screen.AgentAction                    `json:"computer_action,omitempty"`
 	PhoneAction          *phone.AgentAction                     `json:"phone_action,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
@@ -159,6 +161,7 @@ type Response struct {
 	Connections          *connections.Response                    `json:"connections,omitempty"`
 	Watch                *watch.Response                          `json:"watch,omitempty"`
 	Computers            *computers.Result                        `json:"computers,omitempty"`
+	Agents               *outsideagents.ControlResult             `json:"agents,omitempty"`
 	AgentUse             *agentuse.Status                         `json:"agent_use,omitempty"`
 	ComputerResult       *screen.AgentResult                      `json:"computer_result,omitempty"`
 	PhoneResult          *phone.AgentResult                       `json:"phone_result,omitempty"`
