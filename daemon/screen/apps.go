@@ -312,7 +312,12 @@ func formatAppTree(app App, tree ElementTree, screen image.Rectangle, toAgent fu
 	if app.Active {
 		b.WriteString(", in front")
 	}
-	b.WriteString(".\nEach line: [id] role \"name\" = \"value\" {actions} at (x, y). Act on an element by its id; an element keeps its id while it stays the same, and an id whose element is gone is refused.\n")
+	if scope.Match != nil {
+		// A find: the lines are as in any read, and the agent has seen the legend.
+		b.WriteString(".\n")
+	} else {
+		b.WriteString(".\nEach line: [id] role \"name\" = \"value\" {actions} at (x, y). Act on an element by its id; an element keeps its id while it stays the same, and an id whose element is gone is refused.\n")
+	}
 	b.WriteString(tree.Note)
 	rows, scoped, err := scope.pick(tree, appRows(tree, screen, toAgent))
 	if err != nil {
