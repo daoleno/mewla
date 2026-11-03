@@ -1,6 +1,7 @@
 // Local fixture site for the browser benchmark. Deterministic, no network.
 import http from 'node:http';
 
+export const events = [];
 const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const page = (title, body, script = '') =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(title)}</title></head><body>${body}<script>${script}</script></body></html>`;
@@ -12,7 +13,7 @@ function busy() {
   for (let i = 1; i <= 800; i++) {
     msgs += `<article><h3><a href="#u${i % 40}">User ${i % 40}</a> <time>10:${String(i % 60).padStart(2, '0')}</time></h3>` +
       `<p>Message ${i}: status update for item ${i}, lorem ipsum dolor sit amet.</p>` +
-      `<button id="react${i}">React ${i}</button><button id="reply${i}">Reply ${i}</button></article>`;
+      `<button id="react${i}" onclick="fetch('/__event',{method:'POST',body:JSON.stringify({type:'react',n:${i}})})">React ${i}</button><button id="reply${i}">Reply ${i}</button></article>`;
   }
   return page('Busy app', `<nav><ul>${channels}</ul></nav><main>${msgs}<form><label>Message <input id="composer" type="text"></label><button type="button" id="send">Send</button></form></main>`);
 }
@@ -22,7 +23,7 @@ function form() {
 <label>Email <input id="email" type="email"></label>
 <label>Plan <select id="plan"><option value="free">Free</option><option value="pro">Pro</option></select></label>
 <label><input id="agree" type="checkbox"> I agree</label>
-<button id="submit" type="button" onclick="document.getElementById('result').textContent='Saved '+document.getElementById('name').value">Submit</button></form><div id="result"></div>`);
+<button id="submit" type="button" onclick="document.getElementById('result').textContent='Saved '+document.getElementById('name').value;fetch('/__event',{method:'POST',body:JSON.stringify({type:'form',name:document.getElementById('name').value,email:document.getElementById('email').value,plan:document.getElementById('plan').value,agree:document.getElementById('agree').checked})})">Submit</button></form><div id="result"></div>`);
 }
 function delay() {
   return page('Delay', `<button id="go" onclick="setTimeout(()=>{document.getElementById('status').textContent='Loaded'},400)">Go</button><div id="status">Idle</div>`);
@@ -43,6 +44,9 @@ const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table,
 export function startFixture(port = 8765) {
   const server = http.createServer((req, res) => {
     if (req.url === '/api/slow') return apiSlow(res);
+    if (req.url === '/__events') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(events)); return; }
+    if (req.url === '/__reset') { events.length = 0; res.writeHead(204); res.end(); return; }
+    if (req.url === '/__event' && req.method === 'POST') { let b = ''; req.on('data', d => b += d); req.on('end', () => { try { events.push(JSON.parse(b)); } catch {} res.writeHead(204); res.end(); }); return; }
     const route = routes[req.url.split('?')[0]];
     if (!route) { res.writeHead(404); res.end('not found'); return; }
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
