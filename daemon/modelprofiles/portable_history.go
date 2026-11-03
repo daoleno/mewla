@@ -10,11 +10,11 @@ import (
 
 // History portability / degradation vocabulary (daemon + wire).
 const (
-	// HistoryPortabilityStripOpaque means a Responses Session has switched
-	// HistoryDomain after opaque traffic and the router must strip provider-
-	// side state (previous_response_id, reasoning, item_reference) on every
-	// later request (Codex may resend it). Anthropic Messages routes never
-	// strip: their history is client-owned and forwarded byte-for-byte.
+	// HistoryPortabilityStripOpaque means the Session has switched
+	// HistoryDomain after opaque traffic. Responses routes strip provider-side
+	// state (previous_response_id, reasoning, item_reference) on every later
+	// request. Anthropic Messages routes drop only thinking blocks the current
+	// upstream did not issue and forward every other byte unchanged.
 	HistoryPortabilityStripOpaque = "strip_opaque_provider_state"
 	// HistoryDegradationStripOpaque is the honest activation fact recorded when
 	// a cross-domain activate relies on that strip boundary.
@@ -22,11 +22,11 @@ const (
 )
 
 // portableHistoryProtocolsAllowed reports whether an opaque cross-domain
-// activate may proceed. Anthropic Messages history is client-owned (the CLI
-// resends its own transcript, thinking blocks included) and is forwarded
-// byte-for-byte to the new upstream. Responses carries provider-side state
+// activate may proceed. Responses carries provider-side state
 // (previous_response_id / reasoning items / item_reference) that the router
-// strips; see opaqueHistoryStripRequired. No general translation.
+// strips. Anthropic Messages history is client-owned; only thinking signed by
+// another backend is dropped (dropForeignAnthropicThinking). No general
+// translation.
 func portableHistoryProtocolsAllowed(current, next RouteBinding) bool {
 	if normalizeID(current.RouteProtocol) != normalizeID(next.RouteProtocol) {
 		return false
@@ -40,14 +40,6 @@ func portableHistoryProtocolsAllowed(current, next RouteBinding) bool {
 	default:
 		return false
 	}
-}
-
-// opaqueHistoryStripRequired reports whether a cross-domain switch on this
-// route protocol needs the router to strip provider state. Only Responses does:
-// a gateway in front of a same-protocol Anthropic client must stay transparent,
-// because upstreams may verify the exact client request bytes.
-func opaqueHistoryStripRequired(routeProtocol string) bool {
-	return normalizeID(routeProtocol) == RouteProtocolResponses
 }
 
 // normalizePortableHistoryBody strips provider-opaque history for a degraded

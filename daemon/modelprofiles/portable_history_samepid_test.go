@@ -280,8 +280,8 @@ func TestPortableHistorySamePIDClaude(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Binding.HistoryPortability != "" {
-		t.Fatalf("anthropic route must stay transparent, portability=%q", got.Binding.HistoryPortability)
+	if got.Binding.HistoryPortability != modelprofiles.HistoryPortabilityStripOpaque {
+		t.Fatalf("portability=%q", got.Binding.HistoryPortability)
 	}
 	if got.Binding.RouteID != state.Binding.RouteID {
 		t.Fatalf("route replaced")
@@ -317,10 +317,9 @@ func TestPortableHistorySamePIDClaude(t *testing.T) {
 	if !strings.Contains(body, "alpha") && !strings.Contains(body, "token-A") && !strings.Contains(body, "HELLO") {
 		t.Fatalf("portable continuity missing: %s", trimTail(body, 900))
 	}
-	// Transparent gateway: the CLI's own thinking history (signed by A) reaches
-	// B unchanged; whether B accepts it is the upstream's decision.
-	if !strings.Contains(body, "sig-A") {
-		t.Fatalf("client thinking history was rewritten before B: %s", trimTail(body, 800))
+	// Thinking signed by A cannot be verified by B and must not reach it.
+	if strings.Contains(body, "sig-A") {
+		t.Fatalf("A-signed thinking reached B: %s", trimTail(body, 800))
 	}
 	t.Logf("proof ok: A=%d B=%d route=%s session=%s pane=%d client=%d",
 		len(hitA), len(hitB), got.Binding.RouteID, after.NativeSessionID, after.PanePID, after.ClientPID)

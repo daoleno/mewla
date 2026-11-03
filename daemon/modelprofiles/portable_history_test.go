@@ -257,23 +257,71 @@ func TestPortableHistoryActivateWhileInFlightSwapsRouteAndMarksOpaque(t *testing
 	}
 }
 
-// anthropicSwitchBody is a Claude Code-shaped request after a provider switch:
-// thinking signed by the old upstream, HTML-sensitive text, and non-alphabetical
-// key order. A transparent gateway must deliver these exact bytes.
-const anthropicSwitchBody = `{"model":"claude-sonnet-4-6","max_tokens":64,"system":[{"type":"text","text":"You are Claude Code"}],"messages":[{"role":"user","content":"<mewla_work_event>{\"a\":1}</mewla_work_event> & go"},{"role":"assistant","content":[{"type":"thinking","thinking":"plan","signature":"sig-A"},{"type":"text","text":"ok"}]},{"role":"user","content":"next"}],"metadata":{"user_id":"u"}}`
+// anthropicBody builds a Claude Code-shaped request whose assistant turn
+// carries the given content parts. HTML-sensitive text and non-alphabetical key
+// order catch any re-encoding of bytes the router must not touch.
+func anthropicBody(assistantParts string) string {
+	return `{"model":"claude-sonnet-4-6","max_tokens":64,"system":[{"type":"text","text":"You are Claude Code"}],"messages":[{"role":"user","content":"<mewla_work_event>{\"a\":1}</mewla_work_event> & go"},{"role":"assistant","content":[` + assistantParts + `]},{"role":"user","content":"next"}],"metadata":{"user_id":"u"}}`
+}
 
-func anthropicCaptureUpstream(t *testing.T, sink *[][]byte, mu *sync.Mutex) *httptest.Server {
+const (
+	thinkingA = `{"type":"thinking","thinking":"plan","signature":"sig-A"}`
+	thinkingB = `{"type":"thinking","thinking":"plan","signature":"sig-B1sig-B2"}`
+	thinkingJ = `{"type":"thinking","thinking":"plan","signature":"sig-J"}`
+	textOK    = `{"type":"text","text":"ok"}`
+)
+
+type anthropicCapture struct {
+	mu    sync.Mutex
+	hits  [][]byte
+	reply func(w http.ResponseWriter)
+}
+
+func (c *anthropicCapture) server(t *testing.T) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		*sink = append(*sink, body)
-		mu.Unlock()
+		c.mu.Lock()
+		c.hits = append(c.hits, body)
+		reply := c.reply
+		c.mu.Unlock()
+		if reply != nil {
+			reply(w)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","content":[{"type":"text","text":"ok"}]}`))
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+func (c *anthropicCapture) last(t *testing.T) string {
+	t.Helper()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.hits) == 0 {
+		t.Fatal("upstream not hit")
+	}
+	return string(c.hits[len(c.hits)-1])
+}
+
+// sseThinkingReply streams a thinking block whose signature arrives in two
+// signature_delta events, as the Messages API may split it.
+func sseThinkingReply(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	events := []string{
+		`{"type":"message_start","message":{"id":"msg","type":"message","role":"assistant","content":[]}}`,
+		`{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"plan"}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-B1"}}`,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sig-B2"}}`,
+		`{"type":"content_block_stop","index":0}`,
+		`{"type":"message_stop"}`,
+	}
+	for _, ev := range events {
+		_, _ = io.WriteString(w, "event: x\ndata: "+ev+"\n\n")
+	}
 }
 
 func postAnthropic(t *testing.T, rootURL, body string) {
@@ -289,93 +337,100 @@ func postAnthropic(t *testing.T, rootURL, body string) {
 	}
 }
 
-func TestAnthropicProviderSwitchForwardsClientBytesUnchanged(t *testing.T) {
-	var mu sync.Mutex
-	var hitA, hitB [][]byte
-	upA := anthropicCaptureUpstream(t, &hitA, &mu)
-	upB := anthropicCaptureUpstream(t, &hitB, &mu)
-
+// switchedAnthropicRoute launches a Claude route on upstream A, sends one turn
+// so history may hold A-signed thinking, then switches the Session to B.
+func switchedAnthropicRoute(t *testing.T, a, b *anthropicCapture) (root string) {
+	t.Helper()
+	upA, upB := a.server(t), b.server(t)
 	table := NewRouteTable()
 	table.SetLookup(func(string) (string, bool) { return "ready", true })
-	a := routedClaude(upA.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
-	state, err := table.BindLaunch("claude", a, 1, verifiedAuth(a))
+	pa := routedClaude(upA.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
+	state, err := table.BindLaunch("claude", pa, 1, verifiedAuth(pa))
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv := httptest.NewServer(NewRouter(table).Handler())
-	defer srv.Close()
-	root, err := LoopbackClaudeRootURL(srv.Listener.Addr().String(), state.Binding.RouteID)
+	t.Cleanup(srv.Close)
+	root, err = LoopbackClaudeRootURL(srv.Listener.Addr().String(), state.Binding.RouteID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	postAnthropic(t, root, anthropicSwitchBody)
-
-	b := routedClaude(upB.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
-	got, err := table.Activate("claude", b, 2, state.Generation, verifiedAuth(b))
+	before := anthropicBody(thinkingA + "," + textOK)
+	postAnthropic(t, root, before)
+	if got := a.last(t); got != before {
+		t.Fatalf("unswitched route rewrote the body:\n got %s\nwant %s", got, before)
+	}
+	pb := routedClaude(upB.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
+	got, err := table.Activate("claude", pb, 2, state.Generation, verifiedAuth(pb))
 	if err != nil {
 		t.Fatalf("cross-provider anthropic switch rejected: %v", err)
 	}
-	if got.Binding.HistoryPortability != "" {
-		t.Fatalf("anthropic route must not strip, portability=%q", got.Binding.HistoryPortability)
+	if got.Binding.HistoryPortability != HistoryPortabilityStripOpaque {
+		t.Fatalf("switched anthropic route portability=%q", got.Binding.HistoryPortability)
 	}
-	postAnthropic(t, root, anthropicSwitchBody)
+	return root
+}
 
-	mu.Lock()
-	defer mu.Unlock()
-	if len(hitA) != 1 || len(hitB) != 1 {
-		t.Fatalf("hitA=%d hitB=%d", len(hitA), len(hitB))
+func TestAnthropicSwitchDropsOnlyThinkingTheNewUpstreamDidNotIssue(t *testing.T) {
+	a := &anthropicCapture{}
+	b := &anthropicCapture{reply: sseThinkingReply}
+	root := switchedAnthropicRoute(t, a, b)
+
+	// First request after the switch: A's thinking is foreign and dropped;
+	// every other byte is the client's.
+	postAnthropic(t, root, anthropicBody(thinkingA+","+textOK))
+	if got, want := b.last(t), anthropicBody(textOK); got != want {
+		t.Fatalf("B body:\n got %s\nwant %s", got, want)
 	}
-	for label, got := range map[string][]byte{"A": hitA[0], "B": hitB[0]} {
-		if string(got) != anthropicSwitchBody {
-			t.Fatalf("upstream %s received rewritten body:\n got %s\nwant %s", label, got, anthropicSwitchBody)
-		}
+	// B issued sig-B1sig-B2 in its streamed reply; it is kept, A's still goes.
+	postAnthropic(t, root, anthropicBody(thinkingA+","+thinkingB+","+textOK))
+	if got, want := b.last(t), anthropicBody(thinkingB+","+textOK); got != want {
+		t.Fatalf("B body:\n got %s\nwant %s", got, want)
+	}
+	// A request with only B-issued thinking is forwarded byte-for-byte.
+	same := anthropicBody(thinkingB + "," + textOK)
+	postAnthropic(t, root, same)
+	if got := b.last(t); got != same {
+		t.Fatalf("B body rewritten:\n got %s\nwant %s", got, same)
 	}
 }
 
-func TestAnthropicRouteIgnoresStalePersistedStripFlag(t *testing.T) {
-	var mu sync.Mutex
-	var hits [][]byte
-	up := anthropicCaptureUpstream(t, &hits, &mu)
+func TestAnthropicSwitchLearnsThinkingFromJSONReplies(t *testing.T) {
+	a := &anthropicCapture{}
+	b := &anthropicCapture{reply: func(w http.ResponseWriter) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"msg","type":"message","role":"assistant","content":[` + thinkingJ + `,{"type":"text","text":"ok"}]}`))
+	}}
+	root := switchedAnthropicRoute(t, a, b)
+	postAnthropic(t, root, anthropicBody(textOK))
+	body := anthropicBody(thinkingJ + "," + textOK)
+	postAnthropic(t, root, body)
+	if got := b.last(t); got != body {
+		t.Fatalf("B-issued JSON thinking was dropped:\n got %s\nwant %s", got, body)
+	}
+}
 
-	table := NewRouteTable()
-	table.SetLookup(func(string) (string, bool) { return "ready", true })
-	a := routedClaude(up.URL, "claude-sonnet-4-6", "claude-sonnet-4-6")
-	state, err := table.BindLaunch("claude", a, 1, verifiedAuth(a))
-	if err != nil {
-		t.Fatal(err)
+func TestAnthropicSwitchKeepsThinkingOnlyTurnNonEmpty(t *testing.T) {
+	a := &anthropicCapture{}
+	b := &anthropicCapture{}
+	root := switchedAnthropicRoute(t, a, b)
+	postAnthropic(t, root, anthropicBody(thinkingA))
+	want := anthropicBody(`{"text":"` + anthropicThinkingOmittedText + `","type":"text"}`)
+	if got := b.last(t); got != want {
+		t.Fatalf("B body:\n got %s\nwant %s", got, want)
 	}
-	// An older daemon persisted the strip flag on this Anthropic route.
-	raw, err := EncodeDurableSnapshot(table.Snapshot())
-	if err != nil {
-		t.Fatal(err)
-	}
-	states, err := DecodeDurableSnapshot(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(states) != 1 {
-		t.Fatalf("states=%d", len(states))
-	}
-	states[0].Binding.HistoryPortability = HistoryPortabilityStripOpaque
-	restored := NewRouteTable()
-	restored.SetLookup(func(string) (string, bool) { return "ready", true })
-	if _, err := restored.Restore(states, registerAllow(nil, a)); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := restored.Get("claude"); got.Binding.HistoryPortability != HistoryPortabilityStripOpaque {
-		t.Fatalf("precondition: stale flag not restored: %q", got.Binding.HistoryPortability)
-	}
-	srv := httptest.NewServer(NewRouter(restored).Handler())
-	defer srv.Close()
-	root, err := LoopbackClaudeRootURL(srv.Listener.Addr().String(), state.Binding.RouteID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	postAnthropic(t, root, anthropicSwitchBody)
+}
 
-	mu.Lock()
-	defer mu.Unlock()
-	if len(hits) != 1 || string(hits[0]) != anthropicSwitchBody {
-		t.Fatalf("stale strip flag rewrote the body: %q", hits)
+func TestDropForeignAnthropicThinkingLeavesCleanBodyIdentical(t *testing.T) {
+	body := []byte(anthropicBody(textOK))
+	out, changed, err := dropForeignAnthropicThinking(body, func(string) bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed || !bytes.Equal(out, body) {
+		t.Fatalf("clean body changed: %s", out)
+	}
+	if _, _, err := dropForeignAnthropicThinking([]byte(`{"messages":{}}`), func(string) bool { return false }); err == nil {
+		t.Fatal("non-array messages must fail closed")
 	}
 }
