@@ -46,14 +46,14 @@ func (m ElementMatch) String() string {
 	return strings.Join(parts, " ")
 }
 
-// match finds the element m names in the tree and returns its id. With
-// one, several equally good matches are an error rather than a guess.
-func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
-	if m.Role == "" && m.Title == "" && m.Value == "" {
-		return 0, errors.New("a match needs a role, title or value")
+// matchIDs are the ids of the elements m names, those whose title is the
+// whole one first, and when there are none, those whose title only holds it.
+func (t *ElementTree) matchIDs(m ElementMatch) ([]int, error) {
+	if m.Role == "" && m.Title == "" && m.Value == "" && !m.Empty {
+		return nil, errors.New("a match needs a role, title or value")
 	}
 	if m.Empty && m.Value != "" {
-		return 0, errors.New("a match is either empty or has a value")
+		return nil, errors.New("a match is either empty or has a value")
 	}
 	role := strings.TrimPrefix(strings.ToLower(m.Role), "ax")
 	var whole, part []int
@@ -79,9 +79,21 @@ func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
 			part = append(part, t.id(i))
 		}
 	}
-	found := whole
-	if len(found) == 0 {
-		found = part
+	if len(whole) > 0 {
+		return whole, nil
+	}
+	return part, nil
+}
+
+// match finds the element m names in the tree and returns its id. With
+// one, several equally good matches are an error rather than a guess.
+func (t *ElementTree) match(m ElementMatch, one bool) (int, error) {
+	if m.Role == "" && m.Title == "" && m.Value == "" {
+		return 0, errors.New("a match needs a role, title or value")
+	}
+	found, err := t.matchIDs(m)
+	if err != nil {
+		return 0, err
 	}
 	switch {
 	case len(found) == 0:
@@ -122,7 +134,7 @@ func (a *agentSession) waitFor(ctx context.Context, action AgentAction) (AgentRe
 			before, err = printer.PrintApp(ctx, pid)
 			known = err == nil
 		}
-		result, err := a.appState(ctx, action.App)
+		result, err := a.appState(ctx, action.App, appScope{Match: action.Match})
 		if err != nil {
 			return AgentResult{}, err
 		}
@@ -156,7 +168,7 @@ func (a *agentSession) expect(ctx context.Context, action AgentAction) (AgentRes
 		return AgentResult{}, errors.New("expect needs match")
 	}
 	if action.App != "" {
-		if _, err := a.appState(ctx, action.App); err != nil {
+		if _, err := a.appState(ctx, action.App, appScope{}); err != nil {
 			return AgentResult{}, err
 		}
 	}

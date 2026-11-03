@@ -142,6 +142,10 @@ type AgentAction struct {
 	// Match names an element of the latest read by what it is instead of
 	// its id, for element, wait_for and expect.
 	Match *ElementMatch `json:"match,omitempty"`
+	// Under, Depth and Match narrow app_state's answer to the inside of an
+	// element, so many levels down, and the elements a match names.
+	Under int `json:"under,omitempty"`
+	Depth int `json:"depth,omitempty"`
 	// Steps are a batch's actions, run in order.
 	Steps []AgentAction `json:"steps,omitempty"`
 }
@@ -663,7 +667,7 @@ func (a *agentSession) listApps(ctx context.Context) (AgentResult, error) {
 
 // appState reads one app, in front or not, and gives its elements ids. The
 // previous read's ids end here.
-func (a *agentSession) appState(ctx context.Context, name string) (AgentResult, error) {
+func (a *agentSession) appState(ctx context.Context, name string, scope appScope) (AgentResult, error) {
 	if a.apps == nil {
 		return AgentResult{}, ErrNoApps
 	}
@@ -677,7 +681,7 @@ func (a *agentSession) appState(ctx context.Context, name string) (AgentResult, 
 	}
 	a.appMu.Lock()
 	defer a.appMu.Unlock()
-	return a.readAppLocked(ctx, app)
+	return a.readAppLocked(ctx, app, scope)
 }
 
 // numberLocked gives a new read's elements their ids: an element still the
@@ -731,14 +735,17 @@ func (a *agentSession) swapTreeLocked(ctx context.Context, app App) (previous *E
 }
 
 // readAppLocked replaces the agent's latest read; callers hold appMu.
-func (a *agentSession) readAppLocked(ctx context.Context, app App) (AgentResult, error) {
+func (a *agentSession) readAppLocked(ctx context.Context, app App, scope appScope) (AgentResult, error) {
 	_, tree, err := a.swapTreeLocked(ctx, app)
 	if err != nil {
 		return AgentResult{}, err
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	text, stats := formatAppTree(app, tree, a.latest.Rect, a.toAgent)
+	text, stats, err := formatAppTree(app, tree, a.latest.Rect, a.toAgent, scope)
+	if err != nil {
+		return AgentResult{}, err
+	}
 	return AgentResult{Text: text, rows: stats.rows, truncated: stats.truncated}, nil
 }
 
@@ -814,7 +821,7 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 			return AgentResult{Text: did + text, rows: stats.rows, diff: true}, nil
 		}
 	}
-	text, stats := formatAppTree(app, tree, a.latest.Rect, a.toAgent)
+	text, stats, _ := formatAppTree(app, tree, a.latest.Rect, a.toAgent, appScope{})
 	return AgentResult{Text: did + "The whole app now (" + why + "):\n" + text, rows: stats.rows, truncated: stats.truncated}, nil
 }
 
@@ -1192,7 +1199,7 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 	case "open_app":
 		return a.openApp(ctx, action.App)
 	case "app_state":
-		return a.appState(ctx, action.App)
+		return a.appState(ctx, action.App, appScope{Under: action.Under, Depth: action.Depth, Match: action.Match})
 	case "bring_forward":
 		return a.bringForward(ctx, action.App)
 	case "element":
