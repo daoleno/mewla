@@ -48,6 +48,19 @@ Open a Session to read it in one of three ways:
 
 What you type in either Chat or Terminal goes to the same `tmux` pane.
 
+### Copy from the Terminal in a browser
+
+Select text with the mouse and press **Cmd+C** (Mac) or **Ctrl+C**, or
+**Ctrl+Shift+C**; the text goes to your computer's clipboard. With nothing
+selected, Ctrl+C still interrupts the program, and right after a Ctrl+C copy
+the next Ctrl+C interrupts again. A program that uses the mouse, such as `tmux`
+with `mouse on`, `vim` or an agent's interface, keeps plain drags for itself:
+hold **Shift** (**Option** on a Mac) while you drag to select instead. What
+`tmux` copies when you select with it, and what a program copies with the
+terminal's clipboard code (OSC 52), reaches the browser's clipboard too, on
+`localhost` or an HTTPS address; programs inside `tmux` need `set -g
+set-clipboard on` for that. Mewla never lets a program read your clipboard.
+
 ### When an agent is waiting for you
 
 A waiting prompt is either a card you can answer by tapping, or no card at all.
