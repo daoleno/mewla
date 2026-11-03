@@ -52,6 +52,35 @@ Restart `mewla` after a change. The file only lists launch commands; Brain
 chooses which one each Worker uses (see
 [Worker routing](brain-and-work.md#worker-routing)).
 
+## More than one account
+
+A second Claude Code or Codex sign-in, such as a work and a personal account,
+is its own executor, picked in Brain's routing like any other:
+
+```sh
+mewla brain executors add claude-work -like claude
+mewla brain executors login claude-work    # signs in to the second account
+```
+
+`add` writes an `[[executors]]` entry with a `config_dir` of its own
+(`CLAUDE_CONFIG_DIR` for Claude Code, `CODEX_HOME` for Codex; by default under
+`~/.mewla/accounts/<name>`, or pass `-config-dir`) and backs up the old
+`executors.toml`. Restart `mewla` afterwards. The default sign-in is untouched.
+
+```toml
+[[executors]]
+name = "claude-work"
+command = "claude"
+config_dir = "/path/to/claude_work"
+```
+
+`mewla doctor` and the Brain host picker in the app show which account each
+executor is signed in as, so two sign-ins of one agent can be told apart. The
+account is the email the CLI recorded at sign-in; it is blank for an API key.
+A separate sign-in keeps its own conversations and settings, so the Model
+Provider you picked and the Skills listed under **Extensions** apply to the
+default sign-in only.
+
 ## Permission bypass risks
 
 **Every agent Mewla launches runs with full authority.** There is no safe mode

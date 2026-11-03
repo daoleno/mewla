@@ -273,6 +273,13 @@ export default function BrainScreen() {
     () => brainExecutorChoices(activeBrain?.executors ?? [], activeBrain?.executor_states),
     [activeBrain?.executors, activeBrain?.executor_states],
   );
+  const executorAccounts = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const [id, state] of Object.entries(activeBrain?.executor_states ?? {})) {
+      if (state.account) out[id] = state.account;
+    }
+    return out;
+  }, [activeBrain?.executor_states]);
   // Switching needs an installed agent other than the one Brain runs on.
   const canSwitchAdapter = availableExecutors.some((executor) => executor.id !== hostExecutor?.id);
   const openAdapterSheet = useCallback(() => {
@@ -885,6 +892,7 @@ export default function BrainScreen() {
         visible={adapterSheetVisible}
         executors={availableExecutors}
         moreToInstall={moreExecutorsToInstall}
+        accounts={executorAccounts}
         hostAdapterId={hostExecutor?.id}
         switchingAdapterId={switchingAdapterId}
         error={adapterSwitchError}

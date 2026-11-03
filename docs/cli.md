@@ -53,6 +53,8 @@ See [Connect and pair](connect-and-pair.md).
 ```sh
 mewla brain executors --json          # Brain's agent and the agents available
 mewla brain use <executor>            # move Brain to another agent; the thread stays
+mewla brain executors add <name> -like claude|codex   # a second sign-in as its own executor
+mewla brain executors login <name>    # sign that executor in to its account
 mewla brain workspace                 # path to Brain's notes
 mewla brain objective show|clear
 mewla brain objective set "Ship atlas-notes v1.4 this week"   # the goal line in the app

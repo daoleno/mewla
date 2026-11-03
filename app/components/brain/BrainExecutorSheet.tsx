@@ -24,6 +24,8 @@ interface BrainExecutorSheetProps {
   executors: BrainExecutorRef[];
   /** Some configured agents are not installed: one line says how to add them. */
   moreToInstall?: boolean;
+  /** Who each executor is signed in as, by executor id; tells two sign-ins of one agent apart. */
+  accounts?: Record<string, string>;
   hostAdapterId?: string;
   switchingAdapterId: string | null;
   error?: string | null;
@@ -35,6 +37,7 @@ export function BrainExecutorSheet({
   visible,
   executors,
   moreToInstall = false,
+  accounts,
   hostAdapterId,
   switchingAdapterId,
   error,
@@ -122,6 +125,7 @@ export function BrainExecutorSheet({
                   {adapter.runtime?.trim()
                     ? ` · ${adapter.runtime.trim()}`
                     : ""}
+                  {accounts?.[adapter.id] ? ` · ${accounts[adapter.id]}` : ""}
                 </Text>
               </View>
               {rowShowsSpinner ? (
