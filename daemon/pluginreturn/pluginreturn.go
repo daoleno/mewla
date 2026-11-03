@@ -1,11 +1,12 @@
 // Package pluginreturn is Mewla's https return page for plugin sign-ins whose
 // provider refuses the app's mewla:// scheme. It runs on Mewla's own origin,
-// never on a user's daemon, and only hands the authorization result to the
-// app: the code is useless without the PKCE verifier the daemon keeps.
+// never on a user's daemon, and only hands the authorization result on, to the
+// app or to the web UI that started the sign-in: the code is useless without
+// the PKCE verifier the daemon keeps.
 package pluginreturn
 
 import (
-	"html"
+	"encoding/base64"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -21,12 +22,47 @@ const Path = "/plugins/return"
 // Target is the app's fixed plugin return. Nothing in a request changes it.
 const Target = "mewla://plugins"
 
-// WebStatePrefix marks a sign-in a browser started from the web UI. The app
-// can open Target; a browser tab can't, so for these the page shows the
-// returned address instead, for the person to paste into the sign-in. The
-// address stays in their own browser and is useless without the PKCE verifier
-// the daemon keeps.
-const WebStatePrefix = "web."
+// WebCallbackPath is where a web UI origin takes a sign-in return.
+const WebCallbackPath = "/plugins/oauth/callback"
+
+// A sign-in a browser started from the web UI can't be handed to mewla://.
+// Its state names the origin to send the browser back to: "web.", the origin
+// in base64url, ".", then the daemon's own random state. The provider echoes
+// the state untouched, and a browser tab can't be reached from here (Slack's
+// pages drop window.opener), so the page redirects the same tab.
+//
+// Naming the origin is safe because the redirect carries only what the
+// provider returned, to one fixed path, and the daemon redeems a code only
+// for a state it minted, with a PKCE verifier that never leaves it. A crafted
+// state can at most bounce a visitor to that path on an https (or loopback)
+// origin with parameters the sender already holds.
+const webStatePrefix = "web."
+
+// WebState is the state a web UI sign-in sends: origin, then the daemon's state.
+func WebState(origin, state string) string {
+	return webStatePrefix + base64.RawURLEncoding.EncodeToString([]byte(origin)) + "." + state
+}
+
+// webOrigin reads the origin out of a web state.
+func webOrigin(state string) (string, bool) {
+	rest, ok := strings.CutPrefix(state, webStatePrefix)
+	if !ok {
+		return "", false
+	}
+	encoded, _, ok := strings.Cut(rest, ".")
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if !ok || err != nil || len(raw) > 256 {
+		return "", false
+	}
+	u, err := url.Parse(string(raw))
+	host := ""
+	if err == nil {
+		host = u.Hostname()
+	}
+	valid := err == nil && u.Scheme+"://"+u.Host == string(raw) && u.User == nil && host != "" &&
+		(u.Scheme == "https" || u.Scheme == "http" && (host == "127.0.0.1" || host == "::1"))
+	return string(raw), valid
+}
 
 var errorCode = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
@@ -70,27 +106,14 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid sign-in return. Go back to Mewla and connect again.", http.StatusBadRequest)
 		return
 	}
-	if strings.HasPrefix(state, WebStatePrefix) {
-		showAddress(w, Origin+Path+"?"+forward.Encode(), failure != "")
+	if strings.HasPrefix(state, webStatePrefix) {
+		origin, ok := webOrigin(state)
+		if !ok {
+			http.Error(w, "Invalid sign-in return. Go back to Mewla and connect again.", http.StatusBadRequest)
+			return
+		}
+		http.Redirect(w, r, origin+WebCallbackPath+"?"+forward.Encode(), http.StatusFound)
 		return
 	}
 	http.Redirect(w, r, Target+"?"+forward.Encode(), http.StatusFound)
-}
-
-// showAddress is the page a web sign-in ends on. The address is selected by a
-// single click and the page runs no script.
-func showAddress(w http.ResponseWriter, address string, denied bool) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// The page's own style only; no script, image or frame is allowed.
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
-	lead := "Copy this address, go back to Mewla and paste it."
-	if denied {
-		lead = "Access was not granted. Copy this address and paste it in Mewla to finish."
-	}
-	_, _ = w.Write([]byte(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Back to Mewla</title><style>` +
-		`body{font:16px/1.5 system-ui,sans-serif;margin:0;padding:48px 20px;background:#fff;color:#1b1b1f}` +
-		`main{max-width:560px;margin:0 auto}h1{font-size:22px;margin:0 0 8px}p{margin:0 0 20px;color:#55555c}` +
-		`code{display:block;padding:14px;border:1px solid #d6d6dc;border-radius:12px;background:#f6f6f8;word-break:break-all;user-select:all;-webkit-user-select:all;font:13px/1.5 ui-monospace,monospace}` +
-		`@media(prefers-color-scheme:dark){body{background:#111114;color:#f2f2f5}p{color:#a8a8b0}code{background:#1c1c21;border-color:#34343b}}` +
-		`</style></head><body><main><h1>Back to Mewla</h1><p>` + html.EscapeString(lead) + `</p><code>` + html.EscapeString(address) + `</code></main></body></html>`))
 }
