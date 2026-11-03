@@ -10,7 +10,7 @@ import (
 
 func serve(method, query string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
-	Handler(w, httptest.NewRequest(method, "https://connect.mewla.ai"+Path+"?"+query, nil))
+	Handler(w, httptest.NewRequest(method, Origin+Path+"?"+query, nil))
 	return w
 }
 
@@ -75,6 +75,9 @@ func TestWebSignInShowsTheAddressInsteadOfOpeningTheApp(t *testing.T) {
 	body := w.Body.String()
 	if w.Code != http.StatusOK || w.Header().Get("Location") != "" || w.Header().Get("Content-Type") != "text/html; charset=utf-8" || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("%d %v", w.Code, w.Header())
+	}
+	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "style-src 'unsafe-inline'") || strings.Contains(csp, "script-src") || !strings.Contains(csp, "default-src 'none'") {
+		t.Fatalf("csp %q", csp)
 	}
 	if !strings.Contains(body, "https://connect.mewla.ai"+Path+"?code=abc&amp;state=web.s1<") || strings.Contains(body, "evil") || strings.Contains(body, "<script") {
 		t.Fatalf("page %s", body)

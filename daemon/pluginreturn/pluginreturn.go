@@ -12,6 +12,9 @@ import (
 	"strings"
 )
 
+// Origin is where cmd/mewla-account serves Handler.
+const Origin = "https://connect.mewla.ai"
+
 // Path is where cmd/mewla-account serves Handler.
 const Path = "/plugins/return"
 
@@ -68,7 +71,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.HasPrefix(state, WebStatePrefix) {
-		showAddress(w, r.Host+Path+"?"+forward.Encode(), failure != "")
+		showAddress(w, Origin+Path+"?"+forward.Encode(), failure != "")
 		return
 	}
 	http.Redirect(w, r, Target+"?"+forward.Encode(), http.StatusFound)
@@ -78,6 +81,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 // single click and the page runs no script.
 func showAddress(w http.ResponseWriter, address string, denied bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// The page's own style only; no script, image or frame is allowed.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
 	lead := "Copy this address, go back to Mewla and paste it."
 	if denied {
 		lead = "Access was not granted. Copy this address and paste it in Mewla to finish."
@@ -87,5 +92,5 @@ func showAddress(w http.ResponseWriter, address string, denied bool) {
 		`main{max-width:560px;margin:0 auto}h1{font-size:22px;margin:0 0 8px}p{margin:0 0 20px;color:#55555c}` +
 		`code{display:block;padding:14px;border:1px solid #d6d6dc;border-radius:12px;background:#f6f6f8;word-break:break-all;user-select:all;-webkit-user-select:all;font:13px/1.5 ui-monospace,monospace}` +
 		`@media(prefers-color-scheme:dark){body{background:#111114;color:#f2f2f5}p{color:#a8a8b0}code{background:#1c1c21;border-color:#34343b}}` +
-		`</style></head><body><main><h1>Back to Mewla</h1><p>` + html.EscapeString(lead) + `</p><code>https://` + html.EscapeString(address) + `</code></main></body></html>`))
+		`</style></head><body><main><h1>Back to Mewla</h1><p>` + html.EscapeString(lead) + `</p><code>` + html.EscapeString(address) + `</code></main></body></html>`))
 }

@@ -117,7 +117,8 @@ its card on the service page show one action: **Reconnect** when sign-in
 expired, **Turn on** when it is off, **Check again** after a failed call, or
 **Retry** when removing its credentials did not finish.
 
-To add a second account, use **Add another account** on the service's page. It
+To add a second account, use **Add another account** at the bottom of the
+service's page. It
 is the same sign-in as Connect.
 
 ## Cloudflare

@@ -1,7 +1,7 @@
 import type { PluginAccount } from "./connections";
 import { accountStatus } from "./connections";
 import { cloudProfileExpiry, cloudProfileIdentity, cloudProfileName, cloudProfileStatus } from "./cloudProfilesModel";
-import { accountTone } from "./pluginConnectionsModel";
+import { accountTone, networkLabel } from "./pluginConnectionsModel";
 
 export type AccountRow = {
   name: string;
@@ -23,7 +23,9 @@ export function accountRow(account: PluginAccount, now = Date.now()): AccountRow
     return { name, identity: cloudProfileIdentity(account), status: cloudProfileStatus(account), expiry: cloudProfileExpiry(account, now) };
   }
   const custom = account.integration === "mcp" || account.integration === "openapi";
-  const identity = custom ? endpointHost(account.endpoint) : account.identity && account.identity !== name ? account.identity : "";
+  // A testnet account always says so, so it is never taken for mainnet.
+  const network = account.network === "testnet" ? networkLabel(account.network) : null;
+  const identity = [network, custom ? endpointHost(account.endpoint) : account.identity && account.identity !== name ? account.identity : ""].filter(Boolean).join(" · ");
   return { name, identity, status: { label: accountStatus(account), tone: accountTone(account) }, expiry: null };
 }
 

@@ -43,7 +43,6 @@ export default function PluginServiceScreen() {
       : !accounts.length
         ? <ConnectOffer plugin={plugin} job={job} serverName={flow.serverName} connecting={connecting} disabled={!!otherConnecting} onConnect={connect} onUseServerAccount={github} />
         : plugin.available ? <Button label={`Add another ${plugin.name} account`} icon="add" variant="tinted" block loading={connecting} disabled={!!otherConnecting} onPress={connect} /> : null;
-  const cloud = plugin.id === "aws" || plugin.id === "gcp";
   const accountCard = (account: typeof accounts[number], close = () => {}) => <AccountCard
       key={account.id}
       plugin={plugin}
@@ -60,7 +59,6 @@ export default function PluginServiceScreen() {
     />;
   return <PluginsPage title={plugin.name}>
     <ServiceHeader plugin={plugin} />
-    {cloud ? tail : null}
     {accounts.map((account) => <ToolUpdatesNotice
       key={`updates:${account.id}`}
       account={account}
@@ -69,6 +67,6 @@ export default function PluginServiceScreen() {
       onConfirm={(names) => flow.confirmUpdates(account, names)}
     />)}
     {accounts.length ? <AccountList key={`${flow.serverId}:${plugin.id}`} accounts={accounts} renderDetails={accountCard} /> : null}
-    {!cloud ? tail : null}
+    {tail}
   </PluginsPage>;
 }

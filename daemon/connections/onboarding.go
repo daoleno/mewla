@@ -27,7 +27,7 @@ const NativeCallback = "mewla://plugins"
 // scheme. It forwards only code, state, error and iss to NativeCallback, so the
 // app finishes the sign-in exactly as from a direct return. Served by
 // cmd/mewla-account.
-const NativeReturnRelay = "https://connect.mewla.ai" + pluginreturn.Path
+const NativeReturnRelay = pluginreturn.Origin + pluginreturn.Path
 
 type ConnectFlow struct {
 	CodeRequired     bool      `json:"code_required,omitempty"`
