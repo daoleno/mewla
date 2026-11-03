@@ -6,7 +6,7 @@ import { AppText, Button, InlineNotice } from "../ui";
 import { outlinedSurface } from "../ui/outlinedSurface";
 import { signInAddressFromText } from "../../services/pluginConnectionsModel";
 
-/** The loopback address copied from a browser on another computer. */
+/** The address a sign-in ended on: a loopback address from another computer's browser, or Mewla's return page. */
 export function SignInAddressEntry({ onSubmit }: { onSubmit(address: string): Promise<void> }) {
   const colors = useAppColors();
   const [address, setAddress] = useState("");
@@ -18,7 +18,7 @@ export function SignInAddressEntry({ onSubmit }: { onSubmit(address: string): Pr
     if (submitting.current) return;
     const callback = signInAddressFromText(address);
     if (!callback) {
-      setError("Paste the full address starting with http://127.0.0.1 from the page opened after sign-in, even if that page could not load.");
+      setError("Paste the full address of the page opened after sign-in, even if that page could not load.");
       return;
     }
     submitting.current = true; setBusy(true); setError("");
@@ -42,7 +42,7 @@ export function SignInAddressEntry({ onSubmit }: { onSubmit(address: string): Pr
         ref={input}
         accessibilityLabel="Address the sign-in ended on"
         testID="sign-in-address"
-        placeholder="http://127.0.0.1:…/plugins/oauth/callback?…"
+        placeholder="Address starting with http…"
         placeholderTextColor={colors.textTertiary}
         style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.bgElevated, borderColor: colors.border }]}
         autoCapitalize="none"
