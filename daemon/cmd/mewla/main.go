@@ -2159,6 +2159,9 @@ func runBrainWorkEventResolve(args []string, stderr io.Writer) error {
 }
 
 func runBrainExecutors(args []string, stderr io.Writer) error {
+	if handled, err := runBrainExecutorAccounts(args, stderr); handled {
+		return err
+	}
 	cfg, err := parseCLIConfig("mewla brain executors", args, stderr)
 	if err != nil {
 		return err

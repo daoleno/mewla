@@ -76,6 +76,8 @@ func writeExecutorsConfig(req configWriteRequest) (configWriteResult, error) {
 			Command: command,
 			Kind:    kind,
 			Runtime: existing.Runtime,
+			// A separate sign-in survives setup being run again.
+			ConfigDir: existing.ConfigDir,
 		}
 		if entry.Kind == "" {
 			entry.Kind = existing.Kind
@@ -140,6 +142,9 @@ func renderExecutorsTOML(file executorFile) ([]byte, error) {
 		if runtime := strings.TrimSpace(executor.Runtime); runtime != "" {
 			b.WriteString("runtime = \"" + escapeTOMLString(runtime) + "\"\n")
 		}
+		if dir := strings.TrimSpace(executor.ConfigDir); dir != "" {
+			b.WriteString("config_dir = \"" + escapeTOMLString(dir) + "\"\n")
+		}
 		b.WriteString("\n")
 	}
 	return []byte(b.String()), nil
@@ -151,4 +156,58 @@ func escapeTOMLString(value string) string {
 		`"`, `\"`,
 	)
 	return replacer.Replace(value)
+}
+
+// AddExecutor adds or replaces one executor in the file at path, keeping every
+// other entry, and backs the old file up. It returns the backup path ("" when
+// there was no file).
+func AddExecutor(path string, entry work.Executor, now time.Time) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("executors path required")
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	var file executorFile
+	raw, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+		if err := toml.Unmarshal(raw, &file); err != nil {
+			return "", fmt.Errorf("read %s: %w", path, err)
+		}
+	case !os.IsNotExist(err):
+		return "", err
+	}
+	replaced := false
+	for i := range file.Executors {
+		if strings.TrimSpace(file.Executors[i].Name) == entry.Name {
+			file.Executors[i], replaced = entry, true
+		}
+	}
+	if !replaced {
+		file.Executors = append(file.Executors, entry)
+	}
+	body, err := renderExecutorsTOML(file)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", err
+	}
+	backup := ""
+	if len(raw) > 0 {
+		backup = path + ".bak." + now.UTC().Format("20060102T150405Z")
+		if err := os.WriteFile(backup, raw, 0o600); err != nil {
+			return "", fmt.Errorf("backup executors.toml: %w", err)
+		}
+	}
+	tmp := path + ".tmp." + fmt.Sprintf("%d", now.UnixNano())
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+		return backup, err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return backup, err
+	}
+	return backup, nil
 }

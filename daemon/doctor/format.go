@@ -64,6 +64,12 @@ func WriteHuman(w io.Writer, report Report) error {
 			if item.Summary != "" {
 				fmt.Fprintf(w, "      %s\n", item.Summary)
 			}
+			if item.Account != "" {
+				fmt.Fprintf(w, "      signed in as %s\n", item.Account)
+			}
+			if item.ConfigDir != "" {
+				fmt.Fprintf(w, "      own sign-in in %s\n", item.ConfigDir)
+			}
 			if item.Remediation != "" {
 				fmt.Fprintf(w, "      remediation: %s\n", item.Remediation)
 			}
