@@ -142,6 +142,8 @@ type AgentAction struct {
 	// Match names an element of the latest read by what it is instead of
 	// its id, for element, wait_for and expect.
 	Match *ElementMatch `json:"match,omitempty"`
+	// Until is what wait_for waits for: appears (the default), gone or enabled.
+	Until string `json:"until,omitempty"`
 	// ConfirmUserAsked says the person asked for a menu item that ends an
 	// app or the session, such as Quit.
 	ConfirmUserAsked bool `json:"confirm_user_asked,omitempty"`

@@ -134,7 +134,7 @@ func (in computerInput) action() screen.AgentAction {
 
 const stepsToolDescription = `Run up to 20 actions in one call, in order, stopping at the first that fails (about 40 seconds in all). ` +
 	`A step is any computer action, or apps, app_state (app), menu (app, path), element (id or match, element_action, and value for set_value), ` +
-	`wait_for (app, match, duration up to 10 seconds: read the app until an element matching appears), ` +
+	`wait_for (app, match, duration up to 10 seconds, until appears, gone or enabled: read the app until an element matching appears, is gone or is enabled; it answers with the one line, not the app), ` +
 	`or expect (match, optionally app to read first: fail unless an element matches). ` +
 	`A match names an element by role, title and value, without case, a whole name before part of one, or with empty: true one with no text; when acting, several matches are an error. ` +
 	`Use it for a known sequence such as find, click, type, check; read the app again when you need to see more. ` +
@@ -154,6 +154,7 @@ type stepInput struct {
 	Match            *screen.ElementMatch `json:"match,omitempty" jsonschema:"for element, wait_for and expect: the element by role, title, value; for app_state: list only these"`
 	Under            int                  `json:"under,omitempty" jsonschema:"for app_state: list only what is inside this element id"`
 	Depth            int                  `json:"depth,omitempty" jsonschema:"for app_state: only this many levels down"`
+	Until            string               `json:"until,omitempty" jsonschema:"for wait_for: appears (default), gone or enabled"`
 	Path             string               `json:"path,omitempty" jsonschema:"for menu: the item, such as File > Save As…, or a menu ending in > to list it"`
 	ConfirmUserAsked bool                 `json:"confirm_user_asked,omitempty" jsonschema:"for menu: the person asked for Quit, Log Out, Shut Down, Restart or Empty Trash"`
 }
@@ -161,7 +162,7 @@ type stepInput struct {
 func (in stepInput) action() screen.AgentAction {
 	action := in.computerInput.action()
 	action.Element, action.ElementAction, action.Match = in.ID, in.ElementAction, in.Match
-	action.Under, action.Depth = in.Under, in.Depth
+	action.Under, action.Depth, action.Until = in.Under, in.Depth, in.Until
 	if action.Text == "" {
 		action.Text = in.Value
 	}
