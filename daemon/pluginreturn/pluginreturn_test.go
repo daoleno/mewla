@@ -1,6 +1,7 @@
 package pluginreturn
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -68,26 +69,54 @@ func TestRejectsMalformedReturns(t *testing.T) {
 	}
 }
 
-// A sign-in a browser started from the web UI can't be handed to mewla://, so
-// the page shows the returned address to paste into Mewla instead.
-func TestWebSignInShowsTheAddressInsteadOfOpeningTheApp(t *testing.T) {
-	w := serve("GET", "code=abc&state=web.s1&scope=x&next=//evil")
-	body := w.Body.String()
-	if w.Code != http.StatusOK || w.Header().Get("Location") != "" || w.Header().Get("Content-Type") != "text/html; charset=utf-8" || w.Header().Get("Cache-Control") != "no-store" {
-		t.Fatalf("%d %v", w.Code, w.Header())
+// A sign-in a browser started from the web UI goes back to that web UI's own
+// callback, named in the state, in the same tab.
+func TestWebSignInReturnsToTheOriginNamedInItsState(t *testing.T) {
+	for origin, want := range map[string]string{
+		"https://mewla.example":    "https://mewla.example/plugins/oauth/callback",
+		"http://127.0.0.1:9877":    "http://127.0.0.1:9877/plugins/oauth/callback",
+		"http://[::1]:9877":        "http://[::1]:9877/plugins/oauth/callback",
+		"https://mewla.example:44": "https://mewla.example:44/plugins/oauth/callback",
+	} {
+		state := WebState(origin, "s1")
+		w := serve("GET", url.Values{"code": {"abc"}, "state": {state}, "scope": {"x"}, "next": {"//evil"}}.Encode())
+		location, _ := url.Parse(w.Header().Get("Location"))
+		if w.Code != http.StatusFound || location.Scheme+"://"+location.Host+location.Path != want || len(location.Query()) != 2 || location.Query().Get("code") != "abc" || location.Query().Get("state") != state {
+			t.Fatalf("%s: %d %s", origin, w.Code, w.Header().Get("Location"))
+		}
 	}
-	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "style-src 'unsafe-inline'") || strings.Contains(csp, "script-src") || !strings.Contains(csp, "default-src 'none'") {
-		t.Fatalf("csp %q", csp)
-	}
-	if !strings.Contains(body, "https://connect.mewla.ai"+Path+"?code=abc&amp;state=web.s1<") || strings.Contains(body, "evil") || strings.Contains(body, "<script") {
-		t.Fatalf("page %s", body)
-	}
-	denied := serve("GET", "error=access_denied&state=web.s2").Body.String()
-	if !strings.Contains(denied, "Access was not granted") || !strings.Contains(denied, "error=access_denied&amp;state=web.s2") {
-		t.Fatalf("denied page %s", denied)
+	denied := serve("GET", url.Values{"error": {"access_denied"}, "state": {WebState("https://mewla.example", "s2")}}.Encode())
+	if location, _ := url.Parse(denied.Header().Get("Location")); denied.Code != http.StatusFound || location.Host != "mewla.example" || location.Query().Get("error") != "access_denied" {
+		t.Fatalf("denied %d %s", denied.Code, denied.Header().Get("Location"))
 	}
 	// The app's sign-in keeps its redirect.
-	if serve("GET", "code=abc&state=s1").Code != http.StatusFound {
+	if w := serve("GET", "code=abc&state=s1"); w.Code != http.StatusFound || !strings.HasPrefix(w.Header().Get("Location"), Target) {
 		t.Fatal("an app sign-in no longer redirects to the app")
+	}
+}
+
+// Only an https or loopback origin, with nothing after it, is a place to send
+// a browser; anything else in a web state is refused, never followed.
+func TestWebSignInRefusesOtherOrigins(t *testing.T) {
+	encode := func(origin string) string {
+		return "web." + base64.RawURLEncoding.EncodeToString([]byte(origin)) + ".s"
+	}
+	for _, state := range []string{
+		encode("http://mewla.example"),
+		encode("http://192.168.1.20:9877"),
+		encode("https://mewla.example/path"),
+		encode("https://mewla.example/?x=1"),
+		encode("https://user@mewla.example"),
+		encode("javascript:alert(1)"),
+		encode("//evil.example"),
+		encode(""),
+		"web.%%%.s",
+		"web.nodot",
+		"web.",
+	} {
+		w := serve("GET", url.Values{"code": {"abc"}, "state": {state}}.Encode())
+		if w.Code != http.StatusBadRequest || w.Header().Get("Location") != "" {
+			t.Fatalf("%q: %d %s", state, w.Code, w.Header().Get("Location"))
+		}
 	}
 }

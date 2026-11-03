@@ -6,7 +6,7 @@ import { AppText, Button, InlineNotice } from "../ui";
 import { outlinedSurface } from "../ui/outlinedSurface";
 import { signInAddressFromText } from "../../services/pluginConnectionsModel";
 
-/** The address a sign-in ended on: a loopback address from another computer's browser, or Mewla's return page. */
+/** The loopback address copied from a browser on another computer. */
 export function SignInAddressEntry({ onSubmit }: { onSubmit(address: string): Promise<void> }) {
   const colors = useAppColors();
   const [address, setAddress] = useState("");

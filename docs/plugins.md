@@ -55,7 +55,7 @@ Mewla's own app registration with the provider:
 | Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; automatic Linux and macOS SDK updates |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
-| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address, so the browser ends on that page, which shows an address. Copy it, paste it into the sign-in card in Mewla and choose **Continue** |
+| Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address, so the browser passes through that page, which sends it straight back to the web UI's Extensions page |
 | Hyperliquid | No sign-in and no setup to read; one API wallet key you paste to let Brain trade | Works everywhere; the key field is on the service's page |
 
 A service that cannot be connected yet shows **Not yet available** with a short

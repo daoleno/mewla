@@ -70,7 +70,7 @@ export function accountSignInInput(account: Pick<PluginAccount, "id" | "integrat
 export function signInAddressFromText(text: string | null | undefined): string {
   const address = (text ?? "").trim();
   if (address.length < 20 || address.length > 8192 || /\s/.test(address)) return "";
-  const bare = /^(?:(?:https?:\/\/)?(?:127\.0\.0\.1|localhost)(?::\d{1,5})?\/[^?#]*|https:\/\/connect\.mewla\.ai\/plugins\/return)\?/i.test(address);
+  const bare = /^(?:https?:\/\/)?(?:127\.0\.0\.1|localhost)(?::\d{1,5})?\/[^?#]*\?/i.test(address);
   return bare && /[?&]state=/.test(address) ? address : "";
 }
 

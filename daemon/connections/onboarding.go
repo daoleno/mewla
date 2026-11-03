@@ -136,7 +136,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if in.WebOrigin != "" {
 			// Only an origin this daemon serves the web UI on, so no caller can
 			// send an authorization code to an address it chooses.
-			callback := in.WebOrigin + "/plugins/oauth/callback"
+			callback := in.WebOrigin + webCallbackPath
 			if m.webOrigin == nil || !m.webOrigin(in.WebOrigin) || !validCallback(callback) {
 				return Response{}, errors.New("Sign-in can't return to this address. Open Mewla at its configured web address and try again.")
 			}
@@ -159,7 +159,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 				state = key
 			}
 		}
-		f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", AuthorizationURL: response.AuthorizationURL, Expires: m.pending[state].Expires, AccountID: response.Account.ID, WebReturn: m.pending[state].Web, AddressRequired: m.pending[state].Loopback || m.pending[state].Paste}, state: state, renewID: in.AccountID}
+		f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: in.Integration, Status: "waiting", AuthorizationURL: response.AuthorizationURL, Expires: m.pending[state].Expires, AccountID: response.Account.ID, WebReturn: m.pending[state].Web, AddressRequired: m.pending[state].Loopback}, state: state, renewID: in.AccountID}
 		m.connectFlows[f.ID] = f
 		return flowResult(f), nil
 	}
@@ -246,7 +246,7 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("This connection is no longer waiting for authorization")
 		}
 		var returned string
-		if pending, ok := m.pending[f.state]; ok && (pending.Loopback || pending.Paste) {
+		if pending, ok := m.pending[f.state]; ok && pending.Loopback {
 			// The browser may have reached this server by itself; asking again
 			// without an address only reports where the sign-in stands.
 			if strings.TrimSpace(q.Callback) == "" {
