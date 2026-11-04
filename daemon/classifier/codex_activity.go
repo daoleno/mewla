@@ -32,9 +32,8 @@ func (a *CodexActivityAdapter) Match(in ActivityInput) bool {
 }
 
 func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
-	pane := latestProviderPaneWindow(in.PaneContent, "openai codex")
+	pane := latestCodexPaneWindow(in.PaneContent)
 	approvalPane := codexApprovalPane(pane)
-	wholeApprovalPane := codexApprovalPane(strings.ReplaceAll(in.PaneContent, "\r\n", "\n"))
 	if codexApprovalPromptRe.MatchString(approvalPane) {
 		signal := ActivitySignal{
 			State:    StateBlocked,
@@ -42,10 +41,10 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "codex_pane_blocked",
 			Provider: a.Name(),
 		}
-		if prompt, ok := ParseMenuPromptIn(a.Name(), PromptApproval, approvalPane, wholeApprovalPane, "Press enter to confirm", "enter to confirm", "Enter to continue"); ok {
+		if prompt, ok := ParseMenuPrompt(a.Name(), PromptApproval, approvalPane, "Press enter to confirm", "enter to confirm", "Enter to continue"); ok {
 			prompt.Title = signal.Summary
 			signal.Prompt = &prompt
-		} else if prompt, ok := ParseMenuPromptIn(a.Name(), PromptApproval, approvalPane, wholeApprovalPane); ok {
+		} else if prompt, ok := ParseMenuPrompt(a.Name(), PromptApproval, approvalPane); ok {
 			prompt.Title = signal.Summary
 			signal.Prompt = &prompt
 		}
@@ -133,6 +132,22 @@ func isCodexPane(command string, lines []string) bool {
 		}
 	}
 	return false
+}
+
+// codexBannerRe is Codex's own banner line: its name alone, with a version or
+// in the welcome box ("│ >_ OpenAI Codex (v0.46.0) │"). A mention inside a
+// command or tool output is not one, and taking it for one would start the pane
+// window inside an open dialog.
+var codexBannerRe = regexp.MustCompile(`(?im)^[\s│|╭]*(?:>_\s*)?openai codex\b(?:\s*\(v?[^)\n]*\))?[\s│|╮]*$`)
+
+// latestCodexPaneWindow is the pane from Codex's latest banner on, or its last
+// 80 lines when the banner has scrolled out.
+func latestCodexPaneWindow(content string) string {
+	normalized := strings.ReplaceAll(content, "\r\n", "\n")
+	if matches := codexBannerRe.FindAllStringIndex(normalized, -1); len(matches) > 0 {
+		return normalized[matches[len(matches)-1][0]:]
+	}
+	return latestProviderPaneWindow(normalized, "")
 }
 
 func latestProviderPaneWindow(content, marker string) string {

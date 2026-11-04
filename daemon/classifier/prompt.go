@@ -294,38 +294,34 @@ func trimRunes(text string, limit int) string {
 // bottom line proves the prompt is open now; it returns false for anything
 // else, so prose in the conversation above never becomes a prompt.
 func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, bool) {
-	prompt, meta, ok := parseMenuPrompt(provider, kind, pane, footerPrefixes...)
-	if !ok || meta.capped {
-		// A request cut short cannot name what is being approved.
-		return Prompt{}, false
-	}
-	return prompt, true
+	prompt, _, ok := parseMenuPrompt(provider, kind, pane, footerPrefixes...)
+	return prompt, ok
 }
 
-// ParseMenuPromptIn reads the prompt in window, a pane cut down to the
-// provider's latest banner, and holds it to the whole pane: if the cut fell
-// inside the request (a command line that looks like the banner), the request
-// is read again from the whole pane when a rule line bounds it there, and
-// otherwise no prompt is returned. An answerable identity never rests on a
-// truncated request.
-func ParseMenuPromptIn(provider string, kind PromptKind, window, whole string, footerPrefixes ...string) (Prompt, bool) {
+// ParseBoxedMenuPrompt reads a prompt whose request is a box a rule line opens
+// (Claude's permission dialog) from window, a pane cut down to the provider's
+// latest banner, and holds it to the whole pane. The request must be bounded
+// above by its rule line: if the read ran out of lines first, or the cut fell
+// inside the request (a command line that looks like the banner) and the whole
+// pane does not bound it, no prompt is returned. An answerable identity never
+// rests on a truncated request; the dialog is still reported as blocked.
+func ParseBoxedMenuPrompt(provider string, kind PromptKind, window, whole string, footerPrefixes ...string) (Prompt, bool) {
 	prompt, meta, ok := parseMenuPrompt(provider, kind, window, footerPrefixes...)
 	if !ok || meta.capped {
 		return Prompt{}, false
 	}
-	if window == whole {
-		return prompt, true
+	if !meta.ruled && window != whole {
+		// The read reached the first line of the window: the request may go on above it.
+		full, fullMeta, fullOK := parseMenuPrompt(provider, kind, whole, footerPrefixes...)
+		switch {
+		case fullOK && full.ID == prompt.ID:
+		case fullOK && fullMeta.ruled && !fullMeta.capped:
+			return full, true
+		default:
+			return Prompt{}, false
+		}
 	}
-	full, fullMeta, fullOK := parseMenuPrompt(provider, kind, whole, footerPrefixes...)
-	switch {
-	case !fullOK:
-		return prompt, true
-	case full.ID == prompt.ID:
-		return prompt, true
-	case fullMeta.ruled && !fullMeta.capped:
-		return full, true
-	}
-	return Prompt{}, false
+	return prompt, true
 }
 
 func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, menuMeta, bool) {
