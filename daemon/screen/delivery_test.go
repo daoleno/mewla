@@ -152,4 +152,24 @@ func TestAFieldThatConfirmsSaysItMayNotBeTakenYet(t *testing.T) {
 	if !strings.Contains(got, "send the Return key") {
 		t.Fatalf("confirm: %s", got)
 	}
+	// What the answer asks for works: Return goes to that app alone (press and
+	// release, no pointer or foreground change), and the app can be read again.
+	act(t, s, "%7", AgentAction{Action: "key", App: "Finder", Text: "Return"})
+	var downs, ups int
+	for _, k := range backend.AppKeys {
+		if k.PID != 601 {
+			t.Fatalf("Return reached pid %d, not Finder", k.PID)
+		}
+		if k.Down {
+			downs++
+		} else {
+			ups++
+		}
+	}
+	if downs != 1 || ups != 1 {
+		t.Fatalf("Return should be one press and one release to Finder: %+v", backend.AppKeys)
+	}
+	if got := act(t, s, "%7", AgentAction{Action: "app_state", App: "Finder"}).Text; !strings.Contains(got, `"new.txt"`) {
+		t.Fatalf("read after Return: %s", got)
+	}
 }
