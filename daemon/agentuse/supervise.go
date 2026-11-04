@@ -71,7 +71,7 @@ func SuperviseMCP(argv, env []string, stdin io.Reader, stdout, stderr io.Writer)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	s := &supervisor{childIn: childIn, stdout: stdout, pending: map[string]chan json.RawMessage{}, lists: map[string]bool{}}
+	s := &supervisor{childIn: childIn, stdout: stdout, pending: map[string]chan json.RawMessage{}, lists: map[string]bool{}, compact: map[string]bool{}}
 	exited := make(chan error, 1)
 	relayed := make(chan struct{})
 	go func() {
@@ -115,6 +115,8 @@ type supervisor struct {
 	next    int
 	// lists are the agent's tools/list requests still unanswered.
 	lists map[string]bool
+	// compact are the browser_snapshot calls whose answer is to be reduced to controls.
+	compact map[string]bool
 }
 
 // toolAdvice is added to these tools' descriptions. The page an action
@@ -125,7 +127,7 @@ type supervisor struct {
 // every agent reads it.
 var toolAdvice = map[string]string{
 	"browser_run_code_unsafe": "Each tool call costs a model turn, which takes far longer than the browser. Script a whole flow in one call: when the task names the fields and buttons (a form, a wizard with Next buttons, items to add and tick), take their names from the task, or from browser_find, and fill, click and wait in one script with getByLabel, getByRole or getByText and a short timeout on each step, such as { timeout: 3000 }, so a wrong guess fails fast. Only if it fails, look at the page (browser_find, or a snapshot of one part) and script the rest. Return just what you need to read. A send, submit or payment goes in the script only if it is already approved; otherwise stop the script before it, ask, then finish.",
-	"browser_snapshot":        "Actions don't return the page, so take a snapshot only when you need to see it. A busy app's whole page (chat, mail, docs) can run to hundreds of thousands of tokens: prefer browser_find, or pass target to snapshot one part.",
+	"browser_snapshot":        "Actions don't return the page, so take a snapshot only when you need to see it. A busy app's whole page (chat, mail, docs) can run to hundreds of thousands of tokens: prefer browser_find, pass target to snapshot one part, or pass interactive: true for just the controls and headings with their refs.",
 	"browser_tabs":            "To open or read several pages, do it in one browser_run_code_unsafe script (page.context().newPage(), goto, read what you need, return it all) rather than one call per tab. Use this tool for a single tab operation.",
 	"browser_find":            "The cheap way to learn the controls a flow needs, or to check that it worked: search for the few names you need, not for every button or textbox.",
 }
@@ -173,12 +175,37 @@ func (s *supervisor) relayOut(r io.Reader) {
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 && !s.answered(line) {
-			_, _ = s.stdout.Write(s.advised(line))
+			_, _ = s.stdout.Write(s.advised(s.compacted(line)))
 		}
 		if err != nil {
 			return
 		}
 	}
+}
+
+// compacted reduces the answer to a browser_snapshot call made with
+// interactive: true; every other line passes unchanged.
+func (s *supervisor) compacted(line []byte) []byte {
+	s.mu.Lock()
+	waiting := len(s.compact) > 0
+	s.mu.Unlock()
+	if !waiting || !bytes.Contains(line, []byte(`"result"`)) {
+		return line
+	}
+	var msg struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if json.Unmarshal(line, &msg) != nil || len(msg.ID) == 0 {
+		return line
+	}
+	s.mu.Lock()
+	wanted := s.compact[string(msg.ID)]
+	delete(s.compact, string(msg.ID))
+	s.mu.Unlock()
+	if !wanted {
+		return line
+	}
+	return compactAnswer(line)
 }
 
 func (s *supervisor) answered(line []byte) bool {
@@ -239,6 +266,9 @@ func (s *supervisor) advised(line []byte) []byte {
 			advice = description + "\n\n" + advice
 		}
 		tool["description"], _ = json.Marshal(advice)
+		if name == "browser_snapshot" {
+			tool["inputSchema"] = withInteractive(tool["inputSchema"])
+		}
 	}
 	var err error
 	if result["tools"], err = json.Marshal(tools); err != nil {
