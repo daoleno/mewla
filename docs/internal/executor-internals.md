@@ -152,19 +152,35 @@ the hub, and drives a choice with the same code as `answer_choice`.
 **What a pane-read id for a command dialog proves.** A Claude permission or Codex
 approval is answerable only when its id is exact (`classifier.PromptIdentity`: the
 displayed text of the dialog, caret and countdown excluded). The watcher captures
-it with `capture-pane -p -J -S -` and reads the pane's own `@mewla_origin` option
-in the same tmux call. Claude's dialog begins at a solid rule at the margin. Codex's
-has no such line, so a Codex id needs the origin marker as the capture's first
-line: Mewla's launch of every Worker pane prints `mewla-origin <nonce>` (concealed)
-before anything else, and tmux evicts the oldest lines first, so the marker still
-being first means nothing was evicted. How full the scrollback is proves nothing
-(tmux trims in batches). No marker (an adopted or older pane, `clear-history`,
-`ESC[3J`, a shell rc that clears the screen, alternate screen, a pane launched
-before this release) means the dialog is blocked with no id, and `worker answer`
-sends no key. Blank lines inside the request, and blanks painted before a line
-break, also refuse the dialog: the screen cannot tell them from erased cells. A
-renderer that never paints trailing blanks would show `'a '` and `'a'` alike; that
-collision is not detectable from cells.
+it with `capture-pane -p -J -S -` and reads, in the same tmux call, whether the
+pane is on its alternate screen and the pane's own `@mewla_origin` option.
+- Claude's dialog begins at a solid rule at the margin.
+- Codex 0.166.0's TUI runs on the alternate screen (measured: `alternate_on=1`, no
+  scrollback, the origin marker printed on the main screen is not in the capture).
+  There the capture is the TUI's own screen with nothing to evict, and Codex cuts a
+  long request to fit (`[… 63 lines] ^a view all`; a dialog showing that is refused,
+  because the screen never holds the whole command). Observed at 40 and 14 rows on
+  that version only.
+- On the main screen (an inline Codex) the id needs the origin marker as the
+  capture's first line: Mewla's launch of every Worker pane prints
+  `mewla-origin <nonce>` (concealed) before anything else, and tmux evicts the oldest
+  lines first. How full the scrollback is proves nothing (tmux trims in batches).
+  No marker (an adopted or older pane, `clear-history`, `ESC[3J`, a shell rc that
+  clears the screen) means blocked with no id, and `worker answer` sends no key.
+- Blanks: Codex pads its grid with blanks of arbitrary width, so blanks outside the
+  request (heading, Environment/Reason rows, separators, menu) are provider UI and
+  normalized; inside the request a blank row, or blanks painted after text that more
+  request text follows, refuse the dialog. A renderer that never paints trailing
+  blanks would show `'a '` and `'a'` alike; that collision is not detectable from
+  cells.
+
+Where the request is structured instead of drawn: a Codex that Mewla starts runs
+attached to its app-server (`codex --remote unix://…/codex-ctl-*.sock`), whose
+`item/commandExecution/requestApproval` and `item/fileChange/requestApproval`
+requests carry the exact command (`agentevents/codex`); `worker approvals` lists them
+and `worker approve` answers without keys. Delegated Codex runs with
+`--dangerously-bypass-approvals-and-sandbox`, so it does not stop at those dialogs
+at all; MCP elicitation is not carried and stays pane-only.
 
 One dialog is reported once. A permission dialog on the screen while its hook
 holds the decision is the hook's to report (`Watcher.SetApprovalHold`: the pane
