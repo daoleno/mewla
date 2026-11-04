@@ -29,6 +29,7 @@ func (a *ClaudeActivityAdapter) Match(in ActivityInput) bool {
 
 func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	pane := latestClaudePaneWindow(in.PaneContent)
+	whole := strings.ReplaceAll(in.PaneContent, "\r\n", "\n")
 	// Claude's selection prompts sit at the bottom of the pane; only the
 	// footer region proves one is open now.
 	tail := claudePromptTail(pane, 8)
@@ -47,7 +48,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "claude_pane_plan",
 			Provider: a.Name(),
 		}
-		if prompt, ok := ParseMenuPrompt(a.Name(), PromptPlan, pane); ok {
+		if prompt, ok := ParseMenuPromptIn(a.Name(), PromptPlan, pane, whole); ok {
 			prompt.Title = signal.Summary
 			signal.Prompt = &prompt
 		}
@@ -61,7 +62,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "claude_pane_blocked",
 			Provider: a.Name(),
 		}
-		if prompt, ok := ParseMenuPrompt(a.Name(), PromptPermission, pane, "Esc to cancel"); ok {
+		if prompt, ok := ParseMenuPromptIn(a.Name(), PromptPermission, pane, whole, "Esc to cancel"); ok {
 			if prompt.Title == "" {
 				prompt.Title = signal.Summary
 			}
@@ -71,7 +72,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	}
 	// Launch-time menus (trust this folder, accept a mode, pick a theme) end
 	// in "Enter to confirm" and appear before any conversation exists.
-	if prompt, ok := ParseMenuPrompt(a.Name(), PromptStartup, pane, "Enter to confirm"); ok {
+	if prompt, ok := ParseMenuPromptIn(a.Name(), PromptStartup, pane, whole, "Enter to confirm"); ok {
 		prompt.Title = "Waiting for your choice"
 		return ActivitySignal{
 			State:    StateBlocked,
