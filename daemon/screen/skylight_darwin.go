@@ -7,6 +7,7 @@ import (
 	"image"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/ebitengine/purego"
 )
@@ -55,24 +56,45 @@ func (s *macSession) BackgroundClicks() (bool, string) {
 // ClickTo clicks one window of the app with pid, by framebuffer pixel,
 // without moving the pointer or bringing the app forward.
 func (s *macSession) ClickTo(pid int, window uint32, x, y, button, count int) error {
+	return s.clickTo(pid, window, x, y, button, count, clickStyle{})
+}
+
+// clickStyle varies how a background click is posted, for the tests that
+// find what an app takes: a mouse-moved event first, and a pause between
+// the press and the release.
+type clickStyle struct {
+	moveFirst bool
+	gap       time.Duration
+}
+
+func (s *macSession) clickTo(pid int, window uint32, x, y, button, count int, style clickStyle) error {
 	post, why := skyLightPost()
 	if post == nil {
 		return errors.New(why)
 	}
 	px, py := s.input.point(image.Pt(x, y))
 	at := cgPoint{px, py}
-	for n := 1; n <= count; n++ {
-		for _, kind := range [2][3]uint32{macDownTypes, macUpTypes} {
-			event := mac.CGEventCreateMouseEvent(s.source0, kind[button], at, uint32(button))
-			if event == 0 {
-				continue
-			}
-			mac.CGEventSetIntegerValueField(event, cgMouseClickStateField, int64(n))
-			mac.CGEventSetIntegerValueField(event, cgMouseWindowUnderPointer, int64(window))
-			mac.CGEventSetIntegerValueField(event, cgMouseWindowUnderPointerThatTakes, int64(window))
-			post(int32(pid), event)
-			mac.CFRelease(event)
+	send := func(kind uint32, state int64) {
+		event := mac.CGEventCreateMouseEvent(s.source0, kind, at, uint32(button))
+		if event == 0 {
+			return
 		}
+		if state > 0 {
+			mac.CGEventSetIntegerValueField(event, cgMouseClickStateField, state)
+		}
+		mac.CGEventSetIntegerValueField(event, cgMouseWindowUnderPointer, int64(window))
+		mac.CGEventSetIntegerValueField(event, cgMouseWindowUnderPointerThatTakes, int64(window))
+		post(int32(pid), event)
+		mac.CFRelease(event)
+	}
+	if style.moveFirst {
+		send(cgEventMouseMoved, 0)
+		time.Sleep(style.gap)
+	}
+	for n := 1; n <= count; n++ {
+		send(macDownTypes[button], int64(n))
+		time.Sleep(style.gap)
+		send(macUpTypes[button], int64(n))
 	}
 	return nil
 }
