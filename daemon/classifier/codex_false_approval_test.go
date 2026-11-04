@@ -143,3 +143,31 @@ func TestCodexMenuLessApprovalPromptStillBlocks(t *testing.T) {
 		t.Fatalf("signal = %#v", signal)
 	}
 }
+
+// Codex counts its Working line up while a command waits for approval. That
+// clock must not become part of the prompt's identity, or `worker answer`
+// finds the dialog "passed" a second after Brain was told of it.
+func TestCodexApprovalIdentityIgnoresWorkingClock(t *testing.T) {
+	pane := func(command, elapsed string) string {
+		return "OpenAI Codex\n• Ran ls\n• Working (" + elapsed + " • esc to interrupt)\n\n" +
+			"  Would you like to run the following command?\n\n  $ " + command + "\n\n" +
+			"› 1. Yes, proceed (y)\n  2. No, and tell Codex what to do differently (esc)\n\n  Press enter to confirm or esc to cancel\n"
+	}
+	infer := func(command, elapsed string) *Prompt {
+		t.Helper()
+		signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: pane(command, elapsed)})
+		if signal.State != StateBlocked || signal.Prompt == nil {
+			t.Fatalf("no approval prompt: %+v", signal)
+		}
+		return signal.Prompt
+	}
+	first := infer("systemctl list-unit-files", "3s")
+	for _, elapsed := range []string{"4s", "59s", "1m 05s", "12m 3s"} {
+		if got := infer("systemctl list-unit-files", elapsed); got.ID != first.ID {
+			t.Fatalf("identity moved with the Working clock (%s): %s != %s", elapsed, got.ID, first.ID)
+		}
+	}
+	if other := infer("rm -rf /tmp/x", "3s"); other.ID == first.ID {
+		t.Fatal("a different command kept the identity")
+	}
+}

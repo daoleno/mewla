@@ -196,8 +196,9 @@ var (
 	// What ends a notice's paragraph when no blank line does: the question
 	// under it or a menu row.
 	autoNoticeEndRe = regexp.MustCompile(`(?i)^(?:do you want\b|would you like\b|esc to cancel)`)
-	// An elapsed or remaining time in brackets: "Running… (12s)", "(1m 5s)".
-	clockInBracketsRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?\s*[)\]]`)
+	// An elapsed or remaining time in brackets: "Running… (12s)", "(1m 5s)",
+	// Codex's "Working (32s • esc to interrupt)".
+	clockInBracketsRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?(?:\s*[•·][^)\]\n]*)?\s*[)\]]`)
 	// A spinner or progress glyph that leads a line and turns as time passes.
 	spinnerRunes = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✻✶✳✢✽·◐◓◑◒"
 )
