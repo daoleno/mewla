@@ -149,6 +149,23 @@ changed without sending a key, resolves a hook-held permission request through
 the hub, and drives a choice with the same code as `answer_choice`.
 `worker send` refuses with `prompt_open` while a prompt is open.
 
+**What a pane-read id for a command dialog proves.** A Claude permission or Codex
+approval is answerable only when its id is exact (`classifier.PromptIdentity`: the
+displayed text of the dialog, caret and countdown excluded). The watcher captures
+it with `capture-pane -p -J -S -` and reads the pane's own `@mewla_origin` option
+in the same tmux call. Claude's dialog begins at a solid rule at the margin. Codex's
+has no such line, so a Codex id needs the origin marker as the capture's first
+line: Mewla's launch of every Worker pane prints `mewla-origin <nonce>` (concealed)
+before anything else, and tmux evicts the oldest lines first, so the marker still
+being first means nothing was evicted. How full the scrollback is proves nothing
+(tmux trims in batches). No marker (an adopted or older pane, `clear-history`,
+`ESC[3J`, a shell rc that clears the screen, alternate screen, a pane launched
+before this release) means the dialog is blocked with no id, and `worker answer`
+sends no key. Blank lines inside the request, and blanks painted before a line
+break, also refuse the dialog: the screen cannot tell them from erased cells. A
+renderer that never paints trailing blanks would show `'a '` and `'a'` alike; that
+collision is not detectable from cells.
+
 One dialog is reported once. A permission dialog on the screen while its hook
 holds the decision is the hook's to report (`Watcher.SetApprovalHold`: the pane
 gate files nothing); if the pane gate filed first, the hook skips its own event
