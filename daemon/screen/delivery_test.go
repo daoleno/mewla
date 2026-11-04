@@ -130,3 +130,26 @@ func TestSettingTheSameValueReadsOnce(t *testing.T) {
 		t.Fatalf("%d reads: %s", backend.Reads-reads, got)
 	}
 }
+
+func TestAFieldThatConfirmsSaysItMayNotBeTakenYet(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = []FakeApp{{App: App{Name: "Finder", PID: 601, Active: true}, Elements: []Element{
+		{Role: "AXWindow", Title: "Folder", Enabled: true},
+		{Depth: 1, Role: "AXTextField", Value: "old.txt", Enabled: true, Actions: []string{"AXConfirm"}},
+		{Depth: 1, Role: "AXTextField", Title: "Plain", Value: "x", Enabled: true},
+	}}}
+	state := act(t, s, "%7", AgentAction{Action: "app_state", App: "Finder"}).Text
+	name, plain := idOf(t, state, `TextField = "old.txt"`), idOf(t, state, `TextField "Plain"`)
+	got := act(t, s, "%7", AgentAction{Action: "element", Element: name, ElementAction: "set_value", Text: "new.txt"}).Text
+	if !strings.Contains(got, "verified, it holds it") || !strings.Contains(got, "key Return") {
+		t.Fatalf("a field that confirms: %s", got)
+	}
+	got = act(t, s, "%7", AgentAction{Action: "element", Element: plain, ElementAction: "set_value", Text: "y"}).Text
+	if strings.Contains(got, "key Return") {
+		t.Fatalf("a plain field should not get the hint: %s", got)
+	}
+	got = act(t, s, "%7", AgentAction{Action: "element", Element: name, ElementAction: "confirm"}).Text
+	if !strings.Contains(got, "send the Return key") {
+		t.Fatalf("confirm: %s", got)
+	}
+}

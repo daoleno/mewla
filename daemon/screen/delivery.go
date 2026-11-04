@@ -2,6 +2,7 @@ package screen
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -62,6 +63,11 @@ func (in elementIntent) delivery(after *Element) string {
 			return "Delivery: sent, not verified; read it before repeating."
 		}
 		if strings.TrimSpace(after.Value) == strings.TrimSpace(oneLine(in.wantValue)) || strings.TrimSpace(after.Value) == strings.TrimSpace(in.wantValue) {
+			if slices.Contains(after.Actions, "AXConfirm") || slices.Contains(after.Actions, "Confirm") {
+				// A field that confirms (a file name in Finder, a search box) holds the
+				// text before the app has taken it.
+				return "Delivery: verified, it holds it; the app may not have taken it yet (a name or a search takes effect on Return): key Return with the app, then read the app again."
+			}
 			return "Delivery: verified, it holds it."
 		}
 		if strings.HasPrefix(after.Value, strings.TrimSpace(in.wantValue)) || len(in.wantValue) > elementText {
@@ -79,6 +85,9 @@ func (in elementIntent) delivery(after *Element) string {
 			return fmt.Sprintf("Delivery: sent, but it is still %s; the app may have refused it.", map[bool]string{true: "checked", false: "unchecked"}[checked])
 		}
 		return "Delivery: sent, not verified."
+	}
+	if in.asked == "confirm" {
+		return "Delivery: sent, not verified. If nothing changed below, the app took no commit from this: send the Return key to the app (key, with app) and read again."
 	}
 	return "Delivery: sent, not verified; read what changed before repeating it."
 }
