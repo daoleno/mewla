@@ -14,6 +14,7 @@ import {
   type OutsideAgents,
   type PendingAgent,
 } from "../../services/outsideAgents";
+import { DateStyle, formatDate } from "../../services/dateFormat";
 import { useCurrentServer } from "../../store/currentServer";
 
 const POLL_MS = 3_000;
@@ -115,7 +116,7 @@ export function OutsideAgentsSettings() {
               <ListRow
                 key={agent.id}
                 title={agent.name}
-                subtitle={agent.last_used_at ? `Used ${new Date(agent.last_used_at).toLocaleString()}` : "Not used yet"}
+                subtitle={agent.last_used_at ? `Used ${formatDate(agent.last_used_at, DateStyle.fullDateTime)}` : "Not used yet"}
                 icon="brain"
                 trailing={
                   <Button label="Revoke" size="sm" variant="destructive" disabled={busy !== null} onPress={() => revoke(agent)} />
