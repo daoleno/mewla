@@ -91,7 +91,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 // window of the pane: it sits inside an open dialog, and the request above it
 // would be cut away.
 func withoutAutoDenyMention(content string) string {
-	if !autoDenyLineRe.MatchString(content) {
+	if !autoDenyLineRe.MatchString(content) && !wrappedAutoDenyRe.MatchString(content) {
 		return content
 	}
 	// A narrow pane can wrap the notice between "Claude Code" and the words

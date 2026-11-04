@@ -184,10 +184,14 @@ func menuRequest(lines []string, menuStart int) (title, request string) {
 
 var (
 	// A dialog Claude will refuse by itself says so, with a clock that ticks:
-	// "Claude Code will automatically deny this request in about 28 seconds".
-	autoDenyLineRe = regexp.MustCompile(`(?i)auto(?:matically)?[ -]?(?:deny|denied|denies|reject|dismiss|cancel)`)
+	// "Claude Code will automatically deny this request in about 28 seconds",
+	// "... automatically block this request in 2:00, to avoid holding up an
+	// unattended session". The verb has varied between releases, so the notice
+	// is recognized by its shape ("will automatically <verb> this request")
+	// as well as by the verbs seen so far.
+	autoDenyLineRe = regexp.MustCompile(`(?i)(?:\bwill\s+auto(?:matically)?[ -]?\w+\s+(?:this|the)\s+request\b|auto(?:matically)?[ -]?(?:deny|denied|denies|block|blocked|blocks|reject|dismiss|cancel|decline|refuse))`)
 	// "Claude Code" followed, across any wrap, by the words of the notice.
-	wrappedAutoDenyRe = regexp.MustCompile(`(?i)claude\s+code(\s+will\s+auto(?:matically)?[ -]?(?:deny|denied|denies|reject|dismiss|cancel))`)
+	wrappedAutoDenyRe = regexp.MustCompile(`(?i)claude\s+code(\s+will\s+auto(?:matically)?[\s-]*\w+)`)
 	// An elapsed or remaining time in brackets: "Running… (12s)", "(1m 5s)".
 	clockInBracketsRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?\s*[)\]]`)
 	// A spinner or progress glyph that leads a line and turns as time passes.
