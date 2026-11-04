@@ -1,0 +1,24 @@
+ 
+                            
+› Run exactly this one shell command, nothing else, then reply with the single
+  word done: echo hello > scratch.txt
+                                                               
+ 
+• Running echo hello > scratch.txt                            
+                                              
+                                                   
+  Would you like to run the following command?          
+                                              
+  Environment: local
+ 
+  Reason: Allow the requested command to write scratch.txt?                   
+                                     
+  $ echo hello > scratch.txt
+ 
+                                 
+› 1. Yes, proceed (y)                                                           
+  2. Yes, and don't ask again for commands that start with `echo hello >      
+     scratch.txt` (p)                
+  3. No, and tell Codex what to do differently (esc)
+                                                                                
+  Press enter to confirm or esc to cancel                                       

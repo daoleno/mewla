@@ -50,7 +50,7 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		// An answerable id needs the dialog's first lines to be provably in
 		// the capture: the pane's origin marker above its heading says so.
 		if in.Capture != nil && in.Capture.Exact {
-			if prompt, ok := ParseCodexApprovalPrompt(whole, in.Capture.Origin); ok {
+			if prompt, ok := ParseCodexApprovalPrompt(whole, *in.Capture); ok {
 				prompt.Title = signal.Summary
 				signal.Prompt = &prompt
 			}

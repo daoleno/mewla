@@ -48,6 +48,11 @@ type CaptureInfo struct {
 	// about this (tmux trims in batches, so a pane below its limit may have
 	// lost lines).
 	Origin string
+	// Alternate: the pane was on its alternate screen, so the capture is the
+	// terminal program's own screen and there is no scrollback behind it to
+	// evict. (Measured: Codex 0.166.0's TUI runs there, and its marker, printed
+	// on the main screen, is not in the capture at all.)
+	Alternate bool
 }
 
 // OriginMarkerLine is the line a Worker pane prints as its first output; the

@@ -1,0 +1,40 @@
+ 
+  Would you like to run the following command?
+                                       
+  Environment: local
+ 
+  Reason: Do you want to allow the requested heredoc command to create scratch2.txt?       
+ 
+  $ cat > scratch2.txt <<'EOF'
+  line 01                                                 
+  line 02
+  line 03                                   
+  line 04                                                                        
+  line 05                                                                                 
+  line 06                                                                                   
+  line 07                                                                                    
+  line 08                                                                                     
+  line 09                                                                                                                                                     
+  line 10                                                                                      
+  line 11                                                                                       
+  line 12                                                                                       
+  line 13                                                                                        
+  line 14                                                                                       
+  line 15                                                                                       
+  line 16                                                                                      
+  line 17                                                                                    
+  line 18                                                                                 
+  line 19                                                                                
+  line 20                                                                              
+  line 21           
+  line 22
+  line 23                                                                 
+  line 24
+  line 25                        
+  line 26                                                         
+  line 27
+  line 28                                                                                                                                                       
+  [… 63 lines] ^a view all                                                                                                                                    
+› 1. Yes, proceed (y)                                                                                                                                           
+  2. No, and tell Codex what to do differently (esc)                                       
+  Press enter to confirm or esc to cancel                                                                                                                       

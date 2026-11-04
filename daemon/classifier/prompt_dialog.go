@@ -35,33 +35,42 @@ import (
 //     contain one, and a clipped capture can begin at it. How full the pane's
 //     scrollback is proves nothing either: tmux trims history in batches, so a
 //     pane below its limit can have lost lines (measured: limit 20, 30 lines
-//     printed, 19 held, first line gone). Two things do prove it. Claude's
-//     dialog box begins at a rule line at the margin, which a command's own
-//     lines (drawn indented) do not produce. Codex's dialog has no such line,
-//     so a Codex id needs the pane's origin marker (CaptureInfo.Origin) as the
-//     capture's first line: tmux evicts from the top, so the pane's first
-//     output still being the first line means nothing was evicted. A copy of
-//     the marker elsewhere (in a command) is not looked at; forging it would
-//     take the pane's private nonce and an eviction that leaves that copy as
-//     the first line.
-//   - Blank lines inside the request cannot be counted exactly either: whether
-//     a renderer paints a blank line's cells or leaves them default, an empty
-//     line and a line of spaces look alike. Inside the request (after the
-//     command's first line, up to its last non-blank line) any blank line
-//     refuses the dialog; the provider's own separators are outside that
-//     region by position.
+//     printed, 19 held, first line gone). What does prove it:
+//     Claude: the box begins at a solid rule line at the margin, which a
+//     command's own lines (drawn indented) do not produce.
+//     Codex on its alternate screen (CaptureInfo.Alternate): the capture is the
+//     TUI's own screen, with no scrollback behind it to evict, and Codex cuts a
+//     long request to fit ("[… 63 lines] ^a view all", refused here) instead of
+//     scrolling its head away. Measured on Codex 0.166.0 at 40 and 14 rows;
+//     other versions are not covered by that observation.
+//     Codex on the main screen (inline mode): the pane's origin marker
+//     (CaptureInfo.Origin) as the capture's first line; tmux evicts from the
+//     top, so the pane's first output still being first means nothing was
+//     evicted. A copy of the marker elsewhere is not looked at.
+//   - Blanks. Codex pads its grid (measured: the heading, menu rows and blank
+//     rows carry painted trailing blanks of arbitrary width), so blanks outside
+//     the request are provider UI and normalized, and two commands that differ
+//     only in blanks the renderer pads share an id when they differ nowhere
+//     else. Inside the request (Codex: from the "$ " line, or for a dialog
+//     without one the body after the heading, to the last non-blank line;
+//     Claude: the run of box lines indented three or more spaces) a blank row,
+//     or blanks painted after text that more request text follows, refuse the
+//     dialog: cells cannot say whether they were written or left by an earlier
+//     frame. Claude's layout has not been measured on the real client, so for
+//     Claude trailing blanks are held against the whole dialog.
 //   - A capture not taken with -J (CaptureInfo.Exact) never yields an id.
 //
 // Whenever one of these cannot be established the dialog is still reported as
 // blocked, with no prompt and so no id to answer.
 //
 //	provider  dialog starts at                       answerable id only when
-//	claude    the solid rule line above the box       Exact capture, rule found, request has no blank line or trailing blanks
-//	codex     the topmost heading below the marker    Exact capture, origin marker above the heading, request has no blank line or trailing blanks
+//	claude    the solid rule line above the box       Exact capture, rule found, request has no blank row or painted trailing blanks
+//	codex     the topmost heading sentence            Exact capture that is the alternate screen or starts at the origin marker, heading found, no truncation marker, request has no blank row or painted trailing blanks
 //
 // Known collision, not detectable from cells: a renderer that never paints
-// trailing blanks shows 'alpha ' and 'alpha' alike, so those two commands share
-// an id. Only blanks that are painted can be refused.
+// trailing blanks shows 'a ' and 'a' alike, so those two commands share an id;
+// and the part of a request Codex cut from the screen is not in the id (hence
+// the refusal).
 //
 // The presentation (Request, Title) is cut and tidied separately; it never
 // feeds the id.
@@ -159,16 +168,30 @@ func blankInsideRequest(dialog []string, from, to int) bool {
 }
 
 // codexRequestRegion is where Codex's request lies: from the line its command
-// starts on to the last non-blank line. ok is false for a dialog with no
-// command line (a trust or MCP question), which has no region to check.
+// starts on (`$ `) to the last non-blank line; for a dialog with no command
+// line (a network or MCP question) from the first non-blank line after the
+// heading, so the heading and the blank row after it stay provider UI.
 func codexRequestRegion(dialog []string) (from, to int, ok bool) {
+	last := lastNonBlank(dialog)
+	if last < 0 {
+		return 0, 0, false
+	}
 	for index, line := range dialog {
 		if codexCommandLineRe.MatchString(line) {
-			return index, lastNonBlank(dialog) + 1, true
+			return index, last + 1, true
+		}
+	}
+	for index := 1; index <= last; index++ {
+		if !isBlank(dialog[index]) {
+			return index, last + 1, true
 		}
 	}
 	return 0, 0, false
 }
+
+// codexTruncatedRe is Codex cutting a long request to fit the screen:
+// "[… 63 lines] ^a view all". The screen then never holds the whole request.
+var codexTruncatedRe = regexp.MustCompile(`\[(?:…|\.{2,3})\s*\d+ lines?\]|\bview all\b`)
 
 // claudeRequestRegion is where Claude's request lies: the run of lines drawn
 // indented three or more spaces (the box content) that starts at the first of
@@ -198,11 +221,12 @@ func claudeRequestRegion(dialog []string) (from, to int, ok bool) {
 	return from, to, true
 }
 
-// interiorTrailingBlanks reports whether a line followed by more text in the
-// dialog ends in blanks (see the identity notes above).
-func interiorTrailingBlanks(dialog []string) bool {
-	last := lastNonBlank(dialog)
-	for index := 0; index < last; index++ {
+// interiorTrailingBlanks reports whether a non-blank line in dialog[from:to]
+// that is followed by more request text ends in blanks (see the identity notes
+// above).
+func interiorTrailingBlanks(dialog []string, from, to int) bool {
+	last := lastNonBlank(dialog[:to])
+	for index := from; index < last; index++ {
 		line := strings.TrimSuffix(dialog[index], "\r")
 		if !isBlank(line) && strings.TrimRight(line, " \t") != line {
 			return true
@@ -214,15 +238,29 @@ func interiorTrailingBlanks(dialog []string) bool {
 // dialogPrompt builds the prompt of the dialog lines, whose menu follows. ok is
 // false when the displayed text cannot support an exact identity.
 func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, options []PromptOption) (Prompt, bool) {
-	if interiorTrailingBlanks(dialog) {
-		return Prompt{}, false
-	}
 	var from, to int
 	var region bool
 	if provider == "claude" {
 		from, to, region = claudeRequestRegion(dialog)
+		// Claude's layout has not been measured on the real client: blanks
+		// anywhere in the dialog are held against it.
+		if interiorTrailingBlanks(dialog, 0, len(dialog)) {
+			return Prompt{}, false
+		}
 	} else {
+		// Codex draws on a cell grid that it pads (measured on 0.166.0: the
+		// heading, menu rows and separators all carry painted trailing blanks
+		// of arbitrary width), so blanks outside the request are provider UI
+		// and normalized; inside it they are held against the dialog.
 		from, to, region = codexRequestRegion(dialog)
+		for _, line := range dialog {
+			if codexTruncatedRe.MatchString(line) {
+				return Prompt{}, false
+			}
+		}
+		if region && interiorTrailingBlanks(dialog, from, to) {
+			return Prompt{}, false
+		}
 	}
 	if region && blankInsideRequest(dialog, from, to) {
 		return Prompt{}, false
@@ -293,30 +331,35 @@ func CodexApprovalDialogOpen(pane string) bool {
 }
 
 // ParseCodexApprovalPrompt reads the approval or trust dialog open at the
-// bottom of a Codex pane and identifies it. origin is the pane's marker line
-// (CaptureInfo.Origin): the dialog starts at the topmost heading sentence
-// below it, which proves the capture still holds every line from the marker
-// on. A heading-like line inside the command sits below the real heading, so
-// it can only lengthen what is hashed. ok is false unless the capture's first
-// line is the marker, so no id comes of a capture that may have lost the
-// dialog's start.
-func ParseCodexApprovalPrompt(pane, origin string) (Prompt, bool) {
-	origin = strings.TrimRight(origin, " \t\r")
-	if origin == "" {
-		return Prompt{}, false
-	}
+// bottom of a Codex pane and identifies it. The dialog starts at the topmost
+// heading sentence, and the capture has to prove that sentence is the real
+// start (a heading-like line inside a command would otherwise do):
+//   - on the alternate screen (capture.Alternate) the capture is the TUI's own
+//     screen with no scrollback to evict, and the TUI cuts a long request to fit
+//     (codexTruncatedRe) instead of scrolling its head away (observed on Codex
+//     0.166.0 at 40 and 14 rows);
+//   - on the main screen the pane's origin marker has to be the capture's first
+//     line, and the heading is searched below it.
+//
+// ok is false when neither holds, so no id comes of a capture that may have
+// lost the dialog's start.
+func ParseCodexApprovalPrompt(pane string, capture CaptureInfo) (Prompt, bool) {
 	body, options, menuStart, ok := locateCodexMenu(pane)
 	if !ok {
 		return Prompt{}, false
 	}
-	// The marker is the pane's first output, so in a capture that still holds
-	// everything it is the first line. A copy anywhere else (say inside a
-	// command) proves nothing and is not looked for.
-	marker := 0
-	if len(body) == 0 || strings.TrimRight(body[0], " \t\r") != origin || marker >= menuStart {
-		return Prompt{}, false
+	from := 0
+	if !capture.Alternate {
+		origin := strings.TrimRight(capture.Origin, " \t\r")
+		// The marker is the pane's first output, so in a capture that still
+		// holds everything it is the first line. A copy anywhere else (say
+		// inside a command) proves nothing and is not looked for.
+		if origin == "" || len(body) == 0 || strings.TrimRight(body[0], " \t\r") != origin || menuStart <= 0 {
+			return Prompt{}, false
+		}
+		from = 1
 	}
-	start := topmostCodexHeading(body, marker+1, menuStart)
+	start := topmostCodexHeading(body, from, menuStart)
 	if start < 0 {
 		return Prompt{}, false
 	}

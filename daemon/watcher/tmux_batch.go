@@ -97,14 +97,14 @@ const originOption = "@mewla_origin"
 // capturePaneDialog captures a pane for identifying a dialog that asks to run
 // something: the whole scrollback (-S -), with the spaces a program wrote at
 // the end of a line kept and terminal-wrapped lines joined (-J). In the same
-// tmux invocation it reads the pane's own origin nonce, so the capture says
-// which marker line, if it still holds that line, proves it starts no later
-// than the pane's first output. How full the scrollback is proves nothing
+// tmux invocation it reads whether the pane is on its alternate screen and the
+// pane's own origin nonce, so the capture says which marker line, if it still
+// holds that line, proves it starts no later than the pane's first output. How full the scrollback is proves nothing
 // (tmux trims in batches), so it is not read.
 func capturePaneDialog(socket, target string) (string, classifier.CaptureInfo, error) {
 	out, err := tmuxCommand(socket,
 		"capture-pane", "-t", target, "-p", "-J", "-S", "-", ";",
-		"display-message", "-p", "-t", target, paneStateMarker, ";",
+		"display-message", "-p", "-t", target, paneStateMarker+"#{alternate_on}", ";",
 		"show-options", "-pqv", "-t", target, originOption,
 	).Output()
 	if err != nil {
@@ -116,8 +116,12 @@ func capturePaneDialog(socket, target string) (string, classifier.CaptureInfo, e
 		return "", classifier.CaptureInfo{}, fmt.Errorf("tmux returned no pane state")
 	}
 	info := classifier.CaptureInfo{Exact: true}
-	if nonce := strings.TrimSpace(text[cut+len(paneStateMarker):]); nonce != "" {
-		info.Origin = classifier.OriginMarkerLine(nonce)
+	state := strings.Fields(text[cut+len(paneStateMarker):])
+	if len(state) > 0 {
+		info.Alternate = state[0] == "1"
+	}
+	if len(state) > 1 {
+		info.Origin = classifier.OriginMarkerLine(state[1])
 	}
 	return text[:cut], info, nil
 }

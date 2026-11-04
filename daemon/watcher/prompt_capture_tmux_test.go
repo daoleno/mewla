@@ -353,3 +353,37 @@ func TestRealTmuxCreateSessionPrintsTheOriginMarkerFirst(t *testing.T) {
 		t.Fatalf("the Worker printed before the marker:\n%q", text)
 	}
 }
+
+// Real Codex draws on the alternate screen: tmux keeps no scrollback behind it
+// (nothing to evict, whatever the limit), the marker printed on the main
+// screen is not in the capture, and the capture is the TUI's own screen. The
+// real captures of Codex 0.166.0 taken from that screen identify there.
+func TestRealTmuxAlternateScreenCaptureIdentifiesARealCodexDialog(t *testing.T) {
+	raw, err := os.ReadFile("../classifier/testdata/codex-0.166.0/exec-approval-160x40.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame := "\x1b[?1049h\x1b[H" + strings.TrimRight(string(raw), "\n") + "\nMEWLA-END\n"
+	// A tiny scrollback limit would have evicted the marker on the main screen.
+	socket, target := launchedPaneSized(t, "4", "160", "40", true, frame)
+	text, info, err := capturePaneDialog(socket, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Alternate || startsAtOrigin(text, info) {
+		t.Fatalf("expected the alternate screen without the marker: %+v / %q", info, strings.SplitN(text, "\n", 2)[0])
+	}
+	text = strings.Replace(text, "MEWLA-END", "", 1)
+	signal := classifier.NewCodexActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "codex"}, Capture: &info, PaneContent: text})
+	if signal.Prompt == nil || !strings.Contains(signal.Prompt.Request, "echo hello > scratch.txt") {
+		t.Fatalf("a real Codex dialog on the alternate screen has no id: %+v", signal)
+	}
+	// The same bytes on the main screen, with the marker evicted, are refused.
+	socket, target = launchedPaneSized(t, "4", "160", "24", true, strings.TrimRight(string(raw), "\n")+"\nMEWLA-END\n")
+	text, info, _ = capturePaneDialog(socket, target)
+	text = strings.Replace(text, "MEWLA-END", "", 1)
+	signal = classifier.NewCodexActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "codex"}, Capture: &info, PaneContent: text})
+	if info.Alternate || signal.Prompt != nil {
+		t.Fatalf("main screen with an evicted marker: %+v / %+v", info, signal.Prompt)
+	}
+}
