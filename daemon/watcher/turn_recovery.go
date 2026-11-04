@@ -376,6 +376,14 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 	}
 	supervisor := w.turnRecovery()
 	for _, item := range results {
+		// A prompt the provider took its turn over without admitting (a keystroke
+		// sent into a prompt never becomes a user prompt, or a follow-up whose
+		// progress signal never carried its identity) holds the Work's active-Attempt fence:
+		// every later send or resume fails with "Work already has an active
+		// Attempt". It is released as delivery-unknown as soon as it is proven
+		// stale, whether or not the Worker looks stalled and whether or not a
+		// recovery record exists for it.
+		w.releaseStaleAdmissions(item.id, staleAdmissionIDs(item))
 		stall, stalled := stalledDelegatedTurn(item)
 		supervisor.mu.Lock()
 		key := item.id + "\x00" + stall.turnID + "\x00" + item.provider.ID
@@ -406,13 +414,6 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 		if !stalled || busy || (throttled && item.now.Before(due)) {
 			continue
 		}
-		// A prompt the provider took its turn over without admitting (a
-		// keystroke sent into a prompt never becomes a user prompt) holds the
-		// Work's active-Attempt fence: every later send or resume fails with
-		// "Work already has an active Attempt". It is released as
-		// delivery-unknown as soon as it is proven stale, whether or not a
-		// recovery record exists for it.
-		w.releaseStaleAdmissions(item.id, stall.stale)
 		if stall.pendingFresh {
 			// An in-flight admission still owns the next prompt.
 			supervisor.recheck(item.id, key, item.now.Add(turnRecoveryRecheck))
@@ -479,7 +480,6 @@ type delegatedStall struct {
 	deadline     time.Time
 	settledAt    time.Time
 	pendingFresh bool
-	stale        []string
 	// stopped marks a live turn whose provider ended without an error and
 	// whose pane is idle at its prompt: the Worker has nothing left running.
 	stopped bool
@@ -518,7 +518,6 @@ func stalledDelegatedTurn(item probedPollWorker) (delegatedStall, bool) {
 	var newestStale *InputAdmission
 	for index, pending := range item.pending {
 		if staleSignalAdmission(pending, provider, item.now) {
-			stall.stale = append(stall.stale, pending.ProposedTurnID)
 			if newestStale == nil || pending.AcceptedAt.After(newestStale.AcceptedAt) {
 				newestStale = &item.pending[index]
 			}
@@ -550,12 +549,30 @@ const signalAdmissionStaleAfter = 45 * time.Second
 
 // staleSignalAdmission reports a prepared delegated prompt that the provider
 // already took its turn over: its Activity settled after the preparation and
-// has stayed idle since. Its delivery is unknown, not failed.
+// has stayed idle since. Its delivery is unknown, not failed. A Brain-host
+// delivery is owned by its handling claim and is never stale here; a Purpose
+// (a review follow-up) does not exempt it, or the Work stays fenced for good.
 func staleSignalAdmission(pending InputAdmission, provider ProviderActivityObservation, now time.Time) bool {
 	return pending.State == InputAdmissionPending && pending.SignalProtocol && pending.ClaimToken == "" &&
-		pending.Purpose == "" && provider.ProbeState == ProbeStateOK && providerActivityTerminal(provider.Status) &&
+		provider.ProbeState == ProbeStateOK && providerActivityTerminal(provider.Status) &&
 		!provider.SettledAt.IsZero() && provider.SettledAt.After(pending.AcceptedAt) &&
 		now.Sub(provider.SettledAt) >= signalAdmissionStaleAfter
+}
+
+// staleAdmissionIDs lists the Session's prepared prompts proven stale. It needs
+// only a live delegated Session and its provider's idle evidence: neither the
+// Worker's turn nor its attention decides whether a fence is released.
+func staleAdmissionIDs(item probedPollWorker) []string {
+	if item.turnErr != nil || !item.alive || !item.workerSnap.Delegated || item.workerSnap.Hidden {
+		return nil
+	}
+	stale := []string{}
+	for _, pending := range item.pending {
+		if staleSignalAdmission(pending, item.provider, item.now) {
+			stale = append(stale, pending.ProposedTurnID)
+		}
+	}
+	return stale
 }
 
 // releaseStaleAdmissions closes prepared prompt admissions the provider took
