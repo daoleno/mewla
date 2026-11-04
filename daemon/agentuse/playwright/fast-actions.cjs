@@ -30,6 +30,10 @@ function firstFrame() {
 }
 
 module.exports.default = async function fastActions({ page }) {
+  // A script's guess that is wrong (a heading the page doesn't have) fails in
+  // five seconds, as the tools' own actions do, not after Playwright's 30.
+  page.setDefaultTimeout(5000);
+  page.setDefaultNavigationTimeout(60000);
   const proto = Object.getPrototypeOf(page.locator('html'));
   if (proto.__mewlaFastActions) return;
   proto.__mewlaFastActions = true;
