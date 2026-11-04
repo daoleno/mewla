@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ func (s *Server) handleAnswerChoice(conn *websocket.Conn, raw clientMessage) {
 	answers, err := s.answerChoice(resolved.targetID, request, load)
 	if err != nil {
 		code, message := "answer_choice_failed", err.Error()
+		log.Printf("answer_choice %s call=%s: %v", resolved.targetID, request.CallID, err)
 		if errors.Is(err, watcher.ErrClaudeChoiceGone) {
 			code, message = "answer_choice_gone", "This question has already passed."
 		} else if errors.Is(err, watcher.ErrClaudeChoiceRefused) {

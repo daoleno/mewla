@@ -1,0 +1,20 @@
+│ you want to log in?
+
+❯ 1. I scan the QR
+     You open http://100.64.178.51:36080 over
+     Freeride's Tailscale and scan the QR with the
+     secondary account's phone. ~1 minute.
+  2. Phone use scans it
+     I have Phone use scan the QR from your
+     phone's 分身 WeChat — only if that 分身 IS
+     the secondary account. Confirm that and I'll
+     do it.
+  3. Hold login for now
+     Don't log in yet; keep WOC idle until you
+     decide.
+  4. Type something.
+──────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc
+to cancel

@@ -576,7 +576,17 @@ func (w *Watcher) CurrentPrompt(sessionID string) (*classifier.Prompt, error) {
 	if !known {
 		return nil, refusePrompt("target provider could not be proven")
 	}
-	return w.currentPrompt(&tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}, sessionID)
+	pane := &tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
+	prompt, err := w.currentPrompt(pane, sessionID)
+	if prompt != nil || err != nil {
+		return prompt, err
+	}
+	// A choice prompt taller than the pane is open but unreadable: say so
+	// rather than report that it has passed.
+	if content, captureErr := pane.capture(); captureErr == nil && parseClaudeChoiceScreen(content).Kind == claudeChoiceScreenClipped {
+		return nil, refusePrompt(claudeChoiceClippedReason)
+	}
+	return nil, nil
 }
 
 func (w *Watcher) currentPrompt(pane claudeChoicePane, sessionID string) (*classifier.Prompt, error) {
