@@ -1,0 +1,36 @@
+// Which per-tab CDP setting keeps a background tab's frames flowing? Raw CDP, own Chrome.
+const ver = await (await fetch('http://127.0.0.1:9333/json/version')).json();
+const ws = new WebSocket(ver.webSocketDebuggerUrl);
+await new Promise(r => ws.addEventListener('open', r));
+let id = 0; const pending = new Map();
+ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
+const send = (method, params = {}, sessionId) => new Promise(res => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params, sessionId })); });
+const FRAMES = `new Promise(r=>{let n=0;const s=performance.now();const f=()=>{n++;requestAnimationFrame(f)};requestAnimationFrame(f);setTimeout(()=>r(n),1500)})`;
+const frames = async sid => (await send('Runtime.evaluate', { expression: FRAMES, awaitPromise: true }, sid)).result?.result?.value;
+// a front tab so the next one is certainly in the background of the same window
+const { result: { targetId: front } } = await send('Target.createTarget', { url: 'http://127.0.0.1:8765/form' });
+await send('Target.activateTarget', { targetId: front });
+await new Promise(r => setTimeout(r, 500));
+const { result: { targetId } } = await send('Target.createTarget', { url: 'http://127.0.0.1:8765/table', background: true });
+const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });
+await new Promise(r => setTimeout(r, 800));
+const out = {};
+out.baseline_background = await frames(sessionId);
+await send('Page.enable', {}, sessionId);
+out.page_enable = await frames(sessionId);
+await send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId);
+out.focus_emulation = await frames(sessionId);
+const lc = await send('Page.setWebLifecycleState', { state: 'active' }, sessionId);
+out.lifecycle_active = (lc.error ? 'ERR ' + lc.error.message.slice(0, 40) + ' ' : '') + await frames(sessionId);
+await send('Emulation.setAutomationOverride', { enabled: true }, sessionId).catch(() => {});
+const sc = await send('Page.startScreencast', { format: 'jpeg', quality: 10, everyNthFrame: 1 }, sessionId);
+let shots = 0; ws.addEventListener('message', e => { const m = JSON.parse(e.data); if (m.method === 'Page.screencastFrame') { shots++; send('Page.screencastFrameAck', { sessionId: m.params.sessionId }, sessionId); } });
+out.screencast = (sc.error ? 'ERR ' + sc.error.message.slice(0, 40) + ' ' : '') + await frames(sessionId) + ' (screencast frames delivered ' + shots + ')';
+await send('Page.stopScreencast', {}, sessionId);
+const bf = await send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: 100000 }, sessionId);
+out.virtual_time = bf.error ? 'ERR ' + bf.error.message.slice(0, 50) : 'accepted (not measured)';
+await send('Emulation.setVirtualTimePolicy', { policy: 'pause' }, sessionId).catch(() => {});
+await send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: 0 }, sessionId).catch(() => {});
+console.log(JSON.stringify(out, null, 1));
+await send('Target.closeTarget', { targetId }); await send('Target.closeTarget', { targetId: front });
+ws.close();
