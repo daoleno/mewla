@@ -99,18 +99,25 @@ func TestPromptIdentityIgnoresCountdownsAndClocks(t *testing.T) {
 	}
 }
 
-func TestStableTextDropsSpinnersAndBracketedClocks(t *testing.T) {
+// Only a menu row's own trailing clock is provider UI. A clock anywhere else
+// may be part of a command being approved, and a spinner glyph or a bullet at
+// a line's start is text.
+func TestStableLabelDropsOnlyTheTrailingClock(t *testing.T) {
 	for in, want := range map[string]string{
-		"✻ Running tests… (12s)":               "Running tests…",
-		"⠹ Waiting\n· Reading (1m 5s)":         "Waiting\nReading",
-		"Yes (28s)":                            "Yes",
-		"Working (32s • esc to interrupt)":     "Working",
-		"• Working (1m 5s · esc to interrupt)": "• Working",
-		"sleep 30 && echo done":                "sleep 30 && echo done",
-		"Keep the (2) copies":                  "Keep the (2) copies",
+		"Yes (28s)":                        "Yes",
+		"Yes (1m 5s)":                      "Yes",
+		"Yes [3s]":                         "Yes",
+		"Yes, and don't ask again (p)":     "Yes, and don't ask again (p)",
+		"Run printf '(1s)' (p)":            "Run printf '(1s)' (p)",
+		"Run printf '(1s • alpha)'":        "Run printf '(1s • alpha)'",
+		"Yes (1s) then (2s)":               "Yes (1s) then",
+		"· Reading (1m 5s) more":           "· Reading (1m 5s) more",
+		"sleep 30 && echo done":            "sleep 30 && echo done",
+		"Keep the (2) copies":              "Keep the (2) copies",
+		"✻ Running tests… (12s) and (13s)": "✻ Running tests… (12s) and",
 	} {
-		if got := stableText(in); got != want {
-			t.Errorf("stableText(%q) = %q, want %q", in, got, want)
+		if got := stableLabel(in); got != want {
+			t.Errorf("stableLabel(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

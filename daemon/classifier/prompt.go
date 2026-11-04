@@ -145,12 +145,14 @@ func collapse(text string) string { return strings.Join(strings.Fields(text), " 
 // menuRequest reads the heading and body above a menu: back to the previous
 // rule line, box edges stripped. The line that asks ("Do you want to
 // proceed?") is the question; the lines above it are the request.
-func menuRequest(lines []string, menuStart int) (title, request string) {
+func menuRequest(lines []string, menuStart int) (title, request, full string, meta menuMeta) {
 	var body []string
-	for index := menuStart - 1; index >= 0 && len(body) < 40; index-- {
+	index := menuStart - 1
+	for ; index >= 0 && len(body) < 40; index-- {
 		text := strings.TrimSpace(promptBoxEdgeRe.ReplaceAllString(lines[index], ""))
 		if promptRuleRe.MatchString(strings.TrimSpace(lines[index])) {
 			if len(body) > 0 && !strings.Contains(lines[index], "╌") {
+				meta.ruled = true
 				break
 			}
 			continue
@@ -163,11 +165,14 @@ func menuRequest(lines []string, menuStart int) (title, request string) {
 		}
 		body = append([]string{text}, body...)
 	}
+	// Forty lines read and no rule above them: the request goes on above what
+	// was read, so what was read is not the whole of it.
+	meta.capped = !meta.ruled && index >= 0
 	for len(body) > 0 && body[0] == "" {
 		body = body[1:]
 	}
 	if len(body) == 0 {
-		return "", ""
+		return "", "", "", meta
 	}
 	// The first line of a Claude permission box is its heading ("Bash
 	// command · from the general-purpose agent"), followed by a one-line
@@ -177,9 +182,16 @@ func menuRequest(lines []string, menuStart int) (title, request string) {
 		title = body[0]
 		body = body[1:]
 	}
-	request = strings.TrimSpace(strings.Join(body, "\n"))
-	request = trimRunes(request, 1800)
-	return title, request
+	full = strings.TrimSpace(strings.Join(body, "\n"))
+	return title, trimRunes(full, 1800), full, meta
+}
+
+// menuMeta says how far a prompt's request could be read.
+type menuMeta struct {
+	// ruled: the request is bounded above by the rule line that opens its box.
+	ruled bool
+	// capped: the read stopped at its line limit inside the request.
+	capped bool
 }
 
 var (
@@ -196,11 +208,10 @@ var (
 	// What ends a notice's paragraph when no blank line does: the question
 	// under it or a menu row.
 	autoNoticeEndRe = regexp.MustCompile(`(?i)^(?:do you want\b|would you like\b|esc to cancel)`)
-	// An elapsed or remaining time in brackets: "Running… (12s)", "(1m 5s)",
-	// Codex's "Working (32s • esc to interrupt)".
-	clockInBracketsRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?(?:\s*[•·][^)\]\n]*)?\s*[)\]]`)
-	// A spinner or progress glyph that leads a line and turns as time passes.
-	spinnerRunes = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✻✶✳✢✽·◐◓◑◒"
+	// A remaining or elapsed time in brackets that ends a menu row: "Yes (28s)",
+	// "Yes (1m 5s)". Only a row's own trailing clock is provider UI; a clock
+	// anywhere else in a prompt may be part of the command being approved.
+	trailingClockRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?\s*[)\]]\s*$`)
 )
 
 // autoNoticeMaxLines bounds a notice paragraph: even a very narrow pane wraps
@@ -240,33 +251,34 @@ func autoNoticeSpans(lines []string) [][2]int {
 // text. It is a paragraph: in a narrow pane it wraps, and the wrapped tail
 // ("to avoid holding up an unattended session") carries no keyword, so a
 // per-line filter leaves a fragment whose shape changes as the clock does.
-// Everything else, including a command that quotes similar words, stays.
+//
+// Only the notice the provider paints where it paints it is dropped: the last
+// paragraph of the request, ahead of the question. The same words inside a
+// command or heredoc are payload and stay, as does any earlier paragraph.
 func withoutVolatileLines(text string) string {
 	lines := strings.Split(text, "\n")
-	drop := make([]bool, len(lines))
-	for _, span := range autoNoticeSpans(lines) {
-		for index := span[0]; index < span[1]; index++ {
-			drop[index] = true
+	spans := autoNoticeSpans(lines)
+	if len(spans) == 0 {
+		return text
+	}
+	span := spans[len(spans)-1]
+	following := 0
+	for _, line := range lines[span[1]:] {
+		if strings.TrimSpace(line) != "" {
+			following++
 		}
 	}
-	kept := lines[:0:0]
-	for index, line := range lines {
-		if !drop[index] {
-			kept = append(kept, line)
-		}
+	if following > 1 {
+		return text
 	}
+	kept := append(append([]string{}, lines[:span[0]]...), lines[span[1]:]...)
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
-// stableText is what a prompt's identity may rest on: its words without the
-// clocks and spinners that change while it stays open.
-func stableText(text string) string {
-	lines := strings.Split(text, "\n")
-	for index, line := range lines {
-		line = strings.TrimLeft(line, " \t"+spinnerRunes)
-		lines[index] = clockInBracketsRe.ReplaceAllString(line, "")
-	}
-	return strings.Join(lines, "\n")
+// stableLabel is a menu row as its identity may rest on it: without the
+// clock the provider counts on the row itself ("Yes (28s)").
+func stableLabel(label string) string {
+	return trailingClockRe.ReplaceAllString(label, "")
 }
 
 func trimRunes(text string, limit int) string {
@@ -282,13 +294,48 @@ func trimRunes(text string, limit int) string {
 // bottom line proves the prompt is open now; it returns false for anything
 // else, so prose in the conversation above never becomes a prompt.
 func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, bool) {
+	prompt, meta, ok := parseMenuPrompt(provider, kind, pane, footerPrefixes...)
+	if !ok || meta.capped {
+		// A request cut short cannot name what is being approved.
+		return Prompt{}, false
+	}
+	return prompt, true
+}
+
+// ParseMenuPromptIn reads the prompt in window, a pane cut down to the
+// provider's latest banner, and holds it to the whole pane: if the cut fell
+// inside the request (a command line that looks like the banner), the request
+// is read again from the whole pane when a rule line bounds it there, and
+// otherwise no prompt is returned. An answerable identity never rests on a
+// truncated request.
+func ParseMenuPromptIn(provider string, kind PromptKind, window, whole string, footerPrefixes ...string) (Prompt, bool) {
+	prompt, meta, ok := parseMenuPrompt(provider, kind, window, footerPrefixes...)
+	if !ok || meta.capped {
+		return Prompt{}, false
+	}
+	if window == whole {
+		return prompt, true
+	}
+	full, fullMeta, fullOK := parseMenuPrompt(provider, kind, whole, footerPrefixes...)
+	switch {
+	case !fullOK:
+		return prompt, true
+	case full.ID == prompt.ID:
+		return prompt, true
+	case fullMeta.ruled && !fullMeta.capped:
+		return full, true
+	}
+	return Prompt{}, false
+}
+
+func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, menuMeta, bool) {
 	lines := strings.Split(strings.ReplaceAll(pane, "\r\n", "\n"), "\n")
 	last := len(lines) - 1
 	for last >= 0 && strings.TrimSpace(lines[last]) == "" {
 		last--
 	}
 	if last < 0 {
-		return Prompt{}, false
+		return Prompt{}, menuMeta{}, false
 	}
 	lines = lines[:last+1]
 	// The footer is the bottom line, or the bottom two when it wrapped.
@@ -305,7 +352,7 @@ func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 		}
 	}
 	if len(footerPrefixes) > 0 && footer < 0 {
-		return Prompt{}, false
+		return Prompt{}, menuMeta{}, false
 	}
 	body := lines
 	if footer >= 0 {
@@ -313,14 +360,16 @@ func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 	}
 	options, start, ok := parseNumberedMenu(body)
 	if !ok || len(options) < 2 {
-		return Prompt{}, false
+		return Prompt{}, menuMeta{}, false
 	}
-	title, request := menuRequest(body, start)
+	title, request, full, meta := menuRequest(body, start)
+	// The identity rests on the whole request, not on the part shown.
 	request = withoutVolatileLines(request)
+	full = withoutVolatileLines(full)
 	labels := make([]string, 0, len(options)+2)
-	labels = append(labels, stableText(request))
+	labels = append(labels, full)
 	for _, option := range options {
-		labels = append(labels, stableText(option.Label))
+		labels = append(labels, stableLabel(option.Label))
 	}
 	return Prompt{
 		ID:       PromptID(kind, labels...),
@@ -329,7 +378,7 @@ func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 		Title:    title,
 		Request:  request,
 		Options:  options,
-	}, true
+	}, meta, true
 }
 
 // ParseChoiceTabs reads the tab headers of an AskUserQuestion prompt, in
