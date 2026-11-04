@@ -101,11 +101,13 @@ func TestPromptIdentityIgnoresCountdownsAndClocks(t *testing.T) {
 
 func TestStableTextDropsSpinnersAndBracketedClocks(t *testing.T) {
 	for in, want := range map[string]string{
-		"✻ Running tests… (12s)":       "Running tests…",
-		"⠹ Waiting\n· Reading (1m 5s)": "Waiting\nReading",
-		"Yes (28s)":                    "Yes",
-		"sleep 30 && echo done":        "sleep 30 && echo done",
-		"Keep the (2) copies":          "Keep the (2) copies",
+		"✻ Running tests… (12s)":               "Running tests…",
+		"⠹ Waiting\n· Reading (1m 5s)":         "Waiting\nReading",
+		"Yes (28s)":                            "Yes",
+		"Working (32s • esc to interrupt)":     "Working",
+		"• Working (1m 5s · esc to interrupt)": "• Working",
+		"sleep 30 && echo done":                "sleep 30 && echo done",
+		"Keep the (2) copies":                  "Keep the (2) copies",
 	} {
 		if got := stableText(in); got != want {
 			t.Errorf("stableText(%q) = %q, want %q", in, got, want)
