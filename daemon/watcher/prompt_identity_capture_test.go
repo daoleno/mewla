@@ -23,7 +23,7 @@ func (p *dialogPane) sendText(string) error { return nil }
 func claudeDialogFixture() (whole, visible string) {
 	var body []string
 	for index := 0; index < 30; index++ {
-		body = append(body, "   # part "+strings.Repeat("x", index%4))
+		body = append(body, "   # part"+strings.Repeat("x", index%4))
 	}
 	whole = "Claude Code v2.1.0\n────────────────────────────────────────\n Bash command\n\n   echo HEAD\n" + strings.Join(body, "\n") +
 		"\n   Write it\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend\n"
