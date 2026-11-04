@@ -16,13 +16,20 @@ import (
 // trailing spaces a program wrote, joined wrapped lines, and whether the
 // capture reaches the pane's first line.
 
-func tmuxPaneShowing(t *testing.T, historyLimit string, rows string, body string) (socket, target string) {
+func tmuxPaneShowing(t *testing.T, historyLimit string, rows string, frames ...string) (socket, target string) {
 	t.Helper()
 	requireTmux(t)
 	dir := shortTmuxTestDir(t)
 	socket = filepath.Join(dir, "s")
 	script := filepath.Join(dir, "show.sh")
-	if err := os.WriteFile(script, []byte("#!/bin/bash\ncat <<'MEWLA_FRAME'\n"+body+"MEWLA_FRAME\nsleep 60\n"), 0o755); err != nil {
+	program := "#!/bin/bash\n"
+	for index, frame := range frames {
+		program += "cat <<'MEWLA_FRAME'\n" + frame + "MEWLA_FRAME\n"
+		if index < len(frames)-1 {
+			program += "sleep 0.6\n"
+		}
+	}
+	if err := os.WriteFile(script, []byte(program+"sleep 60\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	// Raw fixture bootstrap, as the other real-tmux tests do: an empty config
@@ -117,20 +124,50 @@ func TestRealTmuxCompleteCaptureIdentifiesTheOperation(t *testing.T) {
 	}
 }
 
-// Trailing spaces inside a multi-line quoted string survive the real capture
-// and so tell two commands apart.
-func TestRealTmuxTrailingSpacesInAQuotedCommandAreIdentity(t *testing.T) {
-	ids := map[string]string{}
-	for name, command := range map[string]string{"one": "printf 'alpha \nbeta'", "two": "printf 'alpha  \nbeta'"} {
-		frame := "OpenAI Codex\n  Would you like to run the following command?\n\n  $ " + command + "\n\n› 1. Yes, proceed (y)\n  2. No, cancel\n\n  Press enter to confirm or esc to cancel\nMEWLA-END\n"
-		socket, target := tmuxPaneShowing(t, "2000", "24", frame)
-		signal, _ := codexSignalFrom(t, socket, target)
-		if signal.Prompt == nil {
-			t.Fatalf("%s: no prompt: %+v", name, signal)
-		}
-		ids[name] = signal.Prompt.ID
+// What the real capture reports for blanks at a line's end: a space a program
+// wrote is kept, and so is the stale extent of a longer line that was
+// overwritten in place and erased. The two cannot be told apart, so a dialog
+// with such a line followed by more request text is refused, and one drawn
+// with whole-line erases (what a redrawing TUI does) is identified.
+func TestRealTmuxBlanksAtALineEndAreNotEvidence(t *testing.T) {
+	// 1. A command whose quoted string has a written space before its newline.
+	written := "OpenAI Codex\n  Would you like to run the following command?\n\n  $ printf 'alpha \nbeta'\n\n› 1. Yes, proceed (y)\n  2. No, cancel\n\n  Press enter to confirm or esc to cancel\nMEWLA-END\n"
+	socket, target := tmuxPaneShowing(t, "2000", "24", written)
+	text, _, err := capturePaneDialog(socket, target)
+	if err != nil || !strings.Contains(text, "printf 'alpha \n") {
+		t.Fatalf("tmux did not keep the written space (err %v):\n%q", err, text)
 	}
-	if ids["one"] == ids["two"] {
-		t.Fatalf("one and two trailing spaces share id %s", ids["one"])
+	if signal, _ := codexSignalFrom(t, socket, target); signal.State != classifier.StateBlocked || signal.Prompt != nil {
+		t.Fatalf("a quoted trailing space was identified: %+v", signal)
+	}
+
+	// 2. The same ordinary dialog drawn over longer lines. Erase-to-end-of-line
+	// leaves the old extent reported as trailing spaces; a whole-line erase
+	// first does not.
+	long := strings.Repeat("x", 50)
+	older := "OpenAI Codex\n" + strings.Repeat(long+"\n", 8)
+	draw := func(erase string) string {
+		lines := []string{"OpenAI Codex", "  Would you like to run the following command?", "", "  $ echo hi", "", "› 1. Yes, proceed (y)", "  2. No, cancel", "", "  Press enter to confirm or esc to cancel"}
+		out := "\x1b[H"
+		for _, line := range lines {
+			if erase == "line" {
+				out += "\x1b[2K" + line + "\n"
+			} else {
+				out += line + "\x1b[K\n"
+			}
+		}
+		return out + "MEWLA-END\n"
+	}
+	stale, staleTarget := tmuxPaneShowing(t, "2000", "24", older, draw("eol"))
+	staleText, _, _ := capturePaneDialog(stale, staleTarget)
+	if !strings.Contains(staleText, "  $ echo hi ") {
+		t.Fatalf("the fixture left no stale blanks after the command line:\n%q", staleText)
+	}
+	if signal, _ := codexSignalFrom(t, stale, staleTarget); signal.State != classifier.StateBlocked || signal.Prompt != nil {
+		t.Fatalf("stale padding was taken for the command's text: %+v", signal)
+	}
+	fresh, freshTarget := tmuxPaneShowing(t, "2000", "24", older, draw("line"))
+	if signal, _ := codexSignalFrom(t, fresh, freshTarget); signal.Prompt == nil {
+		t.Fatalf("a dialog drawn with whole-line erases was refused: %+v", signal)
 	}
 }

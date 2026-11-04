@@ -133,21 +133,35 @@ func TestStatusShapedLinesInAToolCallPayloadAreKept(t *testing.T) {
 // text from the pane's first line.
 var exactCaptureInfo = &CaptureInfo{Exact: true, Complete: true}
 
-// Spaces a program wrote at the end of a line inside a quoted string are part
-// of what is asked (the Round 4 reproduction).
-func TestTrailingSpacesInsideAMultilineQuotedCommandAreIdentity(t *testing.T) {
-	one, two := "printf 'alpha \nbeta'", "printf 'alpha  \nbeta'"
-	if a, b := codexExactID(t, one), codexExactID(t, two); a == b {
-		t.Fatalf("codex: one and two trailing spaces share id %s", a)
+// Blanks at the end of a line that more request text follows can be the
+// command's (inside a quoted string or a heredoc), and the screen cannot tell
+// them from erased cells: such a dialog gets no id, whatever the count of
+// blanks (the Round 4 reproduction), while the same commands without them are
+// answerable and distinct.
+func TestInteriorTrailingBlanksMakeTheDialogUnidentifiable(t *testing.T) {
+	for _, command := range []string{
+		"printf 'alpha \nbeta'",
+		"printf 'alpha  \nbeta'",
+		"printf 'alpha\t\nbeta'",
+		"cat <<'EOF'\nbody \nEOF",
+	} {
+		codex := codexExactSignal(command)
+		if codex.State != StateBlocked || codex.Prompt != nil {
+			t.Fatalf("codex: %q got a prompt: %+v", command, codex.Prompt)
+		}
+		claude := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo,
+			PaneContent: heredocPermissionPane(command, strings.Replace(blockNoticeFmt, "%s", "2:00", 1))})
+		if claude.State != StateBlocked || claude.Prompt != nil {
+			t.Fatalf("claude: %q got a prompt: %+v", command, claude.Prompt)
+		}
 	}
-	first, _ := claudeExactID(t, one)
-	if second, _ := claudeExactID(t, two); second == first {
-		t.Fatalf("claude: one and two trailing spaces share id %s", first)
+	// The last line of a request may end in blanks; nothing follows it.
+	if codexExactSignal("echo hi  ").Prompt == nil {
+		t.Fatal("blanks after the last line of the command refused the dialog")
 	}
-	// heredoc body lines too
-	h1, h2 := "cat <<'EOF'\nbody \nEOF", "cat <<'EOF'\nbody\nEOF"
-	if a, b := codexExactID(t, h1), codexExactID(t, h2); a == b {
-		t.Fatalf("codex: a trailing space in a heredoc body is lost (%s)", a)
+	// Without them the commands are answerable, and different.
+	if a, b := codexExactID(t, "printf 'alpha\nbeta'"), codexExactID(t, "printf 'alpha\n beta'"); a == b {
+		t.Fatalf("different commands share id %s", a)
 	}
 }
 
