@@ -1,0 +1,54 @@
+{
+ "side": "ab",
+ "model": "claude-sonnet-5-5",
+ "rows": [
+  {
+   "task": "long-pages",
+   "kind": "long",
+   "rep": 0,
+   "ok": true,
+   "wall_ms": 50139,
+   "api_ms": 40882,
+   "turns": 9,
+   "tool_calls": 8,
+   "input": 18,
+   "cache_read": 76301,
+   "cache_create": 10438,
+   "output": 984,
+   "cost_usd": 0.04360110000000001,
+   "answer": "SKU-0742 (Part 742) costs **$2421.50**."
+  },
+  {
+   "task": "long-pages",
+   "kind": "long",
+   "rep": 1,
+   "ok": true,
+   "wall_ms": 41452,
+   "api_ms": 26484,
+   "turns": 8,
+   "tool_calls": 7,
+   "input": 16,
+   "cache_read": 75112,
+   "cache_create": 2680,
+   "output": 839,
+   "cost_usd": 0.022633200000000006,
+   "answer": "SKU-0742 (Part 742) costs **$2421.50**. It's on page 8 of 12."
+  },
+  {
+   "task": "long-pages",
+   "kind": "long",
+   "rep": 2,
+   "ok": true,
+   "wall_ms": 29498,
+   "api_ms": 14786,
+   "turns": 7,
+   "tool_calls": 6,
+   "input": 14,
+   "cache_read": 63410,
+   "cache_create": 799,
+   "output": 632,
+   "cost_usd": 0.014686500000000002,
+   "answer": "**$2421.50**"
+  }
+ ]
+}

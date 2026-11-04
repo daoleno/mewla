@@ -1,0 +1,98 @@
+{
+ "side": "mewla",
+ "reps": 10,
+ "table": {
+  "mcp_initialize": {
+   "n": 1,
+   "p50": 180,
+   "p95": 180,
+   "bytes_p50": null,
+   "errors": 0
+  },
+  "cold_start": {
+   "n": 1,
+   "p50": 1266,
+   "p95": 1266,
+   "bytes_p50": 107,
+   "errors": 0
+  },
+  "navigate": {
+   "n": 10,
+   "p50": 1000,
+   "p95": 2999,
+   "bytes_p50": 109,
+   "errors": 0
+  },
+  "snapshot_busy_full": {
+   "n": 10,
+   "p50": 238,
+   "p95": 348,
+   "bytes_p50": 343081,
+   "errors": 0
+  },
+  "snapshot_busy_interactive": {
+   "n": 10,
+   "p50": 238,
+   "p95": 348,
+   "bytes_p50": 343081,
+   "errors": 0
+  },
+  "find": {
+   "n": 10,
+   "p50": 223,
+   "p95": 241,
+   "bytes_p50": 511,
+   "errors": 0
+  },
+  "click": {
+   "n": 10,
+   "p50": 228,
+   "p95": 250,
+   "bytes_p50": 39,
+   "errors": 0
+  },
+  "fill": {
+   "n": 10,
+   "p50": 7,
+   "p95": 40,
+   "bytes_p50": 39,
+   "errors": 0
+  },
+  "type_keys": {
+   "n": 10,
+   "p50": 113,
+   "p95": 127,
+   "bytes_p50": 39,
+   "errors": 0
+  },
+  "wait_for_change": {
+   "n": 10,
+   "p50": 900,
+   "p95": 1785,
+   "bytes_p50": null,
+   "errors": 0
+  },
+  "screenshot": {
+   "n": 10,
+   "p50": 2000,
+   "p95": 3092,
+   "bytes_p50": 98,
+   "errors": 0
+  },
+  "extract_table": {
+   "n": 10,
+   "p50": 105,
+   "p95": 107,
+   "bytes_p50": 1948,
+   "errors": 0
+  },
+  "multi_tab": {
+   "n": 8,
+   "p50": 1002,
+   "p95": 2008,
+   "bytes_p50": null,
+   "errors": 0
+  }
+ },
+ "errors": {}
+}
