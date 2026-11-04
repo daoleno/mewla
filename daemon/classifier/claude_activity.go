@@ -62,7 +62,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "claude_pane_blocked",
 			Provider: a.Name(),
 		}
-		if prompt, ok := ParseBoxedMenuPrompt(a.Name(), PromptPermission, pane, whole, "Esc to cancel"); ok {
+		if prompt, ok := ParseClaudePermissionPrompt(whole); ok {
 			if prompt.Title == "" {
 				prompt.Title = signal.Summary
 			}

@@ -146,11 +146,18 @@ func collapse(text string) string { return strings.Join(strings.Fields(text), " 
 // rule line, box edges stripped. The line that asks ("Do you want to
 // proceed?") is the question; the lines above it are the request.
 func menuRequest(lines []string, menuStart int) (title, request, full string, meta menuMeta) {
+	return readMenuRequest(lines, menuStart, true)
+}
+
+// readMenuRequest is menuRequest; bounded=false reads a dialog whose first line
+// the caller has already found (rule-looking lines inside it are text, and the
+// read has no line limit).
+func readMenuRequest(lines []string, menuStart int, bounded bool) (title, request, full string, meta menuMeta) {
 	var body []string
 	index := menuStart - 1
-	for ; index >= 0 && len(body) < 40; index-- {
+	for ; index >= 0 && (!bounded || len(body) < 40); index-- {
 		text := strings.TrimSpace(promptBoxEdgeRe.ReplaceAllString(lines[index], ""))
-		if promptRuleRe.MatchString(strings.TrimSpace(lines[index])) {
+		if bounded && promptRuleRe.MatchString(strings.TrimSpace(lines[index])) {
 			if len(body) > 0 && !strings.Contains(lines[index], "╌") {
 				meta.ruled = true
 				break
@@ -298,40 +305,16 @@ func ParseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 	return prompt, ok
 }
 
-// ParseBoxedMenuPrompt reads a prompt whose request is a box a rule line opens
-// (Claude's permission dialog) from window, a pane cut down to the provider's
-// latest banner, and holds it to the whole pane. The request must be bounded
-// above by its rule line: if the read ran out of lines first, or the cut fell
-// inside the request (a command line that looks like the banner) and the whole
-// pane does not bound it, no prompt is returned. An answerable identity never
-// rests on a truncated request; the dialog is still reported as blocked.
-func ParseBoxedMenuPrompt(provider string, kind PromptKind, window, whole string, footerPrefixes ...string) (Prompt, bool) {
-	prompt, meta, ok := parseMenuPrompt(provider, kind, window, footerPrefixes...)
-	if !ok || meta.capped {
-		return Prompt{}, false
-	}
-	if !meta.ruled && window != whole {
-		// The read reached the first line of the window: the request may go on above it.
-		full, fullMeta, fullOK := parseMenuPrompt(provider, kind, whole, footerPrefixes...)
-		switch {
-		case fullOK && full.ID == prompt.ID:
-		case fullOK && fullMeta.ruled && !fullMeta.capped:
-			return full, true
-		default:
-			return Prompt{}, false
-		}
-	}
-	return prompt, true
-}
-
-func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, menuMeta, bool) {
+// locateMenu finds the numbered menu at the bottom of pane: body is every line
+// above its footer, menuStart the index in body of the menu's first row.
+func locateMenu(pane string, footerPrefixes []string) (body []string, options []PromptOption, menuStart int, ok bool) {
 	lines := strings.Split(strings.ReplaceAll(pane, "\r\n", "\n"), "\n")
 	last := len(lines) - 1
 	for last >= 0 && strings.TrimSpace(lines[last]) == "" {
 		last--
 	}
 	if last < 0 {
-		return Prompt{}, menuMeta{}, false
+		return nil, nil, 0, false
 	}
 	lines = lines[:last+1]
 	// The footer is the bottom line, or the bottom two when it wrapped.
@@ -348,22 +331,27 @@ func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 		}
 	}
 	if len(footerPrefixes) > 0 && footer < 0 {
-		return Prompt{}, menuMeta{}, false
+		return nil, nil, 0, false
 	}
-	body := lines
+	body = lines
 	if footer >= 0 {
 		body = lines[:footer]
 	}
-	options, start, ok := parseNumberedMenu(body)
+	options, menuStart, ok = parseNumberedMenu(body)
 	if !ok || len(options) < 2 {
+		return nil, nil, 0, false
+	}
+	return body, options, menuStart, true
+}
+
+func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefixes ...string) (Prompt, menuMeta, bool) {
+	body, options, start, ok := locateMenu(pane, footerPrefixes)
+	if !ok {
 		return Prompt{}, menuMeta{}, false
 	}
 	title, request, full, meta := menuRequest(body, start)
-	// The identity rests on the whole request, not on the part shown.
-	request = withoutVolatileLines(request)
-	full = withoutVolatileLines(full)
 	labels := make([]string, 0, len(options)+2)
-	labels = append(labels, full)
+	labels = append(labels, withoutVolatileLines(full))
 	for _, option := range options {
 		labels = append(labels, stableLabel(option.Label))
 	}
@@ -372,7 +360,7 @@ func parseMenuPrompt(provider string, kind PromptKind, pane string, footerPrefix
 		Kind:     kind,
 		Provider: provider,
 		Title:    title,
-		Request:  request,
+		Request:  withoutVolatileLines(request),
 		Options:  options,
 	}, meta, true
 }

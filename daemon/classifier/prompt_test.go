@@ -65,8 +65,12 @@ func replaceOnce(text, old, repl string) string { return strings.Replace(text, o
 // is plainly open.
 func TestPromptIdentityIgnoresCountdownsAndClocks(t *testing.T) {
 	pane := func(countdown, yes string) string {
+		notice := ""
+		if countdown != "" { // once the notice is gone, so is its paragraph
+			notice = " " + countdown + "\n\n"
+		}
 		return strings.Replace(strings.Replace(subAgentPermissionPane,
-			" Do you want to proceed?\n", " "+countdown+"\n\n Do you want to proceed?\n", 1),
+			" Do you want to proceed?\n", notice+" Do you want to proceed?\n", 1),
 			"1. Yes\n", "1. Yes"+yes+"\n", 1)
 	}
 	infer := func(content string) *Prompt {
