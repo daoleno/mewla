@@ -14,28 +14,37 @@ import (
 // that id, so the id has to tell any two requests apart. For Claude permission
 // and Codex approval dialogs it is a hash of the dialog's text as displayed:
 // every character of the lines from the dialog's first line down to its menu,
-// spaces at line ends included, with only positively identified provider UI
-// removed (Claude's terminal countdown notice, the cursor caret and a trailing
-// clock on a menu row).
+// with only positively identified provider UI removed (Claude's terminal
+// countdown notice, the cursor caret and a trailing clock on a menu row).
 //
-// What the screen can and cannot prove:
-//   - It is the displayed text, not the program's bytes. tmux keeps the spaces
-//     a program wrote at the end of a line and, with -J, joins lines the
-//     terminal wrapped; it cannot show a tab, or a line the program itself
-//     trimmed or re-wrapped. Two commands that render identically get one id.
+// What the screen can and cannot prove, and what is done about it:
+//   - It is the displayed text, not the program's bytes. A tab, or a line the
+//     program trimmed or re-wrapped, cannot be told from the spaces it drew.
+//     tmux joins lines the terminal wrapped (capture-pane -J), so a soft wrap
+//     is not mistaken for a newline.
+//   - Blanks at the end of a line are not evidence. tmux reports a cell that
+//     was written with a space and a cell that an earlier, longer line left
+//     erased alike (measured with tmux 3.6: a line overwritten in place and
+//     erased to its end still reports the old extent as trailing spaces). They
+//     are therefore left out of the id, and a dialog in which any line that is
+//     followed by more request text ends in blanks is refused: inside a quoted
+//     string or a heredoc those blanks can be the command's, and the screen
+//     cannot say. Only the last line of a request may end in blanks.
 //   - Whether the capture holds the whole dialog is a property of the capture,
 //     not of the text. A heading-looking line proves nothing: a command can
 //     contain one, and a clipped capture can begin at it. Claude's dialog box
 //     begins at a rule line at the margin, which a command's own lines (drawn
 //     indented) do not produce. Codex's dialog has no such line, so a Codex id
 //     is issued only when the capture starts at the pane's first line with
-//     nothing evicted (CaptureInfo.Complete); otherwise the dialog is reported
-//     blocked with no prompt, and so no id to answer.
+//     nothing evicted (CaptureInfo.Complete).
 //   - A capture not taken with -J (CaptureInfo.Exact) never yields an id.
 //
+// Whenever one of these cannot be established the dialog is still reported as
+// blocked, with no prompt and so no id to answer.
+//
 //	provider  dialog starts at                       answerable id only when
-//	claude    the solid rule line above the box       Exact capture, rule line found
-//	codex     the topmost heading sentence            Exact and Complete capture, heading found
+//	claude    the solid rule line above the box       Exact capture, rule found, no interior trailing blanks
+//	codex     the topmost heading sentence            Exact and Complete capture, heading found, no interior trailing blanks
 //
 // The presentation (Request, Title) is cut and tidied separately; it never
 // feeds the id.
@@ -64,12 +73,12 @@ var (
 	menuCaretRe    = regexp.MustCompile(`^(\s*)[❯›>](\s*)(\d{1,2}[.)])`)
 )
 
-// menuIdentityRows are the menu's lines as displayed, minus the moving cursor
-// and a row's own countdown.
+// menuIdentityRows are the menu's lines as displayed, minus the moving cursor,
+// a row's own countdown and blanks at a row's end.
 func menuIdentityRows(rows []string) string {
 	out := make([]string, len(rows))
 	for index, row := range rows {
-		row = strings.TrimSuffix(row, "\r")
+		row = strings.TrimRight(row, " \t\r")
 		row = menuCaretRe.ReplaceAllString(row, "$1 $2$3")
 		out[index] = trailingClockRe.ReplaceAllString(row, "")
 	}
@@ -100,11 +109,33 @@ func dropTerminalNotice(lines []string) []string {
 	return append(append([]string{}, lines[:span[0]]...), lines[end:]...)
 }
 
-// dialogPrompt builds the prompt of the dialog lines[start:menuStart].
-func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, options []PromptOption) Prompt {
+// interiorTrailingBlanks reports whether a line followed by more text in the
+// dialog ends in blanks (see the identity notes above).
+func interiorTrailingBlanks(dialog []string) bool {
+	last := -1
+	for index, line := range dialog {
+		if strings.TrimSpace(line) != "" {
+			last = index
+		}
+	}
+	for index := 0; index < last; index++ {
+		line := strings.TrimSuffix(dialog[index], "\r")
+		if strings.TrimSpace(line) != "" && strings.TrimRight(line, " \t") != line {
+			return true
+		}
+	}
+	return false
+}
+
+// dialogPrompt builds the prompt of the dialog lines, whose menu follows. ok is
+// false when the displayed text cannot support an exact identity.
+func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, options []PromptOption) (Prompt, bool) {
+	if interiorTrailingBlanks(dialog) {
+		return Prompt{}, false
+	}
 	rawRows := make([]string, len(dialog))
 	for index, line := range dialog {
-		rawRows[index] = strings.TrimSuffix(line, "\r")
+		rawRows[index] = strings.TrimRight(line, " \t\r")
 	}
 	title, request, _, _ := readMenuRequest(dialog, len(dialog), false)
 	return Prompt{
@@ -114,7 +145,7 @@ func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, optio
 		Title:    title,
 		Request:  request,
 		Options:  options,
-	}
+	}, true
 }
 
 // ParseClaudePermissionPrompt reads the permission dialog open at the bottom of
@@ -136,7 +167,7 @@ func ParseClaudePermissionPrompt(pane string) (Prompt, bool) {
 		return Prompt{}, false
 	}
 	dialog := dropTerminalNotice(body[start:menuStart])
-	return dialogPrompt("claude", PromptPermission, dialog, body[menuStart:], options), true
+	return dialogPrompt("claude", PromptPermission, dialog, body[menuStart:], options)
 }
 
 // ParseCodexApprovalPrompt reads the approval or trust dialog open at the
@@ -162,5 +193,5 @@ func ParseCodexApprovalPrompt(pane string) (Prompt, bool) {
 	if start < 0 {
 		return Prompt{}, false
 	}
-	return dialogPrompt("codex", PromptApproval, body[start:menuStart], body[menuStart:], options), true
+	return dialogPrompt("codex", PromptApproval, body[start:menuStart], body[menuStart:], options)
 }
