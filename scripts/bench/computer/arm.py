@@ -18,6 +18,35 @@ import argparse, json, os, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+def stream(text):
+    """The final result record and a trail of the tool calls: name, whether it errored, and the first 160
+    characters of each result; the caller drops those heads unless the task failed (scratch tasks only)."""
+    out, trail, names = {}, [], {}
+    for line in text.splitlines():
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if o.get("type") == "result":
+            out = o
+        for c in ((o.get("message") or {}).get("content") or []):
+            if not isinstance(c, dict):
+                continue
+            if c.get("type") == "tool_use":
+                inp = c.get("input") or {}
+                names[c.get("id")] = len(trail)
+                trail.append({"tool": str(c.get("name", "")).replace("mcp__mewla-computer__", ""),
+                              "action": inp.get("action") or inp.get("tool") or None})
+            elif c.get("type") == "tool_result" and c.get("tool_use_id") in names:
+                body = c.get("content")
+                if isinstance(body, list):
+                    body = " ".join(str(x.get("text", "")) for x in body if isinstance(x, dict))
+                trail[names[c["tool_use_id"]]]["head"] = str(body).strip()[:160]
+                if c.get("is_error"):
+                    trail[names[c["tool_use_id"]]]["error"] = True
+    return out, trail
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("arm", choices=["ad", "mewla"])
@@ -50,14 +79,15 @@ def main():
             system = "You operate this Mac with the computer tools you have (apps, app_state, element, menu, steps, computer)."
             config = json.dumps({"mcpServers": {"mewla-computer": {"command": a.mewla, "args": ["agent-use", "computer-mcp"]}}})
             tools = ["--tools", "", "--allowedTools", "mcp__mewla-computer", "--strict-mcp-config", "--mcp-config", config]
-        cmd = ["claude", "-p", prompt, "--model", a.model, "--output-format", "json"] + tools + [
+        cmd = ["claude", "-p", prompt, "--model", a.model, "--output-format", "stream-json", "--verbose"] + tools + [
             "--append-system-prompt", system, "--permission-mode", "bypassPermissions"]
         t0 = time.time()
         try:
             p = subprocess.run(cmd, capture_output=True, text=True, timeout=a.timeout)
-            out = json.loads(p.stdout) if p.stdout.strip() else {}
-        except (subprocess.TimeoutExpired, ValueError):
-            out = {"timeout": True}
+            out, trail = stream(p.stdout)
+        except subprocess.TimeoutExpired as e:
+            out, trail = stream((e.stdout or b"").decode() if isinstance(e.stdout, bytes) else (e.stdout or ""))
+            out["timeout"] = True
         wall = time.time() - t0
         ans = os.path.join(a.out, t["id"] + ".answer")
         open(ans, "w").write(str(out.get("result", "")))
@@ -65,11 +95,16 @@ def main():
                                          a.dir, ans], capture_output=True, text=True).stdout or "{}")
         os.remove(ans)
         u = out.get("usage") or {}
-        rec = {"task": t["id"], "arm": a.arm, "wall_s": round(wall, 1), "turns": out.get("num_turns"),
+        rec = {"trail": trail, "task": t["id"], "arm": a.arm, "wall_s": round(wall, 1), "turns": out.get("num_turns"),
                "api_s": round((out.get("duration_api_ms") or 0) / 1000, 1), "success": chk.get("ok"),
                "why": chk.get("why"), "result_chars": len(str(out.get("result", ""))), "timeout": out.get("timeout", False),
                "tokens": {"input": u.get("input_tokens"), "output": u.get("output_tokens"),
                           "cache_read": u.get("cache_read_input_tokens"), "cache_write": u.get("cache_creation_input_tokens")}}
+        if chk.get("ok") is not False:
+            for step in rec["trail"]:
+                step.pop("head", None)
+        else:
+            rec["final_text"] = str(out.get("result", ""))[:400]
         json.dump(rec, open(os.path.join(a.out, t["id"] + ".json"), "w"))
         print(json.dumps(rec, separators=(",", ":")), flush=True)
 
