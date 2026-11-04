@@ -39,9 +39,9 @@ const codexMCPApproval = "  Allow the wechat MCP server to run tool \"send_messa
 func codexPane(header bool, parts ...string) string {
 	pane := strings.Join(parts, "")
 	if header {
-		return "OpenAI Codex\n" + pane
+		return testOrigin + "\nOpenAI Codex\n" + pane
 	}
-	return pane
+	return testOrigin + "\n" + pane
 }
 
 func TestCodexOrdinaryOutputDoesNotRaiseApproval(t *testing.T) {
@@ -149,7 +149,7 @@ func TestCodexMenuLessApprovalPromptStillBlocks(t *testing.T) {
 // finds the dialog "passed" a second after Brain was told of it.
 func TestCodexApprovalIdentityIgnoresWorkingClock(t *testing.T) {
 	pane := func(command, elapsed string) string {
-		return "OpenAI Codex\n• Ran ls\n• Working (" + elapsed + " • esc to interrupt)\n\n" +
+		return testOrigin + "\nOpenAI Codex\n• Ran ls\n• Working (" + elapsed + " • esc to interrupt)\n\n" +
 			"  Would you like to run the following command?\n\n  $ " + command + "\n\n" +
 			"› 1. Yes, proceed (y)\n  2. No, and tell Codex what to do differently (esc)\n\n  Press enter to confirm or esc to cancel\n"
 	}

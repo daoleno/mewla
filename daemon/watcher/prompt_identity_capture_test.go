@@ -47,7 +47,7 @@ func watcherWithClaude(t *testing.T) (*Watcher, string) {
 func TestCurrentPromptIdentifiesADialogFromTheDialogCapture(t *testing.T) {
 	whole, visible := claudeDialogFixture()
 	w, sessionID := watcherWithClaude(t)
-	info := classifier.CaptureInfo{Exact: true, Complete: true}
+	info := classifier.CaptureInfo{Exact: true}
 	polled := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "claude"}, Capture: &info, PaneContent: whole})
 	if polled.Prompt == nil || !strings.Contains(polled.Prompt.Request, "echo HEAD") {
 		t.Fatalf("the poll's prompt: %+v", polled.Prompt)
@@ -65,7 +65,7 @@ func TestCurrentPromptRefusesADialogItCannotCaptureExactly(t *testing.T) {
 	w, sessionID := watcherWithClaude(t)
 	for name, pane := range map[string]claudeChoicePane{
 		"visible screen only": &struct{ claudeChoicePane }{&dialogPane{visible: visible, dialog: whole}},
-		"capture not exact":   &dialogPane{visible: visible, dialog: whole, info: classifier.CaptureInfo{Complete: true}},
+		"capture not exact":   &dialogPane{visible: visible, dialog: whole, info: classifier.CaptureInfo{}},
 	} {
 		got, err := w.currentPrompt(pane, sessionID)
 		if got != nil {
@@ -73,7 +73,7 @@ func TestCurrentPromptRefusesADialogItCannotCaptureExactly(t *testing.T) {
 		}
 		_ = err // visible-only panes report no dialog capture; an inexact one is refused with a reason
 	}
-	if _, err := w.currentPrompt(&dialogPane{visible: visible, dialog: whole, info: classifier.CaptureInfo{Complete: true}}, sessionID); err == nil || !strings.Contains(err.Error(), "cannot be identified exactly") {
+	if _, err := w.currentPrompt(&dialogPane{visible: visible, dialog: whole, info: classifier.CaptureInfo{}}, sessionID); err == nil || !strings.Contains(err.Error(), "cannot be identified exactly") {
 		t.Fatalf("an inexact capture was not refused with its reason: %v", err)
 	}
 }

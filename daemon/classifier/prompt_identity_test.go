@@ -10,8 +10,8 @@ import (
 // the provider's terminal countdown notice); every byte of the command stays.
 
 func codexIdentityPane(command, elapsed string) string {
-	return "OpenAI Codex\n• Ran ls\n• Working (" + elapsed + " • esc to interrupt)\n\n" +
-		"  Would you like to run the following command?\n\n  $ " + command + "\n\n" +
+	return testOrigin + "\nOpenAI Codex\n• Ran ls\n• Working (" + elapsed + " • esc to interrupt)\n\n" +
+		"  Would you like to run the following command?\n\n  $ " + strings.ReplaceAll(command, "\n", "\n  ") + "\n\n" +
 		"› 1. Yes, proceed (y)\n  2. No, cancel\n\n  Press enter to confirm or esc to cancel\n"
 }
 
@@ -132,7 +132,7 @@ func TestUnboundedRequestFailsClosed(t *testing.T) {
 // A very long command is shown trimmed but identified whole.
 func TestLongCommandIdentityCoversWhatIsNotShown(t *testing.T) {
 	notice := strings.Replace(blockNoticeFmt, "%s", "2:00", 1)
-	body := strings.Repeat("echo padding padding padding\n   ", 3)
+	body := strings.Repeat("\necho padding padding padding", 3)
 	tail := strings.Repeat("y", 1900)
 	first := inferPermission(t, heredocPermissionPane("echo ONE; "+tail+body, notice))
 	second := inferPermission(t, heredocPermissionPane("echo TWO; "+tail+body, notice))
@@ -149,7 +149,7 @@ func TestApprovalsStayAnswerableAboveLongHistory(t *testing.T) {
 	for index := 0; index < 70; index++ {
 		conversation += "• Ran step " + strings.Repeat("a", index%5) + "\n  └ ok\n"
 	}
-	codex := history + "╭──────────────────────────────╮\n│ >_ OpenAI Codex (v0.46.0)    │\n╰──────────────────────────────╯\n" + conversation +
+	codex := testOrigin + "\n" + history + "╭──────────────────────────────╮\n│ >_ OpenAI Codex (v0.46.0)    │\n╰──────────────────────────────╯\n" + conversation +
 		"  Would you like to run the following command?\n\n  $ echo 'OpenAI Codex' && ls\n\n› 1. Yes, proceed (y)\n  2. No, cancel\n\n  Press enter to confirm or esc to cancel\n"
 	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: codex})
 	if signal.State != StateBlocked || signal.Prompt == nil || !strings.Contains(signal.Prompt.Request, "echo 'OpenAI Codex' && ls") {
