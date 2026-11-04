@@ -62,6 +62,9 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "claude_pane_blocked",
 			Provider: a.Name(),
 		}
+		if in.Capture == nil || !in.Capture.Exact {
+			return signal // blocked, but the text cannot support an answerable id
+		}
 		if prompt, ok := ParseClaudePermissionPrompt(whole); ok {
 			if prompt.Title == "" {
 				prompt.Title = signal.Summary

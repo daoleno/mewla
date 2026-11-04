@@ -27,7 +27,7 @@ func TestPromptGateFilesBlockedWithOptionsAndClears(t *testing.T) {
 	w.SetTurnLedger(ledger)
 
 	adapter := classifier.NewClaudeActivityAdapter()
-	open := adapter.Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := adapter.Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 	if open.Prompt == nil {
 		t.Fatalf("fixture has no structured prompt: %+v", open)
 	}
@@ -69,7 +69,7 @@ func TestPromptGateIgnoresWorkersItDoesNotOwn(t *testing.T) {
 	w := New(0)
 	ledger := newFakeTurnLedger()
 	w.SetTurnLedger(ledger)
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "claude"}, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "claude"}, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 	for name, tc := range map[string]struct {
 		worker classifier.Worker
 		turn   TurnSnapshot
@@ -104,7 +104,7 @@ func TestPromptGateReachesBrainBeforeTheTurnIsAdmitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 
 	turn, has := w.syncPromptGate(sessionID, worker, true, open, TurnSnapshot{}, false, []InputAdmission{pending})
 	if !has || turn.TurnID != "turn:early" || turn.Status != TurnBlocked {
@@ -128,7 +128,7 @@ func TestPromptGateRenewsTheLeaseWhileThePromptStaysOpen(t *testing.T) {
 	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:renew", Status: TurnRunning, SignalProtocol: true}
 	ledger.seed(sessionID, turn)
 	w.SetTurnLedger(ledger)
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 
 	turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
 	w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
@@ -164,7 +164,7 @@ func TestPromptGateLeavesAHookHeldPermissionToTheHook(t *testing.T) {
 	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:hold", Status: TurnRunning, SignalProtocol: true}
 	ledger.seed(sessionID, turn)
 	w.SetTurnLedger(ledger)
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 	if open.Prompt == nil || open.Prompt.Kind != classifier.PromptPermission {
 		t.Fatalf("fixture is not a permission dialog: %+v", open.Prompt)
 	}
@@ -280,7 +280,7 @@ func TestPromptGateOpensATurnForADialogAfterTheWorkersTurnSettled(t *testing.T) 
 	settled := TurnSnapshot{SessionID: sessionID, TurnID: "turn:settled", Status: TurnDone, SignalProtocol: true}
 	ledger.seed(sessionID, settled)
 	w.SetTurnLedger(ledger)
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 	if open.Prompt == nil {
 		t.Fatalf("fixture has no structured prompt: %+v", open)
 	}
@@ -327,7 +327,7 @@ func TestPromptGateOpensNoTurnWhenItShouldNot(t *testing.T) {
 		settled := TurnSnapshot{SessionID: sessionID, TurnID: "turn:settled", Status: TurnDone, SignalProtocol: true}
 		ledger.seed(sessionID, settled)
 		w.SetTurnLedger(ledger)
-		open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+		open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 		return w, worker, ledger, open, settled
 	}
 	// A dialog that has only just appeared (or a hook has just had answered).
@@ -371,7 +371,7 @@ func TestPromptGateOpensTheTurnOnceTheDialogHasStoodForTheWindow(t *testing.T) {
 	settled := TurnSnapshot{SessionID: sessionID, TurnID: "turn:settled", Status: TurnDone, SignalProtocol: true}
 	ledger.seed(sessionID, settled)
 	w.SetTurnLedger(ledger)
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 
 	w.syncPromptGate(sessionID, worker, true, open, settled, true, nil)
 	if len(ledger.applied) != 0 {
@@ -423,7 +423,7 @@ func TestPromptGateSurvivesABlinkingDialog(t *testing.T) {
 	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:blink", Status: TurnRunning, SignalProtocol: true}
 	ledger.seed(sessionID, turn)
 	w.SetTurnLedger(ledger)
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 
 	turn, _ = w.syncPromptGate(sessionID, worker, true, open, turn, true, nil)
 	for range 20 {
@@ -455,7 +455,7 @@ func TestPromptGateFilesAChurningPromptIdOnce(t *testing.T) {
 	turn := TurnSnapshot{SessionID: sessionID, TurnID: "turn:churn", Status: TurnRunning, SignalProtocol: true}
 	ledger.seed(sessionID, turn)
 	w.SetTurnLedger(ledger)
-	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, PaneContent: subAgentGatePane})
+	open := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: worker, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: subAgentGatePane})
 	withID := func(id string) classifier.ActivitySignal {
 		signal := open
 		prompt := *open.Prompt

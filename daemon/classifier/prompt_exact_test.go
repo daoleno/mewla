@@ -15,7 +15,7 @@ func claudeExactID(t *testing.T, command string) (string, string) {
 }
 
 func codexExactSignal(command string) ActivitySignal {
-	return NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: codexIdentityPane(command, "3s")})
+	return NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: codexIdentityPane(command, "3s")})
 }
 
 func codexExactID(t *testing.T, command string) string {
@@ -67,12 +67,12 @@ func TestExactIdentityCoversAnOperationBeforeTheLineLimit(t *testing.T) {
 func TestDialogWhoseStartIsNotInTheCaptureHasNoAnswerableID(t *testing.T) {
 	// The capture begins inside the command: no rule line / heading sentence above.
 	claude := "   echo THE-REST\n   Write prototype page\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend\n"
-	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: claude})
+	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo, PaneContent: claude})
 	if signal.State != StateBlocked || signal.Prompt != nil {
 		t.Fatalf("claude: %+v", signal)
 	}
 	codex := "OpenAI Codex\n  $ echo THE-REST\n\n› 1. Yes, proceed (y)\n  2. No, cancel\n\n  Press enter to confirm or esc to cancel\nWould you like to run the following command?\n"
-	signal = NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: codex})
+	signal = NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: codex})
 	if signal.State != StateBlocked || signal.Prompt != nil {
 		t.Fatalf("codex: %+v", signal)
 	}
@@ -118,7 +118,7 @@ func TestStatusShapedLinesInAToolCallPayloadAreKept(t *testing.T) {
 			"› 1. Allow\n  2. Cancel\n\n  Press enter to confirm or esc to cancel\n"
 	}
 	id := func(elapsed string) string {
-		signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: pane(elapsed)})
+		signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: pane(elapsed)})
 		if signal.Prompt == nil {
 			t.Fatalf("no prompt: %+v", signal)
 		}
@@ -126,5 +126,97 @@ func TestStatusShapedLinesInAToolCallPayloadAreKept(t *testing.T) {
 	}
 	if id("1s") == id("2s") {
 		t.Fatal("tool-call payloads that differ only in a status-shaped number share an id")
+	}
+}
+
+// exactCaptureInfo is a capture that proves everything a capture can: exact
+// text from the pane's first line.
+var exactCaptureInfo = &CaptureInfo{Exact: true, Complete: true}
+
+// Spaces a program wrote at the end of a line inside a quoted string are part
+// of what is asked (the Round 4 reproduction).
+func TestTrailingSpacesInsideAMultilineQuotedCommandAreIdentity(t *testing.T) {
+	one, two := "printf 'alpha \nbeta'", "printf 'alpha  \nbeta'"
+	if a, b := codexExactID(t, one), codexExactID(t, two); a == b {
+		t.Fatalf("codex: one and two trailing spaces share id %s", a)
+	}
+	first, _ := claudeExactID(t, one)
+	if second, _ := claudeExactID(t, two); second == first {
+		t.Fatalf("claude: one and two trailing spaces share id %s", first)
+	}
+	// heredoc body lines too
+	h1, h2 := "cat <<'EOF'\nbody \nEOF", "cat <<'EOF'\nbody\nEOF"
+	if a, b := codexExactID(t, h1), codexExactID(t, h2); a == b {
+		t.Fatalf("codex: a trailing space in a heredoc body is lost (%s)", a)
+	}
+}
+
+func codexCutAtLast(t *testing.T, pane, needle string) string {
+	t.Helper()
+	index := strings.LastIndex(pane, needle)
+	if index < 0 {
+		t.Fatalf("no %q in the pane", needle)
+	}
+	return pane[index:]
+}
+
+// A heading-looking line is payload when the real start was lost: a capture
+// clipped inside the command must not yield an answerable id (the Round 4
+// reproduction), whatever line it happens to begin at.
+func TestClippedCaptureWithALookalikeHeadingHasNoAnswerableID(t *testing.T) {
+	heading := "Would you like to run the following command?"
+	build := func(operation string) string {
+		return codexIdentityPane(operation+"\ncat <<'EOF'\n"+heading+"\ncommon\nEOF", "3s")
+	}
+	alpha, beta := build("echo ALPHA"), build("echo BETA")
+	// Uncut and complete: the operations differ and the ids tell them apart.
+	if a, b := codexExactID(t, "echo ALPHA\ncat <<'EOF'\n"+heading+"\ncommon\nEOF"), codexExactID(t, "echo BETA\ncat <<'EOF'\n"+heading+"\ncommon\nEOF"); a == b {
+		t.Fatalf("complete captures of different operations share id %s", a)
+	}
+	clipped := &CaptureInfo{Exact: true, Complete: false}
+	for name, cut := range map[string][2]string{
+		"at the payload heading": {codexCutAtLast(t, alpha, heading), codexCutAtLast(t, beta, heading)},
+		"at the payload opener":  {codexCutAtLast(t, alpha, "cat <<'EOF'"), codexCutAtLast(t, beta, "cat <<'EOF'")},
+	} {
+		if cut[0] != cut[1] && name == "at the payload heading" {
+			t.Fatalf("fixture: the two clipped captures should be identical")
+		}
+		for _, pane := range cut {
+			signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: clipped, PaneContent: pane})
+			if signal.State != StateBlocked || signal.Prompt != nil {
+				t.Fatalf("%s: a clipped capture produced %+v", name, signal)
+			}
+		}
+	}
+	// An ordinary approval in a long session (scrollback beyond the capture)
+	// is also reported without an id: Codex's dialog has no line that proves
+	// its start, so only a capture from the first line can.
+	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: clipped, PaneContent: codexIdentityPane("systemctl list-unit-files", "3s")})
+	if signal.State != StateBlocked || signal.Prompt != nil {
+		t.Fatalf("an incomplete capture produced %+v", signal)
+	}
+}
+
+// Claude's dialog starts at a rule line, so an ordinary permission stays
+// answerable even when the capture does not reach the pane's first line.
+func TestClaudePermissionStaysAnswerableOnAnIncompleteCapture(t *testing.T) {
+	pane := heredocPermissionPane("rm -rf /tmp/x", strings.Replace(blockNoticeFmt, "%s", "2:00", 1))
+	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: &CaptureInfo{Exact: true}, PaneContent: pane})
+	if signal.Prompt == nil {
+		t.Fatalf("no prompt on a rule-bounded dialog: %+v", signal)
+	}
+}
+
+// Without an exact capture a dialog is reported but never identified.
+func TestWithoutAnExactCaptureThereIsNoAnswerableID(t *testing.T) {
+	for name, capture := range map[string]*CaptureInfo{"no capture info": nil, "not exact": {Complete: true}} {
+		claude := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: capture,
+			PaneContent: heredocPermissionPane("echo hi", strings.Replace(blockNoticeFmt, "%s", "2:00", 1))})
+		codex := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: capture, PaneContent: codexIdentityPane("echo hi", "3s")})
+		for provider, signal := range map[string]ActivitySignal{"claude": claude, "codex": codex} {
+			if signal.State != StateBlocked || signal.Prompt != nil {
+				t.Fatalf("%s/%s: %+v", name, provider, signal)
+			}
+		}
 	}
 }

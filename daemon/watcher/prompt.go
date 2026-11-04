@@ -602,19 +602,49 @@ func (w *Watcher) currentPrompt(pane claudeChoicePane, sessionID string) (*class
 	if signal.State != classifier.StateBlocked {
 		return nil, nil
 	}
-	if signal.Source == "claude_pane_blocked" || signal.Source == "codex_pane_blocked" {
-		// A dialog that asks to run something is identified from the same
-		// capture the poll made, not from the visible screen alone.
-		if history, ok := pane.(interface{ captureHistory() (string, error) }); ok {
-			whole, err := history.captureHistory()
-			if err != nil {
-				return nil, err
-			}
-			signal = w.activitySignal(*worker, whole, 0, nil)
-			if signal.State != classifier.StateBlocked {
-				return nil, nil
-			}
+	if commandDialogSource(signal.Source) {
+		dialogs, ok := pane.(interface {
+			captureDialog() (string, classifier.CaptureInfo, error)
+		})
+		if !ok {
+			return nil, nil
+		}
+		text, info, err := dialogs.captureDialog()
+		if err != nil {
+			return nil, err
+		}
+		signal = w.activitySignalCaptured(*worker, text, &info)
+		if signal.State != classifier.StateBlocked {
+			return nil, nil
+		}
+		if signal.Prompt == nil {
+			return nil, refusePrompt("this dialog cannot be identified exactly (its first lines are not provably in the capture); no key was sent")
 		}
 	}
 	return signal.Prompt, nil
+}
+
+// commandDialogSource reports whether an activity signal is a Claude permission
+// or Codex approval dialog: one that asks to run something, whose id must rest
+// on an exact capture (capturePaneDialog).
+func commandDialogSource(source string) bool {
+	return source == "claude_pane_blocked" || source == "codex_pane_blocked"
+}
+
+// withDialogCapture gives a command dialog its prompt: the activity from the
+// plain poll capture reports the dialog but carries no prompt, because that
+// capture says nothing about what it holds. The dialog is read again from an
+// exact capture of the whole scrollback.
+func (w *Watcher) withDialogCapture(sessionID string, worker classifier.Worker, signal classifier.ActivitySignal) classifier.ActivitySignal {
+	if signal.State != classifier.StateBlocked || !commandDialogSource(signal.Source) {
+		return signal
+	}
+	text, info, err := capturePaneDialog(w.socketPathFor(sessionID), sessionID)
+	if err != nil {
+		return signal
+	}
+	if captured := w.activitySignalCaptured(worker, text, &info); captured.State == classifier.StateBlocked {
+		return captured
+	}
+	return signal
 }
