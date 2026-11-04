@@ -219,7 +219,7 @@ description: Write a Worker brief whose acceptance and proof can actually be che
 
 Turn the chosen method into concrete work in the brief: "reuse X", "check the upstream API for Y", "first reproduce Z in the browser". Give source pointers and constraints, not the Brain workspace or a generic checklist.
 
-Design proof around what the user does and what must then be true. A reproduced bug needs a test that fails before the fix and passes after. A UI or cross-layer claim needs the real interaction on the affected platforms, checking visible state and side effects. A build, mock or file check proves only its own surface. Use the repository's existing test tools with isolated, cleaned-up state rather than a new verifier per task. Real model or paid API calls need a stated budget and authority.
+Design proof around what the user does and what must then be true. A reproduced bug needs a test that fails before the fix and passes after. A UI or cross-layer claim needs the real interaction on the affected platforms, checking visible state and side effects. A build, mock or file check proves only its own surface. Use the repository's existing test tools with isolated, cleaned-up state rather than a new verifier per task. Real model or paid API calls need a stated budget and authority. A review finding blocks acceptance only when a run reproduces it (the command and its output); an unreproduced concern is reported as unproven and does not block.
 
 For diagnostics, ask for the smallest excerpt that keeps the status, symptom and failing assertion. Replace tokens, cookies and secret URLs with <REDACTED> before reporting or saving, and reference credentials instead of echoing them. If redaction hides the signal, find a narrower safe reproduction.
 
