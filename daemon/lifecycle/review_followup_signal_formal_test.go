@@ -16,9 +16,12 @@ import (
 // `brain work update` does after a `worker send`, AcceptAdmissionBySignal has no
 // review for followUpEvents to resolve and no free Attempt slot, and returns
 // ErrAttemptActive on every retry. The Worker is acting on the prompt, but its
-// progress and final report under the prompt's turn id are all rejected until
-// the old Attempt is lost (lease 10 min + lost grace 30 min). Marking the
-// admission ambiguous (724b50b3) does not help: ambiguous is retried the same way.
+// progress and final report under the prompt's turn id are all rejected. The old
+// Attempt is renewed from provider-running evidence (ReassertLiveTurnOwnership)
+// while the Worker works on the follow-up, so the rejection lasts for as long as
+// the Worker is busy, and after it stops until the old Attempt's last lease and
+// the lost grace (30 min) have run out. Marking the admission ambiguous
+// (724b50b3) does not help: ambiguous is retried the same way.
 func TestReviewFollowUpSignalIsAcceptedAfterBrainResolvesTheReviewWithAnActiveAttempt(t *testing.T) {
 	t.Skip("FORMAL PILOT FINDING, not fixed: AcceptAdmissionBySignal returns ErrAttemptActive for a review follow-up once Brain has resolved the review while the old Attempt is active; remove this Skip when the lifecycle owner decides the intended behaviour")
 	for _, name := range []string{"continue", "wait", "continue_then_stale_release"} {
