@@ -362,7 +362,7 @@ def report(dirs):
     print("\n".join(lines))
 
 
-def first_read(apps, cmd):
+def first_read(apps, cmd, watch=0):
     """The very first read of each app after a fresh daemon, for Electron apps
     nobody switched on: ms, rows, truncation, and whether Mewla said it turned
     the app's web accessibility on. Then a second read for comparison. No
@@ -372,12 +372,15 @@ def first_read(apps, cmd):
     try:
         for a in apps:
             rows = []
-            for i in range(3):
+            t0 = time.time()
+            for i in range(3 if not watch else 10 ** 6):
+                if watch and time.time() - t0 > watch:
+                    break
                 r = m.call("app_state", {"app": a})
                 rows.append({"ms": round(r["ms"]), "rows": rows_of(r["text"]), "bytes": r["bytes"],
                              "truncated": is_trunc(r["text"]), "error": r["error"],
-                             "switched_on_note": "web accessibility" in r["text"]})
-                time.sleep(1.5)  # Chromium fills its tree over a moment after the switch
+                             "switched_on_note": "web accessibility" in r["text"], "at_s": round(time.time() - t0, 1)})
+                time.sleep(0.5 if watch else 1.5)  # Chromium fills its tree over a moment after the switch
             out[a] = rows
     finally:
         m.close()
@@ -421,6 +424,7 @@ def dump_tools(cmd, out):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--watch", type=float, default=0, help="first: read every 0.5 s for this many seconds (time to a full tree)")
     ap.add_argument("mode", choices=["mewla", "ad", "report", "tools", "audit", "first"])
     ap.add_argument("dirs", nargs="*")
     ap.add_argument("-n", type=int, default=20)
@@ -434,7 +438,7 @@ def main():
     if a.mode == "report":
         return report(a.dirs)
     if a.mode == "first":
-        return first_read([x for x in a.apps.split(",") if x], [a.mewla, "agent-use", "computer-mcp"])
+        return first_read([x for x in a.apps.split(",") if x], [a.mewla, "agent-use", "computer-mcp"], a.watch)
     if a.mode == "audit":
         return audit(a.dirs[0] if a.dirs else os.path.expanduser("~/.mewla/screen-agent-audit.jsonl"))
     if a.mode == "tools":
