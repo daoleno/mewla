@@ -19,7 +19,7 @@ func TestAnswerPanePromptSurvivesBlockCountdownAndStillRefusesOtherCommands(t *t
 	}
 	live := func(command, left string) *classifier.Prompt {
 		t.Helper()
-		signal := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "claude"}, PaneContent: pane(command, left)})
+		signal := classifier.NewClaudeActivityAdapter().Infer(classifier.ActivityInput{Worker: classifier.Worker{Command: "claude"}, Capture: &classifier.CaptureInfo{Exact: true, Complete: true}, PaneContent: pane(command, left)})
 		if signal.Prompt == nil {
 			t.Fatalf("no prompt at %s: %+v", left, signal)
 		}

@@ -48,7 +48,9 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		}
 		// The identity rests on the whole capture, not on the window or the
 		// text below the composer: a line in the command can look like either.
-		if wholeOK {
+		// An answerable id needs the dialog's first lines to be provably in
+		// the capture: only a capture from the pane's first line says so.
+		if wholeOK && in.Capture != nil && in.Capture.Exact && in.Capture.Complete {
 			wholePrompt.Title = signal.Summary
 			signal.Prompt = &wholePrompt
 		}

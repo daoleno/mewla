@@ -1920,6 +1920,7 @@ func (w *Watcher) collectPollEvidence(prepared []preparedPollWorker, processes m
 		if probe != nil {
 			toolChild := isCursorAgentCommand(item.workerSnap.Command) && cursorToolChildActive(item.panePID, processes)
 			activity = probe.Infer(classifier.ActivityInput{Worker: item.workerSnap, PaneContent: item.content, ToolChildActive: toolChild})
+			activity = w.withDialogCapture(item.id, item.workerSnap, activity)
 			activity = w.enrichChoicePrompt(item.id, withChoicePrompt(activity, item.content))
 		}
 		turn, hasTurn, turnErr := w.ledgerTurnFor(item.id, item.now)
@@ -3905,6 +3906,17 @@ func looksLikeEnvAssignment(token string) bool {
 		}
 	}
 	return true
+}
+
+// activitySignalCaptured infers activity from a capture that says what it proves.
+func (w *Watcher) activitySignalCaptured(worker classifier.Worker, paneContent string, capture *classifier.CaptureInfo) classifier.ActivitySignal {
+	w.mu.RLock()
+	probe := w.activityProbe
+	w.mu.RUnlock()
+	if probe == nil {
+		return classifier.ActivitySignal{}
+	}
+	return probe.Infer(classifier.ActivityInput{Worker: worker, PaneContent: paneContent, Capture: capture})
 }
 
 func (w *Watcher) activitySignal(worker classifier.Worker, paneContent string, panePID int, processes map[int]processInfo) classifier.ActivitySignal {

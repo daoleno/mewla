@@ -17,7 +17,7 @@ func codexIdentityPane(command, elapsed string) string {
 
 func codexID(t *testing.T, command, elapsed string) string {
 	t.Helper()
-	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: codexIdentityPane(command, elapsed)})
+	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: codexIdentityPane(command, elapsed)})
 	if signal.State != StateBlocked || signal.Prompt == nil {
 		t.Fatalf("no approval prompt for %q: %+v", command, signal)
 	}
@@ -114,7 +114,7 @@ func TestBannerLikeHeredocLineDoesNotTruncateTheRequest(t *testing.T) {
 // prompt.
 func TestUnboundedRequestFailsClosed(t *testing.T) {
 	pane := "old session output\nClaude Code\n   body\n   EOF\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend\n"
-	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: pane})
+	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo, PaneContent: pane})
 	if signal.State != StateBlocked || signal.Prompt != nil {
 		t.Fatalf("want a blocked signal with no prompt, got %+v", signal)
 	}
@@ -123,7 +123,7 @@ func TestUnboundedRequestFailsClosed(t *testing.T) {
 		long = append(long, "   line "+strings.Repeat("x", index%7))
 	}
 	tall := "Claude Code v2.1.0\n" + strings.Join(long, "\n") + "\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend\n"
-	signal = NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: tall})
+	signal = NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo, PaneContent: tall})
 	if signal.State != StateBlocked || signal.Prompt != nil {
 		t.Fatalf("a request longer than the read limit became answerable: %+v", signal)
 	}
@@ -151,7 +151,7 @@ func TestApprovalsStayAnswerableAboveLongHistory(t *testing.T) {
 	}
 	codex := history + "╭──────────────────────────────╮\n│ >_ OpenAI Codex (v0.46.0)    │\n╰──────────────────────────────╯\n" + conversation +
 		"  Would you like to run the following command?\n\n  $ echo 'OpenAI Codex' && ls\n\n› 1. Yes, proceed (y)\n  2. No, cancel\n\n  Press enter to confirm or esc to cancel\n"
-	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: codex})
+	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: codex})
 	if signal.State != StateBlocked || signal.Prompt == nil || !strings.Contains(signal.Prompt.Request, "echo 'OpenAI Codex' && ls") {
 		t.Fatalf("codex approval after a long history: %+v", signal)
 	}

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 const ownershipOption = "@mewla_worker_created"
@@ -86,6 +88,35 @@ func capturePaneWithState(socket, target string) (screen string, alive bool, dea
 		}
 	}
 	return text[:cut], alive, deadStatus, nil
+}
+
+// capturePaneDialog captures a pane for identifying a dialog that asks to run
+// something: the whole scrollback (-S -), with the spaces a program wrote at
+// the end of a line kept and terminal-wrapped lines joined (-J). In the same
+// tmux invocation it reads how much scrollback the pane holds, so the capture
+// can say whether it reaches the pane's first line: it does when the scrollback
+// is shorter than its limit (otherwise the oldest lines were evicted).
+func capturePaneDialog(socket, target string) (string, classifier.CaptureInfo, error) {
+	out, err := tmuxCommand(socket,
+		"capture-pane", "-t", target, "-p", "-J", "-S", "-", ";",
+		"display-message", "-p", "-t", target, paneStateMarker+"#{history_size} #{history_limit}",
+	).Output()
+	if err != nil {
+		return "", classifier.CaptureInfo{}, fmt.Errorf("capture pane: %w", err)
+	}
+	text := string(out)
+	cut := strings.LastIndex(text, paneStateMarker)
+	if cut < 0 {
+		return "", classifier.CaptureInfo{}, fmt.Errorf("tmux returned no scrollback size")
+	}
+	info := classifier.CaptureInfo{Exact: true}
+	fields := strings.Fields(text[cut+len(paneStateMarker):])
+	if len(fields) >= 2 {
+		size, sizeErr := strconv.Atoi(fields[0])
+		limit, limitErr := strconv.Atoi(fields[1])
+		info.Complete = sizeErr == nil && limitErr == nil && limit > 0 && size < limit
+	}
+	return text[:cut], info, nil
 }
 
 // ownedPaneSetFor is ownedPaneSet over an inventory. It returns nil when the

@@ -8,6 +8,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // ClaudeChoiceQuestion is the transcript-owned shape of one AskUserQuestion
@@ -82,16 +84,10 @@ func (p *tmuxClaudeChoicePane) capture() (string, error) {
 	return string(out), nil
 }
 
-// captureHistory is the capture the watcher polls with: the screen and 200
-// lines of scrollback. A prompt that asks to run something is identified from
-// it, in the poll and in the answer alike, so a dialog's first line is found
-// above the visible screen the same way both times.
-func (p *tmuxClaudeChoicePane) captureHistory() (string, error) {
-	out, err := tmuxCommand(p.watcher.socketPathFor(p.sessionID), "capture-pane", "-p", "-S", "-200", "-t", p.sessionID).Output()
-	if err != nil {
-		return "", fmt.Errorf("capture pane: %w", err)
-	}
-	return string(out), nil
+// captureDialog is the capture a dialog that asks to run something is
+// identified from, in the poll and in the answer alike (capturePaneDialog).
+func (p *tmuxClaudeChoicePane) captureDialog() (string, classifier.CaptureInfo, error) {
+	return capturePaneDialog(p.watcher.socketPathFor(p.sessionID), p.sessionID)
 }
 
 func (p *tmuxClaudeChoicePane) sendKey(key string) error {

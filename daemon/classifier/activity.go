@@ -25,6 +25,23 @@ type ActivityInput struct {
 	Worker          Worker
 	PaneContent     string
 	ToolChildActive bool // optional process-tree hint (non-idle worker child)
+	// Capture says how PaneContent was captured. A dialog that asks to run
+	// something is answerable only from a capture that says what it can prove;
+	// without one the dialog is reported blocked, with no prompt id.
+	Capture *CaptureInfo
+}
+
+// CaptureInfo is what the capture of a pane proves about its text.
+type CaptureInfo struct {
+	// Exact: the capture keeps the spaces a program wrote at the end of a line
+	// and joins lines the terminal wrapped (tmux capture-pane -J), so a line's
+	// text is what was displayed, trailing blanks included. It cannot show what
+	// the program did before drawing: a tab, a trimmed or re-wrapped line.
+	Exact bool
+	// Complete: the capture starts at the first line the pane ever held, with
+	// nothing evicted from its scrollback. No dialog can then have its first
+	// lines cut off above the capture.
+	Complete bool
 }
 
 // ActivityAdapter is a provider-specific pane/process activity detector.

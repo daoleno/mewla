@@ -12,18 +12,30 @@ import (
 //
 // An answer is composed for a prompt id and sent only if the pane still shows
 // that id, so the id has to tell any two requests apart. For Claude permission
-// and Codex approval dialogs it is therefore a hash of the dialog's exact text:
-// every byte of the lines from the dialog's own first line down to its menu,
-// whitespace included, with only positively identified provider UI removed
-// (Claude's terminal countdown notice, the cursor caret and a trailing clock on
-// a menu row). The dialog's first line is found by provider structure, in the
-// whole capture rather than in a slice cut by a banner, a composer or a line
-// limit. When that boundary cannot be proven the dialog is still reported as
-// blocked, with no prompt and so no id to answer.
+// and Codex approval dialogs it is a hash of the dialog's text as displayed:
+// every character of the lines from the dialog's first line down to its menu,
+// spaces at line ends included, with only positively identified provider UI
+// removed (Claude's terminal countdown notice, the cursor caret and a trailing
+// clock on a menu row).
 //
-//	provider  dialog starts at                          refused (no prompt) when
-//	claude    the solid rule line above the box          no rule line above the menu
-//	codex     the topmost heading sentence               no heading sentence above the menu
+// What the screen can and cannot prove:
+//   - It is the displayed text, not the program's bytes. tmux keeps the spaces
+//     a program wrote at the end of a line and, with -J, joins lines the
+//     terminal wrapped; it cannot show a tab, or a line the program itself
+//     trimmed or re-wrapped. Two commands that render identically get one id.
+//   - Whether the capture holds the whole dialog is a property of the capture,
+//     not of the text. A heading-looking line proves nothing: a command can
+//     contain one, and a clipped capture can begin at it. Claude's dialog box
+//     begins at a rule line at the margin, which a command's own lines (drawn
+//     indented) do not produce. Codex's dialog has no such line, so a Codex id
+//     is issued only when the capture starts at the pane's first line with
+//     nothing evicted (CaptureInfo.Complete); otherwise the dialog is reported
+//     blocked with no prompt, and so no id to answer.
+//   - A capture not taken with -J (CaptureInfo.Exact) never yields an id.
+//
+//	provider  dialog starts at                       answerable id only when
+//	claude    the solid rule line above the box       Exact capture, rule line found
+//	codex     the topmost heading sentence            Exact and Complete capture, heading found
 //
 // The presentation (Request, Title) is cut and tidied separately; it never
 // feeds the id.
@@ -52,12 +64,12 @@ var (
 	menuCaretRe    = regexp.MustCompile(`^(\s*)[❯›>](\s*)(\d{1,2}[.)])`)
 )
 
-// menuIdentityRows are the menu's exact lines minus the moving cursor and a
-// row's own countdown.
+// menuIdentityRows are the menu's lines as displayed, minus the moving cursor
+// and a row's own countdown.
 func menuIdentityRows(rows []string) string {
 	out := make([]string, len(rows))
 	for index, row := range rows {
-		row = strings.TrimRight(row, " \t\r")
+		row = strings.TrimSuffix(row, "\r")
 		row = menuCaretRe.ReplaceAllString(row, "$1 $2$3")
 		out[index] = trailingClockRe.ReplaceAllString(row, "")
 	}
@@ -92,7 +104,7 @@ func dropTerminalNotice(lines []string) []string {
 func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, options []PromptOption) Prompt {
 	rawRows := make([]string, len(dialog))
 	for index, line := range dialog {
-		rawRows[index] = strings.TrimRight(line, " \t\r")
+		rawRows[index] = strings.TrimSuffix(line, "\r")
 	}
 	title, request, _, _ := readMenuRequest(dialog, len(dialog), false)
 	return Prompt{

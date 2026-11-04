@@ -33,7 +33,7 @@ func heredocPermissionPane(command, notice string) string {
 
 func inferPermission(t *testing.T, pane string) *Prompt {
 	t.Helper()
-	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: pane})
+	signal := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo, PaneContent: pane})
 	if signal.State != StateBlocked || signal.Prompt == nil || signal.Prompt.Kind != PromptPermission {
 		t.Fatalf("not a structured permission prompt: %+v\n%s", signal, pane)
 	}
@@ -61,7 +61,7 @@ func TestBlockCountdownKeepsPermissionIdentityAndCommand(t *testing.T) {
 	if other.ID == first.ID {
 		t.Fatal("a different command kept the identity")
 	}
-	if inferred := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, PaneContent: "Claude Code v2.1.0\n● done\n❯ \n"}); inferred.State == StateBlocked {
+	if inferred := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo, PaneContent: "Claude Code v2.1.0\n● done\n❯ \n"}); inferred.State == StateBlocked {
 		t.Fatalf("an expired dialog still blocks: %+v", inferred)
 	}
 }

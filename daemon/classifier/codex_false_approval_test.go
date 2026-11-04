@@ -60,7 +60,7 @@ func TestCodexOrdinaryOutputDoesNotRaiseApproval(t *testing.T) {
 				label += "/header"
 			}
 			t.Run(label, func(t *testing.T) {
-				signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: pane})
+				signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: pane})
 				if signal.State == StateBlocked || signal.Prompt != nil {
 					t.Fatalf("adapter blocked ordinary output: %#v", signal)
 				}
@@ -76,7 +76,7 @@ func TestCodexOrdinaryOutputDoesNotRaiseApproval(t *testing.T) {
 // The help-text pane is still a Working pane: the fix must restore Running
 // evidence, not merely drop the false block.
 func TestCodexHelpOutputPaneReportsWorking(t *testing.T) {
-	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: "OpenAI Codex\n" + codexHelpOutputPane})
+	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: "OpenAI Codex\n" + codexHelpOutputPane})
 	if signal.State != StateRunning || signal.Source != "codex_pane_working" {
 		t.Fatalf("signal = %#v, want running codex_pane_working", signal)
 	}
@@ -104,7 +104,7 @@ func TestCodexRealApprovalsStillBlockWithPrompt(t *testing.T) {
 				label += "/header"
 			}
 			t.Run(label, func(t *testing.T) {
-				signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: pane})
+				signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: pane})
 				if signal.State != StateBlocked || signal.Source != "codex_pane_blocked" {
 					t.Fatalf("adapter lost the approval: %#v", signal)
 				}
@@ -138,7 +138,7 @@ func TestClassifyRecognizesCodexByChromeWhenCommandIsWrapped(t *testing.T) {
 }
 
 func TestCodexMenuLessApprovalPromptStillBlocks(t *testing.T) {
-	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: "OpenAI Codex\nDo you want to continue?"})
+	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: "OpenAI Codex\nDo you want to continue?"})
 	if signal.State != StateBlocked {
 		t.Fatalf("signal = %#v", signal)
 	}
@@ -155,7 +155,7 @@ func TestCodexApprovalIdentityIgnoresWorkingClock(t *testing.T) {
 	}
 	infer := func(command, elapsed string) *Prompt {
 		t.Helper()
-		signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: pane(command, elapsed)})
+		signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: pane(command, elapsed)})
 		if signal.State != StateBlocked || signal.Prompt == nil {
 			t.Fatalf("no approval prompt: %+v", signal)
 		}
