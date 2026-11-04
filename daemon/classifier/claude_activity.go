@@ -28,7 +28,7 @@ func (a *ClaudeActivityAdapter) Match(in ActivityInput) bool {
 }
 
 func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
-	pane := latestProviderPaneWindow(withoutAutoDenyMention(in.PaneContent), "claude code")
+	pane := latestClaudePaneWindow(in.PaneContent)
 	// Claude's selection prompts sit at the bottom of the pane; only the
 	// footer region proves one is open now.
 	tail := claudePromptTail(pane, 8)
@@ -85,27 +85,26 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	return ActivitySignal{State: StateUnknown, Source: "claude_idle", Provider: a.Name()}
 }
 
-// claudePromptTail returns the last n non-blank lines, trimmed.
-// withoutAutoDenyMention keeps the notice "Claude Code will automatically deny
-// this request in ..." from passing for the banner that starts the latest
-// window of the pane: it sits inside an open dialog, and the request above it
-// would be cut away.
-func withoutAutoDenyMention(content string) string {
-	if !autoDenyLineRe.MatchString(content) && !wrappedAutoDenyRe.MatchString(content) {
-		return content
+// claudeBannerRe is Claude's own banner line: its name alone, or with a
+// version, after any logo glyphs. A mention inside a command, a commit message
+// or the auto-refusal notice ("Claude Code will automatically ...") is not
+// one, and taking it for one would start the pane window inside the open
+// dialog and cut the command above it away.
+var claudeBannerRe = regexp.MustCompile(`(?im)^[^\p{L}\p{N}\n]*claude code\b(?:[ \t]+v?\d[^\n]*)?[ \t\r]*$`)
+
+// latestClaudePaneWindow is the pane from Claude's latest banner on, or its
+// last 80 lines when the banner has scrolled out.
+func latestClaudePaneWindow(content string) string {
+	normalized := strings.ReplaceAll(content, "\r\n", "\n")
+	if matches := claudeBannerRe.FindAllStringIndex(normalized, -1); len(matches) > 0 {
+		start := matches[len(matches)-1][0]
+		// The match opens at the line start; keep the banner line itself.
+		return normalized[start:]
 	}
-	// A narrow pane can wrap the notice between "Claude Code" and the words
-	// that name it, leaving the mention on a line the per-line pass misses.
-	content = wrappedAutoDenyRe.ReplaceAllString(content, "this agent$1")
-	lines := strings.Split(content, "\n")
-	for index, line := range lines {
-		if autoDenyLineRe.MatchString(line) {
-			lines[index] = strings.NewReplacer("Claude Code", "this agent", "claude code", "this agent").Replace(line)
-		}
-	}
-	return strings.Join(lines, "\n")
+	return latestProviderPaneWindow(normalized, "")
 }
 
+// claudePromptTail returns the last n non-blank lines, trimmed.
 func claudePromptTail(pane string, n int) []string {
 	lines := strings.Split(strings.ReplaceAll(pane, "\r\n", "\n"), "\n")
 	var tail []string

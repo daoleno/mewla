@@ -88,3 +88,52 @@ func TestBlockCountdownWrappedInNarrowPane(t *testing.T) {
 		}
 	}
 }
+
+// A command that says what the notice says is a command, not a clock: it stays
+// in the request, and two dialogs that differ only in such a line do not share
+// an identity.
+func TestNoticeLookalikesInCommandsStayInTheRequest(t *testing.T) {
+	notice := strings.Replace(blockNoticeFmt, "%s", "2:00", 1)
+	lookalikes := []string{
+		"echo 'Claude Code will automatically retry the request' >> notes.md",
+		"echo 'Claude Code will automatically block this request in 5 seconds' >> notes.md",
+		"# will automatically deny this request",
+		"echo automatically deny > policy.txt",
+		"⏱ sleep 30 && echo done",
+	}
+	seen := map[string]string{}
+	base := inferPermission(t, heredocPermissionPane("cat > /tmp/proto/index.html <<'EOF'", notice))
+	seen[base.ID] = "base"
+	for _, line := range lookalikes {
+		command := "cat > /tmp/proto/index.html <<'EOF'\n   " + line
+		first := inferPermission(t, heredocPermissionPane(command, notice))
+		if !strings.Contains(first.Request, line) {
+			t.Fatalf("a command line was removed as if it were the notice: %q\nrequest: %q", line, first.Request)
+		}
+		if strings.Contains(first.Request, "unattended session") {
+			t.Fatalf("the real notice leaked beside %q: %q", line, first.Request)
+		}
+		if previous, clash := seen[first.ID]; clash {
+			t.Fatalf("%q collides with %s: %s", line, previous, first.ID)
+		}
+		seen[first.ID] = line
+		// ...and the clock still does not move the identity.
+		for _, left := range []string{"1:25", "0:49"} {
+			again := inferPermission(t, heredocPermissionPane(command, strings.Replace(blockNoticeFmt, "%s", left, 1)))
+			if again.ID != first.ID {
+				t.Fatalf("%q: identity moved with the clock (%s): %s != %s", line, left, again.ID, first.ID)
+			}
+		}
+	}
+}
+
+// The command's own words about "Claude Code" must not stand in for the banner
+// that opens the latest pane window and cut the dialog's request away.
+func TestCommandMentioningClaudeCodeKeepsTheDialogWindow(t *testing.T) {
+	notice := strings.Replace(blockNoticeFmt, "%s", "1:25", 1)
+	command := "git commit -m 'Claude Code will automatically block this request in 2:00'"
+	got := inferPermission(t, heredocPermissionPane(command, notice))
+	if !strings.Contains(got.Request, command) {
+		t.Fatalf("request = %q", got.Request)
+	}
+}
