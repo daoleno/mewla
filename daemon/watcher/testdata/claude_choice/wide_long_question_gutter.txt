@@ -1,0 +1,23 @@
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Export path
+
+│ Exporting readable WeChat history needs decrypting the local database with a key from the running WeChat — there's no lighter
+│ way. The safe version is doing that openly, on your own Mac and account. How do you want to proceed?
+
+❯ 1. GreenBubbles on my Mac
+     Recommended. MIT, compiled and reviewed by us, no telemetry, read-only, no plaintext DB left behind. Needs sudo, re-signing
+     your WeChat.app (reverts on WeChat update), and one re-login (scan QR with your phone). Exports your local history to
+     JSON/Markdown.
+  2. yichen (gentler re-sign)
+     Signs a COPY of WeChat, so it doesn't touch your real app or need a re-login. But its licence isn't open-source (personal use
+     only) and it leaves a fully decrypted database on disk.
+  3. Screen-read new messages
+     No key extraction at all. Read-only on the server's secondary account — captures ongoing new messages in chosen groups, not
+     full history. The most conservative, but not a real export.
+  4. Hold for now
+     Don't read any WeChat database yet; keep thinking about it.
+  5. Type something.
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  6. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

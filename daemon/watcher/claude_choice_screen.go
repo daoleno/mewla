@@ -11,7 +11,8 @@ import (
 // panes). The pane is plain text after capture-pane -p:
 //
 //	←  ☐ Fruit  ☒ Colors  ✔ Submit  →      tab bar (single question: " ☐ Size")
-//	Which colors?                          question text, wrapped by Ink
+//	Which colors?                          question text, wrapped by Ink; a long
+//	                                       one has a "│ " gutter on each line (2.1.318)
 //	❯ 1. [✔] Red                           numbered rows; [ ]/[✔] only for multi-select
 //	         warm                          description or wrapped label
 //	  4. [✔] typed other text              "Type something" row holds the Other text
@@ -72,6 +73,7 @@ var (
 	claudeChoiceBoxRe       = regexp.MustCompile(`\s{2,}[│┌└├┐┘].*$`)
 	claudeChoiceSubmitRowRe = regexp.MustCompile(`^\s*(❯)?\s*Submit\s*$`)
 	claudeChoiceTabRe       = regexp.MustCompile(`([☐☒])\s+(.+?)(?:\s{2,}|$)`)
+	claudeChoiceGutterRe    = regexp.MustCompile(`^\s*│\s?`)
 )
 
 func isClaudeChoiceSeparator(line string) bool {
@@ -148,8 +150,10 @@ func parseClaudeChoiceQuestion(screen claudeChoiceScreen, body []string) claudeC
 		if claudeChoiceRowRe.MatchString(body[index]) {
 			break
 		}
-		question.WriteString(body[index])
-		lines = append(lines, body[index])
+		// A long question is drawn behind a "│ " gutter on every line.
+		line := claudeChoiceGutterRe.ReplaceAllString(body[index], "")
+		question.WriteString(line)
+		lines = append(lines, line)
 	}
 	screen.Question = claudeChoiceCompact(question.String())
 	screen.QuestionText = joinClaudeChoiceLines(lines)
@@ -209,7 +213,8 @@ func parseClaudeChoiceReview(screen claudeChoiceScreen, body, tail []string) cla
 	var current *claudeChoiceReviewItem
 	inAnswer := false
 	for _, line := range body[start+1:] {
-		trimmed := strings.TrimSpace(line)
+		// A long question keeps its "│ " gutter on the review screen too.
+		trimmed := strings.TrimSpace(claudeChoiceGutterRe.ReplaceAllString(line, ""))
 		if trimmed == "Ready to submit your answers?" {
 			break
 		}
