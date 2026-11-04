@@ -23,6 +23,7 @@ function record(op, ms, bytes) {
   if (bytes != null) r.bytes.push(bytes);
 }
 async function repeat(op, fn, n = reps) {
+  if (process.env.BENCH_VERBOSE) console.error(`[bench] ${op} x${n}`);
   for (let i = 0; i < n; i++) {
     try { const { ms, bytes } = await fn(i); record(op, ms, bytes); }
     catch (e) { (results[op] ??= { ms: [], bytes: [], errors: [] }).errors ??= []; results[op].errors.push(String(e).slice(0, 200)); }
