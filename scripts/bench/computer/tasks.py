@@ -69,6 +69,10 @@ def check(tid, d, answer):
         ok = False; why.append("still there " + os.path.basename(c["absent"]))
     for want in c.get("answer_contains", []):
         w = fill(want, d).lower()
+        if w == "none":
+            if not any(n in text for n in ("none", "no event", "nothing", "no meeting", "not any", "isn't any", "empty", "free")):
+                ok = False; why.append("answer lacks %r" % w[:20])
+            continue
         if "todo" in w or w not in text:
             ok = False; why.append("answer lacks %r" % w[:20])
     if "manual" in c:
