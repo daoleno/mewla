@@ -133,8 +133,10 @@ func TestVirtualDisplayStage1(t *testing.T) {
 	clicker := session.(appClicker)
 	ok, why := clicker.BackgroundClicks()
 	say("background clicks available: %v %s", ok, why)
-	// Near the start of the first line, in the display's own pixels.
-	at := image.Pt(window.Bounds.Min.X-bounds.Min.X+12, window.Bounds.Min.Y-bounds.Min.Y+70)
+	// Inside the text area, a little right of its top-left corner (the start
+	// of the first line), in the display's own pixels.
+	at := area.Frame.Min.Add(image.Pt(10, 10)).Sub(bounds.Min)
+	say("text area frame %v", area.Frame)
 	say("click at display pixel %v: %v", at, clicker.ClickTo(pid, window.ID, at.X, at.Y, 0, 1))
 	time.Sleep(500 * time.Millisecond)
 	say("caret after the click: %s", caret())
@@ -156,6 +158,26 @@ func TestVirtualDisplayStage1(t *testing.T) {
 		fcancel()
 		say("a frame after the wake: seq %d err %v", f.Seq, err)
 		say("caret after the sleep: %s", caret())
+		// The old stream is gone; a new session is what the next tool call gets.
+		if err != nil {
+			session.Close()
+			again, err2 := backend.Start(ctx)
+			say("new session after the wake: %v", err2)
+			if err2 == nil {
+				defer again.Close()
+				cctx, ccancel := context.WithTimeout(ctx, 5*time.Second)
+				f2, err3 := again.Frame(cctx, 0)
+				ccancel()
+				say("frame from the new session: seq %d %dx%d err %v", f2.Seq, f2.Image.Bounds().Dx(), f2.Image.Bounds().Dy(), err3)
+				say("set text again: %v", apps.ActOnElement(ctx, *area, "set_value", "hello world, hello again"))
+				time.Sleep(300 * time.Millisecond)
+				say("caret before: %s", caret())
+				clicker2 := again.(appClicker)
+				say("click again at %v: %v", at, clicker2.ClickTo(pid, window.ID, at.X, at.Y, 0, 1))
+				time.Sleep(500 * time.Millisecond)
+				say("caret after the second click: %s", caret())
+			}
+		}
 	}
 }
 
