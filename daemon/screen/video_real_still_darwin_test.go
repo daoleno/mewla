@@ -90,7 +90,8 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.pos0, _ = readScrollMarker(before.Image)
+	var ok0 bool
+	res.pos0, ok0 = readScrollMarker(before.Image)
 	conn, server := shapedPipe(linkShape{"LAN", 2 * time.Millisecond, 100e6 / 8, false})
 	was := streamAdaptive
 	streamAdaptive = true
@@ -135,7 +136,13 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	var trace []posAt
 	began := time.Now()
 	end := began.Add(14 * time.Second)
-	for time.Now().Before(end) {
+	_ = conn.SetReadDeadline(end) // the skimmer panics on a read error: a quiet stream must not run past 14 s
+	for time.Now().Before(end) && !func() (stop bool) {
+		defer func() {
+			if recover() != nil {
+				stop = true
+			}
+		}()
 		cur = nil
 		kind, fence, _ := skim.message()
 		switch kind {
@@ -151,6 +158,8 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 				}
 			}
 		}
+		return false
+	}() {
 	}
 	conn.Close()
 	<-done
@@ -160,14 +169,26 @@ func probeStill(t *testing.T, ctx context.Context, session Session, name string,
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.pos1, _ = readScrollMarker(direct.Image)
+	pos1, ok1 := readScrollMarker(direct.Image)
+	res.pos1 = pos1
+	// Every change of position the viewer's tile pictures showed, and when
+	// (a position seen twice in a row is not repeated).
 	var line strings.Builder
-	for i, p := range trace {
-		if i%12 == 0 || i == len(trace)-1 {
+	last := -1
+	for _, p := range trace {
+		if p.pos != last {
 			fmt.Fprintf(&line, " %dms:%d", p.ms, p.pos)
+			last = p.pos
 		}
 	}
-	t.Logf("%s: scroll position %d before, %d after; per-update (tile pictures only):%s", name, res.pos0, res.pos1, line.String())
+	t.Logf("%s: %d updates in %v; direct scroll marker before %d (read ok: %v), after %d (read ok: %v), frame %v; tile pictures' position changes:%s",
+		name, len(updates), time.Since(began).Round(time.Millisecond), res.pos0, ok0, pos1, ok1, direct.Image.Bounds(), line.String())
+	if out != "" {
+		var buf bytes.Buffer
+		if png.Encode(&buf, direct.Image.SubImage(image.Rect(0, 0, min(600, direct.Image.Bounds().Dx()), 120))) == nil {
+			_ = os.WriteFile(filepath.Join(out, "marker-direct-"+name+".png"), buf.Bytes(), 0o600)
+		}
+	}
 	if res.pos1 == 0 || res.pos1 == res.pos0 {
 		res.invalid = "the page did not scroll"
 		return res
