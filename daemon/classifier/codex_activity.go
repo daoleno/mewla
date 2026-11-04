@@ -34,7 +34,12 @@ func (a *CodexActivityAdapter) Match(in ActivityInput) bool {
 func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	pane := latestCodexPaneWindow(in.PaneContent)
 	approvalPane := strings.Join(linesAfterLastCodexComposer(strings.Split(pane, "\n")), "\n")
-	if codexApprovalPromptRe.MatchString(approvalPane) {
+	// A dialog proves itself by structure: heading sentence, numbered menu and
+	// its footer at the bottom of the capture. That holds whatever a banner-like
+	// or composer-like line inside its command did to the window above.
+	whole := strings.ReplaceAll(in.PaneContent, "\r\n", "\n")
+	wholePrompt, wholeOK := ParseCodexApprovalPrompt(whole)
+	if codexApprovalPromptRe.MatchString(approvalPane) || wholeOK {
 		signal := ActivitySignal{
 			State:    StateBlocked,
 			Summary:  "Waiting for Codex approval",
@@ -43,9 +48,9 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		}
 		// The identity rests on the whole capture, not on the window or the
 		// text below the composer: a line in the command can look like either.
-		if prompt, ok := ParseCodexApprovalPrompt(strings.ReplaceAll(in.PaneContent, "\r\n", "\n")); ok {
-			prompt.Title = signal.Summary
-			signal.Prompt = &prompt
+		if wholeOK {
+			wholePrompt.Title = signal.Summary
+			signal.Prompt = &wholePrompt
 		}
 		return signal
 	}
