@@ -157,6 +157,11 @@ func Classify(paneAlive bool, lines []string, command string) (WorkerState, stri
 	// Get the last few meaningful lines for pattern matching.
 	tail := lastNonEmpty(lines, 10)
 	interactiveTail := linesAfterLastReadyComposer(tail)
+	if isCodexPane(command, lines) {
+		// Codex's composer carries placeholder or draft text, so the bare-caret
+		// rule never sees it and scrollback would be scanned for prompts.
+		interactiveTail = linesAfterLastCodexComposer(interactiveTail)
+	}
 	lastLine := ""
 	if len(interactiveTail) > 0 {
 		lastLine = interactiveTail[len(interactiveTail)-1]

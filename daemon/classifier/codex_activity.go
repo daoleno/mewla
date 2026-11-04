@@ -33,7 +33,7 @@ func (a *CodexActivityAdapter) Match(in ActivityInput) bool {
 
 func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	pane := latestProviderPaneWindow(in.PaneContent, "openai codex")
-	approvalPane := strings.Join(linesAfterLastReadyComposer(strings.Split(pane, "\n")), "\n")
+	approvalPane := strings.Join(linesAfterLastCodexComposer(strings.Split(pane, "\n")), "\n")
 	if codexApprovalPromptRe.MatchString(approvalPane) {
 		signal := ActivitySignal{
 			State:    StateBlocked,
@@ -61,6 +61,49 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	}
 
 	return ActivitySignal{State: StateUnknown, Source: "codex_idle", Provider: a.Name()}
+}
+
+// isCodexComposerLine reports whether line is Codex's input box rather than a
+// menu row. The composer paints "›" and then either nothing, its placeholder
+// ("Ask Codex to do anything", "Write tests for @filename") or the person's
+// unsent draft; an approval, trust or picker menu paints "›" before a numbered
+// option ("› 1. Yes, proceed (y)"). A modal replaces the composer, so a visible
+// composer means nothing above it is waiting for an answer.
+func isCodexComposerLine(line string) bool {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(line), "›")
+	if !ok {
+		return false
+	}
+	rest = strings.TrimSpace(rest)
+	return rest == "" || rest[0] < '0' || rest[0] > '9'
+}
+
+// linesAfterLastCodexComposer keeps only what Codex painted below its last
+// composer: everything above is scrollback (tool output, quoted help text),
+// which can contain approval wording without anything being asked.
+func linesAfterLastCodexComposer(lines []string) []string {
+	last := -1
+	for index, line := range lines {
+		if isCodexComposerLine(line) {
+			last = index
+		}
+	}
+	if last < 0 {
+		return lines
+	}
+	return lines[last+1:]
+}
+
+func isCodexPane(command string, lines []string) bool {
+	if strings.Contains(commandBaseName(command), "codex") {
+		return true
+	}
+	for _, line := range lines {
+		if codexChromeRe.MatchString(line) {
+			return true
+		}
+	}
+	return false
 }
 
 func latestProviderPaneWindow(content, marker string) string {
