@@ -602,5 +602,19 @@ func (w *Watcher) currentPrompt(pane claudeChoicePane, sessionID string) (*class
 	if signal.State != classifier.StateBlocked {
 		return nil, nil
 	}
+	if signal.Source == "claude_pane_blocked" || signal.Source == "codex_pane_blocked" {
+		// A dialog that asks to run something is identified from the same
+		// capture the poll made, not from the visible screen alone.
+		if history, ok := pane.(interface{ captureHistory() (string, error) }); ok {
+			whole, err := history.captureHistory()
+			if err != nil {
+				return nil, err
+			}
+			signal = w.activitySignal(*worker, whole, 0, nil)
+			if signal.State != classifier.StateBlocked {
+				return nil, nil
+			}
+		}
+	}
 	return signal.Prompt, nil
 }
