@@ -618,7 +618,7 @@ func (w *Watcher) currentPrompt(pane claudeChoicePane, sessionID string) (*class
 			return nil, nil
 		}
 		if signal.Prompt == nil {
-			return nil, refusePrompt("this dialog cannot be identified exactly (the capture does not prove its first lines are present, or the request has blanks before a line break that the screen cannot tell from erased cells); no key was sent")
+			return nil, refusePrompt("this dialog cannot be identified exactly (the capture does not prove its first lines are present, the request is cut to fit the screen, or it has blank rows or painted trailing blanks the screen cannot tell from padding); no key was sent")
 		}
 	}
 	return signal.Prompt, nil
