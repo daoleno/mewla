@@ -183,38 +183,74 @@ func menuRequest(lines []string, menuStart int) (title, request string) {
 }
 
 var (
-	// A dialog Claude will refuse by itself says so, with a clock that ticks:
-	// "Claude Code will automatically deny this request in about 28 seconds",
-	// "... automatically block this request in 2:00, to avoid holding up an
-	// unattended session". The verb has varied between releases, so the notice
-	// is recognized by its shape ("will automatically <verb> this request")
-	// as well as by the verbs seen so far.
-	autoDenyLineRe = regexp.MustCompile(`(?i)(?:\bwill\s+auto(?:matically)?[ -]?\w+\s+(?:this|the)\s+request\b|auto(?:matically)?[ -]?(?:deny|denied|denies|block|blocked|blocks|reject|dismiss|cancel|decline|refuse))`)
-	// "Claude Code" followed, across any wrap, by the words of the notice.
-	wrappedAutoDenyRe = regexp.MustCompile(`(?i)claude\s+code(\s+will\s+auto(?:matically)?[\s-]*\w+)`)
+	// The notice a dialog carries when Claude will refuse it by itself, with a
+	// clock that ticks: "Claude Code will automatically deny this request in
+	// about 28 seconds", "... automatically block this request in 2:00, to
+	// avoid holding up an unattended session". The verb has varied between
+	// releases, so the notice is recognized by its whole shape: it opens a
+	// paragraph with the provider's name, says it will act on this request,
+	// and counts down. A line of a command that merely says "automatically
+	// deny" or "will automatically retry the request" is not this notice.
+	autoNoticeStartRe = regexp.MustCompile(`(?i)^(?:⏱\s*)?(?:claude\s+code|this\s+agent)\b`)
+	autoNoticeRe      = regexp.MustCompile(`(?i)^(?:⏱\s*)?(?:claude\s+code|this\s+agent)\s+will\s+auto(?:matically)?[\s-]*\w+\s+(?:this|the)\s+request\s+in\s+(?:about\s+|under\s+|less\s+than\s+)?(?:\d+:\d{2}|(?:\d+(?:\.\d+)?|an?|one)\s*(?:seconds?|secs?|minutes?|mins?|s|m))\b`)
+	// What ends a notice's paragraph when no blank line does: the question
+	// under it or a menu row.
+	autoNoticeEndRe = regexp.MustCompile(`(?i)^(?:do you want\b|would you like\b|esc to cancel)`)
 	// An elapsed or remaining time in brackets: "Running… (12s)", "(1m 5s)".
 	clockInBracketsRe = regexp.MustCompile(`\s*[(\[]\s*\d+(?:\.\d+)?\s*(?:ms|s|m|h)(?:\s*\d+\s*s)?\s*[)\]]`)
 	// A spinner or progress glyph that leads a line and turns as time passes.
 	spinnerRunes = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏✻✶✳✢✽·◐◓◑◒"
 )
 
-// withoutVolatileLines drops the lines of a prompt's text that only count time.
-// The auto-deny notice is a paragraph: in a narrow pane it wraps, and the
-// wrapped tail ("to avoid blocking progress...") carries no keyword, so a
+// autoNoticeMaxLines bounds a notice paragraph: even a very narrow pane wraps
+// it in a handful of lines.
+const autoNoticeMaxLines = 7
+
+// autoNoticeSpans finds the provider's countdown notices in lines: each span
+// is [first, end) of consecutive lines, wrapped however the pane is wide.
+func autoNoticeSpans(lines []string) [][2]int {
+	var spans [][2]int
+	for index := 0; index < len(lines); {
+		first := strings.TrimSpace(promptBoxEdgeRe.ReplaceAllString(lines[index], ""))
+		if !autoNoticeStartRe.MatchString(first) {
+			index++
+			continue
+		}
+		parts := []string{first}
+		end := index + 1
+		for ; end < len(lines) && end-index < autoNoticeMaxLines; end++ {
+			next := strings.TrimSpace(promptBoxEdgeRe.ReplaceAllString(lines[end], ""))
+			if next == "" || autoNoticeEndRe.MatchString(next) || promptRowRe.MatchString(lines[end]) {
+				break
+			}
+			parts = append(parts, next)
+		}
+		if autoNoticeRe.MatchString(strings.Join(parts, " ")) {
+			spans = append(spans, [2]int{index, end})
+			index = end
+			continue
+		}
+		index++
+	}
+	return spans
+}
+
+// withoutVolatileLines drops the provider's countdown notice from a prompt's
+// text. It is a paragraph: in a narrow pane it wraps, and the wrapped tail
+// ("to avoid holding up an unattended session") carries no keyword, so a
 // per-line filter leaves a fragment whose shape changes as the clock does.
+// Everything else, including a command that quotes similar words, stays.
 func withoutVolatileLines(text string) string {
 	lines := strings.Split(text, "\n")
-	kept := lines[:0:0]
-	inNotice := false
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "":
-			inNotice = false
-		case strings.HasPrefix(trimmed, "⏱") || autoDenyLineRe.MatchString(line):
-			inNotice = true
+	drop := make([]bool, len(lines))
+	for _, span := range autoNoticeSpans(lines) {
+		for index := span[0]; index < span[1]; index++ {
+			drop[index] = true
 		}
-		if !inNotice {
+	}
+	kept := lines[:0:0]
+	for index, line := range lines {
+		if !drop[index] {
 			kept = append(kept, line)
 		}
 	}
