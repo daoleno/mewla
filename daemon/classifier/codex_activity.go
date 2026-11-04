@@ -33,7 +33,7 @@ func (a *CodexActivityAdapter) Match(in ActivityInput) bool {
 
 func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	pane := latestCodexPaneWindow(in.PaneContent)
-	approvalPane := codexApprovalPane(pane)
+	approvalPane := strings.Join(linesAfterLastCodexComposer(strings.Split(pane, "\n")), "\n")
 	if codexApprovalPromptRe.MatchString(approvalPane) {
 		signal := ActivitySignal{
 			State:    StateBlocked,
@@ -41,10 +41,9 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "codex_pane_blocked",
 			Provider: a.Name(),
 		}
-		if prompt, ok := ParseMenuPrompt(a.Name(), PromptApproval, approvalPane, "Press enter to confirm", "enter to confirm", "Enter to continue"); ok {
-			prompt.Title = signal.Summary
-			signal.Prompt = &prompt
-		} else if prompt, ok := ParseMenuPrompt(a.Name(), PromptApproval, approvalPane); ok {
+		// The identity rests on the whole capture, not on the window or the
+		// text below the composer: a line in the command can look like either.
+		if prompt, ok := ParseCodexApprovalPrompt(strings.ReplaceAll(in.PaneContent, "\r\n", "\n")); ok {
 			prompt.Title = signal.Summary
 			signal.Prompt = &prompt
 		}
@@ -92,34 +91,6 @@ func linesAfterLastCodexComposer(lines []string) []string {
 		return lines
 	}
 	return lines[last+1:]
-}
-
-// codexStatusLineRe is the whole line Codex paints for a running turn, with
-// its clock: "• Working (32s • esc to interrupt)".
-var codexStatusLineRe = regexp.MustCompile(`(?i)^\s*[•·]?\s*Working\s*\(\s*(?:\d+\s*h\s*)?(?:\d+\s*m\s*)?\d+(?:\.\d+)?\s*[hms]\s*[•·]\s*esc\s+to\s+interrupt\s*\)\s*$`)
-
-// codexApprovalPane is what Codex painted below its last composer, without
-// the turn's status line: its clock counts up while a command waits for
-// approval, and it must not become part of the prompt's identity. Only the
-// status line ahead of the dialog's command (the first "$ " line) is dropped; a
-// line of that shape inside the command is the command's.
-func codexApprovalPane(pane string) string {
-	lines := linesAfterLastCodexComposer(strings.Split(pane, "\n"))
-	command := len(lines)
-	for index, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "$ ") {
-			command = index
-			break
-		}
-	}
-	kept := make([]string, 0, len(lines))
-	for index, line := range lines {
-		if index < command && codexStatusLineRe.MatchString(line) {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	return strings.Join(kept, "\n")
 }
 
 func isCodexPane(command string, lines []string) bool {
