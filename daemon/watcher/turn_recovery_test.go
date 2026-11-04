@@ -542,3 +542,68 @@ func TestStalePreparedAdmissionIsReleasedWithoutARecoveryRecord(t *testing.T) {
 		t.Fatalf("the stale prepared admission was not released: %v", ledger.ambiguous)
 	}
 }
+
+// A Brain follow-up sent under a review handling carries Purpose "review" and
+// no claim token. When the Worker's own turn then ended without reporting under
+// that prompt's identity, its prepared admission fenced the Work for good:
+// every later send failed with "Work already has an active Attempt: admission
+// ... is still prepared". The Worker here is the shape seen live: a blocked
+// signal turn whose lease expired, idle at its prompt. Releasing must not
+// depend on the Worker's attention, the pane's classification, or a recovery
+// record, and a fresh supervisor (a daemon reload) reaches the same verdict.
+func TestStaleReviewPurposedAdmissionIsReleasedWhateverTheWorkersAttention(t *testing.T) {
+	settled := time.Date(2026, 11, 3, 23, 26, 0, 0, time.UTC)
+	attempted := settled.Add(-6*time.Minute - 30*time.Second)
+	review := InputAdmission{
+		ProposedTurnID: "turn:review-1", State: InputAdmissionPending, SignalProtocol: true,
+		Purpose: "review", PurposeID: "handling:1", AcceptedAt: attempted,
+	}
+	cases := map[string]func(*probedPollWorker){
+		"blocked turn, idle prompt": func(item *probedPollWorker) {
+			item.turn.Status, item.turn.Attention = TurnBlocked, "user_input"
+			item.turn.LeaseDeadline = settled.Add(-time.Hour)
+		},
+		"pane classified blocked": func(item *probedPollWorker) {
+			item.turn.Status = TurnBlocked
+			item.activity.State = classifier.StateBlocked
+		},
+		"turn already ended": func(item *probedPollWorker) {
+			item.hasTurn, item.turn = false, TurnSnapshot{}
+		},
+	}
+	for name, shape := range cases {
+		t.Run(name, func(t *testing.T) {
+			ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1", lost: true}
+			submits := []string{}
+			item := stalledPollItem(settled.Add(DefaultTurnRecoveryPolicy().StoppedAfter), settled, "a1", nil)
+			item.pending = []InputAdmission{review}
+			shape(&item)
+
+			newRecoveryWatcher(ledger, &submits).superviseDelegatedTurns([]probedPollWorker{item})
+			// A reload mid-way: a fresh supervisor sees the same durable state.
+			newRecoveryWatcher(ledger, &submits).superviseDelegatedTurns([]probedPollWorker{item})
+
+			if len(ledger.ambiguous) != 1 || ledger.ambiguous[0] != "turn:review-1" {
+				t.Fatalf("the stale review admission was not released exactly once: %v", ledger.ambiguous)
+			}
+		})
+	}
+}
+
+// A Brain-host delivery is owned by its handling claim and is never released
+// here, whatever the provider is doing.
+func TestClaimedAdmissionIsNotReleasedByTheSupervisor(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1", lost: true}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 11, 3, 23, 26, 0, 0, time.UTC)
+	item := stalledPollItem(settled.Add(10*time.Minute), settled, "a1", nil)
+	item.pending = []InputAdmission{{
+		ProposedTurnID: "turn:host-1", State: InputAdmissionPending, SignalProtocol: true,
+		ClaimToken: "handling:2", AcceptedAt: settled.Add(-time.Minute),
+	}}
+	w.superviseDelegatedTurns([]probedPollWorker{item})
+	if len(ledger.ambiguous) != 0 {
+		t.Fatalf("released a claimed host delivery: %v", ledger.ambiguous)
+	}
+}
