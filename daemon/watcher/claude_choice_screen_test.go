@@ -148,3 +148,35 @@ func TestParseClaudeChoiceScreen_QuestionTextKeepsItsSpaces(t *testing.T) {
 		})
 	}
 }
+
+// Claude Code 2.1.318 draws a long question behind a "│ " gutter on every
+// line, on the question screen and on the review screen. The gutter is not
+// part of the question: with it in the key, the prompt never matched the
+// transcript and every answer was refused as "the question has passed".
+func TestParseClaudeChoiceScreen_LongQuestionGutterIsNotQuestionText(t *testing.T) {
+	const longQuestion = "Exporting readable WeChat history needs decrypting the local database with a key from the running WeChat — there's no lighter way. The safe version is doing that openly, on your own Mac and account. How do you want to proceed?"
+	screen := readClaudeChoiceFixture(t, "wide_long_question_gutter.txt")
+	question := ClaudeChoiceQuestion{
+		Question:    longQuestion,
+		Options:     []string{"GreenBubbles on my Mac", "yichen (gentler re-sign)", "Screen-read new messages", "Hold for now"},
+		AllowsOther: true,
+	}
+	if !isClaudeChoiceQuestion(screen, question) {
+		t.Fatalf("screen = %+v", screen)
+	}
+	if screen.QuestionText != longQuestion {
+		t.Fatalf("question text = %q", screen.QuestionText)
+	}
+
+	review := readClaudeChoiceFixture(t, "wide_long_review_gutter.txt")
+	questions := []ClaudeChoiceQuestion{
+		{Question: "Which export path should we take for the WeChat history, given that decrypting the local database needs a key from the running WeChat and there is no lighter way around it for this account?", Options: []string{"GreenBubbles", "Screen read"}, AllowsOther: true},
+		{Question: "Which of these safeguards do you want switched on before anything touches the database, given that the sudo step and the re-signing step are both irreversible until the next update?", MultiSelect: true, Options: []string{"Backup first", "Dry run", "Audit log"}, AllowsOther: true},
+	}
+	if review.Kind != claudeChoiceScreenReview || !screenShowsChoice(review, questions) {
+		t.Fatalf("review = %+v", review)
+	}
+	if !claudeChoiceAnswerMatches(review.Review[1].Answer, []string{"Backup first", "Audit log", "先问我再做"}, claudeChoiceCompact) {
+		t.Fatalf("answer = %q", review.Review[1].Answer)
+	}
+}

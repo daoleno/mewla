@@ -1,0 +1,16 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Path  ☒ Guards  ✔ Submit  →
+
+Review your answers
+
+ │ ● Which export path should we take for the WeChat history, given that decrypting the local database needs a key from the
+ │   running WeChat and there is no lighter way around it for this account?
+   → Screen read
+ │ ● Which of these safeguards do you want switched on before anything touches the database, given that the sudo step and the
+ │   re-signing step are both irreversible until the next update?
+   → Backup first, Audit log, 先问我再做
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel
