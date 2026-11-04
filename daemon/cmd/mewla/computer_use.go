@@ -113,6 +113,7 @@ const elementToolDescription = `Act on one element from your latest app_state by
 	`press, focus, set_value (with value, replacing the element's text), clear, check and uncheck (nothing is pressed when it is already so), show_menu, scroll_to_visible, raise, confirm, cancel, increment, decrement, ` +
 	`or any action the element lists. It answers with a Delivery line (verified, or sent and not verified: don't repeat an unverified press blindly; a refused action says it is safe to retry) and with what changed in the app since your last read, by id (+ new, ~ changed, - gone, and where the focus is), not the whole app; rows it doesn't list are as before and keep their ids. When a window opened or closed, or much changed, it gives the whole app instead. Call app_state when you want the whole app. ` +
 	`read gives the element's whole text instead (app_state cuts each to a line), up to 20,000 characters, to check what a field or note holds. ` +
+	`A field that confirms (a file name in Finder, a search box) can hold your text before the app has taken it: after set_value send key Return with the app, then read the app again before saying it is done. ` +
 	`If the element changed since you read it, read the app again; nothing is guessed.`
 
 // computerInput is one action on the screen, or with app, on one app.

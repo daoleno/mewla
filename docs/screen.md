@@ -164,7 +164,9 @@ something they ask for only the elements that match (a role, a name, a value),
 or for what is inside one element or its top levels, rather than the whole
 app. Each action says whether it was delivered: verified, sent and not
 verified (not to be repeated blindly), or refused (safe to retry); `check`
-and `uncheck` press only when the state isn't already the one asked. They can choose or
+and `uncheck` press only when the state isn't already the one asked. A text
+field that confirms (a file name in Finder, a search box) can hold the text before the
+app has taken it, so its answer says to send Return and read again. They can choose or
 list an app's menu items by name (`File > Save As…`), in the background, and
 wait for an element to appear, go away or become enabled. Shortcuts and menu
 items that quit an app, log you out, shut down, restart or empty the Trash are
