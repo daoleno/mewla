@@ -169,13 +169,14 @@ func TestVirtualDisplayStage1(t *testing.T) {
 				f2, err3 := again.Frame(cctx, 0)
 				ccancel()
 				say("frame from the new session: seq %d %dx%d err %v", f2.Seq, f2.Image.Bounds().Dx(), f2.Image.Bounds().Dy(), err3)
-				say("set text again: %v", apps.ActOnElement(ctx, *area, "set_value", "hello world, hello again"))
-				time.Sleep(300 * time.Millisecond)
-				say("caret before: %s", caret())
-				clicker2 := again.(appClicker)
-				say("click again at %v: %v", at, clicker2.ClickTo(pid, window.ID, at.X, at.Y, 0, 1))
-				time.Sleep(500 * time.Millisecond)
-				say("caret after the second click: %s", caret())
+				for _, c := range clickStyles {
+					say("set text: %v", apps.ActOnElement(ctx, *area, "set_value", "hello world, hello again"))
+					time.Sleep(300 * time.Millisecond)
+					before := caret()
+					err := again.(*macSession).clickTo(pid, window.ID, at.X, at.Y, 0, 1, c.style)
+					time.Sleep(500 * time.Millisecond)
+					say("%s: caret %s -> %s (click: %v)", c.name, before, caret(), err)
+				}
 			}
 		}
 	}
