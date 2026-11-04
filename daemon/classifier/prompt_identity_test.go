@@ -140,3 +140,25 @@ func TestLongCommandIdentityCoversWhatIsNotShown(t *testing.T) {
 		t.Fatalf("commands differing only in the part trimmed from the display share an identity")
 	}
 }
+
+// Real panes carry shell history above the banner and a long conversation
+// between it and the dialog; neither may make a dialog unanswerable.
+func TestApprovalsStayAnswerableAboveLongHistory(t *testing.T) {
+	history := "$ codex\n"
+	conversation := ""
+	for index := 0; index < 70; index++ {
+		conversation += "• Ran step " + strings.Repeat("a", index%5) + "\n  └ ok\n"
+	}
+	codex := history + "╭──────────────────────────────╮\n│ >_ OpenAI Codex (v0.46.0)    │\n╰──────────────────────────────╯\n" + conversation +
+		"  Would you like to run the following command?\n\n  $ echo 'OpenAI Codex' && ls\n\n› 1. Yes, proceed (y)\n  2. No, cancel\n\n  Press enter to confirm or esc to cancel\n"
+	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, PaneContent: codex})
+	if signal.State != StateBlocked || signal.Prompt == nil || !strings.Contains(signal.Prompt.Request, "echo 'OpenAI Codex' && ls") {
+		t.Fatalf("codex approval after a long history: %+v", signal)
+	}
+
+	claude := history + " ▐▛███▜▌   Claude Code v2.1.214\n" + conversation +
+		"────────────────────────────────────────\n Bash command\n\n   echo hi\n   Say hi\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. No\n\n Esc to cancel · Tab to amend\n"
+	if got := inferPermission(t, claude); !strings.Contains(got.Request, "echo hi") {
+		t.Fatalf("claude permission after a long history: %q", got.Request)
+	}
+}

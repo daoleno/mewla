@@ -48,7 +48,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "claude_pane_plan",
 			Provider: a.Name(),
 		}
-		if prompt, ok := ParseMenuPromptIn(a.Name(), PromptPlan, pane, whole); ok {
+		if prompt, ok := ParseMenuPrompt(a.Name(), PromptPlan, pane); ok {
 			prompt.Title = signal.Summary
 			signal.Prompt = &prompt
 		}
@@ -62,7 +62,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 			Source:   "claude_pane_blocked",
 			Provider: a.Name(),
 		}
-		if prompt, ok := ParseMenuPromptIn(a.Name(), PromptPermission, pane, whole, "Esc to cancel"); ok {
+		if prompt, ok := ParseBoxedMenuPrompt(a.Name(), PromptPermission, pane, whole, "Esc to cancel"); ok {
 			if prompt.Title == "" {
 				prompt.Title = signal.Summary
 			}
@@ -72,7 +72,7 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	}
 	// Launch-time menus (trust this folder, accept a mode, pick a theme) end
 	// in "Enter to confirm" and appear before any conversation exists.
-	if prompt, ok := ParseMenuPromptIn(a.Name(), PromptStartup, pane, whole, "Enter to confirm"); ok {
+	if prompt, ok := ParseMenuPrompt(a.Name(), PromptStartup, pane, "Enter to confirm"); ok {
 		prompt.Title = "Waiting for your choice"
 		return ActivitySignal{
 			State:    StateBlocked,
