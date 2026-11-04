@@ -23,7 +23,6 @@ import (
 // the lost grace (30 min) have run out. Marking the admission ambiguous
 // (724b50b3) does not help: ambiguous is retried the same way.
 func TestReviewFollowUpSignalIsAcceptedAfterBrainResolvesTheReviewWithAnActiveAttempt(t *testing.T) {
-	t.Skip("FORMAL PILOT FINDING, not fixed: AcceptAdmissionBySignal returns ErrAttemptActive for a review follow-up once Brain has resolved the review while the old Attempt is active; remove this Skip when the lifecycle owner decides the intended behaviour")
 	for _, name := range []string{"continue", "wait", "continue_then_stale_release"} {
 		t.Run(name, func(t *testing.T) {
 			e, _ := newTestEngine(t)
@@ -76,5 +75,71 @@ func TestReviewFollowUpSignalIsAcceptedAfterBrainResolvesTheReviewWithAnActiveAt
 				t.Fatalf("follow-up did not become the Attempt: %+v", st.Attempt)
 			}
 		})
+	}
+}
+
+// The handover is only for a Purpose=review follow-up. A plain fresh prompt
+// over an active Attempt (no review) is still refused at prepare, so
+// SingleAttempt holds and the Attempt is untouched.
+func TestPlainFreshPromptWithActiveAttemptAndNoReviewStaysRejected(t *testing.T) {
+	e, _ := newTestEngine(t)
+	now := time.Now().UTC()
+	e.SetNow(func() time.Time { return now })
+	define(t, e, "work", PolicyBounded)
+	prepareAdmissionFixture(t, e, "work", "worker", "first")
+	if _, err := e.AcceptAdmissionBySignal("work", "first", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := e.PrepareAdmission("work", PrepareAdmissionInput{
+		SessionID: "worker", TurnToken: "second", Receipt: "second",
+		PayloadSHA256: "digest-second", ProcessIdentity: "process-1", PaneGeneration: "pane-1",
+		Mode: AdmissionFresh, SignalProtocol: true, AttemptedAt: now,
+	})
+	if !errors.Is(err, ErrAttemptActive) {
+		t.Fatalf("plain fresh prompt over an active Attempt: err=%v", err)
+	}
+	if st, _ := e.State("work"); st.Attempt == nil || st.Attempt.TurnToken != "first" {
+		t.Fatalf("Attempt changed: %+v", st.Attempt)
+	}
+}
+
+// After the handover the old Attempt is gone, exactly one Attempt is active and
+// the follow-up's own progress is recorded against it.
+func TestResolvedReviewFollowUpHandsOverTheAttempt(t *testing.T) {
+	e, _ := newTestEngine(t)
+	now := time.Now().UTC()
+	e.SetNow(func() time.Time { return now })
+	define(t, e, "work", PolicyBounded)
+	prepareAdmissionFixture(t, e, "work", "worker", "attempt-turn")
+	if _, err := e.AcceptAdmissionBySignal("work", "attempt-turn", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.OpenReviewEvent("work", "lease_expired", "attempt-turn", "review-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.ClaimReview("work", "host", "handling-1", "host-turn"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.PrepareAdmission("work", PrepareAdmissionInput{
+		SessionID: "worker", TurnToken: "follow-up-turn", Receipt: "follow-up-turn",
+		PayloadSHA256: "digest-follow-up", ProcessIdentity: "process-1", PaneGeneration: "pane-1",
+		Mode: AdmissionFresh, SignalProtocol: true, Purpose: AdmissionPurposeReview, PurposeID: "handling-1",
+		AttemptedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.ResolveReview("work", "review-1", ResolveReviewInput{Disposition: DispositionContinue, Actor: "brain"}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := e.AcceptAdmissionBySignal("work", "follow-up-turn", "worker")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Attempt == nil || st.Attempt.TurnToken != "follow-up-turn" || st.Review != nil || st.Status != StatusRunning {
+		t.Fatalf("handover state: attempt=%+v review=%+v status=%s", st.Attempt, st.Review, st.Status)
+	}
+	// Retrying the same signal is idempotent.
+	if _, err := e.AcceptAdmissionBySignal("work", "follow-up-turn", "worker"); err != nil {
+		t.Fatalf("retry: %v", err)
 	}
 }

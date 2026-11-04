@@ -502,13 +502,32 @@ func newerWorkerSubmission(st *State, a *AdmissionState) bool {
 	return false
 }
 
+// followUpEvents turns an accepted fresh Worker prompt into the model-directed
+// continuation: resolve the open review (if any), relinquish the active
+// Attempt and admit the prompt's own Turn.
+//
+// A Purpose=review follow-up is prepared while the review is open and the old
+// Attempt is still active (PrepareAdmission's boundReview exception). Brain may
+// resolve that review (continue or wait) before the Worker's first signal
+// arrives; the follow-up must then still land. Without this the Worker's signal
+// would hit ErrAttemptActive on every retry and its progress and result would be
+// dropped. A wait cannot hold a Wake while an Attempt is active, so after the
+// review resolves there is nothing a wait would still be guarding.
 func followUpEvents(st *State, a *AdmissionState, now time.Time) []Event {
-	if st.Review == nil || a.ClaimToken != "" {
+	if a.ClaimToken != "" {
 		return nil
 	}
-	events := []Event{{WorkID: st.ID, Kind: KReviewResolved,
-		SourceID: "continue:" + string(a.TurnToken), At: now,
-		Payload: ReviewResolvedPayload{EventID: st.Review.EventID, Disposition: DispositionContinue}}}
+	var events []Event
+	switch {
+	case st.Review != nil:
+		events = append(events, Event{WorkID: st.ID, Kind: KReviewResolved,
+			SourceID: "continue:" + string(a.TurnToken), At: now,
+			Payload: ReviewResolvedPayload{EventID: st.Review.EventID, Disposition: DispositionContinue}})
+	case a.Purpose == AdmissionPurposeReview && st.Attempt != nil:
+		// Review already resolved by Brain; only the Attempt handover remains.
+	default:
+		return nil
+	}
 	fence := st.Fence + 1
 	if st.Attempt != nil {
 		events = append(events, Event{WorkID: st.ID, Kind: KTurnRelinquished,

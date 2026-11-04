@@ -182,6 +182,12 @@ in one transaction. There is no accepted-but-non-owning Worker stage and no seco
 `resolve continue` call. Host delivery receipts remain separate from Worker
 execution; delivering a notification cannot take Worker ownership.
 
+A follow-up sent under a claimed review is a review-purpose admission that is
+prepared while the old Attempt is still active. If Brain resolves that review
+(`continue` or `wait`) before the Worker's first signal, the signal still lands:
+acceptance relinquishes the old Attempt and starts the follow-up's Attempt. A wait
+holds no Wake while an Attempt is active, so nothing is lost by landing it.
+
 Unknown delivery is a fact: the input may have arrived. Brain decides whether to
 inspect a receipt, reconcile effects or send another attempt. A new Worker send
 is allowed after an unknown outcome, including after restart. The previous
