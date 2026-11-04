@@ -32,10 +32,9 @@ func TestExactIdentityKeepsPayloadWhitespaceAndLength(t *testing.T) {
 		{"printf 'a b'", "printf 'a  b'"},
 		{"printf 'a b'", "printf 'a\tb'"},
 		{"cat <<'EOF'\n  indented\nEOF", "cat <<'EOF'\n    indented\nEOF"},
-		{"cat <<'EOF'\na\n\nb\nEOF", "cat <<'EOF'\na\n\n\nb\nEOF"},
 		{"echo hi", "echo hi "},
 	}
-	for _, pair := range pairs[:4] { // a trailing space at a line's end is not visible in a capture
+	for _, pair := range pairs[:3] { // a trailing space at a line's end is not visible in a capture
 		claudeFirst, _ := claudeExactID(t, pair[0])
 		if claudeSecond, _ := claudeExactID(t, pair[1]); claudeSecond == claudeFirst {
 			t.Fatalf("claude: %q and %q share id %s", pair[0], pair[1], claudeFirst)
@@ -114,7 +113,7 @@ func TestExactIdentityIgnoresProviderLookalikesInThePayload(t *testing.T) {
 // arguments) are payload too.
 func TestStatusShapedLinesInAToolCallPayloadAreKept(t *testing.T) {
 	pane := func(elapsed string) string {
-		return "OpenAI Codex\n  Allow the wechat MCP server to run tool \"send\"?\n\n  text: • Working (" + elapsed + " • esc to interrupt)\n\n" +
+		return testOrigin + "\nOpenAI Codex\n  Allow the wechat MCP server to run tool \"send\"?\n\n  text: • Working (" + elapsed + " • esc to interrupt)\n\n" +
 			"› 1. Allow\n  2. Cancel\n\n  Press enter to confirm or esc to cancel\n"
 	}
 	id := func(elapsed string) string {
@@ -131,7 +130,9 @@ func TestStatusShapedLinesInAToolCallPayloadAreKept(t *testing.T) {
 
 // exactCaptureInfo is a capture that proves everything a capture can: exact
 // text from the pane's first line.
-var exactCaptureInfo = &CaptureInfo{Exact: true, Complete: true}
+const testOrigin = "mewla-origin 00112233445566778899aabb"
+
+var exactCaptureInfo = &CaptureInfo{Exact: true, Origin: testOrigin}
 
 // Blanks at the end of a line that more request text follows can be the
 // command's (inside a quoted string or a heredoc), and the screen cannot tell
@@ -183,11 +184,11 @@ func TestClippedCaptureWithALookalikeHeadingHasNoAnswerableID(t *testing.T) {
 		return codexIdentityPane(operation+"\ncat <<'EOF'\n"+heading+"\ncommon\nEOF", "3s")
 	}
 	alpha, beta := build("echo ALPHA"), build("echo BETA")
-	// Uncut and complete: the operations differ and the ids tell them apart.
+	// Uncut, with the marker as the first line: the operations differ and the
+	// ids tell them apart.
 	if a, b := codexExactID(t, "echo ALPHA\ncat <<'EOF'\n"+heading+"\ncommon\nEOF"), codexExactID(t, "echo BETA\ncat <<'EOF'\n"+heading+"\ncommon\nEOF"); a == b {
 		t.Fatalf("complete captures of different operations share id %s", a)
 	}
-	clipped := &CaptureInfo{Exact: true, Complete: false}
 	for name, cut := range map[string][2]string{
 		"at the payload heading": {codexCutAtLast(t, alpha, heading), codexCutAtLast(t, beta, heading)},
 		"at the payload opener":  {codexCutAtLast(t, alpha, "cat <<'EOF'"), codexCutAtLast(t, beta, "cat <<'EOF'")},
@@ -196,18 +197,16 @@ func TestClippedCaptureWithALookalikeHeadingHasNoAnswerableID(t *testing.T) {
 			t.Fatalf("fixture: the two clipped captures should be identical")
 		}
 		for _, pane := range cut {
-			signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: clipped, PaneContent: pane})
+			signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: pane})
 			if signal.State != StateBlocked || signal.Prompt != nil {
 				t.Fatalf("%s: a clipped capture produced %+v", name, signal)
 			}
 		}
 	}
-	// An ordinary approval in a long session (scrollback beyond the capture)
-	// is also reported without an id: Codex's dialog has no line that proves
-	// its start, so only a capture from the first line can.
-	signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: clipped, PaneContent: codexIdentityPane("systemctl list-unit-files", "3s")})
-	if signal.State != StateBlocked || signal.Prompt != nil {
-		t.Fatalf("an incomplete capture produced %+v", signal)
+	// A copy of the marker inside the command is not the capture's first line.
+	forged := strings.Replace(codexCutAtLast(t, alpha, heading), heading, heading+"\n"+testOrigin, 1)
+	if signal := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: exactCaptureInfo, PaneContent: forged}); signal.Prompt != nil {
+		t.Fatalf("a marker copy inside the capture gave an id: %+v", signal.Prompt)
 	}
 }
 
@@ -221,9 +220,13 @@ func TestClaudePermissionStaysAnswerableOnAnIncompleteCapture(t *testing.T) {
 	}
 }
 
-// Without an exact capture a dialog is reported but never identified.
+// Without an exact capture a dialog is reported but never identified; a Codex
+// dialog also needs this pane's origin marker (Claude's box rule needs none).
 func TestWithoutAnExactCaptureThereIsNoAnswerableID(t *testing.T) {
-	for name, capture := range map[string]*CaptureInfo{"no capture info": nil, "not exact": {Complete: true}} {
+	for name, capture := range map[string]*CaptureInfo{
+		"no capture info": nil,
+		"not exact":       {Origin: testOrigin},
+	} {
 		claude := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: capture,
 			PaneContent: heredocPermissionPane("echo hi", strings.Replace(blockNoticeFmt, "%s", "2:00", 1))})
 		codex := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: capture, PaneContent: codexIdentityPane("echo hi", "3s")})
@@ -232,5 +235,48 @@ func TestWithoutAnExactCaptureThereIsNoAnswerableID(t *testing.T) {
 				t.Fatalf("%s/%s: %+v", name, provider, signal)
 			}
 		}
+	}
+	for name, capture := range map[string]*CaptureInfo{
+		"no origin (adopted or older pane)": {Exact: true},
+		"another pane's origin":             {Exact: true, Origin: "mewla-origin ffffffffffffffffffffffff"},
+	} {
+		codex := NewCodexActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "codex"}, Capture: capture, PaneContent: codexIdentityPane("echo hi", "3s")})
+		if codex.State != StateBlocked || codex.Prompt != nil {
+			t.Fatalf("%s: %+v", name, codex)
+		}
+	}
+}
+
+// Blank lines inside a request cannot be counted from cells: an empty line and
+// a line of spaces look alike, and a renderer may leave either unpainted. The
+// reviewer's pair (a heredoc with one and with two spaces on a line) must not
+// share an id; neither is answerable, and blank lines in the provider's own
+// layout (around the request) keep working.
+func TestBlankLinesInsideTheRequestMakeTheDialogUnidentifiable(t *testing.T) {
+	for _, command := range []string{
+		"cat <<'EOF'\n \nEOF",
+		"cat <<'EOF'\n  \nEOF",
+		"cat <<'EOF'\n\t\nEOF",
+		"cat <<'EOF'\n \t \nEOF",
+		"cat <<'EOF'\n\nEOF",
+		"cat <<'EOF'\na\n\n\nb\nEOF",
+	} {
+		codex := codexExactSignal(command)
+		if codex.State != StateBlocked || codex.Prompt != nil {
+			t.Fatalf("codex: %q got a prompt: %+v", command, codex.Prompt)
+		}
+		claude := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo,
+			PaneContent: heredocPermissionPane(command, strings.Replace(blockNoticeFmt, "%s", "2:00", 1))})
+		if claude.State != StateBlocked || claude.Prompt != nil {
+			t.Fatalf("claude: %q got a prompt: %+v", command, claude.Prompt)
+		}
+	}
+	// The provider's separators (heading, request, menu; header, request,
+	// description, warning, question) are outside the request region.
+	if codexExactSignal("echo hi").Prompt == nil {
+		t.Fatal("codex: the provider's own blank lines refused an ordinary dialog")
+	}
+	if inferPermission(t, heredocPermissionPane("echo hi", strings.Replace(blockNoticeFmt, "%s", "2:00", 1))).ID == "" {
+		t.Fatal("claude: the provider's own blank lines refused an ordinary dialog")
 	}
 }

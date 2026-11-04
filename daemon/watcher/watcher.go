@@ -2,8 +2,10 @@ package watcher
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -4307,6 +4309,18 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		}
 		return "", cause
 	}
+	// The pane's first output is its origin marker: tmux evicts the oldest
+	// lines first, so a capture that still holds the marker holds every line
+	// after it. The nonce is kept in the pane's own option, which outlives a
+	// daemon restart.
+	nonce, err := newOriginNonce()
+	if err != nil {
+		return cleanup(fmt.Errorf("origin marker: %w", err))
+	}
+	if err := setTmuxPaneUserOption(createSocket, target, strings.TrimPrefix(originOption, "@"), nonce); err != nil {
+		return cleanup(fmt.Errorf("origin marker: %w", err))
+	}
+	shellCommand = originMarkerCommand(nonce) + shellCommand
 	args = []string{"respawn-pane", "-k", "-t", target}
 	for _, entry := range workerLaunchEnvironment(opts) {
 		args = append(args, "-e", entry)
@@ -4321,6 +4335,21 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 	w.registerCreatedSession(target, cwd, opts, createdAt)
 	resourceCommitted = true
 	return target, nil
+}
+
+// newOriginNonce is the private part of a pane's origin marker.
+func newOriginNonce() (string, error) {
+	raw := make([]byte, 12)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw), nil
+}
+
+// originMarkerCommand prints the marker, concealed (SGR 8), as the very first
+// output of the pane, before the login shell and anything its startup prints.
+func originMarkerCommand(nonce string) string {
+	return "printf '\\033[8m%s\\033[0m\\n' " + shellquote.Quote(classifier.OriginMarkerLine(nonce)) + "; "
 }
 
 func buildNewWindowArgs(sessionName, cwd string, opts CreateSessionOptions, shellCommand string) []string {

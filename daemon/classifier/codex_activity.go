@@ -38,8 +38,7 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 	// its footer at the bottom of the capture. That holds whatever a banner-like
 	// or composer-like line inside its command did to the window above.
 	whole := strings.ReplaceAll(in.PaneContent, "\r\n", "\n")
-	wholePrompt, wholeOK := ParseCodexApprovalPrompt(whole)
-	if codexApprovalPromptRe.MatchString(approvalPane) || wholeOK {
+	if codexApprovalPromptRe.MatchString(approvalPane) || CodexApprovalDialogOpen(whole) {
 		signal := ActivitySignal{
 			State:    StateBlocked,
 			Summary:  "Waiting for Codex approval",
@@ -49,10 +48,12 @@ func (a *CodexActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		// The identity rests on the whole capture, not on the window or the
 		// text below the composer: a line in the command can look like either.
 		// An answerable id needs the dialog's first lines to be provably in
-		// the capture: only a capture from the pane's first line says so.
-		if wholeOK && in.Capture != nil && in.Capture.Exact && in.Capture.Complete {
-			wholePrompt.Title = signal.Summary
-			signal.Prompt = &wholePrompt
+		// the capture: the pane's origin marker above its heading says so.
+		if in.Capture != nil && in.Capture.Exact {
+			if prompt, ok := ParseCodexApprovalPrompt(whole, in.Capture.Origin); ok {
+				prompt.Title = signal.Summary
+				signal.Prompt = &prompt
+			}
 		}
 		return signal
 	}

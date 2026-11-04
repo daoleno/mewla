@@ -90,16 +90,22 @@ func capturePaneWithState(socket, target string) (screen string, alive bool, dea
 	return text[:cut], alive, deadStatus, nil
 }
 
+// originOption is the pane-local option holding the nonce of the pane's
+// origin marker (classifier.OriginMarkerLine), set when Mewla launches a Worker.
+const originOption = "@mewla_origin"
+
 // capturePaneDialog captures a pane for identifying a dialog that asks to run
 // something: the whole scrollback (-S -), with the spaces a program wrote at
 // the end of a line kept and terminal-wrapped lines joined (-J). In the same
-// tmux invocation it reads how much scrollback the pane holds, so the capture
-// can say whether it reaches the pane's first line: it does when the scrollback
-// is shorter than its limit (otherwise the oldest lines were evicted).
+// tmux invocation it reads the pane's own origin nonce, so the capture says
+// which marker line, if it still holds that line, proves it starts no later
+// than the pane's first output. How full the scrollback is proves nothing
+// (tmux trims in batches), so it is not read.
 func capturePaneDialog(socket, target string) (string, classifier.CaptureInfo, error) {
 	out, err := tmuxCommand(socket,
 		"capture-pane", "-t", target, "-p", "-J", "-S", "-", ";",
-		"display-message", "-p", "-t", target, paneStateMarker+"#{history_size} #{history_limit}",
+		"display-message", "-p", "-t", target, paneStateMarker, ";",
+		"show-options", "-pqv", "-t", target, originOption,
 	).Output()
 	if err != nil {
 		return "", classifier.CaptureInfo{}, fmt.Errorf("capture pane: %w", err)
@@ -107,14 +113,11 @@ func capturePaneDialog(socket, target string) (string, classifier.CaptureInfo, e
 	text := string(out)
 	cut := strings.LastIndex(text, paneStateMarker)
 	if cut < 0 {
-		return "", classifier.CaptureInfo{}, fmt.Errorf("tmux returned no scrollback size")
+		return "", classifier.CaptureInfo{}, fmt.Errorf("tmux returned no pane state")
 	}
 	info := classifier.CaptureInfo{Exact: true}
-	fields := strings.Fields(text[cut+len(paneStateMarker):])
-	if len(fields) >= 2 {
-		size, sizeErr := strconv.Atoi(fields[0])
-		limit, limitErr := strconv.Atoi(fields[1])
-		info.Complete = sizeErr == nil && limitErr == nil && limit > 0 && size < limit
+	if nonce := strings.TrimSpace(text[cut+len(paneStateMarker):]); nonce != "" {
+		info.Origin = classifier.OriginMarkerLine(nonce)
 	}
 	return text[:cut], info, nil
 }

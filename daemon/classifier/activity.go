@@ -38,11 +38,21 @@ type CaptureInfo struct {
 	// text is what was displayed, trailing blanks included. It cannot show what
 	// the program did before drawing: a tab, a trimmed or re-wrapped line.
 	Exact bool
-	// Complete: the capture starts at the first line the pane ever held, with
-	// nothing evicted from its scrollback. No dialog can then have its first
-	// lines cut off above the capture.
-	Complete bool
+	// Origin is the marker line Mewla made the pane print as its first output
+	// when it launched it (OriginMarkerLine of the nonce stored in the pane's
+	// own @mewla_origin option); empty for a pane Mewla did not launch or one
+	// launched before the marker existed. tmux evicts the oldest lines first,
+	// so a line that is still in the capture proves that every line written
+	// after it is too: the dialog's first lines cannot have been cut off if
+	// the marker is above them. How much history the pane holds says nothing
+	// about this (tmux trims in batches, so a pane below its limit may have
+	// lost lines).
+	Origin string
 }
+
+// OriginMarkerLine is the line a Worker pane prints as its first output; the
+// nonce is private to the pane and kept in its @mewla_origin option.
+func OriginMarkerLine(nonce string) string { return "mewla-origin " + nonce }
 
 // ActivityAdapter is a provider-specific pane/process activity detector.
 // Adapters must not rely on package init registration.

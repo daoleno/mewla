@@ -21,7 +21,7 @@ func heredocPermissionPane(command, notice string) string {
 		"● I'll write the prototype with a quoted heredoc.\n" +
 		"────────────────────────────────────────\n" +
 		" Bash command\n\n" +
-		"   " + command + "\n" +
+		"   " + strings.ReplaceAll(command, "\n", "\n   ") + "\n" +
 		"   Write prototype page\n\n" +
 		" Dangerous rm operation not ruled out\n\n" +
 		" " + notice + "\n\n" +
