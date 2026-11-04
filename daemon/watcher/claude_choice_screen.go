@@ -38,6 +38,10 @@ const (
 	claudeChoiceScreenNone claudeChoiceScreenKind = iota
 	claudeChoiceScreenQuestion
 	claudeChoiceScreenReview
+	// claudeChoiceScreenClipped is a choice prompt taller than the pane: the
+	// footer and rows are visible but the tab bar scrolled off the top, so the
+	// prompt cannot be proven or driven until the pane is taller.
+	claudeChoiceScreenClipped
 )
 
 type claudeChoiceRow struct {
@@ -125,6 +129,13 @@ func parseClaudeChoiceScreen(pane string) claudeChoiceScreen {
 		}
 	}
 	if tabBar < 0 {
+		rows := lines[:end]
+		if review >= 0 {
+			rows = lines[review+1:]
+		}
+		if claudeChoiceClipped(rows) {
+			return claudeChoiceScreen{Kind: claudeChoiceScreenClipped}
+		}
 		return claudeChoiceScreen{}
 	}
 	screen := claudeChoiceScreen{}
@@ -140,6 +151,19 @@ func parseClaudeChoiceScreen(pane string) claudeChoiceScreen {
 		return parseClaudeChoiceReview(screen, lines[tabBar+1:], lines[review+1:])
 	}
 	return parseClaudeChoiceQuestion(screen, lines[tabBar+1:footer])
+}
+
+// claudeChoiceClipped reports a prompt whose tab bar is off the top of the
+// pane: a numbered row 1 is visible beside the footer ("Enter to select", or
+// "Ready to submit your answers?" for the review step) but no tab bar is. A
+// stray "Enter to select" in ordinary text has no such row.
+func claudeChoiceClipped(above []string) bool {
+	for index := len(above) - 1; index >= 0; index-- {
+		if match := claudeChoiceRowRe.FindStringSubmatch(above[index]); match != nil && claudeChoiceAtoi(match[2]) == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 func parseClaudeChoiceQuestion(screen claudeChoiceScreen, body []string) claudeChoiceScreen {

@@ -81,7 +81,11 @@ something** row. Review lists every answer; tap a row or a tab to change it,
 then tap **Submit**. Questions you have not answered are marked there, and the
 button counts them. The Working row is hidden while a question is open. Once it
 is answered, from the card or from the Terminal, the card becomes an
-**Answered** line in the chat.
+**Answered** line in the chat. Mewla answers by pressing keys in the Session's
+terminal, so it needs to see the whole question there: when the Terminal window
+is shorter than the question (a long multi-question card, a keyboard open over
+the Terminal), sending says the window is too short rather than that the
+question has passed. Make it taller or close the keyboard and send again.
 
 **Permission, plan, startup and approval prompts** (run this command, accept
 this plan, trust this folder, a Codex approval) show a card with the prompt's

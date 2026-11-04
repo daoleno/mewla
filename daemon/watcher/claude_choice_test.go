@@ -3,6 +3,7 @@ package watcher
 import (
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -370,4 +371,47 @@ func TestDriveClaudeChoice_UnresponsiveTerminalIsSaidInPlainWords(t *testing.T) 
 	if !errors.Is(err, ErrClaudeChoiceRefused) || strings.Contains(err.Error(), "timed out") || !strings.Contains(err.Error(), "didn't respond") {
 		t.Fatalf("err = %v", err)
 	}
+}
+
+// shrinkingPane shows the clipped capture for a number of reads, then the full one.
+type shrinkingPane struct {
+	*fakeClaudeChoiceTUI
+	clipped string
+	reads   int
+	clip    int
+}
+
+func (p *shrinkingPane) capture() (string, error) {
+	p.reads++
+	if p.reads <= p.clip {
+		return p.clipped, nil
+	}
+	return p.fakeClaudeChoiceTUI.capture()
+}
+
+func TestDriveClaudeChoice_ClippedPromptIsNeverGone(t *testing.T) {
+	clippedBytes, err := os.ReadFile("testdata/claude_choice/clipped_3q_user_q1.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	answers := []ClaudeChoiceAnswer{{Selected: []int{0}}, {Selected: []int{0}}}
+	questions := []ClaudeChoiceQuestion{fruitQuestion, colorsQuestion}
+	expected, _ := ExpectedClaudeChoiceAnswers(questions, answers)
+
+	t.Run("a pane that stays short says so and sends no key", func(t *testing.T) {
+		pane := &shrinkingPane{fakeClaudeChoiceTUI: newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion), clipped: string(clippedBytes), clip: 1 << 30}
+		err := driveClaudeChoice(pane, questions, answers, expected, 100*time.Millisecond)
+		if !errors.Is(err, ErrClaudeChoiceRefused) || errors.Is(err, ErrClaudeChoiceGone) || !strings.Contains(err.Error(), "too short") || len(pane.keys) != 0 {
+			t.Fatalf("err=%v keys=%#v", err, pane.keys)
+		}
+	})
+	t.Run("a pane that grows back is driven normally", func(t *testing.T) {
+		pane := &shrinkingPane{fakeClaudeChoiceTUI: newFakeClaudeChoiceTUI(fruitQuestion, colorsQuestion), clipped: string(clippedBytes), clip: 3}
+		if err := driveClaudeChoice(pane, questions, answers, expected, 2*time.Second); err != nil {
+			t.Fatalf("err=%v keys=%#v", err, pane.keys)
+		}
+		if !pane.done {
+			t.Fatalf("not submitted: %#v", pane.keys)
+		}
+	})
 }

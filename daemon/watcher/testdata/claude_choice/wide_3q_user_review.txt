@@ -1,0 +1,40 @@
+  use scan the QR from your phone's 分身 WeChat — only if that 分身 IS the
+  secondary account. Confirm that and I'll do it."}, {"label": "Hold
+  login for now", "description": "Don't log in yet; keep WOC idle until
+  you decide."}]}, {"question": "Where should WechatOnCloud live, now that
+  it's becoming a persistent hub (export + agent control + human
+  access)?", "header": "WOC host", "multiSelect": false, "options":
+  [{"label": "Own isolated box", "description": "Move WOC to its own small
+  VM (~$5-10/mo), off the Freeride production host, with no production
+  credentials or network. Cleanest home for a standing WeChat hub."},
+  {"label": "Keep on freeride-sg-app", "description": "Leave it where it
+  is for now. No new cost, but it shares a host with production
+  credentials; keep it read-only and contained."}]}, {"question": "This is
+  also a test of the fake-send fix. Did answering this options card work
+  — did it submit without switching to Terminal mode?", "header": "Fix
+  check", "multiSelect": false, "options": [{"label": "Worked, submitted
+  fine", "description": "The card submitted from the Brain view normally.
+  Confirms 1ec177ee fixed it."}, {"label": "Still broken", "description":
+  "Still a fake send / 'question has passed'. I'll reopen it and get a
+  screenshot of the terminal."}]}]}
+
+───────────────────────────────────────────────────────────────────────────
+←  ☒ WOC login  ☒ WOC host  ☒ Fix check  ✔ Submit  →
+
+Review your answers
+
+ │ ● WechatOnCloud login: the WOC WeChat still isn't logged in, and
+ │   export/agent-control/human-access all need it. With a secondary
+ │   account, how do you want to log in?
+   → I scan the QR
+ │ ● Where should WechatOnCloud live, now that it's becoming a persistent
+ │   hub (export + agent control + human access)?
+   → Own isolated box
+ │ ● This is also a test of the fake-send fix. Did answering this options
+ │   card work — did it submit without switching to Terminal mode?
+   → Worked, submitted fine
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel

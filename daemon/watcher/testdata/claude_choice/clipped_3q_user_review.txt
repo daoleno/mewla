@@ -1,0 +1,12 @@
+   → I scan the QR
+ │ ● Where should WechatOnCloud live, now that it's becoming a persistent
+ │   hub (export + agent control + human access)?
+   → Own isolated box
+ │ ● This is also a test of the fake-send fix. Did answering this options
+ │   card work — did it submit without switching to Terminal mode?
+   → Worked, submitted fine
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel

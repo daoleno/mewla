@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -142,6 +143,7 @@ func (s *Server) handleAnswerPrompt(conn *websocket.Conn, raw clientMessage) {
 	}
 	if _, err := AnswerPanePrompt(pane, resolved.targetID, answer, hook, s.choiceConversationLoader(resolved)); err != nil {
 		code, message := PromptAnswerCode(err)
+		log.Printf("answer_prompt %s prompt=%s: %s: %v", resolved.targetID, answer.PromptID, code, err)
 		s.sendErrorWithRequestID(conn, raw.RequestID, code, message)
 		return
 	}

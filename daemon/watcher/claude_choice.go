@@ -205,6 +205,13 @@ func driveClaudeChoice(pane claudeChoicePane, questions []ClaudeChoiceQuestion, 
 	if err != nil {
 		return err
 	}
+	if screen.Kind == claudeChoiceScreenClipped {
+		// The Terminal may only be briefly short (a keyboard over it); give it
+		// a moment before saying so. The prompt is open, so it is never "gone".
+		if screen, err = d.waitFor(func(s claudeChoiceScreen) bool { return s.Kind != claudeChoiceScreenClipped }); err != nil {
+			return refuseClaudeChoice(claudeChoiceClippedReason)
+		}
+	}
 	if err := verifyPristineClaudeChoice(screen, questions); err != nil {
 		return err
 	}
@@ -234,13 +241,20 @@ func driveClaudeChoice(pane claudeChoicePane, questions []ClaudeChoiceQuestion, 
 	return d.submitReview(questions, expected)
 }
 
+// claudeChoiceClippedReason is shown instead of "passed" when the prompt is
+// open but the Terminal pane is too short to show all of it.
+const claudeChoiceClippedReason = "the Terminal window is too short to show the whole question; make it taller (or close the keyboard) and try again"
+
 func verifyPristineClaudeChoice(screen claudeChoiceScreen, questions []ClaudeChoiceQuestion) error {
+	if screen.Kind == claudeChoiceScreenClipped {
+		return refuseClaudeChoice(claudeChoiceClippedReason)
+	}
 	if !isClaudeChoiceQuestion(screen, questions[0]) {
 		if screenShowsChoice(screen, questions) {
 			// Same prompt, moved off its first question: not passed, so the card stays.
 			return refuseClaudeChoice("the Terminal prompt is not on its first question; go back to it there")
 		}
-		return ErrClaudeChoiceGone
+		return fmt.Errorf("%w (screen kind %d, question %q, %d rows, %d tabs)", ErrClaudeChoiceGone, screen.Kind, screen.Question, len(screen.Rows), len(screen.Tabs))
 	}
 	if len(screen.Tabs) != len(questions) {
 		return refuseClaudeChoice("the Terminal prompt has %d questions, expected %d", len(screen.Tabs), len(questions))

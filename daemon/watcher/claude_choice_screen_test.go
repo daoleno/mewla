@@ -180,3 +180,68 @@ func TestParseClaudeChoiceScreen_LongQuestionGutterIsNotQuestionText(t *testing.
 		t.Fatalf("answer = %q", review.Review[1].Answer)
 	}
 }
+
+// A 3-question card captured from claude 2.1.318 (the Brain's WOC question):
+// long questions carry the gutter on every line, the review lists them with
+// " │ ● " / " │   " and a bare "   → " answer line, and at 40 columns the
+// tab bar abbreviates the headers.
+var threeQuestionUserCard = []ClaudeChoiceQuestion{
+	{Question: "WechatOnCloud login: the WOC WeChat still isn't logged in, and export/agent-control/human-access all need it. With a secondary account, how do you want to log in?", Options: []string{"I scan the QR", "Phone use scans it", "Hold login for now"}, AllowsOther: true},
+	{Question: "Where should WechatOnCloud live, now that it's becoming a persistent hub (export + agent control + human access)?", Options: []string{"Own isolated box", "Keep on freeride-sg-app"}, AllowsOther: true},
+	{Question: "This is also a test of the fake-send fix. Did answering this options card work — did it submit without switching to Terminal mode?", Options: []string{"Worked, submitted fine", "Still broken"}, AllowsOther: true},
+}
+
+func TestParseClaudeChoiceScreen_ThreeQuestionCardAcrossWidths(t *testing.T) {
+	for _, name := range []string{"wide_3q_user_q1.txt", "narrow_3q_user_q1.txt"} {
+		screen := readClaudeChoiceFixture(t, name)
+		if !isClaudeChoiceQuestion(screen, threeQuestionUserCard[0]) || len(screen.Tabs) != 3 {
+			t.Fatalf("%s: screen = %+v", name, screen)
+		}
+		if err := verifyPristineClaudeChoice(screen, threeQuestionUserCard); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	second := readClaudeChoiceFixture(t, "wide_3q_user_q2.txt")
+	if !isClaudeChoiceQuestion(second, threeQuestionUserCard[1]) || !second.TabsAnswered[0] || second.TabsAnswered[1] {
+		t.Fatalf("q2 = %+v", second)
+	}
+	review := readClaudeChoiceFixture(t, "wide_3q_user_review.txt")
+	if review.Kind != claudeChoiceScreenReview || !screenShowsChoice(review, threeQuestionUserCard) {
+		t.Fatalf("review = %+v", review)
+	}
+	for index, want := range []string{"I scan the QR", "Own isolated box", "Worked, submitted fine"} {
+		if review.Review[index].Answer != want {
+			t.Fatalf("review[%d] = %q, want %q", index, review.Review[index].Answer, want)
+		}
+	}
+	if len(review.ReviewRows) != 2 || review.ReviewRows[0].Text != "Submit answers" || !review.ReviewRows[0].Cursor {
+		t.Fatalf("review rows = %+v", review.ReviewRows)
+	}
+}
+
+func TestParseClaudeChoiceScreen_ThreeQuestionExportCard(t *testing.T) {
+	first := readClaudeChoiceFixture(t, "wide_3q_export_q1.txt")
+	if first.Kind != claudeChoiceScreenQuestion || len(first.Tabs) != 3 || len(first.Rows) != 5 || first.cursorRow() != 1 {
+		t.Fatalf("q1 = %+v", first)
+	}
+	review := readClaudeChoiceFixture(t, "wide_3q_export_review.txt")
+	if review.Kind != claudeChoiceScreenReview || len(review.Review) != 3 {
+		t.Fatalf("review = %+v", review)
+	}
+	if got := claudeChoiceCompact(review.Review[0].Question); got != claudeChoiceCompact("Exporting readable WeChat history needs decrypting the local database with a key taken from the running WeChat, and there is no lighter way to do it. The safe version is doing that openly, on your own Mac and account, with every step logged. How do you want to proceed with the export of the full chat history?") {
+		t.Fatalf("review question = %q", got)
+	}
+	if review.Review[2].Question != "After the export, how should Brain summarize the groups?" || review.Review[2].Answer != "Daily digest per group" {
+		t.Fatalf("review[2] = %+v", review.Review[2])
+	}
+}
+
+// A card taller than the pane scrolls its tab bar away; it is still an open
+// prompt and must not read as one that has passed.
+func TestParseClaudeChoiceScreen_CardTallerThanThePaneIsClipped(t *testing.T) {
+	for _, name := range []string{"clipped_3q_user_q1.txt", "clipped_3q_user_review.txt"} {
+		if screen := readClaudeChoiceFixture(t, name); screen.Kind != claudeChoiceScreenClipped {
+			t.Fatalf("%s: screen = %+v", name, screen)
+		}
+	}
+}
