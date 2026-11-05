@@ -4264,6 +4264,16 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		}
 		opts.Command = command
 	}
+	// The tools go on the command first: the adapter may wrap it in shell
+	// (Codex's own app-server), which tool injection cannot parse.
+	if !opts.Hidden {
+		w.mu.RLock()
+		tools := w.agentTools
+		w.mu.RUnlock()
+		if tools != nil {
+			opts.Command = tools(opts.Command, opts.ProgressEnv)
+		}
+	}
 	if !opts.Hidden {
 		w.mu.RLock()
 		adapt := w.launchAdapter
@@ -4274,14 +4284,6 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 				return "", err
 			}
 			opts.Command, opts.AgentControl = launch.Command, launch.Control
-		}
-	}
-	if !opts.Hidden {
-		w.mu.RLock()
-		tools := w.agentTools
-		w.mu.RUnlock()
-		if tools != nil {
-			opts.Command = tools(opts.Command, opts.ProgressEnv)
 		}
 	}
 	applyProviderTmuxIsolation(&opts, w)
