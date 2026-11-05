@@ -333,8 +333,10 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	}
 	// A turn already blocked by the Worker's own report or the permission hook
 	// has told Brain; this prompt is that one. A permission dialog whose hook
-	// holds the decision is the hook's to report.
-	if !open || (turn.Status == TurnBlocked && !renewing) || (!renewing && w.hookHoldsDialog(id, activity)) {
+	// holds the decision is the hook's to report. A lease renewal of an
+	// identified prompt goes on; one of an unidentified dialog the hook has since
+	// claimed must not replace the hook's event.
+	if !open || (turn.Status == TurnBlocked && !renewing) || (w.hookHoldsDialog(id, activity) && (!renewing || activity.Prompt == nil)) {
 		return turn, hasTurn
 	}
 	summary := activity.Summary
