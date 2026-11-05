@@ -353,11 +353,11 @@ func (s *fakeSession) BackgroundClicks() (bool, string) {
 	return f.SkyLight, "SkyLight isn't available on this Mac"
 }
 
-func (s *fakeSession) ClickTo(pid int, window uint32, x, y, button, count int) error {
+func (s *fakeSession) ClickTo(pid int, window AppWindow, x, y, button, count int) error {
 	f := s.backend
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.AppClicks = append(f.AppClicks, FakeAppClick{pid, window, x, y, button, count})
+	f.AppClicks = append(f.AppClicks, FakeAppClick{pid, window.ID, x, y, button, count})
 	if f.AppEventsSeen {
 		f.input[InputClick] = time.Now()
 	}

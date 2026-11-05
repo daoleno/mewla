@@ -47,7 +47,7 @@ type appClicker interface {
 	// BackgroundClicks says whether it can on this computer, and if not,
 	// why not.
 	BackgroundClicks() (bool, string)
-	ClickTo(pid int, window uint32, x, y, button, clicks int) error
+	ClickTo(pid int, window AppWindow, x, y, button, clicks int) error
 }
 
 // windowInfo is one window from the system's window list.
