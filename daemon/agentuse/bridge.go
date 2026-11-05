@@ -3,6 +3,8 @@ package agentuse
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,7 +73,39 @@ var (
 	connectTimeout     = 20 * time.Second
 )
 
-func bridgeSocket(dir string) string { return filepath.Join(dir, "bridge.sock") }
+// maxSocketPath keeps the socket's path inside what a unix socket can name:
+// 104 bytes on a Mac, 108 on Linux, the terminator included.
+const maxSocketPath = 100
+
+// bridgeSocket is where the daemon listens and the host and the shim dial. A
+// state directory deep enough to overflow a unix socket's path (a temporary
+// directory under a long name) gets a short private directory of its own under
+// /tmp (not $TMPDIR, which may be the long one), the
+// same one on both sides because it derives from the state directory.
+func bridgeSocket(dir string) string {
+	path := filepath.Join(dir, "bridge.sock")
+	if len(path) <= maxSocketPath {
+		return path
+	}
+	sum := sha256.Sum256([]byte(dir))
+	return filepath.Join("/tmp", fmt.Sprintf("mewla-%d", os.Getuid()), hex.EncodeToString(sum[:8])+".sock")
+}
+
+// privateDir makes the directory for a socket outside the state directory and
+// makes sure it is the caller's own, not somebody else's or a link to one.
+func privateDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", dir)
+	}
+	return os.Chmod(dir, 0o700)
+}
 
 // Bridge is the daemon's side.
 type Bridge struct {
@@ -129,6 +163,11 @@ func (b *Bridge) Serve(ctx context.Context) error {
 		return err
 	}
 	path := bridgeSocket(b.dir)
+	if filepath.Dir(path) != b.dir {
+		if err := privateDir(filepath.Dir(path)); err != nil {
+			return err
+		}
+	}
 	_ = os.Remove(path)
 	ln, err := net.Listen("unix", path)
 	if err != nil {

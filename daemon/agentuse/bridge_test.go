@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -324,4 +325,50 @@ func (l *lockedWriter) bytes() []byte {
 	l.mu <- struct{}{}
 	defer func() { <-l.mu }()
 	return append([]byte(nil), l.w.Bytes()...)
+}
+
+// A unix socket's path holds 104 bytes on a Mac. A state directory under a long
+// temporary path (the Mac acceptance's) must still get a bridge, the same one
+// for the daemon and for the programs that dial it.
+func TestTheBridgeListensWhereTheStateDirectoryIsDeep(t *testing.T) {
+	base, err := os.MkdirTemp("", "deep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(base) })
+	dir := filepath.Join(base, strings.Repeat("long-directory-name/", 6), "state", "agent-use")
+	if len(filepath.Join(dir, "bridge.sock")) <= maxSocketPath {
+		t.Fatalf("the directory isn't deep enough: %d", len(dir))
+	}
+	b := NewBridge(dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	served := make(chan error, 1)
+	go func() { served <- b.Serve(ctx) }()
+	for i := 0; i < 100 && !fileExists(bridgeSocket(dir)); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := bridgeSocket(dir); len(got) > maxSocketPath {
+		t.Fatalf("socket path %d bytes: %s", len(got), got)
+	}
+	select {
+	case err := <-served:
+		t.Fatalf("Serve: %v", err)
+	default:
+	}
+	fakeExtension(t, dir, func(hostMessage) hostMessage { return hostMessage{Type: "connected"} })
+	for i := 0; i < 100 && !b.HasHost(); i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !b.HasHost() {
+		t.Fatal("the host never joined through the short path")
+	}
+	if info, err := os.Stat(filepath.Dir(bridgeSocket(dir))); err != nil || info.Mode().Perm() != 0o700 {
+		t.Fatalf("the short socket's directory isn't private: %v %v", info, err)
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
