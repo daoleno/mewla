@@ -572,3 +572,72 @@ func signedRelayRequest(
 	)
 	return message
 }
+
+// A phone that vanished (no FIN, no RST) must not keep a stream, and with it
+// one of its address's client slots, until the idle timeout once the computer
+// has closed its side: nothing it could still send can be delivered.
+func TestForwardReleasesAVanishedClientSoonAfterTheComputerCloses(t *testing.T) {
+	server := newTestRelay(t)
+	server.config.IdleTimeout = 5 * time.Second
+	server.config.HalfCloseLinger = 150 * time.Millisecond
+	leftRelay, leftPeer := tcpConnectionPair(t)
+	rightRelay, rightPeer := tcpConnectionPair(t)
+	defer leftPeer.Close() // the client never closes during the test
+	defer rightPeer.Close()
+
+	done := make(chan struct{})
+	go func() {
+		server.forward(context.Background(), leftRelay, rightRelay)
+		close(done)
+	}()
+	_ = leftPeer.SetDeadline(time.Now().Add(3 * time.Second))
+	if _, err := rightPeer.Write([]byte("last words")); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 10)
+	if _, err := io.ReadFull(leftPeer, buf); err != nil {
+		t.Fatal(err)
+	}
+	if err := rightPeer.CloseWrite(); err != nil { // the daemon finished and closed
+		t.Fatal(err)
+	}
+	started := time.Now()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("stream still held %v after the computer closed; the idle timeout is %v", time.Since(started), server.config.IdleTimeout)
+	}
+	if elapsed := time.Since(started); elapsed < 100*time.Millisecond {
+		t.Fatalf("closed after %v, before the linger let the client answer", elapsed)
+	}
+}
+
+// The linger is for the computer's close only. A client that half-closes its
+// request still drains a delayed response (see the half-close test), and a
+// client that answers the close in time ends the stream at once.
+func TestForwardEndsAtOnceWhenTheClientAnswersTheClose(t *testing.T) {
+	server := newTestRelay(t)
+	server.config.IdleTimeout = 5 * time.Second
+	server.config.HalfCloseLinger = 3 * time.Second
+	leftRelay, leftPeer := tcpConnectionPair(t)
+	rightRelay, rightPeer := tcpConnectionPair(t)
+	defer leftPeer.Close()
+	defer rightPeer.Close()
+	done := make(chan struct{})
+	go func() {
+		server.forward(context.Background(), leftRelay, rightRelay)
+		close(done)
+	}()
+	_ = leftPeer.SetDeadline(time.Now().Add(3 * time.Second))
+	if err := rightPeer.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	var probe [1]byte
+	if _, err := leftPeer.Read(probe[:]); err != io.EOF {
+		t.Fatalf("client should see the close, got %v", err)
+	}
+	if err := leftPeer.CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	waitForForward(t, done)
+}
