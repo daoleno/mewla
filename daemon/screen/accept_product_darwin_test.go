@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -45,16 +46,29 @@ func TestAcceptProduct(t *testing.T) {
 	dir := t.TempDir()
 	agentApp := launchTextEdit(t, dir, "agent.txt", "")
 	defer agentApp.quit()
+	agentApp2 := launchTextEdit(t, dir, "agent2.txt", "")
+	defer agentApp2.quit()
 	personApp := launchTextEdit(t, dir, "person.txt", "")
 	defer personApp.quit()
 	if front := workspaceFrontPID(); front != personApp.pid {
 		t.Fatalf("the person's TextEdit (%d) is not in front (%d): someone is using the Mac; nothing was typed", personApp.pid, front)
 	}
-	say("agent TextEdit %d, person TextEdit %d, macOS %s", agentApp.pid, personApp.pid, productVersion())
+	say("agent TextEdit %d and %d, person TextEdit %d, macOS %s", agentApp.pid, agentApp2.pid, personApp.pid, productVersion())
+	// The scripted person types letters through the keyboard like anyone: an
+	// input method (Pinyin, say) composes them instead, which reads as a damaged
+	// text. Say which one is selected, so a failure of the person's text can be
+	// told apart from the product's.
+	for _, key := range []string{"AppleCurrentKeyboardLayoutInputSourceID", "AppleSelectedInputSources"} {
+		out, _ := exec.Command("/usr/bin/defaults", "read", "com.apple.HIToolbox", key).CombinedOutput()
+		say("input source %s: %s", key, strings.Join(strings.Fields(string(out)), " "))
+	}
 
 	backend := newBackend()
 	mb := backend.(*macBackend)
 	agentArea := textAreaOf(t, mb, agentApp.pid)
+	agentArea2 := textAreaOf(t, mb, agentApp2.pid)
+	home2 := windowOf(t, mb, agentApp2.pid)
+	homePos2, _ := frontWindowPosition(agentApp2.pid)
 	personArea := textAreaOf(t, mb, personApp.pid)
 	home := windowOf(t, mb, agentApp.pid)
 	homePos, _ := frontWindowPosition(agentApp.pid)
@@ -65,12 +79,13 @@ func TestAcceptProduct(t *testing.T) {
 	svc.SetAgentGate(func() bool { return true })
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	const worker = "%accept"
-	act := func(action AgentAction) (AgentResult, error) {
+	const worker, worker2 = "%accept", "%accept2"
+	actAs := func(who string, action AgentAction) (AgentResult, error) {
 		cctx, c := context.WithTimeout(ctx, 40*time.Second)
 		defer c()
-		return svc.Act(cctx, worker, action)
+		return svc.Act(cctx, who, action)
 	}
+	act := func(action AgentAction) (AgentResult, error) { return actAs(worker, action) }
 
 	// The scripted person starts typing; the sampler watches the whole run.
 	source := mac.CGEventSourceCreate(1)
@@ -165,6 +180,50 @@ func TestAcceptProduct(t *testing.T) {
 	win, err := act(AgentAction{Action: "screenshot", App: pid})
 	check(err == nil && len(win.Image) > 1000 && strings.Contains(win.Text, "agent display"), "window screenshot of the parked app: err=%v %dx%d %d bytes", err, win.Width, win.Height, len(win.Image))
 
+	// 4b. A second Worker, on another app, at the same time as the first.
+	// Neither waits for the other, neither is taken for the person, and each
+	// app gets only its own Worker's keys.
+	pid2 := fmt.Sprint(agentApp2.pid)
+	area2 := agentArea2.Frame
+	local2 := area2.Min.Sub(home2.Bounds.Min).Add(image.Pt(10, 10))
+	click2 := AgentAction{Action: "left_click", App: pid2, Coordinate: []int{int(float64(local2.X)/scale + 0.5), int(float64(local2.Y)/scale + 0.5)}}
+	res2, err := actAs(worker2, click2)
+	say("second Worker's click answered: err=%v %q", err, res2.Text)
+	check(err == nil && strings.Contains(res2.Text, "agent display"), "the second Worker's app moved to the agent display: err=%v", err)
+	text2 := func() string {
+		var v string
+		withPool(func() { v = elementValue(mb, agentApp2.pid, agentArea2) })
+		return v
+	}
+	started := time.Now()
+	var wg sync.WaitGroup
+	var concErrs sync.Map
+	runWorker := func(who, appPID, letter string) {
+		defer wg.Done()
+		for i := 0; i < 8; i++ {
+			if _, err := actAs(who, AgentAction{Action: "type", App: appPID, Text: letter}); err != nil {
+				concErrs.Store(who, err)
+				return
+			}
+		}
+	}
+	wg.Add(2)
+	go runWorker(worker, pid, "A")
+	go runWorker(worker2, pid2, "B")
+	wg.Wait()
+	elapsed := time.Since(started)
+	concErrs.Range(func(k, v any) bool {
+		check(false, "%v stopped: %v", k, v)
+		return true
+	})
+	t1, t2 := agentText(), text2()
+	say("concurrent: %s: %q; %s: %q (%s)", worker, t1, worker2, t2, elapsed.Round(10*time.Millisecond))
+	check(strings.Count(t1, "A") == 8 && !strings.Contains(t1, "B"), "the first Worker's app has only its own keys: %q", t1)
+	check(strings.Count(t2, "B") == 8 && !strings.Contains(t2, "A"), "the second Worker's app has only its own keys: %q", t2)
+	check(mb.ParkedOnDisplay(agentApp.pid) && mb.ParkedOnDisplay(agentApp2.pid), "both apps are on the agent display")
+	other, err := actAs(worker2, AgentAction{Action: "type", App: pid, Text: "x"})
+	check(err != nil && strings.Contains(err.Error(), "working in that app"), "a Worker can't act in another Worker's app: err=%v %s", err, other.Text)
+
 	// 5. Failure paths: nothing sent for a point outside the window; an
 	// honest "no effect" for a point that does nothing.
 	before := len(agentText())
@@ -179,6 +238,8 @@ func TestAcceptProduct(t *testing.T) {
 	check(errors.Is(err, ErrPersonAtComputer), "a key to the screen while the person types is refused: %v", err)
 	_, err = act(AgentAction{Action: "left_click", Coordinate: []int{400, 300}})
 	check(errors.Is(err, ErrPersonAtComputer), "a click on the screen while the person types is refused: %v", err)
+	_, err = actAs(worker2, AgentAction{Action: "key", Text: "a"})
+	check(errors.Is(err, ErrPersonAtComputer), "the second Worker's key to the screen is refused too: %v", err)
 
 	// 7. Optional: the display sleeps and wakes.
 	if os.Getenv("MEWLA_ACCEPT_SLEEP") == "1" {
@@ -230,6 +291,14 @@ func TestAcceptProduct(t *testing.T) {
 		}
 	}
 	check(back == homePos, "the agent's window is back where it was: %v (was %v)", back, homePos)
+	var back2 image.Point
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		back2, _ = frontWindowPosition(agentApp2.pid)
+		if back2 == homePos2 {
+			break
+		}
+	}
+	check(back2 == homePos2, "the second Worker's window is back where it was: %v (was %v)", back2, homePos2)
 	var after []displayInfo
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
 		after, _ = activeDisplays()

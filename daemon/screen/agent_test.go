@@ -120,11 +120,13 @@ func TestAPersonComesFirst(t *testing.T) {
 	if state, ok := s.Agent(); !ok || state.Worker != "%7" {
 		t.Fatalf("agent state %+v %v", state, ok)
 	}
-	if _, err := s.Act(context.Background(), "%8", AgentAction{Action: "screenshot"}); err == nil || !strings.Contains(err.Error(), "%7") {
-		t.Fatalf("second agent: %v", err)
+	// A second Worker works at the same time; neither shuts the other out.
+	act(t, s, "%8", AgentAction{Action: "screenshot"})
+	if states := s.Agents(); len(states) != 2 || states[0].Worker != "%7" || states[1].Worker != "%8" {
+		t.Fatalf("agents %+v", states)
 	}
 
-	// A viewer connects: the agent's control ends at once.
+	// A viewer connects: every agent's control ends at once.
 	ctx, cancel := context.WithCancelCause(context.Background())
 	person := s.TakeControl(cancel)
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "screenshot"}); !errors.Is(err, ErrAgentStopped) && !errors.Is(err, ErrPersonControlling) {
