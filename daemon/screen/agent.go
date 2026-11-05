@@ -620,17 +620,18 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 				return AgentResult{Text: fmt.Sprintf("Pressed %s at that point in %s, behind other windows (path: accessibility press); it and the pointer stayed where they were. Read it with app_state to see the result.", what, oneLine(app.Name))}, nil
 			}
 		}
+		before, haveBefore := a.witnessBefore(ctx, app.PID)
 		err := a.session.(appClicker).ClickTo(app.PID, window, p.X, p.Y, click.button, click.count)
 		a.mu.Lock()
 		a.lastAppClick = time.Now()
 		a.mu.Unlock()
 		if err != nil {
-			return AgentResult{}, err
+			return AgentResult{}, fmt.Errorf("The click was not sent: %w. Nothing was changed; use an element id, or bring_forward when nobody is using the computer", err)
 		}
 		a.mu.Lock()
 		a.lastAct = time.Now()
 		a.mu.Unlock()
-		return AgentResult{Text: fmt.Sprintf("Sent a click to %s behind other windows (path: SkyLight); it and the pointer stayed where they were. An app that isn't active may ignore such a click, or only bring its window forward: read it with app_state to check whether it took effect, and when what you meant to click has an id, press it with element instead.", oneLine(app.Name))}, nil
+		return AgentResult{Text: fmt.Sprintf("Sent a click to %s behind other windows (path: SkyLight); it and the pointer stayed where they were. %s", oneLine(app.Name), a.effect(ctx, app, "click", before, haveBefore))}, nil
 	}
 	text := "Clicked on the screen (path: screen pointer"
 	if !app.Active {
@@ -1320,6 +1321,9 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 	}
 	// Keys can go to one app, which stays where it is.
 	pid := 0
+	var keyApp App
+	var keyBefore Witness
+	var haveKeyBefore bool
 	if action.App != "" {
 		switch action.Action {
 		case "type", "key", "hold_key":
@@ -1360,13 +1364,8 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 				}
 			}
 		}
-		if !app.Active {
-			defer func() {
-				if result.Text != "" {
-					result.Text = fmt.Sprintf("Sent it to %s behind other windows. An app that isn't in front may ignore keys: read it with app_state to check, and if nothing changed, use bring_forward when nobody is using the computer.", oneLine(app.Name))
-				}
-			}()
-		}
+		keyApp = app
+		keyBefore, haveKeyBefore = a.witnessBefore(ctx, pid)
 	}
 	if err := a.input(action, pid, background); err != nil {
 		return AgentResult{}, err
@@ -1375,7 +1374,12 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 	a.lastAct = time.Now()
 	a.mu.Unlock()
 	if pid != 0 {
-		return AgentResult{Text: "done; read the app with app_state to see the result"}, nil
+		sent := "keys"
+		prefix := "Sent it to " + oneLine(keyApp.Name) + "."
+		if !keyApp.Active {
+			prefix = "Sent it to " + oneLine(keyApp.Name) + " behind other windows."
+		}
+		return AgentResult{Text: prefix + " " + a.effect(ctx, keyApp, sent, keyBefore, haveKeyBefore)}, nil
 	}
 	return AgentResult{Text: "done; take a screenshot to see the result"}, nil
 }
@@ -1822,4 +1826,31 @@ func pruneAudit(path string, before time.Time) {
 		kept = append(append(kept, line...), '\n')
 	}
 	_ = os.WriteFile(path, kept, 0o600)
+}
+
+// witnessBefore reads an app's focus before an action sent to it, when the
+// backend can.
+func (a *agentSession) witnessBefore(ctx context.Context, pid int) (Witness, bool) {
+	w, ok := a.apps.(appWitness)
+	if !ok {
+		return Witness{}, false
+	}
+	before, err := w.Witness(ctx, pid)
+	return before, err == nil
+}
+
+// effectWait is how long an action to an app is given to show an effect.
+var effectWait = 700 * time.Millisecond
+
+// effect words what the app shows of an action sent to it (see Witness).
+func (a *agentSession) effect(ctx context.Context, app App, sent string, before Witness, haveBefore bool) string {
+	w, ok := a.apps.(appWitness)
+	if !ok || !haveBefore {
+		return effectLine(oneLine(app.Name), sent, before, Witness{}, false)
+	}
+	after, err := witnessAfter(ctx, w, app.PID, before, effectWait)
+	if err != nil {
+		after = Witness{}
+	}
+	return effectLine(oneLine(app.Name), sent, before, after, true)
 }

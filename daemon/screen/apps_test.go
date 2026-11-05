@@ -434,7 +434,7 @@ func TestABackgroundClickPressesWhatItCan(t *testing.T) {
 		{Action: "double_click", Coordinate: []int{100, 100}, App: "Safari"},
 	} {
 		got := act(t, s, "%7", action).Text
-		if !strings.Contains(got, "Sent a click to Safari behind other windows (path: SkyLight)") || !strings.Contains(got, "check whether it took effect") || strings.Contains(got, "Clicked") {
+		if !strings.Contains(got, "Sent a click to Safari behind other windows (path: SkyLight)") || !strings.Contains(got, "No effect seen") || strings.Contains(got, "Clicked") {
 			t.Fatalf("%s: %s", action.Action, got)
 		}
 	}
@@ -578,7 +578,7 @@ func TestShortcutsChooseMenuItemsBehindOtherWindows(t *testing.T) {
 		t.Fatalf("keys %v, menus %v", backend.AppKeys, backend.MenuPresses)
 	}
 	// No item has cmd+shift+n: the keys go to the app, which may ignore them.
-	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+shift+n", App: "Notes"}).Text; !strings.Contains(got, "Sent it to Notes behind other windows. An app that isn't in front may ignore keys") || len(backend.AppKeys) == 0 {
+	if got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+shift+n", App: "Notes"}).Text; !strings.Contains(got, "Sent it to Notes behind other windows. No effect seen") || len(backend.AppKeys) == 0 {
 		t.Fatalf("not a menu shortcut: %s", got)
 	}
 	time.Sleep(personMargin + 50*time.Millisecond)
@@ -730,5 +730,44 @@ func TestAPasswordFieldBySubroleNeverShowsItsValue(t *testing.T) {
 	set := act(t, s, "%7", AgentAction{Action: "element", Element: password, ElementAction: "set_value", Text: "newsecret"}).Text
 	if strings.Contains(set, "newsecret") || strings.Contains(set, "hunter2") {
 		t.Fatalf("the answer shows a password:\n%s", set)
+	}
+}
+
+// A click or a key to an app behind others says what the app's focus shows
+// afterwards: a change, no change, or that the app can't be read. It never
+// says only that the event was sent.
+func TestAnActionBehindOtherWindowsSaysWhetherItShowed(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[1].Hidden = false
+	apps[1].Windows = []AppWindow{{ID: 7, Bounds: image.Rect(0, 0, 800, 600)}}
+	apps[1].Elements = append(apps[1].Elements, Element{Depth: 1, Role: "AXTextArea", Title: "Body", Frame: image.Rect(100, 100, 700, 500), Enabled: true, Focused: true})
+	backend.RunningApps = apps
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	last := len(apps[1].Elements) - 1
+
+	click := AgentAction{Action: "left_click", Coordinate: []int{200, 200}, App: "Safari"}
+	if got := act(t, s, "%7", click).Text; !strings.Contains(got, "No effect seen") || strings.Contains(got, "Effect seen") {
+		t.Fatalf("a click the app ignored: %s", got)
+	}
+
+	backend.OnAppClick = func(app *FakeApp, _ FakeAppClick) { app.Elements[last].Value = "caret moved" }
+	if got := act(t, s, "%7", click).Text; !strings.Contains(got, "Effect seen: Safari changed the focused field's text") {
+		t.Fatalf("a click the app took: %s", got)
+	}
+
+	backend.OnAppKey = func(app *FakeApp, k FakeKey) {
+		if k.Down {
+			app.Elements[last].Value += "x"
+		}
+	}
+	if got := act(t, s, "%7", AgentAction{Action: "type", Text: "ab", App: "Safari"}).Text; !strings.Contains(got, "Sent it to Safari behind other windows. Effect seen") {
+		t.Fatalf("keys the app took: %s", got)
+	}
+
+	backend.NoWitness = true
+	if got := act(t, s, "%7", click).Text; !strings.Contains(got, "Effect not checked") {
+		t.Fatalf("an app that can't be read: %s", got)
 	}
 }
