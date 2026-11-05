@@ -112,6 +112,9 @@ type hostManifest struct {
 // runs `mewla agent-use native-host`. It is written again whenever the Mewla
 // binary moves.
 func (s *Service) InstallNativeHost(userDataDir, mewla string, extensionIDs []string) error {
+	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+		return err
+	}
 	launcher := filepath.Join(s.dir, "native-host.sh")
 	script := fmt.Sprintf("#!/bin/sh\nexec %s agent-use native-host --state-dir %s\n", shellQuote(mewla), shellQuote(filepath.Dir(s.dir)))
 	if err := atomicfile.Write(launcher, []byte(script), 0o700); err != nil {
