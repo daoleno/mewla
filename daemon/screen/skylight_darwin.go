@@ -242,3 +242,72 @@ func (s *macSession) clickTo(pid int, window AppWindow, x, y, button, count int,
 }
 
 var _ appClicker = (*macSession)(nil)
+
+// keyStyle varies how keys reach an app that is not in front, for the test
+// that finds what an app takes.
+type keyStyle struct {
+	focus    bool // tell the app one of its windows has the focus first
+	makeKey  bool // and make it the app's key window (the record pair)
+	skyLight bool // post through the window server instead of CGEventPostToPid
+}
+
+// typeTo types ASCII text into the app with pid, key by key, in a style.
+func (s *macSession) typeTo(pid int, window AppWindow, text string, style keyStyle) error {
+	k := loadSkyLight()
+	if style.focus || style.makeKey || style.skyLight {
+		if k.why != "" {
+			return errors.New(k.why)
+		}
+	}
+	if style.focus || style.makeKey {
+		psn, ok := k.psnForWindow(window.ID, pid)
+		if !ok {
+			return errors.New("couldn't find the app behind that window")
+		}
+		if err := k.postRecordTo(psn, focusRecord(window.ID, 1)); err != nil {
+			return err
+		}
+		if style.makeKey {
+			for _, kind := range []byte{1, 2} {
+				if err := k.postRecordTo(psn, makeKeyRecord(window.ID, kind)); err != nil {
+					return err
+				}
+			}
+		}
+		time.Sleep(120 * time.Millisecond)
+	}
+	post := eventPostToPid()
+	if style.skyLight {
+		post = k.post
+	}
+	if post == nil {
+		return errors.New("this Mac can't send keys to one app")
+	}
+	source := mac.CGEventSourceCreate(1)
+	defer mac.CFRelease(source)
+	for _, r := range text {
+		key, ok := macANSIKeys[r]
+		if !ok {
+			continue
+		}
+		for _, down := range []bool{true, false} {
+			ev := mac.CGEventCreateKeyboardEvent(source, key.code, down)
+			if ev == 0 {
+				return errors.New("couldn't make the key event")
+			}
+			var flags uint64
+			if key.shift {
+				flags = macFlagShift
+			}
+			mac.CGEventSetFlags(ev, flags)
+			if down && flags == 0 {
+				units := utf16Units(r)
+				mac.CGEventKeyboardSetUnicodeString(ev, uint64(len(units)), &units[0])
+			}
+			post(int32(pid), ev)
+			mac.CFRelease(ev)
+		}
+		time.Sleep(8 * time.Millisecond)
+	}
+	return nil
+}
