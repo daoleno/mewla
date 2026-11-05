@@ -65,6 +65,11 @@ var profileDirName = regexp.MustCompile(`^(Default|Profile \d+)$`)
 // extensionProfile picks the Chrome profile that has the extension, the
 // last-used one first, the same choice the Playwright MCP server makes.
 func extensionProfile(userDataDir string) (string, bool) {
+	return profileWithExtension(userDataDir, ExtensionID)
+}
+
+// profileWithExtension is extensionProfile for any extension ID.
+func profileWithExtension(userDataDir, id string) (string, bool) {
 	entries, err := os.ReadDir(userDataDir)
 	if err != nil {
 		return "", false
@@ -85,7 +90,7 @@ func extensionProfile(userDataDir string) (string, bool) {
 		}
 	}
 	for _, profile := range profiles {
-		if extensionInstalled(filepath.Join(userDataDir, profile)) {
+		if extensionInstalledAs(filepath.Join(userDataDir, profile), id) {
 			return profile, true
 		}
 	}
@@ -116,8 +121,10 @@ func lastUsedProfile(userDataDir string) string {
 	return state.Profile.LastUsed
 }
 
-func extensionInstalled(profileDir string) bool {
-	if info, err := os.Stat(filepath.Join(profileDir, "Extensions", ExtensionID)); err == nil && info.IsDir() {
+func extensionInstalled(profileDir string) bool { return extensionInstalledAs(profileDir, ExtensionID) }
+
+func extensionInstalledAs(profileDir, id string) bool {
+	if info, err := os.Stat(filepath.Join(profileDir, "Extensions", id)); err == nil && info.IsDir() {
 		return true
 	}
 	for _, name := range []string{"Preferences", "Secure Preferences"} {
@@ -131,7 +138,7 @@ func extensionInstalled(profileDir string) bool {
 			} `json:"extensions"`
 		}
 		if json.Unmarshal(raw, &prefs) == nil {
-			if _, ok := prefs.Extensions.Settings[ExtensionID]; ok {
+			if _, ok := prefs.Extensions.Settings[id]; ok {
 				return true
 			}
 		}

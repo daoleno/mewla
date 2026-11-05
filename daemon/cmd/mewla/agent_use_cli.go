@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/agentuse"
 	"github.com/daoleno/mewla/daemon/control"
@@ -41,6 +43,9 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	}
 	if action == "phone-mcp" {
 		return runPhoneMCP(args[1:], stderr)
+	}
+	if action == "native-host" || action == "open" {
+		return runExtensionBridge(action, args[1:], stderr)
 	}
 	fs := flag.NewFlagSet("mewla agent-use "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -198,4 +203,43 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 	case agentuse.FixRetry:
 		fmt.Fprintln(w, "  mewla agent-use fix   tries the download again.")
 	}
+}
+
+// runExtensionBridge runs the two small programs that join Mewla's Chrome
+// extension to the daemon (agentuse/bridge.go): native-host, which Chrome
+// starts for the extension, and open, which the browser tools start in place
+// of Chrome to have the extension connect to them. Neither prints anything
+// Chrome or the tools would read as a message except the protocol itself.
+func runExtensionBridge(action string, args []string, stderr io.Writer) error {
+	var stateDir string
+	for len(args) > 0 {
+		switch {
+		case args[0] == "--state-dir" && len(args) > 1:
+			stateDir, args = args[1], args[2:]
+			continue
+		case args[0] == "--":
+			args = args[1:]
+		}
+		break
+	}
+	stateDir = resolveCLIStateDir(stateDir)
+	if action == "native-host" {
+		return agentuse.RunNativeHost(stateDir, os.Stdin, os.Stdout)
+	}
+	chrome, ok := agentuse.FindChrome()
+	err := agentuse.OpenForTools(stateDir, args, func(profile string) error {
+		if !ok {
+			return errors.New("Google Chrome isn't installed")
+		}
+		return agentuse.StartChromeForExtension(chrome, profile)
+	})
+	if err != nil {
+		// The browser tools start this with its output discarded; the reason
+		// is kept where `mewla agent-use status` users can find it.
+		if f, openErr := os.OpenFile(filepath.Join(stateDir, "agent-use", "open.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); openErr == nil {
+			fmt.Fprintf(f, "%s %v\n", time.Now().Format(time.RFC3339), err)
+			f.Close()
+		}
+	}
+	return err
 }
