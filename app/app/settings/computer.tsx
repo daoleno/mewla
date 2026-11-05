@@ -211,7 +211,7 @@ export default function ComputerScreen() {
           problem.key,
           { fix: action.fix },
           action.fix === "install_extension"
-            ? `Click Add to Chrome on ${server.name}.`
+            ? `Load the Mewla folder in Chrome on ${server.name}: Developer mode, then Load unpacked.`
             : action.fix === "open_settings"
               ? `Turn on Mewla in the settings that opened on ${server.name}.`
               : undefined,
