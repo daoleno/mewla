@@ -3939,7 +3939,8 @@ func hostAuthRank(state HostAuthState) int {
 }
 
 // HostExecutorID names the executor running Brain. Launches Brain does not
-// choose itself (Calendar scheduled_action, spawn without -executor) use it.
+// choose itself (spawn without -executor) use it. Calendar scheduled actions
+// do not: they use their own route or the person's scheduled-action default.
 func (s *Service) HostExecutorID() string {
 	return s.hostExecutor().ID
 }

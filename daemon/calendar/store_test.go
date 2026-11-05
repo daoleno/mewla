@@ -875,3 +875,76 @@ func TestSummaryIsTrimmedAndOneLine(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkerRoutePersistsAcrossRestartAndRouteOnlyUpdateKeepsSchedule(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
+	created, err := store.Create(Item{
+		Title: "Routed", Kind: KindScheduledAction, DueAt: &due, Timezone: "UTC", Recurrence: RecurrenceDaily,
+		ActionInstruction: "Say hi", SourceThreadID: "thread-1",
+		ActionExecutor: " claude ", ActionModel: " claude-sonnet-5-5 ", ActionReasoning: " medium ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ActionExecutor != "claude" || created.ActionModel != "claude-sonnet-5-5" || created.ActionReasoning != "medium" {
+		t.Fatalf("route not normalized: %#v", created)
+	}
+	reopened, err := NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := reopened.Get(created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.ActionExecutor != "claude" || loaded.ActionModel != "claude-sonnet-5-5" || loaded.ActionReasoning != "medium" {
+		t.Fatalf("route lost across restart: %#v", loaded)
+	}
+	edit := loaded
+	edit.ActionExecutor, edit.ActionModel, edit.ActionReasoning = "codex", "gpt-6-astra", "high"
+	updated, err := reopened.Update(edit, loaded.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.NextAt.Equal(loaded.NextAt) || updated.Recurrence != loaded.Recurrence || updated.SourceThreadID != loaded.SourceThreadID ||
+		updated.ActionInstruction != loaded.ActionInstruction || len(updated.Runs) != len(loaded.Runs) || updated.ActionExecutor != "codex" {
+		t.Fatalf("route-only update changed the schedule: before %#v after %#v", loaded, updated)
+	}
+}
+
+func TestWorkerRouteValidationAndKindChange(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().UTC().Add(time.Hour)
+	base := Item{Title: "Routed", Kind: KindScheduledAction, DueAt: &due, Timezone: "UTC", ActionInstruction: "Say hi", SourceThreadID: "thread-1"}
+	for _, bad := range []Item{
+		func() Item { i := base; i.ActionModel = "claude-sonnet-5-5"; return i }(),
+		func() Item { i := base; i.ActionReasoning = "high"; return i }(),
+		func() Item { i := base; i.ActionExecutor = "cla\nude"; return i }(),
+	} {
+		if _, err := store.Create(bad); err == nil {
+			t.Fatalf("accepted %#v", bad)
+		}
+	}
+	created, err := store.Create(func() Item { i := base; i.ActionExecutor = "claude"; i.ActionModel = "m"; return i }())
+	if err != nil {
+		t.Fatal(err)
+	}
+	reminderItem := created
+	reminderItem.Kind, reminderItem.NotifyAt, reminderItem.DueAt = KindReminder, &due, nil
+	reminderItem.ActionInstruction, reminderItem.SourceThreadID = "", ""
+	converted, err := store.Update(reminderItem, created.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if converted.ActionExecutor != "" || converted.ActionModel != "" {
+		t.Fatalf("a reminder kept a Worker route: %#v", converted)
+	}
+}

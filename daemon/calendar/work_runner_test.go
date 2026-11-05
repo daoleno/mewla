@@ -21,7 +21,14 @@ type scheduledActionWatcher struct {
 type scheduledActionThreadRegistry struct {
 	known  bool
 	thread string
-	host   string
+}
+
+// scheduledExecs is an executor catalog whose default scheduled-action Worker
+// is defaultExecutor, as scheduled-action-route.toml would set it.
+func scheduledExecs(defaultExecutor string, executors map[string]work.Executor) *work.ExecutorConfig {
+	cfg := work.NewExecutorConfig(executors)
+	cfg.ScheduledAction = work.LaunchRoute{Executor: defaultExecutor}
+	return cfg
 }
 
 type scheduledActionLaunchRunner struct {
@@ -57,10 +64,6 @@ func (r *scheduledActionLaunchRunner) Abort(sessionID string) error {
 func (r *scheduledActionThreadRegistry) HasChatThread(threadID string) (bool, error) {
 	r.thread = threadID
 	return r.known, nil
-}
-
-func (r *scheduledActionThreadRegistry) HostExecutorID() string {
-	return r.host
 }
 
 func (w scheduledActionWatcher) GetWorker(string) *classifier.Worker {
@@ -421,14 +424,14 @@ func TestRunScheduledActionPersistsFreshDelegatedLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	tmux := &scheduledActionLaunchRunner{}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, scheduledExecs("claude", map[string]work.Executor{
 		"claude": {Name: "claude", Command: "claude --configured"},
 		"codex":  {Name: "codex", Command: "codex"},
 	}))
 	runner := &WorkRunner{
 		Store:    store,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true, host: "claude"},
+		Brain:    &scheduledActionThreadRegistry{known: true},
 	}
 	run := Run{ID: "run-1", Title: "Frozen title", SourceThreadID: "captured-thread"}
 
@@ -489,13 +492,13 @@ func TestUnsupportedScheduledExecutorFailsOccurrenceBeforeAnyPromptCanRun(t *tes
 		t.Fatal(err)
 	}
 	tmux := &scheduledActionLaunchRunner{}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, scheduledExecs("my-agent", map[string]work.Executor{
 		"my-agent": {Name: "my-agent", Command: "my-agent --interactive", Kind: "custom"},
 	}))
 	runner := &WorkRunner{
 		Store:    workStore,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true, host: "my-agent"},
+		Brain:    &scheduledActionThreadRegistry{known: true},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }
@@ -547,13 +550,13 @@ func TestSchedulerHandoffTimeoutFailsOccurrenceOnceBoundedly(t *testing.T) {
 	}
 	notReady := errors.New("Session input was definitely not submitted: agent input not ready for \"opencode\"")
 	tmux := &scheduledActionLaunchRunner{sendReadyErr: notReady}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, scheduledExecs("opencode", map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
 		Store:    workStore,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true, host: "opencode"},
+		Brain:    &scheduledActionThreadRegistry{known: true},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }
@@ -632,13 +635,13 @@ func TestSchedulerHandoffAmbiguousFailsOccurrenceWithoutReplay(t *testing.T) {
 	}
 	ambiguous := errors.New("Session input outcome is unknown and will not be replayed: provider admission not observed")
 	tmux := &scheduledActionLaunchRunner{sendReadyErr: ambiguous}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, scheduledExecs("opencode", map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
 		Store:    workStore,
 		Launcher: launcher,
-		Brain:    &scheduledActionThreadRegistry{known: true, host: "opencode"},
+		Brain:    &scheduledActionThreadRegistry{known: true},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }
@@ -684,7 +687,7 @@ func TestSchedulerDelayedReadinessHandoffLaunchesOnceAndRoutsResult(t *testing.T
 		t.Fatal(err)
 	}
 	tmux := &scheduledActionLaunchRunner{newID: "opencode-scheduled"}
-	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+	launcher := work.NewLauncher(tmux, scheduledExecs("opencode", map[string]work.Executor{
 		"opencode": {Name: "opencode", Command: "opencode"},
 	}))
 	runner := &WorkRunner{
@@ -694,7 +697,7 @@ func TestSchedulerDelayedReadinessHandoffLaunchesOnceAndRoutsResult(t *testing.T
 			State:   classifier.StateRunning,
 			Summary: "OpenCode working on the scheduled briefing",
 		}},
-		Brain: &scheduledActionThreadRegistry{known: true, host: "opencode"},
+		Brain: &scheduledActionThreadRegistry{known: true},
 	}
 	scheduler := NewScheduler(calendarStore, runner)
 	scheduler.now = func() time.Time { return now }
@@ -1018,4 +1021,95 @@ func newLinkedScheduledRunFixture(t *testing.T, body string, mutate func(*work.F
 
 func scheduledDeliverableBody(deliverable string) string {
 	return "# Scheduled result\n\n" + scheduledDeliverableStart + "\n" + deliverable + "\n" + scheduledDeliverableEnd + "\n"
+}
+
+// routedRunnerFixture launches through stub executors; defaultRoute is the
+// person's scheduled-action default (zero: none configured).
+func routedRunnerFixture(t *testing.T, defaultRoute work.LaunchRoute) (*WorkRunner, *work.Store, *scheduledActionLaunchRunner) {
+	t.Helper()
+	store, err := work.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmux := &scheduledActionLaunchRunner{newID: "worker-session"}
+	execs := work.NewExecutorConfig(map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude --model claude-opus-5-5"},
+		"codex":  {Name: "codex", Command: "codex --model gpt-6-sol"},
+	})
+	execs.ScheduledAction = defaultRoute
+	return &WorkRunner{Store: store, Launcher: work.NewLauncher(tmux, execs), Brain: &scheduledActionThreadRegistry{known: true}}, store, tmux
+}
+
+var userDefaultRoute = work.LaunchRoute{Executor: "claude", Model: "claude-sonnet-5-5", Reasoning: "medium"}
+
+func TestRunScheduledActionRoutelessItemUsesTheUserDefaultNeverTheHost(t *testing.T) {
+	runner, store, tmux := routedRunnerFixture(t, userDefaultRoute)
+	item := Item{ID: "old-item", Title: "Older or phone-created", ActionInstruction: "Say hi", ActionCwd: "/calendar-cwd"}
+	if _, err := runner.RunScheduledAction(context.Background(), item, Run{ID: "run-default", Title: "t", SourceThreadID: "thread"}); err != nil {
+		t.Fatal(err)
+	}
+	command := tmux.spawnCommands[0]
+	if tmux.spawnRoles[0] != "claude" || strings.Count(command, "--model") != 1 || !strings.Contains(command, "--model claude-sonnet-5-5") || !strings.Contains(command, "--effort medium") {
+		t.Fatalf("spawned %v %q", tmux.spawnRoles, command)
+	}
+	written, _ := store.GetByID("run-default")
+	extra := written.Frontmatter.Extra
+	if extra["worker_executor"] != "claude" || extra["worker_model"] != "claude-sonnet-5-5" || extra["worker_route_source"] != work.ScheduledRouteDefault {
+		t.Fatalf("Work route evidence = %#v", extra)
+	}
+}
+
+func TestRunScheduledActionItemRouteOverridesDefault(t *testing.T) {
+	runner, store, tmux := routedRunnerFixture(t, userDefaultRoute)
+	item := Item{ID: "item-2", Title: "Codex on request", ActionInstruction: "Say hi", ActionCwd: "/calendar-cwd", ActionExecutor: "codex", ActionModel: "gpt-6-astra", ActionReasoning: "max"}
+	if _, err := runner.RunScheduledAction(context.Background(), item, Run{ID: "run-codex", Title: "Codex", SourceThreadID: "thread"}); err != nil {
+		t.Fatal(err)
+	}
+	command := tmux.spawnCommands[0]
+	if tmux.spawnRoles[0] != "codex" || !strings.Contains(command, "--model gpt-6-astra") || strings.Contains(command, "gpt-6-sol") || strings.Contains(command, "sonnet") || !strings.Contains(command, `model_reasoning_effort="max"`) {
+		t.Fatalf("spawned %v %q", tmux.spawnRoles, command)
+	}
+	written, _ := store.GetByID("run-codex")
+	if written.Frontmatter.Extra["worker_route_source"] != work.ScheduledRouteItem {
+		t.Fatalf("Work route evidence = %#v", written.Frontmatter.Extra)
+	}
+}
+
+func TestRunScheduledActionWithoutAnyRouteFailsBeforeWorkOrLaunch(t *testing.T) {
+	runner, store, tmux := routedRunnerFixture(t, work.LaunchRoute{})
+	item := Item{ID: "item-3", Title: "No route", ActionInstruction: "Say hi", ActionCwd: "/calendar-cwd"}
+	_, err := runner.RunScheduledAction(context.Background(), item, Run{ID: "run-none", Title: "t", SourceThreadID: "thread"})
+	if !errors.Is(err, work.ErrNoScheduledRoute) {
+		t.Fatalf("error = %v", err)
+	}
+	if len(tmux.spawnCommands) != 0 {
+		t.Fatalf("spawned %v", tmux.spawnCommands)
+	}
+	if _, ok := store.GetByID("run-none"); ok {
+		t.Fatal("a Work file was created for an occurrence that cannot launch")
+	}
+}
+
+func TestRunScheduledActionBadRoutesFailBeforeAnyLaunch(t *testing.T) {
+	for name, test := range map[string]struct {
+		def  work.LaunchRoute
+		item Item
+	}{
+		"bad item reasoning":     {userDefaultRoute, Item{ActionExecutor: "claude", ActionReasoning: "ultra"}},
+		"unknown item executor":  {userDefaultRoute, Item{ActionExecutor: "nope"}},
+		"unknown default":        {work.LaunchRoute{Executor: "nope"}, Item{}},
+		"default reasoning typo": {work.LaunchRoute{Executor: "claude", Reasoning: "ultra"}, Item{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runner, store, tmux := routedRunnerFixture(t, test.def)
+			item := test.item
+			item.ID, item.Title, item.ActionInstruction, item.ActionCwd = "item-4", "Bad", "Say hi", "/calendar-cwd"
+			if _, err := runner.RunScheduledAction(context.Background(), item, Run{ID: "run-bad", Title: "Bad", SourceThreadID: "thread"}); err == nil {
+				t.Fatal("unlaunchable route launched")
+			}
+			if _, ok := store.GetByID("run-bad"); len(tmux.spawnCommands) != 0 || ok {
+				t.Fatalf("spawned %v, Work created %v", tmux.spawnCommands, ok)
+			}
+		})
+	}
 }

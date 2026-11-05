@@ -536,6 +536,8 @@ func (e env) checkExecutors() ExecutorsCheck {
 		check.Warnings = append(check.Warnings, fmt.Sprintf("executors.toml: %s are retired and ignored; Brain routes Workers from its routing.md", strings.Join(cfg.DeprecatedKeys, ", ")))
 	}
 
+	check.Warnings = append(check.Warnings, scheduledRouteWarnings(cfg)...)
+
 	for _, name := range cfg.Roles() {
 		executor := cfg.ByName[name]
 		check.Items = append(check.Items, e.probeExecutor(name, executor))
@@ -1071,4 +1073,27 @@ func (e env) defaultHTTPGet(ctx context.Context, url string) (int, []byte, error
 		return resp.StatusCode, nil, err
 	}
 	return resp.StatusCode, body, nil
+}
+
+// scheduledRouteWarnings reports the default Worker for Calendar scheduled
+// actions (scheduled-action-route.toml): without a usable one, an action that
+// names no executor is refused when saved and fails when it fires.
+func scheduledRouteWarnings(cfg *work.ExecutorConfig) []string {
+	path, err := work.DefaultScheduledActionRoutePath()
+	if err != nil {
+		return nil
+	}
+	route, err := work.LoadScheduledActionRoute(path)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	if route.Executor == "" {
+		return []string{"scheduled-action-route.toml: no default Worker for Calendar scheduled actions; set executor = \"...\" there"}
+	}
+	probe := *cfg
+	probe.ScheduledAction = route
+	if _, _, err := probe.ResolveScheduledRoute(work.LaunchRoute{}); err != nil {
+		return []string{err.Error()}
+	}
+	return nil
 }

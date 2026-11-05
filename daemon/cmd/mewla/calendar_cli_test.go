@@ -34,3 +34,13 @@ func TestCalendarCreateHelpAndValidationRequireSourceThread(t *testing.T) {
 		t.Fatalf("missing source-thread error = %v", err)
 	}
 }
+
+func TestCalendarCreateHelpDescribesWorkerOverrideFlags(t *testing.T) {
+	var help bytes.Buffer
+	_ = runCalendarWrite(false, []string{"-help"}, &help)
+	for _, want := range []string{"-executor", "-model", "-reasoning", "scheduled-action-route.toml"} {
+		if !strings.Contains(help.String(), want) {
+			t.Fatalf("help missing %q:\n%s", want, help.String())
+		}
+	}
+}

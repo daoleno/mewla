@@ -547,6 +547,7 @@ func (a *controlApp) handleCalendarUpdate(req control.Request) control.Response 
 	}
 	return calendarControlResponse(item, "Updated")
 }
+
 func (a *controlApp) handleCalendarCancel(req control.Request) control.Response {
 	if a == nil || a.calendarStore == nil {
 		return control.ErrorResponse("calendar_unavailable", "Calendar is not configured.")
