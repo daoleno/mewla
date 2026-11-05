@@ -247,6 +247,12 @@ type agentSession struct {
 	readElements func(ctx context.Context, limit int) (ElementTree, error)
 	scale        float64 // framebuffer pixels per screenshot pixel
 
+	// parked are the apps this agent moved to the agent display (see
+	// parking.go); parkTold is whether it was told there is none.
+	parkMu   sync.Mutex
+	parked   map[int]bool
+	parkTold bool
+
 	// appMu serializes reading apps and acting on their elements: tree is
 	// the agent's latest read, whose ids its element actions name, and the
 	// handles it holds are released only under appMu.
@@ -466,6 +472,8 @@ func (s *Service) watchAgent(agent *agentSession) {
 	posted := agent.lastPost
 	agent.mu.Unlock()
 	agent.releaseTree()
+	// Apps moved to the agent display go back to where they were.
+	agent.unparkAll()
 	s.ReleaseControl(agent.control)
 	s.agentMu.Lock()
 	if posted.After(s.agentPosted) {
@@ -592,7 +600,16 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 	p := image.Pt(int(float64(c[0])*a.scale+0.5), int(float64(c[1])*a.scale+0.5))
 	inside := p.In(a.latest.Rect)
 	a.mu.Unlock()
-	if !inside {
+	if a.isParked(app.PID) && len(app.Windows) > 0 {
+		// An app on the agent display is off the screenshot: its point is on
+		// its own window screenshot, counted from the window's corner.
+		window := app.Windows[0]
+		p = window.Bounds.Min.Add(p)
+		inside = p.In(window.Bounds)
+		if !inside {
+			return AgentResult{}, fmt.Errorf("[%d, %d] is outside %s's window screenshot (it is %d x %d)", c[0], c[1], oneLine(app.Name), int(float64(window.Bounds.Dx())/a.scaleNow()+0.5), int(float64(window.Bounds.Dy())/a.scaleNow()+0.5))
+		}
+	} else if !inside {
 		return AgentResult{}, fmt.Errorf("[%d, %d] is outside the screenshot", c[0], c[1])
 	}
 	if background {
@@ -1009,6 +1026,8 @@ func (a *agentSession) bringForward(ctx context.Context, name string) (AgentResu
 	if app.Active {
 		return AgentResult{Text: fmt.Sprintf("%s is already in front.", oneLine(app.Name))}, nil
 	}
+	// An app on the agent display comes back to the person's screen first.
+	a.unpark(app.PID)
 	if err := raiser.RaiseApp(ctx, app.PID); err != nil {
 		return AgentResult{}, a.gone(ctx, app, err)
 	}
@@ -1267,6 +1286,14 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 	bounds := a.latest.Rect
 	a.scale = max(1, float64(max(bounds.Dx(), bounds.Dy()))/AgentLongEdge)
 	a.mu.Unlock()
+
+	if note := a.maybePark(ctx, action); note != "" {
+		defer func() {
+			if err == nil && result.Text != "" {
+				result.Text = note + " " + result.Text
+			}
+		}()
+	}
 
 	switch action.Action {
 	case "screenshot":
@@ -1664,6 +1691,9 @@ func (a *agentSession) windowShot(ctx context.Context, name string) (AgentResult
 			return AgentResult{}, ctx.Err()
 		}
 	}
+	if parker, ok := a.apps.(appParker); ok && a.isParked(app.PID) && !app.Window.Empty() {
+		return a.parkedShot(ctx, parker, app)
+	}
 	a.mu.Lock()
 	src := a.latest
 	r := app.Window.Intersect(src.Rect)
@@ -1686,6 +1716,13 @@ func (a *agentSession) windowShot(ctx context.Context, name string) (AgentResult
 		text += " Part of it is under " + strings.Join(app.CoveredBy, ", ") + ", which this picture shows instead; app_state reads it whole."
 	}
 	return AgentResult{Image: out.Bytes(), Width: w, Height: h, Text: text}, nil
+}
+
+// scaleNow is the screenshot scale.
+func (a *agentSession) scaleNow() float64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.scale
 }
 
 // agentSize is the screenshot size; callers hold a.mu.
@@ -1853,4 +1890,23 @@ func (a *agentSession) effect(ctx context.Context, app App, sent string, before 
 		after = Witness{}
 	}
 	return effectLine(oneLine(app.Name), sent, before, after, true)
+}
+
+// parkedShot is the window of an app on the agent display, from that
+// display's own picture, at the scale of a full screenshot. Its points are
+// counted from the window's corner.
+func (a *agentSession) parkedShot(ctx context.Context, parker appParker, app App) (AgentResult, error) {
+	img, err := parker.ParkedImage(ctx, app.Window)
+	if err != nil {
+		return AgentResult{}, fmt.Errorf("%s is on the agent display and its picture isn't available: %w; app_state reads it", oneLine(app.Name), err)
+	}
+	scale := a.scaleNow()
+	w, h := max(1, int(float64(img.Bounds().Dx())/scale+0.5)), max(1, int(float64(img.Bounds().Dy())/scale+0.5))
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	xdraw.ApproxBiLinear.Scale(dst, dst.Rect, img, img.Bounds(), xdraw.Src, nil)
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 70}); err != nil {
+		return AgentResult{}, err
+	}
+	return AgentResult{Image: out.Bytes(), Width: w, Height: h, Text: fmt.Sprintf("%s's window on the agent display, %dx%d. Click points for %s are on this picture, from its top left (0, 0).", oneLine(app.Name), w, h, oneLine(app.Name))}, nil
 }

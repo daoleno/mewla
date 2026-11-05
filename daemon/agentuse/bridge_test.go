@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -76,8 +77,32 @@ func waitHost(t *testing.T, b *Bridge) {
 
 func TestConnectAsksTheExtensionToOpenAnAgentWindow(t *testing.T) {
 	b, dir := startBridge(t)
-	b.Bounds = func() (WindowBounds, bool) { return WindowBounds{1512, 0, 1600, 1000}, true }
-	got := fakeExtension(t, dir, func(hostMessage) hostMessage { return hostMessage{Type: "connected"} })
+	var held, released atomic.Int32
+	b.Display = func(string) (WindowBounds, func(), error) {
+		held.Add(1)
+		return WindowBounds{1512, 0, 1600, 1000}, func() { released.Add(1) }, nil
+	}
+	conn, err := DialBridgeHost(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	enc := json.NewEncoder(conn)
+	_ = enc.Encode(hostMessage{Type: "hello", Version: "9.9"})
+	got := make(chan hostMessage, 4)
+	go func() {
+		dec := json.NewDecoder(conn)
+		for {
+			var m hostMessage
+			if dec.Decode(&m) != nil {
+				return
+			}
+			got <- m
+			if m.Type == "connect" {
+				_ = enc.Encode(hostMessage{Type: "connected", ID: m.ID})
+			}
+		}
+	}()
 	waitHost(t, b)
 	if err := ConnectViaBridge(dir, goodRelay, "claude"); err != nil {
 		t.Fatal(err)
@@ -87,7 +112,56 @@ func TestConnectAsksTheExtensionToOpenAnAgentWindow(t *testing.T) {
 		t.Fatalf("the extension was asked %+v", m)
 	}
 	if m.Bounds == nil || *m.Bounds != (WindowBounds{1512, 0, 1600, 1000}) {
-		t.Fatalf("the window goes %+v, want the isolated display", m.Bounds)
+		t.Fatalf("the window goes %+v, want the agent display", m.Bounds)
+	}
+	// The display is held while the agent's window is open, and let go when
+	// the extension says it closed.
+	if held.Load() != 1 || released.Load() != 0 {
+		t.Fatalf("held %d released %d", held.Load(), released.Load())
+	}
+	_ = enc.Encode(hostMessage{Type: "closed", ID: m.ID, Reason: "The agent finished"})
+	for i := 0; i < 100 && released.Load() == 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if released.Load() != 1 {
+		t.Fatalf("the display wasn't let go: released %d", released.Load())
+	}
+}
+
+func TestTheDisplayIsLetGoWhenChromeEndsTheHostWithAWindowOpen(t *testing.T) {
+	b, dir := startBridge(t)
+	var released atomic.Int32
+	b.Display = func(string) (WindowBounds, func(), error) {
+		return WindowBounds{}, func() { released.Add(1) }, nil
+	}
+	conn, err := DialBridgeHost(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc := json.NewEncoder(conn)
+	_ = enc.Encode(hostMessage{Type: "hello", Version: "9.9"})
+	go func() {
+		dec := json.NewDecoder(conn)
+		for {
+			var m hostMessage
+			if dec.Decode(&m) != nil {
+				return
+			}
+			if m.Type == "connect" {
+				_ = enc.Encode(hostMessage{Type: "connected", ID: m.ID})
+			}
+		}
+	}()
+	waitHost(t, b)
+	if err := ConnectViaBridge(dir, goodRelay, "claude"); err != nil {
+		t.Fatal(err)
+	}
+	conn.Close()
+	for i := 0; i < 100 && released.Load() == 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if released.Load() != 1 {
+		t.Fatalf("released %d", released.Load())
 	}
 }
 

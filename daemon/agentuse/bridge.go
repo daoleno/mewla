@@ -76,14 +76,17 @@ func bridgeSocket(dir string) string { return filepath.Join(dir, "bridge.sock") 
 // Bridge is the daemon's side.
 type Bridge struct {
 	dir string
-	// Bounds, when set, says where the agent's window should go: the isolated
-	// display, if the computer has one.
-	Bounds func() (WindowBounds, bool)
+	// Display, when set, makes the agent display (the display Mewla keeps for
+	// agents, off the person's screen) and says where it is, for the agent's
+	// window to open on; release lets it go when the window closes.
+	Display func(key string) (bounds WindowBounds, release func(), err error)
 
 	mu      sync.Mutex
 	host    *bridgeHost
 	waiting map[string]chan hostMessage
 	nextID  int
+	// releases let go of each open agent window's hold on the display.
+	releases map[string]func()
 }
 
 type bridgeHost struct {
@@ -100,7 +103,7 @@ func (h *bridgeHost) send(m hostMessage) error {
 }
 
 func NewBridge(dir string) *Bridge {
-	return &Bridge{dir: dir, waiting: map[string]chan hostMessage{}}
+	return &Bridge{dir: dir, waiting: map[string]chan hostMessage{}, releases: map[string]func(){}}
 }
 
 // HasHost says whether the extension is connected.
@@ -208,6 +211,9 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader) {
 			host.version = m.Version
 			b.mu.Unlock()
 		case "connected", "error", "closed":
+			if m.Type != "connected" {
+				b.release(m.ID)
+			}
 			b.mu.Lock()
 			ch := b.waiting[m.ID]
 			b.mu.Unlock()
@@ -221,7 +227,27 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader) {
 	}
 }
 
+// release lets go of a window's hold on the agent display.
+func (b *Bridge) release(id string) {
+	b.mu.Lock()
+	release := b.releases[id]
+	delete(b.releases, id)
+	b.mu.Unlock()
+	if release != nil {
+		release()
+	}
+}
+
 func (b *Bridge) failAll(why string) {
+	b.mu.Lock()
+	ids := make([]string, 0, len(b.releases))
+	for id := range b.releases {
+		ids = append(ids, id)
+	}
+	b.mu.Unlock()
+	for _, id := range ids {
+		b.release(id)
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for id, ch := range b.waiting {
@@ -270,12 +296,16 @@ func (b *Bridge) Connect(ctx context.Context, relayURL, client string, bounds *W
 		delete(b.waiting, id)
 		b.mu.Unlock()
 	}()
-	if bounds == nil && b.Bounds != nil {
-		if got, ok := b.Bounds(); ok {
+	if bounds == nil && b.Display != nil {
+		if got, release, err := b.Display(id); err == nil {
 			bounds = &got
+			b.mu.Lock()
+			b.releases[id] = release
+			b.mu.Unlock()
 		}
 	}
 	if err := host.send(hostMessage{Type: "connect", ID: id, RelayURL: relayURL, Client: client, Bounds: bounds}); err != nil {
+		b.release(id)
 		return fmt.Errorf("couldn't reach the extension: %w", err)
 	}
 	select {
@@ -283,9 +313,11 @@ func (b *Bridge) Connect(ctx context.Context, relayURL, client string, bounds *W
 		if m.Type == "connected" {
 			return nil
 		}
+		b.release(id)
 		return fmt.Errorf("the extension couldn't open the agent's window: %s", m.Message)
 	case <-ctx.Done():
 		_ = host.send(hostMessage{Type: "disconnect", ID: id})
+		b.release(id)
 		return errors.New("the extension didn't answer in time")
 	}
 }

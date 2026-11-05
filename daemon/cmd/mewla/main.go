@@ -749,6 +749,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 		},
 		Stop: screenService.StopAgent,
 	})
+	if hold, release, ok := screenService.AgentDisplay(); ok {
+		// The browser's agent windows open on the agent display too, off the
+		// person's screen.
+		agentUse.SetAgentDisplay(func(key string) (agentuse.WindowBounds, error) {
+			bounds, err := hold(key)
+			return agentuse.WindowBounds{Left: bounds.Min.X, Top: bounds.Min.Y, Width: bounds.Dx(), Height: bounds.Dy()}, err
+		}, release)
+	}
 	controlHandler.agentUse = agentUse
 	controlHandler.phone = phone.NewAgent(phoneManager, phone.NewAudit(authManager.StorageDir()))
 	// A Worker that finishes or is closed gives the phone's screen back at once.
