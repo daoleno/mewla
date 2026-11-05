@@ -616,6 +616,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	debuglog.Printf("websocket: client connected remote=%s device=%s clients=%d", r.RemoteAddr, device.ID, s.clientCount())
 	connectedAt := time.Now()
 	link := keepWebSocketAlive(conn)
+	link.deflate = clientOffersDeflate(r)
 	defer link.stop()
 	s.sendWorkerSessionList(conn)
 	if s.work != nil {
@@ -634,12 +635,13 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			out := s.outboxStats(conn)
-			if cause := link.endCause(err, out); cause != "peer-closed" || !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			if cause := link.endCause(err, out); cause != "peer-closed" || !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) || out.sent >= wsQuietCloseLogBytes {
 				// Without this line a phone that lost its connection leaves no
 				// trace here: connect and disconnect are verbose-only. The
 				// cause says which end hung up. Only a close frame that says
 				// goodbye is quiet: a reset or an abrupt close is the phone
-				// vanishing, which is what this line is for.
+				// vanishing, which is what this line is for. So is a goodbye
+				// after megabytes: types= says what the link carried.
 				log.Printf("websocket: client connection lost remote=%s device=%s age=%s cause=%s %s: %v", r.RemoteAddr, device.ID, time.Since(connectedAt).Round(time.Second), cause, link.describe(out), err)
 			}
 			break
@@ -3525,7 +3527,7 @@ func (s *Server) handleWatcherEvent(ev watcher.SessionEvent) {
 		}
 	case "worker_output":
 		if ev.Worker != nil {
-			s.publishWorkerSession("worker_session_updated", ev.Worker)
+			s.publishWorkerSessionOutput(ev.Worker)
 		}
 	case "worker_state_change":
 		if ev.Worker != nil {

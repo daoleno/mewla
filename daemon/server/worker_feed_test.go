@@ -335,3 +335,138 @@ func TestWatcherEventsMoveASessionInAndOutOfTheListWhenItsVisibilityFlips(t *tes
 		t.Fatalf("showing = %+v", m)
 	}
 }
+
+func outputWire(id string, tick int) *workerSessionWire {
+	return &workerSessionWire{Worker: &classifier.Worker{ID: id, Name: "n", LastLines: []string{"• Working (" + strings.Repeat("s", tick%7) + ")", strings.Repeat("x", tick)}}}
+}
+
+func withOutputGap(t *testing.T, gap time.Duration) {
+	t.Helper()
+	previous := workerOutputUpdateGap
+	workerOutputUpdateGap = gap
+	t.Cleanup(func() { workerOutputUpdateGap = previous })
+}
+
+func waitForFeedCount(t *testing.T, recorder *feedRecorder, want int) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		recorder.mu.Lock()
+		n := len(recorder.sent)
+		recorder.mu.Unlock()
+		if n >= want {
+			return
+		}
+	}
+	t.Fatalf("feed never reached %d messages", want)
+}
+
+// A screen that changes on every poll reaches clients once per gap, and the
+// last message is the newest state.
+func TestWorkerFeedPacesOutputOnlyUpdates(t *testing.T) {
+	withOutputGap(t, 100*time.Millisecond)
+	var feed workerFeed
+	recorder := &feedRecorder{}
+	feed.publish("worker_session_created", outputWire("w", 0), recorder.emit)
+	for tick := 1; tick <= 8; tick++ {
+		feed.publishOutput(outputWire("w", tick), recorder.emit)
+	}
+	if n := len(recorder.sent); n != 1 {
+		t.Fatalf("%d messages inside the gap, want only the creation", n)
+	}
+	waitForFeedCount(t, recorder, 2)
+	time.Sleep(250 * time.Millisecond)
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if len(recorder.sent) != 2 {
+		t.Fatalf("got %d messages, want creation plus one paced update", len(recorder.sent))
+	}
+	if !strings.Contains(string(recorder.sent[1]), strings.Repeat("x", 8)) || strings.Contains(string(recorder.sent[1]), strings.Repeat("x", 9)) {
+		t.Fatalf("paced update is not the newest state: %s", recorder.sent[1])
+	}
+	if got := decodeFeed(t, recorder.sent[1]).Seq; got != 2 {
+		t.Fatalf("paced update has seq %d", got)
+	}
+}
+
+func TestWorkerFeedSendsNothingForUnchangedOutput(t *testing.T) {
+	withOutputGap(t, 20*time.Millisecond)
+	var feed workerFeed
+	recorder := &feedRecorder{}
+	feed.publish("worker_session_created", outputWire("w", 3), recorder.emit)
+	time.Sleep(40 * time.Millisecond)
+	feed.publishOutput(outputWire("w", 3), recorder.emit)
+	time.Sleep(60 * time.Millisecond)
+	if n := len(recorder.sent); n != 1 {
+		t.Fatalf("an unchanged Session was sent again: %d messages", n)
+	}
+}
+
+// A state change is never held, and it supersedes a held output change: the
+// stale output must not arrive after it.
+func TestWorkerFeedStateChangeIsImmediateAndSupersedesHeldOutput(t *testing.T) {
+	withOutputGap(t, 80*time.Millisecond)
+	var feed workerFeed
+	recorder := &feedRecorder{}
+	feed.publish("worker_session_created", outputWire("w", 0), recorder.emit)
+	feed.publishOutput(outputWire("w", 4), recorder.emit) // held
+	changed := outputWire("w", 5)
+	changed.State = classifier.StateBlocked
+	feed.publishChange(changed, recorder.emit)
+	if n := len(recorder.sent); n != 2 {
+		t.Fatalf("state change was held: %d messages", n)
+	}
+	time.Sleep(200 * time.Millisecond)
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if len(recorder.sent) != 2 {
+		t.Fatalf("a stale held update arrived after the state change: %d messages", len(recorder.sent))
+	}
+}
+
+func TestWorkerFeedArchiveDropsHeldOutput(t *testing.T) {
+	withOutputGap(t, 60*time.Millisecond)
+	var feed workerFeed
+	recorder := &feedRecorder{}
+	feed.publish("worker_session_created", outputWire("w", 0), recorder.emit)
+	feed.publishOutput(outputWire("w", 2), recorder.emit)
+	feed.retire("w", recorder.emit)
+	time.Sleep(150 * time.Millisecond)
+	recorder.mu.Lock()
+	defer recorder.mu.Unlock()
+	if len(recorder.sent) != 2 || decodeFeed(t, recorder.sent[1]).Type != "worker_session_archived" {
+		t.Fatalf("an archived Session was updated after it left: %d messages", len(recorder.sent))
+	}
+}
+
+// The same output stream a phone is sent, before and after pacing: ten running
+// Sessions whose screens change every poll (scaled: a 2 s gap against 500 ms
+// polls becomes 160 ms against 40 ms).
+func TestWorkerFeedOutputBytesBeforeAndAfterPacing(t *testing.T) {
+	withOutputGap(t, 160*time.Millisecond)
+	const sessions, polls, poll = 10, 50, 40 * time.Millisecond
+	var before, after int
+	var paced feedRecorder
+	var feed workerFeed
+	for s := 0; s < sessions; s++ {
+		feed.publish("worker_session_created", outputWire(string(rune('a'+s)), 0), paced.emit)
+	}
+	for tick := 1; tick <= polls; tick++ {
+		for s := 0; s < sessions; s++ {
+			wire := outputWire(string(rune('a'+s)), tick)
+			body, _ := json.Marshal(wire) // what the unpaced path emitted every poll
+			before += len(body)
+			feed.publishOutput(wire, paced.emit)
+		}
+		time.Sleep(poll)
+	}
+	time.Sleep(300 * time.Millisecond)
+	paced.mu.Lock()
+	defer paced.mu.Unlock()
+	for _, data := range paced.sent[sessions:] {
+		after += len(data)
+	}
+	t.Logf("output-only updates: before %d B (%d messages), after %d B (%d messages)", before, sessions*polls, after, len(paced.sent)-sessions)
+	if after*3 > before {
+		t.Fatalf("pacing saved too little: %d B before, %d B after", before, after)
+	}
+}

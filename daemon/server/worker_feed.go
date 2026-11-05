@@ -25,6 +25,15 @@ const workerFeedReconcileInterval = time.Minute
 // received when no later change follows.
 const workerFeedHeartbeatInterval = 10 * time.Second
 
+// workerOutputUpdateGap is the least time between two worker_session_updated
+// messages that exist only because a Session's terminal changed. The watcher
+// polls every 500 ms and a running agent's screen changes on every poll (a
+// spinner's timer), and each message carries the Session's last output lines,
+// so a phone was sent about two of them a second per running Session, around
+// 12 KB/s per client on the wire even when nobody touched the app. A Session
+// that is still changing is sent at this pace, the newest state last.
+var workerOutputUpdateGap = 2 * time.Second
+
 // workerFeed is the one ordered stream of Session changes a client follows.
 //
 // A client receives the full list once per connection (and again only when it
@@ -39,6 +48,85 @@ type workerFeed struct {
 	seq uint64
 	// sent is the last wire form published for each visible Session.
 	sent map[string]sentWorkerSession
+
+	// now is the clock; tests replace it.
+	now func() time.Time
+	// publishedAt is when each Session was last published, and pending holds
+	// the newest output-only change waiting for workerOutputUpdateGap.
+	publishedAt map[string]time.Time
+	pending     map[string]*pendingWorkerOutput
+}
+
+// pendingWorkerOutput is an output-only change held back to pace updates. Its
+// timer publishes the newest wire unless another publication got there first.
+type pendingWorkerOutput struct {
+	wire  *workerSessionWire
+	timer *time.Timer
+}
+
+func (f *workerFeed) clock() time.Time {
+	if f.now != nil {
+		return f.now()
+	}
+	return time.Now()
+}
+
+// publishOutput publishes a change that came only from a Session's terminal
+// output. It sends nothing when the Session reads exactly as clients were last
+// told, and holds the change when the Session was published less than
+// workerOutputUpdateGap ago, so a screen that changes twice a second reaches
+// clients every gap instead. State, metadata and creation changes do not come
+// through here and are never held.
+func (f *workerFeed) publishOutput(wire *workerSessionWire, emit func([]byte)) {
+	if wire == nil || wire.Worker == nil {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	previous, known := f.sent[wire.ID]
+	if !known {
+		f.publishLocked("worker_session_updated", wire, emit)
+		return
+	}
+	if body, err := json.Marshal(wire); err == nil && bytes.Equal(previous.body, body) {
+		f.dropPendingLocked(wire.ID)
+		return
+	}
+	wait := workerOutputUpdateGap - f.clock().Sub(f.publishedAt[wire.ID])
+	if wait <= 0 {
+		f.publishLocked("worker_session_updated", wire, emit)
+		return
+	}
+	if held := f.pending[wire.ID]; held != nil {
+		held.wire = wire // the timer is already set; it will send the newest
+		return
+	}
+	if f.pending == nil {
+		f.pending = map[string]*pendingWorkerOutput{}
+	}
+	held := &pendingWorkerOutput{wire: wire}
+	id := wire.ID
+	held.timer = time.AfterFunc(wait, func() { f.flushOutput(id, held, emit) })
+	f.pending[id] = held
+}
+
+func (f *workerFeed) flushOutput(id string, held *pendingWorkerOutput, emit func([]byte)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.pending[id] != held {
+		return // a newer publication or a retirement superseded it
+	}
+	delete(f.pending, id)
+	f.publishLocked("worker_session_updated", held.wire, emit)
+}
+
+// dropPendingLocked forgets a held output change that a publication has made
+// stale. The publication carries the Session's current state itself.
+func (f *workerFeed) dropPendingLocked(id string) {
+	if held := f.pending[id]; held != nil {
+		held.timer.Stop()
+		delete(f.pending, id)
+	}
 }
 
 type sentWorkerSession struct {
@@ -92,6 +180,7 @@ func (f *workerFeed) retireLocked(id string, emit func([]byte)) {
 }
 
 func (f *workerFeed) publishLocked(kind string, wire *workerSessionWire, emit func([]byte)) {
+	f.dropPendingLocked(wire.ID)
 	body, err := json.Marshal(wire)
 	if err != nil {
 		log.Printf("worker feed: %s for %s not published: %v", kind, wire.ID, err)
@@ -114,8 +203,13 @@ func (f *workerFeed) publishLocked(kind string, wire *workerSessionWire, emit fu
 	}
 	if kind == "worker_session_archived" {
 		delete(f.sent, wire.ID)
+		delete(f.publishedAt, wire.ID)
 	} else {
 		f.sent[wire.ID] = sentWorkerSession{wire: wire, body: body}
+		if f.publishedAt == nil {
+			f.publishedAt = map[string]time.Time{}
+		}
+		f.publishedAt[wire.ID] = f.clock()
 	}
 	emit(data)
 }
@@ -188,6 +282,12 @@ func (f *workerFeed) reconcile(build func() []*workerSessionWire, emit func([]by
 	for _, id := range gone {
 		f.retireLocked(id, emit)
 	}
+}
+
+// publishWorkerSessionOutput is publishWorkerSession for a change that is only
+// the Session's terminal output; see workerFeed.publishOutput.
+func (s *Server) publishWorkerSessionOutput(worker *classifier.Worker) {
+	s.workerFeed.publishOutput(s.workerSessionWire(worker), s.broadcast)
 }
 
 func (s *Server) publishWorkerSession(kind string, worker *classifier.Worker) {
