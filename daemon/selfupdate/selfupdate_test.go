@@ -262,3 +262,42 @@ func TestDaemonArchiveRoleIsSingleMewlaExecutable(t *testing.T) {
 		t.Fatalf("manifest artifact %+v ok=%v", got, ok)
 	}
 }
+
+func TestDownloadOutlastsTheOldTotalLimitWhileDataKeepsComing(t *testing.T) {
+	old := stallTimeout
+	stallTimeout = 300 * time.Millisecond
+	t.Cleanup(func() { stallTimeout = old })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for i := 0; i < 8; i++ { // 8 x 100 ms: longer than the stall limit in all
+			_, _ = w.Write([]byte("0123456789"))
+			w.(http.Flusher).Flush()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	defer server.Close()
+	client := &Client{HTTPClient: server.Client()}
+	data, err := client.download(context.Background(), server.URL, 1000)
+	if err != nil || len(data) != 80 {
+		t.Fatalf("slow but steady: %d bytes, %v", len(data), err)
+	}
+}
+
+func TestDownloadGivesUpWhenNoDataArrives(t *testing.T) {
+	old := stallTimeout
+	stallTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { stallTimeout = old })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("0123456789"))
+		w.(http.Flusher).Flush()
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	}))
+	defer server.Close()
+	client := &Client{HTTPClient: server.Client()}
+	_, err := client.download(context.Background(), server.URL, 1000)
+	if err == nil || !strings.Contains(err.Error(), "no data received") {
+		t.Fatalf("stalled: %v", err)
+	}
+}
