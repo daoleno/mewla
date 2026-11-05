@@ -157,6 +157,25 @@ func secondsIdle() float64 {
 	return idle(0, 0xFFFFFFFF)
 }
 
+// waitForIdle says whether the Mac has had minIdle seconds of no input. With
+// MEWLA_ACCEPT_WAIT_IDLE=<duration> (say 2h) it waits that long for the person
+// to step away, checking every two seconds, instead of giving up at once; the
+// run still aborts if the person comes back once it has started.
+func waitForIdle(minIdle float64) (float64, bool) {
+	limit, _ := time.ParseDuration(os.Getenv("MEWLA_ACCEPT_WAIT_IDLE"))
+	deadline := time.Now().Add(limit)
+	for {
+		idle := secondsIdle()
+		if idle >= minIdle {
+			return idle, true
+		}
+		if !time.Now().Before(deadline) {
+			return idle, false
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
 // parkPointer moves the pointer with a hardware-style event.
 func parkPointer(source uintptr, at cgPoint) {
 	ev := mac.CGEventCreateMouseEvent(source, cgEventMouseMoved, at, 0)
@@ -253,7 +272,7 @@ func TestAcceptBackgroundClick(t *testing.T) {
 		fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
 	}
 	const minIdle = 20.0
-	if idle := secondsIdle(); idle < minIdle {
+	if idle, ok := waitForIdle(minIdle); !ok {
 		t.Skipf("the Mac has been used %.0f s ago; this run needs %.0f s of no input and types for about a minute", idle, minIdle)
 	}
 	dir := t.TempDir()

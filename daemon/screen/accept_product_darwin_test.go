@@ -39,7 +39,7 @@ func TestAcceptProduct(t *testing.T) {
 		fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
 	}
 	const minIdle = 20.0
-	if idle := secondsIdle(); idle < minIdle {
+	if idle, ok := waitForIdle(minIdle); !ok {
 		t.Skipf("the Mac has been used %.0f s ago; this run needs %.0f s of no input", idle, minIdle)
 	}
 	dir := t.TempDir()
