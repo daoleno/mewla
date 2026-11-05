@@ -1412,6 +1412,12 @@ func (s *Store) applyWorkUpdateViaFSMLocked(database *presentationDatabase, inde
 			if update.WaitFor != nil {
 				waitFor = *update.WaitFor
 			}
+			if wake == nil && item.Loop != nil {
+				// An operator wait would replace the loop's next check with a
+				// wait for user input that nothing answers: the loop would stop
+				// silently. A loop's check closes through its own resolution.
+				return Work{}, fmt.Errorf("%w: %s is a persistent loop; close its check with mewla brain work resolve -disposition wait -wake-kind due_retry, or re-arm with mewla brain loop resume", ErrWorkConflict, item.ID)
+			}
 			if wake == nil {
 				wake = &WorkWake{Kind: WorkWakeUserInput, Ref: firstNonEmpty(waitFor, "operator:"+item.ID)}
 			}

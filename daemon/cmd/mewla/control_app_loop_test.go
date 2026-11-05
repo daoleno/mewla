@@ -117,7 +117,7 @@ func TestBrainLoopDefaultRouteIsPersistedAndFollowedBySpawn(t *testing.T) {
 	if defaulted.Loop.WorkerExecutor != "claude" || defaulted.Loop.WorkerModel != "claude-sonnet-5-5" {
 		t.Fatalf("default route not persisted: %+v", defaulted.Loop)
 	}
-	if !strings.Contains(defaulted.NextAction, "worker spawn -executor claude -model claude-sonnet-5-5") {
+	if !strings.Contains(defaulted.NextAction, "follows this loop's route (-executor claude -model claude-sonnet-5-5)") {
 		t.Fatalf("next action = %q", defaulted.NextAction)
 	}
 	// A client cannot start a loop already paused.

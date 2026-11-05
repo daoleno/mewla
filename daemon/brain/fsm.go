@@ -841,21 +841,30 @@ func wakeProse(wake *lifecycle.WakeState) string {
 	return "Next check " + wake.NextAttemptAt.UTC().Format("2006-01-02 15:04 UTC") + ": " + wake.Ref
 }
 
-// retryDueProse tells the Host what a due timed wake asks of it.
+// retryDueProse tells the Host what a due timed wake asks of it. For a loop it
+// names the closing command, because a Host that is not told closes the event
+// with `brain work update`, which leaves the loop with no next check.
 func retryDueProse(item Work) string {
 	if item.Loop == nil {
 		return "The wake is due: check the external condition once, then resolve with wait, complete or cancel."
 	}
-	text := "A loop check is due: check progress toward the objective once, then resolve with wait (next check), complete (goal met) or cancel."
+	text := ""
+	if item.Loop.Paused {
+		text = "The user has PAUSED this loop. Finish this check, then close it with -disposition wait: the loop stays paused until the user resumes it, whatever next time you give. Do not complete or cancel it for being paused. "
+	}
+	text += "A loop check is due. Do one bounded check of the objective yourself; spawn a Worker only if the check really needs one. " +
+		"Then close this event with mewla brain work resolve (the event's work_id, handling_id, provider_turn_id and work_revision): " +
+		"-disposition wait -wake-kind due_retry (leave out -next-attempt-at to use the loop's gap) with -summary of what you found, " +
+		"-disposition complete when the goal is met, or -disposition cancel. Never close it with brain work update."
 	if item.Loop.WorkerExecutor != "" {
-		text += " Delegate only with worker spawn -executor " + item.Loop.WorkerExecutor
+		text += " A Worker for this loop is worker spawn -work " + item.ID + " (route: executor " + item.Loop.WorkerExecutor
 		if item.Loop.WorkerModel != "" {
-			text += " -model " + item.Loop.WorkerModel
+			text += ", model " + item.Loop.WorkerModel
 		}
 		if item.Loop.WorkerReasoning != "" {
-			text += " -reasoning " + item.Loop.WorkerReasoning
+			text += ", reasoning " + item.Loop.WorkerReasoning
 		}
-		text += "."
+		text += "; it follows that route unless you pass -executor)."
 	}
 	return text
 }
