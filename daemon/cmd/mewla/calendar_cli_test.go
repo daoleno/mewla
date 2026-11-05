@@ -35,20 +35,10 @@ func TestCalendarCreateHelpAndValidationRequireSourceThread(t *testing.T) {
 	}
 }
 
-func TestCalendarCreateScheduledActionRequiresExecutor(t *testing.T) {
-	args := []string{
-		"-title", "Report", "-kind", "scheduled_action", "-date", "2026-07-15", "-time", "09:30",
-		"-timezone", "UTC", "-instruction", "Write the report", "-source-thread", "thread-1",
-		// A state dir that holds no daemon: the check must fail before any call.
-		"-state-dir", t.TempDir(),
-	}
-	err := runCalendarWrite(false, args, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "scheduled_action requires -executor") {
-		t.Fatalf("missing executor error = %v", err)
-	}
+func TestCalendarCreateHelpDescribesWorkerOverrideFlags(t *testing.T) {
 	var help bytes.Buffer
 	_ = runCalendarWrite(false, []string{"-help"}, &help)
-	for _, want := range []string{"-executor", "-model", "-reasoning"} {
+	for _, want := range []string{"-executor", "-model", "-reasoning", "scheduled-action-route.toml"} {
 		if !strings.Contains(help.String(), want) {
 			t.Fatalf("help missing %q:\n%s", want, help.String())
 		}

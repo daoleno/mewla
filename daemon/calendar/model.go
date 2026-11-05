@@ -72,10 +72,10 @@ type Item struct {
 	// ActionExecutor, ActionModel and ActionReasoning are the person's route
 	// for a scheduled_action's Worker, passed like `mewla worker spawn
 	// -executor -model -reasoning`. An empty model or reasoning keeps the
-	// executor's own default. They are stored with the item, so switching the
-	// Brain host never changes the Worker of an item that names one. An item
-	// without an executor (created before routing, or on the phone) falls back
-	// to the Brain host at fire time, and its Work records that.
+	// executor's own default. An item that names an executor uses exactly this
+	// route. An item that names none (older, or created on the phone) uses the
+	// person's default scheduled-action Worker when it fires. The Brain host
+	// never chooses.
 	ActionExecutor  string `json:"action_executor,omitempty"`
 	ActionModel     string `json:"action_model,omitempty"`
 	ActionReasoning string `json:"action_reasoning,omitempty"`

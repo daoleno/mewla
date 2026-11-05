@@ -15,6 +15,7 @@ import (
 	"github.com/daoleno/mewla/daemon/auth"
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/watcher"
+	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
 )
 
@@ -172,5 +173,118 @@ func TestCalendarWebSocketSnoozeAndDoneAnswerTheAlert(t *testing.T) {
 	}
 	if got.Status != calendar.StatusCompleted || got.SnoozedUntil != nil {
 		t.Fatalf("done = %#v", got)
+	}
+}
+
+// The phone saves scheduled actions through these WebSocket messages, not
+// through the CLI: its route must be resolved and kept by the same store check.
+func TestCalendarWebSocketResolvesWorkerRouteAndKeepsItOnEdit(t *testing.T) {
+	authManager, err := auth.NewManager(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairing, _ := authManager.IssuePairingToken(time.Minute)
+	publicKey, privateKey, _ := ed25519.GenerateKey(rand.Reader)
+	if _, err := authManager.EnrollDevice(pairing.Value, authManager.DaemonID(), authManager.PublicKeyHex(), "device-route", "phone", hex.EncodeToString(publicKey)); err != nil {
+		t.Fatal(err)
+	}
+	execs := work.NewExecutorConfig(map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude --model claude-opus-5-5"},
+		"codex":  {Name: "codex", Command: "codex"},
+	})
+	store, _ := calendar.NewStore(t.TempDir())
+	store.SetRouteCheck(func(item calendar.Item) error {
+		_, _, err := execs.ResolveScheduledRoute(work.LaunchRoute{Executor: item.ActionExecutor, Model: item.ActionModel, Reasoning: item.ActionReasoning})
+		return err
+	})
+	srv := New(authManager, watcher.New(time.Second), nil, nil, nil, nil, nil)
+	srv.SetCalendar(store, calendar.NewScheduler(store, nil))
+	httpServer := httptest.NewServer(http.HandlerFunc(srv.handleWS))
+	defer httpServer.Close()
+	header := http.Header{}
+	header.Set("Authorization", calendarAuthHeader(privateKey, authManager.DaemonID(), "device-route", "mewla-connect"))
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(httpServer.URL, "http"), header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	read := func(want string) map[string]any {
+		t.Helper()
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		for {
+			_, raw, readErr := conn.ReadMessage()
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(raw, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload["type"] == want {
+				return payload
+			}
+		}
+	}
+	read("calendar_items_snapshot")
+	due := time.Now().UTC().Add(time.Hour).Format(time.RFC3339)
+	action := func(extra map[string]any) map[string]any {
+		item := map[string]any{"title": "Phone action", "kind": "scheduled_action", "due_at": due, "timezone": "UTC", "recurrence": "none",
+			"action_instruction": "Say hi", "source_thread_id": "thread-1"}
+		for key, value := range extra {
+			item[key] = value
+		}
+		return item
+	}
+	send := func(msgType, id string, item map[string]any) {
+		t.Helper()
+		if err := conn.WriteJSON(map[string]any{"type": msgType, "request_id": id, "calendar_item": item, "revision": item["revision"]}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decode := func(payload map[string]any) calendar.Item {
+		t.Helper()
+		raw, _ := json.Marshal(payload["calendar_item"])
+		var item calendar.Item
+		if err := json.Unmarshal(raw, &item); err != nil {
+			t.Fatal(err)
+		}
+		return item
+	}
+
+	// No route and no default configured: refused, nothing saved.
+	send("create_calendar_item", "c0", action(nil))
+	if refused := read("error"); !strings.Contains(refused["message"].(string), "no Worker route") || len(store.List()) != 0 {
+		t.Fatalf("route-less create without a default: %#v", refused)
+	}
+	execs.ScheduledAction = work.LaunchRoute{Executor: "claude", Model: "claude-sonnet-5-5"}
+	send("create_calendar_item", "c1", action(map[string]any{"action_executor": "nope"}))
+	if refused := read("error"); !strings.Contains(refused["message"].(string), "not configured") || len(store.List()) != 0 {
+		t.Fatalf("unknown executor: %#v", refused)
+	}
+	send("create_calendar_item", "c2", action(map[string]any{"action_executor": "claude", "action_reasoning": "ultra"}))
+	if refused := read("error"); len(store.List()) != 0 {
+		t.Fatalf("bad reasoning saved: %#v", refused)
+	}
+	// A phone-created item names no route; the default applies when it fires.
+	send("create_calendar_item", "c3", action(nil))
+	if phone := decode(read("calendar_item_created")); phone.ActionExecutor != "" {
+		t.Fatalf("phone item = %#v", phone)
+	}
+	// An explicit Codex item survives an edit that sends the whole item back.
+	send("create_calendar_item", "c4", action(map[string]any{"title": "Codex on request", "action_executor": "codex", "action_model": "gpt-6-astra", "action_reasoning": "max"}))
+	explicit := decode(read("calendar_item_created"))
+	edit := action(nil)
+	raw, _ := json.Marshal(explicit)
+	_ = json.Unmarshal(raw, &edit)
+	edit["title"] = "Renamed on the phone"
+	send("update_calendar_item", "u1", edit)
+	edited := decode(read("calendar_item_updated"))
+	if edited.Title != "Renamed on the phone" || edited.ActionExecutor != "codex" || edited.ActionModel != "gpt-6-astra" || edited.ActionReasoning != "max" {
+		t.Fatalf("edit lost the route: %#v", edited)
+	}
+	edit["revision"], edit["action_executor"] = edited.Revision, "nope"
+	send("update_calendar_item", "u2", edit)
+	if refused := read("error"); !strings.Contains(refused["message"].(string), "not configured") {
+		t.Fatalf("edit to an unknown executor: %#v", refused)
 	}
 }

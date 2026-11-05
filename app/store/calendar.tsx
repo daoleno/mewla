@@ -41,6 +41,14 @@ export interface CalendarItem {
   summary?: string;
   action_instruction?: string;
   action_cwd?: string;
+  /**
+   * The Worker of a scheduled action, set only to override the daemon's default
+   * scheduled-action Worker. The daemon validates it on every save, and an edit
+   * sends it back unchanged (the editor spreads the existing item).
+   */
+  action_executor?: string;
+  action_model?: string;
+  action_reasoning?: string;
   source_thread_id?: string;
   source_message_id?: string;
   linked_work_id?: string;

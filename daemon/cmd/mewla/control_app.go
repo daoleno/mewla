@@ -531,9 +531,6 @@ func (a *controlApp) handleCalendarCreate(req control.Request) control.Response 
 	if a == nil || a.calendarStore == nil || req.CalendarItem == nil {
 		return control.ErrorResponse("invalid_calendar_item", "A calendar item is required.")
 	}
-	if err := a.validateScheduledRoute(*req.CalendarItem); err != nil {
-		return control.ErrorResponse("invalid_calendar_item", err.Error())
-	}
 	item, err := a.calendarStore.Create(*req.CalendarItem)
 	if err != nil {
 		return calendarControlError(err)
@@ -544,9 +541,6 @@ func (a *controlApp) handleCalendarUpdate(req control.Request) control.Response 
 	if a == nil || a.calendarStore == nil || req.CalendarItem == nil {
 		return control.ErrorResponse("invalid_calendar_item", "A calendar item is required.")
 	}
-	if err := a.validateScheduledRoute(*req.CalendarItem); err != nil {
-		return control.ErrorResponse("invalid_calendar_item", err.Error())
-	}
 	item, err := a.calendarStore.Update(*req.CalendarItem, req.Revision)
 	if err != nil {
 		return calendarControlError(err)
@@ -554,17 +548,6 @@ func (a *controlApp) handleCalendarUpdate(req control.Request) control.Response 
 	return calendarControlResponse(item, "Updated")
 }
 
-// validateScheduledRoute rejects a scheduled_action whose Worker route cannot
-// launch, when it is saved rather than when it fires. An item that names no
-// executor has no route to check.
-func (a *controlApp) validateScheduledRoute(item calendar.Item) error {
-	executor := strings.TrimSpace(item.ActionExecutor)
-	if a == nil || a.execs == nil || item.Kind != calendar.KindScheduledAction || executor == "" {
-		return nil
-	}
-	_, err := a.execs.ScheduledLaunchCommand(work.LaunchRoute{Executor: executor, Model: item.ActionModel, Reasoning: item.ActionReasoning})
-	return err
-}
 func (a *controlApp) handleCalendarCancel(req control.Request) control.Response {
 	if a == nil || a.calendarStore == nil {
 		return control.ErrorResponse("calendar_unavailable", "Calendar is not configured.")

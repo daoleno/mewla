@@ -41,8 +41,8 @@ A scheduled action is a small job for an agent: "At 09:30 on weekdays,
 summarise yesterday's merged pull requests." When it is due, Mewla:
 
 1. creates a visible Work item and starts the agent in its own Session, on
-   the executor the action names (`-executor`, with optional `-model` and
-   `-reasoning`; an older action without one uses Brain's executor);
+   your default scheduled-action Worker, or the executor the action itself
+   names (see below). It never uses Brain's executor;
 2. waits for that Work to finish or fail;
 3. posts the result to the Brain thread where you created the action, and
    sends one push notification that opens that thread.
@@ -124,7 +124,6 @@ mewla calendar create -title "Summarise merged PRs" -kind scheduled_action \
   -date 2026-07-15 -time 09:30 -timezone Europe/Berlin -recurrence weekdays \
   -summary "Every weekday morning, yesterday's merged PRs in brief" \
   -instruction "Summarise yesterday's merged pull requests" \
-  -executor claude -model claude-sonnet-5-5 -reasoning medium \
   -source-thread <brain-thread-id> --json
 mewla calendar cancel -id <item-id> -revision <revision> --json
 mewla calendar run -id <item-id> --json
@@ -135,14 +134,33 @@ mewla calendar done -id <item-id> --json
 `-lead <minutes>` on `create` sets how long before an event or deadline the
 phone alerts (default 10 for an event, 30 for a deadline).
 
+### Which agent runs a scheduled action
+
+The agent is your **default scheduled-action Worker**, one small file you own,
+`~/.mewla/scheduled-action-route.toml`:
+
+```toml
+executor  = "claude"              # a name from executors.toml
+model     = "claude-sonnet-5-5"   # optional; empty keeps the executor's default
+reasoning = "medium"              # optional
+```
+
+Restart `mewla` after editing it. An action that names its own `-executor`
+(with optional `-model` and `-reasoning`, as in `mewla worker spawn`) uses
+exactly that route instead, for example when you ask for Codex for one task.
+Actions created on the phone name none and use the default. Brain's executor
+is never used, so switching Brain's agent does not change who runs an action.
+
+Without a default, an action that names no executor is refused when you save
+it, and one already saved fails when it is due with that reason; nothing is
+substituted. The route is checked on every save (CLI, Brain and phone), so a
+typo in an executor, model or reasoning level is rejected then, not when the
+action is due. `mewla doctor` warns when the default is missing or unusable.
+Pass the flags to `mewla calendar update` to route an existing action.
+
 A scheduled action needs `-source-thread`, the Brain thread that receives its
 result. `-summary` is the one line Calendar shows; `-instruction` is the full
-prompt the agent gets. `-executor` is required and picks the agent that runs
-it, like `mewla worker spawn -executor`; `-model` and `-reasoning` are
-optional and an empty one keeps that executor's default. The route is stored
-with the item, so switching Brain's executor never changes it, and a typo is
-rejected when you save the action. Pass the same flags to `calendar update`
-to route an older action. Brain writes the summary in your language. An item
+prompt the agent gets. Brain writes the summary in your language. An item
 without one shows the first sentence of its instruction. Events use `-end-date` and `-end-time`. `mewla calendar update` takes the
 complete item as `-item-json` plus its current `-revision`, so two edits cannot
 silently overwrite each other.

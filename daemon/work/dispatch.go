@@ -76,6 +76,12 @@ func (c *ExecutorConfig) ScheduledLaunchCommand(route LaunchRoute) (string, erro
 	return ScheduledActionCommand(role, executor)
 }
 
+// ScheduledRoute resolves the Worker of a scheduled action: the item's own
+// route, else the person's default. See ExecutorConfig.ResolveScheduledRoute.
+func (l *Launcher) ScheduledRoute(item LaunchRoute) (LaunchRoute, string, error) {
+	return l.execs.ResolveScheduledRoute(item)
+}
+
 // StartDedicated always spawns a fresh session of the routed executor. The
 // caller chooses the route and persists the returned started metadata.
 func (l *Launcher) StartDedicated(item *Item, cwd string, route LaunchRoute) (*Item, error) {
