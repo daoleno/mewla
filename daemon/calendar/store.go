@@ -45,6 +45,25 @@ type Store struct {
 	subs    map[int]chan Event
 	nextSub int
 	changed chan struct{}
+	// routeCheck, when set, vets the Worker of every scheduled_action saved
+	// through any path (CLI, control socket, phone WebSocket).
+	routeCheck func(Item) error
+}
+
+// SetRouteCheck installs the check Create and Update run on a scheduled_action:
+// it resolves the item's Worker route the way a launch does, so a route that
+// cannot launch is refused when saved, not when it fires.
+func (s *Store) SetRouteCheck(check func(Item) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.routeCheck = check
+}
+
+func (s *Store) checkRoute(item Item) error {
+	if s.routeCheck == nil || item.Kind != KindScheduledAction {
+		return nil
+	}
+	return s.routeCheck(item)
 }
 
 func DefaultRoot() (string, error) {
@@ -278,6 +297,9 @@ func (s *Store) create(item Item) (Item, error) {
 	if err := item.Validate(); err != nil {
 		return Item{}, err
 	}
+	if err := s.checkRoute(item); err != nil {
+		return Item{}, err
+	}
 	now := s.now().UTC()
 	item.CreatedAt, item.UpdatedAt, item.Revision = now, now, 1
 	item.Status, item.NextAt = StatusScheduled, item.TriggerAt()
@@ -318,6 +340,9 @@ func (s *Store) Update(item Item, expectedRevision int64) (Item, error) {
 	item.Summary = strings.TrimSpace(item.Summary)
 	item.normalizeActionRoute()
 	if err := item.Validate(); err != nil {
+		return Item{}, err
+	}
+	if err := s.checkRoute(item); err != nil {
 		return Item{}, err
 	}
 	item.CreatedAt, item.UpdatedAt, item.Revision = current.CreatedAt, s.now().UTC(), current.Revision+1

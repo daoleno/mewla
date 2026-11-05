@@ -24,10 +24,6 @@ type WorkRunner struct {
 	}
 	Brain interface {
 		HasChatThread(string) (bool, error)
-		// HostExecutorID runs only a scheduled_action that names no executor
-		// (created before routing, or on the phone). An item that names one
-		// keeps it whichever agent Brain runs on.
-		HostExecutorID() string
 	}
 }
 
@@ -194,7 +190,10 @@ func (r *WorkRunner) RunScheduledAction(_ context.Context, item Item, run Run) (
 			return ActionResult{}, err
 		}
 	}
-	route, source := scheduledActionRoute(item, r.Brain.HostExecutorID())
+	route, source, err := r.Launcher.ScheduledRoute(work.LaunchRoute{Executor: item.ActionExecutor, Model: item.ActionModel, Reasoning: item.ActionReasoning})
+	if err != nil {
+		return ActionResult{}, fmt.Errorf("choose scheduled action Worker: %w", err)
+	}
 	path := filepath.Join(r.Store.Root, "calendar", item.ID+"-"+run.ID+".md")
 	body := scheduledWorkBody(item, run)
 	extra := map[string]interface{}{"calendar_item_id": item.ID, "calendar_run_id": run.ID, "worker_executor": route.Executor, "worker_route_source": source}
@@ -217,21 +216,6 @@ func (r *WorkRunner) RunScheduledAction(_ context.Context, item Item, run Run) (
 		return ActionResult{WorkID: created.ID, WorkerSession: started.Frontmatter.WorkerSession, Launched: true}, fmt.Errorf("persist started Work item: %w", err)
 	}
 	return ActionResult{WorkID: written.ID, WorkerSession: written.Frontmatter.WorkerSession, Launched: true}, nil
-}
-
-const (
-	workerRouteItem = "calendar_item"
-	workerRouteHost = "brain_host_fallback"
-)
-
-// scheduledActionRoute is the Worker route of one occurrence: the item's own
-// when it names an executor, else the Brain host (source says which, and the
-// Work records it).
-func scheduledActionRoute(item Item, hostExecutor string) (work.LaunchRoute, string) {
-	if executor := strings.TrimSpace(item.ActionExecutor); executor != "" {
-		return work.LaunchRoute{Executor: executor, Model: strings.TrimSpace(item.ActionModel), Reasoning: strings.TrimSpace(item.ActionReasoning)}, workerRouteItem
-	}
-	return work.LaunchRoute{Executor: strings.TrimSpace(hostExecutor)}, workerRouteHost
 }
 
 func scheduledWorkBody(item Item, run Run) string {

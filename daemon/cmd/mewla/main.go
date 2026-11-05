@@ -420,6 +420,17 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize calendar store: %w", err)
 	}
+	scheduledRoutePath, err := work.DefaultScheduledActionRoutePath()
+	if err != nil {
+		return fmt.Errorf("resolve scheduled action route path: %w", err)
+	}
+	if execs.ScheduledAction, err = work.LoadScheduledActionRoute(scheduledRoutePath); err != nil {
+		return fmt.Errorf("load scheduled action Worker: %w", err)
+	}
+	calendarStore.SetRouteCheck(func(item calendar.Item) error {
+		_, _, err := execs.ResolveScheduledRoute(work.LaunchRoute{Executor: item.ActionExecutor, Model: item.ActionModel, Reasoning: item.ActionReasoning})
+		return err
+	})
 	controlPath, err := control.DefaultSocketPath(authManager.StorageDir())
 	if err != nil {
 		return fmt.Errorf("resolve control socket path: %w", err)
@@ -1368,9 +1379,9 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs.StringVar(&summary, "summary", "", "scheduled action: one line, in the user's language, saying what it does (shown in Calendar)")
 	fs.StringVar(&instruction, "instruction", "", "scheduled action instruction")
 	fs.StringVar(&cwd, "cwd", "", "scheduled action working directory")
-	fs.StringVar(&executor, "executor", "", "scheduled action Worker executor (required to create a scheduled_action; the item keeps it when the Brain host changes)")
-	fs.StringVar(&model, "model", "", "scheduled action Worker model; empty keeps the executor default")
-	fs.StringVar(&reasoning, "reasoning", "", "scheduled action Worker reasoning level; empty keeps the executor default")
+	fs.StringVar(&executor, "executor", "", "scheduled action Worker executor, only to override the default scheduled-action Worker (scheduled-action-route.toml); the item keeps it")
+	fs.StringVar(&model, "model", "", "scheduled action Worker model for -executor; empty keeps that executor's default")
+	fs.StringVar(&reasoning, "reasoning", "", "scheduled action Worker reasoning level for -executor; empty keeps that executor's default")
 	fs.StringVar(&sourceThread, "source-thread", "", "required for scheduled_action: source_thread_id for canonical Calendar result projection")
 	fs.Int64Var(&revision, "revision", 0, "expected revision")
 	if err := fs.Parse(args); err != nil {
@@ -1423,9 +1434,6 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	}
 	if item.Kind == calendar.KindScheduledAction && strings.TrimSpace(item.SourceThreadID) == "" {
 		return fmt.Errorf("scheduled_action requires -source-thread (source_thread_id)")
-	}
-	if !update && item.Kind == calendar.KindScheduledAction && strings.TrimSpace(item.ActionExecutor) == "" {
-		return fmt.Errorf("scheduled_action requires -executor (with -model and -reasoning when the executor default is not wanted): without it the Worker follows the Brain host")
 	}
 	typeName := "calendar_create"
 	if update {

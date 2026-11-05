@@ -17,7 +17,7 @@ States are `scheduled`, `waiting`, `running`, `completed`, `failed`, and `cancel
 
 ## Scheduled actions
 
-A scheduled action creates a visible `calendar_action` Work item and launches it through the executor the item names (`action_executor`, with optional `action_model` and `action_reasoning`, resolved by `ExecutorConfig.ScheduledLaunchCommand`, the same helpers `mewla worker spawn` uses, and checked when the item is saved) in a dedicated, non-delegated tmux session. Launching Work only makes the Calendar item `running`; it is not completion. The scheduler reconciles the linked Work frontmatter and Worker lifecycle and records completion or failure only after a terminal signal. The executor session never enters generic agent-lifecycle OS notifications; Calendar owns the terminal result alert.
+A scheduled action creates a visible `calendar_action` Work item and launches it through the item's Worker route (`action_executor`, `action_model`, `action_reasoning`) or else the default scheduled-action Worker, resolved by `ExecutorConfig.ResolveScheduledRoute` and `ScheduledLaunchCommand` (the helpers `mewla worker spawn` uses) and checked when the item is saved in a dedicated, non-delegated tmux session. Launching Work only makes the Calendar item `running`; it is not completion. The scheduler reconciles the linked Work frontmatter and Worker lifecycle and records completion or failure only after a terminal signal. The executor session never enters generic agent-lifecycle OS notifications; Calendar owns the terminal result alert.
 
 The generated Work file has a deterministic `User-facing deliverable` section delimited by exactly one ordered pair of `mewla:scheduled-deliverable` markers. The executor must replace the placeholder inside those markers with the complete result intended for the user, preserving useful paragraphs, lists, links, and citations while excluding instructions, progress notes, and Calendar metadata. Mewla accepts that section only from the freshly read, correctly linked terminal Work file, rejects malformed or larger-than-256-KiB content, and never substitutes Work digest fields or an executor summary.
 
@@ -47,14 +47,13 @@ mewla calendar create -title "Review plan" -kind reminder \
 mewla calendar create -title "Summarize AI papers" -kind scheduled_action \
   -date 2026-07-15 -time 09:30 -timezone Asia/Shanghai \
   -instruction "Summarize the three linked papers" \
-  -executor claude -model claude-sonnet-5-5 -reasoning medium \
   -source-thread <brain-thread-id> --json
 mewla calendar update -item-json '<complete item JSON>' -revision <revision> --json
 mewla calendar cancel -id <item-id> -revision <revision> --json
 mewla calendar run -id <item-id> --json
 ```
 
-Create, update, cancel, get, and run responses include a plain confirmation with the resolved local date, time, timezone, and effect. In the CLI, `-source-thread` supplies `source_thread_id` and is mandatory for `scheduled_action`; callers updating with `-item-json` must preserve the same field. `-executor` is mandatory when creating a `scheduled_action`; `-model` and `-reasoning` are optional, and on update the flags override the route in `-item-json`. An item with no `action_executor` (created before routing or on the phone) falls back to the Brain host executor at fire time; its Work frontmatter records `worker_executor`, `worker_model`, `worker_reasoning` and `worker_route_source` (`calendar_item` or `brain_host_fallback`). Brain is instructed to use these tools only for explicit calendar intent, not to extract commitments from every message.
+Create, update, cancel, get, and run responses include a plain confirmation with the resolved local date, time, timezone, and effect. In the CLI, `-source-thread` supplies `source_thread_id` and is mandatory for `scheduled_action`; callers updating with `-item-json` must preserve the same field. The Worker route is optional on create: `-executor`, `-model` and `-reasoning` override the default scheduled-action Worker for that item and, on update, override the route in `-item-json`. `Store.SetRouteCheck` runs `ExecutorConfig.ResolveScheduledRoute` on every `scheduled_action` saved through any path (CLI, control socket, phone WebSocket), so there is one resolution and validation path. An item with no `action_executor` resolves to `ExecutorConfig.ScheduledAction` (`~/.mewla/scheduled-action-route.toml`, read at start, a typo is a start error) and with neither the occurrence fails with `ErrNoScheduledRoute` before any Work file is created. The Brain host is never consulted. The Work frontmatter records `worker_executor`, `worker_model`, `worker_reasoning` and `worker_route_source` (`calendar_item` or `scheduled_action_default`). Brain is instructed to use these tools only for explicit calendar intent, not to extract commitments from every message.
 
 ## Alerts
 

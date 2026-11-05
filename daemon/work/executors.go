@@ -15,13 +15,18 @@ import (
 var ErrUnknownExecutor = errors.New("unknown executor")
 
 // ExecutorConfig is the static launch catalog parsed from executors.toml plus
-// built-in defaults. It holds no Worker routing: Brain chooses each delegated
-// Worker's executor, model and reasoning per launch from its routing guide.
+// built-in defaults. It holds no routing for Brain's delegated Workers: Brain
+// chooses each one's executor, model and reasoning per launch from its routing
+// guide. Only Calendar scheduled actions have a default (ScheduledAction).
 type ExecutorConfig struct {
 	ByName map[string]Executor
 	// DeprecatedKeys lists retired top-level keys (delegated_executor,
 	// delegated_model, delegated_reasoning) found in the file. They are ignored.
 	DeprecatedKeys []string
+	// ScheduledAction is the person's default Worker for Calendar scheduled
+	// actions that name none, read from scheduled-action-route.toml by the
+	// daemon. It is not part of executors.toml, which setup rewrites.
+	ScheduledAction LaunchRoute
 }
 
 // NewExecutorConfig builds an in-memory ExecutorConfig.

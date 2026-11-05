@@ -2,6 +2,8 @@ package work
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -441,5 +443,55 @@ func TestLauncherStartDedicatedLaunchesRoutedModel(t *testing.T) {
 	if len(run.spawnCommands) != 1 || run.spawnRoles[0] != "claude" || !strings.Contains(run.spawnCommands[0], "--model claude-sonnet-5-5 ") && !strings.HasSuffix(run.spawnCommands[0], "--model claude-sonnet-5-5") ||
 		strings.Contains(run.spawnCommands[0], "opus") || !strings.Contains(run.spawnCommands[0], "--effort high") {
 		t.Fatalf("spawn = %#v %#v", run.spawnRoles, run.spawnCommands)
+	}
+}
+
+func TestResolveScheduledRoutePrefersItemThenUserDefaultNeverHost(t *testing.T) {
+	execs := NewExecutorConfig(map[string]Executor{
+		"claude": {Name: "claude", Command: "claude"},
+		"codex":  {Name: "codex", Command: "codex"},
+	})
+	if _, _, err := execs.ResolveScheduledRoute(LaunchRoute{}); !errors.Is(err, ErrNoScheduledRoute) {
+		t.Fatalf("no default: err = %v", err)
+	}
+	execs.ScheduledAction = LaunchRoute{Executor: "claude", Model: "claude-sonnet-5-5"}
+	route, source, err := execs.ResolveScheduledRoute(LaunchRoute{})
+	if err != nil || route.Executor != "claude" || route.Model != "claude-sonnet-5-5" || source != ScheduledRouteDefault {
+		t.Fatalf("default: %+v %q %v", route, source, err)
+	}
+	// An item that names an executor takes none of the default's model.
+	route, source, err = execs.ResolveScheduledRoute(LaunchRoute{Executor: "codex"})
+	if err != nil || route.Executor != "codex" || route.Model != "" || source != ScheduledRouteItem {
+		t.Fatalf("item: %+v %q %v", route, source, err)
+	}
+	if _, _, err := execs.ResolveScheduledRoute(LaunchRoute{Executor: "nope"}); err == nil {
+		t.Fatal("unknown item executor accepted")
+	}
+	execs.ScheduledAction = LaunchRoute{Executor: "nope"}
+	if _, _, err := execs.ResolveScheduledRoute(LaunchRoute{}); err == nil || !strings.Contains(err.Error(), "scheduled-action-route.toml") {
+		t.Fatalf("bad default: err = %v", err)
+	}
+}
+
+func TestLoadScheduledActionRoute(t *testing.T) {
+	dir := t.TempDir()
+	write := func(body string) string {
+		path := filepath.Join(dir, "route.toml")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	if route, err := LoadScheduledActionRoute(filepath.Join(dir, "missing.toml")); err != nil || route != (LaunchRoute{}) {
+		t.Fatalf("missing file: %+v %v", route, err)
+	}
+	route, err := LoadScheduledActionRoute(write("executor = \" claude \"\nmodel = \"claude-sonnet-5-5\"\nreasoning = \"medium\"\n"))
+	if err != nil || route != (LaunchRoute{Executor: "claude", Model: "claude-sonnet-5-5", Reasoning: "medium"}) {
+		t.Fatalf("route: %+v %v", route, err)
+	}
+	for _, bad := range []string{"model = \"m\"\n", "executer = \"claude\"\n", "executor = \n"} {
+		if route, err := LoadScheduledActionRoute(write(bad)); err == nil {
+			t.Fatalf("%q accepted as %+v", bad, route)
+		}
 	}
 }

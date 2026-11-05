@@ -19,7 +19,10 @@ Older `~/.mewla/executors.toml` files may still contain `delegated_executor`,
 `delegated_model` or `delegated_reasoning`. They load normally, but these keys
 are ignored, and `mewla doctor` prints a one-line note that they are retired.
 Delete them at any time. The `mewla worker defaults` and `mewla brain set-delegated`
-commands and the `MEWLA_DELEGATED_EXECUTOR` lock no longer exist.
+commands and the `MEWLA_DELEGATED_EXECUTOR` lock no longer exist. Brain's
+Workers still have no default. Only Calendar scheduled actions have one,
+`scheduled-action-route.toml`, a separate file because `mewla setup` and
+`mewla brain executors add` rewrite `executors.toml`.
 
 Claude, Cursor and Grok delegated launches reuse the existing unattended client
 adapters. Claude runs in `--permission-mode bypassPermissions` by default for Brain
