@@ -1,3 +1,3 @@
 export const NOVNC_VERSION = "1.7.0";
 export const NOVNC_LICENSE = "MPL-2.0";
-export const SCREEN_VIEWER_SHA256 = "81efeb9403a8911033c52bcd8aee3790238ad02acd3c880f0ec955b52af5b0f0";
+export const SCREEN_VIEWER_SHA256 = "c555b6dad450a4a3b3c644f28986e1fb96521c4718a5ce91a990ab6a126252d8";

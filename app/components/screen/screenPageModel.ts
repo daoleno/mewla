@@ -164,34 +164,62 @@ export function qualityReduced(daemon: ScreenStreamStats | null | undefined, vie
   return !!daemon && daemon.quality > 0 && daemon.quality < viewerQuality;
 }
 
-/** How the stream arrived and what holds it up: the badge's first line. */
-export function streamHeadline(readout: StreamReadout): string | null {
-  const parts: string[] = [];
+/** Round trip (ms) from which the network is the problem, not a number to read. */
+export const SLOW_NETWORK_MS = 200;
+/** Consecutive slow samples before a slow connection is worth saying. */
+export const SLOW_SAMPLES = 3;
+
+/**
+ * A slow connection worth saying, in plain words, with the way out when the
+ * phone has one. Everything else about the stream is a diagnostic. The fix
+ * is offered only where the computer lists private addresses this phone could
+ * not reach; with none listed, nothing on the phone changes that.
+ */
+export function connectionProblem(readout: StreamReadout): { title: string; fix: string | null } | null {
+  const slow = (readout.rttMs ?? 0) >= SLOW_NETWORK_MS || qualityReduced(readout.daemon, readout.viewerQuality);
+  if (!slow) return null;
   const path = readout.viaPath ?? readout.daemon?.path;
-  if (path) parts.push(PATH_LABELS[path]);
-  // Video carries motion; the picture sharpens as soon as the screen is still.
-  if ((readout.daemon?.video ?? 0) > 0) parts.push("video");
-  if (path === "relay" && readout.directHint === "announced") parts.push("no LAN/Tailscale route from this phone");
-  if (path === "relay" && readout.directHint === "none") parts.push("computer lists no LAN/Tailscale address");
+  const fix = path === "relay" && readout.directHint === "announced" ? "Join your computer's Wi-Fi or Tailscale" : null;
+  return { title: "Slow connection", fix };
+}
+
+/** The streak of slow samples after one more: a good one ends it. */
+export function nextSlowStreak(streak: number, slow: boolean): number {
+  return slow ? streak + 1 : 0;
+}
+
+/** True once slowness has lasted, so a single spike never lights the indicator. */
+export function slowLasts(streak: number): boolean {
+  return streak >= SLOW_SAMPLES;
+}
+
+export type IndicatorTone = "quiet" | "warn";
+
+/**
+ * The connection indicator: quiet unless something needs attention, either a
+ * slow connection that lasts or a power risk the person can act on.
+ */
+export function indicatorTone(slow: boolean, warning: ReturnType<typeof powerWarning>): IndicatorTone {
+  return slow || (warning !== null && warning.label !== "On battery") ? "warn" : "quiet";
+}
+
+export interface DiagnosticRow {
+  label: string;
+  value: string;
+}
+
+/** The diagnostics behind the indicator: every number once, in plain labels. */
+export function diagnosticRows(readout: StreamReadout, power: string | null): DiagnosticRow[] {
+  const rows: DiagnosticRow[] = [];
+  const path = readout.viaPath ?? readout.daemon?.path;
+  if (path) rows.push({ label: "Route", value: (readout.daemon?.video ?? 0) > 0 ? `${PATH_LABELS[path]} · video` : PATH_LABELS[path] });
+  if (readout.rttMs !== null) rows.push({ label: "Network", value: `${Math.round(readout.rttMs)} ms` });
+  if (readout.inputMs !== null) rows.push({ label: "To screen", value: `${Math.round(readout.inputMs)} ms` });
+  rows.push({ label: "Frame rate", value: `${readout.fps < 10 ? readout.fps.toFixed(1) : Math.round(readout.fps)} fps` });
+  rows.push({ label: "Data", value: readout.kbps >= 1000 ? `${(readout.kbps / 1000).toFixed(1)} Mb/s` : `${Math.round(readout.kbps)} kb/s` });
+  if (qualityReduced(readout.daemon, readout.viewerQuality)) rows.push({ label: "Quality", value: "Reduced" });
   const slowest = slowestStage(readout);
-  if (slowest) parts.push(`${slowest.label} ${Math.round(slowest.ms)} ms`);
-  if (qualityReduced(readout.daemon, readout.viewerQuality)) parts.push("reduced quality");
-  return parts.length ? parts.join(" · ") : null;
-}
-
-export function formatStats(stats: StreamReadout): string {
-  const parts: string[] = [];
-  if (stats.rttMs !== null) parts.push(`${Math.round(stats.rttMs)} ms network`);
-  if (stats.inputMs !== null) parts.push(`${Math.round(stats.inputMs)} ms to screen`);
-  parts.push(`${stats.fps < 10 ? stats.fps.toFixed(1) : Math.round(stats.fps)} fps`);
-  parts.push(stats.kbps >= 1000 ? `${(stats.kbps / 1000).toFixed(1)} Mb/s` : `${Math.round(stats.kbps)} kb/s`);
-  return parts.join(" · ");
-}
-
-/** Connection quality from network round trip, for the status dot. */
-export function connectionQuality(rttMs: number | null): "good" | "fair" | "poor" | "unknown" {
-  if (rttMs === null) return "unknown";
-  if (rttMs < 80) return "good";
-  if (rttMs < 200) return "fair";
-  return "poor";
+  if (slowest && slowest.stage !== "network") rows.push({ label: "Slowest", value: `${slowest.label} ${Math.round(slowest.ms)} ms` });
+  if (power) rows.push({ label: "Computer", value: power });
+  return rows;
 }

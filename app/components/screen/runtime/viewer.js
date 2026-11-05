@@ -55,6 +55,8 @@ export function mountScreenViewer(container, post) {
   let fbH = 0;
   const view = { s: 1, tx: 0, ty: 0, fit: 1 };
   let mode = "touch";
+  // Where a picture shorter than the page sits: the middle, or against the top.
+  let align = "center";
   let cursor = { x: 0, y: 0 };
   let buttons = 0;
   const stats = { bytes: 0, updates: 0, since: performance.now() };
@@ -134,7 +136,7 @@ export function mountScreenViewer(container, post) {
     const w = fbW * view.s;
     const h = fbH * view.s;
     view.tx = w <= cw ? (cw - w) / 2 : Math.min(0, Math.max(cw - w, view.tx));
-    view.ty = h <= ch ? (ch - h) / 2 : Math.min(0, Math.max(ch - h, view.ty));
+    view.ty = h <= ch ? (align === "top" ? 0 : (ch - h) / 2) : Math.min(0, Math.max(ch - h, view.ty));
   }
 
   function fitView() {
@@ -280,6 +282,12 @@ export function mountScreenViewer(container, post) {
     post({ type: "haptic" });
   }
 
+  // A touch beside the picture (the page is taller or wider than it) is not a
+  // click on the computer: it would land on the picture's nearest edge.
+  function besidePicture(point) {
+    return point.x < 0 || point.y < 0 || point.x > fbW || point.y > fbH;
+  }
+
   function startOne(p) {
     const start = { x: p.x, y: p.y };
     gesture = {
@@ -289,6 +297,7 @@ export function mountScreenViewer(container, post) {
       at: performance.now(),
       held: false,
       remote: mode === "trackpad" ? { ...cursor } : toRemote(p.clientX, p.clientY),
+      beside: mode === "touch" && besidePicture(toRemote(p.clientX, p.clientY)),
       afterTap: mode === "trackpad" && performance.now() - lastTap.at < DOUBLE_TAP_MS,
     };
     const g = gesture;
@@ -316,6 +325,7 @@ export function mountScreenViewer(container, post) {
       if (mode === "trackpad") g.kind = g.held ? "drag" : "move";
       else if (g.held || view.s <= view.fit * 1.02) g.kind = "drag";
       else g.kind = "pan";
+      if (g.kind === "drag" && g.beside) g.kind = "none";
       if (g.kind === "drag") {
         if (mode === "touch") press(g.remote.x, g.remote.y);
         else press(cursor.x, cursor.y);
@@ -357,7 +367,7 @@ export function mountScreenViewer(container, post) {
       release(r.x, r.y);
       return;
     }
-    if (g.kind !== "pending") return;
+    if (g.kind !== "pending" || g.beside) return;
     if (g.held) {
       click(g.remote.x, g.remote.y, "right");
       return;
@@ -696,6 +706,11 @@ export function mountScreenViewer(container, post) {
       case "mode":
         mode = message.mode === "trackpad" ? "trackpad" : "touch";
         drawCursor();
+        break;
+      case "align":
+        align = message.align === "top" ? "top" : "center";
+        clampView();
+        applyView();
         break;
       case "fit": fitView(); break;
     }
