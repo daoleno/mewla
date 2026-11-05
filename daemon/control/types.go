@@ -249,6 +249,11 @@ type Worker struct {
 	LastSeenAt          *time.Time `json:"last_seen_at,omitempty"`
 	Hidden              bool       `json:"hidden,omitempty"`
 	Delegated           bool       `json:"delegated,omitempty"`
+	// PromptID is the id of the blocking prompt open in the Worker's terminal,
+	// the one `mewla worker answer -prompt` takes. PromptUnidentified says why
+	// a dialog that is open has none.
+	PromptID           string `json:"prompt_id,omitempty"`
+	PromptUnidentified string `json:"prompt_unidentified,omitempty"`
 }
 
 // Approval is a decision a Worker's agent is waiting on. Each option carries

@@ -1770,7 +1770,13 @@ func controlWorker(worker *classifier.Worker) control.Worker {
 		value := worker.LastSeenAt
 		lastSeenAt = &value
 	}
+	promptID := ""
+	if worker.Prompt != nil {
+		promptID = worker.Prompt.ID
+	}
 	return control.Worker{
+		PromptID:            promptID,
+		PromptUnidentified:  worker.PromptUnidentified,
 		ID:                  worker.ID,
 		Name:                worker.Name,
 		Status:              string(worker.State),

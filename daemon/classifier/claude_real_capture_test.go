@@ -206,3 +206,73 @@ func TestRealClaudeForgedRuleInTheRequestDoesNotShortenTheID(t *testing.T) {
 		t.Fatalf("dash row inside the request: %+v", signal)
 	}
 }
+
+// Claude wraps a long single-line command itself, and the wrapped rows start
+// with a space like every other row of the box. A run of dashes in the
+// command that lands on its own wrapped row, followed by text with letters,
+// looks like "a rule and a header" one row apart; only the rule at column 0
+// opens the dialog. Commands that differ before the dashes must not share an
+// id (or must have none).
+func TestRealClaudeWrappedDashesInASingleLineCommandDoNotStartTheDialog(t *testing.T) {
+	pane := realClaudeCapture(t, "dangerous-rm.txt")
+	lines := strings.Split(pane, "\n")
+	build := func(head string) string {
+		out := append([]string{}, lines[:26]...) // up to and including the real rule
+		out = append(out, lines[26], lines[27], lines[28])
+		out = append(out, " "+head, " "+strings.Repeat("─", 100), " next")
+		out = append(out, lines[30:]...)
+		return strings.Join(out, "\n")
+	}
+	if !strings.HasPrefix(lines[26], "─") || !strings.Contains(lines[27], "Bash command") {
+		t.Fatalf("fixture shape: %q %q", lines[26], lines[27])
+	}
+	a, b := claudeOnRealCapture(build("echo AAAA")), claudeOnRealCapture(build("echo BBBB"))
+	if a.State != StateBlocked || b.State != StateBlocked {
+		t.Fatalf("not blocked: %+v %+v", a, b)
+	}
+	if a.Prompt == nil || b.Prompt == nil {
+		t.Fatalf("the real rule above the command was lost: %+v %+v", a.Prompt, b.Prompt)
+	}
+	if a.Prompt.ID == b.Prompt.ID || !strings.Contains(a.Prompt.Request, "echo AAAA") {
+		t.Fatalf("commands that differ before the wrapped dashes share an id: %s / %s", a.Prompt.ID, b.Prompt.ID)
+	}
+	// No real rule above: the wrapped dashes must not become the start.
+	headless := strings.Join(strings.Split(build("echo AAAA"), "\n")[27:], "\n")
+	if signal := claudeOnRealCapture(headless); signal.Prompt != nil {
+		t.Fatalf("wrapped dashes became the dialog start: %+v", signal.Prompt)
+	}
+}
+
+// The countdown notice Brain quoted ("⚠ … automatically block this request in
+// 1:52") counts down while the dialog is open. Its clock must not be in the
+// id: an id that changes every second is prompt_gone by the time it is used.
+func TestRealClaudeCountdownNoticeDoesNotMoveTheID(t *testing.T) {
+	pane := realClaudeCapture(t, "bash-multiline-ssh.txt")
+	lines := strings.Split(pane, "\n")
+	// after the warning row (line 32), before the blank row and the question
+	withNotice := func(prefix, clock string) string {
+		notice := []string{prefix + "⚠ Claude Code will automatically block this request in " + clock + ", to avoid holding up an unattended session"}
+		out := append(append(append([]string{}, lines[:33]...), notice...), lines[33:]...)
+		return strings.Join(out, "\n")
+	}
+	for name, prefix := range map[string]string{"no gutter": " ", "gutter": " │ "} {
+		a := claudeOnRealCapture(withNotice(prefix, "1:52"))
+		b := claudeOnRealCapture(withNotice(prefix, "1:51"))
+		if a.Prompt == nil || b.Prompt == nil {
+			t.Fatalf("%s: no prompt: %q %q", name, a.Unidentified, b.Unidentified)
+		}
+		if a.Prompt.ID != b.Prompt.ID {
+			t.Fatalf("%s: the clock moved the id %s -> %s", name, a.Prompt.ID, b.Prompt.ID)
+		}
+		if strings.Contains(a.Prompt.Request, "automatically block") {
+			t.Fatalf("%s: the notice is in the request Brain reads: %q", name, a.Prompt.Request)
+		}
+	}
+	// The notice is volatile text, not the command: another command still differs.
+	base := withNotice(" ", "1:52")
+	cut := strings.LastIndex(base, "systemctl status foo")
+	other := base[:cut] + "systemctl status fob" + base[cut+len("systemctl status foo"):]
+	if claudeOnRealCapture(other).Prompt.ID == claudeOnRealCapture(base).Prompt.ID {
+		t.Fatal("a different command shares the id with a notice present")
+	}
+}

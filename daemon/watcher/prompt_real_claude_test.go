@@ -179,3 +179,26 @@ func TestRealClaudeTallDialogIsReportedUnidentifiedNotWithAFakeID(t *testing.T) 
 		t.Fatalf("answer-time refusal: %v keys=%v", err, pane.keys)
 	}
 }
+
+// The lease renewal of an unidentified dialog that a hook has since claimed
+// must not overwrite the hook's event with the unidentified one.
+func TestUnidentifiedRenewalDoesNotReplaceTheHooksEvent(t *testing.T) {
+	w, sessionID, worker, ledger, turn := delegatedClaude(t)
+	pane := &screenPane{screen: realClaudeDialog(t, "tall-60-lines-40x40.txt")}
+	text, info, _ := pane.captureDialog()
+	activity := w.activitySignalCaptured(worker, text, &info)
+	turn, _ = w.syncPromptGate(sessionID, worker, true, activity, turn, true, nil)
+	if len(ledger.applied) != 1 {
+		t.Fatalf("applied %+v", ledger.applied)
+	}
+	w.SetApprovalHold(func(string) bool { return true })
+	w.mu.Lock()
+	gate := w.gates[sessionID]
+	gate.filedAt = gate.filedAt.Add(-2 * promptGateRenewEvery)
+	w.gates[sessionID] = gate
+	w.mu.Unlock()
+	w.syncPromptGate(sessionID, worker, true, activity, turn, true, nil)
+	if len(ledger.applied) != 1 {
+		t.Fatalf("the renewal replaced the hook's event: %+v", ledger.applied)
+	}
+}

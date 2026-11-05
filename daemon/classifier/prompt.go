@@ -210,8 +210,8 @@ var (
 	// paragraph with the provider's name, says it will act on this request,
 	// and counts down. A line of a command that merely says "automatically
 	// deny" or "will automatically retry the request" is not this notice.
-	autoNoticeStartRe = regexp.MustCompile(`(?i)^(?:⏱\s*)?(?:claude\s+code|this\s+agent)\b`)
-	autoNoticeRe      = regexp.MustCompile(`(?i)^(?:⏱\s*)?(?:claude\s+code|this\s+agent)\s+will\s+auto(?:matically)?[\s-]*\w+\s+(?:this|the)\s+request\s+in\s+(?:about\s+|under\s+|less\s+than\s+)?(?:\d+:\d{2}|(?:\d+(?:\.\d+)?|an?|one)\s*(?:seconds?|secs?|minutes?|mins?|s|m))\b`)
+	autoNoticeStartRe = regexp.MustCompile(`(?i)^(?:[⏱⚠]\x{FE0F}?\s*)?(?:claude\s+code|this\s+agent)\b`)
+	autoNoticeRe      = regexp.MustCompile(`(?i)^(?:[⏱⚠]\x{FE0F}?\s*)?(?:claude\s+code|this\s+agent)\s+will\s+auto(?:matically)?[\s-]*\w+\s+(?:this|the)\s+request\s+in\s+(?:about\s+|under\s+|less\s+than\s+)?(?:\d+:\d{2}|(?:\d+(?:\.\d+)?|an?|one)\s*(?:seconds?|secs?|minutes?|mins?|s|m))\b`)
 	// What ends a notice's paragraph when no blank line does: the question
 	// under it or a menu row.
 	autoNoticeEndRe = regexp.MustCompile(`(?i)^(?:do you want\b|would you like\b|esc to cancel)`)

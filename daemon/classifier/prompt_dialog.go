@@ -105,9 +105,12 @@ func PromptIdentity(kind PromptKind, parts ...string) string {
 
 var (
 	// claudeBoxRuleRe is the solid rule that opens a Claude dialog's box: box
-	// drawing characters only, at the left margin. Lines inside the box are
+	// drawing characters only, at column 0. Every row Claude draws inside the
+	// box (header, tip, description, request, warning) starts with a space, and
+	// so does a line Claude wraps from a long command, so a wrapped run of
+	// dashes is never taken for the rule. Lines inside the box are
 	// indented, and its inner separators are dashed (╌), so neither is it.
-	claudeBoxRuleRe = regexp.MustCompile(`^ ?[─━]{6,}\s*$`)
+	claudeBoxRuleRe = regexp.MustCompile(`^[─━]{6,}\s*$`)
 	// codexHeadingRe is the sentence a Codex dialog opens with.
 	codexHeadingRe = regexp.MustCompile(`(?i)^\s*(?:would you like to\b|do you trust\b|do you want to\b|allow (?:the\b.*\bmcp\b|codex\b)|update available\b)`)
 	menuCaretRe    = regexp.MustCompile(`^(\s*)[❯›>](\s*)(\d{1,2}[.)])`)
