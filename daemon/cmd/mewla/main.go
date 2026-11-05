@@ -1347,7 +1347,7 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla calendar create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	cfg := cliConfig{json: true}
-	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, summary, instruction, cwd, sourceThread string
+	var itemJSON, title, kind, date, clock, endDate, endClock, timezone, occurrence, endOccurrence, recurrence, notes, summary, instruction, cwd, sourceThread, executor, model, reasoning string
 	var revision int64
 	var lead int
 	fs.IntVar(&lead, "lead", -1, "minutes before an event starts or a deadline falls due that the phone alerts (default: event 10, deadline 30; a reminder alerts at its time)")
@@ -1368,6 +1368,9 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	fs.StringVar(&summary, "summary", "", "scheduled action: one line, in the user's language, saying what it does (shown in Calendar)")
 	fs.StringVar(&instruction, "instruction", "", "scheduled action instruction")
 	fs.StringVar(&cwd, "cwd", "", "scheduled action working directory")
+	fs.StringVar(&executor, "executor", "", "scheduled action Worker executor (required to create a scheduled_action; the item keeps it when the Brain host changes)")
+	fs.StringVar(&model, "model", "", "scheduled action Worker model; empty keeps the executor default")
+	fs.StringVar(&reasoning, "reasoning", "", "scheduled action Worker reasoning level; empty keeps the executor default")
 	fs.StringVar(&sourceThread, "source-thread", "", "required for scheduled_action: source_thread_id for canonical Calendar result projection")
 	fs.Int64Var(&revision, "revision", 0, "expected revision")
 	if err := fs.Parse(args); err != nil {
@@ -1407,8 +1410,22 @@ func runCalendarWrite(update bool, args []string, stderr io.Writer) error {
 	if lead >= 0 {
 		item.AlertLeadMinutes = &lead
 	}
+	// Flags set the Worker route on create and on update (a backfill of an
+	// older item); an unset flag leaves what the item already names.
+	if executor = strings.TrimSpace(executor); executor != "" {
+		item.ActionExecutor = executor
+	}
+	if model = strings.TrimSpace(model); model != "" {
+		item.ActionModel = model
+	}
+	if reasoning = strings.TrimSpace(reasoning); reasoning != "" {
+		item.ActionReasoning = reasoning
+	}
 	if item.Kind == calendar.KindScheduledAction && strings.TrimSpace(item.SourceThreadID) == "" {
 		return fmt.Errorf("scheduled_action requires -source-thread (source_thread_id)")
+	}
+	if !update && item.Kind == calendar.KindScheduledAction && strings.TrimSpace(item.ActionExecutor) == "" {
+		return fmt.Errorf("scheduled_action requires -executor (with -model and -reasoning when the executor default is not wanted): without it the Worker follows the Brain host")
 	}
 	typeName := "calendar_create"
 	if update {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/calendar"
 	"github.com/daoleno/mewla/daemon/control"
+	"github.com/daoleno/mewla/daemon/work"
 )
 
 func TestCalendarControlToolsCRUDAndResolvedTimeConfirmation(t *testing.T) {
@@ -90,5 +91,35 @@ func TestCalendarControlToolRejectsAmbiguousOrMismatchedTime(t *testing.T) {
 	resp := app.HandleControlRequest(control.Request{Type: "calendar_create", CalendarItem: &calendar.Item{Title: "Bad", Kind: calendar.KindDeadline, DueAt: &wrong, Timezone: "Asia/Shanghai", Recurrence: calendar.RecurrenceNone}})
 	if resp.OK || resp.Error == nil || !strings.Contains(resp.Error.Message, "offset does not match") {
 		t.Fatalf("response = %#v", resp)
+	}
+}
+
+func TestCalendarControlValidatesScheduledWorkerRouteWhenSaved(t *testing.T) {
+	store, err := calendar.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := &controlApp{calendarStore: store, execs: work.NewExecutorConfig(map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude --model claude-opus-5-5"},
+	})}
+	due := time.Now().UTC().Add(time.Hour)
+	item := func(executor, model, reasoning string) *calendar.Item {
+		return &calendar.Item{Title: "Routed", Kind: calendar.KindScheduledAction, DueAt: &due, Timezone: "UTC", Recurrence: calendar.RecurrenceNone,
+			ActionInstruction: "Say hi", SourceThreadID: "thread-1", ActionExecutor: executor, ActionModel: model, ActionReasoning: reasoning}
+	}
+	for _, bad := range []*calendar.Item{item("nope", "", ""), item("claude", "", "ultra"), item("claude", "bad\nmodel", "")} {
+		resp := app.HandleControlRequest(control.Request{Type: "calendar_create", CalendarItem: bad})
+		if resp.OK || len(store.List()) != 0 {
+			t.Fatalf("route %q/%q/%q was saved: %#v", bad.ActionExecutor, bad.ActionModel, bad.ActionReasoning, resp)
+		}
+	}
+	resp := app.HandleControlRequest(control.Request{Type: "calendar_create", CalendarItem: item("claude", "claude-sonnet-5-5", "medium")})
+	if !resp.OK || resp.CalendarItem == nil || resp.CalendarItem.ActionExecutor != "claude" || resp.CalendarItem.ActionModel != "claude-sonnet-5-5" {
+		t.Fatalf("create = %#v", resp)
+	}
+	edit := *resp.CalendarItem
+	edit.ActionExecutor = "nope"
+	if bad := app.HandleControlRequest(control.Request{Type: "calendar_update", CalendarItem: &edit, Revision: edit.Revision}); bad.OK {
+		t.Fatalf("update to an unknown executor saved: %#v", bad)
 	}
 }

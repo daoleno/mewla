@@ -274,6 +274,7 @@ func (s *Store) create(item Item) (Item, error) {
 		item.Recurrence = RecurrenceNone
 	}
 	item.Summary = strings.TrimSpace(item.Summary)
+	item.normalizeActionRoute()
 	if err := item.Validate(); err != nil {
 		return Item{}, err
 	}
@@ -315,6 +316,7 @@ func (s *Store) Update(item Item, expectedRevision int64) (Item, error) {
 		item.Recurrence = RecurrenceNone
 	}
 	item.Summary = strings.TrimSpace(item.Summary)
+	item.normalizeActionRoute()
 	if err := item.Validate(); err != nil {
 		return Item{}, err
 	}
