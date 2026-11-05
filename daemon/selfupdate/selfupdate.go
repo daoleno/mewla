@@ -94,7 +94,7 @@ func NewClient() (*Client, error) {
 		return nil, errors.New("update public key is not Ed25519")
 	}
 	return &Client{
-		HTTPClient:  &http.Client{Timeout: 15 * time.Second},
+		HTTPClient:  &http.Client{Transport: patientTransport()},
 		ReleasesURL: DefaultReleasesURL,
 		PublicKey:   key,
 		GOOS:        runtime.GOOS,
@@ -214,7 +214,36 @@ func (c *Client) DownloadBinary(ctx context.Context, candidate Candidate) ([]byt
 	return binary, nil
 }
 
+// stallTimeout is how long a download may go without receiving a byte. A
+// 28 MB archive on a slow link takes minutes, so no total time limit applies;
+// a link that has stopped does.
+var stallTimeout = 20 * time.Second
+
+func patientTransport() http.RoundTripper {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = stallTimeout
+	return t
+}
+
+// stallReader cancels the download when no byte arrives for stallTimeout.
+type stallReader struct {
+	r     io.Reader
+	timer *time.Timer
+}
+
+func (s *stallReader) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	if n > 0 {
+		s.timer.Reset(stallTimeout)
+	}
+	return n, err
+}
+
 func (c *Client) download(ctx context.Context, url string, limit int64) ([]byte, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stall := time.AfterFunc(stallTimeout, cancel)
+	defer stall.Stop()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -229,8 +258,12 @@ func (c *Client) download(ctx context.Context, url string, limit int64) ([]byte,
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %s", resp.Status)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	stall.Reset(stallTimeout)
+	data, err := io.ReadAll(io.LimitReader(&stallReader{r: resp.Body, timer: stall}, limit+1))
 	if err != nil {
+		if ctx.Err() != nil && errors.Is(err, context.Canceled) {
+			return nil, fmt.Errorf("no data received for %s", stallTimeout)
+		}
 		return nil, err
 	}
 	if int64(len(data)) > limit {
