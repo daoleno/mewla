@@ -4,97 +4,239 @@ package screen
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"log"
+	"os/exec"
+	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/ebitengine/purego"
 )
 
 // SkyLight is the private framework under the window server. Its
 // SLEventPostToPid delivers an event to one app as if it came through the
-// window server, so a click reaches a window behind others without the
-// pointer. It is private: a macOS without it, or that changed it, only loses
-// clicks behind other windows, which then go on the screen.
-var skyLight struct {
+// window server, and SLPSPostEventRecordTo tells an app one of its windows is
+// key without raising it. Together they let a click reach a window behind
+// others without the pointer, the way trycua/cua's driver does (see
+// bgclick.go). They are private: a macOS without them, or that changed them,
+// only loses clicks behind other windows, which then go on the screen.
+type skyLightSyms struct {
 	once sync.Once
-	post func(pid int32, event uintptr)
 	why  string
+
+	post          func(pid int32, event uintptr)
+	setField      func(event uintptr, field uint32, value int64)
+	setWindowLoc  func(event uintptr, x, y float64)
+	postRecord    func(psn unsafe.Pointer, record unsafe.Pointer) int32
+	windowOwner   func(cid, wid uint32, owner *uint32) int32
+	connectionPSN func(cid uint32, psn unsafe.Pointer) int32
+	mainCID       func() uint32
+	processForPID func(pid int32, psn unsafe.Pointer) int32
 }
 
-func skyLightPost() (func(pid int32, event uintptr), string) {
+var skyLight skyLightSyms
+
+func loadSkyLight() *skyLightSyms {
 	skyLight.once.Do(func() {
-		lib, err := purego.Dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", purego.RTLD_NOW|purego.RTLD_GLOBAL)
+		sky, err := purego.Dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", purego.RTLD_NOW|purego.RTLD_GLOBAL)
 		if err != nil {
 			skyLight.why = "this macOS has no SkyLight to click behind other windows"
 			log.Printf("screen: clicks behind other windows unavailable: %v", err)
 			return
 		}
-		if _, err := purego.Dlsym(lib, "SLEventPostToPid"); err != nil {
-			skyLight.why = "this macOS's SkyLight can't post to one app"
-			log.Printf("screen: clicks behind other windows unavailable: no SLEventPostToPid")
-			return
+		libs := []uintptr{sky}
+		for _, path := range []string{
+			"/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
+			"/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices",
+			"/System/Library/Frameworks/CoreServices.framework/CoreServices",
+		} {
+			if lib, err := purego.Dlopen(path, purego.RTLD_NOW|purego.RTLD_GLOBAL); err == nil {
+				libs = append(libs, lib)
+			}
 		}
-		purego.RegisterLibFunc(&skyLight.post, lib, "SLEventPostToPid")
+		var missing []string
+		bind := func(fn any, names ...string) bool {
+			for _, lib := range libs {
+				for _, name := range names {
+					if _, err := purego.Dlsym(lib, name); err == nil {
+						purego.RegisterLibFunc(fn, lib, name)
+						return true
+					}
+				}
+			}
+			missing = append(missing, names[0])
+			return false
+		}
+		bind(&skyLight.post, "SLEventPostToPid")
+		bind(&skyLight.setField, "SLEventSetIntegerValueField")
+		bind(&skyLight.setWindowLoc, "CGEventSetWindowLocation")
+		bind(&skyLight.postRecord, "SLPSPostEventRecordTo")
+		bind(&skyLight.mainCID, "CGSMainConnectionID", "SLSMainConnectionID")
+		bind(&skyLight.windowOwner, "SLSGetWindowOwner")
+		bind(&skyLight.connectionPSN, "SLSGetConnectionPSN")
+		bind(&skyLight.processForPID, "GetProcessForPID")
+		// The window-owner lookup has GetProcessForPID to fall back on.
+		switch {
+		case skyLight.post == nil:
+			skyLight.why = "this macOS's SkyLight can't post to one app"
+		case skyLight.setField == nil || skyLight.setWindowLoc == nil:
+			skyLight.why = "this macOS's SkyLight can't route a click to one window"
+		case skyLight.postRecord == nil:
+			skyLight.why = "this macOS's SkyLight can't make a window key without raising it"
+		case skyLight.processForPID == nil && (skyLight.windowOwner == nil || skyLight.connectionPSN == nil || skyLight.mainCID == nil):
+			skyLight.why = "this macOS's SkyLight can't find the app behind a window"
+		}
+		if skyLight.why != "" {
+			log.Printf("screen: clicks behind other windows unavailable: %s (missing %s)", skyLight.why, strings.Join(missing, ", "))
+		}
 	})
-	return skyLight.post, skyLight.why
+	return &skyLight
 }
 
-// Mouse event fields naming the window under the pointer, so the app routes
-// a click to that window although it isn't the one in front.
-const (
-	cgMouseWindowUnderPointer          = 91
-	cgMouseWindowUnderPointerThatTakes = 92
-)
+func skyLightPost() (func(pid int32, event uintptr), string) {
+	s := loadSkyLight()
+	if s.why != "" {
+		return nil, s.why
+	}
+	return s.post, ""
+}
+
+var productVersion = sync.OnceValue(func() string {
+	out, err := exec.Command("/usr/bin/sw_vers", "-productVersion").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+})
 
 func (s *macSession) BackgroundClicks() (bool, string) {
 	post, why := skyLightPost()
 	return post != nil, why
 }
 
+// psnForWindow is the process serial number of the app that owns a window,
+// which the window server's records are addressed to.
+func (k *skyLightSyms) psnForWindow(window uint32, pid int) ([8]byte, bool) {
+	var psn [8]byte
+	if k.windowOwner != nil && k.connectionPSN != nil && k.mainCID != nil {
+		var owner uint32
+		if k.windowOwner(k.mainCID(), window, &owner) == 0 && owner != 0 &&
+			k.connectionPSN(owner, unsafe.Pointer(&psn[0])) == 0 {
+			return psn, true
+		}
+	}
+	if k.processForPID != nil && k.processForPID(int32(pid), unsafe.Pointer(&psn[0])) == 0 {
+		return psn, true
+	}
+	return psn, false
+}
+
+// postRecordTo sends the window server's record to the app with psn.
+func (k *skyLightSyms) postRecordTo(psn [8]byte, record [recordSize]byte) error {
+	status := k.postRecord(unsafe.Pointer(&psn[0]), unsafe.Pointer(&record[0]))
+	switch status {
+	case 0:
+		return nil
+	case statusInvalidConnection:
+		return errors.New("the window server gave Mewla no connection to that app (status 1002), so the app can't be made ready for the click; Mewla may be running outside its app bundle")
+	}
+	return fmt.Errorf("the window server refused the app's focus record (status %d)", status)
+}
+
+// focusWithoutRaise tells the app with pid that its window is the one in
+// focus, without raising it, switching Space or telling the person's front
+// app anything: only the focus record goes, to the target. (A defocus record
+// to the front app made its key window resign, and the person's typing was
+// dropped until they clicked it again.)
+func (k *skyLightSyms) focusWithoutRaise(pid int, window uint32) error {
+	psn, ok := k.psnForWindow(window, pid)
+	if !ok {
+		return errors.New("couldn't find the app behind that window")
+	}
+	return k.postRecordTo(psn, focusRecord(window, 1))
+}
+
 // ClickTo clicks one window of the app with pid, by framebuffer pixel,
 // without moving the pointer or bringing the app forward.
-func (s *macSession) ClickTo(pid int, window uint32, x, y, button, count int) error {
+func (s *macSession) ClickTo(pid int, window AppWindow, x, y, button, count int) error {
 	return s.clickTo(pid, window, x, y, button, count, clickStyle{})
 }
 
-// clickStyle varies how a background click is posted, for the tests that
-// find what an app takes: a mouse-moved event first, and a pause between
-// the press and the release.
+// clickStyle leaves parts of the recipe out, for the tests that find which
+// parts an app needs. The zero value is the whole recipe.
 type clickStyle struct {
-	moveFirst bool
-	gap       time.Duration
+	noFocus     bool
+	noPrimer    bool
+	noWindowLoc bool
+	flipStamp   bool // stamp the global point where the window one is due, and the reverse
 }
 
-func (s *macSession) clickTo(pid int, window uint32, x, y, button, count int, style clickStyle) error {
-	post, why := skyLightPost()
-	if post == nil {
-		return errors.New(why)
+func (s *macSession) clickTo(pid int, window AppWindow, x, y, button, count int, style clickStyle) error {
+	k := loadSkyLight()
+	if k.why != "" {
+		return errors.New(k.why)
+	}
+	if !style.noFocus {
+		if err := k.focusWithoutRaise(pid, window.ID); err != nil {
+			return err
+		}
+		// AppKit updates which window is key as it handles the record.
+		time.Sleep(50 * time.Millisecond)
 	}
 	px, py := s.input.point(image.Pt(x, y))
-	at := cgPoint{px, py}
-	send := func(kind uint32, state int64) {
-		event := mac.CGEventCreateMouseEvent(s.source0, kind, at, uint32(button))
+	lx := float64(x-window.Bounds.Min.X) * s.input.scale
+	ly := float64(y-window.Bounds.Min.Y) * s.input.scale
+	local := windowLocalStamp(productVersion())
+	if style.flipStamp {
+		local = !local
+	}
+	plan := clickPlan(fpoint{px, py}, fpoint{lx, ly}, count, local)
+	group := time.Now().UnixNano() & 0x7fffffff
+	// The person's held modifiers sit in the combined session state; the
+	// source is the hardware's and every event states its flags itself.
+	source := mac.CGEventSourceCreate(1)
+	defer func() {
+		if source != 0 {
+			mac.CFRelease(source)
+		}
+	}()
+	for _, step := range plan {
+		if style.noPrimer && step.Phase == 1 || style.noPrimer && step.At.X < 0 {
+			continue
+		}
+		var kind uint32
+		switch step.Kind {
+		case clickMove:
+			kind = cgEventMouseMoved
+		case clickDown:
+			kind = macDownTypes[button]
+		case clickUp:
+			kind = macUpTypes[button]
+		}
+		event := mac.CGEventCreateMouseEvent(source, kind, cgPoint{step.At.X, step.At.Y}, uint32(button))
 		if event == 0 {
-			return
+			return errors.New("couldn't make the click event")
 		}
-		if state > 0 {
-			mac.CGEventSetIntegerValueField(event, cgMouseClickStateField, state)
+		set := func(field uint32, value int64) { k.setField(event, field, value) }
+		set(fieldGesturePhase, step.Phase)
+		set(fieldClickState, step.State)
+		set(fieldButtonNumber, int64(button))
+		set(fieldSubtype, step.Subtype)
+		set(fieldTargetPID, int64(pid))
+		set(fieldWindowNumber, int64(window.ID))
+		set(fieldWindowUnder, int64(window.ID))
+		set(fieldWindowUnderCan, int64(window.ID))
+		set(fieldClickGroup, group)
+		if !style.noWindowLoc {
+			k.setWindowLoc(event, step.Stamp.X, step.Stamp.Y)
 		}
-		mac.CGEventSetIntegerValueField(event, cgMouseWindowUnderPointer, int64(window))
-		mac.CGEventSetIntegerValueField(event, cgMouseWindowUnderPointerThatTakes, int64(window))
-		post(int32(pid), event)
+		mac.CGEventSetFlags(event, 0)
+		k.post(int32(pid), event)
 		mac.CFRelease(event)
-	}
-	if style.moveFirst {
-		send(cgEventMouseMoved, 0)
-		time.Sleep(style.gap)
-	}
-	for n := 1; n <= count; n++ {
-		send(macDownTypes[button], int64(n))
-		time.Sleep(style.gap)
-		send(macUpTypes[button], int64(n))
+		time.Sleep(step.Pause)
 	}
 	return nil
 }

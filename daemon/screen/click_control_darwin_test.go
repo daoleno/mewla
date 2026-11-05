@@ -12,14 +12,16 @@ import (
 	"time"
 )
 
-// clickStyles are the ways a background click is posted, tried in turn.
+// clickStyles ablate the recipe, so a run shows which part an app needs.
 var clickStyles = []struct {
 	name  string
 	style clickStyle
 }{
-	{"plain", clickStyle{}},
-	{"gap 30ms", clickStyle{gap: 30 * time.Millisecond}},
-	{"move first + gap 30ms", clickStyle{moveFirst: true, gap: 30 * time.Millisecond}},
+	{"whole recipe", clickStyle{}},
+	{"no focus record", clickStyle{noFocus: true}},
+	{"no primer", clickStyle{noPrimer: true}},
+	{"no window location", clickStyle{noWindowLoc: true}},
+	{"stamp flipped", clickStyle{flipStamp: true}},
 }
 
 // The control for stage 1, on the real display, so a click that does not move
@@ -82,7 +84,7 @@ func TestClickControl(t *testing.T) {
 		say("%s: set text: %v", c.name, apps.ActOnElement(ctx, *area, "set_value", "hello world, hello again"))
 		time.Sleep(300 * time.Millisecond)
 		before := caret()
-		err := clicker.clickTo(pid, window.ID, at.X, at.Y, 0, 1, c.style)
+		err := clicker.clickTo(pid, window, at.X, at.Y, 0, 1, c.style)
 		time.Sleep(500 * time.Millisecond)
 		say("%s: caret %s -> %s (click: %v)", c.name, before, caret(), err)
 	}

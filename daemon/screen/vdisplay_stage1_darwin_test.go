@@ -137,7 +137,7 @@ func TestVirtualDisplayStage1(t *testing.T) {
 	// of the first line), in the display's own pixels.
 	at := area.Frame.Min.Add(image.Pt(10, 10)).Sub(bounds.Min)
 	say("text area frame %v", area.Frame)
-	say("click at display pixel %v: %v", at, clicker.ClickTo(pid, window.ID, at.X, at.Y, 0, 1))
+	say("click at display pixel %v: %v", at, clicker.ClickTo(pid, window, at.X, at.Y, 0, 1))
 	time.Sleep(500 * time.Millisecond)
 	say("caret after the click: %s", caret())
 	afterPointer, afterFront := pointerAt(), workspaceFrontPID()
@@ -173,7 +173,7 @@ func TestVirtualDisplayStage1(t *testing.T) {
 					say("set text: %v", apps.ActOnElement(ctx, *area, "set_value", "hello world, hello again"))
 					time.Sleep(300 * time.Millisecond)
 					before := caret()
-					err := again.(*macSession).clickTo(pid, window.ID, at.X, at.Y, 0, 1, c.style)
+					err := again.(*macSession).clickTo(pid, window, at.X, at.Y, 0, 1, c.style)
 					time.Sleep(500 * time.Millisecond)
 					say("%s: caret %s -> %s (click: %v)", c.name, before, caret(), err)
 				}

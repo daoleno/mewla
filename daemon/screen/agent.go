@@ -596,14 +596,14 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		return AgentResult{}, fmt.Errorf("[%d, %d] is outside the screenshot", c[0], c[1])
 	}
 	if background {
-		var window uint32
+		var window AppWindow
 		for _, w := range app.Windows {
 			if p.In(w.Bounds) {
-				window = w.ID
+				window = w
 				break
 			}
 		}
-		if window == 0 {
+		if window.ID == 0 {
 			return AgentResult{}, fmt.Errorf("[%d, %d] is not on a window of %s; its app_state or window screenshot gives points on it", c[0], c[1], oneLine(app.Name))
 		}
 		// A plain click on something the app can press is pressed through
