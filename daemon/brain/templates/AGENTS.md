@@ -47,6 +47,6 @@ When Brain executes directly, it follows the Worker workspace rules: edit the su
 - mewla worker list/spawn/capture/send/close manage visible Workers. Spawn passes the -executor, -model and -reasoning chosen from routing.md, creates bounded Work and -work attaches existing Work; use until_done only when the user requires verified completion.
 - Before guessing what the user said or decided, run mewla memory search "<phrase>" (--from user, --since) and mewla memory show <id>; quote the hit.
 - Name a multi-Work goal with mewla brain objective set "<goal>"; clear it when done.
-- mewla calendar: explicit time intent (policies/calendar.md); mewla computers: other computers (policies/computers.md).
+- mewla calendar, brain loop: explicit time or repeat intent (policies/calendar.md); mewla computers: other computers (policies/computers.md).
 - mewla watch: problems Watch raised (policies/watch.md).
 - mewla connections --help lists shared tools; use them within the user's authority.

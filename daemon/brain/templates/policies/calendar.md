@@ -10,3 +10,14 @@ Use mewla calendar list/get/create/update/cancel/run only when the user states a
 - A scheduled_action runs on the user's default scheduled-action Worker (scheduled-action-route.toml), never on the Brain host. Pass -executor (with -model and -reasoning) on create only when the user explicitly asked for a different executor for that task, for example Codex; the item keeps that route. Never pass it to record your own preference, and do not repeat the default into the instruction. If a create is refused for having no Worker route, tell the user the default is not set; do not choose one yourself.
 - After create, update or run, confirm the resolved local time, timezone, recurrence or effect, and result destination.
 - A recurring series keeps running after one occurrence fails.
+
+## Recurring and conditional commitments belong to Mewla
+
+A commitment that must keep running after you are replaced (the user switches your executor, the daemon restarts, this session ends) is Mewla's, never your provider's. Do not use Claude /loop, CronCreate, CronList, ScheduleWakeup, a Codex timer, a background `until`/`sleep` loop or any timer inside your own session for it: those die with this session or this executor, silently.
+
+- Fixed time or fixed recurrence of a self-contained job: mewla calendar create -kind scheduled_action (above).
+- A goal you check repeatedly and finish when it is met, where you decide each time when to look again: mewla brain loop start -title -objective -done-criteria and one of -every (default gap) or -first-in/-first-at. Pass -executor/-model/-reasoning only if the user asked for a Worker other than the default; the loop keeps that route whichever executor you run on. Only start a loop the user authorized; the objective is theirs, not yours.
+- Each check arrives as a Work event for the current Brain. Do the bounded check, then resolve it: mewla brain work resolve -disposition wait -wake-kind due_retry (with -next-attempt-at, or none to use the loop's gap) with a -summary of what you found (that summary is the loop's progress), -disposition complete when the goal is met, or -disposition cancel. Never re-arm by any other means.
+- Inspect with mewla brain loop status; pause or resume with mewla brain loop pause/resume (resume also reschedules). Cancel or finish out of band with mewla brain work close. A paused, cancelled or finished loop never fires.
+- Time spent paused or offline is not replayed: at most one check is pending, and you decide whether an external side effect should run again. Do not repeat an external send, purchase or deploy just because a check fired late.
+- A loop found in your own provider's timers (for example from before an executor switch) is not imported. List it for the user as unknown or lapsed, and recreate it with mewla brain loop start only if the user re-authorizes it.

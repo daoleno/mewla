@@ -330,7 +330,7 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 	case st.TerminalAt != nil:
 		return workStatusFromLifecycle(st.Status), "", ""
 	case st.Wake != nil && st.Attempt == nil:
-		return WorkWaiting, firstNonEmpty(item.NextAction, "Wait for the named external condition."), st.Wake.Ref
+		return WorkWaiting, firstNonEmpty(item.NextAction, "Wait for the named external condition."), wakeProse(st.Wake)
 	}
 	if st.Review != nil {
 		// An open canonical event is the actionable obligation. Lease expiry
@@ -341,6 +341,10 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 			waitFor = sessionProse(st.Attempt.SessionID)
 		}
 		switch st.Review.Reason {
+		case "retry_due":
+			if st.Attempt == nil {
+				return WorkWaiting, retryDueProse(item), ""
+			}
 		case "turn_failed":
 			if st.Attempt == nil {
 				return WorkWaiting, "Inspect the delegated Session failure.", waitFor
@@ -823,4 +827,35 @@ func (s *Store) rebuildWorkCardsLocked(database presentationDatabase, workIDs []
 		}
 	}
 	return s.rewriteTimelineLocked(out)
+}
+
+// wakeProse is what a waiting Work shows as its wait: a timed wake reads as
+// its due time, and a due_retry without a time is a paused loop.
+func wakeProse(wake *lifecycle.WakeState) string {
+	if wake.Kind != lifecycle.WakeDueRetry {
+		return wake.Ref
+	}
+	if wake.NextAttemptAt == nil {
+		return "Paused: " + wake.Ref
+	}
+	return "Next check " + wake.NextAttemptAt.UTC().Format("2006-01-02 15:04 UTC") + ": " + wake.Ref
+}
+
+// retryDueProse tells the Host what a due timed wake asks of it.
+func retryDueProse(item Work) string {
+	if item.Loop == nil {
+		return "The wake is due: check the external condition once, then resolve with wait, complete or cancel."
+	}
+	text := "A loop check is due: check progress toward the objective once, then resolve with wait (next check), complete (goal met) or cancel."
+	if item.Loop.WorkerExecutor != "" {
+		text += " Delegate only with worker spawn -executor " + item.Loop.WorkerExecutor
+		if item.Loop.WorkerModel != "" {
+			text += " -model " + item.Loop.WorkerModel
+		}
+		if item.Loop.WorkerReasoning != "" {
+			text += " -reasoning " + item.Loop.WorkerReasoning
+		}
+		text += "."
+	}
+	return text
 }

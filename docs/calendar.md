@@ -62,6 +62,60 @@ demand.
 Scheduled actions run unattended; see
 [Permission bypass risks](executors.md#permission-bypass-risks).
 
+## Persistent loops
+
+A **loop** is a goal Mewla keeps checking until it is met. It is an
+`until_done` Work whose next check is a durable `due_retry` wake, so it belongs
+to Mewla, not to the agent that started it. Replacing the Brain executor
+(Claude to Codex and back) or restarting the daemon does not stop or duplicate
+it; the check always goes to whichever Brain is the Host when it is due. Do not
+use a provider's own timers (Claude `/loop`, `CronCreate`, `ScheduleWakeup`, a
+background `sleep` loop) for a commitment that must outlive the session: they
+end with it.
+
+```sh
+mewla brain loop start -title "Quota" -objective "Check the quota; ask for more once approved" \
+  -done-criteria "quota is 256" -every 30m [-first-in 5m | -first-at <RFC3339>] \
+  [-executor claude -model claude-sonnet-5-5 -reasoning medium]
+mewla brain loop status [-id <work>] [-all]
+mewla brain loop pause  -id <work>
+mewla brain loop resume -id <work> [-in 10m | -at <RFC3339>]   # also reschedules
+```
+
+- **Each check** reaches the Host as a Work event. Brain does one bounded
+  check, then resolves it: `mewla brain work resolve -disposition wait
+  -wake-kind due_retry` (with `-next-attempt-at`, or none to re-arm after the
+  loop's `-every` gap), `-disposition complete` when the goal is met, or
+  `-disposition cancel`. The `-summary` of each resolve is the loop's progress;
+  `loop status` shows the last one and the number of checks.
+- **Who decides what.** The user authorizes the objective and the done
+  criteria. Brain decides what a check found, when to look again and when the
+  goal is met. Mewla only persists the timer and delivers each due check once,
+  to the current Host. It never decides success and never retries an external
+  side effect.
+- **Worker route.** `-executor/-model/-reasoning` are the route the loop
+  delegates to, checked when the loop starts and shown in each check's next
+  action. They belong to the loop, not to the Host, so a Codex Brain still
+  delegates a Claude loop to Claude, and a loop that names Codex stays on Codex.
+  Without them Brain follows `routing.md` as for any Worker.
+- **States** (`loop status`): `scheduled` (timer armed), `due` (fired, waiting
+  for the Host), `handling` (the Host is on it), `running` (a delegated
+  Attempt is active), `paused` (no timer), `unarmed` (not finished but no next
+  check was set: resolve or `resume` it), `done`, `cancelled`.
+- **Pause, resume, cancel.** `pause` removes the timer and nothing fires until
+  `resume`. `resume` arms exactly one next check from now, so time spent paused
+  or offline is not replayed. `pause` and `resume` are refused while a check is
+  being handled or a delegated Attempt runs; resolve that first. Cancel or
+  finish out of band with `mewla brain work close -status cancelled|done`. A
+  paused, cancelled or finished loop never fires.
+- **Offline catch-up.** If the daemon was down past the due time, one check
+  fires when it starts, not one per missed interval.
+- **Fixed schedules.** A self-contained job at fixed times (every weekday at
+  09:30) is a [scheduled action](#scheduled-actions) instead.
+- **Old private timers** are not imported. A timer left in a provider session
+  from before an executor switch is gone; recreate it with `loop start` only
+  if the user re-authorizes it.
+
 ## Alerts you will not miss
 
 An event, reminder or deadline alerts your phone, with no setup. An event
@@ -133,6 +187,11 @@ mewla calendar done -id <item-id> --json
 
 `-lead <minutes>` on `create` sets how long before an event or deadline the
 phone alerts (default 10 for an event, 30 for a deadline).
+
+A fixed time or recurrence is a scheduled action. A goal Brain checks again and
+again until it is met, choosing the next check each time, is a
+[persistent loop](#persistent-loops). Both belong to Mewla and
+survive a change of Brain executor and a daemon restart.
 
 ### Which agent runs a scheduled action
 

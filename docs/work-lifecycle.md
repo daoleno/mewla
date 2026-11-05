@@ -488,6 +488,13 @@ polls Sessions, or holds an LLM turn open while waiting.
 Its source reference and timestamp are exact: unrelated `user_input` is a no-op,
 and repeated timer sweeps create one stable actionable Event.
 
+## Persistent loops
+
+A goal Mewla keeps checking until it is met is an `until_done` Work with a
+`due_retry` wake of its own, started with `mewla brain loop start`. The user
+guide is [Persistent loops](calendar.md#persistent-loops); the engine notes are
+in [Brain and the Work Lifecycle](internal/brain-lifecycle.md).
+
 ## Invariants
 
 - One lifecycle store and transaction boundary owns Work, Attempt, Wake,

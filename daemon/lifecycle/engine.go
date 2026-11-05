@@ -909,6 +909,37 @@ func (e *Engine) SetWait(id WorkID, kind WakeKind, ref string) (*State, error) {
 	})
 }
 
+// SetTimedWait parks a non-owned Work on its own durable timer: a due_retry
+// wake due at `at`. A nil `at` parks it with no timer, which is how a paused
+// loop waits; the timer sweep and NextWakeAt both ignore a due_retry without a
+// time. It replaces the Work's current wake, and is refused while an Attempt is
+// active or a Review is open, so a wake being handled is never overwritten.
+func (e *Engine) SetTimedWait(id WorkID, ref string, at *time.Time) (*State, error) {
+	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
+		if st == nil {
+			return nil, ErrUnknownWork
+		}
+		if terminal(st) {
+			return nil, ErrTerminal
+		}
+		if st.Attempt != nil {
+			return nil, ErrAttemptActive
+		}
+		if st.Review != nil {
+			return nil, ErrReviewOpen
+		}
+		payload := WakePayload{WakeKind: WakeDueRetry, Ref: ref}
+		if at != nil {
+			utc := at.UTC()
+			payload.NextAttemptAt = &utc
+		}
+		return []Event{{
+			WorkID: id, Kind: KWakeSet, SourceID: "timed-wake:" + ref + ":" + e.newID(), At: now,
+			Payload: payload,
+		}}, nil
+	})
+}
+
 // ClearWait releases a matching wake; mismatched producers are no-ops.
 func (e *Engine) ClearWait(id WorkID, kind WakeKind, ref, occurrence string) (*State, error) {
 	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {

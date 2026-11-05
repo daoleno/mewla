@@ -253,6 +253,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleBrainWorkEventResolve(req)
 	case "brain_work_resolve":
 		return a.handleBrainWorkResolve(req)
+	case "brain_loop_start", "brain_loop_status", "brain_loop_pause", "brain_loop_resume":
+		return a.handleBrainLoop(req)
 	case "brain_set_executor":
 		return a.handleBrainSetExecutor(req)
 	case "brain_objective", "brain_objective_set", "brain_objective_clear":
@@ -1162,6 +1164,73 @@ func (a *controlApp) handleBrainWorkEventResolve(req control.Request) control.Re
 		return control.ErrorResponse("invalid_brain_work_event_resolution",
 			"resolution action must be mark_delivered, discard, or replay")
 	}
+}
+
+// handleBrainLoop manages persistent loops: Work whose next check is a durable
+// Mewla timer. The loop's Worker route is validated here, once, the way a
+// `worker spawn` would launch it.
+func (a *controlApp) handleBrainLoop(req control.Request) control.Response {
+	if a == nil || a.brainService == nil {
+		return control.ErrorResponse("brain_unavailable", "Brain loops are not configured.")
+	}
+	id := strings.TrimSpace(req.WorkID)
+	var at time.Time
+	if req.BrainLoopAt != nil {
+		at = *req.BrainLoopAt
+	}
+	switch req.Type {
+	case "brain_loop_start":
+		if req.BrainLoopStart == nil {
+			return control.ErrorResponse("invalid_brain_loop", "A loop definition is required.")
+		}
+		start := *req.BrainLoopStart
+		start.FirstCheckAt = at
+		if route := start.Loop; strings.TrimSpace(route.WorkerExecutor) != "" && a.execs != nil {
+			if _, err := a.execs.ResolveWorkerCommand(route.WorkerExecutor, "", route.WorkerModel, route.WorkerReasoning, true); err != nil {
+				return control.ErrorResponse("invalid_brain_loop", "worker route: "+err.Error())
+			}
+		}
+		item, err := a.brainService.StartLoop(start)
+		if err != nil {
+			return brainLoopControlError(err)
+		}
+		return control.Response{OK: true, BrainWork: &item, Confirmation: "Loop started: Mewla keeps its next check and delivers it to the current Brain."}
+	case "brain_loop_status":
+		if id != "" {
+			status, err := a.brainService.LoopStatus(id)
+			if err != nil {
+				return brainLoopControlError(err)
+			}
+			return control.Response{OK: true, BrainLoops: []brain.LoopStatus{status}}
+		}
+		loops, err := a.brainService.Loops(req.BrainLoopAll)
+		if err != nil {
+			return brainLoopControlError(err)
+		}
+		return control.Response{OK: true, BrainLoops: loops}
+	case "brain_loop_pause":
+		item, err := a.brainService.PauseLoop(id)
+		if err != nil {
+			return brainLoopControlError(err)
+		}
+		return control.Response{OK: true, BrainWork: &item, Confirmation: "Loop paused: nothing fires until it is resumed."}
+	default:
+		item, err := a.brainService.ResumeLoop(id, at)
+		if err != nil {
+			return brainLoopControlError(err)
+		}
+		return control.Response{OK: true, BrainWork: &item, Confirmation: "Loop scheduled: one next check is armed."}
+	}
+}
+
+func brainLoopControlError(err error) control.Response {
+	switch {
+	case errors.Is(err, brain.ErrNotLoop):
+		return control.ErrorResponse("brain_loop_not_found", err.Error())
+	case errors.Is(err, brain.ErrLoopHandling), errors.Is(err, brain.ErrLoopAttempt), errors.Is(err, brain.ErrLoopTerminal):
+		return control.ErrorResponse("brain_loop_conflict", err.Error())
+	}
+	return brainWorkControlError(err)
 }
 
 func brainWorkControlError(err error) control.Response {
