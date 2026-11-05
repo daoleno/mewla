@@ -23,11 +23,46 @@ import (
 // opens the agent's tabs in a window of their own, which the person's tabs
 // never share and which can sit on the display Mewla keeps for agents.
 
-//go:embed extension/manifest.json extension/background.js extension/relay.js extension/LICENSE-NOTICE.md
+//go:embed extension/manifest.json extension/background.js extension/relay.js extension/status.html extension/status.js extension/LICENSE-NOTICE.md extension/icons/*.png
 var extensionFiles embed.FS
 
-// MewlaExtensionID is the ID its manifest key fixes.
+// MewlaExtensionID is the ID the key in the extension's own manifest fixes:
+// the folder Mewla writes for loading unpacked has it. The Chrome Web Store
+// assigns its own ID on the first upload (its manifest carries no key), which
+// is MewlaStoreExtensionID once the item exists.
 const MewlaExtensionID = "keclgeaemhlgnnhocopjklenhgfimmjh"
+
+// MewlaStoreExtensionID is the Chrome Web Store item's ID; empty until the
+// first upload has assigned it (see the submit steps).
+const MewlaStoreExtensionID = ""
+
+// mewlaExtensionIDs are the IDs the extension can have.
+func mewlaExtensionIDs() []string {
+	ids := []string{MewlaExtensionID}
+	if MewlaStoreExtensionID != "" {
+		ids = append([]string{MewlaStoreExtensionID}, ids...)
+	}
+	return ids
+}
+
+// installedMewlaExtension is the Chrome profile that has the extension, and
+// the IDs it has it under. Only an ID found installed is allowed to talk to
+// the native host, so an extension nobody added can't claim the other one's.
+func installedMewlaExtension(userDataDir string) (profile string, ids []string, ok bool) {
+	for _, id := range mewlaExtensionIDs() {
+		p, found := profileWithExtension(userDataDir, id)
+		if !found {
+			continue
+		}
+		if profile == "" {
+			profile = p
+		}
+		if p == profile {
+			ids = append(ids, id)
+		}
+	}
+	return profile, ids, profile != ""
+}
 
 // NativeHostName is the name the extension asks Chrome for.
 const NativeHostName = "com.mewla.browser"
@@ -52,7 +87,11 @@ func (s *Service) ExtensionDir() (string, error) {
 		if err != nil {
 			return err
 		}
-		return atomicfile.Write(filepath.Join(dir, filepath.Base(path)), raw, 0o644)
+		rel := strings.TrimPrefix(path, "extension/")
+		if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(rel)), 0o755); err != nil {
+			return err
+		}
+		return atomicfile.Write(filepath.Join(dir, rel), raw, 0o644)
 	})
 	return dir, err
 }
@@ -71,18 +110,20 @@ type hostManifest struct {
 // runs the launcher with the extension's origin as its argument; the launcher
 // runs `mewla agent-use native-host`. It is written again whenever the Mewla
 // binary moves.
-func (s *Service) InstallNativeHost(userDataDir, mewla string) error {
+func (s *Service) InstallNativeHost(userDataDir, mewla string, extensionIDs []string) error {
 	launcher := filepath.Join(s.dir, "native-host.sh")
 	script := fmt.Sprintf("#!/bin/sh\nexec %s agent-use native-host --state-dir %s\n", shellQuote(mewla), shellQuote(filepath.Dir(s.dir)))
 	if err := atomicfile.Write(launcher, []byte(script), 0o700); err != nil {
 		return err
 	}
 	manifest := hostManifest{
-		Name:           NativeHostName,
-		Description:    "Mewla: lets the agents Mewla starts use this Chrome in a window of their own",
-		Path:           launcher,
-		Type:           "stdio",
-		AllowedOrigins: []string{"chrome-extension://" + MewlaExtensionID + "/"},
+		Name:        NativeHostName,
+		Description: "Mewla: lets the agents Mewla starts use this Chrome in a window of their own",
+		Path:        launcher,
+		Type:        "stdio",
+	}
+	for _, id := range extensionIDs {
+		manifest.AllowedOrigins = append(manifest.AllowedOrigins, "chrome-extension://"+id+"/")
 	}
 	raw, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
@@ -179,13 +220,19 @@ func OpenForTools(stateDir string, args []string, startChrome func(profile strin
 }
 
 // StartChromeForExtension starts Chrome in the background with no window, as
-// Chrome does to run an extension alone.
+// Chrome does to run an extension alone. On a Mac it is opened with -g, so it
+// doesn't come to the front of what the person is using.
 func StartChromeForExtension(chrome chromeInstall, profile string) error {
 	args := []string{"--no-startup-window", "--no-first-run"}
 	if profile != "" {
 		args = append(args, "--profile-directory="+profile)
 	}
 	cmd := exec.Command(chrome.Executable, args...)
+	if runtime.GOOS == "darwin" {
+		if app := macAppOf(chrome.Executable); app != "" {
+			cmd = exec.Command("/usr/bin/open", append([]string{"-g", "-j", "-a", app, "--args"}, args...)...)
+		}
+	}
 	if runtime.GOOS == "linux" {
 		cmd.Env = os.Environ()
 	}
@@ -194,6 +241,14 @@ func StartChromeForExtension(chrome chromeInstall, profile string) error {
 	}
 	go func() { _ = cmd.Wait() }()
 	return nil
+}
+
+// macAppOf is the .app bundle holding an executable inside it, or "".
+func macAppOf(executable string) string {
+	if i := strings.Index(executable, ".app/Contents/MacOS/"); i >= 0 {
+		return executable[:i+len(".app")]
+	}
+	return ""
 }
 
 // FindChrome is the user's Google Chrome, for the commands that start it.

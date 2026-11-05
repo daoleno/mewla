@@ -22,8 +22,13 @@ const isNonDebuggableUrl = url => !!url && NON_DEBUGGABLE_SCHEMES.some(s => url.
 let personWindowId;
 const agentWindowIds = new Set();
 chrome.windows.onFocusChanged.addListener(async windowId => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE)
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    // The person is in another app: there is no window of Chrome's to hand the
+    // focus back to, and handing back a stale one would bring Chrome in front
+    // of the app they are using.
+    personWindowId = undefined;
     return;
+  }
   if (!agentWindowIds.has(windowId)) {
     personWindowId = windowId;
     return;
@@ -165,6 +170,10 @@ function scheduleReconnect() {
   backoff = Math.min(backoff * 2, 60_000);
 }
 
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'status' && sender.id === chrome.runtime.id)
+    sendResponse({ connected: !!port, sessions: sessions.size });
+});
 chrome.runtime.onStartup.addListener(() => {});
 chrome.runtime.onInstalled.addListener(() => {});
 connectHost();

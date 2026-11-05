@@ -65,7 +65,6 @@ const (
 const ExtensionID = "mmlmfjhmonkocbjadbfplnigmagldckm"
 
 const (
-	storeURL         = "https://chromewebstore.google.com/detail/playwright-extension/" + ExtensionID
 	extensionPageURL = "chrome-extension://" + ExtensionID + "/status.html"
 	statusTTL        = 15 * time.Second
 	retryInstall     = 10 * time.Minute
@@ -263,7 +262,7 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 	}
 	// Mewla's own extension needs no key. The Playwright extension, which
 	// asks the person to copy its key, is still used where that was done.
-	mewlaProfile, mewla := profileWithExtension(chrome.UserDataDir, MewlaExtensionID)
+	mewlaProfile, mewlaIDs, mewla := installedMewlaExtension(chrome.UserDataDir)
 	profile, ok := mewlaProfile, mewla
 	if !mewla {
 		profile, ok = extensionProfile(chrome.UserDataDir)
@@ -314,7 +313,7 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 		status.Summary = "Agents use your Chrome, in a window of their own."
 		if s.prepare {
 			if exe, err := s.executable(); err == nil {
-				if err := s.InstallNativeHost(chrome.UserDataDir, exe); err != nil {
+				if err := s.InstallNativeHost(chrome.UserDataDir, exe, mewlaIDs); err != nil {
 					log.Printf("agent use: couldn't register Mewla's native host with Chrome: %v", err)
 				}
 			}
@@ -441,7 +440,17 @@ func (s *Service) Fix(fix string) (Status, error) {
 		if !ok {
 			return Status{}, errors.New("Google Chrome isn't installed on this computer")
 		}
-		args := []string{storeURL}
+		args := []string{MewlaStoreURL}
+		var unpublished error
+		if MewlaStoreURL == "" {
+			// Not in the Chrome Web Store yet: the folder to load unpacked.
+			dir, err := s.ExtensionDir()
+			if err != nil {
+				return Status{}, err
+			}
+			args = []string{"chrome://extensions"}
+			unpublished = fmt.Errorf("Mewla for Chrome isn't in the Chrome Web Store yet. In Chrome's extensions page (opened), turn on Developer mode, choose Load unpacked and pick %s", dir)
+		}
 		if fix == FixOpenExtension {
 			args = []string{extensionPageURL}
 			if profile, ok := extensionProfile(chrome.UserDataDir); ok {
@@ -454,6 +463,9 @@ func (s *Service) Fix(fix string) (Status, error) {
 			return Status{}, fmt.Errorf("open Chrome: %w", err)
 		}
 		go func() { _ = cmd.Wait() }()
+		if unpublished != nil && fix == FixInstallExtension {
+			return s.Refresh(), unpublished
+		}
 	case FixRetry:
 		s.mu.Lock()
 		s.installErr = nil
