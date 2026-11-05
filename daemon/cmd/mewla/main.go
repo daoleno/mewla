@@ -742,6 +742,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		}
 		return ""
 	})
+	agentUse.SetWorkerNames(func(id string) string {
+		if worker := w.GetWorker(id); worker != nil {
+			return worker.Name
+		}
+		return ""
+	})
 	agentUse.SetComputer(agentuse.ComputerHooks{
 		Status: func() agentuse.ComputerStatus { return computerStatus(ctx, screenService) },
 		OpenSettings: func(permission string) error {
