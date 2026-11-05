@@ -526,8 +526,13 @@ func macDiagnostics(t *testing.T) {
 		{"/usr/libexec/ApplicationFirewall/socketfilterfw", "--getblockall"},
 		{"/usr/libexec/ApplicationFirewall/socketfilterfw", "--getallowsigned"},
 		{"/usr/bin/lsappinfo", "front"},
+		{"/usr/bin/log", "show", "--last", "2m", "--style", "compact", "--predicate", `process == "socketfilterfw" OR subsystem == "com.apple.alf"`},
 	} {
 		out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
-		t.Logf("%s: %s %v", strings.Join(args, " "), strings.TrimSpace(string(out)), err)
+		text := strings.TrimSpace(string(out))
+		if lines := strings.Split(text, "\n"); len(lines) > 40 {
+			text = strings.Join(lines[len(lines)-40:], "\n")
+		}
+		t.Logf("%s: %s %v", strings.Join(args, " "), text, err)
 	}
 }
