@@ -17,7 +17,7 @@ import (
 	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
-// Mewla for Chrome is Mewla's own extension, derived from Playwright's. It
+// The Mewla extension is Mewla's own extension, derived from Playwright's. It
 // needs no key: Chrome starts Mewla's native messaging host only for this
 // extension's ID, and the host joins it to the daemon (see bridge.go). It
 // opens the agent's tabs in a window of their own, which the person's tabs
@@ -75,7 +75,8 @@ var MewlaStoreURL = ""
 // ExtensionDir writes the extension's files and returns the folder, which
 // Chrome can load unpacked.
 func (s *Service) ExtensionDir() (string, error) {
-	dir := filepath.Join(s.dir, "chrome-extension")
+	// A stable folder in Mewla's own state, where Chrome keeps loading it from.
+	dir := filepath.Join(filepath.Dir(s.dir), "extension", "mewla")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}

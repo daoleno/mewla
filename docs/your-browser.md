@@ -12,9 +12,12 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
 1. Open **Settings** and tap the computer. Its page has a quiet row,
    *Let agents use Chrome*. A missing Chrome or Node.js is not shown there as a
    problem; `mewla agent-use` on the computer says what is missing.
-2. Tap **Set up**. Chrome on that computer opens **Mewla for Chrome** in the
-   Chrome Web Store. Click **Add to Chrome** there, or through
-   [Screen](screen.md) if you are not at the computer.
+2. Tap **Set up**. Chrome on that computer opens its extensions page, and Mewla
+   says which folder to load. Turn on **Developer mode**, choose **Load
+   unpacked** and pick `~/.mewla/extension/mewla` (the folder Mewla wrote).
+   Do this at the computer or through [Screen](screen.md). Once the extension
+   is in the Chrome Web Store, **Set up** opens its page there and you click
+   **Add to Chrome** instead.
 
 That is all: no key to copy. Mewla registers its helper with Chrome itself, and
 the extension connects to it whenever Chrome runs. If Chrome isn't running when
@@ -29,7 +32,7 @@ picks the extension up by itself, and your other computers learn of it over
 their open connection.
 
 If you set the Playwright extension up before, with its key, that keeps
-working; adding Mewla for Chrome replaces it.
+working; adding the Mewla extension replaces it.
 
 The switch **Agents can use this computer** turns it off: agents started
 after that don't get your Chrome, and agents already running lose it the next
@@ -71,8 +74,8 @@ the Mac's Chrome. See [Your other computers](computers.md).
 | The row says | What to do |
 | --- | --- |
 | Google Chrome isn't installed | Install Google Chrome. Chrome from Flatpak or Snap is not supported. |
-| Add Mewla for Chrome | Tap **Set up**, then **Add to Chrome**. |
-| Open the Playwright extension in Chrome and copy its key | Only for the older Playwright extension: tap **Open it**, copy the key it shows, then run `mewla agent-use key` on the computer and paste it. Adding Mewla for Chrome instead needs no key. |
+| Add the Mewla extension to Chrome | Tap **Set up**, then load the Mewla folder (Developer mode, **Load unpacked**), or **Add to Chrome** once it is in the store. |
+| Open the Playwright extension in Chrome and copy its key | Only for the older Playwright extension: tap **Open it**, copy the key it shows, then run `mewla agent-use key` on the computer and paste it. Adding the Mewla extension instead needs no key. |
 | Sign in to this computer's desktop | On Linux, agents open Chrome in your desktop session. With nobody signed in to the desktop there is no Chrome to use; sign in and the row turns ready. |
 | Install Node.js 20 or later | Install Node.js on that computer; Mewla finds it in the usual places, including version managers. |
 | Couldn't download the browser tools | Check the computer's network, then tap **Try again**. |
@@ -87,7 +90,7 @@ mewla agent-use fix      # do the fix that status names
 
 ## What stays where
 
-Mewla for Chrome has no key. (With the older Playwright extension, its key stays
+The Mewla extension has no key. (With the older Playwright extension, its key stays
 on the computer, readable only by your user, and goes to the browser tools
 through their environment, never into a command line, a log or an agent's
 prompt.)

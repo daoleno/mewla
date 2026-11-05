@@ -1,6 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Mewla for Chrome",
+  "name": "Mewla",
+  "short_name": "Mewla",
   "version": "0.1.0",
   "description": "Lets the agents Mewla starts on this computer work in Chrome, in a window of their own, with your logged-in sites. Nothing leaves this computer.",
   "minimum_chrome_version": "116",
@@ -17,7 +18,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Mewla for Chrome",
+    "default_title": "Mewla",
     "default_popup": "status.html",
     "default_icon": {
       "16": "icons/icon-16.png",
