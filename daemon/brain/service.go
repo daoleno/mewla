@@ -125,10 +125,10 @@ type Service struct {
 	hostLaunching map[string]bool
 	// hostBlank holds the launched Sessions that start without a native
 	// conversation to resume; their first activation carries the visible chat
-	// tail. It lives and dies with hostLaunching, so a retried activation
-	// keeps the conversation a first attempt would have carried. Guarded by
-	// hostActivationMu.
-	hostBlank map[string]bool
+	// tail. The value is the prompt once built: a retried activation sends the
+	// same text (a receipt is bound to its payload, and the chat may have moved
+	// on). It lives and dies with hostLaunching. Guarded by hostActivationMu.
+	hostBlank map[string]string
 	hostMu    sync.Mutex
 
 	routeMu sync.Mutex
@@ -3094,9 +3094,9 @@ func (s *Service) markHostLaunching(sessionID string, blank bool) {
 	s.hostLaunching[sessionID] = true
 	if blank {
 		if s.hostBlank == nil {
-			s.hostBlank = map[string]bool{}
+			s.hostBlank = map[string]string{}
 		}
-		s.hostBlank[sessionID] = true
+		s.hostBlank[sessionID] = ""
 	}
 }
 
@@ -3112,8 +3112,16 @@ func (s *Service) ensureHostActivation(sessionID, command string, executor work.
 	s.hostActivationMu.Lock()
 	defer s.hostActivationMu.Unlock()
 	prompt := brainHostActivationPrompt()
-	if bootstrap || s.hostBlank[sessionID] {
+	built, blank := s.hostBlank[sessionID]
+	if built != "" {
+		prompt = built
+	} else if blank || bootstrap {
 		prompt = s.hostBootstrapPrompt(executor)
+		if blank && prompt != "" {
+			// Only a blank launch is remembered (it is cleared with
+			// hostLaunching); a plain bootstrap never leaves an entry behind.
+			s.hostBlank[sessionID] = prompt
+		}
 	}
 	if strings.TrimSpace(prompt) == "" {
 		return fmt.Errorf("Brain Host activation prompt is empty")

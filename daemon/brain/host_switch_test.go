@@ -114,7 +114,7 @@ func TestSelectHostExecutorRejectsWhatCannotRunBeforeChangingAnything(t *testing
 // The first activation that finds the pane not ready is retried; the retry must
 // still carry the conversation, not the bare activation contract.
 func TestHostActivationRetryKeepsTheConversation(t *testing.T) {
-	service, fw, _, _ := switchFixture(t)
+	service, fw, store, _ := switchFixture(t)
 	if _, err := service.SelectHostExecutor("codex"); err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +125,15 @@ func TestHostActivationRetryKeepsTheConversation(t *testing.T) {
 	if _, err := service.ReconcileHostContinuity(); !errors.Is(err, watcher.ErrWorkerInputNotReady) {
 		t.Fatalf("first attempt err = %v", err)
 	}
+	firstText := fw.sentCalls[len(fw.sentCalls)-1].text
+	// The chat moves on between the attempts: the retry must still send the
+	// text of the first, never a different payload for the same receipt.
+	if _, err := store.AppendTimelineItem(TimelineItem{
+		ID: "chat-3", ThreadID: "thread-main", SessionID: "later", Role: "user",
+		Kind: timelineKindUserMessage, Body: "A message sent during the switch", CreatedAt: time.Now().Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
 	fw.sendErr = nil
 	fw.sentCalls = nil
 	if _, err := service.ReconcileHostContinuity(); err != nil {
@@ -132,6 +141,9 @@ func TestHostActivationRetryKeepsTheConversation(t *testing.T) {
 	}
 	if len(fw.sentCalls) != 1 || !strings.Contains(fw.sentCalls[0].text, "Sharing it as a single device link.") {
 		t.Fatalf("retried activation lost the conversation: %#v", fw.sentCalls)
+	}
+	if fw.sentCalls[0].text != firstText {
+		t.Fatalf("retried activation changed its payload:\n%s\n--- vs ---\n%s", firstText, fw.sentCalls[0].text)
 	}
 	// Once accepted it is not repeated.
 	fw.sentCalls = nil
