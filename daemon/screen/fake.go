@@ -67,6 +67,12 @@ type FakeBackend struct {
 	SkyLight  bool
 	HitTest   bool
 	AppClicks []FakeAppClick
+	// OnAppClick and OnAppKey, when set, run after a click or a key sent to
+	// one app, to change it as the app would; they hold the backend's lock.
+	OnAppClick func(app *FakeApp, c FakeAppClick)
+	OnAppKey   func(app *FakeApp, k FakeKey)
+	// NoWitness makes the apps give no accessibility reading of their focus.
+	NoWitness bool
 	Raised    []int
 	// InstalledApps are apps OpenApp can start; Launched is what it was asked.
 	InstalledApps []FakeInstalledApp
@@ -340,6 +346,13 @@ func (s *fakeSession) KeyTo(pid int, keysym uint32, down bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.AppKeys = append(f.AppKeys, FakeAppKey{pid, FakeKey{keysym, down}})
+	if f.OnAppKey != nil {
+		for i := range f.RunningApps {
+			if f.RunningApps[i].PID == pid {
+				f.OnAppKey(&f.RunningApps[i], FakeKey{keysym, down})
+			}
+		}
+	}
 	if f.AppEventsSeen {
 		f.input[InputKey] = time.Now()
 	}
@@ -358,6 +371,13 @@ func (s *fakeSession) ClickTo(pid int, window AppWindow, x, y, button, count int
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.AppClicks = append(f.AppClicks, FakeAppClick{pid, window.ID, x, y, button, count})
+	if f.OnAppClick != nil {
+		for i := range f.RunningApps {
+			if f.RunningApps[i].PID == pid {
+				f.OnAppClick(&f.RunningApps[i], FakeAppClick{pid, window.ID, x, y, button, count})
+			}
+		}
+	}
 	if f.AppEventsSeen {
 		f.input[InputClick] = time.Now()
 	}
@@ -803,3 +823,29 @@ func (f *FakeBackend) PressMenuPath(_ context.Context, pid int, path []string) (
 }
 
 var _ menuPather = (*FakeBackend)(nil)
+
+// Witness reads a fake app's focus: its title, the values of its elements
+// and the index of its focused one.
+func (f *FakeBackend) Witness(_ context.Context, pid int) (Witness, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.NoWitness {
+		return Witness{}, errors.New("the app gave no accessibility reading")
+	}
+	for _, app := range f.RunningApps {
+		if app.PID != pid {
+			continue
+		}
+		w := Witness{Readable: true, Window: app.Name}
+		for i, e := range app.Elements {
+			w.Text += e.Value + "\n"
+			if e.Focused {
+				w.Field = fmt.Sprintf("%d|%s|%s", i, e.Role, e.Title)
+			}
+		}
+		return w, nil
+	}
+	return Witness{}, errors.New("the app quit")
+}
+
+var _ appWitness = (*FakeBackend)(nil)

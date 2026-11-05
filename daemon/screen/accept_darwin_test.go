@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/ebitengine/purego"
 	"time"
 )
 
@@ -74,21 +76,56 @@ func (a textEditApp) quit() {
 	_ = exec.Command("/bin/kill", strconv.Itoa(a.pid)).Run()
 }
 
-// personTyping is the scripted person: it parks the pointer, then types a
-// text at the system's keyboard, a key every few milliseconds, as a
-// hardware keyboard would.
+// personTyping is the scripted person: it types a text at the system's
+// keyboard, a key every few milliseconds, as a hardware keyboard would. It
+// types into the one app it was given and nothing else: before every key it
+// checks that this app is still in front and the pointer is still where it
+// was parked, and every few keys that the app holds exactly what was typed,
+// so a real person who sits down (they switch app, move the pointer or type
+// themselves) stops it at once, and it types nothing more.
 type personTyping struct {
 	text    string
 	pointer cgPoint
+	pid     int
+	read    func() string
 	done    chan struct{}
+	// aborted is why it stopped early, or empty.
+	aborted string
+}
+
+func (p *personTyping) guard(typed string, n int) string {
+	var front int
+	var at cgPoint
+	withPool(func() { front, at = workspaceFrontPID(), pointerAt() })
+	switch {
+	case front != p.pid:
+		return fmt.Sprintf("the app in front is %d, not the person's %d", front, p.pid)
+	case abs(int(at.X)-int(p.pointer.X)) > 3 || abs(int(at.Y)-int(p.pointer.Y)) > 3:
+		return fmt.Sprintf("the pointer moved from %v to %v", p.pointer, at)
+	}
+	if _, err := os.Stat(filepath.Join(os.TempDir(), "mewla-accept-stop")); err == nil {
+		return "the stop file exists"
+	}
+	if n%8 == 0 && n > 0 {
+		if got := p.read(); got != typed {
+			return fmt.Sprintf("the person's text is %q, not %q", got, typed)
+		}
+	}
+	return ""
 }
 
 func (p *personTyping) run(source uintptr, cpm time.Duration) {
 	defer close(p.done)
+	typed := ""
+	n := 0
 	for _, r := range p.text {
 		key, ok := macANSIKeys[r]
 		if !ok {
 			continue
+		}
+		if why := p.guard(typed, n); why != "" {
+			p.aborted = why
+			return
 		}
 		for _, down := range []bool{true, false} {
 			ev := mac.CGEventCreateKeyboardEvent(source, key.code, down)
@@ -103,8 +140,21 @@ func (p *personTyping) run(source uintptr, cpm time.Duration) {
 			mac.CGEventPost(cgHIDEventTap, ev)
 			mac.CFRelease(ev)
 		}
+		typed += string(r)
+		n++
 		time.Sleep(cpm)
 	}
+}
+
+// secondsIdle is how long the Mac has had no input of any kind.
+func secondsIdle() float64 {
+	lib, err := purego.Dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", purego.RTLD_NOW|purego.RTLD_GLOBAL)
+	if err != nil {
+		return 0
+	}
+	var idle func(state int32, kind uint32) float64
+	purego.RegisterLibFunc(&idle, lib, "CGEventSourceSecondsSinceLastEventType")
+	return idle(0, 0xFFFFFFFF)
 }
 
 // parkPointer moves the pointer with a hardware-style event.
@@ -202,12 +252,19 @@ func TestAcceptBackgroundClick(t *testing.T) {
 	say := func(format string, args ...any) {
 		fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
 	}
+	const minIdle = 20.0
+	if idle := secondsIdle(); idle < minIdle {
+		t.Skipf("the Mac has been used %.0f s ago; this run needs %.0f s of no input and types for about a minute", idle, minIdle)
+	}
 	dir := t.TempDir()
 	agent := launchTextEdit(t, dir, "agent.txt", "")
 	defer agent.quit()
 	personApp := launchTextEdit(t, dir, "person.txt", "")
 	defer personApp.quit()
 	personPid := personApp.pid
+	if front := workspaceFrontPID(); front != personPid {
+		t.Fatalf("the person's TextEdit (%d) is not in front (%d): someone is using the Mac; nothing was typed", personPid, front)
+	}
 	say("agent TextEdit pid %d, person TextEdit pid %d, front app %d", agent.pid, personApp.pid, workspaceFrontPID())
 	say("macOS %s, window-local stamp %v", productVersion(), windowLocalStamp(productVersion()))
 
@@ -278,7 +335,12 @@ func TestAcceptBackgroundClick(t *testing.T) {
 		parked := cgPoint{900, 600}
 		parkPointer(source, parked)
 		typed := "the quick brown fox jumps over the lazy dog 0123456789"
-		typist := &personTyping{text: typed, pointer: parked, done: make(chan struct{})}
+		typist := &personTyping{text: typed, pointer: parked, pid: personApp.pid, done: make(chan struct{})}
+		typist.read = func() string {
+			var v string
+			withPool(func() { v = elementValue(mb, personPid, personArea) })
+			return v
+		}
 		watch := sampleInput(parked)
 		front0 := workspaceFrontPID()
 		before := caret()
@@ -293,6 +355,10 @@ func TestAcceptBackgroundClick(t *testing.T) {
 
 		var got string
 		withPool(func() { got = elementValue(mb, personPid, personArea) })
+		if typist.aborted != "" {
+			say("ABORTED  the scripted person stopped typing: %s", typist.aborted)
+			t.Fatalf("aborted: %s", typist.aborted)
+		}
 		say("click error: %v", err)
 		say("EFFECT   agent caret %s -> %s (moved: %v)", before, after, before != after)
 		say("PERSON   typed text intact: %v (%q)", got == typed, got)
