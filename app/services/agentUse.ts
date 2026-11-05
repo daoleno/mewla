@@ -26,6 +26,8 @@ export interface AgentUseStatus {
     permission?: string;
     /** The agent using the screen now. */
     active?: { worker: string; name?: string; since: string };
+    /** Every agent using the screen, longest first. */
+    agents?: { worker: string; name?: string; since: string }[];
   };
 }
 

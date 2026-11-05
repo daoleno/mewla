@@ -310,6 +310,16 @@ func (s *Service) StopAgent() {
 	}
 }
 
+// StopAgentFor ends one Worker's control, from the app; the others go on.
+func (s *Service) StopAgentFor(worker string) {
+	s.agentMu.Lock()
+	agent := s.agents[worker]
+	s.agentMu.Unlock()
+	if agent != nil {
+		agent.cancel(errors.New("You stopped the agent from the app"))
+	}
+}
+
 // AgentReady says whether agents can use the screen now, and why not.
 func (s *Service) AgentReady(ctx context.Context) (Capability, error) {
 	capability := s.backend.Capability(ctx)

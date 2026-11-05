@@ -68,8 +68,11 @@ func computerStatus(ctx context.Context, s *screen.Service) agentuse.ComputerSta
 	case err != nil:
 		return agentuse.ComputerStatus{State: agentuse.ComputerUnavailable, Summary: err.Error()}
 	}
-	if active, ok := s.Agent(); ok {
-		status.Active = &agentuse.ActiveAgent{Worker: active.Worker, Name: active.Name, Since: active.Since}
+	for _, active := range s.Agents() {
+		status.Agents = append(status.Agents, agentuse.ActiveAgent{Worker: active.Worker, Name: active.Name, Since: active.Since})
+	}
+	if len(status.Agents) > 0 {
+		status.Active = &status.Agents[0]
 	}
 	return status
 }

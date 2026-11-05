@@ -112,6 +112,8 @@ export function ScreenScreen() {
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const [watching, setWatching] = useState(false);
+  // Which agent is being watched, when several work at once.
+  const [watchedWorker, setWatchedWorker] = useState<string | undefined>();
   // The power pill the person closed; a different warning shows again.
   const [dismissedPower, setDismissedPower] = useState<string | null>(null);
   const host = useRef<ScreenViewerHostHandle>(null);
@@ -174,7 +176,7 @@ export function ScreenScreen() {
   // A person comes first, so viewing ends an agent's control. Only an
   // explicit "takeOver" does that; opening the page waits for the agent, and
   // "watch" shows the agent's screen without taking over.
-  const connect = useCallback(async (how: "auto" | "takeOver" | "watch" = "auto") => {
+  const connect = useCallback(async (how: "auto" | "takeOver" | "watch" = "auto", worker?: string) => {
     if (!currentServer) return;
     const server = currentServer;
     disconnect();
@@ -209,6 +211,7 @@ export function ScreenScreen() {
     }
     const watch = how === "watch" && !!next.agent;
     setWatching(watch);
+    setWatchedWorker(watch ? worker : undefined);
     setPhase("connecting");
     const socket = new ScreenConnection(server, {
       open() {
@@ -243,7 +246,7 @@ export function ScreenScreen() {
         setReason(why || null);
         setPhase("lost");
       },
-    }, watch);
+    }, watch, worker);
     connection.current = socket;
     try { await socket.connect(); } catch (error) {
       if (!active()) return;
@@ -432,12 +435,12 @@ export function ScreenScreen() {
     } finally { setBusy(false); }
     if (isCurrentServer(server.id)) void connect();
   };
-  const stopAgent = async () => {
+  const stopAgent = async (worker?: string) => {
     if (!currentServer) return;
     const server = currentServer;
     setBusy(true);
     try {
-      const next = await screenRequest(server, { action: "stop_agent" });
+      const next = await screenRequest(server, worker ? { action: "stop_agent", worker } : { action: "stop_agent" });
       if (isCurrentServer(server.id)) setStatus(next);
     } catch (error) {
       if (isCurrentServer(server.id)) setReason(error instanceof Error ? error.message : String(error));
@@ -504,7 +507,8 @@ export function ScreenScreen() {
   const viewerVisible = phase === "connecting" || phase === "live";
   const active = activeModifiers(mods);
   const cornerTop = immersive ? Math.max(insets.top, Spacing.sm) : Spacing.sm;
-  const agentLabel = status?.agent?.name || "An agent";
+  const agents = status?.agents?.length ? status.agents : status?.agent ? [status.agent] : [];
+  const agentLabel = (watchedWorker ? agents.find((a) => a.worker === watchedWorker)?.name : undefined) || status?.agent?.name || "An agent";
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
@@ -521,11 +525,21 @@ export function ScreenScreen() {
       {phase === "agent" && status?.agent ? (
         <View style={[styles.root, styles.center]}>
           <Icon name="desktop" size={40} color={colors.textTertiary} />
-          <AppText variant="title" style={styles.agentTitle}>{agentLabel} is using the screen</AppText>
+          <AppText variant="title" style={styles.agentTitle}>
+            {agents.length > 1 ? `${agents.length} agents are using the screen` : `${agentLabel} is using the screen`}
+          </AppText>
+          {agents.map((agent) => {
+            const label = agent.name || "An agent";
+            return (
+              <View key={agent.worker} style={styles.agentActions}>
+                {agents.length > 1 ? <AppText variant="body" style={styles.agentTitle}>{label}</AppText> : null}
+                <Button label="Watch" icon="eye" size="sm" accessibilityLabel={`Watch ${label}`} onPress={() => void connect("watch", agent.worker)} disabled={busy} />
+                <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${label}`} onPress={() => void stopAgent(agent.worker)} disabled={busy} />
+              </View>
+            );
+          })}
           <View style={styles.agentActions}>
-            <Button label="Take over" icon="hand" size="sm" variant="filled" onPress={() => void connect("takeOver")} disabled={busy} />
-            <Button label="Watch" icon="eye" size="sm" onPress={() => void connect("watch")} disabled={busy} />
-            <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${agentLabel}`} onPress={() => void stopAgent()} disabled={busy} />
+            <Button label={agents.length > 1 ? "Take over (stops all)" : "Take over"} icon="hand" size="sm" variant="filled" onPress={() => void connect("takeOver")} disabled={busy} />
           </View>
         </View>
       ) : null}
@@ -574,7 +588,7 @@ export function ScreenScreen() {
                   <AppText variant="micro" style={{ color: colors.accentStrong }}>Take over</AppText>
                 </Pressable>
                 <Pressable accessibilityRole="button" accessibilityLabel={`Stop ${agentLabel}`} hitSlop={8} disabled={busy}
-                  onPress={() => void stopAgent()} style={styles.chipAction}>
+                  onPress={() => void stopAgent(watchedWorker)} style={styles.chipAction}>
                   <Icon name="stop" size={14} color={colors.dangerText} />
                 </Pressable>
               </View>

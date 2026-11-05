@@ -15,13 +15,21 @@ var ErrNoAgent = errors.New("No agent is using this computer's screen")
 // dropped. Like Open, it returns the viewer's end right before ClientInit.
 // The session ends when the agent does.
 func (s *Service) Watch(ctx context.Context, deviceID string, obs *Observer) (net.Conn, error) {
+	return s.WatchWorker(ctx, deviceID, "", obs)
+}
+
+// WatchWorker is Watch for one Worker's agent; without one, the longest-running.
+func (s *Service) WatchWorker(ctx context.Context, deviceID, worker string, obs *Observer) (net.Conn, error) {
 	if err := s.allowed(deviceID); err != nil {
 		return nil, err
 	}
 	var agent *agentSession
 	s.agentMu.Lock()
 	for _, candidate := range s.agents {
-		if candidate.ctx.Err() == nil && (agent == nil || candidate.since.Before(agent.since)) {
+		if candidate.ctx.Err() != nil || (worker != "" && candidate.worker != worker) {
+			continue
+		}
+		if agent == nil || candidate.since.Before(agent.since) {
 			agent = candidate
 		}
 	}

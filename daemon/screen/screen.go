@@ -106,6 +106,9 @@ type Status struct {
 	CanRestart bool `json:"can_restart,omitempty"`
 	// Agent is the agent using the screen now.
 	Agent *AgentState `json:"agent,omitempty"`
+	// Agents are all the agents using the screen, longest first: Agent is the
+	// first of them.
+	Agents []AgentState `json:"agents,omitempty"`
 	// Locked means the computer is locked now, so a viewer sees its login
 	// window and the display may sleep.
 	Locked bool `json:"locked,omitempty"`
@@ -236,8 +239,9 @@ func (s *Service) Status(ctx context.Context, deviceID string) Status {
 		status.Locked = reporter.Presence().Locked
 	}
 	status.CanRestart = s.restart != nil
-	if agent, ok := s.Agent(); ok {
-		status.Agent = &agent
+	if agents := s.Agents(); len(agents) > 0 {
+		status.Agent = &agents[0]
+		status.Agents = agents
 	}
 	return status
 }

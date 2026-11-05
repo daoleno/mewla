@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -68,6 +69,7 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Action     string `json:"action"`
 			Permission string `json:"permission"`
+			Worker     string `json:"worker"`
 			KeepAwake  *bool  `json:"keep_awake"`
 		}
 		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
@@ -91,8 +93,13 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 		case body.Action == "" && body.KeepAwake != nil:
 			err = s.screen.SetKeepAwake(device.ID, *body.KeepAwake)
 		case body.Action == "stop_agent":
-			// Stopping an agent is always safe, so any paired device may.
-			s.screen.StopAgent()
+			// Stopping an agent is always safe, so any paired device may. With a
+			// Worker, only that one's control ends.
+			if body.Worker != "" {
+				s.screen.StopAgentFor(body.Worker)
+			} else {
+				s.screen.StopAgent()
+			}
 		case body.Action == "restart":
 			if err = s.screen.Restart(device.ID); err == nil {
 				w.WriteHeader(http.StatusAccepted)
@@ -195,7 +202,10 @@ func (s *Server) handleScreenViewer(w http.ResponseWriter, r *http.Request) {
 	watch := r.URL.Query().Get("watch") == "1"
 	open := s.screen.Open
 	if watch {
-		open = s.screen.Watch
+		worker := r.URL.Query().Get("worker")
+		open = func(ctx context.Context, deviceID string, obs *screen.Observer) (net.Conn, error) {
+			return s.screen.WatchWorker(ctx, deviceID, worker, obs)
+		}
 	}
 	// What the viewer shows as its badge and the daemon logs once: how the
 	// request arrived and what each stage of the stream cost. Numbers only.

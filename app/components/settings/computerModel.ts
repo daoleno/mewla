@@ -55,10 +55,13 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
   if (!status) return [];
   const problems: ComputerProblem[] = [];
   const active = status.computer?.active;
+  const everyone = status.computer?.agents ?? [];
   if (active) {
     problems.push({
       key: "active",
-      text: `${active.name || "An agent"} is using the screen.`,
+      text: everyone.length > 1
+        ? `${everyone.map((agent) => agent.name || "An agent").join(", ")} are using the screen.`
+        : `${active.name || "An agent"} is using the screen.`,
       action: { label: "Stop", does: { kind: "stop_agent" }, destructive: true },
     });
   }
