@@ -63,20 +63,27 @@ it. Text you type with the phone's keyboard, including Chinese and accented
 letters, arrives as typed, whatever input source the computer uses. Keys
 pressed with ⌘, ⌃ or ⌥ arrive as shortcuts.
 
-The view rotates to landscape on this page only. The badge in the corner has
-two lines. The first says how the connection reaches the computer (Relay,
-Tailscale, LAN or Local; for a phone paired through Mewla Link it is the path
-the phone chose) and which stage takes longest between the screen
-changing and your phone showing it: the network round trip (which includes
-bytes waiting in the link), the computer's encoding, the hop into the viewer or
-the viewer's own drawing. "Reduced quality" is added while the picture is
-sent at lower quality to keep up. The second line has the round trip, the time
-from your tap until the screen redraws, updates per second and bandwidth, with
-the computer's power state below. Small tags in the opposite corner say only
-what needs saying and never move the screen: **Locked** when the computer is
-locked, and **Keep awake** (tap it to turn the hold on), **Lid closed** or **On
-battery** when sleeping is a risk; close a tag with its ✕. Tap the badge to
-hide it.
+The view rotates to landscape on this page only. Upright, the picture sits
+under the header; held sideways it fills the display, with the header and the
+status bar hidden, and the controls stand in a strip beside it: the connection
+dot, the keyboard, the key tray (⌘, tap to show or hide) and the page menu.
+Nothing is ever drawn over the picture, and a tap in the space beside it does
+not click on the computer.
+
+The connection dot in the header (or the strip) is nearly invisible while all
+is well. It turns amber when the connection stays slow, when the computer may
+sleep (**Keep awake**, **Lid closed**), and a lock replaces it while the
+computer is locked. A slow connection is said once, briefly, beside the dot
+("Slow connection"). Tap the dot for the details: the way out if there is one
+(join the computer's Wi-Fi or Tailscale, when the computer lists addresses the
+phone could not reach), then the route (Relay, Tailscale, LAN or Local; for a
+phone paired through Mewla Link it is the path the phone chose, and **video**
+while motion is going as video), the round trip, the time from your tap until
+the screen redraws, updates per second, bandwidth, whether the picture is sent
+at reduced quality, the stage that takes longest when it isn't the network
+(the computer's encoding, the hop into the viewer or the viewer's own
+drawing), and the computer's power state, with **Keep awake** to turn that hold
+on.
 
 Screen sends only the parts of the screen that changed, and always the newest
 screen: a slow connection drops frames instead of queueing them. It watches how
@@ -109,7 +116,7 @@ Video needs a hardware H.264 encoder (every Apple Silicon Mac has one) and a
 viewer that says it can decode it; otherwise nothing changes. It is **off by
 default** until it has been tried on real machines: start Mewla with
 `MEWLA_SCREEN_VIDEO=on` to turn it on, and `MEWLA_SCREEN_VIDEO=off` always
-turns it off. The badge's first line says **video** while motion is going as video, and the
+turns it off. The connection details say **video** while motion is going as video, and the
 log line for a session says how many of its updates were.
 
 ## Keep the computer reachable
@@ -274,11 +281,11 @@ mewla screen enable     # allow devices to ask again
 
 ## When the picture is slow
 
-Open the badge on the Screen page and read its first line. The path says
+Tap the connection dot on the Screen page. The route says
 whether the phone reaches the computer through the Mewla Link relay or directly,
-and the stage says what holds the picture up.
+and the slowest stage, when it isn't the network, says what holds the picture up.
 
-- **network** is high and the path is **Relay**: the round trip through the
+- **Network** is high and the route is **Relay**: the round trip through the
   relay dominates, and it is set by where the relay is: a relay on another
   continent adds its distance twice (phone to relay, relay to computer), so
   even a few KB takes 400 to 700 ms to be answered. Input then reaches the
@@ -289,15 +296,15 @@ and the stage says what holds the picture up.
   [Direct when it can](connect-and-pair.md#direct-when-it-can). If the path
   stays **Relay** at home, the phone can't reach the computer's private
   address: another Wi-Fi network, client isolation on the router, or a firewall
-  blocking the port. The badge says which case it is: **no LAN/Tailscale route
-  from this phone** means the computer listed private addresses and none could
-  be verified from here (turn Tailscale on on the phone, or join the same
-  Wi-Fi); **computer lists no LAN/Tailscale address** means the computer
-  listens on none, for example because it has no private network address or is
-  started on a non-loopback address.
-- **encode** is high: the computer is busy; a full-screen update normally takes
+  blocking the port. When the computer listed private addresses and none could
+  be verified from this phone, a slow connection says "Join your computer's
+  Wi-Fi or Tailscale" (turn Tailscale on on the phone, or join the same
+  Wi-Fi). When the computer lists none (no private network address, or it was
+  started on a non-loopback address), the phone can't change that and the
+  details give no fix.
+- **Slowest** reads **encode**: the computer is busy; a full-screen update normally takes
   about 10 ms.
-- **app** or **draw** is high: the phone is the limit (its bridge into the
+- **Slowest** reads **app** or **draw**: the phone is the limit (its bridge into the
   viewer, or drawing the picture).
 
 At the computer, one line per session in Mewla's log summarizes the same stages

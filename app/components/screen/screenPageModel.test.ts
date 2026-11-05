@@ -1,17 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import {
   activeModifiers,
-  connectionQuality,
-  formatStats,
+  connectionProblem,
+  diagnosticRows,
+  indicatorTone,
   KEYBOARD_SENTINEL,
   keyboardEdit,
   NO_MODIFIERS,
+  nextSlowStreak,
   powerSummary,
   powerWarning,
   qualityReduced,
   slowestStage,
   spendModifiers,
-  streamHeadline,
+  slowLasts,
   tapModifier,
   unsupportedScreen,
 } from "./screenPageModel";
@@ -97,17 +99,6 @@ describe("unsupported computers", () => {
   });
 });
 
-describe("stats", () => {
-  test("format and quality", () => {
-    expect(formatStats({ rttMs: 42.4, inputMs: 120, fps: 7.25, kbps: 1500 })).toBe("42 ms network · 120 ms to screen · 7.3 fps · 1.5 Mb/s");
-    expect(formatStats({ rttMs: null, inputMs: null, fps: 30, kbps: 80 })).toBe("30 fps · 80 kb/s");
-    expect(connectionQuality(30)).toBe("good");
-    expect(connectionQuality(150)).toBe("fair");
-    expect(connectionQuality(400)).toBe("poor");
-    expect(connectionQuality(null)).toBe("unknown");
-  });
-});
-
 describe("viewer messages", () => {
   test("only known types and base64 payloads pass", () => {
     expect(parseScreenViewerMessage(JSON.stringify({ type: "send", data: "AQID" }))).toEqual({ type: "send", data: "AQID" });
@@ -135,30 +126,58 @@ describe("stream stages", () => {
     expect(slowestStage(readout({ rttMs: null, bridgeMs: null, presentMs: null, daemon: daemonStats({ updates: 0, encodeMs: 50 }) }))).toBeNull();
     expect(slowestStage(readout({ rttMs: 30, daemon: null, bridgeMs: null, presentMs: null }))?.stage).toBe("network");
   });
-  test("the headline says the path first, then the slowest stage, then reduced quality", () => {
-    expect(streamHeadline(readout())).toBe("Relay · network 142 ms");
-    expect(streamHeadline(readout({ daemon: daemonStats({ path: "tailscale", quality: 3 }) }))).toBe("Tailscale · network 142 ms · reduced quality");
-    expect(streamHeadline(readout({ daemon: daemonStats({ path: "lan" }) }))).toContain("LAN");
+  test("a healthy stream has nothing to say, whatever the route", () => {
+    expect(connectionProblem(readout())).toBeNull();
+    expect(connectionProblem(readout({ viaPath: "relay", directHint: "announced" }))).toBeNull();
+    expect(connectionProblem(readout({ rttMs: 199 }))).toBeNull();
+    expect(connectionProblem(readout({ rttMs: null, daemon: null }))).toBeNull();
   });
-  test("the path the phone chose is named, not the address the daemon saw", () => {
-    // Through the phone's loopback tunnel the daemon may see "Local" or "Direct".
-    expect(streamHeadline(readout({ viaPath: "lan", daemon: daemonStats({ path: "loopback" }) }))).toBe("LAN · network 142 ms");
-    expect(streamHeadline(readout({ viaPath: "relay", daemon: daemonStats({ path: "direct" }) }))).toBe("Relay · network 142 ms");
-    expect(streamHeadline(readout({ viaPath: "tailscale", daemon: null }))).toBe("Tailscale · network 142 ms");
-    expect(streamHeadline(readout({ viaPath: null, daemon: daemonStats({ path: "lan" }) }))).toContain("LAN");
+  test("a slow network says so, with the way out only when the phone has one", () => {
+    expect(connectionProblem(readout({ rttMs: 466 }))).toEqual({ title: "Slow connection", fix: null });
+    expect(connectionProblem(readout({ rttMs: 466, viaPath: "relay", directHint: "announced" })))
+      .toEqual({ title: "Slow connection", fix: "Join your computer's Wi-Fi or Tailscale" });
+    expect(connectionProblem(readout({ rttMs: 466, viaPath: "relay", directHint: "none" }))?.fix).toBeNull();
+    expect(connectionProblem(readout({ rttMs: 466, viaPath: "lan", directHint: "announced" }))?.fix).toBeNull();
   });
-  test("a stream carrying video says so", () => {
-    expect(streamHeadline(readout({ viaPath: "relay", daemon: daemonStats({ video: 20 }) }))).toBe("Relay · video · network 142 ms");
-    expect(streamHeadline(readout({ viaPath: "relay", daemon: daemonStats({ video: 0 }) }))).toBe("Relay · network 142 ms");
+  test("reduced quality counts as slow even when the round trip is fine", () => {
+    expect(connectionProblem(readout({ daemon: daemonStats({ quality: 3 }) }))?.title).toBe("Slow connection");
   });
-  test("a relay stream says why it is not direct", () => {
-    expect(streamHeadline(readout({ viaPath: "relay", directHint: "announced" }))).toBe("Relay · no LAN/Tailscale route from this phone · network 142 ms");
-    expect(streamHeadline(readout({ viaPath: "relay", directHint: "none" }))).toBe("Relay · computer lists no LAN/Tailscale address · network 142 ms");
-    expect(streamHeadline(readout({ viaPath: "lan", directHint: "announced" }))).toBe("LAN · network 142 ms");
+  test("slowness must last before it shows, and a good sample ends it", () => {
+    let streak = 0;
+    for (let i = 0; i < 2; i++) streak = nextSlowStreak(streak, true);
+    expect(slowLasts(streak)).toBe(false);
+    streak = nextSlowStreak(streak, true);
+    expect(slowLasts(streak)).toBe(true);
+    expect(nextSlowStreak(streak, false)).toBe(0);
   });
-  test("an older daemon's stream still has a headline from what the phone measured", () => {
-    expect(streamHeadline(readout({ daemon: null }))).toBe("network 142 ms");
-    expect(streamHeadline(readout({ daemon: null, rttMs: null, bridgeMs: null, presentMs: null }))).toBeNull();
+  test("the indicator is quiet unless something needs attention", () => {
+    expect(indicatorTone(false, null)).toBe("quiet");
+    expect(indicatorTone(true, null)).toBe("warn");
+    expect(indicatorTone(false, { label: "Keep awake", action: "keep-awake" })).toBe("warn");
+    expect(indicatorTone(false, { label: "Lid closed", action: null })).toBe("warn");
+    expect(indicatorTone(false, { label: "On battery", action: null })).toBe("quiet");
+  });
+  test("the diagnostics list each number once, in plain labels", () => {
+    const rows = diagnosticRows(readout({ rttMs: 466, inputMs: 622, fps: 29, kbps: 421, viaPath: "relay", daemon: daemonStats({ quality: 3 }) }), "Charger · 100% · Staying awake");
+    expect(rows).toEqual([
+      { label: "Route", value: "Relay" },
+      { label: "Network", value: "466 ms" },
+      { label: "To screen", value: "622 ms" },
+      { label: "Frame rate", value: "29 fps" },
+      { label: "Data", value: "421 kb/s" },
+      { label: "Quality", value: "Reduced" },
+      { label: "Computer", value: "Charger · 100% · Staying awake" },
+    ]);
+    expect(rows.filter((r) => r.value.includes("466")).length).toBe(1);
+  });
+  test("diagnostics format small rates, fast links, video and a non-network bottleneck", () => {
+    const rows = diagnosticRows(readout({ rttMs: null, inputMs: null, fps: 7.25, kbps: 1500, viaPath: "lan", presentMs: 95, daemon: daemonStats({ video: 20 }) }), null);
+    expect(rows).toEqual([
+      { label: "Route", value: "LAN · video" },
+      { label: "Frame rate", value: "7.3 fps" },
+      { label: "Data", value: "1.5 Mb/s" },
+      { label: "Slowest", value: "draw 95 ms" },
+    ]);
   });
   test("quality is reduced only below the viewer's level", () => {
     expect(qualityReduced(daemonStats({ quality: 6 }))).toBe(false);

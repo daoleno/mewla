@@ -8,7 +8,9 @@ export type ScreenHostMessage =
   | { type: "text"; text: string; mods: ScreenModifier[] }
   | { type: "key"; key: ScreenKey; mods: ScreenModifier[] }
   | { type: "mode"; mode: ScreenPointerMode }
-  | { type: "fit" };
+  | { type: "fit" }
+  /** Where a picture shorter than the page sits. */
+  | { type: "align"; align: "top" | "center" };
 
 export type ScreenModifier = "Command" | "Control" | "Option" | "Shift";
 export type ScreenKey =
