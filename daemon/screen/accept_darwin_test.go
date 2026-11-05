@@ -365,6 +365,55 @@ func TestAcceptBackgroundClick(t *testing.T) {
 		say("POINTER  parked %v, last %v, samples off it: %d", parked, last, moves)
 		say("FRONT    at start %d, apps seen in front %v (person %d)", front0, seen, personPid)
 	}
+
+	keyStyles := []struct {
+		name  string
+		style keyStyle
+	}{
+		{"keys: CGEventPostToPid only (before)", keyStyle{}},
+		{"keys: focus record, CGEventPostToPid", keyStyle{focus: true}},
+		{"keys: focus + make-key, CGEventPostToPid", keyStyle{focus: true, makeKey: true}},
+		{"keys: focus + make-key, SkyLight post", keyStyle{focus: true, makeKey: true, skyLight: true}},
+	}
+	for _, c := range keyStyles {
+		say("---- %s", c.name)
+		say("agent set text: %v", mb.ActOnElement(ctx, *agentArea, "set_value", ""))
+		say("person set text: %v", mb.ActOnElement(ctx, *personArea, "set_value", ""))
+		time.Sleep(300 * time.Millisecond)
+		window := windowOf(t, mb, agent.pid)
+		window.Bounds = window.Bounds.Sub(origin)
+		parked := cgPoint{900, 600}
+		parkPointer(source, parked)
+		typed := "The quick brown fox jumps over the lazy dog 0123456789"
+		typist := &personTyping{text: typed, pointer: parked, pid: personApp.pid, done: make(chan struct{})}
+		typist.read = func() string {
+			var v string
+			withPool(func() { v = elementValue(mb, personPid, personArea) })
+			return v
+		}
+		watch := sampleInput(parked)
+		go typist.run(source, 25*time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
+		agentText := "agentkeys"
+		err := clicker.typeTo(agent.pid, window, agentText, c.style)
+		time.Sleep(400 * time.Millisecond)
+		var gotAgent string
+		withPool(func() { gotAgent = elementValue(mb, agent.pid, agentArea) })
+		<-typist.done
+		time.Sleep(300 * time.Millisecond)
+		seen, moves, last := watch.finish()
+		var got string
+		withPool(func() { got = elementValue(mb, personPid, personArea) })
+		if typist.aborted != "" {
+			say("ABORTED  the scripted person stopped typing: %s", typist.aborted)
+			t.Fatalf("aborted: %s", typist.aborted)
+		}
+		say("send error: %v", err)
+		say("EFFECT   agent text %q (want %q): landed %v", gotAgent, agentText, gotAgent == agentText)
+		say("PERSON   typed text intact: %v (%q)", got == typed, got)
+		say("POINTER  parked %v, last %v, samples off it: %d", parked, last, moves)
+		say("FRONT    apps seen in front %v (person %d)", seen, personPid)
+	}
 }
 
 // elementValue reads a text area's current value.
