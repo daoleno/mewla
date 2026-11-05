@@ -16,9 +16,10 @@ describe("Settings → Labs", () => {
   test("one row per feature, each opening its own page, with no switch on the list", () => {
     expect(labs).toContain('router.push("/settings/friends")');
     expect(labs).toContain('router.push("/settings/phone")');
-    expect(labs.match(/accessory="chevron"/g)).toHaveLength(2);
+    expect(labs).toContain('router.push("/settings/iphone")');
+    expect(labs.match(/accessory="chevron"/g)).toHaveLength(3);
     expect(labs).not.toContain("InkSwitch");
-    for (const page of ["friends", "phone"]) expect(existsSync(new URL(`../../app/settings/${page}.tsx`, import.meta.url))).toBe(true);
+    for (const page of ["friends", "phone", "iphone"]) expect(existsSync(new URL(`../../app/settings/${page}.tsx`, import.meta.url))).toBe(true);
   });
 
   test("a feature's controls live on its page", () => {
@@ -28,6 +29,10 @@ describe("Settings → Labs", () => {
       expect(labs).not.toContain(text);
     }
     expect(read("./PhoneSettings.tsx")).toContain('accessibilityLabel="Phone use"');
+    const iphone = read("./IPhoneSettings.tsx");
+    expect(iphone).toContain('accessibilityLabel="iPhone use"');
+    expect(iphone).toContain("{ handoff_done: true }");
+    expect(iphone).toContain("{ stop_agent: true }");
   });
 });
 
@@ -56,7 +61,7 @@ describe("Settings is one visual system", () => {
   });
 
   test("no explanatory footers or filler subtitles", () => {
-    for (const name of [...sections, "FriendsSettings", "PhoneSettings"]) expect(read(`./${name}.tsx`)).not.toContain("footer=");
+    for (const name of [...sections, "FriendsSettings", "PhoneSettings", "IPhoneSettings"]) expect(read(`./${name}.tsx`)).not.toContain("footer=");
     expect(read("./FriendsSettings.tsx")).not.toContain("A small public timeline");
     expect(read("./CalendarAlertsSection.tsx")).not.toContain("can't miss");
     expect(settings).not.toContain("Talk to Brain from Telegram");

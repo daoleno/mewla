@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { hasRoomyHeight } from "../../constants/windowRoom";
 import { useCurrentServer } from "../../store/currentServer";
+import { useIPhoneUse } from "../../store/iphoneUse";
 import { currentTransportPath, directPathBecameAvailable, directPathHint, recheckDirectPath, type TransportPath } from "../../services/pinnedTransport";
 import { ScreenConnection, screenRequest, type ScreenStatus } from "../../services/screen";
 import type { ScreenStreamStats } from "../../services/screenStream";
@@ -122,6 +123,7 @@ export function ScreenScreen() {
   const [typing, setTyping] = useState(false);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  const iphone = useIPhoneUse(5_000);
   const [watching, setWatching] = useState(false);
   // Which agent is being watched, when several work at once.
   const [watchedWorker, setWatchedWorker] = useState<string | undefined>();
@@ -515,6 +517,9 @@ export function ScreenScreen() {
   const fullBleed = immersive && viewerVisible;
   const active = activeModifiers(mods);
   const agents = status?.agents?.length ? status.agents : status?.agent ? [status.agent] : [];
+  // An agent on the iPhone works in iPhone Mirroring, off the Mac's screen: Watch can't show it,
+  // so it has its own Done (for what it asked of the person) and Stop.
+  const iphoneAgent = iphone.status?.enabled ? iphone.status.active : undefined;
   const agentLabel = (watchedWorker ? agents.find((a) => a.worker === watchedWorker)?.name : undefined) || status?.agent?.name || "An agent";
   const menuItems: ActionMenuItem[] = watching ? [
     { key: "fit", icon: "expand", label: "Fit screen", onPress: () => toViewer({ type: "fit" }) },
@@ -596,6 +601,15 @@ export function ScreenScreen() {
               </View>
             );
           })}
+          {iphoneAgent ? (
+            <View style={styles.agentActions}>
+              <AppText variant="body" style={styles.agentTitle}>{`${iphoneAgent.name || "An agent"} is using your iPhone`}</AppText>
+              <Button label="Done" icon="check" size="sm" accessibilityLabel="Done: tell the agent you finished on your iPhone"
+                onPress={() => void iphone.change({ handoff_done: true })} disabled={iphone.busy} />
+              <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${iphoneAgent.name || "the agent"} on your iPhone`}
+                onPress={() => void iphone.change({ stop_agent: true })} disabled={iphone.busy} />
+            </View>
+          ) : null}
           <View style={styles.agentActions}>
             <Button label={agents.length > 1 ? "Take over (stops all)" : "Take over"} icon="hand" size="sm" variant="filled" onPress={() => void connect("takeOver")} disabled={busy} />
           </View>
