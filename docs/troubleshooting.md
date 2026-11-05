@@ -42,7 +42,8 @@ conversation skipped a revision and resubscribed, `snapshot_wait` means no
 snapshot came back within 8 seconds of subscribing, `send_unsettled` means a
 send was not confirmed, and `pending_unreconciled` means a confirmed send
 still had no row 45 seconds later. A connection that dropped without a clean
-close is logged as `websocket: client connection lost ... device=<id> cause=<who>`.
+close is logged as `websocket: client connection lost ... device=<id> cause=<who>`,
+and so is any connection that was sent more than 1 MiB, even when it ended cleanly.
 The cause says which end hung up:
 
 - `peer-closed`: the phone, or something between it and the daemon (a tunnel,
@@ -55,7 +56,10 @@ The cause says which end hung up:
 
 The rest of the line shows the link: bytes sent, bytes still queued, the last
 send's size, age and duration, and how many pings the phone answered
-(`pongs=answered/sent`) and when. A phone's own report of how its socket ended
+(`pongs=answered/sent`) and when. `types=` names the message types that filled
+the link, heaviest first, as `type:bytes/count`; `other` is the rest, and the
+byte counts are before compression (`deflate=true` says the phone offered
+compression, so JSON text is smaller on the wire). A phone's own report of how its socket ended
 is `event=ws_closed`; it carries the platform's error text (`error=`) and the
 last frame it received (`lastFrame=type/size`). To check a stuck screen
 afterwards:

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -302,5 +303,76 @@ func waitForClientCount(t *testing.T, server *Server, want int) {
 			t.Fatalf("client count=%d, want %d", server.clientCount(), want)
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestWireMessageTypeReadsOnlyTheTopLevelType(t *testing.T) {
+	cases := []struct {
+		name string
+		kind int
+		data string
+		want string
+	}{
+		{"leading key", websocket.TextMessage, `{"type":"brain_snapshot","x":1}`, "brain_snapshot"},
+		{"after nested objects, maps sort type late", websocket.TextMessage, `{"items":[{"type":"inner"}],"meta":{"type":"nested"},"type":"work_items_snapshot"}`, "work_items_snapshot"},
+		{"type inside a string value is not a key", websocket.TextMessage, `{"text":"a \"type\":\"fake\" b","type":"real"}`, "real"},
+		{"escaped quote and backslash before the key", websocket.TextMessage, `{"a":"x\\","b":"\"","type":"ok"}`, "ok"},
+		{"whitespace after colon", websocket.TextMessage, ` { "type" : "spaced" }`, "spaced"},
+		{"non-string type is skipped", websocket.TextMessage, `{"type":3,"other":1}`, "unknown"},
+		{"no type", websocket.TextMessage, `{"a":1}`, "unknown"},
+		{"not an object", websocket.TextMessage, `[{"type":"x"}]`, "unknown"},
+		{"truncated", websocket.TextMessage, `{"a":"unterminated`, "unknown"},
+		{"binary frame", websocket.BinaryMessage, `{"type":"terminal"}`, "binary"},
+	}
+	for _, tc := range cases {
+		if got := wireMessageType(tc.kind, []byte(tc.data)); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A dropped connection's log line must say what filled the link, with the
+// types adding up to what was sent.
+func TestOutboxTalliesBytesByMessageType(t *testing.T) {
+	serverConn, client := upgradedTestPair(t, stalledReaderDialer())
+	outbox := newClientOutbox(serverConn)
+	defer outbox.close()
+
+	big := `{"type":"brain_snapshot","pad":"` + strings.Repeat("p", 5000) + `"}`
+	small := `{"type":"worker_session_updated","n":1}`
+	for _, msg := range []string{big, small, small, `{"type":"direct_addresses"}`} {
+		if err := outbox.enqueue(websocket.TextMessage, []byte(msg), false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := outbox.enqueue(websocket.BinaryMessage, []byte("bytes"), false); err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		if _, _, err := client.ReadMessage(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stats outboxStats
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		if stats = outbox.stats(); len(stats.byType) == 4 {
+			break
+		}
+	}
+	if len(stats.byType) != 4 || stats.byType[0].kind != "brain_snapshot" || stats.byType[0].bytes != int64(len(big)) {
+		t.Fatalf("heaviest type should lead: %+v", stats.byType)
+	}
+	var sum int64
+	for _, stat := range stats.byType {
+		sum += stat.bytes
+	}
+	if sum != stats.sent {
+		t.Fatalf("types sum to %d bytes, sent=%d", sum, stats.sent)
+	}
+	line := (&wsLink{deflate: true}).describe(stats)
+	for _, want := range []string{"deflate=true", "types=brain_snapshot:" + strconv.Itoa(len(big)) + "B/1", "worker_session_updated:" + strconv.Itoa(2*len(small)) + "B/2"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("log line %q lacks %q", line, want)
+		}
 	}
 }

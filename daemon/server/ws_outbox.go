@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +39,13 @@ var (
 type outboundMessage struct {
 	messageType int
 	data        []byte
+	kind        string // wire "type" of a JSON message, for the byte tally
+}
+
+// typeTally is what one message type has cost one client.
+type typeTally struct {
+	bytes int64
+	count int
 }
 
 // clientOutbox is one WebSocket client's ordered send queue. Broadcasts,
@@ -52,6 +62,7 @@ type clientOutbox struct {
 	err    error
 
 	sent         int64 // bytes written to the socket so far
+	byType       map[string]typeTally
 	lastSendAt   time.Time
 	lastSendSize int
 	lastSendTook time.Duration
@@ -62,6 +73,7 @@ type clientOutbox struct {
 // connection can say whether it died mid-send.
 type outboxStats struct {
 	sent         int64
+	byType       []typeStat // heaviest first
 	pending      int
 	lastSendAt   time.Time
 	lastSendSize int
@@ -72,7 +84,7 @@ type outboxStats struct {
 func (o *clientOutbox) stats() outboxStats {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return outboxStats{o.sent, o.bytes, o.lastSendAt, o.lastSendSize, o.lastSendTook, o.failure}
+	return outboxStats{sent: o.sent, byType: sortedTally(o.byType), pending: o.bytes, lastSendAt: o.lastSendAt, lastSendSize: o.lastSendSize, lastSendTook: o.lastSendTook, failure: o.failure}
 }
 
 func newClientOutbox(conn *websocket.Conn) *clientOutbox {
@@ -98,7 +110,7 @@ func (o *clientOutbox) enqueue(messageType int, data []byte, waitForRoom bool) e
 	if o.closed {
 		return o.err
 	}
-	o.queue = append(o.queue, outboundMessage{messageType: messageType, data: data})
+	o.queue = append(o.queue, outboundMessage{messageType: messageType, data: data, kind: wireMessageType(messageType, data)})
 	o.bytes += len(data)
 	o.cond.Broadcast()
 	return nil
@@ -126,6 +138,13 @@ func (o *clientOutbox) run() {
 				o.failLocked(err)
 			} else {
 				o.sent += int64(len(msg.data))
+				if o.byType == nil {
+					o.byType = make(map[string]typeTally)
+				}
+				tally := o.byType[msg.kind]
+				tally.bytes += int64(len(msg.data))
+				tally.count++
+				o.byType[msg.kind] = tally
 				o.lastSendAt, o.lastSendSize, o.lastSendTook = time.Now(), len(msg.data), time.Since(started)
 			}
 			o.bytes -= len(msg.data)
@@ -222,6 +241,10 @@ type wsLink struct {
 	lastPongAt time.Time
 	closedBy   string
 
+	// deflate is whether the client offered permessage-deflate, so JSON text
+	// goes out compressed; sent= and types= count the bytes before it.
+	deflate bool
+
 	done chan struct{}
 	once sync.Once
 }
@@ -269,8 +292,8 @@ func (l *wsLink) describe(out outboxStats) string {
 		}
 		return now.Sub(t).Round(10 * time.Millisecond).String()
 	}
-	return fmt.Sprintf("sent=%dB pending=%dB lastSend=%dB/%s took %s pongs=%d/%d lastPong=%s",
-		out.sent, out.pending, out.lastSendSize, since(out.lastSendAt), out.lastSendTook.Round(time.Millisecond), pongs, pings, since(lastPongAt))
+	return fmt.Sprintf("sent=%dB pending=%dB lastSend=%dB/%s took %s pongs=%d/%d lastPong=%s deflate=%t types=%s",
+		out.sent, out.pending, out.lastSendSize, since(out.lastSendAt), out.lastSendTook.Round(time.Millisecond), pongs, pings, since(lastPongAt), l.deflate, describeTally(out.byType, out.sent))
 }
 
 // keepWebSocketAlive pings conn on a timer and drops it when the client goes
@@ -322,4 +345,123 @@ func keepWebSocketAlive(conn *websocket.Conn) *wsLink {
 func isTemporaryNetError(err error) bool {
 	var netErr net.Error
 	return errors.As(err, &netErr) && netErr.Timeout()
+}
+
+// typeStat is one message type's share of what a client was sent.
+type typeStat struct {
+	kind  string
+	bytes int64
+	count int
+}
+
+func sortedTally(by map[string]typeTally) []typeStat {
+	stats := make([]typeStat, 0, len(by))
+	for kind, tally := range by {
+		stats = append(stats, typeStat{kind, tally.bytes, tally.count})
+	}
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].bytes != stats[j].bytes {
+			return stats[i].bytes > stats[j].bytes
+		}
+		return stats[i].kind < stats[j].kind
+	})
+	return stats
+}
+
+// wsQuietCloseLogBytes is how much a client must have been sent before even a
+// clean close is logged: a slow link that carried this much explains a slow
+// load, and the line's types= says what filled it.
+const wsQuietCloseLogBytes = 1 << 20
+
+// wsTallyShown is how many message types a connection-lost line names; the
+// rest are summed as "other".
+const wsTallyShown = 5
+
+// describeTally renders the heaviest message types as kind:bytes/count, so a
+// slow link's log says what filled it.
+func describeTally(stats []typeStat, sent int64) string {
+	if len(stats) == 0 {
+		return "none"
+	}
+	var b strings.Builder
+	var shown int64
+	for i, stat := range stats {
+		if i == wsTallyShown {
+			break
+		}
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, "%s:%dB/%d", stat.kind, stat.bytes, stat.count)
+		shown += stat.bytes
+	}
+	if rest := sent - shown; rest > 0 {
+		fmt.Fprintf(&b, ",other:%dB/%d", rest, len(stats)-wsTallyShown)
+	}
+	return b.String()
+}
+
+// wireMessageType reads the top-level "type" of a JSON message without
+// decoding it: snapshots are megabytes, and every queued message passes
+// here. Binary frames, and JSON with no string "type", name themselves.
+func wireMessageType(messageType int, data []byte) string {
+	if messageType != websocket.TextMessage {
+		return "binary"
+	}
+	i := 0
+	for i < len(data) && data[i] != '{' {
+		if data[i] != ' ' && data[i] != '\n' && data[i] != '\t' && data[i] != '\r' {
+			return "unknown"
+		}
+		i++
+	}
+	depth := 0
+	for ; i < len(data); i++ {
+		switch data[i] {
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+		case '"':
+			start := i + 1
+			for i++; i < len(data) && data[i] != '"'; i++ {
+				if data[i] == '\\' {
+					i++
+				}
+			}
+			if i >= len(data) {
+				return "unknown"
+			}
+			if depth != 1 || string(data[start:i]) != "type" {
+				continue
+			}
+			j := i + 1
+			for j < len(data) && (data[j] == ' ' || data[j] == ':') {
+				j++
+			}
+			if j >= len(data) || data[j] != '"' {
+				continue // a key named "type" whose value is not a string
+			}
+			end := j + 1
+			for end < len(data) && data[end] != '"' && data[end] != '\\' {
+				end++
+			}
+			if end >= len(data) || data[end] != '"' {
+				return "unknown"
+			}
+			return string(data[j+1 : end])
+		}
+	}
+	return "unknown"
+}
+
+// clientOffersDeflate reports whether the upgrade asked for permessage-deflate,
+// which the upgrader accepts (EnableCompression).
+func clientOffersDeflate(r *http.Request) bool {
+	for _, value := range r.Header.Values("Sec-WebSocket-Extensions") {
+		if strings.Contains(strings.ToLower(value), "permessage-deflate") {
+			return true
+		}
+	}
+	return false
 }
