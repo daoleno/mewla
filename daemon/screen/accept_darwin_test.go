@@ -334,7 +334,7 @@ func TestAcceptBackgroundClick(t *testing.T) {
 
 		parked := cgPoint{900, 600}
 		parkPointer(source, parked)
-		typed := "the quick brown fox jumps over the lazy dog 0123456789"
+		typed := "The quick brown fox jumps over the lazy dog 0123456789" // capital T: TextEdit capitalises a first letter
 		typist := &personTyping{text: typed, pointer: parked, pid: personApp.pid, done: make(chan struct{})}
 		typist.read = func() string {
 			var v string
