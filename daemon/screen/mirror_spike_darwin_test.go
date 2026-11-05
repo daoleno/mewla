@@ -16,6 +16,9 @@ import (
 	"time"
 )
 
+// dumpAX prints the mirror's accessibility tree, set by the spike.
+var dumpAX = func(string) {}
+
 func loadPNG(t *testing.T, path string) *image.RGBA {
 	t.Helper()
 	f, err := os.Open(path)
@@ -67,7 +70,13 @@ func TestVisionReadsChineseAndEnglishWhereTheyAre(t *testing.T) {
 // A spike, not a test: what iPhone Mirroring on this Mac takes. Run it on a
 // Mac with an iPhone set up for iPhone Mirroring, locked and nearby:
 //
-//	MEWLA_IPHONE_SPIKE=<dir for pictures> [MEWLA_IPHONE_SPIKE_INPUT=1] go test ./screen -run IPhoneMirrorSpike -v
+//	MEWLA_IPHONE_SPIKE=<dir for pictures> [MEWLA_IPHONE_SPIKE_INPUT=1] [MEWLA_IPHONE_SPIKE_NOPARK=1] go test ./screen -run IPhoneMirrorSpike -v
+//
+// NOPARK leaves the mirror on the person's display, behind their windows,
+// instead of the agent display. Around every input step it prints the app
+// in front and the pointer, so input that took the person's focus or moved
+// their pointer shows. The mirror's own accessibility tree is printed at the
+// start and whenever a reading has few lines.
 //
 // Without INPUT it only opens the mirror, moves it to the agent display and
 // reads it. With INPUT it also presses Home, opens Spotlight, types "clock"
@@ -86,7 +95,14 @@ func TestIPhoneMirrorSpike(t *testing.T) {
 		fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
 	}
 	ctx := context.Background()
+	mirrorNoPark = os.Getenv("MEWLA_IPHONE_SPIKE_NOPARK") != ""
+	defer func() { mirrorNoPark = false }()
 	s := NewService(t.TempDir())
+	if capability, err := s.AgentReady(ctx); err != nil {
+		say("not ready: %v (%+v). This process needs Screen Recording and Accessibility; run it from Mewla's own terminal.", err, capability)
+		t.Fatal(err)
+	}
+	say("no park: %v", mirrorNoPark)
 	t.Cleanup(func() { s.MirrorRelease("spike"); s.StopAgent(); time.Sleep(500 * time.Millisecond) })
 	say("macOS %s; before: %+v", productVersion(), s.MirrorInfo(ctx))
 	n := 0
@@ -117,9 +133,34 @@ func TestIPhoneMirrorSpike(t *testing.T) {
 		changed := sum != last
 		last = sum
 		say("%02d %s: %dx%d shot %s, read %s (%v), changed %v: %s", n, label, img.Rect.Dx(), img.Rect.Dy(), took.Round(time.Millisecond), time.Since(started).Round(time.Millisecond), err, changed, strings.Join(texts, " "))
+		if len(lines) <= 8 {
+			dumpAX(label)
+		}
 		return lines, changed
 	}
+	dumpAX = func(label string) {
+		s.agentMu.Lock()
+		agent := s.agents["spike"]
+		s.agentMu.Unlock()
+		if agent == nil || agent.apps == nil {
+			return
+		}
+		app, err := findMirror(ctx, agent.apps)
+		if err != nil {
+			return
+		}
+		tree, err := agent.apps.ReadApp(ctx, app.PID, 200)
+		if err != nil {
+			say("   ax %s: %v", label, err)
+			return
+		}
+		defer agent.apps.Release(tree)
+		for _, e := range tree.Elements {
+			say("   ax %s: %s%s %q %q %v %v", label, strings.Repeat("  ", e.Depth), e.Role, e.Title, e.Value, e.Frame, e.Actions)
+		}
+	}
 	lines, _ := shot("first")
+	dumpAX("first")
 	s.agentMu.Lock()
 	agent := s.agents["spike"]
 	s.agentMu.Unlock()
@@ -134,10 +175,13 @@ func TestIPhoneMirrorSpike(t *testing.T) {
 		return
 	}
 	step := func(label string, fn func() error) bool {
+		front, pointer := workspaceFrontPID(), pointerAt()
 		err := fn()
+		frontAfter, pointerAfter := workspaceFrontPID(), pointerAt()
 		time.Sleep(1200 * time.Millisecond)
+		frontLater := workspaceFrontPID()
 		_, changed := shot(label)
-		say("   %s: err %v, changed %v", label, err, changed)
+		say("   %s: err %v, changed %v; front %d -> %d -> %d (took focus: %v); pointer moved: %v", label, err, changed, front, frontAfter, frontLater, frontAfter != front || frontLater != front, pointer != pointerAfter)
 		return changed
 	}
 	step("home", func() error { return s.MirrorKey(ctx, "spike", MirrorHome) })
@@ -164,14 +208,26 @@ func TestIPhoneMirrorSpike(t *testing.T) {
 	step("app-switcher", func() error { return s.MirrorKey(ctx, "spike", MirrorAppSwitcher) })
 	step("home-before-tap", func() error { return s.MirrorKey(ctx, "spike", MirrorHome) })
 	lines, _ = shot("before-tap")
-	for _, l := range lines {
-		if l.Box.Min.Y > h/8 && l.Box.Max.Y < h*7/8 {
-			mid := image.Pt((l.Box.Min.X+l.Box.Max.X)/2, (l.Box.Min.Y+l.Box.Max.Y)/2)
-			say("tapping %q at %v", l.Text, mid)
-			step("tap", func() error { return s.MirrorTap(ctx, "spike", mid.X, mid.Y-l.Box.Dy()*2, 0) })
+	tapped := false
+	for _, name := range []string{"设置", "Settings", "时钟", "Clock"} {
+		for _, l := range lines {
+			if strings.TrimSpace(l.Text) != name {
+				continue
+			}
+			// The label sits under its icon: tap the icon.
+			mid := image.Pt((l.Box.Min.X+l.Box.Max.X)/2, l.Box.Min.Y-l.Box.Dy()*2)
+			say("tapping the icon above %q at %v", l.Text, mid)
+			step("tap-"+name, func() error { return s.MirrorTap(ctx, "spike", mid.X, mid.Y, 0) })
 			step("home-after-tap", func() error { return s.MirrorKey(ctx, "spike", MirrorHome) })
+			tapped = true
 			break
 		}
+		if tapped {
+			break
+		}
+	}
+	if !tapped {
+		say("no Settings or Clock label on this home page: no tap")
 	}
 	shot("last")
 }

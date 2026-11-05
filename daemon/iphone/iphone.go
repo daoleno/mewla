@@ -58,6 +58,8 @@ type Mirror interface {
 	// Key is return, delete, tab, escape, select_all, home, app_switcher or spotlight.
 	Key(ctx context.Context, worker, name string) error
 	Release(worker string)
+	// Stop ends the Worker's session on the Mac's screen, as Stop in Screen does.
+	Stop(worker string)
 }
 
 // Keys an agent names, and what the mirror calls them.
@@ -114,6 +116,14 @@ type Phone struct {
 	w, h  int
 	// handoff is closed when the person says a handoff is done.
 	handoff chan struct{}
+	// stopped are the Workers the person stopped, refused until the switch
+	// goes off; cancel ends the op in flight, for worker.
+	stopped map[string]bool
+	cancel  context.CancelCauseFunc
+	running string
+	// picture is the latest reading's JPEG, at the screen's size, for Watch.
+	picture   []byte
+	pictureAt time.Time
 }
 
 var _ phone.Device = (*Phone)(nil)
@@ -148,8 +158,7 @@ func New(mirror Mirror, opts Options) *Phone {
 var (
 	ErrUnsupported = &phone.Error{Code: phone.CodeNotConnected, Message: "This computer can't use an iPhone: iPhone use works through iPhone Mirroring on a Mac (macOS 15 or later). Tell the person, and stop."}
 	ErrInUse       = &phone.Error{Code: phone.CodePersonInControl, Message: "The person is using their iPhone: iPhone Mirroring pauses while the iPhone is unlocked. Stop and tell them; do not retry in a loop. It works again once they lock it."}
-	ErrAuth        = &phone.Error{Code: phone.CodeNotReady, Message: "iPhone Mirroring is asking the person to sign in on the Mac (Touch ID or password). Never type it yourself: tell the person to unlock iPhone Mirroring, or set it to sign in automatically (iPhone Mirroring → Settings), and stop."}
-	ErrNotSetUp    = &phone.Error{Code: phone.CodeNotReady, Message: "iPhone Mirroring isn't set up on this Mac: the person has to open iPhone Mirroring once and confirm on their iPhone. Tell them, and stop."}
+	ErrStopped     = &phone.Error{Code: phone.CodeStopped, Message: "The person stopped you on the iPhone. Stop and report; do not retry. Agents can use it again after the person turns iPhone use off and on."}
 )
 
 // mirrorState is what the mirror's window shows besides the iPhone's screen.
@@ -158,9 +167,7 @@ type mirrorState int
 const (
 	stateScreen       mirrorState = iota // the iPhone's screen
 	stateInUse                           // the person unlocked the iPhone
-	stateAuth                            // the Mac asks for Touch ID or a password
-	stateDisconnected                    // not connected; it may offer to try again
-	stateSetup                           // first use: the person has to set it up
+	stateMirror                          // maybe the mirror's own screen: sign-in, Try Again
 )
 
 // The mirror's own words for its states, English and Chinese, lower case. Its
@@ -171,9 +178,8 @@ var stateWords = []struct {
 	words []string
 }{
 	{stateInUse, []string{"iphone in use", "iphone is in use", "iphone 使用中", "iphone使用中", "正在使用 iphone", "正在使用iphone", "iphone 正在使用", "iphone正在使用"}},
-	{stateAuth, []string{"touch id", "enter your password", "输入密码", "使用触控 id", "触控 id", "unlock iphone mirroring", "解锁"}},
-	{stateSetup, []string{"get started", "开始使用", "continue", "继续"}},
-	{stateDisconnected, []string{"try again", "重试", "再试一次", "unable to connect", "无法连接", "not nearby", "不在附近", "connect", "连接", "disconnected", "已断开"}},
+	// Words an iPhone app may show as well: never a refusal, only a note.
+	{stateMirror, []string{"touch id", "enter your password", "输入密码", "触控 id", "iphone mirroring", "iphone 镜像", "try again", "重试", "再试一次", "unable to connect", "无法连接", "not nearby", "不在附近", "disconnected", "已断开"}},
 }
 
 const stateMaxLines = 8
@@ -245,16 +251,73 @@ func (p *Phone) activeLocked() *phone.Active {
 }
 
 // Release ends every agent's use of the iPhone, as when iPhone use is
-// turned off.
+// turned off; agents the person stopped may use it again once it is on.
 func (p *Phone) Release() {
 	p.mu.Lock()
 	active := p.active
 	p.active = nil
 	p.gen++
+	p.stopped = nil
+	cancel := p.cancel
+	p.picture = nil
 	p.mu.Unlock()
+	if cancel != nil {
+		cancel(ErrStopped)
+	}
 	if active != nil {
 		p.mirror.Release(active.Worker)
 	}
+}
+
+// Stop is the person's Stop for the agent using the iPhone.
+func (p *Phone) Stop() {
+	p.mu.Lock()
+	worker := ""
+	if p.active != nil {
+		worker = p.active.Worker
+	}
+	p.mu.Unlock()
+	if worker != "" {
+		p.StopWorker(worker)
+	}
+}
+
+// StopWorker is the person stopping one Worker: what it is doing ends at
+// once, a handoff it waits on included, and it is refused from then on.
+func (p *Phone) StopWorker(worker string) {
+	p.mu.Lock()
+	if p.stopped == nil {
+		p.stopped = map[string]bool{}
+	}
+	again := p.stopped[worker]
+	p.stopped[worker] = true
+	var cancel context.CancelCauseFunc
+	if p.running == worker {
+		cancel = p.cancel
+	}
+	held := p.active != nil && p.active.Worker == worker
+	if held {
+		p.active = nil
+	}
+	p.mu.Unlock()
+	if cancel != nil {
+		cancel(ErrStopped)
+	}
+	if held {
+		p.mirror.Release(worker)
+	}
+	if !again {
+		// The screen's Stop tells this Phone too (StopWorker again), which then ends here.
+		p.mirror.Stop(worker)
+	}
+}
+
+// Picture is the latest reading's JPEG, for watching the agent without
+// another capture.
+func (p *Phone) Picture() ([]byte, time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.picture, p.pictureAt
 }
 
 // HandoffDone is the person saying they did what a handoff asked.
@@ -307,6 +370,12 @@ func (p *Phone) Do(ctx context.Context, worker, workerName, op string, args any,
 	if err := p.CheckWait(ctx); err != nil {
 		return phone.Reply{}, err
 	}
+	p.mu.Lock()
+	stopped := p.stopped[worker]
+	p.mu.Unlock()
+	if stopped {
+		return phone.Reply{}, ErrStopped
+	}
 	if err := p.claim(worker, workerName); err != nil {
 		return phone.Reply{}, err
 	}
@@ -321,11 +390,34 @@ func (p *Phone) Do(ctx context.Context, worker, workerName, op string, args any,
 		p.lastAct = p.opts.Now()
 		p.mu.Unlock()
 	}()
-	note, err := p.act(ctx, worker, op, args)
-	if err != nil {
-		return phone.Reply{}, err
+	opCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	p.mu.Lock()
+	if p.stopped[worker] {
+		p.mu.Unlock()
+		return phone.Reply{}, ErrStopped
 	}
-	return p.read(ctx, worker, image, note)
+	p.cancel, p.running = cancel, worker
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		if p.running == worker {
+			p.cancel, p.running = nil, ""
+		}
+		p.mu.Unlock()
+	}()
+	note, err := p.act(opCtx, worker, op, args)
+	if err == nil {
+		var reply phone.Reply
+		reply, err = p.read(opCtx, worker, image, note)
+		if err == nil {
+			return reply, nil
+		}
+	}
+	if errors.Is(context.Cause(opCtx), ErrStopped) {
+		return phone.Reply{}, ErrStopped
+	}
+	return phone.Reply{}, err
 }
 
 // act performs an op's input, and settles the screen after it.
@@ -550,12 +642,8 @@ func (p *Phone) read(ctx context.Context, worker string, withImage bool, note st
 	switch state, words := classify(lines); state {
 	case stateInUse:
 		return phone.Reply{}, ErrInUse
-	case stateAuth:
-		return phone.Reply{}, ErrAuth
-	case stateSetup:
-		return phone.Reply{}, ErrNotSetUp
-	case stateDisconnected:
-		extra := fmt.Sprintf("iPhone Mirroring isn't showing the iPhone (it says: %s). If it offers Try Again or Connect, tap that; the iPhone must be locked and near the Mac.", words)
+	case stateMirror:
+		extra := fmt.Sprintf("This may be iPhone Mirroring's own screen on the Mac rather than the iPhone's (it says: %s). If it offers Try Again or Connect, tap it (the iPhone must be locked and near the Mac); if it asks for Touch ID or a password, never type it: hand off to the person.", words)
 		if note == "" {
 			note = extra
 		} else {
@@ -572,18 +660,22 @@ func (p *Phone) read(ctx context.Context, worker string, withImage bool, note st
 	reply.OK = true
 	reply.Screen = screen
 	reply.Note = note
+	picture := encode(img, screen.W, screen.H)
+	p.mu.Lock()
+	p.picture, p.pictureAt = picture, p.opts.Now()
+	p.mu.Unlock()
 	if withImage || len(screen.Windows) == 0 {
-		reply.Image = encode(img, screen.W, screen.H)
+		reply.Image = base64.StdEncoding.EncodeToString(picture)
 	}
 	return reply, nil
 }
 
-func encode(img *image.RGBA, w, h int) string {
+func encode(img *image.RGBA, w, h int) []byte {
 	dst := image.NewRGBA(image.Rect(0, 0, max(1, w), max(1, h)))
 	xdraw.ApproxBiLinear.Scale(dst, dst.Rect, img, img.Rect, xdraw.Src, nil)
 	var out bytes.Buffer
 	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 70}); err != nil {
-		return ""
+		return nil
 	}
-	return base64.StdEncoding.EncodeToString(out.Bytes())
+	return out.Bytes()
 }

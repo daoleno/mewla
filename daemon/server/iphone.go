@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -83,6 +84,12 @@ func (s *Server) handleIPhone(w http.ResponseWriter, r *http.Request) {
 	row := s.agentUse.IPhone()
 	if row == nil {
 		row = &agentuse.IPhoneStatus{State: agentuse.IPhoneUnsupported, Summary: "iPhone use works through iPhone Mirroring on a Mac. Switch to the Mewla on your Mac."}
+	}
+	if r.Method == http.MethodGet && r.URL.Query().Get("picture") == "1" && row.Enabled {
+		if picture, at := s.agentUse.IPhonePicture(); len(picture) > 0 {
+			row.Picture = base64.StdEncoding.EncodeToString(picture)
+			row.PictureAt = &at
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

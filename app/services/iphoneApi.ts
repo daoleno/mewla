@@ -9,12 +9,15 @@ export { iphoneOffered, iphoneStateWord } from "./iphoneStatus";
 
 export type IPhoneChange = { enabled: boolean } | { stop_agent: true } | { handoff_done: true };
 
+/** Reads iPhone use; with picture, also the agent's latest picture of the iPhone (no new capture). */
 export async function getIPhoneStatus(
   server: StoredServer,
+  picture = false,
   loadIdentity: () => Promise<LocalDeviceIdentity> = getOrCreateLocalDeviceIdentity,
 ): Promise<IPhoneDaemonStatus> {
   const identity = await loadIdentity();
-  const response = await signedFetch(server, "GET", "/iphone", "mewla-iphone:GET:/iphone", undefined, identity);
+  const path = picture ? "/iphone?picture=1" : "/iphone";
+  const response = await signedFetch(server, "GET", path, "mewla-iphone:GET:/iphone", undefined, identity);
   if (!response.ok) throw await requestFailure(server, response);
   return (await response.json()) as IPhoneDaemonStatus;
 }

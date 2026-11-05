@@ -20,6 +20,7 @@ type fakeMirror struct {
 	lines    []Line
 	sent     []string
 	released []string
+	stops    []string
 	noMac    bool
 	// onKey changes the screen as the iPhone would.
 	onKey func(name string)
@@ -66,6 +67,12 @@ func (m *fakeMirror) Key(_ context.Context, _ string, name string) error {
 		m.onKey(name)
 	}
 	return nil
+}
+
+func (m *fakeMirror) Stop(worker string) {
+	m.mu.Lock()
+	m.stops = append(m.stops, worker)
+	m.mu.Unlock()
 }
 
 func (m *fakeMirror) Release(worker string) {
@@ -205,9 +212,14 @@ func TestTheMirrorsOwnScreens(t *testing.T) {
 	if !errors.Is(err, ErrInUse) {
 		t.Fatalf("in use: %v", err)
 	}
+	// What an app may show too is a note, never a refusal.
 	m.lines = []Line{{Text: "使用触控 ID 来打开 iPhone 镜像", Box: image.Rect(50, 600, 550, 650)}}
-	if _, err := a.Act(ctx, "%7", "", phone.AgentAction{Action: phone.ActScreen}); !errors.Is(err, ErrAuth) {
-		t.Fatalf("auth: %v", err)
+	if res, err := a.Act(ctx, "%7", "", phone.AgentAction{Action: phone.ActScreen}); err != nil || !strings.Contains(res.Text, "never type it") {
+		t.Fatalf("auth: %v\n%s", err, res.Text)
+	}
+	m.lines = []Line{{Text: "欢迎", Box: image.Rect(50, 600, 550, 650)}, {Text: "继续", Box: image.Rect(250, 700, 350, 740)}}
+	if res, err := a.Act(ctx, "%7", "", phone.AgentAction{Action: phone.ActScreen}); err != nil || strings.Contains(res.Text, "Mirroring") {
+		t.Fatalf("an app's Continue: %v\n%s", err, res.Text)
 	}
 	m.lines = []Line{{Text: "无法连接到 iPhone", Box: image.Rect(50, 600, 550, 650)}, {Text: "重试", Box: image.Rect(250, 700, 350, 740)}}
 	res, err := a.Act(ctx, "%7", "", phone.AgentAction{Action: phone.ActScreen})
@@ -295,5 +307,55 @@ func waitFor(t *testing.T, ok func() bool) {
 			t.Fatal("timed out")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// The person's Stop ends a handoff the agent waits on, and the agent is
+// refused from then on, until iPhone use is turned off and on.
+func TestStopEndsTheAgentAndKeepsItOff(t *testing.T) {
+	m := &fakeMirror{lines: home()}
+	p := New(m, Options{Settle: time.Millisecond, Sleep: func(ctx context.Context, d time.Duration) error {
+		select {
+		case <-time.After(time.Millisecond):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}})
+	a := phone.NewDeviceAgent(p, nil, Profile)
+	done := make(chan error, 1)
+	go func() {
+		_, err := a.Act(context.Background(), "%7", "", phone.AgentAction{Action: phone.ActHandoff, Reason: "Pay"})
+		done <- err
+	}()
+	waitFor(t, func() bool { return p.Active() != nil })
+	p.Stop()
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrStopped) {
+			t.Fatalf("handoff ended with %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the handoff went on after Stop")
+	}
+	if _, err := a.Act(context.Background(), "%7", "", phone.AgentAction{Action: phone.ActScreen}); !errors.Is(err, ErrStopped) {
+		t.Fatalf("after Stop: %v", err)
+	}
+	m.mu.Lock()
+	stops := append([]string(nil), m.stops...)
+	m.mu.Unlock()
+	if len(stops) == 0 || stops[0] != "%7" {
+		t.Fatalf("the Mac session was not stopped: %v", stops)
+	}
+	// Another Worker may go on; the switch off and on lets this one again.
+	if _, err := a.Act(context.Background(), "%8", "", phone.AgentAction{Action: phone.ActScreen}); err != nil {
+		t.Fatalf("another Worker: %v", err)
+	}
+	p.Release()
+	if _, err := a.Act(context.Background(), "%7", "", phone.AgentAction{Action: phone.ActScreen}); err != nil {
+		t.Fatalf("after the switch went off and on: %v", err)
+	}
+	if pic, at := p.Picture(); len(pic) == 0 || at.IsZero() {
+		t.Fatal("no picture to watch")
 	}
 }

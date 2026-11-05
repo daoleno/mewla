@@ -95,6 +95,8 @@ type FakeBackend struct {
 	MirrorInputs []FakeMirrorInput
 	TextLines    []TextLine
 	TextReads    int
+	// NoMirror is a Mac without iPhone Mirroring (macOS 13 and 14).
+	NoMirror bool
 	// Scroll, when above zero, shows a page of text and pictures that
 	// scrolls this many pixels at every ScrollTick, for measuring a link.
 	Scroll   int
@@ -501,6 +503,14 @@ func (f *FakeBackend) OpenApp(_ context.Context, name string) error {
 	f.Launched = append(f.Launched, name)
 	for i, app := range f.InstalledApps {
 		if strings.EqualFold(app.Name, name) || app.Bundle == name {
+			// Running with its windows closed: opening it shows them again.
+			for j := range f.RunningApps {
+				if f.RunningApps[j].BundleID != "" && f.RunningApps[j].BundleID == app.Bundle && len(f.RunningApps[j].Windows) == 0 {
+					f.RunningApps[j].Windows, f.RunningApps[j].Window = app.Windows, app.Window
+					f.InstalledApps = append(f.InstalledApps[:i], f.InstalledApps[i+1:]...)
+					return nil
+				}
+			}
 			running := app.FakeApp
 			running.BundleID = app.Bundle
 			f.RunningApps = append(f.RunningApps, running)

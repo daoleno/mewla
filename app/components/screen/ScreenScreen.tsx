@@ -604,6 +604,8 @@ export function ScreenScreen() {
           {iphoneAgent ? (
             <View style={styles.agentActions}>
               <AppText variant="body" style={styles.agentTitle}>{`${iphoneAgent.name || "An agent"} is using your iPhone`}</AppText>
+              <Button label="Watch" icon="eye" size="sm" accessibilityLabel={`Watch ${iphoneAgent.name || "the agent"} on your iPhone`}
+                onPress={() => router.push("/settings/iphone")} />
               <Button label="Done" icon="check" size="sm" accessibilityLabel="Done: tell the agent you finished on your iPhone"
                 onPress={() => void iphone.change({ handoff_done: true })} disabled={iphone.busy} />
               <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${iphoneAgent.name || "the agent"} on your iPhone`}
