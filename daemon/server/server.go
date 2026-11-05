@@ -514,6 +514,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/agent-use", s.handleAgentUse)
 	mux.HandleFunc("/daemon-update", s.handleDaemonUpdate)
 	mux.HandleFunc("/phone", s.handlePhone)
+	mux.HandleFunc("/iphone", s.handleIPhone)
 	mux.HandleFunc("/phone/device", s.handlePhoneDevice)
 	mux.Handle("/friends", s.appRoute(webUI, http.HandlerFunc(s.handleFriends)))
 	mux.HandleFunc("/upload", s.handleUpload)

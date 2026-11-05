@@ -36,6 +36,7 @@ var privateAllowedPaths = map[string]bool{
 	"/agents":                  true,
 	"/agent-use":               true,
 	"/phone":                   true,
+	"/iphone":                  true,
 	"/phone/device":            true,
 	"/friends":                 true,
 	"/upload":                  true,

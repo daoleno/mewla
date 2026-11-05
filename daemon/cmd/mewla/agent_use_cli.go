@@ -44,6 +44,9 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	if action == "phone-mcp" {
 		return runPhoneMCP(args[1:], stderr)
 	}
+	if action == "iphone-mcp" {
+		return runIPhoneMCP(args[1:], stderr)
+	}
 	if action == "native-host" || action == "open" {
 		return runExtensionBridge(action, args[1:], stderr)
 	}
@@ -167,10 +170,34 @@ func printPhone(w io.Writer, status agentuse.Status) {
 	}
 }
 
+// printIPhone says whether iPhone use is on and, when something is missing, the one fix.
+func printIPhone(w io.Writer, status agentuse.Status) {
+	iphone := status.IPhone
+	if iphone == nil || !iphone.Enabled {
+		return
+	}
+	line := "Your iPhone: iPhone use is on; " + iphone.Summary
+	if iphone.State == agentuse.IPhoneReady {
+		line += " Workers here have mewla_iphone."
+	}
+	fmt.Fprintln(w, line)
+	if iphone.Fix == agentuse.FixOpenSettings {
+		fmt.Fprintln(w, "  Open System Settings → Privacy & Security on this Mac and turn Mewla on there.")
+	}
+	if iphone.Active != nil {
+		name := iphone.Active.Name
+		if name == "" {
+			name = iphone.Active.Worker
+		}
+		fmt.Fprintf(w, "  %s is using it now.\n", name)
+	}
+}
+
 func printAgentUse(w io.Writer, status agentuse.Status) {
 	if !status.Enabled {
 		fmt.Fprintln(w, "Agents can use this computer: off")
 		printPhone(w, status)
+		printIPhone(w, status)
 		return
 	}
 	fmt.Fprintln(w, "Agents can use this computer: on")
@@ -191,6 +218,7 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 		}
 	}
 	printPhone(w, status)
+	printIPhone(w, status)
 	if status.CodexComputerUse {
 		fmt.Fprintln(w, "Codex's own computer use: Codex Workers here have it. Mewla can't watch or pause it.")
 	}

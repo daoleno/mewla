@@ -85,6 +85,25 @@ func TestTheSwitchTurnsOffCodexsOwnComputerUse(t *testing.T) {
 	}
 }
 
+func TestTheIPhoneIsItsOwnServerNextToThePhone(t *testing.T) {
+	codex := WithAgentTools("codex", "/mewla", "/state", AgentTools{IPhone: true})
+	for _, want := range []string{"mcp_servers.mewla_iphone={", `args=["agent-use","iphone-mcp","--state-dir","/state"]`, `env_vars=["MEWLA_WORKER_ID"]`, ",tool_timeout_sec=800"} {
+		if !strings.Contains(codex, want) {
+			t.Fatalf("missing %q in %s", want, codex)
+		}
+	}
+	claude := WithAgentTools("claude", "/mewla", "/state", AgentTools{Phone: true, IPhone: true})
+	if !strings.HasSuffix(claude, "--allowedTools mcp__mewla_phone,mcp__mewla_iphone") || !strings.Contains(claude, `"timeout":800000`) {
+		t.Fatal(claude)
+	}
+	if again := WithAgentTools(codex, "/mewla", "/state", AgentTools{IPhone: true}); again != codex {
+		t.Fatalf("added twice: %s", again)
+	}
+	if got := WithAgentTools("codex", "/mewla", "/state", AgentTools{Phone: true}); strings.Contains(got, "iphone") {
+		t.Fatal(got)
+	}
+}
+
 func TestThePhoneIsAnInvocationScopedServerForClaudeAndCodex(t *testing.T) {
 	phone := AgentTools{Phone: true}
 	codex := WithAgentTools("codex --model x", "/path with space/mewla", "/private/state", phone)

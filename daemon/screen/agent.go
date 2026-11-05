@@ -1311,6 +1311,9 @@ func (a *agentSession) capture() {
 }
 
 func (a *agentSession) act(ctx context.Context, action AgentAction, background bool) (result AgentResult, err error) {
+	if namesMirror(action.App) {
+		return AgentResult{}, ErrMirrorForIPhoneTools
+	}
 	select {
 	case <-a.ready:
 	case <-time.After(agentFirstFrame):

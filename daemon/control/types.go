@@ -38,6 +38,9 @@ type Request struct {
 	AgentsRequest        *outsideagents.ControlRequest          `json:"agents_request,omitempty"`
 	ComputerAction       *screen.AgentAction                    `json:"computer_action,omitempty"`
 	PhoneAction          *phone.AgentAction                     `json:"phone_action,omitempty"`
+	// IPhoneAction is one action on the iPhone, through iPhone Mirroring (type "iphone"); its
+	// answer is PhoneResult.
+	IPhoneAction *phone.AgentAction `json:"iphone_action,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
 	ProcessStart         string                                 `json:"process_start,omitempty"`
 	Type                 string                                 `json:"type"`

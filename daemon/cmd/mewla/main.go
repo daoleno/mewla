@@ -39,6 +39,7 @@ import (
 	"github.com/daoleno/mewla/daemon/doctor"
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/friends"
+	"github.com/daoleno/mewla/daemon/iphone"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
@@ -655,7 +656,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetAgentTools(func(command string, worker bool) string {
 		// The screen and the phone act for a named Worker, so only sessions that
 		// carry their Worker identity get them.
-		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), Phone: worker && agentUse.PhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
+		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), Phone: worker && agentUse.PhoneReady(), IPhone: worker && agentUse.IPhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
@@ -765,6 +766,21 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	controlHandler.agentUse = agentUse
 	controlHandler.phone = phone.NewAgent(phoneManager, phone.NewAudit(authManager.StorageDir()))
+	// The person's iPhone, through iPhone Mirroring on this Mac: it rides the
+	// screen's own gates, claim and agent display.
+	iphoneDriver := newMirrorDriver(screenService)
+	iphoneDevice := iphone.New(iphoneDriver, iphone.Options{Notify: func(worker, name, reason string) {
+		screen.Notify("Mewla", handoffText(reason))
+		_ = pusher.NotifyWorker(push.KindWorkerBlocked, push.WorkerNotice{WorkerID: worker, Window: name, Summary: handoffText(reason)})
+	}})
+	controlHandler.iphone = phone.NewDeviceAgent(iphoneDevice, phone.NewAuditFile(authManager.StorageDir(), iphone.AuditFile), iphone.Profile)
+	agentUse.SetIPhone(agentuse.IPhoneHooks{
+		Status: func() agentuse.IPhoneStatus {
+			return iphoneStatus(ctx, iphoneDriver, iphoneDevice, func() agentuse.ComputerStatus { return computerStatus(ctx, screenService) })
+		},
+		Stop:        iphoneDevice.Release,
+		HandoffDone: iphoneDevice.HandoffDone,
+	})
 	// A Worker that finishes or is closed gives the phone's screen back at once.
 	phoneManager.SetAlive(controlHandler.liveWorker)
 	controlHandler.browsers = browserManager

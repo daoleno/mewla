@@ -22,12 +22,18 @@ const AuditMaxAge = 30 * 24 * time.Hour
 // a screenshot, what an agent read, or text an agent typed beyond its length and a fingerprint.
 type Audit struct {
 	dir    string
+	file   string
 	now    func() time.Time
 	mu     sync.Mutex
 	pruned bool
 }
 
-func NewAudit(stateDir string) *Audit { return &Audit{dir: stateDir, now: time.Now} }
+func NewAudit(stateDir string) *Audit { return NewAuditFile(stateDir, AuditFile) }
+
+// NewAuditFile keeps the log in another file of the state directory, for another phone.
+func NewAuditFile(stateDir, file string) *Audit {
+	return &Audit{dir: stateDir, file: file, now: time.Now}
+}
 
 type auditLine struct {
 	Time       time.Time `json:"time"`
@@ -95,7 +101,7 @@ func (a *Audit) Record(worker string, act AgentAction, t trace, actErr error) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	path := filepath.Join(a.dir, AuditFile)
+	path := filepath.Join(a.dir, a.file)
 	if !a.pruned {
 		a.pruned = true
 		pruneAudit(path, a.now().Add(-AuditMaxAge))
