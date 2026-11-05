@@ -330,7 +330,7 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 	case st.TerminalAt != nil:
 		return workStatusFromLifecycle(st.Status), "", ""
 	case st.Wake != nil && st.Attempt == nil:
-		return WorkWaiting, firstNonEmpty(item.NextAction, "Wait for the named external condition."), st.Wake.Ref
+		return WorkWaiting, firstNonEmpty(item.NextAction, "Wait for the named external condition."), wakeProse(st.Wake)
 	}
 	if st.Review != nil {
 		// An open canonical event is the actionable obligation. Lease expiry
@@ -341,6 +341,10 @@ func fsmProjectLifecycle(st *lifecycle.State, database *presentationDatabase, it
 			waitFor = sessionProse(st.Attempt.SessionID)
 		}
 		switch st.Review.Reason {
+		case "retry_due":
+			if st.Attempt == nil {
+				return WorkWaiting, retryDueProse(item), ""
+			}
 		case "turn_failed":
 			if st.Attempt == nil {
 				return WorkWaiting, "Inspect the delegated Session failure.", waitFor
@@ -823,4 +827,44 @@ func (s *Store) rebuildWorkCardsLocked(database presentationDatabase, workIDs []
 		}
 	}
 	return s.rewriteTimelineLocked(out)
+}
+
+// wakeProse is what a waiting Work shows as its wait: a timed wake reads as
+// its due time, and a due_retry without a time is a paused loop.
+func wakeProse(wake *lifecycle.WakeState) string {
+	if wake.Kind != lifecycle.WakeDueRetry {
+		return wake.Ref
+	}
+	if wake.NextAttemptAt == nil || isLoopPauseWake(wake.NextAttemptAt) {
+		return "Paused: " + wake.Ref
+	}
+	return "Next check " + wake.NextAttemptAt.UTC().Format("2006-01-02 15:04 UTC") + ": " + wake.Ref
+}
+
+// retryDueProse tells the Host what a due timed wake asks of it. For a loop it
+// names the closing command, because a Host that is not told closes the event
+// with `brain work update`, which leaves the loop with no next check.
+func retryDueProse(item Work) string {
+	if item.Loop == nil {
+		return "The wake is due: check the external condition once, then resolve with wait, complete or cancel."
+	}
+	text := ""
+	if item.Loop.Paused {
+		text = "The user has PAUSED this loop. Finish this check, then close it with -disposition wait: the loop stays paused until the user resumes it, whatever next time you give. Do not complete or cancel it for being paused. "
+	}
+	text += "A loop check is due. Do one bounded check of the objective yourself; spawn a Worker only if the check really needs one. " +
+		"Then close this event with mewla brain work resolve (the event's work_id, handling_id, provider_turn_id and work_revision): " +
+		"-disposition wait -wake-kind due_retry (leave out -next-attempt-at to use the loop's gap) with -summary of what you found, " +
+		"-disposition complete when the goal is met, or -disposition cancel. Never close it with brain work update."
+	if item.Loop.WorkerExecutor != "" {
+		text += " A Worker for this loop is worker spawn -work " + item.ID + " (route: executor " + item.Loop.WorkerExecutor
+		if item.Loop.WorkerModel != "" {
+			text += ", model " + item.Loop.WorkerModel
+		}
+		if item.Loop.WorkerReasoning != "" {
+			text += ", reasoning " + item.Loop.WorkerReasoning
+		}
+		text += "; it follows that route unless you pass -executor)."
+	}
+	return text
 }

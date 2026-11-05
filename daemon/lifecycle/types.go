@@ -707,6 +707,7 @@ var (
 	ErrTerminal         = errors.New("lifecycle: work is terminal")
 	ErrStaleInput       = errors.New("lifecycle: stale fence or turn token")
 	ErrAttemptActive    = errors.New("lifecycle: Work already has an active Attempt")
+	ErrReviewOpen       = errors.New("lifecycle: Work has an open review; resolve it first")
 	ErrRevisionConflict = errors.New("lifecycle: revision conflict")
 	ErrNotWaiting       = errors.New("lifecycle: work is not waiting on that wake")
 	ErrNoOpenReview     = errors.New("lifecycle: no open actionable Event")

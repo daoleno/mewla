@@ -1258,6 +1258,8 @@ func runBrainCommand(args []string, stderr io.Writer) error {
 		return runBrainGC(args[1:], stderr)
 	case "work":
 		return runBrainWork(args[1:], stderr)
+	case "loop":
+		return runBrainLoop(args[1:], stderr)
 	case "executors":
 		return runBrainExecutors(args[1:], stderr)
 	case "use":
@@ -1484,7 +1486,7 @@ func printWorkerUsage(w io.Writer) {
 }
 
 func printBrainUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: mewla brain <workspace|context|playbooks|gc|work|objective|executors|use> [flags]")
+	fmt.Fprintln(w, "Usage: mewla brain <workspace|context|playbooks|gc|work|loop|objective|executors|use> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  workspace      Print the Brain workspace path")
@@ -1492,6 +1494,7 @@ func printBrainUsage(w io.Writer) {
 	fmt.Fprintln(w, "  playbooks      Print the Brain playbook catalog")
 	fmt.Fprintln(w, "  gc             Reconcile product-owned Brain workspace blocks while preserving user content")
 	fmt.Fprintln(w, "  work           List, create, update, or append an event to durable Active work")
+	fmt.Fprintln(w, "  loop           Start, inspect, pause or resume a persistent loop (Mewla keeps its next check across Brain and daemon changes)")
 	fmt.Fprintln(w, "  objective      Show, set, or clear the current chat's objective (the App's goal line)")
 	fmt.Fprintln(w, "  executors      List configured executors and the Brain host")
 	fmt.Fprintln(w, "  use            Switch the Brain host executor")
@@ -1956,6 +1959,93 @@ func runBrainWorkResolve(args []string, stderr io.Writer) error {
 		}
 	}
 	resp, err := callControl(cfg, control.Request{Type: "brain_work_resolve", BrainWorkDisposition: &request})
+	if err != nil {
+		return err
+	}
+	return writeControlResponse(os.Stdout, resp, cfg.json)
+}
+
+// runBrainLoop manages persistent loops. A loop is an until_done Work whose
+// next check is a durable Mewla timer: use it, never a provider-private timer
+// (Claude /loop, CronCreate, ScheduleWakeup), for anything that must outlive
+// the Brain executor or a daemon restart. The check itself is handled by the
+// current Brain: `mewla brain work resolve -disposition wait|complete|cancel`.
+func runBrainLoop(args []string, stderr io.Writer) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		fmt.Fprintln(stderr, "Usage: mewla brain loop <start|status|pause|resume> [flags]")
+		fmt.Fprintln(stderr, "  start    -title T -objective O -done-criteria D (-every 30m | -first-in 10m | -first-at RFC3339) [-executor E -model M -reasoning R]")
+		fmt.Fprintln(stderr, "  status   [-id W] [-all]")
+		fmt.Fprintln(stderr, "  pause    -id W")
+		fmt.Fprintln(stderr, "  resume   -id W [-in 10m | -at RFC3339]   (also reschedules the next check)")
+		fmt.Fprintln(stderr, "Handle a delivered check with: mewla brain work resolve -disposition wait|complete|cancel")
+		fmt.Fprintln(stderr, "Cancel or finish out of band with: mewla brain work close -status cancelled|done")
+		return flag.ErrHelp
+	}
+	name := args[0]
+	fs := flag.NewFlagSet("mewla brain loop "+name, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	cfg := cliConfig{json: true}
+	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and control socket")
+	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
+	var id, title, objective, doneCriteria, contextRef, executor, model, reasoning, firstAt string
+	var every, firstIn, in time.Duration
+	var all bool
+	fs.StringVar(&id, "id", "", "loop Work id")
+	switch name {
+	case "start":
+		fs.StringVar(&title, "title", "", "short loop title")
+		fs.StringVar(&objective, "objective", "", "what the user authorized: the outcome to reach")
+		fs.StringVar(&doneCriteria, "done-criteria", "", "when the loop is finished (reference or short statement)")
+		fs.StringVar(&contextRef, "context", "", "Brain Worklog/context reference (relative to the Brain workspace)")
+		fs.DurationVar(&every, "every", 0, "default gap between checks (a wait with no time re-arms this far ahead)")
+		fs.DurationVar(&firstIn, "first-in", 0, "first check this long from now (default: -every)")
+		fs.StringVar(&firstAt, "first-at", "", "first check at this RFC3339 time")
+		fs.StringVar(&executor, "executor", "", "Worker executor this loop delegates to, whichever executor Brain runs on")
+		fs.StringVar(&model, "model", "", "Worker model; empty keeps the executor default")
+		fs.StringVar(&reasoning, "reasoning", "", "Worker reasoning level; empty keeps the executor default")
+	case "status":
+		fs.BoolVar(&all, "all", false, "include finished loops")
+	case "pause":
+	case "resume":
+		fs.DurationVar(&in, "in", 0, "next check this long from now (default: the loop interval)")
+		fs.StringVar(&firstAt, "at", "", "next check at this RFC3339 time")
+	default:
+		return fmt.Errorf("unknown brain loop command: %s", name)
+	}
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+	var at *time.Time
+	switch {
+	case strings.TrimSpace(firstAt) != "":
+		parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(firstAt))
+		if err != nil {
+			return fmt.Errorf("invalid time: %w", err)
+		}
+		at = &parsed
+	case firstIn > 0:
+		next := time.Now().Add(firstIn)
+		at = &next
+	case in > 0:
+		next := time.Now().Add(in)
+		at = &next
+	}
+	req := control.Request{Type: "brain_loop_" + name, WorkID: strings.TrimSpace(id), BrainLoopAt: at, BrainLoopAll: all}
+	switch name {
+	case "start":
+		req.BrainLoopStart = &brain.LoopStart{
+			Title: title, Objective: objective, DoneCriteriaRef: doneCriteria, ContextRef: contextRef,
+			Loop: brain.WorkLoop{IntervalSeconds: int64(every / time.Second), WorkerExecutor: executor, WorkerModel: model, WorkerReasoning: reasoning},
+		}
+	case "pause", "resume":
+		if req.WorkID == "" {
+			return fmt.Errorf("-id is required")
+		}
+	}
+	resp, err := callControl(cfg, req)
 	if err != nil {
 		return err
 	}
