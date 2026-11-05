@@ -28,6 +28,8 @@ type ComputerStatus struct {
 	Permission string `json:"permission,omitempty"`
 	// Active is the agent using the screen now.
 	Active *ActiveAgent `json:"active,omitempty"`
+	// Agents are all the agents using the screen, longest first.
+	Agents []ActiveAgent `json:"agents,omitempty"`
 }
 
 type ActiveAgent struct {

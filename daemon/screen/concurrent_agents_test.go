@@ -124,3 +124,22 @@ func TestAWorkerIsToldWhenAnotherHasTheApp(t *testing.T) {
 	waitFor(t, func() bool { return len(s.Agents()) == 0 })
 	act(t, s, "%8", AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: "Safari"})
 }
+
+// The person sees every agent, and stops one without the others.
+func TestThePersonSeesEveryAgentAndStopsOne(t *testing.T) {
+	s, _ := twoAppService(t)
+	s.SetWorkerNames(func(id string) string { return map[string]string{"%7": "Researcher", "%8": "Writer"}[id] })
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%8", AgentAction{Action: "screenshot"})
+	status := s.Status(context.Background(), "")
+	if len(status.Agents) != 2 || status.Agents[0].Name != "Researcher" || status.Agents[1].Name != "Writer" || status.Agent == nil || status.Agent.Worker != "%7" {
+		t.Fatalf("status shows %+v / %+v", status.Agent, status.Agents)
+	}
+	s.StopAgentFor("%7")
+	waitFor(t, func() bool { return len(s.Agents()) == 1 })
+	if got := s.Agents(); got[0].Worker != "%8" {
+		t.Fatalf("stopping %%7 left %+v", got)
+	}
+	// The other goes on.
+	act(t, s, "%8", AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: "Mail"})
+}

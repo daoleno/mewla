@@ -43,16 +43,20 @@ export interface ScreenStatus {
   /** A service manager restarts Mewla, so the app may ask it to restart. */
   can_restart?: boolean;
   /** An agent using the screen now. Viewing it takes over and stops the agent. */
-  agent?: { worker: string; name?: string; since: string };
+  agent?: ScreenAgent;
+  /** Every agent using the screen, longest first: several Workers can work at once, each on its own apps. */
+  agents?: ScreenAgent[];
   /** The computer is locked: a viewer sees its login window. */
   locked?: boolean;
 }
+
+export interface ScreenAgent { worker: string; name?: string; since: string }
 
 export type ScreenAction =
   | { action: "enable" }
   | { action: "open_settings"; permission: string }
   | { action: "restart" }
-  | { action: "stop_agent" }
+  | { action: "stop_agent"; worker?: string }
   | { keep_awake: boolean };
 
 /** HTTP failure with the status kept apart from any body text. */
@@ -143,7 +147,7 @@ export class ScreenConnection {
   private reason: string | null = null;
 
   /** watch: see the agent using the screen without taking over; input goes nowhere. */
-  constructor(private server: StoredServer, private handlers: ScreenConnectionHandlers, private watch = false) {}
+  constructor(private server: StoredServer, private handlers: ScreenConnectionHandlers, private watch = false, private worker?: string) {}
 
   /** The path this viewer's socket is carried on, known once it is dialed. */
   path: TransportPath | null = null;
@@ -153,6 +157,7 @@ export class ScreenConnection {
     this.path = url.via;
     url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
     if (this.watch) url.searchParams.set("watch", "1");
+    if (this.watch && this.worker) url.searchParams.set("worker", this.worker);
     const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-screen-view" });
     if (this.closed) return;
     let socket: WebSocket;
