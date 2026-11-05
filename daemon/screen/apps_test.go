@@ -771,3 +771,164 @@ func TestAnActionBehindOtherWindowsSaysWhetherItShowed(t *testing.T) {
 		t.Fatalf("an app that can't be read: %s", got)
 	}
 }
+
+func parkingApps() []FakeApp {
+	apps := fakeApps()
+	apps[1].Hidden = false
+	apps[1].Windows = []AppWindow{{ID: 7, Bounds: image.Rect(100, 100, 900, 700)}}
+	apps[1].Window = apps[1].Windows[0].Bounds
+	apps[1].Elements = append(apps[1].Elements, Element{Depth: 1, Role: "AXTextArea", Title: "Body", Focused: true, Frame: image.Rect(150, 150, 850, 650), Enabled: true})
+	apps[0].Windows = []AppWindow{{ID: 5, Bounds: image.Rect(0, 0, 2000, 1400)}}
+	apps[0].Window = apps[0].Windows[0].Bounds
+	return apps
+}
+
+// An app an agent acts on while it isn't in front is moved to the agent
+// display, is clicked there by points on its own window screenshot, and goes
+// back when the agent is done. The person's app in front is never moved.
+func TestAnAppTheAgentActsOnWaitsOnTheAgentDisplay(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	last := len(backend.RunningApps[1].Elements) - 1
+	backend.OnAppClick = func(app *FakeApp, _ FakeAppClick) { app.Elements[last].Value = "x" }
+
+	// Reading doesn't move it.
+	act(t, s, "%7", AgentAction{Action: "app_state", App: "Safari"})
+	if backend.ParkCalls != 0 {
+		t.Fatal("reading moved the app")
+	}
+
+	// The first click does, and says so.
+	got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: "Safari"}).Text
+	if !strings.HasPrefix(got, "Safari is on the agent display, off your screen") || !strings.Contains(got, "Effect seen") {
+		t.Fatalf("first click: %s", got)
+	}
+	if backend.ParkCalls != 1 || !backend.Parked[202] {
+		t.Fatalf("parked %v after %d moves", backend.Parked, backend.ParkCalls)
+	}
+	// The click went to the window by its own point, not by the screenshot's.
+	if len(backend.AppClicks) != 1 {
+		t.Fatalf("clicks %+v", backend.AppClicks)
+	}
+	c := backend.AppClicks[0]
+	scale := 2.0 // the fake screen is 2000 wide: a screenshot pixel is two points
+	want := image.Pt(fakeDisplayShift+100+int(100*scale), 100+int(80*scale))
+	if c.Window != 7 || image.Pt(c.X, c.Y) != want {
+		t.Fatalf("click at %+v, want window 7 at %v", c, want)
+	}
+
+	// A second action doesn't move it again, and says nothing of it.
+	got = act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: "Safari"}).Text
+	if strings.Contains(got, "agent display") || backend.ParkCalls != 1 {
+		t.Fatalf("second click: %s (%d moves)", got, backend.ParkCalls)
+	}
+
+	// A point outside its window screenshot is refused, not sent.
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{5000, 5000}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "outside Safari's window screenshot") {
+		t.Fatalf("outside: %v", err)
+	}
+	if len(backend.AppClicks) != 2 {
+		t.Fatalf("an outside click was sent: %+v", backend.AppClicks)
+	}
+
+	// Its window screenshot comes from the agent display.
+	shot := act(t, s, "%7", AgentAction{Action: "screenshot", App: "Safari"})
+	if backend.ParkedShots != 1 || !strings.Contains(shot.Text, "on the agent display") || shot.Width != 400 || shot.Height != 300 {
+		t.Fatalf("window shot %dx%d: %s (%d from the display)", shot.Width, shot.Height, shot.Text, backend.ParkedShots)
+	}
+
+	// The person's app in front is never parked.
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Notes"})
+	if backend.Parked[101] {
+		t.Fatal("the app in front was parked")
+	}
+
+	// bring_forward puts it back before raising it.
+	act(t, s, "%7", AgentAction{Action: "bring_forward", App: "Safari"})
+	if backend.Parked[202] || len(backend.Restored) != 1 || backend.Restored[0] != 202 || len(backend.Raised) != 1 {
+		t.Fatalf("parked %v restored %v raised %v", backend.Parked, backend.Restored, backend.Raised)
+	}
+}
+
+func TestParkedAppsGoBackWhenTheAgentIsDone(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	if !backend.Parked[202] {
+		t.Fatal("not parked")
+	}
+	s.StopAgent()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		backend.mu.Lock()
+		back := len(backend.Restored) == 1 && !backend.Parked[202]
+		backend.mu.Unlock()
+		if back {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the app wasn't put back: parked %v restored %v", backend.Parked, backend.Restored)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if w := backend.RunningApps[1].Windows[0].Bounds; w != image.Rect(100, 100, 900, 700) {
+		t.Fatalf("its window is at %v", w)
+	}
+}
+
+// Without an agent display the agent works behind the person's windows, and is
+// told once.
+func TestWithoutAnAgentDisplayTheAppStaysAndTheAgentIsToldOnce(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	backend.NoAgentDisplay = "this macOS can't make a display"
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	first := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: "Safari"}).Text
+	if !strings.HasPrefix(first, "No agent display here (this macOS can't make a display), so Safari stays behind your windows.") {
+		t.Fatalf("first: %s", first)
+	}
+	second := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: "Safari"}).Text
+	if strings.Contains(second, "No agent display") {
+		t.Fatalf("told twice: %s", second)
+	}
+	if backend.Parked[202] {
+		t.Fatal("parked without a display")
+	}
+	// The click went where the screenshot's point is.
+	c := backend.AppClicks[0]
+	if image.Pt(c.X, c.Y) != image.Pt(200, 160) {
+		t.Fatalf("click at %+v", c)
+	}
+}
+
+// A display that went away (the Mac slept) takes the windows back; the next
+// action moves them again and says so.
+func TestParkedAppsAreMovedAgainAfterTheDisplayWentAway(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	backend.mu.Lock()
+	for j := range backend.RunningApps[1].Windows {
+		backend.RunningApps[1].Windows[j].Bounds = backend.RunningApps[1].Windows[j].Bounds.Sub(image.Pt(fakeDisplayShift, 0))
+	}
+	backend.RunningApps[1].Window = backend.RunningApps[1].Windows[0].Bounds
+	backend.mu.Unlock()
+	got := act(t, s, "%7", AgentAction{Action: "key", Text: "b", App: "Safari"}).Text
+	if !strings.Contains(got, "was back on your screen") || !strings.Contains(got, "on the agent display again") {
+		t.Fatalf("after the wake: %s", got)
+	}
+	if !backend.ParkedOnDisplay(202) {
+		t.Fatal("not moved again")
+	}
+}

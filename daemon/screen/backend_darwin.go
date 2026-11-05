@@ -39,6 +39,8 @@ type macBackend struct {
 	guiding bool
 	restart func()
 	display keeper
+	// agentDisp is the display agents' apps wait on (see parking.go).
+	agentDisp agentDisplay
 }
 
 func (b *macBackend) HoldDisplay(on bool) { b.display.set(on) }
@@ -512,6 +514,12 @@ func registerOutputClass() error {
 }
 
 func (b *macBackend) Start(ctx context.Context) (Session, error) {
+	return b.startOn(ctx, 0)
+}
+
+// startOn captures one display, or the main one (the test hook captureDisplayID
+// may change it) when displayID is 0.
+func (b *macBackend) startOn(ctx context.Context, displayID uint32) (Session, error) {
 	if err := loadMac(); err != nil {
 		return nil, ErrUnsupported
 	}
@@ -545,7 +553,7 @@ func (b *macBackend) Start(ctx context.Context) (Session, error) {
 	}
 	defer content.Send(selRelease)
 
-	s := &macSession{changed: make(chan struct{}), done: make(chan struct{})}
+	s := &macSession{changed: make(chan struct{}), done: make(chan struct{}), displayID: displayID}
 	var startErr error
 	withPool(func() { startErr = s.start(ctx, content) })
 	if startErr != nil {
@@ -558,7 +566,9 @@ func (b *macBackend) Start(ctx context.Context) (Session, error) {
 type macSession struct {
 	stream, output, source objc.ID
 	source0                uintptr
-	input                  *macInput
+	// displayID is the display captured; 0 is the main one.
+	displayID uint32
+	input     *macInput
 
 	mu     sync.Mutex
 	seq    uint64
@@ -574,7 +584,10 @@ type macSession struct {
 
 func (s *macSession) start(ctx context.Context, content objc.ID) error {
 	displays := content.Send(objc.RegisterName("displays"))
-	main := captureDisplayID()
+	main := s.displayID
+	if main == 0 {
+		main = captureDisplayID()
+	}
 	var display objc.ID
 	for i := uint64(0); i < objc.Send[uint64](displays, selCount); i++ {
 		d := displays.Send(selObjectAt, i)

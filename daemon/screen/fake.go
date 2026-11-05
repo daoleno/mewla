@@ -73,7 +73,17 @@ type FakeBackend struct {
 	OnAppKey   func(app *FakeApp, k FakeKey)
 	// NoWitness makes the apps give no accessibility reading of their focus.
 	NoWitness bool
-	Raised    []int
+	// The fake agent display: NoAgentDisplay, when set, is why there is none.
+	// Parked are the apps on it, ParkCalls how many were moved there,
+	// Restored the apps moved back, ParkedShots the pictures taken of it.
+	// AgentDisplay turns the fake agent display on.
+	AgentDisplay   bool
+	NoAgentDisplay string
+	Parked         map[int]bool
+	ParkCalls      int
+	Restored       []int
+	ParkedShots    int
+	Raised         []int
 	// InstalledApps are apps OpenApp can start; Launched is what it was asked.
 	InstalledApps []FakeInstalledApp
 	Launched      []string
@@ -849,3 +859,97 @@ func (f *FakeBackend) Witness(_ context.Context, pid int) (Witness, error) {
 }
 
 var _ appWitness = (*FakeBackend)(nil)
+
+// A fake agent display sits 3000 points to the right of the screen: parking
+// moves an app's windows there, restoring moves them back.
+const fakeDisplayShift = 3000
+
+// ParkApp moves a fake app's windows onto the fake agent display.
+func (f *FakeBackend) ParkApp(_ context.Context, pid int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.NoAgentDisplay != "" {
+		return errors.New(f.NoAgentDisplay)
+	}
+	for i := range f.RunningApps {
+		app := &f.RunningApps[i]
+		if app.PID != pid {
+			continue
+		}
+		if f.Parked == nil {
+			f.Parked = map[int]bool{}
+		}
+		if f.Parked[pid] && app.Windows[0].Bounds.Min.X >= fakeDisplayShift {
+			return nil
+		}
+		if !f.Parked[pid] {
+			f.ParkCalls++
+		}
+		f.Parked[pid] = true
+		for j := range app.Windows {
+			if app.Windows[j].Bounds.Min.X < fakeDisplayShift {
+				app.Windows[j].Bounds = app.Windows[j].Bounds.Add(image.Pt(fakeDisplayShift, 0))
+			}
+		}
+		app.Window = app.Windows[0].Bounds
+		return nil
+	}
+	return errors.New("the app quit")
+}
+
+// RestoreApp moves them back.
+func (f *FakeBackend) RestoreApp(pid int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Restored = append(f.Restored, pid)
+	for i := range f.RunningApps {
+		app := &f.RunningApps[i]
+		if app.PID != pid {
+			continue
+		}
+		for j := range app.Windows {
+			if app.Windows[j].Bounds.Min.X >= fakeDisplayShift {
+				app.Windows[j].Bounds = app.Windows[j].Bounds.Sub(image.Pt(fakeDisplayShift, 0))
+			}
+		}
+		if len(app.Windows) > 0 {
+			app.Window = app.Windows[0].Bounds
+		}
+	}
+	delete(f.Parked, pid)
+	return nil
+}
+
+// ParkedOnDisplay says whether a fake app's windows are on the fake display.
+func (f *FakeBackend) ParkedOnDisplay(pid int) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, app := range f.RunningApps {
+		if app.PID == pid && len(app.Windows) > 0 {
+			return app.Windows[0].Bounds.Min.X >= fakeDisplayShift
+		}
+	}
+	return false
+}
+
+// ParkedImage is a flat grey picture of rect.
+func (f *FakeBackend) ParkedImage(_ context.Context, rect image.Rectangle) (*image.RGBA, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.ParkedShots++
+	img := image.NewRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+	for i := range img.Pix {
+		img.Pix[i] = 0x80
+	}
+	return img, nil
+}
+
+var _ appParker = (*FakeBackend)(nil)
+
+// AgentDisplayAvailable: the fake has one when a test asks for it, or for
+// the failure to make it.
+func (f *FakeBackend) AgentDisplayAvailable() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.AgentDisplay || f.NoAgentDisplay != ""
+}

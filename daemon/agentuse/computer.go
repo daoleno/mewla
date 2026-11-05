@@ -107,3 +107,16 @@ func (s *Service) withComputer(status Status) Status {
 	status.Computer = &computer
 	return status
 }
+
+// SetAgentDisplay lets the browser's agent windows open on the agent display
+// (off the person's screen) when the computer has one. hold makes it and
+// returns where it is, in global points; release lets go of one hold.
+func (s *Service) SetAgentDisplay(hold func(key string) (WindowBounds, error), release func(key string)) {
+	s.Bridge().Display = func(key string) (WindowBounds, func(), error) {
+		bounds, err := hold("browser:" + key)
+		if err != nil {
+			return WindowBounds{}, nil, err
+		}
+		return bounds, func() { release("browser:" + key) }, nil
+	}
+}
