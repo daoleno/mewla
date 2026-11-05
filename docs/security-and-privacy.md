@@ -106,8 +106,10 @@ action is logged on the computer without what was typed. See
 
 When **Agents can use this computer** is on and Mewla for Chrome is in
 Chrome, agents Mewla starts on that computer can use your Chrome with your
-logins, through the extension. Each works in a window of its own, which the
-extension creates for it and closes when the agent is done; the extension
+logins, through the extension. Each works in a window of its own, with its tabs in a tab group named for the
+Worker (the extension's *tab groups* permission is for that), which the
+extension creates for it and closes when the agent is done; any number of
+agents can work this way at once; the extension
 attaches only to tabs in that window and never reads, moves or focuses your
 own. The switch turns it off for new agents at once.
 

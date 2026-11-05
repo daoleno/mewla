@@ -37,7 +37,10 @@ time they start their browser tools.
 
 ## What agents do there
 
-Each agent gets a window of its own and sees only the tabs in it. Your own
+Each agent gets a window of its own and sees only the tabs in it, in a tab
+group named for the Worker, so you can see whose tabs they are. Several agents
+work in your Chrome at the same time, each in its own window, none waiting for
+another; on an agent display their windows sit side by side. Your own
 windows and tabs are never read, moved or focused, and Chrome stays behind
 whatever you are using. On a Mac with an agent display (see [Screen](screen.md))
 the window opens there, off your screen. Chrome shows a bar while an agent is

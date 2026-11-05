@@ -182,7 +182,7 @@ Accessibility permissions. The Mac's page in Settings says which permission is
 missing, and **Open Settings** opens the right page on the Mac.
 
 - **You come first.** Opening Screen while an agent works shows who is using
-  it with **Take over**, **Watch** and **Stop**; **Take over** ends the agent's
+  it with **Take over**, **Watch** and **Stop**; **Take over** ends the agents'
   control and opens the screen. When the agent is done, the screen opens by
   itself. While you view it, agents wait.
   Someone using the Mac's own keyboard or trackpad pauses the agent at once,
@@ -219,8 +219,15 @@ missing, and **Open Settings** opens the right page on the Mac.
   not show it; it is still the agent's turn on the screen, with the same
   pause, stop and record. The Mac shows a notification when an agent starts and stops using
   the screen, and Settings shows the agent with a **Stop** row.
-- **One at a time.** One agent uses the screen at a time; the agent's control
-  ends a minute after its last action.
+- **Several at once, each in its own apps.** Any number of agents can use the
+  Mac at the same time as long as each works in a different app: they click and
+  type into apps behind your windows, and those apps wait on the agent display.
+  Neither waits for the other, and one agent's keys are never taken for yours.
+  Only the pointer and keyboard themselves are one set, so one agent at a time
+  acts on the screen itself; a second one waits its turn, and an agent that
+  asks for an app another agent is working in is told which agent has it. Each
+  agent's control ends a minute after its last action. Opening Screen lists
+  every agent by name, each with **Watch** and **Stop**.
 - **What is kept.** Each action is recorded on the Mac in
   `~/.mewla/screen-agent-audit.jsonl` (readable only by you, kept 30 days):
   which agent, which action, which app and control, where, which keys, how
