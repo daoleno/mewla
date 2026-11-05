@@ -133,10 +133,7 @@ int main(int argc, char **argv) { signal(SIGINT,SIG_IGN); FILE *f=fopen(argv[1],
 		}
 		return r
 	}
-	durableCwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
+	durableCwd := durableTestDir(t)
 	create := func(name string) string {
 		t.Helper()
 		id, e := w.CreateSession("", watcher.CreateSessionOptions{Name: name, Cwd: durableCwd, Command: "exec " + native + " " + filepath.Join(root, name+".input"), Detached: true, Delegated: true, Env: map[string]string{"MEWLA_FIXTURE_INPUT": filepath.Join(root, name+".input"), "ZDOTDIR": root}})
@@ -293,4 +290,54 @@ int main(int argc, char **argv) { signal(SIGINT,SIG_IGN); FILE *f=fopen(argv[1],
 		t.Fatal("owner changed on restart")
 	}
 	t.Log("real control/watcher/native receipt and sole canonical ownership verified")
+}
+
+// durableTestDir is a directory a delegated Worker may be started in: not on
+// temporary or memory-backed storage, which Mewla refuses. The test used to
+// take the process's working directory, so it failed whenever the checkout (or
+// TMPDIR) sat under /tmp, /dev/shm or the like.
+func durableTestDir(t *testing.T) string {
+	t.Helper()
+	var candidates []string
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, wd)
+	}
+	if root := os.Getenv("MEWLA_WORKTREE_ROOT"); root != "" {
+		candidates = append(candidates, root)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, home)
+	}
+	volatile := []string{os.TempDir(), "/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", "/dev/shm", "/run/user"}
+	for _, dir := range candidates {
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			continue
+		}
+		resolved := abs
+		if r, err := filepath.EvalSymlinks(abs); err == nil {
+			resolved = r
+		}
+		ok := true
+		for _, root := range volatile {
+			rootAbs, err := filepath.Abs(root)
+			if err != nil {
+				continue
+			}
+			rootResolved := rootAbs
+			if r, err := filepath.EvalSymlinks(rootAbs); err == nil {
+				rootResolved = r
+			}
+			for _, pair := range [][2]string{{abs, rootAbs}, {resolved, rootResolved}} {
+				if rel, err := filepath.Rel(pair[1], pair[0]); err == nil && !strings.HasPrefix(rel, "..") {
+					ok = false
+				}
+			}
+		}
+		if ok {
+			return resolved
+		}
+	}
+	t.Skip("no directory outside temporary storage to start a Worker in")
+	return ""
 }
