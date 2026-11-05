@@ -369,6 +369,86 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	if n := countWindows(t); n != 1 {
 		t.Errorf("every Worker's window should close with its tools; %d windows remain", n)
 	}
+
+	// How real Workers end: each runs under the supervisor, closes its browser
+	// itself (browser_close) and is then closed, which makes the supervisor
+	// close "its tabs" once more. Nothing may open a window then, and none may
+	// be left behind: only the person's window remains, now and later.
+	var supervised []*supervisedProc
+	for _, id := range workers {
+		supervised = append(supervised, startSupervised(t, argv, append(append([]string(nil), env...), "MEWLA_WORKER_ID="+id)))
+	}
+	for i, p := range supervised {
+		if out, err := p.callE("browser_navigate", map[string]any{"url": site.URL + "/w/" + names[workers[i]]}); err != nil {
+			t.Fatalf("%s navigate: %v %s", names[workers[i]], err, out)
+		}
+	}
+	if n := countWindows(t); n != 1+len(workers) {
+		t.Errorf("expected %d windows with the Workers working, got %d", 1+len(workers), n)
+	}
+	for i, p := range supervised {
+		if out, err := p.callE("browser_close", map[string]any{}); err != nil {
+			t.Fatalf("%s browser_close: %v %s", names[workers[i]], err, out)
+		}
+	}
+	for _, p := range supervised {
+		p.end()
+	}
+	// The windows close; then, for a while after, nothing may open one again.
+	for i := 0; i < 75 && countWindows(t) != 1; i++ {
+		time.Sleep(200 * time.Millisecond)
+	}
+	for i := 0; i < 40; i++ {
+		if n := countWindows(t); n != 1 {
+			t.Errorf("after the Workers ended there should be only the person's window, got %d: %s", n,
+				extensionEval(t, `chrome.windows.getAll({populate: true}).then(ws => JSON.stringify(ws.map(w => ({id: w.id, left: w.left, width: w.width, tabs: (w.tabs||[]).map(x => x.url)}))))`))
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if now := observePersonWindow(t); now != person {
+		t.Errorf("the person's window changed over the Workers' endings:\n before %s\n after  %s", person, now)
+	}
+}
+
+// supervisedProc is a Worker's browser tools as a real Worker runs them: under
+// SuperviseMCP, which closes the agent's tabs when its stdin ends.
+type supervisedProc struct {
+	*mcpProc
+	done chan struct{}
+}
+
+func startSupervised(t *testing.T, argv, env []string) *supervisedProc {
+	t.Helper()
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer outW.Close()
+		_ = SuperviseMCP(argv, env, inR, outW, os.Stderr)
+	}()
+	p := &mcpProc{cmd: &exec.Cmd{}, in: inW, lines: make(chan string, 64)}
+	go func() {
+		s := bufio.NewScanner(outR)
+		s.Buffer(make([]byte, 1<<20), 16<<20)
+		for s.Scan() {
+			p.lines <- s.Text()
+		}
+		close(p.lines)
+	}()
+	p.rpc(t, "initialize", map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": map[string]any{"name": "e2e", "version": "1"}})
+	fmt.Fprintln(inW, `{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+	return &supervisedProc{mcpProc: p, done: done}
+}
+
+// end is the Worker being closed: its stdin ends and the supervisor cleans up.
+func (p *supervisedProc) end() {
+	p.in.Close()
+	select {
+	case <-p.done:
+	case <-time.After(30 * time.Second):
+	}
 }
 
 // tabGroups is Chrome's tab groups as the extension sees them.
