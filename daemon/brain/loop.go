@@ -32,7 +32,20 @@ type WorkLoop struct {
 	WorkerExecutor  string `json:"worker_executor,omitempty"`
 	WorkerModel     string `json:"worker_model,omitempty"`
 	WorkerReasoning string `json:"worker_reasoning,omitempty"`
+	// Paused is the user's persisted intent that no further check be armed.
+	// It holds even while a check or a delegated Attempt is running: that work
+	// finishes, but its resolution cannot re-arm the loop (see
+	// pauseWakeIfPaused). Resume clears it.
+	Paused bool `json:"paused,omitempty"`
 }
+
+// loopPauseAt is the far-future time a paused loop's wake carries. A pause is
+// an ordinary valid due_retry wake that never comes due, not a special row, so
+// an older daemon (which rejects a due_retry wake without a time) still loads
+// the Work and simply never fires it.
+var loopPauseAt = time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func isLoopPauseWake(at *time.Time) bool { return at != nil && at.Equal(loopPauseAt) }
 
 // LoopStart creates a loop. Objective and DoneCriteriaRef are the user's
 // authorization and acceptance condition; the runtime never invents either.
@@ -51,7 +64,8 @@ const (
 	LoopDue       = "due"       // the wake fired; waiting for the Host to take it
 	LoopHandling  = "handling"  // the Host is handling the wake now
 	LoopRunning   = "running"   // a delegated Attempt is active
-	LoopPaused    = "paused"    // no timer; nothing fires until resumed
+	LoopPaused    = "paused"    // nothing fires until resumed
+	LoopPausing   = "pausing"   // paused, but a check or Attempt is still running; it cannot re-arm
 	LoopUnarmed   = "unarmed"   // not finished, not paused, but no next check set
 	LoopDone      = "done"
 	LoopCancelled = "cancelled"
@@ -77,14 +91,6 @@ var (
 )
 
 func loopWakeRef(workID string) string { return "loop:" + strings.TrimSpace(workID) }
-
-// pausedLoopWake reports the one persisted wake that has no time: a loop's
-// own due_retry after PauseLoop. Brain cannot create it through a disposition
-// (validateWorkWake still requires a time there).
-func pausedLoopWake(item Work) bool {
-	return item.Loop != nil && item.Wake != nil && item.Wake.Kind == WorkWakeDueRetry &&
-		item.Wake.NextAttemptAt == nil && item.Wake.Ref == loopWakeRef(item.ID)
-}
 
 func validateWorkLoop(item Work) error {
 	loop := item.Loop
@@ -135,10 +141,22 @@ func (s *Store) defaultLoopWake(request *WorkReviewDispositionRequest) {
 	request.Wake = &wake
 }
 
+// pauseWakeIfPaused replaces the wait a Host resolved a paused loop with, so
+// a late resolution (or a Brain that did not notice the pause) cannot re-arm
+// the loop. The caller holds the Store lock, which orders it with PauseLoop.
+func pauseWakeIfPaused(item Work, request *WorkReviewDispositionRequest) {
+	if item.Loop == nil || !item.Loop.Paused || request.Disposition != WorkDispositionWait {
+		return
+	}
+	at := loopPauseAt
+	request.Wake = &WorkWake{Kind: WorkWakeDueRetry, Ref: loopWakeRef(item.ID), NextAttemptAt: &at}
+}
+
 // StartLoop creates the loop Work and arms its first check in one step. The
 // Work freezes the current Brain thread, so results and wakes return there.
 func (s *Store) StartLoop(in LoopStart) (Work, error) {
 	loop := normalizeLoop(in.Loop)
+	loop.Paused = false // only PauseLoop sets the intent
 	now := s.nowUTC()
 	at := in.FirstCheckAt.UTC()
 	if in.FirstCheckAt.IsZero() {
@@ -184,67 +202,116 @@ func (s *Store) afterLoopChange(workID string) (Work, error) {
 	return s.Work(workID)
 }
 
-func (s *Store) loopWork(workID string) (Work, *lifecycle.State, error) {
-	item, err := s.Work(workID)
+// loopWork reads a live loop and its lifecycle state. A finished loop is
+// refused; busy reports a check or Attempt in flight.
+func (s *Store) loopWork(workID string) (item Work, busy bool, err error) {
+	item, err = s.Work(workID)
 	if err != nil {
-		return Work{}, nil, err
+		return Work{}, false, err
 	}
 	if item.Loop == nil {
-		return Work{}, nil, ErrNotLoop
+		return Work{}, false, ErrNotLoop
 	}
 	st, err := s.fsmState(item.ID)
 	if err != nil {
-		return Work{}, nil, err
+		return Work{}, false, err
 	}
-	switch {
-	case st.TerminalAt != nil:
-		return item, st, ErrLoopTerminal
-	case st.Attempt != nil:
-		return item, st, ErrLoopAttempt
-	case st.Review != nil:
-		return item, st, ErrLoopHandling
+	if st.TerminalAt != nil {
+		return item, false, ErrLoopTerminal
 	}
-	return item, st, nil
+	return item, st.Attempt != nil || st.Review != nil, nil
 }
 
-// PauseLoop removes the timer but keeps the loop, its objective and history.
-// Nothing fires until ResumeLoop. A pause is refused while a wake is being
-// handled or a delegated Attempt runs: those finish through their own path.
+// setLoopPaused persists the pause intent on the Work row under the Store lock,
+// the same lock ResolveWorkReview holds while it applies a disposition.
+func (s *Store) setLoopPaused(workID string, paused bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	database, err := s.loadPresentationLocked()
+	if err != nil {
+		return err
+	}
+	index := workIndex(database.BrainWork, workID)
+	if index < 0 {
+		return ErrWorkNotFound
+	}
+	item := database.BrainWork[index]
+	if item.Loop == nil {
+		return ErrNotLoop
+	}
+	loop := *item.Loop
+	loop.Paused = paused
+	item.Loop = &loop
+	item.UpdatedAt = s.nowUTC()
+	database.BrainWork[index] = item
+	return s.persistPresentationLocked(database)
+}
+
+// armLoop sets the one next-check wake. A check or Attempt in flight is not an
+// error here: it is handled through its own resolution, which sees the intent.
+func (s *Store) armLoop(workID string, at time.Time) error {
+	_, err := s.fsm.SetTimedWait(lifecycle.WorkID(workID), loopWakeRef(workID), &at)
+	if errors.Is(err, lifecycle.ErrReviewOpen) || errors.Is(err, lifecycle.ErrAttemptActive) {
+		return nil
+	}
+	return err
+}
+
+// PauseLoop records the intent first, then parks the timer. A check or a
+// delegated Attempt that is running is not interrupted (it may be a business
+// action); it simply cannot re-arm the loop when it resolves. The loop reads
+// "pausing" until then. Idempotent.
 func (s *Store) PauseLoop(workID string) (Work, error) {
-	item, st, err := s.loopWork(workID)
+	item, _, err := s.loopWork(workID)
 	if err != nil {
 		return item, err
 	}
-	if st.Wake != nil && st.Wake.Kind == lifecycle.WakeDueRetry && st.Wake.NextAttemptAt == nil {
-		return item, nil // already paused
+	if !item.Loop.Paused {
+		if err := s.setLoopPaused(item.ID, true); err != nil {
+			return Work{}, err
+		}
 	}
-	if _, err := s.fsm.SetTimedWait(lifecycle.WorkID(item.ID), loopWakeRef(item.ID), nil); err != nil {
+	if err := s.armLoop(item.ID, loopPauseAt); err != nil {
 		return Work{}, err
 	}
 	return s.afterLoopChange(item.ID)
 }
 
-// ResumeLoop arms the next check at `at`; a zero `at` uses the loop's
-// interval from now. It also reschedules a loop that is already scheduled.
-// Time spent paused or offline is not replayed: one wake is armed, from now.
+// ResumeLoop clears the pause and arms the next check at `at`; a zero `at`
+// uses the loop's interval from now. It also reschedules a loop that is
+// already scheduled. Time spent paused or offline is not replayed: one wake is
+// armed, from now. While a check is running the pause is only cleared: that
+// check's own resolution arms the next one.
 func (s *Store) ResumeLoop(workID string, at time.Time) (Work, error) {
-	item, _, err := s.loopWork(workID)
+	item, busy, err := s.loopWork(workID)
 	if err != nil {
 		return item, err
 	}
 	now := s.nowUTC()
-	if at.IsZero() {
-		if item.Loop.IntervalSeconds <= 0 {
-			return Work{}, fmt.Errorf("name the next check time: this loop has no interval")
+	if busy && !at.IsZero() {
+		return item, ErrLoopHandling
+	}
+	if !busy {
+		if at.IsZero() {
+			if item.Loop.IntervalSeconds <= 0 {
+				return Work{}, fmt.Errorf("name the next check time: this loop has no interval")
+			}
+			at = now.Add(time.Duration(item.Loop.IntervalSeconds) * time.Second)
 		}
-		at = now.Add(time.Duration(item.Loop.IntervalSeconds) * time.Second)
+		at = at.UTC()
+		if !at.After(now) {
+			return Work{}, fmt.Errorf("the next check must be in the future")
+		}
 	}
-	at = at.UTC()
-	if !at.After(now) {
-		return Work{}, fmt.Errorf("the next check must be in the future")
+	if item.Loop.Paused {
+		if err := s.setLoopPaused(item.ID, false); err != nil {
+			return Work{}, err
+		}
 	}
-	if _, err := s.fsm.SetTimedWait(lifecycle.WorkID(item.ID), loopWakeRef(item.ID), &at); err != nil {
-		return Work{}, err
+	if !busy {
+		if err := s.armLoop(item.ID, at); err != nil {
+			return Work{}, err
+		}
 	}
 	return s.afterLoopChange(item.ID)
 }
@@ -296,15 +363,17 @@ func (s *Store) loopStatus(item Work) (LoopStatus, error) {
 		status.State = LoopCancelled
 	case st.TerminalAt != nil:
 		status.State = LoopDone
+	case item.Loop != nil && item.Loop.Paused && (st.Attempt != nil || st.Review != nil):
+		status.State = LoopPausing
 	case st.Attempt != nil:
 		status.State = LoopRunning
 	case st.Review != nil && st.Review.Handler != nil && st.Review.Handler.DeliveredAt != nil:
 		status.State = LoopHandling
 	case st.Review != nil:
 		status.State = LoopDue
-	case st.Wake != nil && st.Wake.Kind == lifecycle.WakeDueRetry && st.Wake.NextAttemptAt == nil:
+	case item.Loop != nil && item.Loop.Paused:
 		status.State = LoopPaused
-	case st.Wake != nil && st.Wake.NextAttemptAt != nil:
+	case st.Wake != nil && st.Wake.NextAttemptAt != nil && !isLoopPauseWake(st.Wake.NextAttemptAt):
 		status.State = LoopScheduled
 		next := st.Wake.NextAttemptAt.UTC()
 		status.NextCheckAt = &next

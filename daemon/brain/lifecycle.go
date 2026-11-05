@@ -783,7 +783,7 @@ func validateWorkWithSourceThread(item Work, requireSourceThread bool) error {
 		return fmt.Errorf("nonterminal Work cannot retain terminal_revision")
 	}
 	if item.Wake != nil {
-		if err := validateWorkWake(item.Wake); err != nil && !pausedLoopWake(item) {
+		if err := validateWorkWake(item.Wake); err != nil {
 			return err
 		}
 		if item.Status == WorkDone || item.Status == WorkCancelled {
@@ -3058,6 +3058,9 @@ func (s *Store) ResolveWorkReview(request WorkReviewDispositionRequest) (WorkEve
 		if stateErr != nil {
 			s.mu.Unlock()
 			return WorkEvent{}, Work{}, stateErr
+		}
+		if st.Attempt == nil {
+			pauseWakeIfPaused(item, &request)
 		}
 		if st.Attempt != nil {
 			if request.Wake.Kind != WorkWakeSessionTerminal || request.Wake.Ref != SessionTerminalWakeRef(st.Attempt.SessionID, string(st.Attempt.TurnToken)) {

@@ -97,24 +97,37 @@ mewla brain loop resume -id <work> [-in 10m | -at <RFC3339>]   # also reschedule
   delegates to, checked when the loop starts and shown in each check's next
   action. They belong to the loop, not to the Host, so a Codex Brain still
   delegates a Claude loop to Claude, and a loop that names Codex stays on Codex.
-  Without them Brain follows `routing.md` as for any Worker.
+  Without them the loop takes your default Worker route
+  (`~/.mewla/scheduled-action-route.toml`, the same one Calendar scheduled
+  actions use) at the moment it starts, so a later Host switch or config change
+  does not move it. `worker spawn -work <loop>` with no `-executor` follows the
+  loop's route; an explicit `-executor`, `-model` or `-reasoning` wins. With no
+  default configured, delegation follows `routing.md` as for any Worker.
 - **States** (`loop status`): `scheduled` (timer armed), `due` (fired, waiting
   for the Host), `handling` (the Host is on it), `running` (a delegated
-  Attempt is active), `paused` (no timer), `unarmed` (not finished but no next
+  Attempt is active), `paused` (nothing fires), `pausing` (paused while a check
+  or Attempt is still running), `unarmed` (not finished but no next
   check was set: resolve or `resume` it), `done`, `cancelled`.
-- **Pause, resume, cancel.** `pause` removes the timer and nothing fires until
-  `resume`. `resume` arms exactly one next check from now, so time spent paused
-  or offline is not replayed. `pause` and `resume` are refused while a check is
-  being handled or a delegated Attempt runs; resolve that first. Cancel or
-  finish out of band with `mewla brain work close -status cancelled|done`. A
-  paused, cancelled or finished loop never fires.
+- **Pause, resume, cancel.** `pause` records your intent and nothing fires
+  until `resume`. It works while a check is running too: that check (or a
+  delegated Attempt) is not interrupted, but its resolution cannot re-arm the
+  loop, even if Brain asks for another check, and the loop reads `pausing` until
+  then. `resume` arms exactly one next check from now, so time spent paused or
+  offline is not replayed; while a check is running it only clears the pause and
+  that check's own resolution arms the next one. Cancel or finish out of band
+  with `mewla brain work close -status cancelled|done`. A paused, cancelled or
+  finished loop never fires.
 - **Offline catch-up.** If the daemon was down past the due time, one check
   fires when it starts, not one per missed interval.
 - **Fixed schedules.** A self-contained job at fixed times (every weekday at
   09:30) is a [scheduled action](#scheduled-actions) instead.
-- **Old private timers** are not imported. A timer left in a provider session
-  from before an executor switch is gone; recreate it with `loop start` only
-  if the user re-authorizes it.
+- **Old private timers** are not imported or recreated automatically. A timer
+  left in a provider session from before an executor switch is gone. Before
+  recreating one with `loop start`, check that the authorization behind it is
+  still active (a documented standing authorization remains valid) and was not
+  cancelled, superseded or already moved to Calendar or a loop, so nothing runs
+  twice. A timer whose origin cannot be established is listed as unknown and
+  not rebuilt.
 
 ## Alerts you will not miss
 

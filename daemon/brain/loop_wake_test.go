@@ -168,8 +168,13 @@ func TestLoopPauseResumeCancelAndCompleteNeverFireWhenInactive(t *testing.T) {
 	if fires() {
 		t.Fatal("a paused loop fired")
 	}
-	if _, ok := store.FSM().NextWakeAt(); ok {
-		t.Fatal("a paused loop still holds a timer")
+	// The pause is a valid far-future wake (an older daemon still loads it),
+	// never a real timer.
+	if next, ok := store.FSM().NextWakeAt(); ok && !isLoopPauseWake(&next) {
+		t.Fatalf("a paused loop holds a real timer at %v", next)
+	}
+	if item, err := store.Work(paused.ID); err != nil || validateWorkWake(item.Wake) != nil || item.Loop == nil || !item.Loop.Paused {
+		t.Fatalf("paused Work must carry a valid wake and the persisted intent: %+v err=%v", item, err)
 	}
 
 	// Resume re-arms ONE wake from now. The 48 hours offline are not replayed.
@@ -192,8 +197,14 @@ func TestLoopPauseResumeCancelAndCompleteNeverFireWhenInactive(t *testing.T) {
 	if fires() {
 		t.Fatal("a resumed loop fired twice")
 	}
-	if _, err := store.PauseLoop(paused.ID); err == nil {
-		t.Fatal("paused a loop while its wake was being handled")
+	// The check is being handled. A pause now is accepted (it is the user's
+	// intent) and reads "pausing"; resuming with a time is refused until the
+	// check resolves.
+	if _, err := store.PauseLoop(paused.ID); err != nil {
+		t.Fatalf("pause during a check: %v", err)
+	}
+	if status, _ = store.LoopStatus(paused.ID); status.State != LoopPausing {
+		t.Fatalf("pausing status = %+v", status)
 	}
 
 	// Cancelled: the timer is gone and cannot be revived.
@@ -277,5 +288,95 @@ func TestLoopCadenceDefaultsCatchUpOnceAndFinishes(t *testing.T) {
 	}
 	if status, _ = restarted.LoopStatus(item.ID); status.State != LoopDone {
 		t.Fatalf("completed status = %+v", status)
+	}
+}
+
+// A pause requested while a check is being handled must stop the loop from
+// being re-armed by that check's own late resolution, across a restart.
+func TestLoopPauseDuringCheckBlocksLateRearmAndSurvivesRestart(t *testing.T) {
+	root := t.TempDir()
+	clock := &loopClock{base: time.Now().UTC()}
+	store := newLoopStore(t, root, clock)
+	if err := store.SetHostSession("host:@claude", "claude"); err != nil {
+		t.Fatal(err)
+	}
+	item := startTestLoop(t, store, clock, quotaLoop(), 10*time.Minute)
+	clock.offset = 11 * time.Minute
+	if err := store.SweepLifecycle(); err != nil {
+		t.Fatal(err)
+	}
+	claimAndDeliverTestReview(t, store, "host:@claude")
+
+	if _, err := store.PauseLoop(item.ID); err != nil {
+		t.Fatalf("pause during check: %v", err)
+	}
+	if _, err := store.PauseLoop(item.ID); err != nil {
+		t.Fatalf("second pause must be idempotent: %v", err)
+	}
+	if _, err := store.ResumeLoop(item.ID, clock.now().Add(time.Hour)); err == nil {
+		t.Fatal("resume with a time while a check is handled was accepted")
+	}
+	restarted := newLoopStore(t, root, clock)
+	status, err := restarted.LoopStatus(item.ID)
+	if err != nil || status.State != LoopPausing {
+		t.Fatalf("status after restart = %+v err=%v", status, err)
+	}
+
+	// The Host did not notice the pause and asks for another check in 10 min.
+	armLoopWake(t, restarted, item.ID, clock.now().Add(10*time.Minute), "still pending")
+	status, err = restarted.LoopStatus(item.ID)
+	if err != nil || status.State != LoopPaused || status.NextCheckAt != nil {
+		t.Fatalf("late resolution re-armed a paused loop: %+v err=%v", status, err)
+	}
+	clock.offset += 24 * time.Hour
+	if err := restarted.SweepLifecycle(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := restarted.ClaimNextReviewAction("host:@claude"); err != nil || ok {
+		t.Fatalf("a paused loop fired after a late resolution (ok=%v err=%v)", ok, err)
+	}
+	if card, _ := restarted.Work(item.ID); card.Status != WorkWaiting || !strings.HasPrefix(card.WaitFor, "Paused") {
+		t.Fatalf("the Work card must read paused: status=%s wait_for=%q", card.Status, card.WaitFor)
+	}
+
+	// Resume re-arms exactly one check.
+	if _, err := restarted.ResumeLoop(item.ID, time.Time{}); err == nil {
+		t.Fatal("this loop has no interval; resume without a time must be refused")
+	}
+	if _, err := restarted.ResumeLoop(item.ID, clock.now().Add(5*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if status, _ = restarted.LoopStatus(item.ID); status.State != LoopScheduled || status.NextCheckAt == nil {
+		t.Fatalf("resumed status = %+v", status)
+	}
+}
+
+// Resuming while a check runs only clears the intent: that check's own
+// resolution arms the next one, so there is never a second wake.
+func TestLoopResumeDuringCheckClearsIntentOnly(t *testing.T) {
+	root := t.TempDir()
+	clock := &loopClock{base: time.Now().UTC()}
+	store := newLoopStore(t, root, clock)
+	if err := store.SetHostSession("host:@claude", "claude"); err != nil {
+		t.Fatal(err)
+	}
+	item := startTestLoop(t, store, clock, quotaLoop(), 10*time.Minute)
+	clock.offset = 11 * time.Minute
+	if err := store.SweepLifecycle(); err != nil {
+		t.Fatal(err)
+	}
+	claimAndDeliverTestReview(t, store, "host:@claude")
+	if _, err := store.PauseLoop(item.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ResumeLoop(item.ID, time.Time{}); err != nil {
+		t.Fatalf("resume during a check: %v", err)
+	}
+	if status, _ := store.LoopStatus(item.ID); status.State != LoopHandling {
+		t.Fatalf("status = %+v", status)
+	}
+	armLoopWake(t, store, item.ID, clock.now().Add(10*time.Minute), "next")
+	if status, _ := store.LoopStatus(item.ID); status.State != LoopScheduled || status.NextCheckAt == nil {
+		t.Fatalf("status after resolve = %+v", status)
 	}
 }

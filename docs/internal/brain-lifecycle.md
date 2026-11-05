@@ -23,14 +23,21 @@ so unrelated conversation does not revise the Work or create a card.
 A persistent loop is exactly this shape with a `Work.Loop` marker (interval and
 Worker route) and one lifecycle owner of its next check: `Engine.SetTimedWait`
 writes the `due_retry` wake (`KWakeSet` with `next_attempt_at`) and refuses while
-an Attempt is active or a Review is open. A paused loop is the same wake with no
-time: the sweep and `NextWakeAt` ignore it, and only `loop resume` replaces it.
-Persisted rows accept that timeless wake only for a loop's own
-`loop:<work_id>` reference; Brain's `resolve` still requires a time. The Work
-row stays the single authority for identity, objective, progress (each handled
-event's disposition summary) and cancellation; `Store.LoopStatus` only derives a
-read model. The record decoder ignores unknown fields, so rolling the binary back
-keeps every wake firing and loses only the interval and Worker route.
+an Attempt is active or a Review is open. A pause is a persisted intent
+(`Work.Loop.Paused`, written under the Store lock) plus a valid `due_retry` wake
+at a far-future sentinel time (2100-01-01) that never comes due, so a pause is
+never a timeless wake: an older daemon rejects a `due_retry` row with no
+`next_attempt_at`, but loads this one. While a check or Attempt runs the intent
+alone holds; `ResolveWorkReview` replaces a `wait` on a paused loop (when no
+Attempt is active) with the sentinel, inside the same Store lock, so a late
+resolution cannot re-arm it. `loop resume` clears the intent and arms one wake
+from now, or, mid-check, only clears the intent. The Work row stays the single
+authority for identity, objective, progress (each handled event's disposition
+summary) and cancellation; `Store.LoopStatus` only derives a read model. The
+record decoder ignores unknown fields, so rolling the binary back keeps every
+timed wake firing (including the sentinel, which never fires) and loses the
+interval, the Worker route and the pause flag: a loop paused before rollback is
+therefore only held by the sentinel until the next time something re-arms it.
 
 The visible Brain timeline is a projection. One Work owns one replaceable card;
 repeated delivery of its stable Event cannot append duplicate cards. Session,
