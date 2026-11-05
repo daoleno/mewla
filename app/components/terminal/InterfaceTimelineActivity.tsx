@@ -4,6 +4,7 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
+import { MessageBody } from "./InterfaceMessageBody";
 import { InterfaceTimelineActivityDetails } from "./InterfaceTimelineActivityDetails";
 import { InterfaceTimelineActivityHeader } from "./InterfaceTimelineActivityHeader";
 import { useTimelineActivityExpansion } from "./InterfaceTimelineActivityExpansionState";
@@ -43,6 +44,14 @@ export function ActivityEvent({
     chrome,
   );
 
+
+  if (item.activityKind === "update") {
+    return (
+      <View style={styles.wrap}>
+        <MessageBody value={item.body ?? item.title} chrome={chrome} theme={theme} compact />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>

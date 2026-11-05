@@ -225,6 +225,11 @@ func conversationWithActivity(conversation CodexConversation, lifecycle *provide
 // conversation. The person did not type it.
 const ConversationOriginProvider = "provider"
 
+// ConversationKindUpdate is a line the provider's own terminal prints as the
+// agent speaking between steps (Claude "updates" thinking). It is not hidden
+// reasoning and not a final message.
+const ConversationKindUpdate = "update"
+
 type CodexConversationEvent struct {
 	ID        string `json:"id"`
 	Seq       int    `json:"seq"`

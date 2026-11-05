@@ -828,6 +828,25 @@ function activityFromEvent(
         defaultExpanded: failed,
       };
     }
+    case "update": {
+      // Words the provider's own terminal prints between steps (Claude
+      // "updates"): a quiet in-turn line, not reasoning and not a message.
+      const body = cleanStructuredMessageText(event.body || "");
+      if (!body) {
+        return null;
+      }
+      return {
+        type: "activity",
+        id: event.id || `update:${event.seq}`,
+        timestamp: event.timestamp,
+        title: body,
+        statusKey: "done",
+        tone: "neutral",
+        icon: "bulb",
+        activityKind: "update",
+        body,
+      };
+    }
     case "commentary": {
       if (!event.body?.trim()) {
         return null;

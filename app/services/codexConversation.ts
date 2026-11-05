@@ -2,6 +2,7 @@ export type CodexConversationEventKind =
   | "user_message"
   | "assistant_message"
   | "commentary"
+  | "update"
   | "command"
   | "tool"
   | "web_search"
@@ -529,6 +530,7 @@ function normalizeKind(value: unknown): CodexConversationEventKind | null {
     case "user_message":
     case "assistant_message":
     case "commentary":
+    case "update":
     case "command":
     case "tool":
     case "web_search":
