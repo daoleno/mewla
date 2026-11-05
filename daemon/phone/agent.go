@@ -97,12 +97,50 @@ func (a AgentAction) Budget() time.Duration {
 	return actionBudget
 }
 
+// Device is the phone an Agent drives: the Android phone's Manager, or another phone that
+// answers the same ops (the iPhone, through iPhone Mirroring on a Mac).
+type Device interface {
+	// Do performs one op for a Worker and returns the screen it leaves; see Manager.Do.
+	Do(ctx context.Context, worker, workerName, op string, args any, image bool) (Reply, error)
+	// CheckWait says why an action could not be sent now, after giving a missing phone a
+	// moment to come back.
+	CheckWait(ctx context.Context) error
+	// Generation numbers the current connection: ids read on one mean nothing on the next.
+	Generation() uint64
+	// Status is the phone now; its W and H are the screen's size once known.
+	Status() Status
+	// Release ends the agents' use of the phone.
+	Release()
+}
+
+var _ Device = (*Manager)(nil)
+
+// Profile is what differs between the phones an Agent drives, in the words agents see.
+type Profile struct {
+	// Keys maps each key name an agent may use to the device's own name for it.
+	Keys map[string]string
+	// KeyList names the keys for an agent, as "back, enter, delete, tab or search".
+	KeyList string
+	// NoAppList says the phone cannot list its apps: launch sends the name the agent gave, and
+	// the device finds the app.
+	NoAppList bool
+}
+
+// AndroidProfile is the Android phone's.
+var AndroidProfile = Profile{
+	Keys: map[string]string{
+		"back": "back", "enter": "enter", "return": "enter", "delete": "delete", "backspace": "delete", "tab": "tab", "search": "search",
+	},
+	KeyList: "back, enter, delete, tab or search",
+}
+
 // Agent turns what an agent asks into the phone's ops, and the phone's answers into text.
 type Agent struct {
-	mgr   *Manager
-	audit *Audit
-	now   func() time.Time
-	sleep func(ctx context.Context, d time.Duration) error
+	mgr     Device
+	audit   *Audit
+	profile Profile
+	now     func() time.Time
+	sleep   func(ctx context.Context, d time.Duration) error
 
 	mu       sync.Mutex
 	gen      uint64
@@ -111,9 +149,12 @@ type Agent struct {
 	appsAt   time.Time
 }
 
-// NewAgent serves agents through mgr. The audit may be nil.
-func NewAgent(mgr *Manager, audit *Audit) *Agent {
-	return &Agent{mgr: mgr, audit: audit, now: time.Now, sleep: func(ctx context.Context, d time.Duration) error {
+// NewAgent serves agents through the Android phone's manager. The audit may be nil.
+func NewAgent(mgr *Manager, audit *Audit) *Agent { return NewDeviceAgent(mgr, audit, AndroidProfile) }
+
+// NewDeviceAgent serves agents through any phone. The audit may be nil.
+func NewDeviceAgent(dev Device, audit *Audit, profile Profile) *Agent {
+	return &Agent{mgr: dev, audit: audit, profile: profile, now: time.Now, sleep: func(ctx context.Context, d time.Duration) error {
 		t := time.NewTimer(d)
 		defer t.Stop()
 		select {
@@ -330,14 +371,10 @@ func (a *Agent) typeText(ctx context.Context, w worker, act AgentAction, t *trac
 	return a.finish(ctx, w, reply, err, "")
 }
 
-var keyNames = map[string]string{
-	"back": "back", "enter": "enter", "return": "enter", "delete": "delete", "backspace": "delete", "tab": "tab", "search": "search",
-}
-
 func (a *Agent) key(ctx context.Context, w worker, act AgentAction, t *trace) (AgentResult, error) {
-	name, ok := keyNames[strings.ToLower(strings.TrimSpace(act.Key))]
+	name, ok := a.profile.Keys[strings.ToLower(strings.TrimSpace(act.Key))]
 	if !ok {
-		return AgentResult{}, fmt.Errorf("unknown key %q: use back, enter, delete, tab or search", act.Key)
+		return AgentResult{}, fmt.Errorf("unknown key %q: use %s", act.Key, a.profile.KeyList)
 	}
 	t.key = name
 	reply, err := a.do(ctx, w, OpKey, KeyArgs{Name: name}, act.Image)
@@ -483,6 +520,9 @@ func (a *Agent) handoff(ctx context.Context, w worker, act AgentAction) (AgentRe
 }
 
 func (a *Agent) listApps(ctx context.Context, w worker) (AgentResult, error) {
+	if a.profile.NoAppList {
+		return AgentResult{}, errors.New("this phone cannot list its apps: launch one by its name as the phone shows it")
+	}
 	apps, err := a.appList(ctx, w, true)
 	if err != nil {
 		return AgentResult{}, err
@@ -526,7 +566,15 @@ func (a *Agent) appList(ctx context.Context, w worker, refresh bool) ([]App, err
 func (a *Agent) launch(ctx context.Context, w worker, act AgentAction, t *trace) (AgentResult, error) {
 	query := strings.TrimSpace(act.App)
 	if query == "" {
+		if a.profile.NoAppList {
+			return AgentResult{}, errors.New("launch needs an app: its name as the phone shows it")
+		}
 		return AgentResult{}, errors.New("launch needs an app: its name, or its package from phone_apps")
+	}
+	if a.profile.NoAppList {
+		t.app = query
+		reply, err := a.do(ctx, w, OpLaunch, LaunchArgs{Package: query}, act.Image)
+		return a.finish(ctx, w, reply, err, "")
 	}
 	apps, err := a.appList(ctx, w, false)
 	if err != nil {

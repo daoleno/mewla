@@ -172,6 +172,8 @@ type clickStyle struct {
 	noPrimer    bool
 	noWindowLoc bool
 	flipStamp   bool // stamp the global point where the window one is due, and the reverse
+	// hold keeps the button down this long before the release: a long press.
+	hold time.Duration
 }
 
 func (s *macSession) clickTo(pid int, window AppWindow, x, y, button, count int, style clickStyle) error {
@@ -194,6 +196,9 @@ func (s *macSession) clickTo(pid int, window AppWindow, x, y, button, count int,
 		local = !local
 	}
 	plan := clickPlan(fpoint{px, py}, fpoint{lx, ly}, count, local)
+	if style.hold > 0 {
+		plan[len(plan)-2].Pause = style.hold
+	}
 	group := time.Now().UnixNano() & 0x7fffffff
 	// The person's held modifiers sit in the combined session state; the
 	// source is the hardware's and every event states its flags itself.

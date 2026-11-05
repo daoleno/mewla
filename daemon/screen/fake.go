@@ -89,6 +89,12 @@ type FakeBackend struct {
 	Launched      []string
 	// MenuPresses are the menu items chosen by shortcut.
 	MenuPresses []string
+	// MirrorInputs are the holds, swipes, strokes and pastes sent to one
+	// app (fake_mirror.go); TextLines is what ReadText reads, TextReads how
+	// often it was asked.
+	MirrorInputs []FakeMirrorInput
+	TextLines    []TextLine
+	TextReads    int
 	// Scroll, when above zero, shows a page of text and pictures that
 	// scrolls this many pixels at every ScrollTick, for measuring a link.
 	Scroll   int

@@ -14,6 +14,8 @@ const (
 	ComputerMCPName = "mewla_computer"
 	// PhoneMCPName is the person's Android phone, when Phone use is on.
 	PhoneMCPName = "mewla_phone"
+	// IPhoneMCPName is the person's iPhone, through iPhone Mirroring on this Mac.
+	IPhoneMCPName = "mewla_iphone"
 	// CodexComputerUseName is Codex's own computer use, from the user's
 	// Codex config.
 	CodexComputerUseName = "computer-use"
@@ -33,6 +35,8 @@ type AgentTools struct {
 	Computer bool
 	// Phone is the person's Android phone, through the Mewla app.
 	Phone bool
+	// IPhone is the person's iPhone, through iPhone Mirroring on this Mac.
+	IPhone bool
 	// NoCodexComputerUse turns off Codex's own computer use, which the
 	// user's Codex config adds, while agents may not use this computer.
 	NoCodexComputerUse bool
@@ -63,6 +67,9 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 	if tools.Phone {
 		servers = append(servers, server{name: PhoneMCPName, args: []string{"agent-use", "phone-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}, timeoutSec: PhoneToolTimeoutSec})
 	}
+	if tools.IPhone {
+		servers = append(servers, server{name: IPhoneMCPName, args: []string{"agent-use", "iphone-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}, timeoutSec: PhoneToolTimeoutSec})
+	}
 	// Only a config that defines the server can turn it off: Codex refuses a
 	// server entry with nothing to run. A launch that picks its own Codex
 	// home may not have it, so it is left alone.
@@ -75,7 +82,7 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 		return command
 	}
 	for _, arg := range opts.argv {
-		if strings.HasPrefix(arg, "mcp_servers."+ChromeMCPName) || strings.HasPrefix(arg, "mcp_servers."+ComputerMCPName) || strings.HasPrefix(arg, "mcp_servers."+PhoneMCPName) ||
+		if strings.HasPrefix(arg, "mcp_servers."+ChromeMCPName) || strings.HasPrefix(arg, "mcp_servers."+ComputerMCPName) || strings.HasPrefix(arg, "mcp_servers."+PhoneMCPName) || strings.HasPrefix(arg, "mcp_servers."+IPhoneMCPName) ||
 			arg == "--mcp-config" || strings.HasPrefix(arg, "--mcp-config=") || arg == "--strict-mcp-config" {
 			return command
 		}

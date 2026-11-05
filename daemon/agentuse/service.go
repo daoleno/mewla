@@ -92,6 +92,8 @@ type Status struct {
 	Computer *ComputerStatus `json:"computer,omitempty"`
 	// Phone is the person's phone, for agents to use: off until they turn it on.
 	Phone *PhoneStatus `json:"phone,omitempty"`
+	// IPhone is the person's iPhone through iPhone Mirroring on this Mac: off until they turn it on.
+	IPhone *IPhoneStatus `json:"iphone,omitempty"`
 	// CodexComputerUse is set when the user's Codex config gives Codex its
 	// own computer use. Codex Workers here get it while the switch is on.
 	CodexComputerUse bool `json:"codex_computer_use,omitempty"`
@@ -103,6 +105,8 @@ type settings struct {
 	Key string `json:"pasted_key,omitempty"`
 	// Phone is Phone use, a Labs feature: stored as on, so a missing file means off.
 	Phone bool `json:"phone,omitempty"`
+	// IPhone is iPhone use, a Labs feature, stored the same way.
+	IPhone bool `json:"iphone,omitempty"`
 }
 
 type Service struct {
@@ -127,6 +131,7 @@ type Service struct {
 	installErrAt time.Time
 	computer     *ComputerHooks
 	phone        func() phone.Status
+	iphone       *IPhoneHooks
 	bridge       *Bridge
 	// executable is the mewla binary the extension's host and the tools'
 	// stand-in for Chrome run; replaced in tests.

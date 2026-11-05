@@ -79,6 +79,7 @@ type controlApp struct {
 	calendarScheduler *calendar.Scheduler
 	screen            *screen.Service
 	phone             *phone.Agent
+	iphone            *phone.Agent
 	agentUse          *agentuse.Service
 	profiles          *modelprofiles.Owner
 	telegram          telegramControlManager
@@ -114,6 +115,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return a.handleComputerControl(req)
 	case "phone":
 		return a.handlePhoneControl(req)
+	case "iphone":
+		return a.handleIPhoneControl(req)
 	case "executor_check":
 		// The agents as the daemon sees them: its own PATH and environment,
 		// which are what Brain's host launches with, not the terminal's.
