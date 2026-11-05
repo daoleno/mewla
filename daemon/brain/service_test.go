@@ -2743,6 +2743,18 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	for index, row := range []TimelineItem{
+		{ID: "chat-1", Kind: timelineKindUserMessage, Body: "We are sharing the wechat box with Lin"},
+		{ID: "chat-2", Kind: timelineKindAssistantMessage, Body: "Sharing it as a single device link."},
+	} {
+		row.ThreadID, row.SessionID = "thread-main", oldHostID
+		row.Role = map[bool]string{true: "user", false: "assistant"}[index == 0]
+		row.CreatedAt = time.Now().Add(time.Duration(index) * time.Second)
+		if _, err := store.AppendTimelineItem(row); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	snapshot, err := service.SetHostExecutor("codex")
 	if err != nil {
 		t.Fatal(err)
@@ -2753,29 +2765,25 @@ func TestServiceSetHostExecutorHandsOffExistingThread(t *testing.T) {
 	if len(fw.killed) != 1 || fw.killed[0] != oldHostID {
 		t.Fatalf("killed = %#v", fw.killed)
 	}
-	if len(fw.sentCalls) != 2 {
+	// One delivery: the new Host's first activation carries the conversation,
+	// so there is no second send that can time out or be lost.
+	if len(fw.sentCalls) != 1 {
 		t.Fatalf("sent calls = %#v", fw.sentCalls)
 	}
-	handoff := ""
-	for _, call := range fw.sentCalls {
-		if strings.Contains(call.text, "Brain host executor handoff:") {
-			handoff = call.text
-			break
-		}
-	}
-	if handoff == "" {
-		t.Fatalf("executor handoff was not delivered: %#v", fw.sentCalls)
-	}
+	handoff := fw.sentCalls[0].text
 	if strings.Contains(handoff, "Preserve handoff objective.") {
 		t.Fatal("handoff embeds private current.md instead of reading its current version")
 	}
 	for _, want := range []string{
-		"Brain host executor handoff:", "changed from grok to codex",
-		"AGENTS.md", "current.md", "policies/handoff.md", "pending Event identities",
+		"Brain Host activation contract:", "AGENTS.md", "current.md", "policies/handoff.md", "pending Event identities",
+		"user: We are sharing the wechat box with Lin", "Brain: Sharing it as a single device link.", "mewla memory search",
 	} {
 		if !strings.Contains(handoff, want) {
 			t.Fatalf("handoff missing %q:\n%s", want, handoff)
 		}
+	}
+	if !work.IsPrivateHostPrompt(handoff) {
+		t.Fatal("handoff would appear as a visible chat row")
 	}
 	assertChatStateFixtureUnchanged(t, store.ChatStatePath(), registryRaw, registryInfo)
 	state, err := store.ChatState("thread-main")

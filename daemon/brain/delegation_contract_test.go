@@ -50,7 +50,7 @@ func TestBrainWorkerRoleContractProjectedAcrossSurfaces(t *testing.T) {
 	}
 	for name, surface := range map[string]string{
 		"delegation": read(store.policyPath("delegation.md")),
-		"handoff":    formatHostHandoffPrompt("thread-one", "grok", "codex", nil),
+		"handoff":    formatHostConversationHandoff([]TimelineItem{{Kind: timelineKindUserMessage, Body: "hello"}}),
 	} {
 		if strings.Contains(surface, brainWorkerRoleContract) {
 			t.Fatalf("%s must reference the role owner without repeating it", name)

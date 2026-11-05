@@ -106,7 +106,11 @@ func (s *Server) reconcileBrainHostContinuity() error {
 		return nil
 	}
 	changed, err := s.brain.ReconcileHostContinuity()
-	if changed {
+	// A failure, and the success that ends one, change the host problem the
+	// snapshot carries even when the Host Session did not change.
+	failed := err != nil
+	if changed || failed || s.brainHostReconcileFailed.Swap(failed) {
+		s.brainHostReconcileFailed.Store(failed)
 		s.broadcastBrainHostCapabilityRefresh()
 	}
 	if err != nil {

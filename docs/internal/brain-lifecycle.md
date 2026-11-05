@@ -39,6 +39,24 @@ Host subscription using its new Session ID and process metadata, and accepts
 the new stream's snapshot before consuming its deltas. Draft ownership stays
 with the logical Brain thread; late frames from the old subscription are ignored.
 
+`brain_set_executor` keeps the choice and answers at once with the projection
+that already names the new Host; it refuses at once, with the reason, an
+executor that is not configured, is locked by the environment or is not
+installed. The Host continuity owner (`ReconcileHostContinuity`, woken by the
+request) then replaces the Host, so a slow agent never holds the request. The
+App follows the snapshots: the switch is done when `host_worker.provider`
+matches the new executor, and failed when `host_problem` names it (`start_failed`
+carries the launch error; not-signed-in and not-ready keep their own codes). The
+"did not start" grace counts from the choice, not only from daemon start.
+
+A Host that starts without a native conversation to resume gets, in its first
+activation prompt (the same prompt on a retry), a bounded, redacted tail of the
+visible Brain chat — user and Brain turns, newest last — plus how to read
+further back (`mewla memory search` / `mewla memory show`). There is no second
+handoff message to wait for or lose, and no per-executor path. A message sent in
+the moment between the choice and the old Host's replacement still goes to the
+old Host.
+
 Transcript discovery can race a Host switch. Before publishing or persisting a
 resolved transcript, the store must compare the complete Host binding with the
 one that started the read. A departing provider cannot bind the newly selected

@@ -1,53 +1,67 @@
 package brain
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-func TestHandoffReferencesContextAndOnlyOwnedWorkers(t *testing.T) {
-	workers := []WorkerRef{
-		{ID: "owned:@1", Status: "running", Delegated: true, Summary: strings.Repeat("private-history", 1000)},
-		{ID: "external:@2", Status: "running"},
+func chatTurn(kind, body string) TimelineItem {
+	return TimelineItem{Kind: kind, Body: body, CreatedAt: time.Now()}
+}
+
+func TestConversationHandoffCarriesBoundedChatTail(t *testing.T) {
+	var items []TimelineItem
+	for i := 0; i < 100; i++ {
+		items = append(items, chatTurn(timelineKindUserMessage, fmt.Sprintf("question-%03d", i)))
+		items = append(items, chatTurn(timelineKindAssistantMessage, fmt.Sprintf("answer-%03d", i)))
 	}
-	prompt := formatHostHandoffPrompt("thread-one", "codex", "grok", workers)
-	for _, required := range []string{"current.md", "AGENTS.md", "policies/handoff.md", "thread-one", "owned:@1", "pending Event identities"} {
+	items = append(items,
+		chatTurn(timelineKindWorkCard, "work-card-body"),
+		TimelineItem{Kind: timelineKindUserMessage, Origin: TimelineOriginProvider, Body: "provider-compaction-summary"},
+		chatTurn(timelineKindUserMessage, "Brain Host activation contract: private"),
+	)
+	prompt := formatHostConversationHandoff(items)
+	for _, required := range []string{"user: question-099", "Brain: answer-099", "mewla memory search", "mewla memory show", "policies/handoff.md", "pending Event identities", "earlier turns left out"} {
 		if !strings.Contains(prompt, required) {
-			t.Fatalf("handoff missing %q", required)
+			t.Fatalf("handoff missing %q:\n%s", required, prompt)
 		}
 	}
-	for _, excluded := range []string{"private-history", "external:@2", brainWorkerRoleContract} {
+	for _, excluded := range []string{"question-000", "work-card-body", "provider-compaction-summary", "Host activation contract", brainWorkerRoleContract} {
 		if strings.Contains(prompt, excluded) {
-			t.Fatalf("handoff duplicated or leaked %q", excluded)
+			t.Fatalf("handoff leaked or kept %q", excluded)
 		}
 	}
-	if len(prompt) > 700 {
+	if strings.Index(prompt, "question-098") > strings.Index(prompt, "question-099") {
+		t.Fatal("chat is not oldest first")
+	}
+	if len(prompt) > hostHandoffMaxTotalRunes*2 {
 		t.Fatalf("handoff expanded to %d bytes", len(prompt))
 	}
-	if !work.IsPrivateHostPrompt(prompt) {
-		t.Fatal("compact handoff lost transcript privacy")
-	}
-	if formatHostHandoffPrompt(" ", "codex", "grok", workers) != "" {
-		t.Fatal("blank thread produced a handoff")
+	if !work.IsPrivateHostPrompt("Brain Host activation contract:\n\n" + prompt) {
+		t.Fatal("bootstrap carrying the handoff lost transcript privacy")
 	}
 }
 
-func TestPromptOwnersCoverAutonomyWaitingAndVerification(t *testing.T) {
-	for _, required := range []string{
-		"finish authorized work", "keep doing independent preparation",
-		"User instructions override skill guidelines within platform constraints",
-		"Brain decides decomposition", "a resend is a second attempt",
-		"act on them without acknowledgement",
-	} {
-		if !strings.Contains(productWorkspaceInstructions, required) {
-			t.Fatalf("workspace missing %q", required)
-		}
+func TestConversationHandoffTrimsLongTurnsAndRedactsSecrets(t *testing.T) {
+	long := strings.Repeat("x", hostHandoffMaxRowRunes*3)
+	prompt := formatHostConversationHandoff([]TimelineItem{
+		chatTurn(timelineKindUserMessage, long),
+		chatTurn(timelineKindAssistantMessage, "token sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789ABCDEF"),
+	})
+	if strings.Contains(prompt, long) || !strings.Contains(prompt, "…[trimmed]") {
+		t.Fatal("a long turn was not capped")
 	}
-	for _, required := range []string{"Required repository gates are part of acceptance", "a passing subset does not replace a full-task requirement", "that is the whole step, with no separate resolve", "weigh the cost of a duplicate effect"} {
-		if !strings.Contains(productDelegationPolicy, required) {
-			t.Fatalf("delegation missing %q", required)
-		}
+	if strings.Contains(prompt, "abcdefghijklmnopqrstuvwxyz0123456789") {
+		t.Fatal("a secret reached the handoff")
+	}
+}
+
+func TestConversationHandoffIsEmptyWithoutChat(t *testing.T) {
+	if formatHostConversationHandoff(nil) != "" || formatHostConversationHandoff([]TimelineItem{chatTurn(timelineKindWorkCard, "x")}) != "" {
+		t.Fatal("no chat produced a handoff")
 	}
 }
