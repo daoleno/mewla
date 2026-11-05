@@ -1761,9 +1761,12 @@ func (w *Watcher) projectPollResultsLocked(results []probedPollWorker) []Session
 		}
 		worker.State = newState
 		worker.Summary = summary
-		worker.Prompt = nil
+		worker.Prompt, worker.PromptUnidentified = nil, ""
 		if newState == classifier.StateBlocked && activity.State == classifier.StateBlocked {
 			worker.Prompt = activity.Prompt
+			if activity.Prompt == nil {
+				worker.PromptUnidentified = activity.Unidentified
+			}
 		}
 		providerChanged := false
 		if worker.Hidden {

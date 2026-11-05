@@ -136,9 +136,11 @@ var exactCaptureInfo = &CaptureInfo{Exact: true, Origin: testOrigin}
 
 // Blanks at the end of a line that more request text follows can be the
 // command's (inside a quoted string or a heredoc), and the screen cannot tell
-// them from erased cells: such a dialog gets no id, whatever the count of
+// them from erased cells: such a Codex dialog gets no id, whatever the count of
 // blanks (the Round 4 reproduction), while the same commands without them are
-// answerable and distinct.
+// answerable and distinct. Claude is measured differently (claude_real_capture_test.go):
+// it paints trailing blanks of arbitrary width on rows of its own box, so for
+// Claude they are not evidence either way and are left out of the id.
 func TestInteriorTrailingBlanksMakeTheDialogUnidentifiable(t *testing.T) {
 	for _, command := range []string{
 		"printf 'alpha \nbeta'",
@@ -149,11 +151,6 @@ func TestInteriorTrailingBlanksMakeTheDialogUnidentifiable(t *testing.T) {
 		codex := codexExactSignal(command)
 		if codex.State != StateBlocked || codex.Prompt != nil {
 			t.Fatalf("codex: %q got a prompt: %+v", command, codex.Prompt)
-		}
-		claude := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo,
-			PaneContent: heredocPermissionPane(command, strings.Replace(blockNoticeFmt, "%s", "2:00", 1))})
-		if claude.State != StateBlocked || claude.Prompt != nil {
-			t.Fatalf("claude: %q got a prompt: %+v", command, claude.Prompt)
 		}
 	}
 	// The last line of a request may end in blanks; nothing follows it.
@@ -250,8 +247,10 @@ func TestWithoutAnExactCaptureThereIsNoAnswerableID(t *testing.T) {
 // Blank lines inside a request cannot be counted from cells: an empty line and
 // a line of spaces look alike, and a renderer may leave either unpainted. The
 // reviewer's pair (a heredoc with one and with two spaces on a line) must not
-// share an id; neither is answerable, and blank lines in the provider's own
-// layout (around the request) keep working.
+// share an id; neither is answerable for Codex, and blank lines in the
+// provider's own layout (around the request) keep working. Claude keeps its
+// blank rows as rows (its box draws a gutter on each), see
+// claude_real_capture_test.go.
 func TestBlankLinesInsideTheRequestMakeTheDialogUnidentifiable(t *testing.T) {
 	for _, command := range []string{
 		"cat <<'EOF'\n \nEOF",
@@ -264,11 +263,6 @@ func TestBlankLinesInsideTheRequestMakeTheDialogUnidentifiable(t *testing.T) {
 		codex := codexExactSignal(command)
 		if codex.State != StateBlocked || codex.Prompt != nil {
 			t.Fatalf("codex: %q got a prompt: %+v", command, codex.Prompt)
-		}
-		claude := NewClaudeActivityAdapter().Infer(ActivityInput{Worker: Worker{Command: "claude"}, Capture: exactCaptureInfo,
-			PaneContent: heredocPermissionPane(command, strings.Replace(blockNoticeFmt, "%s", "2:00", 1))})
-		if claude.State != StateBlocked || claude.Prompt != nil {
-			t.Fatalf("claude: %q got a prompt: %+v", command, claude.Prompt)
 		}
 	}
 	// The provider's separators (heading, request, menu; header, request,

@@ -1,0 +1,24 @@
+ │ echo marker-line-46 sleep                                                                        
+ │ echo marker-line-47 sleep                                                                        
+ │ echo marker-line-48 sleep                                                                        
+ │ echo marker-line-49 sleep                                                                        
+ │ echo marker-line-50 sleep                                                                        
+ │ echo marker-line-51 sleep                                                                        
+ │ echo marker-line-52 sleep                                                                        
+ │ echo marker-line-53 sleep                                                                        
+ │ echo marker-line-54 sleep                                                                        
+ │ echo marker-line-55 sleep                                                                        
+ │ echo marker-line-56 sleep                                                                        
+ │ echo marker-line-57 sleep                                                                        
+ │ echo marker-line-58 sleep                                                                        
+ │ echo marker-line-59 sleep"                                                                       
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes                                                 
+   2. Yes, and don't ask again for bash -c 'echo line00 commands in                               
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you                        
+   4. No                           
+
+ Esc to cancel · Tab to amend                      

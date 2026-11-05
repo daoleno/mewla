@@ -65,11 +65,14 @@ func (a *ClaudeActivityAdapter) Infer(in ActivityInput) ActivitySignal {
 		if in.Capture == nil || !in.Capture.Exact {
 			return signal // blocked, but the text cannot support an answerable id
 		}
-		if prompt, ok := ParseClaudePermissionPrompt(whole); ok {
+		prompt, reason, ok := ParseClaudePermissionPrompt(whole)
+		if ok {
 			if prompt.Title == "" {
 				prompt.Title = signal.Summary
 			}
 			signal.Prompt = &prompt
+		} else {
+			signal.Unidentified = reason
 		}
 		return signal
 	}
