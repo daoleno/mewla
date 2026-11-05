@@ -257,6 +257,9 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader) {
 			ch := b.waiting[m.ID]
 			b.mu.Unlock()
 			if ch != nil {
+				if m.Type == "closed" && m.Message == "" {
+					m.Message = m.Reason // a window that closed while opening says why here
+				}
 				select {
 				case ch <- m:
 				default:

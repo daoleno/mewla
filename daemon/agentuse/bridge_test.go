@@ -184,6 +184,19 @@ func TestConnectReportsWhyTheExtensionFailed(t *testing.T) {
 	}
 }
 
+// A window that closes while it is opening says why in "reason", not "message".
+func TestConnectReportsWhyAWindowClosedWhileOpening(t *testing.T) {
+	b, dir := startBridge(t)
+	fakeExtension(t, dir, func(hostMessage) hostMessage {
+		return hostMessage{Type: "closed", Reason: "No answer from the relay at 127.0.0.1:1 after 10000 ms"}
+	})
+	waitHost(t, b)
+	err := ConnectViaBridge(dir, goodRelay, "claude")
+	if err == nil || !strings.Contains(err.Error(), "No answer from the relay") {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestOnlyTheBrowserToolsOwnRelayIsAccepted(t *testing.T) {
 	b, dir := startBridge(t)
 	got := fakeExtension(t, dir, func(hostMessage) hostMessage { return hostMessage{Type: "connected"} })

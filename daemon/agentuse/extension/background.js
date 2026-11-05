@@ -92,7 +92,7 @@ class AgentWindow {
     try {
       this.connection = await openRelayConnection(relayUrl, this);
     } catch (error) {
-      await this.close(error.message);
+      await this.close(error.message, true);
       throw error;
     }
     this.connection.onclose = () => void this.close('The agent finished');
@@ -100,7 +100,8 @@ class AgentWindow {
     this.connection.didInitialize();
   }
 
-  async close(reason) {
+  // quiet: the open failed, and the failure itself is what the daemon hears.
+  async close(reason, quiet) {
     if (this.closed)
       return;
     this.closed = true;
@@ -111,7 +112,8 @@ class AgentWindow {
     agentWindowIds.delete(this.windowId);
     if (this.windowId !== undefined)
       await chrome.windows.remove(this.windowId).catch(() => {});
-    tell({ type: 'closed', id: this.id, reason });
+    if (!quiet)
+      tell({ type: 'closed', id: this.id, reason });
   }
 }
 
@@ -129,7 +131,7 @@ async function onHostMessage(message) {
         tell({ type: 'connected', id: message.id, windowId: session.windowId });
       } catch (error) {
         sessions.delete(message.id);
-        tell({ type: 'error', id: message.id, message: error.message });
+        tell({ type: 'error', id: message.id, message: String(error?.message || error) });
       }
       return;
     }
