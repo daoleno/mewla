@@ -190,8 +190,11 @@ type Server struct {
 	brainWorkSub                <-chan brain.WorkChange
 	brainHostRecovery           chan struct{}
 	signalSystemStartupComplete bool
-	workerFeed                  workerFeed
-	codexThread                 func(sessionID string) string
+	// brainHostReconcileFailed: the last Host continuity pass failed, so the
+	// pass that ends the failure is broadcast too.
+	brainHostReconcileFailed atomic.Bool
+	workerFeed               workerFeed
+	codexThread              func(sessionID string) string
 
 	// hostBlockSignature is the blocked state and prompt of the Brain host that
 	// the last brain_snapshot carried, so only a change in it is broadcast.
@@ -2975,7 +2978,10 @@ func (s *Server) handleBrainSetExecutor(conn *websocket.Conn, raw clientMessage)
 	if executorID == "" {
 		executorID = strings.TrimSpace(raw.AdapterID)
 	}
-	snapshot, err := s.brain.SetHostExecutor(executorID)
+	// The choice is kept and answered at once; bringing the new Host up takes
+	// as long as the agent takes to open, so the Host continuity owner does it
+	// and clients follow the snapshots (and a host_problem if it fails).
+	snapshot, err := s.brain.SelectHostExecutor(executorID)
 	if err != nil {
 		s.sendErrorWithRequestID(conn, raw.RequestID, "brain_set_executor_failed", err.Error())
 		return
@@ -2990,6 +2996,11 @@ func (s *Server) handleBrainSetExecutor(conn *websocket.Conn, raw clientMessage)
 		"request_id": raw.RequestID,
 		"brain":      payload,
 	})
+	select {
+	case s.brainHostRecovery <- struct{}{}:
+	default:
+	}
+	s.broadcastBrainHostCapabilityRefresh()
 }
 
 func (s *Server) handleBrainContext(conn *websocket.Conn, raw clientMessage) {

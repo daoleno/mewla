@@ -71,8 +71,8 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 			}))
 			bootstrap := service.hostBootstrapPrompt(service.hostExecutor())
 			activation := brainHostActivationPrompt()
-			handoff := formatHostHandoffPrompt("arbitrary-project", provider, provider, nil)
-			for name, prompt := range map[string]string{"bootstrap": bootstrap, "activation": activation, "handoff": handoff} {
+			handoff := formatHostConversationHandoff([]TimelineItem{{Kind: timelineKindUserMessage, Body: "hello"}})
+			for name, prompt := range map[string]string{"bootstrap": bootstrap, "activation": activation, "handoff": bootstrap + "\n\n" + handoff} {
 				if !strings.Contains(prompt, "AGENTS.md") || !work.IsPrivateHostPrompt(prompt) {
 					t.Fatalf("%s lost guidance pointer or privacy", name)
 				}
@@ -82,7 +82,7 @@ func TestEngineeringGuidanceGeneratedAndLazy(t *testing.T) {
 					}
 				}
 			}
-			if len(activation) > 300 || len(bootstrap) > 800 || len(handoff) > 600 {
+			if len(activation) > 300 || len(bootstrap) > 800 || len(handoff) > 1100 {
 				t.Fatalf("prompt growth: activation=%d bootstrap=%d handoff=%d", len(activation), len(bootstrap), len(handoff))
 			}
 			t.Logf("%s: AGENTS=%d bootstrap=%d activation=%d handoff=%d bytes", provider, len(agents), len(bootstrap), len(activation), len(handoff))

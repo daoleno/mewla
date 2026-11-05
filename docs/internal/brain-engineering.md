@@ -78,7 +78,7 @@ unmanaged, and Brain deletes stale playbooks it no longer wants. Customized
 playbooks may intentionally retain old methods; the managed principle/routing
 layer still updates.
 
-Bootstrap and executor handoff already reference `AGENTS.md`; they do not embed
+Bootstrap (which carries the conversation handoff) already references `AGENTS.md`; they do not embed
 the playbook manual. The existing activation receipt now hashes release-owned
 instructions, policies and default playbooks, as well as the compact activation
 prompt. A product-only change therefore refreshes an existing Host once through

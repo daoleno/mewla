@@ -59,6 +59,10 @@ import type { SendAttachment } from "../../services/structuredWebSocketTransport
 import { terminalRouteParams } from "../../services/workerRouteId";
 import { brainScreenSurface, canSwitchBrainExecutorFromProblem } from "../../services/connectionLifecycle";
 import {
+  BRAIN_HOST_SWITCH_PATIENCE_MS,
+  brainHostSwitchProgress,
+} from "../../services/brainHostSwitch";
+import {
   isTargetedBrainThreadReadOnly,
   nextBrainChatMount,
   type BrainChatMount,
@@ -121,6 +125,7 @@ export default function BrainScreen() {
   const [switchingAdapterId, setSwitchingAdapterId] = useState<string | null>(
     null,
   );
+  const [switchAccepted, setSwitchAccepted] = useState(false);
   const [adapterSwitchError, setAdapterSwitchError] = useState<string | null>(
     null,
   );
@@ -295,6 +300,45 @@ export default function BrainScreen() {
     setAdapterSwitchError(null);
   }, []);
 
+  // The daemon answers a switch as soon as it keeps the choice; the new host
+  // then opens in its own time. The sheet shows the switch as in progress until
+  // a snapshot shows the new host (or a problem for it), not until a timer.
+  useEffect(() => {
+    if (!switchingAdapterId || !switchAccepted) {
+      return;
+    }
+    const progress = brainHostSwitchProgress(activeBrain, switchingAdapterId);
+    if (progress.state === "pending") {
+      return;
+    }
+    setSwitchingAdapterId(null);
+    setSwitchAccepted(false);
+    if (progress.state === "failed") {
+      setAdapterSwitchError(progress.detail);
+    } else {
+      closeAdapterSheet();
+    }
+  }, [activeBrain, closeAdapterSheet, switchAccepted, switchingAdapterId]);
+
+  // A switch belongs to the server it was made on.
+  const activeServerId = activeServer?.id;
+  useEffect(() => {
+    setSwitchingAdapterId(null);
+    setSwitchAccepted(false);
+  }, [activeServerId]);
+
+  useEffect(() => {
+    if (!switchingAdapterId || !switchAccepted) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSwitchingAdapterId(null);
+      setSwitchAccepted(false);
+      closeAdapterSheet();
+    }, BRAIN_HOST_SWITCH_PATIENCE_MS);
+    return () => clearTimeout(timer);
+  }, [closeAdapterSheet, switchAccepted, switchingAdapterId]);
+
   const openMenu = useCallback(() => {
     setMenuVisible(true);
   }, []);
@@ -357,11 +401,11 @@ export default function BrainScreen() {
       setAdapterSwitchError(null);
       try {
         await wsClient.setBrainExecutor(activeServer.id, adapter.id);
-        closeAdapterSheet();
+        // Kept, not finished: the snapshots say when the new host is up.
+        setSwitchAccepted(true);
       } catch (error: any) {
-        setAdapterSwitchError(error?.message || "Failed to switch executor.");
-      } finally {
         setSwitchingAdapterId(null);
+        setAdapterSwitchError(error?.message || "Failed to switch executor.");
       }
     },
     [

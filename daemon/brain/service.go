@@ -79,7 +79,15 @@ type Service struct {
 	hostProblemSince time.Time
 	// hostNotReadySince is when the host pane first stayed unready for input.
 	hostNotReadySince time.Time
-	lastHostHeal      time.Time
+	// hostChangedAt is when the person last chose another Host executor. The
+	// "did not start" grace counts from it, not only from daemon start: a
+	// long-running daemon that is switching Hosts must not call the new one
+	// failed while it is still coming up. hostStartFailure is why the last
+	// attempt to start the current Host failed for a reason that will not fix
+	// itself. Both are guarded by hostProblemMu.
+	hostChangedAt    time.Time
+	hostStartFailure *hostStartFailure
+	lastHostHeal     time.Time
 
 	// sessionConversationHook overrides the provider conversation reader for
 	// the Session projection surface. Tests inject sanitized fixtures; nil
@@ -115,7 +123,13 @@ type Service struct {
 	// hostLaunching holds the Sessions this daemon launched whose first
 	// activation has not been accepted. Guarded by hostActivationMu.
 	hostLaunching map[string]bool
-	hostMu        sync.Mutex
+	// hostBlank holds the launched Sessions that start without a native
+	// conversation to resume; their first activation carries the visible chat
+	// tail. It lives and dies with hostLaunching, so a retried activation
+	// keeps the conversation a first attempt would have carried. Guarded by
+	// hostActivationMu.
+	hostBlank map[string]bool
+	hostMu    sync.Mutex
 
 	routeMu sync.Mutex
 	routes  SessionRouteLifecycle
@@ -934,11 +948,6 @@ func (s *Service) setHostExecutor(executorID string, explicit bool) (Snapshot, e
 	if !ok {
 		return Snapshot{}, fmt.Errorf("%w: %s", ErrExecutorNotConfigured, executorID)
 	}
-	var previousHost HostSession
-	chatThreadID, _ := s.store.ChatThreadID()
-	if host, err := s.store.HostSession(); err == nil {
-		previousHost = host
-	}
 	setExecutor := s.store.setImplicitHostExecutorID
 	if explicit {
 		setExecutor = s.store.SetHostExecutorID
@@ -946,14 +955,10 @@ func (s *Service) setHostExecutor(executorID string, explicit bool) (Snapshot, e
 	if err := setExecutor(executor.ID); err != nil {
 		return Snapshot{}, err
 	}
-	snapshot, err := s.EnsureHostSnapshot()
-	if err != nil {
-		return Snapshot{}, err
-	}
-	if snapshot.HostWorker != nil && strings.TrimSpace(previousHost.ID) != "" && strings.TrimSpace(snapshot.HostWorker.ID) != "" && snapshot.HostWorker.ID != strings.TrimSpace(previousHost.ID) {
-		_ = s.handoffHostSession(chatThreadID, previousHost.ExecutorID, executor.ID, snapshot.HostWorker.ID, snapshot.Workers)
-	}
-	return snapshot, nil
+	s.noteHostChosen()
+	// The new Host's first activation carries the conversation (see
+	// hostBootstrapPrompt), so there is no second send to wait for or lose.
+	return s.EnsureHostSnapshot()
 }
 
 // RouteSessionEvent records the executor fact against its owning Work before
@@ -2871,8 +2876,10 @@ func (s *Service) ReconcileHostContinuity() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	_, continuityErr := s.ensureHostContinuity(s.hostExecutor(), true)
+	hostExecutor := s.hostExecutor()
+	_, continuityErr := s.ensureHostContinuity(hostExecutor, true)
 	s.noteHostActivation(continuityErr)
+	s.noteHostStartResult(hostExecutor, continuityErr)
 	// Capture identity even if activation failed or its receipt is ambiguous.
 	// The process can already own a resumable conversation at that point.
 	_, bindingErr := s.BindHostProviderTranscript()
@@ -2978,7 +2985,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 	}
 	// Mark the launch before the Session is recorded as the Host, so no Host
 	// state event can reach it on the queued path first.
-	s.markHostLaunching(workerID)
+	s.markHostLaunching(workerID, resumeToken == "")
 	if provisionalID != "" && routes != nil {
 		_, _, persist, commitErr := routes.CommitLaunch(provisionalID, workerID)
 		if !persist.Applied {
@@ -3078,13 +3085,19 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 
 // markHostLaunching keeps a Session this daemon just launched on the
 // provider-ready activation path until its first activation is accepted.
-func (s *Service) markHostLaunching(sessionID string) {
+func (s *Service) markHostLaunching(sessionID string, blank bool) {
 	s.hostActivationMu.Lock()
 	defer s.hostActivationMu.Unlock()
 	if s.hostLaunching == nil {
 		s.hostLaunching = map[string]bool{}
 	}
 	s.hostLaunching[sessionID] = true
+	if blank {
+		if s.hostBlank == nil {
+			s.hostBlank = map[string]bool{}
+		}
+		s.hostBlank[sessionID] = true
+	}
 }
 
 func (s *Service) ensureHostActivation(sessionID, command string, executor work.WorkerExecutor, startup, bootstrap bool) error {
@@ -3099,7 +3112,7 @@ func (s *Service) ensureHostActivation(sessionID, command string, executor work.
 	s.hostActivationMu.Lock()
 	defer s.hostActivationMu.Unlock()
 	prompt := brainHostActivationPrompt()
-	if bootstrap {
+	if bootstrap || s.hostBlank[sessionID] {
 		prompt = s.hostBootstrapPrompt(executor)
 	}
 	if strings.TrimSpace(prompt) == "" {
@@ -3134,6 +3147,7 @@ func (s *Service) ensureHostActivation(sessionID, command string, executor work.
 				// Never replay an ambiguous receipt: later attempts settle it
 				// through the receipt ledger below.
 				delete(s.hostLaunching, sessionID)
+				delete(s.hostBlank, sessionID)
 			}
 			return err
 		}
@@ -3143,6 +3157,7 @@ func (s *Service) ensureHostActivation(sessionID, command string, executor work.
 		// Accepted: whatever happens to the persisted record, the receipt now
 		// settles through the ledger below and is never delivered again.
 		delete(s.hostLaunching, sessionID)
+		delete(s.hostBlank, sessionID)
 		return s.markHostActivation(sessionID, result.Receipt, owned)
 	}
 
@@ -3782,7 +3797,10 @@ func (s *Service) hostProblem(executor work.WorkerExecutor) *HostProblem {
 	case hostAuth(executor.ID) == HostAuthUnauthenticated:
 		problem.Code = "not_signed_in"
 		problem.Detail = fmt.Sprintf("Brain is set to run on %s, but %s is not signed in on this computer. %s there; Brain starts by itself.", name, name, hostSignInStep(executor.ID))
-	case time.Since(processStartedAt) > hostStartGrace:
+	case s.currentHostStartFailure(executor.ID) != nil:
+		problem.Code = "start_failed"
+		problem.Detail = fmt.Sprintf("Brain could not start on %s: %s", name, s.currentHostStartFailure(executor.ID).Detail)
+	case time.Since(s.hostStartedSince()) > hostStartGrace:
 		problem.Code = "not_started"
 		problem.Detail = fmt.Sprintf("Brain's %s session did not start. Run mewla doctor on the computer to see why.", name)
 		if hostAuth(executor.ID) == HostAuthUnknown {
@@ -4192,7 +4210,7 @@ func (s *Service) hostBootstrapPrompt(executor work.WorkerExecutor) string {
 		return ""
 	}
 	worktreeRoot, _ := work.DefaultWorktreeRoot()
-	return brainHostActivationPrompt() + "\n\n" + strings.TrimSpace(fmt.Sprintf(`
+	prompt := brainHostActivationPrompt() + "\n\n" + strings.TrimSpace(fmt.Sprintf(`
 You are Brain inside Mewla.
 Brain workspace: %s (private reports in worklog/)
 Managed worktree root: %s
@@ -4202,52 +4220,10 @@ Recover active work from current.md and mewla brain context --json.
 Personality: %s
 `, snapshot.Workspace, worktreeRoot, executor.ID, cliCommand(),
 		strings.TrimSpace(snapshot.Personality)))
-}
-
-func (s *Service) handoffHostSession(threadID, previousExecutorID, nextExecutorID, nextHostID string, workers []WorkerRef) error {
-	if s == nil || s.store == nil || s.watcher == nil {
-		return nil
+	if tail := s.hostConversationHandoff(); tail != "" {
+		prompt += "\n\n" + tail
 	}
-	threadID = strings.TrimSpace(threadID)
-	nextHostID = strings.TrimSpace(nextHostID)
-	if threadID == "" || nextHostID == "" {
-		return nil
-	}
-	prompt := formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID, workers)
-	if prompt != "" {
-		hostCmd, err := s.hostCommand(s.hostExecutor())
-		if err != nil {
-			return err
-		}
-		if err := s.watcher.SendInputWhenReady(nextHostID, hostCmd, prompt+"\n"); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func formatHostHandoffPrompt(threadID, previousExecutorID, nextExecutorID string, workers []WorkerRef) string {
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return ""
-	}
-	lines := []string{
-		"Brain host executor handoff:",
-		fmt.Sprintf("Host executor changed from %s to %s in thread %s. Continue the same visible Brain chat in the user's language; keep this handoff private.",
-			strings.TrimSpace(previousExecutorID), strings.TrimSpace(nextExecutorID), threadID),
-		"Read AGENTS.md, policies/handoff.md and current.md; mewla brain context --json is authoritative for Work and Workers. Preserve pending Event identities and next actions; a Host change does not authorize restarting or polling Workers.",
-	}
-	active := []string{}
-	for _, worker := range workers {
-		if worker.Delegated && worker.Status != string(classifier.StateDone) && worker.Status != string(classifier.StateFailed) && worker.Status != string(classifier.StateRemoved) {
-			active = append(active, fmt.Sprintf("%s [%s]", worker.ID, worker.Status))
-		}
-	}
-	if len(active) > 0 {
-		lines = append(lines, "Active Workers: "+strings.Join(active, ", "))
-	}
-	lines = append(lines, "Wait for the next user message or Work Event.")
-	return strings.Join(lines, "\n")
+	return prompt
 }
 
 func cliCommand() string {
