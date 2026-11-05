@@ -261,11 +261,24 @@ async function invokeChromeMethod(fullMethod, args) {
 }
 
 export async function openRelayConnection(url, home) {
+  const started = Date.now();
+  const where = (() => { try { return new URL(url).host; } catch { return 'the relay'; } })();
   const socket = new WebSocket(url);
   await new Promise((resolve, reject) => {
-    socket.onopen = () => resolve();
-    socket.onerror = () => reject(new Error('WebSocket error'));
-    setTimeout(() => reject(new Error('Connection timeout')), 5000);
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error(`No answer from the relay at ${where} after ${Date.now() - started} ms (socket state ${socket.readyState})`));
+    }, 10000);
+    socket.onopen = () => { clearTimeout(timer); resolve(); };
+    socket.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error(`The relay at ${where} refused the connection after ${Date.now() - started} ms (socket state ${socket.readyState})`));
+    };
+    socket.onclose = event => {
+      clearTimeout(timer);
+      reject(new Error(`The relay at ${where} closed the connection (code ${event.code}${event.reason ? ', ' + event.reason : ''}) after ${Date.now() - started} ms`));
+    };
   });
+  socket.onclose = null;
   return new RelayConnection(socket, home);
 }

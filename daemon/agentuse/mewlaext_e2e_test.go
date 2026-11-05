@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -143,6 +145,7 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		_, sockErr := os.Stat(sock)
 		_, manifestErr := os.Stat(filepath.Join(profile, "NativeMessagingHosts", NativeHostName+".json"))
 		t.Logf("bridge socket %s (%d bytes): %v; host manifest: %v", sock, len(sock), sockErr, manifestErr)
+		macDiagnostics(t)
 		t.Fatal("Mewla's extension never connected through its native host")
 	}
 	t.Logf("extension connected, version %s", bridge.HostVersion())
@@ -160,6 +163,20 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	}
 	person := observePersonWindow(t)
 	t.Logf("person's window before: %s", person)
+	if !strings.Contains(person, `"title":"person"`) {
+		// Chrome never loaded the page this test serves on 127.0.0.1: nothing
+		// that Chrome opens to this computer's loopback is going to work.
+		macDiagnostics(t)
+		t.Fatalf("Chrome could not load the test page %s/person (the person's window stayed blank)", site.URL)
+	}
+	if runtime.GOOS == "darwin" {
+		// Chrome, started by this test, came to the front as any app does when
+		// it starts. The person is using something else: put Finder in front, so
+		// "Chrome never comes to the front" and "the front app is unchanged"
+		// mean something.
+		_ = exec.Command("/usr/bin/open", "-b", "com.apple.finder").Run()
+		time.Sleep(time.Second)
+	}
 	frontBefore := frontAppPID()
 	t.Logf("app in front before: %d (Chrome is %d)", frontBefore, chrome.Process.Pid)
 
@@ -451,8 +468,12 @@ func frontAppPID() int {
 	if err != nil {
 		return -1
 	}
-	var pid int
-	fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(out)), `"pid"=`)), "%d", &pid)
+	// `"pid"=123` on some releases, `"pid" = 123` on others.
+	digits := regexp.MustCompile(`\d+`).FindAllString(string(out), -1)
+	if len(digits) == 0 {
+		return -1
+	}
+	pid, _ := strconv.Atoi(digits[len(digits)-1])
 	return pid
 }
 
@@ -491,4 +512,22 @@ func agentWindowBounds(t *testing.T) WindowBounds {
 		t.Fatal(err)
 	}
 	return reply.Result.Bounds
+}
+
+// macDiagnostics logs what on a Mac can keep Chrome from reaching a program
+// that listens on 127.0.0.1 (the application firewall asks about, and holds
+// connections to, programs it doesn't know): read-only.
+func macDiagnostics(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	for _, args := range [][]string{
+		{"/usr/libexec/ApplicationFirewall/socketfilterfw", "--getglobalstate"},
+		{"/usr/libexec/ApplicationFirewall/socketfilterfw", "--getblockall"},
+		{"/usr/libexec/ApplicationFirewall/socketfilterfw", "--getallowsigned"},
+		{"/usr/bin/lsappinfo", "front"},
+	} {
+		out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+		t.Logf("%s: %s %v", strings.Join(args, " "), strings.TrimSpace(string(out)), err)
+	}
 }
