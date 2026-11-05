@@ -6,6 +6,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/codextrust"
+	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
 func TestAdapterDeclaresStructuredEverything(t *testing.T) {
@@ -87,5 +88,29 @@ func TestPrepareLaunchGivesTheAppServerTheFolderTrust(t *testing.T) {
 	}
 	if strings.Contains(server, "check_for_update_on_startup") {
 		t.Fatalf("only the trust is forwarded:\n%s", server)
+	}
+}
+
+// The app-server starts the MCP servers, so the tools added to a launch must
+// reach it, not only the TUI.
+func TestPrepareLaunchGivesTheAppServerTheMCPTools(t *testing.T) {
+	a := Adapter{ControlDir: "/state/codex-ctl"}
+	chrome := `mcp_servers.mewla_chrome={command="/bin/mewla",args=["agent-use","chrome-mcp"],enabled=true}`
+	off := `mcp_servers.computer-use.enabled=false`
+	launch, err := a.PrepareLaunch("codex --model m -c " + shellquote.Word(chrome) + " -c " + shellquote.Word(off) + " -c 'model_reasoning_effort=\"high\"'")
+	if err != nil || launch.Control == "" {
+		t.Fatalf("not wrapped: %+v %v", launch, err)
+	}
+	server, _, _ := strings.Cut(launch.Command, " > ")
+	for _, want := range []string{chrome, off} {
+		if !strings.Contains(server, shellquote.Word(want)) {
+			t.Errorf("app-server lacks %q:\n%s", want, server)
+		}
+	}
+	if strings.Contains(server, "model_reasoning_effort") {
+		t.Fatalf("only trust and MCP tools are forwarded:\n%s", server)
+	}
+	if strings.Count(launch.Command, shellquote.Word(chrome)) != 2 {
+		t.Fatalf("tool should be on the app-server and the TUI:\n%s", launch.Command)
 	}
 }

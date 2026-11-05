@@ -45,7 +45,9 @@ func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
 	program := strings.Fields(command)[0]
 	// The app-server is the process that loads the folder's own config, so it
 	// carries the launch's folder trust; the attached TUI shows no trust screen.
-	server := program + " app-server --listen unix://" + shellquote.Word(socket) + codextrust.Forwarded(rest)
+	// It also starts the MCP servers, so the tools Mewla adds to the launch
+	// (mewla_chrome, mewla_computer) are forwarded too.
+	server := program + " app-server --listen unix://" + shellquote.Word(socket) + codextrust.Forwarded(rest) + forwardedMCP(rest)
 	log, pid := ControlLogPath(socket), ControlPidPath(socket)
 	wrapped := "set +m; " + server + " > " + shellquote.Word(log) + " 2>&1 & echo $! > " + shellquote.Word(pid) +
 		"; exec " + program + " --remote unix://" + shellquote.Word(socket)
@@ -53,6 +55,22 @@ func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
 		wrapped += " " + rest
 	}
 	return agentevents.Launch{Command: wrapped, Control: socket}, nil
+}
+
+// forwardedMCP returns, as launch options for the app-server, the MCP server
+// overrides (-c mcp_servers.<name>=...) that the TUI command line carries.
+func forwardedMCP(tuiArgs string) string {
+	fields, ok := shellquote.Fields(tuiArgs)
+	if !ok {
+		return ""
+	}
+	var out strings.Builder
+	for index := 0; index+1 < len(fields); index++ {
+		if (fields[index] == "--config" || fields[index] == "-c") && strings.HasPrefix(fields[index+1], "mcp_servers.") {
+			out.WriteString(" -c " + shellquote.Word(fields[index+1]))
+		}
+	}
+	return out.String()
 }
 
 // ControlPidPath is where the launch wrapper records the app-server's pid.
