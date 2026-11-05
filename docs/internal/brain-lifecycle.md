@@ -20,6 +20,18 @@ with a durable `next_attempt_at`. The daemon timer creates one actionable wake
 for one bounded check. Generic Brain-thread `user_input` cannot match that wait,
 so unrelated conversation does not revise the Work or create a card.
 
+A persistent loop is exactly this shape with a `Work.Loop` marker (interval and
+Worker route) and one lifecycle owner of its next check: `Engine.SetTimedWait`
+writes the `due_retry` wake (`KWakeSet` with `next_attempt_at`) and refuses while
+an Attempt is active or a Review is open. A paused loop is the same wake with no
+time: the sweep and `NextWakeAt` ignore it, and only `loop resume` replaces it.
+Persisted rows accept that timeless wake only for a loop's own
+`loop:<work_id>` reference; Brain's `resolve` still requires a time. The Work
+row stays the single authority for identity, objective, progress (each handled
+event's disposition summary) and cancellation; `Store.LoopStatus` only derives a
+read model. The record decoder ignores unknown fields, so rolling the binary back
+keeps every wake firing and loses only the interval and Worker route.
+
 The visible Brain timeline is a projection. One Work owns one replaceable card;
 repeated delivery of its stable Event cannot append duplicate cards. Session,
 provider, tmux, transcript, and process observations help decide whether an

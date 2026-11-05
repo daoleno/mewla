@@ -90,6 +90,9 @@ type Request struct {
 	BrainWork            *brain.Work                            `json:"brain_work,omitempty"`
 	BrainWorkEvent       *brain.WorkEvent                       `json:"brain_work_event,omitempty"`
 	BrainWorkDisposition *brain.WorkReviewDispositionRequest    `json:"brain_work_disposition,omitempty"`
+	BrainLoopStart       *brain.LoopStart                       `json:"brain_loop_start,omitempty"`
+	BrainLoopAt          *time.Time                             `json:"brain_loop_at,omitempty"`
+	BrainLoopAll         bool                                   `json:"brain_loop_all,omitempty"`
 	WorkID               string                                 `json:"work_id,omitempty"`
 	WorkFields           []string                               `json:"work_fields,omitempty"`
 	Service              *watcher.ManagedServiceDescriptor      `json:"service,omitempty"`
@@ -193,6 +196,7 @@ type Response struct {
 	TurnID               string                                   `json:"turn_id,omitempty"`
 	BrainWork            *brain.Work                              `json:"brain_work,omitempty"`
 	BrainWorks           []brain.Work                             `json:"brain_work_items,omitempty"`
+	BrainLoops           []brain.LoopStatus                       `json:"brain_loops,omitempty"`
 	BrainWorkEvent       *brain.WorkEvent                         `json:"brain_work_event,omitempty"`
 	BrainWorkEvents      []brain.WorkEvent                        `json:"brain_work_events,omitempty"`
 	BrainWorkTranscripts []brain.WorkTranscriptLink               `json:"brain_work_transcripts,omitempty"`

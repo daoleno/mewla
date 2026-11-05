@@ -152,6 +152,9 @@ type Work struct {
 	Wake             *WorkWake        `json:"wake,omitempty"`
 	Review           *WorkReview      `json:"review,omitempty"`
 	ContextRef       string           `json:"context_ref,omitempty"`
+	// Loop marks a persistent loop: this Work's next check is a durable timer
+	// owned by Mewla, so it outlives a Brain executor change and a restart.
+	Loop *WorkLoop `json:"loop,omitempty"`
 	// Question and Choices are what Brain asks the user about this Work; the
 	// slip renders the choices as buttons. A user reply clears them.
 	Question   string     `json:"question,omitempty"`
@@ -406,6 +409,7 @@ type workRecord struct {
 	Wake             *WorkWake        `json:"wake,omitempty"`
 	Review           *WorkReview      `json:"review,omitempty"`
 	ContextRef       string           `json:"context_ref,omitempty"`
+	Loop             *WorkLoop        `json:"loop,omitempty"`
 	// Question and Choices are what Brain asks the user about this Work; the
 	// slip renders the choices as buttons. A user reply clears them.
 	Question   string     `json:"question,omitempty"`
@@ -449,6 +453,7 @@ func worksFromRecords(records []workRecord) []Work {
 			Wake:             cloneWorkWake(record.Wake),
 			Review:           cloneWorkReview(record.Review),
 			ContextRef:       strings.TrimSpace(record.ContextRef),
+			Loop:             cloneWorkLoop(record.Loop),
 			Question:         strings.TrimSpace(record.Question),
 			Choices:          append([]string(nil), record.Choices...),
 			QuestionAt:       cloneTimePointer(record.QuestionAt),
@@ -458,6 +463,14 @@ func worksFromRecords(records []workRecord) []Work {
 		})
 	}
 	return out
+}
+
+func cloneWorkLoop(loop *WorkLoop) *WorkLoop {
+	if loop == nil {
+		return nil
+	}
+	copy := normalizeLoop(*loop)
+	return &copy
 }
 
 func cloneWorkWake(wake *WorkWake) *WorkWake {
@@ -752,6 +765,9 @@ func validateWorkWithSourceThread(item Work, requireSourceThread bool) error {
 	if item.CompletionPolicy == CompletionUntilDone && strings.TrimSpace(item.DoneCriteriaRef) == "" {
 		return fmt.Errorf("until_done requires done_criteria_ref")
 	}
+	if err := validateWorkLoop(item); err != nil {
+		return err
+	}
 	if item.CreatedAt.IsZero() || item.UpdatedAt.IsZero() {
 		return fmt.Errorf("created_at and updated_at are required")
 	}
@@ -767,7 +783,7 @@ func validateWorkWithSourceThread(item Work, requireSourceThread bool) error {
 		return fmt.Errorf("nonterminal Work cannot retain terminal_revision")
 	}
 	if item.Wake != nil {
-		if err := validateWorkWake(item.Wake); err != nil {
+		if err := validateWorkWake(item.Wake); err != nil && !pausedLoopWake(item) {
 			return err
 		}
 		if item.Status == WorkDone || item.Status == WorkCancelled {
@@ -2979,6 +2995,7 @@ func (s *Store) ResolveWorkReview(request WorkReviewDispositionRequest) (WorkEve
 		!validWorkDisposition(request.Disposition) {
 		return WorkEvent{}, Work{}, fmt.Errorf("work_id, handling_id, provider_turn_id, expected_work_revision, and a valid disposition are required")
 	}
+	s.defaultLoopWake(&request)
 	if request.Disposition == WorkDispositionWait {
 		if err := validateWorkWake(request.Wake); err != nil || request.Wake == nil {
 			if err == nil {
