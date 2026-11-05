@@ -661,6 +661,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		return control.ErrorResponse("watcher_unavailable", "Worker watcher is not running.")
 	}
 
+	req = a.applyLoopRoute(req)
 	command, err := a.resolveSpawnCommand(req)
 	if err != nil {
 		return control.ErrorResponse("invalid_executor", err.Error())
@@ -1185,6 +1186,7 @@ func (a *controlApp) handleBrainLoop(req control.Request) control.Response {
 		}
 		start := *req.BrainLoopStart
 		start.FirstCheckAt = at
+		start.Loop = a.withDefaultLoopRoute(start.Loop)
 		if route := start.Loop; strings.TrimSpace(route.WorkerExecutor) != "" && a.execs != nil {
 			if _, err := a.execs.ResolveWorkerCommand(route.WorkerExecutor, "", route.WorkerModel, route.WorkerReasoning, true); err != nil {
 				return control.ErrorResponse("invalid_brain_loop", "worker route: "+err.Error())
@@ -1221,6 +1223,52 @@ func (a *controlApp) handleBrainLoop(req control.Request) control.Response {
 		}
 		return control.Response{OK: true, BrainWork: &item, Confirmation: "Loop scheduled: one next check is armed."}
 	}
+}
+
+// withDefaultLoopRoute persists the user's configured default Worker route on
+// a loop that names none, so the route is fixed when the loop starts and does
+// not follow the Host or a later config change. A route that names an executor
+// is the user's override and is kept exactly. No configured default leaves the
+// route empty, and delegation then follows routing.md as for any Worker.
+func (a *controlApp) withDefaultLoopRoute(loop brain.WorkLoop) brain.WorkLoop {
+	if a == nil || a.execs == nil || strings.TrimSpace(loop.WorkerExecutor) != "" {
+		return loop
+	}
+	def := a.execs.ScheduledAction
+	if strings.TrimSpace(def.Executor) == "" {
+		return loop
+	}
+	loop.WorkerExecutor = def.Executor
+	if strings.TrimSpace(loop.WorkerModel) == "" {
+		loop.WorkerModel = def.Model
+	}
+	if strings.TrimSpace(loop.WorkerReasoning) == "" {
+		loop.WorkerReasoning = def.Reasoning
+	}
+	return loop
+}
+
+// applyLoopRoute makes `worker spawn -work <loop>` follow the loop's own
+// Worker route when the caller names no executor, whichever executor Brain
+// runs on. An explicit executor, command or executor id wins untouched; an
+// explicit model or reasoning wins per field.
+func (a *controlApp) applyLoopRoute(req control.Request) control.Request {
+	if a == nil || a.brainStore == nil || req.Hidden || strings.TrimSpace(req.WorkID) == "" ||
+		strings.TrimSpace(req.Executor) != "" || strings.TrimSpace(req.ExecutorID) != "" || strings.TrimSpace(req.Command) != "" {
+		return req
+	}
+	item, err := a.brainStore.Work(strings.TrimSpace(req.WorkID))
+	if err != nil || item.Loop == nil || strings.TrimSpace(item.Loop.WorkerExecutor) == "" {
+		return req
+	}
+	req.Executor = item.Loop.WorkerExecutor
+	if strings.TrimSpace(req.ModelID) == "" {
+		req.ModelID = item.Loop.WorkerModel
+	}
+	if strings.TrimSpace(req.ReasoningEffort) == "" {
+		req.ReasoningEffort = item.Loop.WorkerReasoning
+	}
+	return req
 }
 
 func brainLoopControlError(err error) control.Response {

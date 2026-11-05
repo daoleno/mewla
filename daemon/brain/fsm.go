@@ -835,7 +835,7 @@ func wakeProse(wake *lifecycle.WakeState) string {
 	if wake.Kind != lifecycle.WakeDueRetry {
 		return wake.Ref
 	}
-	if wake.NextAttemptAt == nil {
+	if wake.NextAttemptAt == nil || isLoopPauseWake(wake.NextAttemptAt) {
 		return "Paused: " + wake.Ref
 	}
 	return "Next check " + wake.NextAttemptAt.UTC().Format("2006-01-02 15:04 UTC") + ": " + wake.Ref
