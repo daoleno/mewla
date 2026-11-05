@@ -12,10 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/daoleno/mewla/daemon/screen"
 	"github.com/gorilla/websocket"
 	"time"
 )
@@ -30,8 +32,8 @@ import (
 //	  MEWLA_E2E_BIN=<mewla binary> go test ./agentuse -run MewlaExtensionE2E -v -count=1
 func TestMewlaExtensionE2E(t *testing.T) {
 	chromeBin, mcpCLI, mewla := os.Getenv("MEWLA_E2E_CHROME"), os.Getenv("MEWLA_E2E_MCP"), os.Getenv("MEWLA_E2E_BIN")
-	if chromeBin == "" || mcpCLI == "" || mewla == "" || os.Getenv("DISPLAY") == "" {
-		t.Skip("set DISPLAY, MEWLA_E2E_CHROME, MEWLA_E2E_MCP and MEWLA_E2E_BIN")
+	if chromeBin == "" || mcpCLI == "" || mewla == "" || (runtime.GOOS == "linux" && os.Getenv("DISPLAY") == "") {
+		t.Skip("set MEWLA_E2E_CHROME, MEWLA_E2E_MCP and MEWLA_E2E_BIN (and DISPLAY on Linux)")
 	}
 	root, err := os.MkdirTemp("", "e2e")
 	if err != nil {
@@ -69,7 +71,27 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc.lookChrome = func(string) (chromeInstall, bool) { return chromeInstall{chromeBin, profile}, true }
-	svc.lookDesktop = func() ([]string, bool) { return []string{"DISPLAY=" + os.Getenv("DISPLAY")}, true }
+	svc.lookDesktop = func() ([]string, bool) {
+		if runtime.GOOS == "linux" {
+			return []string{"DISPLAY=" + os.Getenv("DISPLAY")}, true
+		}
+		return nil, true
+	}
+	// On a Mac, with MEWLA_E2E_AGENT_DISPLAY=1, the agent's window opens on the
+	// agent display, as the daemon does for it.
+	var displayBounds *WindowBounds
+	if os.Getenv("MEWLA_E2E_AGENT_DISPLAY") == "1" {
+		hold, release, ok := screen.NewService(root).AgentDisplay()
+		if !ok {
+			t.Fatal("this computer has no agent display")
+		}
+		svc.SetAgentDisplay(func(key string) (WindowBounds, error) {
+			r, err := hold(key)
+			b := WindowBounds{Left: r.Min.X, Top: r.Min.Y, Width: r.Dx(), Height: r.Dy()}
+			displayBounds = &b
+			return b, err
+		}, release)
+	}
 	svc.executable = func() (string, error) { return mewla, nil }
 	extDir, err := svc.ExtensionDir()
 	if err != nil {
@@ -94,10 +116,14 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	go bridge.Serve(ctx)
 
 	// The person's Chrome, with a window of their own on a page.
-	chrome := exec.Command(chromeBin, "--user-data-dir="+profile, "--no-sandbox", "--no-first-run", "--no-default-browser-check",
-		"--remote-debugging-port=9334", "--load-extension="+extDir, "--window-size=900,700", site.URL+"/person")
-	chrome.Env = append(os.Environ(), "HOME="+root)
-	chrome.Stderr = os.Stderr
+	chromeArgs := []string{"--user-data-dir=" + profile, "--no-first-run", "--no-default-browser-check",
+		"--remote-debugging-port=9334", "--load-extension=" + extDir, "--window-size=900,700", site.URL + "/person"}
+	chrome := exec.Command(chromeBin, chromeArgs...)
+	if runtime.GOOS == "linux" {
+		chrome.Args = append(chrome.Args, "--no-sandbox")
+		chrome.Env = append(os.Environ(), "HOME="+root)
+		chrome.Stderr = os.Stderr
+	}
 	if err := chrome.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -126,6 +152,8 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	}
 	person := observePersonWindow(t)
 	t.Logf("person's window before: %s", person)
+	frontBefore := frontAppPID()
+	t.Logf("app in front before: %d (Chrome is %d)", frontBefore, chrome.Process.Pid)
 
 	status := svc.Refresh()
 	if status.Browser.State != BrowserReady {
@@ -165,6 +193,16 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		t.Fatalf("the server saw %d hits, value %q: %s", hits.Load(), typed.Load(), out)
 	}
 
+	if displayBounds != nil {
+		got := agentWindowBounds(t)
+		t.Logf("agent window at %+v, agent display %+v", got, *displayBounds)
+		if got.Left < displayBounds.Left || got.Left >= displayBounds.Left+displayBounds.Width {
+			t.Fatalf("the agent's window is not on the agent display: %+v", got)
+		}
+	}
+	if frontAfter := frontAppPID(); frontAfter != frontBefore {
+		t.Fatalf("the app in front changed from %d to %d", frontBefore, frontAfter)
+	}
 	after := observePersonWindow(t)
 	t.Logf("person's window after: %s", after)
 	if after != person {
@@ -390,4 +428,59 @@ func shotOfExtensionPage(t *testing.T, path string) {
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// frontAppPID is the pid of the app in front on a Mac, 0 elsewhere.
+func frontAppPID() int {
+	if runtime.GOOS != "darwin" {
+		return 0
+	}
+	front, err := exec.Command("/usr/bin/lsappinfo", "front").Output()
+	if err != nil {
+		return -1
+	}
+	out, err := exec.Command("/usr/bin/lsappinfo", "info", "-only", "pid", strings.TrimSpace(string(front))).Output()
+	if err != nil {
+		return -1
+	}
+	var pid int
+	fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(out)), `"pid"=`)), "%d", &pid)
+	return pid
+}
+
+// agentWindowBounds is where the agent's page's window is, from Chrome.
+func agentWindowBounds(t *testing.T) WindowBounds {
+	t.Helper()
+	resp, err := http.Get("http://127.0.0.1:9334/json/version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var version struct {
+		WS string `json:"webSocketDebuggerUrl"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&version)
+	resp.Body.Close()
+	var targetID string
+	for _, target := range cdpTargets(t) {
+		u := fmt.Sprint(target["url"])
+		if target["type"] == "page" && !strings.HasSuffix(u, "/person") && !strings.HasPrefix(u, "chrome-extension://") {
+			targetID = fmt.Sprint(target["id"])
+		}
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(version.WS, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.WriteJSON(map[string]any{"id": 1, "method": "Browser.getWindowForTarget", "params": map[string]any{"targetId": targetID}})
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	var reply struct {
+		Result struct {
+			Bounds WindowBounds `json:"bounds"`
+		} `json:"result"`
+	}
+	if err := conn.ReadJSON(&reply); err != nil {
+		t.Fatal(err)
+	}
+	return reply.Result.Bounds
 }
