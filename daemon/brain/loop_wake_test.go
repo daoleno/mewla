@@ -109,7 +109,8 @@ func TestLoopWakeSurvivesHostSwitchAndRestartAndFiresOnce(t *testing.T) {
 	if delivered.WorkID != item.ID || work.Loop == nil || work.Loop.WorkerExecutor != "claude" || work.Loop.WorkerModel != "claude-sonnet-5-5" {
 		t.Fatalf("delivered %+v work %+v", delivered, work)
 	}
-	if !strings.Contains(work.NextAction, "A loop check is due") || !strings.Contains(work.NextAction, "worker spawn -executor claude -model claude-sonnet-5-5") {
+	if !strings.Contains(work.NextAction, "A loop check is due") || !strings.Contains(work.NextAction, "mewla brain work resolve") || !strings.Contains(work.NextAction, "Never close it with brain work update") ||
+		!strings.Contains(work.NextAction, "executor claude, model claude-sonnet-5-5") {
 		t.Fatalf("wake next action = %q", work.NextAction)
 	}
 	if delivered.DeliveryHostSessionID != "host:@codex" {
@@ -316,6 +317,9 @@ func TestLoopPauseDuringCheckBlocksLateRearmAndSurvivesRestart(t *testing.T) {
 	if _, err := store.ResumeLoop(item.ID, clock.now().Add(time.Hour)); err == nil {
 		t.Fatal("resume with a time while a check is handled was accepted")
 	}
+	if paused, err := store.Work(item.ID); err != nil || !strings.Contains(retryDueProse(paused), "The user has PAUSED this loop") {
+		t.Fatalf("a paused loop's check must say so: %q err=%v", retryDueProse(paused), err)
+	}
 	restarted := newLoopStore(t, root, clock)
 	status, err := restarted.LoopStatus(item.ID)
 	if err != nil || status.State != LoopPausing {
@@ -379,4 +383,32 @@ func TestLoopResumeDuringCheckClearsIntentOnly(t *testing.T) {
 	if status, _ := store.LoopStatus(item.ID); status.State != LoopScheduled || status.NextCheckAt == nil {
 		t.Fatalf("status after resolve = %+v", status)
 	}
+}
+
+// A Host that closes a loop check with `brain work update -status waiting`
+// would replace the next check with a wait nothing answers. It is refused with
+// the command that works, and the loop keeps its place.
+func TestLoopRefusesOperatorWaitThatWouldLoseTheNextCheck(t *testing.T) {
+	root := t.TempDir()
+	clock := &loopClock{base: time.Now().UTC()}
+	store := newLoopStore(t, root, clock)
+	if err := store.SetHostSession("host:@codex", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	item := startTestLoop(t, store, clock, quotaLoop(), 10*time.Minute)
+	clock.offset = 11 * time.Minute
+	if err := store.SweepLifecycle(); err != nil {
+		t.Fatal(err)
+	}
+	claimAndDeliverTestReview(t, store, "host:@codex")
+	waiting := WorkWaiting
+	waitFor := "Next check soon"
+	_, err := store.UpdateWork(item.ID, WorkUpdate{Status: &waiting, WaitFor: &waitFor})
+	if err == nil || !strings.Contains(err.Error(), "persistent loop") || !strings.Contains(err.Error(), "work resolve") {
+		t.Fatalf("operator wait on a loop = %v", err)
+	}
+	if status, _ := store.LoopStatus(item.ID); status.State != LoopHandling {
+		t.Fatalf("the refused update changed the loop: %+v", status)
+	}
+	armLoopWake(t, store, item.ID, clock.now().Add(5*time.Minute), "second check")
 }

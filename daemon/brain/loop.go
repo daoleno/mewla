@@ -168,16 +168,16 @@ func (s *Store) StartLoop(in LoopStart) (Work, error) {
 	if !at.After(now) {
 		return Work{}, fmt.Errorf("the first check must be in the future")
 	}
-	nextAction := "Check progress toward the objective, then re-arm the next check or finish."
+	nextAction := "Check progress toward the objective, then re-arm the next check (mewla brain work resolve -disposition wait) or finish."
 	if loop.WorkerExecutor != "" {
-		nextAction += " Delegate with worker spawn -executor " + loop.WorkerExecutor
+		nextAction += " If a Worker is needed: worker spawn -work <id>, which follows this loop's route (-executor " + loop.WorkerExecutor
 		if loop.WorkerModel != "" {
 			nextAction += " -model " + loop.WorkerModel
 		}
 		if loop.WorkerReasoning != "" {
 			nextAction += " -reasoning " + loop.WorkerReasoning
 		}
-		nextAction += "."
+		nextAction += ")."
 	}
 	item, err := s.CreateWork(Work{
 		Title: in.Title, Objective: in.Objective, CompletionPolicy: CompletionUntilDone,
