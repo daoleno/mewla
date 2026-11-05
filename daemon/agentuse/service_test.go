@@ -2,9 +2,13 @@ package agentuse
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -398,5 +402,114 @@ func TestWithoutAPastedKeyTheStatusSaysHowToGetOne(t *testing.T) {
 	status := c.service(true).Refresh()
 	if status.Browser.State != BrowserNoKey || status.Browser.Fix != FixOpenExtension || !strings.Contains(status.Browser.Summary, "paste") {
 		t.Fatalf("no key: %+v", status.Browser)
+	}
+}
+
+func (c *computer) installMewlaExtension(profile string) {
+	c.t.Helper()
+	if err := os.MkdirAll(filepath.Join(c.chrome.UserDataDir, profile, "Extensions", MewlaExtensionID, "0.1.0_0"), 0o700); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// Mewla's own extension needs no key, and the browser tools reach Chrome
+// through Mewla's stand-in, not Chrome itself.
+func TestMewlaExtensionNeedsNoKeyAndTheToolsGetMewlasStandIn(t *testing.T) {
+	c := newFakeComputer(t)
+	c.installMewlaExtension("Default")
+	c.withNode()
+	s := c.service(true)
+	s.executable = func() (string, error) { return "/opt/mewla/bin/mewla", nil }
+	waitReady(t, s)
+	status := s.Status().Browser
+	if status.State != BrowserReady || status.KeyPasted || !strings.Contains(status.Summary, "window of their own") {
+		t.Fatalf("status %+v", status)
+	}
+
+	argv, env, err := s.MCPServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	shim := filepath.Join(c.root, "state", "agent-use", "chrome-for-tools.sh")
+	if joined := strings.Join(argv, " "); !strings.Contains(joined, "--executable-path "+shim) || strings.Contains(joined, c.chrome.Executable) {
+		t.Fatalf("argv %q", joined)
+	}
+	body, err := os.ReadFile(shim)
+	if err != nil || !strings.Contains(string(body), "'/opt/mewla/bin/mewla' agent-use open --state-dir '"+filepath.Join(c.root, "state")+"' --") {
+		t.Fatalf("shim %q %v", body, err)
+	}
+	tokens := 0
+	for _, entry := range env {
+		if v, ok := strings.CutPrefix(entry, "PLAYWRIGHT_MCP_EXTENSION_TOKEN="); ok {
+			tokens++
+			if !validToken(v) {
+				t.Fatalf("token %q", v)
+			}
+		}
+	}
+	if tokens != 1 {
+		t.Fatalf("%d tokens", tokens)
+	}
+
+	// The daemon registers the native host where Chrome looks for the user's own.
+	manifest, err := os.ReadFile(filepath.Join(c.chrome.UserDataDir, "NativeMessagingHosts", NativeHostName+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m hostManifest
+	if err := json.Unmarshal(manifest, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m.Type != "stdio" || len(m.AllowedOrigins) != 1 || m.AllowedOrigins[0] != "chrome-extension://"+MewlaExtensionID+"/" || m.Path != filepath.Join(c.root, "state", "agent-use", "native-host.sh") {
+		t.Fatalf("manifest %+v", m)
+	}
+	launcher, _ := os.ReadFile(m.Path)
+	if !strings.Contains(string(launcher), "exec '/opt/mewla/bin/mewla' agent-use native-host --state-dir") {
+		t.Fatalf("launcher %q", launcher)
+	}
+	if info, _ := os.Stat(m.Path); info == nil || info.Mode().Perm()&0o100 == 0 {
+		t.Fatal("the launcher isn't executable")
+	}
+}
+
+func TestWithoutAnyExtensionTheStatusAsksForMewlaForChrome(t *testing.T) {
+	c := newFakeComputer(t)
+	c.withNode()
+	s := c.service(false)
+	status := s.Refresh().Browser
+	if status.State != BrowserNoExtension || status.Fix != FixInstallExtension || !strings.Contains(status.Summary, "Mewla for Chrome") {
+		t.Fatalf("status %+v", status)
+	}
+}
+
+func TestTheExtensionManifestKeepsItsIDAndAsksForWhatItUses(t *testing.T) {
+	raw, err := extensionFiles.ReadFile("extension/manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		Key         string   `json:"key"`
+		Permissions []string `json:"permissions"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	der, err := base64.StdEncoding.DecodeString(m.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(der)
+	id := make([]byte, 32)
+	for i, b := range hex.EncodeToString(sum[:16]) {
+		id[i] = byte('a' + (b - map[bool]rune{true: '0', false: 'a' - 10}[b <= '9']))
+	}
+	if string(id) != MewlaExtensionID {
+		t.Fatalf("the key gives ID %s, the code expects %s", id, MewlaExtensionID)
+	}
+	want := []string{"debugger", "nativeMessaging", "tabGroups", "tabs"}
+	got := append([]string(nil), m.Permissions...)
+	sort.Strings(got)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("permissions %v", got)
 	}
 }

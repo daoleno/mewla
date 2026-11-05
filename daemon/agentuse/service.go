@@ -7,8 +7,10 @@ package agentuse
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	_ "embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -126,13 +128,27 @@ type Service struct {
 	installErrAt time.Time
 	computer     *ComputerHooks
 	phone        func() phone.Status
+	bridge       *Bridge
+	// executable is the mewla binary the extension's host and the tools'
+	// stand-in for Chrome run; replaced in tests.
+	executable func() (string, error)
+}
+
+// Bridge is the daemon's side of Mewla's Chrome extension (see bridge.go).
+func (s *Service) Bridge() *Bridge {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.bridge == nil {
+		s.bridge = NewBridge(s.dir)
+	}
+	return s.bridge
 }
 
 // New reads this computer's switch from stateDir. It never touches Chrome.
 // The daemon passes prepare=true so it can fetch the browser tools.
 func New(stateDir string, prepare bool) (*Service, error) {
 	home, _ := os.UserHomeDir()
-	s := &Service{dir: filepath.Join(stateDir, "agent-use"), home: home, prepare: prepare, lookChrome: findChrome, lookNode: findNode, lookDesktop: findDesktop, lookCodex: findCodexComputerUse, recheck: recheckEvery}
+	s := &Service{dir: filepath.Join(stateDir, "agent-use"), home: home, prepare: prepare, lookChrome: findChrome, lookNode: findNode, lookDesktop: findDesktop, lookCodex: findCodexComputerUse, recheck: recheckEvery, executable: os.Executable}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.loadLocked(); err != nil {
@@ -203,6 +219,13 @@ func (s *Service) refreshBrowser() Status {
 // otherwise only refreshed when something asks, such as an agent starting,
 // so a computer left alone would never fetch the browser tools.
 func (s *Service) Run(ctx context.Context) {
+	if s.prepare {
+		go func() {
+			if err := s.Bridge().Serve(ctx); err != nil {
+				log.Printf("agent use: the extension bridge stopped: %v", err)
+			}
+		}()
+	}
 	ticker := time.NewTicker(s.recheck)
 	defer ticker.Stop()
 	for {
@@ -224,6 +247,9 @@ func (s *Service) Run(ctx context.Context) {
 type launch struct {
 	node, cli, chrome, profile, key string
 	desktop                         []string
+	// mewla is set when the browser tools reach Chrome through Mewla's own
+	// extension: no key, and the tools' "Chrome" is Mewla's stand-in.
+	mewla bool
 }
 
 func (s *Service) browserLocked() (BrowserStatus, launch) {
@@ -235,21 +261,33 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 	if !ok {
 		return BrowserStatus{State: BrowserNoDesktop, Summary: "Sign in to this computer's desktop so agents can open Chrome there."}, launch{}
 	}
-	profile, ok := extensionProfile(chrome.UserDataDir)
+	// Mewla's own extension needs no key. The Playwright extension, which
+	// asks the person to copy its key, is still used where that was done.
+	mewlaProfile, mewla := profileWithExtension(chrome.UserDataDir, MewlaExtensionID)
+	profile, ok := mewlaProfile, mewla
+	if !mewla {
+		profile, ok = extensionProfile(chrome.UserDataDir)
+	}
 	if !ok {
-		return BrowserStatus{State: BrowserNoExtension, Summary: "Add the Playwright extension to Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
+		return BrowserStatus{State: BrowserNoExtension, Summary: "Add Mewla for Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
 	}
 	status := BrowserStatus{Profile: profile}
-	// The extension's key is the person's to hand over: the extension shows it
-	// on its status page and checks it when the browser tools connect. Mewla
-	// does not read it out of Chrome's storage.
 	key := s.settings.Key
-	if key == "" {
-		status.State, status.Fix = BrowserNoKey, FixOpenExtension
-		status.Summary = "Copy the Playwright extension's key from its page in Chrome and paste it here."
-		return status, launch{}
+	if mewla {
+		// The browser tools check for a key when they start, though Mewla's
+		// extension never asks for one: a made-up one satisfies them.
+		key = randomToken()
+	} else {
+		// The extension's key is the person's to hand over: the extension
+		// shows it on its status page and checks it when the browser tools
+		// connect. Mewla does not read it out of Chrome's storage.
+		if key == "" {
+			status.State, status.Fix = BrowserNoKey, FixOpenExtension
+			status.Summary = "Add Mewla for Chrome, or copy the Playwright extension's key from its page in Chrome and paste it here."
+			return status, launch{}
+		}
+		status.KeyPasted = true
 	}
-	status.KeyPasted = true
 	node, npm, ok := s.lookNode(s.home)
 	if !ok {
 		status.State = BrowserNoNode
@@ -272,7 +310,17 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 	}
 	status.State = BrowserReady
 	status.Summary = "Agents use your Chrome, in their own tab group."
-	return status, launch{node: node, cli: cli, chrome: chrome.Executable, profile: profile, key: key, desktop: desktop}
+	if mewla {
+		status.Summary = "Agents use your Chrome, in a window of their own."
+		if s.prepare {
+			if exe, err := s.executable(); err == nil {
+				if err := s.InstallNativeHost(chrome.UserDataDir, exe); err != nil {
+					log.Printf("agent use: couldn't register Mewla's native host with Chrome: %v", err)
+				}
+			}
+		}
+	}
+	return status, launch{node: node, cli: cli, chrome: chrome.Executable, profile: profile, key: key, desktop: desktop, mewla: mewla}
 }
 
 func (s *Service) packageDir() string { return filepath.Join(s.dir, "playwright-mcp") }
@@ -452,7 +500,17 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 	if err := atomicfile.Write(fastActionsPath, fastActions, 0o600); err != nil {
 		return nil, nil, err
 	}
-	argv = []string{l.node, l.cli, "--extension", "--executable-path", l.chrome, "--profile-dir-name", l.profile,
+	executable := l.chrome
+	if l.mewla {
+		exe, err := s.executable()
+		if err != nil {
+			return nil, nil, err
+		}
+		if executable, err = s.writeOpenShim(exe); err != nil {
+			return nil, nil, err
+		}
+	}
+	argv = []string{l.node, l.cli, "--extension", "--executable-path", executable, "--profile-dir-name", l.profile,
 		// An action answers with what changed, not the whole page: a busy
 		// app's page is hundreds of thousands of tokens, which the agent
 		// asks for, when it needs it, with browser_find or browser_snapshot.
@@ -496,6 +554,13 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 		"PATH="+filepath.Dir(l.node)+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
 	return argv, env, nil
+}
+
+// randomToken is a key for the browser tools that nothing else will check.
+func randomToken() string {
+	var b [24]byte
+	_, _ = rand.Read(b[:])
+	return base64.RawURLEncoding.EncodeToString(b[:])
 }
 
 func firstLine(text string) string {
