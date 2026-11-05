@@ -12,22 +12,24 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
 1. Open **Settings** and tap the computer. Its page has a quiet row,
    *Let agents use Chrome*. A missing Chrome or Node.js is not shown there as a
    problem; `mewla agent-use` on the computer says what is missing.
-2. Tap **Set up**. Chrome on that computer opens the Playwright
-   Extension in the Chrome Web Store. Click **Add to Chrome** there, or
-   through [Screen](screen.md) if you are not at the computer.
-3. The extension shows a key (`PLAYWRIGHT_MCP_EXTENSION_TOKEN`) on its own
-   page. Tap **Open it** to open that page in Chrome and copy the key. Then, on
-   that computer, run `mewla agent-use key` and paste it. If the key is on your
-   phone's clipboard instead, tap **Paste key**. Mewla does not read the key out
-   of Chrome's storage; you hand it over once, and it stays until you clear it
-   with `mewla agent-use key -clear`.
+2. Tap **Set up**. Chrome on that computer opens **Mewla for Chrome** in the
+   Chrome Web Store. Click **Add to Chrome** there, or through
+   [Screen](screen.md) if you are not at the computer.
 
-When nothing is missing, the page shows only the switch. Mewla downloads the
-browser tools the first time (it needs Node.js 20 or later on the computer).
-A computer without a desktop session, such as a headless server, has no
-Chrome for agents to use; its page shows nothing about it. Mewla looks again every half minute
-until Chrome is ready, so a computer left alone picks the extension up by
-itself, and your other computers learn of it over their open connection.
+That is all: no key to copy. Mewla registers its helper with Chrome itself, and
+the extension connects to it whenever Chrome runs. If Chrome isn't running when
+an agent needs it, Mewla starts it in the background with no window, and the
+agent's window is the only one that appears.
+
+Mewla downloads the browser tools the first time (it needs Node.js 20 or later
+on the computer). A computer without a desktop session, such as a headless
+server, has no Chrome for agents to use; its page shows nothing about it. Mewla
+looks again every half minute until Chrome is ready, so a computer left alone
+picks the extension up by itself, and your other computers learn of it over
+their open connection.
+
+If you set the Playwright extension up before, with its key, that keeps
+working; adding Mewla for Chrome replaces it.
 
 The switch **Agents can use this computer** turns it off: agents started
 after that don't get your Chrome, and agents already running lose it the next
@@ -35,14 +37,15 @@ time they start their browser tools.
 
 ## What agents do there
 
-Each agent gets its own tab group and sees only the tabs in it. Drag a tab
-into the group to hand it a page you already have open, or out of it to take
-it back. Chrome shows a bar while an agent is attached.
+Each agent gets a window of its own and sees only the tabs in it. Your own
+windows and tabs are never read, moved or focused, and Chrome stays behind
+whatever you are using. On a Mac with an agent display (see [Screen](screen.md))
+the window opens there, off your screen. Chrome shows a bar while an agent is
+attached.
 
 When an agent is done, because its Worker ended or it stopped using the
-browser, Mewla closes the tabs in its group and the group goes with them, so a
-computer that runs all day doesn't pile up tabs. A tab you dragged into the
-group is closed too; drag it out first to keep it.
+browser, Mewla closes its window and the tabs in it, so a computer that runs
+all day doesn't pile up tabs.
 
 Agents open pages, read them, fill in forms, click, upload and wait for what a
 page does next. What takes the time is the agent's turns, not the browser, so
@@ -65,8 +68,8 @@ the Mac's Chrome. See [Your other computers](computers.md).
 | The row says | What to do |
 | --- | --- |
 | Google Chrome isn't installed | Install Google Chrome. Chrome from Flatpak or Snap is not supported. |
-| Let agents use Chrome | Tap **Set up**, then **Add to Chrome**. |
-| Open the Playwright extension in Chrome and copy its key | Tap **Open it**, copy the key the extension shows, then run `mewla agent-use key` on the computer and paste it (or tap **Paste key** to use your phone's clipboard). |
+| Add Mewla for Chrome | Tap **Set up**, then **Add to Chrome**. |
+| Open the Playwright extension in Chrome and copy its key | Only for the older Playwright extension: tap **Open it**, copy the key it shows, then run `mewla agent-use key` on the computer and paste it. Adding Mewla for Chrome instead needs no key. |
 | Sign in to this computer's desktop | On Linux, agents open Chrome in your desktop session. With nobody signed in to the desktop there is no Chrome to use; sign in and the row turns ready. |
 | Install Node.js 20 or later | Install Node.js on that computer; Mewla finds it in the usual places, including version managers. |
 | Couldn't download the browser tools | Check the computer's network, then tap **Try again**. |
@@ -81,9 +84,10 @@ mewla agent-use fix      # do the fix that status names
 
 ## What stays where
 
-The extension's key stays on the computer, readable only by your user. It goes
-to the browser tools through their environment, never into a command line, a
-log or an agent's prompt.
+Mewla for Chrome has no key. (With the older Playwright extension, its key stays
+on the computer, readable only by your user, and goes to the browser tools
+through their environment, never into a command line, a log or an agent's
+prompt.)
 
 Files the browser tools make on their own, such as console logs, screenshots
 and downloads, go to `~/.mewla/agent-use/browser-files` rather than the

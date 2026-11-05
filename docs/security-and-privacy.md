@@ -104,17 +104,22 @@ action is logged on the computer without what was typed. See
 
 ## Agents in your browser
 
-When **Agents can use this computer** is on and the Playwright extension is in
+When **Agents can use this computer** is on and Mewla for Chrome is in
 Chrome, agents Mewla starts on that computer can use your Chrome with your
-logins, through the extension. Each works in a tab group of its own and sees
-only that group. The switch turns it off for new agents at once.
+logins, through the extension. Each works in a window of its own, which the
+extension creates for it and closes when the agent is done; the extension
+attaches only to tabs in that window and never reads, moves or focuses your
+own. The switch turns it off for new agents at once.
 
-The extension's key lets anything that has it attach to your Chrome without
-asking. Mewla reads it from the extension's storage in your Chrome profile (or
-keeps the one you pasted, in a file only your user can read) and hands it to
-the browser tools in their environment only: never on a command line, in a log
-or in an agent's prompt. Regenerate it in the extension to cut off every copy.
-What the browser tools save by themselves (console logs, screenshots,
+The extension has no key to copy or leak. Chrome starts Mewla's helper
+(`com.mewla.browser`, registered in your Chrome profile's own
+NativeMessagingHosts folder, with no administrator rights) only for the
+extension's ID, the helper reaches the Mewla daemon over a socket only your
+user can open, and the daemon passes a connection only to the browser tools it
+started, on this computer's loopback. Where the Playwright extension was set
+up the old way, its key is still kept in a file only your user can read and
+handed to the browser tools in their environment only: never on a command
+line, in a log or in an agent's prompt. What the browser tools save by themselves (console logs, screenshots,
 downloads) goes to `~/.mewla/agent-use/browser-files`, readable only by your
 user and capped at 256 MB, oldest first; pages are not saved there unless an
 agent asks.

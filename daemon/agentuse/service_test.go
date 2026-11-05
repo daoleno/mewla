@@ -86,10 +86,22 @@ func TestBrowserStatusWalksTheUserThroughWhatIsMissing(t *testing.T) {
 	if !status.Enabled || status.Browser.State != BrowserNoExtension || status.Browser.Fix != FixInstallExtension {
 		t.Fatalf("no extension: %+v", status)
 	}
+	// Not in the store yet: Chrome's extensions page opens, and the person is
+	// told which folder to load.
+	if _, err := s.Fix(FixInstallExtension); err == nil || !strings.Contains(err.Error(), "Load unpacked") || !strings.Contains(err.Error(), filepath.Join(c.root, "state", "agent-use", "chrome-extension")) {
+		t.Fatalf("unpublished: %v", err)
+	}
+	waitForFile(t, filepath.Join(c.root, "chrome-opened"), "chrome://extensions")
+	if _, err := os.Stat(filepath.Join(c.root, "state", "agent-use", "chrome-extension", "manifest.json")); err != nil {
+		t.Fatal(err)
+	}
+	// Published: the store's page opens.
+	MewlaStoreURL = "https://chromewebstore.google.com/detail/mewla-for-chrome/abc"
+	defer func() { MewlaStoreURL = "" }()
 	if _, err := s.Fix(FixInstallExtension); err != nil {
 		t.Fatal(err)
 	}
-	waitForFile(t, filepath.Join(c.root, "chrome-opened"), storeURL)
+	waitForFile(t, filepath.Join(c.root, "chrome-opened"), MewlaStoreURL)
 
 	c.installExtension("Default")
 	if status := s.Refresh(); status.Browser.State != BrowserNoKey || status.Browser.Fix != FixOpenExtension {
@@ -506,7 +518,7 @@ func TestTheExtensionManifestKeepsItsIDAndAsksForWhatItUses(t *testing.T) {
 	if string(id) != MewlaExtensionID {
 		t.Fatalf("the key gives ID %s, the code expects %s", id, MewlaExtensionID)
 	}
-	want := []string{"debugger", "nativeMessaging", "tabGroups", "tabs"}
+	want := []string{"debugger", "nativeMessaging"}
 	got := append([]string(nil), m.Permissions...)
 	sort.Strings(got)
 	if strings.Join(got, ",") != strings.Join(want, ",") {

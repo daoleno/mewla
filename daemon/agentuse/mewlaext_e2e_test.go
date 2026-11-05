@@ -3,6 +3,7 @@ package agentuse
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -74,7 +75,7 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := svc.InstallNativeHost(profile, mewla); err != nil {
+	if err := svc.InstallNativeHost(profile, mewla, []string{MewlaExtensionID}); err != nil {
 		t.Fatal(err)
 	}
 	// The browser tools, from an existing install of the pinned version.
@@ -148,6 +149,9 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		t.Fatalf("navigate: %s", out)
 	}
 	t.Logf("person's window after navigate: %s", observePersonWindow(t))
+	if dir := os.Getenv("MEWLA_E2E_SHOTS"); dir != "" {
+		shotOfExtensionPage(t, filepath.Join(dir, "popup-agent-working.png"))
+	}
 	script := `async (page) => {
 	  await page.getByLabel('Name').fill('hello from the agent');
 	  await page.getByRole('button', {name: 'Send'}).click();
@@ -332,4 +336,58 @@ func evalIn(t *testing.T, wsURL, expr string) string {
 		t.Fatal(err)
 	}
 	return reply.Result.Result.Value
+}
+
+// shotOfExtensionPage saves a 1280x800 screenshot of the extension's status
+// page, for the store listing. It runs in a tab of the observer's own, closed
+// after.
+func shotOfExtensionPage(t *testing.T, path string) {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPut, "http://127.0.0.1:9334/json/new?chrome-extension://"+MewlaExtensionID+"/status.html", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var target struct {
+		ID string `json:"id"`
+		WS string `json:"webSocketDebuggerUrl"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&target)
+	resp.Body.Close()
+	defer http.Get("http://127.0.0.1:9334/json/close/" + target.ID)
+	conn, _, err := websocket.DefaultDialer.Dial(target.WS, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	call := func(id int, method string, params map[string]any) json.RawMessage {
+		_ = conn.WriteJSON(map[string]any{"id": id, "method": method, "params": params})
+		for {
+			var m struct {
+				ID     int             `json:"id"`
+				Result json.RawMessage `json:"result"`
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+			if err := conn.ReadJSON(&m); err != nil {
+				t.Fatal(err)
+			}
+			if m.ID == id {
+				return m.Result
+			}
+		}
+	}
+	// The page is the popup's size; a 4x capture of 320x200 is 1280x800.
+	call(1, "Emulation.setDeviceMetricsOverride", map[string]any{"width": 320, "height": 200, "deviceScaleFactor": 1, "mobile": false})
+	time.Sleep(500 * time.Millisecond)
+	var shot struct {
+		Data string `json:"data"`
+	}
+	_ = json.Unmarshal(call(3, "Page.captureScreenshot", map[string]any{"format": "png", "clip": map[string]any{"x": 0, "y": 0, "width": 320, "height": 200, "scale": 4}}), &shot)
+	raw, err := base64.StdEncoding.DecodeString(shot.Data)
+	if err != nil || len(raw) == 0 {
+		t.Fatalf("screenshot: %v", err)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
