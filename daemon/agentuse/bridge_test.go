@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -112,8 +113,8 @@ func TestConnectAsksTheExtensionToOpenAnAgentWindow(t *testing.T) {
 	if m.Type != "connect" || m.RelayURL != goodRelay || m.Client != "claude" {
 		t.Fatalf("the extension was asked %+v", m)
 	}
-	if m.Bounds == nil || *m.Bounds != (WindowBounds{1512, 0, 1600, 1000}) {
-		t.Fatalf("the window goes %+v, want the agent display", m.Bounds)
+	if m.Bounds == nil || *m.Bounds != (WindowBounds{1512, 0, 800, 500}) {
+		t.Fatalf("the window goes %+v, want the first quarter of the agent display", m.Bounds)
 	}
 	// The display is held while the agent's window is open, and let go when
 	// the extension says it closed.
@@ -384,4 +385,45 @@ func TestTheBridgeListensWhereTheStateDirectoryIsDeep(t *testing.T) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// Several Workers connect at once: each gets a window of its own, in its own
+// quarter of the agent display, and its tab group carries its Worker's name.
+func TestWorkersConnectAtOnceEachWithItsOwnWindowAndLabel(t *testing.T) {
+	b, dir := startBridge(t)
+	b.Display = func(key string) (WindowBounds, func(), error) {
+		return WindowBounds{1512, 0, 1600, 1000}, func() {}, nil
+	}
+	b.WorkerName = func(worker string) string {
+		return map[string]string{"%1": "Researcher", "%2": "Writer"}[worker]
+	}
+	got := fakeExtension(t, dir, func(hostMessage) hostMessage { return hostMessage{Type: "connected"} })
+	waitHost(t, b)
+	var wg sync.WaitGroup
+	for _, worker := range []string{"%1", "%2", "%3"} {
+		worker := worker
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := ConnectViaBridgeFor(dir, goodRelay, "claude", worker); err != nil {
+				t.Errorf("%s: %v", worker, err)
+			}
+		}()
+	}
+	wg.Wait()
+	cells := map[WindowBounds]bool{}
+	labels := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		m := <-got
+		cells[*m.Bounds] = true
+		labels[m.Label] = true
+	}
+	if len(cells) != 3 {
+		t.Fatalf("the windows share a place on the display: %v", cells)
+	}
+	for _, want := range []string{"Researcher", "Writer", "%3"} {
+		if !labels[want] {
+			t.Fatalf("labels %v, missing %q", labels, want)
+		}
+	}
 }

@@ -120,3 +120,8 @@ func (s *Service) SetAgentDisplay(hold func(key string) (WindowBounds, error), r
 		return bounds, func() { release("browser:" + key) }, nil
 	}
 }
+
+// SetWorkerNames lets the tab group of a Worker's browser tabs carry its name.
+func (s *Service) SetWorkerNames(name func(worker string) string) {
+	s.Bridge().WorkerName = name
+}

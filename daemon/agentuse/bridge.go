@@ -32,13 +32,15 @@ import (
 
 // Messages between the daemon and the extension, as the extension sends them.
 type hostMessage struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id,omitempty"`
-	RelayURL  string          `json:"relayUrl,omitempty"`
-	Client    string          `json:"client,omitempty"`
-	Bounds    *WindowBounds   `json:"bounds,omitempty"`
-	Message   string          `json:"message,omitempty"`
-	Reason    string          `json:"reason,omitempty"`
+	Type     string        `json:"type"`
+	ID       string        `json:"id,omitempty"`
+	RelayURL string        `json:"relayUrl,omitempty"`
+	Client   string        `json:"client,omitempty"`
+	Bounds   *WindowBounds `json:"bounds,omitempty"`
+	Message  string        `json:"message,omitempty"`
+	Reason   string        `json:"reason,omitempty"`
+	// Label names the agent's tab group.
+	Label     string          `json:"label,omitempty"`
 	Version   string          `json:"version,omitempty"`
 	WindowID  int             `json:"windowId,omitempty"`
 	Sessions  []string        `json:"sessions,omitempty"`
@@ -60,6 +62,9 @@ type hello struct {
 	RelayURL string        `json:"relayUrl,omitempty"`
 	Client   string        `json:"client,omitempty"`
 	Bounds   *WindowBounds `json:"bounds,omitempty"`
+	// Worker is the Mewla Worker the browser tools run for (MEWLA_WORKER_ID):
+	// its name is the label of the tab group its tabs are in.
+	Worker string `json:"worker,omitempty"`
 }
 
 type connectReply struct {
@@ -114,6 +119,8 @@ type Bridge struct {
 	// agents, off the person's screen) and says where it is, for the agent's
 	// window to open on; release lets it go when the window closes.
 	Display func(key string) (bounds WindowBounds, release func(), err error)
+	// WorkerName gives a Worker's name for its tab group, when it has one.
+	WorkerName func(worker string) string
 
 	mu      sync.Mutex
 	host    *bridgeHost
@@ -121,6 +128,10 @@ type Bridge struct {
 	nextID  int
 	// releases let go of each open agent window's hold on the display.
 	releases map[string]func()
+	// slots are the places on the agent display the open windows have, so
+	// Workers' windows sit side by side, not over one another (a covered
+	// window is one Chrome may stop drawing).
+	slots map[string]int
 }
 
 type bridgeHost struct {
@@ -214,7 +225,7 @@ func (b *Bridge) serve(conn net.Conn) {
 		reply := connectReply{OK: true}
 		ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 		defer cancel()
-		if err := b.Connect(ctx, h.RelayURL, h.Client, h.Bounds); err != nil {
+		if err := b.connect(ctx, h.RelayURL, h.Client, h.Worker, h.Bounds); err != nil {
 			reply = connectReply{Error: err.Error()}
 		}
 		_ = json.NewEncoder(conn).Encode(reply)
@@ -274,6 +285,7 @@ func (b *Bridge) release(id string) {
 	b.mu.Lock()
 	release := b.releases[id]
 	delete(b.releases, id)
+	delete(b.slots, id)
 	b.mu.Unlock()
 	if release != nil {
 		release()
@@ -319,6 +331,10 @@ func validRelayURL(raw string) error {
 // Connect asks the extension to open an agent window and connect it to the
 // browser tools' relay, and returns when it has, or says why it couldn't.
 func (b *Bridge) Connect(ctx context.Context, relayURL, client string, bounds *WindowBounds) error {
+	return b.connect(ctx, relayURL, client, "", bounds)
+}
+
+func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, bounds *WindowBounds) error {
 	if err := validRelayURL(relayURL); err != nil {
 		return err
 	}
@@ -340,13 +356,23 @@ func (b *Bridge) Connect(ctx context.Context, relayURL, client string, bounds *W
 	}()
 	if bounds == nil && b.Display != nil {
 		if got, release, err := b.Display(id); err == nil {
-			bounds = &got
 			b.mu.Lock()
 			b.releases[id] = release
+			cell := cellOf(got, b.takeSlotLocked(id))
 			b.mu.Unlock()
+			bounds = &cell
 		}
 	}
-	if err := host.send(hostMessage{Type: "connect", ID: id, RelayURL: relayURL, Client: client, Bounds: bounds}); err != nil {
+	label := ""
+	if worker != "" {
+		label = worker
+		if b.WorkerName != nil {
+			if name := strings.TrimSpace(b.WorkerName(worker)); name != "" {
+				label = name
+			}
+		}
+	}
+	if err := host.send(hostMessage{Type: "connect", ID: id, RelayURL: relayURL, Client: client, Label: label, Bounds: bounds}); err != nil {
 		b.release(id)
 		return fmt.Errorf("couldn't reach the extension: %w", err)
 	}
@@ -366,12 +392,18 @@ func (b *Bridge) Connect(ctx context.Context, relayURL, client string, bounds *W
 
 // ConnectViaBridge is the connect role's side: ask the daemon.
 func ConnectViaBridge(dir, relayURL, client string) error {
+	return ConnectViaBridgeFor(dir, relayURL, client, "")
+}
+
+// ConnectViaBridgeFor is ConnectViaBridge for a Worker, whose name labels the
+// tab group its tabs are in.
+func ConnectViaBridgeFor(dir, relayURL, client, worker string) error {
 	conn, err := net.DialTimeout("unix", bridgeSocket(dir), 3*time.Second)
 	if err != nil {
 		return errors.New("Mewla isn't running on this computer")
 	}
 	defer conn.Close()
-	if err := json.NewEncoder(conn).Encode(hello{Role: "connect", RelayURL: relayURL, Client: client}); err != nil {
+	if err := json.NewEncoder(conn).Encode(hello{Role: "connect", RelayURL: relayURL, Client: client, Worker: worker}); err != nil {
 		return err
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(connectTimeout + 5*time.Second))
@@ -397,4 +429,28 @@ func DialBridgeHost(dir string) (net.Conn, error) {
 		return nil, err
 	}
 	return conn, nil
+}
+
+// takeSlotLocked is the lowest place on the display no open window has.
+func (b *Bridge) takeSlotLocked(id string) int {
+	if b.slots == nil {
+		b.slots = map[string]int{}
+	}
+	taken := map[int]bool{}
+	for _, slot := range b.slots {
+		taken[slot] = true
+	}
+	slot := 0
+	for taken[slot] {
+		slot++
+	}
+	b.slots[id] = slot
+	return slot
+}
+
+// cellOf is one quarter of the agent display: where the slot's window goes.
+func cellOf(display WindowBounds, slot int) WindowBounds {
+	w, h := display.Width/2, display.Height/2
+	i := slot % 4
+	return WindowBounds{Left: display.Left + (i%2)*w, Top: display.Top + (i/2)*h, Width: w, Height: h}
 }

@@ -518,7 +518,7 @@ func TestTheExtensionManifestKeepsItsIDAndAsksForWhatItUses(t *testing.T) {
 	if string(id) != MewlaExtensionID {
 		t.Fatalf("the key gives ID %s, the code expects %s", id, MewlaExtensionID)
 	}
-	want := []string{"debugger", "nativeMessaging"}
+	want := []string{"debugger", "nativeMessaging", "tabGroups"}
 	got := append([]string(nil), m.Permissions...)
 	sort.Strings(got)
 	if strings.Join(got, ",") != strings.Join(want, ",") {

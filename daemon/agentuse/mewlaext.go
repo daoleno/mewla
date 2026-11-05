@@ -197,7 +197,7 @@ func OpenForTools(stateDir string, args []string, startChrome func(profile strin
 	started := false
 	deadline := time.Now().Add(25 * time.Second)
 	for {
-		err := ConnectViaBridge(dir, req.RelayURL, req.Client)
+		err := ConnectViaBridgeFor(dir, req.RelayURL, req.Client, strings.TrimSpace(os.Getenv("MEWLA_WORKER_ID")))
 		if err == nil {
 			return nil
 		}

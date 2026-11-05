@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -52,6 +54,9 @@ func TestMewlaExtensionE2E(t *testing.T) {
 
 	// A page the agent drives, and one the person is reading.
 	var hits atomic.Int32
+	var inflight, maxInflight atomic.Int32
+	var recMu sync.Mutex
+	records := map[string][]string{}
 	var typed atomic.Value
 	typed.Store("")
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -60,9 +65,31 @@ func TestMewlaExtensionE2E(t *testing.T) {
 			hits.Add(1)
 			typed.Store(r.URL.Query().Get("v"))
 			io.WriteString(w, "ok")
+		case "/record2":
+			// Workers' pages record who sent what; a short wait makes
+			// concurrent requests overlap, and the overlap is counted.
+			n := inflight.Add(1)
+			for {
+				old := maxInflight.Load()
+				if n <= old || maxInflight.CompareAndSwap(old, n) {
+					break
+				}
+			}
+			time.Sleep(120 * time.Millisecond)
+			inflight.Add(-1)
+			recMu.Lock()
+			who := r.URL.Query().Get("w")
+			records[who] = append(records[who], r.URL.Query().Get("v"))
+			recMu.Unlock()
+			io.WriteString(w, "ok")
 		case "/person":
 			io.WriteString(w, `<title>person</title><input id=p autofocus><body>the person's page`)
 		default:
+			if strings.HasPrefix(r.URL.Path, "/w/") {
+				name := strings.TrimPrefix(r.URL.Path, "/w/")
+				fmt.Fprintf(w, `<title>page of %s</title><input aria-label="Note"><button onclick="fetch('/record2?w=%s&v='+encodeURIComponent(document.querySelector('input').value)).then(()=>document.title='sent '+document.querySelector('input').value)">Send</button>`, name, name)
+				return
+			}
 			io.WriteString(w, `<title>agent page</title><input id=name aria-label="Name"><button onclick="fetch('/record?v='+encodeURIComponent(document.getElementById('name').value)).then(()=>document.title='sent')">Send</button>`)
 		}
 	}))
@@ -244,6 +271,122 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	if n := countWindows(t); n != 1 {
 		t.Fatalf("the agent's window should close with the tools; %d windows remain", n)
 	}
+
+	// Several Workers at once in this same Chrome: each in a window of its own
+	// and a tab group with its name; all of them get on at the same time, and
+	// what each does reaches only its own page.
+	svc.Bridge().WorkerName = func(id string) string {
+		return map[string]string{"%e2e1": "Alpha", "%e2e2": "Beta", "%e2e3": "Gamma"}[id]
+	}
+	workers := []string{"%e2e1", "%e2e2", "%e2e3"}
+	names := map[string]string{"%e2e1": "Alpha", "%e2e2": "Beta", "%e2e3": "Gamma"}
+	procs := map[string]*mcpProc{}
+	for _, id := range workers {
+		procs[id] = startMCP(t, argv, append(append([]string(nil), env...), "MEWLA_WORKER_ID="+id))
+		defer procs[id].close()
+	}
+	const rounds = 5
+	runAll := time.Now()
+	var wg sync.WaitGroup
+	failures := make(chan error, len(workers))
+	barrier := make(chan struct{})
+	for _, id := range workers {
+		id := id
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p, name := procs[id], names[id]
+			<-barrier
+			if out, err := p.callE("browser_navigate", map[string]any{"url": site.URL + "/w/" + name}); err != nil || !strings.Contains(out, "page of "+name) {
+				failures <- fmt.Errorf("%s navigate: %v %s", name, err, out)
+				return
+			}
+			for i := 1; i <= rounds; i++ {
+				script := fmt.Sprintf(`async (page) => {
+				  await page.getByLabel('Note').fill('%s-%d');
+				  await page.getByRole('button', {name: 'Send'}).click();
+				  await page.waitForFunction(() => document.title === 'sent %s-%d');
+				  return await page.title();
+				}`, name, i, name, i)
+				if out, err := p.callE("browser_run_code_unsafe", map[string]any{"code": script}); err != nil {
+					failures <- fmt.Errorf("%s round %d: %v %s", name, i, err, out)
+					return
+				}
+			}
+		}()
+	}
+	close(barrier)
+	waited := make(chan struct{})
+	go func() { wg.Wait(); close(waited) }()
+	select {
+	case <-waited:
+	case <-time.After(120 * time.Second):
+		t.Fatal("the Workers did not finish: they block each other")
+	}
+	close(failures)
+	for err := range failures {
+		t.Error(err)
+	}
+	t.Logf("%d Workers, %d rounds each, at the same time: %s (overlapping requests: %d)", len(workers), rounds, time.Since(runAll).Round(10*time.Millisecond), maxInflight.Load())
+	recMu.Lock()
+	for _, id := range workers {
+		name := names[id]
+		var want []string
+		for i := 1; i <= rounds; i++ {
+			want = append(want, fmt.Sprintf("%s-%d", name, i))
+		}
+		if strings.Join(records[name], ",") != strings.Join(want, ",") {
+			t.Errorf("%s's page got %v, want %v", name, records[name], want)
+		}
+	}
+	recMu.Unlock()
+	if maxInflight.Load() < 2 {
+		t.Errorf("the Workers never overlapped (%d at most): they ran one after another", maxInflight.Load())
+	}
+	if n := countWindows(t); n != 1+len(workers) {
+		t.Errorf("expected the person's window and %d Workers' windows, got %d", len(workers), n)
+	}
+	if now := observePersonWindow(t); now != person {
+		t.Errorf("the person's window changed while the Workers worked:\n before %s\n after  %s", person, now)
+	}
+	t.Logf("windows: %s", extensionEval(t, `chrome.windows.getAll({}).then(ws => JSON.stringify(ws.map(w => ({id: w.id, focused: w.focused, state: w.state, left: w.left}))))`))
+	groups := tabGroups(t)
+	t.Logf("tab groups: %s", groups)
+	for _, name := range names {
+		if strings.Count(groups, `"title":"`+name+`"`) != 1 {
+			t.Errorf("expected one tab group named %s in %s", name, groups)
+		}
+	}
+	if frontAfter := frontAppPID(); frontAfter != frontBefore {
+		t.Errorf("the app in front changed from %d to %d", frontBefore, frontAfter)
+	}
+	for _, id := range workers {
+		procs[id].close()
+	}
+	for i := 0; i < 50 && countWindows(t) != 1; i++ {
+		time.Sleep(200 * time.Millisecond)
+	}
+	if n := countWindows(t); n != 1 {
+		t.Errorf("every Worker's window should close with its tools; %d windows remain", n)
+	}
+}
+
+// tabGroups is Chrome's tab groups as the extension sees them.
+func tabGroups(t *testing.T) string {
+	t.Helper()
+	return extensionEval(t, `chrome.tabGroups.query({}).then(g => JSON.stringify(g.map(x => ({title: x.title, windowId: x.windowId, color: x.color}))))`)
+}
+
+// extensionEval runs an expression in the extension's service worker.
+func extensionEval(t *testing.T, expr string) string {
+	t.Helper()
+	for _, target := range cdpTargets(t) {
+		if target["type"] == "service_worker" && strings.HasPrefix(fmt.Sprint(target["url"]), "chrome-extension://"+MewlaExtensionID+"/") {
+			return evalAwaitIn(t, fmt.Sprint(target["webSocketDebuggerUrl"]), expr)
+		}
+	}
+	t.Fatal("the extension's service worker isn't running")
+	return ""
 }
 
 type mcpProc struct {
@@ -302,6 +445,49 @@ func (p *mcpProc) rpc(t *testing.T, method string, params any) json.RawMessage {
 			}
 		case <-deadline:
 			t.Fatalf("%s: no answer in 90 s", method)
+		}
+	}
+}
+
+// callE is call for goroutines: it returns the failure instead of ending the
+// test.
+func (p *mcpProc) callE(name string, args map[string]any) (string, error) {
+	p.id++
+	id := p.id
+	raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": map[string]any{"name": name, "arguments": args}})
+	fmt.Fprintln(p.in, string(raw))
+	deadline := time.After(90 * time.Second)
+	for {
+		select {
+		case line, ok := <-p.lines:
+			if !ok {
+				return "", errors.New("the browser tools ended")
+			}
+			var msg struct {
+				ID     int `json:"id"`
+				Result struct {
+					Content []struct{ Text string } `json:"content"`
+					IsError bool                    `json:"isError"`
+				} `json:"result"`
+				Error json.RawMessage `json:"error"`
+			}
+			if json.Unmarshal([]byte(line), &msg) != nil || msg.ID != id {
+				continue
+			}
+			if msg.Error != nil {
+				return "", fmt.Errorf("%s: %s", name, msg.Error)
+			}
+			var texts []string
+			for _, c := range msg.Result.Content {
+				texts = append(texts, c.Text)
+			}
+			out := strings.Join(texts, "\n")
+			if msg.Result.IsError {
+				return out, fmt.Errorf("%s failed: %s", name, out)
+			}
+			return out, nil
+		case <-deadline:
+			return "", fmt.Errorf("%s: no answer in 90 s", name)
 		}
 	}
 }
@@ -393,10 +579,14 @@ func evalIn(t *testing.T, wsURL, expr string) string {
 			Result struct {
 				Value string `json:"value"`
 			} `json:"result"`
+			ExceptionDetails json.RawMessage `json:"exceptionDetails"`
 		} `json:"result"`
 	}
 	if err := conn.ReadJSON(&reply); err != nil {
 		t.Fatal(err)
+	}
+	if reply.Result.ExceptionDetails != nil {
+		t.Fatalf("%s: %s", expr, reply.Result.ExceptionDetails)
 	}
 	return reply.Result.Result.Value
 }
@@ -535,4 +725,42 @@ func macDiagnostics(t *testing.T) {
 		}
 		t.Logf("%s: %s %v", strings.Join(args, " "), text, err)
 	}
+}
+
+// evalAwaitIn is evalIn for an expression that gives a promise.
+func evalAwaitIn(t *testing.T, wsURL, expr string) string {
+	t.Helper()
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.WriteJSON(map[string]any{"id": 1, "method": "Runtime.evaluate", "params": map[string]any{"expression": expr, "returnByValue": true, "awaitPromise": true}})
+	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+	var raw json.RawMessage
+	for {
+		var msg struct {
+			ID int `json:"id"`
+		}
+		if err := conn.ReadJSON(&raw); err != nil {
+			t.Fatal(err)
+		}
+		// A worker target announces itself before it answers.
+		if json.Unmarshal(raw, &msg) == nil && msg.ID == 1 {
+			break
+		}
+	}
+	var reply struct {
+		Result struct {
+			Result struct {
+				Value string `json:"value"`
+			} `json:"result"`
+			ExceptionDetails json.RawMessage `json:"exceptionDetails"`
+		} `json:"result"`
+	}
+	_ = json.Unmarshal(raw, &reply)
+	if reply.Result.ExceptionDetails != nil {
+		t.Fatalf("%s: %s", expr, reply.Result.ExceptionDetails)
+	}
+	return reply.Result.Result.Value
 }
