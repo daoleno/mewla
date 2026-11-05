@@ -147,7 +147,7 @@ back on when it can.
 - On a network Android hasn't been told to allow, switching Wireless debugging on
   raises the system's prompt. Mewla only does that by itself on a network where
   it worked, and stops asking after the prompt is dismissed twice.
-- iOS has no Phone use.
+- iOS has no Phone use; agents on a Mac can use an iPhone through [iPhone use](iphone.md).
 
 ## Turn it off
 

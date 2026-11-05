@@ -738,6 +738,7 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="settings/model-providers" options={{ title: "Model Providers" }} />
       <Stack.Screen name="settings/friends" options={{ title: "Friends" }} />
       <Stack.Screen name="settings/phone" options={{ title: "Phone use" }} />
+      <Stack.Screen name="settings/iphone" options={{ title: "iPhone use" }} />
       <Stack.Screen name="settings/agents" options={{ title: "Outside agents" }} />
       <Stack.Screen name="settings/pet" options={{ title: "Pet" }} />
       <Stack.Screen name="settings/licenses" options={{ title: "Open-source Licenses" }} />
