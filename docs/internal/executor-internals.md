@@ -154,7 +154,21 @@ approval is answerable only when its id is exact (`classifier.PromptIdentity`: t
 displayed text of the dialog, caret and countdown excluded). The watcher captures
 it with `capture-pane -p -J -S -` and reads, in the same tmux call, whether the
 pane is on its alternate screen and the pane's own `@mewla_origin` option.
-- Claude's dialog begins at a solid rule at the margin.
+- Claude's dialog begins at a solid rule at the margin that is followed by the tool's
+  header line ("Bash command"); the header tells the rule from a line of dashes in
+  the request. Measured on Claude 2.1.318 (alternate screen, no scrollback): the box
+  is header, `╌` separator, request rows (multi-line ones behind a ` │ ` gutter),
+  `╌` separator, warning rows. Claude paints trailing blanks of arbitrary width
+  after its rows, request rows and an empty command line included, so for Claude
+  they are not evidence and are left out of the id; a blank row stays a row. A
+  request taller than the pane is not cut by Claude: the box grows and its head,
+  rule included, scrolls off the screen. Such a dialog is blocked with no id: the
+  event carries `details.prompt_unidentified` (the reason) and `details.next`
+  instead of `answer_with`, `worker status` shows `prompt_unidentified`, and
+  `worker answer` refuses with the same reason. Its exact request is the
+  `PermissionRequest` hook's: while the hook holds the decision the pane gate stays
+  silent and Brain answers the hook's prompt id (`worker approvals`, `worker
+  approve`).
 - Codex 0.166.0's TUI runs on the alternate screen (measured: `alternate_on=1`, no
   scrollback, the origin marker printed on the main screen is not in the capture).
   There the capture is the TUI's own screen with nothing to evict, and Codex cuts a

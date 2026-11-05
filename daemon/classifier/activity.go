@@ -17,6 +17,10 @@ type ActivitySignal struct {
 	// adapter could read it; nil when the pane proves a prompt but not its
 	// shape.
 	Prompt *Prompt
+	// Unidentified says why a Blocked signal that asks to run something has
+	// no Prompt: the dialog is open but the screen cannot support an id. It is
+	// empty when Prompt is set or the adapter has nothing to say.
+	Unidentified string
 }
 
 // ActivityInput is the provider-neutral observation bundle passed to adapters.

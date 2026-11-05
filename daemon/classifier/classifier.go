@@ -44,7 +44,11 @@ type Worker struct {
 	EventKind    string      `json:"event_kind,omitempty"`
 	DetailsJSON  string      `json:"details_json,omitempty"`
 	// Prompt is the blocking prompt open in the Worker's terminal right now.
-	Prompt              *Prompt    `json:"prompt,omitempty"`
+	Prompt *Prompt `json:"prompt,omitempty"`
+	// PromptUnidentified says why a blocked Worker's dialog has no Prompt (and
+	// so no id to answer): the dialog is open, but the screen cannot support an
+	// exact identity. It is empty whenever Prompt is set.
+	PromptUnidentified  string     `json:"prompt_unidentified,omitempty"`
 	NeedsAttention      bool       `json:"needs_attention,omitempty"`
 	LastProgressAt      *time.Time `json:"last_progress_at,omitempty"`
 	ExpectedNextCheckAt *time.Time `json:"expected_next_check_at,omitempty"`

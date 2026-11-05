@@ -334,7 +334,7 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	// A turn already blocked by the Worker's own report or the permission hook
 	// has told Brain; this prompt is that one. A permission dialog whose hook
 	// holds the decision is the hook's to report.
-	if !open || (turn.Status == TurnBlocked && !renewing) || (!renewing && w.hookHoldsPrompt(id, activity.Prompt)) {
+	if !open || (turn.Status == TurnBlocked && !renewing) || (!renewing && w.hookHoldsDialog(id, activity)) {
 		return turn, hasTurn
 	}
 	summary := activity.Summary
@@ -342,6 +342,10 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 		summary = summary + ": " + prompt.Title
 	}
 	details := PromptEventDetails(id, activity.Prompt)
+	if activity.Prompt == nil {
+		details["prompt_unidentified"] = unidentifiedReason(activity)
+		details["next"] = unidentifiedNext
+	}
 	details["pane"] = strings.TrimSpace(id)
 	raw, err := json.Marshal(details)
 	if err != nil {
@@ -350,7 +354,7 @@ func (w *Watcher) syncPromptGate(id string, worker classifier.Worker, alive bool
 	if _, err := w.UpdateWorkerProgress(id, classifier.WorkerProgress{
 		TurnID: turnID, Status: "blocked", Phase: "working", Attention: "user_input",
 		Summary: summary, EventKind: "needs_judgment", DetailsJSON: string(raw), LeaseSeconds: promptGateLeaseSeconds,
-		ProgressEventID: fmt.Sprintf("pane-gate:%s:%s:%d", turnID, promptID, time.Now().UnixNano()),
+		ProgressEventID: fmt.Sprintf("pane-gate:%s:%s:%d", turnID, firstNonEmptyString(promptID, "unidentified"), time.Now().UnixNano()),
 	}); err != nil {
 		return turn, hasTurn
 	}
@@ -378,6 +382,11 @@ func PromptEventDetails(sessionID string, prompt *classifier.Prompt) map[string]
 	}
 	return details
 }
+
+// unidentifiedNext is what Brain reads when a dialog is open and no id can be
+// had for it. There is nothing to pass to `worker answer -prompt`: the
+// progress event id of the event is not a prompt id.
+const unidentifiedNext = "No prompt id exists for this dialog, so `mewla worker answer` cannot target it and no key is sent for it. If a permission hook holds the decision, `mewla worker approvals` lists it with the exact request and `mewla worker approve` answers it. Otherwise ask the user to answer it in the app, or have the Worker stop and run a shorter command."
 
 const permissionPolicy = "Choose Allow only for what the Work's brief already authorizes, and quote that sentence as -basis. Use -escalate for anything the brief does not cover (other people's data, money, accounts or credentials, outside messages, irreversible deletion): the user then gets a card. Choose Deny to refuse it, with -basis saying why. If you do not answer, the user is asked."
 
@@ -493,6 +502,24 @@ func (w *Watcher) SetApprovalHold(holds func(sessionID string) bool) {
 	w.mu.Unlock()
 }
 
+// hookHoldsDialog is hookHoldsPrompt for the dialog an activity signal reports,
+// whether or not the pane could identify it: a Claude permission dialog the
+// screen cannot identify (a request taller than the pane scrolls its start
+// away) still has the exact request in the hook's decision, which is the one
+// Brain answers.
+func (w *Watcher) hookHoldsDialog(sessionID string, activity classifier.ActivitySignal) bool {
+	if activity.Prompt != nil {
+		return w.hookHoldsPrompt(sessionID, activity.Prompt)
+	}
+	if activity.Source != "claude_pane_blocked" {
+		return false
+	}
+	w.mu.RLock()
+	holds := w.approvalHolds
+	w.mu.RUnlock()
+	return holds != nil && holds(sessionID)
+}
+
 func (w *Watcher) hookHoldsPrompt(sessionID string, prompt *classifier.Prompt) bool {
 	if prompt == nil || prompt.Kind != classifier.PromptPermission {
 		return false
@@ -528,41 +555,46 @@ func (w *Watcher) AnswerPrompt(sessionID, promptID string, number int) error {
 	}
 	pane := &tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
 	return w.sessionInputOwner().serialized(sessionID, func() error {
-		prompt, err := w.currentPrompt(pane, sessionID)
+		return w.answerPrompt(pane, sessionID, promptID, number)
+	})
+}
+
+// answerPrompt is AnswerPrompt on a pane, inside the Session's serialized input.
+func (w *Watcher) answerPrompt(pane claudeChoicePane, sessionID, promptID string, number int) error {
+	prompt, err := w.currentPrompt(pane, sessionID)
+	if err != nil {
+		return err
+	}
+	if prompt == nil || prompt.ID != promptID {
+		return fmt.Errorf("%w: %w", ErrPromptGone, ErrClaudeChoiceRefused)
+	}
+	if prompt.Kind == classifier.PromptChoice {
+		return refusePrompt("a question is answered with its answers, not one option")
+	}
+	valid := false
+	for _, option := range prompt.Options {
+		valid = valid || option.Number == number
+	}
+	if !valid || number < 1 || number > 9 {
+		return refusePrompt("the prompt has no option %d", number)
+	}
+	if err := pane.sendKey(fmt.Sprint(number)); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(claudeChoiceStepTimeout)
+	for {
+		time.Sleep(claudeChoicePollInterval)
+		after, err := w.currentPrompt(pane, sessionID)
 		if err != nil {
 			return err
 		}
-		if prompt == nil || prompt.ID != promptID {
-			return fmt.Errorf("%w: %w", ErrPromptGone, ErrClaudeChoiceRefused)
+		if after == nil || after.ID != promptID {
+			return nil
 		}
-		if prompt.Kind == classifier.PromptChoice {
-			return refusePrompt("a question is answered with its answers, not one option")
+		if !time.Now().Before(deadline) {
+			return refusePrompt("the prompt did not take option %d", number)
 		}
-		valid := false
-		for _, option := range prompt.Options {
-			valid = valid || option.Number == number
-		}
-		if !valid || number < 1 || number > 9 {
-			return refusePrompt("the prompt has no option %d", number)
-		}
-		if err := pane.sendKey(fmt.Sprint(number)); err != nil {
-			return err
-		}
-		deadline := time.Now().Add(claudeChoiceStepTimeout)
-		for {
-			time.Sleep(claudeChoicePollInterval)
-			after, err := w.currentPrompt(pane, sessionID)
-			if err != nil {
-				return err
-			}
-			if after == nil || after.ID != promptID {
-				return nil
-			}
-			if !time.Now().Before(deadline) {
-				return refusePrompt("the prompt did not take option %d", number)
-			}
-		}
-	})
+	}
 }
 
 func refusePrompt(format string, args ...any) error {
@@ -618,10 +650,18 @@ func (w *Watcher) currentPrompt(pane claudeChoicePane, sessionID string) (*class
 			return nil, nil
 		}
 		if signal.Prompt == nil {
-			return nil, refusePrompt("this dialog cannot be identified exactly (the capture does not prove its first lines are present, the request is cut to fit the screen, or it has blank rows or painted trailing blanks the screen cannot tell from padding); no key was sent")
+			return nil, refusePrompt("this dialog cannot be identified exactly (%s); no key was sent", unidentifiedReason(signal))
 		}
 	}
 	return signal.Prompt, nil
+}
+
+// unidentifiedReason says why a command dialog that is open has no id.
+func unidentifiedReason(signal classifier.ActivitySignal) string {
+	if signal.Unidentified != "" {
+		return signal.Unidentified
+	}
+	return "the capture does not prove its first lines are present, the request is cut to fit the screen, or it has blank rows or painted trailing blanks the screen cannot tell from padding"
 }
 
 // commandDialogSource reports whether an activity signal is a Claude permission

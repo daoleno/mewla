@@ -1,0 +1,40 @@
+    echo \"checking $f\"                                                                                                
+                                                                                                                        
+    ls -la /tmp/$f || true                                                                                              
+  done                                                                                                                  
+  systemctl status foo --no-pager                                                                                       
+  echo done"                                                                                                            
+
+● SSH to test host and run checks                                                                                       
+  ⎿  $ ssh -o BatchMode=yes -o ConnectTimeout=3 nobody@192.0.2.1 "set -e                                                
+     cd /tmp                                                                                                            
+     for f in a b c; do                                                                                                 
+     echo \"checking $f\"                                                                                               
+     ls -la /tmp/$f || true                                                                                             
+     done                                                                                                               
+     systemctl status foo --no-pager                                                                                    
+     echo done"                                                                                                         
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+ Tip: auto mode handles these prompts for you — choose "switch to auto mode" below
+ SSH to test host and run checks
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ │ ssh -o BatchMode=yes -o ConnectTimeout=3 nobody@192.0.2.1 "set -e
+ │ cd /tmp
+ │ for f in a b c; do
+ │   echo \"checking $f\"
+ │                                                                                                                    
+ │   ls -la /tmp/$f || true
+ │ done
+ │ systemctl status foo --no-pager         
+ │ echo done"
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ A variable in this command can't be checked before it runs
+
+ Do you want to proceed?          
+ ❯ 1. Yes                                                                                                             
+   2. Yes, and switch to auto mode · auto mode handles these prompts for you                                            
+   3. No                           
+
+ Esc to cancel · Tab to amend                      

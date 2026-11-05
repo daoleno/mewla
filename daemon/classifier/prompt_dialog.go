@@ -36,8 +36,16 @@ import (
 //     scrollback is proves nothing either: tmux trims history in batches, so a
 //     pane below its limit can have lost lines (measured: limit 20, 30 lines
 //     printed, 19 held, first line gone). What does prove it:
-//     Claude: the box begins at a solid rule line at the margin, which a
-//     command's own lines (drawn indented) do not produce.
+//     Claude: the box begins at a solid rule line at the margin followed by
+//     the tool's header line ("Bash command"). A command's own rows are drawn
+//     after the header and a `╌` separator (multi-line ones with a " │ " gutter),
+//     so a rule-looking row there is followed by a separator or more request,
+//     not by a header. A request taller than the pane is not cut by Claude: the
+//     box grows and its head, rule included, scrolls off the alternate screen,
+//     which has no scrollback behind it (measured on Claude 2.1.318 at 40 and
+//     24 rows). That dialog has no start on screen and gets no id
+//     (ActivitySignal.Unidentified says why); its exact request is the
+//     PermissionRequest hook's, which Brain answers with `worker approve`.
 //     Codex on its alternate screen (CaptureInfo.Alternate): the capture is the
 //     TUI's own screen, with no scrollback behind it to evict, and Codex cuts a
 //     long request to fit ("[… 63 lines] ^a view all", refused here) instead of
@@ -56,19 +64,25 @@ import (
 //     Claude: the run of box lines indented three or more spaces) a blank row,
 //     or blanks painted after text that more request text follows, refuse the
 //     dialog: cells cannot say whether they were written or left by an earlier
-//     frame. Claude's layout has not been measured on the real client, so for
-//     Claude trailing blanks are held against the whole dialog.
+//     frame. Claude is measured (2.1.318): it paints trailing blanks of
+//     arbitrary width after rows of its own box, including request rows (9
+//     blanks after a command line that has none; a whole row of blanks for an
+//     empty command line, which keeps its " │ " gutter). They are not evidence
+//     either way, so for Claude they are left out of the id and neither a
+//     trailing blank nor a blank row refuses the dialog.
 //   - A capture not taken with -J (CaptureInfo.Exact) never yields an id.
 //
 // Whenever one of these cannot be established the dialog is still reported as
 // blocked, with no prompt and so no id to answer.
 //
 //	provider  dialog starts at                       answerable id only when
-//	claude    the solid rule line above the box       Exact capture, rule found, request has no blank row or painted trailing blanks
+//	claude    the solid rule line above the box       Exact capture, rule followed by the tool header found
 //	codex     the topmost heading sentence            Exact capture that is the alternate screen or starts at the origin marker, heading found, no truncation marker, request has no blank row or painted trailing blanks
 //
 // Known collision, not detectable from cells: a renderer that never paints
-// trailing blanks shows 'a ' and 'a' alike, so those two commands share an id;
+// trailing blanks shows 'a ' and 'a' alike, so those two commands share an id
+// (for Claude this holds for every line of the request, and a request line of
+// only blanks equals an empty one);
 // and the part of a request Codex cut from the screen is not in the id (hence
 // the refusal).
 //
@@ -193,34 +207,6 @@ func codexRequestRegion(dialog []string) (from, to int, ok bool) {
 // "[… 63 lines] ^a view all". The screen then never holds the whole request.
 var codexTruncatedRe = regexp.MustCompile(`\[(?:…|\.{2,3})\s*\d+ lines?\]|\bview all\b`)
 
-// claudeRequestRegion is where Claude's request lies: the run of lines drawn
-// indented three or more spaces (the box content) that starts at the first of
-// them. Claude's own lines (header, warnings, the question) are indented one.
-func claudeRequestRegion(dialog []string) (from, to int, ok bool) {
-	from = -1
-	for index, line := range dialog {
-		if !isBlank(line) && len(line)-len(strings.TrimLeft(line, " ")) >= 3 {
-			from = index
-			break
-		}
-	}
-	if from < 0 {
-		return 0, 0, false
-	}
-	to = from
-	for index := from; index < len(dialog); index++ {
-		line := dialog[index]
-		if isBlank(line) {
-			continue
-		}
-		if len(line)-len(strings.TrimLeft(line, " ")) < 3 {
-			break
-		}
-		to = index + 1
-	}
-	return from, to, true
-}
-
 // interiorTrailingBlanks reports whether a non-blank line in dialog[from:to]
 // that is followed by more request text ends in blanks (see the identity notes
 // above).
@@ -238,38 +224,27 @@ func interiorTrailingBlanks(dialog []string, from, to int) bool {
 // dialogPrompt builds the prompt of the dialog lines, whose menu follows. ok is
 // false when the displayed text cannot support an exact identity.
 func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, options []PromptOption) (Prompt, bool) {
-	var from, to int
-	var region bool
-	if provider == "claude" {
-		from, to, region = claudeRequestRegion(dialog)
-		// Claude's layout has not been measured on the real client: blanks
-		// anywhere in the dialog are held against it.
-		if interiorTrailingBlanks(dialog, 0, len(dialog)) {
-			return Prompt{}, false
-		}
-	} else {
+	if provider != "claude" {
 		// Codex draws on a cell grid that it pads (measured on 0.166.0: the
 		// heading, menu rows and separators all carry painted trailing blanks
 		// of arbitrary width), so blanks outside the request are provider UI
 		// and normalized; inside it they are held against the dialog.
-		from, to, region = codexRequestRegion(dialog)
+		from, to, region := codexRequestRegion(dialog)
 		for _, line := range dialog {
 			if codexTruncatedRe.MatchString(line) {
 				return Prompt{}, false
 			}
 		}
-		if region && interiorTrailingBlanks(dialog, from, to) {
+		if region && (interiorTrailingBlanks(dialog, from, to) || blankInsideRequest(dialog, from, to)) {
 			return Prompt{}, false
 		}
-	}
-	if region && blankInsideRequest(dialog, from, to) {
-		return Prompt{}, false
 	}
 	rawRows := make([]string, len(dialog))
 	for index, line := range dialog {
 		rawRows[index] = strings.TrimRight(line, " \t\r")
 	}
 	title, request, _, _ := readMenuRequest(dialog, len(dialog), false)
+	request = withoutSeparatorRows(request)
 	return Prompt{
 		ID:       PromptIdentity(kind, strings.Join(rawRows, "\n"), menuIdentityRows(menu)),
 		Kind:     kind,
@@ -280,26 +255,63 @@ func dialogPrompt(provider string, kind PromptKind, dialog, menu []string, optio
 	}, true
 }
 
-// ParseClaudePermissionPrompt reads the permission dialog open at the bottom of
-// a Claude pane. ok is false when it is not one, or when no rule line above it
-// proves where its box begins.
-func ParseClaudePermissionPrompt(pane string) (Prompt, bool) {
-	body, options, menuStart, ok := locateMenu(pane, []string{"Esc to cancel"})
-	if !ok {
-		return Prompt{}, false
-	}
-	start := -1
+// claudeUnidentifiedStart is why a Claude dialog has no id when no rule line
+// proves where it begins.
+const claudeUnidentifiedStart = "the screen does not show where the dialog starts (a request taller than the pane scrolls its head away, and the capture has no history behind it)"
+
+// claudeDialogStart is the index, in body, of the first line of the permission
+// dialog whose menu starts at menuStart, or -1. The dialog opens with a solid
+// rule at the margin followed by the tool's header line ("Bash command"). The
+// header is what tells that rule from a line of dashes inside the request: in
+// the measured layout a request's own rows are drawn after the header and the
+// first separator, and a rule-looking row there is followed by a separator or
+// more request, not by a header.
+func claudeDialogStart(body []string, menuStart int) int {
 	for index := menuStart - 1; index >= 0; index-- {
-		if claudeBoxRuleRe.MatchString(body[index]) {
-			start = index + 1
-			break
+		if !claudeBoxRuleRe.MatchString(body[index]) {
+			continue
+		}
+		if index+1 < menuStart && claudeHeaderRe.MatchString(body[index+1]) {
+			return index + 1
 		}
 	}
+	return -1
+}
+
+// claudeHeaderRe is the tool header under the rule: text, not box drawing.
+var claudeHeaderRe = regexp.MustCompile(`^ \S*[\p{L}\p{N}]`)
+
+var separatorRowRe = regexp.MustCompile(`^[╌─━]{6,}$`)
+
+// withoutSeparatorRows drops the provider's own separator rows from the
+// request as Brain reads it. The id does not rest on this text.
+func withoutSeparatorRows(request string) string {
+	lines := strings.Split(request, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if !separatorRowRe.MatchString(strings.TrimSpace(line)) {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+// ParseClaudePermissionPrompt reads the permission dialog open at the bottom of
+// a Claude pane. ok is false when it is not one, or when no rule line above it
+// proves where its box begins; reason then says why no id came of a dialog
+// that is open.
+func ParseClaudePermissionPrompt(pane string) (prompt Prompt, reason string, ok bool) {
+	body, options, menuStart, found := locateMenu(pane, []string{"Esc to cancel"})
+	if !found {
+		return Prompt{}, "", false
+	}
+	start := claudeDialogStart(body, menuStart)
 	if start < 0 {
-		return Prompt{}, false
+		return Prompt{}, claudeUnidentifiedStart, false
 	}
 	dialog := dropTerminalNotice(body[start:menuStart])
-	return dialogPrompt("claude", PromptPermission, dialog, body[menuStart:], options)
+	prompt, ok = dialogPrompt("claude", PromptPermission, dialog, body[menuStart:], options)
+	return prompt, "", ok
 }
 
 // locateCodexMenu finds the numbered menu and footer at the bottom of a Codex

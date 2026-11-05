@@ -1,0 +1,40 @@
+ │ echo marker-line-30 sleep                                                                                            
+ │ echo marker-line-31 sleep                                                                                            
+ │ echo marker-line-32 sleep                                                                                            
+ │ echo marker-line-33 sleep                                                                                            
+ │ echo marker-line-34 sleep                                                                                            
+ │ echo marker-line-35 sleep                                                                                            
+ │ echo marker-line-36 sleep                                                                                            
+ │ echo marker-line-37 sleep                                                                                            
+ │ echo marker-line-38 sleep                                                                                            
+ │ echo marker-line-39 sleep                                                                                            
+ │ echo marker-line-40 sleep                                                                                            
+ │ echo marker-line-41 sleep                                                                                            
+ │ echo marker-line-42 sleep                                                                                            
+ │ echo marker-line-43 sleep                                                                                            
+ │ echo marker-line-44 sleep                                                                                            
+ │ echo marker-line-45 sleep                                                                                            
+ │ echo marker-line-46 sleep                                                                                            
+ │ echo marker-line-47 sleep                                                                                            
+ │ echo marker-line-48 sleep                                                                                            
+ │ echo marker-line-49 sleep                                                                                            
+ │ echo marker-line-50 sleep                                                                                            
+ │ echo marker-line-51 sleep                                                                                            
+ │ echo marker-line-52 sleep                                                                                            
+ │ echo marker-line-53 sleep                                                                                            
+ │ echo marker-line-54 sleep                                                                                            
+ │ echo marker-line-55 sleep                                                                                            
+ │ echo marker-line-56 sleep                                                                                            
+ │ echo marker-line-57 sleep                                                                                            
+ │ echo marker-line-58 sleep                                                                                            
+ │ echo marker-line-59 sleep"                                                                                           
+╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+ This command requires approval                                                                                         
+                                                                                                                       
+ Do you want to proceed?                                    
+ ❯ 1. Yes                                                                  
+   2. Yes, and don't ask again for bash -c 'echo line00 commands in /tmp/scratch                 
+   3. Yes, and switch to auto mode · auto mode handles these prompts for you                                            
+   4. No                                                                     
+
+ Esc to cancel · Tab to amend                      
