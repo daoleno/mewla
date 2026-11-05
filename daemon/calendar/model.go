@@ -69,9 +69,19 @@ type Item struct {
 	Summary           string `json:"summary,omitempty"`
 	ActionInstruction string `json:"action_instruction,omitempty"`
 	ActionCwd         string `json:"action_cwd,omitempty"`
-	SourceThreadID    string `json:"source_thread_id,omitempty"`
-	SourceMessageID   string `json:"source_message_id,omitempty"`
-	LinkedWorkID      string `json:"linked_work_id,omitempty"`
+	// ActionExecutor, ActionModel and ActionReasoning are the person's route
+	// for a scheduled_action's Worker, passed like `mewla worker spawn
+	// -executor -model -reasoning`. An empty model or reasoning keeps the
+	// executor's own default. They are stored with the item, so switching the
+	// Brain host never changes the Worker of an item that names one. An item
+	// without an executor (created before routing, or on the phone) falls back
+	// to the Brain host at fire time, and its Work records that.
+	ActionExecutor  string `json:"action_executor,omitempty"`
+	ActionModel     string `json:"action_model,omitempty"`
+	ActionReasoning string `json:"action_reasoning,omitempty"`
+	SourceThreadID  string `json:"source_thread_id,omitempty"`
+	SourceMessageID string `json:"source_message_id,omitempty"`
+	LinkedWorkID    string `json:"linked_work_id,omitempty"`
 	// Owner names the part of Mewla that created and acts on this item. Only
 	// the daemon sets it; clients cannot create or change it. An owned item
 	// is an ordinary reminder the user can move, repeat differently or cancel.
@@ -116,6 +126,18 @@ type Run struct {
 	PreviousStatus Status `json:"previous_status,omitempty"`
 }
 
+// normalizeActionRoute trims the Worker route and drops it from items that do
+// not run an agent, so a kind change on the phone cannot leave a stale route.
+func (i *Item) normalizeActionRoute() {
+	if i.Kind != KindScheduledAction {
+		i.ActionExecutor, i.ActionModel, i.ActionReasoning = "", "", ""
+		return
+	}
+	i.ActionExecutor = strings.TrimSpace(i.ActionExecutor)
+	i.ActionModel = strings.TrimSpace(i.ActionModel)
+	i.ActionReasoning = strings.TrimSpace(i.ActionReasoning)
+}
+
 // MaxSummaryRunes bounds Summary: it is a line, not a description.
 const MaxSummaryRunes = 120
 
@@ -126,6 +148,14 @@ func (i Item) Validate() error {
 	}
 	if summary := strings.TrimSpace(i.Summary); utf8.RuneCountInString(summary) > MaxSummaryRunes || strings.ContainsAny(summary, "\r\n") {
 		return fmt.Errorf("summary must be one line of at most %d characters", MaxSummaryRunes)
+	}
+	if strings.TrimSpace(i.ActionExecutor) == "" && (strings.TrimSpace(i.ActionModel) != "" || strings.TrimSpace(i.ActionReasoning) != "") {
+		return fmt.Errorf("action_model and action_reasoning require action_executor")
+	}
+	for _, value := range []string{i.ActionExecutor, i.ActionModel, i.ActionReasoning} {
+		if strings.ContainsAny(value, "\x00\r\n") {
+			return fmt.Errorf("action_executor, action_model and action_reasoning must be single-line values")
+		}
 	}
 	switch i.Kind {
 	case KindEvent:

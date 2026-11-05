@@ -41,7 +41,8 @@ A scheduled action is a small job for an agent: "At 09:30 on weekdays,
 summarise yesterday's merged pull requests." When it is due, Mewla:
 
 1. creates a visible Work item and starts the agent in its own Session, on
-   Brain's executor;
+   the executor the action names (`-executor`, with optional `-model` and
+   `-reasoning`; an older action without one uses Brain's executor);
 2. waits for that Work to finish or fail;
 3. posts the result to the Brain thread where you created the action, and
    sends one push notification that opens that thread.
@@ -123,6 +124,7 @@ mewla calendar create -title "Summarise merged PRs" -kind scheduled_action \
   -date 2026-07-15 -time 09:30 -timezone Europe/Berlin -recurrence weekdays \
   -summary "Every weekday morning, yesterday's merged PRs in brief" \
   -instruction "Summarise yesterday's merged pull requests" \
+  -executor claude -model claude-sonnet-5-5 -reasoning medium \
   -source-thread <brain-thread-id> --json
 mewla calendar cancel -id <item-id> -revision <revision> --json
 mewla calendar run -id <item-id> --json
@@ -135,7 +137,12 @@ phone alerts (default 10 for an event, 30 for a deadline).
 
 A scheduled action needs `-source-thread`, the Brain thread that receives its
 result. `-summary` is the one line Calendar shows; `-instruction` is the full
-prompt the agent gets. Brain writes the summary in your language. An item
+prompt the agent gets. `-executor` is required and picks the agent that runs
+it, like `mewla worker spawn -executor`; `-model` and `-reasoning` are
+optional and an empty one keeps that executor's default. The route is stored
+with the item, so switching Brain's executor never changes it, and a typo is
+rejected when you save the action. Pass the same flags to `calendar update`
+to route an older action. Brain writes the summary in your language. An item
 without one shows the first sentence of its instruction. Events use `-end-date` and `-end-time`. `mewla calendar update` takes the
 complete item as `-item-json` plus its current `-revision`, so two edits cannot
 silently overwrite each other.

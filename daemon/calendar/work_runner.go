@@ -24,8 +24,9 @@ type WorkRunner struct {
 	}
 	Brain interface {
 		HasChatThread(string) (bool, error)
-		// HostExecutorID runs scheduled_action Work: the action fires without
-		// Brain choosing an executor, so it uses the one the user runs Brain on.
+		// HostExecutorID runs only a scheduled_action that names no executor
+		// (created before routing, or on the phone). An item that names one
+		// keeps it whichever agent Brain runs on.
 		HostExecutorID() string
 	}
 }
@@ -193,13 +194,21 @@ func (r *WorkRunner) RunScheduledAction(_ context.Context, item Item, run Run) (
 			return ActionResult{}, err
 		}
 	}
+	route, source := scheduledActionRoute(item, r.Brain.HostExecutorID())
 	path := filepath.Join(r.Store.Root, "calendar", item.ID+"-"+run.ID+".md")
 	body := scheduledWorkBody(item, run)
-	created, err := r.Store.Write(&work.Item{Path: path, Project: "calendar", Body: body, Frontmatter: work.Frontmatter{ID: run.ID, Kind: "calendar_action", Created: time.Now().UTC(), Title: run.Title, Extra: map[string]interface{}{"calendar_item_id": item.ID, "calendar_run_id": run.ID}}}, time.Time{})
+	extra := map[string]interface{}{"calendar_item_id": item.ID, "calendar_run_id": run.ID, "worker_executor": route.Executor, "worker_route_source": source}
+	if route.Model != "" {
+		extra["worker_model"] = route.Model
+	}
+	if route.Reasoning != "" {
+		extra["worker_reasoning"] = route.Reasoning
+	}
+	created, err := r.Store.Write(&work.Item{Path: path, Project: "calendar", Body: body, Frontmatter: work.Frontmatter{ID: run.ID, Kind: "calendar_action", Created: time.Now().UTC(), Title: run.Title, Extra: extra}}, time.Time{})
 	if err != nil {
 		return ActionResult{}, fmt.Errorf("create visible Work item: %w", err)
 	}
-	started, err := r.Launcher.StartDedicated(created, cwd, r.Brain.HostExecutorID())
+	started, err := r.Launcher.StartDedicated(created, cwd, route)
 	if err != nil {
 		return ActionResult{WorkID: created.ID}, fmt.Errorf("start visible Work item: %w", err)
 	}
@@ -208,6 +217,21 @@ func (r *WorkRunner) RunScheduledAction(_ context.Context, item Item, run Run) (
 		return ActionResult{WorkID: created.ID, WorkerSession: started.Frontmatter.WorkerSession, Launched: true}, fmt.Errorf("persist started Work item: %w", err)
 	}
 	return ActionResult{WorkID: written.ID, WorkerSession: written.Frontmatter.WorkerSession, Launched: true}, nil
+}
+
+const (
+	workerRouteItem = "calendar_item"
+	workerRouteHost = "brain_host_fallback"
+)
+
+// scheduledActionRoute is the Worker route of one occurrence: the item's own
+// when it names an executor, else the Brain host (source says which, and the
+// Work records it).
+func scheduledActionRoute(item Item, hostExecutor string) (work.LaunchRoute, string) {
+	if executor := strings.TrimSpace(item.ActionExecutor); executor != "" {
+		return work.LaunchRoute{Executor: executor, Model: strings.TrimSpace(item.ActionModel), Reasoning: strings.TrimSpace(item.ActionReasoning)}, workerRouteItem
+	}
+	return work.LaunchRoute{Executor: strings.TrimSpace(hostExecutor)}, workerRouteHost
 }
 
 func scheduledWorkBody(item Item, run Run) string {

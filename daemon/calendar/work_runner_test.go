@@ -1019,3 +1019,90 @@ func newLinkedScheduledRunFixture(t *testing.T, body string, mutate func(*work.F
 func scheduledDeliverableBody(deliverable string) string {
 	return "# Scheduled result\n\n" + scheduledDeliverableStart + "\n" + deliverable + "\n" + scheduledDeliverableEnd + "\n"
 }
+
+func routedRunnerFixture(t *testing.T, host string) (*WorkRunner, *work.Store, *scheduledActionLaunchRunner, *scheduledActionThreadRegistry) {
+	t.Helper()
+	store, err := work.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmux := &scheduledActionLaunchRunner{newID: "worker-session"}
+	registry := &scheduledActionThreadRegistry{known: true, host: host}
+	launcher := work.NewLauncher(tmux, work.NewExecutorConfig(map[string]work.Executor{
+		"claude": {Name: "claude", Command: "claude --model claude-opus-5-5"},
+		"codex":  {Name: "codex", Command: "codex --model gpt-6-sol"},
+	}))
+	return &WorkRunner{Store: store, Launcher: launcher, Brain: registry}, store, tmux, registry
+}
+
+func TestRunScheduledActionUsesItemRouteWhateverTheBrainHost(t *testing.T) {
+	item := Item{ID: "item-1", Title: "Routed", ActionInstruction: "Say hi", ActionCwd: "/calendar-cwd", ActionExecutor: "claude", ActionModel: "claude-sonnet-5-5", ActionReasoning: "medium"}
+	for _, host := range []string{"codex", "claude"} {
+		t.Run("host "+host, func(t *testing.T) {
+			runner, store, tmux, registry := routedRunnerFixture(t, host)
+			run := Run{ID: "run-" + host, Title: "Routed", SourceThreadID: "thread"}
+			if _, err := runner.RunScheduledAction(context.Background(), item, run); err != nil {
+				t.Fatal(err)
+			}
+			if len(tmux.spawnRoles) != 1 || tmux.spawnRoles[0] != "claude" ||
+				strings.Count(tmux.spawnCommands[0], "--model") != 1 || !strings.Contains(tmux.spawnCommands[0], "--model claude-sonnet-5-5") || !strings.Contains(tmux.spawnCommands[0], "--effort medium") {
+				t.Fatalf("host %s spawned %v %v", host, tmux.spawnRoles, tmux.spawnCommands)
+			}
+			written, ok := store.GetByID(run.ID)
+			if !ok {
+				t.Fatal("Work item missing")
+			}
+			extra := written.Frontmatter.Extra
+			if extra["worker_executor"] != "claude" || extra["worker_model"] != "claude-sonnet-5-5" || extra["worker_reasoning"] != "medium" || extra["worker_route_source"] != workerRouteItem {
+				t.Fatalf("Work route evidence = %#v", extra)
+			}
+			_ = registry
+		})
+	}
+}
+
+func TestRunScheduledActionExplicitCodexOverridesDefault(t *testing.T) {
+	runner, store, tmux, _ := routedRunnerFixture(t, "claude")
+	item := Item{ID: "item-2", Title: "Codex on request", ActionInstruction: "Say hi", ActionCwd: "/calendar-cwd", ActionExecutor: "codex", ActionModel: "gpt-6-astra", ActionReasoning: "max"}
+	if _, err := runner.RunScheduledAction(context.Background(), item, Run{ID: "run-codex", Title: "Codex", SourceThreadID: "thread"}); err != nil {
+		t.Fatal(err)
+	}
+	command := tmux.spawnCommands[0]
+	if tmux.spawnRoles[0] != "codex" || !strings.Contains(command, "--model gpt-6-astra") || strings.Contains(command, "gpt-6-sol") || !strings.Contains(command, `model_reasoning_effort="max"`) {
+		t.Fatalf("spawned %v %q", tmux.spawnRoles, command)
+	}
+	written, _ := store.GetByID("run-codex")
+	if written.Frontmatter.Extra["worker_route_source"] != workerRouteItem {
+		t.Fatalf("Work route evidence = %#v", written.Frontmatter.Extra)
+	}
+}
+
+func TestRunScheduledActionWithoutExecutorFallsBackToHostAndSaysSo(t *testing.T) {
+	runner, store, tmux, _ := routedRunnerFixture(t, "codex")
+	item := Item{ID: "item-3", Title: "Legacy", ActionInstruction: "Say hi", ActionCwd: "/calendar-cwd"}
+	if _, err := runner.RunScheduledAction(context.Background(), item, Run{ID: "run-legacy", Title: "Legacy", SourceThreadID: "thread"}); err != nil {
+		t.Fatal(err)
+	}
+	if tmux.spawnRoles[0] != "codex" {
+		t.Fatalf("spawned %v", tmux.spawnRoles)
+	}
+	written, _ := store.GetByID("run-legacy")
+	extra := written.Frontmatter.Extra
+	if extra["worker_executor"] != "codex" || extra["worker_route_source"] != workerRouteHost {
+		t.Fatalf("Work route evidence = %#v", extra)
+	}
+	if _, ok := extra["worker_model"]; ok {
+		t.Fatalf("fallback must not invent a model: %#v", extra)
+	}
+}
+
+func TestRunScheduledActionRouteErrorFailsBeforeAnyLaunch(t *testing.T) {
+	runner, _, tmux, _ := routedRunnerFixture(t, "claude")
+	item := Item{ID: "item-4", Title: "Bad", ActionInstruction: "Say hi", ActionCwd: "/calendar-cwd", ActionExecutor: "claude", ActionReasoning: "ultra"}
+	if _, err := runner.RunScheduledAction(context.Background(), item, Run{ID: "run-bad", Title: "Bad", SourceThreadID: "thread"}); err == nil {
+		t.Fatal("unsupported reasoning launched")
+	}
+	if len(tmux.spawnCommands) != 0 {
+		t.Fatalf("spawned %v", tmux.spawnCommands)
+	}
+}
