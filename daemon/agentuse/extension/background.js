@@ -1,5 +1,5 @@
 /**
- * Mewla for Chrome: lets the agents Mewla starts on this computer work in a
+ * Mewla extension: lets the agents Mewla starts on this computer work in a
  * window of their own in this Chrome, with its logged-in sites.
  *
  * The daemon asks over Chrome's native messaging (only this extension's ID is

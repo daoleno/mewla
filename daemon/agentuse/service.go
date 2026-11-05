@@ -268,7 +268,7 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 		profile, ok = extensionProfile(chrome.UserDataDir)
 	}
 	if !ok {
-		return BrowserStatus{State: BrowserNoExtension, Summary: "Add Mewla for Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
+		return BrowserStatus{State: BrowserNoExtension, Summary: "Add the Mewla extension to Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
 	}
 	status := BrowserStatus{Profile: profile}
 	key := s.settings.Key
@@ -282,7 +282,7 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 		// connect. Mewla does not read it out of Chrome's storage.
 		if key == "" {
 			status.State, status.Fix = BrowserNoKey, FixOpenExtension
-			status.Summary = "Add Mewla for Chrome, or copy the Playwright extension's key from its page in Chrome and paste it here."
+			status.Summary = "Add the Mewla extension to Chrome, or copy the Playwright extension's key from its page in Chrome and paste it here."
 			return status, launch{}
 		}
 		status.KeyPasted = true
@@ -315,6 +315,12 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 			if exe, err := s.executable(); err == nil {
 				if err := s.InstallNativeHost(chrome.UserDataDir, exe, mewlaIDs); err != nil {
 					log.Printf("agent use: couldn't register Mewla's native host with Chrome: %v", err)
+				}
+				// Keep the folder Chrome loads the extension from current.
+				if _, err := os.Stat(filepath.Join(filepath.Dir(s.dir), "extension", "mewla", "manifest.json")); err == nil {
+					if _, err := s.ExtensionDir(); err != nil {
+						log.Printf("agent use: couldn't refresh the Mewla extension folder: %v", err)
+					}
 				}
 			}
 		}
@@ -449,7 +455,14 @@ func (s *Service) Fix(fix string) (Status, error) {
 				return Status{}, err
 			}
 			args = []string{"chrome://extensions"}
-			unpublished = fmt.Errorf("Mewla for Chrome isn't in the Chrome Web Store yet. In Chrome's extensions page (opened), turn on Developer mode, choose Load unpacked and pick %s", dir)
+			// Allow the extension before it exists, so that it connects the
+			// moment it is loaded.
+			if exe, err := s.executable(); err == nil {
+				if err := s.InstallNativeHost(chrome.UserDataDir, exe, mewlaExtensionIDs()); err != nil {
+					log.Printf("agent use: couldn't register Mewla's native host with Chrome: %v", err)
+				}
+			}
+			unpublished = fmt.Errorf("Add the Mewla extension from a folder: in Chrome's extensions page (opened), turn on Developer mode, choose Load unpacked and pick %s", dir)
 		}
 		if fix == FixOpenExtension {
 			args = []string{extensionPageURL}

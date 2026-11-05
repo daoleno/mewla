@@ -88,11 +88,11 @@ func TestBrowserStatusWalksTheUserThroughWhatIsMissing(t *testing.T) {
 	}
 	// Not in the store yet: Chrome's extensions page opens, and the person is
 	// told which folder to load.
-	if _, err := s.Fix(FixInstallExtension); err == nil || !strings.Contains(err.Error(), "Load unpacked") || !strings.Contains(err.Error(), filepath.Join(c.root, "state", "agent-use", "chrome-extension")) {
+	if _, err := s.Fix(FixInstallExtension); err == nil || !strings.Contains(err.Error(), "Load unpacked") || !strings.Contains(err.Error(), filepath.Join(c.root, "state", "extension", "mewla")) {
 		t.Fatalf("unpublished: %v", err)
 	}
 	waitForFile(t, filepath.Join(c.root, "chrome-opened"), "chrome://extensions")
-	if _, err := os.Stat(filepath.Join(c.root, "state", "agent-use", "chrome-extension", "manifest.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(c.root, "state", "extension", "mewla", "manifest.json")); err != nil {
 		t.Fatal(err)
 	}
 	// Published: the store's page opens.
@@ -489,7 +489,7 @@ func TestWithoutAnyExtensionTheStatusAsksForMewlaForChrome(t *testing.T) {
 	c.withNode()
 	s := c.service(false)
 	status := s.Refresh().Browser
-	if status.State != BrowserNoExtension || status.Fix != FixInstallExtension || !strings.Contains(status.Summary, "Mewla for Chrome") {
+	if status.State != BrowserNoExtension || status.Fix != FixInstallExtension || !strings.Contains(status.Summary, "Mewla extension") {
 		t.Fatalf("status %+v", status)
 	}
 }

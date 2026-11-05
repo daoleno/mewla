@@ -104,7 +104,7 @@ action is logged on the computer without what was typed. See
 
 ## Agents in your browser
 
-When **Agents can use this computer** is on and Mewla for Chrome is in
+When **Agents can use this computer** is on and the Mewla extension is in
 Chrome, agents Mewla starts on that computer can use your Chrome with your
 logins, through the extension. Each works in a window of its own, with its tabs in a tab group named for the
 Worker (the extension's *tab groups* permission is for that), which the
