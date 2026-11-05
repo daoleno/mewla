@@ -90,9 +90,15 @@ type Config struct {
 	HandshakeTimeout time.Duration
 	AttachTimeout    time.Duration
 	IdleTimeout      time.Duration
-	AuthMaxAge       time.Duration
-	MaxAdmissionTTL  time.Duration
-	SweepInterval    time.Duration
+	// HalfCloseLinger is how long a stream stays open after the computer's
+	// side finished and closed, waiting for the client to close its side. Zero
+	// means defaultHalfCloseLinger. A client that vanished (a phone that lost
+	// its network) never answers, and without this limit its stream holds a
+	// client slot until IdleTimeout.
+	HalfCloseLinger time.Duration
+	AuthMaxAge      time.Duration
+	MaxAdmissionTTL time.Duration
+	SweepInterval   time.Duration
 }
 
 type Snapshot struct {
@@ -1266,7 +1272,7 @@ func (server *Server) createAdmission(message linkproto.Message) (string, time.T
 		)
 	}
 	if server.admissionCounts[routeID] >= server.config.MaxAdmissionsPerRoute {
-		server.recordCapacityRejection("admissions_per_route")
+		server.recordCapacityRejection("admissions_per_route", routeID)
 		return "", time.Time{}, newRelayRejection(
 			rejectionCapacity,
 			"relay per-route admission capacity is exhausted",
@@ -1648,7 +1654,7 @@ func (server *Server) reserveClient(session *routeSession) bool {
 		return false
 	}
 	if session.activeClients >= server.config.MaxClientsPerRoute {
-		server.recordCapacityRejection("clients_per_route")
+		server.recordCapacityRejection("clients_per_route", session.routeID)
 		return false
 	}
 	session.activeClients++
@@ -1670,7 +1676,7 @@ func (server *Server) reserveRouteSource(session *routeSession, source string) b
 	server.mu.Lock()
 	defer server.mu.Unlock()
 	if session.clientsBySource[source] >= server.routeSourceLimit() {
-		server.recordCapacityRejection("clients_per_route_ip")
+		server.recordCapacityRejection("clients_per_route_ip", session.routeID)
 		return false
 	}
 	if session.clientsBySource == nil {
@@ -1773,19 +1779,44 @@ func (server *Server) forward(ctx context.Context, left, right net.Conn) {
 	}
 	contextDone := ctx.Done()
 	completed := 0
+	var lingerDone <-chan time.Time
 	for completed < 2 {
 		select {
 		case <-contextDone:
 			closeBoth()
 			contextDone = nil
+		case <-lingerDone:
+			// The computer closed and its client never answered. Nothing the
+			// client could still send can be delivered, so holding the stream
+			// (and the client slot it counts against) until the idle timeout
+			// only serves a client that is gone.
+			closeBoth()
+			lingerDone = nil
 		case result := <-results:
 			completed++
 			if result.err != nil || !result.gracefulEOF {
 				closeBoth()
+				continue
+			}
+			if result.from == right && completed == 1 {
+				timer := time.NewTimer(server.halfCloseLinger())
+				defer timer.Stop()
+				lingerDone = timer.C
 			}
 		}
 	}
 	closeBoth()
+}
+
+// defaultHalfCloseLinger covers a client's answering FIN over a slow, lossy
+// path (a few round trips at 300 ms).
+const defaultHalfCloseLinger = 10 * time.Second
+
+func (server *Server) halfCloseLinger() time.Duration {
+	if server.config.HalfCloseLinger > 0 {
+		return server.config.HalfCloseLinger
+	}
+	return defaultHalfCloseLinger
 }
 
 func (server *Server) copyDirection(
@@ -1798,7 +1829,7 @@ func (server *Server) copyDirection(
 	buffer := make([]byte, copyBufferBytes)
 	for {
 		if err := ctx.Err(); err != nil {
-			result <- forwardResult{err: err}
+			result <- forwardResult{from: source, err: err}
 			return
 		}
 		deadline := forwardDeadline(ctx, activity, server.config.IdleTimeout)
@@ -1813,7 +1844,7 @@ func (server *Server) copyDirection(
 				activity,
 			)
 			if writeErr != nil {
-				result <- forwardResult{err: writeErr}
+				result <- forwardResult{from: source, err: writeErr}
 				return
 			}
 		}
@@ -1827,10 +1858,10 @@ func (server *Server) copyDirection(
 					),
 				)
 				if err := closeWrite(destination); err != nil {
-					result <- forwardResult{err: err}
+					result <- forwardResult{from: source, err: err}
 					return
 				}
-				result <- forwardResult{gracefulEOF: true}
+				result <- forwardResult{from: source, gracefulEOF: true}
 				return
 			}
 			if isTimeout(readErr) &&
@@ -1841,13 +1872,14 @@ func (server *Server) copyDirection(
 			if err := ctx.Err(); err != nil {
 				readErr = err
 			}
-			result <- forwardResult{err: readErr}
+			result <- forwardResult{from: source, err: readErr}
 			return
 		}
 	}
 }
 
 type forwardResult struct {
+	from        net.Conn // the side this direction read from
 	gracefulEOF bool
 	err         error
 }
@@ -1987,13 +2019,21 @@ func (server *Server) sweep(now time.Time) {
 	}
 }
 
-func (server *Server) recordCapacityRejection(reason string) {
+// recordCapacityRejection counts a rejection and logs it, at a limited rate.
+// A limit that belongs to one computer's route names that route by its hash
+// tag, so the log says which computer is hitting it (and, with the Mac's own
+// tag, whether it is the phone). Never the route ID itself.
+func (server *Server) recordCapacityRejection(reason string, routeID ...string) {
 	counter := server.capacityRejects[reason]
 	if counter == nil {
 		return
 	}
 	total := counter.Add(1)
 	if server.logAllowed(server.capacityLogged[reason]) {
+		if len(routeID) > 0 && routeID[0] != "" {
+			server.logf("capacity_rejected reason=%s route=%s total=%d", reason, routeTag(routeID[0]), total)
+			return
+		}
 		server.logf("capacity_rejected reason=%s total=%d", reason, total)
 	}
 }

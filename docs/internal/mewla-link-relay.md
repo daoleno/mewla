@@ -151,6 +151,17 @@ Important flags:
 - `-attach-timeout`
 - `-idle-timeout` (fires only when neither stream direction makes progress;
   one-way transfers remain active and half-closed requests may drain responses)
+- the computer closing its side ends the stream within a fixed 10 seconds if
+  the client does not answer with its own close (a phone that lost its network
+  never does), so a vanished client does not hold one of its address's
+  `clients_per_route_ip` slots for the idle timeout. A client that half-closes
+  its request first still drains the response.
+
+A `capacity_rejected` line for a per-computer limit (`clients_per_route`,
+`clients_per_route_ip`, `admissions_per_route`) carries `route=<tag>`, the same
+hash tag as `route_registered`, never the route ID. Compare it with the tag of
+the computer in question (the first 8 hex characters of the SHA-256 of its
+lower-case route ID).
 
 Cost is principally public egress bytes, concurrent client + connector sockets,
 kernel memory, TLS CPU, and regional load-balancer/DDoS service. Large file

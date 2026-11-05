@@ -942,3 +942,31 @@ func TestRelayLogsUnansweredControlAndAdmissionRejections(t *testing.T) {
 		t.Fatalf("admission rejection line = %q", line)
 	}
 }
+
+// A rejection by a per-computer limit says which computer, by hash tag.
+func TestCapacityRejectionNamesTheRouteByTagOnly(t *testing.T) {
+	var lines []string
+	config := DefaultConfig(strings.Repeat("a", 32))
+	config.Logf = func(format string, args ...any) { lines = append(lines, fmt.Sprintf(format, args...)) }
+	server, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	routeID := strings.Repeat("ab", 16)
+	session := &routeSession{routeID: routeID}
+	for range server.routeSourceLimit() {
+		if !server.reserveRouteSource(session, "203.0.113.9") {
+			t.Fatal("source refused within its share")
+		}
+	}
+	if server.reserveRouteSource(session, "203.0.113.9") {
+		t.Fatal("source exceeded its share")
+	}
+	want := "relay capacity_rejected reason=clients_per_route_ip route=" + routeTag(routeID) + " total=1"
+	if len(lines) != 1 || lines[0] != want {
+		t.Fatalf("log = %q, want %q", lines, want)
+	}
+	if strings.Contains(strings.Join(lines, "\n"), routeID) {
+		t.Fatal("the log carries the route ID")
+	}
+}
