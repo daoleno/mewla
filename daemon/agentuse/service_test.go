@@ -104,7 +104,7 @@ func TestBrowserStatusWalksTheUserThroughWhatIsMissing(t *testing.T) {
 	waitForFile(t, filepath.Join(c.root, "chrome-opened"), MewlaStoreURL)
 
 	c.installExtension("Default")
-	if status := s.Refresh(); status.Browser.State != BrowserNoKey || status.Browser.Fix != FixOpenExtension {
+	if status := s.Refresh(); status.Browser.State != BrowserNoKey || status.Browser.Fix != FixInstallExtension {
 		t.Fatalf("no key: %+v", status)
 	}
 	if _, err := s.Fix(FixOpenExtension); err != nil {
@@ -412,7 +412,7 @@ func TestWithoutAPastedKeyTheStatusSaysHowToGetOne(t *testing.T) {
 	c.installExtension("Default")
 	c.withNode()
 	status := c.service(true).Refresh()
-	if status.Browser.State != BrowserNoKey || status.Browser.Fix != FixOpenExtension || !strings.Contains(status.Browser.Summary, "paste") {
+	if status.Browser.State != BrowserNoKey || status.Browser.Fix != FixInstallExtension || !strings.Contains(status.Browser.Summary, "paste") {
 		t.Fatalf("no key: %+v", status.Browser)
 	}
 }

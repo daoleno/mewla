@@ -85,6 +85,11 @@ describe("computerProblems", () => {
       { kind: "fix", fix: "open_extension", target: "browser" },
       { kind: "paste_key" },
     ]);
+    const mewla = computerProblems({ enabled: true, browser: { state: "no_key", summary: "", fix: "install_extension" } });
+    expect(mewla.map((problem) => problem.action?.does)).toEqual([
+      { kind: "fix", fix: "install_extension", target: "browser" },
+      { kind: "paste_key" },
+    ]);
     const headless = computerProblems({ enabled: true, browser: { state: "no_key", summary: "" } });
     expect(headless.map((problem) => problem.action?.does)).toEqual([{ kind: "paste_key" }]);
   });

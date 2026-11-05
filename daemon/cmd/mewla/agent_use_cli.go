@@ -196,7 +196,15 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 	}
 	switch browser.Fix {
 	case agentuse.FixInstallExtension:
-		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension's page in Chrome; click Add to Chrome.")
+		if agentuse.MewlaStoreURL == "" {
+			fmt.Fprintln(w, "  mewla agent-use fix   opens Chrome's extensions page and names the Mewla folder;")
+			fmt.Fprintln(w, "                        turn on Developer mode, choose Load unpacked and pick that folder.")
+		} else {
+			fmt.Fprintln(w, "  mewla agent-use fix   opens the extension's page in Chrome; click Add to Chrome.")
+		}
+		if browser.State == agentuse.BrowserNoKey {
+			fmt.Fprintln(w, "  mewla agent-use key   or, for the older Playwright extension, reads its key from stdin.")
+		}
 	case agentuse.FixOpenExtension:
 		fmt.Fprintln(w, "  mewla agent-use fix   opens the extension in Chrome, which shows its key;")
 		fmt.Fprintln(w, "  mewla agent-use key   then reads that key from stdin (paste it, press Enter).")
