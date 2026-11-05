@@ -36,8 +36,9 @@ func TestAcceptChromium(t *testing.T) {
 	say := func(format string, args ...any) {
 		fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05.000")}, args...)...)
 	}
-	if idle := secondsIdle(); idle < 20 {
-		t.Skipf("the Mac has been used %.0f s ago; this run needs 20 s of no input", idle)
+	const minIdle = 20.0
+	if idle, ok := waitForIdle(minIdle); !ok {
+		t.Skipf("the Mac has been used %.0f s ago; this run needs %.0f s of no input", idle, minIdle)
 	}
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `<title>probe</title><body style="margin:0"><button id=b style="position:absolute;left:100px;top:100px;width:200px;height:60px" onclick="window.clicks=(window.clicks||0)+1">count</button><input id=i style="position:absolute;left:100px;top:220px;width:300px;height:40px">`)
