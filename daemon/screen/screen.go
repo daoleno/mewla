@@ -147,6 +147,8 @@ type Service struct {
 	appOwners  map[int]string
 	workerName func(id string) string
 	agentGate  func() bool
+	// stopHook hears of each Worker the person stops (SetStopHook).
+	stopHook func(worker string)
 	// agentPosted is when an ended agent session last posted input.
 	agentPosted time.Time
 	// elementIDs is the last element id given out: every app read numbers

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"image"
 	"math"
+	"os"
 	"sync"
 	"time"
 	"unsafe"
@@ -58,6 +59,15 @@ func loadMirrorSyms() {
 			purego.RegisterLibFunc(&mirrorSyms.setType, lib, "CGEventSetType")
 		}
 	})
+}
+
+// mirrorApp is where macOS 15 and later keep iPhone Mirroring.
+const mirrorApp = "/System/Applications/iPhone Mirroring.app"
+
+// MirrorInstalled says whether this Mac has iPhone Mirroring.
+func (b *macBackend) MirrorInstalled() bool {
+	_, err := os.Stat(mirrorApp)
+	return err == nil
 }
 
 // HoldTo presses one point of an app's window behind others for hold.
@@ -263,39 +273,86 @@ func (s *macSession) StrokesTo(pid int, window AppWindow, strokes []KeyStroke) e
 
 const pasteboardText = "public.utf8-plain-text"
 
+// pasteboardSaved is one type of one pasteboard item, retained until put back.
+type pasteboardSaved struct{ item, kind, data objc.ID }
+
 // PasteTo pastes text into an app behind other windows: the text goes on
-// the pasteboard for ⌘V, and what the pasteboard held comes back after.
+// the pasteboard for ⌘V, marked so clipboard managers don't keep it, and
+// what the pasteboard held, every item and type, comes back after, unless
+// the person copied something meanwhile.
 func (s *macSession) PasteTo(pid int, window AppWindow, text string) error {
 	if err := loadMac(); err != nil {
 		return err
 	}
-	var before string
-	var had bool
+	selGeneral := objc.RegisterName("generalPasteboard")
+	selChange := objc.RegisterName("changeCount")
+	var saved []pasteboardSaved
+	var ours int64
 	withPool(func() {
-		board := objc.ID(objc.GetClass("NSPasteboard")).Send(objc.RegisterName("generalPasteboard"))
-		old := board.Send(objc.RegisterName("stringForType:"), nsString(pasteboardText))
-		if old != 0 {
-			before, had = objc.Send[string](old, selUTF8String), true
+		board := objc.ID(objc.GetClass("NSPasteboard")).Send(selGeneral)
+		items := board.Send(objc.RegisterName("pasteboardItems"))
+		if items != 0 {
+			for i := uint64(0); i < objc.Send[uint64](items, selCount); i++ {
+				item := items.Send(selObjectAt, i)
+				kinds := item.Send(objc.RegisterName("types"))
+				for j := uint64(0); kinds != 0 && j < objc.Send[uint64](kinds, selCount); j++ {
+					kind := kinds.Send(selObjectAt, j)
+					data := item.Send(objc.RegisterName("dataForType:"), kind)
+					if data == 0 {
+						continue
+					}
+					saved = append(saved, pasteboardSaved{item: objc.ID(i), kind: kind.Send(selRetain), data: data.Send(selRetain)})
+				}
+			}
 		}
 		board.Send(objc.RegisterName("clearContents"))
 		board.Send(objc.RegisterName("setString:forType:"), nsString(text), nsString(pasteboardText))
+		empty := objc.ID(objc.GetClass("NSData")).Send(objc.RegisterName("data"))
+		for _, marker := range []string{"org.nspasteboard.TransientType", "org.nspasteboard.ConcealedType"} {
+			board.Send(objc.RegisterName("setData:forType:"), empty, nsString(marker))
+		}
+		ours = objc.Send[int64](board, selChange)
 	})
 	err := s.StrokesTo(pid, window, []KeyStroke{{Code: macANSIKeys['v'].code, Flags: macFlagCommand}})
 	// The iPhone reads the pasteboard as it pastes.
 	time.Sleep(600 * time.Millisecond)
 	withPool(func() {
-		board := objc.ID(objc.GetClass("NSPasteboard")).Send(objc.RegisterName("generalPasteboard"))
-		board.Send(objc.RegisterName("clearContents"))
-		if had {
-			board.Send(objc.RegisterName("setString:forType:"), nsString(before), nsString(pasteboardText))
+		defer func() {
+			for _, sv := range saved {
+				sv.kind.Send(selRelease)
+				sv.data.Send(selRelease)
+			}
+		}()
+		board := objc.ID(objc.GetClass("NSPasteboard")).Send(selGeneral)
+		if objc.Send[int64](board, selChange) != ours {
+			// The person copied something: it stays.
+			return
 		}
+		board.Send(objc.RegisterName("clearContents"))
+		if len(saved) == 0 {
+			return
+		}
+		objects := objc.ID(objc.GetClass("NSMutableArray")).Send(objc.RegisterName("array"))
+		var item objc.ID
+		last := objc.ID(^uintptr(0))
+		for _, sv := range saved {
+			if sv.item != last {
+				item = objc.ID(objc.GetClass("NSPasteboardItem")).Send(selAlloc).Send(objc.RegisterName("init"))
+				objects.Send(objc.RegisterName("addObject:"), item)
+				item.Send(selRelease)
+				last = sv.item
+			}
+			item.Send(objc.RegisterName("setData:forType:"), sv.data, sv.kind)
+		}
+		board.Send(objc.RegisterName("writeObjects:"), objects)
 	})
 	return err
 }
 
 var (
-	_ mirrorInput = (*macSession)(nil)
-	_ textReader  = (*macBackend)(nil)
+	_ mirrorInput  = (*macSession)(nil)
+	_ textReader   = (*macBackend)(nil)
+	_ mirrorHolder = (*macBackend)(nil)
 )
 
 // Vision reads text: the accurate recognizer, Chinese and English.

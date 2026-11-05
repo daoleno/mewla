@@ -74,6 +74,8 @@ func (m *mirrorDriver) Key(ctx context.Context, worker, name string) error {
 
 func (m *mirrorDriver) Release(worker string) { m.screen.MirrorRelease(worker) }
 
+func (m *mirrorDriver) Stop(worker string) { m.screen.StopAgentFor(worker) }
+
 // handoffText is what the person is told when an agent needs them on the iPhone.
 func handoffText(reason string) string {
 	return "Needs you on your iPhone: " + reason + ". Unlock your iPhone and do it, then lock it again; or do it in iPhone Mirroring on your Mac, then tap Done in Mewla → Screen."

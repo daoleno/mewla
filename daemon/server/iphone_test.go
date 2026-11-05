@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/agentuse"
 )
@@ -20,9 +21,12 @@ func TestIPhoneSwitchStopAndDoneAreSignedOverTheirBody(t *testing.T) {
 	}
 	stops, dones := 0, 0
 	use.SetIPhone(agentuse.IPhoneHooks{
-		Status:      func() agentuse.IPhoneStatus { return agentuse.IPhoneStatus{State: agentuse.IPhoneReady, Summary: "ready"} },
+		Status: func() agentuse.IPhoneStatus {
+			return agentuse.IPhoneStatus{State: agentuse.IPhoneReady, Summary: "ready"}
+		},
 		Stop:        func() { stops++ },
 		HandoffDone: func() bool { dones++; return true },
+		Picture:     func() ([]byte, time.Time) { return []byte{0xff, 0xd8}, time.Unix(100, 0) },
 	})
 	s := New(a, nil, nil, nil, nil, nil, nil)
 	s.SetAgentUse(use)
@@ -57,6 +61,21 @@ func TestIPhoneSwitchStopAndDoneAreSignedOverTheirBody(t *testing.T) {
 	}
 	if code, row := post(`{"enabled":true}`); code != http.StatusOK || !row.Enabled || row.State != agentuse.IPhoneReady || !use.IPhoneReady() {
 		t.Fatalf("on: %d %+v", code, row)
+	}
+	if code, row := request(http.MethodGet, "mewla-iphone:GET:/iphone", ""); code != http.StatusOK || row.Picture != "" {
+		t.Fatalf("a picture nobody asked for: %+v", row)
+	}
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/iphone?picture=1", nil)
+	req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-iphone:GET:/iphone"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var watched agentuse.IPhoneStatus
+	_ = json.NewDecoder(resp.Body).Decode(&watched)
+	resp.Body.Close()
+	if watched.Picture != "/9g=" || watched.PictureAt == nil {
+		t.Fatalf("watch: %+v", watched)
 	}
 	if code, _ := post(`{"handoff_done":true}`); code != http.StatusOK || dones != 1 {
 		t.Fatalf("done: %d %d", code, dones)

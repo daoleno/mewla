@@ -110,6 +110,12 @@ type mirrorInput interface {
 	PasteTo(pid int, window AppWindow, text string) error
 }
 
+// mirrorHolder is a backend that knows whether iPhone Mirroring is on this
+// computer at all (macOS 15 and later).
+type mirrorHolder interface {
+	MirrorInstalled() bool
+}
+
 // textReader is a backend that reads the text on a picture.
 type textReader interface {
 	ReadText(ctx context.Context, img *image.RGBA) ([]TextLine, error)
@@ -153,6 +159,9 @@ func (s *Service) MirrorInfo(ctx context.Context) MirrorInfo {
 		return MirrorInfo{}
 	}
 	info := MirrorInfo{Supported: s.backend.Capability(ctx).Supported}
+	if holder, ok := s.backend.(mirrorHolder); !ok || !holder.MirrorInstalled() {
+		info.Supported = false
+	}
 	apps, err := reader.Apps(ctx)
 	if err != nil {
 		return info
@@ -168,6 +177,10 @@ func (s *Service) MirrorInfo(ctx context.Context) MirrorInfo {
 	}
 	return info
 }
+
+// mirrorNoPark leaves the mirror where it is instead of moving it to the
+// agent display: the spike measures both.
+var mirrorNoPark = false
 
 // mirrorOpenWait is how long a mirror that was just opened has to show its window.
 const mirrorOpenWait = 8 * time.Second
@@ -228,8 +241,10 @@ func (s *Service) withMirror(ctx context.Context, worker string, fn func(t mirro
 	if err := s.claimApp(app.PID, worker); err != nil {
 		return errors.New(strings.Replace(err.Error(), "is working in that app. Work in another app, or wait until it is done.", "is using the iPhone. Wait until it is done.", 1))
 	}
-	if _, err := agent.maybePark(ctx, AgentAction{Action: "left_click", App: strconv.Itoa(app.PID)}); err != nil {
-		return err
+	if !mirrorNoPark {
+		if _, err := agent.maybePark(ctx, AgentAction{Action: "left_click", App: strconv.Itoa(app.PID)}); err != nil {
+			return err
+		}
 	}
 	// Where its window is now, after any move.
 	if app, err = findMirror(ctx, agent.apps); err != nil {
@@ -286,10 +301,9 @@ func (s *Service) openMirror(ctx context.Context, agent *agentSession) (App, err
 	}); ok {
 		before, _ = fronter.FrontPID(ctx)
 	}
-	if err != nil {
-		if err := opener.OpenApp(ctx, MirrorBundleID); err != nil {
-			return App{}, fmt.Errorf("%w: %v", ErrNoMirror, err)
-		}
+	// Not running, or running with its window closed: opening it again shows one.
+	if err := opener.OpenApp(ctx, MirrorBundleID); err != nil {
+		return App{}, fmt.Errorf("%w: %v", ErrNoMirror, err)
 	}
 	deadline := time.Now().Add(mirrorOpenWait)
 	for {
@@ -454,7 +468,13 @@ func (s *Service) MirrorKey(ctx context.Context, worker, name string) error {
 	return s.withMirror(ctx, worker, func(t mirrorTarget) error {
 		if char, ok := mirrorMenu[name]; ok {
 			if presser, ok := t.agent.apps.(menuPresser); ok {
+				var before App
+				if apps, err := t.agent.apps.Apps(ctx); err == nil {
+					before = t.agent.frontApp(ctx, apps)
+				}
 				_, found, err := presser.PressMenuKey(ctx, t.app.PID, Shortcut{Char: char})
+				// Choosing a menu item can bring the mirror forward: the front goes back to the person's app.
+				t.agent.giveFrontBack(ctx, t.app, before)
 				if err == nil && found {
 					return nil
 				}

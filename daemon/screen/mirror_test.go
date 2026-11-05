@@ -207,3 +207,57 @@ func TestAsciiStrokesAndReadingOrder(t *testing.T) {
 		t.Fatalf("%+v", lines)
 	}
 }
+
+// A Mac without iPhone Mirroring (macOS 13, 14) can't use an iPhone.
+func TestAMacWithoutIPhoneMirroringIsNotSupported(t *testing.T) {
+	s, backend := newMirrorService(t)
+	if !s.MirrorInfo(context.Background()).Supported {
+		t.Fatal("not supported with iPhone Mirroring")
+	}
+	backend.NoMirror = true
+	if s.MirrorInfo(context.Background()).Supported {
+		t.Fatal("supported without iPhone Mirroring")
+	}
+}
+
+// A mirror running with its window closed is opened again.
+func TestAClosedMirrorWindowIsOpenedAgain(t *testing.T) {
+	s, backend := newMirrorService(t)
+	i := mirrorIndex(backend)
+	mirror := backend.RunningApps[i]
+	backend.RunningApps[i].Windows = nil
+	backend.InstalledApps = []FakeInstalledApp{{FakeApp: mirror, Bundle: MirrorBundleID}}
+	if _, err := s.MirrorShot(context.Background(), "%7"); err != nil {
+		t.Fatal(err)
+	}
+	if len(backend.Launched) != 1 {
+		t.Fatalf("launched %v", backend.Launched)
+	}
+}
+
+// A menu item that brings the mirror forward gives the front back to the person's app.
+func TestAMenuItemGivesTheFrontBack(t *testing.T) {
+	s, backend := newMirrorService(t)
+	backend.RunningApps[mirrorIndex(backend)].Menu = []FakeMenuItem{{Path: "View > Home Screen", Char: "1", Activates: true}}
+	if err := s.MirrorKey(context.Background(), "%7", MirrorHome); err != nil {
+		t.Fatal(err)
+	}
+	if len(backend.Raised) == 0 || backend.Raised[len(backend.Raised)-1] != backend.RunningApps[0].PID {
+		t.Fatalf("raised %v", backend.Raised)
+	}
+}
+
+// The person's Stop for one Worker, or for all, is heard by what else it uses.
+func TestStopIsHeardByTheIPhone(t *testing.T) {
+	s, _ := newMirrorService(t)
+	var heard []string
+	s.SetStopHook(func(worker string) { heard = append(heard, worker) })
+	if err := s.MirrorTap(context.Background(), "%7", 10, 10, 0); err != nil {
+		t.Fatal(err)
+	}
+	s.StopAgentFor("%7")
+	s.StopAgent()
+	if len(heard) != 2 || heard[0] != "%7" || heard[1] != "%7" {
+		t.Fatalf("heard %v", heard)
+	}
+}

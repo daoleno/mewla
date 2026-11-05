@@ -14,6 +14,9 @@ export interface IPhoneDaemonStatus {
   running?: boolean;
   /** The agent using the iPhone now. */
   active?: { worker: string; name?: string; since: string };
+  /** A base64 JPEG of the iPhone as the agent last read it, when asked for: Watch. */
+  picture?: string;
+  picture_at?: string;
 }
 
 /** The one word Labs shows for iPhone use. */

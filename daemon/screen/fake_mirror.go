@@ -54,7 +54,15 @@ func (f *FakeBackend) ReadText(_ context.Context, img *image.RGBA) ([]TextLine, 
 	return append([]TextLine(nil), f.TextLines...), nil
 }
 
+// MirrorInstalled: the fake has iPhone Mirroring unless NoMirror is set.
+func (f *FakeBackend) MirrorInstalled() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.NoMirror
+}
+
 var (
-	_ mirrorInput = (*fakeSession)(nil)
-	_ textReader  = (*FakeBackend)(nil)
+	_ mirrorHolder = (*FakeBackend)(nil)
+	_ mirrorInput  = (*fakeSession)(nil)
+	_ textReader   = (*FakeBackend)(nil)
 )

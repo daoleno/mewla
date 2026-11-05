@@ -1,6 +1,9 @@
 package agentuse
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // iPhone use states, from the user's side.
 const (
@@ -26,14 +29,23 @@ type IPhoneStatus struct {
 	Running bool `json:"running,omitempty"`
 	// Active is the agent using the iPhone now.
 	Active *ActiveAgent `json:"active,omitempty"`
+	// Picture is a base64 JPEG of the iPhone as the agent last read it, and
+	// PictureAt when: sent only when asked for (/iphone?picture=1), to watch
+	// the agent without another capture of the iPhone.
+	Picture   string     `json:"picture,omitempty"`
+	PictureAt *time.Time `json:"picture_at,omitempty"`
 }
 
 // IPhoneHooks connect iPhone use, which the daemon owns.
 type IPhoneHooks struct {
 	// Status is the state with the switch on.
 	Status func() IPhoneStatus
-	// Stop ends the agents' use of the iPhone.
+	// Stop is the person's Stop: the agent using the iPhone ends and is refused after.
 	Stop func()
+	// Release ends every agent's use, as the switch going off does.
+	Release func()
+	// Picture is the latest picture an agent read, for watching it.
+	Picture func() ([]byte, time.Time)
 	// HandoffDone is the person saying they did what an agent asked; false
 	// when no agent was waiting.
 	HandoffDone func() bool
@@ -81,7 +93,11 @@ func (s *Service) SetIPhoneEnabled(enabled bool) (Status, error) {
 		return Status{}, err
 	}
 	if !enabled && hooks != nil {
-		hooks.Stop()
+		if hooks.Release != nil {
+			hooks.Release()
+		} else {
+			hooks.Stop()
+		}
 	}
 	return s.Refresh(), nil
 }
@@ -126,4 +142,15 @@ func (s *Service) IPhoneHandoffDone() bool {
 func (s *Service) withIPhone(status Status) Status {
 	status.IPhone = s.IPhone()
 	return status
+}
+
+// IPhonePicture is the latest picture of the iPhone an agent read, with when.
+func (s *Service) IPhonePicture() ([]byte, time.Time) {
+	s.mu.Lock()
+	hooks := s.iphone
+	s.mu.Unlock()
+	if hooks == nil || hooks.Picture == nil {
+		return nil, time.Time{}
+	}
+	return hooks.Picture()
 }

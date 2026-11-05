@@ -54,8 +54,10 @@ is on. It has the shape of [Phone use](phone.md):
 iPhone Mirroring shows a picture, not the iPhone's buttons and fields, so the
 screen is read as the text on it (on the Mac, with Apple's own text
 recognition). An icon with no words is tapped by a point on the picture. Text
-a US keyboard types goes in as keys; Chinese and other text goes in by paste,
-and the Mac's clipboard is put back after. There is no list of apps: an agent
+a US keyboard types goes in as keys; Chinese and other text goes in by paste:
+it is on the Mac's clipboard for a moment, marked so clipboard managers skip
+it, and what you had copied comes back after, unless you copied something
+else meanwhile. There is no list of apps: an agent
 opens one by the name it has on your iPhone. An iPhone has no back key; agents
 tap the app's own back button.
 
@@ -69,13 +71,20 @@ tap the app's own back button.
   the Mac. Do it on your iPhone and lock it again, or do it in iPhone Mirroring
   on the Mac, then tap **Done** in Mewla (Screen, or Settings → Labs → iPhone
   use). The agent never reads or types your passwords or codes.
+- **Watch.** **Watch** next to the agent in Screen opens the iPhone use page,
+  which shows your iPhone as the agent last read it, updated as it works. It
+  takes no picture of its own.
 - **Stop.** **Stop** next to the agent in Screen or in the iPhone use page ends
-  it. **Take over** in Screen ends every agent on the Mac and puts iPhone
-  Mirroring back on your screen. Switching iPhone use off stops the agent at once.
+  what it is doing at once, a handoff it waits on included, and that agent
+  can't use the iPhone again; another agent can, and so can this one after you
+  switch iPhone use off and on. **Take over** in Screen ends every agent on the
+  Mac and puts iPhone Mirroring back on your screen; agents wait while you view
+  it. Switching iPhone use off stops the agent at once.
 - **One agent at a time** uses the iPhone; another is told which agent has it.
   An agent that goes quiet for a minute lets it go.
 - **The Mac's own rules apply**: a locked Mac stops agents until it is unlocked,
-  and iPhone Mirroring in front on your Mac is yours: agents wait.
+  and iPhone Mirroring in front on your Mac is yours: agents wait. A Mac without
+  iPhone Mirroring (macOS 13 and 14) has no iPhone use.
 - **What is kept.** Each action is recorded in `~/.mewla/iphone-agent-audit.jsonl`
   on the Mac (readable only by you, kept 30 days), without screenshots, what was
   read, or what was typed beyond its length and a fingerprint.

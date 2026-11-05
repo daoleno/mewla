@@ -778,9 +778,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 		Status: func() agentuse.IPhoneStatus {
 			return iphoneStatus(ctx, iphoneDriver, iphoneDevice, func() agentuse.ComputerStatus { return computerStatus(ctx, screenService) })
 		},
-		Stop:        iphoneDevice.Release,
+		Stop:        iphoneDevice.Stop,
+		Release:     iphoneDevice.Release,
 		HandoffDone: iphoneDevice.HandoffDone,
+		Picture:     iphoneDevice.Picture,
 	})
+	// The person's Stop for a Worker in Screen stops it on the iPhone too.
+	screenService.SetStopHook(iphoneDevice.StopWorker)
 	// A Worker that finishes or is closed gives the phone's screen back at once.
 	phoneManager.SetAlive(controlHandler.liveWorker)
 	controlHandler.browsers = browserManager

@@ -16,7 +16,7 @@ export interface IPhoneUse {
  * iPhone use on the one current computer, read while a screen shows it: every pollMs (0 reads
  * once). A server switch drops the old computer's answer before the new one's arrives.
  */
-export function useIPhoneUse(pollMs = 0): IPhoneUse {
+export function useIPhoneUse(pollMs = 0, picture = false): IPhoneUse {
   const { currentServer } = useCurrentServer();
   const [status, setStatus] = useState<IPhoneDaemonStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export function useIPhoneUse(pollMs = 0): IPhoneUse {
     if (!currentServer || Platform.OS === "web") return;
     const asked = currentServer.id;
     try {
-      const next = await getIPhoneStatus(currentServer);
+      const next = await getIPhoneStatus(currentServer, picture);
       if (current.current === asked) {
         setStatus(next);
         setError(null);
@@ -43,7 +43,7 @@ export function useIPhoneUse(pollMs = 0): IPhoneUse {
     }
     // The server is the dependency, not its object identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serverId]);
+  }, [serverId, picture]);
 
   useEffect(() => {
     setStatus(null);

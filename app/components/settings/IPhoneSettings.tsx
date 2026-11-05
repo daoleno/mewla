@@ -1,5 +1,5 @@
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Image, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, ListRow, ListSection } from "../ui";
@@ -13,7 +13,8 @@ import { useIPhoneUse } from "../../store/iphoneUse";
 export function IPhoneSettings() {
   const insets = useSafeAreaInsets();
   const { colors } = useAppTheme();
-  const iphone = useIPhoneUse(3_000);
+  // The picture is the agent's own latest reading: watching takes no picture of the iPhone itself.
+  const iphone = useIPhoneUse(2_000, true);
   const status = iphone.status;
   const unsupported = status?.state === "unsupported";
   const active = status?.active;
@@ -46,6 +47,14 @@ export function IPhoneSettings() {
               ? `This computer doesn't offer iPhone use (${iphone.error}).`
               : "Reading this computer…"}
         </AppText>
+        {active && status?.picture ? (
+          <Image
+            source={{ uri: `data:image/jpeg;base64,${status.picture}` }}
+            style={[styles.picture, { borderColor: colors.border }]}
+            resizeMode="contain"
+            accessibilityLabel={`Your iPhone as ${active.name || "the agent"} last saw it`}
+          />
+        ) : null}
         {active ? (
           <ListSection>
             <ListRow title={`${active.name || active.worker} is using your iPhone`} icon="phone" />
@@ -66,5 +75,6 @@ const styles = StyleSheet.create({
   content: { width: "100%", paddingHorizontal: 16, paddingTop: 16 },
   inner: { width: "100%", maxWidth: ContentWidth.page, alignSelf: "center", gap: 12 },
   note: { paddingHorizontal: 4 },
+  picture: { width: "100%", aspectRatio: 0.46, maxHeight: 520, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, alignSelf: "center" },
   actions: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 12 },
 });

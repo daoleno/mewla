@@ -304,9 +304,13 @@ func (s *Service) StopAgent() {
 	for _, agent := range s.agents {
 		stop = append(stop, agent)
 	}
+	hook := s.stopHook
 	s.agentMu.Unlock()
 	for _, agent := range stop {
 		agent.cancel(errors.New("You stopped the agent from the app"))
+		if hook != nil {
+			hook(agent.worker)
+		}
 	}
 }
 
@@ -314,10 +318,23 @@ func (s *Service) StopAgent() {
 func (s *Service) StopAgentFor(worker string) {
 	s.agentMu.Lock()
 	agent := s.agents[worker]
+	hook := s.stopHook
 	s.agentMu.Unlock()
 	if agent != nil {
 		agent.cancel(errors.New("You stopped the agent from the app"))
 	}
+	if hook != nil {
+		hook(worker)
+	}
+}
+
+// SetStopHook tells what else a Worker uses through this screen (the
+// iPhone) when the person stops it here. Taking over needs no hook: no agent
+// acts while a person views the screen.
+func (s *Service) SetStopHook(hook func(worker string)) {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	s.stopHook = hook
 }
 
 // AgentReady says whether agents can use the screen now, and why not.
