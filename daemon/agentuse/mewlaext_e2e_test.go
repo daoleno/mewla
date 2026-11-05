@@ -113,7 +113,11 @@ func TestMewlaExtensionE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	bridge := svc.Bridge()
-	go bridge.Serve(ctx)
+	go func() {
+		if err := bridge.Serve(ctx); err != nil {
+			t.Errorf("the bridge can't listen: %v", err)
+		}
+	}()
 
 	// The person's Chrome, with a window of their own on a page.
 	chromeArgs := []string{"--user-data-dir=" + profile, "--no-first-run", "--no-default-browser-check",
@@ -135,6 +139,10 @@ func TestMewlaExtensionE2E(t *testing.T) {
 		for _, target := range cdpTargets(t) {
 			t.Logf("target %v %v", target["type"], target["url"])
 		}
+		sock := bridgeSocket(filepath.Join(state, "agent-use"))
+		_, sockErr := os.Stat(sock)
+		_, manifestErr := os.Stat(filepath.Join(profile, "NativeMessagingHosts", NativeHostName+".json"))
+		t.Logf("bridge socket %s (%d bytes): %v; host manifest: %v", sock, len(sock), sockErr, manifestErr)
 		t.Fatal("Mewla's extension never connected through its native host")
 	}
 	t.Logf("extension connected, version %s", bridge.HostVersion())
