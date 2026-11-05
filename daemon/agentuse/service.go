@@ -281,7 +281,7 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 		// shows it on its status page and checks it when the browser tools
 		// connect. Mewla does not read it out of Chrome's storage.
 		if key == "" {
-			status.State, status.Fix = BrowserNoKey, FixOpenExtension
+			status.State, status.Fix = BrowserNoKey, FixInstallExtension
 			status.Summary = "Add the Mewla extension to Chrome, or copy the Playwright extension's key from its page in Chrome and paste it here."
 			return status, launch{}
 		}

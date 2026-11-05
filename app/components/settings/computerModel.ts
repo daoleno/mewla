@@ -81,7 +81,13 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
     case "no_key":
       // Mewla does not read the key out of Chrome: the extension shows it and
       // the person hands it over.
-      if (browser.fix) {
+      if (browser.fix === "install_extension") {
+        problems.push({
+          key: "browser",
+          text: "Add the Mewla extension to Chrome. It needs no key.",
+          action: { label: "Set up", does: { kind: "fix", fix: browser.fix, target: "browser" } },
+        });
+      } else if (browser.fix) {
         problems.push({
           key: "browser",
           text: "Open the Playwright extension in Chrome and copy its PLAYWRIGHT_MCP_EXTENSION_TOKEN.",
@@ -90,7 +96,7 @@ export function computerProblems(status: AgentUseStatus | null): ComputerProblem
       }
       problems.push({
         key: "browser-key",
-        text: "Then run mewla agent-use key on that computer, or paste it here.",
+        text: "Or, with the older Playwright extension, run mewla agent-use key on that computer, or paste its key here.",
         action: { label: "Paste key", does: { kind: "paste_key" } },
       });
       break;
