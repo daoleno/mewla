@@ -21,6 +21,7 @@ const (
 
 	timelineKindUserMessage      = "user_message"
 	timelineKindAssistantMessage = "assistant_message"
+	timelineKindUpdate           = work.ConversationKindUpdate
 	timelineKindWorkCard         = "work_card"
 	timelineKindCalendarResult   = "calendar_result"
 
@@ -535,7 +536,7 @@ func providerEventMaterializable(event work.CodexConversationEvent) bool {
 		}
 		_, hasExactTimestamp := exactProviderEventTimestamp(event)
 		return strings.TrimSpace(event.Body) != "" && hasExactTimestamp
-	case timelineKindAssistantMessage:
+	case timelineKindAssistantMessage, timelineKindUpdate:
 		return strings.TrimSpace(event.Body) != ""
 	default:
 		return false
@@ -555,7 +556,7 @@ func timelineItemFromProviderEvent(threadID, sessionID string, event work.CodexC
 		if role == "" {
 			role = "user"
 		}
-	case timelineKindAssistantMessage:
+	case timelineKindAssistantMessage, timelineKindUpdate:
 		if role == "" {
 			role = "assistant"
 		}
@@ -866,6 +867,16 @@ func timelineItemToConversationEvent(item TimelineItem, seq int) (work.CodexConv
 			Role:      "assistant",
 			Body:      item.Body,
 			Title:     item.Title,
+			Source:    "brain_timeline",
+		}, true
+	case timelineKindUpdate:
+		return work.CodexConversationEvent{
+			ID:        item.ID,
+			Seq:       seq,
+			Timestamp: item.CreatedAt.Format(time.RFC3339Nano),
+			Kind:      timelineKindUpdate,
+			Role:      "assistant",
+			Body:      item.Body,
 			Source:    "brain_timeline",
 		}, true
 	case timelineKindWorkCard:

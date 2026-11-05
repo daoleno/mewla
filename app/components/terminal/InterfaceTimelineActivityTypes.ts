@@ -23,7 +23,7 @@ export interface ActivityTimelineItem {
   title: string;
   tone: "neutral" | "running" | "success" | "failed";
   icon: TimelineActivityIconName;
-  activityKind?: "reasoning";
+  activityKind?: "reasoning" | "update";
   streaming?: boolean;
   detail?: string;
   body?: string;

@@ -597,6 +597,9 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 		// Claude Code writes a provider/transport failure as a synthetic
 		// assistant record: isApiErrorMessage, an error category and, when
 		// known, the upstream status.
+		// ThinkingDisplay "updates" marks a record whose non-empty thinking
+		// text Claude Code prints in its terminal as a "●" line.
+		ThinkingDisplay   string `json:"thinkingDisplay"`
 		IsAPIErrorMessage bool   `json:"isApiErrorMessage"`
 		Error             string `json:"error"`
 		APIErrorStatus    int    `json:"apiErrorStatus"`
@@ -665,7 +668,7 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 				b.activityLifecycle.start(pending.id, pending.startedAt)
 			}
 		}
-		b.consumeAssistantContent(lineNumber, recordID, timestamp, envelope.Message.Content)
+		b.consumeAssistantContent(lineNumber, recordID, timestamp, envelope.ThinkingDisplay, envelope.Message.Content)
 		if envelope.IsAPIErrorMessage {
 			// The error record ends Claude's turn whatever its stop reason.
 			b.activityLifecycle.settle("", ProviderActivityCompleted, timestamp)
@@ -871,7 +874,7 @@ func claudeVisibleUserText(text string) bool {
 	return text != "" && !isTranscriptBoilerplate(text)
 }
 
-func (b *claudeConversationBuilder) consumeAssistantContent(lineNumber int, recordID, timestamp string, raw json.RawMessage) {
+func (b *claudeConversationBuilder) consumeAssistantContent(lineNumber int, recordID, timestamp, thinkingDisplay string, raw json.RawMessage) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return
 	}
@@ -893,7 +896,7 @@ func (b *claudeConversationBuilder) consumeAssistantContent(lineNumber int, reco
 		switch strings.ToLower(strings.TrimSpace(item.Type)) {
 		case "thinking":
 			thinkingIndex++
-			b.addThinking(lineNumber, recordID, thinkingIndex, timestamp, item.Thinking)
+			b.addThinking(lineNumber, recordID, thinkingIndex, timestamp, item.Thinking, thinkingDisplay == claudeThinkingDisplayUpdates)
 		case "text":
 			textIndex++
 			b.addMessage(lineNumber, recordID, textIndex, timestamp, "assistant", "", item.Text)
@@ -962,12 +965,18 @@ func (b *claudeConversationBuilder) addMessage(lineNumber int, recordID string, 
 	}
 }
 
-func (b *claudeConversationBuilder) addThinking(lineNumber int, recordID string, index int, timestamp, text string) {
+// claudeThinkingDisplayUpdates is the thinkingDisplay Claude Code sets when it
+// prints a thinking block's text in the terminal as an agent update.
+const claudeThinkingDisplayUpdates = "updates"
+
+// addThinking records a non-empty thinking block. An "updates" block is words
+// the terminal shows, so it is an update event; any other is Reasoning.
+func (b *claudeConversationBuilder) addThinking(lineNumber int, recordID string, index int, timestamp, text string, update bool) {
 	text = CleanCodexDisplayText(text)
 	if text == "" || isTranscriptBoilerplate(text) {
 		return
 	}
-	b.addEvent(CodexConversationEvent{
+	event := CodexConversationEvent{
 		ID:        b.eventID(recordID, "thinking", index),
 		Seq:       claudeEventSeq(lineNumber, index),
 		Timestamp: timestamp,
@@ -976,7 +985,13 @@ func (b *claudeConversationBuilder) addThinking(lineNumber int, recordID string,
 		Body:      text,
 		Status:    "done",
 		Source:    claudeConversationSource,
-	})
+	}
+	if update {
+		event.Kind = ConversationKindUpdate
+		event.Role = "assistant"
+		event.Title = ""
+	}
+	b.addEvent(event)
 }
 
 func (b *claudeConversationBuilder) addToolUse(lineNumber int, recordID string, index int, timestamp string, item claudeContentBlock) {

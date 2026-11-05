@@ -60,7 +60,7 @@ function latestStep(items: TimelineItem[], working: number): string | undefined 
   for (let index = working - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (item.type === "message") return undefined;
-    if (item.type !== "activity" || item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX)) continue;
+    if (item.type !== "activity" || item.activityKind === "update" || item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX)) continue;
     const last = item.id.startsWith(BRAIN_STEPS_ITEM_PREFIX) ? item.children?.[item.children.length - 1] : undefined;
     const title = (last?.title ?? item.title)?.trim();
     if (title) return title;
@@ -113,6 +113,8 @@ function isFoldableToolRow(item: TimelineItem): item is ActivityTimelineItem {
     item.type === "activity" &&
     item.tone !== "running" &&
     !item.streaming &&
+    // Brain's own words between steps stay visible, never folded into steps.
+    item.activityKind !== "update" &&
     !item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX) &&
     !item.id.startsWith(BRAIN_PRESENCE_ITEM_PREFIX) &&
     // Your answer to Brain's question is part of the conversation, not a step.

@@ -105,6 +105,12 @@ describe("Brain's tool rows", () => {
     expect(foldBrainToolRows(items)).toBe(items);
   });
 
+  test("Brain's update line stays visible between folded steps", () => {
+    const update = { type: "activity", id: "u", title: "Quota is now 256.", body: "Quota is now 256.", tone: "neutral", icon: "bulb", activityKind: "update" } as TimelineItem;
+    const folded = foldBrainToolRows([tool("a"), tool("b"), update, tool("c"), tool("d"), reply]);
+    expect(folded.map((item) => item.id)).toEqual([`${BRAIN_STEPS_ITEM_PREFIX}a`, "u", `${BRAIN_STEPS_ITEM_PREFIX}c`, "reply"]);
+  });
+
   test("an answered question stays its own line between folded steps", () => {
     const answered = { ...tool("q"), title: "Answered", statusKey: "choice:answered" } as TimelineItem;
     const folded = foldBrainToolRows([tool("a"), tool("b"), answered, tool("c"), tool("d")]);
