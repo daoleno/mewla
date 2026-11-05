@@ -21,7 +21,10 @@ type agentDisplay struct {
 	vd     *virtualDisplay
 	bounds image.Rectangle
 	saved  map[int][]image.Point
-	holds  map[string]bool
+	// slots are the places on the display where parked apps sit, so two
+	// agents' apps never lie over each other.
+	slots map[int]int
+	holds map[string]bool
 	// capture is a stream of the display, started when a picture of a window
 	// on it is first asked for.
 	capture Session
@@ -194,7 +197,8 @@ func (b *macBackend) ParkApp(ctx context.Context, pid int) error {
 			moved++
 			continue
 		}
-		target := d.bounds.Min.Add(image.Pt(40+30*i, 60+30*i))
+		slot := d.slotLocked(pid)
+		target := d.bounds.Min.Add(image.Pt(40+(slot%2)*800+30*i, 60+(slot/2%2)*480+30*i))
 		if err := setWindowPosition(pid, i, target); err != nil {
 			log.Printf("screen: agent display: %v", err)
 			continue
@@ -203,6 +207,7 @@ func (b *macBackend) ParkApp(ctx context.Context, pid int) error {
 	}
 	if moved == 0 {
 		delete(d.saved, pid)
+		delete(d.slots, pid)
 		d.releaseIfIdleLocked()
 		return errors.New("the app wouldn't let its windows be moved")
 	}
@@ -217,6 +222,7 @@ func (b *macBackend) ParkApp(ctx context.Context, pid int) error {
 		}
 		if !on {
 			delete(d.saved, pid)
+			delete(d.slots, pid)
 			d.releaseIfIdleLocked()
 			return errors.New("the app took the move but its window did not go")
 		}
@@ -233,6 +239,7 @@ func (b *macBackend) RestoreApp(pid int) error {
 		return nil
 	}
 	delete(d.saved, pid)
+	delete(d.slots, pid)
 	defer d.releaseIfIdleLocked()
 	positions, ok, err := windowPositions(pid)
 	if err != nil {
@@ -350,3 +357,23 @@ func (b *macBackend) ReleaseAgentDisplay(key string) {
 }
 
 var _ appParker = (*macBackend)(nil)
+
+// slotLocked is the lowest free place on the agent display for an app.
+func (d *agentDisplay) slotLocked(pid int) int {
+	if slot, ok := d.slots[pid]; ok {
+		return slot
+	}
+	if d.slots == nil {
+		d.slots = map[int]int{}
+	}
+	taken := map[int]bool{}
+	for _, slot := range d.slots {
+		taken[slot] = true
+	}
+	slot := 0
+	for taken[slot] {
+		slot++
+	}
+	d.slots[pid] = slot
+	return slot
+}

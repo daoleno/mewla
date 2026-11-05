@@ -18,10 +18,15 @@ func (s *Service) Watch(ctx context.Context, deviceID string, obs *Observer) (ne
 	if err := s.allowed(deviceID); err != nil {
 		return nil, err
 	}
+	var agent *agentSession
 	s.agentMu.Lock()
-	agent := s.agent
+	for _, candidate := range s.agents {
+		if candidate.ctx.Err() == nil && (agent == nil || candidate.since.Before(agent.since)) {
+			agent = candidate
+		}
+	}
 	s.agentMu.Unlock()
-	if agent == nil || agent.ctx.Err() != nil {
+	if agent == nil {
 		return nil, ErrNoAgent
 	}
 	viewer, server := net.Pipe()

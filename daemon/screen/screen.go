@@ -125,10 +125,23 @@ type Service struct {
 	restart func()
 
 	// control holds who controls the screen: one person or one agent.
-	control    sync.Mutex
-	current    *Control
-	agentMu    sync.Mutex
-	agent      *agentSession
+	control sync.Mutex
+	// current is a person's viewer, if one has the screen. agentControls are
+	// the agents acting on it: any number of them at once, each on its own
+	// apps, until a person's viewer takes it.
+	current       *Control
+	agentControls map[*Control]struct{}
+	agentMu       sync.Mutex
+	// agents are the agents using this computer, by Worker.
+	agents map[string]*agentSession
+	// screenSem lets one agent at a time act on the screen itself (the
+	// pointer and keyboard are one set); actions on an app that isn't in front
+	// don't take it.
+	screenSem chan struct{}
+	// posts is what any agent last posted, so no agent reads another's events
+	// as a person's.
+	posts      sharedPosts
+	appOwners  map[int]string
 	workerName func(id string) string
 	agentGate  func() bool
 	// agentPosted is when an ended agent session last posted input.

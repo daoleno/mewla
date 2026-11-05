@@ -41,10 +41,10 @@ type appParker interface {
 
 // maybePark moves the app an action works on to the agent display, once. It
 // returns a line to put before the answer, or "".
-func (a *agentSession) maybePark(ctx context.Context, action AgentAction) string {
+func (a *agentSession) maybePark(ctx context.Context, action AgentAction) (string, error) {
 	parker, ok := a.apps.(appParker)
 	if !ok || a.apps == nil || !parker.AgentDisplayAvailable() {
-		return ""
+		return "", nil
 	}
 	name := action.App
 	switch action.Action {
@@ -56,33 +56,41 @@ func (a *agentSession) maybePark(ctx context.Context, action AgentAction) string
 		}
 		a.appMu.Unlock()
 	default:
-		return ""
+		return "", nil
 	}
 	if name == "" {
-		return ""
+		return "", nil
 	}
 	apps, err := a.apps.Apps(ctx)
 	if err != nil {
-		return ""
+		return "", nil
 	}
 	app, err := resolveApp(apps, name)
 	if err != nil || app.Active || app.Hidden {
 		// The app in front is the person's, and an app with no window on a
 		// screen has nothing to move.
-		return ""
+		return "", nil
 	}
 	a.parkMu.Lock()
 	defer a.parkMu.Unlock()
 	if a.parked[app.PID] && parker.ParkedOnDisplay(app.PID) {
-		return ""
+		return "", nil
+	}
+	if a.claimApp != nil {
+		if err := a.claimApp(app.PID, a.worker); err != nil {
+			return "", err
+		}
 	}
 	if err := parker.ParkApp(ctx, app.PID); err != nil {
 		delete(a.parked, app.PID)
+		if a.freeApp != nil {
+			a.freeApp(app.PID, a.worker)
+		}
 		if a.parkTold {
-			return ""
+			return "", nil
 		}
 		a.parkTold = true
-		return fmt.Sprintf("No agent display here (%s), so %s stays behind your windows.", firstSentence(err.Error()), oneLine(app.Name))
+		return fmt.Sprintf("No agent display here (%s), so %s stays behind your windows.", firstSentence(err.Error()), oneLine(app.Name)), nil
 	}
 	if a.parked == nil {
 		a.parked = map[int]bool{}
@@ -90,9 +98,9 @@ func (a *agentSession) maybePark(ctx context.Context, action AgentAction) string
 	again := a.parked[app.PID]
 	a.parked[app.PID] = true
 	if again {
-		return fmt.Sprintf("%s was back on your screen (the agent display went away, as it does when the Mac sleeps) and is on the agent display again.", oneLine(app.Name))
+		return fmt.Sprintf("%s was back on your screen (the agent display went away, as it does when the Mac sleeps) and is on the agent display again.", oneLine(app.Name)), nil
 	}
-	return fmt.Sprintf("%s is on the agent display, off your screen, until the agent is done. Coordinates for it are on its window screenshot (screenshot with app).", oneLine(app.Name))
+	return fmt.Sprintf("%s is on the agent display, off your screen, until the agent is done. Coordinates for it are on its window screenshot (screenshot with app).", oneLine(app.Name)), nil
 }
 
 // isParked says whether the app is on the agent display.
@@ -113,6 +121,9 @@ func (a *agentSession) unpark(pid int) {
 		_ = parker.RestoreApp(pid)
 	}
 	delete(a.parked, pid)
+	if a.freeApp != nil {
+		a.freeApp(pid, a.worker)
+	}
 }
 
 // unparkAll puts every parked app back: the agent is done.

@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -103,12 +104,11 @@ type Control struct {
 func (s *Service) TakeControl(cancel context.CancelCauseFunc) *Control {
 	s.control.Lock()
 	defer s.control.Unlock()
+	for agent := range s.agentControls {
+		agent.cancel(ErrAgentStopped)
+	}
 	if s.current != nil {
-		if s.current.agent {
-			s.current.cancel(ErrAgentStopped)
-		} else {
-			s.current.cancel(ErrScreenReplaced)
-		}
+		s.current.cancel(ErrScreenReplaced)
 	}
 	s.current = &Control{cancel: cancel}
 	return s.current
@@ -121,6 +121,7 @@ func (s *Service) ReleaseControl(c *Control) {
 	if s.current == c {
 		s.current = nil
 	}
+	delete(s.agentControls, c)
 }
 
 // AgentAction is one computer-use action, shaped like the computer tool
@@ -241,8 +242,14 @@ type agentSession struct {
 	lastPost     time.Time
 	lastAppKey   time.Time
 	lastAppClick time.Time
-	pausedUntil  time.Time
-	paused       personError
+	// shared is what every agent last posted; a person's input is what comes
+	// after all of it.
+	shared *sharedPosts
+	// claimApp and freeApp say which agent works in which app.
+	claimApp    func(pid int, worker string) error
+	freeApp     func(pid int, worker string)
+	pausedUntil time.Time
+	paused      personError
 	// readElements reads the focused window, when the backend can.
 	readElements func(ctx context.Context, limit int) (ElementTree, error)
 	scale        float64 // framebuffer pixels per screenshot pixel
@@ -264,24 +271,41 @@ type agentSession struct {
 
 // Agent reports the agent using the screen, if any.
 func (s *Service) Agent() (AgentState, bool) {
-	s.agentMu.Lock()
-	defer s.agentMu.Unlock()
-	if s.agent == nil || s.agent.ctx.Err() != nil {
+	states := s.Agents()
+	if len(states) == 0 {
 		return AgentState{}, false
 	}
-	state := AgentState{Worker: s.agent.worker, Since: s.agent.since}
-	if s.workerName != nil {
-		state.Name = s.workerName(s.agent.worker)
+	return states[0], true
+}
+
+// Agents are the agents using the screen, longest first.
+func (s *Service) Agents() []AgentState {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	var states []AgentState
+	for _, agent := range s.agents {
+		if agent.ctx.Err() != nil {
+			continue
+		}
+		state := AgentState{Worker: agent.worker, Since: agent.since}
+		if s.workerName != nil {
+			state.Name = s.workerName(agent.worker)
+		}
+		states = append(states, state)
 	}
-	return state, true
+	sort.Slice(states, func(i, j int) bool { return states[i].Since.Before(states[j].Since) })
+	return states
 }
 
 // StopAgent ends the agent's control, from the app.
 func (s *Service) StopAgent() {
 	s.agentMu.Lock()
-	agent := s.agent
+	var stop []*agentSession
+	for _, agent := range s.agents {
+		stop = append(stop, agent)
+	}
 	s.agentMu.Unlock()
-	if agent != nil {
+	for _, agent := range stop {
 		agent.cancel(errors.New("You stopped the agent from the app"))
 	}
 }
@@ -355,6 +379,16 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 			return AgentResult{}, err
 		}
 	}
+	// The pointer and keyboard are one set: one agent at a time acts on the
+	// screen itself. Work on an app that isn't in front doesn't wait for it.
+	if !background {
+		release, err := s.screenSlot(ctx)
+		if err != nil {
+			s.audit(worker, action, AgentResult{}, started, err)
+			return AgentResult{}, err
+		}
+		defer release()
+	}
 	agent.mu.Lock()
 	agent.inflight++
 	agent.mu.Unlock()
@@ -373,30 +407,23 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 func (s *Service) agentFor(worker string) (*agentSession, error) {
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
-	if s.agent != nil && s.agent.ctx.Err() == nil {
-		if s.agent.worker != worker {
-			return nil, fmt.Errorf("Another agent (%s) is using this computer's screen", s.agent.worker)
-		}
-		return s.agent, nil
+	if existing := s.agents[worker]; existing != nil && existing.ctx.Err() == nil {
+		return existing, nil
 	}
 	// What an agent posted last is not a person's input for the next
 	// session either, as when a display that slept ends one.
-	lastPost := s.agentPosted
-	if old := s.agent; old != nil {
-		old.mu.Lock()
-		if old.lastPost.After(lastPost) {
-			lastPost = old.lastPost
-		}
-		old.mu.Unlock()
-	}
+	lastPost := later(s.agentPosted, s.posts.last().post)
 	s.control.Lock()
-	if s.current != nil && !s.current.agent {
+	if s.current != nil {
 		s.control.Unlock()
 		return nil, ErrPersonControlling
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
 	control := &Control{agent: true, cancel: cancel}
-	s.current = control
+	if s.agentControls == nil {
+		s.agentControls = map[*Control]struct{}{}
+	}
+	s.agentControls[control] = struct{}{}
 	s.control.Unlock()
 
 	starting := time.Now()
@@ -411,6 +438,7 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	// at the computer is never overlooked.
 	if woke := time.Unix(0, displayWoke.Load()); !woke.Before(starting) {
 		lastPost = later(lastPost, woke.Add(wakeDeclares))
+		s.posts.notePost(woke.Add(wakeDeclares))
 	}
 	label := worker
 	if s.workerName != nil {
@@ -429,7 +457,13 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		agent.apps = reader
 	}
 	agent.releaseDisplay = s.holdDisplay()
-	s.agent = agent
+	agent.shared = &s.posts
+	agent.claimApp = s.claimApp
+	agent.freeApp = s.freeApp
+	if s.agents == nil {
+		s.agents = map[string]*agentSession{}
+	}
+	s.agents[worker] = agent
 	go agent.capture()
 	go s.watchAgent(agent)
 	Notify("Mewla", "An agent ("+label+") is using this computer. Open Screen in the app to watch or stop it.")
@@ -479,8 +513,8 @@ func (s *Service) watchAgent(agent *agentSession) {
 	if posted.After(s.agentPosted) {
 		s.agentPosted = posted
 	}
-	if s.agent == agent {
-		s.agent = nil
+	if s.agents[agent.worker] == agent {
+		delete(s.agents, agent.worker)
 	}
 	if agent.releaseDisplay != nil {
 		agent.releaseDisplay()
@@ -641,6 +675,7 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		err := a.session.(appClicker).ClickTo(app.PID, window, p.X, p.Y, click.button, click.count)
 		a.mu.Lock()
 		a.lastAppClick = time.Now()
+		a.shared.noteAppClick(a.lastAppClick)
 		a.mu.Unlock()
 		if err != nil {
 			return AgentResult{}, fmt.Errorf("The click was not sent: %w. Nothing was changed; use an element id, or bring_forward when nobody is using the computer", err)
@@ -1157,12 +1192,12 @@ func (a *agentSession) personInputLocked() error {
 	inputs := a.presence().Input
 	var seen personError
 	for kind, at := range inputs {
-		own := a.lastPost
+		own := later(a.lastPost, a.shared.last().post)
 		switch InputKind(kind) {
 		case InputKey:
-			own = later(own, a.lastAppKey)
+			own = later(own, later(a.lastAppKey, a.shared.last().appKey))
 		case InputClick:
-			own = later(own, a.lastAppClick)
+			own = later(own, later(a.lastAppClick, a.shared.last().appClick))
 		}
 		if !at.IsZero() && at.After(own.Add(personMargin)) && at.After(seen.seen) {
 			seen = personError{kind: InputKind(kind), seen: at, inputs: inputs}
@@ -1224,6 +1259,7 @@ func (a *agentSession) letGoLocked() {
 		_ = a.session.Pointer(a.pointer.X, a.pointer.Y, 0)
 		a.buttons = 0
 		a.lastPost = time.Now()
+		a.shared.notePost(a.lastPost)
 	}
 }
 
@@ -1287,7 +1323,11 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 	a.scale = max(1, float64(max(bounds.Dx(), bounds.Dy()))/AgentLongEdge)
 	a.mu.Unlock()
 
-	if note := a.maybePark(ctx, action); note != "" {
+	note, parkErr := a.maybePark(ctx, action)
+	if parkErr != nil {
+		return AgentResult{}, parkErr
+	}
+	if note != "" {
 		defer func() {
 			if err == nil && result.Text != "" {
 				result.Text = note + " " + result.Text
@@ -1444,9 +1484,11 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 			_ = send(held[i], false)
 			if !background {
 				a.lastPost = time.Now()
+				a.shared.notePost(a.lastPost)
 			}
 			if pid != 0 {
 				a.lastAppKey = time.Now()
+				a.shared.noteAppKey(a.lastAppKey)
 			}
 		}
 		a.letGoLocked()
@@ -1458,9 +1500,11 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 		err := send(keysym, down)
 		if !background {
 			a.lastPost = time.Now()
+			a.shared.notePost(a.lastPost)
 		}
 		if pid != 0 {
 			a.lastAppKey = time.Now()
+			a.shared.noteAppKey(a.lastAppKey)
 		}
 		if err != nil {
 			return err
@@ -1503,6 +1547,7 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 		a.pointer, a.buttons = p, buttons
 		err := a.session.Pointer(p.X, p.Y, buttons)
 		a.lastPost = time.Now()
+		a.shared.notePost(a.lastPost)
 		return err
 	}
 	clicks := func(mask uint8, n int) error {
@@ -1909,4 +1954,97 @@ func (a *agentSession) parkedShot(ctx context.Context, parker appParker, app App
 		return AgentResult{}, err
 	}
 	return AgentResult{Image: out.Bytes(), Width: w, Height: h, Text: fmt.Sprintf("%s's window on the agent display, %dx%d. Click points for %s are on this picture, from its top left (0, 0).", oneLine(app.Name), w, h, oneLine(app.Name))}, nil
+}
+
+// sharedPosts is when any agent last posted input of each kind. An agent
+// reads input it did not post as a person's; another agent's posts are not
+// that. A nil *sharedPosts (an agent made apart from a Service) knows none.
+type sharedPosts struct {
+	mu       sync.Mutex
+	post     time.Time
+	appKey   time.Time
+	appClick time.Time
+}
+
+type postTimes struct{ post, appKey, appClick time.Time }
+
+func (p *sharedPosts) last() postTimes {
+	if p == nil {
+		return postTimes{}
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return postTimes{p.post, p.appKey, p.appClick}
+}
+
+func (p *sharedPosts) notePost(at time.Time) {
+	if p != nil {
+		p.mu.Lock()
+		p.post = later(p.post, at)
+		p.mu.Unlock()
+	}
+}
+
+func (p *sharedPosts) noteAppKey(at time.Time) {
+	if p != nil {
+		p.mu.Lock()
+		p.appKey = later(p.appKey, at)
+		p.mu.Unlock()
+	}
+}
+
+func (p *sharedPosts) noteAppClick(at time.Time) {
+	if p != nil {
+		p.mu.Lock()
+		p.appClick = later(p.appClick, at)
+		p.mu.Unlock()
+	}
+}
+
+// claimApp records that a Worker works in an app; a second Worker asking for
+// the same app is told. The apps are the ones an agent moved to the agent
+// display, which is where two agents would otherwise meet.
+func (s *Service) claimApp(pid int, worker string) error {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	if s.appOwners == nil {
+		s.appOwners = map[int]string{}
+	}
+	if owner, ok := s.appOwners[pid]; ok && owner != worker {
+		if other := s.agents[owner]; other != nil && other.ctx.Err() == nil {
+			name := owner
+			if s.workerName != nil {
+				if n := s.workerName(owner); n != "" {
+					name = n
+				}
+			}
+			return fmt.Errorf("Another agent (%s) is working in that app. Work in another app, or wait until it is done.", name)
+		}
+	}
+	s.appOwners[pid] = worker
+	return nil
+}
+
+func (s *Service) freeApp(pid int, worker string) {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	if s.appOwners[pid] == worker {
+		delete(s.appOwners, pid)
+	}
+}
+
+// screenSlot is the right to act on the screen itself (see screenSem).
+func (s *Service) screenSlot(ctx context.Context) (release func(), err error) {
+	s.agentMu.Lock()
+	if s.screenSem == nil {
+		s.screenSem = make(chan struct{}, 1)
+	}
+	sem := s.screenSem
+	s.agentMu.Unlock()
+	select {
+	case sem <- struct{}{}:
+		return func() { <-sem }, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("another agent was acting on the screen itself and did not finish in time: %w", context.Cause(ctx))
+	}
 }
