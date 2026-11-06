@@ -173,17 +173,41 @@ func (s *Service) AgentDisplay() (hold func(key string) (image.Rectangle, error)
 // before they go back. An agent that is thinking between two steps comes back
 // well within it; one that is simply gone (closed, crashed) does not keep
 // the person's apps off their screen for long.
-const parkLeaseDefault = 10 * time.Minute
+const parkLeaseDefault = 10 * time.Minute // after the agent's last action
 
 // parkHold is the apps an idle agent left on the agent display.
 type parkHold struct {
 	pids  []int
 	timer *time.Timer
+	// display is the agent's hold on the display, kept with its apps.
+	display func()
 }
 
-// holdParked keeps the apps the ending agent moved to the agent display where
-// they are, for its next session or until the lease ends, and says whether
-// there were any. Without idle (stopped, taken over) nothing is held.
+// DisplayKeptForAgents says whether the display is held on for agents: one is
+// using the screen, or one went quiet and its time is not over (see
+// holdParked). Without it the Mac's own display sleep, and the lock that
+// follows it, run as usual.
+func (s *Service) DisplayKeptForAgents() bool {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	for _, agent := range s.agents {
+		if agent.ctx.Err() == nil {
+			return true
+		}
+	}
+	for _, hold := range s.parkHolds {
+		if hold.display != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// holdParked keeps what the ending agent holds, for its next session or until
+// the lease ends: the apps it moved to the agent display, and the display
+// itself, which stays on so the Mac doesn't dim and lock between two steps.
+// It says whether anything is held. Without idle (stopped, taken over, its
+// Worker gone) nothing is.
 func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 	if !idle {
 		return false
@@ -196,7 +220,8 @@ func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 		}
 	}
 	agent.parkMu.Unlock()
-	if len(pids) == 0 {
+	_, canHold := s.backend.(displayHolder)
+	if len(pids) == 0 && !(canHold && agent.releaseDisplay != nil) {
 		return false
 	}
 	sort.Ints(pids)
@@ -204,6 +229,11 @@ func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 	if lease == 0 {
 		lease = parkLeaseDefault
 	}
+	// The lease counts from the agent's last action, not from the idle end.
+	agent.mu.Lock()
+	lastUse := agent.lastUse
+	agent.mu.Unlock()
+	remaining := max(lease-time.Since(lastUse), time.Second)
 	worker := agent.worker
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
@@ -212,9 +242,16 @@ func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 	}
 	if old := s.parkHolds[worker]; old != nil {
 		old.timer.Stop()
+		if old.display != nil {
+			old.display()
+		}
 	}
 	hold := &parkHold{pids: pids}
-	hold.timer = time.AfterFunc(lease, func() { s.dropHold(worker) })
+	if canHold && agent.releaseDisplay != nil {
+		// The hold on the display is handed over, not let go.
+		hold.display, agent.releaseDisplay = agent.releaseDisplay, nil
+	}
+	hold.timer = time.AfterFunc(remaining, func() { s.dropHold(worker) })
 	s.parkHolds[worker] = hold
 	if alive := s.alive; alive != nil {
 		every := s.aliveEvery
@@ -258,6 +295,9 @@ func (s *Service) dropHold(worker string) {
 		return
 	}
 	hold.timer.Stop()
+	if hold.display != nil {
+		hold.display()
+	}
 	parker, _ := s.backend.(appParker)
 	for _, pid := range hold.pids {
 		if parker != nil {

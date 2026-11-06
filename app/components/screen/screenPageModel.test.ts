@@ -72,6 +72,7 @@ describe("power", () => {
   test("summary", () => {
     expect(powerSummary({ source: "ac", percent: 90, keeping_awake: true }, true)).toBe("Charger · 90% · Staying awake");
     expect(powerSummary({ source: "battery", percent: 40, keeping_awake: false }, false)).toBe("Battery · 40% · May sleep");
+    expect(powerSummary({ source: "ac", percent: 90, keeping_awake: true, display_kept_for_agents: true }, true)).toBe("Charger · 90% · Staying awake · Display kept on for agents");
     expect(powerSummary(undefined, true)).toBeNull();
   });
 });

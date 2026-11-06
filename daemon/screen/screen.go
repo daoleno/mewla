@@ -242,6 +242,7 @@ func (s *Service) Status(ctx context.Context, deviceID string) Status {
 		status.Power = readPower()
 		if status.Power != nil {
 			status.Power.KeepingAwake = s.awake.holding()
+			status.Power.DisplayKeptForAgents = s.DisplayKeptForAgents()
 		}
 	}
 	status.Ready = capability.Ready() && status.Approved

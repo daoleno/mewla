@@ -74,6 +74,7 @@ func computerStatus(ctx context.Context, s *screen.Service) agentuse.ComputerSta
 	if len(status.Agents) > 0 {
 		status.Active = &status.Agents[0]
 	}
+	status.DisplayKept = s.DisplayKeptForAgents()
 	return status
 }
 

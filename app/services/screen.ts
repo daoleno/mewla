@@ -12,6 +12,7 @@ export interface ScreenPower {
   charging?: boolean;
   lid_closed?: boolean;
   keeping_awake: boolean;
+  display_kept_for_agents?: boolean;
 }
 
 export interface ScreenPermission {

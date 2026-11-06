@@ -528,6 +528,10 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		// The apps this Worker left on the agent display are still its own.
 		hold.timer.Stop()
 		delete(s.parkHolds, worker)
+		if hold.display != nil {
+			// This session holds the display itself already.
+			hold.display()
+		}
 		agent.parked = map[int]bool{}
 		for _, pid := range hold.pids {
 			agent.parked[pid] = true

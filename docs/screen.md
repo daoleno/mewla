@@ -214,12 +214,17 @@ missing, and **Open Settings** opens the right page on the Mac.
   a Mac nobody is at, its automatic screen lock decides how long they can
   (System Settings → Lock Screen).
 - **The display stays on while an agent works**, also on battery, since a
-  sleeping display stops what the agent sees; the Mac's display sleep, and a
-  lock that follows it, wait until a minute after the agent's last action. If
-  the display goes off anyway, the agent is told, and its next action wakes
-  it. On a Mac that asks for its password after the display sleeps, the
-  display going to sleep also locks it, and agents wait until it's
-  unlocked. A MacBook with its lid closed and no external display can't be woken.
+  sleeping display stops what the agent sees, and a Mac that asks for its
+  password after the display sleeps locks itself then. It is held on from an
+  agent's first action until its Worker ends, and up to ten minutes after its
+  last action, so it doesn't dim and lock between two steps; **Stop**, taking
+  over, or the Worker ending let it go at once. Screen's details and
+  `mewla agent-use status` say "Display kept on for agents" while it is held.
+  Mewla never locks the Mac or changes its lock and password settings, and a
+  lock you make yourself is yours to keep. Once the Mac is locked, agents wait
+  until it is unlocked, and if the display goes off anyway the agent is told
+  and its next action wakes it. A MacBook with its lid closed and no external
+  display can't be woken.
 - **You see it.** **Watch** shows the agent working, live, without taking
   over: your taps don't reach the screen, and **Take over** or **Stop** is one
   tap away. Work in an app behind others happens out of sight, so Watch may
