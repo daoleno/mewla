@@ -236,8 +236,8 @@ missing, and **Open Settings** opens the right page on the Mac.
   agent's control ends a minute after its last action, but an app it moved to
   the agent display stays there, still its own, for up to ten minutes more,
   so its windows don't jump back onto your screen while it is thinking; they
-  return at once when you stop the agent or take over, or when its next
-  action is `bring_forward`. Opening Screen lists every agent by name, each
+  return at once when you stop the agent or take over, when its Worker is
+  closed or its Work ends, or when its next action is `bring_forward`. Opening Screen lists every agent by name, each
   with **Watch** and **Stop**.
 - **Closing a window behind others.** An app's Close menu item (cmd+w) is off
   while the app is behind other windows. The agent then presses the close

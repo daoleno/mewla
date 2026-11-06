@@ -216,7 +216,36 @@ func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 	hold := &parkHold{pids: pids}
 	hold.timer = time.AfterFunc(lease, func() { s.dropHold(worker) })
 	s.parkHolds[worker] = hold
+	if alive := s.alive; alive != nil {
+		every := s.aliveEvery
+		if every == 0 {
+			every = 3 * time.Second
+		}
+		go s.watchHold(worker, hold, alive, every)
+	}
 	return true
+}
+
+// watchHold gives the apps back as soon as their Worker has ended (closed, or
+// its Work done); the lease is only the fallback.
+func (s *Service) watchHold(worker string, hold *parkHold, alive func(string) bool, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	missing := 0
+	for range ticker.C {
+		s.agentMu.Lock()
+		current := s.parkHolds[worker] == hold
+		s.agentMu.Unlock()
+		if !current {
+			return
+		}
+		if alive(worker) {
+			missing = 0
+		} else if missing++; missing >= 2 {
+			s.dropHold(worker)
+			return
+		}
+	}
 }
 
 // dropHold puts back the apps a Worker's idle agent left on the agent display.

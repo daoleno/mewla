@@ -787,6 +787,9 @@ func runDaemon(args []string, stderr io.Writer) error {
 	screenService.SetStopHook(iphoneDevice.StopWorker)
 	// A Worker that finishes or is closed gives the phone's screen back at once.
 	phoneManager.SetAlive(controlHandler.liveWorker)
+	// The same for the screen: a Worker that ends gives back its control and
+	// the apps it left on the agent display.
+	screenService.SetWorkerAlive(controlHandler.liveWorker)
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager

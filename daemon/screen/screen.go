@@ -147,8 +147,12 @@ type Service struct {
 	appOwners map[int]string
 	// parkHolds are the apps an idle agent left on the agent display, by Worker
 	// (see parking.go); parkLease is how long, 0 for the default.
-	parkHolds  map[string]*parkHold
-	parkLease  time.Duration
+	parkHolds map[string]*parkHold
+	parkLease time.Duration
+	// alive says whether a Worker is still running (see SetWorkerAlive);
+	// aliveEvery is how often to ask, 0 for the default.
+	alive      func(worker string) bool
+	aliveEvery time.Duration
 	workerName func(id string) string
 	agentGate  func() bool
 	// stopHook hears of each Worker the person stops (SetStopHook).
