@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,13 +17,13 @@ func (m *Manager) SetTailscaleBrowser(b TailscaleBrowser) {
 	m.tailscaleBrowser = b
 }
 
-const tailscalePasteMessage = "Create an OAuth client named " + tailscaleClientName + " with the scopes all:read, devices:core, auth_keys, policy_file and dns, then paste its client secret."
+const tailscalePasteMessage = "Create an OAuth client named " + tailscaleClientName + " with the scopes all:read, devices:core, auth_keys, policy_file, devices:posture_attributes and dns, then paste its client secret."
 
 // startTailscale begins Connect. With a ready browser the job runs in the
 // background and the flow reports on it; otherwise the person is sent to the
 // console's credential page to paste the secret.
 func (m *Manager) startTailscale(in *Input) (Response, error) {
-	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: "tailscale", Status: "waiting", Expires: time.Now().Add(10 * time.Minute)}, allowWrites: in.AllowWrites}
+	f := &connectFlow{ConnectFlow: ConnectFlow{ID: uuid.NewString(), Integration: "tailscale", Status: "waiting", Expires: time.Now().Add(10 * time.Minute)}, allowWrites: in.AllowWrites, dryRun: in.DryRun}
 	b := m.tailscaleBrowser
 	if b == nil || !b.Ready() || m.tailscaleJobs > 0 {
 		m.tailscalePaste(f, "")
@@ -47,13 +48,31 @@ func (m *Manager) tailscalePaste(f *connectFlow, why string) {
 }
 
 func (m *Manager) runTailscaleBrowser(ctx context.Context, f *connectFlow, b TailscaleBrowser) {
-	client, err := b.Create(ctx)
+	var client TailscaleClient
+	var err error
+	var state string
+	var seen []string
+	if f.dryRun {
+		state, seen, err = b.Probe(ctx)
+	} else {
+		client, err = b.Create(ctx)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	defer m.cacheListLocked()
 	m.tailscaleJobs--
 	f.jobCancel()
 	if m.connectFlows[f.ID] != f || f.Status != "waiting" {
+		return
+	}
+	if f.dryRun {
+		// Nothing was created. The flow ends with what the console showed.
+		f.Status, f.AuthorizationURL, f.CodeRequired = "cancelled", "", false
+		if err != nil {
+			f.Message = "Dry run: " + err.Error()
+		} else {
+			f.Message = "Dry run: " + state + "; the console showed " + strings.Join(seen, " | ")
+		}
 		return
 	}
 	if err != nil {

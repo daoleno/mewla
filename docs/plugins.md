@@ -150,13 +150,14 @@ password and stops if the console asks for a captcha or a second factor.
 Without a ready Chrome, create the client yourself on the Trust credentials
 page, named Mewla, and paste its client secret
 (`tskey-client-…`, which carries the ID). The CLI does the same:
-`mewla connections connect --integration tailscale`, or
+`mewla connections connect --integration tailscale` (add `--dry-run` to go as far as the Generate credential button and report what the page showed, creating nothing), or
 `mewla connections add --integration tailscale --credential-stdin`.
 
 The client is given **all:read** (every read, including APIs Tailscale adds
 later), **devices:core** (delete, rename, expire, authorize and tag devices),
 **auth_keys** (create and revoke auth keys), **policy_file** (read and edit the
-access policy) and **dns**. Tailscale requires a tag on the first two, so the
+access policy), **devices:posture_attributes** (Tailscale requires it for
+policy editing) and **dns**. Tailscale requires a tag on the first two, so the
 client carries one tag from your tailnet. Users, webhooks, log streaming, trust
 credentials and **all** are not requested. To change what Mewla can do, revoke
 the client in Trust credentials and connect again.

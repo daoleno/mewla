@@ -128,6 +128,9 @@ type Input struct {
 	OAuthClient *OAuthClientConfig `json:"oauth_client,omitempty"`
 	Mobile      bool               `json:"mobile,omitempty"`
 	AllowWrites bool               `json:"allow_writes,omitempty"`
+	// DryRun: Tailscale connect goes as far as the button that creates the OAuth
+	// client and reports what the console showed, without pressing it.
+	DryRun bool `json:"dry_run,omitempty"`
 	// WebOrigin is the web UI's own origin. connect_start returns its browser
 	// there instead of to the native app, if the daemon serves the web UI on it.
 	WebOrigin string `json:"web_origin,omitempty"`

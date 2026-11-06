@@ -67,6 +67,7 @@ type connectFlow struct {
 	renewID string
 	// jobCancel stops a background job the flow runs (Tailscale's browser).
 	jobCancel context.CancelFunc
+	dryRun    bool
 }
 
 func (m *Manager) isPending(id string) bool {
