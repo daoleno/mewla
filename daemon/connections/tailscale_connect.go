@@ -17,7 +17,7 @@ func (m *Manager) SetTailscaleBrowser(b TailscaleBrowser) {
 	m.tailscaleBrowser = b
 }
 
-const tailscalePasteMessage = "Create an OAuth client named " + tailscaleClientName + " with the scopes all:read, devices:core, auth_keys, policy_file, devices:posture_attributes and dns, then paste its client secret."
+var tailscalePasteMessage = "Create an OAuth client named " + tailscaleClientName + " with " + consoleScopeSummary() + ", then paste its client secret."
 
 // startTailscale begins Connect. With a ready browser the job runs in the
 // background and the flow reports on it; otherwise the person is sent to the

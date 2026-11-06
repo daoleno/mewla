@@ -426,7 +426,7 @@ func TestTailscaleConsoleScriptCarriesItsConfigAndNeverTypesSecrets(t *testing.T
 	if _, _, err := b.Probe(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{TailscaleCredentialsURL, `"name":"Mewla"`, `"dryRun":true`, `"id":"devices:core"`, `"id":"all:read"`} {
+	for _, want := range []string{TailscaleCredentialsURL, `"name":"Mewla"`, `"dryRun":true`, `"section":"Devices"`, `"label":"Core"`, `"label":"Policy File"`} {
 		if !strings.Contains(seen, want) {
 			t.Fatalf("script lacks %s", want)
 		}

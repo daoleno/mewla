@@ -58,23 +58,46 @@ func NewTailscaleBrowser(ready func() bool, start func() *exec.Cmd) TailscaleBro
 
 func (c *chromeTools) Ready() bool { return c.ready != nil && c.ready() }
 
+// consoleScope is one row of the console's custom scopes: the section it is
+// under, its label there, and whether Mewla ticks Read or Write. Write includes
+// Read. Tag: Tailscale asks for a tag with this scope.
 type consoleScope struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Level string `json:"level"`
-	Tag   bool   `json:"tag,omitempty"`
+	Section string `json:"section"`
+	Label   string `json:"label"`
+	Level   string `json:"level"`
+	Tag     bool   `json:"tag,omitempty"`
 }
 
-// consoleScopes names each scope the way the admin console labels it.
 func consoleScopes() []consoleScope {
 	return []consoleScope{
-		{ID: "all:read", Label: "All", Level: "read"},
-		{ID: "devices:core", Label: "Devices Core", Level: "write", Tag: true},
-		{ID: "auth_keys", Label: "Auth Keys", Level: "write", Tag: true},
-		{ID: "policy_file", Label: "Policy File", Level: "write"},
-		{ID: "devices:posture_attributes", Label: "Devices Posture Attributes", Level: "write"},
-		{ID: "dns", Label: "DNS", Level: "write"},
+		{Section: "Devices", Label: "Core", Level: "write", Tag: true},
+		{Section: "Devices", Label: "Posture Attributes", Level: "write"},
+		{Section: "Keys", Label: "Auth Keys", Level: "write", Tag: true},
+		{Section: "General", Label: "Policy File", Level: "write"},
+		{Section: "General", Label: "DNS", Level: "write"},
+		{Section: "General", Label: "Users", Level: "read"},
+		{Section: "General", Label: "Services", Level: "read"},
+		{Section: "Devices", Label: "Routes", Level: "read"},
+		{Section: "Devices", Label: "Device Invites", Level: "read"},
+		{Section: "Keys", Label: "API Access Tokens", Level: "read"},
+		{Section: "Keys", Label: "Webhooks", Level: "read"},
+		{Section: "Logging", Label: "Log Streaming", Level: "read"},
+		{Section: "Logging", Label: "Audit Logs", Level: "read"},
 	}
+}
+
+// consoleScopeSummary says what the client is given, for the person who
+// creates it by hand.
+func consoleScopeSummary() string {
+	var write, read []string
+	for _, s := range consoleScopes() {
+		if s.Level == "write" {
+			write = append(write, s.Section+" "+s.Label)
+		} else {
+			read = append(read, s.Section+" "+s.Label)
+		}
+	}
+	return "custom scopes: Write on " + strings.Join(write, ", ") + "; Read on " + strings.Join(read, ", ")
 }
 
 type consoleResult struct {
