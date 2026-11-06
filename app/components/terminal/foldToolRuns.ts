@@ -50,7 +50,7 @@ function bucketOf(kind: SemanticActionKind): RunBucket {
 
 /**
  * A finished, quiet tool row that carries its kind. Anything the person has to
- * look at stays on its own: a running or streaming row, a failure or block
+ * look at stays on its own: a subagent, a running or streaming row, a failure or block
  * (those open themselves), the agent's own words, the choice card and the
  * provider's live row.
  */
@@ -58,6 +58,8 @@ export function isFoldableToolRow(
   item: TimelineItem,
 ): item is ActivityTimelineItem & { semanticKind: SemanticActionKind } {
   if (item.type !== "activity" || !item.semanticKind) return false;
+  // A subagent is a piece of work in its own right, not a step to summarise.
+  if (item.semanticKind === "delegate_agent") return false;
   if (item.tone === "running" || item.tone === "failed" || item.streaming) {
     return false;
   }

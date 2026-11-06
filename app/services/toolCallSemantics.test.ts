@@ -386,3 +386,60 @@ describe("timeline presentation", () => {
     expect(activities[4]?.defaultExpanded).toBe(false);
   });
 });
+
+describe("subagent calls", () => {
+  const toolEvent = (overrides: Partial<CodexConversationEvent>): CodexConversationEvent => ({
+    id: "t",
+    seq: 1,
+    kind: "tool",
+    status: "completed",
+    ...overrides,
+  });
+
+  test("a Claude Task or Agent call is titled by the task it was given", () => {
+    for (const tool_name of ["Task", "Agent"]) {
+      const [item] = buildTimeline([
+        toolEvent({
+          tool_name,
+          input: JSON.stringify({
+            description: "Audit the sync module",
+            subagent_type: "Explore",
+            prompt: "Read everything.\nThen report.",
+          }),
+          output: "Found 3 issues",
+        }),
+      ]) as ActivityTimelineItem[];
+      expect(item.title).toBe("Audit the sync module");
+      expect(item.semanticKind).toBe("delegate_agent");
+      expect(item.icon).toBe("git-network");
+      expect(item.body).toBe("Found 3 issues");
+    }
+  });
+
+  test("a Codex spawn_agent call uses the first line of its message, and says so while it runs", () => {
+    const [item] = buildTimeline([
+      toolEvent({
+        tool_name: "spawn_agent",
+        status: "running",
+        input: JSON.stringify({ message: "Review the diff\nand the tests" }),
+      }),
+    ]) as ActivityTimelineItem[];
+    expect(item.title).toBe("Review the diff");
+    expect(item.tone).toBe("running");
+    expect(item.icon).toBe("time");
+  });
+
+  test("without a description it still reads as a subagent, and an unsafe one is not echoed", () => {
+    const [bare] = buildTimeline([
+      toolEvent({ tool_name: "Task", input: "{}" }),
+    ]) as ActivityTimelineItem[];
+    expect(bare.title).toBe("Run a subagent");
+    const [secret] = buildTimeline([
+      toolEvent({
+        tool_name: "Task",
+        input: JSON.stringify({ description: "Use sk-abcdefghijklmnopqrstuvwxyz123456 to call the API" }),
+      }),
+    ]) as ActivityTimelineItem[];
+    expect(secret.title).toBe("Run a subagent");
+  });
+});
