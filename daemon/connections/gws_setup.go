@@ -55,13 +55,15 @@ func (gwsCLI) setupFlow(m *Manager, ctx context.Context, f *connectFlow) (bool, 
 	return true, nil
 }
 
-// gwsProjectCommands builds the gcloud calls for the one signed-in Google Cloud
-// account. With none, or with several, the person creates the project instead:
-// Mewla never picks an account to change.
+// gwsProjectCommands builds the gcloud calls for the one Google Cloud account
+// that is signed in and turned on. With none, or with several, the person
+// creates the project instead: Mewla never picks an account to change.
 func (m *Manager) gwsProjectCommands(f *connectFlow) ([][]string, string, bool) {
 	account := ""
 	for _, r := range m.records {
-		if r.Account.Integration != "gcp" || r.CLI == nil || r.CLI.Account == "" || r.Account.Status != "connected" {
+		// Only an account the person turned on in Extensions: Mewla never changes
+		// one that merely exists on this computer.
+		if r.Account.Integration != "gcp" || r.CLI == nil || r.CLI.Account == "" || r.Account.Status != "connected" || !r.Account.Enabled {
 			continue
 		}
 		if account != "" && account != r.CLI.Account {

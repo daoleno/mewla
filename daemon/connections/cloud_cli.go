@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -108,19 +107,6 @@ func (c *cloudRuntime) resolveExecutableLease(id string) (string, *os.File, erro
 		closeCloudLease(lease)
 	}
 	return "", nil, errors.New("Install the CLI to continue")
-}
-
-// gws loads a .env file from its working directory, which could replace its
-// token or client. It runs in an empty private directory instead.
-func cloudWorkDir(binary string) string {
-	if filepath.Base(binary) != "gws" {
-		return ""
-	}
-	dir := filepath.Join(os.TempDir(), "mewla-gws-cwd-"+strconv.Itoa(os.Getuid()))
-	if os.MkdirAll(dir, 0700) != nil {
-		return ""
-	}
-	return dir
 }
 
 // boundedBuffer drains output without retaining unbounded data; it is also used

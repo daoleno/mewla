@@ -86,12 +86,48 @@ func TestGWSEnvironmentKeepsOnlyTheSignedInAccount(t *testing.T) {
 	if strings.Contains(env, "evil") || !strings.Contains(env, "GOOGLE_WORKSPACE_CLI_CONFIG_DIR=/canonical/config") {
 		t.Fatalf("credential routing overridden:\n%s", env)
 	}
-	// The CLI runs in a private empty directory, so a .env file cannot supply them.
-	if dir := cloudWorkDir("/x/bin/gws"); dir == "" || cloudWorkDir("/x/bin/aws") != "" {
+	// A .env file never overrides a variable that is already set, so each one is pinned.
+	for _, want := range []string{"GOOGLE_WORKSPACE_CLI_TOKEN=\n", "GOOGLE_WORKSPACE_CLI_CLIENT_ID=\n", "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE=\n", "GOOGLE_WORKSPACE_PROJECT_ID=\n", "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND="} {
+		if !strings.Contains(env+"\n", want) {
+			t.Fatalf("%s not pinned", want)
+		}
+	}
+}
+
+func TestGWSRunsInAPrivateDirectoryUnderMewlaState(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("MEWLA_STATE_DIR", state)
+	dir := cloudWorkDir("/x/bin/gws")
+	if dir != filepath.Join(state, "cli", "gws", "run") || cloudWorkDir("/x/bin/aws") != "" {
 		t.Fatal("working directory", dir)
 	}
-	if entries, _ := os.ReadDir(cloudWorkDir("/x/bin/gws")); len(entries) != 0 {
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
 		t.Fatal("working directory is not empty")
+	}
+	// A directory others can write to (a planted .env) is never used.
+	if err := os.Chmod(dir, 0777); err != nil {
+		t.Fatal(err)
+	}
+	if got := cloudWorkDir("/x/bin/gws"); got == dir || got == "" || strings.HasPrefix(got, state) {
+		t.Fatalf("shared directory used: %s", got)
+	}
+	os.RemoveAll(cloudWorkDir("/x/bin/gws"))
+}
+
+func TestGWSConfigDirIsPinned(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GOOGLE_WORKSPACE_CLI_CONFIG_DIR", "")
+	if got := gwsConfigDir(); got != filepath.Join(home, ".config", "gws") {
+		t.Fatal(got)
+	}
+	os.MkdirAll(filepath.Join(home, ".config", "gws"), 0700)
+	if !strings.Contains(strings.Join((gwsCLI{}).environment(), "\n"), "GOOGLE_WORKSPACE_CLI_CONFIG_DIR="+filepath.Join(home, ".config", "gws")) {
+		t.Fatal("not pinned")
+	}
+	t.Setenv("GOOGLE_WORKSPACE_CLI_CONFIG_DIR", "/chosen")
+	if gwsConfigDir() != "/chosen" {
+		t.Fatal("explicit directory ignored")
 	}
 }
 
@@ -272,7 +308,7 @@ func TestGWSInstallVerifiesDigestAndVersion(t *testing.T) {
 
 // TestGWSHelperProcess is a stand-in for the vendor CLI, driven by the flow test.
 func TestGWSHelperProcess(t *testing.T) {
-	if os.Getenv("GWS_HELPER") != "1" {
+	if os.Getenv("MEWLA_TEST_GWS_HELPER") != "1" {
 		return
 	}
 	args := os.Args
@@ -344,10 +380,11 @@ func testGWSManager(t *testing.T) (*Manager, string) {
 	m, _, _, _ := testCloudManager(t)
 	config := t.TempDir()
 	t.Setenv("GOOGLE_WORKSPACE_CLI_CONFIG_DIR", config)
-	t.Setenv("GWS_HELPER", "1")
-	t.Setenv("GWS_TEST_BIN", os.Args[0])
+	t.Setenv("MEWLA_STATE_DIR", t.TempDir())
+	t.Setenv("MEWLA_TEST_GWS_HELPER", "1")
+	t.Setenv("MEWLA_TEST_GWS_BIN", os.Args[0])
 	script := filepath.Join(t.TempDir(), "gws")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nexec \"$GWS_TEST_BIN\" -test.run=TestGWSHelperProcess -- \"$@\"\n"), 0700); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexec \"$MEWLA_TEST_GWS_BIN\" -test.run=TestGWSHelperProcess -- \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	m.cloud.providers["gws"] = testGWSCLI{path: script}
@@ -454,7 +491,7 @@ func TestGWSSetupCreatesTheProjectInTheOnlyGoogleCloudAccount(t *testing.T) {
 	m, _ := testGWSManager(t)
 	var calls []string
 	m.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
-	m.records["gcp-one"] = &record{CLI: &cloudAccount{Profile: "account:me@example.com", Account: "me@example.com"}, Account: Account{ID: "gcp-one", Integration: "gcp", Status: "connected"}}
+	m.records["gcp-one"] = &record{CLI: &cloudAccount{Profile: "account:me@example.com", Account: "me@example.com"}, Account: Account{ID: "gcp-one", Integration: "gcp", Status: "connected", Enabled: true}}
 	run := m.cloud.run
 	m.cloud.run = func(ctx context.Context, binary string, args, env []string) (cloudOutput, error) {
 		if filepath.Base(binary) == "true" {
@@ -481,10 +518,18 @@ func TestGWSSetupCreatesTheProjectInTheOnlyGoogleCloudAccount(t *testing.T) {
 		t.Fatalf("gcloud calls:\n%s", joined)
 	}
 
+	// An account that is signed in but not turned on is never changed.
+	m3, _ := testGWSManager(t)
+	m3.records["off"] = &record{CLI: &cloudAccount{Profile: "account:off@example.com", Account: "off@example.com"}, Account: Account{ID: "off", Integration: "gcp", Status: "connected"}}
+	m3.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
+	if f := mustHandle(t, m3, Request{Action: "connect_start", Input: &Input{Integration: "gws"}}).Flow; !f.CodeRequired || f.AuthorizationURL != gwsConsoleNew {
+		t.Fatalf("changed an account that is off: %+v", f)
+	}
+
 	// Two Google Cloud accounts: Mewla never picks one to change.
 	m2, _ := testGWSManager(t)
-	m2.records["a"] = &record{CLI: &cloudAccount{Profile: "account:a@example.com", Account: "a@example.com"}, Account: Account{ID: "a", Integration: "gcp", Status: "connected"}}
-	m2.records["b"] = &record{CLI: &cloudAccount{Profile: "account:b@example.com", Account: "b@example.com"}, Account: Account{ID: "b", Integration: "gcp", Status: "connected"}}
+	m2.records["a"] = &record{CLI: &cloudAccount{Profile: "account:a@example.com", Account: "a@example.com"}, Account: Account{ID: "a", Integration: "gcp", Status: "connected", Enabled: true}}
+	m2.records["b"] = &record{CLI: &cloudAccount{Profile: "account:b@example.com", Account: "b@example.com"}, Account: Account{ID: "b", Integration: "gcp", Status: "connected", Enabled: true}}
 	m2.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
 	f = mustHandle(t, m2, Request{Action: "connect_start", Input: &Input{Integration: "gws"}}).Flow
 	if !f.CodeRequired || f.AuthorizationURL != gwsConsoleNew || !strings.Contains(f.Message, "Create a Google Cloud project") {

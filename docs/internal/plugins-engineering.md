@@ -175,8 +175,10 @@ Sources: [AWS CLI login session limits](https://docs.aws.amazon.com/cli/latest/u
 
 `gwsCLI` is a `cloudProvider` for Google's `gws` with one profile, `default`; its
 account is `gws auth status` (user, token_valid), so an outside sign-out removes the
-card. It runs in an empty private working directory because `gws` loads `.env`, and
-with `GOOGLE_WORKSPACE_*` token, credentials, client and project overrides removed.
+card. `gws` loads a `.env` from its working directory or any parent and never
+overrides a variable that is already set, so it runs in an empty owner-only directory
+under the state dir (`cli/gws/run`) with the token, credentials, client, project,
+config-dir and keyring variables pinned explicitly (blank, or the resolved value).
 The pinned release (`gwsVersion`, `gwsArchives` SHA256s, refreshed with the gcloud
 bootstrap pins) is extracted in-process and published only after `--version` matches.
 
@@ -184,7 +186,7 @@ Connect has two provider hooks beyond gcloud's. `setupFlow` runs before sign-in:
 without `client_secret.json` the flow is `setup_required` (the code field takes the
 client), and `gws auth setup` is not used because it cannot create the OAuth client
 (its consent-screen call returns 404 and client creation was removed). With exactly
-one connected gcloud account Connect runs `gcloud projects create` and
+one connected and enabled gcloud account Connect runs `gcloud projects create` and
 `services enable` for it; it never picks between accounts. `finishSetup` writes the
 client where `gws auth status` says `client_config` lives. Sign-in uses `gws auth login -s
 gmail,calendar,drive` (gmail.modify, calendar, drive): `gws` listens on a random

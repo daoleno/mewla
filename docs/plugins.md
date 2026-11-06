@@ -437,8 +437,8 @@ Connect, first time:
 
 1. If `gws` is missing, **Install and sign in** installs the pinned official build.
 2. Mewla creates a Google Cloud project with the Gmail, Calendar and Drive APIs on,
-   in the one Google Cloud account you already connected. With none, or with
-   several, you create the project yourself and Connect says so.
+   in the one Google Cloud account you have connected and turned on. With none, or
+   with several, you create the project yourself and Connect says so.
 3. One action in the Google console: set up the consent screen as **External**,
    choose **Publish app** (so sign-in does not expire after seven days), and
    create a **Desktop app** client. Paste its client ID and secret into Mewla.
