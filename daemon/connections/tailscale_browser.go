@@ -83,6 +83,7 @@ type consoleResult struct {
 	ID     string   `json:"id"`
 	Secret string   `json:"secret"`
 	Seen   []string `json:"seen"`
+	Page   string   `json:"page"`
 }
 
 var consoleOutput = regexp.MustCompile(`MEWLA:([A-Za-z0-9+/=]+)`)
@@ -105,7 +106,12 @@ func (c *chromeTools) Create(ctx context.Context) (TailscaleClient, error) {
 // is told apart from a signed-out browser.
 func (c *chromeTools) Probe(ctx context.Context) (state string, seen []string, err error) {
 	res, err := c.exec(ctx, true)
-	return res.State, res.Seen, err
+	if res.Page != "" {
+		seen = append([]string{"page " + res.Page}, res.Seen...)
+	} else {
+		seen = res.Seen
+	}
+	return res.State, seen, err
 }
 
 func (c *chromeTools) exec(ctx context.Context, dryRun bool) (consoleResult, error) {
