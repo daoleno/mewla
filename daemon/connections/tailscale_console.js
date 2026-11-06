@@ -48,7 +48,6 @@ async (page) => {
 
   // Each scope is a row of a section; a section that is folded is opened first.
   const rowOf = (s) => page.locator('div, li, tr').filter({ has: page.getByText(s.label, { exact: true }) }).filter({ has: page.locator('input[type=checkbox]') }).last();
-  let needsTag = false;
   for (const want of CONFIG.scopes) {
     let row = rowOf(want);
     if (!(await visible(row, 800))) {
@@ -67,22 +66,29 @@ async (page) => {
       await page.waitForTimeout(150);
     }
     if (!(await on())) return stop('unrecognised', 'level of ' + want.label);
-    if (want.tag) needsTag = true;
   }
 
-  // Scopes on devices and keys may ask for a tag. If the button is still off,
-  // look for the field and pick the first tag the tailnet has.
+  // Scopes on devices and keys ask for a tag each ("Add tags" fields). Each takes
+  // the first tag the tailnet offers: from the open list, or from what typing
+  // "tag:" suggests. When none is offered, the page's own words are returned.
   await page.waitForTimeout(500);
-  if (await generate.first().isDisabled().catch(() => false) || needsTag) {
-    const tags = page.getByRole('combobox', { name: /tag/i }).or(page.getByLabel(/tag/i)).or(page.getByPlaceholder(/tag/i));
-    if (await visible(tags, 1500)) {
-      await tags.first().click();
-      const option = page.getByRole('option').first();
-      if (!(await visible(option, 3000))) return out({ state: 'needs_tag' });
-      await option.click();
-      await page.keyboard.press('Escape').catch(() => {});
-      await page.waitForTimeout(300);
+  const popup = async () => (await page.locator('[role=listbox], [role=menu], [role=dialog], [data-radix-popper-content-wrapper], ul').allInnerTexts().catch(() => []))
+    .map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 8);
+  const fields = page.getByRole('combobox', { name: /tags?/i });
+  const count = await fields.count().catch(() => 0);
+  for (let i = 0; i < count; i++) {
+    const field = fields.nth(i);
+    if (await field.inputValue().catch(() => '')) continue;
+    await field.click();
+    let option = page.getByRole('option').first();
+    if (!(await visible(option, 1500))) {
+      await field.pressSequentially('tag:', { delay: 60 }).catch(() => {});
+      option = page.getByRole('option').first();
     }
+    if (!(await visible(option, 2500))) return out({ state: 'needs_tag', page: where(), seen: await popup() });
+    await option.click();
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(300);
   }
   if (await generate.first().isDisabled().catch(() => false)) return stop('needs_tag', 'generate disabled');
   if (CONFIG.dryRun) return out({ state: 'dry_run', seen: await seen() });
