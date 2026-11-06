@@ -53,3 +53,9 @@ test("Google Cloud rows summarize accounts without exposing configuration select
   expect(cloudProfilesSummary([account])).toBe("person@example.com");
   expect(cloudProfileIdentity(account)).toBe("No default project");
 });
+test("a Google Workspace account is named by its Google account, with no project line", () => {
+  const gws = { ...profile("default", "valid", "gws"), name: "person@example.com", identity: "person@example.com" };
+  expect(cloudProfileName(gws)).toBe("person@example.com");
+  expect(cloudProfileIdentity(gws)).toBe("");
+  expect(cloudProfilesSummary([gws])).toBe("person@example.com");
+});

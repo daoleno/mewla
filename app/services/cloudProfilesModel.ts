@@ -1,5 +1,5 @@
 import type { PluginAccount } from "./connections";
-export function cloudProfileName(a: PluginAccount): string { return a.integration === "gcp" ? a.name || a.identity : a.profile || a.name; }
+export function cloudProfileName(a: PluginAccount): string { return a.integration === "gcp" || a.integration === "gws" ? a.name || a.identity : a.profile || a.name; }
 
 export function cloudProfileExpiry(a: PluginAccount, now = Date.now()): { label: string; soon: boolean } | null {
   const at = Date.parse(a.profile_sign_in_by || "");
@@ -23,7 +23,7 @@ export function cloudProfileStatus(a: PluginAccount): { label: string; tone: "su
   }
 }
 export function cloudProfileIdentity(a: PluginAccount): string {
-  return a.integration === "gcp" ? a.project || "No default project" : [a.aws?.account_name, a.aws?.account_id].filter(Boolean).join(" · ");
+  return a.integration === "gws" ? "" : a.integration === "gcp" ? a.project || "No default project" : [a.aws?.account_name, a.aws?.account_id].filter(Boolean).join(" · ");
 }
 export function cloudProfileGroups(accounts: PluginAccount[], query = "") {
   const needle = query.trim().toLocaleLowerCase();

@@ -265,6 +265,7 @@ describe("AWS", () => {
     const expired = aws({ id: "aws-3", status: "authorization_required", history: [{ at: "2026-10-28T00:00:00Z", tool: "read", status: "error", message: "AWS session expired. Sign in again." }] });
     expect(accountRecovery(expired, "AWS")).toEqual({ title: "Needs sign-in again", detail: "AWS stopped accepting this session.", action: "reconnect", actionLabel: "Sign in to AWS", tone: "warning" });
     expect(accountSignInInput(expired)).toEqual({ integration: "aws", account_id: "aws-3" });
+    expect(accountSignInInput(account({ integration: "gws", id: "gws-cli-default" }))).toEqual({ integration: "gws", account_id: "gws-cli-default" });
     expect(accountSignInInput(account({ integration: "github" }))).toBeNull();
     expect(connectLabel({ id: "aws", name: "AWS" })).toBe("Sign in to AWS");
     expect(connectLabel({ id: "github", name: "GitHub" })).toBe("Connect GitHub");

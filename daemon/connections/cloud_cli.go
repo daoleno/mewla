@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,7 +53,7 @@ type cloudRuntime struct {
 }
 
 func newCloudRuntime(dir string) *cloudRuntime {
-	return &cloudRuntime{profileFiles: awsProfileFiles, dir: dir, providers: map[string]cloudProvider{"aws": awsCLI{}, "gcp": gcloudCLI{}}, run: runCloudProcess, checked: map[string]time.Time{}}
+	return &cloudRuntime{profileFiles: awsProfileFiles, dir: dir, providers: map[string]cloudProvider{"aws": awsCLI{}, "gcp": gcloudCLI{}, "gws": gwsCLI{}}, run: runCloudProcess, checked: map[string]time.Time{}}
 }
 func (c *cloudRuntime) executable(id string) (string, error) {
 	c.refresh(id, false)
@@ -109,6 +110,19 @@ func (c *cloudRuntime) resolveExecutableLease(id string) (string, *os.File, erro
 	return "", nil, errors.New("Install the CLI to continue")
 }
 
+// gws loads a .env file from its working directory, which could replace its
+// token or client. It runs in an empty private directory instead.
+func cloudWorkDir(binary string) string {
+	if filepath.Base(binary) != "gws" {
+		return ""
+	}
+	dir := filepath.Join(os.TempDir(), "mewla-gws-cwd-"+strconv.Itoa(os.Getuid()))
+	if os.MkdirAll(dir, 0700) != nil {
+		return ""
+	}
+	return dir
+}
+
 // boundedBuffer drains output without retaining unbounded data; it is also used
 // by interactive login processes whose output is never logged or persisted.
 type boundedBuffer struct {
@@ -141,6 +155,7 @@ func runCloudProcess(ctx context.Context, binary string, args, env []string) (cl
 	ownCloudProcess(cmd)
 	inheritCloudLease(cmd, lease)
 	cmd.Env = env
+	cmd.Dir = cloudWorkDir(binary)
 	cmd.WaitDelay = time.Second
 	out := &boundedBuffer{limit: MaxResultBytes}
 	stderr := &boundedBuffer{limit: 16384}
@@ -190,6 +205,7 @@ func startCloudLogin(binary string, args, env []string) (*cloudLogin, error) {
 	ownCloudProcess(cmd)
 	inheritCloudLease(cmd, lease)
 	cmd.Env = env
+	cmd.Dir = cloudWorkDir(binary)
 	cmd.WaitDelay = time.Second
 	input, err := cmd.StdinPipe()
 	if err != nil {
