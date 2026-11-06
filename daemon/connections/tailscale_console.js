@@ -19,7 +19,9 @@ async (page) => {
 
   await page.goto(CONFIG.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-  if (!/^https:\/\/login\.tailscale\.com\/admin\//.test(page.url())) return out({ state: 'signed_out', page: where(), seen: await seen() });
+  // The console draws after the page loads; its navigation says it is the console.
+  await visible(page.getByRole('link', { name: /trust credentials/i }), 12000);
+  if (!/^https:\/\/(console|login)\.tailscale\.com\/admin\//.test(page.url())) return out({ state: 'signed_out', page: where(), seen: await seen() });
   if (await visible(page.getByText(/captcha|verification code|two-factor|security key|verify it.s you/i), 1500)) return out({ state: 'needs_you', page: where() });
 
   // Open the new-credential dialog and choose OAuth.

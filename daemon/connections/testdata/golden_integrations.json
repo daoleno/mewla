@@ -642,7 +642,7 @@
       "id": "tailscale",
       "name": "Tailscale",
       "available": true,
-      "setup_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+      "setup_url": "https://console.tailscale.com/admin/settings/trust-credentials",
       "description": "Your tailnet: devices, auth keys, access policy and DNS"
     },
     {
@@ -3430,7 +3430,7 @@
       },
       "native": {
         "flow": {
-          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "authorization_url": "https://console.tailscale.com/admin/settings/trust-credentials",
           "has_account": false,
           "integration": "tailscale",
           "status": "waiting",
@@ -3442,7 +3442,7 @@
       },
       "native_custom_endpoint": {
         "flow": {
-          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "authorization_url": "https://console.tailscale.com/admin/settings/trust-credentials",
           "has_account": false,
           "integration": "tailscale",
           "status": "waiting",
@@ -3454,7 +3454,7 @@
       },
       "native_operator_secret": {
         "flow": {
-          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "authorization_url": "https://console.tailscale.com/admin/settings/trust-credentials",
           "has_account": false,
           "integration": "tailscale",
           "status": "waiting",
@@ -3466,7 +3466,7 @@
       },
       "native_writes_publishers": {
         "flow": {
-          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "authorization_url": "https://console.tailscale.com/admin/settings/trust-credentials",
           "has_account": false,
           "integration": "tailscale",
           "status": "waiting",
@@ -3478,7 +3478,7 @@
       },
       "web": {
         "flow": {
-          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "authorization_url": "https://console.tailscale.com/admin/settings/trust-credentials",
           "has_account": false,
           "integration": "tailscale",
           "status": "waiting",
@@ -3490,7 +3490,7 @@
       },
       "web_bad_origin": {
         "flow": {
-          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "authorization_url": "https://console.tailscale.com/admin/settings/trust-credentials",
           "has_account": false,
           "integration": "tailscale",
           "status": "waiting",
@@ -3502,7 +3502,7 @@
       },
       "web_writes_publishers": {
         "flow": {
-          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "authorization_url": "https://console.tailscale.com/admin/settings/trust-credentials",
           "has_account": false,
           "integration": "tailscale",
           "status": "waiting",
