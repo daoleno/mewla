@@ -30,7 +30,7 @@ func TestRealScreenVideoOverSimulatedLinks(t *testing.T) {
 
 	// The page scrolls itself up and down (requestAnimationFrame); no input
 	// reaches the Mac. Its tab is titled mewla-scroll-fixture loop.
-	openScrollFixture(t, "loop", 0, 0, true)
+	openScrollFixture(t, ctx, backend, "loop", 0, 0, true)
 	time.Sleep(4 * time.Second)
 
 	session, err := backend.Start(ctx)
