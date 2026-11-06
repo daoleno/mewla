@@ -773,6 +773,13 @@ export function usePinnedTimeline(
           previousGeometry.viewport !== undefined &&
           viewport !== previousGeometry.viewport);
       scrollGeometryRef.current = { height, viewport };
+      // Two questions with different answers. A geometry change during the
+      // reader's own gesture (virtualization mounting rows, a streaming reply
+      // growing) must not flip follow intent. It is still where the reader is:
+      // scrolling into history mounts older rows on nearly every event, so
+      // gating the anchor on it left the bookmark one or more steps behind and
+      // the next message "restored" the reader to that stale offset.
+      const readerMoved = userDriven;
       userDriven = userDriven && !geometryChanged;
       latestOffsetRef.current =
         Platform.OS === "ios" ? -Math.max(0, contentInset.top) : 0;
@@ -798,7 +805,7 @@ export function usePinnedTimeline(
         attachToLatest();
         return;
       }
-      if (nextScrollState.mode === "detached" && userDriven) {
+      if (nextScrollState.mode === "detached" && readerMoved) {
         detachFromLatest();
         captureReadingPosition();
         return;
