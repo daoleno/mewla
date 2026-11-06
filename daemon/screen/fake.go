@@ -89,6 +89,8 @@ type FakeBackend struct {
 	Launched      []string
 	// MenuPresses are the menu items chosen by shortcut.
 	MenuPresses []string
+	// ClosePresses are the apps whose key window's close button was pressed.
+	ClosePresses []int
 	// MirrorInputs are the holds, swipes, strokes and pastes sent to one
 	// app (fake_mirror.go); TextLines is what ReadText reads, TextReads how
 	// often it was asked.
@@ -437,6 +439,9 @@ type FakeApp struct {
 	// OtherDesktop puts its windows on another desktop: on the screen, and
 	// readable, only while it is in front.
 	OtherDesktop bool
+	// SaveSheet are the buttons of the sheet a close asks for (unsaved
+	// changes): the window then stays.
+	SaveSheet []string
 }
 
 // FakeMenuItem is a fake app's menu item with a shortcut: Char and
@@ -495,6 +500,44 @@ func (f *FakeBackend) PressMenuKey(_ context.Context, pid int, shortcut Shortcut
 }
 
 var _ menuPresser = (*FakeBackend)(nil)
+
+// CloseKeyWindow presses the close button of the fake app's first window, its
+// key window: the window and what is in it go, unless it asks to save first.
+func (f *FakeBackend) CloseKeyWindow(_ context.Context, pid int) (CloseResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.RunningApps {
+		app := &f.RunningApps[i]
+		if app.PID != pid {
+			continue
+		}
+		start := -1
+		for j, e := range app.Elements {
+			if e.Role == "AXWindow" && e.Depth == 0 {
+				start = j
+				break
+			}
+		}
+		if start < 0 {
+			return CloseResult{}, errors.New("the app has no key window to close")
+		}
+		end := start + 1
+		for end < len(app.Elements) && app.Elements[end].Depth > 0 {
+			end++
+		}
+		result := CloseResult{Title: app.Elements[start].Title}
+		f.ClosePresses = append(f.ClosePresses, pid)
+		if len(app.SaveSheet) > 0 {
+			result.Sheet = append([]string(nil), app.SaveSheet...)
+			return result, nil
+		}
+		app.Elements = append(app.Elements[:start:start], app.Elements[end:]...)
+		return result, nil
+	}
+	return CloseResult{}, errors.New("the app quit")
+}
+
+var _ windowCloser = (*FakeBackend)(nil)
 
 // OpenApp starts one of the fake's InstalledApps, by name or bundle id.
 func (f *FakeBackend) OpenApp(_ context.Context, name string) error {

@@ -143,8 +143,12 @@ type Service struct {
 	screenSem chan struct{}
 	// posts is what any agent last posted, so no agent reads another's events
 	// as a person's.
-	posts      sharedPosts
-	appOwners  map[int]string
+	posts     sharedPosts
+	appOwners map[int]string
+	// parkHolds are the apps an idle agent left on the agent display, by Worker
+	// (see parking.go); parkLease is how long, 0 for the default.
+	parkHolds  map[string]*parkHold
+	parkLease  time.Duration
 	workerName func(id string) string
 	agentGate  func() bool
 	// stopHook hears of each Worker the person stops (SetStopHook).
