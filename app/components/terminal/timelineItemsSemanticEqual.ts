@@ -235,8 +235,28 @@ function activityItemsEqual(
     stringArraysEqual(left.files, right.files) &&
     patchSummariesEqual(left.fileSummaries, right.fileSummaries) &&
     toolDeveloperDetailsEqual(left.developerDetails, right.developerDetails) &&
-    activityChildrenEqual(left.children, right.children)
+    activityChildrenEqual(left.children, right.children) &&
+    left.semanticKind === right.semanticKind &&
+    activityStepsEqual(left.steps, right.steps)
   );
+}
+
+function activityStepsEqual(
+  left?: ActivityTimelineItem[],
+  right?: ActivityTimelineItem[],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index] && !activityItemsEqual(left[index], right[index])) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Owns providerToolId, rawInput, and string-valued transport (no key order). */

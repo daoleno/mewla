@@ -105,8 +105,9 @@ again, or press and hold it to delete it. Nothing else ever asks you to retry.
 Session chats behave the same way.
 
 **Folded steps.** The searches, reads and commands Brain runs in a turn fold
-into one "Worked · N steps" row. Tap it to see them. Session chats keep every
-row.
+into one "Worked · N steps" row. Tap it to see them. Session chats fold the
+same way, but the row says what happened ("Edited 2 files and ran 3
+commands") and opens onto the real rows.
 
 **Background tasks.** When a Claude Code subagent, background command or
 monitor reports back, the chat shows a task card with its status, duration,

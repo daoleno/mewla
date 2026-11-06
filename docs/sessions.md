@@ -39,8 +39,10 @@ select several and terminate them together.
 Open a Session to read it in one of three ways:
 
 - **Chat**: the structured conversation, with your messages, the agent's
-  replies, tool calls, plans and attachments. Available for Claude, Codex,
-  Cursor, Grok, Pi and OpenCode.
+  replies, tool calls, plans and attachments. A run of finished tool calls
+  folds into one row that says what it did ("Read 3 files and ran 2
+  commands"); tap it for the calls. A call that is running or failed stays on
+  its own row. Available for Claude, Codex, Cursor, Grok, Pi and OpenCode.
 - **Terminal**: the live terminal, rendered natively. Works for any command,
   including a Shell. A key row above the keyboard adds Ctrl, Esc, Tab and arrows.
 - **Git**: read-only All, Working and Staged diffs for the Session's
