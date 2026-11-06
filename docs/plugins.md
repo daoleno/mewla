@@ -154,13 +154,16 @@ page, named Mewla, and paste its client secret
 `mewla connections connect --integration tailscale` (add `--dry-run` to go as far as the Generate credential button and report what the page showed, creating nothing), or
 `mewla connections add --integration tailscale --credential-stdin`.
 
-The client is given **all:read** (every read, including APIs Tailscale adds
-later), **devices:core** (delete, rename, expire, authorize and tag devices),
-**auth_keys** (create and revoke auth keys), **policy_file** (read and edit the
-access policy), **devices:posture_attributes** (Tailscale requires it for
-policy editing) and **dns**. Tailscale requires a tag on the first two, so the
-client carries one tag from your tailnet. Users, webhooks, log streaming, trust
-credentials and **all** are not requested. To change what Mewla can do, revoke
+The client is given custom scopes: **Write** on Devices (Core, to delete,
+rename, expire and tag devices, and Posture Attributes, which Tailscale
+requires for policy editing), Keys (Auth Keys), and General (Policy File and
+DNS); and **Read** on Users, Services, Routes, Device Invites, API Access
+Tokens, Webhooks, Log Streaming and Audit Logs. Tailscale offers an all-reads
+preset only without Write, so reads are listed one by one and APIs Tailscale
+adds later are not covered until you reconnect. Tailscale may ask for a tag on
+the device and key scopes; if it does, the client carries the first tag your
+tailnet has. Tailnet management, OAuth and federated keys, and **All** are not
+requested. To change what Mewla can do, revoke
 the client in Trust credentials and connect again.
 
 Tailscale's whole API is open through three tools driven by its official

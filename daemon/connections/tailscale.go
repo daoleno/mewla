@@ -35,26 +35,13 @@ const (
 	tailscaleClientName = "Mewla"
 )
 
-// tailscaleScopes are what a client created for Mewla is given. Reads cover
-// the whole tailnet; the write scopes are the ones needed for everyday
-// management. Mewla still allows a change only with the person's say-so for
-// the task.
-//
-//   - all:read: every read endpoint, including ones Tailscale adds later.
-//   - devices:core: delete, rename, expire, authorize and tag devices. Tailscale
-//     requires a tag on a credential with this scope.
-//   - auth_keys: create and revoke auth keys. Also requires a tag.
-//   - policy_file: read and edit the access policy. Tailscale requires
-//     devices:posture_attributes (write) and devices:core:read with it.
-//   - devices:posture_attributes: that dependency, device posture attributes.
-//   - dns: read and edit DNS.
-//
-// Not requested: users, billing-adjacent settings, webhooks, log streaming,
-// trust credentials themselves and "all".
-var tailscaleScopes = []string{"all:read", "devices:core", "auth_keys", "policy_file", "devices:posture_attributes", "dns"}
-
-// TailscaleScopes is the scope list the browser connect asks for.
-func TailscaleScopes() []string { return append([]string(nil), tailscaleScopes...) }
+// The client Mewla creates is given (see consoleScopes): Write on devices
+// (core and posture attributes), auth keys, the policy file and DNS, and Read on
+// users, routes, device invites, API access tokens, webhooks, services and logs.
+// Tailscale requires posture attributes with the policy file. It is not given
+// "all", users, OAuth, federated or tailnet management, and it is not given
+// "all:read": the console offers that only as a preset that excludes Write.
+// Mewla still allows a change only with the person's say-so for the task.
 
 var tsClientSecret = regexp.MustCompile(`^tskey-client-([A-Za-z0-9]+)-[A-Za-z0-9]+$`)
 
