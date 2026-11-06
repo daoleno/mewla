@@ -62,3 +62,26 @@ export function toggleCollapsedSection(
 export function collapsedSectionsToStore(keys: ReadonlySet<string>): string[] {
   return [...keys].slice(-MAX_REMEMBERED_COLLAPSED_SECTIONS);
 }
+
+/** More new rows than this arrive as a reload, not as news. */
+export const MAX_ANIMATED_NEW_ROWS = 40;
+
+/**
+ * The Session keys that were not in the list the last time it changed. There
+ * are none for the first list, for an empty one, or when a whole new set
+ * arrives (a server switch), so opening the page animates nothing.
+ */
+export function newRowKeys(
+  known: ReadonlySet<string> | null,
+  sections: readonly Pick<WorkerDirectorySection, "data">[],
+): ReadonlySet<string> {
+  if (!known || known.size === 0) return NO_ROWS;
+  const added = sections.flatMap((section) =>
+    section.data.map((worker) => worker.key).filter((key) => !known.has(key)),
+  );
+  return added.length === 0 || added.length > MAX_ANIMATED_NEW_ROWS
+    ? NO_ROWS
+    : new Set(added);
+}
+
+const NO_ROWS: ReadonlySet<string> = new Set();

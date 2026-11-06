@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useRef } from "react";
 import { StyleSheet, View } from "react-native";
+import { FadeInView } from "../ui/FadeInView";
 import type {
   TerminalThemeChrome,
   TerminalThemePalette,
@@ -40,6 +41,9 @@ export function ActivityEvent({
     item.id,
     defaultExpanded,
   );
+  // Only a person's own tap fades the details in; a row that mounts open (a
+  // failure, or one scrolled back into the window) simply shows them.
+  const openedByPressRef = useRef(false);
   const activityPresentation = buildInterfaceTimelineActivityPresentation(
     item,
     chrome,
@@ -71,38 +75,41 @@ export function ActivityEvent({
         accessibilityLabel={item.accessibilityLabel}
         onPress={() => {
           if (activityPresentation.canExpand) {
+            openedByPressRef.current = true;
             toggle();
           }
         }}
       />
 
       {detailsExpanded ? (
-        item.steps?.length ? (
-          // A folded run opens onto the real rows, each with its own disclosure.
-          <InterfaceTimelineExpandedBlock chrome={chrome} style={styles.steps}>
-            {item.steps.map((step) => (
-              <ActivityEvent
-                key={step.id}
-                item={step}
-                chrome={chrome}
-                theme={theme}
-                loadAssetPreview={_loadAssetPreview}
-                formatPatchPath={formatPatchPath}
-                truncateBody={truncateBody}
-              />
-            ))}
-          </InterfaceTimelineExpandedBlock>
-        ) : (
-          <InterfaceTimelineActivityDetails
-            item={item}
-            chrome={chrome}
-            theme={theme}
-            assetPreviewUri={null}
-            assetPreviewFailed={false}
-            formatPatchPath={formatPatchPath}
-            truncateBody={truncateBody}
-          />
-        )
+        <FadeInView animate={openedByPressRef.current}>
+          {item.steps?.length ? (
+            // A folded run opens onto the real rows, each with its own disclosure.
+            <InterfaceTimelineExpandedBlock chrome={chrome} style={styles.steps}>
+              {item.steps.map((step) => (
+                <ActivityEvent
+                  key={step.id}
+                  item={step}
+                  chrome={chrome}
+                  theme={theme}
+                  loadAssetPreview={_loadAssetPreview}
+                  formatPatchPath={formatPatchPath}
+                  truncateBody={truncateBody}
+                />
+              ))}
+            </InterfaceTimelineExpandedBlock>
+          ) : (
+            <InterfaceTimelineActivityDetails
+              item={item}
+              chrome={chrome}
+              theme={theme}
+              assetPreviewUri={null}
+              assetPreviewFailed={false}
+              formatPatchPath={formatPatchPath}
+              truncateBody={truncateBody}
+            />
+          )}
+        </FadeInView>
       ) : null}
     </View>
   );

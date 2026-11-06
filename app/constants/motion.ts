@@ -21,3 +21,14 @@ export const Spring = {
 } as const;
 
 export const PRESSED_SCALE = 0.96;
+
+/**
+ * Product motion: short, eased out, never bouncy. Springs above are for touch
+ * feedback; things that appear, open or turn use these durations (ms).
+ */
+export const Timing = {
+  /** A row or a block of details appearing. */
+  quick: 150,
+  /** A disclosure chevron turning, or a surface fading in. */
+  base: 200,
+} as const;

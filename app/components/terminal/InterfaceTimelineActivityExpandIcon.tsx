@@ -1,6 +1,6 @@
 import React from "react";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { Icon } from "../icons/Icon";
+import { AnimatedChevron } from "../ui/AnimatedChevron";
 
 interface InterfaceTimelineActivityExpandIconProps {
   expanded: boolean;
@@ -8,16 +8,16 @@ interface InterfaceTimelineActivityExpandIconProps {
 }
 
 /**
- * Native disclosure convention: a forward chevron while collapsed, a down
- * chevron once the details are open.
+ * Native disclosure convention: a forward chevron while collapsed that turns
+ * down once the details are open.
  */
 export function InterfaceTimelineActivityExpandIcon({
   expanded,
   chrome,
 }: InterfaceTimelineActivityExpandIconProps) {
   return (
-    <Icon
-      name={expanded ? "chevron-down" : "chevron-right"}
+    <AnimatedChevron
+      expanded={expanded}
       size={13}
       color={expanded ? chrome.textMuted : chrome.textSubtle}
     />
