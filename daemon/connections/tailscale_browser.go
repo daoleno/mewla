@@ -28,6 +28,9 @@ type TailscaleBrowser interface {
 	// Create makes one client. It returns a *TailscaleBrowserError when the
 	// browser could not finish and the person has to do the rest by hand.
 	Create(ctx context.Context) (TailscaleClient, error)
+	// Probe goes as far as the button that creates the client and reports what
+	// the console showed, without pressing it.
+	Probe(ctx context.Context) (state string, seen []string, err error)
 }
 
 // TailscaleBrowserError says why the browser could not create the client, in
@@ -69,6 +72,7 @@ func consoleScopes() []consoleScope {
 		{ID: "devices:core", Label: "Devices Core", Level: "write", Tag: true},
 		{ID: "auth_keys", Label: "Auth Keys", Level: "write", Tag: true},
 		{ID: "policy_file", Label: "Policy File", Level: "write"},
+		{ID: "devices:posture_attributes", Label: "Devices Posture Attributes", Level: "write"},
 		{ID: "dns", Label: "DNS", Level: "write"},
 	}
 }

@@ -261,9 +261,14 @@ type fakeTSBrowser struct {
 	err    error
 	gate   chan struct{}
 	calls  int
+	probes int
 }
 
 func (b *fakeTSBrowser) Ready() bool { return b.ready }
+func (b *fakeTSBrowser) Probe(ctx context.Context) (string, []string, error) {
+	b.probes++
+	return "dry_run", []string{"Credential", "Generate credential"}, nil
+}
 func (b *fakeTSBrowser) Create(ctx context.Context) (TailscaleClient, error) {
 	b.calls++
 	if b.gate != nil {
@@ -428,5 +433,25 @@ func TestTailscaleConsoleScriptCarriesItsConfigAndNeverTypesSecrets(t *testing.T
 	}
 	if strings.Contains(seen, "__CONFIG__") || strings.Contains(strings.ToLower(seen), "password") && strings.Contains(seen, ".fill(") && strings.Contains(strings.ToLower(seen), "getbylabel(/password") {
 		t.Fatal("script is not filled in or types a password")
+	}
+}
+
+func TestTailscaleDryRunCreatesNothing(t *testing.T) {
+	fake := newTailscaleFake()
+	m := testManager(t, fake.RoundTrip)
+	browser := &fakeTSBrowser{ready: true, client: TailscaleClient{ID: "kTestID1CNTRL", Secret: tsTestSecret}}
+	m.SetTailscaleBrowser(browser)
+	r := mustHandle(t, m, Request{Action: "connect_start", Input: &Input{Integration: "tailscale", DryRun: true}})
+	for i := 0; i < 100 && r.Flow.Status == "waiting"; i++ {
+		time.Sleep(10 * time.Millisecond)
+		r = mustHandle(t, m, Request{Action: "connect_status", FlowID: r.Flow.ID})
+	}
+	if browser.calls != 0 || browser.probes != 1 || r.Flow.Status != "cancelled" || !strings.Contains(r.Flow.Message, "Generate credential") {
+		t.Fatalf("calls %d probes %d flow %+v", browser.calls, browser.probes, r.Flow)
+	}
+	for _, rec := range m.records {
+		if rec.Account.Integration == "tailscale" {
+			t.Fatal("a dry run made an account")
+		}
 	}
 }

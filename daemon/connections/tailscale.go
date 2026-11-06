@@ -44,12 +44,14 @@ const (
 //   - devices:core: delete, rename, expire, authorize and tag devices. Tailscale
 //     requires a tag on a credential with this scope.
 //   - auth_keys: create and revoke auth keys. Also requires a tag.
-//   - policy_file: read and edit the access policy.
+//   - policy_file: read and edit the access policy. Tailscale requires
+//     devices:posture_attributes (write) and devices:core:read with it.
+//   - devices:posture_attributes: that dependency, device posture attributes.
 //   - dns: read and edit DNS.
 //
 // Not requested: users, billing-adjacent settings, webhooks, log streaming,
 // trust credentials themselves and "all".
-var tailscaleScopes = []string{"all:read", "devices:core", "auth_keys", "policy_file", "dns"}
+var tailscaleScopes = []string{"all:read", "devices:core", "auth_keys", "policy_file", "devices:posture_attributes", "dns"}
 
 // TailscaleScopes is the scope list the browser connect asks for.
 func TailscaleScopes() []string { return append([]string(nil), tailscaleScopes...) }

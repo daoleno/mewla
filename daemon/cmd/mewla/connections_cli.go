@@ -28,7 +28,7 @@ MCP resources: resources --id account [--cursor c] lists documents and URI templ
 Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
 updates --id account asks the service now and shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
 A call blocked by an update names the confirm-updates command that clears every update waiting on its account.
-Connect: connect --integration tailscale creates the OAuth client in the user's signed-in Chrome and stores it. If Chrome isn't ready it prints the page to open; then pass the client secret to add.
+Connect: connect --integration tailscale creates the OAuth client in the user's signed-in Chrome and stores it. It creates a credential in the user's tailnet, so run it only when the user asks to connect Tailscale; --dry-run stops before creating anything and reports what the page showed. If Chrome isn't ready it prints the page to open; then pass the client secret to add.
 Add: --integration github|notion|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
 Hyperliquid (also in Extensions): reading needs no account setup; pass each read an address. To trade, add --integration hyperliquid --credential-stdin with an API wallet key; the key names its account and network, and tool results name the network.
 Cloud CLIs: Mewla maintains private official AWS/gcloud installations, with daily background updates and shared local profiles. Use mewla aws --version or mewla gcloud --version to see the selected version. Lists return cached rows immediately and refresh cloud status in the background.
@@ -73,6 +73,7 @@ Never send messages or make updates without task-specific user authorization, ev
 	fs.StringVar(&specFile, "spec-file", "", "OpenAPI JSON document")
 	fs.StringVar(&oauthFile, "oauth-config-file", "", "private JSON file: client_id, client_secret, redirect_url")
 	fs.StringVar(&trustRanges, "trust-networks", "", "explicit internal CIDRs for this custom account, comma separated")
+	fs.BoolVar(&in.DryRun, "dry-run", false, "connect: go as far as the button that creates the credential, report what the page showed, create nothing")
 	fs.BoolVar(&in.AllowWrites, "allow-writes", false, "request OAuth write scopes (tools still need explicit grants)")
 	fs.BoolVar(&stdinSecret, "credential-stdin", false, "read credential from stdin instead of hidden prompt")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -258,6 +259,9 @@ func connectFromCLI(cfg cliConfig, in *connections.Input) error {
 				_, _ = call(connections.Request{Action: "connect_cancel", FlowID: flow.ID})
 			}
 			return errors.New("not connected")
+		}
+		if flow := response.Connections.Flow; in.DryRun && flow.Message != "" {
+			fmt.Fprintln(os.Stderr, flow.Message)
 		}
 	}
 	return writeControlResponse(os.Stdout, response, true)
