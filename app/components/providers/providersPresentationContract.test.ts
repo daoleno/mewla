@@ -358,6 +358,7 @@ describe("Agent-first Providers surface contract", () => {
     // A highlighted row read as "the chosen model"; access is a plain switch.
     expect(presentationSource).not.toContain("modelChipSelected");
     expect(presentationSource).toContain("<InkSwitch");
+    expect(presentationSource).not.toContain("pickerHint");
     expect(presentationSource).toContain("FlatList");
     expect(presentationSource).toContain("pickerListContent");
     expect(presentationSource).not.toContain("selectingDefault");

@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import { Radii, TypeScale, UiTextMetrics, useAppColors } from "../../constants/tokens";
-import { InkSwitch } from "../plugins/PluginConnectionViews";
+import { InkSwitch } from "../ui/InkSwitch";
 import { Button } from "../ui/Button";
 import { ListRow, ListSection } from "../ui/ListSection";
 import type { ComputerAction, ComputerProblem } from "./computerModel";

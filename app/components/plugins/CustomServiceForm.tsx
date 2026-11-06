@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { StyleSheet, TextInput, View, type TextInputProps } from "react-native";
-import { InkSwitch } from "./PluginConnectionViews";
+import { InkSwitch } from "../ui/InkSwitch";
 import { AppText, Button, InlineNotice, ListRow, ListSection } from "../ui";
 import { useAppColors } from "../../constants/tokens";
 import type { ConnectionRequest, PluginIntegration } from "../../services/connections";

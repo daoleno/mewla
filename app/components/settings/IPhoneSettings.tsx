@@ -3,7 +3,7 @@ import { Image, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, ListRow, ListSection } from "../ui";
-import { InkSwitch } from "../plugins/PluginConnectionViews";
+import { InkSwitch } from "../ui/InkSwitch";
 import { useIPhoneUse } from "../../store/iphoneUse";
 
 /**

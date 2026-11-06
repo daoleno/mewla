@@ -83,7 +83,7 @@ import {
   type ProvidersEditorState,
 } from "./providersPresentationModel";
 import { Icon } from "../icons/Icon";
-import { InkSwitch } from "../plugins/PluginConnectionViews";
+import { InkSwitch } from "../ui/InkSwitch";
 
 export type {
   ModelSyncPickerState,
@@ -1050,10 +1050,6 @@ function ModelSyncSheet({
           <Icon name="close" size={22} color={colors.textSecondary} />
         </Pressable>
       </View>
-      <Text style={styles.pickerHint}>
-        A model that is off is blocked for every agent on this provider. Pick a
-        Session's model in that Session.
-      </Text>
       {usingLocalCatalog ? (
         <Text style={styles.pickerNotice}>
           Upstream models are unavailable. Showing the local model catalog; Sync can refresh it.
@@ -1283,13 +1279,6 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       ...TypeScale.caption,
       color: colors.textTertiary,
       marginTop: 2,
-    },
-    pickerHint: {
-      ...UiTextMetrics,
-      ...TypeScale.caption,
-      color: colors.textSecondary,
-      paddingHorizontal: 16,
-      paddingBottom: 10,
     },
     pickerNotice: {
       ...UiTextMetrics,

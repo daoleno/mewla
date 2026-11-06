@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppText } from "../ui/AppText";
 import { Button } from "../ui/Button";
 import { ListRow, ListSection } from "../ui";
-import { InkSwitch } from "../plugins/PluginConnectionViews";
+import { InkSwitch } from "../ui/InkSwitch";
 import { FriendsAvatar } from "../friends/FriendsAvatar";
 import { FriendsSheet } from "../friends/FriendsSheet";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
