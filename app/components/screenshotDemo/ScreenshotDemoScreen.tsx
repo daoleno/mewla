@@ -64,6 +64,7 @@ import {
   SCREENSHOT_BRAIN_WORK_DESK,
   SCREENSHOT_CHAT_ACTIVITY_EVENTS,
   SCREENSHOT_SUBAGENT_EVENTS,
+  screenshotToolHeavyEvents,
   SCREENSHOT_CHAT_EVENTS,
   SCREENSHOT_GIT_SNAPSHOT,
   screenshotGitDiffPage,
@@ -423,6 +424,7 @@ function ChatDemo() {
     working?: string | string[];
     choice?: string | string[];
     fixture?: string;
+    turns?: string;
   }>();
   const showChoice =
     (Array.isArray(params.choice) ? params.choice[0] : params.choice) === "1";
@@ -468,6 +470,11 @@ function ChatDemo() {
     if (params.fixture === "subagents") {
       return SCREENSHOT_SUBAGENT_EVENTS;
     }
+    if (params.fixture === "toolheavy") {
+      return screenshotToolHeavyEvents(
+        Math.min(Number(params.turns) || 300, 2000),
+      );
+    }
     const transcriptEvents = SCREENSHOT_CHAT_EVENTS.filter(
       (event) =>
         event.kind === "user_message" ||
@@ -484,7 +491,7 @@ function ChatDemo() {
         seq: batch * 1000 + event.seq,
       })),
     ).flat();
-  }, [activityFixture, longTimeline, params.fixture]);
+  }, [activityFixture, longTimeline, params.fixture, params.turns]);
   const pendingUserMessages = useMemo(
     () => screenshotChatPendingUserMessages(pendingFixture),
     [pendingFixture],

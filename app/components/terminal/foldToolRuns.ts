@@ -7,8 +7,8 @@ import {
 import type { ActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
 import { PROVIDER_ACTIVITY_ITEM_PREFIX } from "./InterfaceTimelineModel";
 
-/** Timeline id prefix for a folded run of finished tool rows. */
-export const TOOL_RUN_ITEM_PREFIX = "tool-run:";
+/** Cache key for a folded run; the run's row itself keeps its first step's id. */
+const TOOL_RUN_CACHE_PREFIX = "tool-run:";
 
 type RunBucket =
   | "edit"
@@ -129,8 +129,9 @@ export function foldedToolRun(
   const last = steps[steps.length - 1];
   return {
     type: "activity",
-    // The first step names the run, so a run that grows keeps its row.
-    id: `${TOOL_RUN_ITEM_PREFIX}${steps[0].id}`,
+    // The first step's id: the list keeps that row mounted (and the reading
+    // anchor on it) when a lone row becomes a run, and when a run grows.
+    id: steps[0].id,
     timestamp: last.timestamp ?? steps[0].timestamp,
     statusKey: "done",
     title,
@@ -171,7 +172,7 @@ export function createToolRunFolder(): ToolRunFolder {
       if (run.length < 2) {
         out.push(...run);
       } else {
-        const id = `${TOOL_RUN_ITEM_PREFIX}${run[0].id}`;
+        const id = `${TOOL_RUN_CACHE_PREFIX}${run[0].id}`;
         const previous = built.get(id);
         const entry =
           previous && sameSteps(previous.steps, run)

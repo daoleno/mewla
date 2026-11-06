@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../../services/codexConversation";
 import { SCREENSHOT_CHAT_ACTIVITY_EVENTS } from "../../services/screenshotDemoFixtures";
 import {
-  TOOL_RUN_ITEM_PREFIX,
   createToolRunFolder,
   isFoldableToolRow,
   summarizeToolRun,
@@ -52,7 +51,7 @@ describe("folding a turn's finished tool rows", () => {
     const out = fold(items);
     expect(out.map((item) => item.id)).toEqual([
       "a",
-      `${TOOL_RUN_ITEM_PREFIX}r1`,
+      "r1",
       "b",
     ]);
     const group = out[1] as ActivityTimelineItem;
@@ -72,9 +71,9 @@ describe("folding a turn's finished tool rows", () => {
       row("b2", "run_command"),
     ]);
     expect(out.map((item) => item.id)).toEqual([
-      `${TOOL_RUN_ITEM_PREFIX}a1`,
+      "a1",
       "between",
-      `${TOOL_RUN_ITEM_PREFIX}b1`,
+      "b1",
     ]);
   });
 
@@ -101,9 +100,9 @@ describe("folding a turn's finished tool rows", () => {
       kept[0],
     ]);
     expect(out.map((item) => item.id)).toEqual([
-      `${TOOL_RUN_ITEM_PREFIX}a`,
+      "a",
       "failed",
-      `${TOOL_RUN_ITEM_PREFIX}c`,
+      "c",
       "running",
     ]);
   });
@@ -117,9 +116,9 @@ describe("folding a turn's finished tool rows", () => {
       row("d", "run_command"),
     ]);
     expect(out.map((item) => item.id)).toEqual([
-      `${TOOL_RUN_ITEM_PREFIX}a`,
+      "a",
       "agent",
-      `${TOOL_RUN_ITEM_PREFIX}c`,
+      "c",
     ]);
   });
 
@@ -133,6 +132,16 @@ describe("folding a turn's finished tool rows", () => {
     ).toBe(false);
   });
 
+  test("a lone row that becomes a run keeps its row id", () => {
+    const fold = createToolRunFolder();
+    const first = row("r1", "read_files");
+    const alone = fold([say("m"), first]);
+    expect(alone.map((item) => item.id)).toEqual(["m", "r1"]);
+    const grown = fold([say("m"), first, row("r2", "run_command")]);
+    expect(grown.map((item) => item.id)).toEqual(["m", "r1"]);
+    expect((grown[1] as ActivityTimelineItem).steps).toHaveLength(2);
+  });
+
   test("a run that grows keeps its row key; untouched runs keep their object", () => {
     const fold = createToolRunFolder();
     const first = row("r1", "read_files");
@@ -143,9 +152,9 @@ describe("folding a turn's finished tool rows", () => {
     const after = fold([...earlier, first, second, row("r3", "search_code")]);
     expect(after[0]).toBe(earlierGroup);
     expect(after.map((item) => item.id)).toEqual([
-      `${TOOL_RUN_ITEM_PREFIX}e1`,
+      "e1",
       "m",
-      `${TOOL_RUN_ITEM_PREFIX}r1`,
+      "r1",
     ]);
     expect((after[2] as ActivityTimelineItem).steps).toHaveLength(3);
     expect(timelineItemsSemanticEqual(before[2], after[2])).toBe(false);
@@ -200,16 +209,14 @@ describe("the activity demo fixture", () => {
       SCREENSHOT_CHAT_ACTIVITY_EVENTS as CodexConversationEvent[],
     );
     const out = createToolRunFolder()(items);
-    const activityIds = out
-      .filter((item) => item.type === "activity")
-      .map((item) => item.id);
-    expect(activityIds.some((id) => id.startsWith(TOOL_RUN_ITEM_PREFIX))).toBe(
-      true,
+    const folded = out.filter(
+      (item) => item.type === "activity" && item.steps?.length,
     );
+    expect(folded).toHaveLength(1);
     const failed = out.find(
       (item) => item.type === "activity" && item.tone === "failed",
     );
     expect(failed).toBeDefined();
-    expect(failed?.id.startsWith(TOOL_RUN_ITEM_PREFIX)).toBe(false);
+    expect(failed && "steps" in failed && failed.steps).toBeFalsy();
   });
 });

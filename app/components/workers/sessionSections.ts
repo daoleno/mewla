@@ -68,17 +68,19 @@ export const MAX_ANIMATED_NEW_ROWS = 40;
 
 /**
  * The Session keys that were not in the list the last time it changed. There
- * are none for the first list, for an empty one, or when a whole new set
- * arrives (a server switch), so opening the page animates nothing.
+ * are none for the first list, for an empty one, or when nothing carried over
+ * from the last list (another computer's Sessions replaced it), so opening
+ * the page or switching computers animates nothing.
  */
 export function newRowKeys(
   known: ReadonlySet<string> | null,
   sections: readonly Pick<WorkerDirectorySection, "data">[],
 ): ReadonlySet<string> {
   if (!known || known.size === 0) return NO_ROWS;
-  const added = sections.flatMap((section) =>
-    section.data.map((worker) => worker.key).filter((key) => !known.has(key)),
-  );
+  const keys = sections.flatMap((section) => section.data.map((worker) => worker.key));
+  // Nothing carried over: another computer's list replaced this one.
+  if (!keys.some((key) => known.has(key))) return NO_ROWS;
+  const added = keys.filter((key) => !known.has(key));
   return added.length === 0 || added.length > MAX_ANIMATED_NEW_ROWS
     ? NO_ROWS
     : new Set(added);
