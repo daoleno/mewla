@@ -196,6 +196,54 @@ export const SCREENSHOT_CHAT_ACTIVITY_EVENTS: CodexConversationEvent[] = [
   },
 ];
 
+/** A turn that delegates: finished reads fold, subagents stay on their own rows. */
+export const SCREENSHOT_SUBAGENT_EVENTS: CodexConversationEvent[] = [
+  {
+    id: "subagent-user",
+    seq: 1,
+    kind: "user_message",
+    timestamp: DEMO_TIMESTAMP,
+    body: "Audit the sync module and the settings copy in parallel.",
+  },
+  {
+    id: "subagent-read",
+    seq: 2,
+    kind: "tool",
+    timestamp: DEMO_TIMESTAMP,
+    tool_name: "Read",
+    input: '{"file_path":"app/sync/index.ts"}',
+    status: "completed",
+  },
+  {
+    id: "subagent-read-2",
+    seq: 3,
+    kind: "tool",
+    timestamp: DEMO_TIMESTAMP,
+    tool_name: "Read",
+    input: '{"file_path":"app/settings/strings.ts"}',
+    status: "completed",
+  },
+  {
+    id: "subagent-task",
+    seq: 4,
+    kind: "tool",
+    timestamp: DEMO_TIMESTAMP,
+    tool_name: "Task",
+    input: '{"description":"Audit the sync module","subagent_type":"Explore","prompt":"Look for conflicts."}',
+    output: "Found 3 conflict paths; two lose the newest edit.",
+    status: "completed",
+  },
+  {
+    id: "subagent-agent",
+    seq: 5,
+    kind: "tool",
+    timestamp: DEMO_TIMESTAMP,
+    tool_name: "Agent",
+    input: '{"description":"Tidy the settings copy","subagent_type":"general-purpose","prompt":"Keep the word sync."}',
+    status: "running",
+  },
+];
+
 /**
  * Collapsed Tool activity headers for screenshot/demo and geometry coverage:
  * Run + short command, Search + query, Run + long ellipsized path.

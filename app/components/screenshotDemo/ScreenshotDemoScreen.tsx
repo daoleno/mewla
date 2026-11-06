@@ -63,6 +63,7 @@ import {
   SCREENSHOT_BRAIN_NEEDS,
   SCREENSHOT_BRAIN_WORK_DESK,
   SCREENSHOT_CHAT_ACTIVITY_EVENTS,
+  SCREENSHOT_SUBAGENT_EVENTS,
   SCREENSHOT_CHAT_EVENTS,
   SCREENSHOT_GIT_SNAPSHOT,
   screenshotGitDiffPage,
@@ -464,6 +465,9 @@ function ChatDemo() {
     if (activityFixture) {
       return SCREENSHOT_CHAT_ACTIVITY_EVENTS;
     }
+    if (params.fixture === "subagents") {
+      return SCREENSHOT_SUBAGENT_EVENTS;
+    }
     const transcriptEvents = SCREENSHOT_CHAT_EVENTS.filter(
       (event) =>
         event.kind === "user_message" ||
@@ -480,7 +484,7 @@ function ChatDemo() {
         seq: batch * 1000 + event.seq,
       })),
     ).flat();
-  }, [activityFixture, longTimeline]);
+  }, [activityFixture, longTimeline, params.fixture]);
   const pendingUserMessages = useMemo(
     () => screenshotChatPendingUserMessages(pendingFixture),
     [pendingFixture],

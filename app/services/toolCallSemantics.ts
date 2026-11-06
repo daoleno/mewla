@@ -18,6 +18,7 @@ export type SemanticActionKind =
   | "view_image"
   | "test_app"
   | "wait"
+  | "delegate_agent"
   | "use_tool";
 
 export type SemanticActionStatus = "running" | "done" | "failed" | "blocked";
@@ -500,12 +501,26 @@ function semanticFromToolName(
   }
   if (
     lower === "wait" ||
+    lower === "wait_agent" ||
     lower === "write_stdin" ||
     lower === "await" ||
     lower === "awaitshell" ||
     lower === "await_shell"
   ) {
     return action("wait", status, name);
+  }
+  if (
+    lower === "task" ||
+    lower === "agent" ||
+    lower === "spawn_agent" ||
+    lower === "spawn_subagent"
+  ) {
+    return action(
+      "delegate_agent",
+      status,
+      name,
+      delegatedTaskTitle(input) ?? defaultLabel("delegate_agent"),
+    );
   }
   if (
     lower === "apply_patch" ||
@@ -655,6 +670,8 @@ function defaultLabel(kind: SemanticActionKind): string {
       return "Test";
     case "wait":
       return "Wait";
+    case "delegate_agent":
+      return "Run a subagent";
     default:
       return "Use";
   }
@@ -1051,6 +1068,30 @@ function patchPaths(value: string): string[] {
   return [...value.matchAll(/^\*\*\* (?:Update|Add|Delete) File:\s+(.+)$/gm)]
     .map((match) => match[1]?.trim() || "")
     .filter(Boolean);
+}
+
+/**
+ * What a subagent was asked to do, as its own one-line title: Claude's Task
+ * and Agent tools carry a short `description`, Codex's spawn_agent a `message`.
+ */
+function delegatedTaskTitle(input?: string): string | undefined {
+  if (!input) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(input);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return undefined;
+    }
+    const record = parsed as Record<string, unknown>;
+    const text =
+      stringField(record, "description") ||
+      stringField(record, "message") ||
+      stringField(record, "prompt");
+    return safeCollapsedValue(text.split("\n")[0]);
+  } catch {
+    return undefined;
+  }
 }
 
 function queryFromToolInput(input?: string): string {

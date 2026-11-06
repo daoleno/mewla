@@ -777,12 +777,20 @@ function activityFromEvent(
         statusKey: event.status || "done",
         title,
         tone: running ? "running" : failed ? "failed" : "success",
-        icon: semanticActivityIcon(
-          semantic.title,
-          presentation.icon,
-          running,
-          failed,
-        ),
+        icon:
+          // A subagent's title is the task it was given, not a verb to read an icon from.
+          action.kind === "delegate_agent"
+            ? running
+              ? "time"
+              : failed
+                ? "alert-circle"
+                : "git-network"
+            : semanticActivityIcon(
+                semantic.title,
+                presentation.icon,
+                running,
+                failed,
+              ),
         detail: detail?.trim() === title ? undefined : detail,
         body: result.text || undefined,
         bodyKind: result.text
@@ -2219,6 +2227,8 @@ function semanticKindIcon(kind: SemanticActionKind): TimelineIconName {
       return "checks";
     case "wait":
       return "time";
+    case "delegate_agent":
+      return "git-network";
     default:
       return "cube";
   }

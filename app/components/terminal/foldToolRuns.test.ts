@@ -108,6 +108,21 @@ describe("folding a turn's finished tool rows", () => {
     ]);
   });
 
+  test("a subagent row stays on its own and splits the run", () => {
+    const out = createToolRunFolder()([
+      row("a", "read_files"),
+      row("b", "read_files"),
+      row("agent", "delegate_agent"),
+      row("c", "run_command"),
+      row("d", "run_command"),
+    ]);
+    expect(out.map((item) => item.id)).toEqual([
+      `${TOOL_RUN_ITEM_PREFIX}a`,
+      "agent",
+      `${TOOL_RUN_ITEM_PREFIX}c`,
+    ]);
+  });
+
   test("rows without a kind, the agent's words and the choice answer are not folded", () => {
     expect(isFoldableToolRow(row("x", undefined))).toBe(false);
     expect(
