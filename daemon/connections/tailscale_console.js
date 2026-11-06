@@ -74,11 +74,10 @@ async (page) => {
   await page.waitForTimeout(500);
   const popup = async () => (await page.locator('[role=listbox], [role=menu], [role=dialog], [data-radix-popper-content-wrapper], ul').allInnerTexts().catch(() => []))
     .map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 8);
-  const fields = page.getByRole('combobox', { name: /tags?/i });
-  const count = await fields.count().catch(() => 0);
-  for (let i = 0; i < count; i++) {
-    const field = fields.nth(i);
-    if (await field.inputValue().catch(() => '')) continue;
+  // A chosen tag turns its field into a chip, so the fields are looked up again each round.
+  for (let round = 0; round < 4; round++) {
+    const field = page.getByRole('combobox', { name: /add tags?/i }).first();
+    if (!(await visible(field, round ? 1000 : 2000))) break;
     await field.click();
     let option = page.getByRole('option').first();
     if (!(await visible(option, 1500))) {
@@ -88,7 +87,7 @@ async (page) => {
     if (!(await visible(option, 2500))) return out({ state: 'needs_tag', page: where(), seen: await popup() });
     await option.click();
     await page.keyboard.press('Escape').catch(() => {});
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(400);
   }
   if (await generate.first().isDisabled().catch(() => false)) return stop('needs_tag', 'generate disabled');
   if (CONFIG.dryRun) return out({ state: 'dry_run', seen: await seen() });
