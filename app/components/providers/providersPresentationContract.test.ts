@@ -247,7 +247,7 @@ describe("Agent-first Providers surface contract", () => {
     expect(presentationSource).toContain(
       "placeholder={`Search ${providerClientLabel(selectedClient)} Providers`}",
     );
-    expect(presentationSource).toContain('label: "Models"');
+    expect(presentationSource).toContain('label: "Model access"');
     expect(presentationSource).toContain("exposedCount");
     expect(presentationSource).toContain('switchState?.kind === "error"');
   });
@@ -334,7 +334,7 @@ describe("Agent-first Providers surface contract", () => {
   });
 
   test("connection actions sync models through discovery into a picker", () => {
-    expect(presentationSource).toContain('label: "Models"');
+    expect(presentationSource).toContain('label: "Model access"');
     expect(presentationSource).toContain("onPress: onDiscover");
     expect(presentationSource).toContain("Test connection");
     expect(screenSource).toContain("discoverProviderModels");
@@ -348,23 +348,27 @@ describe("Agent-first Providers surface contract", () => {
     expect(screenSource).not.toContain("defaultRuntimeSeedAction");
   });
 
-  test("model rows control the exposed model scope for the current Provider", () => {
-    expect(presentationSource).toContain("Models");
+  test("model access switches control the exposed model scope for the current Provider", () => {
+    expect(presentationSource).toContain("Model access");
     expect(presentationSource).toContain("modelSupportChoices(");
     expect(presentationSource).toContain("onSelectModel(");
     expect(presentationSource).toContain("picker.client,");
     expect(presentationSource).not.toContain("Choose model");
     expect(presentationSource).not.toContain("pickerCurrentLabel");
-    expect(presentationSource).toContain("modelChipSelected");
+    // A highlighted row read as "the chosen model"; access is a plain switch.
+    expect(presentationSource).not.toContain("modelChipSelected");
+    expect(presentationSource).toContain("<InkSwitch");
     expect(presentationSource).toContain("FlatList");
     expect(presentationSource).toContain("pickerListContent");
     expect(presentationSource).not.toContain("selectingDefault");
-    expect(presentationSource).toContain('accessibilityRole="checkbox"');
+    expect(presentationSource).not.toContain('accessibilityRole="checkbox"');
     expect(screenSource).toContain("runSetModels");
     expect(screenSource).toContain("wsClient.setProviderModels");
     expect(screenSource).toContain("wsClient.setProviderConnection");
     expect(screenSource).toContain("wsClient.setProviderConnection");
     expect(screenSource).toContain("toggleModelSupport(");
+    expect(screenSource).toContain("modelSupportToggleTurnsOff(");
+    expect(screenSource).toContain('confirmLabel: "Turn off"');
     expect(screenSource).not.toContain("firstSupportedModel(");
   });
 

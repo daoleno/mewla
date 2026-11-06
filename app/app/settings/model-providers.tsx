@@ -21,6 +21,7 @@ import {
   presentProviderError,
   providerMutationRequiresRefresh,
   providersScreenAfterBlur,
+  modelSupportToggleTurnsOff,
   resolveCreatedConnection,
   toggleModelSupport,
   type ProviderConnection,
@@ -613,7 +614,20 @@ export default function ProvidersScreen() {
       onCloseModelPicker={() => setModelPicker(null)}
       onSelectModel={(client, connection, modelId) => {
         const enabledIds = toggleModelSupport(catalog, connection.id, modelId);
-        void runSetModels(connection, enabledIds);
+        if (!modelSupportToggleTurnsOff(catalog, connection.id, modelId)) {
+          void runSetModels(connection, enabledIds);
+          return;
+        }
+        const model = catalog?.models[connection.id]?.find(
+          (entry) => entry.id === modelId,
+        );
+        const name = model?.display_name?.trim() || modelId;
+        confirmDestructive({
+          title: `Turn off ${name}?`,
+          message: `No agent on ${connection.name} can use it until you turn it back on. Sessions using it now will start failing.`,
+          confirmLabel: "Turn off",
+          onConfirm: () => runSetModels(connection, enabledIds),
+        });
       }}
       onTestConnection={async ({ client, baseUrl, apiKey }) => {
         if (!currentServerId || !currentConnected) {

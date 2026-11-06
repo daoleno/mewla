@@ -105,24 +105,41 @@ export function launchSelectionFromSnapshot(
 }
 
 /**
- * Picker inventory for one connection after discovery: every discovered model
- * as a compact support chip. "Selected" means the gateway exposes the model
- * (the client enable allowlist); tapping toggles support. There is no
- * connection selection is independent from model exposure: the gateway never
- * owns an Agent model.
+ * Model access inventory for one connection after discovery: every
+ * discovered model with an on/off switch. "On" means the gateway lets every
+ * agent on this connection use the model (the client enable allowlist); it
+ * never picks a Session's model. The on state comes from the live catalog
+ * whenever it lists the model, so a switch reflects each write instead of the
+ * discovery result the sheet opened with.
  */
 export function modelSupportChoices(
   snapshot: ProvidersSnapshot | null | undefined,
   connection: ProviderConnection,
   models: ProviderModel[],
 ): ProviderModelChoice[] {
-  void snapshot;
+  const live = new Map(
+    (snapshot?.models[connection.id] ?? []).map((model) => [model.id, model]),
+  );
   return models.map((model) => ({
     connection,
     model,
-    current: model.available,
+    current: live.get(model.id)?.available ?? model.available,
     disabled: false,
   }));
+}
+
+/**
+ * Turning a model off blocks it for every agent on the connection, including
+ * Sessions using it right now, so only that direction asks first.
+ */
+export function modelSupportToggleTurnsOff(
+  snapshot: ProvidersSnapshot | null | undefined,
+  connectionId: string,
+  modelId: string,
+): boolean {
+  return enabledModelIds(snapshot, connectionId).includes(
+    normalizeProviderId(modelId),
+  );
 }
 
 /**
