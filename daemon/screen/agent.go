@@ -217,6 +217,31 @@ func (s *Service) SetWorkerNames(name func(id string) string) {
 	s.workerName = name
 }
 
+// SetWorkerAlive tells the screen whether a Worker is still running. A Worker
+// that is closed or whose Work ends gives back what it holds here at once:
+// its control of the screen, and the apps it left on the agent display.
+func (s *Service) SetWorkerAlive(alive func(worker string) bool) {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	s.alive = alive
+}
+
+// errWorkerGone is why an agent whose Worker ended loses the screen.
+var errWorkerGone = errors.New("the Worker ended")
+
+// aliveCheck gives the Worker's liveness test and how often to ask. A Worker
+// is gone only when two asks in a row say so: right after a restart the
+// daemon may not have found its Workers yet.
+func (s *Service) aliveCheck() (alive func(worker string) bool, every time.Duration) {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	every = s.aliveEvery
+	if every == 0 {
+		every = 3 * time.Second
+	}
+	return s.alive, every
+}
+
 type agentSession struct {
 	// releaseDisplay lets go of this agent's display hold.
 	releaseDisplay func()
@@ -319,6 +344,7 @@ func (s *Service) StopAgent() {
 			hook(agent.worker)
 		}
 	}
+	s.releaseAllHolds()
 }
 
 // StopAgentFor ends one Worker's control, from the app; the others go on.
@@ -524,6 +550,9 @@ func (s *Service) watchAgent(agent *agentSession) {
 	// command), so look often.
 	ticker := time.NewTicker(min(idleAfter/4, 2*time.Second))
 	defer ticker.Stop()
+	alive, every := s.aliveCheck()
+	var lastAlive time.Time
+	missing := 0
 	for {
 		select {
 		case <-agent.ctx.Done():
@@ -531,6 +560,15 @@ func (s *Service) watchAgent(agent *agentSession) {
 			if err := s.agentBlocked(); err != nil {
 				agent.cancel(err)
 				break
+			}
+			if alive != nil && time.Since(lastAlive) >= every {
+				lastAlive = time.Now()
+				if alive(agent.worker) {
+					missing = 0
+				} else if missing++; missing >= 2 {
+					agent.cancel(errWorkerGone)
+					break
+				}
 			}
 			agent.mu.Lock()
 			idle := agent.inflight == 0 && time.Since(agent.lastUse) > idleAfter

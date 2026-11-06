@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -1081,4 +1082,83 @@ func TestAQuietAgentsAppGoesBackWhenTheLeaseEnds(t *testing.T) {
 		defer backend.mu.Unlock()
 		return !backend.Parked[202] && len(backend.Restored) == 1
 	})
+}
+
+// A Worker that is closed, or whose Work ends, gives back what it holds at
+// once: the lease is only the fallback.
+func TestAnEndedWorkersAppsGoBackAtOnce(t *testing.T) {
+	var mu sync.Mutex
+	ended := map[string]bool{}
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.aliveEvery = 30 * time.Millisecond
+	s.parkLease = time.Hour
+	s.SetWorkerAlive(func(w string) bool { mu.Lock(); defer mu.Unlock(); return !ended[w] })
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	// Alive and quiet: it stays.
+	time.Sleep(200 * time.Millisecond)
+	backend.mu.Lock()
+	stays := backend.Parked[202]
+	backend.mu.Unlock()
+	if !stays {
+		t.Fatal("the app went back while its Worker lives")
+	}
+	mu.Lock()
+	ended["%7"] = true
+	mu.Unlock()
+	waitFor(t, func() bool {
+		backend.mu.Lock()
+		defer backend.mu.Unlock()
+		return !backend.Parked[202] && len(backend.Restored) == 1
+	})
+	s.agentMu.Lock()
+	_, owned := s.appOwners[202]
+	s.agentMu.Unlock()
+	if owned {
+		t.Fatal("the app is still claimed")
+	}
+}
+
+// A Worker that ends while it is acting loses the screen and its apps go back.
+func TestAWorkerThatEndsWhileActingLosesTheScreen(t *testing.T) {
+	var mu sync.Mutex
+	ended := false
+	s, backend, _ := newAgentService(t)
+	s.aliveEvery = 20 * time.Millisecond
+	s.SetWorkerAlive(func(string) bool { mu.Lock(); defer mu.Unlock(); return !ended })
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	mu.Lock()
+	ended = true
+	mu.Unlock()
+	waitFor(t, func() bool {
+		backend.mu.Lock()
+		defer backend.mu.Unlock()
+		return !backend.Parked[202] && len(backend.Restored) == 1
+	})
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+}
+
+// One look that misses the Worker (a daemon that has just started and not
+// found its Workers yet) does not end anything.
+func TestOneMissedLookDoesNotEndTheWorker(t *testing.T) {
+	var mu sync.Mutex
+	asks := 0
+	s, backend, _ := newAgentService(t)
+	s.aliveEvery = 20 * time.Millisecond
+	s.SetWorkerAlive(func(string) bool { mu.Lock(); defer mu.Unlock(); asks++; return asks != 2 })
+	backend.RunningApps = parkingApps()
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	time.Sleep(400 * time.Millisecond)
+	if _, ok := s.Agent(); !ok {
+		t.Fatal("one missed look ended the agent")
+	}
 }
