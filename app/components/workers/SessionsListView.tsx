@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   type ListRenderItem,
@@ -23,6 +23,17 @@ import type { WorkerDirectorySection } from "../../services/workerDirectory";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { WorkerListRowContainer } from "./WorkerListRowContainer";
 import { Icon } from "../icons/Icon";
+import { StatusMark } from "../ui/StatusMark";
+import {
+  buildSessionListSections,
+  collapsedSectionsToStore,
+  toggleCollapsedSection,
+  type SessionListSection,
+} from "./sessionSections";
+import {
+  getCollapsedSessionSections,
+  setCollapsedSessionSections,
+} from "../../services/storage";
 import { useWebTooltip } from "../ui/useWebTooltip";
 import { useDesktopWeb } from "../navigation/useDesktopWeb";
 
@@ -40,6 +51,35 @@ export const sessionsColumnStyle = {
 const NEW_SESSION_BUTTON_HEIGHT = 48;
 
 const workerKeyExtractor = (agent: Worker) => agent.key;
+const NO_COLLAPSED_SECTIONS: ReadonlySet<string> = new Set();
+
+/**
+ * The directories the person folded. Keys name their server, so another
+ * server's folds never touch this list; nothing folds until the saved set is read.
+ */
+function useCollapsedSections() {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(NO_COLLAPSED_SECTIONS);
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getCollapsedSessionSections().then((keys) => {
+      if (cancelled) return;
+      loadedRef.current = true;
+      setCollapsed((current) => (current.size > 0 ? new Set([...keys, ...current]) : new Set(keys)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const toggle = useCallback((key: string) => {
+    setCollapsed((current) => {
+      const next = toggleCollapsedSection(current, key);
+      void setCollapsedSessionSections(collapsedSectionsToStore(next));
+      return next;
+    });
+  }, []);
+  return { collapsed, toggle };
+}
 
 export interface SessionsListRowState {
   alias?: string;
@@ -81,6 +121,11 @@ export function SessionsListView({
   const desktop = useDesktopWeb();
   const styles = useMemo(() => createStyles(theme, desktop), [theme, desktop]);
   const useSectionHeaders = sections.length > 1;
+  const { collapsed, toggle: toggleSection } = useCollapsedSections();
+  const listSections = useMemo(
+    () => buildSessionListSections(sections, collapsed, selectionMode),
+    [collapsed, sections, selectionMode],
+  );
 
   const renderItem = useCallback<ListRenderItem<Worker>>(
     ({ item }) => {
@@ -117,12 +162,22 @@ export function SessionsListView({
   );
 
   const renderSectionHeader = useCallback(
-    ({ section }: { section: WorkerDirectorySection }) => {
+    ({ section }: { section: SessionListSection }) => {
       if (!useSectionHeaders) {
         return null;
       }
+      const expandable = !selectionMode;
       return (
-        <View style={styles.sectionHeader}>
+        <AnimatedPressable
+          style={styles.sectionHeader}
+          preset="card"
+          scale={1}
+          disabled={!expandable}
+          onPress={() => toggleSection(section.key)}
+          accessibilityRole="button"
+          accessibilityLabel={`${section.title}, ${section.count} ${section.count === 1 ? "session" : "sessions"}`}
+          accessibilityState={{ expanded: !section.collapsed }}
+        >
           <Text
             style={styles.sectionTitle}
             numberOfLines={1}
@@ -130,10 +185,25 @@ export function SessionsListView({
           >
             {section.title}
           </Text>
-        </View>
+          {expandable ? (
+            <Icon
+              name={section.collapsed ? "chevron-right" : "chevron-down"}
+              size={12}
+              color={styles.sectionChevron.color}
+            />
+          ) : null}
+          {section.collapsed ? (
+            <>
+              <Text style={styles.sectionCount}>{section.count}</Text>
+              <View style={styles.sectionMark}>
+                {section.mark ? <StatusMark status={section.mark} size={14} /> : null}
+              </View>
+            </>
+          ) : null}
+        </AnimatedPressable>
       );
     },
-    [styles, useSectionHeaders],
+    [selectionMode, styles, toggleSection, useSectionHeaders],
   );
 
   const contentContainerStyle = useMemo(
@@ -149,7 +219,7 @@ export function SessionsListView({
 
   return (
     <SectionList
-      sections={sections}
+      sections={listSections}
       ListHeaderComponent={header ?? undefined}
       key="list"
       keyExtractor={workerKeyExtractor}
@@ -235,14 +305,32 @@ function createStyles(theme: ResolvedTheme, desktop: boolean) {
       ...ContinuousCorners,
     },
     sectionHeader: {
-      paddingTop: 18,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      minHeight: 40,
+      paddingTop: 14,
       paddingBottom: 4,
       paddingHorizontal: SESSIONS_TEXT_INSET,
     },
     sectionTitle: {
       ...UiTextMetrics,
       ...TypeScale.label,
+      flexShrink: 1,
       color: sectionLabel,
+    },
+    sectionChevron: {
+      color: sectionLabel,
+    },
+    sectionCount: {
+      ...UiTextMetrics,
+      ...TypeScale.label,
+      color: sectionLabel,
+    },
+    sectionMark: {
+      marginLeft: "auto",
+      width: 14,
+      height: 14,
     },
     buttonDock: {
       position: "absolute",

@@ -22,6 +22,7 @@ const KEYS = {
   onboarded: "mewla:onboarded",
   recentWorkerOpens: "mewla:recent_agent_opens",
   workerAliases: "mewla:agent_aliases",
+  collapsedSessionSections: "mewla:v1:collapsed_session_sections",
   interfaceRenderModes: "mewla:codex_render_modes",
   themePreference: "mewla:theme_preference",
   petPreference: "mewla:pet_preference",
@@ -190,6 +191,28 @@ export async function markWorkerOpened(
     KEYS.recentWorkerOpens,
     JSON.stringify(Object.fromEntries(entries)),
   );
+}
+
+/** Keys of the Sessions directory sections the person folded; each key names its server. */
+export async function getCollapsedSessionSections(): Promise<string[]> {
+  const value = await AsyncStorage.getItem(KEYS.collapsedSessionSections);
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((key): key is string => typeof key === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setCollapsedSessionSections(keys: string[]): Promise<void> {
+  if (keys.length === 0) {
+    await AsyncStorage.removeItem(KEYS.collapsedSessionSections);
+    return;
+  }
+  await AsyncStorage.setItem(KEYS.collapsedSessionSections, JSON.stringify(keys));
 }
 
 export async function getWorkerAliases(): Promise<StoredWorkerAliases> {
