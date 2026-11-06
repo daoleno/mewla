@@ -84,7 +84,7 @@ func (r *ProviderConversationReader) loadClaudeConversationForWorker(worker clas
 }
 
 func (r *ProviderConversationReader) loadClaudeConversation(path string) (CodexConversation, error) {
-	return r.loadFileConversation(WorkerProviderClaude, path, parseClaudeConversation)
+	return r.loadFileConversationStat(WorkerProviderClaude, path, parseClaudeConversation, claudeTranscriptStat)
 }
 
 // ClaudeBoundTranscript is the transcript of the conversation a Claude Worker
@@ -464,6 +464,15 @@ func claudeTranscriptCreatedAt(path string, fallback time.Time) time.Time {
 }
 
 func parseClaudeConversation(path string) (CodexConversation, error) {
+	conversation, err := parseClaudeConversationEvents(path)
+	if err != nil {
+		return CodexConversation{}, err
+	}
+	attachClaudeSubagents(&conversation, path)
+	return conversation, nil
+}
+
+func parseClaudeConversationEvents(path string) (CodexConversation, error) {
 	if conversation, ok, err := parseClaudeConversationTail(path); err != nil {
 		return CodexConversation{}, err
 	} else if ok {
@@ -551,6 +560,12 @@ type claudeConversationBuilder struct {
 	// seenTaskNotifications drops the rare second copy when Claude records one
 	// notification both as a mid-turn attachment and as a later prompt.
 	seenTaskNotifications map[string]bool
+	// sidechain reads a subagent's own transcript, whose every record is marked
+	// isSidechain; the main conversation leaves those records out.
+	sidechain bool
+	// firstTimestamp and lastTimestamp bracket a sidechain's records.
+	firstTimestamp string
+	lastTimestamp  string
 }
 
 type claudePendingTaskTurn struct {
@@ -624,8 +639,16 @@ func (b *claudeConversationBuilder) consumeLine(lineNumber int, line []byte) {
 	}
 	// Keep provider-internal linkage/metadata out of the shared conversation:
 	// parentUuid, toolUseResult, attachments, permission mode, sidechains, etc.
-	if envelope.IsSidechain {
+	if envelope.IsSidechain != b.sidechain {
 		return
+	}
+	if b.sidechain {
+		if stamp := normalizeCodexTimestamp(envelope.Timestamp); stamp != "" {
+			if b.firstTimestamp == "" {
+				b.firstTimestamp = stamp
+			}
+			b.lastTimestamp = stamp
+		}
 	}
 	if _, left := b.abandoned[envelope.UUID]; left && envelope.UUID != "" {
 		return

@@ -1,6 +1,7 @@
 import type {
   CodexConversation,
   CodexConversationEvent,
+  ConversationSubagent,
   ProviderActivity,
 } from "../../services/codexConversation";
 import type { BrainWorkResultEvent } from "../brain/brainWorkEvent";
@@ -247,11 +248,67 @@ export function buildTimelineFromSortedEvents(
     }
     const activity = activityFromEvent(event);
     if (activity) {
-      items.push(activity);
+      items.push(
+        event.subagent ? withSubagentWork(activity, event.subagent) : activity,
+      );
     }
   }
   flushExploration();
   return items;
+}
+
+/**
+ * A delegating call carries the calls its subagent made. They become the row's
+ * own steps, in the same shape as a folded run, with the count and, once it has
+ * finished, how long it took beside the chevron. A subagent that is still
+ * working keeps the row running; the mark says so.
+ */
+function withSubagentWork(
+  activity: TimelineItem,
+  subagent: ConversationSubagent,
+): TimelineItem {
+  if (activity.type !== "activity" || activity.semanticKind !== "delegate_agent") {
+    return activity;
+  }
+  const steps = buildTimelineFromSortedEvents(subagent.steps).filter(
+    (item): item is ActivityTimelineItem => item.type === "activity",
+  );
+  const working = !subagent.finished && activity.tone !== "failed";
+  const parts = [
+    steps.length > 0
+      ? `${steps.length} ${steps.length === 1 ? "step" : "steps"}`
+      : undefined,
+    subagent.finished
+      ? formatSubagentDuration(subagent.started_at, subagent.ended_at)
+      : undefined,
+  ].filter((part): part is string => Boolean(part));
+  return {
+    ...activity,
+    tone: working ? "running" : activity.tone,
+    icon: working ? "time" : activity.icon,
+    detail: parts.length > 0 ? parts.join(" · ") : activity.detail,
+    ...(steps.length > 0 ? { steps } : {}),
+  };
+}
+
+/** "45s", "2m 14s", "1h 3m": whole seconds, nothing under a second. */
+export function formatSubagentDuration(
+  startedAt?: string,
+  endedAt?: string,
+): string | undefined {
+  if (!startedAt || !endedAt) return undefined;
+  const ms = Date.parse(endedAt) - Date.parse(startedAt);
+  if (!Number.isFinite(ms) || ms < 1000) return undefined;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    const rest = seconds % 60;
+    return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`;
 }
 
 function attachWaitStatusToLastCommand(

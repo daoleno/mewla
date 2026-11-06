@@ -98,7 +98,9 @@ export function ActivityEvent({
                 />
               ))}
             </InterfaceTimelineExpandedBlock>
-          ) : (
+          ) : null}
+          {/* A folded run is only its rows; a subagent is also a call with a result. */}
+          {!item.steps?.length || item.semanticKind === "delegate_agent" ? (
             <InterfaceTimelineActivityDetails
               item={item}
               chrome={chrome}
@@ -108,7 +110,7 @@ export function ActivityEvent({
               formatPatchPath={formatPatchPath}
               truncateBody={truncateBody}
             />
-          )}
+          ) : null}
         </FadeInView>
       ) : null}
     </View>

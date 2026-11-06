@@ -2737,6 +2737,21 @@ func writeCodexConversationEventFingerprint(w io.Writer, event work.CodexConvers
 	writeFingerprintPlan(w, event.Plan)
 	writeFingerprintChoice(w, event.Choice)
 	writeFingerprintString(w, event.Source)
+	writeFingerprintSubagent(w, event.Subagent)
+}
+
+func writeFingerprintSubagent(w io.Writer, subagent *work.CodexConversationSubagent) {
+	if subagent == nil {
+		writeFingerprintString(w, "")
+		return
+	}
+	writeFingerprintString(w, subagent.AgentID)
+	writeFingerprintString(w, subagent.Type)
+	writeFingerprintString(w, subagent.Description)
+	writeFingerprintBool(w, subagent.Finished)
+	writeFingerprintString(w, subagent.StartedAt)
+	writeFingerprintString(w, subagent.EndedAt)
+	writeCodexConversationEventsFingerprint(w, subagent.Steps)
 }
 
 func writeFingerprintChoice(w io.Writer, choice *work.ConversationChoice) {

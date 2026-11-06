@@ -64,6 +64,7 @@ import {
   SCREENSHOT_BRAIN_WORK_DESK,
   SCREENSHOT_CHAT_ACTIVITY_EVENTS,
   SCREENSHOT_SUBAGENT_EVENTS,
+  SCREENSHOT_SUBAGENT_WORK_EVENTS,
   screenshotToolHeavyEvents,
   SCREENSHOT_CHAT_EVENTS,
   SCREENSHOT_GIT_SNAPSHOT,
@@ -466,6 +467,9 @@ function ChatDemo() {
   const timelineEvents = useMemo(() => {
     if (activityFixture) {
       return SCREENSHOT_CHAT_ACTIVITY_EVENTS;
+    }
+    if (params.fixture === "subagentwork") {
+      return SCREENSHOT_SUBAGENT_WORK_EVENTS;
     }
     if (params.fixture === "subagents") {
       return SCREENSHOT_SUBAGENT_EVENTS;
