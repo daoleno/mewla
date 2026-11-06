@@ -57,13 +57,16 @@ async (page) => {
       row = rowOf(want);
       if (!(await visible(row, 2500))) return stop('unrecognised', 'scope ' + want.section + ' ' + want.label);
     }
-    const box = row.locator('input[type=checkbox]').nth(want.level === 'write' ? 1 : 0);
-    const control = row.getByRole('button', { name: want.level === 'write' ? /^write$/i : /^read$/i });
-    if (!(await box.isChecked().catch(() => false))) {
-      if (await visible(control, 1000)) await control.first().click();
-      else await box.check({ force: true });
+    // Each box is a button with role checkbox next to a hidden input; the button is the control.
+    const name = want.level === 'write' ? /^write$/i : /^read$/i;
+    const control = row.getByRole('checkbox', { name }).or(row.getByRole('button', { name })).first();
+    const hidden = row.locator('input[type=checkbox]').nth(want.level === 'write' ? 1 : 0);
+    const on = () => control.isChecked().catch(() => hidden.isChecked().catch(() => false));
+    if (!(await on())) {
+      if (await visible(control, 1500)) await control.click();
+      await page.waitForTimeout(150);
     }
-    if (!(await box.isChecked().catch(() => false))) return stop('unrecognised', 'level of ' + want.label);
+    if (!(await on())) return stop('unrecognised', 'level of ' + want.label);
     if (want.tag) needsTag = true;
   }
 
