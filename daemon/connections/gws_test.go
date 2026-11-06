@@ -487,14 +487,25 @@ func TestGWSConnectFlowEndToEnd(t *testing.T) {
 	}
 }
 
+// gcloudStub is a private executable named gcloud, so the tests never depend on
+// what the host's /bin/true is (a coreutils multicall binary on newer Ubuntu).
+func gcloudStub(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "gcloud")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func TestGWSSetupCreatesTheProjectInTheOnlyGoogleCloudAccount(t *testing.T) {
 	m, _ := testGWSManager(t)
 	var calls []string
-	m.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
+	m.cloud.providers["gcp"] = testGcloudCLI{path: gcloudStub(t)}
 	m.records["gcp-one"] = &record{CLI: &cloudAccount{Profile: "account:me@example.com", Account: "me@example.com"}, Account: Account{ID: "gcp-one", Integration: "gcp", Status: "connected", Enabled: true}}
 	run := m.cloud.run
 	m.cloud.run = func(ctx context.Context, binary string, args, env []string) (cloudOutput, error) {
-		if filepath.Base(binary) == "true" {
+		if filepath.Base(binary) == "gcloud" {
 			calls = append(calls, strings.Join(args, " "))
 			return cloudOutput{Stdout: "{}"}, nil
 		}
@@ -521,7 +532,7 @@ func TestGWSSetupCreatesTheProjectInTheOnlyGoogleCloudAccount(t *testing.T) {
 	// An account that is signed in but not turned on is never changed.
 	m3, _ := testGWSManager(t)
 	m3.records["off"] = &record{CLI: &cloudAccount{Profile: "account:off@example.com", Account: "off@example.com"}, Account: Account{ID: "off", Integration: "gcp", Status: "connected"}}
-	m3.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
+	m3.cloud.providers["gcp"] = testGcloudCLI{path: gcloudStub(t)}
 	if f := mustHandle(t, m3, Request{Action: "connect_start", Input: &Input{Integration: "gws"}}).Flow; !f.CodeRequired || f.AuthorizationURL != gwsConsoleNew {
 		t.Fatalf("changed an account that is off: %+v", f)
 	}
@@ -530,7 +541,7 @@ func TestGWSSetupCreatesTheProjectInTheOnlyGoogleCloudAccount(t *testing.T) {
 	m2, _ := testGWSManager(t)
 	m2.records["a"] = &record{CLI: &cloudAccount{Profile: "account:a@example.com", Account: "a@example.com"}, Account: Account{ID: "a", Integration: "gcp", Status: "connected", Enabled: true}}
 	m2.records["b"] = &record{CLI: &cloudAccount{Profile: "account:b@example.com", Account: "b@example.com"}, Account: Account{ID: "b", Integration: "gcp", Status: "connected", Enabled: true}}
-	m2.cloud.providers["gcp"] = testGcloudCLI{path: "/bin/true"}
+	m2.cloud.providers["gcp"] = testGcloudCLI{path: gcloudStub(t)}
 	f = mustHandle(t, m2, Request{Action: "connect_start", Input: &Input{Integration: "gws"}}).Flow
 	if !f.CodeRequired || f.AuthorizationURL != gwsConsoleNew || !strings.Contains(f.Message, "Create a Google Cloud project") {
 		t.Fatalf("ambiguous accounts: %+v", f)
