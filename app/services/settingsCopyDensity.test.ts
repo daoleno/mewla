@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const source = readFileSync(
@@ -23,6 +23,16 @@ describe("Settings copy density", () => {
     ]) {
       expect(source).not.toContain(redundantCopy);
     }
+  });
+
+  test("lists no per-agent sign-in state", () => {
+    // Settings holds real decisions only. A lapsed agent login is reported by Brain in
+    // the conversation, not by a standing, non-interactive list of accounts.
+    expect(source).not.toMatch(/ExecutorAccount/i);
+    expect(source).not.toContain("executor_states");
+    expect(source).not.toMatch(/Signed in|Not signed in/);
+    const settingsDir = join(import.meta.dir, "../components/settings");
+    expect(readdirSync(settingsDir).filter((name) => /executorAccount/i.test(name))).toEqual([]);
   });
 
   test("retains requirements, consequences, security boundaries, and accessibility semantics", () => {
