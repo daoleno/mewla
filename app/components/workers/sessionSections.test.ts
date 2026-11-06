@@ -79,8 +79,11 @@ describe("rows new to the list", () => {
     expect([...newRowKeys(new Set(["a", "b"]), rows("a", "b", "c"))]).toEqual(["c"]);
     expect(newRowKeys(new Set(["a", "b"]), rows("b", "a")).size).toBe(0);
   });
-  test("a whole new set (another server) is a reload, not news", () => {
+  test("a list that shares nothing with the last one (another computer) is a reload", () => {
+    expect(newRowKeys(new Set(["a", "b"]), rows("x", "y")).size).toBe(0);
+  });
+  test("too many new rows at once is a reload, not news", () => {
     const many = Array.from({ length: MAX_ANIMATED_NEW_ROWS + 1 }, (_, index) => `n${index}`);
-    expect(newRowKeys(new Set(["a"]), rows(...many)).size).toBe(0);
+    expect(newRowKeys(new Set(["a"]), rows("a", ...many)).size).toBe(0);
   });
 });

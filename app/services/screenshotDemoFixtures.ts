@@ -196,6 +196,57 @@ export const SCREENSHOT_CHAT_ACTIVITY_EVENTS: CodexConversationEvent[] = [
   },
 ];
 
+/**
+ * Many turns, each with a run of finished tool calls, for measuring a long
+ * tool-heavy history (`fixture=toolheavy&turns=N`).
+ */
+export function screenshotToolHeavyEvents(turns: number): CodexConversationEvent[] {
+  const events: CodexConversationEvent[] = [];
+  let seq = 0;
+  for (let turn = 0; turn < turns; turn += 1) {
+    events.push({
+      id: `heavy-user-${turn}`,
+      seq: ++seq,
+      kind: "user_message",
+      timestamp: DEMO_TIMESTAMP,
+      body: `Request ${turn}: tidy module ${turn} and run its checks.`,
+    });
+    for (let step = 0; step < 6; step += 1) {
+      const id = `heavy-${turn}-${step}`;
+      events.push(
+        step % 3 === 0
+          ? {
+              id,
+              seq: ++seq,
+              kind: "command",
+              timestamp: DEMO_TIMESTAMP,
+              command: `bun test module-${turn}-${step}`,
+              output: "3 pass\n0 fail",
+              status: "completed",
+              exit_code: 0,
+            }
+          : {
+              id,
+              seq: ++seq,
+              kind: "tool",
+              timestamp: DEMO_TIMESTAMP,
+              tool_name: "Read",
+              input: `{"file_path":"app/module-${turn}/file-${step}.ts"}`,
+              status: "completed",
+            },
+      );
+    }
+    events.push({
+      id: `heavy-assistant-${turn}`,
+      seq: ++seq,
+      kind: "assistant_message",
+      timestamp: DEMO_TIMESTAMP,
+      body: `Module ${turn} is tidy and its checks pass.`,
+    });
+  }
+  return events;
+}
+
 /** A turn that delegates: finished reads fold, subagents stay on their own rows. */
 export const SCREENSHOT_SUBAGENT_EVENTS: CodexConversationEvent[] = [
   {
