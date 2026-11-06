@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  type ListRenderItem,
+  type SectionListRenderItem,
   SectionList,
   StyleSheet,
   Text,
@@ -23,10 +23,14 @@ import type { WorkerDirectorySection } from "../../services/workerDirectory";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { WorkerListRowContainer } from "./WorkerListRowContainer";
 import { Icon } from "../icons/Icon";
+import { Timing } from "../../constants/motion";
+import { FadeInView } from "../ui/FadeInView";
+import { AnimatedChevron } from "../ui/AnimatedChevron";
 import { StatusMark } from "../ui/StatusMark";
 import {
   buildSessionListSections,
   collapsedSectionsToStore,
+  newRowKeys,
   toggleCollapsedSection,
   type SessionListSection,
 } from "./sessionSections";
@@ -52,6 +56,40 @@ const NEW_SESSION_BUTTON_HEIGHT = 48;
 
 const workerKeyExtractor = (agent: Worker) => agent.key;
 const NO_COLLAPSED_SECTIONS: ReadonlySet<string> = new Set();
+
+/** Keys new to the list since it last changed; see `newRowKeys`. */
+function useFreshRowKeys(sections: readonly WorkerDirectorySection[]): ReadonlySet<string> {
+  const knownRef = useRef<ReadonlySet<string> | null>(null);
+  const fresh = useMemo(() => newRowKeys(knownRef.current, sections), [sections]);
+  useEffect(() => {
+    knownRef.current = new Set(
+      sections.flatMap((section) => section.data.map((worker) => worker.key)),
+    );
+  }, [sections]);
+  return fresh;
+}
+
+/** Marks the directory being folded or opened for the length of its fade. */
+function useSectionMotion(toggle: (key: string) => void) {
+  const [motionSectionKey, setMotionSectionKey] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+  const toggleSection = useCallback(
+    (key: string) => {
+      setMotionSectionKey(key);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setMotionSectionKey(null), Timing.base * 2);
+      toggle(key);
+    },
+    [toggle],
+  );
+  return { motionSectionKey, toggleSection };
+}
 
 /**
  * The directories the person folded. Keys name their server, so another
@@ -121,17 +159,22 @@ export function SessionsListView({
   const desktop = useDesktopWeb();
   const styles = useMemo(() => createStyles(theme, desktop), [theme, desktop]);
   const useSectionHeaders = sections.length > 1;
-  const { collapsed, toggle: toggleSection } = useCollapsedSections();
+  const { collapsed, toggle } = useCollapsedSections();
+  const { motionSectionKey, toggleSection } = useSectionMotion(toggle);
+  const freshKeys = useFreshRowKeys(sections);
   const listSections = useMemo(
     () => buildSessionListSections(sections, collapsed, selectionMode),
     [collapsed, sections, selectionMode],
   );
 
-  const renderItem = useCallback<ListRenderItem<Worker>>(
-    ({ item }) => {
+  const renderItem = useCallback<SectionListRenderItem<Worker, SessionListSection>>(
+    ({ item, section }) => {
       const state = rowState(item);
+      // Rows fade in when they are new to the list or their directory was just
+      // opened; rows that scroll into the window never animate.
+      const enters = freshKeys.has(item.key) || section.key === motionSectionKey;
       return (
-        <View style={styles.rowWrap}>
+        <FadeInView style={styles.rowWrap} animate={enters}>
           <WorkerListRowContainer
             agent={item}
             alias={state.alias}
@@ -147,10 +190,12 @@ export function SessionsListView({
             separator={false}
             cornerStyle={styles.rowCorners}
           />
-        </View>
+        </FadeInView>
       );
     },
     [
+      freshKeys,
+      motionSectionKey,
       onEnterSelection,
       onOpenWorker,
       onToggleSelection,
@@ -186,8 +231,8 @@ export function SessionsListView({
             {section.title}
           </Text>
           {expandable ? (
-            <Icon
-              name={section.collapsed ? "chevron-right" : "chevron-down"}
+            <AnimatedChevron
+              expanded={!section.collapsed}
               size={12}
               color={styles.sectionChevron.color}
             />
