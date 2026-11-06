@@ -1,4 +1,5 @@
 import type { ToolDeveloperDetails } from "../../services/toolCallDetails";
+import type { SemanticActionKind } from "../../services/toolCallSemantics";
 import type { IconName } from "../icons/Icon";
 
 export type TimelineActivityIconName = IconName;
@@ -42,6 +43,13 @@ export interface ActivityTimelineItem {
   providerToolId?: string;
   developerDetails?: ToolDeveloperDetails;
   children?: ActivityChild[];
+  /**
+   * What the call did, when the provider payload says. Tool rows that carry it
+   * may fold into a run summary; rows without it always stay on their own.
+   */
+  semanticKind?: SemanticActionKind;
+  /** A folded run: the finished rows it stands for, in order. */
+  steps?: ActivityTimelineItem[];
 }
 
 export type ActivityChild = {

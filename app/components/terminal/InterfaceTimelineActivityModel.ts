@@ -91,7 +91,8 @@ function canExpandActivity(item: ActivityTimelineItem) {
     item.fileSummaries?.length ||
     item.files?.length ||
     item.previewPath ||
-    item.children?.length,
+    item.children?.length ||
+    item.steps?.length,
   );
 }
 

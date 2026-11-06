@@ -17,6 +17,7 @@ import {
   type TimelineProjectionCache,
 } from "./projectTimeline";
 import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
+import { createToolRunFolder, type ToolRunFolder } from "./foldToolRuns";
 import { useBrainCompanion } from "../mewla/BrainCompanion";
 import {
   foldBrainToolRows,
@@ -71,6 +72,7 @@ export function useInterfaceTimelineItems({
     items: [],
   });
   const projectionCacheRef = useRef<TimelineProjectionCache | null>(null);
+  const toolRunFolderRef = useRef<ToolRunFolder | null>(null);
 
   // Pure event→timeline projection. Callback/set identity must not rescan events.
   const projectedTimelineItems = useMemo(() => {
@@ -123,19 +125,20 @@ export function useInterfaceTimelineItems({
   }, [providerTimelineItems, turnFocusAnchorAliases]);
   // Brain only: the cat's presence row; Sessions have no companion.
   const brainPresence = useBrainCompanion()?.presence;
-  const providerTimelineWithActivity = useMemo(
-    () =>
-      mergeBrainPresenceIntoTimeline(
-        mergeRunningActivityIntoTimeline(
-          brainPresence
-            ? foldBrainToolRows(providerTimelineItemsWithTurnFocus)
-            : providerTimelineItemsWithTurnFocus,
-          runningActivity,
-        ),
-        brainPresence,
+  const providerTimelineWithActivity = useMemo(() => {
+    // Brain keeps its own "Worked" fold; Sessions fold finished tool runs
+    // into a summary row that opens onto the real rows.
+    toolRunFolderRef.current ??= createToolRunFolder();
+    return mergeBrainPresenceIntoTimeline(
+      mergeRunningActivityIntoTimeline(
+        brainPresence
+          ? foldBrainToolRows(providerTimelineItemsWithTurnFocus)
+          : toolRunFolderRef.current(providerTimelineItemsWithTurnFocus),
+        runningActivity,
       ),
-    [brainPresence, providerTimelineItemsWithTurnFocus, runningActivity],
-  );
+      brainPresence,
+    );
+  }, [brainPresence, providerTimelineItemsWithTurnFocus, runningActivity]);
 
   return useMemo(() => {
     if (

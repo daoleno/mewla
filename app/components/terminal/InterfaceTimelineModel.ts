@@ -600,6 +600,7 @@ function activityFromEvent(
         statusLine: details.statusLine,
         files: details.files,
         defaultExpanded: failed,
+        semanticKind: action.kind,
         accessibilityLabel: semantic.accessibilityLabel,
         providerToolId:
           action.kind === "read_files" || action.kind === "search_code"
@@ -650,6 +651,7 @@ function activityFromEvent(
         files: summary.files.map((file) => file.path),
         body: summary.files.length > 0 ? undefined : event.body,
         defaultExpanded: failed,
+        semanticKind: "update_files",
         accessibilityLabel: semantic.accessibilityLabel,
         providerToolId: semantic.providerToolId,
         developerDetails: semantic.providerToolId
@@ -792,6 +794,7 @@ function activityFromEvent(
         files: details.files,
         previewPath,
         defaultExpanded: failed,
+        semanticKind: action.kind,
         accessibilityLabel: isWait
           ? details.statusLine || (running ? "Waiting" : "Finished")
           : semantic.accessibilityLabel,
@@ -986,6 +989,7 @@ function explorationActivityFromEntries(
     body: body || undefined,
     files,
     defaultExpanded: false,
+    semanticKind: semantic.kind,
     accessibilityLabel:
       entries.length > 1
         ? `${title}, ${quietDetail}`
