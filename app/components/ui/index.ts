@@ -3,6 +3,7 @@ export { AppText } from "./AppText";
 export { BottomSheetFrame } from "./BottomSheetFrame";
 export { Button } from "./Button";
 export { EmptyState } from "./EmptyState";
+export { InkSwitch } from "./InkSwitch";
 export { InlineNotice } from "./InlineNotice";
 export { confirmDestructive } from "./confirmDestructive";
 export { IconButton } from "./IconButton";

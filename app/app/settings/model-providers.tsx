@@ -624,7 +624,7 @@ export default function ProvidersScreen() {
         const name = model?.display_name?.trim() || modelId;
         confirmDestructive({
           title: `Turn off ${name}?`,
-          message: `No agent on ${connection.name} can use it until you turn it back on. Sessions using it now will start failing.`,
+          message: "Sessions using it will start failing.",
           confirmLabel: "Turn off",
           onConfirm: () => runSetModels(connection, enabledIds),
         });

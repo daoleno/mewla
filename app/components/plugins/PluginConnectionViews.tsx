@@ -7,9 +7,9 @@ import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { ActivityIndicator, Linking, StyleSheet, Switch, View, type SwitchProps } from "react-native";
+import { ActivityIndicator, Linking, StyleSheet, View } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
-import { AppText, Button, EmptyState, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
+import { AppText, Button, EmptyState, InkSwitch, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { brainCanNow, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -67,14 +67,6 @@ export function ServiceGlyph({ id, size = 30 }: { id: string; size?: number }) {
       )}
     </View>
   );
-}
-
-/** Switches are ink, like every other control (DESIGN.md: Paper and ink). */
-export function InkSwitch(props: SwitchProps) {
-  const { colors } = useAppTheme();
-  // react-native-web colours an on thumb with activeThumbColor, outside SwitchProps.
-  const web = { activeThumbColor: colors.bgSurface, activeTrackColor: colors.accent } as object;
-  return <Switch trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.bgSurface} {...web} {...props} />;
 }
 
 export function NoServerState({ onOpenSettings }: { onOpenSettings(): void }) {

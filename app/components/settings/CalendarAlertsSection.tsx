@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { ListRow, ListSection } from "../ui";
-import { InkSwitch } from "../plugins/PluginConnectionViews";
+import { InkSwitch } from "../ui/InkSwitch";
 import { getMewlaLiveModule } from "../../modules/mewla-live/src";
 import {
   setStrongCalendarAlerts,

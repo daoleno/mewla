@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
 import { ListRow, ListSection } from "../ui";
-import { InkSwitch } from "../plugins/PluginConnectionViews";
+import { InkSwitch } from "../ui/InkSwitch";
 import { usePhoneUse } from "../../store/phoneUse";
 
 /** Settings → Labs → Phone use: the switch, then where it stands. */
