@@ -183,6 +183,11 @@ catalog when it can. Choosing a connection sets no default model: each CLI
 keeps its own (for Claude Code, whatever you chose with `/model`). A model
 picked for one Session applies to that Session only.
 
+**Model access.** A Provider's **Model access** sheet (its **…** menu) turns
+each model on or off for every agent using that Provider. A model that is off
+is refused by the gateway, so a Session asking for it fails until it is turned
+back on. Turning a model off asks for confirmation first.
+
 When a provider cannot list its models, the Codex list comes from the installed
 Codex itself (its app-server answers `model/list`, so new Codex models appear
 without a Mewla update). If Codex does not answer, Mewla uses Codex's

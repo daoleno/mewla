@@ -20,6 +20,7 @@ import {
   enabledModelIds,
   launchSelectionFromSnapshot,
   modelSupportChoices,
+  modelSupportToggleTurnsOff,
   providerClientForCommand,
   toggleModelSupport,
   type ProvidersSnapshot,
@@ -622,6 +623,48 @@ describe("Model sync and default binding policy", () => {
       "gpt-5.6-sol",
     );
     expect(reenabled).toEqual(["gpt-5.6-sol"]);
+  });
+
+  test("access switches follow the live catalog, not the discovery the sheet opened with", () => {
+    // The sheet keeps the discovery result it opened with. After a write the
+    // catalog changes; a switch that kept showing the old state let one tap
+    // silently turn a model off while it still looked on.
+    const opened = [
+      { id: "claude-opus-5-5", available: true, source: "discovered" },
+      { id: "claude-sonnet-5-5", available: true, source: "discovered" },
+    ];
+    const snapshot = providerSnapshot({
+      models: {
+        c2: [
+          { id: "claude-opus-5-5", available: false, source: "discovered" },
+          { id: "claude-sonnet-5-5", available: true, source: "discovered" },
+        ],
+      },
+    });
+    const connection = snapshot.connections[1]!;
+    expect(
+      modelSupportChoices(snapshot, connection, opened).map((c) => c.current),
+    ).toEqual([false, true]);
+    // A model the catalog does not list yet keeps its discovered state.
+    expect(
+      modelSupportChoices(providerSnapshot(), connection, opened).map(
+        (c) => c.current,
+      ),
+    ).toEqual([true, true]);
+  });
+
+  test("only turning a model off needs a confirmation", () => {
+    const snapshot = providerSnapshot({
+      models: {
+        c2: [
+          { id: "claude-opus-5-5", available: true, source: "discovered" },
+          { id: "claude-opus-4-8", available: false, source: "discovered" },
+        ],
+      },
+    });
+    expect(modelSupportToggleTurnsOff(snapshot, "c2", "claude-opus-5-5")).toBe(true);
+    expect(modelSupportToggleTurnsOff(snapshot, "c2", "claude-opus-4-8")).toBe(false);
+    expect(modelSupportToggleTurnsOff(null, "c2", "claude-opus-5-5")).toBe(false);
   });
 
   test("launch selection carries the client's connection without a model seed", () => {

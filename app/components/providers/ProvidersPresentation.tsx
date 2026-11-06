@@ -83,6 +83,7 @@ import {
   type ProvidersEditorState,
 } from "./providersPresentationModel";
 import { Icon } from "../icons/Icon";
+import { InkSwitch } from "../plugins/PluginConnectionViews";
 
 export type {
   ModelSyncPickerState,
@@ -530,6 +531,7 @@ function ProviderConnectionRow({
   const exposedCount = models.filter(
     (model) => model.available && model.known !== false,
   ).length;
+  const accessOnCount = models.filter((model) => model.available).length;
   const selected = catalog.defaults[client]?.connection_id === connection.id;
   const ready = connection.credential_ready;
   const testing = testState.kind === "testing";
@@ -619,9 +621,9 @@ function ProviderConnectionRow({
         items={[
           {
             key: "models",
-            label: "Models",
+            label: "Model access",
             icon: "layers",
-            detail: `${exposedCount} exposed`,
+            detail: `${accessOnCount} of ${models.length} on`,
             disabled: disabled || !ready,
             onPress: onDiscover,
           },
@@ -1032,14 +1034,14 @@ function ModelSyncSheet({
       <View style={styles.pickerHeader}>
         <View style={styles.pickerCopy}>
           <Text style={styles.pickerTitle} accessibilityRole="header">
-            Models
+            Model access
           </Text>
           <Text style={styles.pickerSubtitle} numberOfLines={1}>
-            {picker.connection.name}
+            {picker.connection.name} · {enabledCount} of {choices.length} on
           </Text>
         </View>
         <Pressable
-          accessibilityLabel="Close model picker"
+          accessibilityLabel="Close model access"
           accessibilityRole="button"
           hitSlop={8}
           style={styles.editorClose}
@@ -1049,9 +1051,8 @@ function ModelSyncSheet({
         </Pressable>
       </View>
       <Text style={styles.pickerHint}>
-        {enabledCount === choices.length
-            ? `${enabledCount} models exposed`
-            : `${enabledCount} of ${choices.length} models exposed`}
+        A model that is off is blocked for every agent on this provider. Pick a
+        Session's model in that Session.
       </Text>
       {usingLocalCatalog ? (
         <Text style={styles.pickerNotice}>
@@ -1084,43 +1085,17 @@ function ModelSyncSheet({
           disabled,
         }}
         renderItem={({ item: choice }) => {
-          const selected = choice.current;
-          const chipDisabled = saving || disabled;
+          const on = choice.current;
+          const switchDisabled = saving || disabled;
+          const name = choice.model.display_name?.trim() || choice.model.id;
           return (
-            <Pressable
+            <View
               key={choice.model.id}
-              style={[
-                styles.modelRow,
-                selected && styles.modelChipSelected,
-                chipDisabled && styles.modelChipDisabled,
-              ]}
-              disabled={chipDisabled}
-              accessibilityRole="checkbox"
-              accessibilityState={{
-                checked: selected,
-                disabled: chipDisabled,
-                busy: saving,
-              }}
-              accessibilityLabel={`${choice.model.display_name?.trim() || choice.model.id}, ${
-                selected ? "exposed" : "hidden"
-              }`}
-              onPress={() =>
-                onSelectModel(picker.client, picker.connection, choice.model.id)
-              }
+              style={[styles.modelRow, switchDisabled && styles.modelRowDisabled]}
             >
-              <Icon
-                name={selected ? "checkbox" : "square"}
-                size={16}
-                color={selected ? colors.accentStrong : colors.textTertiary}
-              />
               <View style={styles.modelRowCopy}>
-                <Text
-                  style={[
-                    styles.modelChipText,
-                    selected && { color: colors.accentStrong },
-                  ]}
-                >
-                  {choice.model.display_name?.trim() || choice.model.id}
+                <Text style={[styles.modelChipText, !on && styles.modelOffText]}>
+                  {name}
                 </Text>
                 <Text style={styles.modelChipMeta} numberOfLines={1}>
                   {choice.model.id} · {choice.model.source}
@@ -1129,7 +1104,20 @@ function ModelSyncSheet({
                     : ""}
                 </Text>
               </View>
-            </Pressable>
+              <InkSwitch
+                value={on}
+                disabled={switchDisabled}
+                accessibilityLabel={`${name} access`}
+                accessibilityState={{
+                  checked: on,
+                  disabled: switchDisabled,
+                  busy: saving,
+                }}
+                onValueChange={() =>
+                  onSelectModel(picker.client, picker.connection, choice.model.id)
+                }
+              />
+            </View>
           );
         }}
         ListFooterComponent={
@@ -1320,26 +1308,23 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       minHeight: 52,
       flexDirection: "row",
       alignItems: "center",
-      gap: 6,
+      gap: 12,
       borderRadius: Radii.xs,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.surfacePressed,
-      paddingHorizontal: 11,
+      backgroundColor: colors.bgSurface,
+      paddingHorizontal: 12,
       paddingVertical: 6,
     },
     modelRowCopy: { flex: 1, minWidth: 0, gap: 2 },
-    modelChipSelected: {
-      borderColor: colors.border,
-      backgroundColor: colors.accentSoft,
-    },
-    modelChipDisabled: { opacity: 0.45 },
+    modelRowDisabled: { opacity: 0.45 },
     modelChipText: {
       ...UiTextMetrics,
       ...TypeScale.label,
-      color: colors.textSecondary,
+      color: colors.textPrimary,
       flexShrink: 1,
     },
+    modelOffText: { color: colors.textTertiary },
     modelChipMeta: {
       ...UiTextMetrics,
       ...TypeScale.caption,
