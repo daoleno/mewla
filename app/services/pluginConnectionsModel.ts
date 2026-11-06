@@ -59,7 +59,7 @@ export function connectLabel(plugin: Pick<PluginIntegration, "id" | "name">): st
  * connecting, naming the card it came from so that card is renewed in place.
  */
 export function accountSignInInput(account: Pick<PluginAccount, "id" | "integration">): { integration: string; account_id: string } | null {
-  return ["aws", "gcp"].includes(account.integration) ? { integration: account.integration, account_id: account.id } : null;
+  return ["aws", "gcp", "gws"].includes(account.integration) ? { integration: account.integration, account_id: account.id } : null;
 }
 
 /**

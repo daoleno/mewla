@@ -170,3 +170,31 @@ AWS profile names are the actual CLI section names. After sign-in the completion
 Sign-in timing never uses rotating AWS login credentials or ID-token iat/exp. After successful Mewla remote sign-in and identity verification, persist its completion time and a digest of the cached ID token's session_arn. For that same session, show completion + 12h as an explicit upper bound (the principal/console session can end sooner), with exact local time in detail. Refresh does not extend it; unknown terminal sessions show no countdown. Legacy nonrefreshable SSO uses the matching cache expiresAt; modern sso-session tokens also refresh, so no session deadline is inferred. Only CLI identity/refresh failure marks Expired; passing a timestamp alone never does. No token/key is returned or copied. Gcloud user credentials have no invented sign-in expiry.
 
 Sources: [AWS CLI login session limits](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html), [SSO token-provider and legacy session behavior](https://docs.aws.amazon.com/sdkref/latest/guide/feature-sso-credentials.html).
+
+## Google Workspace (gws)
+
+`gwsCLI` is a `cloudProvider` for Google's `gws` with one profile, `default`; its
+account is `gws auth status` (user, token_valid), so an outside sign-out removes the
+card. It runs in an empty private working directory because `gws` loads `.env`, and
+with `GOOGLE_WORKSPACE_*` token, credentials, client and project overrides removed.
+The pinned release (`gwsVersion`, `gwsArchives` SHA256s, refreshed with the gcloud
+bootstrap pins) is extracted in-process and published only after `--version` matches.
+
+Connect has two provider hooks beyond gcloud's. `setupFlow` runs before sign-in:
+without `client_secret.json` the flow is `setup_required` (the code field takes the
+client), and `gws auth setup` is not used because it cannot create the OAuth client
+(its consent-screen call returns 404 and client creation was removed). With exactly
+one connected gcloud account Connect runs `gcloud projects create` and
+`services enable` for it; it never picks between accounts. `finishSetup` writes the
+client where `gws auth status` says `client_config` lives. Sign-in uses `gws auth login -s
+gmail,calendar,drive` (gmail.modify, calendar, drive): `gws` listens on a random
+loopback port and has no copy-code mode, so the flow is `address_required` and
+`deliverCode` replays only `code` and `scope` from the pasted address, and only to
+127.0.0.1 on the port in the printed redirect URI, once.
+
+Reads are an allowlist (`classify`): last path word `list`, `get` or `getX`,
+`freebusy query`, `+triage`, `+read`, `+agenda`, `schema`. Everything else is a
+change. File loaders (`--upload`, `--output`, `--attach`, `@file`), watch/push and
+`auth` are refused. The 7-day Testing-mode refresh-token expiry is avoided by
+publishing the app in the console; that step is documented, not verified by code.
+

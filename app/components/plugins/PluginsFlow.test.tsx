@@ -98,6 +98,23 @@ if (!process.env.MEWLA_PLUGIN_FLOW_TEST_CHILD) {
     expect(request.mock.calls.filter(([, req]) => req.action === "connect_finish")).toHaveLength(finishCount);
     await act(async () => tree.unmount());
   });
+  test("Google Workspace asks for its client once, then for the address the sign-in ended on", async () => {
+    stored.clear();
+    const setup = { ...flow, id: "gws-flow", integration: "gws", address_required: false, authorization_url: "https://console.cloud.google.com/auth/overview?project=mewla-ws-0a1b2c3d", code_required: true, setup_required: true, message: "Set up the consent screen." };
+    request.mockImplementation(async (_server: string, req: any) => req.action === "list" ? { catalog: [], accounts: [] } : { flow: setup });
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => { tree = TestRenderer.create(<PluginsFlowProvider serverId="server" serverName="Server" connection="connected" deferReturn={async () => {}}><Capture /></PluginsFlowProvider>); });
+    await act(async () => state.connect("gws"));
+    expect(state.flow?.flow.setup_required).toBe(true);
+    expect(request.mock.calls.filter(([, req]) => req.action === "connect_start").at(-1)?.[1].input.integration).toBe("gws");
+    const client = "123456789012-abc.apps.googleusercontent.com GOCSPX-secret_value";
+    request.mockResolvedValueOnce({ flow: { ...setup, code_required: false, setup_required: false, address_required: true, authorization_url: "https://accounts.google.com/o/oauth2/auth?redirect_uri=http://localhost:42503" } });
+    await act(async () => state.submitAddress(client));
+    expect(request.mock.calls.at(-1)?.[1]).toEqual({ action: "connect_finish", flow_id: "gws-flow", callback: client });
+    expect(state.flow?.flow.address_required).toBe(true);
+    expect(state.flow?.flow.setup_required).toBe(false);
+    await act(async () => tree.unmount());
+  });
   test("an install failure remains retryable in the same flow", async () => {
     stored.clear();
     const installFlow = { ...flow, id: "gcp-install", integration: "gcp", address_required: false, authorization_url: "", install_required: true };

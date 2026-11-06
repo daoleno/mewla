@@ -24,7 +24,11 @@ func (m *Manager) startCloud(ctx context.Context, in *Input) (Response, error) {
 		profile = r.CLI.Profile
 	}
 	if profile == "" {
-		profile = "mewla-" + uuid.NewString()[:8]
+		if d, ok := m.cloud.providers[in.Integration].(interface{ defaultProfile() string }); ok {
+			profile = d.defaultProfile()
+		} else {
+			profile = "mewla-" + uuid.NewString()[:8]
+		}
 	}
 	if !m.cloud.providers[in.Integration].validProfile(profile) {
 		return Response{}, errors.New("Use a profile name with letters, numbers, dots, underscores or hyphens")
@@ -95,6 +99,19 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 			return err
 		}
 	}
+	// Some CLIs need the person's own client before they can sign in.
+	if s, ok := p.(interface {
+		setupFlow(*Manager, context.Context, *connectFlow) (bool, error)
+	}); ok {
+		need, err := s.setupFlow(m, ctx, f)
+		if err != nil {
+			return err
+		}
+		if need {
+			f.InstallRequired, f.InstallManual, f.InstallFailed, f.Installing = false, false, false, false
+			return nil
+		}
+	}
 	login, err := startCloudLogin(binary, p.loginArgs(f.profile), p.environment())
 	if err != nil {
 		return err
@@ -111,8 +128,7 @@ func (m *Manager) launchCloudLogin(ctx context.Context, f *connectFlow) error {
 	defer timer.Stop()
 	for {
 		if address := p.loginURL(login.output.String()); address != "" {
-			f.AuthorizationURL = address
-			f.CodeRequired = true
+			markLoginURL(f, p, address)
 			return nil
 		}
 		select {
@@ -171,6 +187,21 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 		}
 		return flowResult(f), nil
 	}
+	if f.SetupRequired {
+		if q.Action == "connect_finish" {
+			if err := p.(interface {
+				finishSetup(*Manager, context.Context, *connectFlow, string) error
+			}).finishSetup(m, ctx, f, q.Callback); err != nil {
+				return Response{}, err
+			}
+			f.SetupRequired, f.CodeRequired, f.AuthorizationURL, f.Message = false, false, "", ""
+			f.Expires = time.Now().Add(10 * time.Minute)
+			if err := m.launchCloudLogin(ctx, f); err != nil {
+				return Response{}, err
+			}
+		}
+		return flowResult(f), nil
+	}
 	if f.cli == nil {
 		return Response{}, errors.New("Start sign-in again")
 	}
@@ -193,19 +224,32 @@ func (m *Manager) continueCloud(ctx context.Context, q Request, f *connectFlow) 
 		return flowResult(f), nil
 	}
 	if f.AuthorizationURL == "" {
-		f.AuthorizationURL = p.loginURL(f.cli.output.String())
-		f.CodeRequired = f.AuthorizationURL != ""
+		if address := p.loginURL(f.cli.output.String()); address != "" {
+			markLoginURL(f, p, address)
+		}
 	}
 	if q.Action == "connect_finish" && !f.cli.sent {
 		code := strings.TrimSpace(q.Callback)
 		if !p.validateCode(f.AuthorizationURL, code) {
-			return Response{}, errors.New("Paste the authorization code shown after sign-in.")
+			message := "Paste the authorization code shown after sign-in."
+			if h, ok := p.(interface{ pasteError() string }); ok {
+				message = h.pasteError()
+			}
+			return Response{}, errors.New(message)
 		}
-		if _, err := io.WriteString(f.cli.stdin, code+"\n"); err != nil {
+		if d, ok := p.(interface {
+			deliverCode(string, string) error
+		}); ok {
+			// The CLI listens on a loopback port; the code reaches it the way
+			// the browser's redirect would have.
+			if err := d.deliverCode(f.AuthorizationURL, code); err != nil {
+				return Response{}, err
+			}
+		} else if _, err := io.WriteString(f.cli.stdin, code+"\n"); err != nil {
 			return Response{}, errors.New("This sign-in ended. Start again.")
 		}
 		f.cli.sent = true
-		f.CodeRequired = false
+		f.CodeRequired, f.AddressRequired = false, false
 		f.Message = "Checking your account…"
 	}
 	select {
@@ -294,7 +338,7 @@ func (m *Manager) runCloud(ctx context.Context, q Request) (Response, error) {
 	if err != nil {
 		return Response{}, err
 	}
-	if out.ExitCode != 0 && awsExpired(out.Stderr) {
+	if out.ExitCode != 0 && (awsExpired(out.Stderr) || q.Integration == "gws" && out.ExitCode == 2) {
 		r.Account.Status = "authorization_required"
 		r.Account.ProfileStatus = "expired"
 	}
@@ -313,4 +357,15 @@ func awsOutputArgs(args []string) []string {
 		}
 	}
 	return append(out, "--output", "json")
+}
+
+// markLoginURL shows the sign-in address. A CLI that listens on a loopback port
+// asks for the address the browser ended on; the others ask for a code.
+func markLoginURL(f *connectFlow, p cloudProvider, address string) {
+	f.AuthorizationURL = address
+	if _, ok := p.(interface{ pasteError() string }); ok {
+		f.AddressRequired, f.CodeRequired = true, false
+		return
+	}
+	f.CodeRequired = true
 }

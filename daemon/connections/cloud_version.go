@@ -16,6 +16,9 @@ func cloudExecutableVersion(ctx context.Context, id, path string, run func(conte
 	if id == "gcp" {
 		args = []string{"version", "--format=json"}
 	}
+	if id == "gws" {
+		return gwsExecutableVersion(ctx, path, run, env)
+	}
 	out, err := run(ctx, path, args, env)
 	if err != nil || out.ExitCode != 0 {
 		return "", errors.New("Cloud CLI version check failed")
@@ -62,4 +65,25 @@ func cloudVersionLess(a, b string) bool {
 		}
 	}
 	return false
+}
+
+var gwsVersionLine = regexp.MustCompile(`^gws (\d+\.\d+\.\d+)$`)
+
+func gwsExecutableVersion(ctx context.Context, path string, run func(context.Context, string, []string, []string) (cloudOutput, error), env []string) (string, error) {
+	out, err := run(ctx, path, []string{"--version"}, env)
+	if err != nil || out.ExitCode != 0 {
+		return "", errors.New("Cloud CLI version check failed")
+	}
+	m := gwsVersionLine.FindStringSubmatch(strings.TrimSpace(strings.SplitN(out.Stdout, "\n", 2)[0]))
+	if m == nil {
+		return "", errors.New("Invalid Google Workspace CLI version")
+	}
+	if cloudVersionLess(m[1], "0.22.0") {
+		return "", errors.New("Google Workspace CLI 0.22 or later is required")
+	}
+	return m[1], nil
+}
+func (gwsCLI) validateExecutable(ctx context.Context, path string) error {
+	_, err := gwsExecutableVersion(ctx, path, runCloudProcess, gwsCLI{}.environment())
+	return err
 }

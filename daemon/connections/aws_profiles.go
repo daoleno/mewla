@@ -299,6 +299,9 @@ func (m *Manager) deleteCloudProfile(ctx context.Context, q Request) (Response, 
 	if r != nil && r.CLI != nil && r.Account.Integration == "gcp" {
 		return m.deleteGCPProfile(ctx, q)
 	}
+	if r != nil && r.CLI != nil && r.Account.Integration == "gws" {
+		return m.deleteGWSProfile(ctx, q)
+	}
 	if r == nil || r.CLI == nil || r.Account.Integration != "aws" {
 		return Response{}, errors.New("Refresh the profiles first")
 	}

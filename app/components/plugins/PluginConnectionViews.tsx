@@ -232,7 +232,7 @@ export function ServiceHeader({ plugin, state }: { plugin: PluginIntegration; st
         ) : null}
         {plugin.cli ? (
           <AppText variant="compact" tone="secondary">
-            {plugin.id === "aws" ? "AWS CLI" : "Google Cloud CLI"} {plugin.cli.version} · {plugin.cli.managed ? "managed by Mewla" : "local installation"}
+            {plugin.id === "aws" ? "AWS CLI" : plugin.id === "gws" ? "Google Workspace CLI" : "Google Cloud CLI"} {plugin.cli.version} · {plugin.cli.managed ? "managed by Mewla" : "local installation"}
           </AppText>
         ) : null}
       </View>
@@ -307,10 +307,10 @@ export function ConnectStatusCard({
     <Button label="Cancel" variant="plain" block onPress={onCancel} />
   </StatusCard>;
   if (flow?.flow.code_required && (phase === "waiting" || phase === "verifying")) {
-    // Tailscale: an OAuth client is created in its admin console and its secret pasted.
-    const secret = flow.flow.integration === "tailscale";
+    // Tailscale and Google Workspace: an OAuth client is created in the service's console and pasted.
+    const secret = flow.flow.integration === "tailscale" || !!flow.flow.setup_required;
     return <StatusCard title={secret ? `Connect ${serviceName}` : `Sign in to ${serviceName}`} detail={secret ? flow.flow.message : `Open ${serviceName}, sign in, then paste the code shown there.`}>
-      <CloudCodeEntry key={flow.flow.id} serviceName={serviceName} noun={secret ? "client secret" : "code"} onSubmit={onSubmitAddress} />
+      <CloudCodeEntry key={flow.flow.id} serviceName={serviceName} noun={flow.flow.setup_required ? "client ID and secret" : secret ? "client secret" : "code"} onSubmit={onSubmitAddress} />
       <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block onPress={onOpen} />
       <Button label="Cancel" variant="plain" block onPress={onCancel} />
     </StatusCard>;
@@ -525,7 +525,7 @@ export function AccountCard({
       />
       {account.integration === "aws" && account.profile && onRename ? renaming ? <CloudProfileNameEntry key={account.id} account={account} onSave={async (name) => { const saved = await onRename(name); if (saved) setRenaming(false); return saved; }} /> : <ListRow title="Rename profile" icon="edit" onPress={() => setRenaming(true)} /> : null}
       {account.profile_sign_in_by ? <ListRow icon="time" title="Sign in again by" subtitle={`${formatDate(account.profile_sign_in_by, DateStyle.fullDateTime, { timeZoneName: "short" })} · ${account.profile_sign_in_limit === "maximum" ? "At latest · AWS allows up to 12h; your session may end sooner." : "SSO session"}`} numberOfLines={3} /> : null}
-      {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle={`Use ${plugin.name} remote sign-in for this ${account.integration === "gcp" ? "account" : "profile"}.`} trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
+      {account.profile ? <ListRow icon="person-circle" title="Sign in again" subtitle={`Use ${plugin.name} remote sign-in for this ${account.integration === "aws" ? "profile" : "account"}.`} trailing={<Button label="Sign in again" variant="tinted" size="sm" disabled={busy} onPress={() => onRecover("reconnect")} />} /> : null}
       {!account.profile && recovery ? (
         <ListRow
           icon={recovery.tone === "neutral" ? "pause-circle" : "alert-circle"}
@@ -577,15 +577,15 @@ export function AccountCard({
       {confirming ? (
         <BottomSheetFrame visible onClose={() => { if (!removing) setConfirming(false); }}><View style={styles.confirm}>
           <AppText variant="compact" tone="secondary">
-            {account.integration === "gcp" ? `Delete ${account.identity || account.name} from this computer? This signs it out of gcloud and removes its configurations. Other accounts are kept.` : account.profile ? `Delete profile ${account.profile}${account.aws?.account_id ? ` (${account.aws.account_id})` : ""} from this computer? It will also disappear from the AWS CLI. A backup is kept.` : `Disconnect ${account.name}? Brain loses access right away, and Mewla removes its saved sign-in.`}
+            {account.integration === "gws" ? `Sign ${account.identity || account.name} out of Google Workspace on this computer? Your Google client stays, so connecting again is quick.` : account.integration === "gcp" ? `Delete ${account.identity || account.name} from this computer? This signs it out of gcloud and removes its configurations. Other accounts are kept.` : account.profile ? `Delete profile ${account.profile}${account.aws?.account_id ? ` (${account.aws.account_id})` : ""} from this computer? It will also disappear from the AWS CLI. A backup is kept.` : `Disconnect ${account.name}? Brain loses access right away, and Mewla removes its saved sign-in.`}
           </AppText>
           <View style={styles.confirmActions}>
             <Button label="Keep" variant="plain" size="sm" disabled={removing} onPress={() => setConfirming(false)} />
-            <Button label={account.integration === "gcp" ? "Delete account" : account.profile ? "Delete profile" : "Disconnect"} variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then(() => setConfirming(false))} />
+            <Button label={account.integration === "gws" ? "Sign out" : account.integration === "gcp" ? "Delete account" : account.profile ? "Delete profile" : "Disconnect"} variant="destructive" size="sm" loading={removing} disabled={busy && !removing} onPress={() => void onDisconnect().then(() => setConfirming(false))} />
           </View>
         </View></BottomSheetFrame>
       ) : !account.profile && !canDisconnect(account) ? null : (
-        <ListRow icon="remove-circle" title={account.integration === "gcp" ? "Delete account" : account.profile ? "Delete profile" : "Disconnect"} destructive disabled={busy} onPress={() => setConfirming(true)} />
+        <ListRow icon="remove-circle" title={account.integration === "gws" ? "Sign out" : account.integration === "gcp" ? "Delete account" : account.profile ? "Delete profile" : "Disconnect"} destructive disabled={busy} onPress={() => setConfirming(true)} />
       )}
     </ListSection>
   );

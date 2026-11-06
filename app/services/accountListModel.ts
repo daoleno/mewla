@@ -19,7 +19,7 @@ export function endpointHost(endpoint?: string): string {
 /** One collapsed row of the account list, the same for every service. */
 export function accountRow(account: PluginAccount, now = Date.now()): AccountRow {
   const name = cloudProfileName(account);
-  if (account.profile || account.integration === "aws" || account.integration === "gcp") {
+  if (account.profile || account.integration === "aws" || account.integration === "gcp" || account.integration === "gws") {
     return { name, identity: cloudProfileIdentity(account), status: cloudProfileStatus(account), expiry: cloudProfileExpiry(account, now) };
   }
   const custom = account.integration === "mcp" || account.integration === "openapi";

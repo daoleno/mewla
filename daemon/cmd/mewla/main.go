@@ -161,6 +161,8 @@ func run(args []string, stderr io.Writer) error {
 			return runCloudCommand("gcp", args[1:], stderr)
 		case "aws":
 			return runCloudCommand("aws", args[1:], stderr)
+		case "gws":
+			return runCloudCommand("gws", args[1:], stderr)
 		case "connections":
 			return runConnectionsCommand(args[1:], stderr)
 		case "watch":
@@ -2700,6 +2702,7 @@ Agents and tools
   providers    Set the image model behind Codex image_gen
   aws          Run AWS CLI commands through the connected profile
   gcloud       Run Google Cloud CLI commands through the connected configuration
+  gws          Run Google Workspace CLI commands (Gmail, Calendar, Drive) through the connected account
   connections  Plugins shared by Brain and Workers
   calendar     List, create, update, cancel or run scheduled Brain work
   watch        Inspect what Watch collects about your projects

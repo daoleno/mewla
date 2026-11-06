@@ -92,6 +92,8 @@ export type ConnectionRequest = {
 };
 export type ConnectFlow = {
   code_required?: boolean;
+  /** The CLI needs a one-time client from the person, pasted as the code (Google Workspace). */
+  setup_required?: boolean;
   install_required?: boolean;
   install_manual?: boolean;
   install_failed?: boolean;

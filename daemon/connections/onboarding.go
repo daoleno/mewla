@@ -30,7 +30,9 @@ const NativeCallback = "mewla://plugins"
 const NativeReturnRelay = pluginreturn.Origin + pluginreturn.Path
 
 type ConnectFlow struct {
-	CodeRequired     bool      `json:"code_required,omitempty"`
+	CodeRequired bool `json:"code_required,omitempty"`
+	// SetupRequired: the CLI needs a one-time client from the person, pasted as the code.
+	SetupRequired    bool      `json:"setup_required,omitempty"`
 	InstallManual    bool      `json:"install_manual,omitempty"`
 	InstallFailed    bool      `json:"install_failed,omitempty"`
 	InstallURL       string    `json:"install_url,omitempty"`
@@ -56,6 +58,7 @@ type connectFlow struct {
 	ConnectFlow
 	cli         *cloudLogin
 	profile     string
+	projectID   string
 	state       string
 	secret      string
 	deviceCode  string

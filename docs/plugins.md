@@ -54,6 +54,7 @@ Mewla's own app registration with the provider:
 | Tailscale | One tap: Mewla opens the Tailscale admin console in your signed-in Chrome on the server's computer and creates an OAuth client named Mewla there, then keeps its ID and secret in the server's vault. If Chrome isn't ready or isn't signed in to Tailscale, Extensions opens the console's Trust credentials page and you paste the client secret | Same flow; the paste field is on the Extensions page |
 | AWS | Local AWS CLI profiles. Sign in remotely and paste the code; Mewla maintains the official CLI automatically | Phone and web manage the same profiles on the current server |
 | Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; automatic Linux and macOS SDK updates |
+| Google Workspace | Gmail, Calendar and Drive through Google's own `gws` CLI. Connect asks once for a Google client (below), then signs in with Google; paste the address the browser ends on | One account, shared with the CLI; Mewla installs a checksum-pinned `gws` in one tap |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
 | GitHub | Device code, or import from `gh` | Code page opens in a new tab; Extensions updates when you're done |
 | Slack | Official Slack sign-in, in any Slack workspace. Your workspace may ask an admin to approve Mewla first | Slack accepts only Mewla's page at `connect.mewla.ai` as its return address. On this computer (`http://127.0.0.1`) that page sends the browser straight back to Extensions. From any other web address it shows an address instead: copy it, paste it into the sign-in card in Mewla and choose **Continue** |
@@ -422,3 +423,40 @@ changes appear on refresh (four-second list cache, one-minute credential check).
 Because the credentials are shared, Mewla's authorization checks apply to
 `mewla gcloud` and connection tools, not a worker running bare gcloud as the same
 OS user. Disabling agent use keeps the account in gcloud; Delete signs it out.
+
+## Google Workspace
+
+Gmail, Calendar and Drive through Google's official [`gws`](https://github.com/googleworkspace/cli).
+Mewla's own Calendar is separate. Google's own verification and fees do not apply:
+you sign in through an OAuth client in **your** Google Cloud project, so mail and
+tokens never pass through a Mewla server and Mewla stores no Google keys. `gws`
+keeps its account in its own config directory (`GOOGLE_WORKSPACE_CLI_CONFIG_DIR`
+when set), and Extensions shows that one account.
+
+Connect, first time:
+
+1. If `gws` is missing, **Install and sign in** installs the pinned official build.
+2. Mewla creates a Google Cloud project with the Gmail, Calendar and Drive APIs on,
+   in the one Google Cloud account you already connected. With none, or with
+   several, you create the project yourself and Connect says so.
+3. One action in the Google console: set up the consent screen as **External**,
+   choose **Publish app** (so sign-in does not expire after seven days), and
+   create a **Desktop app** client. Paste its client ID and secret into Mewla.
+   Google has no API for this step.
+4. Sign in with Google. If the browser is on another device it ends on a
+   `http://localhost:…` page that will not load: copy its address and paste it into
+   Mewla. Google may say the app is unverified; choose **Advanced**, then **Go to … (unsafe)**.
+   It is your own app.
+
+Connecting again, or after sign-in expires, skips steps 2 and 3. **Sign out** runs
+`gws auth logout`; the client stays.
+
+Agents use `mewla gws`, for example
+`mewla gws gmail users messages list --params '{"userId":"me","q":"is:unread"}'`,
+`mewla gws calendar events list --params '{"calendarId":"primary"}'` or
+`mewla gws drive files list`. `mewla gws schema gmail.users.messages.list` shows a
+method's parameters. List, get and free/busy calls and `+triage`, `+read` and
+`+agenda` run directly. Sending mail, creating or changing events, writing to Drive
+and everything else need enabled writes plus your task-specific authorization
+(`--mewla-authorize`). Local file arguments, push subscriptions and `gws auth` are
+unavailable.
