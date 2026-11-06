@@ -796,6 +796,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	// The same for the screen: a Worker that ends gives back its control and
 	// the apps it left on the agent display.
 	screenService.SetWorkerAlive(controlHandler.liveWorker)
+	screenService.SetWorkerTurnActive(w.WorkerTurnActive)
 	controlHandler.browsers = browserManager
 	srv.SetConnections(connectionManager)
 	controlHandler.connections = connectionManager

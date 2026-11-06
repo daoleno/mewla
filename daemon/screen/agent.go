@@ -226,6 +226,15 @@ func (s *Service) SetWorkerAlive(alive func(worker string) bool) {
 	s.alive = alive
 }
 
+// SetWorkerTurnActive tells the screen whether a Worker has a turn running. An
+// idle agent's display and apps stay held while it does, and for ten minutes
+// after it ends.
+func (s *Service) SetWorkerTurnActive(active func(worker string) bool) {
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	s.turnActive = active
+}
+
 // errWorkerGone is why an agent whose Worker ended loses the screen.
 var errWorkerGone = errors.New("the Worker ended")
 
@@ -526,7 +535,9 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	}
 	if hold := s.parkHolds[worker]; hold != nil {
 		// The apps this Worker left on the agent display are still its own.
-		hold.timer.Stop()
+		if hold.timer != nil {
+			hold.timer.Stop()
+		}
 		delete(s.parkHolds, worker)
 		if hold.display != nil {
 			// This session holds the display itself already.

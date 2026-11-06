@@ -173,7 +173,7 @@ func (s *Service) AgentDisplay() (hold func(key string) (image.Rectangle, error)
 // before they go back. An agent that is thinking between two steps comes back
 // well within it; one that is simply gone (closed, crashed) does not keep
 // the person's apps off their screen for long.
-const parkLeaseDefault = 10 * time.Minute // after the agent's last action
+const parkLeaseDefault = 10 * time.Minute // after the Worker's turn ends
 
 // parkHold is the apps an idle agent left on the agent display.
 type parkHold struct {
@@ -241,7 +241,9 @@ func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 		s.parkHolds = map[string]*parkHold{}
 	}
 	if old := s.parkHolds[worker]; old != nil {
-		old.timer.Stop()
+		if old.timer != nil {
+			old.timer.Stop()
+		}
 		if old.display != nil {
 			old.display()
 		}
@@ -251,24 +253,33 @@ func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 		// The hold on the display is handed over, not let go.
 		hold.display, agent.releaseDisplay = agent.releaseDisplay, nil
 	}
-	hold.timer = time.AfterFunc(remaining, func() { s.dropHold(worker) })
+	turnActive := s.turnActive
+	if turnActive == nil {
+		// Without a way to tell a turn is running, the time since the
+		// agent's last action decides.
+		hold.timer = time.AfterFunc(remaining, func() { s.dropHold(worker) })
+	}
 	s.parkHolds[worker] = hold
-	if alive := s.alive; alive != nil {
+	if alive := s.alive; alive != nil || turnActive != nil {
 		every := s.aliveEvery
 		if every == 0 {
 			every = 3 * time.Second
 		}
-		go s.watchHold(worker, hold, alive, every)
+		go s.watchHold(worker, hold, alive, turnActive, lease, every)
 	}
 	return true
 }
 
-// watchHold gives the apps back as soon as their Worker has ended (closed, or
-// its Work done); the lease is only the fallback.
-func (s *Service) watchHold(worker string, hold *parkHold, alive func(string) bool, every time.Duration) {
+// watchHold gives back what an idle agent left, when it should go: at once
+// when its Worker has ended (closed, or its Work done), and lease after its
+// turn ended. While the Worker's turn is running the hold stays, however
+// quiet the agent is (a build, a long wait); a new turn before the lease is
+// up starts the count again.
+func (s *Service) watchHold(worker string, hold *parkHold, alive, turnActive func(string) bool, lease, every time.Duration) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
 	missing := 0
+	var turnEnded time.Time
 	for range ticker.C {
 		s.agentMu.Lock()
 		current := s.parkHolds[worker] == hold
@@ -276,9 +287,23 @@ func (s *Service) watchHold(worker string, hold *parkHold, alive func(string) bo
 		if !current {
 			return
 		}
-		if alive(worker) {
-			missing = 0
-		} else if missing++; missing >= 2 {
+		if alive != nil {
+			if alive(worker) {
+				missing = 0
+			} else if missing++; missing >= 2 {
+				s.dropHold(worker)
+				return
+			}
+		}
+		if turnActive == nil {
+			continue
+		}
+		switch {
+		case turnActive(worker):
+			turnEnded = time.Time{}
+		case turnEnded.IsZero():
+			turnEnded = time.Now()
+		case time.Since(turnEnded) >= lease:
 			s.dropHold(worker)
 			return
 		}
@@ -294,7 +319,9 @@ func (s *Service) dropHold(worker string) {
 	if hold == nil {
 		return
 	}
-	hold.timer.Stop()
+	if hold.timer != nil {
+		hold.timer.Stop()
+	}
 	if hold.display != nil {
 		hold.display()
 	}

@@ -216,15 +216,16 @@ missing, and **Open Settings** opens the right page on the Mac.
 - **The display stays on while an agent works**, also on battery, since a
   sleeping display stops what the agent sees, and a Mac that asks for its
   password after the display sleeps locks itself then. It is held on from an
-  agent's first action until its Worker ends, and up to ten minutes after its
-  last action, so it doesn't dim and lock between two steps; **Stop**, taking
-  over, or the Worker ending let it go at once. Screen's details and
-  `mewla agent-use status` say "Display kept on for agents" while it is held.
-  Mewla never locks the Mac or changes its lock and password settings, and a
-  lock you make yourself is yours to keep. Once the Mac is locked, agents wait
-  until it is unlocked, and if the display goes off anyway the agent is told
-  and its next action wakes it. A MacBook with its lid closed and no external
-  display can't be woken.
+  agent's first action for as long as its Worker has a turn running, however
+  quiet it is (a long build or wait included), and for ten minutes after the
+  turn ends; a new turn in that time keeps it. **Stop**, taking over, or the
+  Worker being closed let it go at once, and an idle Worker left open does
+  not keep the Mac awake. Screen's details and `mewla agent-use status` say
+  "Display kept on for agents" while it is held. Mewla never locks the Mac or
+  changes its lock and password settings, and a lock you make yourself is
+  yours to keep. Once the Mac is locked, agents wait until it is unlocked, and
+  if the display goes off anyway the agent is told and its next action wakes
+  it. A MacBook with its lid closed and no external display can't be woken.
 - **You see it.** **Watch** shows the agent working, live, without taking
   over: your taps don't reach the screen, and **Take over** or **Stop** is one
   tap away. Work in an app behind others happens out of sight, so Watch may
@@ -239,7 +240,7 @@ missing, and **Open Settings** opens the right page on the Mac.
   acts on the screen itself; a second one waits its turn, and an agent that
   asks for an app another agent is working in is told which agent has it. Each
   agent's control ends a minute after its last action, but an app it moved to
-  the agent display stays there, still its own, for up to ten minutes more,
+  the agent display stays there, still its own, while its Worker's turn runs and for ten minutes after it ends,
   so its windows don't jump back onto your screen while it is thinking; they
   return at once when you stop the agent or take over, when its Worker is
   closed or its Work ends, or when its next action is `bring_forward`. Opening Screen lists every agent by name, each
