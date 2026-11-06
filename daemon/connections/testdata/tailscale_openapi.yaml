@@ -1,0 +1,56 @@
+openapi: 3.1.0
+info: {title: Tailscale API}
+servers: [{url: https://api.tailscale.com/api/v2}]
+paths:
+  /tailnet/{tailnet}/devices:
+    get:
+      operationId: listTailnetDevices
+      summary: List tailnet devices
+      description: "Lists the devices in a tailnet.\n\nOAuth Scope: `devices:core:read`"
+      tags: [devices]
+      parameters:
+        - $ref: '#/components/parameters/tailnet'
+        - {name: fields, in: query, schema: {type: string, enum: [default, all]}}
+  /device/{deviceId}:
+    get:
+      operationId: getDevice
+      summary: Get a device
+      parameters:
+        - {name: deviceId, in: path, required: true, schema: {type: string}}
+    delete:
+      operationId: deleteDevice
+      summary: Delete a device
+      description: "Deletes a device from its tailnet.\n\nOAuth Scope: `devices:core`"
+      tags: [devices]
+      parameters:
+        - {name: deviceId, in: path, required: true, schema: {type: string}}
+  /device/{deviceId}/name:
+    post:
+      operationId: setDeviceName
+      summary: Set device name
+      parameters:
+        - {name: deviceId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeviceName'}
+  /tailnet/{tailnet}/dns/nameservers:
+    get:
+      operationId: listDnsNameservers
+      summary: List DNS nameservers
+      parameters:
+        - $ref: '#/components/parameters/tailnet'
+components:
+  parameters:
+    tailnet:
+      name: tailnet
+      in: path
+      required: true
+      schema: {type: string}
+  schemas:
+    DeviceName:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, description: The new device name}

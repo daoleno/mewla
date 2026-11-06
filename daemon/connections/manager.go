@@ -51,6 +51,10 @@ type Manager struct {
 	toolsSeen    map[string]time.Time // when each MCP account's tool list was last read
 	cloud        *cloudRuntime
 	loopbackPort int // the port this daemon serves on; see SetLoopbackPort
+	// tailscaleBrowser creates Tailscale's OAuth client in the person's Chrome;
+	// tailscaleJobs counts the creations running, of which one is allowed.
+	tailscaleBrowser TailscaleBrowser
+	tailscaleJobs    int
 }
 
 // SetWebOrigins admits web UI origins for browser sign-in returns. Without it,

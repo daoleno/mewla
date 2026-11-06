@@ -314,11 +314,15 @@ export function ConnectStatusCard({
   if (flow?.flow.installing && flow.flow.status === "waiting") return <StatusCard busy title={`Installing ${serviceName} CLI…`}>
     <Button label="Cancel" variant="plain" block onPress={onCancel} />
   </StatusCard>;
-  if (flow?.flow.code_required && (phase === "waiting" || phase === "verifying")) return <StatusCard title={`Sign in to ${serviceName}`} detail={`Open ${serviceName}, sign in, then paste the code shown there.`}>
-    <CloudCodeEntry key={flow.flow.id} serviceName={serviceName} onSubmit={onSubmitAddress} />
-    <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block onPress={onOpen} />
-    <Button label="Cancel" variant="plain" block onPress={onCancel} />
-  </StatusCard>;
+  if (flow?.flow.code_required && (phase === "waiting" || phase === "verifying")) {
+    // Tailscale: an OAuth client is created in its admin console and its secret pasted.
+    const secret = flow.flow.integration === "tailscale";
+    return <StatusCard title={secret ? `Connect ${serviceName}` : `Sign in to ${serviceName}`} detail={secret ? flow.flow.message : `Open ${serviceName}, sign in, then paste the code shown there.`}>
+      <CloudCodeEntry key={flow.flow.id} serviceName={serviceName} noun={secret ? "client secret" : "code"} onSubmit={onSubmitAddress} />
+      <Button label={`Open ${serviceName} again`} icon="open-external" variant="plain" block onPress={onOpen} />
+      <Button label="Cancel" variant="plain" block onPress={onCancel} />
+    </StatusCard>;
+  }
   const code = flow?.flow.user_code;
   const identity = flow?.flow.status === "confirm" ? flow.flow.identity || `${serviceName} account` : null;
   if (identity !== null) {
@@ -355,7 +359,7 @@ export function ConnectStatusCard({
   if (phase === "waiting") {
     return (
       <StatusCard busy title={`Waiting for ${serviceName}`} detail={flow?.flow.message || error || undefined}>
-        <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} />
+        {flow?.flow.authorization_url ? <Button label={`Open ${serviceName} again`} icon="open-external" variant="tinted" block onPress={onOpen} /> : null}
         <Button label="Cancel" variant="plain" block onPress={onCancel} />
       </StatusCard>
     );

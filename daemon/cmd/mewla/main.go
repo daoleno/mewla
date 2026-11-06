@@ -715,6 +715,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
 	connectionManager.EnableLocalCloudCLI()
+	// Connecting Tailscale creates its OAuth client in the person's own Chrome,
+	// through the browser tools agents use.
+	connectionManager.SetTailscaleBrowser(connections.NewTailscaleBrowser(agentUse.BrowserReady, func() *exec.Cmd {
+		exe, _ := os.Executable()
+		return exec.Command(exe, "agent-use", "chrome-mcp", "--state-dir", authManager.StorageDir())
+	}))
 	defer connectionManager.Close()
 	if err := connectionManager.EnsureDefaults(); err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)

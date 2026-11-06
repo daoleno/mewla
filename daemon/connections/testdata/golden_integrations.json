@@ -550,6 +550,28 @@
         "error": "account name is required (up to 80 characters)",
         "requests": []
       }
+    },
+    "tailscale": {
+      "credential": {
+        "error": "That is not a Tailscale client secret. It starts with tskey-client-.",
+        "requests": []
+      },
+      "no_credential": {
+        "error": "Paste the client secret from Tailscale.",
+        "requests": []
+      },
+      "spec_on_other": {
+        "error": "That is not a Tailscale client secret. It starts with tskey-client-.",
+        "requests": []
+      },
+      "trusted": {
+        "error": "That is not a Tailscale client secret. It starts with tskey-client-.",
+        "requests": []
+      },
+      "unnamed": {
+        "error": "That is not a Tailscale client secret. It starts with tskey-client-.",
+        "requests": []
+      }
     }
   },
   "catalog": [
@@ -615,6 +637,13 @@
       "available": true,
       "setup_url": "https://docs.cloud.google.com/sdk/gcloud/reference/auth/login",
       "description": "Projects, compute, storage, databases and more"
+    },
+    {
+      "id": "tailscale",
+      "name": "Tailscale",
+      "available": true,
+      "setup_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+      "description": "Your tailnet: devices, auth keys, access policy and DNS"
     },
     {
       "id": "mcp",
@@ -817,6 +846,18 @@
       "no_id_app": "this service requires a publisher-owned client ID",
       "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
       "no_id_valid": "this service requires a publisher-owned client ID"
+    },
+    "tailscale": {
+      "id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_no_redirect": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "id_secret_valid": "OAuth is not supported for this plugin",
+      "id_valid": "OAuth is not supported for this plugin",
+      "mcp_resource": "OAuth is not supported for this plugin",
+      "nil": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_app": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_no_address": "provide an OAuth client and registered daemon /plugins/oauth/callback URL",
+      "no_id_valid": "OAuth is not supported for this plugin"
     }
   },
   "connect": {
@@ -3353,6 +3394,124 @@
         ],
         "requests": []
       }
+    },
+    "tailscale": {
+      "direct": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_custom": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_mobile": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_operator": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_operator_other": {
+        "error": "OAuth is not supported for this plugin",
+        "requests": []
+      },
+      "direct_trusted": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "direct_unnamed_long": {
+        "error": "maximum accounts reached or invalid account name",
+        "requests": []
+      },
+      "direct_writes": {
+        "error": "Sign-in is not set up for this service yet.",
+        "requests": []
+      },
+      "native": {
+        "flow": {
+          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "has_account": false,
+          "integration": "tailscale",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": []
+      },
+      "native_custom_endpoint": {
+        "flow": {
+          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "has_account": false,
+          "integration": "tailscale",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": []
+      },
+      "native_operator_secret": {
+        "flow": {
+          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "has_account": false,
+          "integration": "tailscale",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": []
+      },
+      "native_writes_publishers": {
+        "flow": {
+          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "has_account": false,
+          "integration": "tailscale",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": []
+      },
+      "web": {
+        "flow": {
+          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "has_account": false,
+          "integration": "tailscale",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": []
+      },
+      "web_bad_origin": {
+        "flow": {
+          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "has_account": false,
+          "integration": "tailscale",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": []
+      },
+      "web_writes_publishers": {
+        "flow": {
+          "authorization_url": "https://login.tailscale.com/admin/settings/trust-credentials",
+          "has_account": false,
+          "integration": "tailscale",
+          "status": "waiting",
+          "user_code": "",
+          "web_return": false
+        },
+        "pending": [],
+        "requests": []
+      }
     }
   },
   "defaults": {
@@ -3436,6 +3595,11 @@
       "account": "Slack",
       "account_name": "Slack",
       "service": "Slack"
+    },
+    "tailscale": {
+      "account": "Tailscale",
+      "account_name": "Tailscale",
+      "service": "Tailscale"
     }
   },
   "official": {
@@ -3846,6 +4010,11 @@
         "execute": "",
         "get_me": "",
         "notion-search": ""
+      },
+      "tailscale": {
+        "execute": "",
+        "get_me": "",
+        "notion-search": ""
       }
     }
   },
@@ -3861,7 +4030,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": "Slack sign-in is not set up yet."
+      "slack": "Slack sign-in is not set up yet.",
+      "tailscale": ""
     },
     "operator_github": {
       "aws": "",
@@ -3874,7 +4044,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": "Slack sign-in is not set up yet."
+      "slack": "Slack sign-in is not set up yet.",
+      "tailscale": ""
     },
     "operator_notion": {
       "aws": "",
@@ -3887,7 +4058,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": "Slack sign-in is not set up yet."
+      "slack": "Slack sign-in is not set up yet.",
+      "tailscale": ""
     },
     "operator_slack_app": {
       "aws": "",
@@ -3900,7 +4072,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": ""
+      "slack": "",
+      "tailscale": ""
     },
     "operator_slack_no_secret_callback": {
       "aws": "",
@@ -3913,7 +4086,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": "Slack sign-in is not set up yet."
+      "slack": "Slack sign-in is not set up yet.",
+      "tailscale": ""
     },
     "operator_slack_relay": {
       "aws": "",
@@ -3926,7 +4100,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": ""
+      "slack": "",
+      "tailscale": ""
     },
     "operator_slack_secret_app": {
       "aws": "",
@@ -3939,7 +4114,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": "Slack sign-in is not set up yet."
+      "slack": "Slack sign-in is not set up yet.",
+      "tailscale": ""
     },
     "operator_slack_secret_callback": {
       "aws": "",
@@ -3952,7 +4128,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": ""
+      "slack": "",
+      "tailscale": ""
     },
     "publisher": {
       "aws": "",
@@ -3965,7 +4142,8 @@
       "notion": "",
       "onlora": "",
       "openapi": "",
-      "slack": ""
+      "slack": "",
+      "tailscale": ""
     }
   },
   "slack_scopes": {
@@ -4698,6 +4876,11 @@
       "method:oauth": false
     },
     "slack": {
+      "method:": false,
+      "method:mcp_oauth": true,
+      "method:oauth": false
+    },
+    "tailscale": {
       "method:": false,
       "method:mcp_oauth": true,
       "method:oauth": false

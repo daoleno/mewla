@@ -65,6 +65,8 @@ type connectFlow struct {
 	allowWrites bool
 	// renewID is the account a "sign in again" started from.
 	renewID string
+	// jobCancel stops a background job the flow runs (Tailscale's browser).
+	jobCancel context.CancelFunc
 }
 
 func (m *Manager) isPending(id string) bool {
@@ -86,6 +88,9 @@ func (m *Manager) expireFlows() {
 		if time.Now().After(flow.Expires) {
 			if flow.cli != nil {
 				flow.cli.cancel()
+			}
+			if flow.jobCancel != nil {
+				flow.jobCancel()
 			}
 			delete(m.connectFlows, id)
 		}
@@ -128,6 +133,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("Too many connections in progress. Try again shortly.")
 		}
 		in := *q.Input
+		if in.Integration == "tailscale" {
+			return m.startTailscale(&in)
+		}
 		if in.Integration == "aws" || m.cloud != nil && m.cloud.providers[in.Integration] != nil {
 			return m.startCloud(ctx, &in)
 		}
@@ -169,6 +177,9 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 	}
 	if f.profile != "" {
 		return m.continueCloud(ctx, q, f)
+	}
+	if f.Integration == "tailscale" {
+		return m.continueTailscale(ctx, q, f)
 	}
 	if q.Action == "connect_cancel" {
 		if r := m.records[f.AccountID]; r != nil && r.Account.Status == "connected" && !m.isPending(r.Account.ID) {

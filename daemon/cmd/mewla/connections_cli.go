@@ -19,7 +19,7 @@ import (
 
 func runConnectionsCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
+		fmt.Fprintln(stderr, `Usage: mewla connections <list|add|connect|import-gh|oauth-configure|oauth-start|get|refresh|search|describe|invoke|resources|read-resource|updates|confirm-updates|dismiss-updates|enable|disable|disconnect|policy> [flags]
 Plugins are shared by Brain and Workers on this daemon.
 Search: --query text. Describe/invoke: --id account --tool name; describe without --tool lists every tool.
 Invoke: --args '{"query":{...}}' or --args-file path (up to 8 MiB). One bounded call, no implicit pagination, never retried.
@@ -28,6 +28,7 @@ MCP resources: resources --id account [--cursor c] lists documents and URI templ
 Updated tools: when a service adds or changes tools, unchanged tools keep working and the rest wait for the person.
 updates --id account asks the service now and shows them; confirm-updates|dismiss-updates --id account --tools a,b on explicit user consent.
 A call blocked by an update names the confirm-updates command that clears every update waiting on its account.
+Connect: connect --integration tailscale creates the OAuth client in the user's signed-in Chrome and stores it. If Chrome isn't ready it prints the page to open; then pass the client secret to add.
 Add: --integration github|notion|slack|linear|mcp|openapi --name account [--endpoint https://...] [--spec-file path].
 Hyperliquid (also in Extensions): reading needs no account setup; pass each read an address. To trade, add --integration hyperliquid --credential-stdin with an API wallet key; the key names its account and network, and tool results name the network.
 Cloud CLIs: Mewla maintains private official AWS/gcloud installations, with daily background updates and shared local profiles. Use mewla aws --version or mewla gcloud --version to see the selected version. Lists return cached rows immediately and refresh cloud status in the background.
@@ -35,6 +36,8 @@ AWS: mewla aws [--profile NAME] <aws args>. Vetted reads run directly; other com
 Google Cloud: mewla gcloud [--account EMAIL | --profile CONFIGURATION] [--mewla-authorize] <gcloud arguments>. Local signed-in gcloud accounts are managed in Extensions; empty configurations are hidden. Delete revokes the account and handles its active configuration. List, describe and get-style reads run directly in any command group, including IAM, billing and SQL metadata. Changes, SQL execution and secret/credential reads require enabled writes and task-specific user authorization; local credential export remains unavailable. Output is the CLI's own; JSON by default. Choose the project's --project from the user's task; never guess between ambiguous projects. No automatic retries.
 Cloudflare (connected in Extensions) covers the whole Cloudflare API: find the endpoint with its search tool, then call it with execute; docs searches Cloudflare's docs.
 Deleting Cloudflare resources, changing DNS, or creating or revoking tokens needs the user's authorization for that task.
+Tailscale (connected in Extensions) covers the whole Tailscale API for the tailnet its credential belongs to: find an operation with search, call reads with read, and changes with execute. Leave the tailnet out of paths. Add by hand: add --integration tailscale --credential-stdin with the OAuth client secret (tskey-client-...), or ID:SECRET.
+Removing or renaming devices, changing access policy or DNS, and creating or revoking auth keys need the user's authorization for that task.
 Operator-owned OAuth override (not end-user installation): oauth-configure --integration github|slack|notion|linear|mcp --oauth-config-file private.json; oauth-start --integration ... --name account opens a system-browser URL.
 Custom internal endpoints: --trust-networks 127.0.0.1/32 (explicit, per account).
 Credentials are read from a hidden terminal prompt; --credential-stdin supports a secure pipe.
@@ -79,7 +82,7 @@ Never send messages or make updates without task-specific user authorization, ev
 		return errors.New("unexpected positional arguments")
 	}
 	switch action {
-	case "list", "add", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy", "resources", "updates":
+	case "list", "add", "connect", "import-gh", "oauth-configure", "oauth-start", "get", "refresh", "search", "describe", "invoke", "enable", "disable", "disconnect", "policy", "resources", "updates":
 	case "read-resource", "confirm-updates", "dismiss-updates":
 		q.Action = strings.ReplaceAll(action, "-", "_")
 	default:
@@ -167,6 +170,12 @@ Never send messages or make updates without task-specific user authorization, ev
 		q.Action = "add"
 		q.Input = &in
 	}
+	if action == "connect" {
+		if in.Integration != "tailscale" {
+			return errors.New("connect supports --integration tailscale; other services connect from Extensions")
+		}
+		return connectFromCLI(cfg, &in)
+	}
 	timeout := 30 * time.Second
 	if action == "invoke" {
 		// A remote tool that waits for its work can take minutes; the daemon
@@ -215,4 +224,41 @@ func readBoundedFile(path string, limit int) ([]byte, error) {
 		return nil, errors.New("input file exceeds size limit")
 	}
 	return raw, nil
+}
+
+// connectFromCLI starts a browser connect and waits for it to settle. A flow
+// that falls back to pasting a secret ends the command with the page to open.
+func connectFromCLI(cfg cliConfig, in *connections.Input) error {
+	socketPath, err := control.DefaultSocketPath(cfg.stateDir)
+	if err != nil {
+		return err
+	}
+	call := func(q connections.Request) (control.Response, error) {
+		return control.CallWithTimeout(socketPath, control.Request{Type: "connections", ConnectionRequest: &q}, 30*time.Second)
+	}
+	response, err := call(connections.Request{Action: "connect_start", Input: in})
+	if err != nil {
+		return controlError(cfg.stateDir, err)
+	}
+	deadline := time.Now().Add(5 * time.Minute)
+	for response.OK && response.Connections != nil && response.Connections.Flow != nil {
+		flow := response.Connections.Flow
+		if flow.Status != "waiting" || flow.CodeRequired || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(2 * time.Second)
+		if response, err = call(connections.Request{Action: "connect_status", FlowID: flow.ID}); err != nil {
+			return controlError(cfg.stateDir, err)
+		}
+	}
+	if response.OK && response.Connections != nil && response.Connections.Flow != nil {
+		if flow := response.Connections.Flow; flow.Status == "waiting" {
+			if flow.CodeRequired {
+				fmt.Fprintf(os.Stderr, "%s\nOpen %s, then: mewla connections add --integration tailscale --credential-stdin\n", flow.Message, flow.AuthorizationURL)
+				_, _ = call(connections.Request{Action: "connect_cancel", FlowID: flow.ID})
+			}
+			return errors.New("not connected")
+		}
+	}
+	return writeControlResponse(os.Stdout, response, true)
 }
