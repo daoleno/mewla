@@ -29,7 +29,7 @@ const (
 	tailscaleTokenPath = "/api/v2/oauth/token"
 	// TailscaleCredentialsURL is the admin console page where an OAuth client is
 	// created, for a person who creates it by hand.
-	TailscaleCredentialsURL = "https://login.tailscale.com/admin/settings/trust-credentials"
+	TailscaleCredentialsURL = "https://console.tailscale.com/admin/settings/trust-credentials"
 	// tailscaleClientName is how the client Mewla creates is named in the
 	// admin console.
 	tailscaleClientName = "Mewla"
