@@ -13,12 +13,14 @@ async (page) => {
   const seen = async () => (await page.locator('button, [role=button], [role=radio], [role=tab], label, th, [role=row]').allInnerTexts().catch(() => []))
     .map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 60);
   const visible = (loc, timeout = 4000) => loc.first().waitFor({ state: 'visible', timeout }).then(() => true, () => false);
-  const stop = async (state, step) => out({ state, step, seen: await seen() });
+  // Where the tab is, without its query: for telling a login page from a changed console.
+  const where = () => { try { const u = new URL(page.url()); return u.origin + u.pathname; } catch (e) { return ''; } };
+  const stop = async (state, step) => out({ state, step, page: where(), seen: await seen() });
 
   await page.goto(CONFIG.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
-  if (!/^https:\/\/login\.tailscale\.com\/admin\//.test(page.url())) return out({ state: 'signed_out' });
-  if (await visible(page.getByText(/captcha|verification code|two-factor|security key|verify it.s you/i), 1500)) return out({ state: 'needs_you' });
+  if (!/^https:\/\/login\.tailscale\.com\/admin\//.test(page.url())) return out({ state: 'signed_out', page: where(), seen: await seen() });
+  if (await visible(page.getByText(/captcha|verification code|two-factor|security key|verify it.s you/i), 1500)) return out({ state: 'needs_you', page: where() });
 
   // Open the new-credential dialog and choose OAuth.
   const add = page.getByRole('button', { name: /credential/i });
