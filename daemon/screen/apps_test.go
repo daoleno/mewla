@@ -1162,3 +1162,67 @@ func TestOneMissedLookDoesNotEndTheWorker(t *testing.T) {
 		t.Fatal("one missed look ended the agent")
 	}
 }
+
+// The display stays on for an agent through its quiet spell: from its first
+// action until its Worker ends, and ten minutes after its last action at
+// most; Stop, a person taking over and the Worker ending let go at once.
+func TestTheDisplayStaysOnForAQuietAgentUntilItsWorkerEnds(t *testing.T) {
+	var mu sync.Mutex
+	ended := false
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.aliveEvery = 20 * time.Millisecond
+	s.parkLease = time.Hour
+	s.SetWorkerAlive(func(string) bool { mu.Lock(); defer mu.Unlock(); return !ended })
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	waitHeld(t, backend, true)
+	if !s.DisplayKeptForAgents() {
+		t.Fatal("not reported while the agent works")
+	}
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	time.Sleep(200 * time.Millisecond)
+	if !displayHeld(backend) || !s.DisplayKeptForAgents() {
+		t.Fatal("the display was let go while the agent was only quiet")
+	}
+	// Its next action takes the hold over: still one hold, and still on.
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	waitFor(t, func() bool { return s.DisplayKeptForAgents() })
+	mu.Lock()
+	ended = true
+	mu.Unlock()
+	waitHeld(t, backend, false)
+	if s.DisplayKeptForAgents() {
+		t.Fatal("still reported after the Worker ended")
+	}
+}
+
+func TestTheDisplayIsLetGoAtOnceWhenTheAgentIsStopped(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.parkLease = time.Hour
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	if !displayHeld(backend) {
+		t.Fatal("not held through the quiet spell")
+	}
+	s.StopAgentFor("%7")
+	waitHeld(t, backend, false)
+}
+
+func TestTheDisplayIsLetGoWhenAPersonTakesOver(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.parkLease = time.Hour
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	s.TakeControl(func(error) {})
+	waitHeld(t, backend, false)
+}
+
+func TestTheDisplayHoldEndsTenMinutesAfterTheLastActionAtMost(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.parkLease = 400 * time.Millisecond
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	waitHeld(t, backend, false)
+}

@@ -59,6 +59,7 @@ export function powerSummary(power: ScreenPower | undefined, keepAwake: boolean)
   if (power.source === "ac") parts.push(power.percent ? `Charger · ${power.percent}%` : "Charger");
   else if (power.source === "battery") parts.push(`Battery · ${power.percent ?? "?"}%`);
   parts.push(power.keeping_awake ? "Staying awake" : keepAwake ? "Starting keep-awake" : "May sleep");
+  if (power.display_kept_for_agents) parts.push("Display kept on for agents");
   return parts.join(" · ");
 }
 

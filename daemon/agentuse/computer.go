@@ -30,6 +30,9 @@ type ComputerStatus struct {
 	Active *ActiveAgent `json:"active,omitempty"`
 	// Agents are all the agents using the screen, longest first.
 	Agents []ActiveAgent `json:"agents,omitempty"`
+	// DisplayKept says the display is held on for agents, so the Mac does not
+	// dim and lock between their steps.
+	DisplayKept bool `json:"display_kept,omitempty"`
 }
 
 type ActiveAgent struct {

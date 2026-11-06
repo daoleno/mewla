@@ -16,6 +16,8 @@ type Power struct {
 	// display sleeps regardless of any keep-awake hold.
 	LidClosed    *bool `json:"lid_closed,omitempty"`
 	KeepingAwake bool  `json:"keeping_awake"`
+	// DisplayKeptForAgents is set while the display is held on for agents.
+	DisplayKeptForAgents bool `json:"display_kept_for_agents,omitempty"`
 }
 
 // keeper owns one keep-awake child process.

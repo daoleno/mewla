@@ -209,6 +209,9 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 	fmt.Fprintln(w, line)
 	if computer := status.Computer; computer != nil {
 		fmt.Fprintln(w, "This computer's screen: "+computer.Summary)
+		if computer.DisplayKept {
+			fmt.Fprintln(w, "Display kept on for agents.")
+		}
 		if computer.Active != nil {
 			name := computer.Active.Name
 			if name == "" {
