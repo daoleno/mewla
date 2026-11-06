@@ -202,6 +202,72 @@ if (!process.env.MEWLA_READING_HOOK_CHILD) {
       h.close();
     });
 
+    // Scrolling into history mounts older rows, so almost every scroll event
+    // also changes the content height. Those events are still the reader's
+    // position: the bookmark must follow them, or the next message "restores"
+    // the reader to where they were one or more scroll steps earlier.
+    test("web wheel into history: the bookmark is where the reader stopped, not the last event without a height change", async () => {
+      const h = harness("hook-web-wheel-mounting");
+      h.layout();
+      h.calls.length = 0;
+      act(() => {
+        h.hook.readingPosition.onUserScrollIntent();
+        h.hook.handleScroll(scroll(150, 2000));
+        h.hook.handleScroll(scroll(300, 2100));
+        h.hook.handleScroll(scroll(450, 2200));
+      });
+      expect(h.hook.readingPosition.current().anchor).toMatchObject({
+        id: "row-9",
+        intraOffset: 50,
+      });
+      // Let the wheel intent settle, then a new message and streaming growth
+      // arrive below the reader.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      act(() => flush());
+      expect(h.calls).toHaveLength(0);
+      h.update(21);
+      h.layout(200);
+      expect(h.calls.at(-1)?.offset).toBe(650);
+      expect(h.hook.readingPosition.current().mode).toBe("detached");
+      h.close();
+    });
+
+    test("native fling into history: momentum end at a new content height still moves the bookmark", () => {
+      const h = harness("hook-native-fling-mounting");
+      h.layout();
+      h.calls.length = 0;
+      act(() => {
+        h.hook.handleScrollBeginDrag();
+        h.hook.handleScroll(scroll(100, 2000));
+        h.hook.handleScrollEndDrag(scroll(150, 2000));
+        h.hook.handleMomentumScrollBegin();
+        h.hook.handleScroll(scroll(300, 2100));
+        h.hook.handleScroll(scroll(400, 2200));
+        h.hook.handleMomentumScrollEnd(scroll(450, 2300));
+      });
+      expect(h.hook.readingPosition.current().anchor).toMatchObject({
+        id: "row-9",
+        intraOffset: 50,
+      });
+      h.update(21);
+      h.layout(200);
+      expect(h.calls.at(-1)?.offset).toBe(650);
+      h.close();
+    });
+
+    test("a content-height change during the reader's gesture still cannot flip follow intent", () => {
+      const h = harness("hook-geometry-intent");
+      h.layout();
+      act(() => {
+        h.hook.handleScrollBeginDrag();
+        h.hook.handleScroll(scroll(0, 2000));
+        h.hook.handleScroll(scroll(300, 2100));
+      });
+      expect(h.hook.readingPosition.current().mode).toBe("attached");
+      expect(h.hook.readingPosition.current().anchor).toBeUndefined();
+      h.close();
+    });
+
     test("same-conversation remount restores measured message and intra-offset; another server does not inherit it", () => {
       const h = harness("server-a:conversation-restore");
       h.layout();

@@ -17,6 +17,17 @@ undoing a native adjustment. Old measurement callbacks are fenced on unmount
 and conversation replacement. Geometry work is coalesced to an animation frame,
 not a timer-based retry or repeated scroll loop.
 
+Follow intent and the reading anchor answer different questions. A scroll event
+whose content height or viewport changed (virtualization mounting rows, a reply
+streaming in) cannot attach or detach follow intent, but when the reader is
+dragging, flinging or using the web wheel it still refreshes the anchor: moving
+into history mounts older rows on nearly every event, and a bookmark gated on
+unchanged geometry lagged the reader by whole scroll steps, so the next message
+snapped them back. Mutations below a resting reader are held by the platform
+(`maintainVisibleContentPosition` on native, CSS scroll anchoring on web); the
+at-rest reconcile then finds nothing to correct. Browsers without scroll
+anchoring (Safari before 27) only get that reconcile, one frame late.
+
 Navigation retains bounded, process-local metadata for up to 32 server and
 conversation identities: intent, message ID, intra-item offset and nearby IDs.
 No transcript copy is stored. If an anchor disappears, a surviving neighbor is
