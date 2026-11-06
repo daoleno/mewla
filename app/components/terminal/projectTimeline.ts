@@ -1,5 +1,6 @@
 import {
   conversationChoicesEqual,
+  conversationSubagentsEqual,
   type CodexConversationEvent,
 } from "../../services/codexConversation";
 import { compareConversationEvents } from "./interfaceConversationReconciliation";
@@ -557,7 +558,7 @@ function isBoundedStreamingFieldDelta(
     sameFileChanges(previous.file_changes, next.file_changes) &&
     samePlan(previous.plan, next.plan) &&
     conversationChoicesEqual(previous.choice, next.choice) &&
-    true
+    conversationSubagentsEqual(previous.subagent, next.subagent)
   );
 }
 

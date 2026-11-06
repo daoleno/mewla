@@ -10,6 +10,7 @@ import {
 import type { ConnectionState, WorkerApproval, WorkerPrompt } from "../../store/workers";
 import {
   conversationChoicesEqual,
+  conversationSubagentsEqual,
   type CodexConversation,
 } from "../../services/codexConversation";
 import type { UploadedAttachment } from "../../services/uploads";
@@ -885,7 +886,8 @@ function codexEventsEqual(
       stringArraysEqual(left.files, right.files) &&
       fileChangesEqual(left.file_changes, right.file_changes) &&
       planStepsEqual(left.plan, right.plan) &&
-      conversationChoicesEqual(left.choice, right.choice))
+      conversationChoicesEqual(left.choice, right.choice) &&
+      conversationSubagentsEqual(left.subagent, right.subagent))
   );
 }
 

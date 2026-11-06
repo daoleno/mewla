@@ -133,6 +133,20 @@ export interface CodexConversationEvent {
   task_duration_ms?: number;
   /** Set only for source "computer_message" status events. */
   computer?: ComputerConversationMessage;
+  /** The work a delegating call's subagent did, set on the call that started it. */
+  subagent?: ConversationSubagent;
+}
+
+/** A subagent's own transcript: the calls it made, not its words. */
+export interface ConversationSubagent {
+  agent_id: string;
+  type?: string;
+  description?: string;
+  /** False while it is still working. */
+  finished: boolean;
+  started_at?: string;
+  ended_at?: string;
+  steps: CodexConversationEvent[];
 }
 
 /** A message between this computer's Brain and another of the user's computers. */
@@ -386,6 +400,7 @@ function normalizeCodexConversationEvent(
     task_tool_uses: finiteCount(event.task_tool_uses),
     task_duration_ms: finiteCount(event.task_duration_ms),
     computer: normalizeComputerMessage(event.computer),
+    subagent: normalizeSubagent(event.subagent),
   };
   if (
     (normalized.kind === "user_message" ||
@@ -396,6 +411,36 @@ function normalizeCodexConversationEvent(
     return null;
   }
   return normalized;
+}
+
+function normalizeSubagent(value: unknown): ConversationSubagent | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  const steps = Array.isArray(raw.steps)
+    ? (raw.steps
+        .map(normalizeCodexConversationEvent)
+        .filter(Boolean) as CodexConversationEvent[])
+    : [];
+  return {
+    agent_id: typeof raw.agent_id === "string" ? raw.agent_id : "",
+    type: typeof raw.type === "string" ? raw.type : undefined,
+    description:
+      typeof raw.description === "string" ? raw.description : undefined,
+    finished: raw.finished === true,
+    started_at:
+      typeof raw.started_at === "string" ? raw.started_at : undefined,
+    ended_at: typeof raw.ended_at === "string" ? raw.ended_at : undefined,
+    steps,
+  };
+}
+
+export function conversationSubagentsEqual(
+  left: ConversationSubagent | undefined,
+  right: ConversationSubagent | undefined,
+) {
+  return left === right || JSON.stringify(left) === JSON.stringify(right);
 }
 
 function finiteCount(value: unknown): number | undefined {

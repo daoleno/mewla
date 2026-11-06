@@ -199,7 +199,19 @@ func (r *ProviderConversationReader) loadFileConversation(
 	path string,
 	parse func(string) (CodexConversation, error),
 ) (CodexConversation, error) {
-	info, err := os.Stat(path)
+	return r.loadFileConversationStat(provider, path, parse, os.Stat)
+}
+
+// loadFileConversationStat is loadFileConversation for a source that is more
+// than one file: stat describes everything the parse reads, so a change to any
+// part of it ends the reuse of a cached parse.
+func (r *ProviderConversationReader) loadFileConversationStat(
+	provider string,
+	path string,
+	parse func(string) (CodexConversation, error),
+	stat func(string) (os.FileInfo, error),
+) (CodexConversation, error) {
+	info, err := stat(path)
 	if err != nil {
 		r.resetSource()
 		return CodexConversation{}, err
@@ -233,7 +245,7 @@ func (r *ProviderConversationReader) loadFileConversation(
 			// once in the background; the next poll reads the newer one.
 			if shared.loading == nil {
 				shared.loading = make(chan struct{})
-				go shared.parse(provider, path, parse, info)
+				go shared.parse(provider, path, parse, stat, info)
 			}
 			r.takeShared(shared)
 			shared.mu.Unlock()
@@ -242,14 +254,14 @@ func (r *ProviderConversationReader) loadFileConversation(
 		if wait := shared.loading; wait != nil {
 			shared.mu.Unlock()
 			<-wait
-			if info, err = os.Stat(path); err != nil {
+			if info, err = stat(path); err != nil {
 				return CodexConversation{}, err
 			}
 			continue
 		}
 		shared.loading = make(chan struct{})
 		shared.mu.Unlock()
-		conversation, err := shared.parse(provider, path, parse, info)
+		conversation, err := shared.parse(provider, path, parse, stat, info)
 		if err == nil {
 			shared.mu.Lock()
 			if shared.valid && shared.matches(info) {
@@ -309,10 +321,11 @@ func (e *sharedFileConversation) mayServeStale(info os.FileInfo) bool {
 func (e *sharedFileConversation) parse(
 	provider, path string,
 	parse func(string) (CodexConversation, error),
+	stat func(string) (os.FileInfo, error),
 	before os.FileInfo,
 ) (CodexConversation, error) {
 	conversation, err := parseRecovering(parse, path)
-	after, statErr := os.Stat(path)
+	after, statErr := stat(path)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	defer func() {
@@ -399,7 +412,16 @@ func sameProviderSourceFile(left, right os.FileInfo) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return os.SameFile(left, right)
+	return os.SameFile(underlyingSourceFile(left), underlyingSourceFile(right))
+}
+
+// underlyingSourceFile is the file a source is identified by, when its info
+// also describes files that belong to it.
+func underlyingSourceFile(info os.FileInfo) os.FileInfo {
+	if composite, ok := info.(interface{ underlying() os.FileInfo }); ok {
+		return composite.underlying()
+	}
+	return info
 }
 
 func firstNonEmpty(values ...string) string {

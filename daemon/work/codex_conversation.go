@@ -292,12 +292,33 @@ type CodexConversationEvent struct {
 	// Computer is only set for Source=computer_message status items: a task
 	// handed to, or an answer from, another of the user's computers.
 	Computer *ComputerMessage `json:"computer,omitempty"`
+	// Subagent is set on a delegating tool call (Claude's Task or Agent) whose
+	// own transcript the provider keeps beside the conversation: the steps the
+	// subagent took, so the apps never infer them from the call's text.
+	Subagent *CodexConversationSubagent `json:"subagent,omitempty"`
 	// AdmissionSHA256 is the exact provider-native user input digest when the
 	// source preserves those bytes separately from its display projection.
 	AdmissionSHA256 string `json:"-"`
 	// AdmissionUnwrappedSHA256 preserves an exact alternative only when a provider
 	// adds a recognized whole-message transport envelope. Never a display digest.
 	AdmissionUnwrappedSHA256 string `json:"-"`
+}
+
+// CodexConversationSubagent is the work a delegated subagent did, read from the
+// transcript the provider writes for it.
+type CodexConversationSubagent struct {
+	AgentID     string `json:"agent_id"`
+	Type        string `json:"type,omitempty"`
+	Description string `json:"description,omitempty"`
+	// Finished is true once the subagent has stopped: the provider marked it,
+	// or its transcript ends on an answer with no call still running.
+	Finished bool `json:"finished"`
+	// StartedAt and EndedAt are the first and last record of its transcript.
+	StartedAt string `json:"started_at,omitempty"`
+	EndedAt   string `json:"ended_at,omitempty"`
+	// Steps are its tool calls, oldest first. A subagent it started in turn
+	// carries its own Subagent.
+	Steps []CodexConversationEvent `json:"steps"`
 }
 
 // CodexConversationFileChange is the provider-neutral, display-only summary

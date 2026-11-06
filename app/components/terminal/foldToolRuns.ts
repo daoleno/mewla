@@ -161,13 +161,19 @@ export function createToolRunFolder(): ToolRunFolder {
     string,
     { steps: ActivityTimelineItem[]; group: ActivityTimelineItem }
   >();
+  // A subagent's own steps fold the same way. Each subagent keeps its folder so
+  // its groups survive a new row object for the same subagent, and its row
+  // while the source row is the same object.
+  let subagents = new Map<string, SubagentEntry>();
   return (items) => {
     const next = new Map<
       string,
       { steps: ActivityTimelineItem[]; group: ActivityTimelineItem }
     >();
+    const nextSubagents = new Map<string, SubagentEntry>();
     const out: TimelineItem[] = [];
     let run: ActivityTimelineItem[] = [];
+    let changed = false;
     const flush = () => {
       if (run.length < 2) {
         out.push(...run);
@@ -180,6 +186,7 @@ export function createToolRunFolder(): ToolRunFolder {
             : { steps: run, group: foldedToolRun(run) };
         next.set(id, entry);
         out.push(entry.group);
+        changed = true;
       }
       run = [];
     };
@@ -189,11 +196,45 @@ export function createToolRunFolder(): ToolRunFolder {
         continue;
       }
       flush();
+      if (
+        item.type === "activity" &&
+        item.semanticKind === "delegate_agent" &&
+        item.steps?.length
+      ) {
+        const previous = subagents.get(item.id);
+        const entry: SubagentEntry =
+          previous && previous.source === item
+            ? previous
+            : foldSubagent(item, previous?.fold ?? createToolRunFolder());
+        nextSubagents.set(item.id, entry);
+        out.push(entry.row);
+        if (entry.row !== item) changed = true;
+        continue;
+      }
       out.push(item);
     }
     flush();
     built = next;
-    return next.size === 0 ? items : out;
+    subagents = nextSubagents;
+    return changed ? out : items;
+  };
+}
+
+type SubagentEntry = {
+  source: ActivityTimelineItem;
+  row: ActivityTimelineItem;
+  fold: ToolRunFolder;
+};
+
+function foldSubagent(
+  source: ActivityTimelineItem,
+  fold: ToolRunFolder,
+): SubagentEntry {
+  const folded = fold(source.steps ?? []) as ActivityTimelineItem[];
+  return {
+    source,
+    fold,
+    row: folded === source.steps ? source : { ...source, steps: folded },
   };
 }
 

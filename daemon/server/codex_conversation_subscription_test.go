@@ -1008,3 +1008,30 @@ func TestConversationEventFingerprintCoversAttachments(t *testing.T) {
 		t.Fatalf("attachment changes do not change the fingerprint: %s %s %s", a, b, c)
 	}
 }
+
+func TestConversationEventFingerprintCoversSubagentWork(t *testing.T) {
+	base := work.CodexConversationEvent{ID: "t1", Kind: "tool", ToolName: "Task", CallID: "toolu_task"}
+	withSub := base
+	withSub.Subagent = &work.CodexConversationSubagent{
+		AgentID: "a1",
+		Steps:   []work.CodexConversationEvent{{ID: "s1", Kind: "tool", ToolName: "Read", Status: "running"}},
+	}
+	settled := base
+	settled.Subagent = &work.CodexConversationSubagent{
+		AgentID: "a1",
+		Steps:   []work.CodexConversationEvent{{ID: "s1", Kind: "tool", ToolName: "Read", Status: "completed"}},
+	}
+	finished := settled
+	finished.Subagent = &work.CodexConversationSubagent{
+		AgentID: "a1", Finished: true, EndedAt: "2026-10-17T10:02:00Z",
+		Steps: settled.Subagent.Steps,
+	}
+	seen := map[string]bool{}
+	for _, event := range []work.CodexConversationEvent{base, withSub, settled, finished} {
+		fingerprint := codexConversationEventFingerprint(event)
+		if seen[fingerprint] {
+			t.Fatalf("a subagent change leaves the fingerprint alone, so no delta is sent: %+v", event.Subagent)
+		}
+		seen[fingerprint] = true
+	}
+}
