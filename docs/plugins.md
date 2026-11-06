@@ -1,7 +1,7 @@
 # Plugins
 
 Plugins connect Brain and its Workers to services you use: Linear, Notion,
-GitHub, Slack, Cloudflare, AWS, Google Cloud, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
+GitHub, Slack, Cloudflare, Tailscale, AWS, Google Cloud, Onlora for generating and finding assets, Hyperliquid for markets and trading, and custom MCP or OpenAPI
 services. Plugins are a **preview**.
 
 Connected accounts belong to the current server. Switching servers in the app
@@ -51,6 +51,7 @@ Mewla's own app registration with the provider:
 | Notion | Official browser sign-in | Returns to the web UI's Extensions page |
 | Onlora | Onlora's sign-in, by email link; a new Onlora account needs an invite code | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
 | Cloudflare | Cloudflare's official MCP server (`mcp.cloudflare.com`). Its page asks which permissions to grant, **Read only** unless you choose more. Cloudflare accepts only web addresses, so from the phone app it returns through Mewla's page at `connect.mewla.ai`, which hands the result straight back to the app | Works when the web UI is on an `https://` address or on this computer (`http://127.0.0.1`), and returns to its Extensions page |
+| Tailscale | One tap: Mewla opens the Tailscale admin console in your signed-in Chrome on the server's computer and creates an OAuth client named Mewla there, then keeps its ID and secret in the server's vault. If Chrome isn't ready or isn't signed in to Tailscale, Extensions opens the console's Trust credentials page and you paste the client secret | Same flow; the paste field is on the Extensions page |
 | AWS | Local AWS CLI profiles. Sign in remotely and paste the code; Mewla maintains the official CLI automatically | Phone and web manage the same profiles on the current server |
 | Google Cloud | Remote browser sign-in through gcloud; paste the authorization code | Local accounts and configurations, shared with the CLI; automatic Linux and macOS SDK updates |
 | Remote MCP | The server's own sign-in, or a token | Returns to the web UI's Extensions page |
@@ -138,6 +139,34 @@ Cloudflare's MCP server covers the whole Cloudflare API with a few tools:
 under **Make changes when asked**, so turn that on before Brain reads anything
 from your account, and it can only do what you granted on Cloudflare's page; to grant more, disconnect and connect again, choosing more
 permissions there.
+
+## Tailscale
+
+Tailscale has no sign-in that works across tailnets, so Mewla connects with an
+OAuth client, which belongs to your tailnet, doesn't expire, and gives out
+one-hour access tokens. **Connect** creates it for you in Chrome; nothing is
+typed or copied, and there is no tailnet to choose. Mewla never types your
+password and stops if the console asks for a captcha or a second factor.
+Without a ready Chrome, create the client yourself on the Trust credentials
+page, named Mewla, and paste its client secret
+(`tskey-client-…`, which carries the ID). The CLI does the same:
+`mewla connections connect --integration tailscale`, or
+`mewla connections add --integration tailscale --credential-stdin`.
+
+The client is given **all:read** (every read, including APIs Tailscale adds
+later), **devices:core** (delete, rename, expire, authorize and tag devices),
+**auth_keys** (create and revoke auth keys), **policy_file** (read and edit the
+access policy) and **dns**. Tailscale requires a tag on the first two, so the
+client carries one tag from your tailnet. Users, webhooks, log streaming, trust
+credentials and **all** are not requested. To change what Mewla can do, revoke
+the client in Trust credentials and connect again.
+
+Tailscale's whole API is open through three tools driven by its official
+OpenAPI document (kept in the server's state and refreshed weekly): **search**
+finds an operation, **read** calls a GET operation, and **execute** calls any
+operation. Read and search are on once connected. Execute sits under **Make
+changes when asked**; deleting or renaming a device, changing policy or DNS,
+and creating or revoking auth keys also need your say-so for the task.
 
 ## AWS
 

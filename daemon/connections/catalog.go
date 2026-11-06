@@ -214,6 +214,7 @@ func registerDrivers() {
 		"mcp":         {discover: discoverMCPToken},
 		"aws":         {discover: discoverAWS, invoke: invokeAWSDriver},
 		"gcp":         {discover: discoverGCP, invoke: invokeGCP},
+		"tailscale":   {discover: discoverTailscale, invoke: invokeTailscale, add: addTailscale},
 	}
 }
 
@@ -367,6 +368,10 @@ func buildCatalog() []*entry {
 			Integration: Integration{ID: "gcp", Name: "Google Cloud", Available: true, SetupURL: "https://docs.cloud.google.com/sdk/gcloud/reference/auth/login", Description: "Projects, compute, storage, databases and more"},
 			Driver:      "gcp", Endpoint: "https://cloud.google.com", Tools: gcpTools,
 			AddRefusal: "Google Cloud uses CLI sign-in; connect it from Extensions",
+		},
+		{
+			Integration: Integration{ID: "tailscale", Name: "Tailscale", Available: true, SetupURL: TailscaleCredentialsURL, Description: "Your tailnet: devices, auth keys, access policy and DNS"},
+			Driver:      "tailscale", Endpoint: tailscaleOrigin, NeedsCredential: true, Tools: tailscaleTools,
 		},
 		{
 			Integration: Integration{ID: "mcp", Name: "Remote MCP", Available: true, SetupURL: "https://modelcontextprotocol.io", Description: "Discover tools from a remote MCP server"},
