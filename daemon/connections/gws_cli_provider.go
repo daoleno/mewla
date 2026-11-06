@@ -28,21 +28,55 @@ func (gwsCLI) environment() []string {
 	env := []string{}
 	for _, v := range os.Environ() {
 		key, _, _ := strings.Cut(v, "=")
-		// Keep the vendor's config directory and keyring choice, but never inherit
-		// a token, credentials file, client or project override in place of the
-		// signed-in account.
-		if strings.HasPrefix(key, "GOOGLE_WORKSPACE_") && key != "GOOGLE_WORKSPACE_CLI_CONFIG_DIR" && key != "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND" ||
-			key == "GOOGLE_APPLICATION_CREDENTIALS" || key == "GWS_SANITIZE_TEMPLATE" {
+		// Nothing inherited may replace the signed-in account's token, client,
+		// credentials or project.
+		if strings.HasPrefix(key, "GOOGLE_WORKSPACE_") || strings.HasPrefix(key, "GWS_") || key == "GOOGLE_APPLICATION_CREDENTIALS" {
 			continue
 		}
 		env = append(env, v)
 	}
-	// A computer without a desktop keyring keeps gws's key in its config directory.
-	if os.Getenv("GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND") == "" && runtime.GOOS == "linux" && os.Getenv("DBUS_SESSION_BUS_ADDRESS") == "" {
-		env = append(env, "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND=file")
+	// gws also loads a .env file from its working directory or any parent, and
+	// never overrides a variable that is already set, even to nothing. Setting
+	// each of these pins it against such a file.
+	for _, key := range []string{"GOOGLE_WORKSPACE_CLI_TOKEN", "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE", "GOOGLE_WORKSPACE_CLI_CLIENT_ID", "GOOGLE_WORKSPACE_CLI_CLIENT_SECRET", "GOOGLE_WORKSPACE_PROJECT_ID", "GOOGLE_WORKSPACE_CLI_SANITIZE_TEMPLATE", "GOOGLE_WORKSPACE_CLI_SANITIZE_MODE", "GOOGLE_WORKSPACE_CLI_LOG", "GOOGLE_WORKSPACE_CLI_LOG_FILE", "GOOGLE_APPLICATION_CREDENTIALS", "GWS_SANITIZE_TEMPLATE"} {
+		env = append(env, key+"=")
 	}
-	return env
+	return append(env, "GOOGLE_WORKSPACE_CLI_CONFIG_DIR="+gwsConfigDir(), "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND="+gwsKeyringBackend())
 }
+
+// gwsConfigDir is the directory gws itself would use (its own rule), unless the
+// person set GOOGLE_WORKSPACE_CLI_CONFIG_DIR. It is passed explicitly so a .env
+// file cannot move it.
+func gwsConfigDir() string {
+	if dir := os.Getenv("GOOGLE_WORKSPACE_CLI_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	home, _ := os.UserHomeDir()
+	primary := filepath.Join(home, ".config", "gws")
+	if _, err := os.Stat(primary); err == nil {
+		return primary
+	}
+	if dir, err := os.UserConfigDir(); err == nil {
+		if legacy := filepath.Join(dir, "gws"); legacy != primary {
+			if _, err := os.Stat(legacy); err == nil {
+				return legacy
+			}
+		}
+	}
+	return primary
+}
+
+// A computer without a desktop keyring keeps gws's key in its config directory.
+func gwsKeyringBackend() string {
+	switch v := strings.ToLower(os.Getenv("GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND")); {
+	case v == "file" || v == "keyring":
+		return v
+	case runtime.GOOS == "linux" && os.Getenv("DBUS_SESSION_BUS_ADDRESS") == "":
+		return "file"
+	}
+	return "keyring"
+}
+
 func (gwsCLI) validProfile(p string) bool { return p == gwsProfile }
 func (gwsCLI) defaultProfile() string     { return gwsProfile }
 
