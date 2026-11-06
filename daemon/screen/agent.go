@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -86,6 +87,9 @@ const AgentLongEdge = 1280
 
 const agentIdle = 60 * time.Second
 
+// errAgentIdle is why an agent that went quiet loses its control of the screen.
+var errAgentIdle = errors.New("the agent stopped using the screen")
+
 var (
 	agentSettle      = 400 * time.Millisecond
 	agentFirstFrame  = 5 * time.Second
@@ -111,6 +115,9 @@ func (s *Service) TakeControl(cancel context.CancelCauseFunc) *Control {
 		s.current.cancel(ErrScreenReplaced)
 	}
 	s.current = &Control{cancel: cancel}
+	// Apps idle agents left on the agent display come back too, off this
+	// lock (it is taken the other way round when an agent starts).
+	go s.releaseAllHolds()
 	return s.current
 }
 
@@ -323,6 +330,7 @@ func (s *Service) StopAgentFor(worker string) {
 	if agent != nil {
 		agent.cancel(errors.New("You stopped the agent from the app"))
 	}
+	s.dropHold(worker)
 	if hook != nil {
 		hook(worker)
 	}
@@ -490,6 +498,15 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	if s.agents == nil {
 		s.agents = map[string]*agentSession{}
 	}
+	if hold := s.parkHolds[worker]; hold != nil {
+		// The apps this Worker left on the agent display are still its own.
+		hold.timer.Stop()
+		delete(s.parkHolds, worker)
+		agent.parked = map[int]bool{}
+		for _, pid := range hold.pids {
+			agent.parked[pid] = true
+		}
+	}
 	s.agents[worker] = agent
 	go agent.capture()
 	go s.watchAgent(agent)
@@ -521,7 +538,7 @@ func (s *Service) watchAgent(agent *agentSession) {
 			if !idle {
 				continue
 			}
-			agent.cancel(errors.New("the agent stopped using the screen"))
+			agent.cancel(errAgentIdle)
 		}
 		break
 	}
@@ -533,8 +550,15 @@ func (s *Service) watchAgent(agent *agentSession) {
 	posted := agent.lastPost
 	agent.mu.Unlock()
 	agent.releaseTree()
-	// Apps moved to the agent display go back to where they were.
-	agent.unparkAll()
+	// Apps moved to the agent display go back to where they were when the
+	// agent is stopped or taken over. An agent that only went quiet is
+	// usually thinking, not done: its apps stay where they are for a while
+	// (see parkHold), so its windows don't jump back to the person's screen
+	// between two steps.
+	if !s.holdParked(agent, errors.Is(context.Cause(agent.ctx), errAgentIdle)) {
+		agent.unparkAll()
+		s.dropHold(agent.worker)
+	}
 	s.ReleaseControl(agent.control)
 	s.agentMu.Lock()
 	if posted.After(s.agentPosted) {
@@ -1447,6 +1471,18 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 				path, found, err := presser.PressMenuKey(ctx, pid, shortcut)
 				var off menuItemOff
 				if errors.As(err, &off) && !app.Active {
+					// Close is off behind other windows, but the window's own close
+					// button works from there.
+					if closer, ok := a.apps.(windowCloser); ok && isCloseWindow(shortcut) {
+						if result, closeErr := closer.CloseKeyWindow(ctx, pid); closeErr == nil {
+							a.mu.Lock()
+							a.lastAct = time.Now()
+							a.mu.Unlock()
+							return AgentResult{Text: closeWindowText(app, result)}, nil
+						} else {
+							err = fmt.Errorf("%w; its close button wasn't pressed either: %v", err, closeErr)
+						}
+					}
 					return AgentResult{}, fmt.Errorf("%w. Commands like this one are often off while the app isn't in front: bring_forward it when nobody is using the computer, then try again", err)
 				}
 				if err != nil {
@@ -1479,6 +1515,24 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		return AgentResult{Text: prefix + " " + a.effect(ctx, keyApp, sent, keyBefore, haveKeyBefore)}, nil
 	}
 	return AgentResult{Text: "done; take a screenshot to see the result"}, nil
+}
+
+// closeWindowText says what pressing a window's close button did.
+func closeWindowText(app App, result CloseResult) string {
+	name := oneLine(app.Name)
+	title := oneLine(result.Title)
+	if len(result.Sheet) == 0 {
+		return fmt.Sprintf("Cmd+w is off while %s is behind other windows, so I pressed the close button of its key window %q instead, without bringing it forward. Read the app with app_state to see that it closed.", name, title)
+	}
+	return fmt.Sprintf("Cmd+w is off while %s is behind other windows, so I pressed the close button of its key window %q instead, without bringing it forward. The window did not close: it asks what to do with unsaved changes, with the buttons %s. Nothing was chosen. Read the app with app_state and press the button you mean by its id; only discard the document if your task said to.", name, title, strings.Join(quoteAll(result.Sheet), ", "))
+}
+
+func quoteAll(titles []string) []string {
+	out := make([]string, len(titles))
+	for i, t := range titles {
+		out[i] = fmt.Sprintf("%q", t)
+	}
+	return out
 }
 
 // input performs one action on the screen; a pid sends its keys to that app
@@ -2041,7 +2095,11 @@ func (s *Service) claimApp(pid int, worker string) error {
 		s.appOwners = map[int]string{}
 	}
 	if owner, ok := s.appOwners[pid]; ok && owner != worker {
-		if other := s.agents[owner]; other != nil && other.ctx.Err() == nil {
+		held := false
+		if hold := s.parkHolds[owner]; hold != nil {
+			held = slices.Contains(hold.pids, pid)
+		}
+		if other := s.agents[owner]; held || (other != nil && other.ctx.Err() == nil) {
 			name := owner
 			if s.workerName != nil {
 				if n := s.workerName(owner); n != "" {

@@ -932,3 +932,153 @@ func TestParkedAppsAreMovedAgainAfterTheDisplayWentAway(t *testing.T) {
 		t.Fatal("not moved again")
 	}
 }
+
+// Cmd+w is off while the app is behind other windows; the window's own close
+// button closes it from there, without bringing anything forward.
+func TestCloseWindowFallsBackToTheCloseButtonBehindOtherWindows(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Menu = []FakeMenuItem{{Path: "File > Close", Char: "W", Disabled: true}}
+	apps[0].Elements = []Element{
+		{Role: "AXWindow", Title: "Untitled", Enabled: true},
+		{Depth: 1, Role: "AXButton", Subrole: "AXCloseButton", Enabled: true, Actions: []string{"AXPress"}},
+		{Depth: 1, Role: "AXTextArea", Value: "alpha one", Enabled: true},
+	}
+	apps[0].Active, apps[2].Active = false, true
+	backend.RunningApps = apps
+	got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+w", App: "Notes"}).Text
+	if !strings.Contains(got, `pressed the close button of its key window "Untitled"`) || strings.Contains(got, "unsaved") {
+		t.Fatalf("close:\n%s", got)
+	}
+	if !slices.Equal(backend.ClosePresses, []int{backend.RunningApps[0].PID}) || len(backend.Raised) != 0 {
+		t.Fatalf("close presses %v, raised %v", backend.ClosePresses, backend.Raised)
+	}
+	if front, _ := backend.FrontPID(context.Background()); front != 301 {
+		t.Fatalf("the front changed to %d", front)
+	}
+	if state := act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"}).Text; strings.Contains(state, "alpha one") {
+		t.Fatalf("the window is still there:\n%s", state)
+	}
+}
+
+// A document with unsaved changes puts up a sheet instead: nothing is chosen
+// for the Worker; it reads the sheet and presses what its task says.
+func TestCloseWindowWithUnsavedChangesLeavesTheChoiceToTheWorker(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Menu = []FakeMenuItem{{Path: "File > Close", Char: "W", Disabled: true}}
+	apps[0].Elements = []Element{
+		{Role: "AXWindow", Title: "Untitled", Enabled: true},
+		{Depth: 1, Role: "AXButton", Subrole: "AXCloseButton", Enabled: true, Actions: []string{"AXPress"}},
+	}
+	apps[0].SaveSheet = []string{"Delete", "Cancel", "Save"}
+	apps[0].Active, apps[2].Active = false, true
+	backend.RunningApps = apps
+	got := act(t, s, "%7", AgentAction{Action: "key", Text: "cmd+w", App: "Notes"}).Text
+	for _, want := range []string{`"Delete", "Cancel", "Save"`, "Nothing was chosen", "only discard the document if your task said to"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("answer lacks %q:\n%s", want, got)
+		}
+	}
+}
+
+// Only the plain Close is replaced; other items that are off still say so,
+// and an app without a key window is not guessed at.
+func TestCloseFallbackIsOnlyForCmdW(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[0].Menu = []FakeMenuItem{{Path: "File > Close All", Char: "W", Modifiers: 2, Disabled: true}, {Path: "File > Close", Char: "W", Disabled: true}}
+	apps[0].Active, apps[2].Active = false, true
+	backend.RunningApps = apps
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "cmd+option+w", App: "Notes"}); err == nil || len(backend.ClosePresses) != 0 {
+		t.Fatalf("cmd+option+w: %v %v", err, backend.ClosePresses)
+	}
+	backend.RunningApps[0].Elements = nil
+	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "cmd+w", App: "Notes"})
+	if err == nil || !strings.Contains(err.Error(), "no key window to close") || !strings.Contains(err.Error(), "bring_forward") {
+		t.Fatalf("no window: %v", err)
+	}
+}
+
+func parkedAfterIdle(t *testing.T) (*Service, *FakeBackend) {
+	t.Helper()
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.parkLease = time.Hour
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	if !backend.Parked[202] {
+		t.Fatal("not parked")
+	}
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	return s, backend
+}
+
+// An agent that only went quiet is thinking, not done: its app stays on the
+// agent display, still its own, and its next action finds it there.
+func TestAQuietAgentKeepsItsAppOnTheAgentDisplay(t *testing.T) {
+	s, backend := parkedAfterIdle(t)
+	time.Sleep(200 * time.Millisecond)
+	backend.mu.Lock()
+	still, restored := backend.Parked[202], len(backend.Restored)
+	backend.mu.Unlock()
+	if !still || restored != 0 {
+		t.Fatalf("the app went back: parked %v restored %d", still, restored)
+	}
+	// Another agent is told the app is taken.
+	if _, err := s.Act(context.Background(), "%8", AgentAction{Action: "key", Text: "b", App: "Safari"}); err == nil || !strings.Contains(err.Error(), "Another agent") {
+		t.Fatalf("a second agent: %v", err)
+	}
+	// Its own next action neither moves it again nor mentions it.
+	moves := backend.ParkCalls
+	got := act(t, s, "%7", AgentAction{Action: "key", Text: "c", App: "Safari"}).Text
+	if strings.Contains(got, "agent display") || backend.ParkCalls != moves {
+		t.Fatalf("next action: %s (%d moves, was %d)", got, backend.ParkCalls, moves)
+	}
+}
+
+// Stopping the agent from the app, or a person taking over, puts it back at
+// once, even when the agent is quiet.
+func TestAQuietAgentsAppGoesBackWhenItIsStoppedOrTheScreenIsTaken(t *testing.T) {
+	for name, end := range map[string]func(*Service){
+		"stopped": func(s *Service) { s.StopAgentFor("%7") },
+		"taken":   func(s *Service) { s.TakeControl(func(error) {}) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, backend := parkedAfterIdle(t)
+			end(s)
+			waitFor(t, func() bool {
+				backend.mu.Lock()
+				defer backend.mu.Unlock()
+				return !backend.Parked[202] && len(backend.Restored) == 1
+			})
+			// The app is free for another agent again.
+			s.agentMu.Lock()
+			_, owned := s.appOwners[202]
+			s.agentMu.Unlock()
+			if owned {
+				t.Fatal("the app is still claimed")
+			}
+		})
+	}
+}
+
+// An agent that never comes back does not keep the app away for ever.
+func TestAQuietAgentsAppGoesBackWhenTheLeaseEnds(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.parkLease = 300 * time.Millisecond
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	waitFor(t, func() bool {
+		backend.mu.Lock()
+		defer backend.mu.Unlock()
+		return !backend.Parked[202] && len(backend.Restored) == 1
+	})
+}

@@ -450,6 +450,30 @@ type frontReader interface {
 	FrontPID(ctx context.Context) (int, error)
 }
 
+// CloseResult is what pressing the close button of an app's key window did.
+type CloseResult struct {
+	// Title is the window's title.
+	Title string
+	// Sheet lists the buttons of a sheet the window put up instead of
+	// closing (unsaved changes ask what to do); empty when it closed.
+	Sheet []string
+}
+
+// windowCloser is a backend that can close an app's key window by its close
+// button through accessibility: nothing is brought forward or typed, so it
+// works where the Close menu item is off because the app is behind others.
+type windowCloser interface {
+	// CloseKeyWindow presses the close button of pid's key window. It never
+	// picks another window when the app has no key window.
+	CloseKeyWindow(ctx context.Context, pid int) (CloseResult, error)
+}
+
+// isCloseWindow says whether a shortcut is the plain Close of the key window
+// (cmd+w), not Close All or Close Tab variants.
+func isCloseWindow(s Shortcut) bool {
+	return s.Char == "W" && !s.Shift && !s.Option && !s.Control
+}
+
 // menuPresser is a backend that can choose an app's menu item by its
 // shortcut through accessibility: no key is sent, so an app behind others
 // acts on it as if it were in front.

@@ -233,8 +233,18 @@ missing, and **Open Settings** opens the right page on the Mac.
   Only the pointer and keyboard themselves are one set, so one agent at a time
   acts on the screen itself; a second one waits its turn, and an agent that
   asks for an app another agent is working in is told which agent has it. Each
-  agent's control ends a minute after its last action. Opening Screen lists
-  every agent by name, each with **Watch** and **Stop**.
+  agent's control ends a minute after its last action, but an app it moved to
+  the agent display stays there, still its own, for up to ten minutes more,
+  so its windows don't jump back onto your screen while it is thinking; they
+  return at once when you stop the agent or take over, or when its next
+  action is `bring_forward`. Opening Screen lists every agent by name, each
+  with **Watch** and **Stop**.
+- **Closing a window behind others.** An app's Close menu item (cmd+w) is off
+  while the app is behind other windows. The agent then presses the close
+  button of the app's key window instead, without bringing anything forward.
+  A document with unsaved changes asks first, with a sheet; the agent is told
+  its buttons and nothing is chosen for it. It presses the one its task calls
+  for, and discards a document only when told to.
 - **What is kept.** Each action is recorded on the Mac in
   `~/.mewla/screen-agent-audit.jsonl` (readable only by you, kept 30 days):
   which agent, which action, which app and control, where, which keys, how

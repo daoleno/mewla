@@ -6,6 +6,7 @@ import (
 	"image"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The agent display is where the apps an agent works in wait: a display of
@@ -166,4 +167,85 @@ func (s *Service) AgentDisplay() (hold func(key string) (image.Rectangle, error)
 		return nil, nil, false
 	}
 	return holder.HoldAgentDisplay, holder.ReleaseAgentDisplay, true
+}
+
+// parkLeaseDefault is how long an idle agent's apps stay on the agent display
+// before they go back. An agent that is thinking between two steps comes back
+// well within it; one that is simply gone (closed, crashed) does not keep
+// the person's apps off their screen for long.
+const parkLeaseDefault = 10 * time.Minute
+
+// parkHold is the apps an idle agent left on the agent display.
+type parkHold struct {
+	pids  []int
+	timer *time.Timer
+}
+
+// holdParked keeps the apps the ending agent moved to the agent display where
+// they are, for its next session or until the lease ends, and says whether
+// there were any. Without idle (stopped, taken over) nothing is held.
+func (s *Service) holdParked(agent *agentSession, idle bool) bool {
+	if !idle {
+		return false
+	}
+	agent.parkMu.Lock()
+	var pids []int
+	for pid, on := range agent.parked {
+		if on {
+			pids = append(pids, pid)
+		}
+	}
+	agent.parkMu.Unlock()
+	if len(pids) == 0 {
+		return false
+	}
+	sort.Ints(pids)
+	lease := s.parkLease
+	if lease == 0 {
+		lease = parkLeaseDefault
+	}
+	worker := agent.worker
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	if s.parkHolds == nil {
+		s.parkHolds = map[string]*parkHold{}
+	}
+	if old := s.parkHolds[worker]; old != nil {
+		old.timer.Stop()
+	}
+	hold := &parkHold{pids: pids}
+	hold.timer = time.AfterFunc(lease, func() { s.dropHold(worker) })
+	s.parkHolds[worker] = hold
+	return true
+}
+
+// dropHold puts back the apps a Worker's idle agent left on the agent display.
+func (s *Service) dropHold(worker string) {
+	s.agentMu.Lock()
+	hold := s.parkHolds[worker]
+	delete(s.parkHolds, worker)
+	s.agentMu.Unlock()
+	if hold == nil {
+		return
+	}
+	hold.timer.Stop()
+	parker, _ := s.backend.(appParker)
+	for _, pid := range hold.pids {
+		if parker != nil {
+			_ = parker.RestoreApp(pid)
+		}
+		s.freeApp(pid, worker)
+	}
+}
+
+func (s *Service) releaseAllHolds() {
+	s.agentMu.Lock()
+	workers := make([]string, 0, len(s.parkHolds))
+	for worker := range s.parkHolds {
+		workers = append(workers, worker)
+	}
+	s.agentMu.Unlock()
+	for _, worker := range workers {
+		s.dropHold(worker)
+	}
 }
