@@ -153,6 +153,8 @@ type Service struct {
 	// aliveEvery is how often to ask, 0 for the default.
 	alive      func(worker string) bool
 	aliveEvery time.Duration
+	// turnActive says whether a Worker has a turn running (SetWorkerTurnActive).
+	turnActive func(worker string) bool
 	workerName func(id string) string
 	agentGate  func() bool
 	// stopHook hears of each Worker the person stops (SetStopHook).

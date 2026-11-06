@@ -1226,3 +1226,94 @@ func TestTheDisplayHoldEndsTenMinutesAfterTheLastActionAtMost(t *testing.T) {
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 	waitHeld(t, backend, false)
 }
+
+type turnWorld struct {
+	mu     sync.Mutex
+	turn   bool
+	closed bool
+}
+
+func (w *turnWorld) set(turn, closed bool) {
+	w.mu.Lock()
+	w.turn, w.closed = turn, closed
+	w.mu.Unlock()
+}
+
+func turnService(t *testing.T) (*Service, *FakeBackend, *turnWorld) {
+	t.Helper()
+	world := &turnWorld{turn: true}
+	s, backend, _ := newAgentService(t)
+	s.agentIdle = 80 * time.Millisecond
+	s.aliveEvery = 20 * time.Millisecond
+	s.parkLease = 400 * time.Millisecond // the ten minutes after a turn ends
+	s.SetWorkerAlive(func(string) bool { world.mu.Lock(); defer world.mu.Unlock(); return !world.closed })
+	s.SetWorkerTurnActive(func(string) bool { world.mu.Lock(); defer world.mu.Unlock(); return world.turn && !world.closed })
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	return s, backend, world
+}
+
+func appBack(b *FakeBackend) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return !b.Parked[202] && len(b.Restored) == 1
+}
+
+// While the Worker's turn is running the display and the app stay held, however
+// long the agent is quiet (several times the ten minutes, here the lease).
+func TestARunningTurnKeepsTheDisplayAndAppNoMatterHowQuiet(t *testing.T) {
+	s, backend, _ := turnService(t)
+	time.Sleep(1600 * time.Millisecond) // four leases
+	if !displayHeld(backend) || !s.DisplayKeptForAgents() || appBack(backend) || !backend.ParkedOnDisplay(202) {
+		t.Fatalf("let go while the turn ran: display %v, parked %v", displayHeld(backend), backend.Parked)
+	}
+}
+
+// When the turn ends the hold goes after the lease, not before and not never.
+func TestTheHoldEndsALeaseAfterTheTurnEnds(t *testing.T) {
+	s, backend, world := turnService(t)
+	world.set(false, false)
+	time.Sleep(200 * time.Millisecond)
+	if !displayHeld(backend) {
+		t.Fatal("let go before the lease after the turn ended")
+	}
+	waitHeld(t, backend, false)
+	waitFor(t, func() bool { return appBack(backend) })
+	if s.DisplayKeptForAgents() {
+		t.Fatal("still reported")
+	}
+}
+
+// Closing the Worker lets go at once, whatever its turn was doing.
+func TestClosingTheWorkerReleasesAtOnce(t *testing.T) {
+	_, backend, world := turnService(t)
+	world.set(true, true)
+	start := time.Now()
+	waitHeld(t, backend, false)
+	if time.Since(start) > 300*time.Millisecond {
+		t.Fatalf("took %v", time.Since(start))
+	}
+	waitFor(t, func() bool { return appBack(backend) })
+}
+
+// A new turn before the lease is up starts the count again.
+func TestANewTurnReArmsTheHold(t *testing.T) {
+	s, backend, world := turnService(t)
+	world.set(false, false)
+	time.Sleep(250 * time.Millisecond) // most of the lease
+	world.set(true, false)
+	time.Sleep(900 * time.Millisecond) // more than two leases, turn running
+	if !displayHeld(backend) || !s.DisplayKeptForAgents() {
+		t.Fatal("a new turn did not keep the hold")
+	}
+	world.set(false, false)
+	time.Sleep(200 * time.Millisecond)
+	if !displayHeld(backend) {
+		t.Fatal("the count did not start again")
+	}
+	waitHeld(t, backend, false)
+}

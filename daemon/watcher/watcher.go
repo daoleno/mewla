@@ -4894,6 +4894,27 @@ func (w *Watcher) completedTargetIdentity(sessionID string) (targetProcessIdenti
 	return identity, err == nil, nil
 }
 
+// WorkerTurnActive says whether the Worker has a turn in progress: its
+// ledger turn is not settled, or, without one, it is running or blocked on an
+// answer. A long quiet tool call (a build, a wait) is still a turn running.
+func (w *Watcher) WorkerTurnActive(id string) bool {
+	if w == nil {
+		return false
+	}
+	worker := w.GetWorker(id)
+	if worker == nil || !w.HasSession(id) {
+		return false
+	}
+	if turn, ok, err := w.ledgerTurnFor(id, time.Now()); err == nil && ok {
+		switch turn.Status {
+		case TurnDone, TurnFailed:
+			return false
+		}
+		return turn.SettledAt == nil
+	}
+	return worker.State == classifier.StateRunning || worker.State == classifier.StateBlocked
+}
+
 // KillSession terminates only the owned pane and releases its delegated
 // resources. Missing panes are idempotent; resource release errors remain
 // retryable as ErrDelegatedResourceRelease.
