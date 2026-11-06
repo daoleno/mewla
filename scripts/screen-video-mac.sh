@@ -98,8 +98,22 @@ echo "== VideoToolbox encoder"
 # is used, so no Automation permission is needed.
 echo "== real screen, simulated links"
 export MEWLA_SCREEN_VIDEO=on MEWLA_SCREEN_BENCH_OUT="$OUT"
-MEWLA_SCREEN_REAL_BENCH=1 $GO test ./screen -run 'TestRealScreenStillAndSharpness' -count=1 -v -timeout 10m 2>&1 | tail -20 | tee "$OUT/still.txt"
-MEWLA_SCREEN_REAL_BENCH=1 $GO test ./screen -run TestRealScreenVideoOverSimulatedLinks -count=1 -v -timeout 15m 2>&1 | tail -20 | tee "$OUT/real.txt"
+CHROME=""
+for c in "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "/Applications/Chromium.app/Contents/MacOS/Chromium"; do
+  [ -x "$c" ] && { CHROME="$c"; break; }
+done
+export MEWLA_CHROME="${MEWLA_CHROME:-$CHROME}"
+echo "chrome: ${MEWLA_CHROME:-none}"
+# Each test on its own, so one failing does not sink the others. The Safari
+# fixture pages scroll themselves (no input events); the test brings Safari to
+# the front through the accessibility API and checks, from the marker on the
+# screen, that the page is drawing before it measures.
+run_test() { # name pattern timeout file
+  MEWLA_SCREEN_REAL_BENCH=1 $GO test ./screen -run "$2" -count=1 -v -timeout "$3" 2>&1 | tail -30 | tee "$OUT/$4"
+}
+run_test still 'TestRealScreenStillAndSharpness' 6m still.txt
+run_test viewer 'TestRealScreenViewerEndToEnd' 4m viewer.txt
+run_test real 'TestRealScreenVideoOverSimulatedLinks' 6m real.txt
 
 # ---- 4. iOS WKWebView: secure context, VideoDecoder, one real key frame ----
 echo "== iOS WKWebView probe"
@@ -187,5 +201,5 @@ PL
 fi
 
 # ---- summary ----------------------------------------------------------------
-{ echo "# Screen video, Mac run $(date)"; echo "## region latency"; cat "$OUT/region.txt"; echo "## VideoToolbox"; cat "$OUT/vt.txt"; echo "## still frame + sharpness"; cat "$OUT/still.txt"; echo "## real screen"; cat "$OUT/real.txt"; echo "## iOS WKWebView"; cat "$OUT/ios.txt" 2>/dev/null; } > "$OUT/summary.txt"
+{ echo "# Screen video, Mac run $(date)"; echo "## region latency"; cat "$OUT/region.txt"; echo "## VideoToolbox"; cat "$OUT/vt.txt"; echo "## still frame + sharpness"; cat "$OUT/still.txt"; echo "## viewer end to end"; cat "$OUT/viewer.txt" 2>/dev/null; echo "## real screen"; cat "$OUT/real.txt"; echo "## iOS WKWebView"; cat "$OUT/ios.txt" 2>/dev/null; } > "$OUT/summary.txt"
 echo "done: $OUT/summary.txt"

@@ -2,6 +2,7 @@ package screen
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -48,6 +49,9 @@ type stillAnalysis struct {
 	stillIdx                int // the first update after the quiet gap
 	gap                     time.Duration
 	motionVideo             int // moving updates that carried a video rect
+	// noStill: a scroll was found and nothing followed it. Tiles already at
+	// the viewer's quality need no sharpening, so that is expected for them.
+	noStill bool
 }
 
 const (
@@ -82,7 +86,11 @@ func analyzeStill(updates []stillUpdate, screenArea int) (stillAnalysis, bool) {
 		}
 		i = j + 1
 	}
-	if bestLen < motionMinRun || best.motionLast+1 >= len(updates) {
+	if bestLen < motionMinRun {
+		return best, false
+	}
+	if best.motionLast+1 >= len(updates) {
+		best.noStill = true
 		return best, false
 	}
 	best.stillIdx = best.motionLast + 1
@@ -98,22 +106,44 @@ func analyzeStill(updates []stillUpdate, screenArea int) (stillAnalysis, bool) {
 	return best, true
 }
 
-// The scroll marker: the fixture page draws, in its top left corner, a green
-// square followed by sixteen red (1) or blue (0) squares of the same size,
-// the page's scroll position in binary, most significant bit first. It is
-// read back from any frame that shows it, so a frame says where the page was.
+// The page marker: the fixture page draws, in its top left corner, two rows
+// of seventeen squares of one size. In the first, a green square then the
+// scroll position in sixteen bits; in the second, a yellow square then
+// sixteen bits: 2 for the phase (0 waiting, 1 scrolling, 2 done), 1 that is
+// set for good once the page was hidden or stopped drawing while it scrolled,
+// and 13 of a counter that advances with every frame the page draws. Bits
+// are red (1) or blue (0), most significant first. Any frame that shows it
+// says where the page was, whether it was drawing, and whether it ever
+// stalled; the counter and phase freeze when the scroll ends, so a still page
+// is a still screen.
 
 const markerBits = 16
 
-// readScrollMarker finds the marker in the top rows of img and returns the
-// scroll position it shows.
-func readScrollMarker(img *image.RGBA) (int, bool) {
+const (
+	phaseWaiting   = 0
+	phaseScrolling = 1
+	phaseDone      = 2
+)
+
+type pageMarker struct {
+	Pos     int
+	Phase   int
+	Stalled bool
+	Beat    int
+}
+
+func (m pageMarker) String() string {
+	return fmt.Sprintf("pos %d phase %d stalled %v beat %d", m.Pos, m.Phase, m.Stalled, m.Beat)
+}
+
+// readMarker finds the marker in img and returns what it shows.
+func readMarker(img *image.RGBA) (pageMarker, bool) {
 	b := img.Bounds()
 	green := func(x, y int) bool {
 		c := img.RGBAAt(x, y)
 		return c.G > 150 && c.R < 110 && c.B < 110
 	}
-	for y := b.Min.Y; y < min(b.Max.Y, b.Min.Y+400); y++ {
+	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
 			if !green(x, y) || (x > b.Min.X && green(x-1, y)) || (y > b.Min.Y && green(x, y-1)) {
 				continue
@@ -125,7 +155,7 @@ func readScrollMarker(img *image.RGBA) (int, bool) {
 			for x+s0 < b.Max.X && green(x+s0, y) {
 				s0++
 			}
-			if s0 < 6 || y+s0 > b.Max.Y {
+			if s0 < 6 || y+2*s0 > b.Max.Y {
 				continue
 			}
 			sat := func(c color.RGBA) bool { return max(c.R, c.G, c.B)-min(c.R, c.G, c.B) > 100 }
@@ -140,47 +170,77 @@ func readScrollMarker(img *image.RGBA) (int, bool) {
 				}
 			}
 			s := (width + (markerBits+1)/2) / (markerBits + 1)
-			if s < 6 || x+(markerBits+1)*s > b.Max.X {
+			if s < 6 || x+(markerBits+1)*s > b.Max.X || y+2*s > b.Max.Y {
 				continue
 			}
-			pos, ok := 0, true
-			for i := 0; i < markerBits && ok; i++ {
-				c := img.RGBAAt(x+(i+1)*s+s/2, y+s/2)
-				switch {
-				case c.R > 150 && c.B < 100:
-					pos = pos<<1 | 1
-				case c.B > 150 && c.R < 100:
-					pos <<= 1
-				default:
-					ok = false
+			bits := func(row int) (int, bool) {
+				v := 0
+				for i := 0; i < markerBits; i++ {
+					c := img.RGBAAt(x+(i+1)*s+s/2, y+row*s+s/2)
+					switch {
+					case c.R > 150 && c.B < 100:
+						v = v<<1 | 1
+					case c.B > 150 && c.R < 100:
+						v <<= 1
+					default:
+						return 0, false
+					}
+				}
+				return v, true
+			}
+			pos, ok := bits(0)
+			if !ok {
+				continue
+			}
+			m := pageMarker{Pos: pos}
+			// The second row is read when its yellow sentinel is there.
+			if c := img.RGBAAt(x+s/2, y+s+s/2); c.R > 150 && c.G > 150 && c.B < 120 {
+				if v, ok := bits(1); ok {
+					m.Phase, m.Stalled, m.Beat = v>>14, v>>13&1 == 1, v&0x1fff
 				}
 			}
-			if ok {
-				return pos, true
-			}
+			return m, true
 		}
 	}
-	return 0, false
+	return pageMarker{}, false
 }
 
-// drawScrollMarker paints the marker the page draws, with squares of size s
-// at (x0, y0).
-func drawScrollMarker(img *image.RGBA, x0, y0, s, pos int) {
-	fill := func(i int, c color.RGBA) {
-		for y := y0; y < y0+s; y++ {
+// readScrollMarker is the scroll position alone.
+func readScrollMarker(img *image.RGBA) (int, bool) {
+	m, ok := readMarker(img)
+	return m.Pos, ok
+}
+
+// drawMarker paints the marker the page draws, with squares of size s at
+// (x0, y0).
+func drawMarker(img *image.RGBA, x0, y0, s int, m pageMarker) {
+	fill := func(row, i int, c color.RGBA) {
+		for y := y0 + row*s; y < y0+(row+1)*s; y++ {
 			for x := x0 + i*s; x < x0+(i+1)*s; x++ {
 				img.SetRGBA(x, y, c)
 			}
 		}
 	}
-	fill(0, color.RGBA{0, 255, 0, 255})
-	for i := 0; i < markerBits; i++ {
-		if pos>>(markerBits-1-i)&1 == 1 {
-			fill(i+1, color.RGBA{255, 0, 0, 255})
-		} else {
-			fill(i+1, color.RGBA{0, 0, 255, 255})
+	bit := func(v, i int) color.RGBA {
+		if v>>(markerBits-1-i)&1 == 1 {
+			return color.RGBA{255, 0, 0, 255}
 		}
+		return color.RGBA{0, 0, 255, 255}
 	}
+	second := m.Phase<<14 | m.Beat&0x1fff
+	if m.Stalled {
+		second |= 1 << 13
+	}
+	fill(0, 0, color.RGBA{0, 255, 0, 255})
+	fill(1, 0, color.RGBA{255, 255, 0, 255})
+	for i := 0; i < markerBits; i++ {
+		fill(0, i+1, bit(m.Pos&0xffff, i))
+		fill(1, i+1, bit(second, i))
+	}
+}
+
+func drawScrollMarker(img *image.RGBA, x0, y0, s, pos int) {
+	drawMarker(img, x0, y0, s, pageMarker{Pos: pos})
 }
 
 func syntheticStream(start time.Time, build func(add func(ms int, rects ...stillRect))) []stillUpdate {
@@ -256,8 +316,8 @@ func TestAnalyzeStill(t *testing.T) {
 		u := syntheticStream(start, func(add func(int, ...stillRect)) {
 			scroll(add, 0, 200, vid)
 		})
-		if _, ok := analyzeStill(u, area); ok {
-			t.Fatal("no still update exists")
+		if a, ok := analyzeStill(u, area); ok || !a.noStill {
+			t.Fatalf("no still update exists: %+v %v", a, ok)
 		}
 	})
 	t.Run("the next update comes too soon", func(t *testing.T) {
@@ -309,6 +369,30 @@ func TestScrollMarker(t *testing.T) {
 		}
 		if got, ok := readScrollMarker(rgba); !ok || got != tc.pos {
 			t.Errorf("jpeg %+v read %d %v", tc, got, ok)
+		}
+	}
+	// The second row: phase, stall latch and counter.
+	for _, want := range []pageMarker{{Pos: 0, Phase: phaseWaiting, Beat: 1}, {Pos: 1234, Phase: phaseScrolling, Stalled: true, Beat: 8191}, {Pos: 3600, Phase: phaseDone, Beat: 77}} {
+		img := image.NewRGBA(image.Rect(0, 0, 900, 300))
+		for i := range img.Pix {
+			img.Pix[i] = 240
+		}
+		drawMarker(img, 33, 7, 20, want)
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 60}); err != nil {
+			t.Fatal(err)
+		}
+		dec, _ := jpeg.Decode(&buf)
+		rgba := image.NewRGBA(dec.Bounds())
+		for y := 0; y < 300; y++ {
+			for x := 0; x < 900; x++ {
+				rgba.Set(x, y, dec.At(x, y))
+			}
+		}
+		for _, in := range []*image.RGBA{img, rgba} {
+			if got, ok := readMarker(in); !ok || got != want {
+				t.Errorf("want %v, read %v %v", want, got, ok)
+			}
 		}
 	}
 	if _, ok := readScrollMarker(image.NewRGBA(image.Rect(0, 0, 300, 300))); ok {
