@@ -29,6 +29,10 @@ name, its latest line and, on the right, its state mark: a spinning arc while
 it works, a red dot when it needs you, a crossed box when it failed, a check
 when it finished.
 
+Tap a directory's name to fold it. A folded directory keeps its Session count
+and the most urgent mark among its Sessions (needs you, then failed, then
+running), so nothing waiting on you hides. Folds are remembered per computer.
+
 Brain's Workers are ordinary Sessions and appear here too. Long-press a row to
 select several and terminate them together.
 
