@@ -29,7 +29,6 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = "app/components/terminal/pierre";
 const require = createRequire(join(root, "app", "package.json"));
-const { transform } = require("lightningcss");
 const pkg = (name) => JSON.parse(readFileSync(join(dirname(require.resolve(`${name}/package.json`)), "package.json"), "utf8"));
 const diffs = pkg("@pierre/diffs");
 const trees = pkg("@pierre/trees");
@@ -86,36 +85,10 @@ const trim = {
       }
       return undefined;
     });
-    build.onLoad({ filter: /@pierre[\\/](diffs|trees)[\\/]dist[\\/].*\.js$/ }, (args) => {
-      const code = readFileSync(args.path, "utf8");
-      return code.includes(".css?inline") ? { contents: lowerInlinedCss(code), loader: "js" } : undefined;
-    });
     build.onLoad({ filter: /.*/, namespace: "pierre-empty" }, () => ({ contents: emptyModule, loader: "js" }));
     build.onLoad({ filter: /.*/, namespace: "pierre-highlights" }, () => ({ contents: "export const HighlightsHighlighter = { create() { throw new Error('highlights backend is not bundled'); } };", loader: "js" }));
   },
 };
-
-// Platform floor: iOS 16.4 (the app's deployment target) and Android WebView
-// 117 (subgrid, which the diff grid needs, is the newest feature Pierre's CSS
-// cannot do without). The libraries' stylesheets are written for newer engines
-// (CSS nesting: Safari 17.2; light-dark(): Safari 17.5, Chromium 123; relative
-// colors: Chromium 119), so each inlined stylesheet is lowered here.
-// light-dark() becomes a pair of custom properties that runtime/colorScheme.js
-// turns on for the current theme. color-mix() takes custom properties and stays:
-// it needs Safari 16.2 / Chromium 111.
-const TARGETS = { safari: (16 << 16) | (4 << 8), chrome: 117 << 16 };
-export function lowerCss(css) {
-  // rgb(from X r g b / a) is X at alpha a, which color-mix() against transparent says too.
-  const flattened = css.replace(/rgb\(from (var\((?:--[\w-]+)\)) r g b \/ ([.\d]+)\)/g, (_, color, alpha) => `color-mix(in srgb, ${color} ${Math.round(parseFloat(alpha) * 100)}%, transparent)`);
-  const result = transform({ filename: "pierre.css", code: Buffer.from(flattened), minify: true, targets: TARGETS });
-  const out = result.code.toString();
-  const left = /light-dark\(|rgb\(from|[{};,]&|\(from /.exec(out);
-  if (left) throw new Error(`lowered CSS still has ${left[0]}: ${out.slice(Math.max(0, left.index - 60), left.index + 80)}`);
-  return out;
-}
-// Each library inlines its stylesheet as `var x = "<css>";` under a
-// `//#region src/**.css?inline` marker.
-const lowerInlinedCss = (code) => code.replace(/(\/\/#region [^\n]*\.css\?inline\nvar \w+ = )("(?:[^"\\]|\\.)*")/g, (_, head, literal) => head + JSON.stringify(lowerCss(JSON.parse(literal))));
 
 // A single non-ASCII character makes Hermes store the whole string constant as
 // UTF-16, twice the size (867 such characters sit in 3.5 MB). Escaped, the value

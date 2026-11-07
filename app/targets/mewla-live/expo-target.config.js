@@ -15,7 +15,7 @@ module.exports = (config) => {
     displayName: "Mewla",
     bundleIdentifier: identity.liveExtensionBundleIdentifier,
     // Widgets and Live Activities need containerBackground and Text(timerInterval:) (iOS 17).
-    deploymentTarget: "17.0",
+    deploymentTarget: "17.5",
     images: { seal: "./seal.png" },
     entitlements: {
       "com.apple.security.application-groups": [identity.appGroup],

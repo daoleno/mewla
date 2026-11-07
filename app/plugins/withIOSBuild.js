@@ -22,9 +22,25 @@ const NOTICE_SRC_REL = "assets/notices/GHOSTTY-MIT.txt";
 // app bundle root so the packaged path matches verify-ios-artifact.
 const NOTICE_BUNDLE_REL = "GHOSTTY-MIT.txt";
 
+// The app's iOS floor. Pierre's stylesheets use light-dark() (Safari 17.5) and
+// nesting; nothing older is supported (docs/internal/git-review.md).
+const IOS_DEPLOYMENT_TARGET = "17.5";
+
+function applyIOSDeploymentTarget(project) {
+  const configurations = project.pbxXCBuildConfigurationSection();
+  for (const [key, configuration] of Object.entries(configurations)) {
+    if (key.endsWith("_comment") || !configuration || !configuration.buildSettings) continue;
+    if (configuration.buildSettings.IPHONEOS_DEPLOYMENT_TARGET) {
+      configuration.buildSettings.IPHONEOS_DEPLOYMENT_TARGET = IOS_DEPLOYMENT_TARGET;
+    }
+  }
+  return project;
+}
+
 function applyIOSPodfileProperties(properties) {
   return {
     ...properties,
+    "ios.deploymentTarget": IOS_DEPLOYMENT_TARGET,
     EXPO_USE_PRECOMPILED_MODULES: "false",
   };
 }
@@ -128,7 +144,9 @@ function withIOSBuild(config, options) {
     return cfg;
   });
   config = withXcodeProject(config, (cfg) => {
-    cfg.modResults = applyIOSVersionBuildSettings(cfg.modResults, options);
+    cfg.modResults = applyIOSDeploymentTarget(
+      applyIOSVersionBuildSettings(cfg.modResults, options),
+    );
     return cfg;
   });
   return withGhosttyNotice(config);
@@ -138,6 +156,8 @@ const pkg = { name: "with-ios-build", version: "1.0.0" };
 
 module.exports = createRunOncePlugin(withIOSBuild, pkg.name, pkg.version);
 module.exports.applyIOSPodfileProperties = applyIOSPodfileProperties;
+module.exports.applyIOSDeploymentTarget = applyIOSDeploymentTarget;
+module.exports.IOS_DEPLOYMENT_TARGET = IOS_DEPLOYMENT_TARGET;
 module.exports.applyIOSVersionBuildSettings =
   applyIOSVersionBuildSettings;
 module.exports.copyGhosttyNoticeIntoIOSProject =
