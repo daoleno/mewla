@@ -33,8 +33,14 @@ const SYSTEM = {
 };
 
 function mcpConfig() {
-  const argv = JSON.parse(process.env.BENCH_MCP);
-  const cfg = { mcpServers: { mewla_chrome: { command: 'node', args: [path.join(here, 'mewla-proxy.mjs'), '--', ...argv], env: { DISPLAY: process.env.DISPLAY || ':97', PLAYWRIGHT_MCP_EXTENSION_TOKEN: readFileSync(path.join(BENCH_DIR, 'ext-key'), 'utf8').trim() } } } };
+  // BENCH_BRIDGE: the real chain (daemon/agentuse TestAgentUseBenchBridge): Mewla's extension, native host and bridge,
+  // with the tools' argv and env exactly as the daemon builds them. Without it: Playwright's own extension (stand-in).
+  const bridge = process.env.BENCH_BRIDGE ? JSON.parse(readFileSync(process.env.BENCH_BRIDGE, 'utf8')) : null;
+  const argv = bridge ? bridge.argv : JSON.parse(process.env.BENCH_MCP);
+  const env = bridge
+    ? { ...Object.fromEntries(bridge.env.map(e => [e.slice(0, e.indexOf('=')), e.slice(e.indexOf('=') + 1)])), MEWLA_WORKER_ID: '%aub' }
+    : { DISPLAY: process.env.DISPLAY || ':97', PLAYWRIGHT_MCP_EXTENSION_TOKEN: readFileSync(path.join(BENCH_DIR, 'ext-key'), 'utf8').trim() };
+  const cfg = { mcpServers: { mewla_chrome: { command: 'node', args: [path.join(here, 'mewla-proxy.mjs'), '--', ...argv], env } } };
   const file = path.join(work, 'mcp.json'); writeFileSync(file, JSON.stringify(cfg)); return file;
 }
 
@@ -45,6 +51,44 @@ function resetBrowser() {
   const pages = list.filter(t => t.type === 'page');
   for (const t of pages.slice(1)) execFileSync('curl', ['-s', `localhost:${CDP}/json/close/${t.id}`], { stdio: 'ignore' });
   if (pages[0]) execFileSync('curl', ['-s', `localhost:${CDP}/json/activate/${pages[0].id}`], { stdio: 'ignore' });
+}
+
+// --nonint: a person (agent-use/web/xuser.c) types one character a second into a window of its own in front of the
+// agent's, while the agent works. The row then says what the agent did to the person: lost keyboard focus, a window
+// raised over theirs, typing lost, the real pointer moved, their page hidden.
+const NONINT = process.argv.includes('--nonint');
+const XUSER = process.env.BENCH_XUSER || path.join(here, '../agent-use/web/xuser');
+async function cdpBrowser(method, params) {
+  const url = JSON.parse(execFileSync('curl', ['-s', `localhost:${CDP}/json/version`]).toString()).webSocketDebuggerUrl;
+  const ws = new WebSocket(url);
+  await new Promise(r => { ws.onopen = r; });
+  const reply = new Promise(res => { ws.onmessage = e => { const m = JSON.parse(e.data); if (m.id === 1) res(m); }; });
+  ws.send(JSON.stringify({ id: 1, method, params }));
+  const m = await reply; ws.close();
+  return m.result;
+}
+async function startUser() {
+  const { targetId } = await cdpBrowser('Target.createTarget', { url: `${base}/user`, newWindow: true });
+  const xu = spawn(XUSER, ['AUB user page', '1000'], { env: { ...process.env, DISPLAY: process.env.DISPLAY || ':97' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const lines = []; xu.stdout.on('data', d => lines.push(...String(d).split('\n').filter(Boolean)));
+  const exited = new Promise(r => xu.on('exit', r));
+  await new Promise(r => setTimeout(r, 1500));
+  return { targetId, xu, lines, exited };
+}
+async function stopUser(u) {
+  u.xu.kill('SIGTERM'); await u.exited;
+  await new Promise(r => setTimeout(r, 400)); // the last beacons
+  const seen = events.slice(); // before the window closes: closing it fires its own visibility event
+  await cdpBrowser('Target.closeTarget', { targetId: u.targetId }).catch(() => {});
+  let s = {}; for (const l of u.lines) { try { const o = JSON.parse(l); if (o.ev === 'summary') s = o; } catch {} }
+  const keys = seen.filter(e => e.type === 'user:key').length;
+  const ni = { typed: s.typed ?? null, keys_received: keys, typing_lost: s.typed == null ? null : Math.max(0, s.typed - keys - 1),
+    key_focus_lost: s.focus_away ?? null, raised_over_user: s.raised ?? null, pointer_moved: s.pointer_moves ?? null,
+    user_page_hidden: seen.filter(e => e.type === 'user:vis' && e.state === 'hidden').length,
+    measured: ['key_focus_lost', 'raised_over_user', 'typing_lost', 'pointer_moved', 'user_page_hidden'],
+    not_measured: ['clipboard', 'space_switch', 'dialog_on_user', 'app_activation'] };
+  ni.undisturbed = s.typed != null && ni.measured.every(k => ni[k] === 0);
+  return ni;
 }
 
 function runClaude(prompt) {
@@ -83,15 +127,18 @@ for (const task of tasks) {
   if (only && !only.includes(task.id)) continue;
   for (let rep = 0; rep < reps; rep++) {
     events.length = 0; resetBrowser();
+    const user = NONINT ? await startUser() : null;
     const r = await runClaude(task.prompt.replaceAll('{base}', base));
+    const nonint = user ? await stopUser(user) : undefined;
     const answer = r.result?.result ?? '';
     const u = r.result?.usage ?? {};
-    const row = { task: task.id, kind: task.kind, rep, ok: !!task.check(answer, events), wall_ms: Math.round(r.wall), api_ms: r.result?.duration_api_ms ?? null,
+    const ok = !!task.check(answer, events);
+    const row = { task: task.id, kind: task.kind, rep, ok, nonint, full_pass: nonint ? ok && nonint.undisturbed : undefined, wall_ms: Math.round(r.wall), api_ms: r.result?.duration_api_ms ?? null,
       turns: r.result?.num_turns ?? null, tool_calls: r.tools, input: u.input_tokens, cache_read: u.cache_read_input_tokens, cache_create: u.cache_creation_input_tokens, output: u.output_tokens,
       cost_usd: r.result?.total_cost_usd ?? null, answer: answer.slice(0, 160), error: r.result ? undefined : r.err };
     rows.push(row);
     console.log(JSON.stringify(row));
-    if (args.out) writeFileSync(args.out, JSON.stringify({ side, model, rows }, null, 1));
+    if (args.out) writeFileSync(args.out, JSON.stringify({ side, model, meta: JSON.parse(process.env.AUB_META || '{}'), rows }, null, 1));
   }
 }
 const med = xs => { const s = xs.filter(x => x != null).sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
