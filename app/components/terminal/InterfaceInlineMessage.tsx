@@ -9,18 +9,17 @@ import type { MarkdownInlinePart } from "../markdown/markdownInline";
 import { useMarkdownLinks } from "../markdown/useMarkdownLinkOpener";
 import { recognizeSessionFileReference } from "../../services/sessionFilePreview";
 import { interfaceInlineCodeStyle } from "./InterfaceInlineCodeStyle";
-import { tokenizeInlineMessage } from "./InterfaceMessageBodyModel";
 import { useSessionFilePreviewContext } from "./SessionFilePreviewContext";
 
 interface InterfaceInlineMessageProps {
-  text: string;
+  parts: MarkdownInlinePart[];
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
   compact?: boolean;
 }
 
 export function InterfaceInlineMessage({
-  text,
+  parts: messageParts,
   chrome,
   theme,
   compact = false,
@@ -113,7 +112,7 @@ export function InterfaceInlineMessage({
       return part.text;
     });
 
-  return <>{render(tokenizeInlineMessage(text))}</>;
+  return <>{render(messageParts)}</>;
 }
 
 const styles = StyleSheet.create({

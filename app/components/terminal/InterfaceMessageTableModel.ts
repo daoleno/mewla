@@ -39,13 +39,6 @@ const THIN_CHAR = /[\s.,:;'"|!()[\]{}ilj]/;
 const BROAD_CHAR = /[0-9A-Zmw%$#@&]/;
 const WIDE_CHAR = /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]|[\u{1f300}-\u{1faff}]/u;
 
-/** What a cell shows, without the markdown that draws it. */
-function visibleCellText(cell: string): string {
-  return cell
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/(\*\*|__|\*|_|~~|`)/g, "");
-}
-
 function estimatedTextWidth(text: string): number {
   let width = 0;
   for (const char of text) {
@@ -58,7 +51,7 @@ function estimatedTextWidth(text: string): number {
 }
 
 /**
- * One width per column, from its widest cell, so every row's cells line up.
+ * One width per column, from its widest cell (as plain text, the way it reads), so every row's cells line up.
  * Rows lay out independently, so without a shared width each row sized its
  * cells to its own text and the column edges zigzagged. Text past the
  * maximum wraps inside the cell.
@@ -72,7 +65,7 @@ export function messageTableColumnWidths(
   const columns = Math.max(headers.length, ...rows.map((row) => row.length));
   return Array.from({ length: columns }, (_, column) => {
     const cells = [headers[column] ?? "", ...rows.map((row) => row[column] ?? "")];
-    const widest = Math.max(...cells.map((cell) => estimatedTextWidth(visibleCellText(cell))));
+    const widest = Math.max(...cells.map((cell) => estimatedTextWidth(cell)));
     const width = Math.ceil(widest + limits.padding * 2 + 2);
     return Math.min(limits.max, Math.max(limits.min, width));
   });
