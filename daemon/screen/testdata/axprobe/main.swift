@@ -3,12 +3,16 @@
 // dragged. Every event it receives goes to a log file, one JSON object a line, so the probe knows what an app behind
 // other windows really got.
 //
-//   axprobe LOGFILE
+//   axprobe LOGFILE [person]
+//
+// With "person" the window is titled Person: the probe runs a second copy as the person's own app, whose window the
+// Mac probe watches for didResignKey while the first copy is dragged behind it.
 //
 // It never activates itself: started from a program, it stays behind whatever is in front.
 import AppKit
 
 let logPath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "/tmp/axprobe.log"
+let windowTitle = CommandLine.arguments.count > 2 ? "Person" : "Probe Lab"
 
 func log(_ fields: String) {
     let line = "{\"t\":\(Int(Date().timeIntervalSince1970 * 1000)),\(fields)}\n"
@@ -66,7 +70,7 @@ final class Delegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         window = NSWindow(contentRect: NSRect(x: 240, y: 240, width: 520, height: 360),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "Probe Lab"
+        window.title = windowTitle
         let content = NSView(frame: NSRect(x: 0, y: 0, width: 520, height: 360))
         window.contentView = content
 
