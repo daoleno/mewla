@@ -6,13 +6,14 @@
  * allowed by the host manifest, so there is no key to copy or leak):
  *   {type: "connect", id, relayUrl, client, label?, bounds?: {left, top, width, height}}
  * and gets back {type: "connected" | "closed" | "error", id, ...}.
- * Each connection gets a new, unfocused window; the person's own windows and
+ * Each connection gets a new, unfocused window (minimized when there is no
+ * agent display to put it on); the person's own windows and
  * tabs are never attached, moved, focused or listed. Its tabs are in a tab
  * group named for the Worker, so the person can see whose they are, and any
  * number of Workers can work in this Chrome at once, each in its own window.
  * When the agent is done its window closes with its tabs.
  */
-import { debugLog, openRelayConnection } from './relay.js';
+import { debugLog, drivenAt, openRelayConnection } from './relay.js';
 
 const HOST = 'com.mewla.browser';
 const NON_DEBUGGABLE_SCHEMES = ['chrome:', 'edge:', 'devtools:', 'chrome-extension:'];
@@ -23,6 +24,7 @@ const isNonDebuggableUrl = url => !!url && NON_DEBUGGABLE_SCHEMES.some(s => url.
 // is sent, even with no pointer), it goes straight back.
 let personWindowId;
 const agentWindowIds = new Set();
+const minimizeAgentWindows = new Set();
 // Windows being made right now: until they are known as agent windows, a focus
 // change to a window nobody has seen yet could be theirs, so it waits.
 // The person's window, and when focus left Chrome from it: a window that
@@ -57,11 +59,19 @@ chrome.windows.onFocusChanged.addListener(async windowId => {
     personWindowId = windowId;
     return;
   }
+  // The window took the focus because of something the agent did to it (it
+  // opened, or a command just reached it): the person's window had it a moment
+  // ago, and some desktops pass through "no window" in between. It goes back.
+  const agentCaused = Date.now() - (createdAt.get(windowId) ?? 0) < 2500 || Date.now() - (drivenAt.get(windowId) ?? 0) < 500;
   if (personWindowId === undefined && lostPersonWindowId !== undefined &&
-      Date.now() - lostAt < 1500 && Date.now() - (createdAt.get(windowId) ?? 0) < 2500)
+      Date.now() - lostAt < 1500 && agentCaused)
     personWindowId = lostPersonWindowId;
   if (personWindowId !== undefined) {
     await chrome.windows.update(personWindowId, { focused: true }).catch(() => {});
+    // Without an agent display to put it on, the window the person was in is the only place the agent's
+    // can go that is not over theirs: out of the way, still working.
+    if (minimizeAgentWindows.has(windowId))
+      await chrome.windows.update(windowId, { state: 'minimized' }).catch(() => {});
   }
 });
 
@@ -109,6 +119,8 @@ class AgentWindow {
 
   async open({ relayUrl, bounds, label }) {
     const options = { url: 'about:blank', type: 'normal', focused: false };
+    this.minimize = !bounds;
+    if (!bounds) options.state = 'minimized';
     if (bounds) {
       options.left = Math.round(bounds.left);
       options.top = Math.round(bounds.top);
@@ -126,6 +138,7 @@ class AgentWindow {
       window = await chrome.windows.create(options);
       this.windowId = window.id;
       agentWindowIds.add(window.id);
+      if (this.minimize) minimizeAgentWindows.add(window.id);
       createdAt.set(window.id, Date.now());
     } finally {
       doneCreating();
@@ -173,6 +186,8 @@ class AgentWindow {
     this.connection?.close(reason);
     sessions.delete(this.id);
     agentWindowIds.delete(this.windowId);
+    minimizeAgentWindows.delete(this.windowId);
+    drivenAt.delete(this.windowId);
     createdAt.delete(this.windowId);
     if (this.windowId !== undefined)
       await chrome.windows.remove(this.windowId).catch(() => {});

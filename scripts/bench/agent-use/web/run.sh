@@ -2,7 +2,10 @@
 # Web suite of the agent-use benchmark, fully automatic, on this Linux computer. No window of the user's is used:
 # its own Xvnc display, its own Chrome for Testing, its own throwaway state; nothing of the live daemon is touched.
 #
-#   web/run.sh [--reps 3] [--only id,id] [--with-long] [--sides mewla,ab] [--keep]
+#   web/run.sh [--reps 3] [--only id,id] [--with-long] [--sides mewla,ab] [--keep] [--wm none|kwin] [--tag label]
+#   --wm kwin: run kwin_x11 (KDE's window manager, default focus-stealing prevention, no compositing) on the display, so
+#   window placement, stacking and activation are a real desktop's and not a bare X server's. --tag goes into the run id
+#   (before / after a change).
 #
 # mewla side: the real chain. daemon/agentuse TestAgentUseBenchBridge brings up Mewla's extension, native host and
 #   bridge in a Chrome for Testing and writes the browser tools' argv exactly as the daemon builds them; the tools
@@ -16,7 +19,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
-REPS=3; ONLY=""; SIDES="mewla,ab"; LONG=""; KEEP=""
+REPS=3; ONLY=""; SIDES="mewla,ab"; LONG=""; KEEP=""; WM=none; TAG=""
 while [ $# -gt 0 ]; do
   case $1 in
     --reps) REPS=$2; shift 2;;
@@ -24,6 +27,8 @@ while [ $# -gt 0 ]; do
     --sides) SIDES=$2; shift 2;;
     --with-long) LONG="--with-long"; shift;;
     --keep) KEEP=1; shift;;
+    --wm) WM=$2; shift 2;;
+    --tag) TAG=-$2; shift 2;;
     *) echo "unknown flag $1" >&2; exit 2;;
   esac
 done
@@ -34,6 +39,7 @@ SHA=$(git -C "$REPO" rev-parse --short HEAD)
 cleanup() {
   touch "$WORK/bridge.json.stop" 2>/dev/null || true
   sleep 3
+  [ -f "$WORK/wm.pid" ] && kill "$(cat "$WORK/wm.pid")" 2>/dev/null || true
   [ -f "$WORK/xvnc.pid" ] && kill "$(cat "$WORK/xvnc.pid")" 2>/dev/null || true
   agent-browser close --all >/dev/null 2>&1 || true
   [ -n "$KEEP" ] || rm -rf "$WORK"
@@ -46,6 +52,17 @@ mkdir -p "$WORK/pwmcp" && (cd "$WORK/pwmcp" && npm init -y >/dev/null && npm i -
 (cd "$REPO/daemon" && go build -o "$WORK/mewla" ./cmd/mewla)
 nohup Xvnc ":$DISP" -SecurityTypes None -localhost yes -rfbport $((59000 + DISP)) -geometry 1280x900 -depth 24 >"$WORK/xvnc.log" 2>&1 &
 echo $! >"$WORK/xvnc.pid"; sleep 2
+WMNOTE="no window manager (bare Xvnc)"
+case $WM in
+  none) ;;
+  kwin)
+    DISPLAY=":$DISP" KWIN_COMPOSE=N nohup kwin_x11 >"$WORK/wm.log" 2>&1 &
+    echo $! >"$WORK/wm.pid"; sleep 4
+    DISPLAY=":$DISP" xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null 2>&1 || { echo "kwin_x11 did not come up; see $WORK/wm.log" >&2; KEEP=1; exit 1; }
+    export XUSER_WM=1
+    WMNOTE="kwin_x11 $(pacman -Q kwin 2>/dev/null | awk '{print $2}' || true), no compositing, default focus-stealing prevention";;
+  *) echo "unknown --wm $WM" >&2; exit 2;;
+esac
 CFT=$(ls -d "$HOME"/.cache/ms-playwright/chromium-*/chrome-linux64/chrome | tail -1)
 (cd "$REPO/daemon" && DISPLAY=":$DISP" AUB_BRIDGE_OUT="$WORK/bridge.json" MEWLA_E2E_CHROME="$CFT" MEWLA_E2E_MCP="$WORK/pwmcp/node_modules/@playwright/mcp/cli.js" \
   MEWLA_E2E_BIN="$WORK/mewla" nohup go test ./agentuse -run AgentUseBenchBridge -v -count=1 -timeout 3h >"$WORK/bridge.log" 2>&1) &
@@ -60,7 +77,7 @@ SUITE=(node "$HERE/../../browser/suite.mjs" --reps "$REPS" $LONG)
 [ -n "${AUB_SUITE_EXTRA:-}" ] && SUITE+=($AUB_SUITE_EXTRA)
 for side in ${SIDES//,/ }; do
   if [ "$side" = mewla ]; then
-    AUB_META="{\"run_id\":\"$STAMP-web-fixture-mewla_chrome-bg\",\"transport\":\"Mewla extension $EXT + native host + bridge (real); supervise layer mirrored by mewla-proxy.mjs\",\"tool_version\":\"git:$SHA\",\"nonint_measured\":[\"key_focus_lost\",\"raised_over_user\",\"typing_lost\",\"pointer_moved\",\"user_page_hidden\"],\"nonint_not_measured\":[\"clipboard\",\"space_switch\",\"dialog_on_user\",\"app_activation\"]}" \
+    AUB_META="{\"run_id\":\"$STAMP-web-fixture-mewla_chrome-bg-$WM$TAG\",\"transport\":\"Mewla extension $EXT + native host + bridge (real); supervise layer mirrored by mewla-proxy.mjs; display: $WMNOTE\",\"tool_version\":\"git:$SHA\",\"nonint_measured\":[\"key_focus_lost\",\"raised_over_user\",\"typing_lost\",\"pointer_moved\",\"user_page_hidden\"],\"nonint_not_measured\":[\"clipboard\",\"space_switch\",\"dialog_on_user\",\"app_activation\"]}" \
       "${SUITE[@]}" --side mewla --nonint --out "$WORK/mewla.json"
     python3 -I "$HERE/../aub.py" convert-web "$WORK/mewla.json"
   else

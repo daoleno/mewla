@@ -34,3 +34,14 @@ export const tasks = [
     prompt: 'Open https://news.ycombinator.com/item?id=8863 and tell me the title of that post.',
     check: a => has(a, 'Dropbox') },
 ];
+
+// Run only by naming them with --only: checks of what a task needs from the page being drawn (a screenshot, an
+// animation frame), for changes that could stop the page being drawn (a window kept out of the way).
+export const extraTasks = [
+  { id: 'shot', kind: 'extra',
+    prompt: 'Open {base}/table and take a screenshot of the page with the browser screenshot tool. Tell me the first column header you can read in the screenshot.',
+    check: a => has(a, 'ID') },
+  { id: 'raf', kind: 'extra',
+    prompt: 'Open {base}/raf, press Start and wait until the counter shows Done. Tell me the number it ends on.',
+    check: a => has(a, '30') },
+];
