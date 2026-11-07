@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func TestGitDiffPageAuthenticatedWebSocket(t *testing.T) {
+func TestGitDiffPatchAuthenticatedWebSocket(t *testing.T) {
 	repo := initGitDiffTestRepo(t)
 	writeGitDiffTestFile(t, repo, "tracked.ts", "old\n")
 	runGitDiffTestGit(t, repo, "add", ".")
@@ -47,37 +47,37 @@ func TestGitDiffPageAuthenticatedWebSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	for _, path := range []string{" odd\tfile ", "tracked.ts"} {
-		for _, scope := range []string{"all", "working", "staged"} {
-			if err = conn.WriteJSON(map[string]any{"type": "git_diff_page", "request_id": "page-test", "cwd": repo, "path": path, "scope": scope, "row": 0, "query": "new"}); err != nil {
+	// " odd\tfile " is untracked; tracked.ts has a staged and an unstaged change.
+	for path, scopes := range map[string][]string{" odd\tfile ": {"untracked"}, "tracked.ts": {"staged", "unstaged"}} {
+		if err = conn.WriteJSON(map[string]any{"type": "git_diff_patch", "request_id": "patch-test", "cwd": repo, "path": path}); err != nil {
+			t.Fatal(err)
+		}
+		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+		for {
+			_, raw, err := conn.ReadMessage()
+			if err != nil {
 				t.Fatal(err)
 			}
-			conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-			for {
-				_, raw, err := conn.ReadMessage()
-				if err != nil {
-					t.Fatal(err)
-				}
-				var response struct {
-					Type      string      `json:"type"`
-					RequestID string      `json:"request_id"`
-					Page      gitDiffPage `json:"page"`
-				}
-				if err = json.Unmarshal(raw, &response); err != nil {
-					t.Fatal(err)
-				}
-				if response.RequestID != "page-test" {
-					continue
-				}
-				if response.Type != "git_diff_page" || response.Page.Path != path || response.Page.Scope != scope {
-					t.Fatalf("response: %s", raw)
-				}
-				wantEmpty := path == " odd\tfile " && scope == "staged"
-				if (len(response.Page.Rows) == 0) != wantEmpty {
-					t.Fatalf("unexpected %s/%s rows: %+v", path, scope, response.Page)
-				}
-				break
+			var response struct {
+				Type      string              `json:"type"`
+				RequestID string              `json:"request_id"`
+				Patch     gitDiffPatchPayload `json:"patch"`
 			}
+			if err = json.Unmarshal(raw, &response); err != nil {
+				t.Fatal(err)
+			}
+			if response.RequestID != "patch-test" {
+				continue
+			}
+			if response.Type != "git_diff_patch" || response.Patch.Path != path || len(response.Patch.Sections) != len(scopes) {
+				t.Fatalf("response for %q: %s", path, raw)
+			}
+			for index, scope := range scopes {
+				if response.Patch.Sections[index].Scope != scope {
+					t.Fatalf("%q section %d scope = %q, want %q", path, index, response.Patch.Sections[index].Scope, scope)
+				}
+			}
+			break
 		}
 	}
 }
