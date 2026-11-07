@@ -53,7 +53,8 @@ uses, and follows the same switches:
 
 - An account that is off or disconnected is not read.
 - Watch uses only read tools, and only the ones allowed for that account.
-  GitHub: `get_repository`, `list_workflow_runs` (CI), `list_updated_issues`,
+  GitHub's own tools: `search_repositories` (finds the default branch),
+  `actions_list` (CI runs), `list_issues`, `list_pull_requests`,
   `list_dependabot_alerts` and `list_code_scanning_alerts`. Linear:
   `list_teams`, `list_issues` and `list_comments`.
 - Watch's reads don't change an account's status or its recent calls.
@@ -62,11 +63,17 @@ uses, and follows the same switches:
 whether Watch is collecting and, if not, why: `not_connected` (no account for
 that service), `disabled` (every account is off), `not_allowed` (a read tool
 it needs is blocked), or `unreachable` (no account can read it, for example
-HTTP 404). An endpoint it can't use is listed under `github.endpoints`.
+GitHub saying it has no such repository). An endpoint it can't use is listed
+under `github.endpoints` (`actions`, `issues`, `pull-requests`, `dependabot`,
+`code-scanning`) with GitHub's own words, for example that Dependabot alerts are
+disabled for the repository. GitHub's tools report no rate limit, so Watch no
+longer pauses itself on one; its reads are one pass every 7 minutes.
 
-GitHub accounts connected before these read tools existed need **Refresh** in
-Tools & activity and the new tools allowed (or **Read and search** turned off
-and on again).
+GitHub accounts connected before Mewla moved to GitHub's own tools keep their
+token. At the next start the account lists the official tools, and the read
+tools it had on are on again. Changes you had allowed are off, because they are
+different tools now: allow them again by name. If GitHub refuses the saved token,
+the account asks you to sign in again.
 
 ### Linking Linear
 

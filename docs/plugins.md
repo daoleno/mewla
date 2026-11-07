@@ -38,6 +38,18 @@ login on this server**, which imports the account the GitHub CLI (`gh`) is
 signed in to on your computer. Mewla shows the identity first and copies it only
 after you confirm.
 
+GitHub's tools are GitHub's own: Mewla connects to GitHub's official MCP server
+(`api.githubcopilot.com/mcp/`) with that same token, so the tool list, the
+descriptions and the arguments come from GitHub and follow its releases. Mewla
+serves the repository, issue, pull request, user, Actions, code scanning,
+Dependabot and organization tools (54 of GitHub's roughly 120), and reviews each
+one as a read or a change: reads are on after sign-in, every change (merging,
+pushing files, creating issues, triggering a workflow) is off until you allow it.
+GitHub's server has no tools for self-hosted runners, repository or organization
+secrets and variables, webhooks, environments, or creating a release; do those
+by hand on GitHub or with `gh`. When GitHub changes a tool you had allowed, it
+waits for your confirmation like any other updated tool.
+
 There are no tokens, client IDs or callback URLs to type for sign-in services.
 
 ## Sign-in availability
