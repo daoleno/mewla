@@ -72,7 +72,7 @@ bun run ios
 
 You can also open `app/ios/Mewla.xcworkspace` in Xcode after `pod install`. The `app/ios/` directory is generated and gitignored; make durable native configuration changes through Expo config or the local Expo module instead of editing generated files.
 
-The app uses bundle identifier `com.daoleno.mewla`, targets iOS 16.4 or newer, and declares local-network access because Mewla connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
+The app uses bundle identifier `com.daoleno.mewla`, targets iOS 17.5 or newer, and declares local-network access because Mewla connects directly to a self-hosted daemon. Camera access is used for pairing QR codes; microphone access is not requested.
 
 ## Pair and validate
 

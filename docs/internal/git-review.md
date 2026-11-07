@@ -36,18 +36,13 @@ menu); the WebViews draw content only. Messages between them are typed in
 `treeViewerProtocol.ts`, and every message from a WebView is parsed and dropped
 if unexpected.
 
-The WebViews must work on the oldest systems the app installs on: iOS 16.4 (the
-Podfile's deployment target) and Android WebView 117. The libraries' stylesheets
-are written for newer engines, so `scripts/generate-pierre-viewer.mjs` lowers each
-inlined stylesheet with lightningcss (a dev dependency, not shipped): CSS nesting
-(Safari 17.2) is unrolled, relative colors become `color-mix()`, and `light-dark()`
-(Safari 17.5, Chromium 123) becomes two custom properties that
-`runtime/colorScheme.js` switches with the app theme, so a theme change restyles
-the open document without reloading it. `color-mix()` stays (Safari 16.2, Chromium
-111). Subgrid (Safari 16, Chromium 117) lays out the diff grid and cannot be
-lowered; a WebView without it shows "This WebView is too old to show diffs."
-instead of a broken grid. `pierrePlatformFloor.test.ts` fails when a library bump
-brings back newer CSS, an ES2023+ syntax, or a newer API.
+The WebViews run on iOS 17.5 or newer (the app's deployment target, set in
+`app/plugins/withIOSBuild.js`) and Android WebView 123 or newer. That is the
+oldest engine with `light-dark()`, which Pierre's stylesheets use, so they ship
+exactly as the libraries write them: no lowering step. Android System WebView
+updates through Google Play. A WebView without `light-dark()` shows "This WebView
+is too old to show diffs." instead of unthemed colors. `pierrePlatformFloor.test.ts`
+fails when a library bump needs CSS, an API or syntax newer than that line.
 
 One file is open at a time. A wide layout (720 dp and up) reads in split view and
 a phone in unified view. The reader shows old and new line numbers, change

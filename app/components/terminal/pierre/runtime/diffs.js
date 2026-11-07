@@ -2,16 +2,14 @@
 // page on web). It renders only; the host owns chrome, data and clipboard.
 // Messages in and out are described by ../diffViewerProtocol.ts.
 import { CodeView, parsePatchFiles, registerCustomCSSVariableTheme } from "@pierre/diffs";
-import { applyColorScheme } from "./colorScheme.js";
 import { findMatches, hunkStarts, stepHunk, stepIndex } from "./diffNavigation.ts";
 
 const THEME = "mewla";
 
-// The diff grid is laid out with CSS subgrid (Safari 16, Chromium 117), the
-// newest feature the reader cannot work around; an older WebView says so
-// instead of drawing a broken grid.
-function requireSubgrid() {
-  if (!CSS.supports("grid-template-columns", "subgrid")) throw new Error("This WebView is too old to show diffs. Update Android System WebView.");
+// Pierre's stylesheets use light-dark() (Safari 17.5, Chromium 123), the app's
+// floor; an older WebView says so instead of drawing unthemed colors.
+function requireLightDark() {
+  if (!CSS.supports("color", "light-dark(red, blue)")) throw new Error("This WebView is too old to show diffs. Update Android System WebView.");
 }
 registerCustomCSSVariableTheme(THEME, {}, true);
 
@@ -46,7 +44,7 @@ export function mountDiffViewer(container, post) {
     s.setProperty("--diffs-line-height", `${Math.round(style.fontSize * 1.6)}px`);
     s.setProperty("--diffs-tab-size", "4");
     s.setProperty("--diffs-gap-block", "0px");
-    applyColorScheme(container, style.dark);
+    container.style.colorScheme = style.dark ? "dark" : "light";
     container.style.background = style.vars["--diffs-background"] || "transparent";
     root.style.background = container.style.background;
   }
@@ -197,8 +195,8 @@ export function mountDiffViewer(container, post) {
         remember();
         build();
         break;
-      case "diff": requireSubgrid(); showDiff(message); break;
-      case "file": requireSubgrid(); showFile(message); break;
+      case "diff": requireLightDark(); showDiff(message); break;
+      case "file": requireLightDark(); showFile(message); break;
       case "clear": remember(); current = null; build(); break;
       case "files": {
         const pending = [...pendingFiles.entries()].find(([id]) => id === message.id);

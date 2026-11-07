@@ -320,7 +320,7 @@ bun run ios
 ```
 
 You can also open `app/ios/Mewla.xcworkspace` in Xcode after `pod install`. The
-app targets iOS 16.4 or newer and asks for local-network access (to reach your
+app targets iOS 17.5 or newer and asks for local-network access (to reach your
 daemon) and camera access (to scan pairing codes).
 
 ### Web UI

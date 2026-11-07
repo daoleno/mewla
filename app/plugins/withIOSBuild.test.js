@@ -11,6 +11,7 @@ import { join } from "node:path";
 import {
   NOTICE_BUNDLE_REL,
   NOTICE_SRC_REL,
+  applyIOSDeploymentTarget,
   applyIOSPodfileProperties,
   applyIOSVersionBuildSettings,
   copyGhosttyNoticeIntoIOSProject,
@@ -25,6 +26,7 @@ describe("withIOSBuild Podfile properties", () => {
 
     expect(properties).toEqual({
       "expo.jsEngine": "hermes",
+      "ios.deploymentTarget": "17.5",
       EXPO_USE_PRECOMPILED_MODULES: "false",
     });
   });
@@ -146,5 +148,18 @@ describe("withIOSBuild Ghostty MIT notice packaging", () => {
     );
     expect(NOTICE_BUNDLE_REL).toBe(lock.ios.notice_bundle_path);
     expect(NOTICE_SRC_REL).toBe(lock.ios.notice_source.replace(/^app\//, ""));
+  });
+});
+
+describe("withIOSBuild deployment target", () => {
+  test("raises every Xcode configuration that sets one to iOS 17.5", () => {
+    const configurations = {
+      A: { buildSettings: { IPHONEOS_DEPLOYMENT_TARGET: "16.4" } },
+      A_comment: "Debug",
+      B: { buildSettings: {} },
+    };
+    applyIOSDeploymentTarget({ pbxXCBuildConfigurationSection: () => configurations });
+    expect(configurations.A.buildSettings.IPHONEOS_DEPLOYMENT_TARGET).toBe("17.5");
+    expect(configurations.B.buildSettings.IPHONEOS_DEPLOYMENT_TARGET).toBeUndefined();
   });
 });
