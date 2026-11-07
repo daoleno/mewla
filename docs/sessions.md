@@ -127,6 +127,13 @@ own. Copy gives the text as written, Markdown included; code blocks keep their
 own copy button. Each button is a 44 dp target that commits when you lift your
 finger, so a slightly drifting tap still counts.
 
+Messages are read as standard GitHub-flavored Markdown on every platform:
+headings, quotes (including a line that continues a quote without its `>`),
+nested and numbered lists, task lists, tables, strikethrough, links and bare
+URLs, HTML entities such as `&amp;`, images, code blocks with a copy button,
+and Mermaid diagrams. A reply that is still arriving never shows half-typed
+syntax: an unfinished `-`, `1.` or `>` waits for its text.
+
 **Edit** puts the message in the composer with a small bar above it and an x to
 cancel. What sending does depends on the agent:
 
