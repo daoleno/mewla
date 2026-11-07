@@ -93,7 +93,8 @@ describe('release asset workflow contract', () => {
     expect(androidNative).toContain('android-native-inputs-');
     expect(androidNative).toContain('android-ghostty-output-v2-arm64-');
     expect(androidNative).toContain('app/modules/terminal-vt/android/src/main/cpp/ghostty');
-    expect(androidNative).toContain('app/modules/terminal-vt/patches/android/**');
+    expect(androidNative).toContain('scripts/lib/ghostty_release.py');
+    expect(androidNative).toContain('scripts/lib/minisign_verify.py');
     expect(androidNative).toContain('scripts/verify-android-native-symbols.py');
     expect(androidNative).toContain("steps.ghostty-output-cache.outputs.cache-hit != 'true'");
     expect(androidNative).toContain('run: ./scripts/verify-libghostty.sh --release');
