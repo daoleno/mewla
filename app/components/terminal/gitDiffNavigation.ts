@@ -4,8 +4,6 @@ export interface GitDiffBackState {
   view: GitDiffViewMode;
   hasSelectedFile: boolean;
   hasBrowserFile: boolean;
-  /** The Files browser is inside a subfolder rather than the repo root. */
-  hasBrowserParent?: boolean;
   /** Where the currently open working file was opened from. */
   fileOrigin: GitDiffViewMode;
 }
@@ -15,21 +13,19 @@ export type GitDiffBackAction =
   | "deselect-file"
   | "close-browser-file-to-reader"
   | "close-browser-file-to-browser"
-  | "browser-to-parent"
   | "browser-to-changes";
 
 /**
  * Resolves what Android hardware back (or a header back control) should unwind.
  * A child state must never close the whole feature; only the overview closes.
  * Closing a working file returns to the state it was opened from, so every
- * exposed Back control shares one destination. Inside the Files browser, Back
- * climbs one folder at a time before returning to the changes list, so the
- * header owns the only folder-up control.
+ * exposed Back control shares one destination. The Files tree has no folder
+ * levels to climb, so Back there returns to the changes list.
  */
 export function resolveGitDiffBack(state: GitDiffBackState): GitDiffBackAction {
   if (state.view === "files") {
     if (!state.hasBrowserFile) {
-      return state.hasBrowserParent ? "browser-to-parent" : "browser-to-changes";
+      return "browser-to-changes";
     }
     return state.fileOrigin === "changes"
       ? "close-browser-file-to-reader"

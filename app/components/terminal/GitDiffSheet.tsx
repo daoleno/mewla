@@ -16,13 +16,13 @@ import {
 } from "../../constants/terminalThemes";
 import {
   filterGitDiffFiles,
+  type GitDiffFileContentPayload,
   type GitDiffFileInfo,
-  type GitDiffPage,
-  type GitDiffPageRequest,
+  type GitDiffPatchPayload,
   type GitDiffScope,
   type GitDiffStatusSnapshot,
-  type GitRepoBrowserEntry,
   type GitRepoFileContentPayload,
+  type GitRepoPathsPayload,
 } from "../../services/gitDiff";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { EmptyState } from "../ui/EmptyState";
@@ -52,23 +52,22 @@ interface GitDiffSheetProps {
   snapshot: GitDiffStatusSnapshot | null;
   loading: boolean;
   error: string | null;
-  loadPage(request: GitDiffPageRequest): Promise<GitDiffPage>;
+  loadPatch(path: string): Promise<GitDiffPatchPayload>;
+  loadFileContent(path: string): Promise<GitDiffFileContentPayload>;
   refreshKey: number;
   ownerKey: string;
-  repoBrowserPath: string;
-  repoBrowserEntries: GitRepoBrowserEntry[];
-  repoBrowserLoading: boolean;
-  repoBrowserError: string | null;
+  repoPaths: GitRepoPathsPayload | null;
+  repoPathsLoading: boolean;
+  repoPathsError: string | null;
   repoFilePath: string | null;
   repoFileLoadingPath: string | null;
   repoFileError: string | null;
   repoFileByPath: Record<string, GitRepoFileContentPayload | undefined>;
   onClose(): void;
   onRefresh(): void;
-  onOpenRepoPath(path: string): void;
+  onLoadRepoPaths(): void;
   onOpenRepoFile(path: string): void;
   onCloseRepoFile(): void;
-  onBackRepoPath(): void;
 }
 
 export function GitDiffSheet(props: GitDiffSheetProps) {
@@ -95,23 +94,22 @@ function GitDiffSheetBody({
   snapshot,
   loading,
   error,
-  loadPage,
+  loadPatch,
+  loadFileContent,
   refreshKey,
   ownerKey,
-  repoBrowserPath,
-  repoBrowserEntries,
-  repoBrowserLoading,
-  repoBrowserError,
+  repoPaths,
+  repoPathsLoading,
+  repoPathsError,
   repoFilePath,
   repoFileLoadingPath,
   repoFileError,
   repoFileByPath,
   onClose,
   onRefresh,
-  onOpenRepoPath,
+  onLoadRepoPaths,
   onOpenRepoFile,
   onCloseRepoFile,
-  onBackRepoPath,
   backRef,
 }: GitDiffSheetProps & { backRef: React.MutableRefObject<() => void> }) {
   const chrome = useGitDiffChrome(theme);
@@ -119,12 +117,11 @@ function GitDiffSheetBody({
   const insets = useSafeAreaInsets();
   const wide = width >= WIDE_BREAKPOINT;
   const bottomInset = Math.max(insets.bottom, 0);
-  const { copyPath, copyPatch, copyText } = useGitDiffClipboard(loadPage);
+  const { copyPath, copyPatch, copyText } = useGitDiffClipboard(loadPatch);
 
   const [view, setView] = React.useState<GitDiffViewMode>("changes");
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null);
   const [scope, setScope] = React.useState<GitDiffScope>("all");
-  const [fileFilterOpen, setFileFilterOpen] = React.useState(false);
   const [diffSearchOpen, setDiffSearchOpen] = React.useState(false);
   const [diffOptionsOpen, setDiffOptionsOpen] = React.useState(false);
   const [fileOrigin, setFileOrigin] = React.useState<GitDiffViewMode>("files");
@@ -134,10 +131,6 @@ function GitDiffSheetBody({
   const [menuVisible, setMenuVisible] = React.useState(false);
 
   const files = React.useMemo(() => snapshot?.files ?? [], [snapshot?.files]);
-  const changedPathSet = React.useMemo(
-    () => new Set(files.map((file) => file.path)),
-    [files],
-  );
   const selectedFile =
     files.find((file) => file.path === selectedPath) ?? null;
   const repoFileContent = repoFilePath
@@ -151,7 +144,6 @@ function GitDiffSheetBody({
     setView("changes");
     setSelectedPath(null);
     setScope("all");
-    setFileFilterOpen(false);
     setDiffSearchOpen(false);
     setDiffOptionsOpen(false);
     setMenuVisible(false);
@@ -197,7 +189,6 @@ function GitDiffSheetBody({
       view,
       hasSelectedFile: Boolean(selectedFile),
       hasBrowserFile: Boolean(repoFilePath),
-      hasBrowserParent: repoBrowserPath !== "",
       fileOrigin,
     });
     switch (action) {
@@ -215,20 +206,17 @@ function GitDiffSheetBody({
       case "close-browser-file-to-browser":
         onCloseRepoFile();
         break;
-      case "browser-to-parent":
-        onBackRepoPath();
-        break;
       case "browser-to-changes":
         setView("changes");
         break;
     }
-  }, [closeReaderTools, fileOrigin, onBackRepoPath, onClose, onCloseRepoFile, repoBrowserPath, repoFilePath, selectedFile, view]);
+  }, [closeReaderTools, fileOrigin, onClose, onCloseRepoFile, repoFilePath, selectedFile, view]);
   backRef.current = handleBack;
 
   const handleBrowseFiles = React.useCallback(() => {
     setView("files");
-    onOpenRepoPath(repoBrowserPath);
-  }, [onOpenRepoPath, repoBrowserPath]);
+    if (!repoPaths) onLoadRepoPaths();
+  }, [onLoadRepoPaths, repoPaths]);
 
   const handleOpenWorkingFile = React.useCallback(
     (path: string) => {
@@ -251,9 +239,9 @@ function GitDiffSheetBody({
     onRefresh();
     if (view === "files") {
       if (repoFilePath) onOpenRepoFile(repoFilePath);
-      else onOpenRepoPath(repoBrowserPath);
+      else onLoadRepoPaths();
     }
-  }, [onOpenRepoFile, onOpenRepoPath, onRefresh, repoBrowserPath, repoFilePath, view]);
+  }, [onLoadRepoPaths, onOpenRepoFile, onRefresh, repoFilePath, view]);
 
   const openMenu = React.useCallback((request: GitDiffMenuRequest) => {
     setMenu(request);
@@ -311,13 +299,8 @@ function GitDiffSheetBody({
           : { items: [refreshItem] };
       case "files":
         return {
-          title: repoBrowserPath || repoTitle,
-          items: [
-            ...(repoBrowserPath
-              ? [{ key: "copy-folder", label: "Copy folder path", icon: "link" as const, onPress: () => void copyPath(repoBrowserPath) }]
-              : []),
-            refreshItem,
-          ],
+          title: repoTitle,
+          items: [refreshItem],
         };
       case "file":
         return {
@@ -332,14 +315,6 @@ function GitDiffSheetBody({
       case "overview": {
         if (!snapshot?.available) return { items: [refreshItem] };
         const items: ActionMenuItem[] = [];
-        if (files.length) {
-          items.push({
-            key: "filter",
-            label: fileFilterOpen ? "Hide filter" : "Filter paths",
-            icon: "search",
-            onPress: () => setFileFilterOpen((value) => !value),
-          });
-        }
         items.push({
           key: "browse",
           label: "Browse files",
@@ -392,7 +367,6 @@ function GitDiffSheetBody({
         scope={scope}
         repoTitle={repoTitle}
         summary={summary}
-        browserPath={repoBrowserPath}
         browserFilePath={repoFilePath}
         workingFileOrigin={fileOrigin}
         hasActions={Boolean(snapshot || error)}
@@ -458,14 +432,14 @@ function GitDiffSheetBody({
               clean={snapshot.clean}
               branch={snapshot.branch}
               repoTitle={repoTitle}
-              loadPage={loadPage}
+              loadPatch={loadPatch}
+              loadFileContent={loadFileContent}
               refreshKey={refreshKey}
               scope={scope}
               scopeCounts={scopeCounts}
               selectedFile={selectedFile}
               wide={wide}
               bottomInset={bottomInset}
-              fileFilterOpen={fileFilterOpen}
               diffSearchOpen={diffSearchOpen}
               diffOptionsOpen={diffOptionsOpen}
               loading={loading}
@@ -483,7 +457,6 @@ function GitDiffSheetBody({
                 setSelectedPath(null);
                 closeReaderTools();
               }}
-              onCloseFileFilter={() => setFileFilterOpen(false)}
               onToggleDiffSearch={() => setDiffSearchOpen((value) => !value)}
               onToggleDiffOptions={() => setDiffOptionsOpen((value) => !value)}
               onBrowseFiles={handleBrowseFiles}
@@ -504,33 +477,33 @@ function GitDiffSheetBody({
             >
               <GitDiffRepoBrowser
                 repoTitle={repoTitle}
-                repoBrowserPath={repoBrowserPath}
-                repoBrowserEntries={repoBrowserEntries}
-                repoBrowserLoading={repoBrowserLoading}
-                repoBrowserError={repoBrowserError}
+                repoPaths={repoPaths}
+                repoPathsLoading={repoPathsLoading}
+                repoPathsError={repoPathsError}
                 repoFilePath={repoFilePath}
                 repoFileContent={repoFileContent}
                 repoFileLoading={repoFileLoading}
                 repoFileError={repoFileError}
-                changedPathSet={changedPathSet}
+                changedFiles={files}
                 theme={theme}
                 chrome={chrome}
                 bottomInset={bottomInset}
-                onOpenRepoPath={onOpenRepoPath}
+                onRetryPaths={onLoadRepoPaths}
                 onOpenRepoFile={handleOpenBrowserFile}
                 onLongPressEntry={(entry) =>
                   openMenu({
                     title: entry.path,
                     items: [
-                      {
-                        key: "open",
-                        label: entry.kind === "directory" ? "Open folder" : "Open file",
-                        icon: entry.kind === "directory" ? "folder-open" : "document-text",
-                        onPress: () =>
-                          entry.kind === "directory"
-                            ? onOpenRepoPath(entry.path)
-                            : handleOpenBrowserFile(entry.path),
-                      },
+                      ...(entry.kind === "file"
+                        ? [
+                            {
+                              key: "open",
+                              label: "Open file",
+                              icon: "document-text" as const,
+                              onPress: () => handleOpenBrowserFile(entry.path),
+                            },
+                          ]
+                        : []),
                       {
                         key: "copy-path",
                         label: "Copy path",

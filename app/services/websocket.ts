@@ -19,7 +19,6 @@ import {
 import type {
   GitDiffFileContentPayload,
   GitDiffPatchPayload,
-  GitRepoBrowserPayload,
   GitRepoFileContentPayload,
   GitRepoPathsPayload,
   GitDiffStatusSnapshot,
@@ -1534,39 +1533,11 @@ export class WebSocketClient {
       { target_id: options.targetId, cwd: options.cwd, path: options.path },
       {
         responseType: "git_diff_patch",
-        timeoutMs: 10000,
+        // The whole patch of one file, not a page: a large one takes a while.
+        timeoutMs: 30000,
         timeout: "Timed out while loading git diff patch.",
         error: "Failed to load git diff patch.",
         parse: (payload) => payload.patch as GitDiffPatchPayload,
-      },
-    );
-  }
-
-  getGitDiffPage(
-    serverId: string,
-    options: import("./gitDiff").GitDiffPageRequest & {
-      targetId: string;
-      cwd: string;
-    },
-  ) {
-    return this.request<import("./gitDiff").GitDiffPage>(
-      serverId,
-      "git_diff_page",
-      {
-        target_id: options.targetId,
-        cwd: options.cwd,
-        path: options.path,
-        scope: options.scope,
-        row: options.row,
-        file_generation: options.version,
-        query: options.query,
-      },
-      {
-        responseType: "git_diff_page",
-        timeoutMs: 10000,
-        timeout: "Timed out while loading diff page.",
-        error: "Could not load diff page.",
-        parse: (payload) => payload.page,
       },
     );
   }
@@ -1589,28 +1560,6 @@ export class WebSocketClient {
         timeout: "Timed out while loading git diff file content.",
         error: "Failed to load git diff file content.",
         parse: (payload) => payload.content as GitDiffFileContentPayload,
-      },
-    );
-  }
-
-  getGitRepoEntries(
-    serverId: string,
-    options?: {
-      targetId?: string;
-      cwd?: string;
-      path?: string;
-    },
-  ) {
-    return this.request<GitRepoBrowserPayload>(
-      serverId,
-      "git_repo_entries",
-      { target_id: options?.targetId, cwd: options?.cwd, path: options?.path },
-      {
-        responseType: "git_repo_entries",
-        timeoutMs: 10000,
-        timeout: "Timed out while loading repository files.",
-        error: "Failed to load repository files.",
-        parse: (payload) => payload.browser as GitRepoBrowserPayload,
       },
     );
   }

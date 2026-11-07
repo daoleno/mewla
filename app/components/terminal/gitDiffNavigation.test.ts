@@ -42,7 +42,7 @@ describe("Git diff back stack", () => {
       }),
     ).toBe("close-browser-file-to-browser");
   });
-  test("an empty browser returns to the changes list", () => {
+  test("the files tree returns to the changes list", () => {
     expect(
       resolveGitDiffBack({
         view: "files",
@@ -52,24 +52,12 @@ describe("Git diff back stack", () => {
       }),
     ).toBe("browser-to-changes");
   });
-  test("a nested browser folder climbs to its parent before leaving", () => {
-    expect(
-      resolveGitDiffBack({
-        view: "files",
-        hasSelectedFile: false,
-        hasBrowserFile: false,
-        hasBrowserParent: true,
-        fileOrigin: "files",
-      }),
-    ).toBe("browser-to-parent");
-  });
-  test("an open browser file closes before its folder climbs", () => {
+  test("an open browser file closes back to the tree, not out of the sheet", () => {
     expect(
       resolveGitDiffBack({
         view: "files",
         hasSelectedFile: false,
         hasBrowserFile: true,
-        hasBrowserParent: true,
         fileOrigin: "files",
       }),
     ).toBe("close-browser-file-to-browser");

@@ -1,97 +1,62 @@
-import React from "react";
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
-import * as Haptics from "expo-haptics";
-import {
-  ContinuousCorners,
-  Radii,
-  TouchTarget,
-  TypeScale,
-  UiTextMetrics,
-} from "../../constants/tokens";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { StyleSheet, View } from "react-native";
+import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
 import type {
-  TerminalThemeChrome,
-  TerminalThemePalette,
-} from "../../constants/terminalThemes";
-import type {
-  GitRepoBrowserEntry,
+  GitDiffFileInfo,
   GitRepoFileContentPayload,
+  GitRepoPathsPayload,
 } from "../../services/gitDiff";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
 import { GitDiffRepoFileView } from "./GitDiffRepoFileView";
-import { GitDiffStateCard } from "./GitDiffStateCard";
-import { withAlpha } from "./colorWithAlpha";
-import { Icon } from "../icons/Icon";
+import { TreeViewerHost } from "./pierre/TreeViewerHost";
+import { parseTreeViewerMessage, type TreeViewerHostHandle } from "./pierre/treeViewerProtocol";
+import { useTreeViewerStyle } from "./pierre/useViewerStyle";
+
+export interface GitRepoTreeEntry {
+  path: string;
+  kind: "file" | "directory";
+}
 
 interface GitDiffRepoBrowserProps {
   repoTitle: string;
-  repoBrowserPath: string;
-  repoBrowserEntries: GitRepoBrowserEntry[];
-  repoBrowserLoading: boolean;
-  repoBrowserError: string | null;
+  repoPaths: GitRepoPathsPayload | null;
+  repoPathsLoading: boolean;
+  repoPathsError: string | null;
   repoFilePath: string | null;
   repoFileContent?: GitRepoFileContentPayload;
   repoFileLoading: boolean;
   repoFileError: string | null;
-  changedPathSet: Set<string>;
+  /** Changed files, so the tree can mark what the working tree touches. */
+  changedFiles: GitDiffFileInfo[];
   theme: TerminalThemePalette;
   chrome: TerminalThemeChrome;
   bottomInset: number;
-  onOpenRepoPath(path: string): void;
+  onRetryPaths(): void;
   onOpenRepoFile(path: string): void;
-  onLongPressEntry?(entry: GitRepoBrowserEntry): void;
+  onLongPressEntry?(entry: GitRepoTreeEntry): void;
 }
 
 /**
- * Working-tree browser as one inset grouped list. The sheet header is the
- * only Back: it climbs one folder at a time, so this view draws no folder-up
- * control of its own.
+ * The working tree as one searchable tree. The sheet header is the only Back,
+ * so this view draws no navigation of its own.
  */
 export function GitDiffRepoBrowser({
-  repoBrowserPath,
-  repoBrowserEntries,
-  repoBrowserLoading,
-  repoBrowserError,
+  repoPaths,
+  repoPathsLoading,
+  repoPathsError,
   repoFilePath,
   repoFileContent,
   repoFileLoading,
   repoFileError,
-  changedPathSet,
+  changedFiles,
   theme,
   chrome,
   bottomInset,
-  onOpenRepoPath,
+  onRetryPaths,
   onOpenRepoFile,
   onLongPressEntry,
 }: GitDiffRepoBrowserProps) {
-  const count = repoBrowserEntries.length;
-  const renderRepoEntry = React.useCallback(
-    ({ item, index }: { item: GitRepoBrowserEntry; index: number }) => (
-      <RepoEntryRow
-        entry={item}
-        first={index === 0}
-        last={index === count - 1}
-        changed={changedPathSet.has(item.path)}
-        chrome={chrome}
-        onPress={() => {
-          if (item.kind === "directory") {
-            onOpenRepoPath(item.path);
-            return;
-          }
-          onOpenRepoFile(item.path);
-        }}
-        onLongPress={onLongPressEntry ? () => onLongPressEntry(item) : undefined}
-      />
-    ),
-    [changedPathSet, chrome, count, onLongPressEntry, onOpenRepoFile, onOpenRepoPath],
-  );
-
   if (repoFilePath) {
     return (
       <GitDiffRepoFileView
@@ -107,181 +72,84 @@ export function GitDiffRepoBrowser({
       />
     );
   }
-
+  if (repoPathsError && !repoPaths) {
+    return (
+      <View style={styles.state}>
+        <InlineNotice
+          tone="danger"
+          title="Couldn't load files"
+          detail={repoPathsError}
+          action={{ label: "Retry", onPress: onRetryPaths }}
+        />
+      </View>
+    );
+  }
+  if (!repoPaths) {
+    return (
+      <View style={styles.state}>
+        <EmptyState size="inline" busy={repoPathsLoading} title={repoPathsLoading ? "Loading files" : "No files"} />
+      </View>
+    );
+  }
   return (
-    <FlatList
-      key={`repo-browser-list:${repoBrowserPath || "root"}`}
-      data={repoBrowserEntries}
-      keyExtractor={(item) => `${item.kind}:${item.path}`}
-      renderItem={renderRepoEntry}
-      style={styles.fullList}
-      contentContainerStyle={[
-        styles.browserContent,
-        { paddingBottom: bottomInset + 20 },
-        count === 0 ? styles.fullListEmpty : null,
-      ]}
-      ListHeaderComponent={
-        <View style={styles.header}>
-          {repoBrowserError ? (
-            <InlineNotice
-              tone="danger"
-              title="Couldn't load folder"
-              detail={repoBrowserError}
-              action={{
-                label: "Retry",
-                onPress: () => onOpenRepoPath(repoBrowserPath),
-                disabled: repoBrowserLoading,
-              }}
-              style={styles.notice}
-            />
-          ) : null}
-        </View>
-      }
-      ListEmptyComponent={
-        repoBrowserLoading ? (
-          <EmptyState size="inline" busy title="Loading folder" />
-        ) : repoBrowserError ? undefined : (
-          <GitDiffStateCard
-            icon="folder-open"
-            title="Empty folder"
-            accent={chrome.textSubtle}
-            chromeText={chrome.text}
-            chromeMuted={chrome.textMuted}
-          />
-        )
-      }
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-      nestedScrollEnabled={false}
+    <RepoTree
+      repoPaths={repoPaths}
+      changedFiles={changedFiles}
+      theme={theme}
+      chrome={chrome}
+      onOpenRepoFile={onOpenRepoFile}
+      onLongPressEntry={onLongPressEntry}
     />
   );
 }
 
-function RepoEntryRow({
-  entry,
-  first,
-  last,
-  changed,
+function RepoTree({
+  repoPaths,
+  changedFiles,
+  theme,
   chrome,
-  onPress,
-  onLongPress,
+  onOpenRepoFile,
+  onLongPressEntry,
 }: {
-  entry: GitRepoBrowserEntry;
-  first: boolean;
-  last: boolean;
-  changed: boolean;
+  repoPaths: GitRepoPathsPayload;
+  changedFiles: GitDiffFileInfo[];
+  theme: TerminalThemePalette;
   chrome: TerminalThemeChrome;
-  onPress(): void;
-  onLongPress?(): void;
+  onOpenRepoFile(path: string): void;
+  onLongPressEntry?(entry: GitRepoTreeEntry): void;
 }) {
-  const isDirectory = entry.kind === "directory";
-  const tint = isDirectory ? chrome.accent : chrome.textMuted;
-
+  const host = useRef<TreeViewerHostHandle>(null);
+  useTreeViewerStyle(host, theme, chrome);
+  const gitStatus = useMemo(
+    () => changedFiles.map((file) => ({ path: file.path, status: file.status })),
+    [changedFiles],
+  );
+  useEffect(() => {
+    host.current?.post([
+      { type: "paths", paths: repoPaths.paths, gitStatus, decorations: {}, expand: "closed", search: true },
+    ]);
+  }, [repoPaths, gitStatus]);
+  const onMessage = useCallback(
+    (raw: string) => {
+      const message = parseTreeViewerMessage(raw);
+      if (!message) return;
+      if (message.type === "open") onOpenRepoFile(message.path);
+      else if (message.type === "menu") onLongPressEntry?.({ path: message.path, kind: message.kind });
+    },
+    [onLongPressEntry, onOpenRepoFile],
+  );
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${entry.name}, ${isDirectory ? "folder" : "file"}${changed ? ", changed" : ""}`}
-      accessibilityHint={isDirectory ? "Opens folder" : "Opens file"}
-      onPress={() => {
-        void Haptics.selectionAsync();
-        onPress();
-      }}
-      onLongPress={onLongPress}
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: pressed ? chrome.surfaceActive : chrome.surface,
-          borderTopLeftRadius: first ? Radii.card : 0,
-          borderTopRightRadius: first ? Radii.card : 0,
-          borderBottomLeftRadius: last ? Radii.card : 0,
-          borderBottomRightRadius: last ? Radii.card : 0,
-        },
-      ]}
-    >
-      <View style={[styles.tile, { backgroundColor: withAlpha(tint, 0.12) }]}>
-        <Icon
-          name={isDirectory ? "folder" : "document-text"}
-          size={16}
-          color={tint}
-        />
-      </View>
-      <View style={[styles.rowBody, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: chrome.border }]}>
-        <Text
-          style={[styles.name, { color: chrome.text }]}
-          numberOfLines={1}
-          ellipsizeMode="middle"
-        >
-          {entry.name}
-        </Text>
-        {changed ? (
-          <View
-            style={[styles.changedDot, { backgroundColor: chrome.text }]}
-            accessible={false}
-          />
-        ) : null}
-        {isDirectory ? (
-          <Icon name="chevron-right" size={16} color={chrome.textSubtle} />
-        ) : null}
-      </View>
-    </Pressable>
+    <View style={styles.root}>
+      <TreeViewerHost ref={host} onMessage={onMessage} backgroundColor={chrome.appBackground} accessibilityLabel="Repository files" />
+      {repoPaths.truncated ? (
+        <InlineNotice tone="warning" icon="cut" title="Showing part of this repository" style={styles.truncation} />
+      ) : null}
+    </View>
   );
 }
 
-const TILE = 28;
-
 const styles = StyleSheet.create({
-  fullList: {
-    flex: 1,
-  },
-  fullListEmpty: {
-    flexGrow: 1,
-  },
-  browserContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  header: {
-    gap: 8,
-    paddingBottom: 8,
-  },
-  notice: {
-    marginTop: 4,
-  },
-  row: {
-    ...ContinuousCorners,
-    minHeight: Math.max(TouchTarget, 48),
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: 14,
-    gap: 12,
-    overflow: "hidden",
-  },
-  tile: {
-    width: TILE,
-    height: TILE,
-    borderRadius: 8,
-    ...ContinuousCorners,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowBody: {
-    flex: 1,
-    minWidth: 0,
-    alignSelf: "stretch",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingRight: 14,
-  },
-  name: {
-    ...TypeScale.compact,
-    ...UiTextMetrics,
-    flex: 1,
-    minWidth: 0,
-  },
-  changedDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
+  root: { flex: 1 },
+  state: { flex: 1, justifyContent: "center", paddingHorizontal: 16 },
+  truncation: { position: "absolute", left: 12, right: 12, bottom: 12 },
 });

@@ -1,16 +1,12 @@
 import { useCallback, useRef } from "react";
 import * as Clipboard from "expo-clipboard";
-import type {
-  GitDiffPage,
-  GitDiffPageRequest,
-  GitDiffScope,
-} from "../../services/gitDiff";
+import type { GitDiffPatchPayload, GitDiffScope } from "../../services/gitDiff";
 import { useToast } from "../ui/Toast";
-import { collectGitDiffPatch } from "./gitDiffActions";
+import { gitDiffPatchText } from "./gitDiffReview";
 
 /** Clipboard actions with Toast feedback (Toast also owns the haptic). */
 export function useGitDiffClipboard(
-  loadPage: (request: GitDiffPageRequest) => Promise<GitDiffPage>,
+  loadPatch: (path: string) => Promise<GitDiffPatchPayload>,
 ) {
   const toast = useToast();
   const copyingPatch = useRef(false);
@@ -38,32 +34,13 @@ export function useGitDiffClipboard(
       if (copyingPatch.current) return;
       copyingPatch.current = true;
       try {
-        const result = await collectGitDiffPatch(
-          loadPage,
-          path,
-          scope,
-          undefined,
-          () => toast.show({ title: "Copying diff\u2026", tone: "info" }),
-        );
-        if (result.ok) {
-          await copyText(
-            result.text,
-            "Diff copied",
-            `${result.lines} ${result.lines === 1 ? "line" : "lines"}`,
-          );
+        const text = gitDiffPatchText(await loadPatch(path), scope);
+        if (!text) {
+          toast.show({ tone: "error", title: "Nothing to copy" });
           return;
         }
-        toast.show({
-          tone: "error",
-          ...(result.reason === "too-large"
-            ? {
-                title: "Diff too large to copy",
-                detail: `${result.total} rows`,
-              }
-            : result.reason === "changed"
-              ? { title: "Diff changed while copying" }
-              : { title: "Nothing to copy" }),
-        });
+        const lines = text.split("\n").length - 1;
+        await copyText(text, "Diff copied", `${lines} ${lines === 1 ? "line" : "lines"}`);
       } catch (error) {
         toast.show({
           title: "Couldn't copy diff",
@@ -74,7 +51,7 @@ export function useGitDiffClipboard(
         copyingPatch.current = false;
       }
     },
-    [copyText, loadPage, toast],
+    [copyText, loadPatch, toast],
   );
   return { copyText, copyPath, copyPatch };
 }
