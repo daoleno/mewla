@@ -73,10 +73,10 @@ time. The request travels over the daemon's private socket, which any process
 of your user on that computer can reach, as with the rest of `mewla`. Agents
 don't need a phone's Screen approval: the switch is the approval. A person
 viewing the screen always takes over from an agent, someone using the Mac's own
-keyboard or trackpad pauses what it does on the screen and in the app in front
-(work in an app behind goes on; key presses, clicks, pointer moves and
-scrolling count, a hand resting on the trackpad doesn't, and the agent and the
-log say which input it saw), agents can't use a locked Mac, the app's switch
+keyboard or trackpad does not pause it: the agent is told what you did (key
+presses, clicks, pointer moves and scrolling count, a hand resting on the
+trackpad doesn't; counts, never what you typed) and judges for itself, and a
+button or key it is holding is let go at once, agents can't use a locked Mac, the app's switch
 stops agents at once (`mewla screen disable` and `mewla agent-use off` within
 seconds), and each action is logged without what was typed, including work in
 an app behind others, which Watch may not show. Agents can also open an app

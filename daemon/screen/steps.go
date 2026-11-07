@@ -226,8 +226,9 @@ func (s *Service) runSteps(ctx context.Context, worker string, steps []AgentActi
 	defer cancel()
 	var b strings.Builder
 	var last AgentResult
+	var notes []string
 	for i, step := range steps {
-		result, err := s.Act(ctx, worker, step)
+		result, err := s.act(ctx, worker, step)
 		if err != nil {
 			if ctx.Err() != nil && errors.Is(err, context.DeadlineExceeded) {
 				err = fmt.Errorf("the steps ran out of their %s", stepsBudget)
@@ -236,10 +237,13 @@ func (s *Service) runSteps(ctx context.Context, worker string, steps []AgentActi
 			return AgentResult{}, errors.New(b.String())
 		}
 		fmt.Fprintf(&b, "%d. %s: done\n", i+1, step.Action)
+		if result.notes != "" {
+			notes = append(notes, result.notes)
+		}
 		last = result
 	}
 	if last.Text != "" {
 		b.WriteString("\n" + last.Text)
 	}
-	return AgentResult{Text: b.String(), Image: last.Image, Width: last.Width, Height: last.Height}, nil
+	return AgentResult{Text: b.String(), Image: last.Image, Width: last.Width, Height: last.Height, notes: strings.Join(notes, " ")}, nil
 }

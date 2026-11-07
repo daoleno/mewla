@@ -662,25 +662,22 @@ export function ScreenScreen() {
                 <RailButton icon="hand" name="Take over" color={colors.accentStrong} disabled={busy} onPress={takeOver} />
                 <RailButton icon="stop" name={`Stop ${agentLabel}`} color={colors.dangerText} disabled={busy} onPress={stopWatched} />
               </>
-            ) : (
-              <>
-                <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />
-                <KeyButton label="⌘" name={keysOpen ? "Hide keys" : "Show keys"} active={keysOpen} onPress={() => setKeysOpen(!keysOpen)} />
-              </>
-            )}
+            ) : null}
+            <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />
+            <KeyButton label="⌘" name={keysOpen ? "Hide keys" : "Show keys"} active={keysOpen} onPress={() => setKeysOpen(!keysOpen)} />
             <RailButton icon="more-vertical" name="Screen options" onPress={() => setMenu(true)} />
           </ScrollView>
         ) : null}
       </View>
       {phase === "live" && watching && !immersive ? (
-        <View style={[styles.tray, styles.watchBar, { borderTopColor: colors.borderSubtle, paddingBottom: Math.max(insets.bottom, Spacing.xs) }]}>
+        <View style={[styles.tray, styles.watchBar, { borderTopColor: colors.borderSubtle, paddingBottom: Spacing.xs }]}>
           <Icon name="eye" size={16} color={colors.textSecondary} />
           <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.watchLabel}>{`Watching ${agentLabel}`}</AppText>
           <Button label="Take over" icon="hand" size="sm" variant="filled" onPress={takeOver} disabled={busy} />
           <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${agentLabel}`} onPress={stopWatched} disabled={busy} />
         </View>
       ) : null}
-      {phase === "live" && !watching && (!immersive || keysOpen) ? (
+      {phase === "live" && (!immersive || keysOpen) ? (
         <View style={[styles.tray, { borderTopColor: colors.borderSubtle, paddingBottom: typing || immersive ? Spacing.xs : Math.max(insets.bottom, Spacing.xs) }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
             {immersive ? null : <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />}
@@ -696,7 +693,7 @@ export function ScreenScreen() {
           </ScrollView>
         </View>
       ) : null}
-      {phase === "live" && !watching ? (
+      {phase === "live" ? (
         // Off-screen field that only collects soft-keyboard keystrokes.
         <TextInput ref={input} value={KEYBOARD_SENTINEL} onChangeText={onKeyboardText}
           onSubmitEditing={() => sendKey("Return")} submitBehavior="submit"

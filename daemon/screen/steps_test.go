@@ -65,11 +65,11 @@ func TestAgentRunsStepsInOneCall(t *testing.T) {
 		t.Fatal("nested steps")
 	}
 
-	// Someone at the computer stops the batch at the next step on the app
-	// in front.
+	// Someone at the computer does not stop a batch: it runs, and the answer
+	// tells the agent what they did.
 	backend.PersonInput()
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: []AgentAction{{Action: "app_state", App: "Notes"}}}); err == nil || !strings.Contains(err.Error(), ErrPersonAtComputer.Error()) {
-		t.Fatalf("person: %v", err)
+	if r, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: []AgentAction{{Action: "app_state", App: "Notes"}}}); err != nil || !strings.Contains(r.Text, "person used") {
+		t.Fatalf("person: %v %q", err, r.Text)
 	}
 
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))

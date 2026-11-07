@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -33,53 +32,20 @@ var (
 	ErrScreenReplaced    = errors.New("Another device took over this screen")
 	ErrScreenLocked      = errors.New("This computer's screen is locked; agents can use it again once it's unlocked")
 	ErrDisplayAsleep     = errors.New("This computer's display went to sleep or off, so the agent lost its view; try again and Mewla wakes it (a closed lid with no external display stays off)")
-	ErrPersonAtComputer  = errors.New("Someone is using this computer's keyboard or pointer, so the agent paused")
 )
 
-// An agent pauses while someone uses the computer itself: until personPause
-// after their last input. Input counts as theirs when it came personMargin
-// after the agent's own last event, which the system may count as input too.
-var (
-	personPause  = 10 * time.Second
-	personMargin = 300 * time.Millisecond
-)
+// Someone using the computer itself does not pause an agent: it is told what
+// they did and when, with its next answer, and judges for itself (they may
+// have tapped by mistake, or be typing a password). Input counts as theirs
+// when it came personMargin after the agent's own last event, which the
+// system may count as input too. The one mechanical rule is that a button or
+// key the agent holds is let go when they use the computer, so it is never
+// pressed under their hand; the agent is told its drag or hold was cut.
+var personMargin = 300 * time.Millisecond
 
-// personWait is how long an action waits for a pause that is about to end,
-// rather than cost the agent a turn to try again. A pause with longer left
-// is answered at once.
-var personWait = 3 * time.Second
-
-// personError is ErrPersonAtComputer with the input that was seen, so a
-// pause that won't end can be told apart: a person, a phantom tap, or
-// another program driving the computer.
-type personError struct {
-	kind   InputKind
-	seen   time.Time
-	inputs [inputKinds]time.Time
-	// until is when the pause ends, unless they go on.
-	until time.Time
-}
-
-func (e personError) Is(target error) bool { return target == ErrPersonAtComputer }
-
-func (e personError) Error() string {
-	now := time.Now()
-	ago := func(t time.Time) string {
-		return strconv.FormatFloat(max(0, now.Sub(t).Seconds()), 'f', 1, 64) + " s ago"
-	}
-	text := ErrPersonAtComputer.Error() + " (saw a " + e.kind.String() + " " + ago(e.seen)
-	var last []string
-	for kind, at := range e.inputs {
-		if InputKind(kind) != e.kind && !at.IsZero() {
-			last = append(last, InputKind(kind).String()+" "+ago(at))
-		}
-	}
-	if len(last) > 0 {
-		text += "; last " + strings.Join(last, ", ")
-	}
-	left := max(1, int(math.Ceil(e.until.Sub(now).Seconds())))
-	return text + fmt.Sprintf("). Try again in about %d s, or meanwhile work in an app that isn't in front: app_state, element and steps on it go on while they use the computer.", left)
-}
+// errPersonInterrupted ends an action that was holding a button or keys when
+// the person used the computer. What it held is already let go.
+var errPersonInterrupted = errors.New("the person used the computer while the action held a button or key")
 
 // AgentLongEdge is the long edge of agent screenshots. Agents give
 // coordinates on the screenshot; Mewla converts them to the display.
@@ -178,6 +144,9 @@ type AgentResult struct {
 	truncated bool
 	// diff says the answer held only what changed.
 	diff bool
+	// notes is what the person did at the computer since the agent last heard;
+	// Act adds it to the text.
+	notes string
 }
 
 // AgentState is what the app shows while an agent uses the screen.
@@ -290,10 +259,25 @@ type agentSession struct {
 	// after all of it.
 	shared *sharedPosts
 	// claimApp and freeApp say which agent works in which app.
-	claimApp    func(pid int, worker string) error
-	freeApp     func(pid int, worker string)
-	pausedUntil time.Time
-	paused      personError
+	claimApp func(pid int, worker string) error
+	freeApp  func(pid int, worker string)
+	// What the person did at the computer is told to the agent with its next
+	// answer: toldAt is how far it has been told, actionAt when the current
+	// action began, during whether the person's input landed inside it, and
+	// cut what was let go when it did. watched is input through Watch.
+	toldAt   time.Time
+	actionAt time.Time
+	during   bool
+	cut      string
+	inMu     sync.Mutex // guards watched, which Watch writes while an action holds mu
+	watched  [inputKinds]time.Time
+	watchedN [inputKinds]int
+	// watchedButtons are the buttons the person holds through Watch.
+	watchedButtons uint8
+	// pending is what the person did that the agent has not heard, as seen
+	// before and during actions: the agent's own events that follow would hide
+	// it from a look made afterwards.
+	pending [inputKinds]time.Time
 	// readElements reads the focused window, when the backend can.
 	readElements func(ctx context.Context, limit int) (ElementTree, error)
 	scale        float64 // framebuffer pixels per screenshot pixel
@@ -419,9 +403,9 @@ func (s *Service) OpenAgentSettings(ctx context.Context, permission string) erro
 	return s.backend.OpenSettings(ctx, permission)
 }
 
-// Act performs one action for a Worker. Every call passes the same gates as
-// a person's viewer and leaves an audit line without typed text.
-func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (AgentResult, error) {
+// act is Act with what the person did kept apart, in notes, so a batch of
+// steps can tell it once.
+func (s *Service) act(ctx context.Context, worker string, action AgentAction) (AgentResult, error) {
 	if strings.TrimSpace(worker) == "" {
 		return AgentResult{}, errors.New("computer use needs the Worker it acts for")
 	}
@@ -440,20 +424,13 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	// the session while it reads apps or waits for the person.
 	defer agent.endUse()
 	// Work on an app behind the person's never fights them for the same
-	// input, so it goes on while they use the computer; anything on the
-	// screen itself, or on the app in front, waits for them.
+	// input. Anything on the screen itself, or on the app in front, goes on
+	// too, and the agent is told what the person did: nothing waits or is
+	// refused. A button the agent left down is let go so it is never pressed
+	// under their hand.
 	background := agent.inBackground(ctx, action)
 	if !background {
-		if err := agent.waitForPerson(ctx); err != nil {
-			agent.letGo()
-			// An agent waiting for the person keeps its session, so the
-			// next try doesn't start a capture, and wake the display, anew.
-			agent.mu.Lock()
-			agent.lastUse = time.Now()
-			agent.mu.Unlock()
-			s.audit(worker, action, AgentResult{}, started, err)
-			return AgentResult{}, err
-		}
+		agent.beginAction()
 	}
 	// The pointer and keyboard are one set: one agent at a time acts on the
 	// screen itself. Work on an app that isn't in front doesn't wait for it.
@@ -469,7 +446,28 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	if errors.Is(err, ErrCaptureStopped) {
 		err = ErrDisplayAsleep
 	}
+	if errors.Is(err, errPersonInterrupted) {
+		// Sent, not verified: some of it went out and what it held is let go.
+		result, err = AgentResult{Text: "The action was cut short: the person used the computer while it held a button or key."}, nil
+	}
+	if err == nil && !background {
+		if heard := agent.heard(); heard != "" {
+			result.notes = heard
+		}
+	}
 	s.audit(worker, action, result, started, err)
+	return result, err
+}
+
+// Act performs one action for a Worker. Every call passes the same gates as
+// a person's viewer and leaves an audit line without typed text. What the
+// person did at the computer since the agent last heard is added to the text.
+func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (AgentResult, error) {
+	result, err := s.act(ctx, worker, action)
+	if err == nil && result.notes != "" {
+		result.Text = strings.TrimSpace(result.Text + "\n" + result.notes)
+		result.notes = ""
+	}
 	return result, err
 }
 
@@ -1386,67 +1384,125 @@ func (a *agentSession) openApp(ctx context.Context, name string) (AgentResult, e
 	}
 }
 
-// personInput is a personError when someone used the computer's own
-// keyboard or pointer in the last personPause, after this agent's last
-// event of that kind.
-func (a *agentSession) personInput() error {
+// personSeenLocked is when the person last used each part of the computer
+// after the agent's own events and after since: at the computer itself, or
+// through Watch. Zero for a kind they did not use.
+func (a *agentSession) personSeenLocked(since time.Time) [inputKinds]time.Time {
+	var seen [inputKinds]time.Time
+	if a.presence != nil {
+		for kind, at := range a.presence().Input {
+			own := later(a.lastPost, a.shared.last().post)
+			switch InputKind(kind) {
+			case InputKey:
+				own = later(own, later(a.lastAppKey, a.shared.last().appKey))
+			case InputClick:
+				own = later(own, later(a.lastAppClick, a.shared.last().appClick))
+			}
+			if !at.IsZero() && at.After(own.Add(personMargin)) && at.After(since) {
+				seen[kind] = at
+			}
+		}
+	}
+	a.inMu.Lock()
+	for kind, at := range a.watched {
+		if at.After(since) && at.After(seen[kind]) {
+			seen[kind] = at
+		}
+	}
+	a.inMu.Unlock()
+	// What any agent has seen of the person counts for this one too.
+	for kind, at := range a.shared.notePerson(seen) {
+		if at.After(since) && at.After(seen[kind]) {
+			seen[kind] = at
+		}
+	}
+	return seen
+}
+
+func anySeen(seen [inputKinds]time.Time) bool {
+	for _, at := range seen {
+		if !at.IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
+// notePendingLocked keeps what the person did, to tell the agent later.
+func (a *agentSession) notePendingLocked(seen [inputKinds]time.Time) {
+	for kind, at := range seen {
+		if at.After(a.pending[kind]) {
+			a.pending[kind] = at
+		}
+	}
+}
+
+// beginAction is the start of an action on the screen: it notes what the
+// person did since the agent last heard, before the agent's own events can hide
+// it, and lets go of a button the agent left down between actions when they
+// did, so it is not pressed under their hand. Nothing waits or is refused; the
+// agent hears of both with the answer.
+func (a *agentSession) beginAction() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.personInputLocked()
+	seen := a.personSeenLocked(a.toldAt)
+	a.notePendingLocked(seen)
+	if a.buttons != 0 && anySeen(seen) {
+		a.letGoLocked()
+		a.cut = "The button you were holding down was let go because they used the computer, so your drag or press ended there."
+	}
+	a.actionAt, a.during = time.Now(), false
 }
 
-func (a *agentSession) personInputLocked() error {
-	if a.presence == nil {
-		return nil
+// heard is what to tell the agent about the person's input since it last
+// heard, or "" when there was none. It does not pause anything: the agent
+// reads the screen again and judges whether it matters.
+func (a *agentSession) heard() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	now := time.Now()
+	a.notePendingLocked(a.personSeenLocked(a.toldAt))
+	seen := a.pending
+	cut := a.cut
+	if !anySeen(seen) && cut == "" {
+		return ""
 	}
-	inputs := a.presence().Input
-	var seen personError
-	for kind, at := range inputs {
-		own := later(a.lastPost, a.shared.last().post)
-		switch InputKind(kind) {
-		case InputKey:
-			own = later(own, later(a.lastAppKey, a.shared.last().appKey))
-		case InputClick:
-			own = later(own, later(a.lastAppClick, a.shared.last().appClick))
+	a.toldAt, a.cut = now, ""
+	a.pending = [inputKinds]time.Time{}
+	var did []string
+	newest := time.Time{}
+	for kind, at := range seen {
+		if at.IsZero() {
+			continue
 		}
-		if !at.IsZero() && at.After(own.Add(personMargin)) && at.After(seen.seen) {
-			seen = personError{kind: InputKind(kind), seen: at, inputs: inputs}
+		did = append(did, InputKind(kind).String())
+		if at.After(newest) {
+			newest = at
 		}
 	}
-	// Once seen, the pause holds for its full time: the agent's own events
-	// after it, such as letting go of a button, must not end it early.
-	if !seen.seen.IsZero() {
-		if until := seen.seen.Add(personPause); until.After(a.pausedUntil) {
-			a.pausedUntil, a.paused = until, seen
+	var b strings.Builder
+	if len(did) > 0 {
+		fmt.Fprintf(&b, "The person used this computer's own keyboard or pointer while you held the screen (%s, the last %s). They may have tapped by mistake or typed something private you cannot see.", strings.Join(did, ", "), roundAgo(now.Sub(newest)))
+		if a.during {
+			b.WriteString(" Some of it landed while your action was running.")
 		}
+		b.WriteString(" The pointer may have moved and the window in front may have changed: take a screenshot and judge whether it matters before you go on.")
 	}
-	if time.Now().Before(a.pausedUntil) {
-		paused := a.paused
-		paused.until = a.pausedUntil
-		return paused
+	if cut != "" {
+		if b.Len() > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(cut)
 	}
-	return nil
+	a.during = false
+	return b.String()
 }
 
-// waitForPerson is personInput, but waits out a pause that ends within
-// personWait. More input meanwhile extends it; the agent's control ending,
-// as when the person takes over, ends the wait at once.
-func (a *agentSession) waitForPerson(ctx context.Context) error {
-	deadline := time.Now().Add(personWait)
-	for {
-		err := a.personInput()
-		var paused personError
-		if err == nil || !errors.As(err, &paused) || paused.until.After(deadline) {
-			return err
-		}
-		select {
-		case <-time.After(time.Until(paused.until)):
-		case <-ctx.Done():
-			return err
-		case <-a.ctx.Done():
-			return context.Cause(a.ctx)
-		}
+func roundAgo(d time.Duration) string {
+	if d < 2*time.Second {
+		return "just now"
 	}
+	return strconv.Itoa(int(d.Seconds())) + " s ago"
 }
 
 func later(a, b time.Time) time.Time {
@@ -1454,6 +1510,15 @@ func later(a, b time.Time) time.Time {
 		return b
 	}
 	return a
+}
+
+// watchInput records the person's input through Watch: it is the person's, not
+// the agent's, so it is told like input at the computer and never pauses.
+func (a *agentSession) watchInput(kind InputKind) {
+	a.inMu.Lock()
+	a.watched[kind] = time.Now()
+	a.watchedN[kind]++
+	a.inMu.Unlock()
 }
 
 // letGo releases a button the agent left down between actions, so a paused
@@ -1714,11 +1779,27 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 	// lets go of what it holds, so no key or button stays pressed.
 	var held []uint32
 	var interrupted error
+	var cutWhat string
 	stopped := func() error {
 		if a.ctx.Err() != nil {
 			interrupted = context.Cause(a.ctx)
 		} else if !background {
-			interrupted = a.personInputLocked()
+			if seen := a.personSeenLocked(a.actionAt); anySeen(seen) {
+				a.notePendingLocked(seen)
+				// The person's input is the agent's to hear about, not a reason
+				// to stop, unless the action holds a button or keys: those are
+				// let go, so nothing stays pressed under their hand.
+				a.during = true
+				if a.buttons != 0 || len(held) > 0 {
+					switch {
+					case a.buttons != 0:
+						cutWhat = "Your drag or button press was interrupted: they used the computer, so the button you held was let go and the rest of the action did not run."
+					default:
+						cutWhat = "Your key hold was interrupted: they used the computer, so the keys you held were let go and the rest of the action did not run."
+					}
+					interrupted = errPersonInterrupted
+				}
+			}
 		}
 		return interrupted
 	}
@@ -1738,6 +1819,9 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 			}
 		}
 		a.letGoLocked()
+		if cutWhat != "" {
+			a.cut = cutWhat
+		}
 	}()
 	press := func(keysym uint32, down bool) error {
 		if err := stopped(); err != nil {
@@ -2210,6 +2294,25 @@ type sharedPosts struct {
 	post     time.Time
 	appKey   time.Time
 	appClick time.Time
+	// person is when the person was seen using each part of the computer, by
+	// any agent: one Worker's own events that follow must not hide it from
+	// another that has not heard yet.
+	person [inputKinds]time.Time
+}
+
+// notePerson records what an agent saw of the person and returns what is known.
+func (p *sharedPosts) notePerson(seen [inputKinds]time.Time) [inputKinds]time.Time {
+	if p == nil {
+		return seen
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for kind, at := range seen {
+		if at.After(p.person[kind]) {
+			p.person[kind] = at
+		}
+	}
+	return p.person
 }
 
 type postTimes struct{ post, appKey, appClick time.Time }

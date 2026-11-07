@@ -180,9 +180,11 @@ func TestAgentSeesOneAppsWindow(t *testing.T) {
 	}
 }
 
-// While someone uses the computer, work on an app behind theirs goes on; the
-// screen itself and the app in front wait for them. Stop still ends it all.
-func TestAPersonPausesOnlyWhatTheyUse(t *testing.T) {
+// Someone at the computer stops nothing: the agent keeps acting on the screen
+// and in the app in front, and the one answer that follows tells it what they
+// did. Work in an app behind goes on exactly as before, and the person's input
+// is told once.
+func TestAPersonIsToldToTheAgentWhateverItDoes(t *testing.T) {
 	s, backend, _ := newAgentService(t)
 	apps := fakeApps()
 	apps[1].Window = image.Rect(0, 0, 400, 300)
@@ -190,21 +192,22 @@ func TestAPersonPausesOnlyWhatTheyUse(t *testing.T) {
 	act(t, s, "%7", AgentAction{Action: "app_state", App: "Notes"})
 	backend.PersonInput()
 
-	paused := []AgentAction{
+	for i, action := range []AgentAction{
 		{Action: "left_click", Coordinate: []int{10, 10}},
 		{Action: "type", Text: "x"},
 		{Action: "screenshot"},
 		{Action: "app_state"},
-		{Action: "element", Element: 2, ElementAction: "press"},
 		{Action: "type", Text: "x", App: "Notes"},
-	}
-	for _, action := range paused {
-		if _, err := s.Act(context.Background(), "%7", action); !errors.Is(err, ErrPersonAtComputer) {
-			t.Fatalf("%s %s went on while someone used the computer: %v", action.Action, action.App, err)
+	} {
+		r, err := s.Act(context.Background(), "%7", action)
+		if err != nil {
+			t.Fatalf("%s %s was stopped by the person: %v", action.Action, action.App, err)
 		}
-	}
-	if len(backend.ElementActions) != 0 {
-		t.Fatal("pressed in the app in front")
+		heard := strings.Contains(r.Text, "person used")
+		// Told on the first answer only; later ones are quiet.
+		if heard != (i == 0) {
+			t.Fatalf("answer %d (%s): told=%v: %s", i, action.Action, heard, r.Text)
+		}
 	}
 
 	act(t, s, "%7", AgentAction{Action: "apps"})
@@ -223,9 +226,15 @@ func TestAPersonPausesOnlyWhatTheyUse(t *testing.T) {
 		t.Fatalf("background presses %+v", backend.ElementActions)
 	}
 
-	// The person is still first: once it waited, the screen still waits.
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{10, 10}}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("after background work: %v", err)
+	// Input after that is told to the next answer on the screen, steps included.
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInputOf(InputClick)
+	r, err := s.Act(context.Background(), "%7", AgentAction{Action: "steps", Steps: []AgentAction{
+		{Action: "cursor_position"},
+		{Action: "screenshot"},
+	}})
+	if err != nil || strings.Count(r.Text, "person used") != 1 {
+		t.Fatalf("a batch tells it once: %v\n%s", err, r.Text)
 	}
 	// Stop ends background work too.
 	s.StopAgent()
@@ -265,10 +274,8 @@ func TestClicksReachAnAppBehindOthers(t *testing.T) {
 		t.Fatalf("off its window: %v", err)
 	}
 
-	// Chromium, or no SkyLight: on the screen, so the person comes first.
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{600, 100}, App: "Slack"}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("on the screen while someone works: %v", err)
-	}
+	// Chromium, or no SkyLight: on the screen. It goes on while someone works,
+	// and the answer tells the agent what they did.
 	backend.ForgetInput()
 	s.StopAgent()
 	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
@@ -335,11 +342,8 @@ func TestDragReachesAnAppBehindOthers(t *testing.T) {
 		t.Fatalf("a refused drag was sent: %+v", backend.AppDrags)
 	}
 
-	// Chromium: on the screen, so the person comes first.
+	// Chromium: on the screen.
 	chromium := AgentAction{Action: "left_click_drag", StartCoordinate: []int{600, 100}, Coordinate: []int{700, 100}, App: "Slack"}
-	if _, err := s.Act(context.Background(), "%7", chromium); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("on the screen while someone works: %v", err)
-	}
 	backend.ForgetInput()
 	s.StopAgent()
 	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
@@ -386,7 +390,7 @@ func TestOpenAnAppThatIsNotRunning(t *testing.T) {
 		t.Fatalf("missing: %v", err)
 	}
 	for _, name := range []string{"", "/Applications/Notes.app", "https://example.com", "-n", "../x", "a\nb", "file:x"} {
-		if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "open_app", App: name}); err == nil || errors.Is(err, ErrPersonAtComputer) {
+		if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "open_app", App: name}); err == nil {
 			t.Fatalf("%q: %v", name, err)
 		}
 	}
@@ -644,8 +648,10 @@ func TestShortcutsChooseMenuItemsBehindOtherWindows(t *testing.T) {
 	}
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInputOf(InputPointer)
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "bring_forward", App: "Notes"}); !errors.Is(err, ErrPersonAtComputer) || len(backend.Raised) != 0 {
-		t.Fatalf("bring_forward while someone types: %v %v", err, backend.Raised)
+	// Taking the front is the agent's call: it goes ahead, and the answer says what the person did.
+	r, err := s.Act(context.Background(), "%7", AgentAction{Action: "bring_forward", App: "Notes"})
+	if err != nil || !strings.Contains(r.Text, "Brought Notes to the front") || !strings.Contains(r.Text, "person used") || len(backend.Raised) != 1 {
+		t.Fatalf("bring_forward while someone types: %v %q %v", err, r.Text, backend.Raised)
 	}
 }
 

@@ -11,28 +11,37 @@ import (
 	"time"
 )
 
-// A pause names the input that caused it, in the answer and the audit log,
-// so one that won't end shows whether a person, a phantom tap or another
-// program is behind it.
-func TestAPauseNamesTheInputItSaw(t *testing.T) {
+// Someone using the computer does not stop the agent: the action goes on and
+// its answer says what they did and when, so the agent judges for itself. It
+// is told once.
+func TestThePersonsInputIsToldNotEnforced(t *testing.T) {
 	s, backend, dir := newAgentService(t)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInputOf(InputScroll)
 	backend.PersonInputOf(InputClick)
-	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"})
-	if !errors.Is(err, ErrPersonAtComputer) || !strings.Contains(err.Error(), "(saw a click 0.0 s ago; last ") || !strings.Contains(err.Error(), "scroll 0.0 s ago") {
-		t.Fatalf("paused with %v", err)
+	r, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"})
+	if err != nil {
+		t.Fatalf("the agent was stopped by the person's input: %v", err)
+	}
+	for _, want := range []string{"X=", "the person used this computer's own keyboard or pointer", "click", "scroll", "just now", "take a screenshot and judge"} {
+		if !strings.Contains(strings.ToLower(r.Text), strings.ToLower(want)) {
+			t.Fatalf("answer lacks %q: %s", want, r.Text)
+		}
+	}
+	again := act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if strings.Contains(again.Text, "person used") {
+		t.Fatalf("told twice: %s", again.Text)
 	}
 	audit, _ := os.ReadFile(filepath.Join(dir, "screen-agent-audit.jsonl"))
-	if !strings.Contains(string(audit), "saw a click") {
-		t.Fatalf("audit %s", audit)
+	if len(audit) == 0 {
+		t.Fatal("no audit")
 	}
 }
 
-// An app that isn't running is reported as such, not as someone at the
-// computer, and nothing is sent anywhere else.
-func TestAMissingAppIsNotAPause(t *testing.T) {
+// An app that isn't running is reported as such, whoever is at the computer,
+// and nothing is sent anywhere else.
+func TestAMissingAppIsReportedAsSuch(t *testing.T) {
 	s, backend, _ := newAgentService(t)
 	backend.RunningApps = fakeApps()
 	act(t, s, "%7", AgentAction{Action: "apps"})
@@ -45,7 +54,7 @@ func TestAMissingAppIsNotAPause(t *testing.T) {
 		{Action: "screenshot", App: "Calendar"},
 	} {
 		_, err := s.Act(context.Background(), "%7", action)
-		if err == nil || errors.Is(err, ErrPersonAtComputer) || !strings.Contains(err.Error(), "Calendar") {
+		if err == nil || !strings.Contains(err.Error(), "Calendar") {
 			t.Fatalf("%s: %v", action.Action, err)
 		}
 	}
@@ -55,7 +64,7 @@ func TestAMissingAppIsNotAPause(t *testing.T) {
 }
 
 // Starting a capture wakes a sleeping display by declaring activity: input
-// seen right then is the agent's own.
+// seen right then is the agent's own, and one after it is the person's.
 func TestWakingTheDisplayIsNotAPerson(t *testing.T) {
 	defer func(saved time.Duration) { wakeDeclares = saved }(wakeDeclares)
 	wakeDeclares = 500 * time.Millisecond
@@ -65,53 +74,36 @@ func TestWakingTheDisplayIsNotAPerson(t *testing.T) {
 	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
 	act(t, s, "%7", AgentAction{Action: "screenshot"}) // a new capture wakes it
 	backend.PersonInputOf(InputPointer)
-	act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if r := act(t, s, "%7", AgentAction{Action: "cursor_position"}); strings.Contains(r.Text, "person used") {
+		t.Fatalf("the wake-up was told as a person: %s", r.Text)
+	}
 	time.Sleep(wakeDeclares + personMargin)
 	backend.PersonInputOf(InputPointer)
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("after the wake: %v", err)
+	if r := act(t, s, "%7", AgentAction{Action: "cursor_position"}); !strings.Contains(r.Text, "pointer move") {
+		t.Fatalf("after the wake: %s", r.Text)
 	}
 }
 
 // A display already on isn't woken, so someone typing as an agent's session
-// starts pauses its very first action.
-func TestAPersonTypingAsASessionStartsComesFirst(t *testing.T) {
+// starts is told to it with its very first answer.
+func TestAPersonTypingAsASessionStartsIsTold(t *testing.T) {
 	defer func(saved time.Duration) { wakeDeclares = saved }(wakeDeclares)
 	wakeDeclares = 5 * time.Second
 	s, backend, _ := newAgentService(t)
 	backend.PersonInput()
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("first action: %v", err)
+	r, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"})
+	if err != nil || !strings.Contains(r.Text, "key press") {
+		t.Fatalf("first action: %v %q", err, r.Text)
 	}
 	time.Sleep(personMargin)
 	backend.PersonInput()
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "a"}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("while they type: %v", err)
-	}
-}
-
-// An agent waiting for the person keeps its session: a new one would start
-// a capture, and wake the display, again.
-func TestWaitingForThePersonKeepsTheSession(t *testing.T) {
-	s, backend, _ := newAgentService(t)
-	s.agentIdle = 400 * time.Millisecond
-	act(t, s, "%7", AgentAction{Action: "screenshot"})
-	first, _ := s.Agent()
-	time.Sleep(personMargin + 50*time.Millisecond)
-	backend.PersonInput()
-	for i := 0; i < 8; i++ {
-		if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"}); !errors.Is(err, ErrPersonAtComputer) {
-			t.Fatalf("try %d: %v", i, err)
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-	if now, ok := s.Agent(); !ok || !now.Since.Equal(first.Since) {
-		t.Fatalf("the session ended while the agent waited: %v %v", first, now)
+	if r, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "a"}); err != nil || !strings.Contains(r.Text, "key press") {
+		t.Fatalf("while they type: %v %q", err, r.Text)
 	}
 }
 
 // Keys and clicks an agent sends to one app are its own, even where the
-// system counts them as input; a person's after them still pause it.
+// system counts them as input; a person's after them are told.
 func TestAnAgentsAppEventsAreItsOwn(t *testing.T) {
 	s, backend, _ := newAgentService(t)
 	apps := fakeApps()
@@ -122,68 +114,96 @@ func TestAnAgentsAppEventsAreItsOwn(t *testing.T) {
 	backend.AppEventsSeen = true
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 	act(t, s, "%7", AgentAction{Action: "type", Text: "rent", App: "Safari"})
-	act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if r := act(t, s, "%7", AgentAction{Action: "cursor_position"}); strings.Contains(r.Text, "person used") {
+		t.Fatalf("the agent's own keys were told as a person's: %s", r.Text)
+	}
 	act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 100}, App: "Safari"})
-	act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if r := act(t, s, "%7", AgentAction{Action: "cursor_position"}); strings.Contains(r.Text, "person used") {
+		t.Fatalf("the agent's own click was told as a person's: %s", r.Text)
+	}
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInputOf(InputClick)
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("a person's click: %v", err)
+	if r := act(t, s, "%7", AgentAction{Action: "cursor_position"}); !strings.Contains(r.Text, "click") {
+		t.Fatalf("a person's click: %s", r.Text)
 	}
 }
 
-// A pause about to end is waited out inside the action, so the agent
-// doesn't spend a turn to try again.
-func TestAPauseAboutToEndIsWaitedOut(t *testing.T) {
-	defer func(saved time.Duration) { personPause = saved }(personPause)
-	personPause = 800 * time.Millisecond
+// Nothing waits for the person: an action after their input answers at once.
+func TestNothingWaitsForThePerson(t *testing.T) {
 	s, backend, _ := newAgentService(t)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInput()
 	start := time.Now()
 	act(t, s, "%7", AgentAction{Action: "cursor_position"})
-	if waited := time.Since(start); waited < 500*time.Millisecond {
-		t.Fatalf("acted %v after the person, inside the pause", waited)
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("the action waited %v for the person", took)
 	}
 }
 
-// A pause with longer left is answered at once, with the time left and the
-// work that goes on meanwhile.
-func TestALongPauseIsAnsweredAtOnce(t *testing.T) {
-	s, backend, _ := newAgentService(t)
+// Input through Watch is the person's too: the viewer's click goes to the
+// screen, the agent keeps going and hears about it.
+func TestWatchInputIsToldToTheAgent(t *testing.T) {
+	s, _, _ := newAgentService(t)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	s.agentMu.Lock()
+	agent := s.agents["%7"]
+	s.agentMu.Unlock()
 	time.Sleep(personMargin + 50*time.Millisecond)
-	backend.PersonInput()
-	start := time.Now()
-	_, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"})
-	if !errors.Is(err, ErrPersonAtComputer) || time.Since(start) > 500*time.Millisecond {
-		t.Fatalf("after %v: %v", time.Since(start), err)
+	agent.watchInput(InputClick)
+	r := act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if !strings.Contains(r.Text, "click") || !strings.Contains(r.Text, "person used") {
+		t.Fatalf("answer %q", r.Text)
 	}
-	if text := err.Error(); !strings.Contains(text, "Try again in about 10 s") || !strings.Contains(text, "app_state, element and steps on it go on") {
-		t.Fatalf("answer %q", text)
+	if again := act(t, s, "%7", AgentAction{Action: "cursor_position"}); strings.Contains(again.Text, "person used") {
+		t.Fatalf("told twice: %s", again.Text)
 	}
 }
 
-// The person taking over ends a wait at once.
-func TestTakingOverEndsTheWait(t *testing.T) {
-	defer func(saved time.Duration) { personPause = saved }(personPause)
-	personPause = 2500 * time.Millisecond
-	s, backend, _ := newAgentService(t)
+// The person taking over is the hard switch: the agent's control ends.
+func TestTakingOverEndsTheAgentsControl(t *testing.T) {
+	s, _, _ := newAgentService(t)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
-	time.Sleep(personMargin + 50*time.Millisecond)
-	backend.PersonInput()
-	done := make(chan error, 1)
-	go func() {
-		_, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"})
-		done <- err
-	}()
-	time.Sleep(200 * time.Millisecond)
-	start := time.Now()
 	_, cancel := context.WithCancelCause(context.Background())
 	person := s.TakeControl(cancel)
 	defer s.ReleaseControl(person)
-	if err := <-done; !errors.Is(err, ErrAgentStopped) || time.Since(start) > time.Second {
-		t.Fatalf("after %v: %v", time.Since(start), err)
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "cursor_position"}); !errors.Is(err, ErrAgentStopped) && !errors.Is(err, ErrPersonControlling) {
+		t.Fatalf("after the take over: %v", err)
+	}
+}
+
+// What the person does in Watch reaches the screen, is told to the agent as
+// theirs (a press once, not its release or drag), and never stops it.
+func TestWatchPassesThePersonsInputOn(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	s.agentMu.Lock()
+	watch := &agentWatch{agent: s.agents["%7"]}
+	s.agentMu.Unlock()
+	time.Sleep(personMargin + 50*time.Millisecond)
+	before, _ := backend.Snapshot()
+	for _, p := range []FakePointer{{X: 50, Y: 50}, {X: 50, Y: 50, Buttons: 1}, {X: 60, Y: 60, Buttons: 1}, {X: 60, Y: 60}} {
+		if err := watch.Pointer(p.X, p.Y, p.Buttons); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := watch.Key('q', true); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Key('q', false); err != nil {
+		t.Fatal(err)
+	}
+	pointers, keys := backend.Snapshot()
+	if len(pointers)-len(before) != 4 || len(keys) != 2 {
+		t.Fatalf("not everything reached the screen: %d pointer events, %d keys", len(pointers)-len(before), len(keys))
+	}
+	r := act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if !strings.Contains(r.Text, "person used") || !strings.Contains(r.Text, "click") || !strings.Contains(r.Text, "key press") {
+		t.Fatalf("the agent was not told: %q", r.Text)
+	}
+	// The agent's own events afterwards are not the person's.
+	act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{10, 10}})
+	if r := act(t, s, "%7", AgentAction{Action: "cursor_position"}); strings.Contains(r.Text, "person used") {
+		t.Fatalf("its own click was told as the person's: %q", r.Text)
 	}
 }

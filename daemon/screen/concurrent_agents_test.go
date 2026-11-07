@@ -94,13 +94,14 @@ func TestOneWorkersEventsAreNotAPersonToTheOther(t *testing.T) {
 			t.Fatalf("%%7's click after %%8's key: %v", err)
 		}
 	}
-	// A real person's input still stops both on the screen itself, and neither
-	// on an app that isn't in front.
+	// A real person's input is told to both on the screen itself, and stops
+	// neither, there or on an app that isn't in front.
 	time.Sleep(personMargin + 100*time.Millisecond)
 	backend.PersonInput()
 	for _, worker := range []string{"%7", "%8"} {
-		if _, err := s.Act(context.Background(), worker, AgentAction{Action: "key", Text: "c"}); !errors.Is(err, ErrPersonAtComputer) {
-			t.Fatalf("%s on the screen while a person types: %v", worker, err)
+		r, err := s.Act(context.Background(), worker, AgentAction{Action: "key", Text: "c"})
+		if err != nil || !strings.Contains(r.Text, "person used") {
+			t.Fatalf("%s on the screen while a person types: %v %q", worker, err, r.Text)
 		}
 	}
 	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 80}, App: "Safari"}); err != nil {
