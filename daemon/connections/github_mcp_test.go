@@ -326,3 +326,28 @@ func TestMovedAccountListsItsToolsAtStart(t *testing.T) {
 		t.Fatal("reads are off")
 	}
 }
+
+// Importing the gh login over an account that moved but has not listed its
+// tools yet settles the move: a later tool list does not turn reads back on
+// after the person switched them off.
+func TestImportSettlesAMovedAccount(t *testing.T) {
+	m, _ := New(t.TempDir())
+	m.networkOwned = false
+	f := newGitHubFixture(t, "octo")
+	m.http = &http.Client{Transport: f.route(nil)}
+	m.githubToken = func(context.Context) (string, error) { return "gh-token", nil }
+	m.records["old"] = &record{Account: Account{ID: "old", Integration: "github", Name: "octo", Identity: "octo", Endpoint: githubMCP, Enabled: true, Status: "connected"}, Grants: map[string]string{}, Moved: true, ReadsOn: true}
+	preview := mustHandle(t, m, Request{Action: "github_preview"})
+	imported := mustHandle(t, m, Request{Action: "github_import", FlowID: preview.Flow.ID}).Account
+	if imported.ID != "old" || len(m.records) != 1 {
+		t.Fatalf("import made another account: %+v", imported)
+	}
+	if r := m.records["old"]; r.Moved || r.ReadsOn {
+		t.Fatalf("the move is still open: %+v", r)
+	}
+	mustHandle(t, m, Request{Action: "permissions", ID: "old", Group: "read", Allowed: false})
+	mustHandle(t, m, Request{Action: "refresh", ID: "old"})
+	if read, _ := toolState(mustHandle(t, m, Request{Action: "get", ID: "old"}).Account, "get_me"); read.Allowed {
+		t.Fatal("a tool list turned reads back on")
+	}
+}
