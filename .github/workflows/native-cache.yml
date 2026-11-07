@@ -28,7 +28,6 @@ on:
       - scripts/verify-libghostty-ios.sh
       - scripts/zig-xcode-compat/**
       - scripts/lib/zig-xcode-compat.sh
-      - scripts/lib/zig_lib_patch_state.py
       - scripts/check-zig-xcode-compat.sh
       - .github/actions/ios-native/**
       - .github/workflows/native-cache.yml
@@ -82,8 +81,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check the SDK
         # Fails, naming what to delete, once the Xcode on this runner no
-        # longer needs the libSystem SDK clone or the libcxx lib patch (see
-        # the script).
+        # longer needs the libSystem SDK clone (see the script).
         run: ./scripts/check-zig-xcode-compat.sh
 
   ios:
