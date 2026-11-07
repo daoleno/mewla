@@ -11,10 +11,29 @@ index 832e543..e827a2d 100644
  # cc-cua-driver-main: Amendment 3; cc-cua-driver-main-skill: Amendment 4. The default arm set of run_bench.py
  # stays the three arms of Amendment 3, so a run without --arms is unchanged.
 diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py b/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
-index 89eb1b9..76c0712 100644
+index 89eb1b9..8ef37ac 100644
 --- a/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
 +++ b/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
-@@ -325,7 +325,9 @@ BROWSER_USE_BIN = Path(
+@@ -51,7 +51,8 @@ _LINUX = sys.platform.startswith("linux")
+ CLAUDE_BIN = (
+     Path(shutil.which("claude") or Path.home() / ".local/bin" / "claude")
+     if _LINUX
+-    else Path("/opt/homebrew/bin/claude")
++    # Not hard-coded: the person's Mac keeps claude where its installer put it (CDB_CLAUDE_BIN or PATH first).
++    else Path(os.environ.get("CDB_CLAUDE_BIN") or shutil.which("claude") or "/opt/homebrew/bin/claude")
+ )
+ CLAUDE_ENV_ALLOW = ("HOME", "PATH", "USER", "LANG", "TMPDIR", "TERM")
+ CLAUDE_ENV_FIXED = {
+@@ -62,7 +63,7 @@ CLAUDE_ENV_FIXED = {
+ CLAUDE_PATH = (
+     f"{CLAUDE_BIN.parent}:/usr/local/bin:/usr/bin:/bin"
+     if _LINUX
+-    else "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
++    else f"{CLAUDE_BIN.parent}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+ )
+ 
+ MACOS_SYSTEM_PROMPT = (
+@@ -325,7 +326,9 @@ BROWSER_USE_BIN = Path(
  )
  BROWSER_USE_ADAPTER = ADAPTER_TOOLS / "browser_use_harness" / "bu_mcp.py"
  BROWSER_USE_SERVER = "browseruse"
@@ -24,7 +43,7 @@ index 89eb1b9..76c0712 100644
      "cc-agent-desktop": AGENT_DESKTOP_SERVER,
      "cc-browser-use": BROWSER_USE_SERVER,
  }
-@@ -338,6 +340,16 @@ def adapter_entry(arm: str) -> dict[str, Any]:
+@@ -338,6 +341,16 @@ def adapter_entry(arm: str) -> dict[str, Any]:
          "PATH": CLAUDE_PATH,
          "DO_NOT_TRACK": "1",
      }
@@ -41,7 +60,7 @@ index 89eb1b9..76c0712 100644
      if arm == "cc-agent-desktop":
          script = AGENT_DESKTOP_ADAPTER
          env.update(
-@@ -384,6 +396,8 @@ ARM_DESCRIPTIONS = {
+@@ -384,6 +397,8 @@ ARM_DESCRIPTIONS = {
      "the vendor skill text as the server instructions",
      "cc-browser-use": "Claude Code + Browser Use macOS harness 0.2.1 through a minimal MCP adapter (server browseruse), "
      "the vendor skill as the server instructions",
@@ -102,7 +121,7 @@ index 9877942..37ad119 100644
          return CU_HELPER_CLASSES.get(tool, "other")
      if server == "agentdesktop":
 diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
-index 120f4b0..bff6589 100644
+index 120f4b0..ba8f63f 100644
 --- a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
 +++ b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
 @@ -655,7 +655,11 @@ def real_capture_check(ctx: "Ctx", arm: str) -> tuple[str, str, str]:
@@ -118,3 +137,22 @@ index 120f4b0..bff6589 100644
                  if "list_apps" not in tools:
                      raise RuntimeError("unexpected agent-desktop tools/list")
                  call("list_apps", {})
+@@ -2465,7 +2469,7 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
+         "not applicable on Linux" if desktop.detect_platform() == "linux" else json.dumps(per_name),
+     )
+     try:
+-        if desktop.detect_platform() == "macos":
++        if desktop.detect_platform() == "macos" and not all(a in ca.ADAPTER_ARMS for a in ctx.arm_names):
+             subprocess.run(["/usr/bin/open", "-a", "Calculator"], check=True, timeout=30)
+         with capture_subject(ctx.run_dir / "preflight-capture" / "subject"):
+             for arm in ctx.arm_names:
+@@ -2474,7 +2478,8 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
+         for arm in ctx.arm_names:
+             add(f"{arm} real capture", "fail", str(error)[:300])
+     finally:
+-        reset_needs_apps(["Calculator"])
++        if not all(a in ca.ADAPTER_ARMS for a in ctx.arm_names):
++            reset_needs_apps(["Calculator"])
+     ps = subprocess.run(["ps", "-axo", "pid=,command="], capture_output=True, text=True).stdout
+     leftovers = [
+         ln.split(None, 1)[1][:80]
