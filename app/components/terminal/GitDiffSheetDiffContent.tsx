@@ -1,52 +1,22 @@
-import React, {
-  useCallback,
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import * as Haptics from "expo-haptics";
-import type {
-  TerminalThemeChrome,
-  TerminalThemePalette,
-} from "../../constants/terminalThemes";
-import {
-  ContinuousCorners,
-  Radii,
-  TouchTarget,
-  TypeScale,
-  Typography,
-  UiTextMetrics,
-  useAppTheme,
-} from "../../constants/tokens";
+import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
+import { ContinuousCorners, Radii, TouchTarget, TypeScale, UiTextMetrics, useAppTheme } from "../../constants/tokens";
 import {
   filterGitDiffFiles,
+  type GitDiffFileContentPayload,
   type GitDiffFileInfo,
-  type GitDiffPage,
-  type GitDiffPageRequest,
+  type GitDiffPatchPayload,
   type GitDiffScope,
 } from "../../services/gitDiff";
 import { EmptyState } from "../ui/EmptyState";
-import { GitDiffReader, type GitDiffPosition } from "./GitDiffReader";
+import { GitDiffFileTree } from "./GitDiffFileTree";
+import { GitDiffReader } from "./GitDiffReader";
 import { DiffIconButton } from "./GitDiffReviewControls";
-import { GitDiffDetailHeader, StatusTile } from "./GitDiffSheetTopChrome";
-import {
-  describeGitDiffFile,
-  gitDiffRowScopeNote,
-  summarizeGitDiffFiles,
-} from "./gitDiffPresentation";
+import { GitDiffDetailHeader } from "./GitDiffSheetTopChrome";
+import { summarizeGitDiffFiles } from "./gitDiffPresentation";
 import { withAlpha } from "./colorWithAlpha";
-import { Icon } from "../icons/Icon";
 
 interface GitDiffSheetDiffContentProps {
   files: GitDiffFileInfo[];
@@ -55,21 +25,20 @@ interface GitDiffSheetDiffContentProps {
   repoTitle: string;
   theme: TerminalThemePalette;
   chrome: TerminalThemeChrome;
-  loadPage(request: GitDiffPageRequest): Promise<GitDiffPage>;
+  loadPatch(path: string): Promise<GitDiffPatchPayload>;
+  loadFileContent(path: string): Promise<GitDiffFileContentPayload>;
   refreshKey: number;
   scope: GitDiffScope;
   scopeCounts: Record<GitDiffScope, number>;
   selectedFile: GitDiffFileInfo | null;
   wide: boolean;
   bottomInset: number;
-  fileFilterOpen: boolean;
   diffSearchOpen: boolean;
   diffOptionsOpen: boolean;
   loading: boolean;
   onSelectFile(path: string): void;
   onScopeChange(scope: GitDiffScope): void;
   onClearSelection(): void;
-  onCloseFileFilter(): void;
   onToggleDiffSearch(): void;
   onToggleDiffOptions(): void;
   onBrowseFiles(): void;
@@ -86,97 +55,39 @@ export function GitDiffSheetDiffContent({
   repoTitle,
   theme,
   chrome,
-  loadPage,
+  loadPatch,
+  loadFileContent,
   refreshKey,
   scope,
   scopeCounts,
   selectedFile,
   wide,
   bottomInset,
-  fileFilterOpen,
   diffSearchOpen,
   diffOptionsOpen,
   loading,
   onSelectFile,
   onScopeChange,
   onClearSelection,
-  onCloseFileFilter,
   onToggleDiffSearch,
   onToggleDiffOptions,
   onBrowseFiles,
   onOpenFileActions,
 }: GitDiffSheetDiffContentProps) {
-  const [query, setQuery] = useState("");
-  const deferredQuery = useDeferredValue(query);
   const [wrap, setWrap] = useState(true);
   const [fontSize, setFontSize] = useState(12);
   const [showHeaders, setShowHeaders] = useState(false);
-  const positions = useRef(new Map<string, GitDiffPosition>());
-  const listRef = useRef<FlatList<GitDiffFileInfo>>(null);
-  const filtered = useMemo(
-    () => filterGitDiffFiles(files, scope, deferredQuery),
-    [files, scope, deferredQuery],
-  );
-  const scopedFiles = useMemo(
-    () => filterGitDiffFiles(files, scope, ""),
-    [files, scope],
-  );
-  const positionKey = JSON.stringify([selectedFile?.path ?? null, scope]);
+  const scopedFiles = useMemo(() => filterGitDiffFiles(files, scope, ""), [files, scope]);
 
-  // Hiding the filter never leaves the list silently filtered.
-  useEffect(() => {
-    if (!fileFilterOpen) setQuery("");
-  }, [fileFilterOpen]);
-
-  // Scope and filter changes reset the overview to the top exactly once.
-  // The list itself is never controlled through `contentOffset`: Android
-  // re-applies that prop on every render, which cancels momentum mid-fling.
-  useEffect(() => {
-    listRef.current?.scrollToOffset({ offset: 0, animated: false });
-  }, [scope, deferredQuery]);
-
-  const listBottomPadding = bottomInset + 16;
   const scopeTotal = scopeCounts[scope];
   const summary = summarizeGitDiffFiles(scopedFiles, scope);
-  const metaLabel = deferredQuery
-    ? `${filtered.length} of ${scopeTotal} ${scopeTotal === 1 ? "file" : "files"}`
-    : summary.label;
   const noChanges = clean && files.length === 0;
-  const count = filtered.length;
 
-  const renderFile = useCallback(
-    ({ item, index }: { item: GitDiffFileInfo; index: number }) => (
-      <GitDiffFileRow
-        file={item}
-        scope={scope}
-        theme={theme}
-        chrome={chrome}
-        first={index === 0}
-        last={index === count - 1}
-        selected={selectedFile?.path === item.path}
-        onPress={() => onSelectFile(item.path)}
-        onLongPress={() => onOpenFileActions(item, false)}
-      />
-    ),
-    [chrome, count, onOpenFileActions, onSelectFile, scope, selectedFile?.path, theme],
-  );
-
-  const detailHeader = selectedFile ? (
-    <GitDiffDetailHeader
-      chrome={chrome}
-      theme={theme}
-      file={selectedFile}
-      scope={scope}
-      repoTitle={repoTitle}
-      loading={loading}
-      onClear={onClearSelection}
-      onOpenActions={() => onOpenFileActions(selectedFile, true)}
-    />
-  ) : null;
-
-  const reader = selectedFile ? (
+  // The reader is one long-lived WebView: it stays mounted and empty under the
+  // list, so opening a file never pays the runtime's cold start.
+  const reader = (
     <>
-      {diffOptionsOpen ? (
+      {selectedFile && diffOptionsOpen ? (
         <GitDiffOptionsStrip
           chrome={chrome}
           wrap={wrap}
@@ -189,29 +100,22 @@ export function GitDiffSheetDiffContent({
         />
       ) : null}
       <GitDiffReader
-        key={`${positionKey}:${refreshKey}`}
-        path={selectedFile.path}
+        file={selectedFile}
         scope={scope}
         theme={theme}
         chrome={chrome}
-        loadPage={loadPage}
+        loadPatch={loadPatch}
+        loadFileContent={loadFileContent}
         refreshKey={refreshKey}
-        position={positions.current.get(positionKey) ?? { offset: 0 }}
-        onPosition={(position) => positions.current.set(positionKey, position)}
+        split={wide}
         wrap={wrap}
         fontSize={fontSize}
-        showSearch={diffSearchOpen}
+        showSearch={diffSearchOpen && Boolean(selectedFile)}
         showHeaders={showHeaders}
         bottomInset={bottomInset}
         onCloseSearch={onToggleDiffSearch}
       />
     </>
-  ) : (
-    <EmptyState
-      icon="git-compare"
-      title="No file selected"
-      style={styles.emptyDetail}
-    />
   );
 
   const emptyList = noChanges ? (
@@ -220,13 +124,6 @@ export function GitDiffSheetDiffContent({
       title="Working tree clean"
       detail={branch ?? null}
       action={{ label: "Browse files", icon: "folder-open", onPress: onBrowseFiles }}
-    />
-  ) : deferredQuery ? (
-    <EmptyState
-      size="inline"
-      title="No matching files"
-      detail={`Nothing matches “${deferredQuery}”.`}
-      action={{ label: "Clear filter", onPress: () => setQuery("") }}
     />
   ) : (
     <EmptyState
@@ -243,226 +140,68 @@ export function GitDiffSheetDiffContent({
           wide ? [styles.listPaneWide, { borderRightColor: chrome.border }] : styles.listPaneStack,
           { backgroundColor: chrome.appBackground },
         ]}
-        importantForAccessibility={
-          selectedFile && !wide ? "no-hide-descendants" : "auto"
-        }
+        importantForAccessibility={selectedFile && !wide ? "no-hide-descendants" : "auto"}
         accessibilityElementsHidden={Boolean(selectedFile && !wide)}
       >
         {noChanges ? null : (
           <View style={styles.listTop}>
-            <GitDiffScopeControl
-              chrome={chrome}
-              scope={scope}
-              counts={scopeCounts}
-              onChange={onScopeChange}
-            />
-            {fileFilterOpen ? (
-              <View style={styles.filterRow}>
-                <View style={[styles.filterField, { backgroundColor: chrome.surfaceMuted }]}>
-                  <Icon name="search" size={16} color={chrome.textSubtle} />
-                  <TextInput
-                    accessibilityLabel="Filter changed paths"
-                    placeholder="Filter paths"
-                    placeholderTextColor={chrome.textSubtle}
-                    style={[styles.filterInput, { color: chrome.text }]}
-                    autoCorrect={false}
-                    autoCapitalize="none"
-                    autoFocus
-                    value={query}
-                    onChangeText={setQuery}
-                    returnKeyType="search"
-                  />
-                  {query ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Clear path filter"
-                      onPress={() => setQuery("")}
-                      hitSlop={Math.ceil((TouchTarget - 17) / 2)}
-                    >
-                      <Icon name="close-circle-fill" size={17} color={chrome.textSubtle} />
-                    </Pressable>
-                  ) : null}
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Done filtering"
-                  onPress={onCloseFileFilter}
-                  style={({ pressed }) => [styles.textButton, { opacity: pressed ? 0.55 : 1 }]}
-                >
-                  <Text style={[styles.textButtonLabel, { color: chrome.link }]}>Done</Text>
-                </Pressable>
-              </View>
-            ) : null}
+            <GitDiffScopeControl chrome={chrome} scope={scope} counts={scopeCounts} onChange={onScopeChange} />
             {scopeTotal > 0 ? (
-              <Text
-                style={[styles.listMetaText, { color: chrome.textSubtle }]}
-                numberOfLines={1}
-                accessibilityLiveRegion="polite"
-              >
-                {metaLabel}
+              <Text style={[styles.listMetaText, { color: chrome.textSubtle }]} numberOfLines={1} accessibilityLiveRegion="polite">
+                {summary.label}
               </Text>
             ) : null}
           </View>
         )}
-        <FlatList
-          ref={listRef}
-          data={filtered}
-          keyExtractor={(item) => item.path}
-          renderItem={renderFile}
-          style={styles.list}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: listBottomPadding },
-            count === 0 ? styles.listContentEmpty : null,
-          ]}
-          initialNumToRender={12}
-          maxToRenderPerBatch={12}
-          windowSize={5}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          removeClippedSubviews={false}
-          onScrollToIndexFailed={() => {}}
-          ListEmptyComponent={emptyList}
-        />
+        {scopedFiles.length === 0 ? (
+          <View style={styles.emptyList}>{emptyList}</View>
+        ) : (
+          <GitDiffFileTree
+            files={scopedFiles}
+            scope={scope}
+            selectedPath={selectedFile?.path ?? null}
+            theme={theme}
+            chrome={chrome}
+            onSelectFile={onSelectFile}
+            onLongPressFile={(file) => onOpenFileActions(file, false)}
+          />
+        )}
       </View>
 
-      {selectedFile && !wide ? (
-        <View style={[styles.overlay, { backgroundColor: chrome.surface }]}>
-          {reader}
-        </View>
-      ) : null}
       {wide ? (
         <View style={[styles.detailPane, { backgroundColor: chrome.surface }]}>
-          {detailHeader}
+          {selectedFile ? (
+            <GitDiffDetailHeader
+              chrome={chrome}
+              theme={theme}
+              file={selectedFile}
+              scope={scope}
+              repoTitle={repoTitle}
+              loading={loading}
+              onClear={onClearSelection}
+              onOpenActions={() => onOpenFileActions(selectedFile, true)}
+            />
+          ) : null}
+          {reader}
+          {selectedFile ? null : (
+            <View style={styles.idleDetail} pointerEvents="none">
+              <EmptyState icon="git-compare" title="No file selected" style={styles.emptyDetail} />
+            </View>
+          )}
+        </View>
+      ) : (
+        <View
+          style={[styles.overlay, { backgroundColor: chrome.surface }, selectedFile ? null : styles.warm]}
+          pointerEvents={selectedFile ? "auto" : "none"}
+          importantForAccessibility={selectedFile ? "auto" : "no-hide-descendants"}
+          accessibilityElementsHidden={!selectedFile}
+        >
           {reader}
         </View>
-      ) : null}
+      )}
     </View>
   );
 }
-
-const GitDiffFileRow = React.memo(function GitDiffFileRow({
-  file,
-  scope,
-  theme,
-  chrome,
-  first,
-  last,
-  selected,
-  onPress,
-  onLongPress,
-}: {
-  file: GitDiffFileInfo;
-  scope: GitDiffScope;
-  theme: TerminalThemePalette;
-  chrome: TerminalThemeChrome;
-  first: boolean;
-  last: boolean;
-  selected: boolean;
-  onPress(): void;
-  onLongPress(): void;
-}) {
-  const presentation = describeGitDiffFile(file, scope);
-  const oldLabel = presentation.oldName
-    ? `${presentation.oldDirectory ?? ""}${presentation.oldName}`
-    : null;
-  const note = gitDiffRowScopeNote(file, scope);
-  const detail = oldLabel
-    ? `from ${oldLabel}`
-    : presentation.directory.replace(/\/$/, "");
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${file.path}, ${presentation.statusLabel}, ${presentation.scopeLabel}, ${
-        presentation.binary
-          ? "binary"
-          : `plus ${presentation.additions}, minus ${presentation.deletions}`
-      }`}
-      accessibilityHint="More actions available"
-      accessibilityActions={[{ name: "longpress", label: "More actions" }]}
-      onAccessibilityAction={(event) => {
-        if (event.nativeEvent.actionName === "longpress") onLongPress();
-      }}
-      onPress={() => {
-        void Haptics.selectionAsync();
-        onPress();
-      }}
-      onLongPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        onLongPress();
-      }}
-      delayLongPress={350}
-      style={({ pressed }) => [
-        styles.file,
-        {
-          backgroundColor: pressed
-            ? chrome.surfaceActive
-            : selected
-              ? chrome.accentSoft
-              : chrome.surface,
-          borderTopLeftRadius: first ? Radii.card : 0,
-          borderTopRightRadius: first ? Radii.card : 0,
-          borderBottomLeftRadius: last ? Radii.card : 0,
-          borderBottomRightRadius: last ? Radii.card : 0,
-        },
-      ]}
-    >
-      <StatusTile presentation={presentation} theme={theme} chrome={chrome} size={28} />
-      <View
-        style={[
-          styles.fileBody,
-          !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: chrome.border },
-        ]}
-      >
-        <View style={styles.fileCopy}>
-          <Text
-            style={[styles.fileName, { color: chrome.text }]}
-            numberOfLines={1}
-            ellipsizeMode="middle"
-          >
-            {presentation.name}
-          </Text>
-          {detail || note ? (
-            <View style={styles.fileDetailRow}>
-              {detail ? (
-                <Text
-                  style={[styles.fileDetail, { color: chrome.textSubtle }]}
-                  numberOfLines={1}
-                  ellipsizeMode="head"
-                >
-                  {detail}
-                </Text>
-              ) : null}
-              {note ? (
-                <Text
-                  style={[styles.fileNote, { color: chrome.textMuted }]}
-                  numberOfLines={1}
-                >
-                  {detail ? `· ${note}` : note}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-        {presentation.binary ? (
-          <Text style={[styles.count, { color: chrome.textSubtle }]}>Binary</Text>
-        ) : (
-          <Text style={styles.count} numberOfLines={1}>
-            <Text style={{ color: presentation.additions ? theme.green : chrome.textSubtle }}>
-              +{presentation.additions}
-            </Text>
-            <Text style={{ color: presentation.deletions ? theme.red : chrome.textSubtle }}>
-              {" −"}
-              {presentation.deletions}
-            </Text>
-          </Text>
-        )}
-      </View>
-    </Pressable>
-  );
-});
 
 function GitDiffScopeControl({
   chrome,
@@ -593,9 +332,9 @@ function GitDiffOptionsStrip({
           </View>
         </View>
         <View style={[styles.option, styles.optionLast]}>
-          <Text style={[styles.optionLabel, { color: chrome.text }]}>Patch headers</Text>
+          <Text style={[styles.optionLabel, { color: chrome.text }]}>File headers</Text>
           <Switch
-            accessibilityLabel="Patch headers"
+            accessibilityLabel="File headers"
             value={showHeaders}
             onValueChange={onShowHeadersChange}
           />
@@ -604,8 +343,6 @@ function GitDiffOptionsStrip({
     </View>
   );
 }
-
-const TILE = 28;
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -624,14 +361,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  list: { flex: 1 },
+  // Mounted but unseen: full size, so the WebView lays out and loads.
+  warm: { opacity: 0 },
   listTop: {
     paddingHorizontal: 16,
     paddingTop: 10,
     gap: 10,
   },
-  listContent: { paddingHorizontal: 16, paddingTop: 2 },
-  listContentEmpty: { flexGrow: 1, justifyContent: "center" },
+  emptyList: { flex: 1, justifyContent: "center", paddingHorizontal: 16 },
   scopeTrack: {
     flexDirection: "row",
     padding: 2,
@@ -665,28 +402,6 @@ const styles = StyleSheet.create({
     ...UiTextMetrics,
     fontVariant: ["tabular-nums"],
   },
-  filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  filterField: {
-    flex: 1,
-    minHeight: 40,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    borderRadius: Radii.sm,
-    ...ContinuousCorners,
-  },
-  filterInput: {
-    ...TypeScale.compact,
-    flex: 1,
-    minWidth: 0,
-    minHeight: 40,
-    paddingVertical: 0,
-  },
   textButton: {
     minHeight: TouchTarget,
     minWidth: TouchTarget,
@@ -701,60 +416,10 @@ const styles = StyleSheet.create({
   listMetaText: {
     ...TypeScale.caption,
     ...UiTextMetrics,
-    paddingHorizontal: 16,
     paddingBottom: 6,
     fontVariant: ["tabular-nums"],
   },
-  file: {
-    ...ContinuousCorners,
-    minHeight: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingLeft: 14,
-    overflow: "hidden",
-  },
-  fileBody: {
-    flex: 1,
-    minWidth: 0,
-    alignSelf: "stretch",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 9,
-    paddingRight: 14,
-  },
-  fileCopy: { flex: 1, minWidth: 0 },
-  fileName: {
-    ...TypeScale.compact,
-    ...UiTextMetrics,
-    fontFamily: Typography.uiFontMedium,
-  },
-  fileDetailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    minWidth: 0,
-  },
-  fileDetail: {
-    ...TypeScale.caption,
-    ...UiTextMetrics,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  fileNote: {
-    ...TypeScale.caption,
-    ...UiTextMetrics,
-    flexShrink: 0,
-  },
-  count: {
-    ...TypeScale.caption,
-    ...UiTextMetrics,
-    fontFamily: Typography.terminalFont,
-    fontVariant: ["tabular-nums"],
-    textAlign: "right",
-    minWidth: TILE + 16,
-  },
+  idleDetail: { ...StyleSheet.absoluteFill, justifyContent: "center" },
   emptyDetail: { flex: 1, justifyContent: "center" },
   options: {
     paddingHorizontal: 16,

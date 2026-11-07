@@ -28,38 +28,6 @@ export interface GitDiffFileInfo {
 
 export type GitDiffScope = "all" | "working" | "staged";
 
-export interface GitDiffPageRequest {
-  path: string;
-  scope: GitDiffScope;
-  row: number;
-  version?: string;
-  query?: string;
-}
-
-export interface GitDiffRow {
-  kind: "scope" | "meta" | "hunk" | "add" | "delete" | "context" | "marker";
-  text: string;
-  old?: number;
-  new?: number;
-  continuation?: boolean;
-}
-
-export interface GitDiffPage {
-  path: string;
-  scope: GitDiffScope;
-  version: string;
-  stale: boolean;
-  start: number;
-  total: number;
-  rows: GitDiffRow[];
-  hunks: number;
-  previous_hunk: number;
-  next_hunk: number;
-  matches: number;
-  previous_match: number;
-  next_match: number;
-}
-
 export function filterGitDiffFiles(
   files: GitDiffFileInfo[],
   scope: GitDiffScope,
@@ -128,18 +96,6 @@ export interface GitDiffFileContentPayload {
   path: string;
   current: GitDiffContentSnapshot;
   base: GitDiffContentSnapshot;
-}
-
-export interface GitRepoBrowserEntry {
-  name: string;
-  path: string;
-  kind: "directory" | "file" | string;
-}
-
-export interface GitRepoBrowserPayload {
-  repo_root: string;
-  path: string;
-  entries: GitRepoBrowserEntry[];
 }
 
 export interface GitRepoPathsPayload {

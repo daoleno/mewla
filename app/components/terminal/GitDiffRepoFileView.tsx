@@ -1,13 +1,14 @@
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
-import {
-  buildTerminalChrome,
-  type TerminalThemePalette,
-} from "../../constants/terminalThemes";
+import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
 import type { GitRepoFileContentPayload } from "../../services/gitDiff";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
-import { GitDiffCodeSnapshotPanel } from "./GitDiffCodeView";
+import { GitDiffStateCard } from "./GitDiffStateCard";
+import { DiffViewerHost } from "./pierre/DiffViewerHost";
+import { parseDiffViewerMessage, type DiffViewerHostHandle } from "./pierre/diffViewerProtocol";
+import { useDiffViewerStyle } from "./pierre/useViewerStyle";
+import { formatGitDiffBytes } from "./gitDiffReview";
 
 interface GitDiffRepoFileViewProps {
   path: string;
@@ -15,10 +16,12 @@ interface GitDiffRepoFileViewProps {
   loading: boolean;
   error: string | null;
   theme: TerminalThemePalette;
-  chrome: ReturnType<typeof buildTerminalChrome>;
+  chrome: TerminalThemeChrome;
   bottomInset: number;
   onRetry?(): void;
 }
+
+const FILE_FONT_SIZE = 12;
 
 /**
  * Working-tree file content only. The single sheet header owns the file title
@@ -34,14 +37,38 @@ export function GitDiffRepoFileView({
   bottomInset,
   onRetry,
 }: GitDiffRepoFileViewProps) {
+  const host = useRef<DiffViewerHostHandle>(null);
+  const snapshot = payload?.snapshot ?? null;
+  const showable = Boolean(snapshot?.exists && snapshot.content && !snapshot.binary);
+  const layout = useMemo(
+    () => ({ split: false, wrap: false, headers: false, inset: bottomInset + 12 }),
+    [bottomInset],
+  );
+  useDiffViewerStyle(host, theme, chrome, FILE_FONT_SIZE, layout);
+
+  useEffect(() => {
+    if (showable && snapshot?.content !== undefined) {
+      host.current?.post([{ type: "file", key: `file:${path}`, path, contents: snapshot.content }]);
+    } else {
+      host.current?.post([{ type: "clear" }]);
+    }
+  }, [path, showable, snapshot?.content]);
+
+  // Nothing here answers the reader, but its errors must not pass silently.
+  const onMessage = useCallback((raw: string) => {
+    const message = parseDiffViewerMessage(raw);
+    if (message?.type === "error") console.warn("[Git file view] " + message.message);
+  }, []);
+
   return (
-    <View style={styles.repoFileRoot}>
+    <View style={styles.root}>
+      <DiffViewerHost ref={host} onMessage={onMessage} backgroundColor={chrome.surface} accessibilityLabel="File" />
       {loading ? (
-        <View style={[styles.contentPad, { paddingBottom: bottomInset + 14 }]}>
+        <View style={[styles.state, { backgroundColor: chrome.surface, paddingBottom: bottomInset + 14 }]}>
           <EmptyState size="inline" busy title="Loading file" />
         </View>
       ) : error ? (
-        <View style={[styles.contentPad, { paddingBottom: bottomInset + 14 }]}>
+        <View style={[styles.state, { backgroundColor: chrome.surface, paddingBottom: bottomInset + 14 }]}>
           <InlineNotice
             tone="danger"
             title="Couldn't load file"
@@ -49,26 +76,36 @@ export function GitDiffRepoFileView({
             action={onRetry ? { label: "Retry", onPress: onRetry } : undefined}
           />
         </View>
-      ) : (
-        <GitDiffCodeSnapshotPanel
-          path={path}
-          snapshot={payload?.snapshot ?? null}
-          chrome={chrome}
-          theme={theme}
-          bottomInset={bottomInset}
+      ) : !showable ? (
+        <View style={[styles.state, { backgroundColor: chrome.surface, paddingBottom: bottomInset + 14 }]}>
+          {snapshot?.binary ? (
+            <GitDiffStateCard icon="cube" title="Binary file" accent={theme.cursor} chromeText={chrome.text} chromeMuted={chrome.textMuted} />
+          ) : (
+            <GitDiffStateCard
+              icon="document-text"
+              title={snapshot?.exists && !snapshot.content ? "Empty file" : "File snapshot unavailable"}
+              detail={snapshot?.exists ? undefined : snapshot?.reason || "This file could not be read from the working tree."}
+              accent={theme.cursor}
+              chromeText={chrome.text}
+              chromeMuted={chrome.textMuted}
+            />
+          )}
+        </View>
+      ) : snapshot?.truncated ? (
+        <InlineNotice
+          tone="warning"
+          icon="cut"
+          title="Showing part of this file"
+          detail={`First ${formatGitDiffBytes(snapshot.content?.length ?? 0)} of ${formatGitDiffBytes(snapshot.byte_count)}.`}
+          style={styles.truncation}
         />
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  contentPad: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  repoFileRoot: {
-    flex: 1,
-  },
+  root: { flex: 1 },
+  state: { ...StyleSheet.absoluteFill, paddingHorizontal: 16, paddingVertical: 16, justifyContent: "flex-start" },
+  truncation: { position: "absolute", left: 12, right: 12, bottom: 12 },
 });

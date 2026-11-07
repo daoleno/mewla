@@ -1,214 +1,273 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, VirtualizedList, useWindowDimensions, type ListViewToken, type VirtualizedListInstance } from "react-native";
-import type { CellRendererProps } from "@react-native/virtualized-lists";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
-import type { GitDiffPage, GitDiffPageRequest, GitDiffScope } from "../../services/gitDiff";
 import { ContinuousCorners, Radii, TouchTarget, TypeScale } from "../../constants/tokens";
+import type {
+  GitDiffFileContentPayload,
+  GitDiffFileInfo,
+  GitDiffPatchPayload,
+  GitDiffScope,
+} from "../../services/gitDiff";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
 import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import { DiffIconButton } from "./GitDiffReviewControls";
-import { GitDiffRow, gitDiffGutterWidth } from "./GitDiffRow";
-import { GitDiffStream, diffStreamRow, restoreDiffStream, diffBookmark, type DiffCellFrame, type GitDiffStreamState, type IndexedDiffRow } from "./gitDiffStream";
+import { DiffViewerHost } from "./pierre/DiffViewerHost";
+import { parseDiffViewerMessage, type DiffViewerHostHandle } from "./pierre/diffViewerProtocol";
+import { useDiffViewerStyle } from "./pierre/useViewerStyle";
+import { formatGitDiffBytes, gitDiffExpansionSides, planGitDiffReview } from "./gitDiffReview";
 
-export interface GitDiffPosition {
-  row?: number;
-  offset: number;
-  horizontalOffset?: number;
-  snapshot?: GitDiffStreamState;
-  refreshKey?: number;
-  layout?: string;
-}
+type ReaderState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready" }
+  | { status: "empty" }
+  | { status: "too-large"; bytes: number }
+  | { status: "error"; message: string };
 
-export function GitDiffReader({ path, scope, loadPage, chrome, theme, position, onPosition, wrap, fontSize, refreshKey, showSearch, showHeaders, bottomInset, onCloseSearch }: {
-  path: string; scope: GitDiffScope;
-  loadPage(request: GitDiffPageRequest): Promise<GitDiffPage>;
-  chrome: TerminalThemeChrome; theme: TerminalThemePalette;
-  position: GitDiffPosition; onPosition(position: GitDiffPosition): void;
-  wrap: boolean; fontSize: number; refreshKey: number; showSearch: boolean; showHeaders: boolean;
+interface GitDiffReaderProps {
+  /** Null keeps the reader warm and empty, so opening a file costs no cold start. */
+  file: GitDiffFileInfo | null;
+  scope: GitDiffScope;
+  loadPatch(path: string): Promise<GitDiffPatchPayload>;
+  loadFileContent(path: string): Promise<GitDiffFileContentPayload>;
+  chrome: TerminalThemeChrome;
+  theme: TerminalThemePalette;
+  split: boolean;
+  wrap: boolean;
+  fontSize: number;
+  refreshKey: number;
+  showSearch: boolean;
+  showHeaders: boolean;
   bottomInset: number;
   /** The find bar's own dismiss; its toggle lives in the header menu. */
   onCloseSearch?(): void;
-}) {
-  const restored = position.refreshKey === refreshKey ? position : { offset: 0 };
-  const stream = useMemo(() => new GitDiffStream(loadPage, path, scope, restoreDiffStream(restored.snapshot, restored.row)), [loadPage, path, scope, refreshKey]);
-  const state = useSyncExternalStore(stream.subscribe, stream.getSnapshot);
-  const [draft, setDraft] = useState(state.query);
-  const { width, fontScale } = useWindowDimensions();
-  const layout = `${wrap}:${fontSize}:${fontScale}`;
-  const layoutRef = useRef(layout);
-  layoutRef.current = layout;
-  const offset = useRef(0);
-  const frames = useRef(new Map<number, DiffCellFrame>());
-  const withinRow = useRef(restored.layout === layout ? restored.offset : 0);
-  const horizontalOffset = useRef(restored.horizontalOffset ?? 0);
-  // Captured once: a live horizontal contentOffset would be re-applied by
-  // Android Fabric on every reader re-render and fight native panning.
-  const initialHorizontalOffset = useRef(horizontalOffset.current).current;
-  const visibleRow = useRef(state.targetRow ?? state.start);
-  const interacted = useRef(false);
-  const list = useRef<VirtualizedListInstance>(null);
-  const targetRow = useRef(state.targetRow);
-  const initialCount = useRef(state.targetRow == null ? 12 : Math.max(12, state.targetRow - state.start + 1));
-  const positionFrame = useRef<number | null>(null);
-  const onTargetLayout = useRef<() => void>(() => {});
-  const mounted = useRef(true);
-  const readingStyle = useRef({ wrap, fontSize });
-  const onPositionRef = useRef(onPosition);
-  onPositionRef.current = onPosition;
-  const viewability = useRef(({ viewableItems }: { viewableItems: ListViewToken[] }) => {
-    const first = viewableItems.find(item => item.isViewable);
-    if (first) visibleRow.current = first.item.index;
-  });
-  const anchor = useRef(state.anchor);
-  if (anchor.current !== state.anchor) {
-    anchor.current = state.anchor;
-    offset.current = 0;
-    visibleRow.current = state.targetRow ?? state.start;
-    targetRow.current = state.targetRow;
-    initialCount.current = state.targetRow == null ? 12 : Math.max(12, state.targetRow - state.start + 1);
-    interacted.current = false;
-    withinRow.current = 0;
-    frames.current.clear();
-  }
-  const MeasuredCell = useMemo(() => function MeasuredCell({ item, children, style, onLayout }: CellRendererProps<IndexedDiffRow>) {
-    const epoch = useRef(anchor.current);
-    useEffect(() => () => { if (epoch.current === anchor.current) frames.current.delete(item.index); }, [item.index]);
-    return <View style={style} onLayout={event => {
-      if (epoch.current === anchor.current) frames.current.set(item.index, { offset: event.nativeEvent.layout.y, length: event.nativeEvent.layout.height });
-      onLayout?.(event);
-      if (item.index === targetRow.current) onTargetLayout.current();
-    }}>{children}</View>;
-  }, []);
-  // Save geometry before native unmount can change the scroll offset.
-  useLayoutEffect(() => {
-    stream.resume();
-    mounted.current = true;
-    if (!stream.getSnapshot().chunks.length) void stream.loadNext();
-    return () => {
-      onPositionRef.current({ ...diffBookmark(frames.current, offset.current, visibleRow.current), layout: layoutRef.current, horizontalOffset: horizontalOffset.current, snapshot: stream.getSnapshot(), refreshKey });
-      stream.dispose();
-      mounted.current = false;
-      if (positionFrame.current !== null) cancelAnimationFrame(positionFrame.current);
-    };
-  }, [stream, refreshKey]);
-  useEffect(() => {
-    if (!showSearch) { setDraft(""); void stream.search(""); }
-  }, [showSearch, stream]);
-  useEffect(() => {
-    if (readingStyle.current.wrap === wrap && readingStyle.current.fontSize === fontSize) return;
-    readingStyle.current = { wrap, fontSize };
-    stream.reanchor(visibleRow.current);
-  }, [stream, wrap, fontSize]);
+}
 
-  const renderRow = useCallback(({ item }: { item: IndexedDiffRow }) => (
-    <GitDiffRow row={item.row} chrome={chrome} theme={theme} wrap={wrap} fontSize={fontSize} query={state.query} scope={scope} showHeaders={showHeaders} />
-  ), [chrome, theme, wrap, fontSize, state.query, scope, showHeaders]);
-  const hasRows = state.end > state.start;
-  const positionTarget = () => {
-    if (!mounted.current || targetRow.current == null || positionFrame.current !== null) return;
-    positionFrame.current = requestAnimationFrame(() => {
-      positionFrame.current = null;
-      if (!mounted.current || !list.current || targetRow.current == null) return;
-      const frame = frames.current.get(targetRow.current);
-      if (frame) list.current.scrollToOffset({ offset: frame.offset + withinRow.current, animated: false });
-    });
-  };
-  onTargetLayout.current = positionTarget;
-  const edgeIndicator = (edge: "next" | "previous") => state.loading === edge ? (
-    <View style={styles.pending}><ActivityIndicator size="small" accessibilityLabel="Loading diff" color={chrome.accent} /></View>
-  ) : undefined;
-  const rows = (
-    <VirtualizedList
-      key={state.anchor}
-      ref={list}
-      data={state}
-      getItem={diffStreamRow}
-      getItemCount={(value: GitDiffStreamState) => value.end - value.start}
-      keyExtractor={item => String(item.index)}
-      renderItem={renderRow}
-      CellRendererComponent={MeasuredCell}
-      style={styles.root}
-      contentContainerStyle={{ paddingBottom: bottomInset + 12 }}
-      initialNumToRender={initialCount.current}
-      maxToRenderPerBatch={8}
-      windowSize={5}
-      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-      onScroll={event => { offset.current = event.nativeEvent.contentOffset.y; }}
-      onScrollBeginDrag={() => {
-        interacted.current = true;
-        targetRow.current = null;
-        if (offset.current < 300) void stream.loadPrevious();
-      }}
-      onViewableItemsChanged={viewability.current}
-      scrollEventThrottle={100}
-      onContentSizeChange={positionTarget}
-      onLayout={positionTarget}
-      onEndReached={() => { void stream.loadNext(); }}
-      onEndReachedThreshold={1.5}
-      onStartReached={() => { if (interacted.current) void stream.loadPrevious(); }}
-      onStartReachedThreshold={0.5}
-      ListHeaderComponent={edgeIndicator("previous")}
-      ListFooterComponent={edgeIndicator("next")}
-      keyboardShouldPersistTaps="handled"
-      accessibilityActions={[{ name: "increment", label: "Next hunk" }, { name: "decrement", label: "Previous hunk" }]}
-      onAccessibilityAction={event => { void stream.seek(event.nativeEvent.actionName === "increment" ? "next" : "previous", visibleRow.current, "hunk"); }}
-    />
+const MAX_CACHED_PATCHES = 8;
+
+export function GitDiffReader({
+  file,
+  scope,
+  loadPatch,
+  loadFileContent,
+  chrome,
+  theme,
+  split,
+  wrap,
+  fontSize,
+  refreshKey,
+  showSearch,
+  showHeaders,
+  bottomInset,
+  onCloseSearch,
+}: GitDiffReaderProps) {
+  const host = useRef<DiffViewerHostHandle>(null);
+  const [state, setState] = useState<ReaderState>({ status: "idle" });
+  const [attempt, setAttempt] = useState(0);
+  const [draft, setDraft] = useState("");
+  const [find, setFind] = useState({ query: "", count: 0, index: -1 });
+  const patches = useRef(new Map<string, GitDiffPatchPayload>());
+  const contents = useRef(new Map<string, Promise<GitDiffFileContentPayload>>());
+  const activeKey = useRef("");
+  const fileRef = useRef(file);
+  fileRef.current = file;
+  const path = file?.path ?? null;
+
+  const layout = useMemo(
+    () => ({ split, wrap, headers: showHeaders, inset: bottomInset + 12 }),
+    [split, wrap, showHeaders, bottomInset],
   );
-  const seekDisabled = !state.query || state.matches === 0 || Boolean(state.loading) || state.stale;
+  useDiffViewerStyle(host, theme, chrome, fontSize, layout);
+
+  useEffect(() => {
+    const current = fileRef.current;
+    if (!current || !path) {
+      activeKey.current = "";
+      host.current?.post([{ type: "clear" }]);
+      setState({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    const patchKey = `${refreshKey}:${path}`;
+    setState({ status: "loading" });
+    void (async () => {
+      try {
+        let payload = patches.current.get(patchKey);
+        if (!payload) {
+          payload = await loadPatch(path);
+          if (patches.current.size >= MAX_CACHED_PATCHES) patches.current.clear();
+          patches.current.set(patchKey, payload);
+        }
+        if (cancelled) return;
+        const plan = planGitDiffReview(payload, fileRef.current ?? current, scope);
+        if (plan.kind !== "sections") {
+          activeKey.current = "";
+          host.current?.post([{ type: "clear" }]);
+          setState(plan.kind === "empty" ? { status: "empty" } : { status: "too-large", bytes: plan.bytes });
+          return;
+        }
+        const key = `${patchKey}|${scope}`;
+        activeKey.current = key;
+        setFind({ query: "", count: 0, index: -1 });
+        host.current?.post([{ type: "diff", key, sections: plan.sections }]);
+      } catch (reason) {
+        if (!cancelled) {
+          setState({ status: "error", message: reason instanceof Error ? reason.message : "Could not load this diff." });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [path, scope, refreshKey, loadPatch, attempt]);
+
+  useEffect(() => {
+    if (showSearch) return;
+    setDraft("");
+    setFind({ query: "", count: 0, index: -1 });
+    host.current?.post([{ type: "find", query: "" }]);
+  }, [showSearch]);
+
+  const answerFiles = useCallback(
+    async (id: string) => {
+      const current = fileRef.current;
+      const post = (oldContents: string | null, newContents: string | null, oldName?: string) =>
+        host.current?.post([{ type: "files", id, oldContents, newContents, oldName }]);
+      if (!current) return post(null, null);
+      try {
+        const key = `${refreshKey}:${current.path}`;
+        let pending = contents.current.get(key);
+        if (!pending) {
+          pending = loadFileContent(current.path);
+          contents.current.set(key, pending);
+        }
+        const sides = gitDiffExpansionSides(await pending, current);
+        if (sides) post(sides.oldContents, sides.newContents, sides.oldName);
+        else post(null, null);
+      } catch {
+        contents.current.delete(`${refreshKey}:${current.path}`);
+        post(null, null);
+      }
+    },
+    [loadFileContent, refreshKey],
+  );
+
+  const onMessage = useCallback(
+    (raw: string) => {
+      const message = parseDiffViewerMessage(raw);
+      if (!message) return;
+      switch (message.type) {
+        case "loaded":
+          if (message.key === activeKey.current) setState({ status: "ready" });
+          break;
+        case "needFiles":
+          void answerFiles(message.id);
+          break;
+        case "find":
+          setFind({ query: message.query, count: message.count, index: message.index });
+          break;
+        case "error":
+          if (!message.key || message.key === activeKey.current) {
+            setState({ status: "error", message: message.message });
+          }
+          break;
+      }
+    },
+    [answerFiles],
+  );
+
+  const submitFind = () => host.current?.post([{ type: "find", query: draft.trim() }]);
+  const seek = (direction: "next" | "previous") => host.current?.post([{ type: "seek", target: "match", direction }]);
+  const seekDisabled = !find.query || find.count === 0;
+
   return (
     <View style={[styles.root, { backgroundColor: chrome.surface }]}>
-      {showSearch ? <View style={[styles.search, { borderColor: chrome.border, backgroundColor: chrome.appBackground }]}>
-        <View style={[styles.field, { backgroundColor: chrome.surfaceMuted }]}>
-          <MobileSingleLineInput
-            accessibilityLabel="Search this diff" placeholder="Find in diff" value={draft}
-            onChangeText={setDraft} onSubmitEditing={() => void stream.search(draft)}
-            returnKeyType="search" autoCapitalize="none" autoCorrect={false} autoFocus
-            containerStyle={styles.input} inputStyle={{ color: chrome.text }} placeholderTextColor={chrome.textSubtle}
-          />
-          {state.loading === "search" ? <ActivityIndicator size="small" color={chrome.textSubtle} accessibilityLabel="Searching diff" /> : state.query ? (
-            <Text accessibilityLiveRegion="polite" style={[styles.matchCount, { color: chrome.textMuted }]}>
-              {state.matches} {state.matches === 1 ? "match" : "matches"}
-            </Text>
+      {showSearch ? (
+        <View style={[styles.search, { borderColor: chrome.border, backgroundColor: chrome.appBackground }]}>
+          <View style={[styles.field, { backgroundColor: chrome.surfaceMuted }]}>
+            <MobileSingleLineInput
+              accessibilityLabel="Search this diff"
+              placeholder="Find in diff"
+              value={draft}
+              onChangeText={setDraft}
+              onSubmitEditing={submitFind}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+              containerStyle={styles.input}
+              inputStyle={{ color: chrome.text }}
+              placeholderTextColor={chrome.textSubtle}
+            />
+            {find.query ? (
+              <Text accessibilityLiveRegion="polite" style={[styles.matchCount, { color: chrome.textMuted }]}>
+                {find.count === 0
+                  ? "No matches"
+                  : find.index < 0
+                    ? `${find.count} ${find.count === 1 ? "match" : "matches"}`
+                    : `${find.index + 1} of ${find.count}`}
+              </Text>
+            ) : null}
+          </View>
+          <DiffIconButton icon="chevron-up" label="Previous matching line" chrome={chrome} disabled={seekDisabled} onPress={() => seek("previous")} />
+          <DiffIconButton icon="chevron-down" label="Next matching line" chrome={chrome} disabled={seekDisabled} onPress={() => seek("next")} />
+          {onCloseSearch ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Done finding"
+              onPress={onCloseSearch}
+              style={({ pressed }) => [styles.done, { opacity: pressed ? 0.55 : 1 }]}
+            >
+              <Text style={[styles.doneText, { color: chrome.link }]}>Done</Text>
+            </Pressable>
           ) : null}
         </View>
-        <DiffIconButton icon="chevron-up" label="Previous matching line" chrome={chrome} disabled={seekDisabled} onPress={() => void stream.seek("previous", visibleRow.current)} />
-        <DiffIconButton icon="chevron-down" label="Next matching line" chrome={chrome} disabled={seekDisabled} onPress={() => void stream.seek("next", visibleRow.current)} />
-        {onCloseSearch ? <Pressable accessibilityRole="button" accessibilityLabel="Done finding" onPress={onCloseSearch} style={({ pressed }) => [styles.done, { opacity: pressed ? 0.55 : 1 }]}>
-          <Text style={[styles.doneText, { color: chrome.link }]}>Done</Text>
-        </Pressable> : null}
-      </View> : null}
-      {state.error || state.stale ? <InlineNotice
-        tone={state.stale ? "warning" : "danger"}
-        icon={state.stale ? "refresh" : undefined}
-        title={state.stale ? "This diff changed" : "Couldn't load this diff"}
-        detail={state.stale ? "Refresh to read the latest version." : state.error}
-        action={{ label: state.stale ? "Refresh" : "Retry", onPress: () => void (state.stale ? stream.refresh() : stream.retry()) }}
-        style={styles.notice}
-      /> : null}
-      {hasRows ? wrap ? rows : <ScrollView
-        horizontal style={styles.root} contentContainerStyle={styles.horizontal}
-        contentOffset={{ x: initialHorizontalOffset, y: 0 }}
-        onScroll={event => { horizontalOffset.current = event.nativeEvent.contentOffset.x; }} scrollEventThrottle={100}
+      ) : null}
+      <View
+        style={styles.body}
+        accessibilityActions={[{ name: "increment", label: "Next hunk" }, { name: "decrement", label: "Previous hunk" }]}
+        onAccessibilityAction={(event) =>
+          host.current?.post([{ type: "seek", target: "hunk", direction: event.nativeEvent.actionName === "increment" ? "next" : "previous" }])
+        }
       >
-        <View style={{ width: Math.max(width, state.maxCharacters * fontSize * fontScale + gitDiffGutterWidth(fontSize, fontScale) + 32 * fontScale) }}>{rows}</View>
-      </ScrollView> : <View style={styles.state}>
-        {state.loading || (state.total === null && !state.error && !state.stale) ? <EmptyState size="inline" busy title="Loading diff" /> : !state.error && !state.stale ? <EmptyState size="inline" title="No changes in this comparison" /> : null}
-      </View>}
+        <DiffViewerHost ref={host} onMessage={onMessage} backgroundColor={chrome.surface} accessibilityLabel="Diff" />
+        {state.status !== "ready" && state.status !== "idle" ? (
+          <View style={[styles.state, { backgroundColor: chrome.surface }]}>
+            {state.status === "loading" ? (
+              <EmptyState size="inline" busy title="Loading diff" />
+            ) : state.status === "empty" ? (
+              <EmptyState size="inline" title="No changes in this comparison" />
+            ) : state.status === "too-large" ? (
+              <EmptyState
+                size="inline"
+                icon="document-text"
+                title="Diff too large to show"
+                detail={formatGitDiffBytes(state.bytes)}
+              />
+            ) : (
+              <InlineNotice
+                tone="danger"
+                title="Couldn't load this diff"
+                detail={state.message}
+                action={{ label: "Retry", onPress: () => setAttempt((value) => value + 1) }}
+              />
+            )}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  horizontal: { height: "100%" },
+  body: { flex: 1 },
   search: { flexDirection: "row", alignItems: "center", gap: 2, paddingLeft: 12, paddingRight: 4, paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth },
   field: { flex: 1, minWidth: 0, minHeight: 38, flexDirection: "row", alignItems: "center", gap: 6, paddingRight: 10, borderRadius: Radii.sm, ...ContinuousCorners },
   input: { flex: 1, minWidth: 0 },
   matchCount: { ...TypeScale.caption, fontVariant: ["tabular-nums"] },
   done: { minHeight: TouchTarget, minWidth: TouchTarget, paddingHorizontal: 8, alignItems: "center", justifyContent: "center" },
   doneText: { ...TypeScale.label },
-  pending: { height: 36, alignItems: "center", justifyContent: "center" },
-  state: { flex: 1, padding: 20, alignItems: "center", justifyContent: "center" },
-  notice: { marginHorizontal: 12, marginVertical: 8 },
+  state: { ...StyleSheet.absoluteFill, padding: 20, alignItems: "center", justifyContent: "center" },
 });

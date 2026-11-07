@@ -96,27 +96,27 @@ const secondServer = {
   daemonPublicKey: "public-key-b",
 };
 
-test("diff pages preserve literal paths and correlate requests with their owning server", async () => {
+test("diff patches preserve literal paths and correlate requests with their owning server", async () => {
   const client = new WebSocketClient();
   const socket = await connectClient(client, server);
   socket.open();
   const path = " leading [x]\t\ntrailing ";
-  const pending = client.getGitDiffPage(server.id, { targetId: "worker", cwd: "/fixture", path, scope: "working", row: 120, version: "snapshot", query: "needle" });
+  const pending = client.getGitDiffPatch(server.id, { targetId: "worker", cwd: "/fixture", path });
   const outbound = JSON.parse(socket.sent.at(-1)!);
-  expect(outbound).toMatchObject({ type: "git_diff_page", path, scope: "working", row: 120, file_generation: "snapshot", query: "needle" });
-  const page = { path, scope: "working" as const, version: "new-snapshot", start: 120, total: 400, rows: [], stale: true, hunks: 1, previous_hunk: 0, next_hunk: -1, matches: 0, previous_match: -1, next_match: -1 };
-  socket.receive({ type: "git_diff_page", request_id: "stale", page: { path: "stale request" } });
+  expect(outbound).toMatchObject({ type: "git_diff_patch", path });
+  const patch = { repo_root: "/fixture", path, sections: [{ scope: "unstaged", title: "Unstaged", patch: "@@ -1 +1 @@\n-a\n+b" }] };
+  socket.receive({ type: "git_diff_patch", request_id: "stale", patch: { path: "stale request" } });
   expect(registeredHandlerCount(client)).toBeGreaterThan(0);
-  socket.receive({ type: "git_diff_page", request_id: outbound.request_id, page });
-  await expect(pending).resolves.toEqual(page);
+  socket.receive({ type: "git_diff_patch", request_id: outbound.request_id, patch });
+  await expect(pending).resolves.toEqual(patch);
   expect(registeredHandlerCount(client)).toBe(0);
-  const failed = client.getGitDiffPage(server.id, { targetId: "worker", cwd: "/fixture", path, scope: "all", row: 0 });
+  const failed = client.getGitDiffPatch(server.id, { targetId: "worker", cwd: "/fixture", path });
   socket.receive({ type: "error", request_id: JSON.parse(socket.sent.at(-1)!).request_id, message: "File no longer changed" });
   await expect(failed).rejects.toThrow("File no longer changed");
   expect(registeredHandlerCount(client)).toBe(0);
   const sentCount = socket.sent.length;
   await expect(
-    client.getGitDiffPage(secondServer.id, { targetId: "worker", cwd: "/fixture", path, scope: "all", row: 0 }),
+    client.getGitDiffPatch(secondServer.id, { targetId: "worker", cwd: "/fixture", path }),
   ).rejects.toThrow("Daemon is not connected.");
   expect(socket.sent).toHaveLength(sentCount);
   expect(registeredHandlerCount(client)).toBe(0);

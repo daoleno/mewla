@@ -68,7 +68,8 @@ import {
   screenshotToolHeavyEvents,
   SCREENSHOT_CHAT_EVENTS,
   SCREENSHOT_GIT_SNAPSHOT,
-  screenshotGitDiffPage,
+  screenshotGitDiffFileContent,
+  screenshotGitDiffPatch,
   SCREENSHOT_PLUGIN_ACCOUNTS,
   SCREENSHOT_PLUGINS,
   SCREENSHOT_SESSION_AGENTS,
@@ -670,10 +671,8 @@ function ChatDemo() {
 function GitDiffDemo() {
   // The route hands the sheet the terminal palette, not the chat one.
   const { terminalTheme: theme } = useTerminalThemeChrome();
-  const loadPage = useCallback(
-    async (request: Parameters<typeof screenshotGitDiffPage>[0]) => screenshotGitDiffPage(request),
-    [],
-  );
+  const loadPatch = useCallback(async (path: string) => screenshotGitDiffPatch(path), []);
+  const loadFileContent = useCallback(async (path: string) => screenshotGitDiffFileContent(path), []);
   return (
     <GitDiffSheet
       visible
@@ -681,23 +680,22 @@ function GitDiffDemo() {
       snapshot={SCREENSHOT_GIT_SNAPSHOT}
       loading={false}
       error={null}
-      loadPage={loadPage}
+      loadPatch={loadPatch}
+      loadFileContent={loadFileContent}
       refreshKey={0}
       ownerKey="demo-git"
-      repoBrowserPath=""
-      repoBrowserEntries={[]}
-      repoBrowserLoading={false}
-      repoBrowserError={null}
+      repoPaths={null}
+      repoPathsLoading={false}
+      repoPathsError={null}
       repoFilePath={null}
       repoFileLoadingPath={null}
       repoFileError={null}
       repoFileByPath={{}}
       onClose={NOOP}
       onRefresh={NOOP}
-      onOpenRepoPath={NOOP}
+      onLoadRepoPaths={NOOP}
       onOpenRepoFile={NOOP}
       onCloseRepoFile={NOOP}
-      onBackRepoPath={NOOP}
     />
   );
 }

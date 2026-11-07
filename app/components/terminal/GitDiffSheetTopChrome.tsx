@@ -32,7 +32,6 @@ interface GitDiffSheetTopChromeProps {
   repoTitle: string;
   /** `+12 −3 · 4 files` for the overview's selected comparison. */
   summary: string | null;
-  browserPath: string;
   browserFilePath: string | null;
   workingFileOrigin: GitDiffViewMode;
   /** No overflow when the current state has no secondary actions. */
@@ -57,7 +56,6 @@ export function GitDiffSheetTopChrome({
   scope,
   repoTitle,
   summary,
-  browserPath,
   browserFilePath,
   workingFileOrigin,
   hasActions,
@@ -71,9 +69,7 @@ export function GitDiffSheetTopChrome({
     view === "reader"
       ? "Changed files"
       : view === "files"
-        ? browserPath
-          ? "Parent folder"
-          : "Changes"
+        ? "Changes"
         : view === "file"
           ? workingFileOrigin === "changes"
             ? file
@@ -95,9 +91,8 @@ export function GitDiffSheetTopChrome({
     subtitle = index > 0 ? `${repoTitle}/${browserFilePath.slice(0, index)}` : repoTitle;
     headTruncate = true;
   } else if (view === "files") {
-    title = browserPath ? browserPath.slice(browserPath.lastIndexOf("/") + 1) : "Files";
-    subtitle = browserPath ? `${repoTitle}/${browserPath}` : repoTitle;
-    headTruncate = true;
+    title = "Files";
+    subtitle = repoTitle;
   } else {
     title = snapshot?.available ? repoTitle : "Changes";
     subtitle = overviewSubtitle(snapshot, summary);

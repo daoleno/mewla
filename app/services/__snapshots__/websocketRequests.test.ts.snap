@@ -1832,68 +1832,7 @@ exports[`correlated WebSocket requests getGitDiffPatch 1`] = `
       "name": "Error",
     },
   },
-  "timeoutMs": 10000,
-}
-`;
-
-exports[`correlated WebSocket requests getGitDiffPage 1`] = `
-{
-  "disconnect": "pending",
-  "errorChannels": {
-    "error": {
-      "rejected": {
-        "message": "probe failure",
-        "name": "Error",
-      },
-    },
-  },
-  "errorWithoutMessage": {
-    "rejected": {
-      "message": "Could not load diff page.",
-      "name": "Error",
-    },
-  },
-  "handlersAfterDisconnect": 0,
-  "handlersAfterOffline": 0,
-  "handlersAfterReply": 0,
-  "handlersAfterTimeout": 0,
-  "ignoredErrorChannels": [
-    "skills_inventory_error",
-    "skills_command_error",
-    "skills_mutation_error",
-    "skills_inspect_error",
-    "plugins_inventory_error",
-    "plugin_command_error",
-    "plugin_mutation_error",
-  ],
-  "offline": {
-    "rejected": {
-      "message": "Daemon is not connected.",
-      "name": "Error",
-    },
-  },
-  "reply": {
-    "resolved": {
-      "path": "a",
-    },
-  },
-  "request": {
-    "cwd": "/w",
-    "path": "a",
-    "request_id": "#_#",
-    "row": 0,
-    "scope": "all",
-    "target_id": "t",
-    "type": "git_diff_page",
-  },
-  "staleReply": "pending",
-  "timeout": {
-    "rejected": {
-      "message": "Timed out while loading diff page.",
-      "name": "Error",
-    },
-  },
-  "timeoutMs": 10000,
+  "timeoutMs": 30000,
 }
 `;
 
@@ -1956,7 +1895,7 @@ exports[`correlated WebSocket requests getGitDiffFileContent 1`] = `
 }
 `;
 
-exports[`correlated WebSocket requests getGitRepoEntries 1`] = `
+exports[`correlated WebSocket requests getGitRepoPaths 1`] = `
 {
   "disconnect": "pending",
   "errorChannels": {
@@ -1994,15 +1933,18 @@ exports[`correlated WebSocket requests getGitRepoEntries 1`] = `
   },
   "reply": {
     "resolved": {
-      "path": "a",
+      "paths": [
+        "a",
+      ],
+      "repo_root": "/w",
+      "truncated": false,
     },
   },
   "request": {
     "cwd": "/w",
-    "path": "a",
     "request_id": "#_#",
     "target_id": "t",
-    "type": "git_repo_entries",
+    "type": "git_repo_paths",
   },
   "staleReply": "pending",
   "timeout": {
@@ -2011,7 +1953,7 @@ exports[`correlated WebSocket requests getGitRepoEntries 1`] = `
       "name": "Error",
     },
   },
-  "timeoutMs": 10000,
+  "timeoutMs": 15000,
 }
 `;
 
@@ -4846,67 +4788,5 @@ exports[`correlated WebSocket requests deleteWorkItem 1`] = `
     },
   },
   "timeoutMs": 10000,
-}
-`;
-
-exports[`correlated WebSocket requests getGitRepoPaths 1`] = `
-{
-  "disconnect": "pending",
-  "errorChannels": {
-    "error": {
-      "rejected": {
-        "message": "probe failure",
-        "name": "Error",
-      },
-    },
-  },
-  "errorWithoutMessage": {
-    "rejected": {
-      "message": "Failed to load repository files.",
-      "name": "Error",
-    },
-  },
-  "handlersAfterDisconnect": 0,
-  "handlersAfterOffline": 0,
-  "handlersAfterReply": 0,
-  "handlersAfterTimeout": 0,
-  "ignoredErrorChannels": [
-    "skills_inventory_error",
-    "skills_command_error",
-    "skills_mutation_error",
-    "skills_inspect_error",
-    "plugins_inventory_error",
-    "plugin_command_error",
-    "plugin_mutation_error",
-  ],
-  "offline": {
-    "rejected": {
-      "message": "Daemon is not connected.",
-      "name": "Error",
-    },
-  },
-  "reply": {
-    "resolved": {
-      "paths": [
-        "a",
-      ],
-      "repo_root": "/w",
-      "truncated": false,
-    },
-  },
-  "request": {
-    "cwd": "/w",
-    "request_id": "#_#",
-    "target_id": "t",
-    "type": "git_repo_paths",
-  },
-  "staleReply": "pending",
-  "timeout": {
-    "rejected": {
-      "message": "Timed out while loading repository files.",
-      "name": "Error",
-    },
-  },
-  "timeoutMs": 15000,
 }
 `;

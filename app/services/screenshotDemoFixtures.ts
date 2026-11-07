@@ -1,4 +1,4 @@
-import type { GitDiffPage, GitDiffPageRequest, GitDiffRow, GitDiffStatusSnapshot } from "./gitDiff";
+import type { GitDiffFileContentPayload, GitDiffPatchPayload, GitDiffStatusSnapshot } from "./gitDiff";
 import type { CodexConversationEvent, ConversationChoice } from "./codexConversation";
 import type { Worker } from "../store/workers";
 import type { PendingUserMessage } from "../components/terminal/InterfaceChatSession";
@@ -967,33 +967,59 @@ export const SCREENSHOT_GIT_SNAPSHOT: GitDiffStatusSnapshot = {
   ],
 };
 
-const GIT_DEMO_ROWS: GitDiffRow[] = [
-  { kind: "hunk", text: "@@ -10,7 +10,7 @@ export const strings = {" },
-  { kind: "context", text: "  title: \"Settings\",", old: 10, new: 10 },
-  { kind: "context", text: "  syncNow: \"Sync now\",", old: 11, new: 11 },
-  { kind: "delete", text: "  syncPaused: \"Synchronisation is currently paused!\",", old: 12 },
-  { kind: "add", text: "  syncPaused: \"Sync paused\",", new: 12 },
-  { kind: "delete", text: "  syncConflict: \"Resolve conflicting versions of this note!\",", old: 13 },
-  { kind: "add", text: "  syncConflict: \"Keep both copies\",", new: 13 },
-  { kind: "context", text: "  retries: 3,", old: 14, new: 14 },
-  { kind: "context", text: "};", old: 15, new: 15 },
+const GIT_DEMO_BASE = [
+  "export const strings = {",
+  "  // Settings screen",
+  "  title: \"Settings\",",
+  "  syncNow: \"Sync now\",",
+  "  syncPaused: \"Synchronisation is currently paused!\",",
+  "  syncConflict: \"Resolve conflicting versions of this note!\",",
+  "  retries: 3,",
+  "};",
+  "",
 ];
+const GIT_DEMO_CURRENT = [...GIT_DEMO_BASE];
+GIT_DEMO_CURRENT[4] = "  syncPaused: \"Sync paused\",";
+GIT_DEMO_CURRENT[5] = "  syncConflict: \"Keep both copies\",";
 
-export function screenshotGitDiffPage(request: GitDiffPageRequest): GitDiffPage {
+const GIT_DEMO_PATCH = [
+  "diff --git a/app/settings/strings.ts b/app/settings/strings.ts",
+  "index 3f2a1c4..9b7d0e2 100644",
+  "--- a/app/settings/strings.ts",
+  "+++ b/app/settings/strings.ts",
+  "@@ -2,7 +2,7 @@ export const strings = {",
+  "   // Settings screen",
+  "   title: \"Settings\",",
+  "   syncNow: \"Sync now\",",
+  "-  syncPaused: \"Synchronisation is currently paused!\",",
+  "+  syncPaused: \"Sync paused\",",
+  "-  syncConflict: \"Resolve conflicting versions of this note!\",",
+  "+  syncConflict: \"Keep both copies\",",
+  "   retries: 3,",
+  " };",
+].join("\n");
+
+export function screenshotGitDiffPatch(path: string): GitDiffPatchPayload {
   return {
-    path: request.path,
-    scope: request.scope,
-    version: "demo",
-    stale: false,
-    start: 0,
-    total: GIT_DEMO_ROWS.length,
-    rows: GIT_DEMO_ROWS,
-    hunks: 1,
-    previous_hunk: -1,
-    next_hunk: -1,
-    matches: 0,
-    previous_match: -1,
-    next_match: -1,
+    repo_root: SCREENSHOT_GIT_SNAPSHOT.repo_root ?? "",
+    path,
+    sections: [{ scope: "unstaged", title: "Unstaged", patch: GIT_DEMO_PATCH }],
+  };
+}
+
+export function screenshotGitDiffFileContent(path: string): GitDiffFileContentPayload {
+  const side = (label: string, lines: string[]) => ({
+    label,
+    exists: true,
+    byte_count: lines.join("\n").length,
+    line_count: lines.length,
+    content: lines.join("\n"),
+  });
+  return {
+    repo_root: SCREENSHOT_GIT_SNAPSHOT.repo_root ?? "",
+    path,
+    base: side("Base", GIT_DEMO_BASE),
+    current: side("Working tree", GIT_DEMO_CURRENT),
   };
 }
 

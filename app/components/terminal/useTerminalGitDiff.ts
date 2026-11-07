@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectionState } from "../../store/workers";
 import {
   buildGitDiffChipLabel,
-  type GitDiffPageRequest,
   type GitDiffStatusSnapshot,
-  type GitRepoBrowserEntry,
   type GitRepoFileContentPayload,
+  type GitRepoPathsPayload,
 } from "../../services/gitDiff";
 import { wsClient } from "../../services/websocket";
 
@@ -48,14 +47,11 @@ export function useTerminalGitDiff({
   const [refreshKey, setRefreshKey] = useState(0);
   const epoch = useRef(0);
   const statusRequest = useRef(0);
-  const browserRequest = useRef(0);
+  const pathsRequest = useRef(0);
   const fileRequest = useRef(0);
-  const [repoBrowserPath, setRepoBrowserPath] = useState("");
-  const [repoBrowserEntries, setRepoBrowserEntries] = useState<
-    GitRepoBrowserEntry[]
-  >([]);
-  const [repoBrowserLoading, setRepoBrowserLoading] = useState(false);
-  const [repoBrowserError, setRepoBrowserError] = useState<string | null>(null);
+  const [repoPaths, setRepoPaths] = useState<GitRepoPathsPayload | null>(null);
+  const [repoPathsLoading, setRepoPathsLoading] = useState(false);
+  const [repoPathsError, setRepoPathsError] = useState<string | null>(null);
   const [repoFilePath, setRepoFilePath] = useState<string | null>(null);
   const [repoFileLoadingPath, setRepoFileLoadingPath] = useState<string | null>(
     null,
@@ -74,10 +70,9 @@ export function useTerminalGitDiff({
     setVisible(false);
     setResult(null);
     setError(null);
-    setRepoBrowserPath("");
-    setRepoBrowserEntries([]);
-    setRepoBrowserError(null);
-    setRepoBrowserLoading(false);
+    setRepoPaths(null);
+    setRepoPathsError(null);
+    setRepoPathsLoading(false);
     setRepoFilePath(null);
     setRepoFileLoadingPath(null);
     setRepoFileError(null);
@@ -124,47 +119,39 @@ export function useTerminalGitDiff({
     return () => clearInterval(timer);
   }, [connected, refresh, visible]);
 
-  const loadPage = useCallback(
-    (request: GitDiffPageRequest) =>
-      wsClient.getGitDiffPage(serverId, {
-        ...request,
-        targetId: workerId,
-        cwd,
-      }),
+  const loadPatch = useCallback(
+    (path: string) =>
+      wsClient.getGitDiffPatch(serverId, { targetId: workerId, cwd, path }),
     [serverId, workerId, cwd],
   );
 
-  const loadRepoPath = useCallback(
-    async (path: string = "") => {
-      const generation = epoch.current;
-      const request = ++browserRequest.current;
-      fileRequest.current++;
-      setRepoBrowserLoading(true);
-      setRepoBrowserError(null);
-      setRepoFilePath(null);
-      setRepoFileError(null);
-      try {
-        const payload = await wsClient.getGitRepoEntries(serverId, {
-          targetId: workerId,
-          cwd,
-          path,
-        });
-        if (generation !== epoch.current || request !== browserRequest.current)
-          return;
-        setRepoBrowserPath(payload.path);
-        setRepoBrowserEntries(payload.entries ?? []);
-      } catch (reason: any) {
-        if (generation === epoch.current && request === browserRequest.current)
-          setRepoBrowserError(
-            reason.message || "Could not load repository files.",
-          );
-      } finally {
-        if (generation === epoch.current && request === browserRequest.current)
-          setRepoBrowserLoading(false);
-      }
-    },
+  const loadFileContent = useCallback(
+    (path: string) =>
+      wsClient.getGitDiffFileContent(serverId, { targetId: workerId, cwd, path }),
     [serverId, workerId, cwd],
   );
+
+  const loadRepoPaths = useCallback(async () => {
+    const generation = epoch.current;
+    const request = ++pathsRequest.current;
+    setRepoPathsLoading(true);
+    setRepoPathsError(null);
+    try {
+      const payload = await wsClient.getGitRepoPaths(serverId, {
+        targetId: workerId,
+        cwd,
+      });
+      if (generation !== epoch.current || request !== pathsRequest.current)
+        return;
+      setRepoPaths(payload);
+    } catch (reason: any) {
+      if (generation === epoch.current && request === pathsRequest.current)
+        setRepoPathsError(reason.message || "Could not load repository files.");
+    } finally {
+      if (generation === epoch.current && request === pathsRequest.current)
+        setRepoPathsLoading(false);
+    }
+  }, [serverId, workerId, cwd]);
 
   const openRepoFile = useCallback(
     async (path: string) => {
@@ -201,13 +188,6 @@ export function useTerminalGitDiff({
     setRepoFilePath(null);
     setRepoFileError(null);
   }, []);
-  const goUpRepoPath = useCallback(() => {
-    void loadRepoPath(
-      repoBrowserPath.includes("/")
-        ? repoBrowserPath.slice(0, repoBrowserPath.lastIndexOf("/"))
-        : "",
-    );
-  }, [loadRepoPath, repoBrowserPath]);
   const summary = useMemo<TerminalGitDiffSummary | null>(() => {
     if (!queryEnabled || status?.reason === "not_git_repo") return null;
     const tone: TerminalGitDiffTone = error
@@ -244,11 +224,11 @@ export function useTerminalGitDiff({
       error,
       ownerKey,
       refreshKey,
-      loadPage,
-      repoBrowserPath,
-      repoBrowserEntries,
-      repoBrowserLoading,
-      repoBrowserError,
+      loadPatch,
+      loadFileContent,
+      repoPaths,
+      repoPathsLoading,
+      repoPathsError,
       repoFilePath,
       repoFileLoadingPath,
       repoFileError,
@@ -257,14 +237,13 @@ export function useTerminalGitDiff({
       onRefresh: () => {
         void refresh();
       },
-      onOpenRepoPath: (path: string) => {
-        void loadRepoPath(path);
+      onLoadRepoPaths: () => {
+        void loadRepoPaths();
       },
       onOpenRepoFile: (path: string) => {
         void openRepoFile(path);
       },
       onCloseRepoFile: closeRepoFile,
-      onBackRepoPath: goUpRepoPath,
     },
   };
 }
