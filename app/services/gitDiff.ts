@@ -28,19 +28,11 @@ export interface GitDiffFileInfo {
 
 export type GitDiffScope = "all" | "working" | "staged";
 
-export function filterGitDiffFiles(
-  files: GitDiffFileInfo[],
-  scope: GitDiffScope,
-  query: string,
-) {
-  const needle = query.toLocaleLowerCase();
+export function filterGitDiffFiles(files: GitDiffFileInfo[], scope: GitDiffScope) {
   return files.filter(
     (file) =>
-      (scope === "all" ||
-        (scope === "staged" ? file.staged : file.unstaged || file.untracked)) &&
-      (!needle ||
-        file.path.toLocaleLowerCase().includes(needle) ||
-        file.old_path?.toLocaleLowerCase().includes(needle)),
+      scope === "all" ||
+      (scope === "staged" ? file.staged : file.unstaged || file.untracked),
   );
 }
 
