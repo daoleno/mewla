@@ -11,7 +11,7 @@ import { McpClient } from './mcpclient.mjs';
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) => (v.startsWith('--') ? [...a, [v.slice(2), all[i + 1]]] : a), []));
 const side = args.side;
 const reps = Number(args.reps || 15);
-const PORT = 8765;
+const PORT = Number(process.env.BENCH_PORT || 8765);
 const base = `http://127.0.0.1:${PORT}`;
 const fixture = await startFixture(PORT);
 

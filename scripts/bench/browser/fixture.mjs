@@ -52,7 +52,7 @@ export function startFixture(port = 8765) {
     if (req.url === '/api/slow') return apiSlow(res);
     if (req.url === '/__events') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(events)); return; }
     if (req.url === '/__reset') { events.length = 0; res.writeHead(204); res.end(); return; }
-    if (req.url === '/__event' && req.method === 'POST') { let b = ''; req.on('data', d => b += d); req.on('end', () => { try { events.push(JSON.parse(b)); } catch {} res.writeHead(204); res.end(); }); return; }
+    if (req.url === '/__event' && req.method === 'POST') { let b = ''; req.on('data', d => b += d); req.on('end', () => { try { events.push({ ...JSON.parse(b), at: Date.now() }); } catch {} res.writeHead(204); res.end(); }); return; }
     const path = req.url.split('?')[0];
     const route = routes[path] ||
       (path === '/pages' ? () => pages(req.url) : path.startsWith('/product/') ? () => product(Number(path.split('/')[2])) : null);
