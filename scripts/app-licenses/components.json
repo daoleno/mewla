@@ -4,6 +4,8 @@
     { "name": "Ghostty (libghostty-vt)", "license": "MIT", "url": "https://github.com/ghostty-org/ghostty", "platforms": ["android", "ios"], "text": "app/assets/notices/GHOSTTY-MIT.txt" },
     { "name": "noVNC", "version": "1.7.0", "license": "MPL-2.0", "url": "https://github.com/novnc/noVNC", "platforms": ["android", "ios"], "text": "app/assets/notices/NOVNC-MPL-2.0.txt" },
     { "name": "Mermaid", "version": "12.2.0", "license": "MIT", "url": "https://github.com/mermaid-js/mermaid", "platforms": ["android", "ios"], "text": "app/assets/notices/MERMAID-MIT.txt", "npmDependenciesOf": "mermaid" },
+    { "name": "Pierre Diffs", "version": "1.6.4", "license": "Apache-2.0", "url": "https://github.com/pierrecomputer/pierre", "platforms": ["android", "ios"], "text": "app/assets/notices/PIERRE-APACHE-2.0.txt", "npmDependenciesOf": "@pierre/diffs" },
+    { "name": "Pierre Trees", "version": "1.0.0-beta.6", "license": "Apache-2.0", "url": "https://github.com/pierrecomputer/pierre", "platforms": ["android", "ios"], "text": "app/assets/notices/PIERRE-APACHE-2.0.txt", "npmDependenciesOf": "@pierre/trees" },
     { "name": "Pi Coding Agent mark", "license": "MIT", "url": "https://pi.dev", "platforms": ["android", "ios"], "text": "app/assets/notices/PI-MARK-MIT.txt" }
   ],
   "fonts": [
@@ -62,7 +64,8 @@
     "github.com/lobehub/lobe-icons": "texts/repo-lobehub-lobe-icons.txt",
     "github.com/radix-ui/primitives": "texts/repo-radix-ui-primitives.txt",
     "github.com/react-navigation/standard-navigation": "texts/repo-react-navigation-standard-navigation.txt",
-    "github.com/react/metro": "texts/repo-facebook-metro.txt"
+    "github.com/react/metro": "texts/repo-facebook-metro.txt",
+    "github.com/rsms/js-lru": "texts/repo-rsms-js-lru.txt"
   },
   "npmProvided": {
     "$comment": "Native artifacts supplied by a JavaScript package listed with the bundle's packages. io.github.expo includes Expo Modules v2 and Kolibri, which share Expo's MIT notice; Pika retains its separate notice above.",

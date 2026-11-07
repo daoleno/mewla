@@ -96,7 +96,7 @@ different places depending on which control is used.
 
 ## 4. Phone: List -> Detail
 
-- **Overview** owns the header, the scope control and the filter input.
+- **Overview** owns the header, the scope control and the file tree with its own path search.
 - Tapping a row opens the reader. The overview list stays mounted underneath
   (see section 8) so its scroll position is retained without replay.
 - **Reader** replaces the list visually. Its header shows a back control with
@@ -151,13 +151,12 @@ designed; this is an explicit, documented limitation, not a silent fallback.
   - `Working` = index vs working tree, including untracked as additions.
   - `Staged` = HEAD vs index, including an unborn index.
 - The scope tab counts are the number of files in each comparison and do not
-  change with the path filter. The list meta line shows `N files`, where `N` is
-  the selected comparison's count, or `M / N files` while a filter is active
-  (`M` matches within that comparison out of `N`).
+  change with the path search. The list meta line shows `N files`, where `N` is
+  the selected comparison's count.
 - Per-file stats use the selected scope's own numbers (`gitDiffCounts`), never a
   sum of index and working changes.
-- The filter matches destination path and rename source, case-insensitively.
-  Filtering resets the list to the top exactly once.
+- Path search is the tree's own field (from six files up): it filters the
+  tree to matching paths, case-insensitively.
 - Changing scope resets the list to the top exactly once.
 
 ## 8. Scroll Retention, Reset, Safe Area, Keyboard
@@ -216,43 +215,32 @@ designed; this is an explicit, documented limitation, not a silent fallback.
 
 ## 9. File Rows
 
-Each row shows, left to right:
+The changed-file list is a Pierre Trees tree: folders are flattened when they
+hold one child, open by default, and each file row shows, left to right:
 
-1. A status glyph (Ionicons) colored by status:
-   - `added` -> `add-circle-outline` (green)
-   - `deleted` -> `remove-circle-outline` (red)
-   - `renamed` / `copied` -> `swap-horizontal-outline` (blue)
-   - `modified` / `changed` -> `ellipse-outline` (yellow)
-   - `conflict` -> `warning-outline` (red)
-   - `untracked` -> `cloud-upload-outline` (muted)
-   - binary patch -> `cube-outline` (muted)
-2. Filename on the first line, medium weight, one line, tail-truncated.
-3. Directory on the second line, muted mono, one line, **head**-truncated so the
-   nearest parent directory stays visible.
-4. Status words on the second line: `Staged`, `Unstaged`, `Staged + unstaged`,
-   `Untracked`, and `from <old>` for renames.
-5. Right-aligned `+a` / `-d` in the scope's numbers, or `Binary`.
+1. A file-type icon.
+2. The file name, with a git status color and a status letter at the end of the
+   row (`M`, `A`, `D`, `R`, `U`).
+3. Right-aligned `+a` / `-d` in the scope's numbers, or `Binary`.
 
-Rows are at least 56dp tall, use a full-width press target, and carry an
-accessibility label of the form
-`<path>, <status>, <scope description>, plus <a>, minus <d>` (or `binary`).
+Rows are 44dp tall, the full row is the press target, and a tap opens the diff in
+one step. A long press opens the file action menu. The tree is a WebView; its
+rows carry the tree role and names for screen readers.
 
-## 10. Unified Diff Reader
+## 10. Diff Reader
 
-- Old and new line numbers in a fixed gutter, colored change rows, hunk
-  headers, and explicit continuation markers for wrapped long lines.
-- Hunk and full-comparison search: case-insensitive, navigates matching lines
-  and hunks with previous/next controls; the complete comparison is searched,
-  not just the loaded page.
-- Inline options (no nested modal): wrap lines, text size (10-20), patch
-  headers. Wrap and text-size changes re-anchor to the visible source row;
-  patch-header changes re-render the header rows immediately.
-- Git headers (`diff --git`, `index`, `---`, `+++`) are hidden by default and
-  revealed by the patch-header option or while searching.
-- Binary, mode-only and rename metadata are shown as metadata rows, never as
+- Pierre Diffs: unified on a phone, split from 720dp. Old and new line numbers
+  in a gutter, colored change rows, word-level changes, syntax highlighting and
+  collapsed unchanged context that expands in place when the file has one kind
+  of edit.
+- Find: case-insensitive over the whole comparison, wraps around, highlights the
+  current line. Hunk navigation is available to screen readers.
+- Inline options (no nested modal): wrap lines, text size (10-20), file headers.
+  Wrap and text-size changes re-render the open comparison in place.
+- A file with staged and unstaged edits shows one labeled section for each.
+- Binary and metadata-only changes arrive as a patch with no hunks and show no
   fake code.
-- Truncation, stale-version, error and retry states are explicit and
-  non-destructive: already-loaded rows stay readable.
+- Error and retry states are explicit and non-destructive.
 - "Open working file" opens the file state and Back returns to the reader.
 
 ## 11. Loading, Empty, Error, Large
@@ -260,14 +248,13 @@ accessibility label of the form
 - **Loading:** a centered busy state on first load; a small pending indicator at
   the loaded edge during pagination. The list/reader never blanks.
 - **Clean/empty:** `Working tree clean` for a clean repository;
-  `No matching files` for an empty filter; `No changes in this comparison`
+  `No changes in this comparison`
   for an empty scope.
 - **Error:** an inline card with a retry control. Errors are visible even after
   an earlier success.
-- **Large diffs:** the reader keeps the existing bounded paging (120 rows per
-  request, 512 UTF-8 bytes per row), contiguous chunks, and virtualized list.
-  The overview virtualizes 100+ rows with `initialNumToRender`, `windowSize`
-  and batched rendering; no flattening and no full-patch retention.
+- **Large diffs:** the reader and the file tree are virtualized by Pierre Diffs
+  and Pierre Trees. The whole patch of one file is sent to the reader once; a
+  comparison over 5 MB is not sent and says `Diff too large to show`.
 
 ## 12. Accessibility
 
@@ -286,7 +273,8 @@ accessibility label of the form
 
 - No staging, commit, discard, checkout or any repository mutation.
 - No arbitrary commit/branch comparison beyond `All`/`Working`/`Staged`.
-- No new design system, component library or dependency.
+- No new design system or component library; the diff reader and file trees are
+  Pierre Diffs and Pierre Trees (see `docs/internal/git-review.md`).
 - No unrelated terminal, navigation or Files-browser redesign.
 
 ## 14. Acceptance Matrix

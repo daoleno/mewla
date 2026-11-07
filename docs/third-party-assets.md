@@ -108,6 +108,14 @@ Application and daemon library licenses are those of their respective packages (
 | `app/components/markdown/mermaidRuntimeSource.js` | [mermaid-js/mermaid](https://github.com/mermaid-js/mermaid) `12.2.0` | MIT | Offline `mermaid.min.js` for fenced Markdown flowcharts. SHA-256 in `mermaidRuntimeMeta.ts`. Both files are generated from the pinned `mermaid` devDependency by `bun run mermaid:generate` (`scripts/generate-mermaid-runtime.mjs`; `--check` reports stale output). Runs in a sandboxed WebView; user diagrams cannot override `securityLevel`, load a CDN, or run callbacks. |
 | Notice source | same | MIT | `app/assets/notices/MERMAID-MIT.txt`. |
 
+## Bundled JavaScript: Pierre Diffs and Pierre Trees
+
+| Artifact | Upstream | License | Notes |
+| --- | --- | --- | --- |
+| `app/components/terminal/pierre/pierreDiffsSource.js`, `pierreDiffsRuntime.js` | [pierrecomputer/pierre](https://github.com/pierrecomputer/pierre) `@pierre/diffs` `1.6.4` | Apache-2.0 | The Git review sheet's diff and file reader, with Shiki's TextMate grammars for a fixed language set (`PIERRE_LANGUAGES` in `pierreMeta.ts`; other extensions read as plain text), no bundled color theme, and no WASM. Bundled with `app/components/terminal/pierre/runtime/` by `bun run pierre:generate` (`scripts/generate-pierre-viewer.mjs`; `--check` reports stale output). The generator swaps Shiki's grammar and theme loaders at build time; the library source is untouched. SHA-256 in `pierreMeta.ts`. Runs in a WebView that cannot navigate or fetch (native) or in the page (web). |
+| `app/components/terminal/pierre/pierreTreesSource.js`, `pierreTreesRuntime.js` | same, `@pierre/trees` `1.0.0-beta.6` | Apache-2.0 (includes code derived from headless-tree, MIT) | The changed-file list and Files browser. Same generator and sandbox. |
+| Notice source | same | Apache-2.0, MIT | `app/assets/notices/PIERRE-APACHE-2.0.txt` (the Apache license and the Trees NOTICE for headless-tree). Both entries list their npm dependencies (Shiki, jsdiff, hast-util-to-html, preact and others) in Settings > Open-source licenses. |
+
 ## Code derived from other projects
 
 | In the repository | Upstream | License |
