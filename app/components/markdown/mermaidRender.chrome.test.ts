@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, test } from "bun:test";
-import { parseMessageBlocks } from "../terminal/InterfaceMessageBodyModel";
+import { parseMessageMarkdown } from "../terminal/InterfaceMessageMarkdownModel";
 import {
   pngIsNonBlank,
   renderMermaidSvgWithChrome,
@@ -98,7 +98,7 @@ describe("Mermaid actual render", () => {
 
   test("message parser still exposes mermaid source for copy after render", () => {
     const markdown = `\`\`\`mermaid\n${PERPETUO_SINGLE_DOMAIN_FLOWCHART.trim()}\n\`\`\``;
-    const block = parseMessageBlocks(markdown).find((item) => item.type === "code");
+    const block = parseMessageMarkdown(markdown).find((item) => item.type === "code");
     expect(block?.type === "code" && block.text).toBe(
       PERPETUO_SINGLE_DOMAIN_FLOWCHART.trim(),
     );

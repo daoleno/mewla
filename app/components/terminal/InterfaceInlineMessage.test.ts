@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { tokenizeInlineMessage } from "./InterfaceMessageBodyModel";
+import { tokenizeMarkdownInline as tokenizeInlineMessage } from "../markdown/markdownInline";
 
 describe("Interface Chat inline links", () => {
   test("retains the destination used by the tappable inline renderer", () => {

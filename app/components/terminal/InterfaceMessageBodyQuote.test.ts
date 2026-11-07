@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { Lexer } from "marked";
-import { parseMessageBlocks, type MessageBlock } from "./InterfaceMessageBodyModel";
+import { inlinePartsText } from "../markdown/markdownInline";
+import { parseMessageMarkdown, type MessageBlock } from "./InterfaceMessageMarkdownModel";
+import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
 
 const REPORTED = `这条你可以直接发：
 
@@ -23,38 +24,31 @@ function quoteOf(blocks: MessageBlock[], at = 0) {
 
 describe("blockquote", () => {
   test("the reported message is one quote: paragraph, list, paragraph", () => {
-    const blocks = parseMessageBlocks(REPORTED);
+    const blocks = parseMessageMarkdown(REPORTED);
     expect(shape(blocks)).toEqual(["paragraph", ["quote", ["paragraph", "list", "paragraph"]]]);
     const list = quoteOf(blocks, 1)[1];
-    expect(list.type === "list" && list.items.map((i) => i.marker)).toEqual(["1.", "2.", "3."]);
+    expect(list.type === "list" && list.ordered).toBe(true);
+    expect(list.type === "list" && list.items.length).toBe(3);
     // no literal ">" survives anywhere
     expect(JSON.stringify(blocks)).not.toContain('">');
   });
 
-  test("agrees with marked on the reported message", () => {
-    const tokens = Lexer.lex(REPORTED);
-    const q = tokens.find((t) => t.type === "blockquote") as any;
-    expect(q.tokens.map((t: any) => t.type).filter((t: string) => t !== "space")).toEqual([
-      "paragraph", "list", "paragraph",
-    ]);
-  });
-
   test("several empty > lines stay in the same quote", () => {
-    expect(shape(parseMessageBlocks("> a\n>\n>\n>\n> b"))).toEqual([["quote", ["paragraph", "paragraph"]]]);
+    expect(shape(parseMessageMarkdown("> a\n>\n>\n>\n> b"))).toEqual([["quote", ["paragraph", "paragraph"]]]);
   });
 
   test("no space after >", () => {
-    expect(shape(parseMessageBlocks(">a\n>\n>b"))).toEqual([["quote", ["paragraph", "paragraph"]]]);
-    expect(shape(parseMessageBlocks(">- x\n>- y"))).toEqual([["quote", ["list"]]]);
+    expect(shape(parseMessageMarkdown(">a\n>\n>b"))).toEqual([["quote", ["paragraph", "paragraph"]]]);
+    expect(shape(parseMessageMarkdown(">- x\n>- y"))).toEqual([["quote", ["list"]]]);
   });
 
   test("a list inside a quote", () => {
-    const inner = quoteOf(parseMessageBlocks("> intro\n> - a\n> - b\n>\n> 1. one\n> 2. two"));
+    const inner = quoteOf(parseMessageMarkdown("> intro\n> - a\n> - b\n>\n> 1. one\n> 2. two"));
     expect(inner.map((b) => b.type)).toEqual(["paragraph", "list", "list"]);
   });
 
   test("a code fence inside a quote keeps its blank lines", () => {
-    const inner = quoteOf(parseMessageBlocks("> before\n> ```ts\n> a\n>\n> b\n> ```\n> after"));
+    const inner = quoteOf(parseMessageMarkdown("> before\n> ```ts\n> a\n>\n> b\n> ```\n> after"));
     expect(inner.map((b) => b.type)).toEqual(["paragraph", "code", "paragraph"]);
     const code = inner[1];
     expect(code.type === "code" && code.text).toBe("a\n\nb");
@@ -62,24 +56,32 @@ describe("blockquote", () => {
   });
 
   test("an unclosed fence inside a streaming quote is open code, not a split", () => {
-    const inner = quoteOf(parseMessageBlocks("> x\n> ```\n> y\n>"));
+    const inner = quoteOf(parseMessageMarkdown("> x\n> ```\n> y\n>"));
     expect(inner.map((b) => b.type)).toEqual(["paragraph", "code"]);
+    expect(inner[1]).toMatchObject({ closed: false });
   });
 
   test("nested quotes", () => {
-    expect(shape(parseMessageBlocks("> outer\n>\n> > inner\n> > more\n>\n> back"))).toEqual([
+    expect(shape(parseMessageMarkdown("> outer\n>\n> > inner\n> > more\n>\n> back"))).toEqual([
       ["quote", ["paragraph", ["quote", ["paragraph"]], "paragraph"]],
     ]);
-    expect(shape(parseMessageBlocks(">> deep"))).toEqual([["quote", [["quote", ["paragraph"]]]]]);
+    expect(shape(parseMessageMarkdown(">> deep"))).toEqual([["quote", [["quote", ["paragraph"]]]]]);
   });
 
   test("a plain paragraph right after the quote, with or without a blank line", () => {
-    expect(shape(parseMessageBlocks("> q\n\nafter"))).toEqual([["quote", ["paragraph"]], "paragraph"]);
-    expect(shape(parseMessageBlocks("> q\n>\n\nafter"))).toEqual([["quote", ["paragraph"]], "paragraph"]);
+    expect(shape(parseMessageMarkdown("> q\n\nafter"))).toEqual([["quote", ["paragraph"]], "paragraph"]);
+    expect(shape(parseMessageMarkdown("> q\n>\n\nafter"))).toEqual([["quote", ["paragraph"]], "paragraph"]);
+  });
+
+  test("a line without > right under the quote's text continues it (lazy continuation)", () => {
+    const blocks = parseMessageMarkdown("> a\nlazy\n\nafter");
+    expect(shape(blocks)).toEqual([["quote", ["paragraph"]], "paragraph"]);
+    const inner = quoteOf(blocks);
+    expect(inner[0].type === "paragraph" && inlinePartsText(inner[0].inline)).toBe("a lazy");
   });
 
   test("a blank line without > ends the quote; two quotes stay two", () => {
-    expect(shape(parseMessageBlocks("> a\n\n> b"))).toEqual([["quote", ["paragraph"]], ["quote", ["paragraph"]]]);
+    expect(shape(parseMessageMarkdown("> a\n\n> b"))).toEqual([["quote", ["paragraph"]], ["quote", ["paragraph"]]]);
   });
 
   test("streaming prefixes never show a literal > or split the quote", () => {
@@ -87,22 +89,22 @@ describe("blockquote", () => {
       const prefix = REPORTED.slice(0, n);
       const walk = (blocks: MessageBlock[]) => {
         for (const b of blocks) {
-          if (b.type === "paragraph") expect(b.text.startsWith(">")).toBe(false);
+          if (b.type === "paragraph") expect(inlinePartsText(b.inline).startsWith(">")).toBe(false);
           if (b.type === "quote") walk(b.blocks);
         }
       };
-      const blocks = parseMessageBlocks(prefix);
+      const blocks = parseMessageMarkdown(prepareInterfaceMarkdown(prefix, true));
       walk(blocks);
       expect(blocks.filter((b) => b.type === "quote").length).toBeLessThanOrEqual(1);
     }
   });
 
   test("a person's own quote keeps typed line breaks", () => {
-    const inner = quoteOf(parseMessageBlocks("> a\n> b", { keepLineBreaks: true }));
-    expect(inner[0].type === "paragraph" && inner[0].text).toBe("a\nb");
+    const inner = quoteOf(parseMessageMarkdown("> a\n> b", { keepLineBreaks: true }));
+    expect(inner[0].type === "paragraph" && inlinePartsText(inner[0].inline)).toBe("a\nb");
   });
 
   test("a > line inside a top-level fence is code", () => {
-    expect(shape(parseMessageBlocks("```\n> not a quote\n```"))).toEqual(["code"]);
+    expect(shape(parseMessageMarkdown("```\n> not a quote\n```"))).toEqual(["code"]);
   });
 });

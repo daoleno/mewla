@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseMessageBlocks } from "../terminal/InterfaceMessageBodyModel";
+import { parseMessageMarkdown } from "../terminal/InterfaceMessageMarkdownModel";
 import {
   isMermaidFenceLanguage,
   markdownHasMermaidFence,
@@ -45,9 +45,9 @@ describe("Mermaid Markdown fences", () => {
     ]);
   });
 
-  test("agrees with parseMessageBlocks for mermaid language and closure", () => {
+  test("agrees with parseMessageMarkdown for mermaid language and closure", () => {
     const markdown = `Hello\n\n\`\`\`mermaid\n${SIMPLE_FLOWCHART_TD.trim()}\n\`\`\`\n`;
-    const blocks = parseMessageBlocks(markdown);
+    const blocks = parseMessageMarkdown(markdown);
     const code = blocks.find((block) => block.type === "code");
     const mermaid = splitMarkdownMermaidSegments(markdown).find(
       (segment) => segment.type === "mermaid",
@@ -62,7 +62,7 @@ describe("Mermaid Markdown fences", () => {
 
   test("preserves the exact Perpetuo source through the message parser", () => {
     const markdown = `\`\`\`mermaid\n${PERPETUO_SINGLE_DOMAIN_FLOWCHART.trim()}\n\`\`\``;
-    const block = parseMessageBlocks(markdown).find((item) => item.type === "code");
+    const block = parseMessageMarkdown(markdown).find((item) => item.type === "code");
     expect(block?.type === "code" && block.language).toBe("mermaid");
     expect(block?.type === "code" && block.text).toBe(
       PERPETUO_SINGLE_DOMAIN_FLOWCHART.trim(),

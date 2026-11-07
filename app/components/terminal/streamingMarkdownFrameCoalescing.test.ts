@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { parseMessageBlocks } from "./InterfaceMessageBodyModel";
+import { parseMessageMarkdown } from "./InterfaceMessageMarkdownModel";
 import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
 import {
   createStreamingMarkdownFrameController,
@@ -81,7 +81,7 @@ function nowMs() {
 
 function runPrepareAndParse(body: string) {
   const prepared = prepareInterfaceMarkdown(body, true);
-  return parseMessageBlocks(prepared);
+  return parseMessageMarkdown(prepared);
 }
 
 describe("streaming Markdown frame coalescing measurement", () => {
@@ -155,7 +155,7 @@ describe("streaming Markdown frame coalescing measurement", () => {
             return;
           }
           // Terminal boundary matches MessageBody: exact body, parse only.
-          parseMessageBlocks(value);
+          parseMessageMarkdown(value);
         },
       });
 

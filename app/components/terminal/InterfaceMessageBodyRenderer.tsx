@@ -4,10 +4,16 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { parseMessageBlocks } from "./InterfaceMessageBodyModel";
-import { InterfaceMessageBlock } from "./InterfaceMessageBlock";
-import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyModel";
-import { MarkdownWithImages } from "../markdown/MarkdownWithImages";
+import { imageReference } from "../../services/imageSource";
+import {
+  InterfaceMessageBlock,
+  MessageImageGalleryContext,
+} from "./InterfaceMessageBlock";
+import {
+  messageImages,
+  parseMessageMarkdown,
+} from "./InterfaceMessageMarkdownModel";
+import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
 import { useStreamingMarkdownPresentation } from "./useStreamingMarkdownPresentation";
 
 interface MessageBodyProps {
@@ -32,27 +38,28 @@ export function MessageBody({
 }: MessageBodyProps) {
   // Provider value stays lossless in props; only presentation work coalesces.
   const presentedValue = useStreamingMarkdownPresentation(value, streaming);
-  const displayValue = useMemo(
-    () =>
-      streaming ? prepareInterfaceMarkdown(presentedValue, true) : presentedValue,
-    [presentedValue, streaming],
-  );
-  return <MarkdownWithImages markdown={displayValue} chrome={chrome} renderMarkdown={(text) => <MessageBlocks value={text} chrome={chrome} theme={theme} compact={compact} dense={dense} streaming={streaming} keepLineBreaks={keepLineBreaks} />} />;
-}
-
-function MessageBlocks({ value, chrome, theme, compact = false, dense = false, streaming = false, keepLineBreaks = false }: MessageBodyProps) {
   const blocks = useMemo(
-    () => parseMessageBlocks(value, { keepLineBreaks }),
-    [keepLineBreaks, value],
+    () =>
+      parseMessageMarkdown(
+        streaming ? prepareInterfaceMarkdown(presentedValue, true) : presentedValue,
+        { keepLineBreaks },
+      ),
+    [keepLineBreaks, presentedValue, streaming],
+  );
+  const gallery = useMemo(
+    () =>
+      messageImages(blocks).map((image) =>
+        imageReference(image.src, image.alt || "Image"),
+      ),
+    [blocks],
   );
   if (blocks.length === 0) {
     return null;
   }
   return (
-    <View style={styles.messageBody}>
-      {blocks.map((block, index) => {
-        const isLast = index === blocks.length - 1;
-        return (
+    <MessageImageGalleryContext.Provider value={gallery}>
+      <View style={styles.messageBody}>
+        {blocks.map((block, index) => (
           <InterfaceMessageBlock
             key={index}
             block={block}
@@ -60,12 +67,12 @@ function MessageBlocks({ value, chrome, theme, compact = false, dense = false, s
             theme={theme}
             compact={compact}
             dense={dense}
-            isLast={isLast}
+            isLast={index === blocks.length - 1}
             streaming={streaming}
           />
-        );
-      })}
-    </View>
+        ))}
+      </View>
+    </MessageImageGalleryContext.Provider>
   );
 }
 

@@ -18,11 +18,7 @@ describe("messageTableColumnWidths", () => {
     expect(long).toBe(MESSAGE_TABLE_CELL_LIMITS.regular.max);
   });
 
-  test("markdown syntax doesn't count and wide characters count double", () => {
-    expect(messageTableColumnWidths(["**Area**"], [])).toEqual(messageTableColumnWidths(["Area"], []));
-    expect(messageTableColumnWidths(["[docs](https://example.com/a/very/long/path)"], [])).toEqual(
-      messageTableColumnWidths(["docs"], []),
-    );
+  test("wide characters count double", () => {
     const [latin] = messageTableColumnWidths(["abcdefghijkl"], []);
     const [cjk] = messageTableColumnWidths(["深色模式编辑器背景颜色对比"], []);
     expect(cjk).toBeGreaterThan(latin);

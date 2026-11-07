@@ -1,4 +1,4 @@
-import React from "react";
+import React, { createContext, memo, useContext } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { Typography } from "../../constants/tokens";
@@ -7,11 +7,14 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import type {
-  MessageBlock,
-  MessageListItem,
-  MessageTableAlignment,
-} from "./InterfaceMessageBodyModel";
+import { imageReference, type ImageSource } from "../../services/imageSource";
+import { AppImage } from "./AppImage";
+import {
+  messageTableCellText,
+  type MessageBlock,
+  type MessageListBlock,
+  type MessageTableAlignment,
+} from "./InterfaceMessageMarkdownModel";
 import { InterfaceInlineMessage } from "./InterfaceInlineMessage";
 import { MermaidDiagram } from "../markdown/MermaidDiagram";
 import { isMermaidFenceLanguage } from "../markdown/mermaidFences";
@@ -31,9 +34,17 @@ interface InterfaceMessageBlockProps {
   dense?: boolean;
   isLast: boolean;
   streaming?: boolean;
+  /** How many lists this block sits inside; picks the bullet and keeps item text close. */
+  listDepth?: number;
 }
 
-export function InterfaceMessageBlock({
+// An empty cell still holds one line, so its row keeps its height.
+const EMPTY_CELL = [{ text: " " }];
+
+/** Every image of the message, so a tap on one opens the same gallery. */
+export const MessageImageGalleryContext = createContext<ImageSource[]>([]);
+
+export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
   block,
   chrome,
   theme,
@@ -41,10 +52,13 @@ export function InterfaceMessageBlock({
   dense = false,
   isLast,
   streaming = false,
+  listDepth = 0,
 }: InterfaceMessageBlockProps) {
   const selectableTextProps = useTimelineSelectableTextProps();
   const tableColors = messageTableSemanticColors(chrome);
   const tableHorizontalGesture = useNestedHorizontalScrollGesture();
+  const gallery = useContext(MessageImageGalleryContext);
+  const inList = listDepth > 0;
 
   switch (block.type) {
     case "heading":
@@ -64,7 +78,7 @@ export function InterfaceMessageBlock({
             ]}
           >
             <InterfaceInlineMessage
-              text={block.text}
+              parts={block.inline}
               chrome={chrome}
               theme={theme}
               compact={compact}
@@ -75,22 +89,18 @@ export function InterfaceMessageBlock({
     case "list":
       return (
         <View
-          style={[styles.messageList, isLast ? styles.messageBlockLast : null]}
+          style={[
+            styles.messageList,
+            inList ? styles.messageListNested : null,
+            isLast ? styles.messageBlockLast : null,
+          ]}
         >
           {block.items.map((item, itemIndex) => (
-            <View
-              key={itemIndex}
-              style={[
-                styles.messageListItem,
-                item.depth > 0
-                  ? { paddingLeft: listItemIndent(item.depth) }
-                  : null,
-              ]}
-            >
+            <View key={itemIndex} style={styles.messageListItem}>
               <View
                 style={[
                   styles.messageListMarkerWrap,
-                  item.ordered ? styles.messageListMarkerWrapOrdered : null,
+                  block.ordered ? styles.messageListMarkerWrapOrdered : null,
                 ]}
               >
                 {item.taskState ? (
@@ -128,33 +138,33 @@ export function InterfaceMessageBlock({
                       { color: chrome.textSubtle },
                     ]}
                   >
-                    {listMarkerText(item)}
+                    {listMarkerText(block, itemIndex, listDepth)}
                   </Text>
                 )}
               </View>
-              <Text
-                {...selectableTextProps}
-                style={[
-                  styles.messageText,
-                  compact ? styles.messageTextCompact : null,
-                  dense ? styles.messageTextDense : null,
-                  styles.messageListText,
-                  { color: chrome.text },
-                ]}
-              >
-                <InterfaceInlineMessage
-                  text={item.text}
-                  chrome={chrome}
-                  theme={theme}
-                  compact={compact}
-                />
-              </Text>
+              <View style={styles.messageListBody}>
+                {item.blocks.map((child, childIndex) => (
+                  <InterfaceMessageBlock
+                    key={childIndex}
+                    block={child}
+                    chrome={chrome}
+                    theme={theme}
+                    compact={compact}
+                    dense={dense}
+                    isLast={childIndex === item.blocks.length - 1}
+                    streaming={streaming}
+                    listDepth={listDepth + 1}
+                  />
+                ))}
+              </View>
             </View>
           ))}
         </View>
       );
     case "table": {
-      const columnWidths = messageTableColumnWidths(block.headers, block.rows, compact);
+      const headerText = block.headers.map(messageTableCellText);
+      const rowText = block.rows.map((row) => row.map(messageTableCellText));
+      const columnWidths = messageTableColumnWidths(headerText, rowText, compact);
       return (
         <View
           style={[
@@ -215,7 +225,7 @@ export function InterfaceMessageBlock({
                         ]}
                       >
                         <InterfaceInlineMessage
-                          text={cell || " "}
+                          parts={cell.length > 0 ? cell : EMPTY_CELL}
                           chrome={chrome}
                           theme={theme}
                           compact={compact}
@@ -225,7 +235,7 @@ export function InterfaceMessageBlock({
                   ))}
                 </View>
                 {block.rows.map((row, rowIndex) => {
-                  const rowTone = messageTableRowTone(row, rowIndex);
+                  const rowTone = messageTableRowTone(rowText[rowIndex], rowIndex);
                   return (
                     <View
                       key={`row:${rowIndex}`}
@@ -272,7 +282,7 @@ export function InterfaceMessageBlock({
                             ]}
                           >
                             <InterfaceInlineMessage
-                              text={cell || " "}
+                              parts={cell.length > 0 ? cell : EMPTY_CELL}
                               chrome={chrome}
                               theme={theme}
                               compact={compact}
@@ -316,6 +326,25 @@ export function InterfaceMessageBlock({
       }
       return codeBlock;
     }
+    case "image":
+      return (
+        <View style={isLast ? null : styles.messageImage}>
+          <AppImage
+            source={imageReference(block.src, block.alt || "Image")}
+            gallery={gallery}
+            chrome={chrome}
+            compact={compact}
+          />
+          {block.alt || block.title ? (
+            <Text
+              {...selectableTextProps}
+              style={[styles.messageImageCaption, { color: chrome.textMuted }]}
+            >
+              {block.title || block.alt}
+            </Text>
+          ) : null}
+        </View>
+      );
     case "rule":
       return (
         <View
@@ -342,6 +371,7 @@ export function InterfaceMessageBlock({
               dense={dense}
               isLast={index === block.blocks.length - 1}
               streaming={streaming}
+              listDepth={listDepth}
             />
           ))}
         </View>
@@ -357,11 +387,12 @@ export function InterfaceMessageBlock({
             compact ? styles.messageTextCompact : null,
             dense ? styles.messageTextDense : null,
             { color: chrome.text },
+            inList ? styles.messageTextInList : null,
             isLast ? styles.messageBlockLast : null,
           ]}
         >
           <InterfaceInlineMessage
-            text={block.text}
+            parts={block.inline}
             chrome={chrome}
             theme={theme}
             compact={compact}
@@ -369,23 +400,19 @@ export function InterfaceMessageBlock({
         </Text>
       );
   }
-}
+});
 
-function listItemIndent(depth: number) {
-  return Math.min(depth, 6) * 16;
-}
-
-function listMarkerText(item: MessageListItem) {
-  if (item.ordered) {
-    return item.marker;
+function listMarkerText(list: MessageListBlock, index: number, depth: number) {
+  if (list.ordered) {
+    return `${list.start + index}.`;
   }
-  switch (item.depth % 3) {
+  switch (depth % 3) {
     case 1:
       return "\u25E6";
     case 2:
       return "\u25AA";
     default:
-      return item.marker;
+      return "\u2022";
   }
 }
 
@@ -416,6 +443,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
+  messageTextInList: {
+    marginBottom: 4,
+  },
   messageTextDense: {
     marginBottom: 6,
     fontSize: 15,
@@ -444,10 +474,17 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 6,
   },
+  messageListNested: {
+    marginBottom: 4,
+  },
   messageListItem: {
     width: "100%",
     flexDirection: "row",
     alignItems: "flex-start",
+    minWidth: 0,
+  },
+  messageListBody: {
+    flex: 1,
     minWidth: 0,
   },
   messageListMarkerWrap: {
@@ -457,11 +494,6 @@ const styles = StyleSheet.create({
   },
   messageListMarkerWrapOrdered: {
     width: 32,
-  },
-  messageListText: {
-    flex: 1,
-    minWidth: 0,
-    marginBottom: 0,
   },
   messageListMarker: {
     textAlign: "right",
@@ -562,6 +594,15 @@ const styles = StyleSheet.create({
     borderLeftWidth: 2,
     paddingLeft: 10,
     paddingVertical: 1,
+  },
+  messageImage: {
+    marginBottom: 10,
+  },
+  messageImageCaption: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: Typography.chatFont,
   },
   messageBlockLast: {
     marginBottom: 0,
