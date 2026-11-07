@@ -211,8 +211,24 @@ function detectLicense(text) {
   return "UNKNOWN";
 }
 
+// lockedVersions is every name@version in bun.lock. CI installs with
+// --frozen-lockfile, so a package that sits in a developer's node_modules
+// without being in the lock (left behind by an older install or an ad-hoc
+// `bun add`) would be listed here and never in CI.
+let lockedVersions = null;
+function isLocked(manifest) {
+  if (!lockedVersions) {
+    const lock = JSON.parse(readFileSync(join(root, "bun.lock"), "utf8").replace(/,(\s*[}\]])/g, "$1"));
+    lockedVersions = new Set(Object.values(lock.packages).map((entry) => entry[0]));
+  }
+  return lockedVersions.has(`${manifest.name}@${manifest.version}`);
+}
+
+const unlocked = new Set();
+
 function npmItem(dir, extra = {}) {
   const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+  if (!isLocked(manifest)) unlocked.add(`${manifest.name}@${manifest.version}`);
   const file = licenseFile(dir);
   const text = file ? normalizeText(readFileSync(file, "utf8")) : null;
   let license = licenseName(manifest);
@@ -409,6 +425,13 @@ if (!bundleDir) {
 }
 try {
   const content = build(bundleDir);
+  if (unlocked.size > 0) {
+    fail(
+      `node_modules has packages that bun.lock does not: ${[...unlocked].sort().join(", ")}.\n` +
+        "CI installs from bun.lock, so this result would differ from CI. bun install does not prune them: delete those directories\n" +
+        "from node_modules (or rm -rf node_modules and run bun install --frozen-lockfile).",
+    );
+  }
   const current = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : "";
   if (args.includes("--check")) {
     if (current !== content) fail(`stale: ${outputName} (run: bun run licenses:generate)`);
