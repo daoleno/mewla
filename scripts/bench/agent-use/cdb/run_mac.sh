@@ -18,6 +18,10 @@
 #  * No message is sent, nothing is bought, no account is touched: BenchLab is a local test app.
 #  * The screen is used for ~1 minute per trial: one unlock, `caffeinate` held for the whole run. Nothing else runs on
 #    the screen meanwhile (one Worker on the screen at a time).
+#  * The runner's own screen recorder is off (--no-recorder): it needs a private Cua Driver install with its own
+#    Accessibility + Screen Recording grants, which a person would have to give. Scoring does not use the video; it uses
+#    BenchSentinel and the task checkers. No recordings are kept.
+#  * Preflight's Calculator open-and-kill is skipped for this arm (the person's Calculator is not ours to kill).
 #  * No new Accessibility / Screen Recording grant is made by this script. Preflight names what is missing; a person
 #    grants it. mewla_computer, agent-desktop and Terminal keep the grants they already have.
 set -euo pipefail
@@ -40,6 +44,15 @@ unset CDB_BENCH_DISPOSABLE
 PIN=$(cat "$HERE/PIN")
 
 export CDB_BENCH_WORK=${CDB_BENCH_WORK:-$(mktemp -d "${TMPDIR:-/tmp}/cdb-work.XXXXXX")}
+# claude wherever this Mac keeps it (the runner hard-codes /opt/homebrew/bin/claude; our patch reads CDB_CLAUDE_BIN).
+export CDB_CLAUDE_BIN=${CDB_CLAUDE_BIN:-$(command -v claude)}
+CLAUDE=$CDB_CLAUDE_BIN
+# Build against the macOS 26 SDK of the Command Line Tools when this Mac is newer than the SDK Xcode ships.
+if [ -z "${SDKROOT:-}" ]; then
+  for sdk in /Library/Developer/CommandLineTools/SDKs/MacOSX26*.sdk; do
+    [ -d "$sdk" ] && export SDKROOT=$sdk DEVELOPER_DIR=/Library/Developer/CommandLineTools
+  done
+fi
 SRC="$CDB_BENCH_WORK/cua"
 mkdir -p "$SRC" && cd "$SRC"
 if [ ! -d .git ]; then
@@ -69,12 +82,12 @@ PY
 export CDB_MEWLA_BIN=${CDB_MEWLA_BIN:-$(command -v mewla)}
 # Keep the display awake for this script's lifetime only (memory mac-unlock-batching).
 caffeinate -d -i -w $$ &
-python3 run_bench.py preflight --bench-v2 --pins "$PINS" --build-dir "$CDB_BENCH_WORK/build" --arms $ARMS || { echo "preflight failed: fix what it names, then rerun" >&2; exit 3; }
+python3 run_bench.py preflight --bench-v2 --pins "$PINS" --no-recorder --allow-non-terminal --claude-bin "$CLAUDE" --build-dir "$CDB_BENCH_WORK/build" --arms $ARMS || { echo "preflight failed: fix what it names, then rerun" >&2; exit 3; }
 [ -n "$PREFLIGHT_ONLY" ] && exit 0
 
 for cond in $( [ "$COND" = both ] && echo "background foreground" || echo "$COND" ); do
   RID="aub-$(date +%Y%m%d-%H%M)-$cond"
-  python3 run_bench.py run --bench-v2 --pins "$PINS" --condition "$cond" --park-pointer --arms $ARMS --tasks $TASKS \
+  python3 run_bench.py run --bench-v2 --pins "$PINS" --no-recorder --allow-non-terminal --claude-bin "$CLAUDE" --condition "$cond" --park-pointer --arms $ARMS --tasks $TASKS \
     --phase1-runs "$RUNS" --phase2-runs 0 --run-id "$RID" --build-dir "$CDB_BENCH_WORK/build"
   python3 -I "$AUB/aub.py" import-cdb "$CDB_BENCH_WORK/runs/$RID"
 done
