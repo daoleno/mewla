@@ -86,27 +86,28 @@ internal object PhoneNotifier {
         return PendingIntent.getBroadcast(context, request, intent, flags)
     }
 
-    /** The ongoing notification the foreground service holds: quiet while idle, with Take over and Stop while an agent works. */
+    /** The ongoing notification the foreground service holds: says what is true (see [PhoneStatusLine]), with Take over and Stop while an agent works. */
     fun status(context: Context): Notification {
         ensureChannels(context)
-        val agent = PhoneController.activeWorker
+        val line = PhoneStatusLine.of(
+            PhoneController.linkOnline,
+            PhoneController.state(),
+            PhoneController.paired,
+            PhoneController.activeWorker,
+        )
         val builder = NotificationCompat.Builder(context, CHANNEL_STATUS)
             .setSmallIcon(smallIcon(context))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(openPhone(context, 1))
-        if (!PhoneController.linkOnline) {
-            // The App's process is alive for the helper but its connection to the computer is not.
-            builder.setContentTitle("Open Mewla to reconnect")
-        } else if (PhoneController.state() == "stopped") {
-            builder.setContentTitle("Stopped")
-                .addAction(0, "Resume", action(context, ACTION_RESUME, 7))
-        } else if (agent == null) {
-            builder.setContentTitle("Phone use is on")
-        } else {
-            builder.setContentTitle("$agent is using your phone")
+            .setContentTitle(line.title)
+        line.text?.let { builder.setContentText(it) }
+        when (line.buttons) {
+            PhoneStatusLine.Buttons.Resume -> builder.addAction(0, "Resume", action(context, ACTION_RESUME, 7))
+            PhoneStatusLine.Buttons.TakeOverAndStop -> builder
                 .addAction(0, "Take over", takeOver(context, 2))
                 .addAction(0, "Stop", action(context, ACTION_STOP, 3))
+            PhoneStatusLine.Buttons.None -> {}
         }
         return builder.build()
     }

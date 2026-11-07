@@ -45,6 +45,10 @@ with another computer and switch to it, and Phone use follows. Agents on
 While an agent works, the Phone page shows its screen live, and a notification
 says who is using your phone.
 
+The ongoing notification only says **Phone use is on** while the helper is really
+running. Until then it says **Finish setting up Phone use** (not paired yet) or
+**Phone use isn't ready** (paired, helper not up); tapping it opens the Phone page.
+
 - **Take over** makes the picture touchable: your finger drives the agent's
   screen. **Give back** returns it.
 - **Stop** ends the agent's work at once, from the page, the notification or the
