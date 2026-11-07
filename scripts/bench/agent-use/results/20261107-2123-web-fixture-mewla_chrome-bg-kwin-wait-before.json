@@ -1,0 +1,515 @@
+{
+ "schema": "aub/1",
+ "run_id": "20261107-2123-web-fixture-mewla_chrome-bg-kwin-wait-before",
+ "date": "2026-11-07T13:27Z",
+ "suite": "web-fixture",
+ "platform": "linux",
+ "tool": "mewla_chrome",
+ "condition": "background",
+ "model": "claude-sonnet-5-5",
+ "harness": "claude -p, one tool layer, --max-turns 30",
+ "mewla_commit": "78d4c5fd",
+ "source": "own",
+ "rows": [
+  {
+   "task": "async",
+   "trial": 0,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 11.6,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 273,
+    "cache_read": 24514,
+    "cache_write": 395,
+    "total": 25186
+   },
+   "cost_usd": 0.006176900000000001,
+   "nonint": {
+    "typed": 12,
+    "keys_received": 12,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "async",
+   "trial": 1,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 11.3,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 285,
+    "cache_read": 24514,
+    "cache_write": 404,
+    "total": 25207
+   },
+   "cost_usd": 0.0063194,
+   "nonint": {
+    "typed": 12,
+    "keys_received": 12,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "async",
+   "trial": 2,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 9.0,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 259,
+    "cache_read": 24514,
+    "cache_write": 381,
+    "total": 25158
+   },
+   "cost_usd": 0.006001900000000001,
+   "nonint": {
+    "typed": 10,
+    "keys_received": 10,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "async",
+   "trial": 3,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 11.8,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 263,
+    "cache_read": 24514,
+    "cache_write": 393,
+    "total": 25174
+   },
+   "cost_usd": 0.0060719,
+   "nonint": {
+    "typed": 12,
+    "keys_received": 12,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "async",
+   "trial": 4,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 8.3,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 271,
+    "cache_read": 24759,
+    "cache_write": 148,
+    "total": 25182
+   },
+   "cost_usd": 0.0055639,
+   "nonint": {
+    "typed": 9,
+    "keys_received": 9,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "async",
+   "trial": 5,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 8.5,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 276,
+    "cache_read": 24514,
+    "cache_write": 406,
+    "total": 25200
+   },
+   "cost_usd": 0.0062344,
+   "nonint": {
+    "typed": 9,
+    "keys_received": 9,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "async",
+   "trial": 6,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 28.3,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 247,
+    "cache_read": 24514,
+    "cache_write": 369,
+    "total": 25134
+   },
+   "cost_usd": 0.0058519,
+   "nonint": {
+    "typed": 29,
+    "keys_received": 29,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "async",
+   "trial": 7,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 29.6,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 341,
+    "cache_read": 24514,
+    "cache_write": 435,
+    "total": 25294
+   },
+   "cost_usd": 0.0069569,
+   "nonint": {
+    "typed": 30,
+    "keys_received": 30,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 0,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 9.2,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 303,
+    "cache_read": 22116,
+    "cache_write": 2680,
+    "total": 25103
+   },
+   "cost_usd": 0.011949600000000001,
+   "nonint": {
+    "typed": 10,
+    "keys_received": 10,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 1,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 10.0,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 239,
+    "cache_read": 24496,
+    "cache_write": 299,
+    "total": 25038
+   },
+   "cost_usd": 0.0055950999999999996,
+   "nonint": {
+    "typed": 11,
+    "keys_received": 11,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 2,
+   "ok": true,
+   "undisturbed": false,
+   "disturbed_by": [
+    "key_focus_lost",
+    "raised_over_user"
+   ],
+   "full_pass": false,
+   "wall_s": 9.5,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 239,
+    "cache_read": 24496,
+    "cache_write": 299,
+    "total": 25038
+   },
+   "cost_usd": 0.0055950999999999996,
+   "nonint": {
+    "typed": 10,
+    "keys_received": 10,
+    "typing_lost": 0,
+    "key_focus_lost": 1,
+    "raised_over_user": 1,
+    "raised_covering_user": 1,
+    "covered_ms": 50,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 3,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 10.0,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 196,
+    "cache_read": 24496,
+    "cache_write": 302,
+    "total": 24998
+   },
+   "cost_usd": 0.0051726,
+   "nonint": {
+    "typed": 11,
+    "keys_received": 11,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 4,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 9.6,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 220,
+    "cache_read": 24657,
+    "cache_write": 138,
+    "total": 25019
+   },
+   "cost_usd": 0.005018699999999999,
+   "nonint": {
+    "typed": 10,
+    "keys_received": 10,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 5,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 8.3,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 190,
+    "cache_read": 24657,
+    "cache_write": 138,
+    "total": 24989
+   },
+   "cost_usd": 0.0047187,
+   "nonint": {
+    "typed": 9,
+    "keys_received": 9,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 6,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 9.3,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 195,
+    "cache_read": 24657,
+    "cache_write": 138,
+    "total": 24994
+   },
+   "cost_usd": 0.0047687,
+   "nonint": {
+    "typed": 10,
+    "keys_received": 10,
+    "typing_lost": 0,
+    "key_focus_lost": 0,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  },
+  {
+   "task": "xhr",
+   "trial": 7,
+   "ok": true,
+   "undisturbed": false,
+   "disturbed_by": [
+    "key_focus_lost"
+   ],
+   "full_pass": false,
+   "wall_s": 8.8,
+   "turns": 2,
+   "steps": 1,
+   "tokens": {
+    "input": 4,
+    "output": 248,
+    "cache_read": 24657,
+    "cache_write": 138,
+    "total": 25047
+   },
+   "cost_usd": 0.0052987,
+   "nonint": {
+    "typed": 9,
+    "keys_received": 9,
+    "typing_lost": 0,
+    "key_focus_lost": 1,
+    "raised_over_user": 0,
+    "raised_covering_user": 0,
+    "covered_ms": 0,
+    "pointer_moved": 0,
+    "user_page_hidden": 0
+   }
+  }
+ ],
+ "transport": "Mewla extension 0.1.0 + native host + bridge (real); supervise layer mirrored by mewla-proxy.mjs; display: kwin_x11 6.6.4-1.0, no compositing, default focus-stealing prevention",
+ "tool_version": "git:78d4c5fd",
+ "nonint_measured": [
+  "key_focus_lost",
+  "raised_over_user",
+  "typing_lost",
+  "pointer_moved",
+  "user_page_hidden"
+ ],
+ "nonint_not_measured": [
+  "clipboard",
+  "space_switch",
+  "dialog_on_user",
+  "app_activation"
+ ]
+}
