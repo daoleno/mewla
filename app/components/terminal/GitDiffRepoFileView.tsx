@@ -11,7 +11,8 @@ import { useDiffViewerStyle } from "./pierre/useViewerStyle";
 import { formatGitDiffBytes } from "./gitDiffReview";
 
 interface GitDiffRepoFileViewProps {
-  path: string;
+  /** Null while parked: the viewer stays mounted so the next file reuses its WebView. */
+  path: string | null;
   payload?: GitRepoFileContentPayload;
   loading: boolean;
   error: string | null;
@@ -39,7 +40,7 @@ export function GitDiffRepoFileView({
 }: GitDiffRepoFileViewProps) {
   const host = useRef<DiffViewerHostHandle>(null);
   const snapshot = payload?.snapshot ?? null;
-  const showable = Boolean(snapshot?.exists && snapshot.content && !snapshot.binary);
+  const showable = Boolean(path && snapshot?.exists && snapshot.content && !snapshot.binary);
   const layout = useMemo(
     () => ({ split: false, wrap: false, headers: false, inset: bottomInset + 12 }),
     [bottomInset],
@@ -47,7 +48,7 @@ export function GitDiffRepoFileView({
   useDiffViewerStyle(host, theme, chrome, FILE_FONT_SIZE, layout);
 
   useEffect(() => {
-    if (showable && snapshot?.content !== undefined) {
+    if (path && showable && snapshot?.content !== undefined) {
       host.current?.post([{ type: "file", key: `file:${path}`, path, contents: snapshot.content }]);
     } else {
       host.current?.post([{ type: "clear" }]);
@@ -63,7 +64,7 @@ export function GitDiffRepoFileView({
   return (
     <View style={styles.root}>
       <DiffViewerHost ref={host} onMessage={onMessage} backgroundColor={chrome.surface} accessibilityLabel="File" />
-      {loading ? (
+      {!path ? null : loading ? (
         <View style={[styles.state, { backgroundColor: chrome.surface, paddingBottom: bottomInset + 14 }]}>
           <EmptyState size="inline" busy title="Loading file" />
         </View>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
 import type {
@@ -57,23 +57,16 @@ export function GitDiffRepoBrowser({
   onOpenRepoFile,
   onLongPressEntry,
 }: GitDiffRepoBrowserProps) {
-  if (repoFilePath) {
-    return (
-      <GitDiffRepoFileView
-        key={`repo-file:${repoFilePath}`}
-        path={repoFilePath}
-        payload={repoFileContent}
-        loading={repoFileLoading}
-        error={repoFileError}
-        theme={theme}
-        chrome={chrome}
-        bottomInset={bottomInset}
-        onRetry={() => onOpenRepoFile(repoFilePath)}
-      />
-    );
-  }
-  if (repoPathsError && !repoPaths) {
-    return (
+  // The file viewer is mounted by the first file opened and then kept, parked
+  // under the tree, so every later file reuses its WebView and Back returns to
+  // the tree as it was left.
+  const [fileViewMounted, setFileViewMounted] = useState(Boolean(repoFilePath));
+  useEffect(() => {
+    if (repoFilePath) setFileViewMounted(true);
+  }, [repoFilePath]);
+  const fileOpen = Boolean(repoFilePath);
+  const tree =
+    repoPathsError && !repoPaths ? (
       <View style={styles.state}>
         <InlineNotice
           tone="danger"
@@ -82,24 +75,43 @@ export function GitDiffRepoBrowser({
           action={{ label: "Retry", onPress: onRetryPaths }}
         />
       </View>
-    );
-  }
-  if (!repoPaths) {
-    return (
+    ) : !repoPaths ? (
       <View style={styles.state}>
         <EmptyState size="inline" busy={repoPathsLoading} title={repoPathsLoading ? "Loading files" : "No files"} />
       </View>
+    ) : (
+      <RepoTree
+        repoPaths={repoPaths}
+        changedFiles={changedFiles}
+        theme={theme}
+        chrome={chrome}
+        onOpenRepoFile={onOpenRepoFile}
+        onLongPressEntry={onLongPressEntry}
+      />
     );
-  }
   return (
-    <RepoTree
-      repoPaths={repoPaths}
-      changedFiles={changedFiles}
-      theme={theme}
-      chrome={chrome}
-      onOpenRepoFile={onOpenRepoFile}
-      onLongPressEntry={onLongPressEntry}
-    />
+    <View style={styles.root}>
+      {tree}
+      {fileViewMounted ? (
+        <View
+          style={[StyleSheet.absoluteFill, fileOpen ? null : styles.parked]}
+          pointerEvents={fileOpen ? "auto" : "none"}
+          accessibilityElementsHidden={!fileOpen}
+          importantForAccessibility={fileOpen ? "auto" : "no-hide-descendants"}
+        >
+          <GitDiffRepoFileView
+            path={repoFilePath}
+            payload={repoFileContent}
+            loading={repoFileLoading}
+            error={repoFileError}
+            theme={theme}
+            chrome={chrome}
+            bottomInset={bottomInset}
+            onRetry={() => repoFilePath && onOpenRepoFile(repoFilePath)}
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -151,5 +163,6 @@ function RepoTree({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   state: { flex: 1, justifyContent: "center", paddingHorizontal: 16 },
+  parked: { opacity: 0 },
   truncation: { position: "absolute", left: 12, right: 12, bottom: 12 },
 });
