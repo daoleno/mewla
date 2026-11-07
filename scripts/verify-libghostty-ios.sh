@@ -73,15 +73,7 @@ for key, want in (
 ):
     assert manifest[key] == want, f"manifest {key} is {manifest[key]!r}, the lock has {want!r}"
 assert manifest["release_grade"] is True
-# The framework was built with exactly the Zig lib patches the lock names.
-expected = [
-    {"path": patch["path"], "sha256": patch["sha256"]}
-    for patch in lock["zig"].get("lib_patches") or []
-]
-assert manifest.get("zig_lib_patches") == expected, (
-    f"zig_lib_patches are {manifest.get('zig_lib_patches')!r}, the lock names {expected!r}"
-)
-print("ok: manifest matches the pinned Ghostty release and Zig lib patches")
+print("ok: manifest matches the pinned Ghostty release")
 PY
 
 # Every slice carries the headers of the pinned release: the bridge is compiled

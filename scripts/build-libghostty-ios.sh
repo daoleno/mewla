@@ -41,13 +41,11 @@ source "$ROOT/scripts/lib/zig.sh"
 source "$ROOT/scripts/lib/zig-xcode-compat.sh"
 ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 
-# Two workarounds, each retired on its own once scripts/check-zig-xcode-compat.sh
-# (run in native-cache.yml) fails because it is no longer needed: the libSystem
-# SDK clone (mewla_prepare_macos_sdk_for_zig) with scripts/zig-xcode-compat/xcrun,
-# and the patched Zig lib dir (the Xcode 27 SDK leaves INFINITY undeclared in
-# Zig's libcxx).
+# The libSystem SDK clone (mewla_prepare_macos_sdk_for_zig) with
+# scripts/zig-xcode-compat/xcrun is a workaround that
+# scripts/check-zig-xcode-compat.sh (run in native-cache.yml) retires once the
+# Xcode SDK no longer needs it.
 MACOS_SDKROOT="$(mewla_prepare_macos_sdk_for_zig "$TOOL_CACHE")" || exit 1
-ZIG_LIB="$(mewla_patched_zig_lib "$ZIG_BIN" "$LOCK" "$ROOT" "$TOOL_CACHE")"
 
 BUILD_WORK="$(mktemp -d "$BUILD_TMP_ROOT/libghostty-ios.XXXXXX")"
 ZIG_CACHE_DIR="$(mktemp -d "$BUILD_TMP_ROOT/libghostty-ios-zigcache.XXXXXX")"
@@ -66,7 +64,7 @@ SIGNATURE_VERIFIED="$(release_field signature_verified)"
 
 echo "Building libghostty-vt XCFramework"
 echo "  ghostty: $GHOSTTY_TAG (minisign verified: $SIGNATURE_VERIFIED)"
-echo "  zig:     $($ZIG_BIN version) (lib $ZIG_LIB)"
+echo "  zig:     $($ZIG_BIN version)"
 
 # The libghostty-vt tarball builds the library on its own (LIB_VERSION marks
 # it); an XCFramework is opt-in because it needs Xcode. A fresh Zig global cache
@@ -75,7 +73,6 @@ echo "  zig:     $($ZIG_BIN version) (lib $ZIG_LIB)"
   cd "$GHOSTTY_SRC"
   PATH="$ROOT/scripts/zig-xcode-compat:$PATH" \
     MEWLA_MACOS_SDKROOT="$MACOS_SDKROOT" \
-    ZIG_LIB_DIR="$ZIG_LIB" \
     ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
     "$ZIG_BIN" build --system "$DEPS_DIR" -Demit-xcframework=true -Doptimize=ReleaseFast
 )
@@ -134,10 +131,6 @@ manifest = {
     "deps_sha256": ghostty["release"]["deps"]["sha256"],
     "signature_verified": sys.argv[4] == "True",
     "zig_version": lock["zig"]["version"],
-    "zig_lib_patches": [
-        {"path": patch["path"], "sha256": patch["sha256"]}
-        for patch in lock["zig"].get("lib_patches") or []
-    ],
     "host": platform.platform(),
     "xcframework": framework.name,
     "files": sum(1 for path in framework.rglob("*") if path.is_file()),
