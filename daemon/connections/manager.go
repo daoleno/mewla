@@ -30,6 +30,12 @@ type record struct {
 	// Updates holds tools the service added or changed that wait for the
 	// person's confirmation, with the definition they would allow.
 	Updates map[string]string `json:"updates,omitempty"`
+	// Moved: the account was a hand-written REST account that moved to
+	// GitHub's own MCP server and has not listed its tools there yet. The
+	// first list is adopted as the account's own, with no update prompts;
+	// ReadsOn then allows the read tools, as the person had them on before.
+	Moved   bool `json:"moved,omitempty"`
+	ReadsOn bool `json:"reads_on,omitempty"`
 }
 
 type Manager struct {
@@ -73,6 +79,27 @@ func New(dir string) (*Manager, error) {
 	return m, err
 }
 
+// listMovedTools reads the official tool list of each account that moved to
+// GitHub's own server, so the account shows its tools without waiting for a
+// first call. Failing is fine: the account stays marked, and the next time it
+// is opened or read it tries again.
+func (m *Manager) listMovedTools() {
+	m.mu.Lock()
+	var ids []string
+	for id, r := range m.records {
+		if r.Moved {
+			ids = append(ids, id)
+		}
+	}
+	m.mu.Unlock()
+	sort.Strings(ids)
+	for _, id := range ids {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		_ = m.syncRemoteTools(ctx, id, true, 20*time.Second)
+		cancel()
+	}
+}
+
 // EnableLocalCloudCLI binds local CLI profiles only in the owning daemon.
 // Isolated protocol clients/tests do not read the host credential configuration.
 func (m *Manager) EnableLocalCloudCLI() {
@@ -81,12 +108,21 @@ func (m *Manager) EnableLocalCloudCLI() {
 	m.cacheListLocked()
 }
 
-// EnsureDefaults adds the accounts every server has without setup. It makes no
-// network request. The daemon calls it once at start.
+// EnsureDefaults adds the accounts every server has without setup. It waits for
+// no network request: accounts that moved to GitHub's own server list their
+// tools in the background. The daemon calls it once at start.
 func (m *Manager) EnsureDefaults() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	defer m.cacheListLocked()
+	if m.networkOwned {
+		for _, r := range m.records {
+			if r.Moved {
+				go m.listMovedTools()
+				break
+			}
+		}
+	}
 	return m.ensureHyperliquidReader()
 }
 
@@ -107,6 +143,9 @@ func newManager(path string, vault modelprofiles.CredentialStore, client *http.C
 		return nil, err
 	}
 	if err := m.removeOldAWS(); err != nil {
+		return nil, err
+	}
+	if err := m.moveGitHubToMCP(); err != nil {
 		return nil, err
 	}
 	m.cacheListLocked()
@@ -146,6 +185,42 @@ func (m *Manager) removeRetired() error {
 	}
 	return nil
 }
+
+// githubRESTEndpoint is where GitHub accounts spoke before Mewla used GitHub's
+// own MCP server.
+const githubRESTEndpoint = "https://api.github.com"
+
+// moveGitHubToMCP moves accounts made with Mewla's former hand-written GitHub
+// tools to GitHub's own MCP server. The stored credential is kept: it is the
+// same GitHub token, which the MCP server accepts. Nothing here touches the
+// network. The first tool list the account reads adopts the official tools,
+// and a token GitHub refuses marks the account as needing sign-in, like any
+// other. Changes the person had allowed are not carried over: the official
+// tools are different tools, so each change is allowed again by name.
+func (m *Manager) moveGitHubToMCP() error {
+	moved := false
+	for _, r := range m.records {
+		if r.Account.Integration != "github" || r.Account.Endpoint != githubRESTEndpoint {
+			continue
+		}
+		read := false
+		for name := range r.Grants {
+			if name != "create_issue" && name != "comment_on_issue" {
+				read = true
+			}
+		}
+		r.Account.Endpoint = githubMCP
+		r.Account.Tools = nil
+		r.Grants, r.Updates = map[string]string{}, nil
+		r.Moved, r.ReadsOn = true, read
+		moved = true
+	}
+	if moved {
+		return m.save()
+	}
+	return nil
+}
+
 func (m *Manager) save() error {
 	if m.transient {
 		return nil
@@ -643,7 +718,7 @@ func schemaArgumentPath(pointer string) string {
 // answeredNotFailed: the service replied with its own error, or Mewla refused
 // the call before sending it. Neither says the account stopped working.
 func answeredNotFailed(err error) bool {
-	var service serviceError
+	var service ServiceError
 	var refused callRefused
 	return errors.As(err, &service) || errors.As(err, &refused)
 }

@@ -241,11 +241,13 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 		if err != nil {
 			return Response{}, err
 		}
+		added := m.records[result.Account.ID]
+		m.setGroup(added, "read", true)
 		if q.Input != nil && q.Input.AllowWrites {
-			m.setGroup(m.records[result.Account.ID], "write", true)
-			if err = m.save(); err != nil {
-				return Response{}, err
-			}
+			m.setGroup(added, "write", true)
+		}
+		if err = m.save(); err != nil {
+			return Response{}, err
 		}
 		f.AccountID = result.Account.ID
 		f.Status = "connected"

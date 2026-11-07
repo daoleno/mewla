@@ -245,6 +245,9 @@ type bearerTransport struct {
 	base   http.RoundTripper
 	secret string
 	origin string
+	// headers are the reviewed service's own (GitHub's toolsets); the
+	// credential is never among them.
+	headers map[string]string
 }
 
 func (t bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -253,6 +256,9 @@ func (t bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	c := r.Clone(r.Context())
 	c.Header = r.Header.Clone()
+	for name, value := range t.headers {
+		c.Header.Set(name, value)
+	}
 	if t.secret != "" {
 		c.Header.Set("Authorization", "Bearer "+t.secret)
 	}

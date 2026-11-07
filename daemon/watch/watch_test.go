@@ -448,21 +448,23 @@ func TestRuntimeCollectorKeepsReportsWhenTheCollectorStops(t *testing.T) {
 	}
 }
 
+// fakeResponse is what a GitHub tool answers for one repository: its JSON, or
+// an error GitHub wrote (Status >= 300), which the plugin reports as a service
+// answer.
 type fakeResponse struct {
 	Status int
 	Body   []byte
 }
 
 type fakeExternal struct {
+	// responses are keyed "tool owner/repo"; an absent key is GitHub saying it
+	// has no such repository.
 	responses map[string]fakeResponse
 	linear    map[string]string
 	accounts  map[string][]connections.ReadAccount
-	calls     []string
-}
-
-var githubToolPaths = map[string]string{
-	"get_repository": "", "list_workflow_runs": "/actions/runs", "list_updated_issues": "/issues",
-	"list_dependabot_alerts": "/dependabot/alerts", "list_code_scanning_alerts": "/code-scanning/alerts",
+	// args records the arguments each GitHub call was sent, by tool.
+	args  map[string]map[string]any
+	calls []string
 }
 
 func allReads(tools ...string) map[string]bool {
@@ -473,35 +475,56 @@ func allReads(tools ...string) map[string]bool {
 	return reads
 }
 
+var githubReads = []string{"search_repositories", "actions_list", "list_issues", "list_pull_requests", "list_dependabot_alerts", "list_code_scanning_alerts"}
+
 func (f *fakeExternal) ReadAccounts(integration string) []connections.ReadAccount {
 	if accounts, ok := f.accounts[integration]; ok {
 		return accounts
 	}
 	reads := allReads("list_teams", "list_issues", "list_comments")
 	if integration == "github" {
-		reads = allReads("get_repository", "list_workflow_runs", "list_updated_issues", "list_dependabot_alerts", "list_code_scanning_alerts")
+		reads = allReads(githubReads...)
 	}
 	return []connections.ReadAccount{{ID: integration + "-1", Name: integration + " account", Integration: integration, Enabled: true, Reads: reads}}
+}
+
+// repoMeta is what searching for exactly one repository answers.
+func repoMeta(slug string) []byte {
+	raw, _ := json.Marshal(map[string]any{"total_count": 1, "items": []any{map[string]any{"full_name": slug, "default_branch": "main"}}})
+	return raw
+}
+
+// mcpText is a plugin read's result: JSON text inside a content list.
+func mcpText(text string) []byte {
+	body, _ := json.Marshal(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}})
+	return body
 }
 
 func (f *fakeExternal) ReadTool(_ context.Context, accountID, tool string, args map[string]any) (connections.ReadResult, error) {
 	if strings.HasPrefix(accountID, "linear") {
 		f.calls = append(f.calls, "linear:"+tool)
-		// Plugin reads return the MCP result: JSON text inside a content list.
-		body, _ := json.Marshal(map[string]any{"content": []any{map[string]any{"type": "text", "text": f.linear[tool]}}})
-		return connections.ReadResult{Body: body, RateRemaining: -1}, nil
+		return connections.ReadResult{Body: mcpText(f.linear[tool])}, nil
 	}
-	path := args["path"].(map[string]any)
-	key := "/repos/" + path["owner"].(string) + "/" + path["repo"].(string) + githubToolPaths[tool]
+	slug := ""
+	if query, ok := args["query"].(string); ok && tool == "search_repositories" {
+		slug = strings.TrimPrefix(query, "repo:")
+	} else {
+		slug = args["owner"].(string) + "/" + args["repo"].(string)
+	}
+	if f.args == nil {
+		f.args = map[string]map[string]any{}
+	}
+	f.args[tool] = args
+	key := tool + " " + slug
 	f.calls = append(f.calls, key)
 	response, ok := f.responses[key]
 	if !ok {
-		return connections.ReadResult{RateRemaining: -1}, connections.StatusError{Status: 404}
+		return connections.ReadResult{}, connections.ServiceError{Service: "GitHub", Detail: "404 Not Found"}
 	}
 	if response.Status >= 300 {
-		return connections.ReadResult{RateRemaining: 4000}, connections.StatusError{Status: response.Status}
+		return connections.ReadResult{}, connections.ServiceError{Service: "GitHub", Detail: fmt.Sprintf("%d refused", response.Status)}
 	}
-	return connections.ReadResult{Body: response.Body, RateRemaining: 4000}, nil
+	return connections.ReadResult{Body: mcpText(string(response.Body))}, nil
 }
 
 func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
@@ -520,13 +543,15 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	body := func(value any) []byte { raw, _ := json.Marshal(value); return raw }
 	external := &fakeExternal{
 		responses: map[string]fakeResponse{
-			"/repos/acme/perpetuo":              {Status: 200, Body: body(map[string]any{"default_branch": "main"})},
-			"/repos/acme/perpetuo/actions/runs": {Status: 200, Body: body(map[string]any{"workflow_runs": []any{run(1, "success", 5*time.Hour), run(2, "failure", 3*time.Hour), run(3, "failure", time.Hour)}})},
-			"/repos/acme/perpetuo/issues": {Status: 200, Body: body([]any{
-				map[string]any{"number": 7, "title": "Login broken", "body": "steps…", "updated_at": now.Add(-time.Hour).Format(time.RFC3339), "user": map[string]any{"login": "teammate"}},
-				map[string]any{"number": 8, "title": "Add invoices", "updated_at": now.Add(-time.Hour).Format(time.RFC3339), "pull_request": map[string]any{}},
+			"search_repositories acme/perpetuo": {Status: 200, Body: repoMeta("acme/perpetuo")},
+			"actions_list acme/perpetuo":        {Status: 200, Body: body(map[string]any{"total_count": 3, "workflow_runs": []any{run(1, "success", 5*time.Hour), run(2, "failure", 3*time.Hour), run(3, "failure", time.Hour)}})},
+			"list_issues acme/perpetuo": {Status: 200, Body: body(map[string]any{"issues": []any{
+				map[string]any{"number": 7, "title": "Login broken", "body": "steps…", "comments": 2, "updated_at": now.Add(-time.Hour).Format(time.RFC3339), "user": map[string]any{"login": "teammate"}},
+			}, "totalCount": 1})},
+			"list_pull_requests acme/perpetuo": {Status: 200, Body: body([]any{
+				map[string]any{"number": 8, "title": "Add invoices", "html_url": "https://github.com/acme/perpetuo/pull/8", "updated_at": now.Add(-time.Hour).Format(time.RFC3339), "user": map[string]any{"login": "teammate"}},
 			})},
-			"/repos/acme/perpetuo/dependabot/alerts": {Status: 403},
+			"list_dependabot_alerts acme/perpetuo": {Status: 403},
 		},
 		linear: map[string]string{"list_teams": `{"teams":[{"id":"t1","key":"PER","name":"Perpetuo"},{"id":"t2","key":"OPS","name":"Operations"}]}`},
 	}
@@ -544,8 +569,33 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	if len(problems) != 1 || !problems[0].Active || problems[0].Count != 2 || !problems[0].Severe {
 		t.Fatalf("ci problems = %+v", problems)
 	}
+	// GitHub's own tools are called by their names and arguments.
+	if got := external.args["search_repositories"]["query"]; got != "repo:acme/perpetuo" {
+		t.Errorf("repository search = %v", got)
+	}
+	filter, _ := external.args["actions_list"]["workflow_runs_filter"].(map[string]any)
+	if external.args["actions_list"]["method"] != "list_workflow_runs" || filter["branch"] != "main" || filter["status"] != "completed" {
+		t.Errorf("workflow runs asked as %v", external.args["actions_list"])
+	}
+	if external.args["list_issues"]["state"] != "OPEN" || external.args["list_issues"]["since"] == nil || external.args["list_pull_requests"]["sort"] != "updated" {
+		t.Errorf("issues asked as %v, pull requests as %v", external.args["list_issues"], external.args["list_pull_requests"])
+	}
+	pointers := map[string]string{}
+	for _, signal := range store.Signals(Filter{Source: SourceExternal}) {
+		if signal.Kind == kindIssueActivity || signal.Kind == kindPRActivity {
+			pointers[signal.Kind] = signal.Pointer
+		}
+	}
+	if pointers[kindIssueActivity] != "https://github.com/acme/perpetuo/issues/7" || pointers[kindPRActivity] != "https://github.com/acme/perpetuo/pull/8" {
+		t.Errorf("links = %v", pointers)
+	}
+	var cursor githubCursor
+	store.Cursor("external:github:"+store.Projects()[0].ID, &cursor)
+	if cursor.AlertsSince.Before(now.Add(-2*time.Minute)) || cursor.Since.Before(now.Add(-2*time.Minute)) {
+		t.Errorf("a refusal GitHub wrote left the cursors behind: %+v", cursor)
+	}
 	project := store.Projects()[0]
-	if project.GitHub == nil || project.GitHub.Endpoints["dependabot"] != "HTTP 403" || project.GitHub.Endpoints["actions"] != "ok" {
+	if project.GitHub == nil || project.GitHub.Endpoints["dependabot"] != "403 refused" || project.GitHub.Endpoints["actions"] != "ok" {
 		t.Errorf("endpoints = %+v", project.GitHub)
 	}
 	if project.Linear == nil || len(project.Linear.Suggested) != 1 || project.Linear.Suggested[0].Key != "PER" || project.Linear.Confirmed != nil {
@@ -553,7 +603,7 @@ func TestExternalCollectorFlagsRedCIAndSuggestsLinear(t *testing.T) {
 	}
 
 	// CI goes green: the problem becomes inactive.
-	external.responses["/repos/acme/perpetuo/actions/runs"] = fakeResponse{Status: 200,
+	external.responses["actions_list acme/perpetuo"] = fakeResponse{Status: 200,
 		Body: body(map[string]any{"workflow_runs": []any{run(3, "failure", time.Hour), run(4, "success", time.Minute)}})}
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 	if problems := store.Problems(Filter{Kind: RuleCIRed}); len(problems) != 1 || problems[0].Active {
@@ -641,20 +691,20 @@ func TestCIRedIsJudgedPerWorkflowAndSurvivesOutOfOrderRuns(t *testing.T) {
 		raw, _ := json.Marshal(map[string]any{"workflow_runs": items})
 		return fakeResponse{Status: 200, Body: raw}
 	}
-	repoMeta, _ := json.Marshal(map[string]any{"default_branch": "main"})
 	external := &fakeExternal{responses: map[string]fakeResponse{
-		"/repos/acme/zeta":              {Status: 200, Body: repoMeta},
-		"/repos/acme/zeta/issues":       {Status: 200, Body: []byte("[]")},
-		"/repos/acme/zeta/actions/runs": runs(run(10, "CI", "success", 3*time.Hour), run(11, "Pages", "success", 3*time.Hour)),
+		"search_repositories acme/zeta": {Status: 200, Body: repoMeta("acme/zeta")},
+		"list_issues acme/zeta":         {Status: 200, Body: []byte(`{"issues":[]}`)},
+		"list_pull_requests acme/zeta":  {Status: 200, Body: []byte("[]")},
+		"actions_list acme/zeta":        runs(run(10, "CI", "success", 3*time.Hour), run(11, "Pages", "success", 3*time.Hour)),
 	}, linear: map[string]string{}}
 	collector.external = external
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 
 	// Push 2: Pages (higher ID) finishes first and is polled alone.
-	external.responses["/repos/acme/zeta/actions/runs"] = runs(run(21, "Pages", "success", 20*time.Minute))
+	external.responses["actions_list acme/zeta"] = runs(run(21, "Pages", "success", 20*time.Minute))
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 	// CI (lower ID) fails later; a later Pages success must not clear it.
-	external.responses["/repos/acme/zeta/actions/runs"] = runs(
+	external.responses["actions_list acme/zeta"] = runs(
 		run(21, "Pages", "success", 20*time.Minute), run(20, "CI", "failure", 10*time.Minute), run(31, "Pages", "success", 5*time.Minute))
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 
@@ -665,7 +715,7 @@ func TestCIRedIsJudgedPerWorkflowAndSurvivesOutOfOrderRuns(t *testing.T) {
 	if passed := store.Signals(Filter{Kind: kindCIPassed}); len(passed) != 0 {
 		t.Fatalf("a passing Pages run was recorded as CI recovering: %+v", passed)
 	}
-	external.responses["/repos/acme/zeta/actions/runs"] = runs(run(40, "CI", "success", time.Minute))
+	external.responses["actions_list acme/zeta"] = runs(run(40, "CI", "success", time.Minute))
 	collector.Collect(context.Background(), []string{SourceExternal}, true)
 	if problems := store.Problems(Filter{Kind: RuleCIRed}); len(problems) != 1 || problems[0].Active {
 		t.Fatalf("after CI recovers: %+v", problems)
@@ -681,13 +731,13 @@ func TestExternalCoverageFollowsThePluginSwitchAndGrants(t *testing.T) {
 		t.Fatal("no project")
 	}
 	now := time.Now().UTC()
-	meta, _ := json.Marshal(map[string]any{"default_branch": "main"})
 	runs, _ := json.Marshal(map[string]any{"workflow_runs": []any{map[string]any{"id": 5, "name": "CI", "head_branch": "main",
 		"status": "completed", "conclusion": "failure", "run_attempt": 1, "updated_at": now.Add(-time.Hour).Format(time.RFC3339)}}})
 	external := &fakeExternal{responses: map[string]fakeResponse{
-		"/repos/acme/theta":              {Status: 200, Body: meta},
-		"/repos/acme/theta/actions/runs": {Status: 200, Body: runs},
-		"/repos/acme/theta/issues":       {Status: 200, Body: []byte("[]")},
+		"search_repositories acme/theta": {Status: 200, Body: repoMeta("acme/theta")},
+		"actions_list acme/theta":        {Status: 200, Body: runs},
+		"list_issues acme/theta":         {Status: 200, Body: []byte(`{"issues":[]}`)},
+		"list_pull_requests acme/theta":  {Status: 200, Body: []byte("[]")},
 	}, linear: map[string]string{}, accounts: map[string][]connections.ReadAccount{"linear": nil}}
 	collector.external = external
 	coverage := func() *GitHub {
@@ -706,23 +756,23 @@ func TestExternalCoverageFollowsThePluginSwitchAndGrants(t *testing.T) {
 	if added := collect(); added != 0 || coverage().Coverage != CoverageNotConnected {
 		t.Fatalf("no account: added %d, %+v", added, coverage())
 	}
-	off := connections.ReadAccount{ID: "gh-1", Name: "work", Enabled: false, Reads: allReads("get_repository", "list_workflow_runs")}
+	off := connections.ReadAccount{ID: "gh-1", Name: "work", Enabled: false, Reads: allReads("search_repositories", "actions_list")}
 	external.accounts["github"] = []connections.ReadAccount{off}
 	if added := collect(); added != 0 || coverage().Coverage != CoverageDisabled {
 		t.Fatalf("switched off: added %d, %+v", added, coverage())
 	}
 	on := off
-	on.Enabled, on.Reads = true, allReads("list_workflow_runs")
+	on.Enabled, on.Reads = true, allReads("actions_list")
 	external.accounts["github"] = []connections.ReadAccount{on}
 	if added := collect(); added != 0 || coverage().Coverage != CoverageNotAllowed {
 		t.Fatalf("repository read not allowed: added %d, %+v", added, coverage())
 	}
-	on.Reads = allReads("get_repository", "list_updated_issues")
+	on.Reads = allReads("search_repositories", "list_issues", "list_pull_requests")
 	external.accounts["github"] = []connections.ReadAccount{on}
-	if added := collect(); added != 0 || coverage().Coverage != CoverageCollecting || coverage().Endpoints["actions"] != "not allowed (list_workflow_runs)" {
+	if added := collect(); added != 0 || coverage().Coverage != CoverageCollecting || coverage().Endpoints["actions"] != "not allowed (actions_list)" {
 		t.Fatalf("CI read not allowed: added %d, %+v", added, coverage())
 	}
-	on.Reads = allReads("get_repository", "list_updated_issues", "list_workflow_runs")
+	on.Reads = allReads("search_repositories", "list_issues", "list_pull_requests", "actions_list")
 	external.accounts["github"] = []connections.ReadAccount{on}
 	if added := collect(); added != 1 {
 		t.Fatalf("allowed: added %d, %+v", added, coverage())
@@ -738,9 +788,9 @@ func TestExternalCoverageFollowsThePluginSwitchAndGrants(t *testing.T) {
 		t.Fatalf("switched back on: added %d, %+v", added, coverage())
 	}
 	// A repository no account can read says why.
-	delete(external.responses, "/repos/acme/theta")
+	delete(external.responses, "search_repositories acme/theta")
 	_, _ = store.UpdateProject(store.Projects()[0].ID, func(p *Project) error { p.GitHub.CheckedAt = time.Time{}; return nil })
-	if collect(); coverage().Coverage != CoverageUnreachable || !strings.Contains(coverage().Reason, "HTTP 404") {
+	if collect(); coverage().Coverage != CoverageUnreachable || !strings.Contains(coverage().Reason, "404 Not Found") {
 		t.Fatalf("unreachable: %+v", coverage())
 	}
 }
@@ -834,8 +884,8 @@ func TestExternalCIClearsAFailureTheCursorForgot(t *testing.T) {
 	}
 	body := func(value any) []byte { raw, _ := json.Marshal(value); return raw }
 	external := &fakeExternal{responses: map[string]fakeResponse{
-		"/repos/acme/perpetuo": {Status: 200, Body: body(map[string]any{"default_branch": "main"})},
-		"/repos/acme/perpetuo/actions/runs": {Status: 200, Body: body(map[string]any{"workflow_runs": []any{
+		"search_repositories acme/perpetuo": {Status: 200, Body: repoMeta("acme/perpetuo")},
+		"actions_list acme/perpetuo": {Status: 200, Body: body(map[string]any{"workflow_runs": []any{
 			run(1, "Android Google Play", "failure", 3*time.Hour)}})},
 	}}
 	collector.external = external
@@ -849,7 +899,7 @@ func TestExternalCIClearsAFailureTheCursorForgot(t *testing.T) {
 	if err := store.DeleteCursor("external:" + store.Projects()[0].ID); err != nil {
 		t.Log(err)
 	}
-	external.responses["/repos/acme/perpetuo/actions/runs"] = fakeResponse{Status: 200, Body: body(map[string]any{"workflow_runs": []any{
+	external.responses["actions_list acme/perpetuo"] = fakeResponse{Status: 200, Body: body(map[string]any{"workflow_runs": []any{
 		run(1, "Android Google Play", "failure", 3*time.Hour),
 		run(2, "Android Google Play", "success", 3*time.Hour-8*time.Minute),
 		run(3, "Pages", "success", time.Hour),

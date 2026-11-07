@@ -73,11 +73,10 @@ type Collector struct {
 	now         func() time.Time
 	pause       func()
 
-	pass              sync.Mutex
-	statesByID        map[string]*lifecycle.State
-	githubPausedUntil time.Time
-	linearTeams       int
-	decodeLog         logonce.Log
+	pass        sync.Mutex
+	statesByID  map[string]*lifecycle.State
+	linearTeams int
+	decodeLog   logonce.Log
 
 	mu       sync.Mutex
 	presence func(workerID string) Presence

@@ -236,7 +236,8 @@ func (m *Manager) startOAuth(ctx context.Context, in *Input) (Response, error) {
 
 	endpoint := in.Endpoint
 	switch {
-	case oauth == nil:
+	case oauth == nil, oauth.Device != nil:
+		// A device-code service has no browser sign-in to start here.
 		return Response{}, errors.New("OAuth is not supported for this plugin")
 	case e.MCP != nil:
 		endpoint = e.MCP.Endpoint

@@ -23,7 +23,7 @@ func TestCatalogRejectsIncompleteEntries(t *testing.T) {
 	base := func() entry {
 		return entry{
 			Integration: Integration{ID: "x", Name: "X", SetupURL: "https://x.example", Description: "x"},
-			Driver:      "rest", Endpoint: "https://api.x.example", IdentityPath: "/me", Tools: githubTools,
+			Driver:      "rest", Endpoint: "https://api.x.example", IdentityPath: "/me", Tools: notionTools,
 		}
 	}
 	good := base()

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -43,15 +44,17 @@ func usesMCP(r *record) bool {
 	return r.Account.AuthMethod == "mcp_oauth" || e != nil && e.TokenMCP
 }
 
-// serviceError is an answer the service itself gave: a tool result marked
-// isError or a JSON-RPC error. It says nothing about the account's health.
-type serviceError struct{ service, detail string }
+// ServiceError is an answer the service itself gave: a tool result marked
+// isError or a JSON-RPC error (a feature switched off for a repository, a
+// missing permission). It says nothing about the account's health, or about
+// whether the service could be reached.
+type ServiceError struct{ Service, Detail string }
 
-func (e serviceError) Error() string {
-	if e.detail == "" {
-		return e.service + " reported an error without details"
+func (e ServiceError) Error() string {
+	if e.Detail == "" {
+		return e.Service + " reported an error without details"
 	}
-	return e.service + " reported an error: " + e.detail
+	return e.Service + " reported an error: " + e.Detail
 }
 
 // toolUpdatedError is a call to a tool the service added, changed since the
@@ -152,7 +155,11 @@ func (m *Manager) mcpClient(r *record, secret string) (*http.Client, func()) {
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	client.Transport = bearerTransport{base: base, secret: secret, origin: u.Scheme + "://" + u.Host}
+	var headers map[string]string
+	if e := lookup(r.Account.Integration); e != nil && e.MCP != nil && r.Account.Endpoint == e.MCP.Endpoint {
+		headers = e.MCP.Headers
+	}
+	client.Transport = bearerTransport{base: base, secret: secret, origin: u.Scheme + "://" + u.Host, headers: headers}
 	return &client, closeIdle
 }
 
@@ -314,7 +321,7 @@ func (m *Manager) callMCP(ctx context.Context, r *record, secret string, t Tool,
 	case err != nil:
 		out.Err = mcpCallError(r, err)
 	case result.IsError:
-		out.Err = serviceError{accountService(r), resultText(result)}
+		out.Err = ServiceError{accountService(r), resultText(result)}
 	default:
 		out.Result, out.Err = json.Marshal(result)
 	}
@@ -330,7 +337,7 @@ func mcpCallError(r *record, err error) error {
 	var wire *jsonrpc.Error
 	// -32005 is the SDK's "rejected by transport": the HTTP request failed.
 	if errors.As(err, &wire) && wire.Code != -32005 {
-		return serviceError{accountService(r), cutText(fmt.Sprintf("%s (JSON-RPC %d)", wire.Message, wire.Code), maxServiceErrorBytes)}
+		return ServiceError{accountService(r), cutText(fmt.Sprintf("%s (JSON-RPC %d)", wire.Message, wire.Code), maxServiceErrorBytes)}
 	}
 	log.Printf("plugins: %s MCP call failed: %.300s", r.Account.Integration, err)
 	if isTransportError(err, errNetwork) || wire != nil {
@@ -461,9 +468,9 @@ func (m *Manager) finishMCP(id, tool string, sensitive []string, out mcpOutcome,
 	if err == nil && len(result) > MaxResultBytes {
 		err = errors.New("integration result exceeds 1 MiB")
 	}
-	var service serviceError
+	var service ServiceError
 	if errors.As(err, &service) {
-		service.detail = string(redactValues([]byte(service.detail), sensitive))
+		service.Detail = string(redactValues([]byte(service.Detail), sensitive))
 		err = service
 	}
 	if err == nil {
@@ -559,9 +566,18 @@ func (m *Manager) officialMCPIdentity(ctx context.Context, r *record, secret str
 			if nested, ok := value["user"].(map[string]any); ok {
 				value = nested
 			}
-			for _, key := range []string{"email", "name", "id"} {
-				if name, ok := value[key].(string); ok && len(name) > 0 && len(name) <= 200 {
-					return name
+			// login is GitHub's account name; id is a number there, so a
+			// name-less account is still named.
+			for _, key := range []string{"login", "email", "name", "id"} {
+				switch name := value[key].(type) {
+				case string:
+					if len(name) > 0 && len(name) <= 200 {
+						return name
+					}
+				case float64:
+					if key == "id" && name > 0 {
+						return strconv.FormatInt(int64(name), 10)
+					}
 				}
 			}
 			return ""

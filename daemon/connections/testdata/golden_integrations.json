@@ -90,95 +90,9 @@
     },
     "github": {
       "credential": {
-        "account": {
-          "access": {
-            "read": "allowed",
-            "write": "off",
-            "allowed": 9,
-            "tools": 11
-          },
-          "address": "",
-          "auth_method": "",
-          "enabled": true,
-          "endpoint": "https://api.github.com",
-          "identity": "octo",
-          "integration": "github",
-          "name": "Name",
-          "network": "",
-          "scopes": null,
-          "status": "connected",
-          "tools": [
-            {
-              "allowed": true,
-              "fingerprint": "d9ba37b9572da9c137ec6e654944711fca9e0ae80eb99a8c08f76487fa475f3c",
-              "group": "read",
-              "name": "get_me"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "76d6bbdf0c39df301d60e47b84c37a8391af558ee654e5d4473a68afb1fbe768",
-              "group": "read",
-              "name": "list_repositories"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "d46adb30ce3e12f65ebf78a5e81f1b060aa90f5a6323224f085af15cf4a4da01",
-              "group": "read",
-              "name": "get_repository"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "b38d8b7fd0dc50d941cd00cc506b815abe673705868dacaf73c8b03fb3243cd5",
-              "group": "read",
-              "name": "list_issues"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "9af2dfaa46e42f3b060e94d1b99b94d43fcf2f0b7068bd3e2732c348c3909a7f",
-              "group": "read",
-              "name": "get_issue"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "d6457f7d791cd7366c3666507cc60de439cd7f1f50c1fba75d7916c3d37d8286",
-              "group": "read",
-              "name": "list_updated_issues"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "73535dc33c9b45936dadaad6604d1bb01f84c5c5b10b087e100ad783a28ed29a",
-              "group": "read",
-              "name": "list_workflow_runs"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "4705d10b2cf05d0137e94136b9d05d7ac083a5d5ecace2d3235f6d9da5eb093f",
-              "group": "read",
-              "name": "list_dependabot_alerts"
-            },
-            {
-              "allowed": true,
-              "fingerprint": "669ff4139faae58fadd4a25909db744843f66964eeb76ef4c91924a596d2e38d",
-              "group": "read",
-              "name": "list_code_scanning_alerts"
-            },
-            {
-              "allowed": false,
-              "fingerprint": "f054e6c843fd5bf1eedd5c5e0c6747ab5e964caddd5f4bb70ef5714ab3172e78",
-              "group": "write",
-              "name": "create_issue"
-            },
-            {
-              "allowed": false,
-              "fingerprint": "414d19998691d76cbc769f07bc332eef20fdd2d4db0bb519050023cddb193161",
-              "group": "write",
-              "name": "comment_on_issue"
-            }
-          ],
-          "trusted_networks": null
-        },
+        "error": "GitHub did not accept the MCP connection; check that its endpoint still serves MCP",
         "requests": [
-          "GET https://api.github.com/user X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok-123"
+          "POST https://api.githubcopilot.com/mcp/ X-MCP-Toolsets=context,repos,issues,pull_requests,users,actions,code_security,dependabot,orgs Authorization=Bearer tok-123"
         ]
       },
       "no_credential": {
@@ -504,7 +418,7 @@
         "requests": []
       }
     },
-    "remove_key_on_github": "only a Hyperliquid account has a trading key",
+    "remove_key_on_notion": "only a Hyperliquid account has a trading key",
     "slack": {
       "credential": {
         "account": {
@@ -602,7 +516,7 @@
       "name": "GitHub",
       "available": true,
       "setup_url": "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps",
-      "description": "Repositories, issues and pull requests"
+      "description": "Repositories, issues, pull requests, Actions and security alerts"
     },
     {
       "id": "notion",
@@ -3622,10 +3536,6 @@
     "openapi https://other.example": "integration returned HTTP 404",
     "openapi https://slack.com/api": "Slack rejected the call; check account authorization and required scopes",
     "requests": [
-      "GET https://api.github.com/user X-GitHub-Api-Version=2022-11-28",
-      "GET https://api.github.com/user X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok",
-      "GET https://api.github.com/user/repos?per_page=30 X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok",
-      "GET https://api.github.com/user/repos?per_page=5 X-GitHub-Api-Version=2022-11-28 Authorization=Bearer tok",
       "GET https://api.notion.com/v1/blocks/b1/children?page_size=30 Notion-Version=2022-06-28 Authorization=Bearer ntn",
       "GET https://api.notion.com/v1/user Notion-Version=2022-06-28",
       "GET https://api.notion.com/v1/users/me Notion-Version=2022-06-28 Authorization=Bearer ntn",
@@ -3748,6 +3658,243 @@
         ],
         "writes": [
           "execute"
+        ]
+      }
+    },
+    "github": {
+      "no_auth_method": {
+        "actions_get": "read",
+        "actions_list": "read",
+        "actions_run_trigger": "write",
+        "add_comment_to_pending_review": "write",
+        "add_issue_comment": "write",
+        "add_reply_to_pull_request_comment": "write",
+        "check_dependency_vulnerabilities": "read",
+        "create_branch": "write",
+        "create_or_update_file": "write",
+        "create_pull_request": "write",
+        "create_repository": "write",
+        "delete_file": "write",
+        "fork_repository": "write",
+        "get_code_scanning_alert": "read",
+        "get_commit": "read",
+        "get_dependabot_alert": "read",
+        "get_file_contents": "read",
+        "get_job_logs": "read",
+        "get_label": "read",
+        "get_latest_release": "read",
+        "get_me": "read",
+        "get_release_by_tag": "read",
+        "get_tag": "read",
+        "get_team_members": "read",
+        "get_teams": "read",
+        "issue_read": "read",
+        "issue_write": "write",
+        "list_branches": "read",
+        "list_code_scanning_alerts": "read",
+        "list_commits": "read",
+        "list_dependabot_alerts": "read",
+        "list_issue_fields": "read",
+        "list_issue_types": "read",
+        "list_issues": "read",
+        "list_pull_requests": "read",
+        "list_releases": "read",
+        "list_repository_collaborators": "read",
+        "list_tags": "read",
+        "merge_pull_request": "write",
+        "pull_request_read": "read",
+        "pull_request_review_write": "write",
+        "push_files": "write",
+        "save_something_new": "",
+        "search_code": "read",
+        "search_commits": "read",
+        "search_issues": "read",
+        "search_orgs": "read",
+        "search_pull_requests": "read",
+        "search_repositories": "read",
+        "search_users": "read",
+        "sub_issue_write": "write",
+        "ui_get": "read",
+        "unknown_tool": "",
+        "update_issue_comment": "write",
+        "update_pull_request": "write",
+        "update_pull_request_branch": "write"
+      },
+      "oauth": {
+        "actions_get": "read",
+        "actions_list": "read",
+        "actions_run_trigger": "write",
+        "add_comment_to_pending_review": "write",
+        "add_issue_comment": "write",
+        "add_reply_to_pull_request_comment": "write",
+        "check_dependency_vulnerabilities": "read",
+        "create_branch": "write",
+        "create_or_update_file": "write",
+        "create_pull_request": "write",
+        "create_repository": "write",
+        "delete_file": "write",
+        "fork_repository": "write",
+        "get_code_scanning_alert": "read",
+        "get_commit": "read",
+        "get_dependabot_alert": "read",
+        "get_file_contents": "read",
+        "get_job_logs": "read",
+        "get_label": "read",
+        "get_latest_release": "read",
+        "get_me": "read",
+        "get_release_by_tag": "read",
+        "get_tag": "read",
+        "get_team_members": "read",
+        "get_teams": "read",
+        "issue_read": "read",
+        "issue_write": "write",
+        "list_branches": "read",
+        "list_code_scanning_alerts": "read",
+        "list_commits": "read",
+        "list_dependabot_alerts": "read",
+        "list_issue_fields": "read",
+        "list_issue_types": "read",
+        "list_issues": "read",
+        "list_pull_requests": "read",
+        "list_releases": "read",
+        "list_repository_collaborators": "read",
+        "list_tags": "read",
+        "merge_pull_request": "write",
+        "pull_request_read": "read",
+        "pull_request_review_write": "write",
+        "push_files": "write",
+        "save_something_new": "",
+        "search_code": "read",
+        "search_commits": "read",
+        "search_issues": "read",
+        "search_orgs": "read",
+        "search_pull_requests": "read",
+        "search_repositories": "read",
+        "search_users": "read",
+        "sub_issue_write": "write",
+        "ui_get": "read",
+        "unknown_tool": "",
+        "update_issue_comment": "write",
+        "update_pull_request": "write",
+        "update_pull_request_branch": "write"
+      },
+      "oauth_other": {
+        "actions_get": "",
+        "actions_list": "",
+        "actions_run_trigger": "",
+        "add_comment_to_pending_review": "",
+        "add_issue_comment": "",
+        "add_reply_to_pull_request_comment": "",
+        "check_dependency_vulnerabilities": "",
+        "create_branch": "",
+        "create_or_update_file": "",
+        "create_pull_request": "",
+        "create_repository": "",
+        "delete_file": "",
+        "fork_repository": "",
+        "get_code_scanning_alert": "",
+        "get_commit": "",
+        "get_dependabot_alert": "",
+        "get_file_contents": "",
+        "get_job_logs": "",
+        "get_label": "",
+        "get_latest_release": "",
+        "get_me": "",
+        "get_release_by_tag": "",
+        "get_tag": "",
+        "get_team_members": "",
+        "get_teams": "",
+        "issue_read": "",
+        "issue_write": "",
+        "list_branches": "",
+        "list_code_scanning_alerts": "",
+        "list_commits": "",
+        "list_dependabot_alerts": "",
+        "list_issue_fields": "",
+        "list_issue_types": "",
+        "list_issues": "",
+        "list_pull_requests": "",
+        "list_releases": "",
+        "list_repository_collaborators": "",
+        "list_tags": "",
+        "merge_pull_request": "",
+        "pull_request_read": "",
+        "pull_request_review_write": "",
+        "push_files": "",
+        "save_something_new": "",
+        "search_code": "",
+        "search_commits": "",
+        "search_issues": "",
+        "search_orgs": "",
+        "search_pull_requests": "",
+        "search_repositories": "",
+        "search_users": "",
+        "sub_issue_write": "",
+        "ui_get": "",
+        "unknown_tool": "",
+        "update_issue_comment": "",
+        "update_pull_request": "",
+        "update_pull_request_branch": ""
+      },
+      "set": {
+        "endpoint": "https://api.githubcopilot.com/mcp/",
+        "reads": [
+          "actions_get",
+          "actions_list",
+          "check_dependency_vulnerabilities",
+          "get_code_scanning_alert",
+          "get_commit",
+          "get_dependabot_alert",
+          "get_file_contents",
+          "get_job_logs",
+          "get_label",
+          "get_latest_release",
+          "get_me",
+          "get_release_by_tag",
+          "get_tag",
+          "get_team_members",
+          "get_teams",
+          "issue_read",
+          "list_branches",
+          "list_code_scanning_alerts",
+          "list_commits",
+          "list_dependabot_alerts",
+          "list_issue_fields",
+          "list_issue_types",
+          "list_issues",
+          "list_pull_requests",
+          "list_releases",
+          "list_repository_collaborators",
+          "list_tags",
+          "pull_request_read",
+          "search_code",
+          "search_commits",
+          "search_issues",
+          "search_orgs",
+          "search_pull_requests",
+          "search_repositories",
+          "search_users",
+          "ui_get"
+        ],
+        "writes": [
+          "actions_run_trigger",
+          "add_comment_to_pending_review",
+          "add_issue_comment",
+          "add_reply_to_pull_request_comment",
+          "create_branch",
+          "create_or_update_file",
+          "create_pull_request",
+          "create_repository",
+          "delete_file",
+          "fork_repository",
+          "issue_write",
+          "merge_pull_request",
+          "pull_request_review_write",
+          "push_files",
+          "sub_issue_write",
+          "update_issue_comment",
+          "update_pull_request",
+          "update_pull_request_branch"
         ]
       }
     },
@@ -4090,11 +4237,6 @@
         "notion-search": ""
       },
       "gcp": {
-        "execute": "",
-        "get_me": "",
-        "notion-search": ""
-      },
-      "github": {
         "execute": "",
         "get_me": "",
         "notion-search": ""
@@ -4517,118 +4659,6 @@
     }
   },
   "tools": {
-    "github": [
-      {
-        "name": "get_me",
-        "description": "Read the authenticated GitHub account",
-        "method": "GET",
-        "path": "/user",
-        "read": true,
-        "fingerprint": "d9ba37b9572da9c137ec6e654944711fca9e0ae80eb99a8c08f76487fa475f3c",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_repositories",
-        "description": "List repositories visible to this account (one page)",
-        "method": "GET",
-        "path": "/user/repos",
-        "read": true,
-        "fingerprint": "76d6bbdf0c39df301d60e47b84c37a8391af558ee654e5d4473a68afb1fbe768",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "get_repository",
-        "description": "Read repository details",
-        "method": "GET",
-        "path": "/repos/{owner}/{repo}",
-        "read": true,
-        "fingerprint": "d46adb30ce3e12f65ebf78a5e81f1b060aa90f5a6323224f085af15cf4a4da01",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_issues",
-        "description": "List repository issues and pull requests (one page)",
-        "method": "GET",
-        "path": "/repos/{owner}/{repo}/issues",
-        "read": true,
-        "fingerprint": "b38d8b7fd0dc50d941cd00cc506b815abe673705868dacaf73c8b03fb3243cd5",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "get_issue",
-        "description": "Read an issue or pull request",
-        "method": "GET",
-        "path": "/repos/{owner}/{repo}/issues/{number}",
-        "read": true,
-        "fingerprint": "9af2dfaa46e42f3b060e94d1b99b94d43fcf2f0b7068bd3e2732c348c3909a7f",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_updated_issues",
-        "description": "List issues and pull requests updated since a time, most recently updated first (one page)",
-        "method": "GET",
-        "path": "/repos/{owner}/{repo}/issues",
-        "read": true,
-        "fingerprint": "d6457f7d791cd7366c3666507cc60de439cd7f1f50c1fba75d7916c3d37d8286",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_workflow_runs",
-        "description": "List a repository's GitHub Actions workflow runs, newest first (one page)",
-        "method": "GET",
-        "path": "/repos/{owner}/{repo}/actions/runs",
-        "read": true,
-        "fingerprint": "73535dc33c9b45936dadaad6604d1bb01f84c5c5b10b087e100ad783a28ed29a",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_dependabot_alerts",
-        "description": "List a repository's Dependabot alerts (one page)",
-        "method": "GET",
-        "path": "/repos/{owner}/{repo}/dependabot/alerts",
-        "read": true,
-        "fingerprint": "4705d10b2cf05d0137e94136b9d05d7ac083a5d5ecace2d3235f6d9da5eb093f",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "list_code_scanning_alerts",
-        "description": "List a repository's code scanning alerts (one page)",
-        "method": "GET",
-        "path": "/repos/{owner}/{repo}/code-scanning/alerts",
-        "read": true,
-        "fingerprint": "669ff4139faae58fadd4a25909db744843f66964eeb76ef4c91924a596d2e38d",
-        "group": "read",
-        "group_oauth": "read"
-      },
-      {
-        "name": "create_issue",
-        "description": "Create a repository issue",
-        "method": "POST",
-        "path": "/repos/{owner}/{repo}/issues",
-        "read": false,
-        "fingerprint": "f054e6c843fd5bf1eedd5c5e0c6747ab5e964caddd5f4bb70ef5714ab3172e78",
-        "group": "write",
-        "group_oauth": "write"
-      },
-      {
-        "name": "comment_on_issue",
-        "description": "Post a comment on an issue or pull request",
-        "method": "POST",
-        "path": "/repos/{owner}/{repo}/issues/{number}/comments",
-        "read": false,
-        "fingerprint": "414d19998691d76cbc769f07bc332eef20fdd2d4db0bb519050023cddb193161",
-        "group": "write",
-        "group_oauth": "write"
-      }
-    ],
     "hyperliquid": [
       {
         "name": "get_me",
@@ -4963,9 +4993,9 @@
       "method:oauth": false
     },
     "github": {
-      "method:": false,
+      "method:": true,
       "method:mcp_oauth": true,
-      "method:oauth": false
+      "method:oauth": true
     },
     "gws": {
       "method:": false,

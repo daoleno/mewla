@@ -78,7 +78,18 @@ func syncTools(r *record, current []Tool) []string {
 
 // adoptTools takes a tool list the service just sent.
 func (m *Manager) adoptTools(r *record, current []Tool) {
-	if updated := syncTools(r, current); len(updated) > 0 {
+	updated := syncTools(r, current)
+	if r.Moved && len(current) > 0 {
+		// The account's first list on GitHub's own server: nothing here is
+		// news to the person, so no update waits, and the reads they had on
+		// are on again.
+		r.Moved, r.Updates, updated = false, nil, nil
+		if r.ReadsOn {
+			m.setGroup(r, "read", true)
+		}
+		r.ReadsOn = false
+	}
+	if len(updated) > 0 {
 		log.Printf("plugins: %s updated %d tools; waiting for confirmation: %d", r.Account.Integration, len(updated), len(r.Updates))
 	}
 	m.toolsSeen[r.Account.ID] = time.Now()
@@ -118,6 +129,16 @@ func (m *Manager) syncRemoteTools(parent context.Context, id string, force bool,
 	}
 	tools, err := m.discoverMCP(ctx, &snapshot, secret)
 	if err != nil {
+		if snapshot.Moved && isTransportError(err, errAuth) {
+			// GitHub refused the token a moved account kept: it has to sign in
+			// again, and says so instead of showing an empty tool list.
+			m.mu.Lock()
+			if r = m.records[id]; r != nil && r.Moved && r.Account.Status != "disconnected" {
+				r.Account.Status = "authorization_required"
+				_ = m.save()
+			}
+			m.mu.Unlock()
+		}
 		return err
 	}
 	m.mu.Lock()

@@ -148,7 +148,7 @@ func (m *Manager) resourceCall(ctx context.Context, r *record, secret string, q 
 	}
 	if q.Action == "read_resource" {
 		if !offered {
-			return mcpOutcome{Err: serviceError{accountService(r), "this service offers no resources"}}
+			return mcpOutcome{Err: ServiceError{accountService(r), "this service offers no resources"}}
 		}
 		result, err := s.ReadResource(ctx, &mcp.ReadResourceParams{URI: q.URI})
 		if err != nil {
