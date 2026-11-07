@@ -1,0 +1,120 @@
+diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/arms.py b/libs/cua-driver-bench/automated-eval/macos_bench/arms.py
+index 832e543..e827a2d 100644
+--- a/libs/cua-driver-bench/automated-eval/macos_bench/arms.py
++++ b/libs/cua-driver-bench/automated-eval/macos_bench/arms.py
+@@ -39,6 +39,7 @@ CLAUDE_ARMS = (
+     "cc-claude-cu-helper",  # Amendment 11: Claude Desktop 2.31226.0 computer-use helper via a minimal adapter
+     "cc-agent-desktop",  # Vercel agent-desktop 1.2.0 behind tools/agent_desktop/ad_mcp.py
+     "cc-browser-use",  # Browser Use macOS harness 0.2.1 behind tools/browser_use_harness/bu_mcp.py
++    "cc-mewla-computer",  # Mewla's mewla_computer: `mewla agent-use computer-mcp`, run inside a Mewla Worker
+ )
+ # cc-cua-driver-main: Amendment 3; cc-cua-driver-main-skill: Amendment 4. The default arm set of run_bench.py
+ # stays the three arms of Amendment 3, so a run without --arms is unchanged.
+diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py b/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
+index 89eb1b9..76c0712 100644
+--- a/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
++++ b/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
+@@ -325,7 +325,9 @@ BROWSER_USE_BIN = Path(
+ )
+ BROWSER_USE_ADAPTER = ADAPTER_TOOLS / "browser_use_harness" / "bu_mcp.py"
+ BROWSER_USE_SERVER = "browseruse"
++MEWLA_COMPUTER_SERVER = "mewla_computer"
+ ADAPTER_ARMS = {
++    "cc-mewla-computer": MEWLA_COMPUTER_SERVER,
+     "cc-agent-desktop": AGENT_DESKTOP_SERVER,
+     "cc-browser-use": BROWSER_USE_SERVER,
+ }
+@@ -338,6 +340,16 @@ def adapter_entry(arm: str) -> dict[str, Any]:
+         "PATH": CLAUDE_PATH,
+         "DO_NOT_TRACK": "1",
+     }
++    if arm == "cc-mewla-computer":
++        # Mewla's own tool layer. The daemon accepts calls only from a Mewla Worker, so the Worker's MEWLA_* variables
++        # (and nothing else of the parent environment) reach the MCP server; `mewla` is named by absolute path.
++        env.update({k: v for k, v in os.environ.items() if k.startswith("MEWLA_")})
++        return {
++            "type": "stdio",
++            "command": os.environ.get("CDB_MEWLA_BIN") or shutil.which("mewla") or "mewla",
++            "args": ["agent-use", "computer-mcp"],
++            "env": env,
++        }
+     if arm == "cc-agent-desktop":
+         script = AGENT_DESKTOP_ADAPTER
+         env.update(
+@@ -384,6 +396,8 @@ ARM_DESCRIPTIONS = {
+     "the vendor skill text as the server instructions",
+     "cc-browser-use": "Claude Code + Browser Use macOS harness 0.2.1 through a minimal MCP adapter (server browseruse), "
+     "the vendor skill as the server instructions",
++    "cc-mewla-computer": "Claude Code + Mewla mewla_computer (`mewla agent-use computer-mcp`, server mewla_computer), "
++    "no skill; the tool descriptions are the product's own",
+ }
+ 
+ SKILL_PROMPT_HEADER = (
+diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/claude_events.py b/libs/cua-driver-bench/automated-eval/macos_bench/claude_events.py
+index 9877942..37ad119 100644
+--- a/libs/cua-driver-bench/automated-eval/macos_bench/claude_events.py
++++ b/libs/cua-driver-bench/automated-eval/macos_bench/claude_events.py
+@@ -146,10 +146,46 @@ BROWSER_USE_CLASSES = {
+ }
+ 
+ 
++MEWLA_COMPUTER_ACTIONS = {
++    "left_click": "click", "double_click": "click", "right_click": "click", "triple_click": "click", "click": "click",
++    "type": "type", "key": "key", "scroll": "scroll", "left_click_drag": "drag", "set_value": "set_value",
++    "mouse_move": "other", "screenshot": "observe", "cursor_position": "observe", "wait": "other",
++}
++
++
++MEWLA_ELEMENT_ACTIONS = {
++    "press": "click", "check": "click", "uncheck": "click", "increment": "click", "decrement": "click",
++    "confirm": "click", "cancel": "click", "show_menu": "click", "set_value": "set_value", "clear": "set_value",
++    "read": "observe",
++}
++
++
+ def tool_class(name: str, tool_input: dict[str, Any] | None = None) -> str:
+     server, tool = strip_mcp(name)
+     if server is None:
+         return "builtin"
++    if server == "mewla_computer":
++        if tool in ("apps", "app_state"):
++            return "observe"
++        if tool == "computer":
++            return MEWLA_COMPUTER_ACTIONS.get(str((tool_input or {}).get("action") or ""), "other")
++        if tool == "element":
++            return MEWLA_ELEMENT_ACTIONS.get(str((tool_input or {}).get("action") or ""), "other")
++        if tool == "menu":
++            return "click"
++        if tool == "steps":
++            classes = []
++            for step in (tool_input or {}).get("steps") or []:
++                if not isinstance(step, dict):
++                    continue
++                if step.get("element_action"):
++                    classes.append(MEWLA_ELEMENT_ACTIONS.get(str(step["element_action"])))
++                else:
++                    classes.append(MEWLA_COMPUTER_ACTIONS.get(str(step.get("action") or "")))
++            for preferred in ("drag", "click", "type", "key", "scroll", "set_value", "observe"):
++                if preferred in classes:
++                    return preferred
++        return "other"
+     if server == "claude-cu-helper":
+         return CU_HELPER_CLASSES.get(tool, "other")
+     if server == "agentdesktop":
+diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
+index 120f4b0..bff6589 100644
+--- a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
++++ b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
+@@ -655,7 +655,11 @@ def real_capture_check(ctx: "Ctx", arm: str) -> tuple[str, str, str]:
+         elif source in ca.ADAPTER_ARMS:
+             # No capture tool: the adapters have no screenshot of the whole desktop. A read-only list proves the
+             # vendor tool answers through the adapter.
+-            if source == "cc-agent-desktop":
++            if source == "cc-mewla-computer":
++                if "apps" not in tools:
++                    raise RuntimeError("unexpected mewla_computer tools/list")
++                call("apps", {})
++            elif source == "cc-agent-desktop":
+                 if "list_apps" not in tools:
+                     raise RuntimeError("unexpected agent-desktop tools/list")
+                 call("list_apps", {})

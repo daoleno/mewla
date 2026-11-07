@@ -38,9 +38,14 @@ function xhr() {
   return page('XHR', `<button id="go" onclick="fetch('/api/slow').then(r=>r.text()).then(t=>{document.getElementById('status').textContent=t})">Load</button><div id="status">Idle</div><button id="timer" onclick="setTimeout(()=>{document.getElementById('status').textContent='Timer done'},150)">Timer</button>`);
 }
 const simple = n => page('Tab ' + n, `<h1>Tab ${n}</h1><a href="/form">form</a>`);
+// The "person" of the non-interference probe (agent-use/web/xuser.c types into this page's textarea).
+const userPage = () => page('AUB user page', '<textarea id="t" rows="6" cols="40" autofocus></textarea>',
+  `const send=o=>navigator.sendBeacon('/__event',JSON.stringify(o));document.getElementById('t').focus();` +
+  `addEventListener('keydown',()=>send({type:'user:key'}));addEventListener('blur',()=>send({type:'user:blur'}));` +
+  `document.addEventListener('visibilitychange',()=>send({type:'user:vis',state:document.visibilityState}));`);
 
 const apiSlow = (res) => setTimeout(() => { res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); res.end('XHR done'); }, 120);
-const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/wizard': wizard, '/covered': covered, '/todo': todo, '/tab2': () => simple(2), '/tab3': () => simple(3) };
+const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/wizard': wizard, '/covered': covered, '/todo': todo, '/user': userPage, '/tab2': () => simple(2), '/tab3': () => simple(3) };
 
 export function startFixture(port = 8765) {
   const server = http.createServer((req, res) => {
