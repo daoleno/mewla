@@ -20,7 +20,7 @@ const only = args.only ? args.only.split(',') : null;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BENCH_DIR = process.env.BENCH_DIR || path.join(process.env.TMPDIR || '/tmp', 'bench');
 const CDP = process.env.BENCH_CDP || '9333';
-const PORT = 8765, base = `http://127.0.0.1:${PORT}`;
+const PORT = Number(process.env.BENCH_PORT || 8765), base = `http://127.0.0.1:${PORT}`;
 const work = mkdtempSync(path.join(tmpdir(), 'suite-'));
 await startFixture(PORT);
 
@@ -67,18 +67,29 @@ async function cdpBrowser(method, params) {
   const m = await reply; ws.close();
   return m.result;
 }
+// Every task starts from the same browser: one blank window, none left over from the last agent. (Opened first, the old
+// ones closed after: Chrome exits when its last window closes.)
+async function freshBrowser() {
+  const { targetInfos } = await cdpBrowser('Target.getTargets');
+  await cdpBrowser('Target.createTarget', { url: 'about:blank', newWindow: true });
+  for (const t of targetInfos.filter(t => t.type === 'page')) await cdpBrowser('Target.closeTarget', { targetId: t.targetId }).catch(() => {});
+  await new Promise(r => setTimeout(r, 500));
+}
 async function startUser() {
   const { targetId } = await cdpBrowser('Target.createTarget', { url: `${base}/user`, newWindow: true });
   const xu = spawn(XUSER, ['AUB user page', '1000'], { env: { ...process.env, DISPLAY: process.env.DISPLAY || ':97' }, stdio: ['ignore', 'pipe', 'inherit'] });
   const lines = []; xu.stdout.on('data', d => lines.push(...String(d).split('\n').filter(Boolean)));
+  const t0 = Date.now();
   const exited = new Promise(r => xu.on('exit', r));
   await new Promise(r => setTimeout(r, 1500));
-  return { targetId, xu, lines, exited };
+  return { targetId, xu, lines, exited, t0 };
 }
 async function stopUser(u) {
   u.xu.kill('SIGTERM'); await u.exited;
   await new Promise(r => setTimeout(r, 400)); // the last beacons
-  const seen = events.slice(); // before the window closes: closing it fires its own visibility event
+  // Before the window closes (closing it fires its own visibility event), and only from when the person started typing:
+  // Chrome reports a freshly shown window as hidden for a moment, which says nothing about the agent.
+  const seen = events.filter(e => e.at == null || e.at >= u.t0);
   await cdpBrowser('Target.closeTarget', { targetId: u.targetId }).catch(() => {});
   let s = {}; for (const l of u.lines) { try { const o = JSON.parse(l); if (o.ev === 'summary') s = o; } catch {} }
   const keys = seen.filter(e => e.type === 'user:key').length;
@@ -87,6 +98,7 @@ async function stopUser(u) {
     user_page_hidden: seen.filter(e => e.type === 'user:vis' && e.state === 'hidden').length,
     measured: ['key_focus_lost', 'raised_over_user', 'typing_lost', 'pointer_moved', 'user_page_hidden'],
     not_measured: ['clipboard', 'space_switch', 'dialog_on_user', 'app_activation'] };
+  if (process.env.AUB_DEBUG) ni.debug = { xuser: u.lines.filter(l => !l.includes('"type"')).slice(0, 40), events: seen.filter(e => e.type !== 'user:key').slice(0, 40).map(e => ({ ...e, dt: e.at - u.t0 })), t0: u.t0 };
   ni.undisturbed = s.typed != null && ni.measured.every(k => ni[k] === 0);
   return ni;
 }
@@ -127,6 +139,7 @@ for (const task of tasks) {
   if (only && !only.includes(task.id)) continue;
   for (let rep = 0; rep < reps; rep++) {
     events.length = 0; resetBrowser();
+    if (NONINT) await freshBrowser();
     const user = NONINT ? await startUser() : null;
     const r = await runClaude(task.prompt.replaceAll('{base}', base));
     const nonint = user ? await stopUser(user) : undefined;

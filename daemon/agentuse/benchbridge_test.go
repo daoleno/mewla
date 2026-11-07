@@ -68,8 +68,12 @@ func TestAgentUseBenchBridge(t *testing.T) {
 		}
 	}()
 
+	cdp := os.Getenv("AUB_CDP_PORT")
+	if cdp == "" {
+		cdp = "9334"
+	}
 	chrome := exec.Command(chromeBin, "--user-data-dir="+profile, "--no-first-run", "--no-default-browser-check",
-		"--remote-debugging-port=9334", "--load-extension="+extDir, "--window-size=900,700", "about:blank")
+		"--remote-debugging-port="+cdp, "--load-extension="+extDir, "--window-size=900,700", "about:blank")
 	if runtime.GOOS == "linux" {
 		chrome.Args = append(chrome.Args, "--no-sandbox")
 		chrome.Env = append(os.Environ(), "HOME="+root)
@@ -111,7 +115,7 @@ func TestAgentUseBenchBridge(t *testing.T) {
 			safe = append(safe, entry)
 		}
 	}
-	raw, _ := json.Marshal(map[string]any{"argv": argv, "env": safe, "cdp": 9334, "extension_version": bridge.HostVersion()})
+	raw, _ := json.Marshal(map[string]any{"argv": argv, "env": safe, "cdp": cdp, "extension_version": bridge.HostVersion()})
 	tmp := out + ".tmp"
 	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		t.Fatal(err)
