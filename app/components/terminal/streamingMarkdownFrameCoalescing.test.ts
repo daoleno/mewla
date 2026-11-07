@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { parseMessageMarkdown } from "./InterfaceMessageMarkdownModel";
-import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
+import { prepareInterfaceMarkdown } from "./InterfaceMessageMarkdownPrepare";
 import {
   createStreamingMarkdownFrameController,
   type AnimationFrameHandle,

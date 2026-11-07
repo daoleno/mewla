@@ -1,6 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useContext } from "react";
 import { Linking } from "react-native";
 import { useSessionFilePreviewContext } from "../terminal/SessionFilePreviewContext";
+import { MarkdownLinkSurfaceContext, type MarkdownLinkSurface } from "./MarkdownLinkContext";
 import { isMarkdownLinkOpenable, openMarkdownLink } from "./markdownLinks";
 
 /**
@@ -9,15 +10,12 @@ import { isMarkdownLinkOpenable, openMarkdownLink } from "./markdownLinks";
  * surface brings its own opener. `openable` says whether a link would do
  * anything, so the surface can show the rest as plain text.
  */
-export function useMarkdownLinks(
-  options: {
-    baseDir?: string;
-    openFile?(reference: string): boolean;
-    canOpenFile?(reference: string): boolean;
-  } = {},
-) {
+export function useMarkdownLinks(options: MarkdownLinkSurface = {}) {
   const filePreview = useSessionFilePreviewContext();
-  const { baseDir, openFile, canOpenFile } = options;
+  const target = useContext(MarkdownLinkSurfaceContext);
+  const baseDir = options.baseDir ?? target.baseDir;
+  const openFile = options.openFile ?? target.openFile;
+  const canOpenFile = options.canOpenFile ?? target.canOpenFile;
   const hasFileOpener = Boolean(openFile || filePreview);
   const open = useCallback(
     (href: string) => {

@@ -15,7 +15,7 @@ describe("Interface provider-neutral naming boundary", () => {
       "InterfaceChatBody.tsx",
       "InterfaceTimelineView.tsx",
       "InterfaceTimelineMessage.tsx",
-      "InterfaceNativeMarkdownBody.tsx",
+      "InterfaceMessageBodyRenderer.tsx",
       "InterfaceChatComposer.tsx",
     ];
 

@@ -1,12 +1,5 @@
-import type { Token, Tokens } from "marked";
-import { markdownInlineTokens } from "./markdownInline";
 
 export type MarkdownUrlOpener = (url: string) => Promise<unknown>;
-
-export type MarkdownLinkPart = {
-  text: string;
-  url?: string;
-};
 
 export type MarkdownLinkTarget =
   | { kind: "external"; url: string }
@@ -150,42 +143,4 @@ function joinPath(baseDir: string, relative: string) {
 export function dirnameOf(path: string) {
   const index = path.lastIndexOf("/");
   return index <= 0 ? (index === 0 ? "/" : "") : path.slice(0, index);
-}
-
-/**
- * Splits source text around its links for the plain-text fallback, which
- * keeps every other character of the Markdown as written.
- */
-export function tokenizeMarkdownLinks(value: string): MarkdownLinkPart[] {
-  const links: { start: number; end: number; text: string; url: string }[] = [];
-  const visit = (tokens: Token[], parent: string, base: number) => {
-    let cursor = 0;
-    for (const token of tokens) {
-      const offset = parent.indexOf(token.raw, cursor);
-      if (offset < 0 || !token.raw) continue;
-      cursor = offset + token.raw.length;
-      const start = base + offset;
-      if (token.type === "link") {
-        const link = token as Tokens.Link;
-        links.push({ start, end: start + link.raw.length, text: link.text, url: link.href });
-      } else if ("tokens" in token && Array.isArray(token.tokens)) {
-        visit(token.tokens, token.raw, start);
-      }
-    }
-  };
-  visit(markdownInlineTokens(value), value, 0);
-
-  const parts: MarkdownLinkPart[] = [];
-  let lastIndex = 0;
-  for (const link of links) {
-    if (link.start > lastIndex) {
-      parts.push({ text: value.slice(lastIndex, link.start) });
-    }
-    parts.push({ text: link.text, url: link.url });
-    lastIndex = link.end;
-  }
-  if (lastIndex < value.length) {
-    parts.push({ text: value.slice(lastIndex) });
-  }
-  return parts;
 }

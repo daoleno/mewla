@@ -3,7 +3,7 @@ import { inlinePartsText } from "../markdown/markdownInline";
 import {
   holdBackHalfTypedMarker,
   prepareInterfaceMarkdown,
-} from "./InterfaceNativeMarkdownBodyPrepare";
+} from "./InterfaceMessageMarkdownPrepare";
 import {
   splitIntoChunks,
   messageImages,

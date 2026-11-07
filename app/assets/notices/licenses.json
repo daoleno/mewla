@@ -1936,13 +1936,6 @@
      "text": "da6d3703ed11"
     },
     {
-     "name": "react-native-enriched-markdown",
-     "version": "1.1.1",
-     "license": "MIT",
-     "url": "https://github.com/software-mansion/enriched-markdown",
-     "text": "42430f8ede03"
-    },
-    {
      "name": "react-native-gesture-handler",
      "version": "3.3.0",
      "license": "MIT",

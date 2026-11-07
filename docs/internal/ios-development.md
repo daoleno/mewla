@@ -26,7 +26,7 @@ Platform-specific implementation is deliberately limited to native plumbing:
 
 - Android loads `libghostty_vt.so` through JNI.
 - iOS links `GhosttyVt.xcframework` through an Expo module/Objective-C++ bridge.
-- Both mobile platforms use the shared enriched Markdown renderer; plain text is only the render/error fallback.
+- Both mobile platforms render messages with the same JavaScript Markdown reader (marked tokens drawn by React Native components); there is no native Markdown module.
 - Keyboard inset behavior differs by platform, while the accessory keys and terminal controller are shared.
 
 ## Prerequisites
