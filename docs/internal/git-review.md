@@ -24,68 +24,74 @@ diff generation. No arbitrary commit/branch comparison is implied by these modes
 
 ## Reader
 
-One file is open at a time. The unified reader shows old and new source line
-numbers, change colors, hunk headers, binary/mode/rename metadata, and missing
-final-newline markers. Near-end native scrolling automatically loads more rows;
-there is no page toolbar. The back arrow opens the changed-file list for direct
-selection, and Android hardware back unwinds one level at a time
-(`file -> browser -> changes -> close`) rather than closing the feature from a
-child state. Return positions are retained by source row per file and comparison,
-including a visit to the Files browser. Rows before a restored or searched
-position load automatically during upward scrolling. The changed-file list is
-never scrolled through a controlled `contentOffset` and stays mounted while a
-detail is open, so scope changes reset it once and Back restores the exact
-offset. Its bottom content padding includes the safe-area inset so the last row
-is reachable and tappable after any fling.
+The reader is [@pierre/diffs](https://diffs.com) (the file view too) and the
+changed-file list and Files browser are [@pierre/trees](https://trees.software),
+both running from bundled offline copies (see
+`docs/third-party-assets.md`). On Android and iOS each is a WebView document that
+cannot navigate or fetch; on web the same code mounts straight into the page,
+because the web UI's CSP allows only same-origin scripts. The sheet keeps all
+chrome in React Native (header, scope control, find bar, display options, action
+menu); the WebViews draw content only. Messages between them are typed in
+`app/components/terminal/pierre/diffViewerProtocol.ts` and
+`treeViewerProtocol.ts`, and every message from a WebView is parsed and dropped
+if unexpected.
 
-The search control submits a case-insensitive search of the complete selected
-comparison, not just the current page. Its arrows navigate matching lines.
-Diff options (wrap, text size, patch headers and working-file access) expand
-inline below the header; there is no nested modal. Git headers are also revealed
-while searching. Wrap and text-size controls retain
-the source-row anchor without refetching the patch. Long lines are split into
-explicitly marked continuations, not truncated. The unwrapped reader uses native
-horizontal panning; no file-swipe gesture competes with it. Search navigation and
-screen-reader hunk actions may anchor anywhere in the diff, with continuous
-reading available in both directions from that point. Search and restored anchors
-include at most one preceding transport chunk; the native list measures that
-bounded prefix before positioning the target. This also keeps a last-line search
-scrollable without moving the match off-screen after the jump.
+One file is open at a time. A wide layout (720 dp and up) reads in split view and
+a phone in unified view. The reader shows old and new line numbers, change
+colors, word-level changes inside a line, syntax highlighting, and collapsed
+unchanged context that expands in place. Syntax comes from a fixed set of Shiki
+grammars; any other extension reads as plain text. Colors come from the terminal
+palette and the font is the terminal's, so a diff matches the terminal beside it.
 
-The Files browser (reached from the changes header, not a stacked mode tab)
-remains a working-tree browser, not a historical comparison. Its existing
-file-preview byte limit is separate from the complete diff reader.
+Back unwinds one level at a time (`file -> tree -> changes -> close`); Android
+hardware back follows the same stack. The reader WebView is one long-lived
+document per sheet: it stays mounted and empty while the list shows, so opening a
+file never pays the runtime's start-up, and it restores each comparison's scroll
+position. Wrap, text size and file headers re-render the open comparison in
+place. A file with both staged and unstaged edits shows one labeled section per
+half.
+
+Find is case-insensitive over the whole selected comparison, runs inside the
+reader, wraps around at either end and highlights the current line. Its arrows
+step through matching lines; screen-reader actions step through hunks and stop at
+the first and last.
+
+The changed-file list is a tree with git status marks, `+a -d` counts for the
+selected comparison and Trees' own path search (shown from six files up). A tap
+opens the diff in one step; a long press opens the file's action menu. The Files
+browser is the same tree over every tracked and untracked-but-not-ignored path
+of the working tree, not a historical comparison, with a file opening into the
+reader's file view (its byte limit is separate: a truncated file says so).
 
 ## Data And Freshness
 
-Update both the mobile client and its current daemon when installing Git review.
-`Unknown message type: git_diff_page` means the connected daemon predates the
-paged reader. Verify the current server identity and deploy the matching daemon;
-reconnecting to the same old executable cannot add the handler. After an update,
-refresh the overview before reopening a file whose changes have since been committed.
+Update both the client and its current daemon when installing Git review:
+`Unknown message type: git_repo_paths` means the connected daemon predates the
+Files tree. Verify the current server identity and deploy the matching daemon.
 
 `git_diff_status` uses NUL-delimited status and batched statistics, preserving
 literal filenames, including whitespace and Git pathspec metacharacters.
-`git_diff_page` accepts `path`, `scope` (`all`, `working`, `staged`), zero-based
-`row`, optional `file_generation`, and optional `query`. It returns up to 120
-display rows of at most 512 UTF-8 bytes each, total row count, neighboring hunk
-and matching-line positions, and a content version.
+`git_diff_patch` returns the complete patch of one file as sections (`staged`,
+`unstaged`, `untracked`); the client keeps the sections of the selected
+comparison (Working is unstaged plus untracked) and hands them to the reader.
+`git_diff_file_content` returns the full HEAD and working-tree text, which is
+what hunk expansion uses. Expansion is offered only when those two sides are
+exactly what the patch compares, that is when a file has staged or unstaged edits
+but not both, and neither side is binary or truncated; otherwise the hunks stay
+as git printed them. `git_repo_paths` returns up to 100000 repo-relative paths
+(`truncated` says when it was capped).
 
-Each page streams Git output for the selected file. The daemon scans that output
-to compute navigation and a digest, but retains only the requested page. It does
-not cache repository snapshots or retain entire patches for the mobile reader.
-This trades a new selected-file Git invocation per page for bounded retained
-memory and simple freshness semantics. The client retains contiguous loaded
-chunks and a native virtualized list accesses them without flattening or mounting
-the whole diff. Only requested content is retained; syntax token trees are not
-created for an entire file. A failed fetch keeps already loaded rows readable and
-offers Retry. Late requests from an old file/search cannot append to a new reader.
+A comparison larger than 5 MB is not sent to the reader; the sheet says it is too
+large, and Copy diff still copies it. There is no daemon-side paging: the patch
+crosses the WebView bridge once and is parsed in one pass. (`git_diff_page` and
+`git_repo_entries` remain in the daemon but nothing in the app calls them.)
 
-A reader is a snapshot. Refresh reloads the overview and selected diff. Paging
-with an older content version produces an explicit changed-file state, not a
-mixture of old and new content. Repository errors are visible even after an earlier
-successful overview. Changing server, session, working directory, or connection
-clears the previous owner's data. Late responses cannot restore it.
+A reader is a snapshot. Refresh reloads the overview and selected diff. Expansion
+reads the working tree when it is asked for, so a file edited after its patch was
+loaded can expand to lines that no longer match until Refresh. Repository errors
+are visible even after an earlier successful overview. Changing server, session,
+working directory, or connection clears the previous owner's data. Late
+responses cannot restore it.
 
 ## Verification
 
@@ -103,6 +109,9 @@ repositories. `TestGitDiffNativeFixtureServer` is opt-in with
 `MEWLA_GIT_DIFF_NATIVE=1`; it binds only loopback port 8097 and uses the production
 authenticated WebSocket handler against temporary repositories. `/stop` shuts
 down this test resource. It is not a daemon entry point or a product route.
+
+The app side is `bun test components/terminal`. The generated viewers are
+rebuilt with `bun run pierre:generate` (`--check` reports stale output).
 
 Native performance evidence must come from Android/iOS execution, not these Go
 or Bun tests. Android emulator data, debug-build overhead, and software-rendered
