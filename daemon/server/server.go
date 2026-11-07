@@ -1057,7 +1057,7 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		go s.handleAnswerPrompt(conn, raw)
 	case "rewind_message":
 		go s.handleRewindMessage(conn, raw)
-	case "git_diff_status", "git_diff_patch", "git_diff_page", "git_diff_file_content", "git_repo_entries", "git_repo_file_content", "list_dir":
+	case "git_diff_status", "git_diff_patch", "git_diff_page", "git_diff_file_content", "git_repo_entries", "git_repo_paths", "git_repo_file_content", "list_dir":
 		s.handleRepositoryMessage(conn, raw)
 	case "service_tunnel":
 		s.handleServiceTunnel(conn, raw)
@@ -1617,6 +1617,17 @@ func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage
 		}
 		s.sendJSON(conn, map[string]any{
 			"type":       "git_repo_entries",
+			"request_id": raw.RequestID,
+			"browser":    payload,
+		})
+	case "git_repo_paths":
+		payload, err := s.buildGitRepoPaths(raw.TargetID, raw.Cwd)
+		if err != nil {
+			s.sendErrorWithRequestID(conn, raw.RequestID, "git_repo_paths_failed", err.Error())
+			return
+		}
+		s.sendJSON(conn, map[string]any{
+			"type":       "git_repo_paths",
 			"request_id": raw.RequestID,
 			"browser":    payload,
 		})
