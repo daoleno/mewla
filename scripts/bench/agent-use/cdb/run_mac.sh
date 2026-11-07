@@ -84,7 +84,13 @@ export CDB_MEWLA_BIN=${CDB_MEWLA_BIN:-$(command -v mewla)}
 caffeinate -d -i -w $$ &
 # Everything from here needs the screen. Locked: wait for the person's one unlock (never try to unlock it), up to
 # CDB_WAIT_UNLOCK_MIN minutes, then go straight on in the same batch.
-locked() { ioreg -n Root -d1 | grep -q -E '"(CGSSessionScreenIsLocked|IOConsoleLocked)" = Yes'; }
+# Capture first, match after: `ioreg | grep -q` quits at the first hit and, under pipefail, the SIGPIPE'd ioreg makes the
+# whole pipeline fail, which read as "not locked" and skipped the wait.
+locked() {
+  local out
+  out=$(ioreg -n Root -d1 2>/dev/null) || true
+  [[ $out == *'"CGSSessionScreenIsLocked" = Yes'* || $out == *'"IOConsoleLocked" = Yes'* ]]
+}
 WAITED=0
 while locked; do
   [ "$WAITED" -ge $(( ${CDB_WAIT_UNLOCK_MIN:-45} * 60 )) ] && { echo "the screen stayed locked for ${CDB_WAIT_UNLOCK_MIN:-45} min: nothing was run" >&2; exit 4; }
