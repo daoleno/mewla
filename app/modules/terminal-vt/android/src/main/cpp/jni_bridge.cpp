@@ -17,10 +17,15 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #endif
 
-// libghostty-vt budgets scrollback in bytes, rounded up to whole pages (about
-// 600-750 rows at 80 columns), not in lines. 1.0 spells the byte budget out as
-// GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES; 10000 is the value the bridge has
-// always passed, and is also the library default.
+// The core's scrollback is a byte budget, rounded up to whole pages: 10000
+// bytes keeps one page, about 375-750 rows depending on width and styling.
+// The app never reads it: the live grid renders only the viewport, and scroll
+// history comes from the tmux capture (useTerminalHistory renders it in a
+// separate 64-row core). Keeping 10000 *lines* instead
+// (GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES with an unlimited byte budget)
+// measured about 9 MB per terminal at 100 columns and 17 MB at 200 for styled
+// output, for rows nothing displays. tests/render_row_updates.cpp pins the
+// current depth.
 static constexpr size_t kScrollbackMaxBytes = 10000;
 static constexpr size_t kMouseStackBufferSize = 128;
 
