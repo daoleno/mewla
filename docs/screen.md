@@ -14,7 +14,8 @@ Settings, where you add the Mewla running on your Mac and switch to it.
 | Computer | Status |
 | --- | --- |
 | macOS 13 or later (Apple Silicon) | Supported |
-| Linux, Windows | Not yet |
+| Linux | Agents' browsers only, on a virtual screen (see below); turn on **Settings → Labs → Virtual screen** |
+| Windows | Not yet |
 
 ## Turn it on
 
@@ -279,6 +280,31 @@ doesn't show it, Take over doesn't stop it, it doesn't pause for someone at the
 Mac, and Mewla's log doesn't record it. Brain keeps one agent on the screen at
 a time. Turning off **Agents can use this computer** turns it off for Codex
 Workers started afterwards; one already running keeps it until it ends.
+
+## Linux: agents' browsers on a virtual screen
+
+A Linux computer has no screen of yours to share, but the browsers agents use
+there run on a virtual screen of their own, off your desktop. With **Settings →
+Labs → Virtual screen** on, **Screen** shows that browser live, with the same
+three choices as on a Mac:
+
+- **Watch** is how it opens. Your taps, scrolls and typing reach the page
+  without taking the browser from the agent. The agent is told what you did
+  (clicks, how much you typed, the page address, never what you typed) and
+  decides for itself whether to go on, wait or ask you; nothing stops it by
+  rule, since you may only have tapped by mistake or be typing a password.
+- **Take over** holds the browser for you. The agent's next action says you
+  have it and it waits. **Hand back** gives it back, and the agent hears what
+  happened meanwhile.
+- **Stop** ends that agent's use of the browser. It is told so and does not
+  ask for it again until you take over and hand back.
+
+The browser has its own profile, not your everyday Chrome: to give it a
+sign-in, take over, sign in yourself and hand back. Sign-ins are kept with the
+profile on that computer and need an unlocked secure wallet (KWallet or another
+Secret Service) for the user Mewla runs as. Attach it to an agent when starting
+the Worker with `--browser`; see [Agents in your browser](your-browser.md) for
+the browser that uses your own Chrome and sign-ins on your desktop instead.
 
 ## Who can use it
 
