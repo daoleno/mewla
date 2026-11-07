@@ -4,14 +4,16 @@
 # longer needs it.
 #
 # 1. libSystem. Xcode 26.6's macOS 26.5 SDK lists the top-level libSystem stub
-#    as arm64e only, while Zig 0.15.2 requires an exact arm64 match.
+#    as arm64e only, while Zig (0.15.2 when this was written) requires an exact
+#    arm64 match. check-zig-xcode-compat.sh re-checks it against the pinned Zig.
 #    build-libghostty-ios.sh therefore builds against a patched SDK clone and
 #    scripts/zig-xcode-compat/xcrun points Zig at it.
 #
-# 2. libcxx. With the Xcode 27 macOS SDK, INFINITY is undeclared inside Zig
-#    0.15.2's bundled libcxx (__random/clamp_to_integral.h), so building libcxx
-#    fails. The Ghostty pin's build.zig rejects any Zig minor version but
-#    0.15, so a newer Zig is not an option. The build uses a private copy of
+# 2. libcxx. With the Xcode 27 macOS SDK, INFINITY is undeclared inside Zig's
+#    bundled libcxx (__random/clamp_to_integral.h; the line is still there in
+#    0.17.0), so building libcxx fails. The libghostty-vt release's build.zig
+#    accepts only the Zig minor version it names, so a different Zig is not an
+#    option. The build uses a private copy of
 #    Zig's lib dir with the patches of native.lock.json's zig.lib_patches
 #    applied, selected with ZIG_LIB_DIR; the Zig install stays untouched.
 #

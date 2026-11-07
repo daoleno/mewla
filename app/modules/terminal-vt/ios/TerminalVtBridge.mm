@@ -43,12 +43,7 @@ static TerminalHandle *TerminalFromHandle(unsigned long long handle) {
     terminal->cols = static_cast<uint16_t>(cols);
     terminal->rows = static_cast<uint16_t>(rows);
 
-    GhosttyTerminalOptions options = {};
-    options.cols = terminal->cols;
-    options.rows = terminal->rows;
-    options.max_scrollback = kDefaultScrollbackRows;
-
-    GhosttyResult result = ghostty_terminal_new(nullptr, &terminal->terminal, options);
+    GhosttyResult result = createTerminalInstance(terminal->cols, terminal->rows, &terminal->terminal);
     if (result != GHOSTTY_SUCCESS) {
         LOGE("ghostty_terminal_new failed: %d", result);
         delete terminal;
@@ -83,7 +78,7 @@ static TerminalHandle *TerminalFromHandle(unsigned long long handle) {
     }
 
     const bool trackLastCell = true;
-    ghostty_mouse_encoder_setopt(
+    ghostty_mouse_encoder_set(
         terminal->mouse_encoder,
         GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL,
         &trackLastCell

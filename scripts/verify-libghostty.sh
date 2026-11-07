@@ -50,6 +50,8 @@ bad() { echo "FAIL: $*" >&2; fail=1; }
 [[ -f "$IOS_PLUGIN" ]] && pass "withIOSBuild plugin present" || bad "missing iOS plugin"
 [[ -x "$ROOT/scripts/build-libghostty.sh" ]] && pass "build-libghostty.sh executable" || bad "build script not executable"
 [[ -x "$ROOT/scripts/verify-libghostty.sh" ]] && pass "verify-libghostty.sh executable" || bad "verify script not executable"
+[[ -f "$ROOT/scripts/lib/ghostty_release.py" ]] && pass "signed release fetcher present" || bad "missing scripts/lib/ghostty_release.py"
+[[ -f "$ROOT/scripts/lib/minisign_verify.py" ]] && pass "minisign verifier present" || bad "missing scripts/lib/minisign_verify.py"
 [[ -x "$ROOT/scripts/verify-android-native-symbols.py" ]] && pass "Android native symbol verifier executable" || bad "Android native symbol verifier not executable"
 [[ -x "$ROOT/scripts/android-release-apk.sh" ]] && pass "android-release-apk.sh executable" || bad "release apk script not executable"
 [[ -x "$ROOT/scripts/verify-apk-notice.sh" ]] && pass "verify-apk-notice.sh executable" || bad "apk notice verifier not executable"
@@ -78,7 +80,22 @@ notice = Path(sys.argv[2]).read_text(encoding="utf-8")
 root = Path(sys.argv[3]).resolve()
 assert lock.get("schema_version") == 1
 assert lock["zig"]["version"]
-assert re.fullmatch(r"[0-9a-f]{40}", lock["ghostty"]["commit"]), "ghostty commit must be full sha"
+ghostty = lock["ghostty"]
+assert re.fullmatch(r"[0-9a-f]{40}", ghostty["commit"]), "ghostty commit must be full sha"
+assert re.fullmatch(r"[0-9a-f]{40}", ghostty["tag_object"]), "ghostty tag_object must be full sha"
+assert re.fullmatch(r"\d+\.\d+\.\d+", ghostty["version"]), "ghostty version must be X.Y.Z"
+assert ghostty["tag"] == "vt-" + ghostty["version"], "ghostty tag must be vt-<version>"
+release = ghostty["release"]
+assert release["base_url"] == (
+    "https://release.files.ghostty.org/libghostty-vt/" + ghostty["version"]
+), "release base_url must be the official libghostty-vt release directory"
+assert re.fullmatch(r"RW[A-Za-z0-9+/]{54}", release["minisign_public_key"]), "minisign public key required"
+for kind, suffix in (("source", ""), ("deps", "-deps")):
+    entry = release[kind]
+    stem = f"libghostty-vt-{ghostty['version']}{suffix}"
+    assert entry["file"] == stem + ".tar.gz", f"release {kind} file must be {stem}.tar.gz"
+    assert entry["archive_root"] == stem
+    assert re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]), f"release {kind} sha256 required"
 assert re.fullmatch(r"[0-9a-f]{64}", lock["ghostty"]["license_sha256"]), "license_sha256 required"
 assert lock["ghostty"].get("copyright_line")
 assert lock["ghostty"]["component"] == "libghostty-vt"
@@ -90,7 +107,7 @@ downloads = lock["zig"].get("downloads") or {}
 for required_download in ("x86_64-linux", "aarch64-linux", "aarch64-macos"):
     assert required_download in downloads
 for key, d in downloads.items():
-    assert d.get("tarball", "").startswith("https://ziglang.org/download/")
+    assert d.get("tarball", "").startswith("https://ziglang.org/download/" + lock["zig"]["version"] + "/")
     assert re.fullmatch(r"[0-9a-f]{64}", d.get("sha256", "")), f"zig sha256 missing for {key}"
     assert d.get("archive_root")
 
@@ -127,39 +144,7 @@ assert lock["release_apk"]["notice_apk_path"] == "assets/notices/GHOSTTY-MIT.txt
 unsupported = set(lock.get("unsupported_abis") or [])
 assert "armeabi-v7a" in unsupported and "x86" in unsupported
 assert lock["android"]["min_api"] == 29
-patches = lock["android"].get("source_patches")
-assert isinstance(patches, list), "android.source_patches must be a list"
-seen_patch_paths = set()
-for patch in patches:
-    required = {
-        "path",
-        "sha256",
-        "applies_to_ghostty_commit",
-        "upstream_repository",
-        "upstream_commit",
-        "upstream_url",
-        "subject",
-    }
-    assert required.issubset(patch), f"source patch metadata missing: {required - set(patch)}"
-    rel = patch["path"]
-    assert isinstance(rel, str) and rel.endswith(".patch")
-    assert rel not in seen_patch_paths, f"duplicate source patch path: {rel}"
-    seen_patch_paths.add(rel)
-    source_patch = (root / rel).resolve()
-    assert source_patch.is_relative_to(root), f"source patch escapes repository: {rel}"
-    assert source_patch.is_file(), f"source patch missing: {rel}"
-    actual_sha = hashlib.sha256(source_patch.read_bytes()).hexdigest()
-    assert re.fullmatch(r"[0-9a-f]{64}", patch["sha256"])
-    assert actual_sha == patch["sha256"], f"source patch sha256 mismatch: {rel}"
-    assert patch["applies_to_ghostty_commit"] == lock["ghostty"]["commit"]
-    assert patch["upstream_repository"] == lock["ghostty"]["repository"]
-    assert re.fullmatch(r"[0-9a-f]{40}", patch["upstream_commit"])
-    assert patch["upstream_url"] == (
-        "https://github.com/ghostty-org/ghostty/commit/" + patch["upstream_commit"]
-    )
-    patch_text = source_patch.read_text(encoding="utf-8")
-    assert patch_text.startswith(f"From {patch['upstream_commit']} ")
-    assert f"Subject: [PATCH] {patch['subject']}" in patch_text
+assert "source_patches" not in lock["android"], "the Android build takes the release tarball unmodified"
 
 forbidden = lock["android"].get("forbidden_undefined_symbols")
 assert isinstance(forbidden, list) and forbidden
@@ -231,11 +216,11 @@ HEADERS_SHA="$(python3 -c "import json;print(json.load(open('$LOCK'))['ghostty']
 if [[ ! -f "$HEADERS_DIR/vt.h" ]]; then
   bad "missing pinned header $HEADERS_DIR/vt.h"
 else
-  actual_headers_sha="$(sha256sum "$HEADERS_DIR/vt.h" | awk '{print $1}')"
+  actual_headers_sha="$(python3 "$ROOT/scripts/lib/ghostty_release.py" "$LOCK" headers-digest "$HEADERS_DIR")"
   if [[ "$actual_headers_sha" == "$HEADERS_SHA" ]]; then
-    pass "vt.h matches pinned header sha256"
+    pass "headers match pinned digest"
   else
-    bad "vt.h sha256 $actual_headers_sha != lock $HEADERS_SHA"
+    bad "headers digest $actual_headers_sha != lock $HEADERS_SHA"
   fi
 fi
 
@@ -274,7 +259,6 @@ LIB_NAME="$(python3 -c "import json;print(json.load(open('$LOCK'))['outputs']['l
 SUMS="$LIB_DIR/$(python3 -c "import json;print(json.load(open('$LOCK'))['outputs']['checksums_filename'])")"
 MANIFEST="$LIB_DIR/$(python3 -c "import json;print(json.load(open('$LOCK'))['outputs']['manifest_filename'])")"
 MIN_API="$(python3 -c "import json;print(json.load(open('$LOCK'))['android']['min_api'])")"
-PIN="$(python3 -c "import json;print(json.load(open('$LOCK'))['ghostty']['commit'])")"
 
 for abi in "${CHECK_ABIS[@]}"; do
   so="$LIB_DIR/$abi/$LIB_NAME"
@@ -385,35 +369,28 @@ fi
 if [[ ! -f "$MANIFEST" ]]; then
   bad "$MODE mode requires build-manifest.json"
 else
-  if python3 - "$MANIFEST" "$PIN" "$LOCK" "$MODE" "$LIB_DIR" "$LIB_NAME" \
+  if python3 - "$MANIFEST" "$LOCK" "$MODE" "$LIB_DIR" "$LIB_NAME" \
     "$(IFS=,; echo "${CHECK_ABIS[*]}")" <<'PY'
 import hashlib, json, sys
 from pathlib import Path
 
-manifest_path, pin, lock_path, mode, lib_dir, lib_name, abis_csv = sys.argv[1:8]
+manifest_path, lock_path, mode, lib_dir, lib_name, abis_csv = sys.argv[1:7]
 m = json.load(open(manifest_path))
 lock = json.load(open(lock_path))
-expected_patches = lock["android"].get("source_patches") or []
-expected_derivation = (
-    "pinned_commit_with_declared_android_patches"
-    if expected_patches
-    else "pinned_commit"
-)
-expected_provenance = (
-    "proven_with_declared_patches" if expected_patches else "proven"
-)
+ghostty = lock["ghostty"]
 errors = []
 
-if m.get("schema_version") != 1:
-    errors.append(f"manifest schema_version is {m.get('schema_version')!r}, need 1")
-if m.get("ghostty_commit_pinned") != pin:
-    errors.append("ghostty_commit_pinned != pin")
-if m.get("applied_patches") != expected_patches:
-    errors.append("applied_patches do not exactly match native.lock.json")
-if m.get("source_derivation") != expected_derivation:
-    errors.append(
-        f"source_derivation is {m.get('source_derivation')!r}, need {expected_derivation!r}"
-    )
+if m.get("schema_version") != 2:
+    errors.append(f"manifest schema_version is {m.get('schema_version')!r}, need 2")
+for key, want in (
+    ("ghostty_version", ghostty["version"]),
+    ("ghostty_tag", ghostty["tag"]),
+    ("ghostty_commit", ghostty["commit"]),
+    ("source_sha256", ghostty["release"]["source"]["sha256"]),
+    ("deps_sha256", ghostty["release"]["deps"]["sha256"]),
+):
+    if m.get(key) != want:
+        errors.append(f"manifest {key} is {m.get(key)!r}, lock has {want!r}")
 expected_zig = lock["zig"]["version"]
 manifest_zig = m.get("zig_version")
 if lock["zig"].get("version_match") == "prefix":
@@ -426,21 +403,12 @@ if not zig_matches:
     errors.append(f"zig_version is {manifest_zig!r}, need locked {expected_zig!r}")
 if "built_at" in m:
     errors.append("manifest must not include wall-clock built_at")
-if not isinstance(m.get("provenance_notes"), list):
-    errors.append("provenance_notes must be a list")
-
-release_grade = m.get("release_grade")
-provenance = m.get("provenance")
-if release_grade is True:
-    if provenance != expected_provenance:
-        errors.append(f"provenance is {provenance!r}, need {expected_provenance!r}")
-    if m.get("ghostty_commit_resolved") != pin:
-        errors.append("release-grade ghostty_commit_resolved != pin")
-elif provenance not in {"dirty", "unproven_no_git"}:
-    errors.append(f"non-release provenance is invalid: {provenance!r}")
-
-if mode == "release" and release_grade is not True:
-    errors.append(f"release_grade is {release_grade!r}, need true")
+if m.get("provenance") != "signed_release":
+    errors.append(f"provenance is {m.get('provenance')!r}, need 'signed_release'")
+if not isinstance(m.get("signature_verified"), bool):
+    errors.append("signature_verified must be a boolean")
+if mode == "release" and m.get("release_grade") is not True:
+    errors.append(f"release_grade is {m.get('release_grade')!r}, need true")
 
 contracts = {entry["android_abi"]: entry for entry in lock["abis"]}
 manifest_libraries = {}
@@ -489,7 +457,7 @@ if errors:
     raise SystemExit(1)
 PY
   then
-    pass "$MODE manifest patch provenance and library digests match"
+    pass "$MODE manifest release provenance and library digests match"
   else
     fail=1
   fi

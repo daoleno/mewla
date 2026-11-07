@@ -23,5 +23,9 @@ DEVICE_DIR="/data/local/tmp/mewla-row-updates-$$"
 trap 'adb -s "$SERIAL" shell rm -rf "$DEVICE_DIR" >/dev/null 2>&1 || true; rm -f "$BUILD_TMP/check"; rmdir "$BUILD_TMP" 2>/dev/null || true' EXIT
 adb -s "$SERIAL" shell mkdir -p "$DEVICE_DIR"
 adb -s "$SERIAL" push "$BUILD_TMP/check" "$DEVICE_DIR/" >/dev/null
-adb -s "$SERIAL" push "$MODULE/libs/android/$ABI/libghostty_vt.so" "$DEVICE_DIR/libghostty-vt.so.0" >/dev/null
+# The check binary records the library's SONAME (libghostty-vt.so.<major>) as
+# its dependency, so the library goes on the device under that name.
+SONAME="$(LC_ALL=C readelf -d "$MODULE/libs/android/$ABI/libghostty_vt.so" | sed -n 's/.*Library soname: \[\(.*\)\]/\1/p')"
+[[ -n "$SONAME" ]] || { echo "libghostty_vt.so has no SONAME" >&2; exit 1; }
+adb -s "$SERIAL" push "$MODULE/libs/android/$ABI/libghostty_vt.so" "$DEVICE_DIR/$SONAME" >/dev/null
 adb -s "$SERIAL" shell "chmod 700 '$DEVICE_DIR/check' && LD_LIBRARY_PATH='$DEVICE_DIR' '$DEVICE_DIR/check'"

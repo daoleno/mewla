@@ -12,7 +12,6 @@ eval "$(python3 - "$LOCK" <<'PY'
 import json, shlex, sys
 lock = json.load(open(sys.argv[1]))
 for key, value in {
-    "GHOSTTY_COMMIT": lock["ghostty"]["commit"],
     "XCFRAMEWORK_NAME": lock["ios"]["xcframework_name"],
 }.items():
     print(f"{key}={shlex.quote(str(value))}")
@@ -60,7 +59,16 @@ python3 - "$MANIFEST" "$LOCK" <<'PY'
 import json, sys
 manifest = json.load(open(sys.argv[1]))
 lock = json.load(open(sys.argv[2]))
-assert manifest["ghostty_commit"] == lock["ghostty"]["commit"]
+ghostty = lock["ghostty"]
+assert manifest["schema_version"] == 2
+for key, want in (
+    ("ghostty_version", ghostty["version"]),
+    ("ghostty_tag", ghostty["tag"]),
+    ("ghostty_commit", ghostty["commit"]),
+    ("source_sha256", ghostty["release"]["source"]["sha256"]),
+    ("deps_sha256", ghostty["release"]["deps"]["sha256"]),
+):
+    assert manifest[key] == want, f"manifest {key} is {manifest[key]!r}, the lock has {want!r}"
 assert manifest["release_grade"] is True
 # The framework was built with exactly the Zig lib patches the lock names.
 expected = [
@@ -70,8 +78,18 @@ expected = [
 assert manifest.get("zig_lib_patches") == expected, (
     f"zig_lib_patches are {manifest.get('zig_lib_patches')!r}, the lock names {expected!r}"
 )
-print("ok: manifest matches pinned Ghostty commit and Zig lib patches")
+print("ok: manifest matches the pinned Ghostty release and Zig lib patches")
 PY
+
+# Every slice carries the headers of the pinned release: the bridge is compiled
+# against them, so a slice from another version would break at run time.
+for headers in "$FRAMEWORK"/*/Headers/ghostty; do
+  actual="$(python3 "$ROOT/scripts/lib/ghostty_release.py" "$LOCK" headers-digest "$headers")"
+  want="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['ghostty']['headers_sha256'])" "$LOCK")"
+  [[ "$actual" == "$want" ]] \
+    || { echo "FAIL: $headers digest $actual != lock $want" >&2; exit 1; }
+done
+echo "ok: every XCFramework slice carries the pinned headers"
 
 find "$FRAMEWORK" -path '*/Headers/ghostty/vt.h' -print -quit | grep -q . \
   || { echo "FAIL: XCFramework is missing ghostty/vt.h" >&2; exit 1; }
