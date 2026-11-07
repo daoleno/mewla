@@ -173,9 +173,14 @@ func snapshot(e *entry) Resource {
 		r.Control = "quiescing"
 	} else if e.owner.ID != "" {
 		r.Control = e.owner.Kind
-		if e.owner.Kind == "agent" {
-			r.Agent = workerOf(e.owner)
-		}
+	}
+	// The agent on the row: its Worker while it holds the browser, and still
+	// that Worker while the person does, so the list keeps the row.
+	switch {
+	case e.owner.Kind == "agent":
+		r.Agent = workerOf(e.owner)
+	case e.owner.Kind == "human":
+		r.Agent = e.lastAgent
 	}
 	if e.uncertain {
 		r.State = "needs_restart"

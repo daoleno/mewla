@@ -442,7 +442,14 @@ func TestPersonInputDuringAgentActionIsFlagged(t *testing.T) {
 func TestTakeOverMakesAgentWaitAndHandBackTellsIt(t *testing.T) {
 	m, _, id := setup(t)
 	lease := agentReady(t, m, id)
-	must(t, m, human, Request{Action: "control", ID: id})
+	taken := must(t, m, human, Request{Action: "control", ID: id})
+	if taken.Resource.Agent != workerOf(agent) {
+		t.Fatalf("the row lost its agent while the person holds it: %q", taken.Resource.Agent)
+	}
+	listed := must(t, m, human, Request{Action: "list"})
+	if len(listed.Resources) != 1 || listed.Resources[0].Agent != workerOf(agent) || listed.Resources[0].Control != "human" {
+		t.Fatalf("list = %+v", listed.Resources)
+	}
 	_, err := m.Handle(context.Background(), agent, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "snapshot"}})
 	if !errors.Is(err, ErrLease) || !strings.Contains(err.Error(), "took over") {
 		t.Fatalf("err = %v", err)

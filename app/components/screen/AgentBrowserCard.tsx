@@ -226,7 +226,7 @@ export function AgentBrowserCard({ server, serverName, resource, agentName, onRe
           <View style={styles.spacer} />
           {holder === "you" ? (
             <Button label="Hand back" variant="tinted" size="sm" disabled={busy !== null}
-              onPress={() => void run("control", async () => { await viewer.current?.release(); setMine(false); })} />
+              onPress={() => void run("control", async () => { await viewer.current?.release(); setMine(false); setLive((l) => (l.control === "human" ? { ...l, control: "idle" } : l)); })} />
           ) : (
             <>
               <Button label="Take over" variant="tinted" size="sm" disabled={busy !== null || live.control === "quiescing"}
