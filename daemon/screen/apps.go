@@ -50,6 +50,15 @@ type appClicker interface {
 	ClickTo(pid int, window AppWindow, x, y, button, clicks int) error
 }
 
+// appDragger is a session that can drag in an app's window behind others, with
+// no pointer: the app gets the press, the moves and the release and is never
+// made the active app.
+type appDragger interface {
+	// DragTo presses at x, y (framebuffer pixels on the window), moves by dx, dy
+	// and releases.
+	DragTo(pid int, window AppWindow, x, y, dx, dy int) error
+}
+
 // windowInfo is one window from the system's window list.
 type windowInfo struct {
 	PID      int

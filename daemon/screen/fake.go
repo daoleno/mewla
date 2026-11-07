@@ -67,6 +67,8 @@ type FakeBackend struct {
 	SkyLight  bool
 	HitTest   bool
 	AppClicks []FakeAppClick
+	// AppDrags are the drags sent to an app behind others.
+	AppDrags []FakeAppDrag
 	// OnAppClick and OnAppKey, when set, run after a click or a key sent to
 	// one app, to change it as the app would; they hold the backend's lock.
 	OnAppClick func(app *FakeApp, c FakeAppClick)
@@ -112,6 +114,15 @@ type FakeAppClick struct {
 	Window        uint32
 	X, Y          int
 	Button, Count int
+}
+
+// FakeAppDrag is one drag sent to an app behind others: the press at X, Y and
+// the release DX, DY away.
+type FakeAppDrag struct {
+	PID    int
+	Window uint32
+	X, Y   int
+	DX, DY int
 }
 
 // SleepDisplay turns the display off, which stops every running capture.
@@ -404,6 +415,17 @@ func (s *fakeSession) ClickTo(pid int, window AppWindow, x, y, button, count int
 	return nil
 }
 
+func (s *fakeSession) DragTo(pid int, window AppWindow, x, y, dx, dy int) error {
+	f := s.backend
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.AppDrags = append(f.AppDrags, FakeAppDrag{pid, window.ID, x, y, dx, dy})
+	if f.AppEventsSeen {
+		f.input[InputClick] = time.Now()
+	}
+	return nil
+}
+
 // RaiseApp brings a fake app to the front.
 func (f *FakeBackend) RaiseApp(_ context.Context, pid int) error {
 	f.mu.Lock()
@@ -418,6 +440,7 @@ func (f *FakeBackend) RaiseApp(_ context.Context, pid int) error {
 var (
 	_ appKeyer   = (*fakeSession)(nil)
 	_ appClicker = (*fakeSession)(nil)
+	_ appDragger = (*fakeSession)(nil)
 	_ appRaiser  = (*FakeBackend)(nil)
 )
 

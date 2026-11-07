@@ -705,7 +705,7 @@ func (a *agentSession) inBackground(ctx context.Context, action AgentAction) boo
 		}
 	case "app_state", "wait_for", "type", "key", "hold_key", "screenshot", "menu":
 	default:
-		if _, click := appClicks[action.Action]; click && name != "" {
+		if _, click := appClicks[action.Action]; (click || action.Action == "left_click_drag") && name != "" {
 			_, background, _, err := a.clickPath(ctx, name)
 			return err != nil || background
 		}
@@ -767,25 +767,9 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 	if err != nil {
 		return AgentResult{}, err
 	}
-	c := action.Coordinate
-	if len(c) != 2 {
-		return AgentResult{}, fmt.Errorf("%s needs coordinate [x, y] on the screenshot", action.Action)
-	}
-	a.mu.Lock()
-	p := image.Pt(int(float64(c[0])*a.scale+0.5), int(float64(c[1])*a.scale+0.5))
-	inside := p.In(a.latest.Rect)
-	a.mu.Unlock()
-	if a.isParked(app.PID) && len(app.Windows) > 0 {
-		// An app on the agent display is off the screenshot: its point is on
-		// its own window screenshot, counted from the window's corner.
-		window := app.Windows[0]
-		p = window.Bounds.Min.Add(p)
-		inside = p.In(window.Bounds)
-		if !inside {
-			return AgentResult{}, fmt.Errorf("[%d, %d] is outside %s's window screenshot (it is %d x %d)", c[0], c[1], oneLine(app.Name), int(float64(window.Bounds.Dx())/a.scaleNow()+0.5), int(float64(window.Bounds.Dy())/a.scaleNow()+0.5))
-		}
-	} else if !inside {
-		return AgentResult{}, fmt.Errorf("[%d, %d] is outside the screenshot", c[0], c[1])
+	p, err := a.appPoint(app, action.Action, action.Coordinate)
+	if err != nil {
+		return AgentResult{}, err
 	}
 	if background {
 		var window AppWindow
@@ -796,7 +780,7 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 			}
 		}
 		if window.ID == 0 {
-			return AgentResult{}, fmt.Errorf("[%d, %d] is not on a window of %s; its app_state or window screenshot gives points on it", c[0], c[1], oneLine(app.Name))
+			return AgentResult{}, fmt.Errorf("[%d, %d] is not on a window of %s; its app_state or window screenshot gives points on it", action.Coordinate[0], action.Coordinate[1], oneLine(app.Name))
 		}
 		// A plain click on something the app can press is pressed through
 		// accessibility, which an app behind others acts on for sure.
@@ -826,7 +810,38 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		a.mu.Unlock()
 		return AgentResult{Text: fmt.Sprintf("Sent a click to %s behind other windows (path: SkyLight); it and the pointer stayed where they were. %s", oneLine(app.Name), a.effect(ctx, app, "click", before, haveBefore))}, nil
 	}
-	text := "Clicked on the screen (path: screen pointer"
+	return a.onScreenInApp(ctx, action, app, "Clicked", why)
+}
+
+// appPoint places a point the agent gave on the screenshot: on the screen, or
+// for an app on the agent display (off the screenshot) on its own window
+// screenshot, counted from the window's corner.
+func (a *agentSession) appPoint(app App, action string, c []int) (image.Point, error) {
+	if len(c) != 2 {
+		return image.Point{}, fmt.Errorf("%s needs coordinate [x, y] on the screenshot", action)
+	}
+	a.mu.Lock()
+	p := image.Pt(int(float64(c[0])*a.scale+0.5), int(float64(c[1])*a.scale+0.5))
+	inside := p.In(a.latest.Rect)
+	a.mu.Unlock()
+	if a.isParked(app.PID) && len(app.Windows) > 0 {
+		window := app.Windows[0]
+		p = window.Bounds.Min.Add(p)
+		if !p.In(window.Bounds) {
+			return image.Point{}, fmt.Errorf("[%d, %d] is outside %s's window screenshot (it is %d x %d)", c[0], c[1], oneLine(app.Name), int(float64(window.Bounds.Dx())/a.scaleNow()+0.5), int(float64(window.Bounds.Dy())/a.scaleNow()+0.5))
+		}
+		return p, nil
+	}
+	if !inside {
+		return image.Point{}, fmt.Errorf("[%d, %d] is outside the screenshot", c[0], c[1])
+	}
+	return p, nil
+}
+
+// onScreenInApp does an action of the screen on an app that can't take it
+// behind other windows: the app comes forward first, and the answer says why.
+func (a *agentSession) onScreenInApp(ctx context.Context, action AgentAction, app App, verb, why string) (AgentResult, error) {
+	text := verb + " on the screen (path: screen pointer"
 	if !app.Active {
 		raiser, ok := a.apps.(appRaiser)
 		if !ok {
@@ -851,6 +866,60 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 	a.lastAct = time.Now()
 	a.mu.Unlock()
 	return AgentResult{Text: text + "; not behind other windows: " + why + "). Take a screenshot to see the result."}, nil
+}
+
+// dragInApp drags in an app's window from one point to another: behind other
+// windows when it can, without the pointer, bringing the app forward or making
+// it the active app; otherwise on the screen, after bringing the app forward.
+func (a *agentSession) dragInApp(ctx context.Context, action AgentAction) (AgentResult, error) {
+	app, background, why, err := a.clickPath(ctx, action.App)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	if len(action.StartCoordinate) != 2 || len(action.Coordinate) != 2 {
+		return AgentResult{}, errors.New("left_click_drag needs start_coordinate and coordinate")
+	}
+	if !background {
+		return a.onScreenInApp(ctx, action, app, "Dragged", why)
+	}
+	dragger, ok := a.session.(appDragger)
+	if !ok {
+		return a.onScreenInApp(ctx, action, app, "Dragged", "this computer can't drag behind other windows")
+	}
+	start, err := a.appPoint(app, action.Action, action.StartCoordinate)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	end, err := a.appPoint(app, action.Action, action.Coordinate)
+	if err != nil {
+		return AgentResult{}, err
+	}
+	var window AppWindow
+	for _, w := range app.Windows {
+		if start.In(w.Bounds) {
+			window = w
+			break
+		}
+	}
+	if window.ID == 0 {
+		return AgentResult{}, fmt.Errorf("%v is not on a window of %s; its app_state or window screenshot gives points on it", action.StartCoordinate, oneLine(app.Name))
+	}
+	if !end.In(window.Bounds) {
+		return AgentResult{}, fmt.Errorf("%v is outside the window the drag starts in; a drag behind other windows stays inside one window of %s", action.Coordinate, oneLine(app.Name))
+	}
+	before, haveBefore := a.witnessBefore(ctx, app.PID)
+	err = dragger.DragTo(app.PID, window, start.X, start.Y, end.X-start.X, end.Y-start.Y)
+	a.mu.Lock()
+	a.lastAppClick = time.Now()
+	a.shared.noteAppClick(a.lastAppClick)
+	a.mu.Unlock()
+	if err != nil {
+		return AgentResult{}, fmt.Errorf("The drag was not sent: %w. Nothing was changed; use an element id, or bring_forward when nobody is using the computer", err)
+	}
+	a.mu.Lock()
+	a.lastAct = time.Now()
+	a.mu.Unlock()
+	return AgentResult{Text: fmt.Sprintf("Sent a drag to %s behind other windows (path: SkyLight, the app stays inactive); it and the pointer stayed where they were. %s", oneLine(app.Name), a.effect(ctx, app, "drag", before, haveBefore))}, nil
 }
 
 // listApps lists the apps an agent can read and act on.
@@ -1530,6 +1599,9 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 	if _, click := appClicks[action.Action]; click && action.App != "" {
 		return a.clickInApp(ctx, action)
 	}
+	if action.Action == "left_click_drag" && action.App != "" {
+		return a.dragInApp(ctx, action)
+	}
 	// Keys can go to one app, which stays where it is.
 	pid := 0
 	var keyApp App
@@ -1539,7 +1611,7 @@ func (a *agentSession) act(ctx context.Context, action AgentAction, background b
 		switch action.Action {
 		case "type", "key", "hold_key":
 		default:
-			return AgentResult{}, fmt.Errorf("%s works on the screen; only clicks, type, key and hold_key take an app", action.Action)
+			return AgentResult{}, fmt.Errorf("%s works on the screen; only clicks, left_click_drag, type, key and hold_key take an app", action.Action)
 		}
 		if _, ok := a.session.(appKeyer); !ok || a.apps == nil {
 			return AgentResult{}, ErrNoApps

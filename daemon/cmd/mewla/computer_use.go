@@ -87,7 +87,8 @@ const computerToolDescription = `Use this computer's screen, keyboard and pointe
 	`elements (the focused window's buttons, fields and text, each with the point to click). ` +
 	`With app (a name or pid), a shortcut such as key "cmd+n" chooses that app's menu item, in the background; other keys, type and hold_key go to that app alone, ` +
 	`which may ignore them behind other windows; bring_forward (app) brings it to the front, and waits for a person like anything on the screen. ` +
-	`A click goes to its window behind others when this Mac allows, and otherwise brings the app forward first (the answer says which); screenshot shows its window. ` +
+	`A click, or a left_click_drag with start_coordinate and coordinate in one window, goes to that window behind others when this Mac allows, ` +
+	`and otherwise brings the app forward first (the answer says which); screenshot shows its window. ` +
 	`Take a screenshot after acting to see the result. A person comes first: if they take over, stop and report; ` +
 	`if someone uses this computer's own keyboard or pointer, you are paused: the answer says when to try again; ` +
 	`meanwhile work in an app that isn't in front (app tools, or keys sent with app) goes on; ` +

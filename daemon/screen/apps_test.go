@@ -151,7 +151,7 @@ func TestAgentTypesIntoAnAppBehindOthers(t *testing.T) {
 			t.Fatalf("a key went elsewhere: %+v", keys)
 		}
 	}
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "mouse_move", Coordinate: []int{1, 1}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "only clicks, type, key and hold_key") {
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "mouse_move", Coordinate: []int{1, 1}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "only clicks, left_click_drag, type, key and hold_key") {
 		t.Fatalf("click in an app: %v", err)
 	}
 	// The agent's own keys to the app are not a person at the computer.
@@ -289,6 +289,66 @@ func TestClicksReachAnAppBehindOthers(t *testing.T) {
 	// Safari is in front now: a click there is a plain screen click.
 	if got := act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 100}, App: "Safari"}).Text; !strings.Contains(got, "Safari is in front") || len(backend.Raised) != 2 {
 		t.Fatalf("in front: %s %v", got, backend.Raised)
+	}
+}
+
+// A drag with an app goes the way a click does: behind other windows, with the
+// pointer and the front app left alone and the app never raised, when the
+// computer allows; on the screen, after bringing the app forward, otherwise.
+func TestDragReachesAnAppBehindOthers(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[1].Hidden = false
+	apps[1].Windows = []AppWindow{{ID: 7, Bounds: image.Rect(0, 0, 400, 300)}}
+	apps = append(apps, FakeApp{App: App{Name: "Slack", PID: 404, Chromium: true, Windows: []AppWindow{{ID: 9, Bounds: image.Rect(1000, 0, 1400, 300)}}}})
+	backend.RunningApps = apps
+	backend.SkyLight = true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	pointers, _ := backend.Snapshot()
+
+	backend.PersonInput()
+	drag := AgentAction{Action: "left_click_drag", StartCoordinate: []int{50, 50}, Coordinate: []int{150, 100}, App: "Safari"}
+	if got := act(t, s, "%7", drag).Text; !strings.Contains(got, "path: SkyLight") || !strings.Contains(got, "inactive") {
+		t.Fatalf("behind: %s", got)
+	}
+	if d := backend.AppDrags; len(d) != 1 || d[0] != (FakeAppDrag{202, 7, 100, 100, 200, 100}) {
+		t.Fatalf("drags %+v", d)
+	}
+	if after, _ := backend.Snapshot(); len(after) != len(pointers) || len(backend.Raised) != 0 || len(backend.AppClicks) != 0 {
+		t.Fatal("the pointer moved, the app came forward or a click was sent")
+	}
+	// It starts and stays in one window of the app.
+	off := drag
+	off.StartCoordinate = []int{300, 300}
+	if _, err := s.Act(context.Background(), "%7", off); err == nil || !strings.Contains(err.Error(), "not on a window of Safari") {
+		t.Fatalf("starts off its window: %v", err)
+	}
+	off = drag
+	off.Coordinate = []int{300, 300}
+	if _, err := s.Act(context.Background(), "%7", off); err == nil || !strings.Contains(err.Error(), "stays inside one window") {
+		t.Fatalf("ends off its window: %v", err)
+	}
+	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click_drag", Coordinate: []int{150, 100}, App: "Safari"}); err == nil || !strings.Contains(err.Error(), "start_coordinate and coordinate") {
+		t.Fatalf("no start: %v", err)
+	}
+	if len(backend.AppDrags) != 1 {
+		t.Fatalf("a refused drag was sent: %+v", backend.AppDrags)
+	}
+
+	// Chromium: on the screen, so the person comes first.
+	chromium := AgentAction{Action: "left_click_drag", StartCoordinate: []int{600, 100}, Coordinate: []int{700, 100}, App: "Slack"}
+	if _, err := s.Act(context.Background(), "%7", chromium); !errors.Is(err, ErrPersonAtComputer) {
+		t.Fatalf("on the screen while someone works: %v", err)
+	}
+	backend.ForgetInput()
+	s.StopAgent()
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	got := act(t, s, "%7", chromium).Text
+	if !strings.Contains(got, "Dragged on the screen (path: screen pointer, after bringing Slack to the front") || !strings.Contains(got, "Chromium") {
+		t.Fatalf("chromium: %s", got)
+	}
+	if len(backend.Raised) != 1 || backend.Raised[0] != 404 || len(backend.AppDrags) != 1 {
+		t.Fatalf("raised %v drags %+v", backend.Raised, backend.AppDrags)
 	}
 }
 
