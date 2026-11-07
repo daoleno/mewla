@@ -90,6 +90,21 @@ int main() {
         auto update = consume();
         assert(!update.full && update.indices.size() == 1);
     }
+    // The core keeps one page of scrollback on purpose (see kScrollbackMaxBytes):
+    // a lib change that makes it unlimited or empty must be noticed here.
+    {
+        GhosttyTerminal deep = nullptr;
+        assert(createTerminalInstance(100, 50, &deep) == GHOSTTY_SUCCESS);
+        for (int i = 0; i < 30000; i++) {
+            const std::string line = "line " + std::to_string(i) + std::string(60, 'x') + "\r\n";
+            ghostty_terminal_vt_write(deep, reinterpret_cast<const uint8_t*>(line.data()), line.size());
+        }
+        size_t scrollbackRows = 0;
+        assert(ghostty_terminal_get(deep, GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS, &scrollbackRows) == GHOSTTY_SUCCESS);
+        assert(scrollbackRows >= 300 && scrollbackRows <= 1500);
+        ghostty_terminal_free(deep);
+        assertions++;
+    }
     std::printf("%zu reconstructed frames match the full native formatter; sparse, cursor, ANSI/CJK, wrapping, alternate screen, resize and theme passed\n", assertions);
     ghostty_render_state_free(h.render_state);
     ghostty_terminal_free(h.terminal);
