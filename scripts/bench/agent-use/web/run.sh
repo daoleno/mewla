@@ -56,6 +56,8 @@ EXT=$(python3 -I -c "import json;print(json.load(open('$WORK/bridge.json'))['ext
 export DISPLAY=":$DISP" BENCH_CDP=9334 BENCH_BRIDGE="$WORK/bridge.json" BENCH_XUSER="$WORK/xuser" BENCH_DIR="$WORK"
 SUITE=(node "$HERE/../../browser/suite.mjs" --reps "$REPS" $LONG)
 [ -n "$ONLY" ] && SUITE+=(--only "$ONLY")
+# Extra suite.mjs flags for debugging, e.g. AUB_SUITE_EXTRA="--keep /tmp/dir" keeps each trial's stream-json.
+[ -n "${AUB_SUITE_EXTRA:-}" ] && SUITE+=($AUB_SUITE_EXTRA)
 for side in ${SIDES//,/ }; do
   if [ "$side" = mewla ]; then
     AUB_META="{\"run_id\":\"$STAMP-web-fixture-mewla_chrome-bg\",\"transport\":\"Mewla extension $EXT + native host + bridge (real); supervise layer mirrored by mewla-proxy.mjs\",\"tool_version\":\"git:$SHA\",\"nonint_measured\":[\"key_focus_lost\",\"raised_over_user\",\"typing_lost\",\"pointer_moved\",\"user_page_hidden\"],\"nonint_not_measured\":[\"clipboard\",\"space_switch\",\"dialog_on_user\",\"app_activation\"]}" \
