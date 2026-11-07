@@ -261,6 +261,9 @@ type agentSession struct {
 	control        *Control
 	cancel         context.CancelCauseFunc
 	ctx            context.Context
+	// stopped is set when the person stopped the agent or took the screen,
+	// whatever ended the session first.
+	stopped *atomic.Bool
 
 	mu       sync.Mutex
 	latest   *image.RGBA
@@ -363,7 +366,7 @@ func (s *Service) StopAgentFor(worker string) {
 	hook := s.stopHook
 	s.agentMu.Unlock()
 	if agent != nil {
-		agent.cancel(errors.New("You stopped the agent from the app"))
+		agent.control.cancel(errors.New("You stopped the agent from the app"))
 	}
 	s.dropHold(worker)
 	if hook != nil {
@@ -433,6 +436,9 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 	if err != nil {
 		return AgentResult{}, err
 	}
+	// agentFor counted this action as in flight, so the idle watch can't end
+	// the session while it reads apps or waits for the person.
+	defer agent.endUse()
 	// Work on an app behind the person's never fights them for the same
 	// input, so it goes on while they use the computer; anything on the
 	// screen itself, or on the app in front, waits for them.
@@ -459,25 +465,23 @@ func (s *Service) Act(ctx context.Context, worker string, action AgentAction) (A
 		}
 		defer release()
 	}
-	agent.mu.Lock()
-	agent.inflight++
-	agent.mu.Unlock()
 	result, err := agent.act(ctx, action, background)
 	if errors.Is(err, ErrCaptureStopped) {
 		err = ErrDisplayAsleep
 	}
-	agent.mu.Lock()
-	agent.inflight--
-	agent.lastUse = time.Now()
-	agent.mu.Unlock()
 	s.audit(worker, action, result, started, err)
 	return result, err
 }
 
+// agentFor gives the Worker's session, starting one when it has none, with a
+// use already counted on it: the caller ends it with endUse. Counted together
+// with the session being alive (and the idle watch ends a session only while
+// none is counted, under the same lock), so a session handed out is never
+// ended as idle before its action has begun.
 func (s *Service) agentFor(worker string) (*agentSession, error) {
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
-	if existing := s.agents[worker]; existing != nil && existing.ctx.Err() == nil {
+	if existing := s.agents[worker]; existing != nil && existing.beginUse() {
 		return existing, nil
 	}
 	// What an agent posted last is not a person's input for the next
@@ -489,7 +493,14 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		return nil, ErrPersonControlling
 	}
 	ctx, cancel := context.WithCancelCause(context.Background())
-	control := &Control{agent: true, cancel: cancel}
+	// A stop or a takeover reaches the agent through its control. It is
+	// remembered on the session even when the idle watch ended the session
+	// first, so what the idle end then keeps (holdParked) is let go instead.
+	stopped := new(atomic.Bool)
+	control := &Control{agent: true, cancel: func(cause error) {
+		stopped.Store(true)
+		cancel(cause)
+	}}
 	if s.agentControls == nil {
 		s.agentControls = map[*Control]struct{}{}
 	}
@@ -519,6 +530,8 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	agent := &agentSession{
 		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence, lastPost: lastPost, ids: &s.elementIDs,
 		cancel: cancel, ctx: ctx, ready: make(chan struct{}), changed: make(chan struct{}), lastUse: time.Now(),
+		inflight: 1, // the caller's use, see agentFor
+		stopped:  stopped,
 	}
 	if reader, ok := s.backend.(elementReader); ok {
 		agent.readElements = reader.Elements
@@ -555,6 +568,26 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	return agent, nil
 }
 
+// beginUse counts one action in flight, and says whether the session was
+// still alive to take it.
+func (a *agentSession) beginUse() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.ctx.Err() != nil {
+		return false
+	}
+	a.inflight++
+	return true
+}
+
+// endUse ends the use agentFor counted.
+func (a *agentSession) endUse() {
+	a.mu.Lock()
+	a.inflight--
+	a.lastUse = time.Now()
+	a.mu.Unlock()
+}
+
 // watchAgent ends an idle agent's control and cleans up when it ends.
 func (s *Service) watchAgent(agent *agentSession) {
 	idleAfter := s.agentIdle
@@ -585,13 +618,17 @@ func (s *Service) watchAgent(agent *agentSession) {
 					break
 				}
 			}
+			// Ending it and counting a use are one step under the lock: a use
+			// that began is never ended under, one that comes later finds it ended.
 			agent.mu.Lock()
 			idle := agent.inflight == 0 && time.Since(agent.lastUse) > idleAfter
+			if idle {
+				agent.cancel(errAgentIdle)
+			}
 			agent.mu.Unlock()
 			if !idle {
 				continue
 			}
-			agent.cancel(errAgentIdle)
 		}
 		break
 	}

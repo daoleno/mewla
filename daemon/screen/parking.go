@@ -237,6 +237,12 @@ func (s *Service) holdParked(agent *agentSession, idle bool) bool {
 	worker := agent.worker
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
+	// Stopped or taken over after the idle end began: nothing is kept. Checked
+	// under the lock a stop's dropHold takes next, so either the stop is seen
+	// here or the hold made below is seen by it.
+	if agent.stopped.Load() {
+		return false
+	}
 	if s.parkHolds == nil {
 		s.parkHolds = map[string]*parkHold{}
 	}
