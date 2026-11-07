@@ -81,6 +81,15 @@ export function SkillFileBrowser({
       return { uri: next.preview.dataUrl, headers: {} };
     },
   }), [currentServerId, detail.copyId, detail.contentHash, files, preview, readFile]);
+  // A link in a Skill file opens another file of the same copy, and nothing outside it.
+  const canOpenSkillFile = (reference: string) =>
+    files.some((file) => file.path === reference);
+  const openSkillFile = (reference: string) => {
+    if (!canOpenSkillFile(reference)) return false;
+    setSelectedPath(reference);
+    onSelectFile(reference);
+    return true;
+  };
   const gallery: ImageSource[] = files.filter((file) => file.mediaType.startsWith("image/")).map((file) => ({ kind: "owned", path: `skill-file:${file.path}`, name: file.path }));
   const renderer = preview && !preview.dataUrl
     ? skillRenderer(preview.kind, preview.content)
@@ -145,7 +154,12 @@ export function SkillFileBrowser({
           />
         ) : null}
         {renderer === "markdown" ? (
-          <MarkdownContent content={preview?.content ?? ""} />
+          <MarkdownContent
+            content={preview?.content ?? ""}
+            baseDir={preview?.path.split("/").slice(0, -1).join("/")}
+            openFile={openSkillFile}
+            canOpenFile={canOpenSkillFile}
+          />
         ) : null}
         {renderer === "json" ? (
           <Code
@@ -171,13 +185,32 @@ export function SkillFileBrowser({
   );
 }
 
-function MarkdownContent({ content }: { content: string }) {
+function MarkdownContent({
+  content,
+  baseDir,
+  openFile,
+  canOpenFile,
+}: {
+  content: string;
+  baseDir?: string;
+  openFile(reference: string): boolean;
+  canOpenFile(reference: string): boolean;
+}) {
   const { theme: appTheme } = useAppTheme();
   const { chrome, theme } = useMemo(
     () => buildChatChrome(appTheme),
     [appTheme],
   );
-  return <MessageBody value={content} chrome={chrome} theme={theme} />;
+  return (
+    <MessageBody
+      value={content}
+      chrome={chrome}
+      theme={theme}
+      baseDir={baseDir}
+      openFile={openFile}
+      canOpenFile={canOpenFile}
+    />
+  );
 }
 
 function BrowserState({

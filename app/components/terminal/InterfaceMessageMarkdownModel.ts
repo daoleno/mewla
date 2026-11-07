@@ -99,11 +99,11 @@ function parseUninstrumented(
   };
   const mode = keepLineBreaks ? "k" : "w";
   const blocks: MessageBlock[] = [];
-  for (const chunk of splitIntoChunks(source)) {
+  for (const { text: chunk, continuesList } of splitIntoChunks(source)) {
     const key = `${mode}${chunk}`;
     const cached = chunkCache.get(key);
     if (cached) {
-      blocks.push(...cached);
+      addPiece(blocks, cached, continuesList);
       continue;
     }
     const tokens = new Lexer({
@@ -121,9 +121,17 @@ function parseUninstrumented(
       }
       chunkCache.set(key, made);
     }
-    blocks.push(...made);
+    addPiece(blocks, made, continuesList);
   }
   return blocks;
+}
+
+function addPiece(blocks: MessageBlock[], piece: MessageBlock[], continuesList: boolean) {
+  if (continuesList) {
+    appendContinuedList(blocks, piece);
+  } else {
+    blocks.push(...piece);
+  }
 }
 
 /** A block whose text did not change is the same object, so a growing reply re-renders only the block still growing. */
@@ -187,22 +195,57 @@ function mustStayWhole(lines: readonly string[]): boolean {
  * starts at the margin and cannot continue a list. A message with a link
  * definition or a raw HTML block that can hold blank lines stays whole.
  */
-export function splitIntoChunks(source: string): string[] {
+export type MessageChunk = {
+  text: string;
+  /** The piece starts at an item of the tight list the previous piece ends in. */
+  continuesList: boolean;
+};
+
+/** `-`, `*`, `+`, or an ordered list's delimiter: items of one list share it. */
+function marginMarkerKind(line: string): string | null {
+  const match = /^(?:([-*+])|\d{1,9}([.)]))(?:[ \t]|$)/.exec(line);
+  return match ? (match[1] ?? match[2]) : null;
+}
+
+export function splitIntoChunks(source: string): MessageChunk[] {
   if (source.length <= CHUNK_TARGET_CHARS * 2) {
-    return [source];
+    return [{ text: source, continuesList: false }];
   }
   const lines = source.split("\n");
   if (mustStayWhole(lines)) {
-    return [source];
+    return [{ text: source, continuesList: false }];
   }
-  const chunks: string[] = [];
+  const chunks: MessageChunk[] = [];
   let start = 0;
+  let continuesList = false;
   let size = 0;
   let fence: string | null = null;
+  // The kind of list marker a run of tight list lines (no blank line between
+  // them, only items and their indented lines) began with, or null.
+  let tightRun: string | null = null;
+  const cut = (end: number, nextContinues: boolean) => {
+    chunks.push({ text: lines.slice(start, end).join("\n"), continuesList });
+    start = end;
+    continuesList = nextContinues;
+    size = 0;
+  };
   for (let index = 0; index < lines.length - 1; index += 1) {
     const line = lines[index];
+    // A new item of a tight list is a safe cut: the pieces are two halves of
+    // one list, which are joined again after they are read.
+    const kind = fence ? null : marginMarkerKind(line);
+    if (kind && kind === tightRun && size >= CHUNK_TARGET_CHARS) {
+      cut(index, true);
+    }
     size += line.length + 1;
     fence = fenceAfter(line, fence);
+    if (fence || line.trim() === "") {
+      tightRun = null;
+    } else if (kind) {
+      tightRun = kind;
+    } else if (!/^[ \t]/.test(line)) {
+      tightRun = null;
+    }
     if (fence || size < CHUNK_TARGET_CHARS || line.trim() !== "") {
       continue;
     }
@@ -219,12 +262,30 @@ export function splitIntoChunks(source: string): string[] {
     if (/^[ \t]/.test(nextLine) || LIST_MARKER_START.test(nextLine)) {
       continue;
     }
-    chunks.push(lines.slice(start, index + 1).join("\n"));
-    start = index + 1;
-    size = 0;
+    cut(index + 1, false);
   }
-  chunks.push(lines.slice(start).join("\n"));
+  chunks.push({ text: lines.slice(start).join("\n"), continuesList });
   return chunks;
+}
+
+/** Joins the two halves of a list cut at an item boundary. */
+function appendContinuedList(blocks: MessageBlock[], piece: MessageBlock[]): MessageBlock[] {
+  const previous = blocks[blocks.length - 1];
+  const first = piece[0];
+  if (
+    previous?.type === "list" &&
+    first?.type === "list" &&
+    previous.ordered === first.ordered
+  ) {
+    blocks[blocks.length - 1] = {
+      ...previous,
+      items: [...previous.items, ...first.items],
+    };
+    blocks.push(...piece.slice(1));
+    return blocks;
+  }
+  blocks.push(...piece);
+  return blocks;
 }
 
 function blocksOf(

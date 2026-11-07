@@ -21,6 +21,9 @@ const list = (blocks: MessageBlock[], at = 0) => {
   if (block?.type !== "list") throw new Error(`block ${at} is ${block?.type}`);
   return block as MessageListBlock;
 };
+const text_ = (block: MessageBlock | undefined) =>
+  block && (block.type === "paragraph" || block.type === "heading") ? inlinePartsText(block.inline) : "";
+const chunksOf = (source: string) => splitIntoChunks(source).map((chunk) => chunk.text);
 const streamed = (value: string) => parseMessageMarkdown(prepareInterfaceMarkdown(value, true));
 
 describe("GFM tables", () => {
@@ -311,11 +314,13 @@ describe("a long message is read in pieces that never cut a block", () => {
   const doc = Array.from({ length: 40 }, (_, n) => section(n)).join("\n");
 
   test("it is split, the pieces join back to the text, and no piece opens inside a list or a fence", () => {
-    const chunks = splitIntoChunks(doc);
+    const chunks = chunksOf(doc);
     expect(chunks.length).toBeGreaterThan(5);
     expect(chunks.join("\n")).toBe(doc);
-    for (const chunk of chunks.slice(1)) {
-      expect(/^[ \t]|^(?:[-*+]|\d+[.)])[ \t]/.test(chunk)).toBe(false);
+    for (const chunk of splitIntoChunks(doc).slice(1)) {
+      expect(/^[ \t]/.test(chunk.text)).toBe(false);
+      // a piece that opens with a list marker is the rest of a tight list
+      expect(/^(?:[-*+]|\d+[.)])[ \t]/.test(chunk.text)).toBe(chunk.continuesList);
     }
   });
 
@@ -340,23 +345,23 @@ describe("a long message is read in pieces that never cut a block", () => {
 
   test("a link definition or a raw <pre> block keeps the message whole", () => {
     const long = `${doc}\n[ref]: https://example.com\n`;
-    expect(splitIntoChunks(long)).toEqual([long]);
+    expect(chunksOf(long)).toEqual([long]);
     const pre = `${doc}\n<pre>\na\n\nb\n</pre>\n`;
-    expect(splitIntoChunks(pre)).toEqual([pre]);
+    expect(chunksOf(pre)).toEqual([pre]);
   });
 
   test("HTML in prose or inside a fence does not keep a long message whole", () => {
     const prose = `${doc}\nUse a \`<script>\` tag or <pre> inline.\n`;
-    expect(splitIntoChunks(prose).length).toBeGreaterThan(5);
+    expect(chunksOf(prose).length).toBeGreaterThan(5);
     const fenced = `${doc}\n\`\`\`html\n<!DOCTYPE html>\n<script>x()</script>\n[a]: not a definition\n\`\`\`\n`;
-    expect(splitIntoChunks(fenced).length).toBeGreaterThan(5);
+    expect(chunksOf(fenced).length).toBeGreaterThan(5);
     const indented = `${doc}\n    <pre>\n`;
-    expect(splitIntoChunks(indented).length).toBeGreaterThan(5);
+    expect(chunksOf(indented).length).toBeGreaterThan(5);
   });
 
   test("a marker still being typed on the last line is not treated as margin text", () => {
     const body = `${"filler ".repeat(300)}\n\n- a`;
-    expect(splitIntoChunks(body)).toEqual([body]);
+    expect(chunksOf(body)).toEqual([body]);
   });
 
   test("a message several thousand lines long is read in well under a second", () => {
@@ -366,5 +371,55 @@ describe("a long message is read in pieces that never cut a block", () => {
     const blocks = parseMessageMarkdown(text);
     expect(blocks.length).toBeGreaterThan(2000);
     expect(performance.now() - started).toBeLessThan(1500);
+  });
+});
+
+describe("a long tight list is read in pieces and joined again", () => {
+  const items = (n: number, marker: (i: number) => string, tail = "") =>
+    Array.from({ length: n }, (_, i) => `${marker(i)} item ${i} with \`code\`${tail}`).join("\n");
+
+  test("3000 items are one list, in order, read in well under half a second", () => {
+    const text = items(3000, () => "-");
+    expect(chunksOf(text).length).toBeGreaterThan(10);
+    const started = performance.now();
+    const blocks = parseMessageMarkdown(text);
+    const elapsed = performance.now() - started;
+    expect(blocks).toHaveLength(1);
+    const only = list(blocks);
+    expect(only.items).toHaveLength(3000);
+    expect(text_(only.items[2999].blocks[0])).toBe("item 2999 with code");
+    expect(elapsed).toBeLessThan(400);
+  });
+
+  test("an ordered list keeps its start and numbering across the cuts", () => {
+    const only = list(parseMessageMarkdown(items(1200, (i) => `${i + 5}.`)));
+    expect(only.ordered).toBe(true);
+    expect(only.start).toBe(5);
+    expect(only.items).toHaveLength(1200);
+  });
+
+  test("nested items stay with their item across the cuts", () => {
+    const text = Array.from({ length: 400 }, (_, i) => `- item ${i}\n  - child ${i}\n    more of child ${i} ${"x".repeat(20)}`).join("\n");
+    const only = list(parseMessageMarkdown(text));
+    expect(only.items).toHaveLength(400);
+    expect(only.items.every((item) => item.blocks.map((b) => b.type).join() === "paragraph,list")).toBe(true);
+  });
+
+  test("a different marker starts a new list, and a blank line or a paragraph ends the run", () => {
+    const blocks = parseMessageMarkdown(`${items(600, () => "-")}\n${items(600, () => "*")}\n\nplain\n${items(300, () => "-")}`);
+    expect(blocks.map((b) => b.type)).toEqual(["list", "list", "paragraph", "list"]);
+    expect([list(blocks, 0).items.length, list(blocks, 1).items.length, list(blocks, 3).items.length]).toEqual([600, 600, 300]);
+  });
+
+  test("a loose list is never cut at an item", () => {
+    const loose = Array.from({ length: 300 }, (_, i) => `- item ${i} ${"y".repeat(30)}`).join("\n\n");
+    expect(chunksOf(loose).length).toBe(1);
+    expect(list(parseMessageMarkdown(loose)).items).toHaveLength(300);
+  });
+
+  test("a code fence inside an item is not cut", () => {
+    const text = Array.from({ length: 200 }, (_, i) => `- item ${i}\n  \`\`\`sh\n  echo ${i}\n- not an item, code\n  \`\`\``).join("\n");
+    const only = list(parseMessageMarkdown(text));
+    expect(only.items.length).toBeGreaterThan(0);
   });
 });
