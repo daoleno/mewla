@@ -58,14 +58,27 @@ fi
 CACHE=${CDB_CACHE_DIR:-$HOME/.cache/mewla-agent-use-bench}/cua-$PIN
 if [ ! -f "$CACHE/.ok" ]; then
   rm -rf "$CACHE" && mkdir -p "$CACHE" && cd "$CACHE"
-  git init -q && git remote add origin https://github.com/trycua/cua.git
-  git sparse-checkout init --cone && git sparse-checkout set libs/cua-driver-bench
-  for try in 1 2 3 4 5 6; do
-    git -c http.lowSpeedLimit=2000 -c http.lowSpeedTime=40 fetch -q --depth 1 origin "$PIN" && break
-    [ "$try" = 6 ] && { echo "could not fetch the pinned CDB commit from GitHub (6 tries): nothing was run" >&2; rm -rf "$CACHE"; exit 5; }
-    echo "fetch attempt $try failed; retrying" >&2; sleep $((try * 10))
-  done
-  git checkout -q FETCH_HEAD && touch .ok
+  if [ -n "${CDB_UPSTREAM_DIR:-}" ]; then
+    # A pre-fetched copy of trycua/cua at the pinned commit (must hold libs/cua-driver-bench), for a Mac that cannot reach GitHub.
+    [ -d "$CDB_UPSTREAM_DIR/libs/cua-driver-bench" ] || { echo "CDB_UPSTREAM_DIR has no libs/cua-driver-bench" >&2; exit 5; }
+    git init -q && cp -R "$CDB_UPSTREAM_DIR/libs" . && touch .ok
+  else
+    git init -q
+    git sparse-checkout init --cone && git sparse-checkout set libs/cua-driver-bench
+    # SSH first (a Mac that pulls mewla over SSH reaches GitHub that way even when https://github.com:443 times out),
+    # then HTTPS; every attempt is bounded (15 s to connect over SSH, 40 s of stall over HTTPS).
+    export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=15"
+    fetched=""
+    for round in 1 2 3; do
+      for url in git@github.com:trycua/cua.git https://github.com/trycua/cua.git; do
+        if git -c http.lowSpeedLimit=2000 -c http.lowSpeedTime=40 fetch -q --depth 1 "$url" "$PIN"; then fetched=1; break 2; fi
+        echo "fetch from $url failed (round $round)" >&2
+      done
+      sleep $((round * 10))
+    done
+    [ -n "$fetched" ] || { echo "could not fetch the pinned CDB commit from GitHub over SSH or HTTPS: nothing was run (set CDB_UPSTREAM_DIR to a pre-fetched copy)" >&2; rm -rf "$CACHE"; exit 5; }
+    git checkout -q FETCH_HEAD && touch .ok
+  fi
 fi
 # A fresh copy to patch: the cache itself stays pristine.
 SRC="$CDB_BENCH_WORK/cua"
