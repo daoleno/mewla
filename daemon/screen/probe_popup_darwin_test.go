@@ -232,6 +232,7 @@ func TestAXProbe(t *testing.T) {
 		t.Fatal("the helper app never reported its layout")
 	}
 	labPid := lab.Process.Pid
+	handle0 := handle
 	person := launchTextEdit(t, dir, "person.txt", "")
 	defer person.quit()
 	if front := workspaceFrontPID(); front != person.pid {
@@ -355,26 +356,95 @@ func TestAXProbe(t *testing.T) {
 		popup, _, _ := labElements()
 		return fmt.Sprintf("set_value: %v", mb.ActOnElement(ctx, *popup, "set_value", "Alpha"))
 	})
-	scenario("5. the real path today: AXPress on the pop-up (opens its menu), 1.5 s, then close it", func() string {
+	// openMenu opens the pop-up's menu with the named AX action and says how it went.
+	openMenu := func(action string) (string, error) {
 		popup, _, _ := labElements()
-		err := mb.ActOnElement(ctx, *popup, "press", "")
-		time.Sleep(1500 * time.Millisecond)
+		err := mb.ActOnElement(ctx, *popup, action, "")
+		return fmt.Sprintf("%s: %v", action, err), err
+	}
+	menuSubtree := func() string {
+		popup, _, _ := labElements()
 		var tree []string
 		withPool(func() { axDump(popup.ref, 0, 2, &tree) })
+		return strings.Join(tree, " / ")
+	}
+	for _, action := range []string{"press", "show_menu"} {
+		scenario("5. the real path today: "+action+" on the pop-up (opens its menu), held 1.5 s, then closed", func() string {
+			said, _ := openMenu(action)
+			time.Sleep(1500 * time.Millisecond)
+			open := menuSubtree()
+			closeMenus()
+			return fmt.Sprintf("%s; subtree while open: %s", said, open)
+		})
 		closeMenus()
-		return fmt.Sprintf("press: %v; subtree while open: %s", err, strings.Join(tree, " / "))
-	})
-	closeMenus()
+	}
+	for _, action := range []string{"press", "show_menu"} {
+		scenario("5b. one quick step: "+action+" opens the menu, Beta is pressed the moment it shows, nothing is held", func() string {
+			started := time.Now()
+			said, err := openMenu(action)
+			if err != nil {
+				return said
+			}
+			var code int32 = -2
+			var waited time.Duration
+			for time.Since(started) < 2*time.Second {
+				popup, _, _ := labElements()
+				if menuItemOf(popup.ref, "Beta", func(item, _ uintptr) { code = axRawAction(item, "AXPress") }) {
+					waited = time.Since(started)
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			closeMenus()
+			return fmt.Sprintf("%s; Beta pressed after %v (AX error %d); menu open for about %v", said, waited.Round(time.Millisecond), code, time.Since(started).Round(time.Millisecond))
+		})
+		closeMenus()
+	}
 
-	for _, drag := range []struct {
-		name string
-		how  SwipeHow
-	}{{"6. background drag with the existing SwipeTo(drag) (iPhone Mirroring's own route), handle +160,+40", SwipeDrag}} {
-		scenario(drag.name, func() string {
-			window := windowOf(t, mb, labPid)
-			err := clicker.SwipeTo(labPid, window, handle.X, handle.Y, 160, 40, drag.how)
-			time.Sleep(500 * time.Millisecond)
-			return fmt.Sprintf("SwipeTo from %v by (160,40): %v (window %d at %v)", handle, err, window.ID, window.Bounds)
+	// dragOnce is SwipeTo's drag with the focus record optional: does the app need it, and what does it cost?
+	dragOnce := func(focus bool) string {
+		window := windowOf(t, mb, labPid)
+		k := loadSkyLight()
+		if focus {
+			if err := k.focusWithoutRaise(labPid, window.ID); err != nil {
+				return "focus record: " + err.Error()
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		src := mac.CGEventSourceCreate(1)
+		defer mac.CFRelease(src)
+		local := windowLocalStamp(productVersion())
+		group := time.Now().UnixNano() & 0x7fffffff
+		post := func(kind uint32, x, y int, pause time.Duration) {
+			gx, gy := clicker.input.point(image.Pt(x, y))
+			stamp := fpoint{gx, gy}
+			if local {
+				stamp = fpoint{float64(x-window.Bounds.Min.X) * clicker.input.scale, float64(y-window.Bounds.Min.Y) * clicker.input.scale}
+			}
+			event := mac.CGEventCreateMouseEvent(src, kind, cgPoint{gx, gy}, 0)
+			k.setField(event, fieldClickState, 1)
+			k.setField(event, fieldClickGroup, group)
+			k.stamp(event, labPid, window, stamp)
+			mac.CGEventSetFlags(event, 0)
+			k.post(int32(labPid), event)
+			mac.CFRelease(event)
+			time.Sleep(pause)
+		}
+		post(macDownTypes[0], handle.X, handle.Y, 30*time.Millisecond)
+		for i := 1; i <= 10; i++ {
+			post(macDragTypes[0], handle.X+160*i/10, handle.Y+40*i/10, 30*time.Millisecond)
+		}
+		post(macUpTypes[0], handle.X+160, handle.Y+40, 0)
+		return fmt.Sprintf("drag with focus record: %v", focus)
+	}
+	for _, focus := range []bool{true, false} {
+		scenario(fmt.Sprintf("6. background drag of the square, focus record sent first: %v", focus), func() string {
+			// The square starts where it was left: aim at where it is now.
+			_, _, moved := labElements()
+			var mx, my int
+			fmt.Sscanf(moved, "Handle: %d,%d", &mx, &my)
+			handle = image.Pt(handle0.X+mx-40, handle0.Y+my-40) // the square started with its centre at 40,40 in its view
+			return dragOnce(focus)
 		})
 	}
 
