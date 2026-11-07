@@ -56,6 +56,7 @@ import (
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/tmuxguard"
 	"github.com/daoleno/mewla/daemon/tmuxsocket"
+	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
@@ -658,7 +659,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetAgentTools(func(command string, worker bool) string {
 		// The screen and the phone act for a named Worker, so only sessions that
 		// carry their Worker identity get them.
-		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), Phone: worker && agentUse.PhoneReady(), IPhone: worker && agentUse.IPhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
+		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), Display: worker && controlHandler.displayOn(), Phone: worker && agentUse.PhoneReady(), IPhone: worker && agentUse.IPhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
@@ -742,6 +743,12 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	srv.SetScreen(screenService)
 	controlHandler.screen = screenService
+	// Desktop apps on a private display of the agent's own (Linux, Labs).
+	displayService := vdisplay.NewService("")
+	displayService.SetAlive(controlHandler.liveWorker)
+	defer displayService.Close()
+	srv.SetDisplays(displayService)
+	controlHandler.displays = displayService
 	// Agents use the screen through the daemon, which holds the permissions;
 	// a person viewing it always comes first.
 	screenService.SetAgentGate(agentUse.Enabled)

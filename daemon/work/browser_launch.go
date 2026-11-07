@@ -13,7 +13,7 @@ import (
 // WithBrowserMCP adds only an invocation-scoped MCP entry. Global provider
 // configuration and other MCP servers are preserved. The managed launch shell
 // supplies MEWLA_WORKER_ID after tmux allocates the actual session identity.
-func WithBrowserMCP(command, executable, stateDir, resourceID string) (string, error) {
+func WithBrowserMCP(command, executable, stateDir, resourceID string, withDisplay bool) (string, error) {
 	if _, err := uuid.Parse(resourceID); err != nil {
 		return "", fmt.Errorf("invalid Browser resource")
 	}
@@ -34,10 +34,20 @@ func WithBrowserMCP(command, executable, stateDir, resourceID string) (string, e
 			quoted[i] = strconv.Quote(arg)
 		}
 		config := "mcp_servers.mewla_browser={command=" + strconv.Quote(executable) + ",args=[" + strings.Join(quoted, ",") + "],enabled=true}"
-		return command + " -c " + shellquote.Word(config), nil
+		command += " -c " + shellquote.Word(config)
+		if withDisplay {
+			command += " -c " + shellquote.Word(displayServerConfig(executable, stateDir))
+		}
+		return command, nil
 	case WorkerProviderClaude:
-		raw, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"mewla_browser": map[string]any{"command": executable, "args": args}}})
-		return command + " --mcp-config " + shellquote.Word(string(raw)) + " --allowedTools mcp__mewla_browser__browser", nil
+		servers := map[string]any{"mewla_browser": map[string]any{"command": executable, "args": args}}
+		allowed := "mcp__mewla_browser__browser"
+		if withDisplay {
+			servers[DisplayMCPName] = map[string]any{"command": executable, "args": displayServerArgs(stateDir)}
+			allowed += ",mcp__" + DisplayMCPName
+		}
+		raw, _ := json.Marshal(map[string]any{"mcpServers": servers})
+		return command + " --mcp-config " + shellquote.Word(string(raw)) + " --allowedTools " + allowed, nil
 	default:
 		return "", fmt.Errorf("Browser attachment currently supports Codex and Claude sessions; choose either or launch without a Browser")
 	}
@@ -51,4 +61,14 @@ func SupportsBrowserAttachment(command string) bool {
 		return true
 	}
 	return false
+}
+
+func displayServerArgs(stateDir string) []string {
+	return []string{"agent-use", "display-mcp", "--state-dir", stateDir}
+}
+
+// displayServerConfig is the Codex config line for the display server; it
+// needs the Worker's identity from the launch environment.
+func displayServerConfig(executable, stateDir string) string {
+	return "mcp_servers." + DisplayMCPName + "={command=" + strconv.Quote(executable) + ",args=" + tomlStrings(displayServerArgs(stateDir)) + ",enabled=true,env_vars=" + tomlStrings([]string{"MEWLA_WORKER_ID"}) + "}"
 }

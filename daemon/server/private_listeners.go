@@ -26,6 +26,8 @@ var privateAllowedPaths = map[string]bool{
 	"/auth-check":              true,
 	"/screen":                  true,
 	"/screen/viewer":           true,
+	"/display":                 true,
+	"/display/viewer":          true,
 	"/browser":                 true,
 	"/browser/viewer":          true,
 	"/resources":               true,

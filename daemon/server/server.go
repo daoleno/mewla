@@ -52,6 +52,7 @@ import (
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/terminal"
+	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/gorilla/websocket"
@@ -113,6 +114,7 @@ type notificationRecorder interface {
 // Server handles WebSocket connections from the Mewla mobile app.
 type Server struct {
 	browsers                     *browser.Manager
+	displays                     *vdisplay.Service
 	screen                       *screen.Service
 	phone                        *phone.Manager
 	phonePing                    time.Duration // the phone's ping interval; zero is the default
@@ -488,6 +490,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/browser/viewer", s.handleBrowserViewer)
 	mux.Handle("/screen", s.appRoute(webUI, http.HandlerFunc(s.handleScreen)))
 	mux.HandleFunc("/screen/viewer", s.handleScreenViewer)
+	mux.HandleFunc("/display", s.handleDisplay)
+	mux.HandleFunc("/display/viewer", s.handleDisplayViewer)
 	mux.HandleFunc("/plugins/oauth/callback", func(w http.ResponseWriter, r *http.Request) {
 		if s.connections == nil {
 			http.Error(w, "Plugins unavailable", http.StatusServiceUnavailable)
