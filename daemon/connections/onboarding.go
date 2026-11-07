@@ -220,6 +220,8 @@ func (m *Manager) connect(ctx context.Context, q Request) (Response, error) {
 					return Response{}, errors.New("GitHub credential could not be saved")
 				}
 				existing.Account.Tools = r.Account.Tools
+				// The import is the account's tool list on the official server.
+				existing.Moved, existing.ReadsOn = false, false
 				existing.Account.Status = "connected"
 				existing.Account.Enabled = true
 				existing.Account.VerifiedAt = r.Account.VerifiedAt
