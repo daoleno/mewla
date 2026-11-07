@@ -45,6 +45,9 @@ simulator = any(
     and "arm64" in item.get("SupportedArchitectures", [])
     for item in slices
 )
+names = {item.get("LibraryPath") for item in slices}
+assert len(names) == 1, f"CocoaPods needs one binary name across slices, got {sorted(names)}"
+assert all(item.get("SupportedPlatform") == "ios" for item in slices), "only iOS slices belong in the XCFramework"
 assert device, "missing arm64 iOS device slice"
 assert simulator, "missing arm64 iOS Simulator slice"
 print("ok: XCFramework contains arm64 iOS device and Simulator slices")

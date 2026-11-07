@@ -90,6 +90,27 @@ fi
 mkdir -p "$OUT_DIR"
 rm -rf "$DESTINATION"
 ditto "$SOURCE" "$DESTINATION"
+# The 1.0 XCFramework also carries a macOS slice whose archive has another name
+# (libghostty-vt.a vs libghostty-vt-fat.a); CocoaPods refuses a vendored
+# XCFramework with differing binary names. Mewla ships iOS device and Simulator
+# only, so keep exactly those slices.
+python3 - "$DESTINATION" <<'PY'
+import plistlib, shutil, sys
+from pathlib import Path
+
+framework = Path(sys.argv[1])
+plist_path = framework / "Info.plist"
+plist = plistlib.loads(plist_path.read_bytes())
+kept = []
+for item in plist["AvailableLibraries"]:
+    if item.get("SupportedPlatform") == "ios":
+        kept.append(item)
+    else:
+        shutil.rmtree(framework / item["LibraryIdentifier"])
+assert kept, "no iOS slices left in the XCFramework"
+plist["AvailableLibraries"] = kept
+plist_path.write_bytes(plistlib.dumps(plist))
+PY
 cp "$NOTICE_SRC" "$OUT_DIR/GHOSTTY-MIT.txt"
 
 (
