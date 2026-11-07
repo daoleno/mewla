@@ -45,6 +45,9 @@ PIN=$(cat "$HERE/PIN")
 
 export CDB_BENCH_WORK=${CDB_BENCH_WORK:-$(mktemp -d "${TMPDIR:-/tmp}/cdb-work.XXXXXX")}
 # claude wherever this Mac keeps it (the runner hard-codes /opt/homebrew/bin/claude; our patch reads CDB_CLAUDE_BIN).
+# The runner scrubs the environment to six variables, which drops the Worker's Claude login (trials said "Not logged in").
+# Opt in to passing the auth variables (ANTHROPIC_API_KEY/AUTH_TOKEN/BASE_URL, CLAUDE_CODE_OAUTH_TOKEN, CLAUDE_CONFIG_DIR) to claude only.
+export CDB_CLAUDE_PASS_AUTH_ENV=1
 export CDB_CLAUDE_BIN=${CDB_CLAUDE_BIN:-$(command -v claude)}
 CLAUDE=$CDB_CLAUDE_BIN
 # Build against the macOS 26 SDK of the Command Line Tools when this Mac is newer than the SDK Xcode ships.

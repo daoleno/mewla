@@ -11,7 +11,7 @@ index 832e543..e827a2d 100644
  # cc-cua-driver-main: Amendment 3; cc-cua-driver-main-skill: Amendment 4. The default arm set of run_bench.py
  # stays the three arms of Amendment 3, so a run without --arms is unchanged.
 diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py b/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
-index 89eb1b9..8ef37ac 100644
+index 89eb1b9..80a81a1 100644
 --- a/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
 +++ b/libs/cua-driver-bench/automated-eval/macos_bench/claude_arms.py
 @@ -51,7 +51,8 @@ _LINUX = sys.platform.startswith("linux")
@@ -69,6 +69,20 @@ index 89eb1b9..8ef37ac 100644
  }
  
  SKILL_PROMPT_HEADER = (
+@@ -539,6 +554,13 @@ def claude_env() -> dict[str, str]:
+     env.setdefault("LANG", "en_US.UTF-8")
+     env.setdefault("TERM", "xterm-256color")
+     env.update(CLAUDE_ENV_FIXED)
++    if os.environ.get("CDB_CLAUDE_PASS_AUTH_ENV") == "1":
++        # Opt-in, for a person's own Mac where the Worker's claude logs in through these variables (a gateway route, an
++        # API key or an OAuth token) and not through a VM's token file. Auth only: nothing else of the parent leaks, they
++        # reach `claude` and no MCP server, and they are not written to any row (rows record CLAUDE_ENV_FIXED only).
++        for key in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR"):
++            if key in os.environ:
++                env[key] = os.environ[key]
+     return env
+ 
+ 
 diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/claude_events.py b/libs/cua-driver-bench/automated-eval/macos_bench/claude_events.py
 index 9877942..37ad119 100644
 --- a/libs/cua-driver-bench/automated-eval/macos_bench/claude_events.py
