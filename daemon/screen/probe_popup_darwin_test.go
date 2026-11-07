@@ -284,6 +284,9 @@ func TestAXProbe(t *testing.T) {
 		parkPointer(source, parked)
 		typist := &personTyping{text: typed, pointer: parked, pid: person.pid, done: make(chan struct{})}
 		typist.read = func() string {
+			// The typist waits while this reads: a moment for the last key to land, so a read that lags one key behind
+			// is not taken for a lost key.
+			time.Sleep(150 * time.Millisecond)
 			var v string
 			withPool(func() { v = elementValue(mb, person.pid, personArea) })
 			return v
@@ -437,7 +440,7 @@ func TestAXProbe(t *testing.T) {
 		post(macUpTypes[0], handle.X+160, handle.Y+40, 0)
 		return fmt.Sprintf("drag with focus record: %v", focus)
 	}
-	for _, focus := range []bool{true, false} {
+	for _, focus := range []bool{false, true} {
 		scenario(fmt.Sprintf("6. background drag of the square, focus record sent first: %v", focus), func() string {
 			// The square starts where it was left: aim at where it is now.
 			_, _, moved := labElements()

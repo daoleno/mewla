@@ -83,6 +83,9 @@ final class Delegate: NSObject, NSApplicationDelegate {
             self?.moved.stringValue = "Handle: \(Int(rect.midX)),\(Int(rect.midY))"
         }
         window.makeKeyAndOrderFront(nil)
+        // Like an app the person used a moment ago, then left for another: it has been active and key once, then the
+        // probe puts the person's TextEdit in front of it. (An app that was never active refuses a pop-up press.)
+        NSApp.activate(ignoringOtherApps: true)
 
         let center = NotificationCenter.default
         for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
