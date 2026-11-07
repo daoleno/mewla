@@ -677,15 +677,30 @@ func (s *Server) sendModelProfileError(conn *websocket.Conn, requestID string, e
 }
 
 func (s *Server) createSessionWithProfiles(preferredTarget string, opts watcher.CreateSessionOptions, profileID, modelID string) (string, *modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error) {
+	autoBrowser := false
+	if opts.BrowserID == "" && !opts.Hidden && work.SupportsBrowserAttachment(opts.Command) {
+		// With the virtual screen on, a Worker gets a browser without being told which.
+		opts.BrowserID = s.browsers.AutoAttachment(context.Background())
+		autoBrowser = opts.BrowserID != ""
+	}
 	if opts.BrowserID != "" {
 		if err := s.browsers.ValidateAttachment(context.Background(), opts.BrowserID); err != nil {
-			return "", nil, modelprofiles.PersistResult{}, err
+			if !autoBrowser {
+				return "", nil, modelprofiles.PersistResult{}, err
+			}
+			opts.BrowserID = ""
 		}
+	}
+	if opts.BrowserID != "" {
 		opts.ProgressEnv = true
 		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"MEWLA_STATE_DIR": s.auth.StorageDir(), "MEWLA_WORKER_ID": ""})
 		id := opts.BrowserID
 		opts.PrepareLaunch = func(command string) (string, error) {
-			return work.WithBrowserMCP(command, watcher.ExecutablePath(), s.auth.StorageDir(), id)
+			launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), s.auth.StorageDir(), id)
+			if err != nil && autoBrowser {
+				return command, nil
+			}
+			return launch, err
 		}
 	}
 	owner := s.modelProfiles()

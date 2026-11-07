@@ -47,6 +47,8 @@ export interface BrowserResponse {
   result?: unknown;
   /** What the person did, told to an agent; never shown to the person. */
   notes?: string[];
+  /** Whether new Workers get a virtual-screen browser by default (the Labs switch). */
+  virtual_screen?: boolean;
 }
 export interface BrowserFrame {
   type: "frame";
@@ -69,7 +71,7 @@ async function endpoint(server: StoredServer, path: string) {
 }
 export async function browserRequest(
   server: StoredServer,
-  request: { action: "list" | "create" | "start" | "stop" | "delete" | "grant" | "status" | "halt"; id?: string; name?: string; allow_agents?: boolean },
+  request: { action: "list" | "create" | "start" | "stop" | "delete" | "grant" | "status" | "halt" | "settings"; id?: string; name?: string; allow_agents?: boolean; enabled?: boolean },
   signal?: AbortSignal,
 ): Promise<BrowserResponse> {
   const url = await endpoint(server, "/browser");

@@ -702,15 +702,27 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		Env:              progressEnvForStateDir(a.stateDir),
 		ExecutorID:       a.spawnExecutorID(req),
 	}
-	if req.BrowserID != "" {
-		if err := a.browsers.ValidateAttachment(context.Background(), req.BrowserID); err != nil {
+	browserID, autoBrowser := req.BrowserID, false
+	if browserID == "" && !req.Hidden && work.SupportsBrowserAttachment(command) {
+		// With the virtual screen on, a Worker gets a browser without being told which.
+		browserID = a.browsers.AutoAttachment(context.Background())
+		autoBrowser = browserID != ""
+	}
+	if browserID != "" {
+		if err := a.browsers.ValidateAttachment(context.Background(), browserID); err != nil && !autoBrowser {
 			a.recordSpawnWorkFailure(ownedWork, err, autoCreatedWork)
 			return control.ErrorResponse("browser_attachment", err.Error())
-		}
-		createOpts.BrowserID = req.BrowserID
-		createOpts.Env["MEWLA_WORKER_ID"] = ""
-		createOpts.PrepareLaunch = func(command string) (string, error) {
-			return work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, req.BrowserID)
+		} else if err == nil {
+			createOpts.BrowserID = browserID
+			createOpts.Env["MEWLA_WORKER_ID"] = ""
+			createOpts.PrepareLaunch = func(command string) (string, error) {
+				launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, browserID)
+				if err != nil && autoBrowser {
+					// The browser was not asked for; a command that cannot take it launches without.
+					return command, nil
+				}
+				return launch, err
+			}
 		}
 	}
 	var routeSnap *modelprofiles.WireSessionSnapshot

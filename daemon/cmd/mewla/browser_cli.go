@@ -57,7 +57,12 @@ func (a *controlApp) handleBrowserControl(req control.Request) control.Response 
 			return control.ErrorResponse("browser_task_ended", "Task is no longer active; browser preserved")
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	wait := 12 * time.Second
+	if q.Action == "control" {
+		// The first request can start the browser (a display and Chrome).
+		wait = 45 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
 	result, err := a.browsers.Handle(ctx, actor, q)
 	if err != nil {
