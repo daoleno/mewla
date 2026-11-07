@@ -54,7 +54,7 @@ Invariants:
 3. `libghostty_vt.so` and Ghostty C headers are **gitignored**. Strangers do not get terminal binaries from a bare clone until they build or consume release artifacts.
 4. Toolchain and Android source-derivation pins live in `native.lock.json` (Zig version, Ghostty git commit, and checksummed upstream patches). Dirty Ghostty trees are refused by default.
 5. Redistributed APKs must embed Ghostty MIT at `assets/notices/GHOSTTY-MIT.txt` (source: `app/assets/notices/GHOSTTY-MIT.txt`), packaged by Expo plugin `app/plugins/withAndroidRelease.js` during prebuild. Verify with `./scripts/verify-apk-notice.sh <apk>`.
-6. Release-grade native builds require a **proven** Ghostty git commit equal to the pin plus every exact declared Android patch (`release_grade: true` in `build-manifest.json`). Patches are applied only in a disposable worktree; the shared Ghostty cache must remain clean. Dirty or no-git trees may build only with explicit developer overrides and **fail** `./scripts/verify-libghostty.sh --release`.
+6. Release-grade native builds come only from the signed libghostty-vt release tarball pinned in the lock, taken unmodified (`release_grade: true`, `provenance: signed_release` in `build-manifest.json`). There is no developer override; `./scripts/verify-libghostty.sh --release` checks the manifest against the lock.
 7. Raw and APK-packaged `libghostty_vt.so` artifacts must not import symbols listed in `android.forbidden_undefined_symbols`. `verify-libghostty.sh` and the APK verifiers enforce this before distribution.
 
 Module wiring (source of truth for packaging):
@@ -199,11 +199,12 @@ including the native formatter, renderer lifecycle, and DOM reuse rules.
 ./scripts/verify-libghostty.sh --contract   # CI: lock + notice + scripts, no .so
 ```
 
-The builder validates each declared patch's upstream metadata, base commit,
-and SHA-256, creates a detached disposable worktree at the pinned Ghostty
-commit, applies the patch set there, and records the exact metadata under
-`applied_patches` in the build manifest. The source cache's HEAD, status, and
-worktree registry are checked again during cleanup.
+The builder downloads the signed release tarball and dependency tarball, checks
+their SHA-256 against the lock (and the minisign signature when a verifier is
+available), unpacks them into a disposable directory, builds each ABI offline
+with `zig build --system` and a fresh Zig cache, and records the release
+version, both tarball digests, the Zig version and the library digests in the
+build manifest. Nothing is patched.
 
 Build outputs (all gitignored except the tracked lock/notice):
 
@@ -211,7 +212,7 @@ Build outputs (all gitignored except the tracked lock/notice):
 | ------------------------------------- | ---------------------------------------------------------------- |
 | `libs/android/<abi>/libghostty_vt.so` | Imported by CMake / jniLibs                                      |
 | `libs/android/SHA256SUMS`             | Per-ABI digests for release notes                                |
-| `libs/android/build-manifest.json`    | Pin + exact applied patches + provenance + Zig version + digests |
+| `libs/android/build-manifest.json`    | Release version + tarball digests + Zig version + library digests |
 | `libs/android/GHOSTTY-MIT.txt`        | Copy of MIT notice for tarballs                                  |
 | `android/src/main/cpp/ghostty/`       | Headers for JNI bridge                                           |
 

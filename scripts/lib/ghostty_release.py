@@ -14,6 +14,8 @@ in the lock are the hard gate: they were taken from a minisign-verified release.
 The signature check is defense in depth, and it is skipped (and reported as
 such) on a host with neither `minisign` nor Python `cryptography`.
 """
+from __future__ import annotations
+
 import argparse
 import hashlib
 import importlib.util
