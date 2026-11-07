@@ -53,14 +53,24 @@ if [ -z "${SDKROOT:-}" ]; then
     [ -d "$sdk" ] && export SDKROOT=$sdk DEVELOPER_DIR=/Library/Developer/CommandLineTools
   done
 fi
-SRC="$CDB_BENCH_WORK/cua"
-mkdir -p "$SRC" && cd "$SRC"
-if [ ! -d .git ]; then
+# The pinned upstream tree is cached outside the scratch dir (keyed by the pin), so a flaky GitHub costs one fetch, not one
+# per attempt. A fetch that stalls fails after ~40 s and is retried; it never hangs for minutes.
+CACHE=${CDB_CACHE_DIR:-$HOME/.cache/mewla-agent-use-bench}/cua-$PIN
+if [ ! -f "$CACHE/.ok" ]; then
+  rm -rf "$CACHE" && mkdir -p "$CACHE" && cd "$CACHE"
   git init -q && git remote add origin https://github.com/trycua/cua.git
   git sparse-checkout init --cone && git sparse-checkout set libs/cua-driver-bench
-  git fetch -q --depth 1 origin "$PIN" && git checkout -q FETCH_HEAD
-  git apply "$HERE/mewla-arm.patch"
+  for try in 1 2 3 4 5 6; do
+    git -c http.lowSpeedLimit=2000 -c http.lowSpeedTime=40 fetch -q --depth 1 origin "$PIN" && break
+    [ "$try" = 6 ] && { echo "could not fetch the pinned CDB commit from GitHub (6 tries): nothing was run" >&2; rm -rf "$CACHE"; exit 5; }
+    echo "fetch attempt $try failed; retrying" >&2; sleep $((try * 10))
+  done
+  git checkout -q FETCH_HEAD && touch .ok
 fi
+# A fresh copy to patch: the cache itself stays pristine.
+SRC="$CDB_BENCH_WORK/cua"
+rm -rf "$SRC" && mkdir -p "$SRC" && cp -R "$CACHE/." "$SRC/" && cd "$SRC"
+git apply "$HERE/mewla-arm.patch"
 MB="$SRC/libs/cua-driver-bench/automated-eval/macos_bench"
 mkdir -p "$CDB_BENCH_WORK/src" "$CDB_BENCH_WORK/build"
 rm -rf "$CDB_BENCH_WORK/src/macos_bench" && cp -R "$MB" "$CDB_BENCH_WORK/src/macos_bench"
