@@ -61,7 +61,6 @@
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
     "react-native-drawer-layout": "4.2.12",
-    "react-native-enriched-markdown": "1.1.1",
     "react-native-gesture-handler": "~3.3.0",
     "react-native-keyboard-controller": "1.22.7",
     "react-native-pager-view": "9.0.7",
@@ -99,10 +98,5 @@
       ]
     }
   },
-  "private": true,
-  "enriched-markdown": {
-    "enableMath": false,
-    "enableCodeHighlight": false,
-    "enableVideo": false
-  }
+  "private": true
 }

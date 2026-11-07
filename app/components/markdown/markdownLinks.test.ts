@@ -6,38 +6,10 @@ import {
   openMarkdownLink,
   resolveAgainst,
   resolveMarkdownLink,
-  tokenizeMarkdownLinks,
 } from "./markdownLinks";
 
-describe("Markdown fallback links", () => {
-  test("retains surrounding Markdown while exposing link destinations", () => {
-    expect(tokenizeMarkdownLinks("See **[docs](https://example.com/docs)** now."))
-      .toEqual([
-        { text: "See **" },
-        { text: "docs", url: "https://example.com/docs" },
-        { text: "** now." },
-      ]);
-  });
-
-  test("finds bare, angle and parenthesised URLs", () => {
-    expect(tokenizeMarkdownLinks("a https://e.com/x. b <https://e.com/y> [w](https://e.com/Foo_(bar))"))
-      .toEqual([
-        { text: "a " },
-        { text: "https://e.com/x", url: "https://e.com/x" },
-        { text: ". b " },
-        { text: "https://e.com/y", url: "https://e.com/y" },
-        { text: " " },
-        { text: "w", url: "https://e.com/Foo_(bar)" },
-      ]);
-  });
-
-  test("exposes unsafe destinations for policy rejection", () => {
-    expect(tokenizeMarkdownLinks("See [unsafe](javascript:alert) now."))
-      .toEqual([
-        { text: "See " },
-        { text: "unsafe", url: "javascript:alert" },
-        { text: " now." },
-      ]);
+describe("Markdown unsafe links", () => {
+  test("a script destination is blocked", () => {
     expect(resolveMarkdownLink("javascript:alert")).toEqual({ kind: "blocked" });
   });
 });

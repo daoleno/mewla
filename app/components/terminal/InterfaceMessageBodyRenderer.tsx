@@ -4,6 +4,10 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
+import {
+  MarkdownLinkSurfaceContext,
+  type MarkdownLinkSurface,
+} from "../markdown/MarkdownLinkContext";
 import { imageReference, type ImageSource } from "../../services/imageSource";
 import {
   InterfaceMessageBlock,
@@ -13,12 +17,12 @@ import {
   messageImages,
   parseMessageMarkdown,
 } from "./InterfaceMessageMarkdownModel";
-import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
+import { prepareInterfaceMarkdown } from "./InterfaceMessageMarkdownPrepare";
 import { useStreamingMarkdownPresentation } from "./useStreamingMarkdownPresentation";
 
 const NO_IMAGES: ImageSource[] = [];
 
-interface MessageBodyProps {
+interface MessageBodyProps extends MarkdownLinkSurface {
   value: string;
   chrome: TerminalThemeChrome;
   theme: TerminalThemePalette;
@@ -37,7 +41,14 @@ export function MessageBody({
   dense = false,
   streaming = false,
   keepLineBreaks = false,
+  baseDir,
+  openFile,
+  canOpenFile,
 }: MessageBodyProps) {
+  const linkSurface = useMemo<MarkdownLinkSurface>(
+    () => ({ baseDir, openFile, canOpenFile }),
+    [baseDir, canOpenFile, openFile],
+  );
   // Provider value stays lossless in props; only presentation work coalesces.
   const presentedValue = useStreamingMarkdownPresentation(value, streaming);
   const blocks = useMemo(
@@ -67,6 +78,7 @@ export function MessageBody({
     return null;
   }
   return (
+    <MarkdownLinkSurfaceContext.Provider value={linkSurface}>
     <MessageImageGalleryContext.Provider value={gallery}>
       <View style={styles.messageBody}>
         {blocks.map((block, index) => (
@@ -83,6 +95,7 @@ export function MessageBody({
         ))}
       </View>
     </MessageImageGalleryContext.Provider>
+    </MarkdownLinkSurfaceContext.Provider>
   );
 }
 

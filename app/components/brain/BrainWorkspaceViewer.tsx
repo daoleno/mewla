@@ -29,8 +29,7 @@ import { AppText, BottomSheetFrame, IconButton } from "../ui";
 import { HeaderBackButton } from "../navigation/HeaderBackButton";
 import { AppImage, ImageOwnerContext } from "../terminal/AppImage";
 import type { ImageOwner } from "../../services/imageSource";
-import { InterfaceNativeMarkdownBody } from "../terminal/InterfaceNativeMarkdownBody";
-import { MarkdownFallbackText } from "../markdown/MarkdownFallbackText";
+import { MessageBody } from "../terminal/InterfaceMessageBody";
 import { dirnameOf } from "../markdown/markdownLinks";
 import {
   brainWorkspaceEntryAccessibilityLabel,
@@ -580,26 +579,13 @@ function BrainWorkspaceFilePreview({
       >
         {content.trim() ? (
           markdown ? (
-            <InterfaceNativeMarkdownBody
+            <MessageBody
               value={content}
               chrome={chrome}
               theme={theme}
               baseDir={dirnameOf(file.path)}
               openFile={onOpenFile}
               canOpenFile={canOpenFile}
-              renderFallback={(value) => (
-                <MarkdownFallbackText
-                  value={value}
-                  baseDir={dirnameOf(file.path)}
-                  openFile={onOpenFile}
-                  canOpenFile={canOpenFile}
-                  style={[styles.plainText, { color: chrome.text }]}
-                  linkStyle={{
-                    color: chrome.link,
-                    textDecorationLine: "underline",
-                  }}
-                />
-              )}
             />
           ) : (
             <Text selectable style={[styles.plainText, { color: chrome.text }]}>

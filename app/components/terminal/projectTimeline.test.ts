@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { CodexConversationEvent } from "../../services/codexConversation";
 import { buildTimeline } from "./InterfaceTimelineModel";
-import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
+import { prepareInterfaceMarkdown } from "./InterfaceMessageMarkdownPrepare";
 import {
   projectTimeline,
   resolveProjectionEventOrder,

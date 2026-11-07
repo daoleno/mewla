@@ -707,9 +707,9 @@ Risky areas to watch:
   The native ghostty grid still needs a device check.
 - **Markdown.** Chat messages (Brain, Sessions, Work) are one marked parse
   (`InterfaceMessageMarkdownModel`) drawn by `InterfaceMessageBlock`; the
-  mermaid theme reads `surfaceMuted` and the accent (ink). Native
-  enriched-markdown styles only the file viewers (Brain workspace, Skills).
-  Check tables and code in sent messages.
+  mermaid theme reads `surfaceMuted` and the accent (ink). The Brain
+  workspace and Skills file viewers use the same reader. Check tables and
+  code in sent messages.
 - **Native modules and fonts.** Font registration differs per platform. Check
   CJK fallback on real iOS and Android devices.
 - **Android elevation and translucency.** Keep in-flow cards flat.

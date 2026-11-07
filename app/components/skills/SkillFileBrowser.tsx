@@ -7,12 +7,9 @@ import {
   Text,
   View,
 } from "react-native";
-import { EnrichedMarkdownText } from "react-native-enriched-markdown";
 import { TypeScale, Typography, useAppColors, useAppTheme } from "../../constants/tokens";
 import { buildChatChrome } from "../../theme";
-import { prepareMarkdownLinks } from "../markdown/prepareMarkdownLinks";
-import { useMarkdownLinks } from "../markdown/useMarkdownLinkOpener";
-import { MarkdownWithMermaid } from "../markdown/MarkdownWithMermaid";
+import { MessageBody } from "../terminal/InterfaceMessageBody";
 import { AppImage, ImageOwnerContext } from "../terminal/AppImage";
 import { useCurrentServer } from "../../store/currentServer";
 import { skillImagePath } from "../../services/skillImagePath";
@@ -24,7 +21,6 @@ import {
   skillRenderer,
   type SkillTreeNode,
 } from "../../services/skillsScreenModel";
-import { buildSkillsMarkdownStyle } from "../../services/skillsMarkdownPresentation";
 import { Icon, type IconName } from "../icons/Icon";
 
 /**
@@ -176,41 +172,12 @@ export function SkillFileBrowser({
 }
 
 function MarkdownContent({ content }: { content: string }) {
-  const colors = useAppColors();
   const { theme: appTheme } = useAppTheme();
   const { chrome, theme } = useMemo(
     () => buildChatChrome(appTheme),
     [appTheme],
   );
-  const { open: openLink, openable } = useMarkdownLinks();
-  const markdown = useMemo(
-    () => prepareMarkdownLinks(content, openable),
-    [content, openable],
-  );
-  const markdownStyle = useMemo(
-    () =>
-      buildSkillsMarkdownStyle(colors, {
-        body: Typography.uiFont,
-        bodyMedium: Typography.uiFontMedium,
-        mono: Typography.terminalFont,
-      }),
-    [colors],
-  );
-  return (
-    <MarkdownWithMermaid
-      markdown={markdown}
-      chrome={chrome}
-      theme={theme}
-      renderMarkdown={(value) => (
-        <EnrichedMarkdownText
-          markdown={value}
-          markdownStyle={markdownStyle}
-          selectable
-          onLinkPress={(event) => openLink(event.url)}
-        />
-      )}
-    />
-  );
+  return <MessageBody value={content} chrome={chrome} theme={theme} />;
 }
 
 function BrowserState({

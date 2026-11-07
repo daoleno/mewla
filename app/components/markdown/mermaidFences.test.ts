@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseMessageMarkdown } from "../terminal/InterfaceMessageMarkdownModel";
-import {
-  isMermaidFenceLanguage,
-  markdownHasMermaidFence,
-  splitMarkdownMermaidSegments,
-} from "./mermaidFences";
+import { isMermaidFenceLanguage } from "./mermaidFences";
 import {
   MERMAID_MARKDOWN_FIXTURE,
   PERPETUO_SINGLE_DOMAIN_FLOWCHART,
@@ -19,44 +15,31 @@ describe("Mermaid Markdown fences", () => {
     expect(isMermaidFenceLanguage("text")).toBe(false);
   });
 
-  test("splits the Perpetuo fixture without eating nested example fences in TypeScript", () => {
-    const segments = splitMarkdownMermaidSegments(MERMAID_MARKDOWN_FIXTURE);
-    const mermaid = segments.filter((segment) => segment.type === "mermaid");
+  test("reads the Perpetuo fixture's diagrams as mermaid blocks without eating nested example fences in TypeScript", () => {
+    const blocks = parseMessageMarkdown(MERMAID_MARKDOWN_FIXTURE);
+    const code = blocks.filter((block) => block.type === "code");
+    const mermaid = code.filter((block) => block.language === "mermaid");
     expect(mermaid).toHaveLength(2);
     expect(mermaid[0]?.closed).toBe(true);
-    expect(mermaid[0]?.source).toContain("subgraph Browser");
-    expect(mermaid[0]?.source).toContain("Harness");
-    expect(mermaid[1]?.source).toContain("flowchart TD");
-    expect(segments.some((segment) => segment.type === "markdown" && segment.text.includes("```ts"))).toBe(true);
+    expect(mermaid[0]?.text).toContain("subgraph Browser");
+    expect(mermaid[1]?.text).toContain("flowchart TD");
+    expect(code.some((block) => block.language === "ts")).toBe(true);
   });
 
-  test("keeps quoted and nested-looking fences as markdown", () => {
-    const value = `> not a fence\n> \`\`\`mermaid\n> flowchart TD\n> A-->B\n> \`\`\`\n`;
-    expect(markdownHasMermaidFence(value)).toBe(false);
+  test("a quoted fence stays inside the quote, and an open fence is open", () => {
+    const quoted = parseMessageMarkdown("> not a fence\n> ```mermaid\n> flowchart TD\n> A-->B\n> ```\n");
+    expect(quoted.map((block) => block.type)).toEqual(["quote"]);
+    const open = parseMessageMarkdown("intro\n```mermaid\nflowchart TD\n  A-->B\n");
+    expect(open[1]).toMatchObject({ type: "code", language: "mermaid", closed: false, text: "flowchart TD\n  A-->B" });
   });
 
-  test("marks an unfinished streaming fence as open", () => {
-    const segments = splitMarkdownMermaidSegments(
-      "intro\n```mermaid\nflowchart TD\n  A-->B\n",
-    );
-    expect(segments).toEqual([
-      { type: "markdown", text: "intro" },
-      { type: "mermaid", source: "flowchart TD\n  A-->B", closed: false },
-    ]);
-  });
-
-  test("agrees with parseMessageMarkdown for mermaid language and closure", () => {
+  test("a closed mermaid fence is a mermaid block that says it is closed", () => {
     const markdown = `Hello\n\n\`\`\`mermaid\n${SIMPLE_FLOWCHART_TD.trim()}\n\`\`\`\n`;
-    const blocks = parseMessageMarkdown(markdown);
-    const code = blocks.find((block) => block.type === "code");
-    const mermaid = splitMarkdownMermaidSegments(markdown).find(
-      (segment) => segment.type === "mermaid",
-    );
-    expect(code).toMatchObject({
+    expect(parseMessageMarkdown(markdown).find((block) => block.type === "code")).toMatchObject({
       type: "code",
       language: "mermaid",
       closed: true,
-      text: mermaid?.source,
+      text: SIMPLE_FLOWCHART_TD.trim(),
     });
   });
 

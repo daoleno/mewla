@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { inlinePartsText } from "../markdown/markdownInline";
 import { parseMessageMarkdown, type MessageBlock } from "./InterfaceMessageMarkdownModel";
-import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
+import { prepareInterfaceMarkdown } from "./InterfaceMessageMarkdownPrepare";
 
 const REPORTED = `这条你可以直接发：
 

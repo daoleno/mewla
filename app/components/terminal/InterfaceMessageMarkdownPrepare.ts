@@ -4,9 +4,6 @@ import {
   recordMarkdownPrepareSample,
 } from "./timelineProjectionPerf";
 
-/** Shared Android+iOS product path. Fallback is error-boundary only, not a platform fork. */
-export const INTERFACE_MARKDOWN_MOBILE_RENDERER = "enriched" as const;
-
 const STREAMING_REMEND_OPTIONS: RemendOptions = {
   images: false,
   inlineKatex: false,
