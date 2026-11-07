@@ -70,6 +70,14 @@ static Window topmost_mapped(Display *d, Window root) {
   return top;
 }
 
+// Whether window w's frame overlaps the person's frame (root coordinates). A window put somewhere that does not cover
+// the person's is raised in the stacking sense but is not "in the way".
+static int overlaps(Display *d, Window w, Window utop) {
+  XWindowAttributes a, b;
+  if (!XGetWindowAttributes(d, w, &a) || !XGetWindowAttributes(d, utop, &b)) return 1;
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
 // One window as a JSON fragment: id, override_redirect (Chrome's own popups: omnibox, bubbles), class, title, geometry.
 static void describe(Display *d, Window w, char *out, size_t n) {
   XWindowAttributes a; XClassHint ch = {0}; char *name = NULL; char cls[64] = "", title[64] = "";
@@ -101,6 +109,14 @@ int main(int argc, char **argv) {
   Window utop = top_of(d, user);
   XRaiseWindow(d, utop);
   XSetInputFocus(d, utop, RevertToPointerRoot, CurrentTime);
+  // With a window manager running, the person gets the window the way a click on it would: _NET_ACTIVE_WINDOW
+  // (source 2, a pager), so the WM's own idea of the active window is theirs too.
+  if (XGetSelectionOwner(d, XInternAtom(d, "WM_S0", False)) != None || getenv("XUSER_WM")) {
+    XEvent ev = {0};
+    ev.xclient.type = ClientMessage; ev.xclient.window = user; ev.xclient.message_type = XInternAtom(d, "_NET_ACTIVE_WINDOW", False);
+    ev.xclient.format = 32; ev.xclient.data.l[0] = 2; ev.xclient.data.l[1] = CurrentTime;
+    XSendEvent(d, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &ev);
+  }
   XFlush(d);
   usleep(300000);
 
@@ -109,8 +125,9 @@ int main(int argc, char **argv) {
   int lastx = rx, lasty = ry;
   Window lastfocus = 0, lasttop = 0; int rev;
   XGetInputFocus(d, &lastfocus, &rev);
-  int typed = 0, focus_away = 0, raised = 0, raised_popup = 0, pointer_moves = 0, typed_not_in_user = 0;
+  int typed = 0, focus_away = 0, raised = 0, raised_covering = 0, raised_popup = 0, pointer_moves = 0, typed_not_in_user = 0;
   char desc[512];
+  double covered = 0, lastsample = now();  // seconds the person's window had another window over it
   double t0 = now(), next_type = t0 + interval / 1000.0;
   printf("{\"ev\":\"start\",\"user_top\":%lu}\n", (unsigned long)utop);
   fflush(stdout);
@@ -126,14 +143,20 @@ int main(int argc, char **argv) {
       lastfocus = f;
     }
     Window top = topmost_mapped(d, root);
+    {
+      double n = now();
+      if (top && top != utop && overlaps(d, top, utop)) covered += n - lastsample;
+      lastsample = n;
+    }
     if (top != lasttop) {
       if (lasttop && top != utop) {
         XWindowAttributes a; int popup = XGetWindowAttributes(d, top, &a) && a.override_redirect;
         describe(d, top, desc, sizeof desc);
         // A popup (override_redirect: Chrome's omnibox, bubbles) is not another window of the person's desktop being
         // put over theirs; counted apart so the two can be told.
-        if (popup) raised_popup++; else raised++;
-        printf("{\"ev\":\"raised\",\"t\":%.2f,\"popup\":%d,%s}\n", t, popup, desc);
+        int covers = !popup && overlaps(d, top, utop);
+        if (popup) raised_popup++; else { raised++; if (covers) raised_covering++; }
+        printf("{\"ev\":\"raised\",\"t\":%.2f,\"popup\":%d,\"covers\":%d,%s}\n", t, popup, covers, desc);
       }
       lasttop = top;
     }
@@ -147,8 +170,8 @@ int main(int argc, char **argv) {
     }
     fflush(stdout);
   }
-  printf("{\"ev\":\"summary\",\"typed\":%d,\"typed_not_in_user\":%d,\"focus_away\":%d,\"raised\":%d,\"raised_popup\":%d,\"pointer_moves\":%d}\n",
-         typed, typed_not_in_user, focus_away, raised, raised_popup, pointer_moves);
+  printf("{\"ev\":\"summary\",\"typed\":%d,\"typed_not_in_user\":%d,\"focus_away\":%d,\"raised\":%d,\"raised_covering\":%d,\"raised_popup\":%d,\"pointer_moves\":%d,\"covered_ms\":%d}\n",
+         typed, typed_not_in_user, focus_away, raised, raised_covering, raised_popup, pointer_moves, (int)(covered * 1000));
   fflush(stdout);
   return 0;
 }

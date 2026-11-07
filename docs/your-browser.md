@@ -46,8 +46,11 @@ work in your Chrome at the same time, each in its own window, none waiting for
 another; on an agent display their windows sit side by side. Your own
 windows and tabs are never read, moved or focused, and Chrome stays behind
 whatever you are using. On a Mac with an agent display (see [Screen](screen.md))
-the window opens there, off your screen. Chrome shows a bar while an agent is
-attached.
+the window opens there, off your screen. Where there is no agent display, the
+window opens minimized and stays out of the way, its tabs opened in the
+background; if a desktop still gives it the focus for a moment (opening a
+window, a click in a page), Mewla gives the focus straight back to the window you
+were in. Chrome shows a bar while an agent is attached.
 
 When an agent is done, because its Worker ended or it stopped using the
 browser, Mewla closes its window and the tabs in it, so a computer that runs

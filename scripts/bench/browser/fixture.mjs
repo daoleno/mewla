@@ -37,6 +37,8 @@ function table() {
 function xhr() {
   return page('XHR', `<button id="go" onclick="fetch('/api/slow').then(r=>r.text()).then(t=>{document.getElementById('status').textContent=t})">Load</button><div id="status">Idle</div><button id="timer" onclick="setTimeout(()=>{document.getElementById('status').textContent='Timer done'},150)">Timer</button>`);
 }
+// Counts to 30 on animation frames: it does not finish where the page is not being drawn.
+const raf = () => page('RAF', `<button id="start" onclick="let n=0;const s=document.getElementById('c');(function f(){n++;s.textContent=n<30?String(n):'Done 30';if(n<30)requestAnimationFrame(f)})()">Start</button><div id="c">0</div>`);
 const simple = n => page('Tab ' + n, `<h1>Tab ${n}</h1><a href="/form">form</a>`);
 // The "person" of the non-interference probe (agent-use/web/xuser.c types into this page's textarea).
 const userPage = () => page('AUB user page', '<textarea id="t" rows="6" cols="40" autofocus></textarea>',
@@ -45,7 +47,7 @@ const userPage = () => page('AUB user page', '<textarea id="t" rows="6" cols="40
   `document.addEventListener('visibilitychange',()=>send({type:'user:vis',state:document.visibilityState}));`);
 
 const apiSlow = (res) => setTimeout(() => { res.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); res.end('XHR done'); }, 120);
-const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/wizard': wizard, '/covered': covered, '/todo': todo, '/user': userPage, '/tab2': () => simple(2), '/tab3': () => simple(3) };
+const routes = { '/busy': busy, '/form': form, '/delay': delay, '/table': table, '/xhr': xhr, '/wizard': wizard, '/covered': covered, '/todo': todo, '/user': userPage, '/raf': raf, '/tab2': () => simple(2), '/tab3': () => simple(3) };
 
 export function startFixture(port = 8765) {
   const server = http.createServer((req, res) => {

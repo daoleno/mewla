@@ -111,7 +111,7 @@ def convert_web(files):
             rows.append(row(r["task"], r["rep"], r["ok"], round(r["wall_ms"] / 1000, 1), r.get("turns"), r.get("tool_calls"), tok,
                             r.get("cost_usd"), None if ni is None else ni.get("undisturbed"), disturbed))
             if ni:
-                rows[-1]["nonint"] = {k: ni.get(k) for k in ("typed", "keys_received", "typing_lost", "key_focus_lost", "raised_over_user", "pointer_moved", "user_page_hidden")}
+                rows[-1]["nonint"] = {k: ni.get(k) for k in ("typed", "keys_received", "typing_lost", "key_focus_lost", "raised_over_user", "raised_covering_user", "covered_ms", "pointer_moved", "user_page_hidden")}
         tool = {"mewla": "mewla_chrome", "ab": "agent-browser"}.get(d.get("side"), d.get("side"))
         run_id = meta.get("run_id") or os.path.basename(f).rsplit(".", 1)[0]
         extra = {k: meta[k] for k in ("transport", "tool_version", "notes", "nonint_measured", "nonint_not_measured") if k in meta}

@@ -9,10 +9,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startFixture, events } from './fixture.mjs';
-import { tasks as baseTasks } from './tasks.mjs';
+import { tasks as baseTasks, extraTasks } from './tasks.mjs';
 import { longTasks } from './tasks-long.mjs';
 // --long runs only the longer tasks; --only picks by id from both sets.
-const tasks = [...(process.argv.includes('--long') ? [] : baseTasks), ...(process.argv.includes('--long') || process.argv.includes('--with-long') ? longTasks : [])];
+const tasks = [...(process.argv.includes('--long') ? [] : baseTasks), ...(process.argv.includes('--long') || process.argv.includes('--with-long') ? longTasks : []), ...extraTasks.filter(t => (process.argv[process.argv.indexOf('--only') + 1] || '').split(',').includes(t.id))];
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) => (v.startsWith('--') ? [...a, [v.slice(2), all[i + 1]]] : a), []));
 const side = args.side, reps = Number(args.reps || 3), model = args.model || 'claude-sonnet-5-5';
@@ -96,7 +96,7 @@ async function stopUser(u) {
   let s = {}; for (const l of u.lines) { try { const o = JSON.parse(l); if (o.ev === 'summary') s = o; } catch {} }
   const keys = seen.filter(e => e.type === 'user:key').length;
   const ni = { typed: s.typed ?? null, keys_received: keys, typing_lost: s.typed == null ? null : Math.max(0, s.typed - keys - 1),
-    key_focus_lost: s.focus_away ?? null, raised_over_user: s.raised ?? null, raised_popup: s.raised_popup ?? null, pointer_moved: s.pointer_moves ?? null,
+    key_focus_lost: s.focus_away ?? null, raised_over_user: s.raised ?? null, raised_covering_user: s.raised_covering ?? null, covered_ms: s.covered_ms ?? null, raised_popup: s.raised_popup ?? null, pointer_moved: s.pointer_moves ?? null,
     user_page_hidden: seen.filter(e => e.type === 'user:vis' && e.state === 'hidden').length,
     measured: ['key_focus_lost', 'raised_over_user', 'typing_lost', 'pointer_moved', 'user_page_hidden'],
     not_measured: ['clipboard', 'space_switch', 'dialog_on_user', 'app_activation'] };
@@ -140,20 +140,26 @@ const rows = [];
 for (const task of tasks) {
   if (only && !only.includes(task.id)) continue;
   for (let rep = 0; rep < reps; rep++) {
+   // The probe sometimes fails to start (the person's window was not found in time): that trial says nothing about the
+   // agent, so it is run again, once, and the row says so.
+   for (let attempt = 0; attempt < 2; attempt++) {
     events.length = 0; resetBrowser();
     if (NONINT) await freshBrowser();
     const user = NONINT ? await startUser() : null;
     const r = CONTROL ? await new Promise(res => setTimeout(() => res({ wall: 20000, result: { result: '' }, tools: 0 }), 20000)) : await runClaude(task.prompt.replaceAll('{base}', base));
     const nonint = user ? await stopUser(user) : undefined;
+    if (nonint && nonint.typed == null && attempt === 0) { console.error(`probe did not run for ${task.id} #${rep}; running it again`); continue; }
     const answer = r.result?.result ?? '';
     const u = r.result?.usage ?? {};
     const ok = !!task.check(answer, events);
     const row = { task: task.id, kind: task.kind, rep, ok, nonint, full_pass: nonint ? ok && nonint.undisturbed : undefined, wall_ms: Math.round(r.wall), api_ms: r.result?.duration_api_ms ?? null,
       turns: r.result?.num_turns ?? null, tool_calls: r.tools, input: u.input_tokens, cache_read: u.cache_read_input_tokens, cache_create: u.cache_creation_input_tokens, output: u.output_tokens,
-      cost_usd: r.result?.total_cost_usd ?? null, answer: answer.slice(0, 160), error: r.result ? undefined : r.err };
+      cost_usd: r.result?.total_cost_usd ?? null, answer: answer.slice(0, 160), error: r.result ? undefined : r.err, probe_retries: attempt || undefined };
     rows.push(row);
     console.log(JSON.stringify(row));
     if (args.out) writeFileSync(args.out, JSON.stringify({ side, model, meta: JSON.parse(process.env.AUB_META || '{}'), rows }, null, 1));
+    break;
+   }
   }
 }
 const med = xs => { const s = xs.filter(x => x != null).sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };

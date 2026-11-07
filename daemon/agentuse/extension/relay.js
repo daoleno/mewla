@@ -6,6 +6,10 @@
  * JavaScript. Changed: tabs the relay creates go to the agent's own window.
  */
 
+// When each agent window was last driven by its agent (any command it sent): a
+// focus change to that window right after one is the agent's doing.
+export const drivenAt = new Map();
+
 export function debugLog(...args) {
   console.log('[Mewla]', ...args);
 }
@@ -194,9 +198,12 @@ export class RelayConnection {
     if (!ALLOWED_CHROME_COMMANDS.has(message.method))
       throw new Error(`Unknown method: ${message.method}`);
     const args = [...(message.params ?? [])];
+    drivenAt.set(this._home.windowId, Date.now());
     if (message.method === 'chrome.tabs.create') {
       // The server opens its tabs in the agent's window, never the person's.
       args[0] = { ...(args[0] ?? {}), windowId: this._home.windowId };
+      // A window kept out of the way stays so: a tab made the active one brings the window up.
+      if (this._home.minimize) args[0].active = false;
     }
     const result = await invokeChromeMethod(message.method, args);
     if (message.method === 'chrome.debugger.attach') {
