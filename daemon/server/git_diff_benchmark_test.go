@@ -42,7 +42,7 @@ func BenchmarkGitDiff(b *testing.B) {
 			git("add", ".")
 			git("commit", "-qm", "fixture")
 			write("new ")
-			for _, operation := range []string{"status", "patch", "page"} {
+			for _, operation := range []string{"status", "patch"} {
 				b.Run(operation, func(b *testing.B) {
 					b.ReportAllocs()
 					for i := 0; i < b.N; i++ {
@@ -50,10 +50,8 @@ func BenchmarkGitDiff(b *testing.B) {
 						var err error
 						if operation == "status" {
 							payload, err = (&Server{}).buildGitDiffStatus("", repo)
-						} else if operation == "patch" {
-							payload, err = (&Server{}).buildGitDiffPatch("", repo, "file-0000.ts")
 						} else {
-							payload, err = (&Server{}).buildGitDiffPage("", repo, "file-0000.ts", "all", 0, "", "")
+							payload, err = (&Server{}).buildGitDiffPatch("", repo, "file-0000.ts")
 						}
 						if err != nil {
 							b.Fatal(err)

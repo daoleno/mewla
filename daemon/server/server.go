@@ -432,7 +432,6 @@ type clientMessage struct {
 	Lines                int                                    `json:"lines"`
 	ProcessID            int                                    `json:"process_id"`
 	Path                 string                                 `json:"path"`
-	Query                string                                 `json:"query"`
 	FileGeneration       string                                 `json:"file_generation"`
 	ID                   string                                 `json:"id"`
 	Project              string                                 `json:"project"`
@@ -1057,7 +1056,7 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		go s.handleAnswerPrompt(conn, raw)
 	case "rewind_message":
 		go s.handleRewindMessage(conn, raw)
-	case "git_diff_status", "git_diff_patch", "git_diff_page", "git_diff_file_content", "git_repo_entries", "git_repo_paths", "git_repo_file_content", "list_dir":
+	case "git_diff_status", "git_diff_patch", "git_diff_file_content", "git_repo_paths", "git_repo_file_content", "list_dir":
 		s.handleRepositoryMessage(conn, raw)
 	case "service_tunnel":
 		s.handleServiceTunnel(conn, raw)
@@ -1591,13 +1590,6 @@ func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage
 			"request_id": raw.RequestID,
 			"patch":      payload,
 		})
-	case "git_diff_page":
-		payload, err := s.buildGitDiffPage(raw.TargetID, raw.Cwd, raw.Path, raw.Scope, raw.Row, raw.FileGeneration, raw.Query)
-		if err != nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "git_diff_page_failed", err.Error())
-			return
-		}
-		s.sendJSON(conn, map[string]interface{}{"type": "git_diff_page", "request_id": raw.RequestID, "page": payload})
 	case "git_diff_file_content":
 		payload, err := s.buildGitDiffFileContent(raw.TargetID, raw.Cwd, raw.Path)
 		if err != nil {
@@ -1608,17 +1600,6 @@ func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage
 			"type":       "git_diff_file_content",
 			"request_id": raw.RequestID,
 			"content":    payload,
-		})
-	case "git_repo_entries":
-		payload, err := s.buildGitRepoEntries(raw.TargetID, raw.Cwd, raw.Path)
-		if err != nil {
-			s.sendErrorWithRequestID(conn, raw.RequestID, "git_repo_entries_failed", err.Error())
-			return
-		}
-		s.sendJSON(conn, map[string]any{
-			"type":       "git_repo_entries",
-			"request_id": raw.RequestID,
-			"browser":    payload,
 		})
 	case "git_repo_paths":
 		payload, err := s.buildGitRepoPaths(raw.TargetID, raw.Cwd)
