@@ -87,7 +87,7 @@ func (k *skyLightSyms) stamp(event uintptr, pid int, window AppWindow, local fpo
 // SwipeTo moves a finger from x, y (framebuffer pixels on the window) by
 // dx, dy, in the way how says, to an app behind other windows.
 func (s *macSession) SwipeTo(pid int, window AppWindow, x, y, dx, dy int, how SwipeHow) error {
-	return s.swipeTo(pid, window, x, y, dx, dy, how, true)
+	return s.swipeTo(pid, window, x, y, dx, dy, how, true, dragShape{})
 }
 
 // DragTo drags in a window of an app behind other windows. No focus record
@@ -96,12 +96,35 @@ func (s *macSession) SwipeTo(pid int, window AppWindow, x, y, dx, dy int, how Sw
 // probe, daemon/screen/probe_popup_darwin_test.go); without it the app still
 // gets the press, the moves and the release.
 func (s *macSession) DragTo(pid int, window AppWindow, x, y, dx, dy int) error {
-	return s.swipeTo(pid, window, x, y, dx, dy, SwipeDrag, false)
+	return s.swipeTo(pid, window, x, y, dx, dy, SwipeDrag, false, dragShapes[dragShapeName])
 }
+
+// dragShape is how a background drag's events are built. The Mac probe
+// (probe_drag_darwin_test.go) tries them against the person's own window, since
+// any didResignKey of it counts as a disturbance in Cua Driver Bench.
+type dragShape struct {
+	move  bool // a mouse-moved at the start first, as a click's plan has
+	touch bool // gesture phase 3 and the touch subtype on every event, as a click's
+	pid   bool // CGEventPostToPid instead of the window server's post
+	plain bool // only the target pid and window number: no window-under fields, no window location
+}
+
+// dragShapeOrder is the order the probe tries them in; the first that leaves
+// the person's window key is the one a build is made with.
+var dragShapeOrder = []string{"base", "move", "touch", "move+touch", "pid", "plain"}
+
+var dragShapes = map[string]dragShape{
+	"base": {}, "move": {move: true}, "touch": {touch: true}, "move+touch": {move: true, touch: true},
+	"pid": {pid: true}, "plain": {plain: true},
+}
+
+// dragShapeName is the shape DragTo uses; a build can set it with
+// -ldflags "-X github.com/daoleno/mewla/daemon/screen.dragShapeName=NAME".
+var dragShapeName = "base"
 
 var _ appDragger = (*macSession)(nil)
 
-func (s *macSession) swipeTo(pid int, window AppWindow, x, y, dx, dy int, how SwipeHow, focus bool) error {
+func (s *macSession) swipeTo(pid int, window AppWindow, x, y, dx, dy int, how SwipeHow, focus bool, shape dragShape) error {
 	k := loadSkyLight()
 	if k.why != "" {
 		return errors.New(k.why)
@@ -132,20 +155,49 @@ func (s *macSession) swipeTo(pid int, window AppWindow, x, y, dx, dy int, how Sw
 	switch how {
 	case SwipeDrag:
 		group := time.Now().UnixNano() & 0x7fffffff
+		deliver := func(event uintptr) {
+			if shape.pid {
+				if postPid := eventPostToPid(); postPid != nil {
+					postPid(int32(pid), event)
+					return
+				}
+			}
+			k.post(int32(pid), event)
+		}
 		post := func(kind uint32, px, py int, pause time.Duration) error {
 			g, l := at(px, py)
 			event := mac.CGEventCreateMouseEvent(source, kind, cgPoint{g.X, g.Y}, 0)
 			if event == 0 {
 				return errors.New("couldn't make the swipe event")
 			}
-			k.setField(event, fieldClickState, 1)
-			k.setField(event, fieldClickGroup, group)
-			k.stamp(event, pid, window, l)
+			if kind != cgEventMouseMoved {
+				k.setField(event, fieldClickState, 1)
+				k.setField(event, fieldClickGroup, group)
+			}
+			if shape.touch {
+				phase := int64(3)
+				if kind == cgEventMouseMoved {
+					phase = 2
+				}
+				k.setField(event, fieldGesturePhase, phase)
+				k.setField(event, fieldSubtype, eventSubtypeTouch)
+			}
+			if shape.plain {
+				k.setField(event, fieldTargetPID, int64(pid))
+				k.setField(event, fieldWindowNumber, int64(window.ID))
+			} else {
+				k.stamp(event, pid, window, l)
+			}
 			mac.CGEventSetFlags(event, 0)
-			k.post(int32(pid), event)
+			deliver(event)
 			mac.CFRelease(event)
 			time.Sleep(pause)
 			return nil
+		}
+		if shape.move {
+			if err := post(cgEventMouseMoved, x, y, 15*time.Millisecond); err != nil {
+				return err
+			}
 		}
 		if err := post(macDownTypes[0], x, y, 30*time.Millisecond); err != nil {
 			return err

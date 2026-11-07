@@ -79,6 +79,8 @@ func computerStatus(ctx context.Context, s *screen.Service) agentuse.ComputerSta
 }
 
 const computerToolDescription = `Use this computer's screen, keyboard and pointer, the way a person at it would. ` +
+	`Screen or app, decide first: without app, a click or drag happens at that point of the screen with the real pointer and brings the window there to the front, ` +
+	`which takes the person's keyboard and screen; to act in a Mac app that is not in front without disturbing them, give app on every click, drag and key. ` +
 	`In a Mac app, prefer the app tools (apps, app_state, element, menu, steps): they act on the app's own controls in the background; ` +
 	`use this tool for what they can't reach. Start with action "screenshot"; give every coordinate in that screenshot's pixels. ` +
 	`Actions: screenshot, left_click, right_click, middle_click, double_click, triple_click, mouse_move, ` +
