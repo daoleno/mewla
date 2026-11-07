@@ -39,7 +39,8 @@ type Resource struct {
 	Generation  string    `json:"generation,omitempty"`
 	Control     string    `json:"control"`
 	Target      string    `json:"target,omitempty"`
-	// Agent is the Worker that holds the browser, empty when none does.
+	// Agent is the Worker that holds the browser, or that held it when the person
+	// took it over; empty otherwise.
 	Agent string `json:"agent,omitempty"`
 }
 type Request struct {
