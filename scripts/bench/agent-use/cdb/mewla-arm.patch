@@ -121,7 +121,7 @@ index 9877942..37ad119 100644
          return CU_HELPER_CLASSES.get(tool, "other")
      if server == "agentdesktop":
 diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
-index 120f4b0..ba8f63f 100644
+index 120f4b0..7fba084 100644
 --- a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
 +++ b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
 @@ -655,7 +655,11 @@ def real_capture_check(ctx: "Ctx", arm: str) -> tuple[str, str, str]:
@@ -137,7 +137,26 @@ index 120f4b0..ba8f63f 100644
                  if "list_apps" not in tools:
                      raise RuntimeError("unexpected agent-desktop tools/list")
                  call("list_apps", {})
-@@ -2465,7 +2469,7 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
+@@ -2458,14 +2462,24 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
+     add("BenchLab + BenchSentinel builds", "pass" if ok_build else "fail", str(build))
+     copies = registered_bench_copies()
+     per_name = {n: [c for c in copies if Path(c).name == n] for n in BENCH_APPS}
+-    ok_copies = desktop.detect_platform() == "linux" or all(len(v) == 1 for v in per_name.values())
++    # Only the Codex computer-use server resolves apps by bundle id and needs exactly one registered copy.
++    needs_one_copy = any(a in ca.CODEX_ARMS for a in ctx.arm_names)
++    ok_copies = (
++        desktop.detect_platform() == "linux"
++        or not needs_one_copy
++        or all(len(v) == 1 for v in per_name.values())
++    )
+     add(
+         "exactly one registered copy of BenchLab and BenchSentinel",
+-        "skip" if desktop.detect_platform() == "linux" else "pass" if ok_copies else "fail",
++        "skip"
++        if desktop.detect_platform() == "linux" or not needs_one_copy
++        else "pass"
++        if ok_copies
++        else "fail",
          "not applicable on Linux" if desktop.detect_platform() == "linux" else json.dumps(per_name),
      )
      try:
@@ -146,7 +165,7 @@ index 120f4b0..ba8f63f 100644
              subprocess.run(["/usr/bin/open", "-a", "Calculator"], check=True, timeout=30)
          with capture_subject(ctx.run_dir / "preflight-capture" / "subject"):
              for arm in ctx.arm_names:
-@@ -2474,7 +2478,8 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
+@@ -2474,7 +2488,8 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
          for arm in ctx.arm_names:
              add(f"{arm} real capture", "fail", str(error)[:300])
      finally:

@@ -16,7 +16,7 @@
 #  * CDB_BENCH_DISPOSABLE is NEVER set, so the runner never kills Chrome/Electron/LibreOffice/GnuCash by name.
 #    Only BenchLab and BenchSentinel (its own two apps) are swept. The BenchLab tasks need nothing else.
 #  * No message is sent, nothing is bought, no account is touched: BenchLab is a local test app.
-#  * The screen is used for ~1 minute per trial: one unlock, `caffeinate` held for the whole run. Nothing else runs on
+#  * The screen is used for ~1 minute per trial: ONE unlock (if locked the script waits for it, never unlocks), `caffeinate` held for the whole run. Nothing else runs on
 #    the screen meanwhile (one Worker on the screen at a time).
 #  * The runner's own screen recorder is off (--no-recorder): it needs a private Cua Driver install with its own
 #    Accessibility + Screen Recording grants, which a person would have to give. Scoring does not use the video; it uses
@@ -82,13 +82,30 @@ PY
 export CDB_MEWLA_BIN=${CDB_MEWLA_BIN:-$(command -v mewla)}
 # Keep the display awake for this script's lifetime only (memory mac-unlock-batching).
 caffeinate -d -i -w $$ &
-python3 run_bench.py preflight --bench-v2 --pins "$PINS" --no-recorder --allow-non-terminal --claude-bin "$CLAUDE" --build-dir "$CDB_BENCH_WORK/build" --arms $ARMS || { echo "preflight failed: fix what it names, then rerun" >&2; exit 3; }
+# Everything from here needs the screen. Locked: wait for the person's one unlock (never try to unlock it), up to
+# CDB_WAIT_UNLOCK_MIN minutes, then go straight on in the same batch.
+locked() { ioreg -n Root -d1 | grep -q -E '"(CGSSessionScreenIsLocked|IOConsoleLocked)" = Yes'; }
+WAITED=0
+while locked; do
+  [ "$WAITED" -ge $(( ${CDB_WAIT_UNLOCK_MIN:-45} * 60 )) ] && { echo "the screen stayed locked for ${CDB_WAIT_UNLOCK_MIN:-45} min: nothing was run" >&2; exit 4; }
+  [ "$WAITED" -eq 0 ] && echo "screen is locked: waiting for the person to unlock it (polling every 20 s)" >&2
+  sleep 20; WAITED=$((WAITED + 20))
+done
+# Flags every runner call shares. --tasks keeps the preflight and the run to the BenchLab tasks (the pack tasks want
+# LibreOffice, GnuCash, Electron apps and CDB_BENCH_DISPOSABLE, which this Mac never gets). --no-model-preflight skips the
+# three Haiku probes (quota reading; this run is small). Disk floor 10 GB: no recordings are kept.
+COMMON=(--bench-v2 --pins "$PINS" --no-recorder --allow-non-terminal --claude-bin "$CLAUDE" --disk-floor-gb 10 --build-dir "$CDB_BENCH_WORK/build")
+bg_tasks() { for t in $TASKS; do case $t in MB-10|MB-11) ;; *) printf '%s ' "$t";; esac; done; }
+first=$( [ "$COND" = foreground ] && echo foreground || echo background )
+if [ "$first" = background ]; then PT=$(bg_tasks); else PT=$TASKS; fi
+python3 run_bench.py preflight "${COMMON[@]}" --no-model-preflight --condition "$first" --arms $ARMS --tasks $PT || { echo "preflight failed: fix what it names, then rerun" >&2; exit 3; }
 [ -n "$PREFLIGHT_ONLY" ] && exit 0
 
 for cond in $( [ "$COND" = both ] && echo "background foreground" || echo "$COND" ); do
   RID="aub-$(date +%Y%m%d-%H%M)-$cond"
-  python3 run_bench.py run --bench-v2 --pins "$PINS" --no-recorder --allow-non-terminal --claude-bin "$CLAUDE" --condition "$cond" --park-pointer --arms $ARMS --tasks $TASKS \
-    --phase1-runs "$RUNS" --phase2-runs 0 --run-id "$RID" --build-dir "$CDB_BENCH_WORK/build"
+  if [ "$cond" = background ]; then T=$(bg_tasks); else T=$TASKS; fi
+  python3 run_bench.py run "${COMMON[@]}" --no-model-preflight --condition "$cond" --park-pointer --arms $ARMS --tasks $T \
+    --phase1-runs "$RUNS" --phase2-runs 0 --run-id "$RID"
   python3 -I "$AUB/aub.py" import-cdb "$CDB_BENCH_WORK/runs/$RID"
 done
-echo "results are in $AUB/results; raw runs (with recordings) stay in $CDB_BENCH_WORK/runs, outside git"
+echo "results are in $AUB/results; raw runs stay in $CDB_BENCH_WORK/runs, outside git"
