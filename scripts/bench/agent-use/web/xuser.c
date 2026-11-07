@@ -13,6 +13,7 @@
 //
 // Build: cc -O2 -o xuser xuser.c -lX11 -lXtst
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/XTest.h>
 #include <X11/keysym.h>
@@ -69,6 +70,17 @@ static Window topmost_mapped(Display *d, Window root) {
   return top;
 }
 
+// One window as a JSON fragment: id, override_redirect (Chrome's own popups: omnibox, bubbles), class, title, geometry.
+static void describe(Display *d, Window w, char *out, size_t n) {
+  XWindowAttributes a; XClassHint ch = {0}; char *name = NULL; char cls[64] = "", title[64] = "";
+  int ok = XGetWindowAttributes(d, w, &a);
+  if (XGetClassHint(d, w, &ch)) { if (ch.res_class) snprintf(cls, sizeof cls, "%s", ch.res_class); if (ch.res_name) XFree(ch.res_name); if (ch.res_class) XFree(ch.res_class); }
+  if (XFetchName(d, w, &name) && name) { snprintf(title, sizeof title, "%s", name); XFree(name); }
+  for (char *c = title; *c; c++) if (*c == '"' || *c == '\\' || *c < 32) *c = ' ';
+  snprintf(out, n, "\"id\":%lu,\"override\":%d,\"cls\":\"%s\",\"name\":\"%s\",\"geom\":\"%d,%d %dx%d\"", (unsigned long)w,
+           ok ? a.override_redirect : -1, cls, title, ok ? a.x : 0, ok ? a.y : 0, ok ? a.width : 0, ok ? a.height : 0);
+}
+
 static void type_char(Display *d, char c) {
   KeySym ks = XStringToKeysym((char[]){c, 0});
   KeyCode kc = XKeysymToKeycode(d, ks);
@@ -97,7 +109,8 @@ int main(int argc, char **argv) {
   int lastx = rx, lasty = ry;
   Window lastfocus = 0, lasttop = 0; int rev;
   XGetInputFocus(d, &lastfocus, &rev);
-  int typed = 0, focus_away = 0, raised = 0, pointer_moves = 0, typed_not_in_user = 0;
+  int typed = 0, focus_away = 0, raised = 0, raised_popup = 0, pointer_moves = 0, typed_not_in_user = 0;
+  char desc[512];
   double t0 = now(), next_type = t0 + interval / 1000.0;
   printf("{\"ev\":\"start\",\"user_top\":%lu}\n", (unsigned long)utop);
   fflush(stdout);
@@ -107,13 +120,21 @@ int main(int argc, char **argv) {
     Window f; XGetInputFocus(d, &f, &rev);
     int in_user = (f != 0 && f != PointerRoot && top_of(d, f) == utop);
     if (f != lastfocus) {
-      printf("{\"ev\":\"focus\",\"t\":%.2f,\"in_user\":%d}\n", t, in_user);
+      describe(d, f && f != PointerRoot ? top_of(d, f) : root, desc, sizeof desc);
+      printf("{\"ev\":\"focus\",\"t\":%.2f,\"in_user\":%d,%s}\n", t, in_user, desc);
       if (!in_user) focus_away++;
       lastfocus = f;
     }
     Window top = topmost_mapped(d, root);
     if (top != lasttop) {
-      if (lasttop && top != utop) { raised++; printf("{\"ev\":\"raised\",\"t\":%.2f}\n", t); }
+      if (lasttop && top != utop) {
+        XWindowAttributes a; int popup = XGetWindowAttributes(d, top, &a) && a.override_redirect;
+        describe(d, top, desc, sizeof desc);
+        // A popup (override_redirect: Chrome's omnibox, bubbles) is not another window of the person's desktop being
+        // put over theirs; counted apart so the two can be told.
+        if (popup) raised_popup++; else raised++;
+        printf("{\"ev\":\"raised\",\"t\":%.2f,\"popup\":%d,%s}\n", t, popup, desc);
+      }
       lasttop = top;
     }
     XQueryPointer(d, root, &rw, &cw, &rx, &ry, &px0, &py0, &mask);
@@ -126,8 +147,8 @@ int main(int argc, char **argv) {
     }
     fflush(stdout);
   }
-  printf("{\"ev\":\"summary\",\"typed\":%d,\"typed_not_in_user\":%d,\"focus_away\":%d,\"raised\":%d,\"pointer_moves\":%d}\n",
-         typed, typed_not_in_user, focus_away, raised, pointer_moves);
+  printf("{\"ev\":\"summary\",\"typed\":%d,\"typed_not_in_user\":%d,\"focus_away\":%d,\"raised\":%d,\"raised_popup\":%d,\"pointer_moves\":%d}\n",
+         typed, typed_not_in_user, focus_away, raised, raised_popup, pointer_moves);
   fflush(stdout);
   return 0;
 }
