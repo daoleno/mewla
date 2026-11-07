@@ -696,7 +696,7 @@ func (s *Server) createSessionWithProfiles(preferredTarget string, opts watcher.
 		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"MEWLA_STATE_DIR": s.auth.StorageDir(), "MEWLA_WORKER_ID": ""})
 		id := opts.BrowserID
 		opts.PrepareLaunch = func(command string) (string, error) {
-			launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), s.auth.StorageDir(), id)
+			launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), s.auth.StorageDir(), id, s.displayOn())
 			if err != nil && autoBrowser {
 				return command, nil
 			}

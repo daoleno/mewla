@@ -41,6 +41,9 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	if action == "computer-mcp" {
 		return runComputerMCP(args[1:], stderr)
 	}
+	if action == "display-mcp" {
+		return runDisplayMCP(args[1:], stderr)
+	}
 	if action == "phone-mcp" {
 		return runPhoneMCP(args[1:], stderr)
 	}

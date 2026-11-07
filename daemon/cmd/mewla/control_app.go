@@ -28,6 +28,7 @@ import (
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
@@ -78,6 +79,7 @@ type controlApp struct {
 	calendarStore     *calendar.Store
 	calendarScheduler *calendar.Scheduler
 	screen            *screen.Service
+	displays          *vdisplay.Service
 	phone             *phone.Agent
 	iphone            *phone.Agent
 	agentUse          *agentuse.Service
@@ -113,6 +115,8 @@ func (a *controlApp) HandleControlRequest(req control.Request) control.Response 
 		return control.Response{OK: true, Connections: &result}
 	case "computer":
 		return a.handleComputerControl(req)
+	case "display":
+		return a.handleDisplayControl(req)
 	case "phone":
 		return a.handlePhoneControl(req)
 	case "iphone":
@@ -716,7 +720,7 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 			createOpts.BrowserID = browserID
 			createOpts.Env["MEWLA_WORKER_ID"] = ""
 			createOpts.PrepareLaunch = func(command string) (string, error) {
-				launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, browserID)
+				launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, browserID, a.displayOn())
 				if err != nil && autoBrowser {
 					// The browser was not asked for; a command that cannot take it launches without.
 					return command, nil

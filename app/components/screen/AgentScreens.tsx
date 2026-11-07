@@ -6,12 +6,14 @@ import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
 import { usePhoneUse } from "../../store/phoneUse";
 import { browserRequest, type BrowserResource } from "../../services/browser";
+import { haltDisplay, listDisplays, type AgentDisplay } from "../../services/display";
 import { getDefaultBrowserId, setDefaultBrowserId } from "../../services/browserDefault";
 import { browserIssue, DEFAULT_BROWSER_NAME, pickDefaultBrowser, type BrowserIssue } from "../../services/browserPageModel";
 import { serverDisplayName } from "../../services/serverDisplayName";
 import { ActionMenu, EmptyState, IconButton, InlineNotice } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AgentBrowserCard } from "./AgentBrowserCard";
+import { AgentDisplayCard } from "./AgentDisplayCard";
 import { phoneMenuItem } from "./phoneRow";
 
 /** How often the list reads the computer again, so an agent that starts or ends shows up. */
@@ -30,6 +32,7 @@ export function AgentScreens() {
   const phone = usePhoneUse();
   const serverName = serverDisplayName(currentServer?.name);
   const [resources, setResources] = useState<BrowserResource[]>([]);
+  const [displays, setDisplays] = useState<AgentDisplay[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [reason, setReason] = useState("");
   const [issue, setIssue] = useState<BrowserIssue | null>(null);
@@ -48,11 +51,16 @@ export function AgentScreens() {
     setResources(next);
     setReason(result.capability?.available === false ? result.capability.reason || "Browser can't start on this server yet." : "");
     setLoaded(true);
+    // Desktop apps run on a display of the agent's own; a server without them says so, which is fine.
+    const shown = await listDisplays(server, abort.current?.signal).then((r) => r.displays, () => []);
+    if (!isCurrentServer(server.id)) return null;
+    setDisplays(shown);
     return { resources: next, available: result.capability?.available !== false };
   }, [currentServer, isCurrentServer]);
 
   useEffect(() => {
     setResources([]);
+    setDisplays([]);
     setLoaded(false);
     setReason("");
     setIssue(null);
@@ -137,7 +145,7 @@ export function AgentScreens() {
       </View>
     );
   }
-  if (running.length === 0) {
+  if (running.length === 0 && displays.length === 0) {
     const setupNeeded = Boolean(reason);
     return (
       <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
@@ -172,6 +180,11 @@ export function AgentScreens() {
       <ScrollView contentContainerStyle={styles.list}>
         <View style={styles.inner}>
           {issue ? <InlineNotice tone={issue.tone} title={issue.title} detail={issue.detail} /> : null}
+          {displays.map((display) => (
+            <AgentDisplayCard key={`display:${display.id}`} server={currentServer} display={display}
+              agentName={workerState.workers.find((w) => w.id === display.id)?.name}
+              onStop={async (worker) => { await haltDisplay(currentServer, worker, abort.current?.signal); await list(); }} />
+          ))}
           {running.map((resource) => (
             <AgentBrowserCard key={`${resource.id}:${nonces[resource.id] ?? 0}`} server={currentServer} serverName={serverName}
               resource={resource} agentName={nameOf(resource)}

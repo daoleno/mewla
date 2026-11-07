@@ -43,7 +43,7 @@ func TestAgentToolsAreInvocationScopedAndCarryNoKey(t *testing.T) {
 func TestAgentToolsNeverBreakALaunch(t *testing.T) {
 	both := AgentTools{Chrome: true, Computer: true}
 	id := "d20f34e6-e54e-4ca2-baf8-bd49592ba60a"
-	withBrowser, err := WithBrowserMCP("claude --model x", "/mewla", "/state", id)
+	withBrowser, err := WithBrowserMCP("claude --model x", "/mewla", "/state", id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestAgentToolsNeverBreakALaunch(t *testing.T) {
 	if got := WithAgentTools("codex", "/mewla", "/state", AgentTools{}); got != "codex" {
 		t.Fatal(got)
 	}
-	codexBrowser, err := WithBrowserMCP("codex", "/mewla", "/state", id)
+	codexBrowser, err := WithBrowserMCP("codex", "/mewla", "/state", id, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,5 +148,28 @@ func TestThePhoneIsAnInvocationScopedServerForClaudeAndCodex(t *testing.T) {
 	}
 	if got := WithAgentTools("codex -c 'mcp_servers.mewla_phone={command=\"x\"}'", "/mewla", "/state", phone); strings.Count(got, "mewla_phone") != 1 {
 		t.Fatal(got)
+	}
+}
+
+func TestDisplayToolRidesOnTheLaunchOnce(t *testing.T) {
+	id := "d20f34e6-e54e-4ca2-baf8-bd49592ba60a"
+	for _, command := range []string{"claude --model x", "codex"} {
+		// With a browser, one MCP config carries both, and the tools pass adds nothing twice.
+		withBoth, err := WithBrowserMCP(command, "/mewla", "/state", id, true)
+		if err != nil || strings.Count(withBoth, "display-mcp") != 1 || !strings.Contains(withBoth, DisplayMCPName) {
+			t.Fatalf("%q: %v %s", command, err, withBoth)
+		}
+		if got := WithAgentTools(withBoth, "/mewla", "/state", AgentTools{Display: true}); strings.Count(got, "display-mcp") != 1 {
+			t.Fatalf("display added twice: %s", got)
+		}
+		without, _ := WithBrowserMCP(command, "/mewla", "/state", id, false)
+		if strings.Contains(without, "display-mcp") {
+			t.Fatalf("display without the switch: %s", without)
+		}
+		// Without a browser launch, the tools pass adds it, with the Worker's identity.
+		plain := WithAgentTools(command, "/mewla", "/state", AgentTools{Display: true})
+		if !strings.Contains(plain, "display-mcp") || !strings.Contains(plain, "MEWLA_WORKER_ID") && strings.HasPrefix(command, "codex") {
+			t.Fatalf("%q: %s", command, plain)
+		}
 	}
 }

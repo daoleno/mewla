@@ -308,6 +308,18 @@ screen without being told which: one no other agent is using, or a new one
 asks for it, not when the Worker starts. The switch lives on the computer, so
 every device sees the same answer.
 
+Desktop apps work the same way. With the switch on, a Worker (Claude or Codex)
+also has a **display** tool: it opens a program (a calculator, an editor) on a
+display of its own, sees it as a picture and clicks, types and presses keys.
+That display is private to the Worker and off your desktop; it needs TigerVNC's
+`Xvnc` on the computer, and apps run as X11 clients (there is no window manager,
+so a window sits where it opens). Screen lists it as another card for that agent
+with the same **Watch**, **Take over** and **Stop**: your taps and typing in
+Watch reach the app and the agent is told how many (never what you typed); Take
+over holds the display until you hand it back. The picture travels over a Unix
+socket only your user can open, no network port is used, and a display is
+closed when its Worker ends or closes it.
+
 The browser has its own profile, not your everyday Chrome: to give it a
 sign-in, take over, sign in yourself and hand back. A profile keeps its
 sign-ins on that computer. Chrome stores them in the computer's secure wallet

@@ -68,7 +68,7 @@ export class ScreenRequestError extends Error {
   }
 }
 
-async function endpoint(server: StoredServer, path: string) {
+export async function endpoint(server: StoredServer, path: string) {
   const url = new URL(await resolveStoredServerURL(server));
   const via = transportPathOfURL(server.id, url.toString());
   url.pathname = path;
@@ -121,6 +121,13 @@ export function base64ToBytes(text: string): Uint8Array {
   return out;
 }
 
+/** A viewer socket other than the computer's own screen. */
+export interface ScreenRoute {
+  path: string;
+  purpose: "mewla-display-view";
+  params: Record<string, string>;
+}
+
 export interface ScreenConnectionHandlers {
   /** The socket is open; the viewer may start its RFB client. */
   open(): void;
@@ -147,19 +154,23 @@ export class ScreenConnection {
   private timer: ReturnType<typeof setInterval> | undefined;
   private reason: string | null = null;
 
-  /** watch: see the agent using the screen without taking over; input goes nowhere. */
-  constructor(private server: StoredServer, private handlers: ScreenConnectionHandlers, private watch = false, private worker?: string) {}
+  /**
+   * watch: see the agent using the screen without taking over; input goes nowhere.
+   * route: another viewer socket that speaks the same RFB to this page, such as an agent's display.
+   */
+  constructor(private server: StoredServer, private handlers: ScreenConnectionHandlers, private watch = false, private worker?: string, private route?: ScreenRoute) {}
 
   /** The path this viewer's socket is carried on, known once it is dialed. */
   path: TransportPath | null = null;
 
   async connect() {
-    const url = await endpoint(this.server, "/screen/viewer");
+    const url = await endpoint(this.server, this.route?.path ?? "/screen/viewer");
     this.path = url.via;
     url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
-    if (this.watch) url.searchParams.set("watch", "1");
-    if (this.watch && this.worker) url.searchParams.set("worker", this.worker);
-    const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: "mewla-screen-view" });
+    for (const [key, value] of Object.entries(this.route?.params ?? {})) url.searchParams.set(key, value);
+    if (!this.route && this.watch) url.searchParams.set("watch", "1");
+    if (!this.route && this.watch && this.worker) url.searchParams.set("worker", this.worker);
+    const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: this.route?.purpose ?? "mewla-screen-view" });
     if (this.closed) return;
     let socket: WebSocket;
     if (Platform.OS === "web") {

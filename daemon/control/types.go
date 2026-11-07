@@ -21,6 +21,7 @@ import (
 	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
+	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/statedir"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
 	"github.com/daoleno/mewla/daemon/watch"
@@ -37,6 +38,7 @@ type Request struct {
 	ComputersRequest     *computers.Request                     `json:"computers_request,omitempty"`
 	AgentsRequest        *outsideagents.ControlRequest          `json:"agents_request,omitempty"`
 	ComputerAction       *screen.AgentAction                    `json:"computer_action,omitempty"`
+	DisplayAction        *vdisplay.Action                       `json:"display_action,omitempty"`
 	PhoneAction          *phone.AgentAction                     `json:"phone_action,omitempty"`
 	// IPhoneAction is one action on the iPhone, through iPhone Mirroring (type "iphone"); its
 	// answer is PhoneResult.
@@ -167,6 +169,7 @@ type Response struct {
 	Agents               *outsideagents.ControlResult             `json:"agents,omitempty"`
 	AgentUse             *agentuse.Status                         `json:"agent_use,omitempty"`
 	ComputerResult       *screen.AgentResult                      `json:"computer_result,omitempty"`
+	DisplayResult        *vdisplay.Result                         `json:"display_result,omitempty"`
 	PhoneResult          *phone.AgentResult                       `json:"phone_result,omitempty"`
 	ResourceTelemetry    *watcher.MachineResourceSnapshot         `json:"resource_telemetry,omitempty"`
 	Daemon               *DaemonStatus                            `json:"daemon,omitempty"`

@@ -12,6 +12,9 @@ import (
 const (
 	ChromeMCPName   = "mewla_chrome"
 	ComputerMCPName = "mewla_computer"
+	// DisplayMCPName is a private display for desktop apps on Linux, when the
+	// virtual screen is on.
+	DisplayMCPName = "mewla_display"
 	// PhoneMCPName is the person's Android phone, when Phone use is on.
 	PhoneMCPName = "mewla_phone"
 	// IPhoneMCPName is the person's iPhone, through iPhone Mirroring on this Mac.
@@ -33,6 +36,8 @@ type AgentTools struct {
 	Chrome bool
 	// Computer is this computer's screen, keyboard and pointer.
 	Computer bool
+	// Display is a private display agents open desktop apps on (Linux).
+	Display bool
 	// Phone is the person's Android phone, through the Mewla app.
 	Phone bool
 	// IPhone is the person's iPhone, through iPhone Mirroring on this Mac.
@@ -57,12 +62,18 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 		// timeoutSec is how long Codex waits for one call, where the default is too short.
 		timeoutSec int
 	}
+	if strings.Contains(command, DisplayMCPName) {
+		tools.Display = false // the browser launch already carried it
+	}
 	var servers []server
 	if tools.Chrome {
 		servers = append(servers, server{name: ChromeMCPName, args: []string{"agent-use", "chrome-mcp", "--state-dir", stateDir}})
 	}
 	if tools.Computer {
 		servers = append(servers, server{name: ComputerMCPName, args: []string{"agent-use", "computer-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}})
+	}
+	if tools.Display {
+		servers = append(servers, server{name: DisplayMCPName, args: []string{"agent-use", "display-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}})
 	}
 	if tools.Phone {
 		servers = append(servers, server{name: PhoneMCPName, args: []string{"agent-use", "phone-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}, timeoutSec: PhoneToolTimeoutSec})
