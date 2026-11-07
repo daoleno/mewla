@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { markWorkOpen, workOpenBreakdown } from "./workOpenTiming";
+import { markWorkOpen, STALE_PRESS_MS, workOpenBreakdown } from "./workOpenTiming";
 
 describe("work open timing", () => {
   test("the breakdown splits one open into press, JS commit and paint", () => {
@@ -17,6 +17,11 @@ describe("work open timing", () => {
 
   test("an unfinished open has no breakdown", () => {
     expect(workOpenBreakdown({ pressIn: 1, press: 2, commit: 3 })).toBeNull();
+  });
+
+  test("a press that only made the cat speak does not pair with a sheet opened much later", () => {
+    expect(workOpenBreakdown({ pressIn: 0, press: 1, commit: 1 + STALE_PRESS_MS + 1, frame: 20_000 })).toBeNull();
+    expect(workOpenBreakdown({ pressIn: 0, press: 1, commit: 1 + STALE_PRESS_MS, frame: 11_000 })?.pressToCommit).toBe(STALE_PRESS_MS);
   });
 
   test("outside a development build nothing is recorded", () => {

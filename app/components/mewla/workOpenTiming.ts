@@ -28,10 +28,18 @@ function dev(): boolean {
   return typeof __DEV__ !== "undefined" && __DEV__;
 }
 
-/** Pure: the breakdown of one open from its stamps, or null while incomplete. */
+/**
+ * A press that only made the cat speak leaves its stamp behind; a sheet opened
+ * from somewhere else minutes later must not pair with it and log a fake
+ * multi-second open.
+ */
+export const STALE_PRESS_MS = 10_000;
+
+/** Pure: the breakdown of one open from its stamps, or null while incomplete or stale. */
 export function workOpenBreakdown(marks: Partial<Record<WorkOpenStage, number>>): WorkOpenTiming | null {
   const { press, commit, frame } = marks;
   if (press === undefined || commit === undefined || frame === undefined) return null;
+  if (commit - press > STALE_PRESS_MS) return null;
   const start = marks.pressIn ?? press;
   return {
     pressInToPress: round(press - start),
