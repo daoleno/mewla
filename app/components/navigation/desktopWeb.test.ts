@@ -33,7 +33,7 @@ describe("route mapping", () => {
     expect(desktopSidebarKey("/plugins/agents/codex")).toBe("plugins");
     expect(desktopSidebarKey("/settings/model-providers")).toBe("settings");
     expect(desktopSidebarKey("/settings?addServer=1")).toBe("settings");
-    expect(desktopSidebarKey("/browser")).toBeNull();
+    expect(desktopSidebarKey("/phone")).toBe("screen");
   });
 
   test("each sidebar row's path maps back to the row", () => {

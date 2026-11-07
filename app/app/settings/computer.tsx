@@ -193,9 +193,6 @@ export default function ComputerScreen() {
           }
         })();
         return;
-      case "stop_agent":
-        void apply(problem.key, { stop_agent: true });
-        return;
       case "paste_key":
         void (async () => {
           const key = (await Clipboard.getStringAsync()).trim();

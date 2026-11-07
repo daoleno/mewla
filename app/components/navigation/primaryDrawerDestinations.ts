@@ -4,10 +4,8 @@ import type { PrimaryRouteName } from "../../services/interactionTrace";
 export type PrimaryDrawerPathname =
   | "/calendar"
   | "/friends"
-  | "/phone"
   | "/plugins"
   | "/stats"
-  | "/browser"
   | "/screen"
   | "/resources"
   | "/settings";
@@ -25,7 +23,7 @@ export interface PrimaryDrawerDestination {
   pathname: PrimaryDrawerPathname;
   icon: IconName;
   /** A Labs feature: listed only while the owner has it turned on (and, for Phone use, available). */
-  labs?: "friends" | "phone";
+  labs?: "friends";
 }
 
 /** Brain and Sessions, the primary pages, lead the menu on every layout. */
@@ -44,7 +42,6 @@ export const PRIMARY_DRAWER_DESTINATIONS: readonly PrimaryDrawerDestination[] = 
   { key: "calendar", label: "Calendar", pathname: "/calendar", icon: "calendar" },
   { key: "plugins", label: "Extensions", pathname: "/plugins", icon: "plugins" },
   { key: "screen", label: "Screen", pathname: "/screen", icon: "desktop" },
-  { key: "phone", label: "Phone", pathname: "/phone", icon: "phone", labs: "phone" },
   { key: "stats", label: "Stats", pathname: "/stats", icon: "stats" },
   { key: "resources", label: "Resources", pathname: "/resources", icon: "resources" },
   { key: "friends", label: "Friends", pathname: "/friends", icon: "people", labs: "friends" },

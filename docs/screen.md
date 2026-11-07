@@ -234,7 +234,7 @@ missing, and **Open Settings** opens the right page on the Mac.
   tap away. Work in an app behind others happens out of sight, so Watch may
   not show it; it is still the agent's turn on the screen, with the same
   pause, stop and record. The Mac shows a notification when an agent starts and stops using
-  the screen, and Settings shows the agent with a **Stop** row.
+  the screen, and **Stop** is on the agent's row in Screen.
 - **Several at once, each in its own apps.** Any number of agents can use the
   Mac at the same time as long as each works in a different app: they click and
   type into apps behind your windows, and those apps wait on the agent display.
@@ -285,8 +285,11 @@ Workers started afterwards; one already running keeps it until it ends.
 
 A Linux computer has no screen of yours to share, but the browsers agents use
 there run on a virtual screen of their own, off your desktop. With **Settings →
-Labs → Virtual screen** on, **Screen** shows that browser live, with the same
-three choices as on a Mac:
+Labs → Virtual screen** on, **Screen** lists every agent using a browser, each
+with its own live view, and the same three choices as on a Mac. A row keeps its
+place and its agent's name while you hold the browser. **New browser** in the
+menu opens one for signing in; the Phone, where phone use is on, is a row in
+the same menu.
 
 - **Watch** is how it opens. Your taps, scrolls and typing reach the page
   without taking the browser from the agent. The agent is told what you did

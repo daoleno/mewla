@@ -27,7 +27,9 @@ import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
 import { ScreenViewerHost } from "./ScreenViewerHost";
-import { BrowserScreen } from "../browser/BrowserScreen";
+import { AgentScreens } from "./AgentScreens";
+import { phoneMenuItem } from "./phoneRow";
+import { usePhoneUse } from "../../store/phoneUse";
 import { useVirtualScreenLabs } from "../../store/virtualScreenLabs";
 import { warnOnce } from "../../services/warnOnce";
 import { serverDisplayName } from "../../services/serverDisplayName";
@@ -126,6 +128,7 @@ export function ScreenScreen() {
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const iphone = useIPhoneUse(5_000);
+  const phone = usePhoneUse();
   const virtualScreen = useVirtualScreenLabs();
   const [watching, setWatching] = useState(false);
   // Which agent is being watched, when several work at once.
@@ -539,6 +542,7 @@ export function ScreenScreen() {
       label: status.keep_awake ? "Let this computer sleep" : "Keep this computer awake",
       onPress: () => void setKeepAwake(!status.keep_awake),
     } satisfies ActionMenuItem] : []),
+    ...(phoneMenuItem(phone, () => router.push("/phone")) ? [phoneMenuItem(phone, () => router.push("/phone"))!] : []),
     phase === "live"
       ? { key: "disconnect", icon: "exit", label: "Disconnect", onPress: () => { disconnect(); setReason(null); setPhase("lost"); } }
       : { key: "reconnect", icon: "refresh", label: "Reconnect", onPress: () => void connect() },
@@ -572,7 +576,7 @@ export function ScreenScreen() {
   // A Linux computer has no screen to share, but its agents' browsers run on a
   // virtual display of their own, shown here with the same Watch, Take over and Stop.
   if (virtualScreen.enabled && status && !status.supported && status.platform === "linux") {
-    return <BrowserScreen embedded />;
+    return <AgentScreens />;
   }
 
   const takeOver = () => void connect("takeOver");
