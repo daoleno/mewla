@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -31,6 +32,8 @@ type fakeRuntime struct {
 	drain     chan struct{}
 	uncertain bool
 	target    string
+	mu        sync.Mutex
+	inputs    []Input
 }
 
 func (r *fakeRuntime) Target() string {
@@ -44,6 +47,15 @@ func (r *fakeRuntime) Close() error                           { r.live.Store(fal
 func (r *fakeRuntime) Release(context.Context) error          { r.releases.Add(1); return nil }
 func (r *fakeRuntime) Stream(context.Context) (Stream, error) { return nil, ErrUnavailable }
 func (r *fakeRuntime) Command(ctx context.Context, c Command) (json.RawMessage, error) {
+	if c.Kind == "input" && c.Input != nil {
+		r.mu.Lock()
+		r.inputs = append(r.inputs, *c.Input)
+		r.mu.Unlock()
+		return nil, nil
+	}
+	if c.Kind == "tabs" {
+		return json.RawMessage(`[{"id":"tab-1","url":"https://example.test/account?token=secret#x"}]`), nil
+	}
 	if r.entered != nil {
 		close(r.entered)
 		select {
@@ -359,4 +371,115 @@ func TestExpiryTimersStopWithTheManager(t *testing.T) {
 	if b.runtime.releases.Load() != releases {
 		t.Fatal("a lease timer fired after the manager closed")
 	}
+}
+
+func humanTouch(t *testing.T, m *Manager, id string, i Input) error {
+	t.Helper()
+	_, err := m.Handle(context.Background(), human, Request{Action: "touch", ID: id, Command: &Command{Kind: "input", Input: &i}})
+	return err
+}
+
+func agentReady(t *testing.T, m *Manager, id string) *Lease {
+	t.Helper()
+	must(t, m, human, Request{Action: "start", ID: id})
+	return must(t, m, agent, Request{Action: "control", ID: id}).Lease
+}
+
+// The person's clicks and typing reach the page while the agent keeps the
+// browser; nothing pauses it. It is told what happened, never the text.
+func TestPersonInputDoesNotPauseAgentAndIsTold(t *testing.T) {
+	m, b, id := setup(t)
+	lease := agentReady(t, m, id)
+	for _, i := range []Input{{Kind: "mouseMoved", X: 5, Y: 5}, {Kind: "mousePressed", X: 10, Y: 20, Button: "left"}, {Kind: "mouseReleased", X: 10, Y: 20, Button: "left"}, {Kind: "text", Text: "hunter2!"}} {
+		if err := humanTouch(t, m, id, i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b.runtime.mu.Lock()
+	delivered := len(b.runtime.inputs)
+	b.runtime.mu.Unlock()
+	if delivered != 4 {
+		t.Fatalf("delivered %d inputs", delivered)
+	}
+	if controlOf(t, m, id) != "agent" {
+		t.Fatal("the person's input moved control away from the agent")
+	}
+	r := must(t, m, agent, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "snapshot"}})
+	notes := strings.Join(r.Notes, "\n")
+	if !strings.Contains(notes, "1 click") || !strings.Contains(notes, "8 typed characters") || strings.Contains(notes, "hunter2") {
+		t.Fatalf("notes = %q", notes)
+	}
+	if r2 := must(t, m, agent, Request{Action: "command", ID: id, Lease: r.Lease, Command: &Command{Kind: "snapshot"}}); len(r2.Notes) != 0 {
+		t.Fatalf("told twice: %q", r2.Notes)
+	}
+}
+
+// Input that lands while the agent's own action runs is flagged as such.
+func TestPersonInputDuringAgentActionIsFlagged(t *testing.T) {
+	m, b, id := setup(t)
+	lease := agentReady(t, m, id)
+	b.runtime.entered = make(chan struct{})
+	b.runtime.drain = make(chan struct{})
+	done := make(chan Response, 1)
+	go func() {
+		r, _ := m.Handle(context.Background(), agent, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "click", Ref: "@e1"}})
+		done <- r
+	}()
+	<-b.runtime.entered
+	if err := humanTouch(t, m, id, Input{Kind: "mousePressed", X: 1, Y: 1, Button: "left"}); err != nil {
+		t.Fatal(err)
+	}
+	close(b.runtime.drain)
+	r := <-done
+	if !strings.Contains(strings.Join(r.Notes, " "), "while your own action was running") || !strings.Contains(strings.Join(r.Notes, " "), "https://example.test/account.") {
+		t.Fatalf("notes = %q", r.Notes)
+	}
+	b.runtime.entered = nil
+}
+
+// Take over is hard: the agent waits and is told; handing back tells it what
+// the person did.
+func TestTakeOverMakesAgentWaitAndHandBackTellsIt(t *testing.T) {
+	m, _, id := setup(t)
+	lease := agentReady(t, m, id)
+	must(t, m, human, Request{Action: "control", ID: id})
+	_, err := m.Handle(context.Background(), agent, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "snapshot"}})
+	if !errors.Is(err, ErrLease) || !strings.Contains(err.Error(), "took over") {
+		t.Fatalf("err = %v", err)
+	}
+	_, err = m.Handle(context.Background(), agent, Request{Action: "control", ID: id})
+	if !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "do not poll") {
+		t.Fatalf("err = %v", err)
+	}
+	must(t, m, human, Request{Action: "release", ID: id})
+	r := must(t, m, agent, Request{Action: "control", ID: id})
+	if !strings.Contains(strings.Join(r.Notes, " "), "handed it back") {
+		t.Fatalf("notes = %q", r.Notes)
+	}
+}
+
+// Stop ends the agent's control and keeps that Worker out until the person
+// hands the browser back.
+func TestStopEndsAgentControlUntilHandBack(t *testing.T) {
+	m, _, id := setup(t)
+	lease := agentReady(t, m, id)
+	if got := must(t, m, human, Request{Action: "status", ID: id}).Resource.Agent; got != "task" {
+		t.Fatalf("agent = %q", got)
+	}
+	must(t, m, human, Request{Action: "halt", ID: id})
+	if controlOf(t, m, id) != "idle" {
+		t.Fatal("control not ended")
+	}
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "snapshot"}}); !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "stopped you") {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "control", ID: id}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("err = %v", err)
+	}
+	other := Owner{Kind: "agent", ID: "other-task/attachment"}
+	must(t, m, other, Request{Action: "control", ID: id})
+	must(t, m, other, Request{Action: "release", ID: id})
+	must(t, m, human, Request{Action: "control", ID: id})
+	must(t, m, human, Request{Action: "release", ID: id})
+	must(t, m, agent, Request{Action: "control", ID: id})
 }

@@ -727,7 +727,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := connectionManager.EnsureDefaults(); err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
-	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend())
+	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), newBrowserBackend())
 	if err != nil {
 		return fmt.Errorf("initialize Browser: %w", err)
 	}

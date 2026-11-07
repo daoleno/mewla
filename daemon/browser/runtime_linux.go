@@ -529,15 +529,17 @@ func (r *linuxRuntime) Command(ctx context.Context, c Command) (json.RawMessage,
 	case "snapshot":
 		return r.cli(ctx, "snapshot", "-i")
 	case "click":
-		if !strings.HasPrefix(c.Ref, "@e") {
+		ref, ok := elementRef(c.Ref)
+		if !ok {
 			return nil, errors.New("Use an element reference from the current snapshot")
 		}
-		return r.cli(ctx, "click", c.Ref)
+		return r.cli(ctx, "click", ref)
 	case "fill":
-		if !strings.HasPrefix(c.Ref, "@e") {
+		ref, ok := elementRef(c.Ref)
+		if !ok {
 			return nil, errors.New("Use an element reference from the current snapshot")
 		}
-		return r.cli(ctx, "fill", c.Ref, c.Text)
+		return r.cli(ctx, "fill", ref, c.Text)
 	case "press":
 		if len(c.Text) > 80 {
 			return nil, errors.New("Key is too long")
@@ -558,6 +560,23 @@ func (r *linuxRuntime) Command(ctx context.Context, c Command) (json.RawMessage,
 		return nil, errors.New("Unsupported managed browser action")
 	}
 }
+
+// elementRef accepts a snapshot reference as the agent sees it, "e2" in the
+// snapshot text or "@e2" as agent-browser takes it, and returns the latter.
+func elementRef(ref string) (string, bool) {
+	rest := strings.TrimPrefix(ref, "@")
+	if !strings.HasPrefix(rest, "e") {
+		return "", false
+	}
+	digits := rest[1:]
+	if digits == "" || len(digits) > 9 || strings.Trim(digits, "0123456789") != "" {
+		return "", false
+	}
+	return "@e" + digits, true
+}
+
+var namedKeys = map[string]int{"Backspace": 8, "Tab": 9, "Enter": 13, "Escape": 27, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Delete": 46}
+
 func (r *linuxRuntime) input(ctx context.Context, i Input) (json.RawMessage, error) {
 	if i.X < 0 || i.Y < 0 || i.X > 16384 || i.Y > 16384 || i.DX > 10000 || i.DX < -10000 || i.DY > 10000 || i.DY < -10000 || len(i.Text) > 8192 || len(i.Key) > 64 {
 		return nil, errors.New("Invalid input coordinates or text")
@@ -573,7 +592,17 @@ func (r *linuxRuntime) input(ctx context.Context, i Input) (json.RawMessage, err
 			delete(r.keys, i.Key)
 		}
 		r.mu.Unlock()
-		return r.cdp(ctx, "Input.dispatchKeyEvent", map[string]any{"type": i.Kind, "key": i.Key, "text": i.Text})
+		params := map[string]any{"type": i.Kind, "key": i.Key, "text": i.Text}
+		// Named keys need their key code for the page to act on them (Enter
+		// submits, Tab moves on); typed characters arrive as text.
+		if code, ok := namedKeys[i.Key]; ok {
+			params["windowsVirtualKeyCode"] = code
+			params["code"] = i.Key
+			if i.Kind == "keyDown" && i.Key == "Enter" {
+				params["text"] = "\r"
+			}
+		}
+		return r.cdp(ctx, "Input.dispatchKeyEvent", params)
 	case "mouseMoved", "mousePressed", "mouseReleased", "mouseWheel":
 		if i.Button != "" && i.Button != "left" && i.Button != "right" && i.Button != "middle" {
 			return nil, errors.New("Invalid pointer button")

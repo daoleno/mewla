@@ -38,6 +38,15 @@ type entry struct {
 	transferring bool
 	uncertain    bool
 	viewer       bool
+
+	// What the person did in a browser an agent holds, told to the agent with
+	// its next result; see touch.go.
+	touches    []touch
+	agentBusy  bool            // an agent's action is running
+	halted     map[string]bool // Workers the person stopped
+	humanFrom  time.Time       // when the person took the lease
+	handedBack *span           // the person's last turn, not yet told to the agent
+	lastAgent  string
 }
 type Manager struct {
 	mu      sync.Mutex
@@ -160,6 +169,9 @@ func snapshot(e *entry) Resource {
 		r.Control = "quiescing"
 	} else if e.owner.ID != "" {
 		r.Control = e.owner.Kind
+		if e.owner.Kind == "agent" {
+			r.Agent = workerOf(e.owner)
+		}
 	}
 	if e.uncertain {
 		r.State = "needs_restart"
@@ -225,7 +237,7 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		return Response{}, err
 	}
 	// Fence lifecycle transitions separately from in-flight commands.
-	if q.Action != "command" {
+	if q.Action != "command" && q.Action != "touch" {
 		e.transition.Lock()
 		defer e.transition.Unlock()
 	}
@@ -272,6 +284,8 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		e.resource.State = "running"
 		e.uncertain = false
 		e.owner = Owner{}
+		e.halted = nil
+		e.touches, e.handedBack = nil, nil
 		e.epoch++
 		r := snapshot(e)
 		return Response{Resource: &r}, nil
@@ -325,15 +339,39 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		r := snapshot(e)
 		return Response{Resource: &r}, nil
 	case "control":
-		return m.control(ctx, e, o)
+		r, err := m.control(ctx, e, o)
+		if err == nil && o.Kind == "agent" {
+			r.Notes = m.notesFor(ctx, e)
+		}
+		return r, err
 	case "release":
 		err = m.releaseMatching(ctx, e, func(x Owner) bool { return x == o })
 		return Response{}, err
+	case "touch":
+		if o.Kind != "human" {
+			return Response{}, ErrLease
+		}
+		return m.touch(ctx, e, o, q)
+	case "halt":
+		if o.Kind != "human" {
+			return Response{}, ErrLease
+		}
+		if err = m.halt(ctx, e); err != nil {
+			return Response{}, err
+		}
+		e.mu.Lock()
+		r := snapshot(e)
+		e.mu.Unlock()
+		return Response{Resource: &r}, nil
 	case "command":
 		if q.Command == nil || q.Lease == nil {
 			return Response{}, ErrLease
 		}
-		return m.command(ctx, e, o, *q.Lease, *q.Command)
+		r, err := m.command(ctx, e, o, *q.Lease, *q.Command)
+		if err == nil && o.Kind == "agent" && q.Command.Kind != "heartbeat" {
+			r.Notes = m.notesFor(ctx, e)
+		}
+		return r, err
 	default:
 		return Response{}, errors.New("Unknown browser operation")
 	}
@@ -343,6 +381,14 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 	if e.transferring {
 		e.mu.Unlock()
 		return Response{}, ErrBusy
+	}
+	if o.Kind == "agent" && e.halted[workerOf(o)] {
+		e.mu.Unlock()
+		return Response{}, errHalted
+	}
+	if o.Kind == "agent" && e.owner.Kind == "human" {
+		e.mu.Unlock()
+		return Response{}, errPersonInControl
 	}
 	if o.Kind == "agent" && (!e.resource.AllowAgents || (e.owner.ID != "" && e.owner != o)) {
 		e.mu.Unlock()
@@ -376,6 +422,14 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 	}
 	e.epoch++
 	e.owner = o
+	if o.Kind == "human" {
+		e.humanFrom = time.Now()
+	} else {
+		if e.lastAgent != workerOf(o) {
+			e.touches, e.handedBack = nil, nil
+		}
+		e.lastAgent = workerOf(o)
+	}
 	e.expires = time.Now().Add(leaseLifetime)
 	m.armExpiryLocked(e)
 	lease := Lease{Epoch: e.epoch, Generation: e.resource.Generation, Target: e.resource.Target, Kind: o.Kind, ExpiresAt: e.expires}
@@ -389,6 +443,16 @@ func (m *Manager) command(ctx context.Context, e *entry, o Owner, l Lease, c Com
 	}
 	defer unlock(e)
 	e.mu.Lock()
+	if o.Kind == "agent" && !e.deleted {
+		if e.halted[workerOf(o)] {
+			e.mu.Unlock()
+			return Response{}, errHalted
+		}
+		if e.owner.Kind == "human" {
+			e.mu.Unlock()
+			return Response{}, errPersonInControl
+		}
+	}
 	if e.deleted || e.owner != o || l.Epoch != e.epoch || l.Generation != e.resource.Generation || l.Target != e.resource.Target || time.Now().After(e.expires) || e.transferring || e.uncertain || e.runtime == nil {
 		e.mu.Unlock()
 		return Response{}, ErrLease
@@ -406,12 +470,14 @@ func (m *Manager) command(ctx context.Context, e *entry, o Owner, l Lease, c Com
 	rt := e.runtime
 	e.expires = time.Now().Add(leaseLifetime)
 	m.armExpiryLocked(e)
+	e.agentBusy = true
 	e.mu.Unlock()
 	actionCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	result, err := rt.Command(actionCtx, c)
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.agentBusy = false
 	if errors.Is(err, ErrUncertain) || actionCtx.Err() != nil {
 		e.uncertain = true
 		return Response{}, ErrUncertain
@@ -448,6 +514,12 @@ func (m *Manager) releaseMatching(ctx context.Context, e *entry, match func(Owne
 	defer e.mu.Unlock()
 	defer func() { e.transferring = false }()
 	if match(e.owner) {
+		if e.owner.Kind == "human" {
+			// Handing back is the person saying carry on to a stopped agent,
+			// and the agent hears what happened while it was away.
+			e.halted = nil
+			e.handedBack = &span{from: e.humanFrom, to: time.Now()}
+		}
 		e.owner = Owner{}
 		e.epoch++
 		if e.runtime != nil {
