@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Build the pinned libghostty-vt XCFramework for arm64 iOS devices and
-# Apple Silicon iOS Simulator. The output is consumed by TerminalVt.podspec.
+# Apple Silicon iOS Simulator from the signed vt-X.Y.Z release tarball (see
+# scripts/build-libghostty.sh). The output is consumed by TerminalVt.podspec.
+#
+#   MEWLA_GHOSTTY_RELEASE_DIR=/dir/with/tarballs ./scripts/build-libghostty-ios.sh  # offline
 
 set -euo pipefail
 
@@ -10,13 +13,14 @@ OUT_DIR="$ROOT/app/modules/terminal-vt/libs/ios"
 NOTICE_SRC="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
 TOOL_CACHE="${MEWLA_TOOL_CACHE:-$ROOT/.cache/mewla-tools}"
 GHOSTTY_CACHE="${MEWLA_GHOSTTY_CACHE:-$ROOT/.cache/mewla/ghostty}"
+BUILD_TMP_ROOT="${MEWLA_BUILD_TMPDIR:-${TMPDIR:-/tmp}}"
 
 eval "$(python3 - "$LOCK" <<'PY'
 import json, shlex, sys
 lock = json.load(open(sys.argv[1]))
 values = {
-    "GHOSTTY_REPO": lock["ghostty"]["repository"],
-    "GHOSTTY_COMMIT": lock["ghostty"]["commit"],
+    "GHOSTTY_VERSION": lock["ghostty"]["version"],
+    "GHOSTTY_TAG": lock["ghostty"]["tag"],
     "XCFRAMEWORK_NAME": lock["ios"]["xcframework_name"],
     "UPSTREAM_XCFRAMEWORK_NAME": lock["ios"]["upstream_xcframework_name"],
 }
@@ -45,34 +49,35 @@ ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"
 MACOS_SDKROOT="$(mewla_prepare_macos_sdk_for_zig "$TOOL_CACHE")" || exit 1
 ZIG_LIB="$(mewla_patched_zig_lib "$ZIG_BIN" "$LOCK" "$ROOT" "$TOOL_CACHE")"
 
-GHOSTTY_SRC="${GHOSTTY_SRC:-$GHOSTTY_CACHE}"
-if [[ ! -d "$GHOSTTY_SRC/.git" ]]; then
-  mkdir -p "$(dirname "$GHOSTTY_SRC")"
-  git clone --filter=blob:none "$GHOSTTY_REPO" "$GHOSTTY_SRC"
-fi
+BUILD_WORK="$(mktemp -d "$BUILD_TMP_ROOT/libghostty-ios.XXXXXX")"
+ZIG_CACHE_DIR="$(mktemp -d "$BUILD_TMP_ROOT/libghostty-ios-zigcache.XXXXXX")"
+trap 'rm -rf -- "$BUILD_WORK" "$ZIG_CACHE_DIR"' EXIT
 
-CURRENT="$(git -C "$GHOSTTY_SRC" rev-parse HEAD)"
-if [[ "$CURRENT" != "$GHOSTTY_COMMIT" ]]; then
-  git -C "$GHOSTTY_SRC" fetch --depth=1 origin "$GHOSTTY_COMMIT" \
-    || git -C "$GHOSTTY_SRC" fetch origin "$GHOSTTY_COMMIT"
-  git -C "$GHOSTTY_SRC" checkout --detach "$GHOSTTY_COMMIT"
-fi
-
-if [[ -n "$(git -C "$GHOSTTY_SRC" status --porcelain)" ]]; then
-  echo "error: Ghostty checkout is dirty: $GHOSTTY_SRC" >&2
-  exit 1
-fi
+RELEASE_JSON="$(python3 "$ROOT/scripts/lib/ghostty_release.py" "$LOCK" prepare \
+  --cache "$GHOSTTY_CACHE/$GHOSTTY_TAG" \
+  --dest "$BUILD_WORK/release" \
+  ${MEWLA_GHOSTTY_RELEASE_DIR:+--release-dir "$MEWLA_GHOSTTY_RELEASE_DIR"})"
+release_field() {
+  python3 -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])' "$RELEASE_JSON" "$1"
+}
+GHOSTTY_SRC="$(release_field source_dir)"
+DEPS_DIR="$(release_field deps_dir)"
+SIGNATURE_VERIFIED="$(release_field signature_verified)"
 
 echo "Building libghostty-vt XCFramework"
-echo "  ghostty: $GHOSTTY_SRC @ $GHOSTTY_COMMIT"
+echo "  ghostty: $GHOSTTY_TAG (minisign verified: $SIGNATURE_VERIFIED)"
 echo "  zig:     $($ZIG_BIN version) (lib $ZIG_LIB)"
 
+# The libghostty-vt tarball builds the library on its own (LIB_VERSION marks
+# it); an XCFramework is opt-in because it needs Xcode. A fresh Zig global cache
+# proves the build used only the packages of the dependency tarball.
 (
   cd "$GHOSTTY_SRC"
   PATH="$ROOT/scripts/zig-xcode-compat:$PATH" \
     MEWLA_MACOS_SDKROOT="$MACOS_SDKROOT" \
     ZIG_LIB_DIR="$ZIG_LIB" \
-    "$ZIG_BIN" build -Demit-lib-vt=true -Doptimize=ReleaseFast
+    ZIG_GLOBAL_CACHE_DIR="$ZIG_CACHE_DIR" \
+    "$ZIG_BIN" build --system "$DEPS_DIR" -Demit-xcframework=true -Doptimize=ReleaseFast
 )
 
 SOURCE="$GHOSTTY_SRC/zig-out/lib/$UPSTREAM_XCFRAMEWORK_NAME"
@@ -94,13 +99,19 @@ cp "$NOTICE_SRC" "$OUT_DIR/GHOSTTY-MIT.txt"
     | xargs -0 shasum -a 256 > SHA256SUMS
 )
 
-python3 - "$LOCK" "$DESTINATION" "$OUT_DIR/build-manifest.json" <<'PY'
+python3 - "$LOCK" "$DESTINATION" "$OUT_DIR/build-manifest.json" "$SIGNATURE_VERIFIED" <<'PY'
 import json, pathlib, platform, subprocess, sys
 lock = json.load(open(sys.argv[1]))
 framework = pathlib.Path(sys.argv[2])
+ghostty = lock["ghostty"]
 manifest = {
-    "schema_version": 1,
-    "ghostty_commit": lock["ghostty"]["commit"],
+    "schema_version": 2,
+    "ghostty_version": ghostty["version"],
+    "ghostty_tag": ghostty["tag"],
+    "ghostty_commit": ghostty["commit"],
+    "source_sha256": ghostty["release"]["source"]["sha256"],
+    "deps_sha256": ghostty["release"]["deps"]["sha256"],
+    "signature_verified": sys.argv[4] == "True",
     "zig_version": lock["zig"]["version"],
     "zig_lib_patches": [
         {"path": patch["path"], "sha256": patch["sha256"]}

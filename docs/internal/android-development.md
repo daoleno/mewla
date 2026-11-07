@@ -68,7 +68,7 @@ Module wiring (source of truth for packaging):
 - Bun (see root `packageManager`)
 - JDK 17 for native Android builds (see root `app:android` script)
 - Android SDK / device or emulator for `expo run:android`
-- For native terminal: a Ghostty checkout at the **pinned commit** (cloned on demand) and Zig **0.15.2** (see lock). `build-libghostty.sh` uses a matching `zig` from `PATH` or downloads the pinned, checksum-verified one into `.cache/mewla-tools` (`MEWLA_TOOL_CACHE`)
+- For native terminal: the signed **libghostty-vt `vt-1.0.0` release tarballs** (downloaded on demand into `~/.cache/mewla/ghostty`, sha256-pinned in the lock, minisign-checked when `minisign` or Python `cryptography` is available) and Zig **0.17.0** (see lock). `build-libghostty.sh` uses a matching `zig` from `PATH` or downloads the pinned, checksum-verified one into `.cache/mewla-tools` (`MEWLA_TOOL_CACHE`). The build is offline (`zig build --system` with the dependency tarball); `MEWLA_GHOSTTY_RELEASE_DIR` points it at pre-downloaded tarballs
 
 ## Day-to-day JS workflow
 
@@ -186,8 +186,8 @@ including the native formatter, renderer lifecycle, and DOM reuse rules.
 ### Build (reproducible path)
 
 ```bash
-# Optional: set Ghostty source; otherwise clones pin into ~/.cache/mewla/ghostty
-# GHOSTTY_SRC=/path/to/ghostty
+# Downloads the pinned signed release tarballs into ~/.cache/mewla/ghostty;
+# MEWLA_GHOSTTY_RELEASE_DIR=/dir/with/tarballs builds offline.
 ./scripts/build-libghostty.sh
 
 # Device ABI only:

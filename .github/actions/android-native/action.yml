@@ -49,7 +49,7 @@ runs:
         path: |
           app/modules/terminal-vt/libs/android
           app/modules/terminal-vt/android/src/main/cpp/ghostty
-        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
     - name: Restore or save verified Android Ghostty output
       id: ghostty-output-cache-rw
       if: ${{ inputs.save-caches == 'true' }}
@@ -58,9 +58,9 @@ runs:
         path: |
           app/modules/terminal-vt/libs/android
           app/modules/terminal-vt/android/src/main/cpp/ghostty
-        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
 
-    # Ghostty build inputs: the pinned Zig and the Ghostty source clone.
+    # Ghostty build inputs: the pinned Zig and the signed release tarballs.
     - name: Restore pinned Zig and Ghostty source
       if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' && steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' && inputs.save-caches != 'true' }}
       uses: actions/cache/restore@v4
@@ -68,7 +68,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
+        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
     - name: Restore or save pinned Zig and Ghostty source
       if: ${{ steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' && inputs.save-caches == 'true' }}
       uses: actions/cache@v4
@@ -76,7 +76,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/patches/android/**', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
+        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
 
     - name: Build release-grade arm64 Ghostty when the cache misses
       if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' && steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' }}

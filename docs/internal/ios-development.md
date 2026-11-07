@@ -106,7 +106,7 @@ The machine-readable source of truth is:
 
 Important invariants:
 
-1. Ghostty commit and Zig version are pinned; the build refuses a dirty Ghostty checkout.
+1. The libghostty-vt release (signed tarball sha256, dependency tarball sha256, header digest) and the Zig version are pinned in the lock; the build never uses a git checkout. Every XCFramework slice must carry the pinned headers.
 2. `GhosttyVt.xcframework`, checksums, build manifest, and copied license notice are generated and gitignored.
 3. The XCFramework must contain arm64 device and arm64 Simulator slices.
 4. `TerminalVt.podspec` is the CocoaPods/autolinking boundary and must keep the deployment target aligned with the lockfile.

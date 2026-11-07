@@ -13,13 +13,13 @@ ROOT = Path(__file__).resolve().parents[2]
 CHECK = ROOT / "scripts/check-zig-xcode-compat.sh"
 LIBRARY = ROOT / "scripts/lib/zig-xcode-compat.sh"
 LOCK = ROOT / "app/modules/terminal-vt/native.lock.json"
-PATCH = ROOT / "scripts/zig-xcode-compat/zig-0.15.2-libcxx-infinity.patch"
+PATCH = ROOT / "scripts/zig-xcode-compat/zig-0.17.0-libcxx-infinity.patch"
 
-# What Zig 0.15.2's libcxx has around the line the patch changes.
+# What Zig 0.17.0's libcxx has around the line the patch changes.
 HEADER_TAIL = """\
 _LIBCPP_HIDE_FROM_ABI _IntT __clamp_to_integral(_RealT __r) _NOEXCEPT {
   using _Lim            = numeric_limits<_IntT>;
-  const _IntT __max_val = __max_representable_int_for_float<_IntT, _RealT>();
+  const _IntT __max_val = std::__max_representable_int_for_float<_IntT, _RealT>();
   if (__r >= ::nextafter(static_cast<_RealT>(__max_val), INFINITY)) {
     return _Lim::max();
   } else if (__r <= _Lim::lowest()) {
@@ -43,7 +43,7 @@ def fake_zig(directory: Path, lib_dir: Path, compile_result: str, release_result
     zig.write_text(
         "#!/bin/sh\n"
         'case "$1" in\n'
-        "  version) echo 0.15.2 ;;\n"
+        "  version) echo 0.17.0 ;;\n"
         f'  env) echo \'.{{ .lib_dir = "{lib_dir}", }}\' | sed \'s/^.{{ //; s/ }}$//\' ;;\n'
         f'  build-exe) echo "$@" >>"$(dirname "$0")/zig-args.log"; {messages[compile_result]} ;;\n'
         f'  build-lib) echo "$@" >>"$(dirname "$0")/zig-args.log"; {messages[release_result or compile_result]} ;;\n'
@@ -221,7 +221,7 @@ class ZigXcodeCompatTests(unittest.TestCase):
             self.assertIn("INFINITY", (lib / HEADER_PATH).read_text())
             self.assertTrue((patched / ".mewla-lib-patched").is_file())
             # Named for the Zig version and the patch, and reused once built.
-            self.assertTrue(patched.name.startswith("zig-lib-0.15.2-"))
+            self.assertTrue(patched.name.startswith("zig-lib-0.17.0-"))
             again = self.patched_lib(root, lib)
             self.assertEqual(again.stdout.strip(), str(patched))
             self.assertEqual(list((root / "tools").iterdir()), [patched])

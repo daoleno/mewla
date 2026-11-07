@@ -19,11 +19,7 @@ int main() {
     TerminalHandle h;
     h.cols = 85;
     h.rows = 68;
-    GhosttyTerminalOptions options = {};
-    options.cols = h.cols;
-    options.rows = h.rows;
-    options.max_scrollback = 1000;
-    assert(ghostty_terminal_new(nullptr, &h.terminal, options) == GHOSTTY_SUCCESS);
+    assert(createTerminalInstance(h.cols, h.rows, &h.terminal) == GHOSTTY_SUCCESS);
     assert(ghostty_render_state_new(nullptr, &h.render_state) == GHOSTTY_SUCCESS);
     std::vector<std::string> displayed;
     size_t assertions = 0;

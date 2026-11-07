@@ -17,7 +17,11 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
 #endif
 
-static constexpr size_t kDefaultScrollbackRows = 10000;
+// libghostty-vt budgets scrollback in bytes, rounded up to whole pages (about
+// 600-750 rows at 80 columns), not in lines. 1.0 spells the byte budget out as
+// GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES; 10000 is the value the bridge has
+// always passed, and is also the library default.
+static constexpr size_t kScrollbackMaxBytes = 10000;
 static constexpr size_t kMouseStackBufferSize = 128;
 
 #if defined(__ANDROID__)
@@ -90,11 +94,61 @@ static GhosttyResult createHtmlFormatter(
         return GHOSTTY_INVALID_VALUE;
     }
 
-    GhosttyFormatterTerminalOptions opts = GHOSTTY_INIT_SIZED(GhosttyFormatterTerminalOptions);
-    opts.emit = GHOSTTY_FORMATTER_FORMAT_HTML;
-    opts.trim = false;
+    GhosttyResult res = ghostty_formatter_terminal_new(nullptr, out, h->terminal);
+    if (res != GHOSTTY_SUCCESS) {
+        return res;
+    }
 
-    return ghostty_formatter_terminal_new(nullptr, out, h->terminal, opts);
+    // A 1.0 formatter starts as trimmed plain text with the palette, style
+    // and hyperlink extras. Pin every option this bridge relies on.
+    const GhosttyFormatterFormat emit = GHOSTTY_FORMATTER_FORMAT_HTML;
+    const bool trim = false;
+    const GhosttyFormatterExtras extras = GHOSTTY_FORMATTER_EXTRAS_NONE;
+    res = ghostty_formatter_set(*out, GHOSTTY_FORMATTER_OPT_EMIT, &emit);
+    if (res == GHOSTTY_SUCCESS) {
+        res = ghostty_formatter_set(*out, GHOSTTY_FORMATTER_OPT_TRIM, &trim);
+    }
+    if (res == GHOSTTY_SUCCESS) {
+        res = ghostty_formatter_set(*out, GHOSTTY_FORMATTER_OPT_EXTRAS, &extras);
+    }
+    if (res != GHOSTTY_SUCCESS) {
+        ghostty_formatter_free(*out);
+        *out = nullptr;
+    }
+    return res;
+}
+
+static GhosttyResult createTerminalInstance(
+    uint16_t cols,
+    uint16_t rows,
+    GhosttyTerminal* out)
+{
+    if (!out) {
+        return GHOSTTY_INVALID_VALUE;
+    }
+
+    // The headers this bridge was compiled against and the library loaded at
+    // run time must agree on the major version, or sized structs and enum
+    // values below mean something different on each side of the call.
+    const char* libraryVersion = ghostty_version();
+    if (!libraryVersion || std::atoi(libraryVersion) != GHOSTTY_VT_VERSION_MAJOR) {
+        LOGE("libghostty-vt %s does not match headers %s",
+            libraryVersion ? libraryVersion : "(unknown)", GHOSTTY_VT_VERSION);
+        return GHOSTTY_INVALID_VALUE;
+    }
+
+    GhosttyResult res = ghostty_terminal_new(nullptr, out, cols, rows);
+    if (res != GHOSTTY_SUCCESS) {
+        return res;
+    }
+
+    const size_t scrollbackMaxBytes = kScrollbackMaxBytes;
+    res = ghostty_terminal_set(*out, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, &scrollbackMaxBytes);
+    if (res != GHOSTTY_SUCCESS) {
+        ghostty_terminal_free(*out);
+        *out = nullptr;
+    }
+    return res;
 }
 
 static std::string formatTerminalScreen(TerminalHandle* h)
@@ -313,12 +367,18 @@ static bool appendCellText(
             &graphemeLen) == GHOSTTY_SUCCESS &&
         graphemeLen > 0) {
         std::vector<uint32_t> graphemes(graphemeLen, 0);
+        // 1.0 fills a GhosttyCodepointBuffer; handing it the bare array of 0.x
+        // makes the library read the first codepoints as ptr and cap.
+        GhosttyCodepointBuffer buffer{};
+        buffer.ptr = graphemes.data();
+        buffer.cap = graphemes.size();
         if (ghostty_render_state_row_cells_get(
                 rowCells,
                 GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF,
-                graphemes.data()) == GHOSTTY_SUCCESS) {
+                &buffer) == GHOSTTY_SUCCESS) {
             bool visible = false;
-            for (uint32_t codepoint : graphemes) {
+            for (size_t i = 0; i < buffer.len && i < graphemes.size(); i++) {
+                const uint32_t codepoint = graphemes[i];
                 appendHtmlEscapedCodepoint(htmlText, codepoint);
                 if (codepoint != 0 && codepoint != ' ') {
                     visible = true;
@@ -424,15 +484,7 @@ static bool stylesEquivalent(const GhosttyStyle& left, const GhosttyStyle& right
         styleColorsEqual(left.fg_color, right.fg_color) &&
         styleColorsEqual(left.bg_color, right.bg_color) &&
         styleColorsEqual(left.underline_color, right.underline_color) &&
-        left.bold == right.bold &&
-        left.italic == right.italic &&
-        left.faint == right.faint &&
-        left.blink == right.blink &&
-        left.inverse == right.inverse &&
-        left.invisible == right.invisible &&
-        left.strikethrough == right.strikethrough &&
-        left.overline == right.overline &&
-        left.underline == right.underline;
+        left.flags == right.flags;
 }
 
 static GhosttyColorRgb resolveEffectiveForeground(
@@ -443,7 +495,7 @@ static GhosttyColorRgb resolveEffectiveForeground(
 {
     if (style.fg_color.tag == GHOSTTY_STYLE_COLOR_PALETTE) {
         uint8_t paletteIndex = style.fg_color.value.palette;
-        if (style.bold && paletteIndex <= GHOSTTY_COLOR_NAMED_WHITE) {
+        if ((style.flags & GHOSTTY_STYLE_FLAG_BOLD) && paletteIndex <= GHOSTTY_COLOR_NAMED_WHITE) {
             paletteIndex = static_cast<uint8_t>(paletteIndex + 8);
         }
         return renderColors.palette[paletteIndex];
@@ -499,7 +551,7 @@ static std::string buildCellCss(
     GhosttyColorRgb bg = renderColors.background;
     bool hasBg = resolveEffectiveBackground(style, renderColors, hasResolvedBg, resolvedBg, &bg);
 
-    if (style.inverse) {
+    if ((style.flags & GHOSTTY_STYLE_FLAG_INVERSE)) {
         const bool hasExplicitFg =
             hasResolvedFg || style.fg_color.tag != GHOSTTY_STYLE_COLOR_NONE;
         const bool hasExplicitBg =
@@ -525,7 +577,7 @@ static std::string buildCellCss(
     std::string css;
     css.reserve(160);
 
-    if (style.invisible) {
+    if ((style.flags & GHOSTTY_STYLE_FLAG_INVISIBLE)) {
         css.append("color:transparent;");
     } else if (!colorsEqual(fg, renderColors.foreground)) {
         css.append("color:");
@@ -539,24 +591,24 @@ static std::string buildCellCss(
         css.push_back(';');
     }
 
-    if (style.bold) {
+    if ((style.flags & GHOSTTY_STYLE_FLAG_BOLD)) {
         css.append("font-weight:700;");
     }
-    if (style.italic) {
+    if ((style.flags & GHOSTTY_STYLE_FLAG_ITALIC)) {
         css.append("font-style:italic;");
     }
-    if (style.faint) {
+    if ((style.flags & GHOSTTY_STYLE_FLAG_FAINT)) {
         css.append("opacity:0.72;");
     }
 
     std::string decorationLine;
-    if (style.underline != GHOSTTY_SGR_UNDERLINE_NONE) {
+    if (GHOSTTY_STYLE_UNDERLINE(style) != GHOSTTY_SGR_UNDERLINE_NONE) {
         decorationLine.append(" underline");
     }
-    if (style.strikethrough) {
+    if ((style.flags & GHOSTTY_STYLE_FLAG_STRIKETHROUGH)) {
         decorationLine.append(" line-through");
     }
-    if (style.overline) {
+    if ((style.flags & GHOSTTY_STYLE_FLAG_OVERLINE)) {
         decorationLine.append(" overline");
     }
     if (!decorationLine.empty()) {
@@ -565,9 +617,9 @@ static std::string buildCellCss(
         css.push_back(';');
     }
 
-    if (style.underline != GHOSTTY_SGR_UNDERLINE_NONE) {
+    if (GHOSTTY_STYLE_UNDERLINE(style) != GHOSTTY_SGR_UNDERLINE_NONE) {
         css.append("text-decoration-style:");
-        switch (style.underline) {
+        switch (GHOSTTY_STYLE_UNDERLINE(style)) {
             case GHOSTTY_SGR_UNDERLINE_DOUBLE:
                 css.append("double;");
                 break;
@@ -646,7 +698,7 @@ static std::string buildRowHtml(
     bool segmentHasFg = false;
     bool segmentHasBg = false;
     bool segmentHasNonDefaultBackground = false;
-    GhosttyStyle segmentStyle = GHOSTTY_INIT_SIZED(GhosttyStyle);
+    GhosttyStyle segmentStyle{};
     GhosttyColorRgb segmentFg = renderColors.foreground;
     GhosttyColorRgb segmentBg = renderColors.background;
 
@@ -665,7 +717,7 @@ static std::string buildRowHtml(
             continue;
         }
 
-        GhosttyStyle style = GHOSTTY_INIT_SIZED(GhosttyStyle);
+        GhosttyStyle style{};
         ghostty_style_default(&style);
         ghostty_render_state_row_cells_get(
             rowCells,
@@ -813,7 +865,9 @@ static bool buildVisibleHtml(
     }
 
     GhosttyRenderStateColors renderColors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
-    ghostty_render_state_colors_get(renderState, &renderColors);
+    if (ghostty_render_state_get(renderState, GHOSTTY_RENDER_STATE_DATA_COLORS, &renderColors) != GHOSTTY_SUCCESS) {
+        return false;
+    }
 
     GhosttyRenderStateRowIterator rowIterator = nullptr;
     if (ghostty_render_state_row_iterator_new(nullptr, &rowIterator) != GHOSTTY_SUCCESS || !rowIterator) {
@@ -876,7 +930,10 @@ static bool buildRenderRowUpdates(
         return false;
     }
     GhosttyRenderStateColors colors = GHOSTTY_INIT_SIZED(GhosttyRenderStateColors);
-    ghostty_render_state_colors_get(h->render_state, &colors);
+    if (ghostty_render_state_get(h->render_state, GHOSTTY_RENDER_STATE_DATA_COLORS, &colors) != GHOSTTY_SUCCESS) {
+        ghostty_render_state_row_iterator_free(iterator);
+        return false;
+    }
     h->rendered_rows.resize(rows);
     size_t index = 0;
     while (ghostty_render_state_row_iterator_next(iterator)) {
@@ -912,7 +969,7 @@ static void clearRenderStateDirty(GhosttyRenderState renderState) {
     }
 
     GhosttyRenderStateDirty clean = GHOSTTY_RENDER_STATE_DIRTY_FALSE;
-    ghostty_render_state_set(renderState, GHOSTTY_RENDER_STATE_OPTION_DIRTY, &clean);
+    ghostty_render_state_set(renderState, GHOSTTY_RENDER_STATE_OPT_DIRTY, &clean);
 
     GhosttyRenderStateRowIterator rowIterator = nullptr;
     if (ghostty_render_state_row_iterator_new(nullptr, &rowIterator) != GHOSTTY_SUCCESS || !rowIterator) {
@@ -928,7 +985,7 @@ static void clearRenderStateDirty(GhosttyRenderState renderState) {
     while (ghostty_render_state_row_iterator_next(rowIterator)) {
         ghostty_render_state_row_set(
             rowIterator,
-            GHOSTTY_RENDER_STATE_ROW_OPTION_DIRTY,
+            GHOSTTY_RENDER_STATE_ROW_OPT_DIRTY,
             &cleanRow
         );
     }
@@ -1083,9 +1140,9 @@ static std::string encodeMouseSequence(
     size.cell_width = h->cell_width_px;
     size.cell_height = h->cell_height_px;
 
-    ghostty_mouse_encoder_setopt_from_terminal(h->mouse_encoder, h->terminal);
-    ghostty_mouse_encoder_setopt(h->mouse_encoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
-    ghostty_mouse_encoder_setopt(
+    ghostty_mouse_encoder_set_from_terminal(h->mouse_encoder, h->terminal);
+    ghostty_mouse_encoder_set(h->mouse_encoder, GHOSTTY_MOUSE_ENCODER_OPT_SIZE, &size);
+    ghostty_mouse_encoder_set(
         h->mouse_encoder,
         GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED,
         &anyButtonPressed
@@ -1111,7 +1168,7 @@ static std::string encodeMouseSequence(
     ghostty_mouse_event_set_mods(event, mods);
     ghostty_mouse_event_set_position(event, GhosttyMousePosition{ .x = x, .y = y });
 
-    char stackBuffer[kMouseStackBufferSize] = {};
+    uint8_t stackBuffer[kMouseStackBufferSize] = {};
     size_t outLen = 0;
     res = ghostty_mouse_encoder_encode(
         h->mouse_encoder,
@@ -1126,7 +1183,7 @@ static std::string encodeMouseSequence(
         res = ghostty_mouse_encoder_encode(
             h->mouse_encoder,
             event,
-            dynamicBuffer.data(),
+            reinterpret_cast<uint8_t*>(dynamicBuffer.data()),
             dynamicBuffer.size(),
             &outLen
         );
@@ -1143,7 +1200,7 @@ static std::string encodeMouseSequence(
         return {};
     }
 
-    return std::string(stackBuffer, outLen);
+    return std::string(reinterpret_cast<const char*>(stackBuffer), outLen);
 }
 
 #if defined(__ANDROID__)
@@ -1157,12 +1214,7 @@ Java_expo_modules_terminalvt_TerminalVtModule_nativeCreateTerminal(
     h->cols = (uint16_t)cols;
     h->rows = (uint16_t)rows;
 
-    GhosttyTerminalOptions opts = {};
-    opts.cols = h->cols;
-    opts.rows = h->rows;
-    opts.max_scrollback = kDefaultScrollbackRows;
-
-    GhosttyResult res = ghostty_terminal_new(nullptr, &h->terminal, opts);
+    GhosttyResult res = createTerminalInstance(h->cols, h->rows, &h->terminal);
     if (res != GHOSTTY_SUCCESS) {
         LOGE("ghostty_terminal_new failed: %d", res);
         delete h;
@@ -1197,7 +1249,7 @@ Java_expo_modules_terminalvt_TerminalVtModule_nativeCreateTerminal(
     }
 
     const bool trackLastCell = true;
-    ghostty_mouse_encoder_setopt(
+    ghostty_mouse_encoder_set(
         h->mouse_encoder,
         GHOSTTY_MOUSE_ENCODER_OPT_TRACK_LAST_CELL,
         &trackLastCell

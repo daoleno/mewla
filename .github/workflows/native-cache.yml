@@ -18,6 +18,8 @@ on:
       - scripts/android-release-apk.sh
       - scripts/build-libghostty.sh
       - scripts/lib/zig.sh
+      - scripts/lib/ghostty_release.py
+      - scripts/lib/minisign_verify.py
       - scripts/verify-libghostty.sh
       - scripts/verify-android-native-symbols.py
       - .github/actions/android-native/**
