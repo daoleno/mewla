@@ -322,7 +322,8 @@ export function InterfaceMessageBlock({
           style={[styles.messageRule, { backgroundColor: chrome.borderStrong }]}
         />
       );
-    case "quote":
+    case "quote": {
+      const quoteChrome = { ...chrome, text: chrome.textMuted };
       return (
         <View
           style={[
@@ -331,23 +332,21 @@ export function InterfaceMessageBlock({
             isLast ? styles.messageBlockLast : null,
           ]}
         >
-          <Text
-            {...selectableTextProps}
-            style={[
-              styles.messageQuoteText,
-              compact ? styles.messageQuoteTextCompact : null,
-              { color: chrome.textMuted },
-            ]}
-          >
-            <InterfaceInlineMessage
-              text={block.text}
-              chrome={chrome}
+          {block.blocks.map((child, index) => (
+            <InterfaceMessageBlock
+              key={index}
+              block={child}
+              chrome={quoteChrome}
               theme={theme}
               compact={compact}
+              dense={dense}
+              isLast={index === block.blocks.length - 1}
+              streaming={streaming}
             />
-          </Text>
+          ))}
         </View>
       );
+    }
     case "paragraph":
     default:
       return (
@@ -563,16 +562,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: 2,
     paddingLeft: 10,
     paddingVertical: 1,
-  },
-  messageQuoteText: {
-    fontSize: 14,
-    lineHeight: 22,
-    fontFamily: Typography.chatFont,
-    letterSpacing: 0,
-  },
-  messageQuoteTextCompact: {
-    fontSize: 13,
-    lineHeight: 20,
   },
   messageBlockLast: {
     marginBottom: 0,

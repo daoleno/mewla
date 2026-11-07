@@ -13,7 +13,7 @@ export type MessageBlock =
   | { type: "list"; items: MessageListItem[] }
   | MessageTableBlock
   | { type: "code"; text: string; language?: string; closed?: boolean }
-  | { type: "quote"; text: string }
+  | { type: "quote"; blocks: MessageBlock[] }
   | { type: "rule" };
 
 export type MessageListItem = {
@@ -35,6 +35,7 @@ export type MessageTableBlock = {
   rows: string[][];
 };
 
+const QUOTE_LINE = /^ {0,3}> ?/;
 const MAX_BARE_JSON_LINES = 240;
 const MAX_BARE_JSON_CHARS = 140_000;
 
@@ -72,7 +73,6 @@ function parseMessageBlocksUninstrumented(value: string, keepLineBreaks: boolean
   const blocks: MessageBlock[] = [];
   let paragraph: string[] = [];
   let list: MessageListItem[] = [];
-  let quote: string[] = [];
   // indent: the opening fence's leading spaces, which every code line drops
   // (CommonMark), so a fence inside a list item doesn't keep the item's indent.
   let code: { fence: string; indent: number; language?: string; lines: string[] } | null = null;
@@ -90,17 +90,9 @@ function parseMessageBlocksUninstrumented(value: string, keepLineBreaks: boolean
     }
     list = [];
   };
-  const flushQuote = () => {
-    const text = normalizeProseText(quote.join(" ")).trim();
-    if (text) {
-      blocks.push({ type: "quote", text });
-    }
-    quote = [];
-  };
   const flushOpenBlocks = () => {
     flushParagraph();
     flushList();
-    flushQuote();
   };
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -137,6 +129,24 @@ function parseMessageBlocksUninstrumented(value: string, keepLineBreaks: boolean
 
     if (!trimmed) {
       flushOpenBlocks();
+      continue;
+    }
+
+    // One blockquote is every consecutive line that starts with ">", a bare
+    // ">" included (CommonMark). Its content is parsed as blocks of its own, so
+    // a list, a code fence or a nested quote inside it stays what it is.
+    if (QUOTE_LINE.test(line)) {
+      flushOpenBlocks();
+      const inner: string[] = [];
+      while (lineIndex < lines.length && QUOTE_LINE.test(lines[lineIndex])) {
+        inner.push(lines[lineIndex].replace(QUOTE_LINE, ""));
+        lineIndex += 1;
+      }
+      lineIndex -= 1;
+      const quoted = parseMessageBlocksUninstrumented(inner.join("\n"), keepLineBreaks);
+      if (quoted.length > 0) {
+        blocks.push({ type: "quote", blocks: quoted });
+      }
       continue;
     }
 
@@ -180,7 +190,6 @@ function parseMessageBlocksUninstrumented(value: string, keepLineBreaks: boolean
     const listItem = /^(\s*)((?:[-*+])|\d+[.)])\s+(.+)$/.exec(line);
     if (listItem) {
       flushParagraph();
-      flushQuote();
       const task = /^\[([ xX])]\s+(.+)$/.exec(listItem[3]);
       list.push({
         marker: normalizeListMarker(listItem[2]),
@@ -196,20 +205,11 @@ function parseMessageBlocksUninstrumented(value: string, keepLineBreaks: boolean
       continue;
     }
 
-    const quoteItem = /^>\s?(.+)$/.exec(trimmed);
-    if (quoteItem) {
-      flushParagraph();
-      flushList();
-      quote.push(quoteItem[1].trim());
-      continue;
-    }
-
     if (appendListContinuation(list, line)) {
       continue;
     }
 
     flushList();
-    flushQuote();
     paragraph.push(trimmed);
   }
 
