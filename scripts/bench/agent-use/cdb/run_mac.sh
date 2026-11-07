@@ -64,20 +64,24 @@ if [ ! -f "$CACHE/.ok" ]; then
     git init -q && cp -R "$CDB_UPSTREAM_DIR/libs" . && touch .ok
   else
     git init -q
+    # Blobless partial fetch: only the commit and trees come down now, and the checkout below fetches just the blobs of
+    # libs/cua-driver-bench (about 3 MB). An unfiltered fetch of this repository is 130+ MB and stalled for an hour.
+    git config remote.origin.promisor true && git config remote.origin.partialclonefilter blob:none
     git sparse-checkout init --cone && git sparse-checkout set libs/cua-driver-bench
-    # SSH first (a Mac that pulls mewla over SSH reaches GitHub that way even when https://github.com:443 times out),
-    # then HTTPS; every attempt is bounded (15 s to connect over SSH, 40 s of stall over HTTPS).
     export GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=15"
+    # macOS has no `timeout`: a watchdog bounds every network step to $1 seconds, whatever it is doing.
+    bounded() { local secs=$1 pid w rc; shift; "$@" & pid=$!; ( sleep "$secs"; kill "$pid" 2>/dev/null ) & w=$!; rc=0; wait "$pid" || rc=$?; kill "$w" 2>/dev/null; wait "$w" 2>/dev/null || true; return $rc; }
     fetched=""
     for round in 1 2 3; do
       for url in git@github.com:trycua/cua.git https://github.com/trycua/cua.git; do
-        if git -c http.lowSpeedLimit=2000 -c http.lowSpeedTime=40 fetch -q --depth 1 "$url" "$PIN"; then fetched=1; break 2; fi
+        if bounded 150 git -c http.lowSpeedLimit=2000 -c http.lowSpeedTime=40 fetch -q --depth 1 --filter=blob:none "$url" "$PIN" \
+           && bounded 150 git checkout -q FETCH_HEAD; then fetched=1; break 2; fi
         echo "fetch from $url failed (round $round)" >&2
       done
       sleep $((round * 10))
     done
     [ -n "$fetched" ] || { echo "could not fetch the pinned CDB commit from GitHub over SSH or HTTPS: nothing was run (set CDB_UPSTREAM_DIR to a pre-fetched copy)" >&2; rm -rf "$CACHE"; exit 5; }
-    git checkout -q FETCH_HEAD && touch .ok
+    touch .ok
   fi
 fi
 # A fresh copy to patch: the cache itself stays pristine.
