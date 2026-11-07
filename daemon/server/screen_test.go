@@ -315,12 +315,25 @@ func TestWatchingAnAgentLeavesItInControl(t *testing.T) {
 	v.read(4)                                        // the update arrives
 	v.write([]byte{5, 1, 0, 10, 0, 20})              // a tap
 	v.write([]byte{4, 1, 0, 0, 0, 0, 0, 'q'})        // a key
-	time.Sleep(100 * time.Millisecond)
-	if pointers, keys := fake.Snapshot(); len(pointers) != 0 || len(keys) != 0 {
-		t.Fatalf("a watcher's input reached the screen: %v %v", pointers, keys)
+	// Watching accepts input: it reaches the screen, takes nothing from the
+	// agent, and the agent hears about it with its next answer.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		pointers, keys := fake.Snapshot()
+		if len(pointers) == 1 && len(keys) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("a watcher's input did not reach the screen: %v %v", pointers, keys)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	if state, ok := service.Agent(); !ok || state.Worker != "%7" {
 		t.Fatal("watching took the screen from the agent")
+	}
+	told, err := service.Act(context.Background(), "%7", screen.AgentAction{Action: "cursor_position"})
+	if err != nil || !strings.Contains(told.Text, "person used") || !strings.Contains(told.Text, "click") {
+		t.Fatalf("the agent was not told what the watcher did: %v %q", err, told.Text)
 	}
 
 	service.StopAgent()

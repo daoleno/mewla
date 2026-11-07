@@ -4,7 +4,6 @@ package screen
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"image"
 	"os"
@@ -22,8 +21,8 @@ import (
 // a command that runs the browser acceptance and exits non-zero if it fails).
 // Everything is checked from outside the agent's own report: the agent's
 // TextEdit holds what was sent, the person's text is exactly what they typed,
-// the pointer stayed, the app in front never changed, the guard refused a
-// screen action while the person typed, and the windows came back.
+// the pointer stayed, the app in front never changed, a screen action while
+// the person typed went on and was told what they did, and the windows came back.
 //
 //	MEWLA_ACCEPT=product [MEWLA_ACCEPT_BROWSER_CMD=...] [MEWLA_ACCEPT_SLEEP=1] \
 //	  go test ./screen -run AcceptProduct -v -count=1
@@ -233,13 +232,15 @@ func TestAcceptProduct(t *testing.T) {
 	say("click on the title bar answered: err=%v %q", err, inert.Text)
 	check(err == nil && (strings.Contains(inert.Text, "No effect seen") || strings.Contains(inert.Text, "Effect not checked")), "a click that changes nothing doesn't claim success")
 
-	// 6. The guard: a screen action while the person types is refused.
-	_, err = act(AgentAction{Action: "key", Text: "a"})
-	check(errors.Is(err, ErrPersonAtComputer), "a key to the screen while the person types is refused: %v", err)
-	_, err = act(AgentAction{Action: "left_click", Coordinate: []int{400, 300}})
-	check(errors.Is(err, ErrPersonAtComputer), "a click on the screen while the person types is refused: %v", err)
-	_, err = actAs(worker2, AgentAction{Action: "key", Text: "a"})
-	check(errors.Is(err, ErrPersonAtComputer), "the second Worker's key to the screen is refused too: %v", err)
+	// 6. A screen action while the person types is not refused: it goes on and
+	// the answer tells the agent what the person did (one Worker's answer, then
+	// the other's, each told once).
+	told, err := act(AgentAction{Action: "key", Text: "a"})
+	check(err == nil && strings.Contains(told.Text, "person used"), "a key to the screen while the person types goes on and is told: %v %q", err, told.Text)
+	told, err = act(AgentAction{Action: "left_click", Coordinate: []int{400, 300}})
+	check(err == nil, "a click on the screen while the person types goes on: %v", err)
+	told, err = actAs(worker2, AgentAction{Action: "key", Text: "a"})
+	check(err == nil && strings.Contains(told.Text, "person used"), "the second Worker is told too: %v %q", err, told.Text)
 
 	// 7. Optional: the display sleeps and wakes.
 	if os.Getenv("MEWLA_ACCEPT_SLEEP") == "1" {

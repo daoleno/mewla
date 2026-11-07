@@ -45,7 +45,11 @@ func (s *Service) WatchWorker(ctx context.Context, deviceID, worker string, obs 
 	return viewer, nil
 }
 
-// agentWatch is a read-only Session over an agent's capture.
+// agentWatch is a Session over an agent's capture: the viewer sees what the
+// agent sees. What the person does in it is theirs: it reaches the screen and
+// is told to the agent with its next answer, like input at the computer, and
+// never pauses it. A button or key the agent holds is let go when the person
+// acts (see agentSession.beginAction and input), so nothing is held under them.
 type agentWatch struct {
 	agent *agentSession
 	image *image.RGBA
@@ -79,7 +83,36 @@ func (w *agentWatch) Frame(ctx context.Context, after uint64) (Frame, error) {
 	}
 }
 
-// Watching never moves the pointer or types.
-func (w *agentWatch) Pointer(int, int, uint8) error { return nil }
-func (w *agentWatch) Key(uint32, bool) error        { return nil }
-func (w *agentWatch) Close() error                  { return nil }
+// Pointer passes the person's pointer to the screen. It is not the agent's
+// own event, so it never hides itself from the agent as one.
+func (w *agentWatch) Pointer(x, y int, buttons uint8) error {
+	w.agent.watchInput(pointerKind(w.agent, buttons))
+	return w.agent.session.Pointer(x, y, buttons)
+}
+
+// Key passes the person's key to the screen.
+func (w *agentWatch) Key(keysym uint32, down bool) error {
+	if down {
+		w.agent.watchInput(InputKey)
+	}
+	return w.agent.session.Key(keysym, down)
+}
+
+func (w *agentWatch) Close() error { return nil }
+
+// pointerKind is what a pointer event of the person's counts as: a wheel
+// notch, a button press, or only a move. Releases and moves with a button down
+// are not counted twice.
+func pointerKind(a *agentSession, buttons uint8) InputKind {
+	a.inMu.Lock()
+	defer a.inMu.Unlock()
+	pressed := buttons &^ a.watchedButtons
+	a.watchedButtons = buttons
+	switch {
+	case pressed&(8|16|32|64) != 0:
+		return InputScroll
+	case pressed&7 != 0:
+		return InputClick
+	}
+	return InputPointer
+}

@@ -358,58 +358,89 @@ func TestAnAgentNeverPausesItself(t *testing.T) {
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 }
 
-// Someone using the computer itself pauses the agent: what it is doing stops
-// with nothing left pressed, and it keeps the screen to carry on after.
-func TestSomeoneAtTheComputerPausesTheAgent(t *testing.T) {
-	defer func(saved, wait time.Duration) { personPause, personWait = saved, wait }(personPause, personWait)
-	personPause = 500 * time.Millisecond
-	personWait = 0 // each retry below is answered, not waited out
+// Someone using the computer itself does not stop an agent by rule, but what
+// it holds is never pressed under their hand: a key hold is cut with the keys
+// let go, and the agent is told its hold was interrupted.
+func TestAKeyHoldIsCutWhenThePersonUsesTheComputer(t *testing.T) {
 	s, backend, _ := newAgentService(t)
 	act(t, s, "%7", AgentAction{Action: "screenshot"})
 
-	done := make(chan error, 1)
+	done := make(chan AgentResult, 1)
 	go func() {
-		_, err := s.Act(context.Background(), "%7", AgentAction{Action: "hold_key", Text: "shift+a", Duration: 5})
-		done <- err
+		r, err := s.Act(context.Background(), "%7", AgentAction{Action: "hold_key", Text: "shift+a", Duration: 5})
+		if err != nil {
+			t.Errorf("a cut hold is an answer, not an error: %v", err)
+		}
+		done <- r
 	}()
 	waitFor(t, func() bool { _, keys := backend.Snapshot(); return len(keys) == 2 })
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInput()
+	var result AgentResult
 	select {
-	case err := <-done:
-		if !errors.Is(err, ErrPersonAtComputer) {
-			t.Fatalf("hold ended with %v", err)
-		}
+	case result = <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("the agent kept holding keys while someone used the computer")
+	}
+	if !strings.Contains(result.Text, "cut short") || !strings.Contains(result.Text, "key hold was interrupted") {
+		t.Fatalf("the agent was not told its hold was cut: %q", result.Text)
 	}
 	if _, keys := backend.Snapshot(); len(keys) != 4 || keys[2] != (FakeKey{'a', false}) || keys[3] != (FakeKey{0xffe1, false}) {
 		t.Fatalf("keys %v", keys)
 	}
 	if _, ok := s.Agent(); !ok {
-		t.Fatal("a pause ended the agent's control")
+		t.Fatal("the person's input ended the agent's control")
 	}
-	// Letting go of the keys doesn't end the pause: a retry right away waits.
-	if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "key", Text: "b"}); !errors.Is(err, ErrPersonAtComputer) {
-		t.Fatalf("right after the interrupted hold: %v", err)
+	// Nothing is refused afterwards: the agent goes on, and has heard.
+	r := act(t, s, "%7", AgentAction{Action: "key", Text: "b"})
+	if strings.Contains(r.Text, "interrupted") {
+		t.Fatalf("told twice: %q", r.Text)
 	}
+}
 
-	// A button held between actions comes up when the pause starts, and
-	// letting go of it doesn't end the pause: a retry right away is refused.
-	time.Sleep(personPause)
+// A button the agent left down between actions comes up when the person uses
+// the computer, and the agent's next answer says so.
+func TestAButtonHeldBetweenActionsIsLetGo(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
 	act(t, s, "%7", AgentAction{Action: "left_mouse_down", Coordinate: []int{10, 10}})
 	time.Sleep(personMargin + 50*time.Millisecond)
 	backend.PersonInput()
-	for i := 0; i < 2; i++ {
-		if _, err := s.Act(context.Background(), "%7", AgentAction{Action: "mouse_move", Coordinate: []int{20, 20}}); !errors.Is(err, ErrPersonAtComputer) {
-			t.Fatalf("try %d while someone is at the computer: %v", i, err)
+	r := act(t, s, "%7", AgentAction{Action: "mouse_move", Coordinate: []int{20, 20}})
+	if pointers, _ := backend.Snapshot(); pointers[len(pointers)-2].Buttons != 0 {
+		t.Fatalf("button left down under the person's hand: %v", pointers)
+	}
+	if !strings.Contains(r.Text, "let go") || !strings.Contains(r.Text, "person used") {
+		t.Fatalf("the agent was not told: %q", r.Text)
+	}
+}
+
+// A drag the person's input lands in is cut: the button comes up, the rest of
+// the drag does not run, and the agent is told.
+func TestADragIsCutWhenThePersonUsesTheComputer(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	// The person uses the computer right after the drag pressed: their input is
+	// stamped ahead of the agent's own events, which the fake performs in no time.
+	backend.mu.Lock()
+	base := len(backend.Pointers)
+	backend.AfterPointer = func(seen int) {
+		if seen == base+2 {
+			backend.PersonInputIn(InputKey, personMargin+300*time.Millisecond)
 		}
+	}
+	backend.mu.Unlock()
+	r, err := s.Act(context.Background(), "%7", AgentAction{Action: "left_click_drag", StartCoordinate: []int{10, 10}, Coordinate: []int{300, 200}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.Text, "cut short") || !strings.Contains(r.Text, "drag or button press was interrupted") {
+		t.Fatalf("answer %q", r.Text)
 	}
 	if pointers, _ := backend.Snapshot(); pointers[len(pointers)-1].Buttons != 0 {
 		t.Fatalf("button left down: %v", pointers)
 	}
-	time.Sleep(personPause)
-	act(t, s, "%7", AgentAction{Action: "screenshot"})
 }
 
 func TestALockedScreenStopsAgents(t *testing.T) {

@@ -37,7 +37,10 @@ type FakeBackend struct {
 	Opened    []string
 	Confirmed []string
 	Requested int
-	input     [inputKinds]time.Time
+	// AfterPointer, when set, runs after each pointer event with how many have
+	// been seen, outside the lock: a test's way to have the person act mid-action.
+	AfterPointer func(seen int)
+	input        [inputKinds]time.Time
 	// AppEventsSeen makes keys and clicks sent to one app count as input
 	// too, as a Mac might.
 	AppEventsSeen bool
@@ -169,6 +172,16 @@ func (f *FakeBackend) Elements(context.Context, int) (ElementTree, error) {
 // PersonInput is someone typing on the computer's own keyboard.
 func (f *FakeBackend) PersonInput() {
 	f.PersonInputOf(InputKey)
+}
+
+// PersonInputIn is the person's input of a kind that lands after d: a test's
+// way to have them act between two of an action's events, which the fake
+// session performs in no time at all.
+func (f *FakeBackend) PersonInputIn(kind InputKind, d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.input[kind] = time.Now().Add(d)
+	f.bump()
 }
 
 // PersonInputOf is someone making one kind of input.
@@ -335,6 +348,18 @@ func (s *fakeSession) draw() {
 }
 
 func (s *fakeSession) Pointer(x, y int, buttons uint8) error {
+	f := s.backend
+	err := s.pointer(x, y, buttons)
+	f.mu.Lock()
+	hook := f.AfterPointer
+	f.mu.Unlock()
+	if hook != nil {
+		hook(len(f.Pointers))
+	}
+	return err
+}
+
+func (s *fakeSession) pointer(x, y int, buttons uint8) error {
 	f := s.backend
 	f.mu.Lock()
 	defer f.mu.Unlock()

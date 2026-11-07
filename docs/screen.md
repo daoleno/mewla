@@ -195,23 +195,26 @@ missing, and **Open Settings** opens the right page on the Mac.
   it with **Take over**, **Watch** and **Stop**; **Take over** ends the agents'
   control and opens the screen. When the agent is done, the screen opens by
   itself. While you view it, agents wait.
-  Someone using the Mac's own keyboard or trackpad pauses the agent at once,
-  letting go of any key or button it holds; it carries on 10 seconds after
-  their last input. An action that comes in the last few seconds of that
-  waits for it to end; earlier ones are answered at once with the time left. A key press, a click, moving the pointer and scrolling
-  count; a hand resting on the trackpad doesn't. The agent is told which
-  input it saw and when, and so is the record below, so a pause that won't
-  end shows what keeps it going: a person, a tap the trackpad registers by
-  itself, or another program clicking or typing. Work in an app behind the one in front goes on meanwhile:
+  Someone using the Mac's own keyboard or trackpad does not pause the agent:
+  nothing waits and nothing is refused. The agent's next answer says what you
+  did (key presses, clicks, scrolls, how long ago, never what you typed) and
+  whether it landed in the middle of its own action, and the agent looks at the
+  screen again and judges whether it matters, because you may have tapped by
+  mistake or be typing a password. A key press, a click, moving the pointer and
+  scrolling count; a hand resting on the trackpad doesn't. The one mechanical
+  rule is that a button or key the agent is holding is let go the moment you
+  use the Mac, so it is never pressed under your hand, and the agent is told its
+  drag or hold was interrupted. The record below notes the same. Work in an app
+  behind the one in front is not touched by any of this:
   reading it (a field's or note's whole text included), pressing or filling
   in its controls, choosing its menu items
   by their shortcuts (⌘N in Notes makes a new note; an app that comes to
   the front for it gives the front straight back to yours), typing into it alone and
   clicking its window behind yours don't touch the pointer or keyboard in
-  use. Anything on the screen itself, or in the app in front, waits, and so
-  does bringing an app to the front, which an agent does only when an app
+  use. Anything on the screen itself, or in the app in front, goes on too, and
+  so does bringing an app to the front, which an agent does only when an app
   behind ignores what it sends. **Take over**, **Stop**, the switch and a
-  locked screen stop all of it.
+  locked screen are the hard switches: they stop all of it.
 - **Not while locked.** Agents can't use a locked Mac, and Settings says so.
   They can use it again once it's unlocked. If agents should keep working on
   a Mac nobody is at, its automatic screen lock decides how long they can
@@ -230,10 +233,11 @@ missing, and **Open Settings** opens the right page on the Mac.
   if the display goes off anyway the agent is told and its next action wakes
   it. A MacBook with its lid closed and no external display can't be woken.
 - **You see it.** **Watch** shows the agent working, live, without taking
-  over: your taps don't reach the screen, and **Take over** or **Stop** is one
+  over: your taps and typing reach the screen, the agent keeps going and is
+  told how many (never what you typed), and **Take over** or **Stop** is one
   tap away. Work in an app behind others happens out of sight, so Watch may
   not show it; it is still the agent's turn on the screen, with the same
-  pause, stop and record. The Mac shows a notification when an agent starts and stops using
+  stop and record. The Mac shows a notification when an agent starts and stops using
   the screen, and **Stop** is on the agent's row in Screen.
 - **Several at once, each in its own apps.** Any number of agents can use the
   Mac at the same time as long as each works in a different app: they click and
@@ -276,7 +280,7 @@ fields, often in the background. Other agents use Mewla's, and so does Codex
 when its own tool fails.
 
 It is Codex's tool, not Mewla's, so the promises above don't cover it: Watch
-doesn't show it, Take over doesn't stop it, it doesn't pause for someone at the
+doesn't show it, Take over doesn't stop it, it isn't told what someone does at the
 Mac, and Mewla's log doesn't record it. Brain keeps one agent on the screen at
 a time. Turning off **Agents can use this computer** turns it off for Codex
 Workers started afterwards; one already running keeps it until it ends.
