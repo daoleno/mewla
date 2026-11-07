@@ -4,7 +4,7 @@
 //   node suite.mjs --side mewla|ab [--reps 3] [--only id,id] [--out file.json] [--model claude-sonnet-5-5]
 // Env: BENCH_DIR (env.sh), and for the mewla side BENCH_MCP (argv JSON of the Playwright MCP command).
 import { spawn, execFileSync } from 'node:child_process';
-import { writeFileSync, mkdtempSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -57,6 +57,8 @@ function resetBrowser() {
 // agent's, while the agent works. The row then says what the agent did to the person: lost keyboard focus, a window
 // raised over theirs, typing lost, the real pointer moved, their page hidden.
 const NONINT = process.argv.includes('--nonint');
+// --control: no agent. The probe alone for 20 s per rep: every criterion must read zero or the probe is measuring itself.
+const CONTROL = process.argv.includes('--control');
 const XUSER = process.env.BENCH_XUSER || path.join(here, '../agent-use/web/xuser');
 async function cdpBrowser(method, params) {
   const url = JSON.parse(execFileSync('curl', ['-s', `localhost:${CDP}/json/version`]).toString()).webSocketDebuggerUrl;
@@ -94,11 +96,11 @@ async function stopUser(u) {
   let s = {}; for (const l of u.lines) { try { const o = JSON.parse(l); if (o.ev === 'summary') s = o; } catch {} }
   const keys = seen.filter(e => e.type === 'user:key').length;
   const ni = { typed: s.typed ?? null, keys_received: keys, typing_lost: s.typed == null ? null : Math.max(0, s.typed - keys - 1),
-    key_focus_lost: s.focus_away ?? null, raised_over_user: s.raised ?? null, pointer_moved: s.pointer_moves ?? null,
+    key_focus_lost: s.focus_away ?? null, raised_over_user: s.raised ?? null, raised_popup: s.raised_popup ?? null, pointer_moved: s.pointer_moves ?? null,
     user_page_hidden: seen.filter(e => e.type === 'user:vis' && e.state === 'hidden').length,
     measured: ['key_focus_lost', 'raised_over_user', 'typing_lost', 'pointer_moved', 'user_page_hidden'],
     not_measured: ['clipboard', 'space_switch', 'dialog_on_user', 'app_activation'] };
-  if (process.env.AUB_DEBUG) ni.debug = { xuser: u.lines.filter(l => !l.includes('"type"')).slice(0, 40), events: seen.filter(e => e.type !== 'user:key').slice(0, 40).map(e => ({ ...e, dt: e.at - u.t0 })), t0: u.t0 };
+  if (process.env.AUB_DEBUG) ni.debug = { xuser: u.lines.filter(l => !l.includes('"ev":"type"')).slice(0, 60), events: seen.filter(e => e.type !== 'user:key').slice(0, 40).map(e => ({ ...e, dt: e.at - u.t0 })), t0: u.t0 };
   ni.undisturbed = s.typed != null && ni.measured.every(k => ni[k] === 0);
   return ni;
 }
@@ -141,7 +143,7 @@ for (const task of tasks) {
     events.length = 0; resetBrowser();
     if (NONINT) await freshBrowser();
     const user = NONINT ? await startUser() : null;
-    const r = await runClaude(task.prompt.replaceAll('{base}', base));
+    const r = CONTROL ? await new Promise(res => setTimeout(() => res({ wall: 20000, result: { result: '' }, tools: 0 }), 20000)) : await runClaude(task.prompt.replaceAll('{base}', base));
     const nonint = user ? await stopUser(user) : undefined;
     const answer = r.result?.result ?? '';
     const u = r.result?.usage ?? {};
@@ -160,4 +162,6 @@ for (const t of [...new Set(rows.map(r => r.task))]) {
   const rs = rows.filter(r => r.task === t);
   console.log(t.padEnd(12), `ok ${rs.filter(r => r.ok).length}/${rs.length}`, `wall ${med(rs.map(r => r.wall_ms))}`, `turns ${med(rs.map(r => r.turns))}`, `tools ${med(rs.map(r => r.tool_calls))}`, `out ${med(rs.map(r => r.output))}`);
 }
+// The MCP config in the work dir can hold the tools' environment: it does not outlive the run.
+try { rmSync(work, { recursive: true, force: true }); } catch {}
 process.exit(0);
