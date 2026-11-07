@@ -1041,6 +1041,49 @@ func TestAQuietAgentKeepsItsAppOnTheAgentDisplay(t *testing.T) {
 	}
 }
 
+// A session handed out for an action is not ended as idle before the action
+// begins, however long the work before it takes; once the action is over the
+// idle end applies again.
+func TestASessionHandedOutForAnActionIsNotEndedAsIdle(t *testing.T) {
+	s, _, _ := newAgentService(t)
+	s.agentIdle = 40 * time.Millisecond
+	agent, err := s.agentFor("%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Several idle periods pass with the action not yet begun: the idle watch
+	// ticks every quarter of one, so it has looked many times.
+	deadline := time.Now().Add(10 * s.agentIdle)
+	for time.Now().Before(deadline) {
+		if err := context.Cause(agent.ctx); err != nil {
+			t.Fatalf("ended before its action began: %v", err)
+		}
+		time.Sleep(s.agentIdle / 4)
+	}
+	agent.endUse()
+	waitFor(t, func() bool { return errors.Is(context.Cause(agent.ctx), errAgentIdle) })
+}
+
+// A stop or a takeover that comes after the idle end began still lets go of
+// what the idle end would keep.
+func TestAStopAfterTheIdleEndBeganKeepsNothing(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	s.parkLease = time.Hour
+	backend.RunningApps = parkingApps()
+	backend.AgentDisplay = true
+	backend.SkyLight, backend.HitTest = true, true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	act(t, s, "%7", AgentAction{Action: "key", Text: "a", App: "Safari"})
+	s.agentMu.Lock()
+	agent := s.agents["%7"]
+	s.agentMu.Unlock()
+	agent.cancel(errAgentIdle) // the idle end, its cleanup not yet run
+	agent.control.cancel(ErrAgentStopped)
+	if s.holdParked(agent, true) {
+		t.Fatal("the idle end kept what the person stopped")
+	}
+}
+
 // Stopping the agent from the app, or a person taking over, puts it back at
 // once, even when the agent is quiet.
 func TestAQuietAgentsAppGoesBackWhenItIsStoppedOrTheScreenIsTaken(t *testing.T) {

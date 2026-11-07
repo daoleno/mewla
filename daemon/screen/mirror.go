@@ -209,15 +209,7 @@ func (s *Service) withMirror(ctx context.Context, worker string, fn func(t mirro
 	if err != nil {
 		return err
 	}
-	agent.mu.Lock()
-	agent.inflight++
-	agent.mu.Unlock()
-	defer func() {
-		agent.mu.Lock()
-		agent.inflight--
-		agent.lastUse = time.Now()
-		agent.mu.Unlock()
-	}()
+	defer agent.endUse() // agentFor counted it
 	select {
 	case <-agent.ready:
 	case <-time.After(agentFirstFrame):
