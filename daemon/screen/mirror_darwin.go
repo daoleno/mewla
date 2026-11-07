@@ -87,14 +87,31 @@ func (k *skyLightSyms) stamp(event uintptr, pid int, window AppWindow, local fpo
 // SwipeTo moves a finger from x, y (framebuffer pixels on the window) by
 // dx, dy, in the way how says, to an app behind other windows.
 func (s *macSession) SwipeTo(pid int, window AppWindow, x, y, dx, dy int, how SwipeHow) error {
+	return s.swipeTo(pid, window, x, y, dx, dy, how, true)
+}
+
+// DragTo drags in a window of an app behind other windows. No focus record
+// goes first: with it the app turns active and its window key, which the
+// person at the computer sees as their keyboard going elsewhere (the Mac
+// probe, daemon/screen/probe_popup_darwin_test.go); without it the app still
+// gets the press, the moves and the release.
+func (s *macSession) DragTo(pid int, window AppWindow, x, y, dx, dy int) error {
+	return s.swipeTo(pid, window, x, y, dx, dy, SwipeDrag, false)
+}
+
+var _ appDragger = (*macSession)(nil)
+
+func (s *macSession) swipeTo(pid int, window AppWindow, x, y, dx, dy int, how SwipeHow, focus bool) error {
 	k := loadSkyLight()
 	if k.why != "" {
 		return errors.New(k.why)
 	}
-	if err := k.focusWithoutRaise(pid, window.ID); err != nil {
-		return err
+	if focus {
+		if err := k.focusWithoutRaise(pid, window.ID); err != nil {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	time.Sleep(50 * time.Millisecond)
 	source := mac.CGEventSourceCreate(1)
 	defer func() {
 		if source != 0 {

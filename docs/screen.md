@@ -163,7 +163,9 @@ again; when a window opened or closed, or much changed, it gets the whole app. T
 same way, and click a point in its window behind others: a plain click on
 something the app can press presses it through accessibility; any other click
 is sent through a part of macOS Apple doesn't document, which an app behind
-others may ignore, so the agent is told to check what happened. Where that
+others may ignore, so the agent is told to check what happened. A drag from
+one point of a window to another goes the same way, and the app isn't made the
+active app, so the person's typing in front stays theirs. Where that
 isn't available, and for apps built on Chromium, the app comes to the front
 for the click. They can run a short
 list of such steps in one go, such as find, press, type and check. To find
