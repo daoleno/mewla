@@ -10,6 +10,11 @@ import type { TreeHostMessage, TreeViewerHostHandle, TreeViewerHostProps } from 
 
 const DEFAULT_BASE_URL = "https://trees.mewla.invalid/";
 
+/** Messages that define the document's state; `reveal` is one-shot. */
+function slotOf(message: TreeHostMessage): string | null {
+  return message.type === "reveal" ? null : message.type;
+}
+
 /** Native host: the reader runs in a WebView that cannot navigate or fetch. */
 export const TreeViewerHost = forwardRef<TreeViewerHostHandle, TreeViewerHostProps>(function TreeViewerHost(
   { onMessage, backgroundColor, accessibilityLabel },
@@ -17,7 +22,11 @@ export const TreeViewerHost = forwardRef<TreeViewerHostHandle, TreeViewerHostPro
 ) {
   const web = useRef<WebView>(null);
   const ready = useRef(false);
-  const queue = useRef<TreeHostMessage[]>([]);
+  // The last message of each kind that defines what the document shows. A
+  // reload (theme flip aside, the OS can kill the WebView's process) comes up
+  // empty, so these are replayed whenever the document says it is ready.
+  const slots = useRef(new Map<string, TreeHostMessage>());
+  const initialBackground = useRef(backgroundColor);
   const font = useMemo(
     () => terminalFontCache.resolve(
       () => Asset.fromModule(require("../../../assets/fonts/MapleMono-CN-Regular.ttf")),
@@ -26,21 +35,26 @@ export const TreeViewerHost = forwardRef<TreeViewerHostHandle, TreeViewerHostPro
     [],
   );
   const source = useMemo(() => ({
-    html: buildPierreViewerHtml({ source: PIERRE_TREES_SOURCE, fontUri: font.uri, background: backgroundColor }),
+    html: buildPierreViewerHtml({ source: PIERRE_TREES_SOURCE, fontUri: font.uri, background: initialBackground.current }),
     baseUrl: font.uri ? terminalWebViewBaseUrl(font.uri, Platform.OS) : DEFAULT_BASE_URL,
-  }), [backgroundColor, font.uri]);
-  const flush = useCallback(() => {
-    if (!ready.current || !queue.current.length) return;
-    const batch = queue.current;
-    queue.current = [];
+  }), [font.uri]);
+  const inject = useCallback((batch: TreeHostMessage[]) => {
+    if (!batch.length) return;
     web.current?.injectJavaScript(`window.pierreTreeHost&&window.pierreTreeHost(${JSON.stringify(batch)});true;`);
   }, []);
+  const replay = useCallback(() => {
+    inject(["style", "paths", "select"].flatMap((slot) => slots.current.get(slot) ?? []));
+  }, [inject]);
   useImperativeHandle(ref, () => ({
     post(batch) {
-      queue.current.push(...batch);
-      flush();
+      for (const message of batch) {
+        const slot = slotOf(message);
+        if (slot) slots.current.set(slot, message);
+      }
+      // Before the document is ready the slots are all there is to send.
+      if (ready.current) inject(batch);
     },
-  }), [flush]);
+  }), [inject]);
   const baseUrl = source.baseUrl;
   return (
     <WebView
@@ -54,7 +68,7 @@ export const TreeViewerHost = forwardRef<TreeViewerHostHandle, TreeViewerHostPro
         const raw = event.nativeEvent.data;
         if (raw.startsWith('{"type":"ready"')) {
           ready.current = true;
-          flush();
+          replay();
         }
         onMessage(raw);
       }}
