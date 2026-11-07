@@ -1,6 +1,7 @@
 // The file tree: @pierre/trees inside a WebView (or straight in the page on
 // web). It renders only; the host owns data and menus; search is Trees' own field.
 // Messages in and out are described by ../treeViewerProtocol.ts.
+import { applyColorScheme } from "./colorScheme.js";
 import { FileTree } from "@pierre/trees";
 import { LONG_PRESS_MS, decorationParts, movedPastSlop, treeGitStatus } from "./treeModel.ts";
 
@@ -20,7 +21,7 @@ export function mountTreeViewer(container, post) {
     container.style.setProperty("--trees-font-family-override", style.fontFamily);
     container.style.setProperty("--trees-font-size-override", `${style.fontSize}px`);
     container.style.background = style.vars["--trees-bg-override"] || "transparent";
-    container.style.colorScheme = style.dark ? "dark" : "light";
+    applyColorScheme(container, style.dark);
   }
 
   function build() {

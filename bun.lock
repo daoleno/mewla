@@ -76,6 +76,8 @@
         "@types/react": "~19.3.0",
         "@types/react-test-renderer": "^19.3.0",
         "@typescript/typescript6": "6.0.2",
+        "acorn": "8.16.0",
+        "lightningcss": "1.32.0",
         "mermaid": "12.2.0",
         "react-test-renderer": "19.3.0",
         "typescript": "~7.0.2",
