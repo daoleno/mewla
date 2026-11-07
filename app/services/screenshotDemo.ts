@@ -26,6 +26,7 @@ export const SCREENSHOT_DEMO_STATES = [
   "empty",
   "mermaid",
   "computers",
+  "connection-path",
 ] as const;
 
 export type ScreenshotDemoState = (typeof SCREENSHOT_DEMO_STATES)[number];

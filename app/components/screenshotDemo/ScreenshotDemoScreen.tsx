@@ -123,6 +123,7 @@ import { useCalendarDispatch, type CalendarItem } from "../../store/calendar";
 import { ResourcesScreenshotDemo, SkillsScreenshotDemo, WorkScreenshotDemo } from "./ToolsScreenshotDemos";
 import { Icon } from "../icons/Icon";
 import { ComputersScreenshotDemo } from "./ComputersScreenshotDemo";
+import { ConnectionPathScreenshotDemo } from "./ConnectionPathScreenshotDemo";
 
 const NOOP = () => undefined;
 
@@ -143,6 +144,7 @@ export default function ScreenshotDemoScreen() {
     demo?: string | string[];
     state?: string | string[];
     fixture?: string;
+    reveal?: string;
   }>();
   const state = resolveScreenshotDemoState(
     params.state ?? process.env.EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO_STATE,
@@ -184,6 +186,8 @@ export default function ScreenshotDemoScreen() {
       return <WorkScreenshotDemo header={<DemoStackHeader title="" />} />;
     case "computers":
       return <ComputersScreenshotDemo fixture={params.fixture} header={(title) => <DemoStackHeader title={title} />} />;
+    case "connection-path":
+      return <ConnectionPathScreenshotDemo fixture={params.fixture} reveal={params.reveal} header={(title) => <DemoStackHeader title={title} />} />;
     case "profile":
       return <InterfaceDevicePerformanceDemoGate />;
     case "reading":

@@ -4,6 +4,7 @@ import {
   type DirectAddress,
   type DirectKind,
 } from "./directAddresses";
+import type { TransportPathInfo } from "./connectionPath";
 import type { StoredServer, StoredTransportCandidate } from "./storage";
 
 /** How the phone reaches a computer: through Mewla Link's relay, or straight. */
@@ -82,6 +83,54 @@ export function directPathHint(server: StoredServer): "announced" | "none" | nul
   return directAddressesFor(server).length > 0 ? "announced" : "none";
 }
 
+function infoFor(serverId: string): TransportPathInfo | null {
+  const entry = paths.get(serverId);
+  if (!entry?.current) return null;
+  const selection = entry.current === "relay" ? entry.relay : entry.direct;
+  if (!selection) return null;
+  const rtt = Number.isFinite(selection.rttMs) ? selection.rttMs : null;
+  if (selection.path === "relay") return { path: "relay", host: null, rttMs: rtt };
+  let host: string | null = null;
+  try {
+    host = new URL(selection.remoteURL).hostname;
+  } catch {
+    // The address stays unnamed; the path is still known.
+  }
+  return { path: selection.path, host, rttMs: rtt };
+}
+
+// What the app shows of each computer's path. A snapshot is replaced only when
+// something in it changed, so a subscriber re-renders on real moves only.
+const snapshots = new Map<string, TransportPathInfo>();
+const pathListeners = new Set<() => void>();
+
+function publishPath(serverId: string) {
+  const next = infoFor(serverId);
+  const before = snapshots.get(serverId) ?? null;
+  if (
+    before === next ||
+    (before && next && before.path === next.path && before.host === next.host && before.rttMs === next.rttMs)
+  ) {
+    return;
+  }
+  if (next) snapshots.set(serverId, next);
+  else snapshots.delete(serverId);
+  for (const listener of [...pathListeners]) listener();
+}
+
+/** The live path of the app's connection to a computer; null until chosen and after it fails. */
+export function transportPathInfo(serverId: string): TransportPathInfo | null {
+  return snapshots.get(serverId) ?? null;
+}
+
+/** Calls `listener` whenever any computer's path changes. Returns the unsubscribe. */
+export function subscribeTransportPath(listener: () => void): () => void {
+  pathListeners.add(listener);
+  return () => {
+    pathListeners.delete(listener);
+  };
+}
+
 /** The path the phone is using for a computer, or null before it has chosen. */
 export function currentTransportPath(serverId: string): TransportPath | null {
   const entry = paths.get(serverId);
@@ -107,6 +156,7 @@ export async function resolveStoredServerURL(
   const direct = stillListed(server, entry.direct);
   if (direct && fresh(direct)) {
     entry.current = "direct";
+    publishPath(server.id);
     return rewriteSelection(server, direct);
   }
   const relay = entry.relay;
@@ -123,9 +173,10 @@ export async function resolveStoredServerURL(
   // keyed per address, so two overlapping races could stop each other's.
   let flight = resolving.get(server.id);
   if (!flight) {
-    flight = chooseTransport(server, entry).finally(() =>
-      resolving.delete(server.id),
-    );
+    flight = chooseTransport(server, entry).finally(() => {
+      resolving.delete(server.id);
+      publishPath(server.id);
+    });
     resolving.set(server.id, flight);
   }
   return flight;
@@ -168,6 +219,7 @@ async function chooseTransport(
   }
   chosen.measuredAt = Date.now();
   entry.current = chosen.path === "relay" ? "relay" : "direct";
+  publishPath(server.id);
   return rewriteSelection(server, chosen);
 }
 
@@ -252,9 +304,10 @@ function probeDirect(
 ): Promise<Selection | null> {
   let probe = directProbes.get(server.id);
   if (!probe) {
-    probe = verifyDirect(server, entry).finally(() =>
-      directProbes.delete(server.id),
-    );
+    probe = verifyDirect(server, entry).finally(() => {
+      directProbes.delete(server.id);
+      publishPath(server.id);
+    });
     directProbes.set(server.id, probe);
   }
   return probe;
@@ -466,6 +519,7 @@ export async function transportFailed(server: StoredServer): Promise<void> {
   if (entry.current === "direct") delete entry.direct;
   else delete entry.relay;
   delete entry.current;
+  publishPath(server.id);
   if (failed) await stopNativePinnedTunnel(failed.tunnelKey).catch(() => undefined);
 }
 
@@ -477,6 +531,7 @@ export async function invalidateStoredServerTransport(
   }
   const entry = paths.get(server.id);
   paths.delete(server.id);
+  publishPath(server.id);
   await Promise.all(
     [entry?.relay, entry?.direct].map((selection) =>
       selection

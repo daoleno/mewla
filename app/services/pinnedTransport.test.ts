@@ -514,4 +514,113 @@ describe("direct path beside the relay", () => {
     expect(stops).not.toContain(`server:${server.id}:direct:${winner}:9876`);
     await invalidateStoredServerTransport(server);
   });
+
+  describe("the live path the app shows", () => {
+    const { subscribeTransportPath, transportPathInfo } = pinnedTransportForDirect;
+    // What a subscriber would have rendered, one entry per notification.
+    function watch(serverId: string) {
+      const seen: Array<string | null> = [];
+      const stop = subscribeTransportPath(() => seen.push(transportPathInfo(serverId)?.path ?? null));
+      return { seen, stop };
+    }
+
+    test("a LAN address is announced with its address and measured round trip", async () => {
+      const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+      expect(transportPathInfo(server.id)).toBeNull();
+      const { seen, stop } = watch(server.id);
+      await resolveStoredServerURL(server);
+      expect(seen).toEqual(["lan"]);
+      expect(transportPathInfo(server.id)).toEqual({ path: "lan", host: "192.168.1.20", rttMs: 5 });
+      stop();
+      await invalidateStoredServerTransport(server);
+    });
+
+    test("Tailscale and the relay are told apart", async () => {
+      const tailnet = linkServer([{ host: "100.64.0.9", port: 9876 }]);
+      await resolveStoredServerURL(tailnet);
+      expect(transportPathInfo(tailnet.id)).toEqual({ path: "tailscale", host: "100.64.0.9", rttMs: 5 });
+      await invalidateStoredServerTransport(tailnet);
+
+      const relayOnly = linkServer([]);
+      await resolveStoredServerURL(relayOnly);
+      expect(transportPathInfo(relayOnly.id)).toEqual({ path: "relay", host: null, rttMs: 40 });
+      await invalidateStoredServerTransport(relayOnly);
+    });
+
+    test("relay to direct: the path moves only when the connection does", async () => {
+      failures = new Set(["192.168.1.20"]);
+      const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+      const { seen, stop } = watch(server.id);
+      await resolveStoredServerURL(server);
+      expect(seen).toEqual(["relay"]);
+
+      failures = new Set();
+      const realNow = Date.now;
+      Date.now = () => realNow() + 21_000;
+      try {
+        expect(await directPathBecameAvailable(server)).toBe(true);
+      } finally {
+        Date.now = realNow;
+      }
+      // Verified, but the live connection is still on the relay.
+      expect(transportPathInfo(server.id)?.path).toBe("relay");
+      expect(seen).toEqual(["relay"]);
+
+      await resolveStoredServerURL(server);
+      expect(seen).toEqual(["relay", "lan"]);
+      expect(transportPathInfo(server.id)?.host).toBe("192.168.1.20");
+      stop();
+      await invalidateStoredServerTransport(server);
+    });
+
+    test("direct lost: nothing is claimed while it fails, then the relay", async () => {
+      const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+      await resolveStoredServerURL(server);
+      const { seen, stop } = watch(server.id);
+
+      failures = new Set(["192.168.1.20"]);
+      await transportFailed(server);
+      expect(transportPathInfo(server.id)).toBeNull();
+      await resolveStoredServerURL(server);
+      expect(seen).toEqual([null, "relay"]);
+      expect(transportPathInfo(server.id)?.rttMs).toBe(40);
+      stop();
+      await invalidateStoredServerTransport(server);
+    });
+
+    for (const bad of ["wrong-key", "replay", "legacy", "error"] as const) {
+      test(`a failed proof (${bad}) never shows a direct path`, async () => {
+        answer = bad;
+        const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+        const { seen, stop } = watch(server.id);
+        await resolveStoredServerURL(server);
+        expect(seen).toEqual(["relay"]);
+        expect(transportPathInfo(server.id)?.path).toBe("relay");
+        stop();
+        await invalidateStoredServerTransport(server);
+      });
+    }
+
+    test("forgetting a computer's transport clears its path", async () => {
+      const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+      await resolveStoredServerURL(server);
+      const { seen, stop } = watch(server.id);
+      await invalidateStoredServerTransport(server);
+      expect(seen).toEqual([null]);
+      expect(transportPathInfo(server.id)).toBeNull();
+      stop();
+    });
+
+    test("a snapshot that did not change is not announced again", async () => {
+      const server = linkServer([{ host: "192.168.1.20", port: 9876 }]);
+      await resolveStoredServerURL(server);
+      const first = transportPathInfo(server.id);
+      const { seen, stop } = watch(server.id);
+      await resolveStoredServerURL(server);
+      expect(seen).toEqual([]);
+      expect(transportPathInfo(server.id)).toBe(first);
+      stop();
+      await invalidateStoredServerTransport(server);
+    });
+  });
 });

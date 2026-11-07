@@ -1,4 +1,5 @@
 import type { ScreenPower, ScreenStatus } from "../../services/screen";
+import { PATH_LABELS } from "../../services/connectionPath";
 import type { ScreenPath, ScreenStreamStats } from "../../services/screenStream";
 import type { ScreenModifier } from "./screenViewerProtocol";
 
@@ -121,14 +122,6 @@ export interface StreamReadout {
    */
   directHint?: "announced" | "none" | null;
 }
-
-const PATH_LABELS: Record<ScreenPath, string> = {
-  relay: "Relay",
-  tailscale: "Tailscale",
-  lan: "LAN",
-  loopback: "Local",
-  direct: "Direct",
-};
 
 export type StreamStage = "network" | "encode" | "bridge" | "draw";
 
