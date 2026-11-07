@@ -1,0 +1,225 @@
+{
+ "schema": "aub/1",
+ "run_id": "20261108-cdb-mewla_computer-background-629296fb",
+ "date": "2026-11-07T16:33Z",
+ "suite": "cdb-macos-benchlab",
+ "platform": "macos",
+ "tool": "mewla_computer",
+ "condition": "background",
+ "model": "claude-sonnet-5-5",
+ "harness": "Cua Driver Bench runner (claude -p, 360 s / 45 turns)",
+ "mewla_commit": "629296fb",
+ "source": "own",
+ "rows": [
+  {
+   "task": "MB-09",
+   "trial": 1,
+   "ok": true,
+   "undisturbed": false,
+   "disturbed_by": [
+    "key_focus",
+    "space"
+   ],
+   "full_pass": false,
+   "wall_s": 23.11,
+   "turns": 6,
+   "steps": 8,
+   "tokens": {
+    "input": 12,
+    "output": 1109,
+    "cache_read": 49138,
+    "cache_write": 12067,
+    "cached_input": 49138,
+    "reasoning": 0,
+    "total": 62326
+   },
+   "cost_usd": 0.0461953
+  },
+  {
+   "task": "MB-09",
+   "trial": 2,
+   "ok": true,
+   "undisturbed": false,
+   "disturbed_by": [
+    "key_focus",
+    "typing"
+   ],
+   "full_pass": false,
+   "wall_s": 20.06,
+   "turns": 5,
+   "steps": 6,
+   "tokens": {
+    "input": 10,
+    "output": 766,
+    "cache_read": 37573,
+    "cache_write": 11204,
+    "cached_input": 37573,
+    "reasoning": 0,
+    "total": 49553
+   },
+   "cost_usd": 0.0394473
+  },
+  {
+   "task": "MB-09",
+   "trial": 3,
+   "ok": true,
+   "undisturbed": false,
+   "disturbed_by": [
+    "key_focus"
+   ],
+   "full_pass": false,
+   "wall_s": 17.78,
+   "turns": 4,
+   "steps": 5,
+   "tokens": {
+    "input": 8,
+    "output": 619,
+    "cache_read": 27337,
+    "cache_write": 10728,
+    "cached_input": 27337,
+    "reasoning": 0,
+    "total": 38692
+   },
+   "cost_usd": 0.0357597
+  },
+  {
+   "task": "IR-03",
+   "trial": 1,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 28.43,
+   "turns": 11,
+   "steps": 19,
+   "tokens": {
+    "input": 22,
+    "output": 1867,
+    "cache_read": 126684,
+    "cache_write": 10573,
+    "cached_input": 126684,
+    "reasoning": 0,
+    "total": 139146
+   },
+   "cost_usd": 0.057814900000000016
+  },
+  {
+   "task": "IR-03",
+   "trial": 2,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 40.31,
+   "turns": 10,
+   "steps": 18,
+   "tokens": {
+    "input": 20,
+    "output": 1543,
+    "cache_read": 110933,
+    "cache_write": 11735,
+    "cached_input": 110933,
+    "reasoning": 0,
+    "total": 124231
+   },
+   "cost_usd": 0.0559008
+  },
+  {
+   "task": "IR-03",
+   "trial": 3,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 25.85,
+   "turns": 10,
+   "steps": 17,
+   "tokens": {
+    "input": 20,
+    "output": 1553,
+    "cache_read": 109341,
+    "cache_write": 10087,
+    "cached_input": 109341,
+    "reasoning": 0,
+    "total": 121001
+   },
+   "cost_usd": 0.051721600000000006
+  },
+  {
+   "task": "IR-04",
+   "trial": 1,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 45.93,
+   "turns": 11,
+   "steps": 17,
+   "tokens": {
+    "input": 22,
+    "output": 1613,
+    "cache_read": 125545,
+    "cache_write": 10614,
+    "cached_input": 125545,
+    "reasoning": 0,
+    "total": 137794
+   },
+   "cost_usd": 0.05526349999999999
+  },
+  {
+   "task": "IR-04",
+   "trial": 2,
+   "ok": false,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": false,
+   "wall_s": 27.13,
+   "turns": 8,
+   "steps": 7,
+   "tokens": {
+    "input": 16,
+    "output": 767,
+    "cache_read": 80017,
+    "cache_write": 8559,
+    "cached_input": 80017,
+    "reasoning": 0,
+    "total": 89359
+   },
+   "cost_usd": 0.0371012
+  },
+  {
+   "task": "IR-04",
+   "trial": 3,
+   "ok": true,
+   "undisturbed": true,
+   "disturbed_by": [],
+   "full_pass": true,
+   "wall_s": 29.41,
+   "turns": 11,
+   "steps": 15,
+   "tokens": {
+    "input": 22,
+    "output": 1431,
+    "cache_read": 123615,
+    "cache_write": 10078,
+    "cached_input": 123615,
+    "reasoning": 0,
+    "total": 135146
+   },
+   "cost_usd": 0.05191049999999999
+  }
+ ],
+ "arm": "cc-mewla-computer",
+ "cdb_run_dir": "aub-20261108-0028-background",
+ "nonint_measured": [
+  "key_focus",
+  "window_raised",
+  "typing",
+  "pointer",
+  "clipboard",
+  "space",
+  "dialog",
+  "activation"
+ ],
+ "nonint_not_measured": []
+}
