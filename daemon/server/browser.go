@@ -35,7 +35,7 @@ func (s *Server) handleBrowser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Leases and input belong to authenticated viewer connections, never HTTP bodies.
-	if q.Action == "command" || q.Action == "control" || q.Action == "release" {
+	if q.Action == "command" || q.Action == "control" || q.Action == "release" || q.Action == "touch" {
 		http.Error(w, "Use the Browser viewer for control", 400)
 		return
 	}
@@ -181,7 +181,7 @@ func (s *Server) handleBrowserViewer(w http.ResponseWriter, r *http.Request) {
 			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1000, "viewer detached"), time.Now().Add(time.Second))
 			return
 		}
-		if msg.Type != "control" && msg.Type != "release" && msg.Type != "command" {
+		if msg.Type != "control" && msg.Type != "release" && msg.Type != "command" && msg.Type != "touch" && msg.Type != "halt" {
 			continue
 		}
 		q := browser.Request{ID: id, Action: msg.Type, Lease: msg.Lease, Command: msg.Command}

@@ -112,3 +112,16 @@ func TestWaitForExitWakesWhenTheProcessEnds(t *testing.T) {
 		t.Fatalf("timeout: %v", err)
 	}
 }
+
+func TestElementRefAcceptsSnapshotAndToolForms(t *testing.T) {
+	for in, want := range map[string]string{"e2": "@e2", "@e12": "@e12"} {
+		if got, ok := elementRef(in); !ok || got != want {
+			t.Fatalf("%q -> %q, %v", in, got, ok)
+		}
+	}
+	for _, in := range []string{"", "@", "@e", "e", "2", "@2", "button", "e2x", "@e2;rm", "e1234567890"} {
+		if got, ok := elementRef(in); ok {
+			t.Fatalf("%q accepted as %q", in, got)
+		}
+	}
+}

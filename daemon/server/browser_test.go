@@ -28,13 +28,17 @@ func (b viewerBackend) Start(context.Context, string) (browser.Runtime, error) {
 type viewerRuntime struct {
 	released atomic.Int32
 	reads    atomic.Int32
+	inputs   atomic.Int32
 }
 
 func (r *viewerRuntime) Target() string                { return "tab" }
 func (r *viewerRuntime) Alive() bool                   { return true }
 func (r *viewerRuntime) Close() error                  { return nil }
 func (r *viewerRuntime) Release(context.Context) error { r.released.Add(1); return nil }
-func (r *viewerRuntime) Command(context.Context, browser.Command) (json.RawMessage, error) {
+func (r *viewerRuntime) Command(_ context.Context, c browser.Command) (json.RawMessage, error) {
+	if c.Kind == "input" {
+		r.inputs.Add(1)
+	}
 	return json.RawMessage("{}"), nil
 }
 func (r *viewerRuntime) Stream(context.Context) (browser.Stream, error) {
@@ -138,6 +142,30 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 		}
 		if e = c.ReadJSON(&response); e != nil || response.Response.Lease == nil {
 			t.Fatalf("control starved behind unacked frame: %v %+v", e, response)
+		}
+		// The person's own input and Stop are viewer messages too: a touch reaches
+		// the page, a halt answers with the resource.
+		c.WriteJSON(map[string]any{"type": "touch", "command": map[string]any{"kind": "input", "input": map[string]any{"kind": "mousePressed", "x": 3, "y": 4, "button": "left"}}})
+		c.WriteJSON(map[string]any{"type": "halt", "request_id": "halt1"})
+		for {
+			var any1 struct {
+				Type      string
+				RequestID string `json:"request_id"`
+				Response  browser.Response
+				Error     string
+			}
+			if e = c.ReadJSON(&any1); e != nil {
+				t.Fatalf("halt response: %v", e)
+			}
+			if any1.Type == "response" && any1.RequestID == "halt1" {
+				if any1.Error != "" || any1.Response.Resource == nil {
+					t.Fatalf("halt: %+v", any1)
+				}
+				break
+			}
+		}
+		if rt.inputs.Load() == 0 {
+			t.Fatal("the person's touch did not reach the page")
 		}
 		c.WriteJSON(map[string]any{"type": "ack", "seq": frame.Seq})
 		if e = c.ReadJSON(&frame); e != nil {
