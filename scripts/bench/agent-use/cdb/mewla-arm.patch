@@ -121,7 +121,7 @@ index 9877942..37ad119 100644
          return CU_HELPER_CLASSES.get(tool, "other")
      if server == "agentdesktop":
 diff --git a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
-index 120f4b0..7fba084 100644
+index 120f4b0..8e98866 100644
 --- a/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
 +++ b/libs/cua-driver-bench/automated-eval/macos_bench/run_bench.py
 @@ -655,7 +655,11 @@ def real_capture_check(ctx: "Ctx", arm: str) -> tuple[str, str, str]:
@@ -137,7 +137,42 @@ index 120f4b0..7fba084 100644
                  if "list_apps" not in tools:
                      raise RuntimeError("unexpected agent-desktop tools/list")
                  call("list_apps", {})
-@@ -2458,14 +2462,24 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
+@@ -1628,7 +1632,33 @@ def park_pointer(ctx: "Ctx") -> dict[str, Any]:
+         raise ParkFailed(f"park point {PARK_POINT} lies inside registered frame(s) {clash}")
+     platform_name = desktop.detect_platform()
+     try:
+-        if platform_name == "macos":
++        if platform_name == "macos" and ctx.args.no_recorder:
++            # No recorder daemon (it needs a private Cua Driver install and its grants): park through CoreGraphics. Warping
++            # the pointer needs no permission; the position is read back the same way, so the park is still verified.
++            import ctypes
++
++            class CGPoint(ctypes.Structure):
++                _fields_ = [("x", ctypes.c_double), ("y", ctypes.c_double)]
++
++            cg = ctypes.CDLL(
++                "/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices"
++            )
++            cg.CGWarpMouseCursorPosition.argtypes = [CGPoint]
++            cg.CGWarpMouseCursorPosition.restype = ctypes.c_int32
++            cg.CGEventCreate.argtypes = [ctypes.c_void_p]
++            cg.CGEventCreate.restype = ctypes.c_void_p
++            cg.CGEventGetLocation.argtypes = [ctypes.c_void_p]
++            cg.CGEventGetLocation.restype = CGPoint
++            cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
++            cf.CFRelease.argtypes = [ctypes.c_void_p]
++            if cg.CGWarpMouseCursorPosition(CGPoint(PARK_POINT[0], PARK_POINT[1])) != 0:
++                raise ParkFailed("CGWarpMouseCursorPosition failed")
++            time.sleep(0.1)
++            event = cg.CGEventCreate(None)
++            where = cg.CGEventGetLocation(event)
++            cf.CFRelease(event)
++            record = v2.park_record((where.x, where.y), "CGWarpMouseCursorPosition")
++        elif platform_name == "macos":
+             rec_home = ca.RECORDER_STATE / "home"
+             args = {"x": PARK_POINT[0], "y": PARK_POINT[1], "scope": "desktop"}
+             ca.cua_cli(
+@@ -2458,14 +2488,24 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
      add("BenchLab + BenchSentinel builds", "pass" if ok_build else "fail", str(build))
      copies = registered_bench_copies()
      per_name = {n: [c for c in copies if Path(c).name == n] for n in BENCH_APPS}
@@ -165,7 +200,7 @@ index 120f4b0..7fba084 100644
              subprocess.run(["/usr/bin/open", "-a", "Calculator"], check=True, timeout=30)
          with capture_subject(ctx.run_dir / "preflight-capture" / "subject"):
              for arm in ctx.arm_names:
-@@ -2474,7 +2488,8 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
+@@ -2474,7 +2514,8 @@ def preflight(ctx: Ctx, with_models: bool = True) -> list[tuple[str, str, str]]:
          for arm in ctx.arm_names:
              add(f"{arm} real capture", "fail", str(error)[:300])
      finally:
