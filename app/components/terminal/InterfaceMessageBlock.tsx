@@ -57,7 +57,6 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
   const selectableTextProps = useTimelineSelectableTextProps();
   const tableColors = messageTableSemanticColors(chrome);
   const tableHorizontalGesture = useNestedHorizontalScrollGesture();
-  const gallery = useContext(MessageImageGalleryContext);
   const inList = listDepth > 0;
 
   switch (block.type) {
@@ -328,22 +327,12 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
     }
     case "image":
       return (
-        <View style={isLast ? null : styles.messageImage}>
-          <AppImage
-            source={imageReference(block.src, block.alt || "Image")}
-            gallery={gallery}
-            chrome={chrome}
-            compact={compact}
-          />
-          {block.alt || block.title ? (
-            <Text
-              {...selectableTextProps}
-              style={[styles.messageImageCaption, { color: chrome.textMuted }]}
-            >
-              {block.title || block.alt}
-            </Text>
-          ) : null}
-        </View>
+        <InterfaceMessageImage
+          block={block}
+          chrome={chrome}
+          compact={compact}
+          isLast={isLast}
+        />
       );
     case "rule":
       return (
@@ -401,6 +390,40 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
       );
   }
 });
+
+/** The only block that reads the gallery, so a change in it re-renders images and nothing else. */
+function InterfaceMessageImage({
+  block,
+  chrome,
+  compact,
+  isLast,
+}: {
+  block: Extract<MessageBlock, { type: "image" }>;
+  chrome: TerminalThemeChrome;
+  compact: boolean;
+  isLast: boolean;
+}) {
+  const gallery = useContext(MessageImageGalleryContext);
+  const selectableTextProps = useTimelineSelectableTextProps();
+  return (
+    <View style={isLast ? null : styles.messageImage}>
+      <AppImage
+        source={imageReference(block.src, block.alt || "Image")}
+        gallery={gallery}
+        chrome={chrome}
+        compact={compact}
+      />
+      {block.alt || block.title ? (
+        <Text
+          {...selectableTextProps}
+          style={[styles.messageImageCaption, { color: chrome.textMuted }]}
+        >
+          {block.title || block.alt}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
 
 function listMarkerText(list: MessageListBlock, index: number, depth: number) {
   if (list.ordered) {

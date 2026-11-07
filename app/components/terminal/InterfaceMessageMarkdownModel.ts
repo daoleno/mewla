@@ -151,8 +151,35 @@ function reusedBlocksOf(
 }
 
 const LIST_MARKER_START = /^(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
-const SINGLE_PIECE_SYNTAX =
-  /^ {0,3}\[[^\]\n]+\]:|<(?:pre|script|style|textarea)\b|<[?!]/im;
+/** A link definition, or a raw HTML block that can hold blank lines, outside any fence. */
+const SINGLE_PIECE_LINE = /^ {0,3}(?:\[[^\]\n]+\]:|<(?:pre|script|style|textarea)\b|<[?!])/i;
+
+/** The fence a line opens or closes: `fence` is the open fence's marker, or null. */
+function fenceAfter(line: string, fence: string | null): string | null {
+  const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+  if (!marker) {
+    return fence;
+  }
+  if (!fence) {
+    return marker[1];
+  }
+  return marker[1][0] === fence[0] &&
+    marker[1].length >= fence.length &&
+    /^ {0,3}(`{3,}|~{3,})\s*$/.test(line)
+    ? null
+    : fence;
+}
+
+function mustStayWhole(lines: readonly string[]): boolean {
+  let fence: string | null = null;
+  for (const line of lines) {
+    if (!fence && SINGLE_PIECE_LINE.test(line)) {
+      return true;
+    }
+    fence = fenceAfter(line, fence);
+  }
+  return false;
+}
 
 /**
  * Pieces of the message that read the same alone as in place: a piece ends at
@@ -161,10 +188,13 @@ const SINGLE_PIECE_SYNTAX =
  * definition or a raw HTML block that can hold blank lines stays whole.
  */
 export function splitIntoChunks(source: string): string[] {
-  if (source.length <= CHUNK_TARGET_CHARS * 2 || SINGLE_PIECE_SYNTAX.test(source)) {
+  if (source.length <= CHUNK_TARGET_CHARS * 2) {
     return [source];
   }
   const lines = source.split("\n");
+  if (mustStayWhole(lines)) {
+    return [source];
+  }
   const chunks: string[] = [];
   let start = 0;
   let size = 0;
@@ -172,18 +202,7 @@ export function splitIntoChunks(source: string): string[] {
   for (let index = 0; index < lines.length - 1; index += 1) {
     const line = lines[index];
     size += line.length + 1;
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
-    if (marker) {
-      if (!fence) {
-        fence = marker[1];
-      } else if (
-        marker[1][0] === fence[0] &&
-        marker[1].length >= fence.length &&
-        /^ {0,3}(`{3,}|~{3,})\s*$/.test(line)
-      ) {
-        fence = null;
-      }
-    }
+    fence = fenceAfter(line, fence);
     if (fence || size < CHUNK_TARGET_CHARS || line.trim() !== "") {
       continue;
     }

@@ -4,7 +4,7 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import { imageReference } from "../../services/imageSource";
+import { imageReference, type ImageSource } from "../../services/imageSource";
 import {
   InterfaceMessageBlock,
   MessageImageGalleryContext,
@@ -15,6 +15,8 @@ import {
 } from "./InterfaceMessageMarkdownModel";
 import { prepareInterfaceMarkdown } from "./InterfaceNativeMarkdownBodyPrepare";
 import { useStreamingMarkdownPresentation } from "./useStreamingMarkdownPresentation";
+
+const NO_IMAGES: ImageSource[] = [];
 
 interface MessageBodyProps {
   value: string;
@@ -46,12 +48,20 @@ export function MessageBody({
       ),
     [keepLineBreaks, presentedValue, streaming],
   );
+  // Keyed on what the images are, not on the blocks: blocks are a new array
+  // every streaming frame, and a new gallery would re-render every image.
+  const galleryKey = messageImages(blocks)
+    .map((image) => `${image.src}\n${image.alt}`)
+    .join("\n\n");
   const gallery = useMemo(
     () =>
-      messageImages(blocks).map((image) =>
-        imageReference(image.src, image.alt || "Image"),
-      ),
-    [blocks],
+      galleryKey
+        ? messageImages(blocks).map((image) =>
+            imageReference(image.src, image.alt || "Image"),
+          )
+        : NO_IMAGES,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [galleryKey],
   );
   if (blocks.length === 0) {
     return null;

@@ -12,7 +12,7 @@ import {
   type MessageBlock,
   type MessageListBlock,
 } from "./InterfaceMessageMarkdownModel";
-import { MESSAGE_KITCHEN_SINK } from "./messageBodyFixtures";
+import { MESSAGE_KITCHEN_SINK, longMessage } from "./messageBodyFixtures";
 
 const text = (block: MessageBlock | undefined) =>
   block && (block.type === "paragraph" || block.type === "heading") ? inlinePartsText(block.inline) : "";
@@ -345,16 +345,26 @@ describe("a long message is read in pieces that never cut a block", () => {
     expect(splitIntoChunks(pre)).toEqual([pre]);
   });
 
+  test("HTML in prose or inside a fence does not keep a long message whole", () => {
+    const prose = `${doc}\nUse a \`<script>\` tag or <pre> inline.\n`;
+    expect(splitIntoChunks(prose).length).toBeGreaterThan(5);
+    const fenced = `${doc}\n\`\`\`html\n<!DOCTYPE html>\n<script>x()</script>\n[a]: not a definition\n\`\`\`\n`;
+    expect(splitIntoChunks(fenced).length).toBeGreaterThan(5);
+    const indented = `${doc}\n    <pre>\n`;
+    expect(splitIntoChunks(indented).length).toBeGreaterThan(5);
+  });
+
   test("a marker still being typed on the last line is not treated as margin text", () => {
     const body = `${"filler ".repeat(300)}\n\n- a`;
     expect(splitIntoChunks(body)).toEqual([body]);
   });
 
   test("a message several thousand lines long is read in well under a second", () => {
-    const text = Array.from({ length: 400 }, (_, n) => section(n)).join("\n");
+    const text = longMessage(250) + Array.from({ length: 400 }, (_, n) => section(n)).join("\n");
+    expect(text.split("\n").length).toBeGreaterThan(8000);
     const started = performance.now();
     const blocks = parseMessageMarkdown(text);
-    expect(blocks.length).toBe(400 * 6);
+    expect(blocks.length).toBeGreaterThan(2000);
     expect(performance.now() - started).toBeLessThan(1500);
   });
 });
