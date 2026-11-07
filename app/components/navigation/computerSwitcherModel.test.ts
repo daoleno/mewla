@@ -108,4 +108,9 @@ describe("tone and label", () => {
     expect(computerRowLabel({ name: "Homelab", status: "Offline", current: false })).toBe("Homelab, Offline");
     expect(computerRowLabel({ name: "Studio Mac", status: "", current: true })).toBe("Studio Mac, in use");
   });
+
+  test("the spoken label names the connection path when there is one", () => {
+    expect(computerRowLabel({ name: "Studio Mac", status: "", current: false, path: "LAN" })).toBe("Studio Mac, LAN");
+    expect(computerRowLabel({ name: "Studio Mac", status: "", current: false, path: null })).toBe("Studio Mac");
+  });
 });

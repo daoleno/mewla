@@ -11,7 +11,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Typography, useAppTheme } from "../../constants/tokens";
-import { useWorkers } from "../../store/workers";
+import { useWorkers, useWorkerServerSummary } from "../../store/workers";
 import type { PrimaryRouteName } from "../../services/interactionTrace";
 import { useCurrentServer } from "../../store/currentServer";
 import { Icon, type IconName } from "../icons/Icon";
@@ -34,6 +34,9 @@ import { useWebTooltip } from "../ui/useWebTooltip";
 import { useToast } from "../ui/Toast";
 import { switchToComputer } from "../../services/computerSwitch";
 import { ComputerSwitcher, useToneInk } from "./ComputerSwitcher";
+import { ConnectionPathMark } from "./ConnectionPathMark";
+import { pathMark as pathMarkOf, type PathMark } from "../../services/connectionPath";
+import { useTransportPath } from "../../services/useTransportPath";
 import {
   attentionTone,
   computerRowLabel,
@@ -193,30 +196,37 @@ function PrimaryPlaceRow({
  * switches computer, or opens Settings → Computers when there is nothing to
  * switch between.
  */
-function ComputerRow({
+export function ComputerRow({
   drawerVisible,
   name,
   status,
   tone,
+  mark,
   switchable,
   expanded,
   onPress,
+  onShowPath,
 }: {
   drawerVisible: boolean;
   name: string;
   status: string;
   tone: ComputerTone;
+  /** How this phone reaches the computer; null when nothing is true to say. */
+  mark: PathMark | null;
   switchable: boolean;
   expanded: boolean;
   onPress(): void;
+  /** A long press on the row says how it is connected. */
+  onShowPath(): void;
 }) {
   const { colors } = useAppTheme();
   const toneInk = useToneInk()(tone);
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={mark ? onShowPath : undefined}
       accessibilityRole="button"
-      accessibilityLabel={`Computer, ${computerRowLabel({ name, status, current: false })}`}
+      accessibilityLabel={`Computer, ${computerRowLabel({ name, status, current: false, path: mark?.label })}`}
       accessibilityHint={switchable ? "Switch computer" : "Open computers in Settings"}
       accessibilityState={switchable ? { expanded } : undefined}
       aria-haspopup={switchable ? "menu" : undefined}
@@ -247,6 +257,7 @@ function ComputerRow({
           </Text>
         </View>
       ) : null}
+      {mark ? <ConnectionPathMark mark={mark} /> : null}
       {switchable ? <Icon name="swap-horizontal" size={16} color={colors.textTertiary} /> : null}
     </Pressable>
   );
@@ -274,6 +285,11 @@ export function PrimaryDrawerPanel({
   const checks = useComputerChecks(servers, currentServer?.id, switcherOpen);
   const updatePending = useAppUpdatePending();
   const computerName = currentServer?.name || "No computer";
+  const { serverConnections } = useWorkerServerSummary();
+  const pathMark = pathMarkOf(
+    useTransportPath(currentServer?.id),
+    currentServer ? serverConnections[currentServer.id] === "connected" : false,
+  );
   const rows = computerSwitcherRows({
     servers,
     currentServerId: currentServer?.id,
@@ -434,6 +450,8 @@ export function PrimaryDrawerPanel({
             name={computerName}
             status={currentRow?.status ?? ""}
             tone={currentRow?.tone ?? attentionTone(attention.badge)}
+            mark={pathMark}
+            onShowPath={() => pathMark && toast.show({ title: pathMark.detail, tone: "info" })}
             switchable={switchable}
             expanded={switcherOpen}
             onPress={pressComputer}

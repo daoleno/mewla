@@ -95,6 +95,9 @@ import {
 import { TelegramConnectionPanel } from "../components/settings/TelegramConnectionPanel";
 import { computerStatusWord } from "../components/settings/computerModel";
 import { ComputersSection } from "../components/settings/ComputersSection";
+import { pathMark } from "../services/connectionPath";
+import { useTransportPath } from "../services/useTransportPath";
+import { useToast } from "../components/ui/Toast";
 import { syncComputers } from "../services/computerSync";
 import type { ComputerCheck } from "../services/computerTeam";
 import { useCurrentServer } from "../store/currentServer";
@@ -116,6 +119,11 @@ export default function SettingsScreen() {
     switchCurrentServer,
   } = useCurrentServer();
   const { serverConnections, serverConnectionIssues } = useWorkerServerSummary();
+  const toast = useToast();
+  const currentPathMark = pathMark(
+    useTransportPath(currentServerId),
+    currentServerId ? serverConnections[currentServerId] === "connected" : false,
+  );
   const colors = useAppColors();
   const { theme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -408,7 +416,9 @@ export default function SettingsScreen() {
                 issue: serverConnectionIssues[server.id]?.code,
                 check: checks[server.id],
               }),
+              mark: server.id === currentServerId ? currentPathMark : null,
             }))}
+            onShowPath={(mark) => toast.show({ title: mark.detail, tone: "info" })}
             onOpen={(id) => router.push({ pathname: "/settings/computer", params: { id } })}
             onPair={() => {
               void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

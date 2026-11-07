@@ -1,3 +1,4 @@
+import { PATH_LABELS } from "./connectionPath";
 import { normalizeDaemonId, normalizePublicKeyHex, verifyDaemonAssertion } from "./deviceAuthContract";
 import type { StoredServer, StoredTransportCandidate } from "./storedServerContract";
 
@@ -58,12 +59,10 @@ export function parseDirectAddresses(payload: unknown): DirectAddress[] {
   return parsed;
 }
 
-const KIND_NAMES: Record<DirectKind, string> = { lan: "LAN", tailscale: "Tailscale" };
-
 /** The stored form of a direct address, on the computer's own request path. */
 export function directCandidate(address: DirectAddress, requestPath = "/ws"): StoredTransportCandidate {
   return {
-    name: KIND_NAMES[address.kind],
+    name: PATH_LABELS[address.kind],
     kind: "direct",
     url: `wss://${address.host}:${address.port}${requestPath}`,
   };

@@ -66,6 +66,8 @@ export function computerSwitcherRows(input: {
 }
 
 /** The row's spoken label: name, then state, then whether it is in use. */
-export function computerRowLabel(row: Pick<ComputerSwitcherRow, "name" | "status" | "current">): string {
-  return [row.name, row.status, row.current ? "in use" : ""].filter(Boolean).join(", ");
+export function computerRowLabel(
+  row: Pick<ComputerSwitcherRow, "name" | "status" | "current"> & { path?: string | null },
+): string {
+  return [row.name, row.status, row.path, row.current ? "in use" : ""].filter(Boolean).join(", ");
 }

@@ -348,6 +348,7 @@ directory. See the operator guide in `docs/internal/mewla-link-relay.md`.
 A phone paired through Mewla Link goes straight to the computer when it can
 reach it on the same Wi-Fi/LAN or over Tailscale, and uses the relay otherwise.
 The connection details on the Screen page (tap its dot) say which: **LAN**, **Tailscale** or **Relay**.
+The same path shows as a small glyph beside the computer in the menu and in Settings → Computers (a link when direct, a cloud on the relay); long-press the row for **LAN**, **Tailscale** or **Relay** with its round trip.
 
 A computer that listens only on loopback, the default, also listens on its
 Wi-Fi/LAN and Tailscale addresses (private networks: 10/8, 172.16/12,
