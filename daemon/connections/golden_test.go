@@ -129,7 +129,7 @@ type goldenTool struct {
 
 func goldenTools() map[string][]goldenTool {
 	out := map[string][]goldenTool{}
-	for _, id := range []string{"github", "notion", "slack", "hyperliquid"} {
+	for _, id := range []string{"notion", "slack", "hyperliquid"} {
 		plain := &record{Account: Account{Integration: id}}
 		oauth := &record{Account: Account{Integration: id, AuthMethod: "oauth"}}
 		list := []goldenTool{}
@@ -236,7 +236,7 @@ func (w *goldenWire) RoundTrip(req *http.Request) (*http.Response, error) {
 		body, _ = io.ReadAll(req.Body)
 	}
 	line := req.Method + " " + req.URL.String()
-	for _, header := range []string{"Notion-Version", "X-GitHub-Api-Version", "Authorization", "Accept"} {
+	for _, header := range []string{"Notion-Version", "X-MCP-Toolsets", "Authorization", "Accept"} {
 		if v := req.Header.Get(header); v != "" && header != "Accept" {
 			line += " " + header + "=" + v
 		}
@@ -282,8 +282,6 @@ var randomFields = regexp.MustCompile(`"(public_key|nonce)":"[^"]*"`)
 func goldenServices(t *testing.T, slackScopes string, slackBot bool) *goldenWire {
 	return &goldenWire{t: t, respond: func(req *http.Request, body []byte) (int, http.Header, string) {
 		switch req.URL.Host + req.URL.Path {
-		case "api.github.com/user":
-			return 200, nil, `{"login":"octo","id":1}`
 		case "api.notion.com/v1/users/me":
 			return 200, nil, `{"id":"u1","bot":{"workspace_name":"Workspace"}}`
 		case "slack.com/api/auth.test":
@@ -296,7 +294,7 @@ func goldenServices(t *testing.T, slackScopes string, slackBot bool) *goldenWire
 			return 200, nil, `{"ok":false}`
 		case "api.hyperliquid.xyz/info", "api.hyperliquid-testnet.xyz/info":
 			return 200, nil, `{"marginSummary":{"accountValue":"0"},"assetPositions":[]}`
-		case "api.github.com/user/repos", "api.notion.com/v1/blocks/b1/children":
+		case "api.notion.com/v1/blocks/b1/children":
 			return 200, nil, `[]`
 		}
 		return 404, nil, `{}`
@@ -365,9 +363,9 @@ func goldenAdd(t *testing.T, ids []string) map[string]any {
 	// Removing a key from an account that has none.
 	wire := goldenServices(t, "", false)
 	m := testManager(t, wire.RoundTrip)
-	account := addGitHub(t, m, "Octo", "tok")
+	account := addNotion(t, m, "Octo", "tok")
 	_, err := m.Handle(context.Background(), Request{Action: "remove_key", ID: account.ID})
-	out["remove_key_on_github"] = err.Error()
+	out["remove_key_on_notion"] = err.Error()
 	return out
 }
 
@@ -402,14 +400,11 @@ func goldenRequestDefaults(t *testing.T) map[string]any {
 	out := map[string]any{}
 	wire := goldenServices(t, "", false)
 	m := testManager(t, wire.RoundTrip)
-	gh := addGitHub(t, m, "Octo", "tok")
-	mustHandle(t, m, Request{Action: "invoke", ID: gh.ID, Tool: "list_repositories"})
-	mustHandle(t, m, Request{Action: "invoke", ID: gh.ID, Tool: "list_repositories", Arguments: json.RawMessage(`{"query":{"per_page":5}}`)})
 	notion := mustHandle(t, m, Request{Action: "add", Input: &Input{Integration: "notion", Name: "N", Credential: "ntn"}}).Account
 	mustHandle(t, m, Request{Action: "invoke", ID: notion.ID, Tool: "list_block_children", Arguments: json.RawMessage(`{"path":{"id":"b1"}}`)})
 	// A custom OpenAPI plugin pointed at a known host gets that host's headers.
 	spec := json.RawMessage(`{"openapi":"3.0.0","info":{"title":"t","version":"1"},"paths":{"/user":{"get":{"operationId":"me","responses":{"200":{"description":"ok"}}}}}}`)
-	for _, endpoint := range []string{"https://api.github.com", "https://api.notion.com/v1", "https://slack.com/api", "https://other.example"} {
+	for _, endpoint := range []string{"https://api.notion.com/v1", "https://slack.com/api", "https://other.example"} {
 		api := mustHandle(t, m, Request{Action: "add", Input: &Input{Integration: "openapi", Name: "O " + endpoint, Endpoint: endpoint, Spec: spec}}).Account
 		mustHandle(t, m, Request{Action: "policy", ID: api.ID, Tool: "me", Allowed: true})
 		_, err := m.Handle(context.Background(), Request{Action: "invoke", ID: api.ID, Tool: "me"})

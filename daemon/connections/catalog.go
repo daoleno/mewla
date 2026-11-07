@@ -31,10 +31,21 @@ const (
 	linearMCP     = "https://mcp.linear.app/mcp"
 	onloraMCP     = "https://api.onlora.ai/mcp"
 	cloudflareMCP = "https://mcp.cloudflare.com/mcp"
+	// GitHub's own hosted MCP server. The endpoint keeps its trailing slash:
+	// an account's endpoint must equal the reviewed one byte for byte.
+	githubMCP = "https://api.githubcopilot.com/mcp/"
 
 	hlMainnetAPI = "https://api.hyperliquid.xyz"
 	hlTestnetAPI = "https://api.hyperliquid-testnet.xyz"
 )
+
+// githubToolsets are the groups of GitHub's tools Mewla serves: the default
+// set (context, repos, issues, pull_requests, users) plus Actions, code
+// scanning, Dependabot and organizations, which Watch and day-to-day work
+// need. They are named one by one so GitHub changing its default does not
+// change what Brain is offered. The reviewed Reads and Writes below cover
+// exactly these groups.
+const githubToolsets = "context,repos,issues,pull_requests,users,actions,code_security,dependabot,orgs"
 
 // Onlora registers Mewla's app as the public client "mewla", returning to
 // mewla://plugins; a web UI return registers a client of its own on connect.
@@ -133,8 +144,11 @@ type oauthSpec struct {
 // are reviewed by name and only on this exact endpoint.
 type mcpSpec struct {
 	Endpoint string
-	Reads    []string
-	Writes   []string
+	// Headers go with every request to Endpoint (never to another address),
+	// besides the credential: GitHub picks its toolsets by header.
+	Headers map[string]string
+	Reads   []string
+	Writes  []string
 	// Identity names a reviewed read tool that says who is signed in, and the
 	// arguments it takes (each must be a property of its input schema).
 	Identity     string
@@ -258,17 +272,34 @@ func init() {
 func buildCatalog() []*entry {
 	return []*entry{
 		{
-			Integration: Integration{ID: "github", Name: "GitHub", Available: true, SetupURL: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps", Description: "Repositories, issues and pull requests"},
-			Driver:      "rest", Endpoint: "https://api.github.com", NeedsCredential: true, IdentityPath: "/user", Tools: githubTools,
-			Headers:       map[string]string{"X-GitHub-Api-Version": "2022-11-28"},
-			QueryDefaults: []queryDefault{{ToolPrefix: "list_", Param: "per_page", Value: "30"}},
+			Integration: Integration{ID: "github", Name: "GitHub", Available: true, SetupURL: "https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps", Description: "Repositories, issues, pull requests, Actions and security alerts"},
+			Driver:      "mcp", Endpoint: githubMCP, NeedsCredential: true, TokenMCP: true,
+			MCP: &mcpSpec{
+				Endpoint: githubMCP,
+				Headers:  map[string]string{"X-MCP-Toolsets": githubToolsets},
+				Reads: []string{
+					"actions_get", "actions_list", "check_dependency_vulnerabilities", "get_code_scanning_alert", "get_commit", "get_dependabot_alert",
+					"get_file_contents", "get_job_logs", "get_label", "get_latest_release", "get_me", "get_release_by_tag", "get_tag", "get_team_members",
+					"get_teams", "issue_read", "list_branches", "list_code_scanning_alerts", "list_commits", "list_dependabot_alerts", "list_issue_fields",
+					"list_issue_types", "list_issues", "list_pull_requests", "list_releases", "list_repository_collaborators", "list_tags", "pull_request_read",
+					"search_code", "search_commits", "search_issues", "search_orgs", "search_pull_requests", "search_repositories", "search_users", "ui_get",
+				},
+				// actions_run_trigger runs, re-runs, cancels and deletes workflow runs.
+				Writes: []string{
+					"actions_run_trigger", "add_comment_to_pending_review", "add_issue_comment", "add_reply_to_pull_request_comment", "create_branch",
+					"create_or_update_file", "create_pull_request", "create_repository", "delete_file", "fork_repository", "issue_write", "merge_pull_request",
+					"pull_request_review_write", "push_files", "sub_issue_write", "update_issue_comment", "update_pull_request", "update_pull_request_branch",
+				},
+				Identity: "get_me",
+			},
 			OAuth: &oauthSpec{
 				Source: clientPublisher, Configurable: true, PublisherClientID: true,
 				Public: func() (OAuthClientConfig, bool) {
 					return OAuthClientConfig{ClientID: GitHubPublicClientID}, GitHubPublicClientID != ""
 				},
 				ExtraRedirect: &redirectRule{URL: ""},
-				Device:        &deviceFlow{Issuer: "https://github.com", CodeURL: "https://github.com/login/device/code", TokenURL: "https://github.com/login/oauth/access_token", Verification: "https://github.com/login/device", Scopes: []string{"read:user", "repo"}},
+				// read:org lets the organization tools list teams and members.
+				Device: &deviceFlow{Issuer: "https://github.com", CodeURL: "https://github.com/login/device/code", TokenURL: "https://github.com/login/oauth/access_token", Verification: "https://github.com/login/device", Scopes: []string{"read:user", "read:org", "repo"}},
 			},
 		},
 		{
@@ -443,6 +474,11 @@ func (e *entry) validate() error {
 				return fmt.Errorf("mcp tool %q is empty or listed twice", name)
 			}
 			seen[name] = true
+		}
+		for name := range e.MCP.Headers {
+			if strings.EqualFold(name, "Authorization") {
+				return fmt.Errorf("mcp headers cannot carry the credential")
+			}
 		}
 		if e.MCP.Identity != "" && !contains(e.MCP.Reads, e.MCP.Identity) {
 			return fmt.Errorf("the identity tool must be a reviewed read")

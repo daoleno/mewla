@@ -26,8 +26,7 @@ const (
 	kindLinearIssue   = "linear_issue"
 	kindLinearComment = "linear_comment"
 
-	githubRecheck   = 24 * time.Hour
-	githubRateFloor = 100
+	githubRecheck = 24 * time.Hour
 )
 
 // ExternalReader is the Plugin boundary Watch reads through. Reads honor the
@@ -94,16 +93,17 @@ type githubRun struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// githubIssue is an entry of GitHub's list_issues or list_pull_requests.
+// Issues carry a comment count and no link; pull requests the other way round.
 type githubIssue struct {
-	Number      int                    `json:"number"`
-	Title       string                 `json:"title"`
-	Body        string                 `json:"body"`
-	HTMLURL     string                 `json:"html_url"`
-	Comments    int                    `json:"comments"`
-	UpdatedAt   time.Time              `json:"updated_at"`
-	CreatedAt   time.Time              `json:"created_at"`
-	User        struct{ Login string } `json:"user"`
-	PullRequest *struct{}              `json:"pull_request"`
+	Number    int                    `json:"number"`
+	Title     string                 `json:"title"`
+	Body      string                 `json:"body"`
+	HTMLURL   string                 `json:"html_url"`
+	Comments  int                    `json:"comments"`
+	UpdatedAt time.Time              `json:"updated_at"`
+	CreatedAt time.Time              `json:"created_at"`
+	User      struct{ Login string } `json:"user"`
 }
 
 type githubAlert struct {
@@ -145,7 +145,7 @@ func (c *Collector) collectGitHub(ctx context.Context) (int, error) {
 	hostName := sshHostNames(c.home)
 	total := 0
 	for _, project := range c.store.Projects() {
-		if ctx.Err() != nil || c.now().Before(c.githubPausedUntil) {
+		if ctx.Err() != nil {
 			break
 		}
 		owner, repo, ok := githubRemoteSlug(project.Remotes, hostName)
@@ -192,7 +192,7 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 	}
 	if link.AccountID != "" && c.now().Sub(link.CheckedAt) < githubRecheck {
 		for _, account := range usable {
-			if account.ID == link.AccountID && account.Reads["get_repository"] {
+			if account.ID == link.AccountID && account.Reads[githubRepoTool] {
 				link.Coverage, link.Reason = CoverageCollecting, "via "+account.Name
 				return link, account.Reads
 			}
@@ -202,22 +202,36 @@ func (c *Collector) githubLink(ctx context.Context, project Project, owner, repo
 	var failures []string
 	allowed := false
 	for _, account := range usable {
-		if !account.Reads["get_repository"] {
-			failures = append(failures, account.Name+": get_repository is not allowed")
+		if !account.Reads[githubRepoTool] {
+			failures = append(failures, account.Name+": "+githubRepoTool+" is not allowed")
 			continue
 		}
 		allowed = true
-		result, err := c.external.ReadTool(ctx, account.ID, "get_repository", githubArgs(owner, repo, nil))
-		c.noteRate(result)
+		// GitHub's own tools have no "get repository": a search for exactly
+		// this repository names its default branch, and says nothing for a
+		// repository the account cannot see.
+		result, err := c.external.ReadTool(ctx, account.ID, githubRepoTool, map[string]any{"query": "repo:" + owner + "/" + repo, "perPage": 1})
 		if err != nil {
 			failures = append(failures, account.Name+": "+readFailure(err))
 			continue
 		}
-		var meta struct {
+		var found []struct {
+			FullName      string `json:"full_name"`
 			DefaultBranch string `json:"default_branch"`
 		}
-		c.decode("github repository", result.Body, &meta)
-		link.AccountID, link.Branch = account.ID, meta.DefaultBranch
+		branch := ""
+		if c.decodeList("github repository", toolPayload(result.Body), "items", &found) {
+			for _, item := range found {
+				if strings.EqualFold(item.FullName, owner+"/"+repo) {
+					branch = item.DefaultBranch
+				}
+			}
+		}
+		if branch == "" {
+			failures = append(failures, account.Name+": GitHub did not return this repository")
+			continue
+		}
+		link.AccountID, link.Branch = account.ID, branch
 		link.Coverage, link.Reason = CoverageCollecting, "via "+account.Name
 		return link, account.Reads
 	}
@@ -241,32 +255,80 @@ func (c *Collector) decode(what string, body []byte, into any) bool {
 	return err == nil
 }
 
-func githubArgs(owner, repo string, query map[string]any) map[string]any {
-	args := map[string]any{"path": map[string]any{"owner": owner, "repo": repo}}
-	if len(query) > 0 {
-		args["query"] = query
+// githubRepoTool finds a repository's default branch; see githubLink.
+const githubRepoTool = "search_repositories"
+
+// githubArgs are a repository's coordinates plus the tool's own arguments.
+func githubArgs(owner, repo string, extra map[string]any) map[string]any {
+	args := map[string]any{"owner": owner, "repo": repo}
+	for name, value := range extra {
+		args[name] = value
 	}
 	return args
 }
 
+// toolPayload is what a plugin read answered: the MCP result's structured
+// content, or its text, which GitHub fills with JSON.
+func toolPayload(body []byte) []byte {
+	var result struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		Structured json.RawMessage `json:"structuredContent"`
+	}
+	if json.Unmarshal(body, &result) != nil {
+		return body
+	}
+	if len(result.Structured) > 0 && string(result.Structured) != "null" {
+		return result.Structured
+	}
+	var text []string
+	for _, part := range result.Content {
+		if part.Type == "text" {
+			text = append(text, part.Text)
+		}
+	}
+	if len(text) == 0 {
+		return body
+	}
+	return []byte(strings.Join(text, "\n"))
+}
+
+// decodeList reads a tool's list: a bare array, or an object that holds it
+// under key. Like decode, an answer of another shape is logged once.
+func (c *Collector) decodeList(what string, raw []byte, key string, into any) bool {
+	var err error
+	if json.Unmarshal(raw, into) != nil {
+		var wrapped map[string]json.RawMessage
+		if err = json.Unmarshal(raw, &wrapped); err == nil {
+			inner, ok := wrapped[key]
+			if !ok {
+				err = fmt.Errorf("no %q list", key)
+			} else {
+				err = json.Unmarshal(inner, into)
+			}
+		}
+	}
+	if err != nil {
+		err = fmt.Errorf("unexpected response: %w", err)
+	}
+	c.decodeLog.Note("watch: "+what, err)
+	return err == nil
+}
+
 // readFailure says briefly why a read did not happen.
 func readFailure(err error) string {
-	var status connections.StatusError
+	var answer connections.ServiceError
 	switch {
-	case errors.As(err, &status):
-		return "HTTP " + strconv.Itoa(status.Status)
+	case errors.As(err, &answer):
+		return excerpt(answer.Detail, 200)
 	case errors.Is(err, connections.ErrReadNotAllowed):
 		return "not allowed"
 	case errors.Is(err, connections.ErrAccountOff):
 		return "switched off"
 	}
 	return err.Error()
-}
-
-func (c *Collector) noteRate(result connections.ReadResult) {
-	if result.RateRemaining >= 0 && result.RateRemaining < githubRateFloor && !result.RateReset.IsZero() {
-		c.githubPausedUntil = result.RateReset
-	}
 }
 
 // readGitHub runs one read for the project and records the endpoint's state.
@@ -278,14 +340,13 @@ func (c *Collector) readGitHub(ctx context.Context, link *GitHub, reads map[stri
 		return nil, false
 	}
 	result, err := c.external.ReadTool(ctx, link.AccountID, tool, githubArgs(link.Owner, link.Repo, query))
-	c.noteRate(result)
 	if err != nil {
 		link.Endpoints[endpoint] = readFailure(err)
-		var status connections.StatusError
-		return nil, errors.As(err, &status)
+		var answer connections.ServiceError
+		return nil, errors.As(err, &answer)
 	}
 	link.Endpoints[endpoint] = "ok"
-	return result.Body, true
+	return toolPayload(result.Body), true
 }
 
 func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, link *GitHub, reads map[string]bool) (int, error) {
@@ -319,13 +380,14 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 				}
 			}
 		}
-		body, _ = c.readGitHub(ctx, link, reads, "actions", "list_workflow_runs",
-			map[string]any{"branch": link.Branch, "status": "completed", "per_page": 100})
+		body, _ = c.readGitHub(ctx, link, reads, "actions", "actions_list", map[string]any{
+			"method": "list_workflow_runs", "perPage": 100,
+			"workflow_runs_filter": map[string]any{"branch": link.Branch, "status": "completed"}})
 		if body != nil {
 			var page struct {
-				Runs []githubRun `json:"workflow_runs"`
+				Runs []githubRun
 			}
-			c.decode("github workflow runs", body, &page)
+			c.decodeList("github workflow runs", body, "workflow_runs", &page.Runs)
 			sort.Slice(page.Runs, func(i, j int) bool { return page.Runs[i].UpdatedAt.Before(page.Runs[j].UpdatedAt) })
 			readFrom := cursor.RunsSince.Add(-runOverlap)
 			if !cursor.CIChecked {
@@ -366,27 +428,46 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 		}
 	}
 
-	// Open issues and pull requests with activity since the cursor.
-	body, _ = c.readGitHub(ctx, link, reads, "issues", "list_updated_issues", map[string]any{
-		"state": "open", "sort": "updated", "direction": "desc", "per_page": 50, "since": cursor.Since.Format(time.RFC3339)})
-	issuesRead := body != nil
-	if issuesRead {
+	// Open issues and pull requests with activity since the cursor: GitHub's
+	// tools list them apart, so each is read and judged on its own.
+	issuesRead := true
+	for _, source := range []struct {
+		endpoint, tool, kind, path string
+		query                      map[string]any
+	}{
+		{"issues", "list_issues", kindIssueActivity, "issues", map[string]any{
+			"state": "OPEN", "orderBy": "UPDATED_AT", "direction": "DESC", "perPage": 50, "since": cursor.Since.Format(time.RFC3339),
+			"fields": []string{"number", "title", "body", "state", "user", "comments", "created_at", "updated_at"}}},
+		{"pull-requests", "list_pull_requests", kindPRActivity, "pull", map[string]any{
+			"state": "open", "sort": "updated", "direction": "desc", "perPage": 50}},
+	} {
+		body, _ = c.readGitHub(ctx, link, reads, source.endpoint, source.tool, source.query)
+		if body == nil {
+			issuesRead = false
+			continue
+		}
 		var issues []githubIssue
 		// An answer that does not parse is not an answer: the cursor stays
 		// where it was and the next pass reads the same window again.
-		issuesRead = c.decode("github issues", body, &issues)
+		if !c.decodeList("github "+source.endpoint, body, source.endpoint, &issues) {
+			issuesRead = false
+			continue
+		}
 		for _, issue := range issues {
-			kind := kindIssueActivity
-			if issue.PullRequest != nil {
-				kind = kindPRActivity
+			if issue.UpdatedAt.Before(cursor.Since) {
+				continue
+			}
+			url := issue.HTMLURL
+			if url == "" {
+				url = "https://github.com/" + slug + "/" + source.path + "/" + strconv.Itoa(issue.Number)
 			}
 			signals = append(signals, Signal{
 				ID:     signalID(SourceExternal, "github-issue|"+slug+"|"+strconv.Itoa(issue.Number)+"|"+issue.UpdatedAt.Format(time.RFC3339)),
-				Source: SourceExternal, ProjectID: projectID, Time: issue.UpdatedAt, Kind: kind,
+				Source: SourceExternal, ProjectID: projectID, Time: issue.UpdatedAt, Kind: source.kind,
 				Excerpt: excerpt(fmt.Sprintf("#%d %s — %s", issue.Number, issue.Title, issue.Body), 400),
 				Refs: refs(map[string]string{"number": strconv.Itoa(issue.Number), "author": issue.User.Login,
-					"comments": strconv.Itoa(issue.Comments), "url": issue.HTMLURL}),
-				Pointer: issue.HTMLURL,
+					"comments": strconv.Itoa(issue.Comments), "url": url}),
+				Pointer: url,
 			})
 		}
 	}
@@ -396,13 +477,13 @@ func (c *Collector) collectGitHubProject(ctx context.Context, projectID string, 
 	for _, alertKind := range []struct{ endpoint, tool string }{
 		{"dependabot", "list_dependabot_alerts"}, {"code-scanning", "list_code_scanning_alerts"},
 	} {
-		body, answered := c.readGitHub(ctx, link, reads, alertKind.endpoint, alertKind.tool, map[string]any{"state": "open", "per_page": 50})
+		body, answered := c.readGitHub(ctx, link, reads, alertKind.endpoint, alertKind.tool, map[string]any{"state": "open", "perPage": 50})
 		alertsRead = alertsRead && answered
 		if body == nil {
 			continue
 		}
 		var alerts []githubAlert
-		if !c.decode("github "+alertKind.endpoint+" alerts", body, &alerts) {
+		if !c.decodeList("github "+alertKind.endpoint+" alerts", body, "alerts", &alerts) {
 			alertsRead = false
 			continue
 		}

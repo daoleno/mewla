@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"sort"
-	"strconv"
 	"time"
 )
 
@@ -30,12 +28,9 @@ type ReadAccount struct {
 	Reads map[string]bool `json:"reads,omitempty"`
 }
 
-// ReadResult is one read's outcome. RateRemaining is -1 when the service did
-// not report it.
+// ReadResult is one read's outcome.
 type ReadResult struct {
-	Body          []byte
-	RateRemaining int
-	RateReset     time.Time
+	Body []byte
 }
 
 // ErrReadNotAllowed reports a read tool the person has not allowed.
@@ -84,6 +79,14 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 	}
 	m.mu.Lock()
 	r := m.records[accountID]
+	if r != nil && !m.isPending(accountID) && usesMCP(r) && !offersTool(r, tool) {
+		// The service may offer it by now (a moved account has not listed its
+		// tools yet), as a call to an unlisted tool finds out.
+		m.mu.Unlock()
+		_ = m.syncRemoteTools(ctx, accountID, true, 20*time.Second)
+		m.mu.Lock()
+		r = m.records[accountID]
+	}
 	if r == nil || m.isPending(accountID) {
 		m.mu.Unlock()
 		return ReadResult{}, errors.New("plugin account not found")
@@ -122,8 +125,7 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 		return ReadResult{}, err
 	}
 
-	out := ReadResult{RateRemaining: -1}
-	var headers http.Header
+	out := ReadResult{}
 	var body []byte
 	if usesMCP(&snapshot) {
 		timeout := mcpTimeout(t, checked)
@@ -136,13 +138,7 @@ func (m *Manager) ReadTool(ctx context.Context, accountID, tool string, args map
 		body, err = m.finishMCP(accountID, tool, sensitive, outcome, false)
 		m.mu.Unlock()
 	} else {
-		body, err = m.invokeTool(ctx, &snapshot, secret, t, checked, &headers)
-	}
-	if remaining, convErr := strconv.Atoi(headers.Get("X-RateLimit-Remaining")); convErr == nil {
-		out.RateRemaining = remaining
-	}
-	if reset, convErr := strconv.ParseInt(headers.Get("X-RateLimit-Reset"), 10, 64); convErr == nil {
-		out.RateReset = time.Unix(reset, 0).UTC()
+		body, err = m.invokeTool(ctx, &snapshot, secret, t, checked)
 	}
 	if ctx.Err() != nil {
 		return out, safeError(ctx.Err())

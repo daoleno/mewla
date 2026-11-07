@@ -94,12 +94,8 @@ func TestGitHubPreviewRequiresConsentAndDeduplicates(t *testing.T) {
 	m, _ := New(t.TempDir())
 	m.networkOwned = false
 	m.githubToken = func(context.Context) (string, error) { return "owned-test-token", nil }
-	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		if req.URL.Host != "api.github.com" || req.URL.Path != "/user" || req.Header.Get("Authorization") != "Bearer owned-test-token" {
-			t.Fatalf("unexpected request %s", req.URL)
-		}
-		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(`{"login":"test-user","id":42}`))}, nil
-	})}
+	f := newGitHubFixture(t, "test-user")
+	m.http = &http.Client{Transport: f.route(nil)}
 	preview := mustHandle(t, m, Request{Action: "github_preview"})
 	if preview.Flow.Identity != "test-user" || len(m.records) != 0 {
 		t.Fatal("preview imported an account")
@@ -109,6 +105,17 @@ func TestGitHubPreviewRequiresConsentAndDeduplicates(t *testing.T) {
 	again := mustHandle(t, m, q)
 	if first.Account.ID != again.Account.ID || len(m.records) != 1 {
 		t.Fatal("duplicate tap created accounts")
+	}
+	if read, _ := toolState(first.Account, "get_me"); !read.Allowed {
+		t.Fatal("an imported account has its reads off")
+	}
+	if write, _ := toolState(first.Account, "issue_write"); write.Allowed {
+		t.Fatal("an import allowed changes without being asked")
+	}
+	for _, request := range f.seen() {
+		if request.Authorization != "Bearer owned-test-token" {
+			t.Fatalf("unexpected credential on %+v", request)
+		}
 	}
 	mustHandle(t, m, Request{Action: "disable", ID: first.Account.ID})
 	preview = mustHandle(t, m, Request{Action: "github_preview"})
@@ -160,7 +167,7 @@ func TestNativePKCEExchangeAndIdempotentFinish(t *testing.T) {
 	m.networkOwned = false
 	verifier := oauth2.GenerateVerifier()
 	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"login":"native-user","id":7}`
+		body := `{"name":"native-user","id":"7"}`
 		if req.URL.Path == "/token" {
 			_ = req.ParseForm()
 			if req.PostForm.Get("code_verifier") != verifier || req.PostForm.Get("redirect_uri") != NativeCallback {
@@ -170,7 +177,7 @@ func TestNativePKCEExchangeAndIdempotentFinish(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
-	r := &record{Account: Account{ID: "new", Integration: "github", Name: "GitHub", Enabled: true, Endpoint: "https://api.github.com", Status: "authorization_required"}, OAuth: &oauthAccount{ClientID: "owned", RedirectURL: NativeCallback, TokenURL: "https://auth.example/token", AuthStyle: oauth2.AuthStyleInParams}, Grants: map[string]string{}}
+	r := &record{Account: Account{ID: "new", Integration: "notion", Name: "Notion", Enabled: true, Endpoint: "https://api.notion.com/v1", Status: "authorization_required"}, OAuth: &oauthAccount{ClientID: "owned", RedirectURL: NativeCallback, TokenURL: "https://auth.example/token", AuthStyle: oauth2.AuthStyleInParams}, Grants: map[string]string{}}
 	m.records["new"] = r
 	m.pending["state"] = &oauthFlow{ID: "new", Verifier: verifier, Mobile: true, Expires: time.Now().Add(time.Minute)}
 	m.connectFlows["flow"] = &connectFlow{ConnectFlow: ConnectFlow{ID: "flow", Status: "waiting", AccountID: "new", Expires: time.Now().Add(time.Minute)}, state: "state"}
@@ -228,20 +235,20 @@ func TestSlackPublicPKCEAndRotatingRefresh(t *testing.T) {
 
 func TestPermissionGroupsSurviveRestart(t *testing.T) {
 	m, _ := New(t.TempDir())
-	r := &record{Account: Account{ID: "github", Integration: "github", Tools: lookup("github").reviewed()}, Grants: map[string]string{}}
+	r := &record{Account: Account{ID: "notion", Integration: "notion", Tools: lookup("notion").reviewed()}, Grants: map[string]string{}}
 	m.records[r.Account.ID] = r
 	_ = m.save()
 	reloaded, err := New(strings.TrimSuffix(m.path, "/integrations.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	r = reloaded.records["github"]
+	r = reloaded.records["notion"]
 	reloaded.setGroup(r, "read", true)
 	for _, tool := range reloaded.projection(r).Tools {
 		if tool.Name == "get_me" && (!tool.Allowed || tool.Group != "read") {
 			t.Fatal("read permission lost across persistence")
 		}
-		if tool.Name == "create_issue" && (tool.Allowed || tool.Group != "write") {
+		if tool.Name == "update_page" && (tool.Allowed || tool.Group != "write") {
 			t.Fatal("read group granted writes after restart")
 		}
 	}
@@ -251,10 +258,11 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 	stateDir := t.TempDir()
 	m, _ := New(stateDir)
 	m.networkOwned = false
-	refreshCalls, reads := 0, 0
+	refreshCalls := 0
 	rejectRefresh := false
-	m.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		body := `{"login":"device-user","id":42}`
+	f := newGitHubFixture(t, "device-user")
+	m.http = &http.Client{Transport: f.route(func(req *http.Request) (*http.Response, error) {
+		body := ``
 		switch req.URL.String() {
 		case "https://github.com/login/oauth/access_token":
 			_ = req.ParseForm()
@@ -276,23 +284,18 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 				}
 				body = `{"access_token":"device-access","refresh_token":"device-refresh","expires_in":28800,"scope":"repo,read:user"}`
 			}
-		case "https://api.github.com/user":
-			reads++
-			if req.Header.Get("Authorization") != "Bearer device-access" && req.Header.Get("Authorization") != "Bearer refreshed-access" {
-				t.Fatal("wrong resource credential")
-			}
 		default:
 			t.Fatalf("unexpected request %s", req.URL)
 		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
 	})}
-	f := &connectFlow{ConnectFlow: ConnectFlow{ID: "device-flow", Integration: "github", Status: "waiting", Expires: time.Now().Add(time.Minute)}, deviceCode: "device-code", clientID: "mewla-public", interval: 5 * time.Second}
-	m.connectFlows[f.ID] = f
-	if err := m.pollDevice(context.Background(), f); err != nil {
+	flow := &connectFlow{ConnectFlow: ConnectFlow{ID: "device-flow", Integration: "github", Status: "waiting", Expires: time.Now().Add(time.Minute)}, deviceCode: "device-code", clientID: "mewla-public", interval: 5 * time.Second}
+	m.connectFlows[flow.ID] = flow
+	if err := m.pollDevice(context.Background(), flow); err != nil {
 		t.Fatal(err)
 	}
-	r := m.records[f.AccountID]
-	if f.Status != "connected" || r.Account.Name != "device-user" || r.OAuth == nil || r.Account.AuthMethod != "oauth" || reads != 1 {
+	r := m.records[flow.AccountID]
+	if flow.Status != "connected" || r.Account.Name != "device-user" || r.OAuth == nil || r.Account.AuthMethod != "oauth" || len(f.seen()) == 0 {
 		t.Fatal("device account not verified and connected exactly once")
 	}
 	readSecret := func() oauthSecret {
@@ -341,17 +344,22 @@ func TestGitHubDeviceExpiryRefreshAndDisconnect(t *testing.T) {
 	// Re-consent replaces only this verified identity and retains the account ID.
 	oldID := r.Account.ID
 	rejectRefresh = false
-	f.deviceCode, f.nextPoll, f.Status = "device-code", time.Time{}, "waiting"
-	if err := m.pollDevice(context.Background(), f); err != nil {
+	flow.deviceCode, flow.nextPoll, flow.Status = "device-code", time.Time{}, "waiting"
+	if err := m.pollDevice(context.Background(), flow); err != nil {
 		t.Fatal(err)
 	}
-	r = m.records[f.AccountID]
+	r = m.records[flow.AccountID]
 	if r.Account.ID != oldID || len(m.records) != 1 || r.Account.Status != "connected" {
 		t.Fatal("reconnect duplicated or lost the verified identity")
 	}
 	mustHandle(t, m, Request{Action: "disconnect", ID: r.Account.ID})
-	before := reads
-	if _, err := m.Handle(context.Background(), Request{Action: "invoke", ID: r.Account.ID, Tool: "get_me"}); err == nil || reads != before {
+	for _, request := range f.seen() {
+		if request.Authorization != "Bearer device-access" && request.Authorization != "Bearer refreshed-access" {
+			t.Fatalf("wrong resource credential on %+v", request)
+		}
+	}
+	before := len(f.seen())
+	if _, err := m.Handle(context.Background(), Request{Action: "invoke", ID: r.Account.ID, Tool: "get_me"}); err == nil || len(f.seen()) != before {
 		t.Fatal("disconnected device account reached the provider")
 	}
 }

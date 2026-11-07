@@ -59,9 +59,12 @@ func mustHandle(t *testing.T, m *Manager, q Request) Response {
 	}
 	return r
 }
-func addGitHub(t *testing.T, m *Manager, name, secret string) *Account {
+
+// addNotion adds a Notion account, the REST service the generic account tests
+// run on. Its identity is the name the fixture's /users/me answers with.
+func addNotion(t *testing.T, m *Manager, name, secret string) *Account {
 	t.Helper()
-	return mustHandle(t, m, Request{Action: "add", Input: &Input{Integration: "github", Name: name, Credential: secret}}).Account
+	return mustHandle(t, m, Request{Action: "add", Input: &Input{Integration: "notion", Name: name, Credential: secret}}).Account
 }
 
 func TestAccountIsolationPolicyPersistenceAndRevocation(t *testing.T) {
@@ -69,22 +72,22 @@ func TestAccountIsolationPolicyPersistenceAndRevocation(t *testing.T) {
 	m := testManager(t, func(r *http.Request) (*http.Response, error) {
 		calls.Add(1)
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		return reply(200, `{"id":1,"login":"`+token+`-identity"}`), nil
+		return reply(200, `{"id":1,"name":"`+token+`-identity"}`), nil
 	})
 	// Discovery must reject a provider reflecting the credential into its identity.
-	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "github", Name: "bad", Credential: "echo-secret"}}); err == nil {
+	if _, err := m.Handle(context.Background(), Request{Action: "add", Input: &Input{Integration: "notion", Name: "bad", Credential: "echo-secret"}}); err == nil {
 		t.Fatal("credential reflected in identity")
 	}
 	m.http.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		calls.Add(1)
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if token == "secret-a" {
-			return reply(200, `{"id":1,"login":"alice"}`), nil
+			return reply(200, `{"id":1,"name":"alice"}`), nil
 		}
-		return reply(200, `{"id":2,"login":"bob"}`), nil
+		return reply(200, `{"id":2,"name":"bob"}`), nil
 	})
-	a := addGitHub(t, m, "personal", "secret-a")
-	b := addGitHub(t, m, "work", "secret-b")
+	a := addNotion(t, m, "personal", "secret-a")
+	b := addNotion(t, m, "work", "secret-b")
 	if a.Identity != "alice" || b.Identity != "bob" || a.ID == b.ID {
 		t.Fatalf("bad identities: %s %s", a.Identity, b.Identity)
 	}
@@ -96,7 +99,7 @@ func TestAccountIsolationPolicyPersistenceAndRevocation(t *testing.T) {
 	count := calls.Load()
 	for _, request := range []Request{
 		{Action: "invoke", ID: b.ID, Tool: "get_me", Arguments: json.RawMessage(`{"credential":"secret-a"}`)},
-		{Action: "invoke", ID: a.ID, Tool: "create_issue", Arguments: json.RawMessage(`{"path":{"owner":"o","repo":"r"},"body":{"title":"test"}}`)},
+		{Action: "invoke", ID: a.ID, Tool: "update_page", Arguments: json.RawMessage(`{"path":{"id":"p"},"body":{"archived":true}}`)},
 	} {
 		if _, err := m.Handle(context.Background(), request); err == nil {
 			t.Fatal("expected denial")
@@ -140,9 +143,9 @@ func TestAccountIsolationPolicyPersistenceAndRevocation(t *testing.T) {
 
 func TestDisabledAccountHidesToolsAndKeepsChoices(t *testing.T) {
 	m := testManager(t, func(r *http.Request) (*http.Response, error) {
-		return reply(200, `{"id":1,"login":"alice"}`), nil
+		return reply(200, `{"id":1,"name":"alice"}`), nil
 	})
-	a := addGitHub(t, m, "personal", "secret-a")
+	a := addNotion(t, m, "personal", "secret-a")
 	mustHandle(t, m, Request{Action: "policy", ID: a.ID, Tool: "get_me", Allowed: true})
 	search := Request{Action: "search", Query: "get_me"}
 	if len(mustHandle(t, m, search).Matches) != 1 {
@@ -174,8 +177,8 @@ func TestDisabledAccountHidesToolsAndKeepsChoices(t *testing.T) {
 }
 
 func TestInvocationRedactionErrorsAndTimeout(t *testing.T) {
-	m := testManager(t, func(r *http.Request) (*http.Response, error) { return reply(200, `{"id":1,"login":"alice"}`), nil })
-	a := addGitHub(t, m, "personal", "credential-secret")
+	m := testManager(t, func(r *http.Request) (*http.Response, error) { return reply(200, `{"id":1,"name":"alice"}`), nil })
+	a := addNotion(t, m, "personal", "credential-secret")
 	q := Request{Action: "invoke", ID: a.ID, Tool: "get_me"}
 	m.http.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) { return reply(200, `{"echo":"credential-secret"}`), nil })
 	if bytes.Contains(mustHandle(t, m, q).Result, []byte("credential-secret")) {
@@ -201,12 +204,12 @@ func TestAccountNamesAndDocumentSecrets(t *testing.T) {
 	var calls int
 	m := testManager(t, func(r *http.Request) (*http.Response, error) {
 		calls++
-		return reply(200, `{"id":1,"login":"alice"}`), nil
+		return reply(200, `{"id":1,"name":"alice"}`), nil
 	})
-	addGitHub(t, m, "personal", "test-secret")
+	addNotion(t, m, "personal", "test-secret")
 	requests := []Input{
-		{Integration: "github", Name: " personal ", Credential: "another-secret"},
-		{Integration: "github", Name: "second", Credential: "test-secret", Spec: json.RawMessage(`{"unused":"test-secret"}`)},
+		{Integration: "notion", Name: " personal ", Credential: "another-secret"},
+		{Integration: "notion", Name: "second", Credential: "test-secret", Spec: json.RawMessage(`{"unused":"test-secret"}`)},
 		{Integration: "openapi", Name: "custom", Endpoint: "https://example.com", Credential: "test-secret", Spec: json.RawMessage(strings.Replace(fixtureSpec, `"title":"Fixture"`, `"title":"Fixture","description":"Bearer test-secret"`, 1))},
 	}
 	for _, in := range requests {
@@ -415,9 +418,9 @@ func TestSlackDiscoveryUsesActualScopesAndDoesNotAssumeBotSearch(t *testing.T) {
 
 func TestBatchPolicyAppliesEveryListedToolOrNone(t *testing.T) {
 	m := testManager(t, func(r *http.Request) (*http.Response, error) {
-		return reply(200, `{"id":1,"login":"alice"}`), nil
+		return reply(200, `{"id":1,"name":"alice"}`), nil
 	})
-	a := addGitHub(t, m, "personal", "secret-a")
+	a := addNotion(t, m, "personal", "secret-a")
 	allowed := func(acc *Account) map[string]bool {
 		out := map[string]bool{}
 		for _, tool := range acc.Tools {
@@ -431,7 +434,7 @@ func TestBatchPolicyAppliesEveryListedToolOrNone(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	if len(names) < 3 {
-		t.Fatalf("want several GitHub tools, got %v", names)
+		t.Fatalf("want several Notion tools, got %v", names)
 	}
 	all := mustHandle(t, m, Request{Action: "policy", ID: a.ID, Tools: names, Allowed: true}).Account
 	if all.Access.Allowed != len(names) {
