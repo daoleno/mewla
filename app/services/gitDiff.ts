@@ -142,6 +142,14 @@ export interface GitRepoBrowserPayload {
   entries: GitRepoBrowserEntry[];
 }
 
+export interface GitRepoPathsPayload {
+  repo_root: string;
+  /** Every tracked or untracked-but-not-ignored file, sorted, repo-relative. */
+  paths: string[];
+  /** The daemon capped the list; the tree shows a prefix of the repository. */
+  truncated: boolean;
+}
+
 export interface GitRepoFileContentPayload {
   repo_root: string;
   path: string;

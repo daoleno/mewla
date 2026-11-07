@@ -21,6 +21,7 @@ import type {
   GitDiffPatchPayload,
   GitRepoBrowserPayload,
   GitRepoFileContentPayload,
+  GitRepoPathsPayload,
   GitDiffStatusSnapshot,
 } from "./gitDiff";
 import type { SessionService, SessionServiceSnapshot } from "./sessionServices";
@@ -1610,6 +1611,27 @@ export class WebSocketClient {
         timeout: "Timed out while loading repository files.",
         error: "Failed to load repository files.",
         parse: (payload) => payload.browser as GitRepoBrowserPayload,
+      },
+    );
+  }
+
+  getGitRepoPaths(
+    serverId: string,
+    options?: {
+      targetId?: string;
+      cwd?: string;
+    },
+  ) {
+    return this.request<GitRepoPathsPayload>(
+      serverId,
+      "git_repo_paths",
+      { target_id: options?.targetId, cwd: options?.cwd },
+      {
+        responseType: "git_repo_paths",
+        timeoutMs: 15000,
+        timeout: "Timed out while loading repository files.",
+        error: "Failed to load repository files.",
+        parse: (payload) => payload.browser as GitRepoPathsPayload,
       },
     );
   }

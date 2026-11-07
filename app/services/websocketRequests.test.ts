@@ -137,6 +137,7 @@ const RPCS: Rpc[] = [
   { name: "getGitDiffPage", call: (c) => c.getGitDiffPage(server.id, { targetId: "t", cwd: "/w", path: "a", scope: "all", row: 0 } as any), reply: { type: "git_diff_page", page: { path: "a" } } },
   { name: "getGitDiffFileContent", call: (c) => c.getGitDiffFileContent(server.id, { targetId: "t", cwd: "/w", path: "a" }), reply: { type: "git_diff_file_content", content: { path: "a" } } },
   { name: "getGitRepoEntries", call: (c) => c.getGitRepoEntries(server.id, { targetId: "t", cwd: "/w", path: "a" }), reply: { type: "git_repo_entries", browser: { path: "a" } } },
+  { name: "getGitRepoPaths", call: (c) => c.getGitRepoPaths(server.id, { targetId: "t", cwd: "/w" }), reply: { type: "git_repo_paths", browser: { repo_root: "/w", paths: ["a"], truncated: false } } },
   { name: "getGitRepoFileContent", call: (c) => c.getGitRepoFileContent(server.id, { targetId: "t", cwd: "/w", path: "a" }), reply: { type: "git_repo_file_content", content: { path: "a" } } },
   { name: "getCodexSlashCommands", call: (c) => c.getCodexSlashCommands(server.id), reply: { type: "codex_slash_commands", source: "bundled", commands: [{ value: "/x", name: "x" }, { value: "y", name: "y" }] } },
   { name: "getCodexSkills", call: (c) => c.getCodexSkills(server.id, { cwd: "/w" }), reply: { type: "codex_skills", skills: [{ name: "s", path: "/p" }, { name: "" }] } },
