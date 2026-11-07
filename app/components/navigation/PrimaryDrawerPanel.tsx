@@ -216,50 +216,58 @@ export function ComputerRow({
   switchable: boolean;
   expanded: boolean;
   onPress(): void;
-  /** A long press on the row says how it is connected. */
+  /** A tap on the mark, or a long press on the row, says how it is connected. */
   onShowPath(): void;
 }) {
   const { colors } = useAppTheme();
   const toneInk = useToneInk()(tone);
   return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={mark ? onShowPath : undefined}
-      accessibilityRole="button"
-      accessibilityLabel={`Computer, ${computerRowLabel({ name, status, current: false, path: mark?.label })}`}
-      accessibilityHint={switchable ? "Switch computer" : "Open computers in Settings"}
-      accessibilityState={switchable ? { expanded } : undefined}
-      aria-haspopup={switchable ? "menu" : undefined}
-      tabIndex={drawerVisible ? 0 : -1}
-      android_ripple={{ color: colors.surfacePressed }}
-      style={(state) => [
-        styles.serverStatus,
-        {
-          backgroundColor: state.pressed
-            ? colors.surfacePressed
-            : (state as { hovered?: boolean }).hovered
-              ? colors.surfaceSubtle
-              : "transparent",
-        },
-      ]}
-    >
-      <View style={styles.drawerRowIcon}>
-        <Icon name="desktop" size={DRAWER_ICON_SIZE} color={toneInk ?? colors.textSecondary} />
-      </View>
-      <Text numberOfLines={1} style={[styles.serverTitle, { color: colors.textPrimary }]}>
-        {name}
-      </Text>
-      {status ? (
-        <View style={styles.serverState}>
-          <View style={[styles.sealDot, { backgroundColor: toneInk ?? colors.textTertiary }]} />
-          <Text numberOfLines={1} style={[styles.serverDetail, { color: toneInk ?? colors.textTertiary }]}>
-            {status}
-          </Text>
+    <View style={styles.serverRow}>
+      <Pressable
+        onPress={onPress}
+        onLongPress={mark ? onShowPath : undefined}
+        accessibilityRole="button"
+        accessibilityLabel={`Computer, ${computerRowLabel({ name, status, current: false, path: mark?.label })}`}
+        accessibilityHint={switchable ? "Switch computer" : "Open computers in Settings"}
+        accessibilityState={switchable ? { expanded } : undefined}
+        aria-haspopup={switchable ? "menu" : undefined}
+        tabIndex={drawerVisible ? 0 : -1}
+        android_ripple={{ color: colors.surfacePressed }}
+        style={(state) => [
+          styles.serverStatus,
+          styles.serverMain,
+          {
+            backgroundColor: state.pressed
+              ? colors.surfacePressed
+              : (state as { hovered?: boolean }).hovered
+                ? colors.surfaceSubtle
+                : "transparent",
+          },
+        ]}
+      >
+        <View style={styles.drawerRowIcon}>
+          <Icon name="desktop" size={DRAWER_ICON_SIZE} color={toneInk ?? colors.textSecondary} />
+        </View>
+        <Text numberOfLines={1} style={[styles.serverTitle, { color: colors.textPrimary }]}>
+          {name}
+        </Text>
+        {status ? (
+          <View style={styles.serverState}>
+            <View style={[styles.sealDot, { backgroundColor: toneInk ?? colors.textTertiary }]} />
+            <Text numberOfLines={1} style={[styles.serverDetail, { color: toneInk ?? colors.textTertiary }]}>
+              {status}
+            </Text>
+          </View>
+        ) : null}
+        {switchable ? <Icon name="swap-horizontal" size={16} color={colors.textTertiary} /> : null}
+      </Pressable>
+      {/* Beside the row, never inside it: a button in a button is not valid. */}
+      {mark ? (
+        <View style={styles.serverMark}>
+          <ConnectionPathMark mark={mark} onPress={onShowPath} tabIndex={drawerVisible ? 0 : -1} />
         </View>
       ) : null}
-      {mark ? <ConnectionPathMark mark={mark} /> : null}
-      {switchable ? <Icon name="swap-horizontal" size={16} color={colors.textTertiary} /> : null}
-    </Pressable>
+    </View>
   );
 }
 
@@ -529,6 +537,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     paddingTop: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  serverRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  serverMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  serverMark: {
+    paddingRight: 12,
   },
   serverStatus: {
     minHeight: 52,
