@@ -157,8 +157,14 @@ object PhoneController {
 
     private fun keepHelper() {
         var wait = 1_000L
+        var shown = state()
         try {
             while (prefs.enabled) {
+                // The notification follows the helper: it must not keep saying "on" after the helper is gone.
+                if (state() != shown) {
+                    shown = state()
+                    publish()
+                }
                 // React Native stops JS timers while the App is in the background, so the link's own
                 // retry never fires there. A link that is down is told to try again from here.
                 if (!linkOnline) {
@@ -277,6 +283,8 @@ object PhoneController {
     }
 
     val enabled: Boolean get() = prefs.enabled
+
+    val paired: Boolean get() = if (::prefs.isInitialized) prefs.paired else false
 
     /** The agent's display size in real pixels (what a person's touch maps onto), or null before it exists. */
     fun displaySize(): IntArray? = display
