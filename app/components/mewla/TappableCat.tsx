@@ -14,7 +14,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import type { BrainCatState } from "./brainCatState";
-import { catCanPlay, isDoubleTap, PET_HOLD_MS, tossOffset, tossTilt } from "./catPlay";
+import { catCanPlay, catTapOutcome, isDoubleTap, PET_HOLD_MS, tossOffset, tossTilt } from "./catPlay";
 import { PetSprite } from "../pets/PetSprite";
 import { petInSeal } from "../pets/petModel";
 
@@ -224,6 +224,7 @@ export function TappableCat({
   animate,
   style,
   onPress,
+  onPressIn,
   accessibilityLabel,
   accessibilityHint,
   stillPortrait,
@@ -233,6 +234,8 @@ export function TappableCat({
   animate?: boolean;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
+  /** The finger lands on the cat (before any press, hold or play is decided). */
+  onPressIn?: () => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
   /** See PetSprite. */
@@ -242,10 +245,16 @@ export function TappableCat({
   const play = useCatPlay(state, size, Boolean(onPress) && catCanPlay(state));
   const { consumed, doubleTap, pressIn, releasePress, startPet } = play;
   const press = useCallback(() => {
-    if (consumed() || doubleTap()) return;
-    hop.trigger();
-    onPress?.();
+    // The tap's own job runs on every tap: a second tap from someone whose
+    // first has not shown yet must not be taken for play and dropped.
+    const outcome = catTapOutcome({ consumed: consumed(), cheered: !consumed() && doubleTap() });
+    if (outcome.hop) hop.trigger();
+    if (outcome.press) onPress?.();
   }, [consumed, doubleTap, hop, onPress]);
+  const handlePressIn = useCallback(() => {
+    pressIn();
+    onPressIn?.();
+  }, [onPressIn, pressIn]);
   const cat = (
     <HoppingCat state={state} size={size} animate={animate} hopStyle={hop.style} cheer={play.cheer} stillPortrait={stillPortrait} />
   );
@@ -260,7 +269,7 @@ export function TappableCat({
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
           accessibilityHint={accessibilityHint}
-          onPressIn={pressIn}
+          onPressIn={handlePressIn}
           onPress={press}
           onLongPress={startPet}
           onPressOut={releasePress}

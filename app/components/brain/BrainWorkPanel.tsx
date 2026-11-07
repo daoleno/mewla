@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ScrollViewInstance, type TextInputInstance, type ViewInstance } from "react-native";
 import { webReplyKeyPress } from "../terminal/composerInputBehavior";
 import { InterfaceComposerAttachmentRail } from "../terminal/InterfaceComposerAttachmentRail";
@@ -28,6 +28,7 @@ import {
   type BrainWorkSurface,
 } from "./brainWorkSurface";
 import { PetSprite } from "../pets/PetSprite";
+import { markWorkOpen } from "../mewla/workOpenTiming";
 import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
 import { Icon } from "../icons/Icon";
 import { composerNeutralFill } from "../terminal/composerMaterial";
@@ -287,8 +288,24 @@ export function BrainWorkSheet({
   // With a goal line above ("2 of 5 back"), a second "back" count would read
   // as the same number; the Back group below still lists them.
   const summary = brainWorkSummaryLine(objective ? { ...surface.counts, back: 0 } : surface.counts);
+  useLayoutEffect(() => {
+    if (!visible) return;
+    markWorkOpen("commit");
+    requestAnimationFrame(() => markWorkOpen("frame"));
+  }, [visible]);
+  // The sheet's shell (header, summary, close) commits on the tap; the slips
+  // follow a frame later, so a long list never holds the sheet back.
+  const [listReady, setListReady] = useState(false);
+  useEffect(() => {
+    if (!visible) {
+      setListReady(false);
+      return;
+    }
+    const frame = requestAnimationFrame(() => setListReady(true));
+    return () => cancelAnimationFrame(frame);
+  }, [visible]);
   return (
-    <BottomSheetFrame visible={visible} onClose={onClose} maxHeight="85%" cardStyle={{ backgroundColor: chrome.appBackground }}>
+    <BottomSheetFrame visible={visible} onClose={onClose} settleGuard maxHeight="85%" cardStyle={{ backgroundColor: chrome.appBackground }}>
       <View style={styles.sheetHeader}>
         <View style={styles.sheetHeading}>
           <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
@@ -302,7 +319,9 @@ export function BrainWorkSheet({
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.sheetContent}>
-        <BrainWorkList surface={surface} chrome={chrome} onOpenSlip={onOpenSlip} actionsFor={actionsFor} emptyCat />
+        {listReady ? (
+          <BrainWorkList surface={surface} chrome={chrome} onOpenSlip={onOpenSlip} actionsFor={actionsFor} emptyCat />
+        ) : null}
       </ScrollView>
     </BottomSheetFrame>
   );
@@ -375,9 +394,15 @@ export function BrainWorkDetailSheet({
     if (!onReply || !replyReady) return;
     onReply(draft.trim(), workReplyFiles(attachments));
   };
+  const detailOpen = Boolean(slip);
+  useLayoutEffect(() => {
+    if (!detailOpen) return;
+    markWorkOpen("commit");
+    requestAnimationFrame(() => markWorkOpen("frame"));
+  }, [detailOpen]);
   const age = slip?.waitedMs && slip.group === "needs" ? `Waiting ${brainWorkAge(slip.waitedMs)}` : undefined;
   return (
-    <BottomSheetFrame visible={Boolean(slip)} onClose={onClose} keyboardAvoiding cardStyle={{ backgroundColor: chrome.surface }}>
+    <BottomSheetFrame visible={Boolean(slip)} onClose={onClose} settleGuard keyboardAvoiding cardStyle={{ backgroundColor: chrome.surface }}>
       {slip ? (
         <View ref={rootRef} style={styles.sheetRoot}>
           <View style={styles.sheetHeader}>

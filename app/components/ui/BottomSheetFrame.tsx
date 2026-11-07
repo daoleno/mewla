@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -27,6 +27,13 @@ import { dialogCardInset } from "./dialogCardInset";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const DISMISS_DISTANCE = 96;
+/**
+ * With `settleGuard`, a sheet ignores touches for this long after it opens.
+ * The card is laid out (and hit-testable) from the first commit while it is
+ * still fading in, so a second tap from someone who sees nothing yet would
+ * press a slip or the backdrop of a sheet that has not appeared.
+ */
+export const SHEET_SETTLE_MS = 260;
 const SHEET_GUTTER = 8;
 // The phone sheet's own maximum, so every sheet keeps its width as a dialog.
 const DESKTOP_DIALOG_WIDTH = 720;
@@ -39,6 +46,8 @@ interface BottomSheetFrameProps {
   cardStyle?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
   keyboardAvoiding?: boolean;
+  /** Ignore touches while the sheet rises (SHEET_SETTLE_MS), for sheets a tap opens from under the card. */
+  settleGuard?: boolean;
   /** Pull the grabber down to close. On by default. */
   dragToDismiss?: boolean;
   /** Desktop web: the dialog's width. */
@@ -59,6 +68,7 @@ export function BottomSheetFrame({
   cardStyle,
   contentStyle,
   keyboardAvoiding = false,
+  settleGuard = false,
   dragToDismiss: dragToDismissOnPhone = true,
   desktopWidth = DESKTOP_DIALOG_WIDTH,
   onClose,
@@ -69,18 +79,23 @@ export function BottomSheetFrame({
   const insets = useSafeAreaInsets();
   const progress = useSharedValue(0);
   const dragY = useSharedValue(0);
+  const [settled, setSettled] = useState(!settleGuard);
 
   useEffect(() => {
     if (visible) {
       dragY.value = 0;
       progress.value = withSpring(1, Spring.rise);
+      if (!settleGuard) return;
+      const timer = setTimeout(() => setSettled(true), SHEET_SETTLE_MS);
+      return () => clearTimeout(timer);
     } else {
+      setSettled(!settleGuard);
       progress.value = withTiming(0, {
         duration: 180,
         easing: Easing.out(Easing.ease),
       });
     }
-  }, [dragY, visible, progress]);
+  }, [dragY, settleGuard, visible, progress]);
 
   const backdropStyle = useAnimatedStyle(() => ({
     opacity: progress.value * (1 - Math.min(dragY.value / 400, 0.6)),
@@ -189,6 +204,7 @@ export function BottomSheetFrame({
 
   // The card stays out of a foldable's rail; the backdrop still covers it.
   const sideInsets = { paddingLeft: insets.left, paddingRight: insets.right };
+  const rising = settleGuard && !settled ? styles.rising : null;
 
   return (
     <Modal
@@ -201,13 +217,13 @@ export function BottomSheetFrame({
     >
       {keyboardAvoiding ? (
         <KeyboardAvoidingView
-          style={[styles.root, dialog && styles.dialogRoot, sideInsets, rootStyle]}
+          style={[styles.root, dialog && styles.dialogRoot, sideInsets, rootStyle, rising]}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           {body}
         </KeyboardAvoidingView>
       ) : (
-        <View style={[styles.root, dialog && styles.dialogRoot, sideInsets, rootStyle]}>{body}</View>
+        <View style={[styles.root, dialog && styles.dialogRoot, sideInsets, rootStyle, rising]}>{body}</View>
       )}
     </Modal>
   );
@@ -217,6 +233,9 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     justifyContent: "flex-end",
+  },
+  rising: {
+    pointerEvents: "none",
   },
   dialogRoot: {
     justifyContent: "center",

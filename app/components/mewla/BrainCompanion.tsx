@@ -1,8 +1,10 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
-import type { BrainCatPresence } from "./brainCatState";
+import { workHintTone, type BrainCatPresence } from "./brainCatState";
+import { BrainWorkHint } from "./BrainWorkHint";
+import { markWorkOpen } from "./workOpenTiming";
 import { TappableCat } from "./TappableCat";
 import type { BrainWorkSlip } from "../brain/brainWorkSurface";
 import type { WorkSlipAction } from "../brain/WorkSlip";
@@ -57,7 +59,7 @@ export function BrainCatRow({
   label: string;
   detail?: string;
   chrome: TerminalThemeChrome;
-  /** Between turns the row's text shows the Work list. */
+  /** Between turns the row's hint shows the Work list. */
   onPress?: () => void;
   /** This is the Working row of a running turn. */
   turnRunning?: boolean;
@@ -77,28 +79,36 @@ export function BrainCatRow({
         size={ROW_CAT}
         animate={companion.animate}
         onPress={companion.onCatTap ? tap : undefined}
+        onPressIn={() => markWorkOpen("pressIn")}
         accessibilityLabel={`Brain: ${label}`}
         accessibilityHint={turnRunning ? "Says what Brain is doing" : "Brain answers"}
       />
-      <Pressable
-        disabled={!onPress}
-        onPress={onPress}
-        style={({ pressed }) => [styles.copy, pressed ? styles.pressed : null]}
-        accessible
-        accessibilityRole={onPress ? "button" : "text"}
-        accessibilityLabel={detail ? `Brain: ${label}, ${detail}` : `Brain: ${label}`}
-        accessibilityHint={onPress ? "Shows the Work list" : undefined}
-        accessibilityLiveRegion="polite"
-      >
-        <Text style={[styles.label, { color: chrome.text }]} numberOfLines={1}>
-          {said ?? label}
-        </Text>
-        {detail && !said ? (
-          <Text style={[styles.detail, { color: chrome.textMuted }]} numberOfLines={1}>
-            {detail}
+      {onPress && !turnRunning ? (
+        // The cat's answer replaces the hint's words for a moment and stays pressable.
+        <BrainWorkHint
+          label={said ?? label}
+          tone={said ? "quiet" : workHintTone(companion.presence)}
+          chrome={chrome}
+          onPress={onPress}
+        />
+      ) : (
+        <View
+          style={styles.copy}
+          accessible
+          accessibilityRole="text"
+          accessibilityLabel={detail ? `Brain: ${label}, ${detail}` : `Brain: ${label}`}
+          accessibilityLiveRegion="polite"
+        >
+          <Text style={[styles.label, { color: chrome.text }]} numberOfLines={1}>
+            {said ?? label}
           </Text>
-        ) : null}
-      </Pressable>
+          {detail && !said ? (
+            <Text style={[styles.detail, { color: chrome.textMuted }]} numberOfLines={1}>
+              {detail}
+            </Text>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -115,6 +125,7 @@ export function useCatSays(companion: BrainCompanion | null, turnRunning: boolea
     return () => clearTimeout(timer);
   }, [said]);
   const tap = useCallback(() => {
+    markWorkOpen("press");
     const line = companion?.onCatTap?.({ turnRunning, turnLabel });
     if (line) {
       setSaid(line);
@@ -130,9 +141,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     paddingVertical: 6,
-  },
-  pressed: {
-    opacity: 0.72,
   },
   copy: {
     flexShrink: 1,

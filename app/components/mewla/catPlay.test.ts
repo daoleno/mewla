@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { catCanPlay, DOUBLE_TAP_MS, isDoubleTap, tossOffset, tossTilt } from "./catPlay";
+import { catCanPlay, catTapOutcome, DOUBLE_TAP_MS, isDoubleTap, tossOffset, tossTilt } from "./catPlay";
 
 describe("cat play", () => {
   test("the empty bed has no cat to play with", () => {
@@ -12,6 +12,14 @@ describe("cat play", () => {
     expect(isDoubleTap(null, 1000)).toBe(false);
     expect(isDoubleTap(1000, 1000 + DOUBLE_TAP_MS)).toBe(true);
     expect(isDoubleTap(1000, 1001 + DOUBLE_TAP_MS)).toBe(false);
+  });
+
+  test("every tap does its job, a second one included; only a hold that petted answers instead", () => {
+    expect(catTapOutcome({ consumed: false, cheered: false })).toEqual({ press: true, hop: true });
+    // The second of a double-tap cheers instead of hopping, and still presses:
+    // someone whose first tap has not shown yet must not lose the open.
+    expect(catTapOutcome({ consumed: false, cheered: true })).toEqual({ press: true, hop: false });
+    expect(catTapOutcome({ consumed: true, cheered: false })).toEqual({ press: false, hop: false });
   });
 
   test("the toss follows the finger and stops within reach", () => {
