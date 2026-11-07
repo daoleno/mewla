@@ -55,15 +55,26 @@ cp -R "$SRC/libs/cua-driver-bench/taskpack" "$CDB_BENCH_WORK/taskpack"
 (cd "$CDB_BENCH_WORK/src/macos_bench" && swift/build.sh "$CDB_BENCH_WORK/build")
 
 cd "$CDB_BENCH_WORK/src/macos_bench"
+# The runner's preflight pins Claude Code 2.1.289, macOS 26.5.2 (25F84) for every arm: the registered VM. This Mac is
+# not that VM, so write a pins file with what is installed here, and say so in the rows (versions are recorded per row).
+PINS="$CDB_BENCH_WORK/pins.mac.json"
+python3 -I - pins.json "$PINS" "$(claude --version)" "$(sw_vers -productVersion)" "$(sw_vers -buildVersion)" <<'PY'
+import json, sys
+src, dst, claude, mac, build = sys.argv[1:6]
+p = json.load(open(src))
+p.update({"claude_code_version": claude, "macos_version": mac, "macos_build": build,
+          "environment": "the person's own Mac, not the registered Lume VM (observed versions substituted for the pins)"})
+json.dump(p, open(dst, "w"), indent=1)
+PY
 export CDB_MEWLA_BIN=${CDB_MEWLA_BIN:-$(command -v mewla)}
 # Keep the display awake for this script's lifetime only (memory mac-unlock-batching).
 caffeinate -d -i -w $$ &
-python3 run_bench.py preflight --bench-v2 --build-dir "$CDB_BENCH_WORK/build" --arms $ARMS || { echo "preflight failed: fix what it names, then rerun" >&2; exit 3; }
+python3 run_bench.py preflight --bench-v2 --pins "$PINS" --build-dir "$CDB_BENCH_WORK/build" --arms $ARMS || { echo "preflight failed: fix what it names, then rerun" >&2; exit 3; }
 [ -n "$PREFLIGHT_ONLY" ] && exit 0
 
 for cond in $( [ "$COND" = both ] && echo "background foreground" || echo "$COND" ); do
   RID="aub-$(date +%Y%m%d-%H%M)-$cond"
-  python3 run_bench.py run --bench-v2 --condition "$cond" --park-pointer --arms $ARMS --tasks $TASKS \
+  python3 run_bench.py run --bench-v2 --pins "$PINS" --condition "$cond" --park-pointer --arms $ARMS --tasks $TASKS \
     --phase1-runs "$RUNS" --phase2-runs 0 --run-id "$RID" --build-dir "$CDB_BENCH_WORK/build"
   python3 -I "$AUB/aub.py" import-cdb "$CDB_BENCH_WORK/runs/$RID"
 done
