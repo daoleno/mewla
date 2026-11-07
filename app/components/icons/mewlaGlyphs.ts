@@ -464,6 +464,7 @@ export const MEWLA_GLYPHS = {
   close: { strokes: ["M6.25,6.25L17.75,17.75", "M17.75,6.25L6.25,17.75"] },
   "close-circle": { strokes: [RING, "M9.25,9.25L14.75,14.75", "M14.75,9.25L9.25,14.75"] },
   "close-circle-fill": { strokes: [], fills: [circle(12, 12, 10) + crossOutline([12, 12], 3.9, HOLE)] },
+  cloud: { strokes: [CLOUD] },
   "cloud-download": {
     strokes: [
       CLOUD_OPEN,
