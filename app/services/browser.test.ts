@@ -14,6 +14,7 @@ if (!process.env.MEWLA_BROWSER_SERVICE_TEST_CHILD) {
   });
 } else {
   mock.module("./auth", () => ({ buildAuthorizationHeader: async () => "signed-fixture" }));
+  mock.module("react-native", () => ({ Platform: { OS: "ios" } }));
   mock.module("./pinnedTransport", () => ({ resolveStoredServerURL: async (server: { url: string }) => server.url }));
   const { BrowserRequestError, BrowserViewer, browserRequest } = await import("./browser");
   class Socket {
@@ -144,5 +145,18 @@ if (!process.env.MEWLA_BROWSER_SERVICE_TEST_CHILD) {
     socket.response({ type: "response", request_id: socket.sent.at(-1).request_id, error: "Browser control changed; request control again" });
     expect(await pending).toBeInstanceOf(Error);
     expect(leases).toEqual([true, false]);
+  });
+  test("the person's input while watching is a touch without a lease, and Stop is a request of its own", async () => {
+    const { viewer, socket } = await setup();
+    // No control requested: a touch still goes out, tied to no lease.
+    viewer.touch({ kind: "mousePressed", x: 4, y: 5, button: "left" });
+    expect(socket.sent.at(-1)).toEqual({ type: "touch", command: { kind: "input", input: { kind: "mousePressed", x: 4, y: 5, button: "left" } } });
+    const stopped = viewer.halt();
+    expect(socket.sent.at(-1).type).toBe("halt");
+    socket.response({ type: "response", request_id: socket.sent.at(-1).request_id, response: {} });
+    await stopped;
+    viewer.close();
+    viewer.touch({ kind: "mouseReleased" });
+    expect(socket.sent.filter((m) => m.type === "touch")).toHaveLength(1);
   });
 }

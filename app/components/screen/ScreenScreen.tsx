@@ -27,6 +27,8 @@ import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
 import { ScreenViewerHost } from "./ScreenViewerHost";
+import { BrowserScreen } from "../browser/BrowserScreen";
+import { useVirtualScreenLabs } from "../../store/virtualScreenLabs";
 import { warnOnce } from "../../services/warnOnce";
 import { serverDisplayName } from "../../services/serverDisplayName";
 import {
@@ -124,6 +126,7 @@ export function ScreenScreen() {
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const iphone = useIPhoneUse(5_000);
+  const virtualScreen = useVirtualScreenLabs();
   const [watching, setWatching] = useState(false);
   // Which agent is being watched, when several work at once.
   const [watchedWorker, setWatchedWorker] = useState<string | undefined>();
@@ -564,6 +567,12 @@ export function ScreenScreen() {
         <EmptyState icon="server" title="No current server" action={{ label: "Open Settings", onPress: () => router.push("/settings") }} />
       </View>
     );
+  }
+
+  // A Linux computer has no screen to share, but its agents' browsers run on a
+  // virtual display of their own, shown here with the same Watch, Take over and Stop.
+  if (virtualScreen.enabled && status && !status.supported && status.platform === "linux") {
+    return <BrowserScreen embedded />;
   }
 
   const takeOver = () => void connect("takeOver");

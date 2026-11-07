@@ -462,12 +462,8 @@ export default function SettingsScreen() {
             />
           </ListSection>
 
-          {Platform.OS === "web" ? null : (
-            <>
-              <SettingsSectionHeader>Labs</SettingsSectionHeader>
-              <LabsSection />
-            </>
-          )}
+          <SettingsSectionHeader>Labs</SettingsSectionHeader>
+          <LabsSection />
 
           {Platform.OS === "web" ? null : (
             <>

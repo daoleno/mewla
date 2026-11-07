@@ -1,38 +1,41 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { WebView } from "react-native-webview";
 import { ContinuousCorners, Radii, Spacing, TouchTarget, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
-import { browserRequest, BrowserViewer, type BrowserFrame, type BrowserResource } from "../../services/browser";
+import { browserRequest, BrowserViewer, type BrowserFrame, type BrowserInput, type BrowserResource } from "../../services/browser";
 import { getDefaultBrowserId, setDefaultBrowserId } from "../../services/browserDefault";
 import {
   browserIssue,
-  controlOffer,
   DEFAULT_BROWSER_NAME,
   pickDefaultBrowser,
   RECONNECT_DELAYS_MS,
   recoveryLabel,
   type BrowserIssue,
 } from "../../services/browserPageModel";
-import { ActionMenu, Button, EmptyState, IconButton, InlineNotice } from "../ui";
+import { ActionMenu, AppText, Button, EmptyState, IconButton, InlineNotice } from "../ui";
+import { useWorkers } from "../../store/workers";
 import type { ActionMenuItem } from "../ui/ActionMenu";
-import { browserRendererHTML } from "./renderer";
+import { BrowserFrameHost, type BrowserFrameHostHandle } from "./BrowserFrameHost";
 import { Icon } from "../icons/Icon";
 import { serverDisplayName } from "../../services/serverDisplayName";
 
 type ViewerPhase = "idle" | "connecting" | "live" | "reconnecting" | "lost";
 
 /**
- * Entering Browser opens the user's default remote browser and asks for input
- * when nobody else holds it. Switching, new browsers, close, delete and details
- * live in the options menu. Leaving releases only this viewer; the browser and
- * its sign-ins stay on the current server.
+ * An agent's browser on the current server's virtual display. Opening it is
+ * Watch: the picture is live and the person's taps and typing reach the page
+ * without taking it from the agent, which is told what they did and decides
+ * for itself. Take over holds the browser for the person; Stop ends the
+ * agent's use. Switching, new browsers, close, delete and details live in the
+ * options menu. Leaving releases only this viewer; the browser and its
+ * sign-ins stay on the current server.
  */
-export function BrowserScreen() {
+export function BrowserScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const router = useRouter();
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
+  const { state: workerState } = useWorkers();
   const serverName = serverDisplayName(currentServer?.name);
   const [resources, setResources] = useState<BrowserResource[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -49,7 +52,7 @@ export function BrowserScreen() {
   const [scroll, setScroll] = useState(false);
   const [tabs, setTabs] = useState<{ id: string; title: string; url: string }[]>([]);
   const viewer = useRef<BrowserViewer | null>(null);
-  const web = useRef<WebView>(null);
+  const web = useRef<BrowserFrameHostHandle>(null);
   const epoch = useRef(0);
   const ready = useRef(false);
   const latest = useRef<BrowserFrame | null>(null);
@@ -114,23 +117,17 @@ export function BrowserScreen() {
     setSelected(fresh);
     setPhase(reconnecting ? "reconnecting" : "connecting");
     const active = () => token === epoch.current && isCurrentServer(server.id);
-    let claimable = false;
     const connection = new BrowserViewer(server, resource.id, {
       frame(frame) {
         if (!active()) return;
         if (!ready.current) { latest.current = frame; return; }
-        web.current?.injectJavaScript(`window.browserFrame(${JSON.stringify(frame)});true;`);
+        web.current?.frame(frame);
       },
       status() {},
       resource(value) {
         if (!active()) return;
         current.current = value;
         setSelected(value);
-        // Claim input only from a fresh observation that nobody holds it;
-        // never override a controller that appeared while disconnected.
-        if (!claimable) return;
-        claimable = false;
-        if (controlOffer(value) === "acquire") void acquire().catch((error) => { if (active()) fail(error); });
       },
       lease(held) { if (active()) setMine(held); },
       connection(value) {
@@ -139,7 +136,6 @@ export function BrowserScreen() {
           attempt.current = 0;
           setPhase("live");
           setIssue(null);
-          claimable = true;
           return;
         }
         setMine(false);
@@ -157,7 +153,7 @@ export function BrowserScreen() {
     try { await connection.connect(); } catch (error) {
       if (active()) { setPhase("lost"); fail(error); }
     }
-  }, [acquire, currentServer, fail, isCurrentServer]);
+  }, [currentServer, fail, isCurrentServer]);
 
   // Opening a browser is the user's choice to use it, including by Agents on
   // this server. A browser created before that default is granted once here.
@@ -232,6 +228,17 @@ export function BrowserScreen() {
       ]);
     }
   };
+  // The person's typing and keys: under the lease when held, otherwise a touch.
+  const sendInput = async (input: BrowserInput) => {
+    if (mine) await command("input", { input });
+    else viewer.current?.touch(input);
+  };
+  const sendKey = async (key: string) => {
+    if (mine) { await command("press", { text: key }); return; }
+    const text = key === "Enter" ? "\r" : undefined;
+    viewer.current?.touch({ kind: "keyDown", key, text });
+    viewer.current?.touch({ kind: "keyUp", key });
+  };
   const manage = async (action: "stop" | "delete", resource: BrowserResource) => {
     if (!currentServer) return;
     const server = currentServer;
@@ -275,10 +282,6 @@ export function BrowserScreen() {
       key: "new", label: "New browser", icon: "add-circle", detail: "Separate sign-ins", disabled: Boolean(reason),
       onPress: () => void run("open", () => open(null, `${DEFAULT_BROWSER_NAME} ${resources.length + 1}`)),
     } satisfies ActionMenuItem] : []),
-    ...(selected && mine ? [{
-      key: "release", label: "Stop controlling", icon: "hand",
-      onPress: () => void run("control", async () => { await viewer.current?.release(); setMine(false); }),
-    } satisfies ActionMenuItem] : []),
     ...(selected && mine ? [{ key: "dialog", label: "Page dialog", icon: "chatbox", onPress: () => void run("dialog", () => command("dialog_status")) } satisfies ActionMenuItem] : []),
     ...(selected ? [{ key: "stop", label: "Close browser", icon: "stop-circle", detail: "Sign-ins are kept", onPress: () => void run("stop", () => manage("stop", selected)) } satisfies ActionMenuItem] : []),
     ...(selected ? [{ key: "delete", label: "Delete browser", icon: "trash", destructive: true, onPress: () => confirmDelete(selected) } satisfies ActionMenuItem] : []),
@@ -286,7 +289,7 @@ export function BrowserScreen() {
   ];
   const header = (
     <Stack.Screen options={{
-      title: selected?.name ?? "Browser",
+      title: embedded ? "Screen" : selected?.name ?? "Browser",
       headerRight: () => currentServer ? (
         <IconButton icon="more-vertical" size={40} accessibilityLabel="Browser options" onPress={() => setMenu(true)} />
       ) : null,
@@ -332,8 +335,10 @@ export function BrowserScreen() {
     );
   }
 
-  const offer = controlOffer(selected);
-  const viewOnly = phase === "live" && !mine;
+  const live = phase === "live";
+  const agentWorker = selected.control === "agent" ? workerState.workers.find((w) => w.id === selected.agent) : undefined;
+  const agentName = agentWorker?.name || "An agent";
+  const holder = mine ? "you" : selected.control === "agent" ? "agent" : selected.control === "human" ? "device" : "none";
   const notice =
     phase === "lost" ? (
       <InlineNotice tone="warning" title="Lost connection to the browser" detail={`Still open on ${serverName}.`}
@@ -341,21 +346,39 @@ export function BrowserScreen() {
     ) : issueNotice ? issueNotice
     : phase === "reconnecting" ? <InlineNotice busy title="Reconnecting…" />
     : phase === "connecting" ? <InlineNotice busy title="Connecting…" />
-    : viewOnly && offer === "takeover" ? (
-      <InlineNotice tone="accent" icon={selected.control === "agent" ? "git-network" : "phone"}
-        title={selected.control === "agent" ? "An Agent is using this browser" : "In use on another device"}
-        detail={selected.control === "agent" ? "The Agent pauses while you're in control." : undefined}
-        action={{ label: "Take over", onPress: () => void run("control", acquire), disabled: busy !== null }} />
-    ) : viewOnly && offer === "acquire" ? (
-      <InlineNotice title="Viewing only"
-        action={{ label: "Use browser", onPress: () => void run("control", acquire), disabled: busy !== null }} />
-    ) : null;
+    : null;
+  // Watch, Take over and Stop: one bar, whatever holds the browser.
+  const controls = live && !notice ? (
+    <View style={styles.controls}>
+      <View style={styles.controlsText}>
+        <AppText variant="label" style={{ color: colors.textPrimary }}>
+          {holder === "you" ? "You're in control" : holder === "agent" ? `${agentName} is using this browser` : holder === "device" ? "In use on another device" : "Watching"}
+        </AppText>
+      </View>
+      <IconButton icon="keypad" size={40} tone={typing ? "tinted" : "default"} accessibilityLabel={typing ? "Hide typing tools" : "Show typing tools"}
+        accessibilityState={{ expanded: typing }} onPress={() => setTyping(!typing)} />
+      {holder === "you" ? (
+        <Button label="Hand back" variant="tinted" size="sm" disabled={busy !== null}
+          onPress={() => void run("control", async () => { await viewer.current?.release(); setMine(false); })} />
+      ) : (
+        <>
+          <Button label="Take over" variant="tinted" size="sm" disabled={busy !== null || selected.control === "quiescing"}
+            onPress={() => void run("control", acquire)} />
+          {holder === "agent" ? (
+            <Button label="Stop" variant="outlined" size="sm" disabled={busy !== null}
+              onPress={() => void run("stop-agent", async () => { await viewer.current?.halt(); })} />
+          ) : null}
+        </>
+      )}
+    </View>
+  ) : null;
   const inputStyle = [styles.input, { color: colors.textPrimary, backgroundColor: colors.inputBackground, borderColor: colors.border }];
   return (
     <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
       {header}
       {sheet}
       {notice ? <View style={styles.notice}>{notice}</View> : null}
+      {controls}
       {mine ? (
         <View style={styles.bar}>
           <TextInput accessibilityLabel="Website address" autoCapitalize="none" autoCorrect={false} keyboardType="url" returnKeyType="go"
@@ -363,8 +386,6 @@ export function BrowserScreen() {
             selectTextOnFocus style={inputStyle}
             onSubmitEditing={() => { if (address.trim()) void run("nav", () => command("navigate", { url: address.trim() })); }} />
           <IconButton icon="copy" size={44} accessibilityLabel="Tabs" onPress={() => void run("tab", () => command("tabs"))} />
-          <IconButton icon="keypad" size={44} tone={typing ? "tinted" : "default"} accessibilityLabel={typing ? "Hide typing tools" : "Show typing tools"}
-            accessibilityState={{ expanded: typing }} onPress={() => setTyping(!typing)} />
         </View>
       ) : null}
       {mine && tabs.length > 0 ? (
@@ -376,39 +397,37 @@ export function BrowserScreen() {
           ))}
         </ScrollView>
       ) : null}
-      <WebView ref={web} style={[styles.viewport, { backgroundColor: colors.bgElevated }]} source={RENDERER_SOURCE} originWhitelist={["about:blank"]}
-        accessibilityLabel={`Page view of ${selected.name}`}
-        onShouldStartLoadWithRequest={(request) => request.url === "about:blank"}
-        javaScriptCanOpenWindowsAutomatically={false} setSupportMultipleWindows={false}
-        allowFileAccess={false} domStorageEnabled={false} sharedCookiesEnabled={false}
-        thirdPartyCookiesEnabled={false} cacheEnabled={false} incognito scrollEnabled={false}
-        onMessage={(event) => {
-          if (event.nativeEvent.data.length > 16384) return;
+      <BrowserFrameHost ref={web} backgroundColor={colors.bgElevated} accessibilityLabel={`Page view of ${selected.name}`}
+        onMessage={(data) => {
+          if (data.length > 16384) return;
           try {
-            const message = JSON.parse(event.nativeEvent.data);
+            const message = JSON.parse(data);
             if (message.type === "ready") {
               ready.current = true;
-              if (latest.current) { web.current?.injectJavaScript(`window.browserFrame(${JSON.stringify(latest.current)});true;`); latest.current = null; }
+              if (latest.current) { web.current?.frame(latest.current); latest.current = null; }
             } else if (message.type === "ack" && Number.isSafeInteger(message.seq)) viewer.current?.ack(message.seq);
-            else if (message.type === "input" && message.input && mine) {
-              void viewer.current?.command({ kind: "input", input: message.input }).catch(fail);
+            else if (message.type === "input" && message.input) {
+              // Holding the browser, input is a command under the lease; watching, it is a touch
+              // the agent hears about.
+              if (mine) void viewer.current?.command({ kind: "input", input: message.input }).catch(fail);
+              else if (live) viewer.current?.touch(message.input);
             }
           } catch { /* Ignore malformed renderer messages. */ }
         }} />
-      {mine && typing ? (
+      {live && typing ? (
         <View style={styles.tray}>
           <View style={styles.bar}>
             <TextInput accessibilityLabel="Text to type into the focused field" secureTextEntry autoCorrect={false} autoCapitalize="none"
               value={text} onChangeText={setText} placeholder="Type into the focused field" placeholderTextColor={colors.textTertiary} style={inputStyle} />
-            <Button label="Send" variant="tinted" disabled={!text} onPress={() => void run("type", async () => { const value = text; setText(""); await command("input", { input: { kind: "text", text: value } }); })} />
+            <Button label="Send" variant="tinted" disabled={!text} onPress={() => void run("type", async () => { const value = text; setText(""); await sendInput({ kind: "text", text: value }); })} />
           </View>
           <View style={styles.keys}>
             {([["Tab", "Tab"], ["Enter", "Enter"], ["Backspace", "⌫"], ["Escape", "Esc"]] as const).map(([key, label]) => (
               <Button key={key} label={label} accessibilityLabel={key === "Backspace" ? "Backspace" : `${key} key`} variant="outlined" style={styles.key}
-                onPress={() => void run("key", () => command("press", { text: key }))} />
+                onPress={() => void run("key", () => sendKey(key))} />
             ))}
             <Pressable accessibilityRole="switch" accessibilityState={{ checked: scroll }} accessibilityLabel="Drag to scroll the page"
-              onPress={() => { setScroll(!scroll); web.current?.injectJavaScript(`window.browserScroll(${!scroll});true;`); }}
+              onPress={() => { setScroll(!scroll); web.current?.scroll(!scroll); }}
               style={[styles.scroll, { backgroundColor: scroll ? colors.surfaceSubtle : "transparent", borderColor: colors.border }]}>
               <Icon name="swap-vertical" size={18} color={colors.textSecondary} />
             </Pressable>
@@ -419,12 +438,12 @@ export function BrowserScreen() {
   );
 }
 
-const RENDERER_SOURCE = { html: browserRendererHTML };
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   center: { justifyContent: "center", padding: Spacing.lg },
   notice: { paddingHorizontal: Spacing.md, paddingTop: Spacing.sm },
+  controls: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
+  controlsText: { flex: 1 },
   bar: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm },
   chipRow: { flexGrow: 0 },
   chips: { gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm },

@@ -66,17 +66,6 @@ export function pickDefaultBrowser(resources: readonly BrowserResource[], rememb
     ?? null;
 }
 
-/**
- * What opening the viewer may do about input. Only an idle browser is claimed
- * automatically; a current controller (an Agent or another device) is never
- * overridden without an explicit takeover.
- */
-export function controlOffer(resource: BrowserResource): "acquire" | "takeover" | "wait" {
-  if (resource.state !== "running" || resource.control === "quiescing") return "wait";
-  if (resource.control === "idle") return "acquire";
-  return "takeover";
-}
-
 /** Session launches can attach Browser only to Codex and Claude commands. */
 export function supportsBrowserAttachment(command: string): boolean {
   const argv = command.trim().split(/\s+/).filter((part) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(part));
