@@ -47,6 +47,7 @@ type entry struct {
 	humanFrom  time.Time       // when the person took the lease
 	handedBack *span           // the person's last turn, not yet told to the agent
 	lastAgent  string
+	reservedAt time.Time // handed to a launching Worker; see AutoAttachment
 }
 type Manager struct {
 	mu      sync.Mutex
@@ -55,6 +56,8 @@ type Manager struct {
 	entries map[string]*entry
 	closed  bool
 	done    chan struct{}
+
+	settings Settings
 }
 
 func privateDir(path string) error {
@@ -125,6 +128,7 @@ func New(root string, backend Backend) (*Manager, error) {
 		r.Target = ""
 		m.entries[r.ID] = newEntry(r)
 	}
+	m.settings = loadSettings(root)
 	return m, nil
 }
 func newEntry(r Resource) *entry {
@@ -204,7 +208,20 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		}
 		sort.Slice(resources, func(i, j int) bool { return resources[i].CreatedAt.Before(resources[j].CreatedAt) })
 		c := m.backend.Capability(ctx)
-		return Response{Resources: resources, Capability: &c}, nil
+		on := m.settings.VirtualScreen
+		return Response{Resources: resources, Capability: &c, VirtualScreen: &on}, nil
+	}
+	if q.Action == "settings" {
+		if o.Kind != "human" {
+			return Response{}, ErrLease
+		}
+		if q.Enabled != nil {
+			if err := m.setVirtualScreen(*q.Enabled); err != nil {
+				return Response{}, err
+			}
+		}
+		on := m.VirtualScreen()
+		return Response{VirtualScreen: &on}, nil
 	}
 	if q.Action == "create" {
 		if o.Kind != "human" {
@@ -219,7 +236,7 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		if m.closed {
 			return Response{}, ErrUnavailable
 		}
-		if len(m.entries) >= 8 {
+		if len(m.entries) >= maxBrowsers {
 			return Response{}, errors.New("This server supports up to eight browser profiles")
 		}
 		// Agents of the same server owner may use a new browser by default; the
@@ -260,34 +277,12 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		if o.Kind != "human" {
 			return Response{}, ErrLease
 		}
-		if err = acquire(ctx, e); err != nil {
+		if err = m.start(ctx, e); err != nil {
 			return Response{}, err
 		}
-		defer unlock(e)
 		e.mu.Lock()
-		defer e.mu.Unlock()
-		if e.runtime != nil && e.runtime.Alive() {
-			r := snapshot(e)
-			return Response{Resource: &r}, nil
-		}
-		if e.runtime != nil {
-			_ = e.runtime.Close()
-			e.runtime = nil
-		}
-		runtime, err := m.backend.Start(ctx, filepath.Join(m.root, q.ID))
-		if err != nil {
-			return Response{}, err
-		}
-		e.runtime = runtime
-		e.resource.Generation = uuid.NewString()
-		e.resource.Target = runtime.Target()
-		e.resource.State = "running"
-		e.uncertain = false
-		e.owner = Owner{}
-		e.halted = nil
-		e.touches, e.handedBack = nil, nil
-		e.epoch++
 		r := snapshot(e)
+		e.mu.Unlock()
 		return Response{Resource: &r}, nil
 	case "stop", "delete":
 		if o.Kind != "human" {
@@ -376,7 +371,52 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		return Response{}, errors.New("Unknown browser operation")
 	}
 }
+
+// start brings the browser up if it is not running; a running one is left as it is.
+func (m *Manager) start(ctx context.Context, e *entry) error {
+	if err := acquire(ctx, e); err != nil {
+		return err
+	}
+	defer unlock(e)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.runtime != nil && e.runtime.Alive() {
+		return nil
+	}
+	if e.runtime != nil {
+		_ = e.runtime.Close()
+		e.runtime = nil
+	}
+	runtime, err := m.backend.Start(ctx, filepath.Join(m.root, e.resource.ID))
+	if err != nil {
+		return err
+	}
+	e.runtime = runtime
+	e.resource.Generation = uuid.NewString()
+	e.resource.Target = runtime.Target()
+	e.resource.State = "running"
+	e.uncertain = false
+	e.owner = Owner{}
+	e.halted = nil
+	e.touches, e.handedBack = nil, nil
+	e.epoch++
+	return nil
+}
+
 func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, error) {
+	if o.Kind == "agent" && m.VirtualScreen() {
+		// With the virtual screen on, a browser an agent is attached to starts when
+		// the agent first asks for it, not when the Worker launches.
+		e.mu.Lock()
+		allowed, halted := e.resource.AllowAgents, e.halted[workerOf(o)]
+		down := e.runtime == nil || !e.runtime.Alive()
+		e.mu.Unlock()
+		if down && allowed && !halted {
+			if err := m.start(ctx, e); err != nil {
+				return Response{}, err
+			}
+		}
+	}
 	e.mu.Lock()
 	if e.transferring {
 		e.mu.Unlock()

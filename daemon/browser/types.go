@@ -49,6 +49,8 @@ type Request struct {
 	AllowAgents bool     `json:"allow_agents,omitempty"`
 	Lease       *Lease   `json:"lease,omitempty"`
 	Command     *Command `json:"command,omitempty"`
+	// Enabled is the new value for the "settings" action.
+	Enabled *bool `json:"enabled,omitempty"`
 }
 type Response struct {
 	Resources  []Resource      `json:"resources,omitempty"`
@@ -59,6 +61,8 @@ type Response struct {
 	// Notes tell an agent what the person did in the browser since its last
 	// action, so it can judge for itself whether to go on, wait or ask.
 	Notes []string `json:"notes,omitempty"`
+	// VirtualScreen is whether new Workers get a virtual-screen browser by default.
+	VirtualScreen *bool `json:"virtual_screen,omitempty"`
 }
 type Command struct {
 	Kind   string `json:"kind"`

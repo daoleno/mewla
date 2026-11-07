@@ -42,3 +42,13 @@ func WithBrowserMCP(command, executable, stateDir, resourceID string) (string, e
 		return "", fmt.Errorf("Browser attachment currently supports Codex and Claude sessions; choose either or launch without a Browser")
 	}
 }
+
+// SupportsBrowserAttachment is whether a launch command is a provider that
+// can take the Browser MCP entry (Codex and Claude).
+func SupportsBrowserAttachment(command string) bool {
+	switch InferWorkerProvider(command) {
+	case WorkerProviderCodex, WorkerProviderClaude:
+		return true
+	}
+	return false
+}

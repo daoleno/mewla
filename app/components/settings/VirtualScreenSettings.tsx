@@ -22,7 +22,7 @@ export function VirtualScreenSettings() {
             title="Virtual screen"
             icon="desktop"
             accessibilityRole="switch"
-            trailing={<InkSwitch value={labs.enabled} accessibilityLabel="Virtual screen" onValueChange={(next) => void labs.set(next)} />}
+            trailing={<InkSwitch value={labs.enabled} disabled={!labs.ready} accessibilityLabel="Virtual screen" onValueChange={(next) => void labs.set(next).catch(() => {})} />}
           />
         </ListSection>
       </View>

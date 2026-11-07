@@ -18,7 +18,7 @@ func (m *Manager) ValidateAttachment(ctx context.Context, id string) error {
 	if r.Resource == nil || !r.Resource.AllowAgents {
 		return errors.New("Agents can't use this Browser right now; open it in Mewla Browser first")
 	}
-	if r.Resource.State != "running" {
+	if r.Resource.State != "running" && !m.VirtualScreen() {
 		return errors.New("Open this Browser before attaching a task")
 	}
 	return nil

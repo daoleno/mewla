@@ -483,3 +483,64 @@ func TestStopEndsAgentControlUntilHandBack(t *testing.T) {
 	must(t, m, human, Request{Action: "release", ID: id})
 	must(t, m, agent, Request{Action: "control", ID: id})
 }
+
+func virtualScreen(t *testing.T, m *Manager, on bool) {
+	t.Helper()
+	r := must(t, m, human, Request{Action: "settings", Enabled: &on})
+	if r.VirtualScreen == nil || *r.VirtualScreen != on {
+		t.Fatalf("settings = %+v", r.VirtualScreen)
+	}
+}
+
+// With the virtual screen on, a Worker is handed a browser no agent holds,
+// and a new one when they are all taken; off, nothing is attached. The
+// choice survives a restart and only the person can change it.
+func TestVirtualScreenAutoAttachment(t *testing.T) {
+	m, _, id := setup(t)
+	ctx := context.Background()
+	if got := m.AutoAttachment(ctx); got != "" {
+		t.Fatalf("attached with the virtual screen off: %q", got)
+	}
+	if _, err := m.Handle(ctx, agent, Request{Action: "settings", Enabled: new(bool)}); err == nil {
+		t.Fatal("an agent changed the setting")
+	}
+	virtualScreen(t, m, true)
+	first := m.AutoAttachment(ctx)
+	if first != id {
+		t.Fatalf("first Worker got %q, want the idle browser %q", first, id)
+	}
+	second := m.AutoAttachment(ctx)
+	if second == "" || second == id {
+		t.Fatalf("second Worker shared the reserved browser: %q", second)
+	}
+	listed := must(t, m, human, Request{Action: "list"})
+	if len(listed.Resources) != 2 || !listed.Resources[1].AllowAgents || listed.VirtualScreen == nil || !*listed.VirtualScreen {
+		t.Fatalf("list = %+v", listed)
+	}
+	m.Close()
+	reload, err := New(m.root, m.backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reload.Close()
+	if !reload.VirtualScreen() {
+		t.Fatal("the setting was lost on restart")
+	}
+}
+
+// The browser an agent is attached to starts when it first asks for control,
+// not when the Worker launches, and only with the virtual screen on.
+func TestAgentControlStartsAttachedBrowserOnlyWithVirtualScreen(t *testing.T) {
+	m, b, id := setup(t)
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "control", ID: id}); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("started without the virtual screen: %v", err)
+	}
+	virtualScreen(t, m, true)
+	r := must(t, m, agent, Request{Action: "control", ID: id})
+	if r.Lease == nil || b.starts.Load() != 1 {
+		t.Fatalf("lease %v, starts %d", r.Lease, b.starts.Load())
+	}
+	if err := m.ValidateAttachment(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+}
