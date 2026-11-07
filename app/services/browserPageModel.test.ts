@@ -67,8 +67,8 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
     expect(launchBrowserId(explicit, "bash")).toBe("b2");
   });
 
-  test("Browser screen has no per-Agent permission step and gates input on the server lease", async () => {
-    const source = await Bun.file(new URL("../components/browser/BrowserScreen.tsx", import.meta.url)).text();
+  test("Agent browser card has no per-Agent permission step and gates input on the server lease", async () => {
+    const source = await Bun.file(new URL("../components/screen/AgentBrowserCard.tsx", import.meta.url)).text();
     expect(source).not.toMatch(/setStatus\(|\.message\)|JSON\.stringify\(value|<Switch/);
     expect(source).toContain("browserIssue(error, serverName)");
     // No background copy about what Agents may do later.
@@ -77,10 +77,11 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
     // Opening is Watch: the page never claims input by itself. Input is a command under the
     // lease when held, and a touch the agent is told about otherwise.
     expect(source).toContain('message.type === "input" && message.input');
-    expect(source).toContain("if (mine) void viewer.current?.command({ kind: \"input\", input: message.input })");
-    expect(source).toContain("else if (live) viewer.current?.touch(message.input)");
+    expect(source).toContain("if (mineRef.current) void viewer.current?.command({ kind: \"input\", input: message.input })");
+    expect(source).toContain("else if (viewer.current) viewer.current.touch(message.input)");
     expect(source).not.toContain("claimable");
     expect(source).not.toMatch(/pauses while/);
-    expect(source).toContain('Alert.alert(\n    `Delete “${resource.name}”?`');
+    const list = await Bun.file(new URL("../components/screen/AgentScreens.tsx", import.meta.url)).text();
+    expect(list).toContain('Alert.alert(\n    `Delete “${resource.name}”?`');
   });
 }

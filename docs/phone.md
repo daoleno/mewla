@@ -11,7 +11,7 @@ later, in the APK from GitHub (the Play Store build leaves it out).
 
 ## Turn it on
 
-1. **Settings → Labs → Phone use**, switch on. The Phone page opens, and Phone is added to the left menu.
+1. **Settings → Labs → Phone use**, switch on. The Phone page opens, and Phone is added to the menu of **Screen**.
 2. The page lists what the phone needs and checks it live: **Developer
    options**, **Wi‑Fi**, **Wireless debugging**, **Pairing** and **Helper**.
 3. Tap **Allow**. Android has you switch on Mewla's Accessibility service, once

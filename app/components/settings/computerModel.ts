@@ -35,7 +35,6 @@ export function computerStatusWord(input: {
 export type ComputerAction =
   | { kind: "fix"; fix: AgentUseFix; target: "browser" | "computer" }
   | { kind: "paste_key" }
-  | { kind: "stop_agent" }
   | { kind: "update" };
 
 export interface ComputerProblem {
@@ -54,17 +53,6 @@ export interface ComputerProblem {
 export function computerProblems(status: AgentUseStatus | null): ComputerProblem[] {
   if (!status) return [];
   const problems: ComputerProblem[] = [];
-  const active = status.computer?.active;
-  const everyone = status.computer?.agents ?? [];
-  if (active) {
-    problems.push({
-      key: "active",
-      text: everyone.length > 1
-        ? `${everyone.map((agent) => agent.name || "An agent").join(", ")} are using the screen.`
-        : `${active.name || "An agent"} is using the screen.`,
-      action: { label: "Stop", does: { kind: "stop_agent" }, destructive: true },
-    });
-  }
   if (!status.enabled) return problems;
 
   const browser = status.browser;

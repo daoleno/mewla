@@ -58,14 +58,14 @@ describe("computerProblems", () => {
     expect(computerProblemsMayChange(headlessLinux)).toBe(false);
   });
 
-  test("a computer agents can't use shows nothing to fix, except an agent still on the screen", () => {
+  test("a computer agents can't use shows nothing to fix, and an agent on the screen is stopped from Screen, not here", () => {
     const off: AgentUseStatus = { ...macMissingExtension, enabled: false };
     expect(computerProblems(off)).toEqual([]);
     const busy: AgentUseStatus = {
       ...off,
       computer: { state: "ready", summary: "", active: { worker: "w1", name: "Codex", since: "" } },
     };
-    expect(computerProblems(busy).map((problem) => [problem.text, problem.action?.label])).toEqual([["Codex is using the screen.", "Stop"]]);
+    expect(computerProblems(busy)).toEqual([]);
   });
 
   test("a missing screen permission opens Settings on the Mac", () => {
