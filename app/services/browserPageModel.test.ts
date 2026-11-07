@@ -14,9 +14,10 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
   });
 } else {
   mock.module("./auth", () => ({ buildAuthorizationHeader: async () => "signed-fixture" }));
+  mock.module("react-native", () => ({ Platform: { OS: "ios" } }));
   mock.module("./pinnedTransport", () => ({ resolveStoredServerURL: async (server: { url: string }) => server.url }));
   const { BrowserRequestError } = await import("./browser");
-  const { browserIssue, chooseBrowser, controlOffer, launchBrowserId, pickDefaultBrowser, recoveryLabel, supportsBrowserAttachment } = await import("./browserPageModel");
+  const { browserIssue, chooseBrowser, launchBrowserId, pickDefaultBrowser, recoveryLabel, supportsBrowserAttachment } = await import("./browserPageModel");
 
   const resource = { id: "r", name: "Personal", state: "running", control: "idle", allow_agents: true };
 
@@ -39,18 +40,13 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
     expect(recoveryLabel("none")).toBeNull();
   });
 
-  test("entering picks the remembered browser and claims input only when nobody holds it", () => {
+  test("entering picks the remembered browser", () => {
     const closed = { ...resource, id: "a", state: "stopped" };
     const running = { ...resource, id: "b" };
     expect(pickDefaultBrowser([closed, running], "a")!.id).toBe("a");
     expect(pickDefaultBrowser([closed, running], "gone")!.id).toBe("b");
     expect(pickDefaultBrowser([closed], null)!.id).toBe("a");
     expect(pickDefaultBrowser([], null)).toBeNull();
-    expect(controlOffer(resource)).toBe("acquire");
-    expect(controlOffer({ ...resource, control: "agent" })).toBe("takeover");
-    expect(controlOffer({ ...resource, control: "human" })).toBe("takeover");
-    expect(controlOffer({ ...resource, control: "quiescing" })).toBe("wait");
-    expect(controlOffer({ ...resource, state: "stopped" })).toBe("wait");
   });
 
   test("session launches attach Browser only for commands that support it", () => {
@@ -78,11 +74,13 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
     // No background copy about what Agents may do later.
     expect(source).not.toMatch(/Agents (can|on this server)/);
     expect(source).toContain("lease(held) { if (active()) setMine(held); }");
-    expect(source).toContain('message.type === "input" && message.input && mine');
-    // Auto-claim waits for this connection's fresh state, never cached state.
-    expect(source).toContain("if (!claimable) return;");
-    expect(source).toContain('if (controlOffer(value) === "acquire") void acquire()');
-    expect(source).not.toContain("controlOffer(known)");
+    // Opening is Watch: the page never claims input by itself. Input is a command under the
+    // lease when held, and a touch the agent is told about otherwise.
+    expect(source).toContain('message.type === "input" && message.input');
+    expect(source).toContain("if (mine) void viewer.current?.command({ kind: \"input\", input: message.input })");
+    expect(source).toContain("else if (live) viewer.current?.touch(message.input)");
+    expect(source).not.toContain("claimable");
+    expect(source).not.toMatch(/pauses while/);
     expect(source).toContain('Alert.alert(\n    `Delete “${resource.name}”?`');
   });
 }

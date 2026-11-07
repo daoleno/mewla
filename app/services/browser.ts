@@ -1,6 +1,8 @@
+import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
 import { resolveStoredServerURL } from "./pinnedTransport";
 import type { StoredServer } from "./storage";
+import { authSubprotocol } from "./webSocketAuth";
 
 export interface BrowserResource {
   id: string;
@@ -10,6 +12,8 @@ export interface BrowserResource {
   allow_agents: boolean;
   generation?: string;
   target?: string;
+  /** The Worker holding the browser, when an agent does. */
+  agent?: string;
 }
 export interface BrowserLease {
   epoch: number;
@@ -41,6 +45,8 @@ export interface BrowserResponse {
   capability?: { available: boolean; reason?: string };
   lease?: BrowserLease;
   result?: unknown;
+  /** What the person did, told to an agent; never shown to the person. */
+  notes?: string[];
 }
 export interface BrowserFrame {
   type: "frame";
@@ -63,7 +69,7 @@ async function endpoint(server: StoredServer, path: string) {
 }
 export async function browserRequest(
   server: StoredServer,
-  request: { action: string; id?: string; name?: string; allow_agents?: boolean },
+  request: { action: "list" | "create" | "start" | "stop" | "delete" | "grant" | "status" | "halt"; id?: string; name?: string; allow_agents?: boolean },
   signal?: AbortSignal,
 ): Promise<BrowserResponse> {
   const url = await endpoint(server, "/browser");
@@ -120,8 +126,14 @@ export class BrowserViewer {
     url.searchParams.set("id", this.id);
     const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: `mewla-browser-view:${this.id}` });
     if (this.closed) return;
-    const NativeWebSocket = WebSocket as unknown as { new(url: string, protocols: undefined, options: { headers: Record<string, string> }): WebSocket };
-    const socket = new NativeWebSocket(url.toString(), undefined, { headers: { Authorization: authorization } });
+    let socket: WebSocket;
+    if (Platform.OS === "web") {
+      // A browser WebSocket cannot set a header; the daemon reads the subprotocol instead.
+      socket = new WebSocket(url.toString(), [authSubprotocol(authorization)]);
+    } else {
+      const NativeWebSocket = WebSocket as unknown as { new(url: string, protocols: undefined, options: { headers: Record<string, string> }): WebSocket };
+      socket = new NativeWebSocket(url.toString(), undefined, { headers: { Authorization: authorization } });
+    }
     this.socket = socket;
     socket.onopen = () => {
       if (this.closed) return;
@@ -180,7 +192,7 @@ export class BrowserViewer {
   ack(seq: number) {
     if (!this.closed && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: "ack", seq }));
   }
-  private request(type: string, command?: BrowserCommand): Promise<BrowserResponse> {
+  private request(type: "control" | "release" | "command" | "touch" | "halt", command?: BrowserCommand): Promise<BrowserResponse> {
     if (this.closed || this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Viewer is disconnected"));
     const request_id = String(++this.serial);
     return new Promise((resolve, reject) => {
@@ -195,6 +207,21 @@ export class BrowserViewer {
     });
   }
   control() { this.revision++; this.lease = undefined; return this.request("control"); }
+  /**
+   * The person's own input while an agent holds the browser: it reaches the
+   * page without a lease and the agent is told what happened, so the agent
+   * decides what it means. Nothing waits for an answer.
+   */
+  touch(input: BrowserInput) {
+    if (this.closed || this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({ type: "touch", command: { kind: "input", input } }));
+  }
+  /** Stop: ends the agent's control; it is told and does not come back on its own. */
+  async halt() {
+    const response = await this.request("halt");
+    this.handlers.status("Viewing · Agent stopped");
+    return response;
+  }
   async release() {
     this.revision++;
     this.lease = undefined;

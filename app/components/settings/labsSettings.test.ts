@@ -17,9 +17,10 @@ describe("Settings → Labs", () => {
     expect(labs).toContain('router.push("/settings/friends")');
     expect(labs).toContain('router.push("/settings/phone")');
     expect(labs).toContain('router.push("/settings/iphone")');
-    expect(labs.match(/accessory="chevron"/g)).toHaveLength(3);
+    expect(labs).toContain('router.push("/settings/virtual-screen")');
+    expect(labs.match(/accessory="chevron"/g)).toHaveLength(4);
     expect(labs).not.toContain("InkSwitch");
-    for (const page of ["friends", "phone", "iphone"]) expect(existsSync(new URL(`../../app/settings/${page}.tsx`, import.meta.url))).toBe(true);
+    for (const page of ["friends", "phone", "iphone", "virtual-screen"]) expect(existsSync(new URL(`../../app/settings/${page}.tsx`, import.meta.url))).toBe(true);
   });
 
   test("a feature's controls live on its page", () => {
