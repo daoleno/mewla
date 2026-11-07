@@ -104,8 +104,9 @@ import { OnboardingPresentation } from "../onboarding/OnboardingPresentation";
 import { EmptyState } from "../ui/EmptyState";
 import { sessionEmptyState } from "../../services/sessionEmptyState";
 import { BrainCompanionContext, type BrainCompanion } from "../mewla/BrainCompanion";
-import type { BrainCatPresence, BrainCatState } from "../mewla/brainCatState";
+import { resolveBrainCatPresence, type BrainCatPresence, type BrainCatState } from "../mewla/brainCatState";
 import { BrainWorkColumn } from "../brain/BrainWorkPanel";
+import { BrainWorkSheetHost, type BrainWorkSheetHandle } from "../brain/BrainWorkSheetHost";
 import {
   brainWorkSurface,
   type BrainCurrentWork,
@@ -779,6 +780,7 @@ function BrainDemo() {
       </PrimaryDrawerShell>
     );
   }
+  if (fixture === "workopen") return <BrainWorkOpenDemo />;
   if (fixture === "cold" || fixture === "cold-empty") {
     return <BrainColdLoadDemo empty={fixture === "cold-empty"} />;
   }
@@ -791,6 +793,82 @@ function BrainDemo() {
         running={fixture !== "empty" && !presence}
         events={fixture === "work" || fixture === "goal" ? SCREENSHOT_BRAIN_WORK_DESK : fixture === "attention" ? SCREENSHOT_BRAIN_NEEDS : SCREENSHOT_BRAIN_EVENTS}
         work={fixture === "goal" ? BRAIN_GOAL_DEMO : undefined}
+      />
+    </BrainCompanionContext.Provider>
+  );
+}
+
+/**
+ * The cat's tail row opening the real Work sheet, for measuring the tap.
+ * `needs` Work needing you (default 4) and `n` Work in all (default 8) set the
+ * list; `stall` blocks the JS thread for that many ms every 250 ms, a stand-in
+ * for a busy timeline. Timings land in `globalThis.__workOpenTimings`.
+ */
+function BrainWorkOpenDemo() {
+  const { needs, n, stall } = useLocalSearchParams<{ needs?: string; n?: string; stall?: string }>();
+  const { theme: appTheme } = useAppTheme();
+  const { chrome } = useMemo(() => buildChatChrome(appTheme), [appTheme]);
+  const sheetRef = useRef<BrainWorkSheetHandle>(null);
+  const currentWork = useMemo<BrainCurrentWork[]>(() => {
+    const asking = Number(needs ?? 4);
+    const total = Math.max(n === undefined ? 8 : Number(n), asking);
+    return Array.from({ length: total }, (_, index) =>
+      index < asking
+        ? {
+            work_id: `ask-${index}`,
+            revision: 1,
+            title: ["Sync fix needs your call", "Approve the deploy", "Pick the pricing copy", "Confirm the Apple agreement"][index % 4] + (index >= 4 ? ` ${index + 1}` : ""),
+            status: "waiting",
+            progress_mode: "waiting",
+            unread_result: false,
+            wait_for: "Keep both copies, or the newest edit?",
+            wake: { kind: "user_input", ref: "Keep both copies, or the newest edit?" },
+            updated_at: new Date(Date.now() - (index + 2) * 60_000).toISOString(),
+          }
+        : {
+            work_id: `run-${index}`,
+            revision: 1,
+            title: `Worker task ${index + 1}`,
+            status: "running",
+            progress_mode: "owned",
+            attempt_session_id: `%${40 + index}`,
+            attempt_delegated: true,
+            unread_result: false,
+            updated_at: new Date(Date.now() - 30_000).toISOString(),
+          },
+    );
+  }, [n, needs]);
+  const surface = useMemo(() => brainWorkSurface(currentWork, undefined), [currentWork]);
+  const presence = useMemo(
+    () => resolveBrainCatPresence({ hasServer: true, connection: "connected", hydrated: true, currentWork }),
+    [currentWork],
+  );
+  const openWork = useCallback(() => sheetRef.current?.open(), []);
+  const companion = useMemo<BrainCompanion>(
+    () => ({ presence, animate: true, onOpenWork: openWork, onCatTap: () => { openWork(); return null; } }),
+    [openWork, presence],
+  );
+  useEffect(() => {
+    const block = Number(stall);
+    if (!block) return;
+    const timer = setInterval(() => {
+      const until = performance.now() + block;
+      while (performance.now() < until) { /* simulated JS work */ }
+    }, 250);
+    return () => clearInterval(timer);
+  }, [stall]);
+  return (
+    <BrainCompanionContext.Provider value={companion}>
+      <BrainChatDemo empty={false} running={false} events={SCREENSHOT_BRAIN_EVENTS} />
+      <BrainWorkSheetHost
+        ref={sheetRef}
+        surface={surface}
+        chrome={chrome}
+        onOpenSlip={(slip) => {
+          // As the screen does: a slip closes the list; the harness reads what was opened.
+          sheetRef.current?.close();
+          (globalThis as { __workOpened?: string[] }).__workOpened = [...((globalThis as { __workOpened?: string[] }).__workOpened ?? []), slip.workId];
+        }}
       />
     </BrainCompanionContext.Provider>
   );

@@ -33,9 +33,9 @@ import {
 import {
   BrainWorkColumn,
   BrainWorkDetailSheet,
-  BrainWorkSheet,
   type BrainWorkReveal,
 } from "../../components/brain/BrainWorkPanel";
+import { BrainWorkSheetHost, type BrainWorkSheetHandle } from "../../components/brain/BrainWorkSheetHost";
 import {
   BRAIN_WORK_GROUP_ORDER,
   brainWorkSlipStale,
@@ -220,16 +220,16 @@ export default function BrainScreen() {
       ),
     [activeBrain?.current_work, activeBrain?.workers, activeBrain?.open_work, calendarItems],
   );
-  const [workSheetVisible, setWorkSheetVisible] = useState(false);
+  const workSheetRef = useRef<BrainWorkSheetHandle>(null);
   const [workReveal, setWorkReveal] = useState<BrainWorkReveal | null>(null);
   const [selectedWorkSlip, setSelectedWorkSlip] = useState<BrainWorkSlip | null>(null);
   const [brainTurnRunning, setBrainTurnRunning] = useState(false);
   useEffect(() => {
-    setWorkSheetVisible(false);
+    workSheetRef.current?.close();
     setWorkReveal(null);
     setSelectedWorkSlip(null);
   }, [activeServer?.id]);
-  const openWorkList = useCallback(() => setWorkSheetVisible(true), []);
+  const openWorkList = useCallback(() => workSheetRef.current?.open(), []);
   const sessionLabels = useMemo(() => {
     const labels = new Map<string, string>();
     for (const worker of activeBrain?.workers ?? []) {
@@ -575,7 +575,7 @@ export default function BrainScreen() {
   const openWorkerSession = useCallback(
     (sessionId: string) => {
       if (!activeServer) return;
-      setWorkSheetVisible(false);
+      workSheetRef.current?.close();
       setSelectedWorkSlip(null);
       router.push({ pathname: "/terminal/[id]", params: terminalRouteParams(sessionId, activeServer.id) });
     },
@@ -583,7 +583,7 @@ export default function BrainScreen() {
   );
   const openWorkSlip = useCallback(
     (slip: BrainWorkSlip) => {
-      setWorkSheetVisible(false);
+      workSheetRef.current?.close();
       if (slip.unread && activeServer) {
         wsClient.markBrainWorkRead(activeServer.id, slip.workId);
       }
@@ -656,12 +656,12 @@ export default function BrainScreen() {
           if (slip.sessionId) openWorkerSession(slip.sessionId);
           return;
         case "reply":
-          setWorkSheetVisible(false);
+          workSheetRef.current?.close();
           setReplyOpenFor(slip.workId);
           setSelectedWorkSlip(slip);
           return;
         case "ask":
-          setWorkSheetVisible(false);
+          workSheetRef.current?.close();
           setSelectedWorkSlip(null);
           setPendingAskDraft(brainWorkAskDraft(slip));
           return;
@@ -904,12 +904,12 @@ export default function BrainScreen() {
       ) : null}
       </View>
 
-      <BrainWorkSheet
-        visible={workSheetVisible && !workColumn}
+      <BrainWorkSheetHost
+        ref={workSheetRef}
+        suppressed={workColumn}
         surface={workSurface}
         objective={activeBrain?.objective}
         chrome={chrome}
-        onClose={() => setWorkSheetVisible(false)}
         onOpenSlip={openWorkSlip}
         actionsFor={workActionsFor}
       />

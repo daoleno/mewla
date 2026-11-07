@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { BrainCurrentWork } from "../../store/brain";
-import { brainCatStatusLine, brainCatTailLabel, brainCatTap, presenceWorkGroup, resolveBrainCatPresence } from "./brainCatState";
+import { brainCatStatusLine, brainCatTailLabel, brainCatTap, presenceWorkGroup, resolveBrainCatPresence, workHintTone } from "./brainCatState";
 
 function work(overrides: Partial<BrainCurrentWork>): BrainCurrentWork {
   return {
@@ -85,6 +85,28 @@ describe("resolveBrainCatPresence", () => {
     expect(brainCatTailLabel({ state: "waking" })).toBe("Waking up");
     for (const state of ["working", "homeless"] as const) {
       expect(brainCatTailLabel({ state })).toBeNull();
+    }
+  });
+});
+
+describe("the tail row's hint", () => {
+  test("four Work items that need you read \"4 need you\" as the seal pill", () => {
+    const asking = ["a", "b", "c", "d"].map((id) =>
+      work({ work_id: id, title: `Ask ${id}`, status: "waiting", progress_mode: "waiting", wake: { kind: "user_input", ref: "Which one?" } }),
+    );
+    const presence = resolveBrainCatPresence({ ...connected, currentWork: asking });
+    expect(presence.state).toBe("attention");
+    expect(presence.count).toBe(4);
+    expect(brainCatTailLabel(presence)).toBe("4 need you");
+    expect(workHintTone(presence)).toBe("needs");
+  });
+
+  test("counted Work is a quiet pill; every other state is plain words", () => {
+    expect(workHintTone({ state: "delivered", count: 2 })).toBe("count");
+    expect(workHintTone({ state: "delegating", count: 3 })).toBe("count");
+    expect(workHintTone({ state: "delegating", count: 3, waiting: true })).toBe("count");
+    for (const state of ["idle", "offline", "waking", "homeless", "working"] as const) {
+      expect(workHintTone({ state })).toBe("quiet");
     }
   });
 });

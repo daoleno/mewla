@@ -84,7 +84,7 @@ if (!process.env.MEWLA_BOTTOM_SHEET_TEST_CHILD) {
   mock.module("./GlassSurface", () => ({ GlassSurface: host("glass") }));
   mock.module("../../constants/motion", () => ({ Spring: { rise: {} } }));
 
-  const { BottomSheetFrame } = await import("./BottomSheetFrame");
+  const { BottomSheetFrame, SHEET_SETTLE_MS } = await import("./BottomSheetFrame");
 
   test("closing a bottom sheet removes the modal backdrop and leaves no press target", async () => {
     const onClose = mock(() => {});
@@ -107,5 +107,55 @@ if (!process.env.MEWLA_BOTTOM_SHEET_TEST_CHILD) {
     });
     expect(renderer.root.findAllByType("modal" as any)).toHaveLength(0);
     expect(renderer.root.findAllByType("pressable" as any)).toHaveLength(0);
+  });
+
+  const rootIgnoresTouches = (renderer: TestRenderer.ReactTestRenderer) => {
+    const root = renderer.root.findByType("modal" as any).findAllByType("view" as any)[0];
+    return [root.props.style].flat(Infinity).some((item: any) => item?.pointerEvents === "none");
+  };
+
+  test("a settleGuard sheet ignores touches while it rises, then takes them", async () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <BottomSheetFrame visible settleGuard onClose={() => {}}>
+          {React.createElement("content")}
+        </BottomSheetFrame>,
+      );
+    });
+    // A second tap from someone who sees nothing yet lands on a card that is not there to them.
+    expect(rootIgnoresTouches(renderer)).toBe(true);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, SHEET_SETTLE_MS + 40));
+    });
+    expect(rootIgnoresTouches(renderer)).toBe(false);
+    // Closing and opening again guards the new rise.
+    await act(async () => {
+      renderer.update(
+        <BottomSheetFrame visible={false} settleGuard onClose={() => {}}>
+          {React.createElement("content")}
+        </BottomSheetFrame>,
+      );
+    });
+    await act(async () => {
+      renderer.update(
+        <BottomSheetFrame visible settleGuard onClose={() => {}}>
+          {React.createElement("content")}
+        </BottomSheetFrame>,
+      );
+    });
+    expect(rootIgnoresTouches(renderer)).toBe(true);
+  });
+
+  test("other sheets take touches at once", async () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <BottomSheetFrame visible onClose={() => {}}>
+          {React.createElement("content")}
+        </BottomSheetFrame>,
+      );
+    });
+    expect(rootIgnoresTouches(renderer)).toBe(false);
   });
 }

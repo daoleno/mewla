@@ -114,6 +114,25 @@ export function brainCatTailLabel(presence: BrainCatPresence): string | null {
 }
 
 /**
+ * How the tail row's hint looks: Work that needs you is the seal pill (the
+ * one focal point), counted Work (results back, Workers running) is a quiet
+ * tinted pill, and every other state is plain words with nothing to press.
+ */
+export type WorkHintTone = "needs" | "count" | "quiet";
+
+export function workHintTone(presence: BrainCatPresence): WorkHintTone {
+  switch (presence.state) {
+    case "attention":
+      return "needs";
+    case "delivered":
+    case "delegating":
+      return "count";
+    default:
+      return "quiet";
+  }
+}
+
+/**
  * What an empty Brain chat says. It follows the cat: a chat that is empty
  * because the computer is out of reach must not say Brain is ready.
  */

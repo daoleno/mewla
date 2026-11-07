@@ -269,10 +269,17 @@ and tested):
   and the conversation drops its between-turn tail row. While Brain's turn
   runs, the cat is in the Working row and the column has none.
 - **Phone.** The chat gets the whole screen. The same grouped list is a
-  sheet, opened from the cat's tail row at the end of the conversation
+  sheet, opened from the hint beside the cat at the end of the conversation
   ("Waiting on 3 Workers", "Brought 2 things back", "2 need you") or from
-  ⋮ → Work. The sheet shows "Work", the goal line and the count line, and
-  keeps the captions bare. Work that needs you also puts a seal dot on
+  ⋮ → Work. The hint is a button, not a line of text: Work that needs you is
+  the seal pill with a chevron (the screen's one focal point), counted Work a
+  tinted paper pill with a chevron, and every other state ("All quiet") plain
+  muted words. It is drawn 32 pt tall with a 46 pt press target and presses
+  with the app's spring. The sheet opens on its own state, so the tap never
+  renders the chat: its header and close button commit on the tap and the
+  slips a frame later, and it ignores touches while it rises, so a second tap
+  from someone who sees nothing yet cannot press a slip. The sheet shows
+  "Work", the goal line and the count line, and keeps the captions bare. Work that needs you also puts a seal dot on
   "Brain" and perches the cat on its slip in the conversation.
 - **Loading is not empty.** "Ready when you are" appears only once the
   conversation has loaded and has nothing in it. Until then (connecting,
@@ -633,7 +640,9 @@ Placement comes from `mergeBrainPresenceIntoTimeline`
 row; otherwise "attention" perches it on the newest slip of any Work that
 needs you, and the tail row is dropped. The tail row is presence only: a
 count, never one Work's title (a single title went stale for days), and
-tapping it opens the Work list. Both are pure and tested, and there is
+pressing the hint beside the cat opens the Work list (`BrainWorkHint`). Every
+tap on the cat also does its own job, a second one included: only a hold that
+already petted the cat answers instead of the tap. Both are pure and tested, and there is
 never more than one cat on screen. Session chats never provide
 `BrainCompanionContext`, so they have no cat.
 
