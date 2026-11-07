@@ -21,6 +21,9 @@ The model is fixed (`claude-sonnet-5-5`, written into every file) so the numbers
 # Web, on this computer: own Xvnc display, own Chrome for Testing, throwaway state; the live daemon and the user's
 # Chrome are never touched. ~30 min for 3 reps of 14 tasks on both sides.
 scripts/bench/agent-use/web/run.sh --reps 3 --with-long
+# Same, on a display with a real window manager (kwin_x11; a bare X server is not a desktop), tagged for before/after:
+scripts/bench/agent-use/web/run.sh --reps 3 --with-long --sides mewla --wm kwin --tag after-my-change
+# Extra checks of what a task needs from the page being drawn (a window kept out of the way): --only shot,raf
 
 # macOS, inside a Mewla Worker on the Mac (one unlock, caffeinate inside the script). Ask the Mac with:
 #   mewla computers send mac -kind request -user-said "<the user's words>" "<what to run: see cdb/run_mac.sh>"
@@ -44,7 +47,7 @@ python3 scripts/bench/agent-use/aub.py check results/*.json
 - **Linux web** (`web/xuser.c`, ours): a simulated person types one character a second into a Chrome window of its own
   with XTest; it samples X input focus, the topmost window and the real pointer 20 times a second, and the page
   logs the keys and visibility it saw. Measured: key focus lost, window raised over the user's, typing lost, pointer
-  moved, user's page hidden. Not measured: clipboard, desktop switch, dialog on the user's app, app activation. Every
+  moved, user's page hidden; also `covered_ms` (how long another window was over theirs; information only, not part of full pass). Not measured: clipboard, desktop switch, dialog on the user's app, app activation. Every
   row carries both lists. Not comparable with CDB's numbers.
 
 ## Files
