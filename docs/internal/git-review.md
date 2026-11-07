@@ -36,12 +36,27 @@ menu); the WebViews draw content only. Messages between them are typed in
 `treeViewerProtocol.ts`, and every message from a WebView is parsed and dropped
 if unexpected.
 
+The WebViews must work on the oldest systems the app installs on: iOS 16.4 (the
+Podfile's deployment target) and Android WebView 117. The libraries' stylesheets
+are written for newer engines, so `scripts/generate-pierre-viewer.mjs` lowers each
+inlined stylesheet with lightningcss (a dev dependency, not shipped): CSS nesting
+(Safari 17.2) is unrolled, relative colors become `color-mix()`, and `light-dark()`
+(Safari 17.5, Chromium 123) becomes two custom properties that
+`runtime/colorScheme.js` switches with the app theme, so a theme change restyles
+the open document without reloading it. `color-mix()` stays (Safari 16.2, Chromium
+111). Subgrid (Safari 16, Chromium 117) lays out the diff grid and cannot be
+lowered; a WebView without it shows "This WebView is too old to show diffs."
+instead of a broken grid. `pierrePlatformFloor.test.ts` fails when a library bump
+brings back newer CSS, an ES2023+ syntax, or a newer API.
+
 One file is open at a time. A wide layout (720 dp and up) reads in split view and
 a phone in unified view. The reader shows old and new line numbers, change
 colors, word-level changes inside a line, syntax highlighting, and collapsed
 unchanged context that expands in place. Syntax comes from a fixed set of Shiki
 grammars; any other extension reads as plain text. Colors come from the terminal
 palette and the font is the terminal's, so a diff matches the terminal beside it.
+
+Files keeps one file viewer mounted after the first file opens, parked under the tree, so later files reuse its WebView and Back finds the tree as it was left.
 
 Back unwinds one level at a time (`file -> tree -> changes -> close`); Android
 hardware back follows the same stack. The reader WebView is one long-lived
@@ -83,8 +98,7 @@ as git printed them. `git_repo_paths` returns up to 100000 repo-relative paths
 
 A comparison larger than 5 MB is not sent to the reader; the sheet says it is too
 large, and Copy diff still copies it. There is no daemon-side paging: the patch
-crosses the WebView bridge once and is parsed in one pass. (`git_diff_page` and
-`git_repo_entries` remain in the daemon but nothing in the app calls them.)
+crosses the WebView bridge once and is parsed in one pass.
 
 A reader is a snapshot. Refresh reloads the overview and selected diff. Expansion
 reads the working tree when it is asked for, so a file edited after its patch was
