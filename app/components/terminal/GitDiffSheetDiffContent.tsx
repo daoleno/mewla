@@ -77,7 +77,7 @@ export function GitDiffSheetDiffContent({
   const [wrap, setWrap] = useState(true);
   const [fontSize, setFontSize] = useState(12);
   const [showHeaders, setShowHeaders] = useState(false);
-  const scopedFiles = useMemo(() => filterGitDiffFiles(files, scope, ""), [files, scope]);
+  const scopedFiles = useMemo(() => filterGitDiffFiles(files, scope), [files, scope]);
 
   const scopeTotal = scopeCounts[scope];
   const summary = summarizeGitDiffFiles(scopedFiles, scope);

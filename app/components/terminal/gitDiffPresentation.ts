@@ -110,17 +110,6 @@ export function describeGitDiffFile(
   };
 }
 
-/** Scope words worth showing on a row; the default working change stays quiet. */
-export function gitDiffRowScopeNote(
-  file: GitDiffFileInfo,
-  scope: GitDiffScope,
-): string | null {
-  if (scope !== "all" || file.untracked) return null;
-  if (file.staged && file.unstaged) return "Staged + unstaged";
-  if (file.staged) return "Staged";
-  return null;
-}
-
 /** `+12 −3 · 4 files` style summary for a set of changed files. */
 export function summarizeGitDiffFiles(
   files: readonly GitDiffFileInfo[],

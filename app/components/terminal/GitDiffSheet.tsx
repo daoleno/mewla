@@ -166,13 +166,13 @@ function GitDiffSheetBody({
   const scopeCounts = React.useMemo<Record<GitDiffScope, number>>(
     () => ({
       all: files.length,
-      working: filterGitDiffFiles(files, "working", "").length,
-      staged: filterGitDiffFiles(files, "staged", "").length,
+      working: filterGitDiffFiles(files, "working").length,
+      staged: filterGitDiffFiles(files, "staged").length,
     }),
     [files],
   );
   const summary = React.useMemo(
-    () => summarizeGitDiffFiles(filterGitDiffFiles(files, scope, ""), scope).label,
+    () => summarizeGitDiffFiles(filterGitDiffFiles(files, scope), scope).label,
     [files, scope],
   );
 
