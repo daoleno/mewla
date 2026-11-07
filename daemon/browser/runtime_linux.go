@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/fsnotify/fsnotify"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -81,35 +82,79 @@ func (b *LinuxBackend) Capability(ctx context.Context) Capability {
 	if b.chrome() == "" {
 		return Capability{Reason: "Install a supported Chrome or Chromium browser on this server"}
 	}
-	for _, name := range []string{"kwin_wayland", "dbus-run-session", "agent-browser", "gdbus"} {
+	for _, name := range []string{"kwin_wayland", "dbus-run-session", "agent-browser"} {
 		if _, e := exec.LookPath(name); e != nil {
 			return Capability{Reason: name + " is not installed on this server"}
 		}
 	}
-	if b.fixtureBasicStore {
-		return Capability{Available: true}
+	return Capability{Available: true}
+}
+
+var secretServiceReady = secretServiceProbe
+
+const (
+	storeSecretService = "gnome-libsecret"
+	storeBasic         = "basic"
+)
+
+// secretServiceReady (the probe, a variable so tests can stand in a wallet) says whether the server user's default wallet is running
+// and unlocked, or what is missing. NameHasOwner does not activate or unlock a
+// personal keyring.
+func secretServiceProbe(ctx context.Context) (bool, string) {
+	if _, e := exec.LookPath("gdbus"); e != nil {
+		return false, "gdbus is not installed on this server"
 	}
 	check, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	// NameHasOwner does not activate or unlock a personal keyring.
 	raw, err := commandOutput(check, nil, "gdbus", "call", "--session", "--dest", "org.freedesktop.DBus", "--object-path", "/org/freedesktop/DBus", "--method", "org.freedesktop.DBus.NameHasOwner", "org.freedesktop.secrets")
 	if err != nil || !strings.Contains(string(raw), "true") {
-		return Capability{Reason: "A secure wallet is not running. Start and unlock KWallet or another Secret Service for the server user, then refresh Browser"}
+		return false, "A secure wallet is not running. Start and unlock KWallet or another Secret Service for the server user"
 	}
 	raw, err = commandOutput(check, nil, "gdbus", "call", "--session", "--dest", "org.freedesktop.secrets", "--object-path", "/org/freedesktop/secrets", "--method", "org.freedesktop.Secret.Service.ReadAlias", "default")
 	if err != nil {
-		return Capability{Reason: "The server's secure keyring is unavailable"}
+		return false, "The server's secure keyring is unavailable"
 	}
 	// gdbus's object-path result is a typed D-Bus tuple, not a shell command.
 	parts := strings.Split(string(raw), "'")
 	if len(parts) < 3 || !strings.HasPrefix(parts[1], "/org/freedesktop/secrets/collection/") {
-		return Capability{Reason: "Create a default collection in the server user's secure keyring"}
+		return false, "Create a default collection in the server user's secure keyring"
 	}
 	raw, err = commandOutput(check, nil, "gdbus", "call", "--session", "--dest", "org.freedesktop.secrets", "--object-path", parts[1], "--method", "org.freedesktop.DBus.Properties.Get", "org.freedesktop.Secret.Collection", "Locked")
 	if err != nil || !strings.Contains(string(raw), "false") {
-		return Capability{Reason: "Unlock the server user's default wallet through its normal KWallet/Secret Service setup, then refresh Browser"}
+		return false, "Unlock the server user's default wallet through its normal KWallet/Secret Service setup"
 	}
-	return Capability{Available: true}
+	return true, ""
+}
+
+// credentialStore picks how Chrome keeps this profile's sign-ins: the Secret
+// Service when it works, else Chrome's own basic storage (the profile folder
+// is private to the server user). A profile keeps the store it started with,
+// since cookies written under one are not readable under the other, so one
+// that began on the wallet waits for the wallet rather than losing its sign-ins.
+func (b *LinuxBackend) credentialStore(ctx context.Context, root string) (string, error) {
+	if b.fixtureBasicStore {
+		return storeBasic, nil
+	}
+	pin := filepath.Join(root, "credential-store")
+	if raw, err := os.ReadFile(pin); err == nil {
+		switch strings.TrimSpace(string(raw)) {
+		case storeBasic:
+			return storeBasic, nil
+		case storeSecretService:
+			if ok, reason := secretServiceReady(ctx); !ok {
+				return "", errors.New(reason + ", then open this browser again; its sign-ins are kept with the wallet")
+			}
+			return storeSecretService, nil
+		}
+	}
+	store := storeBasic
+	if ok, _ := secretServiceReady(ctx); ok {
+		store = storeSecretService
+	}
+	if err := atomicfile.Write(pin, []byte(store+"\n"), 0o600); err != nil {
+		return "", err
+	}
+	return store, nil
 }
 
 type child struct {
@@ -183,6 +228,11 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 		lock.Close()
 		return nil, errors.New("This browser profile already has a runtime owner")
 	}
+	store, err := b.credentialStore(ctx, root)
+	if err != nil {
+		lock.Close()
+		return nil, err
+	}
 	dir, err := os.MkdirTemp("", "zb-")
 	if err != nil {
 		lock.Close()
@@ -236,10 +286,7 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	_ = os.Remove(filepath.Join(profile, "DevToolsActivePort"))
 	// Despite Chrome's historical flag name, libsecret is the standard Secret
 	// Service client, also supported by installed KDE ksecretd/KWallet.
-	store := "gnome-libsecret"
-	if b.fixtureBasicStore {
-		store = "basic"
-	}
+
 	r.chrome, err = spawn(env, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--ozone-platform=wayland", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--window-size=1280,800", "about:blank")
 	if err != nil {
 		return nil, err

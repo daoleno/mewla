@@ -125,3 +125,42 @@ func TestElementRefAcceptsSnapshotAndToolForms(t *testing.T) {
 		}
 	}
 }
+
+func withWallet(t *testing.T, ready bool) {
+	t.Helper()
+	previous := secretServiceReady
+	secretServiceReady = func(context.Context) (bool, string) { return ready, "A secure wallet is not running" }
+	t.Cleanup(func() { secretServiceReady = previous })
+}
+
+// A profile uses the wallet when it works and Chrome's basic storage when it
+// does not, with no setting, and keeps what it started with.
+func TestCredentialStoreFallsBackAndStaysPinned(t *testing.T) {
+	ctx := context.Background()
+	b := &LinuxBackend{}
+
+	withWallet(t, false)
+	noWallet := t.TempDir()
+	if got, err := b.credentialStore(ctx, noWallet); err != nil || got != storeBasic {
+		t.Fatalf("no wallet: %q, %v", got, err)
+	}
+	withWallet(t, true)
+	if got, err := b.credentialStore(ctx, noWallet); err != nil || got != storeBasic {
+		t.Fatalf("a profile that began on basic storage switched stores: %q, %v", got, err)
+	}
+
+	withWallet(t, true)
+	walled := t.TempDir()
+	if got, err := b.credentialStore(ctx, walled); err != nil || got != storeSecretService {
+		t.Fatalf("wallet: %q, %v", got, err)
+	}
+	withWallet(t, false)
+	if got, err := b.credentialStore(ctx, walled); err == nil || got != "" {
+		t.Fatalf("a wallet profile fell back and would lose its sign-ins: %q, %v", got, err)
+	}
+	if !b.Capability(ctx).Available {
+		if _, e := exec.LookPath("kwin_wayland"); e == nil {
+			t.Fatal("capability still depends on the wallet")
+		}
+	}
+}
