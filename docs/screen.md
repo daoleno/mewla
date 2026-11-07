@@ -299,12 +299,21 @@ three choices as on a Mac:
 - **Stop** ends that agent's use of the browser. It is told so and does not
   ask for it again until you take over and hand back.
 
+With the switch on, a Worker (Claude or Codex) gets a browser on the virtual
+screen without being told which: one no other agent is using, or a new one
+(up to eight; after that agents take turns). It comes up when the agent first
+asks for it, not when the Worker starts. The switch lives on the computer, so
+every device sees the same answer.
+
 The browser has its own profile, not your everyday Chrome: to give it a
-sign-in, take over, sign in yourself and hand back. Sign-ins are kept with the
-profile on that computer and need an unlocked secure wallet (KWallet or another
-Secret Service) for the user Mewla runs as. Attach it to an agent when starting
-the Worker with `--browser`; see [Agents in your browser](your-browser.md) for
-the browser that uses your own Chrome and sign-ins on your desktop instead.
+sign-in, take over, sign in yourself and hand back. A profile keeps its
+sign-ins on that computer. Chrome stores them in the computer's secure wallet
+(KWallet or another Secret Service) when one is unlocked for the user Mewla
+runs as; with none, the profile uses Chrome's own basic storage, in a folder
+only that user can read. A profile keeps the store it started with, so one that
+began on the wallet waits for the wallet to be unlocked rather than lose its
+sign-ins. See [Agents in your browser](your-browser.md) for the browser that
+uses your own Chrome and sign-ins on your desktop instead.
 
 ## Who can use it
 
