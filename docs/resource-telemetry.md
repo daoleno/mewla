@@ -288,6 +288,11 @@ grow with the size of a transcript or of the machine:
   aggregate and the price table, so a restart or hot reload reads only the files
   that changed meanwhile. Edit `claudeUsageStoreVersion` when the scan starts to
   add up something else.
+- Grok sessions are kept the same way (`grok-files-v1.json` beside it): a
+  session is read again only when its summary, history or updates changed. The
+  per-file Pi and Codex caches are remembered in memory as well as on disk, and
+  Codex's thread list is asked of `sqlite3` only when its database or log
+  changed, so a refresh with nothing new reads nothing.
 - `/proc` is walked once per tick at most: the panes' own process trees are read
   afresh, every other process at most every 30 seconds, and an ownership
   decision (which processes a Worker owns) takes records up to 10 seconds old.

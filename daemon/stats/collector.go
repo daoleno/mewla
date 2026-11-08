@@ -50,6 +50,18 @@ type Collector struct {
 	// claudeScans holds the scans of the files that were modified last, to go
 	// on from when they grow. Guarded by refreshMu.
 	claudeScans map[string]*claudeScan
+	// codexThreads is the thread list the last sqlite3 run printed, while the
+	// state database it read keeps its size and times. Guarded by refreshMu.
+	codexThreads codexThreadList
+	// grokFiles remembers what each Grok session contributed. Guarded by
+	// refreshMu.
+	grokFiles       map[string]grokSessionUsage
+	grokFilesPrices map[string]map[string]modelPricing
+}
+
+type codexThreadList struct {
+	stamp string
+	out   []byte
 }
 
 // claudeFileUsage is one session file's aggregate, valid while the file keeps
@@ -1015,6 +1027,20 @@ func (c *Collector) collectGrokStats(home string) map[string]*dateAgg {
 		return byDate
 	}
 
+	// A session's aggregate carries cost estimates from the price table, so
+	// other rates drop them all (see collectClaudeSessionStats).
+	prices.mu.RLock()
+	current := cloneProviderPricing(prices.models)
+	prices.mu.RUnlock()
+	storeKey := grokUsageStoreKey(current)
+	if c.grokFiles == nil {
+		c.grokFiles, c.grokFilesPrices = c.loadGrokFiles(storeKey), current
+	} else if !samePricing(cloneProviderPricing(c.grokFilesPrices), cloneProviderPricing(current)) {
+		c.grokFiles, c.grokFilesPrices = map[string]grokSessionUsage{}, current
+	}
+	seen := make(map[string]bool, len(c.grokFiles))
+	changed, complete := false, true
+
 	for _, cwdEntry := range cwdEntries {
 		if !cwdEntry.IsDir() {
 			continue
@@ -1022,6 +1048,7 @@ func (c *Collector) collectGrokStats(home string) map[string]*dateAgg {
 		cwdDir := filepath.Join(sessionsRoot, cwdEntry.Name())
 		sessionEntries, err := os.ReadDir(cwdDir)
 		if err != nil {
+			complete = false
 			continue
 		}
 		for _, sessionEntry := range sessionEntries {
@@ -1029,40 +1056,95 @@ func (c *Collector) collectGrokStats(home string) map[string]*dateAgg {
 				continue
 			}
 			sessionDir := filepath.Join(cwdDir, sessionEntry.Name())
-			summary, _ := readGrokStatsSummary(sessionDir)
-			projectName := grokProjectName(summary, cwdEntry.Name())
-			modelID := firstNonEmptyString(
-				strings.TrimSpace(summary.CurrentModelID),
-				strings.TrimSpace(summary.Info.CurrentModelID),
-				readGrokHistoryModel(filepath.Join(sessionDir, "chat_history.jsonl")),
-			)
-
-			if scanGrokUpdates(filepath.Join(sessionDir, "updates.jsonl"), projectName, modelID, byDate) {
+			seen[sessionDir] = true
+			stamp := grokSessionStamp(sessionDir)
+			if cached, ok := c.grokFiles[sessionDir]; ok && stamp != "" && cached.stamp == stamp {
+				mergeDateAgg(byDate, cached.byDate)
 				continue
 			}
-			if date := grokFallbackSessionDate(summary, sessionDir); date != "" {
-				agg := ensureDateAgg(byDate, date)
-				sourceModelID := firstNonEmptyString(modelID, grokAgentUnreportedModelID)
-				key := modelAggKey("xai", sourceModelID)
-				model := agg.models[key]
-				model.provider, model.modelID = "xai", sourceModelID
-				model.costUnknown = true
-				model.totalTokensUnknown = true
-				model.tokenBreakdownUnknown = true
-				model.sessions++
-				agg.models[key] = model
-				if projectName != "" {
-					incrementProjectSession(agg, projectName)
-					project := agg.projects[projectName]
-					project.costUnknown = true
-					project.totalTokensUnknown = true
-					project.tokenBreakdownUnknown = true
-				}
+			sessionAgg := make(map[string]*dateAgg)
+			c.scanGrokSession(sessionDir, cwdEntry.Name(), sessionAgg)
+			// A session that changed while it was read is read again next time.
+			if stamp != "" && grokSessionStamp(sessionDir) == stamp {
+				c.grokFiles[sessionDir] = grokSessionUsage{stamp: stamp, byDate: sessionAgg}
+				changed = true
 			}
+			mergeDateAgg(byDate, sessionAgg)
+		}
+	}
+	if complete {
+		for dir := range c.grokFiles {
+			if !seen[dir] {
+				delete(c.grokFiles, dir)
+				changed = true
+			}
+		}
+		if changed {
+			c.saveGrokFiles(storeKey, c.grokFiles)
 		}
 	}
 
 	return byDate
+}
+
+// grokSessionUsage is what one Grok session contributed, valid while the files
+// it was read from keep their sizes and times.
+type grokSessionUsage struct {
+	stamp  string
+	byDate map[string]*dateAgg
+}
+
+// grokSessionStamp names the state of the files a session's aggregate comes
+// from. It is empty when one of them cannot be examined.
+func grokSessionStamp(sessionDir string) string {
+	var stamp strings.Builder
+	for _, name := range []string{"summary.json", "chat_history.jsonl", "updates.jsonl", ""} {
+		info, err := os.Stat(filepath.Join(sessionDir, name))
+		if err != nil {
+			if os.IsNotExist(err) && name != "" {
+				fmt.Fprintf(&stamp, "%s|absent\n", name)
+				continue
+			}
+			return ""
+		}
+		s := usageStamp(info)
+		fmt.Fprintf(&stamp, "%s|%d|%d|%s\n", name, s.Size, s.Modified.UnixNano(), s.Identity)
+	}
+	return stamp.String()
+}
+
+// scanGrokSession adds one Grok session to byDate.
+func (c *Collector) scanGrokSession(sessionDir, encodedCWD string, byDate map[string]*dateAgg) {
+	summary, _ := readGrokStatsSummary(sessionDir)
+	projectName := grokProjectName(summary, encodedCWD)
+	modelID := firstNonEmptyString(
+		strings.TrimSpace(summary.CurrentModelID),
+		strings.TrimSpace(summary.Info.CurrentModelID),
+		readGrokHistoryModel(filepath.Join(sessionDir, "chat_history.jsonl")),
+	)
+
+	if scanGrokUpdates(filepath.Join(sessionDir, "updates.jsonl"), projectName, modelID, byDate) {
+		return
+	}
+	if date := grokFallbackSessionDate(summary, sessionDir); date != "" {
+		agg := ensureDateAgg(byDate, date)
+		sourceModelID := firstNonEmptyString(modelID, grokAgentUnreportedModelID)
+		key := modelAggKey("xai", sourceModelID)
+		model := agg.models[key]
+		model.provider, model.modelID = "xai", sourceModelID
+		model.costUnknown = true
+		model.totalTokensUnknown = true
+		model.tokenBreakdownUnknown = true
+		model.sessions++
+		agg.models[key] = model
+		if projectName != "" {
+			incrementProjectSession(agg, projectName)
+			project := agg.projects[projectName]
+			project.costUnknown = true
+			project.totalTokensUnknown = true
+			project.tokenBreakdownUnknown = true
+		}
+	}
 }
 
 func readGrokStatsSummary(sessionDir string) (grokStatsSummary, error) {
@@ -1330,6 +1412,25 @@ type codexDailyEntry struct {
 	cacheRead       int64
 }
 
+// codexStateStamp names the state of Codex's database: its file and the
+// write-ahead log beside it. It is empty when a file cannot be examined, which
+// reads as "changed".
+func codexStateStamp(dbPath string) string {
+	var stamp strings.Builder
+	for _, path := range []string{dbPath, dbPath + "-wal"} {
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) && path != dbPath {
+				continue
+			}
+			return ""
+		}
+		s := usageStamp(info)
+		fmt.Fprintf(&stamp, "%s|%d|%d|%s\n", path, s.Size, s.Modified.UnixNano(), s.Identity)
+	}
+	return stamp.String()
+}
+
 func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, map[string]map[string]modelAggEntry, map[string]map[string]*projectAggEntry) {
 	daily := make(map[string]codexDailyEntry)
 	modelsByDate := make(map[string]map[string]modelAggEntry)
@@ -1347,11 +1448,19 @@ func (c *Collector) collectCodexStats(home string) (map[string]codexDailyEntry, 
 		return daily, modelsByDate, projectsByDate
 	}
 
-	out, err := procspawn.Command("sqlite3 stats", sqlite3, "-readonly", "-json", dbPath,
-		"SELECT id, cwd, model, rollout_path FROM threads WHERE tokens_used > 0").Output()
-	if err != nil {
-		c.warnf("codex-query", "[stats] Codex sqlite3 query failed: %v", err)
-		return daily, modelsByDate, projectsByDate
+	// The sqlite3 process reads the state database, and the daemon is charged
+	// for what its children read: an unchanged database is not asked again.
+	stamp := codexStateStamp(dbPath)
+	out := c.codexThreads.out
+	if stamp == "" || stamp != c.codexThreads.stamp {
+		var err error
+		out, err = procspawn.Command("sqlite3 stats", sqlite3, "-readonly", "-json", dbPath,
+			"SELECT id, cwd, model, rollout_path FROM threads WHERE tokens_used > 0").Output()
+		if err != nil {
+			c.warnf("codex-query", "[stats] Codex sqlite3 query failed: %v", err)
+			return daily, modelsByDate, projectsByDate
+		}
+		c.codexThreads = codexThreadList{stamp: stamp, out: out}
 	}
 
 	var threads []struct {
