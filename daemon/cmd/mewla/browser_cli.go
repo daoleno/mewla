@@ -2,180 +2,29 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"flag"
-	"fmt"
-	"io"
-	"log"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/browser"
-	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
-	"github.com/google/uuid"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// handleBrowserControl is the daemon's say over each browser tool call a Worker
+// makes (see agentuse.Gate): begin, which the person's take over or Stop can
+// refuse, and end, which tells the Worker what the person did in its window.
 // Local control is owner-UID access, not a sandbox against arbitrary shell.
 func (a *controlApp) handleBrowserControl(req control.Request) control.Response {
-	if a.browsers == nil || req.BrowserRequest == nil || req.WorkerID == "" || len(req.Client) > 80 {
+	if a.browsers == nil || req.BrowserRequest == nil || req.WorkerID == "" {
 		return control.ErrorResponse("browser_unavailable", "A managed task is required")
 	}
-	if _, err := uuid.Parse(req.Client); err != nil {
-		return control.ErrorResponse("browser_attachment", "Invalid attachment")
-	}
 	q := *req.BrowserRequest
-	if q.Action != "control" && q.Action != "command" && q.Action != "release" {
-		return control.ErrorResponse("browser_denied", "Agents may only attach, act and detach")
+	if q.Action != "begin" && q.Action != "end" {
+		return control.ErrorResponse("browser_denied", "Agents may only begin and end a browser call")
 	}
-	actor := browser.Owner{Kind: "agent", ID: req.WorkerID + "/" + req.Client}
-	if q.Action != "release" {
-		if reason := a.workerInactiveReason(req.WorkerID); reason != "" {
-			a.browsers.ReleaseOwner(actor)
-			log.Printf("browser: %s refused for Worker %s: %s", q.Action, req.WorkerID, reason)
-			return control.ErrorResponse("browser_task_ended", "Task is no longer active ("+reason+"); browser preserved")
-		}
-	}
-	wait := 12 * time.Second
-	if q.Action == "control" {
-		// The first request can start the browser (a display and Chrome).
-		wait = 45 * time.Second
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
-	result, err := a.browsers.Handle(ctx, actor, q)
+	result, err := a.browsers.Handle(ctx, browser.Owner{Kind: "agent", ID: req.WorkerID}, q)
 	if err != nil {
 		return control.ErrorResponse("browser_denied", err.Error())
 	}
 	return control.Response{OK: true, Browser: &result}
-}
-
-// workerInactiveReason is why a Worker may not use the browser now, or "" when
-// it may: the session is gone, Mewla cannot prove it owns the running process,
-// or the task has finished. Quiet provider processes can be classified idle
-// while executing an MCP call, so process ownership is proved, not terminal paint.
-func (a *controlApp) workerInactiveReason(id string) string {
-	if a.watcher == nil {
-		return "Mewla has no task registry"
-	}
-	w := a.watcher.GetWorker(id)
-	if w == nil {
-		return "Mewla does not know this task"
-	}
-	if !a.watcher.HasSession(id) {
-		return "its session is gone"
-	}
-	if _, err := a.watcher.ResolveOwnedGeneration(id); err != nil {
-		return "Mewla cannot prove it owns the running process: " + err.Error()
-	}
-	if w.Delegated && (w.State == classifier.StateDone || w.State == classifier.StateFailed) {
-		return "the task is marked " + string(w.State)
-	}
-	return ""
-}
-
-type browserToolInput struct {
-	Action string `json:"action" jsonschema:"control, release, snapshot, read, tabs, select_tab, navigate, new_tab, click, fill, press, dialog_status, dialog_accept or dialog_dismiss"`
-	URL    string `json:"url,omitempty"`
-	Target string `json:"target,omitempty"`
-	Ref    string `json:"ref,omitempty" jsonschema:"element reference from the latest snapshot, such as e2 or @e2"`
-	Text   string `json:"text,omitempty"`
-}
-
-func runBrowserCommand(args []string, stderr io.Writer) error {
-	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: mewla browser mcp --task WORKER_ID [--state-dir DIR]\nGive this task a window on the computer's virtual-screen browser (Settings, Labs, Virtual screen). The window opens when the task first asks; the profile and its sign-ins outlive it.")
-		return flag.ErrHelp
-	}
-	if args[0] != "mcp" {
-		return errors.New("expected browser mcp")
-	}
-	fs := flag.NewFlagSet("browser mcp", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	var cfg cliConfig
-	var task string
-	fs.StringVar(&cfg.stateDir, "state-dir", "", "daemon state directory")
-	fs.StringVar(&task, "task", os.Getenv("MEWLA_WORKER_ID"), "active Mewla Worker ID (provided by managed launch)")
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
-	if task == "" || fs.NArg() != 0 {
-		return errors.New("--task required")
-	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-	client := uuid.NewString()
-	var mu sync.Mutex
-	var lease *browser.Lease
-	call := func(q browser.Request) (*browser.Response, error) {
-		r, err := callControl(cfg, control.Request{Type: "browser", WorkerID: task, Client: client, BrowserRequest: &q})
-		if err != nil {
-			return nil, err
-		}
-		if !r.OK {
-			if r.Error != nil {
-				return nil, errors.New(r.Error.Message)
-			}
-			return nil, errors.New("Browser request rejected")
-		}
-		return r.Browser, nil
-	}
-	defer func() { _, _ = call(browser.Request{Action: "release"}) }()
-	server := mcp.NewServer(&mcp.Implementation{Name: "mewla-browser", Version: "1"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use your own window on this computer's browser. Request control before reading or acting. snapshot lists the controls you can use (with refs); read returns the page's text, so use it to read an article. The person can watch the window and use it too: when they do, the result carries notes saying what they did (clicks, typing length, page address, never what they typed). Read them, look at the page again, and judge for yourself whether to carry on, wait or ask the person; do not stop merely because they touched it. If the person takes the browser over, or stops you, calls fail with a message saying so: wait, don't poll, and don't request it again once stopped. Never ask for credentials; when a sign-in is needed, tell the person so they can sign in themselves. release detaches this task; the window stays open until your task ends."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		q := browser.Request{Action: "command", Lease: lease}
-		switch in.Action {
-		case "control", "release":
-			q.Action = in.Action
-		case "snapshot", "read", "tabs", "select_tab", "navigate", "new_tab", "click", "fill", "press", "dialog_status", "dialog_accept", "dialog_dismiss":
-			q.Command = &browser.Command{Kind: in.Action, URL: in.URL, Target: in.Target, Ref: in.Ref, Text: in.Text}
-		default:
-			return nil, nil, errors.New("unsupported browser action")
-		}
-		result, err := call(q)
-		if err != nil {
-			lease = nil
-			return nil, nil, err
-		}
-		if q.Action == "release" {
-			lease = nil
-		} else if result != nil && result.Lease != nil {
-			lease = result.Lease
-		}
-		raw, err := json.Marshal(result)
-		if err != nil {
-			return nil, nil, err
-		}
-		var output map[string]any
-		if err = json.Unmarshal(raw, &output); err != nil {
-			return nil, nil, err
-		}
-		return nil, output, nil
-	})
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				mu.Lock()
-				if lease != nil {
-					if _, err := call(browser.Request{Action: "command", Lease: lease, Command: &browser.Command{Kind: "heartbeat"}}); err != nil {
-						lease = nil
-					}
-				}
-				mu.Unlock()
-			}
-		}
-	}()
-	return server.Run(ctx, &mcp.StdioTransport{})
 }

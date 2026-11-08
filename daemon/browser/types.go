@@ -14,7 +14,7 @@ var (
 	ErrUnavailable = errors.New("Browser runtime is unavailable")
 	ErrLease       = errors.New("Browser control changed; request control again")
 	ErrBusy        = errors.New("Browser is controlled by someone else")
-	ErrUncertain   = errors.New("Browser action could not be drained; its window is opened again on the next request for control")
+	ErrUncertain   = errors.New("Browser did not answer in time")
 )
 
 type Capability struct {
@@ -65,12 +65,14 @@ type Response struct {
 	// VirtualScreen is whether Workers get a browser on the virtual screen.
 	VirtualScreen *bool `json:"virtual_screen,omitempty"`
 }
+
+// Command is what the person's viewer sends under its lease: input for the
+// page, a heartbeat that keeps the lease, or one of the address bar's and tab
+// strip's own actions (navigate, tabs, select_tab, new_tab).
 type Command struct {
 	Kind   string `json:"kind"`
 	URL    string `json:"url,omitempty"`
 	Target string `json:"target,omitempty"`
-	Ref    string `json:"ref,omitempty"`
-	Text   string `json:"text,omitempty"`
 	Input  *Input `json:"input,omitempty"`
 }
 type Input struct {
@@ -91,10 +93,20 @@ type Stream interface {
 	Close() error
 }
 
-// Runtime is one agent's window: its page, input and live view.
+// Runtime is one agent's window as the person sees and uses it: the page it
+// shows, input for it and its live view. The agent drives the page itself,
+// through its browser tools; nothing here does that.
 type Runtime interface {
+	// Target is the page the window shows now.
 	Target() string
+	// SetTarget follows the page the window shows when it changes.
+	SetTarget(string)
+	Input(context.Context, Input) error
+	// Command runs the address bar's and tab strip's actions for the person.
 	Command(context.Context, Command) (json.RawMessage, error)
+	// Page is the shown page's address without query or fragment, or "".
+	Page(context.Context) string
+	// Release lifts the keys and buttons the person's input left held.
 	Release(context.Context) error
 	Stream(context.Context) (Stream, error)
 	Alive() bool
@@ -102,9 +114,11 @@ type Runtime interface {
 }
 
 // Host is the computer's one browser on the one agent profile, with a private
-// display. Windows are opened and closed on it without restarting it.
+// display and Mewla's extension loaded. Agents' windows are opened in it by
+// the extension, not by the host.
 type Host interface {
-	Window(context.Context) (Runtime, error)
+	// Window is the runtime for a window of the browser that shows target.
+	Window(ctx context.Context, target string) (Runtime, error)
 	Alive() bool
 	Close() error
 }

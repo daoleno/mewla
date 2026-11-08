@@ -29,9 +29,9 @@ func (b viewerBackend) Start(context.Context, string) (browser.Host, error) {
 
 type viewerHost struct{ runtime *viewerRuntime }
 
-func (h viewerHost) Alive() bool                                     { return true }
-func (h viewerHost) Close() error                                    { return nil }
-func (h viewerHost) Window(context.Context) (browser.Runtime, error) { return h.runtime, nil }
+func (h viewerHost) Alive() bool                                             { return true }
+func (h viewerHost) Close() error                                            { return nil }
+func (h viewerHost) Window(context.Context, string) (browser.Runtime, error) { return h.runtime, nil }
 
 type viewerRuntime struct {
 	released atomic.Int32
@@ -40,14 +40,17 @@ type viewerRuntime struct {
 }
 
 func (r *viewerRuntime) Target() string                { return "tab" }
+func (r *viewerRuntime) SetTarget(string)              {}
 func (r *viewerRuntime) Alive() bool                   { return true }
 func (r *viewerRuntime) Close() error                  { return nil }
 func (r *viewerRuntime) Release(context.Context) error { r.released.Add(1); return nil }
-func (r *viewerRuntime) Command(_ context.Context, c browser.Command) (json.RawMessage, error) {
-	if c.Kind == "input" {
-		r.inputs.Add(1)
-	}
+func (r *viewerRuntime) Page(context.Context) string   { return "" }
+func (r *viewerRuntime) Command(context.Context, browser.Command) (json.RawMessage, error) {
 	return json.RawMessage("{}"), nil
+}
+func (r *viewerRuntime) Input(context.Context, browser.Input) error {
+	r.inputs.Add(1)
+	return nil
 }
 func (r *viewerRuntime) Stream(context.Context) (browser.Stream, error) {
 	return &viewerStream{r: r, done: make(chan struct{})}, nil
@@ -103,8 +106,8 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 	if _, status := request(browser.Request{Action: "list"}, ""); status == 200 {
 		t.Fatal("unauthenticated list")
 	}
-	// A person cannot make or start browsers; an agent's first request for
-	// control opens its window, which is what the viewer shows.
+	// A person cannot make or start browsers; the window the extension opens
+	// for an agent is what the viewer shows.
 	if _, status := request(browser.Request{Action: "create"}, "mewla-browser"); status == 200 {
 		t.Fatal("a person created a browser")
 	}
@@ -112,7 +115,10 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 	if _, err := m.Handle(context.Background(), browser.Owner{Kind: "human", ID: "server-owner"}, browser.Request{Action: "settings", Enabled: &on}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Handle(context.Background(), browser.Owner{Kind: "agent", ID: "worker/client"}, browser.Request{Action: "control"}); err != nil {
+	if err := m.EnsureHost(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Opened(context.Background(), "worker", "c1", "tab"); err != nil {
 		t.Fatal(err)
 	}
 	listed, status := request(browser.Request{Action: "list"}, "mewla-browser")

@@ -16,6 +16,11 @@ type Settings struct {
 	VirtualScreen bool `json:"virtual_screen,omitempty"`
 }
 
+// LoadSettings reads the computer-wide Browser choices kept under root (the
+// browsers directory of the state directory), for commands that run outside
+// the daemon.
+func LoadSettings(root string) Settings { return loadSettings(root) }
+
 func loadSettings(root string) Settings {
 	var s Settings
 	if raw, err := os.ReadFile(filepath.Join(root, "settings.json")); err == nil {
@@ -46,12 +51,21 @@ func (m *Manager) setVirtualScreen(on bool) error {
 		return err
 	}
 	m.virtual.Store(on)
+	m.mu.Lock()
+	hook := m.switchHook
+	m.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
 	return nil
 }
 
-// AgentBrowser is whether Workers launched now get a browser on the virtual
-// screen: the switch is on and this computer can run one. It starts nothing;
-// the browser comes up when an agent first asks for control.
-func (m *Manager) AgentBrowser(ctx context.Context) bool {
-	return m != nil && m.VirtualScreen() && m.backend.Capability(ctx).Available
+// SetSwitchHook is called after the virtual screen is switched.
+func (m *Manager) SetSwitchHook(f func()) {
+	m.mu.Lock()
+	m.switchHook = f
+	m.mu.Unlock()
 }
+
+// Capability is whether this computer can run the agent browser, and why not.
+func (m *Manager) Capability(ctx context.Context) Capability { return m.backend.Capability(ctx) }

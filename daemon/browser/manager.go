@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,22 +32,21 @@ type entry struct {
 	gate         chan struct{}
 	resource     Resource
 	runtime      Runtime
-	owner        Owner
+	key          string // the extension's id for the window
+	owner        Owner  // the person, while they hold the window
 	epoch        uint64
 	expires      time.Time
 	expiry       *time.Timer // fires when expires passes; see armExpiryLocked
 	transferring bool
-	uncertain    bool
 	viewer       bool
 
-	// What the person did in a browser an agent holds, told to the agent with
-	// its next result; see touch.go.
+	// What the person did in a window an agent works in, told to the agent
+	// with its next result; see touch.go.
 	touches    []touch
-	agentBusy  bool            // an agent's action is running
+	agentBusy  int             // tool calls of the agent that are running
 	halted     map[string]bool // Workers the person stopped
 	humanFrom  time.Time       // when the person took the lease
 	handedBack *span           // the person's last turn, not yet told to the agent
-	lastAgent  string
 }
 
 // Lock order: m.mu guards only the two maps and workerLive, and is never held
@@ -54,13 +54,16 @@ type entry struct {
 // entry's code needs from the manager (the switch, whether it is closed) is
 // atomic for that reason; a deadlock here once froze every agent at once.
 type Manager struct {
-	mu       sync.Mutex
-	root     string
-	backend  Backend
-	entries  map[string]*entry // agents' windows, by window id
-	byWorker map[string]*entry // the same, by the Worker whose window it is
-	closed   atomic.Bool
-	done     chan struct{}
+	mu          sync.Mutex
+	root        string
+	backend     Backend
+	entries     map[string]*entry // agents' windows, by row id
+	byWorker    map[string]*entry // the same, by the Worker whose window it is
+	byKey       map[string]*entry // the same, by the extension's id for the window
+	closeWindow func(key string)
+	switchHook  func()
+	closed      atomic.Bool
+	done        chan struct{}
 
 	virtual    atomic.Bool // Settings.VirtualScreen
 	settingsMu sync.Mutex  // serializes writes of settings.json
@@ -71,6 +74,7 @@ type Manager struct {
 	hostGate   chan struct{}
 	host       Host
 	windows    atomic.Int32
+	ensuredAt  atomic.Int64 // unix nanoseconds of the last EnsureHost
 	workerLive func(worker string) bool
 }
 
@@ -116,7 +120,7 @@ func New(root string, backend Backend) (*Manager, error) {
 	if err := adoptOldProfile(root); err != nil {
 		return nil, err
 	}
-	m := &Manager{root: root, backend: backend, entries: map[string]*entry{}, byWorker: map[string]*entry{}, done: make(chan struct{}), hostGate: make(chan struct{}, 1)}
+	m := &Manager{root: root, backend: backend, entries: map[string]*entry{}, byWorker: map[string]*entry{}, byKey: map[string]*entry{}, done: make(chan struct{}), hostGate: make(chan struct{}, 1)}
 	m.hostGate <- struct{}{}
 	m.virtual.Store(loadSettings(root).VirtualScreen)
 	go m.sweep(sweepEvery)
@@ -194,25 +198,20 @@ func (m *Manager) get(id string) (*entry, error) {
 }
 func snapshot(e *entry) Resource {
 	r := e.resource
-	if e.runtime != nil && !e.runtime.Alive() {
-		r.State = "stopped"
+	if e.runtime != nil {
+		if !e.runtime.Alive() {
+			r.State = "stopped"
+		}
+		r.Target = e.runtime.Target()
 	}
-	r.Control = "idle"
-	if e.transferring {
-		r.Control = "quiescing"
-	} else if e.owner.ID != "" {
-		r.Control = e.owner.Kind
-	}
-	// The agent on the row: its Worker while it holds the browser, and still
-	// that Worker while the person does, so the list keeps the row.
+	// The agent works in the window unless the person holds it.
 	switch {
-	case e.owner.Kind == "agent":
-		r.Agent = workerOf(e.owner)
-	case e.owner.Kind == "human":
-		r.Agent = e.lastAgent
-	}
-	if e.uncertain {
-		r.State = "needs_restart"
+	case e.transferring:
+		r.Control = "quiescing"
+	case e.owner.ID != "":
+		r.Control = e.owner.Kind
+	default:
+		r.Control = "agent"
 	}
 	return r
 }
@@ -225,9 +224,17 @@ func acquire(ctx context.Context, e *entry) error {
 	}
 }
 func unlock(e *entry) { e.gate <- struct{}{} }
+
+// Handle is the person's side of a window (list, status, control, release,
+// touch, command, halt, and the switch) and the agent's two calls around each
+// of its browser tool calls: begin, which the person may refuse, and end,
+// which tells what the person did meanwhile.
 func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, error) {
 	if (o.Kind != "human" && o.Kind != "agent") || o.ID == "" {
 		return Response{}, errors.New("Browser owner is required")
+	}
+	if o.Kind == "agent" {
+		return m.agentCall(ctx, o, q)
 	}
 	if q.Action == "list" {
 		resources := []Resource{}
@@ -242,9 +249,6 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		return Response{Resources: resources, Capability: &c, VirtualScreen: &on}, nil
 	}
 	if q.Action == "settings" {
-		if o.Kind != "human" {
-			return Response{}, ErrLease
-		}
 		if q.Enabled != nil {
 			if err := m.setVirtualScreen(*q.Enabled); err != nil {
 				return Response{}, err
@@ -253,21 +257,7 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		on := m.VirtualScreen()
 		return Response{VirtualScreen: &on}, nil
 	}
-	var e *entry
-	var err error
-	if o.Kind == "agent" {
-		// An agent's window is found by its Worker, not by an id it was given:
-		// the id would be lost with the first daemon restart.
-		e, err = m.agentWindow(o, q.Action == "control")
-		if e == nil && err == nil {
-			if q.Action == "release" {
-				return Response{}, nil
-			}
-			return Response{}, ErrLease
-		}
-	} else {
-		e, err = m.get(q.ID)
-	}
+	e, err := m.get(q.ID)
 	if err != nil {
 		return Response{}, err
 	}
@@ -284,31 +274,18 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 	}
 	switch q.Action {
 	case "status":
-		if o.Kind != "human" {
-			return Response{}, ErrLease
-		}
 		e.mu.Lock()
 		r := snapshot(e)
 		e.mu.Unlock()
 		return Response{Resource: &r}, nil
 	case "control":
-		r, err := m.control(ctx, e, o)
-		if err == nil && o.Kind == "agent" {
-			r.Notes = m.notesFor(ctx, e)
-		}
-		return r, err
+		return m.control(ctx, e, o)
 	case "release":
 		err = m.releaseMatching(ctx, e, func(x Owner) bool { return x == o })
 		return Response{}, err
 	case "touch":
-		if o.Kind != "human" {
-			return Response{}, ErrLease
-		}
 		return m.touch(ctx, e, o, q)
 	case "halt":
-		if o.Kind != "human" {
-			return Response{}, ErrLease
-		}
 		if err = m.halt(ctx, e); err != nil {
 			return Response{}, err
 		}
@@ -320,14 +297,49 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		if q.Command == nil || q.Lease == nil {
 			return Response{}, ErrLease
 		}
-		r, err := m.command(ctx, e, o, *q.Lease, *q.Command)
-		if err == nil && o.Kind == "agent" && q.Command.Kind != "heartbeat" {
-			r.Notes = m.notesFor(ctx, e)
-		}
-		return r, err
+		return m.command(ctx, e, o, *q.Lease, *q.Command)
 	default:
 		return Response{}, errors.New("Unknown browser operation")
 	}
+}
+
+// agentCall is begin and end around one browser tool call of a Worker. A
+// Worker with no window yet is not refused: its first tool call opens one.
+func (m *Manager) agentCall(ctx context.Context, o Owner, q Request) (Response, error) {
+	worker := workerOf(o)
+	m.mu.Lock()
+	e := m.byWorker[worker]
+	m.mu.Unlock()
+	switch q.Action {
+	case "begin":
+		if e == nil {
+			return Response{}, nil
+		}
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if e.deleted {
+			return Response{}, nil
+		}
+		if e.halted[worker] {
+			return Response{}, errHalted
+		}
+		if e.transferring || e.owner.Kind == "human" {
+			return Response{}, errPersonInControl
+		}
+		e.agentBusy++
+		return Response{}, nil
+	case "end":
+		if e == nil {
+			return Response{}, nil
+		}
+		e.mu.Lock()
+		if e.agentBusy > 0 {
+			e.agentBusy--
+		}
+		e.mu.Unlock()
+		return Response{Notes: m.notesFor(ctx, e)}, nil
+	}
+	return Response{}, errors.New("Agents may only begin and end a browser call")
 }
 
 // allEntries is a copy of the entries, so a caller can lock each without holding m.mu.
@@ -341,47 +353,153 @@ func (m *Manager) allEntries() []*entry {
 	return entries
 }
 
-// agentWindow is the window of the Worker an agent owner belongs to; with
-// create, it makes the entry when the Worker has none (nothing is opened yet).
-func (m *Manager) agentWindow(o Owner, create bool) (*entry, error) {
-	worker := workerOf(o)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed.Load() {
-		return nil, ErrUnavailable
-	}
-	if e := m.byWorker[worker]; e != nil {
-		return e, nil
-	}
-	if !create {
-		return nil, nil
-	}
-	if len(m.entries) >= maxWindows {
-		return nil, fmt.Errorf("%w: %d agents already have windows; wait for one to finish", ErrBusy, maxWindows)
-	}
-	e := newEntry(Resource{ID: uuid.NewString(), Name: "Browser", CreatedAt: time.Now().UTC(), State: "stopped", Control: "idle", Agent: worker})
-	m.entries[e.resource.ID] = e
-	m.byWorker[worker] = e
-	return e, nil
-}
-
 // sweepEvery is how often the windows of ended Workers are looked for; a variable so tests can shorten it.
 var sweepEvery = 10 * time.Second
 
 // maxWindows is the most agent windows one computer keeps.
 const maxWindows = 8
 
+// drainWait is how long a take over waits for the agent's running tool calls
+// before it goes ahead anyway: a call cannot be cancelled from here.
+var drainWait = 10 * time.Second
+
+// hostGrace is how long a browser that was just asked for may stand with no
+// window before it is stopped as idle: its first window is still opening.
+var hostGrace = 2 * time.Minute
+
+// SetWindowCloser tells the manager how to close a window in the browser, by
+// the extension's id for it, when its Worker is gone.
+func (m *Manager) SetWindowCloser(f func(key string)) {
+	m.mu.Lock()
+	m.closeWindow = f
+	m.mu.Unlock()
+}
+
+// EnsureHost starts the agent browser (a private display, Chrome and the
+// extension) when it is not running, and waits for it. Agents that ask while
+// it is starting wait for the same start.
+func (m *Manager) EnsureHost(ctx context.Context) error {
+	m.ensuredAt.Store(time.Now().UnixNano())
+	err := m.withHost(ctx, func(Host) error { return nil })
+	if err == nil {
+		time.AfterFunc(hostGrace+time.Second, func() { m.stopIdleHost() })
+	}
+	return err
+}
+
+// Opened registers the window the extension opened for a Worker, so the Screen
+// lists it. key is the extension's id for the window and target the page it
+// shows. A Worker has one row; a window it opens again replaces the old one.
+func (m *Manager) Opened(ctx context.Context, worker, key, target string) error {
+	rowKey := worker
+	if rowKey == "" {
+		rowKey = "window:" + key
+	}
+	m.mu.Lock()
+	if m.closed.Load() {
+		m.mu.Unlock()
+		return ErrUnavailable
+	}
+	e := m.byWorker[rowKey]
+	if e == nil {
+		if len(m.entries) >= maxWindows {
+			m.mu.Unlock()
+			return fmt.Errorf("%w: %d agents already have windows; wait for one to finish", ErrBusy, maxWindows)
+		}
+		e = newEntry(Resource{ID: uuid.NewString(), Name: "Browser", CreatedAt: time.Now().UTC(), State: "stopped", Control: "agent", Agent: worker})
+		m.entries[e.resource.ID] = e
+		m.byWorker[rowKey] = e
+	}
+	m.mu.Unlock()
+	var rt Runtime
+	err := m.withHost(ctx, func(h Host) error {
+		var err error
+		rt, err = h.Window(ctx, target)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	e.mu.Lock()
+	if e.deleted {
+		e.mu.Unlock()
+		_ = rt.Close()
+		return errors.New("Browser not found")
+	}
+	if e.runtime != nil {
+		_ = e.runtime.Close()
+	} else {
+		m.windows.Add(1)
+	}
+	e.runtime = rt
+	oldKey := e.key
+	e.key = key
+	e.resource.Generation = uuid.NewString()
+	e.resource.Target = target
+	e.resource.State = "running"
+	e.touches, e.handedBack = nil, nil
+	e.epoch++
+	e.mu.Unlock()
+	m.mu.Lock()
+	if oldKey != "" && oldKey != key && m.byKey[oldKey] == e {
+		delete(m.byKey, oldKey)
+	}
+	m.byKey[key] = e
+	m.mu.Unlock()
+	return nil
+}
+
+// Viewed follows the page a window shows, as the extension reports it.
+func (m *Manager) Viewed(key, target string) {
+	m.mu.Lock()
+	e := m.byKey[key]
+	m.mu.Unlock()
+	if e == nil {
+		return
+	}
+	e.mu.Lock()
+	if e.runtime != nil {
+		e.runtime.SetTarget(target)
+	}
+	e.resource.Target = target
+	e.mu.Unlock()
+}
+
+// Closed takes a window off the Screen when the extension reports it closed.
+func (m *Manager) Closed(key string) {
+	m.mu.Lock()
+	e := m.byKey[key]
+	m.mu.Unlock()
+	if e != nil {
+		m.forget(e, false)
+	}
+}
+
 // Forget closes a Worker's window and takes it off the Screen. The browser
 // stops with its last window; the profile and its sign-ins stay.
 func (m *Manager) Forget(worker string) {
 	m.mu.Lock()
 	e := m.byWorker[worker]
-	if e == nil {
-		m.mu.Unlock()
-		return
+	m.mu.Unlock()
+	if e != nil {
+		m.forget(e, true)
 	}
-	delete(m.byWorker, worker)
+}
+
+func (m *Manager) forget(e *entry, closeWindow bool) {
+	m.mu.Lock()
+	for w, x := range m.byWorker {
+		if x == e {
+			delete(m.byWorker, w)
+		}
+	}
+	for k, x := range m.byKey {
+		if x == e {
+			delete(m.byKey, k)
+		}
+	}
 	delete(m.entries, e.resource.ID)
+	closer := m.closeWindow
 	m.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -389,14 +507,23 @@ func (m *Manager) Forget(worker string) {
 	defer e.transition.Unlock()
 	_ = acquire(ctx, e)
 	e.mu.Lock()
+	if e.deleted {
+		e.mu.Unlock()
+		m.gateRelease(e)
+		return
+	}
 	e.deleted = true
 	e.owner = Owner{}
 	if e.expiry != nil {
 		e.expiry.Stop()
 	}
+	key := e.key
 	m.dropRuntime(e)
 	e.mu.Unlock()
 	m.gateRelease(e)
+	if closeWindow && closer != nil && key != "" {
+		closer(key)
+	}
 	go m.stopIdleHost()
 }
 
@@ -434,6 +561,9 @@ func (m *Manager) sweep(every time.Duration) {
 		m.mu.Unlock()
 		var gone []string
 		for w, e := range workers {
+			if strings.HasPrefix(w, "window:") {
+				continue // no Worker to ask about
+			}
 			e.mu.Lock()
 			person := e.owner.Kind == "human"
 			e.mu.Unlock()
@@ -490,7 +620,7 @@ func (m *Manager) withHost(ctx context.Context, f func(Host) error) error {
 func (m *Manager) stopIdleHost() {
 	<-m.hostGate
 	defer func() { m.hostGate <- struct{}{} }()
-	if m.host == nil || m.windows.Load() > 0 {
+	if m.host == nil || m.windows.Load() > 0 || time.Since(time.Unix(0, m.ensuredAt.Load())) < hostGrace {
 		return
 	}
 	_ = m.host.Close()
@@ -498,104 +628,37 @@ func (m *Manager) stopIdleHost() {
 	log.Printf("browser: agent browser stopped, no agent has a window")
 }
 
-// start opens the entry's window if it has none that works; a working one is
-// left as it is. Only this window is opened again, never the browser under
-// other agents' windows, unless the browser itself is gone.
-func (m *Manager) start(ctx context.Context, e *entry) error {
-	if err := acquire(ctx, e); err != nil {
-		return err
-	}
-	defer unlock(e)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	// A window whose last action could not be drained is open but cannot be
-	// trusted: opening it again is the way out, and the only one.
-	if e.runtime != nil && e.runtime.Alive() && !e.uncertain {
+func (m *Manager) notRunning(e *entry) error {
+	if e.runtime != nil && e.runtime.Alive() {
 		return nil
-	}
-	m.dropRuntime(e)
-	err := m.withHost(ctx, func(h Host) error {
-		runtime, err := h.Window(ctx)
-		if err != nil {
-			return err
-		}
-		m.windows.Add(1)
-		e.runtime = runtime
-		return nil
-	})
-	if err != nil {
-		log.Printf("browser: opening a window for %s failed: %v", e.resource.Agent, err)
-		return err
-	}
-	e.resource.Generation = uuid.NewString()
-	e.resource.Target = e.runtime.Target()
-	e.resource.State = "running"
-	e.uncertain = false
-	e.owner = Owner{}
-	e.halted = nil
-	e.touches, e.handedBack = nil, nil
-	e.epoch++
-	return nil
-}
-
-// notRunning says why control cannot go ahead on this browser, in words the
-// agent can act on, or nil when it is running and trusted. Caller holds e.mu.
-func (m *Manager) notRunning(e *entry, o Owner) error {
-	switch {
-	case e.uncertain:
-		return ErrUncertain
-	case e.runtime != nil && e.runtime.Alive():
-		return nil
-	case o.Kind == "agent" && !m.VirtualScreen():
-		return fmt.Errorf("%w: it is not running and the virtual screen is off, so no browser starts for agents; the person turns it on in Settings, Labs, Virtual screen", ErrUnavailable)
 	}
 	return fmt.Errorf("%w: it is not running", ErrUnavailable)
 }
 
+// control gives the person the window. New tool calls of the agent are refused
+// from now; the ones running are waited for, up to drainWait.
 func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, error) {
-	if o.Kind == "agent" && m.VirtualScreen() {
-		// With the virtual screen on, an agent's window opens when it first asks
-		// for control, not when the Worker launches, and the browser under it
-		// starts then if nothing else has started it.
-		e.mu.Lock()
-		halted := e.halted[workerOf(o)]
-		// Not running, or running but stuck "uncertain" after an action that
-		// could not be drained (nobody can clear that from the phone but a
-		// restart). The person's own session and another agent's live lease
-		// are left alone.
-		down := e.runtime == nil || !e.runtime.Alive()
-		stuck := e.uncertain && !e.transferring && e.owner.Kind != "human" &&
-			(e.owner.ID == "" || e.owner == o || time.Now().After(e.expires))
-		e.mu.Unlock()
-		if (down || stuck) && !halted {
-			if err := m.start(ctx, e); err != nil {
-				return Response{}, err
-			}
-		}
-	}
 	e.mu.Lock()
 	if e.transferring {
 		e.mu.Unlock()
 		return Response{}, ErrBusy
 	}
-	if o.Kind == "agent" && e.halted[workerOf(o)] {
-		e.mu.Unlock()
-		return Response{}, errHalted
-	}
-	if o.Kind == "agent" && e.owner.Kind == "human" {
-		e.mu.Unlock()
-		return Response{}, errPersonInControl
-	}
-	if o.Kind == "agent" && e.owner.ID != "" && e.owner != o {
+	if e.owner.ID != "" && e.owner != o {
 		e.mu.Unlock()
 		return Response{}, ErrBusy
 	}
-	if err := m.notRunning(e, o); err != nil {
+	if err := m.notRunning(e); err != nil {
 		e.mu.Unlock()
 		return Response{}, err
 	}
 	e.transferring = true
 	e.mu.Unlock()
+	if err := m.drainAgent(ctx, e); err != nil {
+		e.mu.Lock()
+		e.transferring = false
+		e.mu.Unlock()
+		return Response{}, err
+	}
 	if err := acquire(ctx, e); err != nil {
 		e.mu.Lock()
 		e.transferring = false
@@ -606,82 +669,82 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	defer func() { e.transferring = false }()
-	if e.uncertain {
-		return Response{}, ErrUncertain
-	}
-	if err := m.notRunning(e, o); err != nil {
+	if err := m.notRunning(e); err != nil {
 		return Response{}, err
 	}
 	if err := e.runtime.Release(ctx); err != nil {
-		e.uncertain = true
-		return Response{}, ErrUncertain
+		log.Printf("browser: lifting held input of %s failed: %v", e.resource.Agent, err)
 	}
 	e.epoch++
 	e.owner = o
-	if o.Kind == "human" {
-		e.humanFrom = time.Now()
-	} else {
-		if e.lastAgent != workerOf(o) {
-			e.touches, e.handedBack = nil, nil
-		}
-		e.lastAgent = workerOf(o)
-	}
+	e.humanFrom = time.Now()
 	e.expires = time.Now().Add(leaseLifetime)
 	m.armExpiryLocked(e)
-	lease := Lease{Epoch: e.epoch, Generation: e.resource.Generation, Target: e.resource.Target, Kind: o.Kind, ExpiresAt: e.expires}
+	lease := Lease{Epoch: e.epoch, Generation: e.resource.Generation, Target: e.runtime.Target(), Kind: o.Kind, ExpiresAt: e.expires}
 	r := snapshot(e)
 	r.Control = o.Kind
 	return Response{Lease: &lease, Resource: &r}, nil
 }
+
+// drainAgent waits for the agent's running tool calls to end, up to drainWait.
+func (m *Manager) drainAgent(ctx context.Context, e *entry) error {
+	deadline := time.Now().Add(drainWait)
+	for {
+		e.mu.Lock()
+		busy := e.agentBusy
+		e.mu.Unlock()
+		if busy == 0 || time.Now().After(deadline) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+}
+
+// command is the person's input under their lease.
 func (m *Manager) command(ctx context.Context, e *entry, o Owner, l Lease, c Command) (Response, error) {
 	if err := acquire(ctx, e); err != nil {
 		return Response{}, err
 	}
 	defer unlock(e)
 	e.mu.Lock()
-	if o.Kind == "agent" && !e.deleted {
-		if e.halted[workerOf(o)] {
-			e.mu.Unlock()
-			return Response{}, errHalted
-		}
-		if e.owner.Kind == "human" {
-			e.mu.Unlock()
-			return Response{}, errPersonInControl
-		}
-	}
-	if e.deleted || e.owner != o || l.Epoch != e.epoch || l.Generation != e.resource.Generation || l.Target != e.resource.Target || time.Now().After(e.expires) || e.transferring || e.uncertain || e.runtime == nil {
+	if e.deleted || e.owner != o || l.Epoch != e.epoch || l.Generation != e.resource.Generation || time.Now().After(e.expires) || e.transferring || e.runtime == nil {
 		e.mu.Unlock()
 		return Response{}, ErrLease
 	}
+	e.expires = time.Now().Add(leaseLifetime)
+	m.armExpiryLocked(e)
 	if c.Kind == "heartbeat" {
-		e.expires = time.Now().Add(leaseLifetime)
-		m.armExpiryLocked(e)
 		e.mu.Unlock()
 		return Response{}, nil
 	}
 	rt := e.runtime
-	e.expires = time.Now().Add(leaseLifetime)
-	m.armExpiryLocked(e)
-	e.agentBusy = true
 	e.mu.Unlock()
 	actionCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	result, err := rt.Command(actionCtx, c)
+	var result json.RawMessage
+	switch c.Kind {
+	case "input":
+		if c.Input == nil {
+			return Response{}, errors.New("Input is required")
+		}
+		if err := rt.Input(actionCtx, *c.Input); err != nil {
+			return Response{}, err
+		}
+	case "navigate", "tabs", "select_tab", "new_tab":
+		var err error
+		if result, err = rt.Command(actionCtx, c); err != nil {
+			return Response{}, err
+		}
+	default:
+		return Response{}, errors.New("Unsupported browser command")
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.agentBusy = false
-	if errors.Is(err, ErrUncertain) || actionCtx.Err() != nil {
-		e.uncertain = true
-		return Response{}, ErrUncertain
-	}
-	if err != nil {
-		return Response{}, err
-	}
-	e.resource.Target = rt.Target()
-	if e.transferring || e.owner != o {
-		return Response{}, ErrLease
-	} // Do not deliver Agent reads after takeover request.
-	l.Target = e.resource.Target
+	l.Target = rt.Target()
 	l.ExpiresAt = e.expires
 	r := snapshot(e)
 	return Response{Resource: &r, Lease: &l, Result: result}, nil
@@ -696,7 +759,6 @@ func (m *Manager) releaseMatching(ctx context.Context, e *entry, match func(Owne
 	e.mu.Unlock()
 	if err := acquire(ctx, e); err != nil {
 		e.mu.Lock()
-		e.uncertain = true
 		e.transferring = false
 		e.mu.Unlock()
 		return err
@@ -716,8 +778,7 @@ func (m *Manager) releaseMatching(ctx context.Context, e *entry, match func(Owne
 		e.epoch++
 		if e.runtime != nil {
 			if err := e.runtime.Release(ctx); err != nil {
-				e.uncertain = true
-				return ErrUncertain
+				return err
 			}
 		}
 	}

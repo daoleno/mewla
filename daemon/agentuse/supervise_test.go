@@ -41,6 +41,9 @@ func TestFakePlaywrightHelper(t *testing.T) {
 			}}
 		}
 		switch msg.Params.Name {
+		case "browser_evaluate":
+			inner, _ := json.Marshal(`{"url":"http://example.test/post","text":"first line\nsecond line"}`)
+			result["content"] = []any{map[string]any{"type": "text", "text": "### Result\n" + string(inner) + "\n### Page\n- Page URL: http://example.test/post"}}
 		case "browser_navigate":
 			tabs++
 		case "browser_tabs":
@@ -79,14 +82,16 @@ func fakePlaywright(t *testing.T) ([]string, []string, string) {
 	return []string{exe, "-test.run=^TestFakePlaywrightHelper$"}, env, log
 }
 
-func superviseFake(t *testing.T) *supervised {
+func superviseFake(t *testing.T) *supervised { return superviseFakeGated(t, nil) }
+
+func superviseFakeGated(t *testing.T, gate Gate) *supervised {
 	t.Helper()
 	argv, env, log := fakePlaywright(t)
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	s := &supervised{in: inW, out: bufio.NewScanner(outR), ret: make(chan error, 1), log: log}
 	go func() {
-		s.ret <- SuperviseMCP(argv, env, inR, outW, os.Stderr)
+		s.ret <- SuperviseMCP(argv, env, gate, inR, outW, os.Stderr)
 		_ = outW.Close()
 	}()
 	return s
@@ -152,7 +157,7 @@ func TestRelayHelper(t *testing.T) {
 		os.Exit(0)
 	case "supervisor":
 		argv, env := strings.Fields(os.Getenv("MEWLA_RELAY_FAKE")), os.Environ()
-		_ = SuperviseMCP(argv, append(env, "MEWLA_RELAY_ROLE="), os.Stdin, os.Stdout, os.Stderr)
+		_ = SuperviseMCP(argv, append(env, "MEWLA_RELAY_ROLE="), nil, os.Stdin, os.Stdout, os.Stderr)
 		os.Exit(0)
 	}
 }
@@ -175,7 +180,7 @@ func TestAgentsAreToldToScriptAndReadOnlyWhatTheyNeed(t *testing.T) {
 			} `json:"tools"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(s.out.Bytes(), &answer); err != nil || answer.ID != 7 || len(answer.Result.Tools) != 2 {
+	if err := json.Unmarshal(s.out.Bytes(), &answer); err != nil || answer.ID != 7 || len(answer.Result.Tools) != 3 || answer.Result.Tools[2].Name != "browser_read" {
 		t.Fatalf("answer %s (%v)", s.out.Text(), err)
 	}
 	snapshot, click := answer.Result.Tools[0], answer.Result.Tools[1]

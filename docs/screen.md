@@ -329,12 +329,22 @@ asks for one. The Phone, where phone use is on, is a row in the page menu.
 - **Stop** (menu) ends that agent's use of the screen. It is told so and does not
   ask for it again until you **Resume**.
 
-With the switch on, a Worker (Claude or Codex) gets a browser on the virtual
-screen without being told which. It comes up when the agent first asks for it,
-not when the Worker starts, and the agent waits for it. Every agent has a window
-of its own in one shared Chrome, so several agents work at the same time. The
-window closes when its Worker ends, and the browser stops when no agent is using
-it. The switch lives on the computer, so every device sees the same answer.
+With the switch on, a Worker (Claude or Codex) works in the agents' browser on the
+virtual screen instead of your Chrome. It is the same browser tool every Worker
+has, `mewla_chrome`, with the same Mewla extension in that Chrome, so nothing
+about the tool differs from a Mac's. The browser comes up when the agent first
+asks for it, not when the Worker starts, and the agent waits for it. Every agent
+has a window of its own in one shared Chrome, so several agents work at the same
+time. The window closes when its Worker ends, and the browser stops when no agent
+is using it. The switch lives on the computer, so every device sees the same
+answer.
+
+A browser window's card shows the page its window shows, live. What you do in it
+reaches the page at once and the agent is told, not paused. **Take over** is the
+hard part: the agent's next browser call is refused with the reason (the call
+running is waited for, up to ten seconds), and an address bar and the tab
+buttons appear for you; **Hand back** lets it go on, and it hears when you held
+the window. **Stop** refuses that Worker the browser until you hand it back.
 
 Desktop apps work the same way. With the switch on, a Worker (Claude or Codex)
 also has a **display** tool: it opens a program (a calculator, an editor) on a

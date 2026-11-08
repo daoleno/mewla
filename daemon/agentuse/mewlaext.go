@@ -112,11 +112,34 @@ type hostManifest struct {
 // runs `mewla agent-use native-host`. It is written again whenever the Mewla
 // binary moves.
 func (s *Service) InstallNativeHost(userDataDir, mewla string, extensionIDs []string) error {
+	return s.installNativeHost(userDataDir, mewla, extensionIDs, false)
+}
+
+// PrepareAgentBrowser is what the agent browser's Chrome needs before it
+// starts: Mewla's native host registered in its profile, as the host of the
+// agent browser, and the extension's folder, which is loaded into Chrome
+// each time it starts.
+func (s *Service) PrepareAgentBrowser(userDataDir string) (string, error) {
+	exe, err := s.executable()
+	if err != nil {
+		return "", err
+	}
+	if err := s.installNativeHost(userDataDir, exe, []string{MewlaExtensionID}, true); err != nil {
+		return "", err
+	}
+	return s.ExtensionDir()
+}
+
+func (s *Service) installNativeHost(userDataDir, mewla string, extensionIDs []string, agent bool) error {
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
-	launcher := filepath.Join(s.dir, "native-host.sh")
-	script := fmt.Sprintf("#!/bin/sh\nexec %s agent-use native-host --state-dir %s\n", shellQuote(mewla), shellQuote(filepath.Dir(s.dir)))
+	name, flag := "native-host.sh", ""
+	if agent {
+		name, flag = "native-host-agent.sh", " --agent"
+	}
+	launcher := filepath.Join(s.dir, name)
+	script := fmt.Sprintf("#!/bin/sh\nexec %s agent-use native-host --state-dir %s%s\n", shellQuote(mewla), shellQuote(filepath.Dir(s.dir)), flag)
 	if err := atomicfile.Write(launcher, []byte(script), 0o700); err != nil {
 		return err
 	}

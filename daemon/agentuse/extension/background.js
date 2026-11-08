@@ -5,7 +5,9 @@
  * The daemon asks over Chrome's native messaging (only this extension's ID is
  * allowed by the host manifest, so there is no key to copy or leak):
  *   {type: "connect", id, relayUrl, client, label?, bounds?: {left, top, width, height}}
- * and gets back {type: "connected" | "closed" | "error", id, ...}.
+ * and gets back {type: "connected" | "closed" | "error", id, ...}. "connected"
+ * and "view" say which DevTools target the window shows (targetId), so the
+ * daemon can show the window to the person, in Screen, as it changes.
  * Each connection gets a new, unfocused window (minimized when there is no
  * agent display to put it on); the person's own windows and
  * tabs are never attached, moved, focused or listed. Its tabs are in a tab
@@ -93,9 +95,28 @@ function tell(message) {
   try { port?.postMessage(message); } catch (error) { debugLog('host gone', error); }
 }
 
+/** The DevTools target of a tab, which is how the daemon names the page. */
+async function targetIdOf(tabId) {
+  try {
+    const targets = await chrome.debugger.getTargets();
+    return targets.find(t => t.tabId === tabId)?.id;
+  } catch {
+    return undefined;
+  }
+}
+
 class AgentWindow {
   constructor(id) {
     this.id = id;
+    this.viewed = undefined;
+    this._onActivated = info => {
+      if (info.windowId === this.windowId)
+        void this.reportView();
+    };
+    this._onViewUpdated = (tabId, changeInfo, tab) => {
+      if (tab.windowId === this.windowId && tab.active && (changeInfo.status || changeInfo.url))
+        void this.reportView();
+    };
     this.windowId = undefined;
     this.groupId = undefined;
     this.connection = undefined;
@@ -115,6 +136,20 @@ class AgentWindow {
       if (windowId === this.windowId)
         this.close('The agent window was closed');
     };
+  }
+
+  /** The page the window shows now: the active tab's target. */
+  async viewTarget() {
+    const [tab] = await chrome.tabs.query({ windowId: this.windowId, active: true }).catch(() => []);
+    return tab ? await targetIdOf(tab.id) : undefined;
+  }
+
+  async reportView() {
+    const targetId = await this.viewTarget();
+    if (targetId && targetId !== this.viewed && !this.closed) {
+      this.viewed = targetId;
+      tell({ type: 'view', id: this.id, targetId });
+    }
   }
 
   async open({ relayUrl, bounds, label }) {
@@ -154,6 +189,8 @@ class AgentWindow {
     chrome.tabs.onCreated.addListener(this._onCreated);
     chrome.tabs.onUpdated.addListener(this._onUpdated);
     chrome.windows.onRemoved.addListener(this._onRemoved);
+    chrome.tabs.onActivated.addListener(this._onActivated);
+    chrome.tabs.onUpdated.addListener(this._onViewUpdated);
     try {
       this.connection = await openRelayConnection(relayUrl, this);
     } catch (error) {
@@ -183,6 +220,8 @@ class AgentWindow {
     chrome.tabs.onCreated.removeListener(this._onCreated);
     chrome.tabs.onUpdated.removeListener(this._onUpdated);
     chrome.windows.onRemoved.removeListener(this._onRemoved);
+    chrome.tabs.onActivated.removeListener(this._onActivated);
+    chrome.tabs.onUpdated.removeListener(this._onViewUpdated);
     this.connection?.close(reason);
     sessions.delete(this.id);
     agentWindowIds.delete(this.windowId);
@@ -207,7 +246,8 @@ async function onHostMessage(message) {
       sessions.set(message.id, session);
       try {
         await session.open(message);
-        tell({ type: 'connected', id: message.id, windowId: session.windowId });
+        session.viewed = await session.viewTarget();
+        tell({ type: 'connected', id: message.id, windowId: session.windowId, targetId: session.viewed });
       } catch (error) {
         sessions.delete(message.id);
         tell({ type: 'error', id: message.id, message: String(error?.message || error) });

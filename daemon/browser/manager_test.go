@@ -14,8 +14,8 @@ import (
 	"time"
 )
 
-// fakeBackend stands in for the one browser: Start makes a host, Window opens
-// a window on it.
+// fakeBackend stands in for the one browser: Start makes a host, Window
+// follows a window of it.
 type fakeBackend struct {
 	starts    atomic.Int32
 	startErr  error
@@ -45,13 +45,6 @@ func (b *fakeBackend) Start(ctx context.Context, _ string) (Host, error) {
 	b.mu.Unlock()
 	return h, nil
 }
-
-// last is the window opened most recently.
-func (b *fakeBackend) last() *fakeRuntime {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.windows[len(b.windows)-1]
-}
 func (b *fakeBackend) opened() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -70,29 +63,26 @@ type fakeHost struct {
 
 func (h *fakeHost) Alive() bool  { return h.live.Load() }
 func (h *fakeHost) Close() error { h.live.Store(false); return nil }
-func (h *fakeHost) Window(context.Context) (Runtime, error) {
+func (h *fakeHost) Window(_ context.Context, target string) (Runtime, error) {
 	if !h.live.Load() {
 		return nil, ErrUnavailable
 	}
-	r := &fakeRuntime{host: h}
+	r := &fakeRuntime{host: h, target: target}
 	r.open.Store(true)
 	h.b.mu.Lock()
-	r.target = fmt.Sprintf("tab-%d", len(h.b.windows)+1)
 	h.b.windows = append(h.b.windows, r)
 	h.b.mu.Unlock()
 	return r, nil
 }
 
 type fakeRuntime struct {
-	host      *fakeHost
-	open      atomic.Bool
-	releases  atomic.Int32
-	entered   chan struct{}
-	drain     chan struct{}
-	uncertain bool
-	target    string
-	mu        sync.Mutex
-	inputs    []Input
+	host     *fakeHost
+	open     atomic.Bool
+	releases atomic.Int32
+	target   string
+	page     string
+	mu       sync.Mutex
+	inputs   []Input
 }
 
 func (r *fakeRuntime) Target() string {
@@ -100,41 +90,30 @@ func (r *fakeRuntime) Target() string {
 	defer r.mu.Unlock()
 	return r.target
 }
-func (r *fakeRuntime) Alive() bool                            { return r.open.Load() && r.host.live.Load() }
-func (r *fakeRuntime) Close() error                           { r.open.Store(false); return nil }
-func (r *fakeRuntime) Release(context.Context) error          { r.releases.Add(1); return nil }
+func (r *fakeRuntime) SetTarget(t string) { r.mu.Lock(); r.target = t; r.mu.Unlock() }
+func (r *fakeRuntime) Alive() bool        { return r.open.Load() && r.host.live.Load() }
+func (r *fakeRuntime) Close() error       { r.open.Store(false); return nil }
+func (r *fakeRuntime) Release(context.Context) error {
+	r.releases.Add(1)
+	return nil
+}
 func (r *fakeRuntime) Stream(context.Context) (Stream, error) { return nil, ErrUnavailable }
-func (r *fakeRuntime) Command(ctx context.Context, c Command) (json.RawMessage, error) {
-	if c.Kind == "input" && c.Input != nil {
-		r.mu.Lock()
-		r.inputs = append(r.inputs, *c.Input)
-		r.mu.Unlock()
-		return nil, nil
-	}
-	if c.Kind == "tabs" {
-		return json.RawMessage(`[{"id":"tab-1","url":"https://example.test/account?token=secret#x"}]`), nil
-	}
-	if r.entered != nil {
-		close(r.entered)
-		select {
-		case <-r.drain:
-		case <-ctx.Done():
-			return nil, ErrUncertain
-		}
-	}
-	if r.uncertain {
-		return nil, ErrUncertain
-	}
-	if c.Kind == "select_tab" {
-		r.mu.Lock()
-		r.target = c.Target
-		r.mu.Unlock()
-	}
-	return json.RawMessage(`{"authenticated":true}`), nil
+func (r *fakeRuntime) Page(context.Context) string            { return r.page }
+func (r *fakeRuntime) Command(_ context.Context, c Command) (json.RawMessage, error) {
+	return json.Marshal(map[string]string{"ran": c.Kind})
+}
+func (r *fakeRuntime) Input(_ context.Context, i Input) error {
+	r.mu.Lock()
+	r.inputs = append(r.inputs, i)
+	r.mu.Unlock()
+	return nil
 }
 
 var human = Owner{Kind: "human", ID: "device/viewer"}
-var agent = Owner{Kind: "agent", ID: "task/attachment"}
+
+func agentOf(worker string) Owner { return Owner{Kind: "agent", ID: worker} }
+
+var agent = agentOf("task")
 
 func newManager(t *testing.T) (*Manager, *fakeBackend) {
 	t.Helper()
@@ -148,18 +127,25 @@ func newManager(t *testing.T) (*Manager, *fakeBackend) {
 	return m, b
 }
 
-// setup is a manager whose agent has asked for control once: its window is
-// open, and id is that window's.
+// setup is a manager whose Worker "task" has a window: the extension opened
+// it, and id is its row's.
 func setup(t *testing.T) (*Manager, *fakeBackend, string) {
 	t.Helper()
 	m, b := newManager(t)
-	r := must(t, m, agent, Request{Action: "control"})
-	must(t, m, agent, Request{Action: "release"})
-	id := windowID(t, m, workerOf(agent))
-	if r.Lease == nil || b.starts.Load() != 1 || b.opened() != 1 {
-		t.Fatalf("lease %v, starts %d, windows %d", r.Lease, b.starts.Load(), b.opened())
+	open(t, m, "task", "c1", "tab-1")
+	if b.starts.Load() != 1 || b.opened() != 1 {
+		t.Fatalf("starts %d, windows %d", b.starts.Load(), b.opened())
 	}
-	return m, b, id
+	return m, b, windowID(t, m, "task")
+}
+func open(t *testing.T, m *Manager, worker, key, target string) {
+	t.Helper()
+	if err := m.EnsureHost(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Opened(context.Background(), worker, key, target); err != nil {
+		t.Fatal(err)
+	}
 }
 func windowID(t *testing.T, m *Manager, worker string) string {
 	t.Helper()
@@ -186,25 +172,44 @@ func virtualScreen(t *testing.T, m *Manager, on bool) {
 		t.Fatalf("settings = %+v", r.VirtualScreen)
 	}
 }
+func controlOf(t *testing.T, m *Manager, id string) string {
+	t.Helper()
+	return must(t, m, human, Request{Action: "status", ID: id}).Resource.Control
+}
+func shortLeases(t *testing.T, d time.Duration) {
+	t.Helper()
+	old := leaseLifetime
+	leaseLifetime = d
+	t.Cleanup(func() { leaseLifetime = old })
+}
+func waitUntil(t *testing.T, what string, within time.Duration, f func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for !f() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
 
-// Agents that ask for control together get a window each on one browser,
-// started once; the ones that arrive while it starts wait for it.
-func TestConcurrentFirstControlsShareOneBrowserAndEachGetsAWindow(t *testing.T) {
+// Agents that ask for the browser together share one start; the ones that
+// arrive while it starts wait for it, and each gets its own row.
+func TestConcurrentFirstWindowsShareOneBrowserAndEachGetsARow(t *testing.T) {
 	m, b := newManager(t)
 	b.startGate = make(chan struct{})
 	var wg sync.WaitGroup
-	leases := make([]*Lease, 5)
-	for i := range leases {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			o := Owner{Kind: "agent", ID: fmt.Sprintf("worker-%d/client", i)}
-			r, err := m.Handle(context.Background(), o, Request{Action: "control"})
-			if err != nil {
+			if err := m.EnsureHost(context.Background()); err != nil {
 				t.Errorf("agent %d: %v", i, err)
 				return
 			}
-			leases[i] = r.Lease
+			if err := m.Opened(context.Background(), fmt.Sprintf("worker-%d", i), fmt.Sprintf("c%d", i), fmt.Sprintf("tab-%d", i)); err != nil {
+				t.Errorf("agent %d: %v", i, err)
+			}
 		}()
 	}
 	waitUntil(t, "the browser to start", time.Second, func() bool { return b.starts.Load() == 1 })
@@ -214,16 +219,14 @@ func TestConcurrentFirstControlsShareOneBrowserAndEachGetsAWindow(t *testing.T) 
 	if b.starts.Load() != 1 || b.opened() != 5 {
 		t.Fatalf("starts %d, windows %d", b.starts.Load(), b.opened())
 	}
-	seen := map[string]bool{}
-	for _, l := range leases {
-		if l == nil || seen[l.Target] {
-			t.Fatalf("leases %+v", leases)
-		}
-		seen[l.Target] = true
-	}
 	listed := must(t, m, human, Request{Action: "list"})
 	if len(listed.Resources) != 5 {
 		t.Fatalf("Screen lists %d rows", len(listed.Resources))
+	}
+	for _, r := range listed.Resources {
+		if r.Control != "agent" || r.State != "running" || r.Agent == "" || r.Target == "" {
+			t.Fatalf("row %+v", r)
+		}
 	}
 }
 
@@ -233,204 +236,202 @@ func TestStartFailureNamesItsCauseAndLeavesNothingStuck(t *testing.T) {
 	m, b := newManager(t)
 	b.startErr = errors.New("Private graphical session (kwin_wayland) could not start: no wayland socket")
 	for i := 0; i < 2; i++ {
-		_, err := m.Handle(context.Background(), agent, Request{Action: "control"})
+		err := m.EnsureHost(context.Background())
 		if err == nil || !strings.Contains(err.Error(), "no wayland socket") {
 			t.Fatalf("attempt %d: %v", i, err)
 		}
 	}
 	b.startErr = nil
-	if r := must(t, m, agent, Request{Action: "control"}); r.Lease == nil {
-		t.Fatal("no lease once the cause is gone")
+	if err := m.EnsureHost(context.Background()); err != nil {
+		t.Fatalf("still failing once the cause is gone: %v", err)
 	}
 }
 
-// Off, nothing starts for an agent and it is told so.
-func TestControlRefusalsNameTheirCause(t *testing.T) {
-	m, b := newManager(t)
-	virtualScreen(t, m, false)
-	_, err := m.Handle(context.Background(), agent, Request{Action: "control"})
-	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "virtual screen is off") || b.starts.Load() != 0 {
-		t.Fatalf("err = %v, starts %d", err, b.starts.Load())
-	}
-}
-
-func TestOnlyThePersonSetsTheSwitchAndManagesNothingElse(t *testing.T) {
+func TestOnlyThePersonSetsTheSwitchAndAgentsOnlyBeginAndEnd(t *testing.T) {
 	m, _, id := setup(t)
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "settings", Enabled: new(bool)}); err == nil {
+	for _, q := range []Request{{Action: "settings", Enabled: new(bool)}, {Action: "list"}, {Action: "control", ID: id}, {Action: "halt", ID: id}, {Action: "status", ID: id}, {Action: "touch", ID: id}} {
+		if _, err := m.Handle(context.Background(), agent, q); err == nil {
+			t.Fatalf("an agent was allowed %q", q.Action)
+		}
+	}
+	if !m.VirtualScreen() {
 		t.Fatal("an agent changed the setting")
 	}
-	for _, action := range []string{"create", "start", "stop", "delete", "grant"} {
-		if _, err := m.Handle(context.Background(), human, Request{Action: action, ID: id}); err == nil {
-			t.Fatalf("%s is still an operation", action)
-		}
-	}
-	if _, err := m.Handle(context.Background(), human, Request{Action: "status", ID: "../../personal"}); err == nil {
-		t.Fatal("path traversal")
+}
+
+// A Worker with no window yet is not refused: its first tool call opens one.
+func TestAgentWithoutAWindowIsNotRefused(t *testing.T) {
+	m, _ := newManager(t)
+	must(t, m, agentOf("fresh"), Request{Action: "begin"})
+	if r := must(t, m, agentOf("fresh"), Request{Action: "end"}); len(r.Notes) != 0 {
+		t.Fatalf("notes %v", r.Notes)
 	}
 }
 
-func TestTakeoverDrainsActionAndSuppressesRead(t *testing.T) {
+func TestViewedFollowsThePageAndClosedTakesTheRowOff(t *testing.T) {
 	m, b, id := setup(t)
-	lease := must(t, m, agent, Request{Action: "control"}).Lease
-	w := b.last()
-	w.entered = make(chan struct{})
-	w.drain = make(chan struct{})
-	read := make(chan error, 1)
-	go func() {
-		_, e := m.Handle(context.Background(), agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "snapshot"}})
-		read <- e
-	}()
-	<-w.entered
-	takeover := make(chan error, 1)
-	go func() {
-		_, e := m.Handle(context.Background(), human, Request{Action: "control", ID: id})
-		takeover <- e
-	}()
-	e, _ := m.get(id)
-	deadline := time.Now().Add(time.Second)
-	for {
-		e.mu.Lock()
-		pending := e.transferring
-		e.mu.Unlock()
-		if pending {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("takeover not fenced")
-		}
-		time.Sleep(time.Millisecond)
+	m.Viewed("c1", "tab-9")
+	if got := must(t, m, human, Request{Action: "status", ID: id}).Resource.Target; got != "tab-9" || b.windows[0].Target() != "tab-9" {
+		t.Fatalf("target %q", got)
 	}
-	select {
-	case <-takeover:
-		t.Fatal("takeover acknowledged before drain")
-	default:
-	}
-	close(w.drain)
-	if err := <-read; !errors.Is(err, ErrLease) {
-		t.Fatalf("read was delivered: %v", err)
-	}
-	if err := <-takeover; err != nil {
-		t.Fatal(err)
-	}
-	w.entered = nil
-}
-
-// A window whose action could not be drained is opened again for the agent
-// that holds it or the next one, without touching the browser or the other
-// agents' windows; the person cannot take it over meanwhile.
-func TestUncertainWindowIsReopenedAndTheBrowserLeftAlone(t *testing.T) {
-	m, b, id := setup(t)
-	bystander := Owner{Kind: "agent", ID: "bystander/client"}
-	bystanderLease := must(t, m, bystander, Request{Action: "control"}).Lease
-	first := must(t, m, agent, Request{Action: "control"})
-	b.windows[0].uncertain = true
-	_, err := m.Handle(context.Background(), agent, Request{Action: "command", Lease: first.Lease, Command: &Command{Kind: "snapshot"}})
-	if !errors.Is(err, ErrUncertain) {
-		t.Fatal(err)
-	}
-	if _, err = m.Handle(context.Background(), human, Request{Action: "control", ID: id}); err == nil {
-		t.Fatal("undrained action admitted takeover")
-	}
-	again := must(t, m, agent, Request{Action: "control"})
-	if again.Lease == nil || again.Lease.Generation == first.Lease.Generation || again.Lease.Epoch == first.Lease.Epoch {
-		t.Fatalf("lease %+v after %+v", again.Lease, first.Lease)
-	}
-	if b.starts.Load() != 1 || b.opened() != 3 || !b.windows[1].Alive() {
-		t.Fatalf("starts %d, windows %d", b.starts.Load(), b.opened())
+	m.Closed("c1")
+	if rows := must(t, m, human, Request{Action: "list"}).Resources; len(rows) != 0 {
+		t.Fatalf("rows %+v", rows)
 	}
 	if b.windows[0].Alive() {
-		t.Fatal("the stuck window stayed open")
-	}
-	if _, err := m.Handle(context.Background(), bystander, Request{Action: "command", Lease: bystanderLease, Command: &Command{Kind: "snapshot"}}); err != nil {
-		t.Fatalf("another agent's window was disturbed: %v", err)
-	}
-
-	// The person holding an uncertain window is not restarted from under them.
-	must(t, m, agent, Request{Action: "release"})
-	must(t, m, human, Request{Action: "control", ID: id})
-	e, _ := m.get(id)
-	e.mu.Lock()
-	e.uncertain = true
-	e.mu.Unlock()
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "control"}); err == nil || b.opened() != 3 {
-		t.Fatalf("restarted under the person: err %v, windows %d", err, b.opened())
+		t.Fatal("the window's runtime stayed open")
 	}
 }
 
-// When the browser itself is gone, each agent's next request opens a window
-// on a fresh one, started once.
-func TestBrowserLostIsStartedAgainOnce(t *testing.T) {
+// A Worker that ends takes its window with it, and the extension is asked to
+// close it; the browser stops with the last one.
+func TestForgetClosesTheWindowAndTheBrowserStopsWithTheLast(t *testing.T) {
+	old := hostGrace
+	hostGrace = 0
+	t.Cleanup(func() { hostGrace = old })
 	m, b := newManager(t)
-	other := Owner{Kind: "agent", ID: "other/client"}
-	must(t, m, agent, Request{Action: "control"})
-	must(t, m, other, Request{Action: "control"})
-	b.host.live.Store(false)
-	if rows := must(t, m, human, Request{Action: "list"}).Resources; rows[0].State != "stopped" || rows[1].State != "stopped" {
-		t.Fatalf("rows = %+v", rows)
+	var closed []string
+	m.SetWindowCloser(func(key string) { closed = append(closed, key) })
+	open(t, m, "one", "c1", "tab-1")
+	open(t, m, "two", "c2", "tab-2")
+	m.Forget("one")
+	if len(closed) != 1 || closed[0] != "c1" {
+		t.Fatalf("closed %v", closed)
 	}
-	a := must(t, m, agent, Request{Action: "control"})
-	o := must(t, m, other, Request{Action: "control"})
-	if a.Lease == nil || o.Lease == nil || b.starts.Load() != 2 || !b.hostAlive() {
-		t.Fatalf("starts %d", b.starts.Load())
+	time.Sleep(50 * time.Millisecond)
+	if !b.hostAlive() {
+		t.Fatal("the browser stopped with a window left")
 	}
-}
-
-// A Worker that ended loses its window; the browser stops with the last one
-// and starts again for the next agent.
-func TestWindowsFollowTheirWorkersAndTheBrowserStopsWithTheLast(t *testing.T) {
-	m, b := newManager(t)
-	other := Owner{Kind: "agent", ID: "other/client"}
-	must(t, m, agent, Request{Action: "control"})
-	must(t, m, other, Request{Action: "control"})
-	m.Forget("task")
-	if b.windows[0].Alive() || !b.windows[1].Alive() || !b.hostAlive() {
-		t.Fatal("closing one agent's window disturbed the other")
-	}
-	if rows := must(t, m, human, Request{Action: "list"}).Resources; len(rows) != 1 || rows[0].Agent != "other" {
-		t.Fatalf("rows = %+v", rows)
-	}
-	m.Forget("other")
+	m.Forget("two")
 	waitUntil(t, "the browser to stop", time.Second, func() bool { return !b.hostAlive() })
-	if r := must(t, m, agent, Request{Action: "control"}); r.Lease == nil || b.starts.Load() != 2 {
-		t.Fatalf("starts %d", b.starts.Load())
-	}
 }
 
 func TestSweepClosesWindowsOfWorkersThatEnded(t *testing.T) {
-	previous := sweepEvery
-	sweepEvery = 10 * time.Millisecond
-	t.Cleanup(func() { sweepEvery = previous })
-	m, b := newManager(t)
-	var live atomic.Bool
-	live.Store(true)
-	m.SetWorkerLive(func(w string) bool { return w != "task" || live.Load() })
-	must(t, m, agent, Request{Action: "control"})
+	m, _, _ := setup(t)
+	var alive atomic.Bool
+	alive.Store(true)
+	m.SetWorkerLive(func(string) bool { return alive.Load() })
+	go m.sweep(10 * time.Millisecond)
 	time.Sleep(60 * time.Millisecond)
-	if !b.windows[0].Alive() {
-		t.Fatal("a live Worker lost its window")
+	if len(must(t, m, human, Request{Action: "list"}).Resources) != 1 {
+		t.Fatal("the window of a live Worker was closed")
 	}
-	live.Store(false)
-	waitUntil(t, "the window to close", time.Second, func() bool { return !b.windows[0].Alive() })
+	alive.Store(false)
+	waitUntil(t, "the sweep", time.Second, func() bool { return len(must(t, m, human, Request{Action: "list"}).Resources) == 0 })
 }
 
-// A person signing in on a window keeps it, whatever happens to the Worker.
 func TestSweepLeavesAWindowThePersonHolds(t *testing.T) {
-	previous := sweepEvery
-	sweepEvery = 10 * time.Millisecond
-	t.Cleanup(func() { sweepEvery = previous })
-	m, b, id := setup(t)
-	m.SetWorkerLive(func(string) bool { return false })
+	m, _, id := setup(t)
 	must(t, m, human, Request{Action: "control", ID: id})
+	m.SetWorkerLive(func(string) bool { return false })
+	go m.sweep(10 * time.Millisecond)
 	time.Sleep(80 * time.Millisecond)
-	if !b.windows[0].Alive() {
-		t.Fatal("the window under the person closed")
+	if len(must(t, m, human, Request{Action: "list"}).Resources) != 1 {
+		t.Fatal("the person's window was closed")
+	}
+}
+
+// Take over refuses the agent's next call at once, waits for the one running,
+// and hand back tells the agent what happened.
+func TestTakeOverWaitsForTheRunningCallRefusesTheNextAndHandBackTellsIt(t *testing.T) {
+	m, b, id := setup(t)
+	must(t, m, agent, Request{Action: "begin"}) // a tool call is running
+	got := make(chan Response, 1)
+	go func() { got <- must(t, m, human, Request{Action: "control", ID: id}) }()
+	waitUntil(t, "the take over to start", time.Second, func() bool {
+		m.mu.Lock()
+		e := m.byWorker["task"]
+		m.mu.Unlock()
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return e.transferring
+	})
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "begin"}); !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "took over") {
+		t.Fatalf("the next call during a take over: %v", err)
+	}
+	select {
+	case <-got:
+		t.Fatal("the take over went ahead with a call still running")
+	case <-time.After(60 * time.Millisecond):
+	}
+	must(t, m, agent, Request{Action: "end"})
+	r := <-got
+	if r.Lease == nil || controlOf(t, m, id) != "human" || b.windows[0].releases.Load() == 0 {
+		t.Fatalf("lease %v, control %q", r.Lease, controlOf(t, m, id))
+	}
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "begin"}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a call while the person holds it: %v", err)
+	}
+	// The person's input under their lease reaches the page.
+	must(t, m, human, Request{Action: "command", ID: id, Lease: r.Lease, Command: &Command{Kind: "input", Input: &Input{Kind: "text", Text: "hello"}}})
+	if len(b.windows[0].inputs) != 1 {
+		t.Fatalf("inputs %v", b.windows[0].inputs)
 	}
 	must(t, m, human, Request{Action: "release", ID: id})
-	waitUntil(t, "the window to close once released", time.Second, func() bool { return !b.windows[0].Alive() })
+	must(t, m, agent, Request{Action: "begin"})
+	notes := must(t, m, agent, Request{Action: "end"}).Notes
+	if len(notes) == 0 || !strings.Contains(strings.Join(notes, " "), "handed it back") {
+		t.Fatalf("notes %v", notes)
+	}
 }
 
-// The profile the person made in the old multi-browser feature becomes the
-// agent profile with its data; the others go.
+// A take over does not wait for a call forever.
+func TestTakeOverGoesAheadAfterTheDrainWait(t *testing.T) {
+	old := drainWait
+	drainWait = 50 * time.Millisecond
+	t.Cleanup(func() { drainWait = old })
+	m, _, id := setup(t)
+	must(t, m, agent, Request{Action: "begin"})
+	if r := must(t, m, human, Request{Action: "control", ID: id}); r.Lease == nil {
+		t.Fatal("no lease")
+	}
+}
+
+// The person may use the window without taking it over: the page gets their
+// input, nothing stops the agent, and it hears what happened, never the text.
+func TestPersonInputDoesNotPauseAgentAndIsTold(t *testing.T) {
+	m, b, id := setup(t)
+	b.windows[0].page = "https://example.test/account"
+	must(t, m, agent, Request{Action: "begin"})
+	for _, i := range []Input{{Kind: "mousePressed", X: 3, Y: 4, Button: "left"}, {Kind: "text", Text: "secret"}, {Kind: "mouseWheel", DY: 40}} {
+		if _, err := m.Handle(context.Background(), human, Request{Action: "touch", ID: id, Command: &Command{Kind: "input", Input: &i}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(b.windows[0].inputs) != 3 {
+		t.Fatalf("inputs %v", b.windows[0].inputs)
+	}
+	notes := strings.Join(must(t, m, agent, Request{Action: "end"}).Notes, "\n")
+	for _, want := range []string{"1 click", "6 typed characters", "1 scroll", "while your own action was running", "https://example.test/account"} {
+		if !strings.Contains(notes, want) {
+			t.Fatalf("notes lack %q: %s", want, notes)
+		}
+	}
+	if strings.Contains(notes, "secret") {
+		t.Fatal("the typed text was told")
+	}
+	// Told once.
+	must(t, m, agent, Request{Action: "begin"})
+	if again := must(t, m, agent, Request{Action: "end"}).Notes; len(again) != 0 {
+		t.Fatalf("told twice: %v", again)
+	}
+}
+
+// Stop refuses the Worker until the person hands the browser back.
+func TestStopRefusesTheWorkerUntilHandBack(t *testing.T) {
+	m, _, id := setup(t)
+	must(t, m, human, Request{Action: "halt", ID: id})
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "begin"}); err == nil || !strings.Contains(err.Error(), "stopped you") {
+		t.Fatalf("after Stop: %v", err)
+	}
+	if _, err := m.Handle(context.Background(), agentOf("other"), Request{Action: "begin"}); err != nil {
+		t.Fatalf("another Worker was stopped: %v", err)
+	}
+	must(t, m, human, Request{Action: "control", ID: id})
+	must(t, m, human, Request{Action: "release", ID: id})
+	must(t, m, agent, Request{Action: "begin"})
+}
+
 func TestAdoptOldProfileKeepsTheOldestAndItsData(t *testing.T) {
 	root := t.TempDir()
 	write := func(id, created string) {
@@ -480,84 +481,33 @@ func TestRejectSymlinkParent(t *testing.T) {
 	}
 }
 
-func TestTargetFencing(t *testing.T) {
-	m, _, _ := setup(t)
-	lease := must(t, m, agent, Request{Action: "control"}).Lease
-	newer := must(t, m, agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "select_tab", Target: "tab-2"}})
-	if newer.Lease.Target != "tab-2" {
-		t.Fatal("target not updated")
-	}
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "snapshot"}}); !errors.Is(err, ErrLease) {
-		t.Fatal("stale target accepted")
-	}
-}
-
-func TestAgentWindowIsFoundByWorkerNotByAnId(t *testing.T) {
-	m, _, id := setup(t)
-	// Whatever id a long-running tool still carries, the Worker's own window answers.
-	r := must(t, m, agent, Request{Action: "control", ID: "5821d748-645f-48f5-8bd9-c1b53c32416a"})
-	if r.Resource == nil || r.Resource.ID != id || r.Resource.Agent != "task" {
-		t.Fatalf("resource = %+v", r.Resource)
-	}
-	if _, err := m.Handle(context.Background(), Owner{Kind: "agent", ID: "nobody/client"}, Request{Action: "command", Lease: r.Lease, Command: &Command{Kind: "snapshot"}}); !errors.Is(err, ErrLease) {
-		t.Fatalf("a Worker without a window acted: %v", err)
-	}
-}
-
-func shortLeases(t *testing.T, d time.Duration) {
-	t.Helper()
-	previous := leaseLifetime
-	leaseLifetime = d
-	t.Cleanup(func() { leaseLifetime = previous })
-}
-
-func controlOf(t *testing.T, m *Manager, id string) string {
-	t.Helper()
-	return must(t, m, human, Request{Action: "status", ID: id}).Resource.Control
-}
-
-func waitUntil(t *testing.T, what string, within time.Duration, f func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(within)
-	for !f() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
+// A lease ends when its time runs out, on its own timer, and a renewal moves
+// that time.
 // A lease ends when its time runs out, on its own timer, and a renewal moves
 // that time.
 func TestLeaseExpiresOnItsOwnTimerAndRenewalsMoveIt(t *testing.T) {
 	shortLeases(t, 150*time.Millisecond)
 	m, b, id := setup(t)
-	lease := must(t, m, agent, Request{Action: "control"}).Lease
-	if controlOf(t, m, id) != "agent" {
+	lease := must(t, m, human, Request{Action: "control", ID: id}).Lease
+	if controlOf(t, m, id) != "human" {
 		t.Fatalf("control = %q", controlOf(t, m, id))
 	}
 	releasesBefore := b.windows[0].releases.Load()
-
-	// Heartbeats keep it past several lifetimes.
 	until := time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(until) {
-		must(t, m, agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "heartbeat"}})
+		must(t, m, human, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "heartbeat"}})
 		time.Sleep(40 * time.Millisecond)
 	}
-	if controlOf(t, m, id) != "agent" {
+	if controlOf(t, m, id) != "human" {
 		t.Fatal("a lease with heartbeats expired")
 	}
-
-	// Without them it ends by itself.
-	waitUntil(t, "the lease to expire", 2*time.Second, func() bool { return controlOf(t, m, id) == "idle" })
+	waitUntil(t, "the lease to expire", 2*time.Second, func() bool { return controlOf(t, m, id) == "agent" })
 	if b.windows[0].releases.Load() <= releasesBefore {
 		t.Fatal("the runtime was not told to release")
 	}
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "heartbeat"}}); !errors.Is(err, ErrLease) {
+	if _, err := m.Handle(context.Background(), human, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "heartbeat"}}); !errors.Is(err, ErrLease) {
 		t.Fatalf("an expired lease was accepted: %v", err)
 	}
-	must(t, m, agent, Request{Action: "control"})
-	waitUntil(t, "the second lease to expire", 2*time.Second, func() bool { return controlOf(t, m, id) == "idle" })
 }
 
 func TestExpiryTimersStopWithTheManager(t *testing.T) {
@@ -577,170 +527,25 @@ func TestExpiryTimersStopWithTheManager(t *testing.T) {
 	}
 }
 
-func humanTouch(t *testing.T, m *Manager, id string, i Input) error {
-	t.Helper()
-	_, err := m.Handle(context.Background(), human, Request{Action: "touch", ID: id, Command: &Command{Kind: "input", Input: &i}})
-	return err
-}
-
-// The person's clicks and typing reach the page while the agent keeps the
-// browser; nothing pauses it. It is told what happened, never the text.
-func TestPersonInputDoesNotPauseAgentAndIsTold(t *testing.T) {
-	m, b, id := setup(t)
-	lease := must(t, m, agent, Request{Action: "control"}).Lease
-	for _, i := range []Input{{Kind: "mouseMoved", X: 5, Y: 5}, {Kind: "mousePressed", X: 10, Y: 20, Button: "left"}, {Kind: "mouseReleased", X: 10, Y: 20, Button: "left"}, {Kind: "text", Text: "hunter2!"}} {
-		if err := humanTouch(t, m, id, i); err != nil {
-			t.Fatal(err)
-		}
-	}
-	w := b.windows[0]
-	w.mu.Lock()
-	delivered := len(w.inputs)
-	w.mu.Unlock()
-	if delivered != 4 {
-		t.Fatalf("delivered %d inputs", delivered)
-	}
-	if controlOf(t, m, id) != "agent" {
-		t.Fatal("the person's input moved control away from the agent")
-	}
-	r := must(t, m, agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "snapshot"}})
-	notes := strings.Join(r.Notes, "\n")
-	if !strings.Contains(notes, "1 click") || !strings.Contains(notes, "8 typed characters") || strings.Contains(notes, "hunter2") {
-		t.Fatalf("notes = %q", notes)
-	}
-	if r2 := must(t, m, agent, Request{Action: "command", Lease: r.Lease, Command: &Command{Kind: "snapshot"}}); len(r2.Notes) != 0 {
-		t.Fatalf("told twice: %q", r2.Notes)
-	}
-}
-
-// Input that lands while the agent's own action runs is flagged as such.
-func TestPersonInputDuringAgentActionIsFlagged(t *testing.T) {
-	m, b, id := setup(t)
-	lease := must(t, m, agent, Request{Action: "control"}).Lease
-	w := b.windows[0]
-	w.entered = make(chan struct{})
-	w.drain = make(chan struct{})
-	done := make(chan Response, 1)
-	go func() {
-		r, _ := m.Handle(context.Background(), agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "click", Ref: "@e1"}})
-		done <- r
-	}()
-	<-w.entered
-	if err := humanTouch(t, m, id, Input{Kind: "mousePressed", X: 1, Y: 1, Button: "left"}); err != nil {
-		t.Fatal(err)
-	}
-	close(w.drain)
-	r := <-done
-	if !strings.Contains(strings.Join(r.Notes, " "), "while your own action was running") || !strings.Contains(strings.Join(r.Notes, " "), "https://example.test/account.") {
-		t.Fatalf("notes = %q", r.Notes)
-	}
-	w.entered = nil
-}
-
-// Take over is hard: the agent waits and is told; handing back tells it what
-// the person did.
-func TestTakeOverMakesAgentWaitAndHandBackTellsIt(t *testing.T) {
-	m, _, id := setup(t)
-	lease := must(t, m, agent, Request{Action: "control"}).Lease
-	taken := must(t, m, human, Request{Action: "control", ID: id})
-	if taken.Resource.Agent != workerOf(agent) {
-		t.Fatalf("the row lost its agent while the person holds it: %q", taken.Resource.Agent)
-	}
-	listed := must(t, m, human, Request{Action: "list"})
-	if len(listed.Resources) != 1 || listed.Resources[0].Agent != workerOf(agent) || listed.Resources[0].Control != "human" {
-		t.Fatalf("list = %+v", listed.Resources)
-	}
-	_, err := m.Handle(context.Background(), agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "snapshot"}})
-	if !errors.Is(err, ErrLease) || !strings.Contains(err.Error(), "took over") {
-		t.Fatalf("err = %v", err)
-	}
-	_, err = m.Handle(context.Background(), agent, Request{Action: "control"})
-	if !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "do not poll") {
-		t.Fatalf("err = %v", err)
-	}
-	must(t, m, human, Request{Action: "release", ID: id})
-	r := must(t, m, agent, Request{Action: "control"})
-	if !strings.Contains(strings.Join(r.Notes, " "), "handed it back") {
-		t.Fatalf("notes = %q", r.Notes)
-	}
-}
-
-// Stop ends the agent's control and keeps that Worker out until the person
-// hands the window back; other Workers have windows of their own.
-func TestStopEndsAgentControlUntilHandBack(t *testing.T) {
-	m, _, id := setup(t)
-	lease := must(t, m, agent, Request{Action: "control"}).Lease
-	if got := must(t, m, human, Request{Action: "status", ID: id}).Resource.Agent; got != "task" {
-		t.Fatalf("agent = %q", got)
-	}
-	must(t, m, human, Request{Action: "halt", ID: id})
-	if controlOf(t, m, id) != "idle" {
-		t.Fatal("control not ended")
-	}
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "command", Lease: lease, Command: &Command{Kind: "snapshot"}}); !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "stopped you") {
-		t.Fatalf("err = %v", err)
-	}
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "control"}); !errors.Is(err, ErrBusy) {
-		t.Fatalf("err = %v", err)
-	}
-	other := Owner{Kind: "agent", ID: "other-task/attachment"}
-	must(t, m, other, Request{Action: "control"})
-	must(t, m, other, Request{Action: "release"})
-	must(t, m, human, Request{Action: "control", ID: id})
-	must(t, m, human, Request{Action: "release", ID: id})
-	must(t, m, agent, Request{Action: "control"})
-}
-
-// Recovering a stuck window while the Screen lists and the sweeper looks must
-// not deadlock on the manager and entry locks; it once froze every agent.
-func TestRecoveringAWindowWhileListingAndSweepingDoesNotDeadlock(t *testing.T) {
-	previous := sweepEvery
-	sweepEvery = time.Millisecond
-	t.Cleanup(func() { sweepEvery = previous })
-	m, b := newManager(t)
+// A list taken while a window is reopened and the sweep runs must not deadlock.
+func TestOpeningAWindowAgainWhileListingAndSweepingDoesNotDeadlock(t *testing.T) {
+	m, _, _ := setup(t)
 	m.SetWorkerLive(func(string) bool { return true })
-	other := Owner{Kind: "agent", ID: "other/client"}
-	must(t, m, other, Request{Action: "control"})
-	stop := make(chan struct{})
-	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-					m.Handle(context.Background(), human, Request{Action: "list"})
-					m.VirtualScreen()
-				}
-			}
-		}()
-	}
+	go m.sweep(2 * time.Millisecond)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < 40; i++ {
-			r, err := m.Handle(context.Background(), agent, Request{Action: "control"})
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			b.last().uncertain = false
-			e, _ := m.get(windowID(t, m, "task"))
-			e.mu.Lock()
-			e.uncertain = true
-			e.mu.Unlock()
-			_ = r
-			m.Handle(context.Background(), agent, Request{Action: "release"})
+		for i := 0; i < 50; i++ {
+			open(t, m, "task", fmt.Sprintf("c%d", i+2), "tab-x")
+			must(t, m, human, Request{Action: "list"})
 		}
 	}()
 	select {
 	case <-done:
-	case <-time.After(20 * time.Second):
-		t.Fatal("deadlock: recovery, list and sweep did not finish")
+	case <-time.After(5 * time.Second):
+		t.Fatal("deadlock")
 	}
-	close(stop)
-	wg.Wait()
+	if rows := must(t, m, human, Request{Action: "list"}).Resources; len(rows) != 1 {
+		t.Fatalf("a Worker has %d rows", len(rows))
+	}
 }

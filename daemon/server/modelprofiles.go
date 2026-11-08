@@ -677,19 +677,11 @@ func (s *Server) sendModelProfileError(conn *websocket.Conn, requestID string, e
 }
 
 func (s *Server) createSessionWithProfiles(preferredTarget string, opts watcher.CreateSessionOptions, profileID, modelID string) (string, *modelprofiles.WireSessionSnapshot, modelprofiles.PersistResult, error) {
-	if !opts.Hidden && work.SupportsBrowserAttachment(opts.Command) && s.browsers.AgentBrowser(context.Background()) {
-		// With the virtual screen on, a Worker gets a browser on it; the window
-		// opens when the agent first asks.
+	if !opts.Hidden && s.browsers.VirtualScreen() {
+		// With the virtual screen on, a Worker's browser tools act for it by
+		// its identity: its window is named for it and the person can take
+		// the window over from Screen.
 		opts.ProgressEnv = true
-		opts.Env = mergeSessionEnv(opts.Env, map[string]string{"MEWLA_STATE_DIR": s.auth.StorageDir(), "MEWLA_WORKER_ID": ""})
-		opts.PrepareLaunch = func(command string) (string, error) {
-			launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), s.auth.StorageDir(), s.displayOn())
-			if err != nil {
-				// The browser was not asked for; a command that cannot take it launches without.
-				return command, nil
-			}
-			return launch, nil
-		}
 	}
 	owner := s.modelProfiles()
 	if owner == nil {

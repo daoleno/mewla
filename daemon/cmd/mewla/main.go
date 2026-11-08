@@ -156,8 +156,6 @@ func run(args []string, stderr io.Writer) error {
 			return runMemoryCommand(args[1:], stderr)
 		case "calendar":
 			return runCalendarCommand(args[1:], stderr)
-		case "browser":
-			return runBrowserCommand(args[1:], stderr)
 		case "gcloud":
 			return runCloudCommand("gcp", args[1:], stderr)
 		case "aws":
@@ -728,11 +726,32 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := connectionManager.EnsureDefaults(); err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
-	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend())
+	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend(agentUse.PrepareAgentBrowser))
 	if err != nil {
 		return fmt.Errorf("initialize Browser: %w", err)
 	}
 	defer browserManager.Close()
+	// With the virtual screen on, agents' windows are in the agent browser on
+	// it, with the same extension and the same tools as the person's Chrome.
+	agentUse.SetVirtualScreen(func() (bool, string) {
+		if !browserManager.VirtualScreen() {
+			return false, ""
+		}
+		if c := browserManager.Capability(ctx); !c.Available {
+			return true, c.Reason
+		}
+		return true, ""
+	})
+	agentUse.Bridge().Agent = &agentuse.AgentBrowser{
+		On:     browserManager.VirtualScreen,
+		Ensure: browserManager.EnsureHost,
+		Opened: browserManager.Opened,
+		Viewed: browserManager.Viewed,
+		Closed: browserManager.Closed,
+		Bounds: agentuse.WindowBounds{Left: 0, Top: 0, Width: 1280, Height: 800},
+	}
+	browserManager.SetWindowCloser(agentUse.Bridge().CloseWindow)
+	browserManager.SetSwitchHook(func() { go agentUse.Refresh() })
 	srv.SetBrowser(browserManager)
 	// A Worker's window goes with its session, not with its last answer.
 	browserManager.SetWorkerLive(func(id string) bool {

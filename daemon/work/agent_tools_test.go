@@ -30,9 +30,10 @@ func TestAgentToolsAreInvocationScopedAndCarryNoKey(t *testing.T) {
 	if strings.Count(claude, "--mcp-config") != 1 || !strings.Contains(claude, "--allowedTools mcp__mewla_chrome,mcp__mewla_computer") {
 		t.Fatal(claude)
 	}
-	// Codex passes the Worker identity to the computer server only.
+	// Codex passes the Worker identity to both servers: the browser's window
+	// is named for it and the person's take over reaches it by it.
 	codex := WithAgentTools("codex", "/mewla", "/state", both)
-	if strings.Count(codex, "env_vars=") != 1 || !strings.Contains(codex, `env_vars=["MEWLA_WORKER_ID"]`) {
+	if strings.Count(codex, "env_vars=") != 2 || !strings.Contains(codex, `env_vars=["MEWLA_WORKER_ID"]`) {
 		t.Fatal(codex)
 	}
 	if got := WithAgentTools("codex", "/mewla", "/state", AgentTools{Computer: true}); strings.Contains(got, "chrome") || !strings.Contains(got, "mewla_computer") {
@@ -42,23 +43,12 @@ func TestAgentToolsAreInvocationScopedAndCarryNoKey(t *testing.T) {
 
 func TestAgentToolsNeverBreakALaunch(t *testing.T) {
 	both := AgentTools{Chrome: true, Computer: true}
-	withBrowser, err := WithBrowserMCP("claude --model x", "/mewla", "/state", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, command := range []string{"sh", "codex; echo bad", "codex --", "opencode", withBrowser, "claude --strict-mcp-config --mcp-config x"} {
+	for _, command := range []string{"sh", "codex; echo bad", "codex --", "opencode", "claude --strict-mcp-config --mcp-config x"} {
 		if got := WithAgentTools(command, "/mewla", "/state", both); got != command {
 			t.Fatalf("changed %q into %q", command, got)
 		}
 	}
 	if got := WithAgentTools("codex", "/mewla", "/state", AgentTools{}); got != "codex" {
-		t.Fatal(got)
-	}
-	codexBrowser, err := WithBrowserMCP("codex", "/mewla", "/state", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := WithAgentTools(codexBrowser, "/mewla", "/state", both); !strings.Contains(got, "mewla_browser") || !strings.Contains(got, ChromeMCPName) || !strings.Contains(got, ComputerMCPName) {
 		t.Fatal(got)
 	}
 }
@@ -150,24 +140,17 @@ func TestThePhoneIsAnInvocationScopedServerForClaudeAndCodex(t *testing.T) {
 	}
 }
 
-func TestDisplayToolRidesOnTheLaunchOnce(t *testing.T) {
+func TestDisplayToolRidesOnTheLaunchWithTheWorkersIdentity(t *testing.T) {
 	for _, command := range []string{"claude --model x", "codex"} {
-		// With a browser, one MCP config carries both, and the tools pass adds nothing twice.
-		withBoth, err := WithBrowserMCP(command, "/mewla", "/state", true)
-		if err != nil || strings.Count(withBoth, "display-mcp") != 1 || !strings.Contains(withBoth, DisplayMCPName) {
-			t.Fatalf("%q: %v %s", command, err, withBoth)
+		both := WithAgentTools(command, "/mewla", "/state", AgentTools{Chrome: true, Display: true})
+		if strings.Count(both, "display-mcp") != 1 || strings.Count(both, "chrome-mcp") != 1 || !strings.Contains(both, DisplayMCPName) {
+			t.Fatalf("%q: %s", command, both)
 		}
-		if got := WithAgentTools(withBoth, "/mewla", "/state", AgentTools{Display: true}); strings.Count(got, "display-mcp") != 1 {
-			t.Fatalf("display added twice: %s", got)
+		if again := WithAgentTools(both, "/mewla", "/state", AgentTools{Chrome: true, Display: true}); again != both {
+			t.Fatalf("added twice: %s", again)
 		}
-		without, _ := WithBrowserMCP(command, "/mewla", "/state", false)
-		if strings.Contains(without, "display-mcp") {
-			t.Fatalf("display without the switch: %s", without)
-		}
-		// Without a browser launch, the tools pass adds it, with the Worker's identity.
-		plain := WithAgentTools(command, "/mewla", "/state", AgentTools{Display: true})
-		if !strings.Contains(plain, "display-mcp") || !strings.Contains(plain, "MEWLA_WORKER_ID") && strings.HasPrefix(command, "codex") {
-			t.Fatalf("%q: %s", command, plain)
+		if strings.HasPrefix(command, "codex") && strings.Count(both, "MEWLA_WORKER_ID") != 2 {
+			t.Fatalf("the Worker's identity must reach both servers: %s", both)
 		}
 	}
 }

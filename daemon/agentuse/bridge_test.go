@@ -38,7 +38,7 @@ func startBridge(t *testing.T) (*Bridge, string) {
 // extension: it records them and says connected, or an error.
 func fakeExtension(t *testing.T, dir string, answer func(m hostMessage) hostMessage) <-chan hostMessage {
 	t.Helper()
-	conn, err := DialBridgeHost(dir)
+	conn, err := DialBridgeHost(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestConnectAsksTheExtensionToOpenAnAgentWindow(t *testing.T) {
 		held.Add(1)
 		return WindowBounds{1512, 0, 1600, 1000}, func() { released.Add(1) }, nil
 	}
-	conn, err := DialBridgeHost(dir)
+	conn, err := DialBridgeHost(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestTheDisplayIsLetGoWhenChromeEndsTheHostWithAWindowOpen(t *testing.T) {
 	b.Display = func(string) (WindowBounds, func(), error) {
 		return WindowBounds{}, func() { released.Add(1) }, nil
 	}
-	conn, err := DialBridgeHost(dir)
+	conn, err := DialBridgeHost(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestOnlyTheBrowserToolsOwnRelayIsAccepted(t *testing.T) {
 
 func TestAConnectIsFailedWhenChromeEndsTheHost(t *testing.T) {
 	b, dir := startBridge(t)
-	conn, err := DialBridgeHost(dir)
+	conn, err := DialBridgeHost(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestNativeHostJoinsChromeToTheBridge(t *testing.T) {
 	out := &lockedWriter{w: &fromHost, mu: make(chan struct{}, 1)}
 	done := make(chan error, 1)
 	go func() {
-		conn, err := DialBridgeHost(dir)
+		conn, err := DialBridgeHost(dir, false)
 		if err != nil {
 			done <- err
 			return
