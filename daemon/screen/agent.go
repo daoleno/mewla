@@ -1103,6 +1103,9 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err != nil {
 		return AgentResult{}, notDelivered(a.gone(ctx, a.treeApp, err))
 	}
+	if canChoose && e.Role == "AXPopUpButton" && (name == "AXPress" || name == "AXShowMenu") {
+		chosen = " That opened the pop-up's menu and it stays open until an item is chosen. Choose with set_value and the item's title: it takes the item and closes the menu."
+	}
 	announced := false
 	if watch != nil {
 		var err error
