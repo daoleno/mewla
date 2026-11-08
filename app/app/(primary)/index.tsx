@@ -957,7 +957,6 @@ export default function BrainScreen() {
         activating={brainModelSheet.activating}
         error={brainModelSheet.error}
         rows={brainModelSheet.rows}
-        chrome={chrome}
         onClose={brainModelSheet.close}
         onRetry={brainModelSheet.retry}
         onActivate={(choice) => {

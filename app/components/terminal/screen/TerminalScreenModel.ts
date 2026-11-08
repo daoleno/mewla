@@ -1,7 +1,3 @@
-import type {
-  TerminalThemeChrome,
-  TerminalThemePalette,
-} from "../../../constants/terminalThemes";
 import type { ConnectionIssue } from "../../../services/connectionIssue";
 import type { Worker, ConnectionState } from "../../../store/workers";
 import type { WorkItem } from "../../../store/work";
@@ -15,7 +11,8 @@ export interface MenuAnchorLayout {
 }
 
 export interface TerminalFallbackPresentation {
-  accent: string;
+  /** A connection issue, shown as an error rather than a wait. */
+  failed: boolean;
   busy: boolean;
   title: string;
   detail: string;
@@ -42,21 +39,13 @@ export function buildTerminalFallbackPresentation({
   hasTerminalRoute,
   connectionState,
   connectionIssue,
-  terminalTheme,
-  chromeColors,
 }: {
   hasTerminalRoute: boolean;
   connectionState: ConnectionState;
   connectionIssue?: ConnectionIssue | null;
-  terminalTheme: TerminalThemePalette;
-  chromeColors: TerminalThemeChrome;
 }): TerminalFallbackPresentation {
   return {
-    accent: connectionIssue
-      ? terminalTheme.red
-      : connectionState === "connecting"
-        ? terminalTheme.yellow
-        : chromeColors.textSubtle,
+    failed: Boolean(connectionIssue),
     busy:
       hasTerminalRoute && connectionState === "connecting" && !connectionIssue,
     title: !hasTerminalRoute

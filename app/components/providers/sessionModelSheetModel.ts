@@ -3,12 +3,6 @@ import type { ProviderPickerModelRow } from "../../services/providers/sessionMod
 export type SessionModelSheetRow = ProviderPickerModelRow;
 export type { ProviderPickerModelRow } from "../../services/providers/sessionModelHelpers";
 
-export type RuntimeRowSurfaceKey = "accentSoft" | "surfaceMuted";
-
-export function runtimeRowSurfaceKey(selected: boolean): RuntimeRowSurfaceKey {
-  return selected ? "accentSoft" : "surfaceMuted";
-}
-
 export function effectRowsForRuntime(row: ProviderPickerModelRow) {
   return row.effects.map((effect) => ({
     key: effect || "default",

@@ -1,15 +1,15 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet } from "react-native";
 import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../../constants/terminalThemes";
-import { TypeScale } from "../../../constants/tokens";
 import type {
   ProviderError,
   ThreadRuntimeChoice,
 } from "../../../services/providers";
 import type { ProviderPickerModelRow } from "../../../services/providers/sessionModelHelpers";
+import { InlineNotice } from "../../ui/InlineNotice";
 import { SessionModelSheet } from "../../providers/SessionModelSheet";
 import { GitDiffSheet } from "../GitDiffSheet";
 import { NewTerminalSheet } from "../NewTerminalSheet";
@@ -109,28 +109,18 @@ export function TerminalScreenOverlays({
   return (
     <>
       {createDurabilityWarning ? (
-        <View
-          style={[
-            styles.durabilityBanner,
-            { backgroundColor: chrome.surfaceMuted, borderColor: chrome.border },
-          ]}
-          accessibilityRole="summary"
-        >
-          <Text style={[styles.durabilityText, { color: chrome.textMuted }]}>
-            {createDurabilityWarning}
-          </Text>
-          {onDismissCreateDurabilityWarning ? (
-            <Pressable
-              onPress={onDismissCreateDurabilityWarning}
-              accessibilityRole="button"
-              accessibilityLabel="Dismiss durability warning"
-            >
-              <Text style={[styles.durabilityDismiss, { color: chrome.accent }]}>
-                Dismiss
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <InlineNotice
+          tone="warning"
+          title="Not confirmed durable"
+          detail={createDurabilityWarning}
+          detailNumberOfLines={0}
+          style={styles.durabilityBanner}
+          action={
+            onDismissCreateDurabilityWarning
+              ? { label: "Dismiss", accessibilityLabel: "Dismiss durability warning", onPress: onDismissCreateDurabilityWarning }
+              : undefined
+          }
+        />
       ) : null}
 
       <SessionModelSheet
@@ -139,7 +129,6 @@ export function TerminalScreenOverlays({
         activating={routeSheetActivating}
         error={routeSheetError}
         rows={routeSheetRows}
-        chrome={chrome}
         onClose={onCloseRouteSheet}
         onRetry={onRetryRouteSheet}
         onActivate={onActivateSessionModel}
@@ -188,8 +177,6 @@ export function TerminalScreenOverlays({
         visible={renameVisible}
         draft={renameDraft}
         placeholder={renamePlaceholder}
-        chrome={chrome}
-        theme={theme}
         onDraftChange={onRenameDraftChange}
         onClose={onCloseRename}
         onSave={onSaveRename}
@@ -199,21 +186,5 @@ export function TerminalScreenOverlays({
 }
 
 const styles = StyleSheet.create({
-  durabilityBanner: {
-    marginHorizontal: 12,
-    marginTop: 8,
-    marginBottom: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 6,
-  },
-  durabilityText: {
-    ...TypeScale.caption,
-    lineHeight: 16,
-  },
-  durabilityDismiss: {
-    ...TypeScale.label,
-  },
+  durabilityBanner: { marginHorizontal: 12, marginTop: 8, marginBottom: 4 },
 });

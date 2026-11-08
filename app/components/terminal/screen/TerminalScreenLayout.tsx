@@ -8,6 +8,7 @@ import type { TerminalTopBarProps } from "../TerminalTopBar";
 import { TerminalViewport } from "../TerminalViewport";
 import type { TerminalViewportProps } from "../TerminalViewport";
 import type { TerminalThemeChrome } from "../../../constants/terminalThemes";
+import { TerminalThemeScope } from "../../../theme/provider";
 import { TerminalScreenOverlays } from "./TerminalScreenOverlays";
 import { SESSION_FRAME_WIDTH } from "../ChatCanvas";
 import type { TerminalScreenOverlaysProps } from "./TerminalScreenOverlays";
@@ -38,6 +39,7 @@ export function TerminalScreenLayout({
       }
     : null;
   return (
+    <TerminalThemeScope chrome={chrome}>
     <SafeAreaView
       style={[styles.container, { backgroundColor: chrome.appBackground }]}
       edges={["top"]}
@@ -67,6 +69,7 @@ export function TerminalScreenLayout({
 
       <TerminalScreenOverlays {...overlayProps} />
     </SafeAreaView>
+    </TerminalThemeScope>
   );
 }
 

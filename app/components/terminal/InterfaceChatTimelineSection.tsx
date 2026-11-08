@@ -219,7 +219,7 @@ export function InterfaceChatTimelineSection({
   return (
     <ImageOwnerContext.Provider value={imageOwner}>
     <SessionFilePreviewContext.Provider value={filePreviewContext}>
-      {conversation?.source === "dsh_session_jsonl" && workerProcessId && workerStartedAt ? <DSHInteractionPanel key={imageOwner.key} serverId={serverId} request={{ workerId, processId: workerProcessId, startedAt: workerStartedAt, path: "" }} chrome={chrome} /> : null}
+      {conversation?.source === "dsh_session_jsonl" && workerProcessId && workerStartedAt ? <DSHInteractionPanel key={imageOwner.key} serverId={serverId} request={{ workerId, processId: workerProcessId, startedAt: workerStartedAt, path: "" }} /> : null}
       <InterfaceTimelineView
         key={readingPosition?.scope}
         readingPosition={readingPosition}

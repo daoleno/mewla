@@ -1,146 +1,63 @@
 import React from "react";
-import {
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { TypeScale } from "../../constants/tokens";
-import type {
-  TerminalThemeChrome,
-  TerminalThemePalette,
-} from "../../constants/terminalThemes";
+import { StyleSheet, View } from "react-native";
+import { AppText } from "../ui/AppText";
+import { Button } from "../ui/Button";
+import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
+import { useAppColors, Radii } from "../../constants/tokens";
 
 interface TerminalRenameCardProps {
   draft: string;
   placeholder: string;
-  chrome: TerminalThemeChrome;
-  theme: TerminalThemePalette;
   onDraftChange(value: string): void;
   onClose(): void;
   onSave(): void;
 }
 
+/** Reads the terminal theme from the surrounding `TerminalThemeScope`. */
 export function TerminalRenameCard({
   draft,
   placeholder,
-  chrome,
   onDraftChange,
   onClose,
   onSave,
 }: TerminalRenameCardProps) {
+  const colors = useAppColors();
   return (
     <View
       style={[
-        styles.renameCard,
-        {
-          backgroundColor: chrome.surface,
-          borderColor: chrome.border,
-        },
+        styles.card,
+        { backgroundColor: colors.bgSurface, borderColor: colors.border },
       ]}
     >
-      <Text style={[styles.renameTitle, { color: chrome.text }]}>
-        Rename Terminal
-      </Text>
-      <Text style={[styles.renameHint, { color: chrome.textMuted }]}>
+      <AppText variant="heading">Rename Terminal</AppText>
+      <AppText variant="caption" tone="secondary" style={styles.hint}>
         Only changes the local display name on this device.
-      </Text>
-      <TextInput
-        style={[
-          styles.renameInput,
-          {
-            color: chrome.text,
-            borderColor: chrome.border,
-            backgroundColor: chrome.surfaceMuted,
-          },
-        ]}
+      </AppText>
+      <MobileSingleLineInput
+        framed
         value={draft}
         onChangeText={onDraftChange}
         placeholder={placeholder}
-        placeholderTextColor={chrome.textSubtle}
+        placeholderTextColor={colors.textTertiary}
+        accessibilityLabel="Terminal name"
         autoFocus
         autoCorrect={false}
         autoCapitalize="none"
         returnKeyType="done"
         onSubmitEditing={onSave}
+        containerStyle={styles.input}
       />
-      <View style={styles.renameActions}>
-        <TouchableOpacity
-          style={[
-            styles.renameButton,
-            {
-              backgroundColor: chrome.surfaceMuted,
-              borderColor: chrome.border,
-            },
-          ]}
-          onPress={onClose}
-          activeOpacity={0.84}
-        >
-          <Text style={[styles.renameButtonText, { color: chrome.textMuted }]}>
-            Cancel
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.renameButton,
-            {
-              backgroundColor: chrome.accent,
-              borderColor: chrome.accent,
-            },
-          ]}
-          onPress={onSave}
-          activeOpacity={0.84}
-        >
-          <Text
-            style={[
-              styles.renameButtonText,
-              { color: chrome.textOnAccent },
-            ]}
-          >
-            Save
-          </Text>
-        </TouchableOpacity>
+      <View style={styles.actions}>
+        <Button label="Cancel" variant="tinted" onPress={onClose} />
+        <Button label="Save" variant="filled" onPress={onSave} />
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  renameCard: {
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-  },
-  renameTitle: {
-    ...TypeScale.heading,
-  },
-  renameHint: {
-    ...TypeScale.caption,
-    marginTop: 4,
-  },
-  renameInput: {
-    marginTop: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    ...TypeScale.compact,
-  },
-  renameActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 14,
-    gap: 10,
-  },
-  renameButton: {
-    minWidth: 72,
-    height: 44,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  renameButtonText: {
-    ...TypeScale.label,
-  },
+  card: { borderRadius: Radii.card, padding: 16, borderWidth: StyleSheet.hairlineWidth },
+  hint: { marginTop: 4 },
+  input: { marginTop: 14 },
+  actions: { flexDirection: "row", justifyContent: "flex-end", marginTop: 14, gap: 10 },
 });

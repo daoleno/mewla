@@ -31,7 +31,7 @@ export interface TerminalViewportProps {
   canRenderTerminal: boolean;
   shouldMountTerminalSurface: boolean;
   terminalSurfaceActive: boolean;
-  terminalStateAccent: string;
+  terminalStateFailed: boolean;
   terminalStateBusy: boolean;
   terminalStateTitle: string;
   terminalStateDetail: string;
@@ -69,7 +69,7 @@ function TerminalViewportImpl({
   canRenderTerminal,
   shouldMountTerminalSurface,
   terminalSurfaceActive,
-  terminalStateAccent,
+  terminalStateFailed,
   terminalStateBusy,
   terminalStateTitle,
   terminalStateDetail,
@@ -152,7 +152,7 @@ function TerminalViewportImpl({
             canRenderTerminal={canRenderTerminal}
             shouldMountTerminalSurface={shouldMountTerminalSurface}
             terminalSurfaceActive={terminalSurfaceActive}
-            terminalStateAccent={terminalStateAccent}
+            terminalStateFailed={terminalStateFailed}
             terminalStateBusy={terminalStateBusy}
             terminalStateTitle={terminalStateTitle}
             terminalStateDetail={terminalStateDetail}

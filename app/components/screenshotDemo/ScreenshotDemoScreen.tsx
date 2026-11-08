@@ -1549,7 +1549,6 @@ function ComposerStatesDemo() {
         activating={false}
         error={null}
         rows={demoRows}
-        chrome={chrome}
         onClose={() => setDemoSheet(null)}
         onRetry={NOOP}
         onActivate={(choice) => {

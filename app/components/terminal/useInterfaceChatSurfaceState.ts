@@ -638,8 +638,6 @@ export function useInterfaceChatSurfaceState({
         visible: skillsSheetVisible,
         serverId,
         cwd: workerInfo?.cwd,
-        chrome,
-        theme,
         onSelectSkill: (skill) => {
           closeSkillsSheet();
           controller.insertSkillMention(skill);
@@ -648,12 +646,10 @@ export function useInterfaceChatSurfaceState({
       }),
     [
       workerInfo?.cwd,
-      chrome,
       closeSkillsSheet,
       controller.insertSkillMention,
       serverId,
       skillsSheetVisible,
-      theme,
     ],
   );
   const statusSheet = useMemo(
@@ -661,8 +657,6 @@ export function useInterfaceChatSurfaceState({
       React.createElement(CodexStatusSheet, {
         visible: statusSheetVisible,
         state: statusState,
-        chrome,
-        theme,
         onRetry: loadStatus,
         onSwitchToTerminal: onSwitchToTerminal
           ? switchFromStatusToTerminal
@@ -670,14 +664,12 @@ export function useInterfaceChatSurfaceState({
         onClose: closeStatusSheet,
       }),
     [
-      chrome,
       closeStatusSheet,
       onSwitchToTerminal,
       loadStatus,
       statusSheetVisible,
       statusState,
       switchFromStatusToTerminal,
-      theme,
     ],
   );
   const sheets = useMemo(

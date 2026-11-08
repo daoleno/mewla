@@ -19,7 +19,9 @@ import {
   setThemePreference,
 } from "../services/storage";
 import { DEFAULT_PET_ID, PET_PACKS } from "../components/pets/petPacks";
+import type { TerminalThemeChrome } from "../constants/terminalThemes";
 import { navigationThemeFromTheme } from "./navigation";
+import { terminalScopedTheme } from "./terminalScope";
 import { resolveTheme } from "./resolve";
 import { syncSystemRootBackground } from "./syncSystemRootBackground";
 import { useSystemColorScheme } from "./useSystemColorScheme";
@@ -34,7 +36,7 @@ type ThemeContextValue = {
   setPetId: (next: string) => Promise<void>;
 };
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useSystemColorScheme();
@@ -123,6 +125,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       </NavigationThemeProvider>
     </ThemeContext.Provider>
   );
+}
+
+/**
+ * Inside a terminal surface the app theme reads as the terminal theme: the
+ * shared controls need no palette props, they just draw in its colours.
+ */
+export function TerminalThemeScope({ chrome, children }: { chrome: TerminalThemeChrome; children: ReactNode }) {
+  const parent = useThemeContext();
+  const value = useMemo(
+    () => ({ ...parent, theme: terminalScopedTheme(parent.theme, chrome) }),
+    [chrome, parent],
+  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useThemeContext(): ThemeContextValue {
