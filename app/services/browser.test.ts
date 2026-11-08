@@ -113,7 +113,7 @@ if (!process.env.MEWLA_BROWSER_SERVICE_TEST_CHILD) {
       expect(error.status).toBe(404);
       expect(error.detail).toBe("404 page not found");
       globalThis.fetch = (async () => new Response(JSON.stringify({ error: "Browser not found" }), { status: 409 })) as any;
-      await expect(browserRequest(server as any, { action: "start", id: "x" })).rejects.toThrow("Browser not found");
+      await expect(browserRequest(server as any, { action: "status", id: "x" })).rejects.toThrow("Browser not found");
     } finally { globalThis.fetch = fetchOriginal; }
   });
   test("viewer reports lost liveness on close without reporting after detach", async () => {

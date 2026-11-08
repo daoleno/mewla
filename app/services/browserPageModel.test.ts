@@ -17,9 +17,7 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
   mock.module("react-native", () => ({ Platform: { OS: "ios" } }));
   mock.module("./pinnedTransport", () => ({ resolveStoredServerURL: async (server: { url: string }) => server.url }));
   const { BrowserRequestError } = await import("./browser");
-  const { browserIssue, chooseBrowser, launchBrowserId, pickDefaultBrowser, recoveryLabel, supportsBrowserAttachment } = await import("./browserPageModel");
-
-  const resource = { id: "r", name: "Personal", state: "running", control: "idle", allow_agents: true };
+  const { browserIssue, recoveryLabel } = await import("./browserPageModel");
 
   test("failures read as product states and keep raw text only as diagnostics", () => {
     const missing = browserIssue(new BrowserRequestError("Browser request failed", 404, "404 page not found"), "home");
@@ -29,42 +27,15 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
     expect(browserIssue(new BrowserRequestError("x", 401, "unauthorized"), "home")!.recovery).toBe("settings");
     expect(browserIssue(new Error("Browser is controlled by someone else"), "home")!.recovery).toBe("take_control");
     expect(browserIssue(new Error("Browser control changed; request control again"), "home")!.recovery).toBe("take_control");
-    expect(browserIssue(new Error("Browser action could not be drained; stop and reopen this browser"), "home")!.recovery).toBe("restart");
+    expect(browserIssue(new Error("Browser action could not be drained; stop and reopen this browser"), "home")).toMatchObject({ title: "This window needs a fresh start", recovery: "none" });
     expect(browserIssue(new Error("Browser response timed out. Reconnect before continuing."), "home")!.recovery).toBe("reconnect");
     expect(browserIssue(new TypeError("Network request failed"), "home")!.title).toBe("Can't reach home");
     const parse = browserIssue(new SyntaxError("JSON Parse error: Unexpected character: p"), "home")!;
     expect(parse.title).toBe("That didn't finish");
     expect(`${parse.title} ${parse.detail}`).not.toMatch(/json|parse/i);
     expect(browserIssue(new Error("Browser request cancelled"), "home")).toBeNull();
-    for (const recovery of ["retry", "reconnect", "take_control", "settings", "restart"] as const) expect(recoveryLabel(recovery)).toBeTruthy();
+    for (const recovery of ["retry", "reconnect", "take_control", "settings"] as const) expect(recoveryLabel(recovery)).toBeTruthy();
     expect(recoveryLabel("none")).toBeNull();
-  });
-
-  test("entering picks the remembered browser", () => {
-    const closed = { ...resource, id: "a", state: "stopped" };
-    const running = { ...resource, id: "b" };
-    expect(pickDefaultBrowser([closed, running], "a")!.id).toBe("a");
-    expect(pickDefaultBrowser([closed, running], "gone")!.id).toBe("b");
-    expect(pickDefaultBrowser([closed], null)!.id).toBe("a");
-    expect(pickDefaultBrowser([], null)).toBeNull();
-  });
-
-  test("session launches attach Browser only for commands that support it", () => {
-    expect(supportsBrowserAttachment("codex --model x")).toBe(true);
-    expect(supportsBrowserAttachment("FOO=1 /usr/bin/claude")).toBe(true);
-    expect(supportsBrowserAttachment("opencode")).toBe(false);
-    expect(supportsBrowserAttachment("")).toBe(false);
-  });
-
-  test("a preselected browser never breaks unsupported launches or overrides a user's pick", () => {
-    const initial = { automatic: false, chosen: false };
-    const auto = chooseBrowser(initial, "b1", true);
-    expect(launchBrowserId(auto, "codex")).toBe("b1");
-    expect(launchBrowserId(auto, "bash")).toBeUndefined();
-    const none = chooseBrowser(auto, undefined, false);
-    expect(chooseBrowser(none, "b1", true)).toEqual(none);
-    const explicit = chooseBrowser(initial, "b2", false);
-    expect(launchBrowserId(explicit, "bash")).toBe("b2");
   });
 
   test("Agent browser card has no per-Agent permission step and gates input on the server lease", async () => {
@@ -81,7 +52,9 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
     expect(source).toContain("else if (viewer.current) viewer.current.touch(message.input)");
     expect(source).not.toContain("claimable");
     expect(source).not.toMatch(/pauses while/);
+    // The person never manages browsers: Screen lists the agents on it and nothing else.
     const list = await Bun.file(new URL("../components/screen/AgentScreens.tsx", import.meta.url)).text();
-    expect(list).toContain('Alert.alert(\n    `Delete “${resource.name}”?`');
+    expect(list).not.toMatch(/New browser|Open browser|Delete browser|action: "(create|start|stop|delete|grant)"/);
+    expect(source).not.toMatch(/Close browser|Delete browser/);
   });
 }

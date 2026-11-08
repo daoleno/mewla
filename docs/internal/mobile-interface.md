@@ -83,7 +83,7 @@ Loading, offline, empty and error states use the shared empty state with **Try a
 
 ## Browser
 
-Browser opens the current server's default browser straight into the viewer: page view, address bar and Tabs. The app requests input only when nobody is in control. When an Agent or another device is in control it offers Take over. Switching, New browser, Close, Delete and Connection details live in the options menu. A dropped view reconnects up to three times before showing Reconnect. Agent tasks on the same server can use the browser with no per-Agent switch. See [persistent-browser.md](persistent-browser.md).
+There is no Browser page and no browser to manage. Agents' browsers appear in Screen on a Linux computer (see [screen.md](../screen.md) and [persistent-browser.md](persistent-browser.md)): one card per agent window, with Watch, Take over, Hand back and Stop. A dropped view reconnects up to three times before showing Reconnect.
 
 ## Model Providers
 
@@ -91,7 +91,7 @@ A segmented **Codex / Claude** switch picks the agent. Below it, one grouped lis
 
 ## Shared patterns
 
-- **Back** is one control everywhere: `HeaderBackButton`, an icon-only chevron in a 40pt disc with a touch target of at least 44pt, labelled "Back", next to a centred title. Every pushed screen (Calendar, Plugins, Skills, Stats, Browser, Resources, Settings, Model Providers, Work detail) gets it from the root Stack header. The Session screen puts it in its first glass capsule. Full-screen pages inside a sheet, such as Settings → Telegram, use the same header row. Back inside a sheet uses the same chevron and names its destination ("Back to services").
+- **Back** is one control everywhere: `HeaderBackButton`, an icon-only chevron in a 40pt disc with a touch target of at least 44pt, labelled "Back", next to a centred title. Every pushed screen (Calendar, Plugins, Skills, Stats, Resources, Settings, Model Providers, Work detail) gets it from the root Stack header. The Session screen puts it in its first glass capsule. Full-screen pages inside a sheet, such as Settings → Telegram, use the same header row. Back inside a sheet uses the same chevron and names its destination ("Back to services").
 - **Back behaviour** has one rule (`useScreenBack`): the stack pops, and a screen opened by deep link with nothing below it lands on its logical parent: Brain, Sessions for a Session, Settings for Model Providers. Sub-pages are routes, never in-page steps, so Android hardware Back, the iOS edge swipe and browser Back on web all walk the same history.
 - **Overflow menus** always use the bottom-sheet `ActionMenu`. This covers Brain, Sessions, Session, Work detail, per-server actions in Settings, and per-Provider actions.
 - **Destructive actions** go through `confirmDestructive` or a native alert where the destructive button is never the default. This covers terminating Sessions, removing a server, deleting a Work item, deleting a Provider, and removing or unlinking Telegram.

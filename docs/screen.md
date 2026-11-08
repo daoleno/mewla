@@ -301,11 +301,11 @@ A Linux computer has no screen of yours to share, but the browsers agents use
 there run on a virtual screen of their own, off your desktop. **Screen** on a
 Linux computer shows the **Virtual screen** switch until it is on (the same
 switch as **Settings → Labs → Virtual screen**); a switch that cannot be read or
-set says why under it, with Retry. Once on, **Screen** lists every agent using a browser, each
-with its own live view, and the same three choices as on a Mac. A row keeps its
-place and its agent's name while you hold the browser. **New browser** in the
-menu opens one for signing in; the Phone, where phone use is on, is a row in
-the same menu.
+set says why under it, with Retry. Once on, **Screen** lists the agents using a
+browser right now, each with its own live view, and the same three choices as on
+a Mac. A row keeps its place and its agent's name while you hold the browser.
+You never open or manage a browser yourself: an agent's row appears when it
+asks for one. The Phone, where phone use is on, is a row in the page menu.
 
 - **Watch** is how it opens. Your taps, scrolls and typing reach the page
   without taking the browser from the agent. The agent is told what you did
@@ -319,10 +319,11 @@ the same menu.
   ask for it again until you take over and hand back.
 
 With the switch on, a Worker (Claude or Codex) gets a browser on the virtual
-screen without being told which: one no other agent is using, or a new one
-(up to eight; after that agents take turns). It comes up when the agent first
-asks for it, not when the Worker starts. The switch lives on the computer, so
-every device sees the same answer.
+screen without being told which. It comes up when the agent first asks for it,
+not when the Worker starts, and the agent waits for it. Every agent has a window
+of its own in one shared Chrome, so several agents work at the same time. The
+window closes when its Worker ends, and the browser stops when no agent is using
+it. The switch lives on the computer, so every device sees the same answer.
 
 Desktop apps work the same way. With the switch on, a Worker (Claude or Codex)
 also has a **display** tool: it opens a program (a calculator, an editor) on a
@@ -336,12 +337,13 @@ over holds the display until you hand it back. The picture travels over a Unix
 socket only your user can open, no network port is used, and a display is
 closed when its Worker ends or closes it.
 
-The browser has its own profile, not your everyday Chrome: to give it a
-sign-in, take over, sign in yourself and hand back. A profile keeps its
-sign-ins on that computer. Chrome stores them in the computer's secure wallet
+The browser has one profile for all agents on the computer, not your everyday
+Chrome: to give it a sign-in, take over an agent's window, sign in yourself and
+hand back; every agent's window then has it. The profile keeps its sign-ins on
+that computer. Chrome stores them in the computer's secure wallet
 (KWallet or another Secret Service) when one is unlocked for the user Mewla
 runs as; with none, the profile uses Chrome's own basic storage, in a folder
-only that user can read. A profile keeps the store it started with, so one that
+only that user can read. The profile keeps the store it started with, so one that
 began on the wallet waits for the wallet to be unlocked rather than lose its
 sign-ins. See [Agents in your browser](your-browser.md) for the browser that
 uses your own Chrome and sign-ins on your desktop instead.
