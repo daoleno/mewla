@@ -82,7 +82,10 @@ var kg struct {
 
 	tapCreate func(pid int32, place, options uint32, mask uint64, callback, info uintptr) uintptr
 	tapEnable func(port uintptr, enable bool)
-	field     func(event uintptr, field uint32) int64
+	// tapSession is CGEventTapCreate, for the probe's look at everything
+	// that flows through the session.
+	tapSession func(tap, place, options uint32, mask uint64, callback, info uintptr) uintptr
+	field      func(event uintptr, field uint32) int64
 
 	sourceFor   func(alloc, port uintptr, order int64) uintptr
 	loopCurrent func() uintptr
@@ -165,6 +168,9 @@ func loadKeyGuard() string {
 				return
 			}
 			purego.RegisterLibFunc(fn.ptr, fn.lib, fn.name)
+		}
+		if _, err := purego.Dlsym(as, "CGEventTapCreate"); err == nil {
+			purego.RegisterLibFunc(&kg.tapSession, as, "CGEventTapCreate")
 		}
 		if keyGuardVariant == "release" {
 			if sky == 0 {
@@ -297,13 +303,27 @@ func handBackKeyboard(thief int) {
 
 // startTap puts a tap on pid, on a run loop of its own thread.
 func startTap(pid int, callback uintptr) *keyTap {
+	return startTapMask(pid, uint64(1)<<focusNoticeType, false, callback)
+}
+
+// startTapMask puts a tap on pid for the event types in mask, or with
+// session a listen-only tap on the whole login session (pid is then 0).
+func startTapMask(pid int, mask uint64, session bool, callback uintptr) *keyTap {
 	type made struct{ port, loop uintptr }
 	ready := make(chan made, 1)
 	go func() {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 		// kCGHeadInsertEventTap = 0, kCGEventTapOptionDefault = 0.
-		port := kg.tapCreate(int32(pid), 0, 0, uint64(1)<<focusNoticeType, callback, 0)
+		var port uintptr
+		if session {
+			// kCGSessionEventTap = 1, head insert, listen only = 1.
+			if kg.tapSession != nil {
+				port = kg.tapSession(1, 0, 1, mask, callback, 0)
+			}
+		} else {
+			port = kg.tapCreate(int32(pid), 0, 0, mask, callback, 0)
+		}
 		if port == 0 {
 			ready <- made{}
 			return
