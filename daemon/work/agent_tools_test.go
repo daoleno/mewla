@@ -42,8 +42,7 @@ func TestAgentToolsAreInvocationScopedAndCarryNoKey(t *testing.T) {
 
 func TestAgentToolsNeverBreakALaunch(t *testing.T) {
 	both := AgentTools{Chrome: true, Computer: true}
-	id := "d20f34e6-e54e-4ca2-baf8-bd49592ba60a"
-	withBrowser, err := WithBrowserMCP("claude --model x", "/mewla", "/state", id, false)
+	withBrowser, err := WithBrowserMCP("claude --model x", "/mewla", "/state", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +54,7 @@ func TestAgentToolsNeverBreakALaunch(t *testing.T) {
 	if got := WithAgentTools("codex", "/mewla", "/state", AgentTools{}); got != "codex" {
 		t.Fatal(got)
 	}
-	codexBrowser, err := WithBrowserMCP("codex", "/mewla", "/state", id, false)
+	codexBrowser, err := WithBrowserMCP("codex", "/mewla", "/state", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,17 +151,16 @@ func TestThePhoneIsAnInvocationScopedServerForClaudeAndCodex(t *testing.T) {
 }
 
 func TestDisplayToolRidesOnTheLaunchOnce(t *testing.T) {
-	id := "d20f34e6-e54e-4ca2-baf8-bd49592ba60a"
 	for _, command := range []string{"claude --model x", "codex"} {
 		// With a browser, one MCP config carries both, and the tools pass adds nothing twice.
-		withBoth, err := WithBrowserMCP(command, "/mewla", "/state", id, true)
+		withBoth, err := WithBrowserMCP(command, "/mewla", "/state", true)
 		if err != nil || strings.Count(withBoth, "display-mcp") != 1 || !strings.Contains(withBoth, DisplayMCPName) {
 			t.Fatalf("%q: %v %s", command, err, withBoth)
 		}
 		if got := WithAgentTools(withBoth, "/mewla", "/state", AgentTools{Display: true}); strings.Count(got, "display-mcp") != 1 {
 			t.Fatalf("display added twice: %s", got)
 		}
-		without, _ := WithBrowserMCP(command, "/mewla", "/state", id, false)
+		without, _ := WithBrowserMCP(command, "/mewla", "/state", false)
 		if strings.Contains(without, "display-mcp") {
 			t.Fatalf("display without the switch: %s", without)
 		}

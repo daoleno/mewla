@@ -10,8 +10,7 @@ import (
 // real tmux in a stub that execs the path exec.LookPath("tmux") returned. Run
 // from a guarded Worker pane that path is the pane shim, and the guard sees
 // the stub that wraps it as a wrapper looping back into it and refuses. Drop
-// the guard from PATH before any test resolves tmux. An init, not a TestMain,
-// because the browserfixture build already has one.
+// the guard from PATH before any test resolves tmux. An init, not a TestMain.
 func init() {
 	os.Setenv("PATH", tmuxguard.WithoutGuard(os.Getenv("PATH")))
 }

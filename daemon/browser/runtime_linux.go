@@ -31,9 +31,7 @@ import (
 // LinuxBackend uses a private graphical session, not the user's seat or profile.
 // Other GUI applications can use other runtime adapters without changing leases.
 type LinuxBackend struct {
-	// Only package tests can bypass the real Secret Service requirement.
-	fixtureBasicStore bool
-	Chrome            string
+	Chrome string
 }
 
 func NewBackend() Backend { return &LinuxBackend{} }
@@ -132,9 +130,6 @@ func secretServiceProbe(ctx context.Context) (bool, string) {
 // since cookies written under one are not readable under the other, so one
 // that began on the wallet waits for the wallet rather than losing its sign-ins.
 func (b *LinuxBackend) credentialStore(ctx context.Context, root string) (string, error) {
-	if b.fixtureBasicStore {
-		return storeBasic, nil
-	}
 	pin := filepath.Join(root, "credential-store")
 	if raw, err := os.ReadFile(pin); err == nil {
 		switch strings.TrimSpace(string(raw)) {
@@ -250,22 +245,39 @@ func (p *child) stop() {
 	}
 }
 
-type linuxRuntime struct {
-	mu                                         sync.Mutex
-	profile, rundir, endpoint, session, target string
-	env                                        []string
-	chrome, display                            *child
-	lock                                       *os.File
-	closed                                     bool
-	keys                                       map[string]bool
-	buttons                                    map[string]bool
-	x, y                                       float64
+// linuxHost is the computer's one Chrome on the agent profile, with a private
+// KWin display. Agents get windows on it (linuxWindow).
+type linuxHost struct {
+	mu              sync.Mutex
+	profile, rundir string
+	endpoint        string
+	env             []string
+	chrome, display *child
+	lock            *os.File
+	closed          bool
 }
 
-func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) {
+// linuxWindow is one agent's window: a page of its own, an agent-browser
+// session pinned to it, and that session's live view. Sessions share the one
+// Chrome, so each is pinned and every page it opens is a window of its own;
+// pinned sessions do not follow one another's tabs.
+type linuxWindow struct {
+	h       *linuxHost
+	session string
+	mu      sync.Mutex
+	target  string
+	owned   map[string]bool // pages this window opened or was opened from
+	closed  bool
+	keys    map[string]bool
+	buttons map[string]bool
+	x, y    float64
+}
+
+func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	if c := b.Capability(ctx); !c.Available {
 		return nil, errors.New(c.Reason)
 	}
+	reapStrays()
 	if err := privateDir(root); err != nil {
 		return nil, err
 	}
@@ -279,19 +291,19 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	}
 	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		lock.Close()
-		return nil, errors.New("This browser profile already has a runtime owner")
+		return nil, errors.New("The agent browser profile already has a runtime owner")
 	}
 	store, err := b.credentialStore(ctx, root)
 	if err != nil {
 		lock.Close()
 		return nil, err
 	}
-	dir, err := os.MkdirTemp("", "zb-")
+	dir, err := os.MkdirTemp("", tempPrefix)
 	if err != nil {
 		lock.Close()
 		return nil, err
 	}
-	r := &linuxRuntime{profile: profile, rundir: dir, lock: lock, session: "b" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8], keys: map[string]bool{}, buttons: map[string]bool{}}
+	r := &linuxHost{profile: profile, rundir: dir, lock: lock}
 	success := false
 	defer func() {
 		if !success {
@@ -316,14 +328,16 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	env := []string{}
 	for _, v := range os.Environ() {
 		k := strings.SplitN(v, "=", 2)[0]
-		if k == "DBUS_SESSION_BUS_ADDRESS" || k == "DISPLAY" || k == "WAYLAND_DISPLAY" || k == "SESSION_MANAGER" || strings.HasPrefix(k, "XDG_") || strings.HasPrefix(k, "AGENT_BROWSER_") {
+		if k == "DBUS_SESSION_BUS_ADDRESS" || k == "DISPLAY" || k == "WAYLAND_DISPLAY" || k == "SESSION_MANAGER" || k == ownerEnv || strings.HasPrefix(k, "XDG_") || strings.HasPrefix(k, "AGENT_BROWSER_") {
 			continue
 		}
 		env = append(env, v)
 	}
 	// Chrome retains the daemon user's stable Secret Service bus. KWin gets its
 	// own bus through dbus-run-session and never joins the user's physical seat.
-	env = append(env, "DBUS_SESSION_BUS_ADDRESS="+bus, "XDG_SESSION_TYPE=wayland", "XDG_RUNTIME_DIR="+filepath.Join(dir, "run"), "XDG_CONFIG_HOME="+filepath.Join(dir, "config"), "XDG_DATA_HOME="+filepath.Join(dir, "data"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"), "WAYLAND_DISPLAY=mewla-browser", "AGENT_BROWSER_SOCKET_DIR="+filepath.Join(dir, "s"), "AGENT_BROWSER_SESSION="+r.session, "AGENT_BROWSER_IDLE_TIMEOUT_MS=0", "AGENT_BROWSER_STREAM_QUALITY=65", "AGENT_BROWSER_STREAM_MAX_WIDTH=1280", "AGENT_BROWSER_STREAM_MAX_HEIGHT=800", "AGENT_BROWSER_NO_AUTO_DIALOG=1")
+	// ownerEnv marks every process of this runtime with the daemon that started
+	// it, so a later daemon can tell what a crash left behind.
+	env = append(env, "DBUS_SESSION_BUS_ADDRESS="+bus, ownerEnv+"="+strconv.Itoa(os.Getpid()), "XDG_SESSION_TYPE=wayland", "XDG_RUNTIME_DIR="+filepath.Join(dir, "run"), "XDG_CONFIG_HOME="+filepath.Join(dir, "config"), "XDG_DATA_HOME="+filepath.Join(dir, "data"), "XDG_CACHE_HOME="+filepath.Join(dir, "cache"), "WAYLAND_DISPLAY=mewla-browser", "AGENT_BROWSER_SOCKET_DIR="+filepath.Join(dir, "s"), "AGENT_BROWSER_IDLE_TIMEOUT_MS=0", "AGENT_BROWSER_STREAM_QUALITY=65", "AGENT_BROWSER_STREAM_MAX_WIDTH=1280", "AGENT_BROWSER_STREAM_MAX_HEIGHT=800", "AGENT_BROWSER_NO_AUTO_DIALOG=1")
 	r.env = env
 	r.display, err = spawn(env, "dbus-run-session", "--", "kwin_wayland", "--virtual", "--width", "1280", "--height", "800", "--socket", "mewla-browser", "--no-lockscreen", "--no-global-shortcuts", "--no-kactivities")
 	if err != nil {
@@ -339,8 +353,9 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	_ = os.Remove(filepath.Join(profile, "DevToolsActivePort"))
 	// Despite Chrome's historical flag name, libsecret is the standard Secret
 	// Service client, also supported by installed KDE ksecretd/KWallet.
-
-	r.chrome, err = spawn(env, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--ozone-platform=wayland", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--window-size=1280,800", "about:blank")
+	// Windows of different agents overlap on one small screen; none of them may
+	// be slowed down for being covered by another.
+	r.chrome, err = spawn(env, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--ozone-platform=wayland", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling", "--window-size=1280,800", "about:blank")
 	if err != nil {
 		return nil, err
 	}
@@ -358,26 +373,193 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 	}); err != nil {
 		return nil, launchFailure("Managed Chrome could not start", err, r.chrome)
 	}
-	tabs, err := r.tabs(ctx)
-	if err != nil || len(tabs) == 0 {
-		cause := errors.New("it listed no page")
-		if err != nil {
-			cause = err
-		}
-		return nil, launchFailure("Managed Chrome is up but has no page", cause, r.chrome)
-	}
-	r.target = tabs[0].ID
-	if _, err = r.cli(ctx, "tab", r.target); err != nil {
-		return nil, err
-	}
-	if _, err = r.cli(ctx, "--pin-tab", "tab", "list"); err != nil {
-		return nil, err
-	}
-	if err = r.configureViewport(ctx); err != nil {
-		return nil, err
+	if _, err = r.pages(ctx); err != nil {
+		return nil, launchFailure("Managed Chrome is up but does not answer", err, r.chrome)
 	}
 	success = true
 	return r, nil
+}
+
+// ownerEnv names the daemon pid in the environment of everything a runtime starts.
+const ownerEnv = "MEWLA_BROWSER_OWNER"
+
+// tempPrefix starts the private run directory of every runtime.
+const tempPrefix = "zb-"
+
+func (h *linuxHost) Alive() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return !h.closed && h.chrome.alive() && h.display.alive()
+}
+
+func (h *linuxHost) sessionName() string {
+	return "w" + strings.ReplaceAll(uuid.NewString(), "-", "")[:10]
+}
+
+// Window opens a page of its own on the browser for one agent, with a session
+// pinned to it.
+func (h *linuxHost) Window(ctx context.Context) (Runtime, error) {
+	if !h.Alive() {
+		return nil, ErrUnavailable
+	}
+	w := &linuxWindow{h: h, session: h.sessionName(), owned: map[string]bool{}, keys: map[string]bool{}, buttons: map[string]bool{}}
+	id, err := h.newPage(ctx, "about:blank")
+	if err != nil {
+		return nil, fmt.Errorf("Could not open a window: %w", err)
+	}
+	w.target = id
+	w.owned[id] = true
+	ok := false
+	defer func() {
+		if !ok {
+			_ = w.Close()
+		}
+	}()
+	if _, err = w.cli(ctx, "tab", id); err != nil {
+		return nil, err
+	}
+	if err = w.configureViewport(ctx); err != nil {
+		return nil, err
+	}
+	ok = true
+	return w, nil
+}
+
+// browserCDP sends one command to Chrome itself (not to a page).
+func (h *linuxHost) browserCDP(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	req, _ := http.NewRequestWithContext(ctx, "GET", h.endpoint+"/json/version", nil)
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer client.CloseIdleConnections()
+	var version struct {
+		Socket string `json:"webSocketDebuggerUrl"`
+	}
+	err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&version)
+	resp.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(version.Socket)
+	if err != nil || u.Hostname() != "127.0.0.1" {
+		return nil, errors.New("Invalid managed browser endpoint")
+	}
+	return cdpCall(ctx, version.Socket, method, params)
+}
+
+// cdpCall runs one CDP command on a websocket endpoint and returns its result.
+func cdpCall(ctx context.Context, endpoint, method string, params any) (json.RawMessage, error) {
+	conn, _, err := websocket.DefaultDialer.DialContext(ctx, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	conn.SetReadLimit(2 << 20)
+	deadline := time.Now().Add(5 * time.Second)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	_ = conn.SetWriteDeadline(deadline)
+	_ = conn.SetReadDeadline(deadline)
+	if err = conn.WriteJSON(map[string]any{"id": 1, "method": method, "params": params}); err != nil {
+		return nil, ErrUncertain
+	}
+	for {
+		var msg struct {
+			ID     int             `json:"id"`
+			Result json.RawMessage `json:"result"`
+			Error  json.RawMessage `json:"error"`
+		}
+		if err = conn.ReadJSON(&msg); err != nil {
+			return nil, ErrUncertain
+		}
+		if msg.ID == 1 {
+			if len(msg.Error) > 0 {
+				return nil, errors.New("Browser input was rejected")
+			}
+			return msg.Result, nil
+		}
+	}
+}
+
+// newPage opens a page in a window of its own, so it is never hidden behind
+// another agent's tabs.
+func (h *linuxHost) newPage(ctx context.Context, url string) (string, error) {
+	raw, err := h.browserCDP(ctx, "Target.createTarget", map[string]any{"url": url, "newWindow": true})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		TargetID string `json:"targetId"`
+	}
+	if json.Unmarshal(raw, &out) != nil || out.TargetID == "" {
+		return "", errors.New("Chrome opened no page")
+	}
+	return out.TargetID, nil
+}
+
+// pages lists Chrome's pages with the page that opened each (a popup names
+// its opener), across every agent's windows.
+func (h *linuxHost) pages(ctx context.Context) ([]tab, error) {
+	raw, err := h.browserCDP(ctx, "Target.getTargets", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		TargetInfos []struct {
+			TargetID string `json:"targetId"`
+			Type     string `json:"type"`
+			Title    string `json:"title"`
+			URL      string `json:"url"`
+			OpenerID string `json:"openerId"`
+		} `json:"targetInfos"`
+	}
+	if err = json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	pages := []tab{}
+	for _, t := range out.TargetInfos {
+		if t.Type == "page" {
+			pages = append(pages, tab{ID: t.TargetID, Title: t.Title, URL: t.URL, Type: t.Type, Opener: t.OpenerID})
+		}
+	}
+	return pages, nil
+}
+
+func (h *linuxHost) Close() error {
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return nil
+	}
+	h.closed = true
+	h.mu.Unlock()
+	// Every session's agent-browser helper outlives the daemon unless told to go.
+	if h.endpoint != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_, _ = commandOutput(ctx, h.env, "agent-browser", "--json", "close", "--all")
+		cancel()
+	}
+	// Ask Chrome to flush its persistent profile before terminating helpers.
+	// SIGTERM to the whole process group can kill the cookie writer too early.
+	if h.chrome.alive() && h.endpoint != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, _ = h.browserCDP(ctx, "Browser.close", map[string]any{})
+		_ = waitForExit(ctx, 4*time.Second, h.chrome)
+		cancel()
+	}
+	h.chrome.stop()
+	h.display.stop()
+	if h.lock != nil {
+		_ = unix.Flock(int(h.lock.Fd()), unix.LOCK_UN)
+		_ = h.lock.Close()
+	}
+	if h.rundir != "" {
+		_ = os.RemoveAll(h.rundir)
+	}
+	return nil
 }
 
 // waitForFile waits until ready reports true, re-checking it whenever dir
@@ -443,15 +625,16 @@ func waitForExit(ctx context.Context, d time.Duration, p *child) error {
 		return context.DeadlineExceeded
 	}
 }
-func (r *linuxRuntime) Target() string { r.mu.Lock(); defer r.mu.Unlock(); return r.target }
-func (r *linuxRuntime) Alive() bool {
+func (r *linuxWindow) Target() string { r.mu.Lock(); defer r.mu.Unlock(); return r.target }
+func (r *linuxWindow) Alive() bool {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	return !r.closed && r.chrome.alive() && r.display.alive()
+	closed := r.closed
+	r.mu.Unlock()
+	return !closed && r.h.Alive()
 }
-func (r *linuxRuntime) cli(ctx context.Context, args ...string) (json.RawMessage, error) {
-	argv := append([]string{"--session", r.session, "--json", "--cdp", r.endpoint}, args...)
-	raw, err := commandOutput(ctx, r.env, "agent-browser", argv...)
+func (r *linuxWindow) cli(ctx context.Context, args ...string) (json.RawMessage, error) {
+	argv := append([]string{"--session", r.session, "--json", "--cdp", r.h.endpoint, "--pin-tab"}, args...)
+	raw, err := commandOutput(ctx, r.h.env, "agent-browser", argv...)
 	if ctx.Err() != nil {
 		return nil, ErrUncertain
 	}
@@ -481,79 +664,49 @@ type tab struct {
 	URL    string `json:"url"`
 	Type   string `json:"type"`
 	Socket string `json:"webSocketDebuggerUrl"`
+	Opener string `json:"-"`
 }
 
-func (r *linuxRuntime) tabs(ctx context.Context) ([]tab, error) {
-	req, _ := http.NewRequestWithContext(ctx, "GET", r.endpoint+"/json/list", nil)
-	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
-	resp, err := client.Do(req)
+// tabs are this window's pages: the ones it opened and the popups they opened.
+func (r *linuxWindow) tabs(ctx context.Context) ([]tab, error) {
+	all, err := r.h.pages(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	defer client.CloseIdleConnections()
-	var all []tab
-	if err = json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&all); err != nil {
-		return nil, err
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// A popup may name an opener that is itself a popup: settle until none is new.
+	for grew := true; grew; {
+		grew = false
+		for _, t := range all {
+			if !r.owned[t.ID] && t.Opener != "" && r.owned[t.Opener] {
+				r.owned[t.ID] = true
+				grew = true
+			}
+		}
 	}
 	out := []tab{}
 	for _, t := range all {
-		if t.Type == "page" {
+		if r.owned[t.ID] {
 			out = append(out, t)
 		}
 	}
 	return out, nil
 }
-func (r *linuxRuntime) cdp(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (r *linuxWindow) cdp(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	tabs, err := r.tabs(ctx)
 	if err != nil {
 		return nil, err
 	}
 	target := r.Target()
-	endpoint := ""
+	found := false
 	for _, t := range tabs {
-		if t.ID == target {
-			endpoint = t.Socket
-		}
+		found = found || t.ID == target
 	}
-	if endpoint == "" {
+	if !found {
 		return nil, errors.New("Selected tab closed; choose another tab")
 	}
-	u, err := url.Parse(endpoint)
-	if err != nil || u.Hostname() != "127.0.0.1" {
-		return nil, errors.New("Invalid managed browser endpoint")
-	}
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, endpoint, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	conn.SetReadLimit(2 << 20)
-	deadline := time.Now().Add(5 * time.Second)
-	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
-		deadline = d
-	}
-	_ = conn.SetWriteDeadline(deadline)
-	_ = conn.SetReadDeadline(deadline)
-	if err = conn.WriteJSON(map[string]any{"id": 1, "method": method, "params": params}); err != nil {
-		return nil, ErrUncertain
-	}
-	for {
-		var msg struct {
-			ID     int             `json:"id"`
-			Result json.RawMessage `json:"result"`
-			Error  json.RawMessage `json:"error"`
-		}
-		if err = conn.ReadJSON(&msg); err != nil {
-			return nil, ErrUncertain
-		}
-		if msg.ID == 1 {
-			if len(msg.Error) > 0 {
-				return nil, errors.New("Browser input was rejected")
-			}
-			return msg.Result, nil
-		}
-	}
+	return cdpCall(ctx, "ws://"+strings.TrimPrefix(r.h.endpoint, "http://")+"/devtools/page/"+target, method, params)
 }
 func validURL(value string) bool {
 	u, e := url.Parse(value)
@@ -564,12 +717,12 @@ func validURL(value string) bool {
 // can differ from the headed window's actual page size. Configure both through
 // the maintained API so rendered pixels and pointer coordinates share a space.
 // Newly selected popup pages need the same override as the original tab.
-func (r *linuxRuntime) configureViewport(ctx context.Context) error {
+func (r *linuxWindow) configureViewport(ctx context.Context) error {
 	_, err := r.cli(ctx, "set", "viewport", "1280", "800", "1")
 	return err
 }
 
-func (r *linuxRuntime) Command(ctx context.Context, c Command) (json.RawMessage, error) {
+func (r *linuxWindow) Command(ctx context.Context, c Command) (json.RawMessage, error) {
 	if !r.Alive() {
 		return nil, ErrUnavailable
 	}
@@ -621,17 +774,18 @@ func (r *linuxRuntime) Command(ctx context.Context, c Command) (json.RawMessage,
 		if c.Kind == "navigate" {
 			return r.cli(ctx, "open", c.URL)
 		}
-		v, err := r.cli(ctx, "tab", "new", c.URL)
+		id, err := r.h.newPage(ctx, c.URL)
+		if err != nil {
+			return nil, err
+		}
+		r.mu.Lock()
+		r.owned[id] = true
+		r.mu.Unlock()
+		v, err := r.cli(ctx, "tab", id)
 		if err == nil {
-			var q struct {
-				TargetID string `json:"targetId"`
-			}
-			_ = json.Unmarshal(v, &q)
-			if q.TargetID != "" {
-				r.mu.Lock()
-				r.target = q.TargetID
-				r.mu.Unlock()
-			}
+			r.mu.Lock()
+			r.target = id
+			r.mu.Unlock()
 			if err = r.configureViewport(ctx); err != nil {
 				return nil, ErrUncertain
 			}
@@ -688,7 +842,7 @@ func elementRef(ref string) (string, bool) {
 
 var namedKeys = map[string]int{"Backspace": 8, "Tab": 9, "Enter": 13, "Escape": 27, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Delete": 46}
 
-func (r *linuxRuntime) input(ctx context.Context, i Input) (json.RawMessage, error) {
+func (r *linuxWindow) input(ctx context.Context, i Input) (json.RawMessage, error) {
 	if i.X < 0 || i.Y < 0 || i.X > 16384 || i.Y > 16384 || i.DX > 10000 || i.DX < -10000 || i.DY > 10000 || i.DY < -10000 || len(i.Text) > 8192 || len(i.Key) > 64 {
 		return nil, errors.New("Invalid input coordinates or text")
 	}
@@ -740,7 +894,7 @@ func (r *linuxRuntime) input(ctx context.Context, i Input) (json.RawMessage, err
 		return nil, errors.New("Unsupported input event")
 	}
 }
-func (r *linuxRuntime) Release(ctx context.Context) error {
+func (r *linuxWindow) Release(ctx context.Context) error {
 	r.mu.Lock()
 	keys := r.keys
 	buttons := r.buttons
@@ -760,7 +914,7 @@ func (r *linuxRuntime) Release(ctx context.Context) error {
 	}
 	return nil
 }
-func (r *linuxRuntime) Stream(ctx context.Context) (Stream, error) {
+func (r *linuxWindow) Stream(ctx context.Context) (Stream, error) {
 	raw, err := r.cli(ctx, "stream", "status")
 	if err != nil {
 		return nil, err
@@ -795,35 +949,28 @@ func (s *agentStream) Close() error {
 	_ = s.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "viewer detached"), time.Now().Add(time.Second))
 	return s.conn.Close()
 }
-func (r *linuxRuntime) Close() error {
+
+// Close shuts this window's pages and its session. The browser, the other
+// agents' windows and the sign-ins stay.
+func (r *linuxWindow) Close() error {
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
 		return nil
 	}
 	r.closed = true
+	pages := make([]string, 0, len(r.owned))
+	for id := range r.owned {
+		pages = append(pages, id)
+	}
 	r.mu.Unlock()
-	if r.endpoint != "" {
-		ctx, c := context.WithTimeout(context.Background(), 3*time.Second)
+	if r.h.Alive() {
+		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		defer cancel()
 		_, _ = r.cli(ctx, "close")
-		c()
-	}
-	// Ask Chrome to flush its persistent profile before terminating helpers.
-	// SIGTERM to the whole process group can kill the cookie writer too early.
-	if r.chrome.alive() && r.endpoint != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_, _ = r.cdp(ctx, "Browser.close", map[string]any{})
-		_ = waitForExit(ctx, 4*time.Second, r.chrome)
-		cancel()
-	}
-	r.chrome.stop()
-	r.display.stop()
-	if r.lock != nil {
-		_ = unix.Flock(int(r.lock.Fd()), unix.LOCK_UN)
-		_ = r.lock.Close()
-	}
-	if r.rundir != "" {
-		_ = os.RemoveAll(r.rundir)
+		for _, id := range pages {
+			_, _ = r.h.browserCDP(ctx, "Target.closeTarget", map[string]any{"targetId": id})
+		}
 	}
 	return nil
 }

@@ -10,11 +10,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/google/uuid"
 )
 
@@ -48,18 +47,29 @@ type entry struct {
 	humanFrom  time.Time       // when the person took the lease
 	handedBack *span           // the person's last turn, not yet told to the agent
 	lastAgent  string
-	reservedAt time.Time // handed to a launching Worker; see AutoAttachment
 }
 type Manager struct {
-	mu      sync.Mutex
-	root    string
-	backend Backend
-	entries map[string]*entry
-	closed  bool
-	done    chan struct{}
+	mu       sync.Mutex
+	root     string
+	backend  Backend
+	entries  map[string]*entry // agents' windows, by window id
+	byWorker map[string]*entry // the same, by the Worker whose window it is
+	closed   bool
+	done     chan struct{}
 
 	settings Settings
+
+	// The computer's one browser. Starting and stopping it, and opening a
+	// window on it, go through hostGate one at a time, so an agent that asks
+	// while another's start is under way waits for it instead of failing.
+	hostGate   chan struct{}
+	host       Host
+	windows    atomic.Int32
+	workerLive func(worker string) bool
 }
+
+// agentProfile is the one profile agents browse with, under the browsers directory.
+const agentProfile = "agent"
 
 func privateDir(path string) error {
 	clean, err := filepath.Abs(path)
@@ -97,57 +107,69 @@ func New(root string, backend Backend) (*Manager, error) {
 	if err := privateDir(root); err != nil {
 		return nil, err
 	}
-	m := &Manager{root: root, backend: backend, entries: map[string]*entry{}, done: make(chan struct{})}
-	files, err := os.ReadDir(root)
-	if err != nil {
+	if err := adoptOldProfile(root); err != nil {
 		return nil, err
 	}
+	m := &Manager{root: root, backend: backend, entries: map[string]*entry{}, byWorker: map[string]*entry{}, done: make(chan struct{}), hostGate: make(chan struct{}, 1)}
+	m.hostGate <- struct{}{}
+	m.settings = loadSettings(root)
+	go m.sweep(sweepEvery)
+	return m, nil
+}
+
+// adoptOldProfile turns the oldest profile the person made when browsers were
+// named and chosen into the agent profile, keeping its sign-ins, and removes
+// the others. It runs until there is nothing left to adopt.
+func adoptOldProfile(root string) error {
+	files, err := os.ReadDir(root)
+	if err != nil {
+		return err
+	}
+	type old struct {
+		name    string
+		created time.Time
+	}
+	var olds []old
 	for _, f := range files {
 		if !validID.MatchString(f.Name()) {
 			continue
 		}
-		path := filepath.Join(root, f.Name())
 		if f.Type()&os.ModeSymlink != 0 || !f.IsDir() {
-			return nil, errors.New("Invalid browser resource directory")
-		}
-		meta := filepath.Join(path, "resource.json")
-		info, err := os.Lstat(meta)
-		if err != nil || !info.Mode().IsRegular() {
-			return nil, errors.New("Invalid browser metadata file")
-		}
-		data, err := os.ReadFile(meta)
-		if err != nil {
-			return nil, err
+			return errors.New("Invalid browser resource directory")
 		}
 		var r Resource
-		if json.Unmarshal(data, &r) != nil || r.ID != f.Name() {
-			return nil, errors.New("Invalid browser resource metadata")
+		if raw, err := os.ReadFile(filepath.Join(root, f.Name(), "resource.json")); err == nil {
+			_ = json.Unmarshal(raw, &r)
 		}
-		r.State = "stopped"
-		r.Generation = ""
-		r.Control = "idle"
-		r.Target = ""
-		m.entries[r.ID] = newEntry(r)
+		olds = append(olds, old{f.Name(), r.CreatedAt})
 	}
-	m.settings = loadSettings(root)
-	return m, nil
+	if len(olds) == 0 {
+		return nil
+	}
+	sort.Slice(olds, func(i, j int) bool { return olds[i].created.Before(olds[j].created) })
+	agent := filepath.Join(root, agentProfile)
+	if _, err := os.Lstat(agent); os.IsNotExist(err) {
+		first := olds[0]
+		olds = olds[1:]
+		if err := os.Rename(filepath.Join(root, first.name), agent); err != nil {
+			return err
+		}
+		_ = os.Remove(filepath.Join(agent, "resource.json"))
+		log.Printf("browser: %s is now the agent profile", first.name)
+	} else if err != nil {
+		return err
+	}
+	for _, o := range olds {
+		if err := os.RemoveAll(filepath.Join(root, o.name)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 func newEntry(r Resource) *entry {
 	e := &entry{resource: r, gate: make(chan struct{}, 1)}
 	e.gate <- struct{}{}
 	return e
-}
-func (m *Manager) save(e *entry) error {
-	// Caller holds entry.mu. Atomic metadata replacement never touches profile data.
-	path := filepath.Join(m.root, e.resource.ID)
-	if err := privateDir(path); err != nil {
-		return err
-	}
-	b, err := json.Marshal(e.resource)
-	if err != nil {
-		return err
-	}
-	return atomicfile.Write(filepath.Join(path, "resource.json"), b, 0o600)
 }
 func (m *Manager) get(id string) (*entry, error) {
 	if !validID.MatchString(id) {
@@ -207,9 +229,7 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		resources := []Resource{}
 		for _, e := range m.entries {
 			e.mu.Lock()
-			if o.Kind == "human" || e.resource.AllowAgents {
-				resources = append(resources, snapshot(e))
-			}
+			resources = append(resources, snapshot(e))
 			e.mu.Unlock()
 		}
 		sort.Slice(resources, func(i, j int) bool { return resources[i].CreatedAt.Before(resources[j].CreatedAt) })
@@ -229,33 +249,21 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		on := m.VirtualScreen()
 		return Response{VirtualScreen: &on}, nil
 	}
-	if q.Action == "create" {
-		if o.Kind != "human" {
+	var e *entry
+	var err error
+	if o.Kind == "agent" {
+		// An agent's window is found by its Worker, not by an id it was given:
+		// the id would be lost with the first daemon restart.
+		e, err = m.agentWindow(o, q.Action == "control")
+		if e == nil && err == nil {
+			if q.Action == "release" {
+				return Response{}, nil
+			}
 			return Response{}, ErrLease
 		}
-		name := strings.TrimSpace(q.Name)
-		if name == "" || len(name) > 80 {
-			return Response{}, errors.New("Choose a browser name of 1–80 bytes")
-		}
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		if m.closed {
-			return Response{}, ErrUnavailable
-		}
-		if len(m.entries) >= maxBrowsers {
-			return Response{}, errors.New("This server supports up to eight browser profiles")
-		}
-		// Agents of the same server owner may use a new browser by default; the
-		// lease still decides who types, and grant(false) remains a revocation.
-		e := newEntry(Resource{ID: uuid.NewString(), Name: name, CreatedAt: time.Now().UTC(), State: "stopped", Control: "idle", AllowAgents: true})
-		if err := m.save(e); err != nil {
-			return Response{}, err
-		}
-		m.entries[e.resource.ID] = e
-		r := snapshot(e)
-		return Response{Resource: &r}, nil
+	} else {
+		e, err = m.get(q.ID)
 	}
-	e, err := m.get(q.ID)
 	if err != nil {
 		return Response{}, err
 	}
@@ -278,66 +286,6 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		e.mu.Lock()
 		r := snapshot(e)
 		e.mu.Unlock()
-		return Response{Resource: &r}, nil
-	case "start":
-		if o.Kind != "human" {
-			return Response{}, ErrLease
-		}
-		if err = m.start(ctx, e); err != nil {
-			return Response{}, err
-		}
-		e.mu.Lock()
-		r := snapshot(e)
-		e.mu.Unlock()
-		return Response{Resource: &r}, nil
-	case "stop", "delete":
-		if o.Kind != "human" {
-			return Response{}, ErrLease
-		}
-		if err = m.stop(ctx, e); err != nil {
-			return Response{}, err
-		}
-		if q.Action == "delete" {
-			m.mu.Lock()
-			defer m.mu.Unlock()
-			e.mu.Lock()
-			defer e.mu.Unlock()
-			if e.runtime != nil {
-				return Response{}, ErrBusy
-			}
-			e.deleted = true
-			if err := os.RemoveAll(filepath.Join(m.root, q.ID)); err != nil {
-				e.deleted = false
-				return Response{}, err
-			}
-			if e.expiry != nil {
-				e.expiry.Stop()
-			}
-			delete(m.entries, q.ID)
-			return Response{}, nil
-		}
-		e.mu.Lock()
-		r := snapshot(e)
-		e.mu.Unlock()
-		return Response{Resource: &r}, nil
-	case "grant":
-		if o.Kind != "human" {
-			return Response{}, ErrLease
-		}
-		if !q.AllowAgents {
-			if err = m.releaseMatching(ctx, e, func(x Owner) bool { return x.Kind == "agent" }); err != nil {
-				return Response{}, err
-			}
-		}
-		e.mu.Lock()
-		defer e.mu.Unlock()
-		before := e.resource.AllowAgents
-		e.resource.AllowAgents = q.AllowAgents
-		if err = m.save(e); err != nil {
-			e.resource.AllowAgents = before
-			return Response{}, err
-		}
-		r := snapshot(e)
 		return Response{Resource: &r}, nil
 	case "control":
 		r, err := m.control(ctx, e, o)
@@ -378,7 +326,165 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 	}
 }
 
-// start brings the browser up if it is not running; a running one is left as it is.
+// agentWindow is the window of the Worker an agent owner belongs to; with
+// create, it makes the entry when the Worker has none (nothing is opened yet).
+func (m *Manager) agentWindow(o Owner, create bool) (*entry, error) {
+	worker := workerOf(o)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return nil, ErrUnavailable
+	}
+	if e := m.byWorker[worker]; e != nil {
+		return e, nil
+	}
+	if !create {
+		return nil, nil
+	}
+	if len(m.entries) >= maxWindows {
+		return nil, fmt.Errorf("%w: %d agents already have windows; wait for one to finish", ErrBusy, maxWindows)
+	}
+	e := newEntry(Resource{ID: uuid.NewString(), Name: "Browser", CreatedAt: time.Now().UTC(), State: "stopped", Control: "idle", Agent: worker})
+	m.entries[e.resource.ID] = e
+	m.byWorker[worker] = e
+	return e, nil
+}
+
+// sweepEvery is how often the windows of ended Workers are looked for; a variable so tests can shorten it.
+var sweepEvery = 10 * time.Second
+
+// maxWindows is the most agent windows one computer keeps.
+const maxWindows = 8
+
+// Forget closes a Worker's window and takes it off the Screen. The browser
+// stops with its last window; the profile and its sign-ins stay.
+func (m *Manager) Forget(worker string) {
+	m.mu.Lock()
+	e := m.byWorker[worker]
+	if e == nil {
+		m.mu.Unlock()
+		return
+	}
+	delete(m.byWorker, worker)
+	delete(m.entries, e.resource.ID)
+	m.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	e.transition.Lock()
+	defer e.transition.Unlock()
+	_ = acquire(ctx, e)
+	e.mu.Lock()
+	e.deleted = true
+	e.owner = Owner{}
+	if e.expiry != nil {
+		e.expiry.Stop()
+	}
+	m.dropRuntime(e)
+	e.mu.Unlock()
+	m.gateRelease(e)
+	go m.stopIdleHost()
+}
+
+func (m *Manager) gateRelease(e *entry) {
+	select {
+	case e.gate <- struct{}{}:
+	default:
+	}
+}
+
+// SetWorkerLive tells the manager how to ask whether a Worker still exists;
+// the windows of those that do not are closed.
+func (m *Manager) SetWorkerLive(f func(worker string) bool) {
+	m.mu.Lock()
+	m.workerLive = f
+	m.mu.Unlock()
+}
+
+// sweep closes the windows of Workers that have ended.
+func (m *Manager) sweep(every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-m.done:
+			return
+		case <-t.C:
+		}
+		m.mu.Lock()
+		live := m.workerLive
+		var gone []string
+		for w, e := range m.byWorker {
+			e.mu.Lock()
+			person := e.owner.Kind == "human"
+			e.mu.Unlock()
+			if live != nil && !person && !live(w) {
+				gone = append(gone, w)
+			}
+		}
+		m.mu.Unlock()
+		for _, w := range gone {
+			m.Forget(w)
+		}
+	}
+}
+
+// dropRuntime closes the entry's window. Caller holds e.mu.
+func (m *Manager) dropRuntime(e *entry) {
+	if e.runtime == nil {
+		return
+	}
+	_ = e.runtime.Close()
+	e.runtime = nil
+	m.windows.Add(-1)
+}
+
+// withHost runs f on the computer's browser, starting it first when it is not
+// running. One call at a time: a second waits for the first to finish.
+func (m *Manager) withHost(ctx context.Context, f func(Host) error) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-m.hostGate:
+	}
+	defer func() { m.hostGate <- struct{}{} }()
+	m.mu.Lock()
+	closed := m.closed
+	m.mu.Unlock()
+	if closed {
+		return ErrUnavailable
+	}
+	if m.host != nil && !m.host.Alive() {
+		_ = m.host.Close()
+		m.host = nil
+	}
+	if m.host == nil {
+		started := time.Now()
+		h, err := m.backend.Start(ctx, filepath.Join(m.root, agentProfile))
+		if err != nil {
+			log.Printf("browser: starting the agent browser failed after %s: %v", time.Since(started).Round(time.Millisecond), err)
+			return err
+		}
+		log.Printf("browser: agent browser started in %s", time.Since(started).Round(time.Millisecond))
+		m.host = h
+	}
+	return f(m.host)
+}
+
+// stopIdleHost stops the browser once no agent has a window on it.
+func (m *Manager) stopIdleHost() {
+	<-m.hostGate
+	defer func() { m.hostGate <- struct{}{} }()
+	if m.host == nil || m.windows.Load() > 0 {
+		return
+	}
+	_ = m.host.Close()
+	m.host = nil
+	log.Printf("browser: agent browser stopped, no agent has a window")
+}
+
+// start opens the entry's window if it has none that works; a working one is
+// left as it is. Only this window is opened again, never the browser under
+// other agents' windows, unless the browser itself is gone.
 func (m *Manager) start(ctx context.Context, e *entry) error {
 	if err := acquire(ctx, e); err != nil {
 		return err
@@ -386,23 +492,27 @@ func (m *Manager) start(ctx context.Context, e *entry) error {
 	defer unlock(e)
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	// A runtime whose last action could not be drained is running but cannot
-	// be trusted: starting it again is the way out, and the only one.
+	// A window whose last action could not be drained is open but cannot be
+	// trusted: opening it again is the way out, and the only one.
 	if e.runtime != nil && e.runtime.Alive() && !e.uncertain {
 		return nil
 	}
-	if e.runtime != nil {
-		_ = e.runtime.Close()
-		e.runtime = nil
-	}
-	runtime, err := m.backend.Start(ctx, filepath.Join(m.root, e.resource.ID))
+	m.dropRuntime(e)
+	err := m.withHost(ctx, func(h Host) error {
+		runtime, err := h.Window(ctx)
+		if err != nil {
+			return err
+		}
+		m.windows.Add(1)
+		e.runtime = runtime
+		return nil
+	})
 	if err != nil {
-		log.Printf("browser: starting %q (%s) failed: %v", e.resource.Name, e.resource.ID, err)
+		log.Printf("browser: opening a window for %s failed: %v", e.resource.Agent, err)
 		return err
 	}
-	e.runtime = runtime
 	e.resource.Generation = uuid.NewString()
-	e.resource.Target = runtime.Target()
+	e.resource.Target = e.runtime.Target()
 	e.resource.State = "running"
 	e.uncertain = false
 	e.owner = Owner{}
@@ -420,20 +530,19 @@ func (m *Manager) notRunning(e *entry, o Owner) error {
 		return ErrUncertain
 	case e.runtime != nil && e.runtime.Alive():
 		return nil
-	case o.Kind == "agent" && !e.resource.AllowAgents:
-		return fmt.Errorf("%w: agent access is off for this browser", ErrUnavailable)
 	case o.Kind == "agent" && !m.VirtualScreen():
-		return fmt.Errorf("%w: it is not running and the virtual screen is off, so it does not start for agents; the person can open it in Mewla Browser", ErrUnavailable)
+		return fmt.Errorf("%w: it is not running and the virtual screen is off, so no browser starts for agents; the person turns it on in Settings, Labs, Virtual screen", ErrUnavailable)
 	}
 	return fmt.Errorf("%w: it is not running", ErrUnavailable)
 }
 
 func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, error) {
 	if o.Kind == "agent" && m.VirtualScreen() {
-		// With the virtual screen on, a browser an agent is attached to starts when
-		// the agent first asks for it, not when the Worker launches.
+		// With the virtual screen on, an agent's window opens when it first asks
+		// for control, not when the Worker launches, and the browser under it
+		// starts then if nothing else has started it.
 		e.mu.Lock()
-		allowed, halted := e.resource.AllowAgents, e.halted[workerOf(o)]
+		halted := e.halted[workerOf(o)]
 		// Not running, or running but stuck "uncertain" after an action that
 		// could not be drained (nobody can clear that from the phone but a
 		// restart). The person's own session and another agent's live lease
@@ -442,7 +551,7 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 		stuck := e.uncertain && !e.transferring && e.owner.Kind != "human" &&
 			(e.owner.ID == "" || e.owner == o || time.Now().After(e.expires))
 		e.mu.Unlock()
-		if (down || stuck) && allowed && !halted {
+		if (down || stuck) && !halted {
 			if err := m.start(ctx, e); err != nil {
 				return Response{}, err
 			}
@@ -461,7 +570,7 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 		e.mu.Unlock()
 		return Response{}, errPersonInControl
 	}
-	if o.Kind == "agent" && (!e.resource.AllowAgents || (e.owner.ID != "" && e.owner != o)) {
+	if o.Kind == "agent" && e.owner.ID != "" && e.owner != o {
 		e.mu.Unlock()
 		return Response{}, ErrBusy
 	}
@@ -533,10 +642,6 @@ func (m *Manager) command(ctx context.Context, e *entry, o Owner, l Lease, c Com
 		m.armExpiryLocked(e)
 		e.mu.Unlock()
 		return Response{}, nil
-	}
-	if o.Kind == "agent" && !e.resource.AllowAgents {
-		e.mu.Unlock()
-		return Response{}, ErrLease
 	}
 	rt := e.runtime
 	e.expires = time.Now().Add(leaseLifetime)
@@ -618,35 +723,6 @@ func (m *Manager) ReleaseWhere(match func(Owner) bool) {
 		cancel()
 	}
 }
-func (m *Manager) stop(ctx context.Context, e *entry) error {
-	e.mu.Lock()
-	e.transferring = true
-	e.mu.Unlock()
-	if err := acquire(ctx, e); err != nil {
-		e.mu.Lock()
-		e.uncertain = true
-		e.transferring = false
-		e.mu.Unlock()
-		return err
-	}
-	defer unlock(e)
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	defer func() { e.transferring = false }()
-	if e.runtime != nil {
-		if err := e.runtime.Close(); err != nil {
-			return err
-		}
-		e.runtime = nil
-	}
-	e.owner = Owner{}
-	e.epoch++
-	e.resource.State = "stopped"
-	e.resource.Target = ""
-	e.resource.Generation = ""
-	e.uncertain = false
-	return nil
-}
 func (m *Manager) OpenStream(ctx context.Context, id string) (Stream, error) {
 	e, err := m.get(id)
 	if err != nil {
@@ -724,21 +800,29 @@ func (m *Manager) Close() error {
 		entries = append(entries, e)
 	}
 	m.mu.Unlock()
-	var errs []error
 	for _, e := range entries {
 		ctx, c := context.WithTimeout(context.Background(), 15*time.Second)
 		e.transition.Lock()
-		if err := m.stop(ctx, e); err != nil {
-			errs = append(errs, fmt.Errorf("close browser: %w", err))
-		}
+		_ = acquire(ctx, e)
 		e.mu.Lock()
 		e.deleted = true
+		e.owner = Owner{}
 		if e.expiry != nil {
 			e.expiry.Stop()
 		}
+		m.dropRuntime(e)
 		e.mu.Unlock()
+		m.gateRelease(e)
 		e.transition.Unlock()
 		c()
 	}
-	return errors.Join(errs...)
+	// With the windows gone, the browser itself.
+	<-m.hostGate
+	var err error
+	if m.host != nil {
+		err = m.host.Close()
+		m.host = nil
+	}
+	m.hostGate <- struct{}{}
+	return err
 }

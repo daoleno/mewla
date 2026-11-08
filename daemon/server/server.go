@@ -390,7 +390,6 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 }
 
 type clientMessage struct {
-	BrowserID            string                                 `json:"browser_id"`
 	ConnectionRequest    *connections.Request                   `json:"connection_request"`
 	DSHAnswer            json.RawMessage                        `json:"dsh_answer"`
 	DSHAfterRev          *int64                                 `json:"dsh_after_rev"`
@@ -1238,10 +1237,9 @@ func (s *Server) handleSessionLifecycleMessage(conn *websocket.Conn, raw clientM
 			connectionID = strings.TrimSpace(raw.ProfileID)
 		}
 		workerID, routeSnap, persist, err := s.createSessionWithProfiles(raw.TargetID, watcher.CreateSessionOptions{
-			BrowserID: raw.BrowserID,
-			Cwd:       raw.Cwd,
-			Command:   command,
-			Name:      raw.Name,
+			Cwd:     raw.Cwd,
+			Command: command,
+			Name:    raw.Name,
 		}, connectionID, raw.ModelID)
 		if err != nil && (!persist.Applied || strings.TrimSpace(workerID) == "") {
 			code := "create_session_failed"

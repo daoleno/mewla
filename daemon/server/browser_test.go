@@ -23,7 +23,15 @@ type viewerBackend struct{ runtime *viewerRuntime }
 func (b viewerBackend) Capability(context.Context) browser.Capability {
 	return browser.Capability{Available: true}
 }
-func (b viewerBackend) Start(context.Context, string) (browser.Runtime, error) { return b.runtime, nil }
+func (b viewerBackend) Start(context.Context, string) (browser.Host, error) {
+	return viewerHost{b.runtime}, nil
+}
+
+type viewerHost struct{ runtime *viewerRuntime }
+
+func (h viewerHost) Alive() bool                                     { return true }
+func (h viewerHost) Close() error                                    { return nil }
+func (h viewerHost) Window(context.Context) (browser.Runtime, error) { return h.runtime, nil }
 
 type viewerRuntime struct {
 	released atomic.Int32
@@ -95,14 +103,23 @@ func TestBrowserAuthenticatedViewerBackpressureReconnectAndRevocation(t *testing
 	if _, status := request(browser.Request{Action: "list"}, ""); status == 200 {
 		t.Fatal("unauthenticated list")
 	}
-	created, status := request(browser.Request{Action: "create", Name: "Fixture"}, "mewla-browser")
-	if status != 200 {
-		t.Fatal(status)
+	// A person cannot make or start browsers; an agent's first request for
+	// control opens its window, which is what the viewer shows.
+	if _, status := request(browser.Request{Action: "create"}, "mewla-browser"); status == 200 {
+		t.Fatal("a person created a browser")
 	}
-	id := created.Resource.ID
-	if _, status = request(browser.Request{Action: "start", ID: id}, "mewla-browser"); status != 200 {
-		t.Fatal(status)
+	on := true
+	if _, err := m.Handle(context.Background(), browser.Owner{Kind: "human", ID: "server-owner"}, browser.Request{Action: "settings", Enabled: &on}); err != nil {
+		t.Fatal(err)
 	}
+	if _, err := m.Handle(context.Background(), browser.Owner{Kind: "agent", ID: "worker/client"}, browser.Request{Action: "control"}); err != nil {
+		t.Fatal(err)
+	}
+	listed, status := request(browser.Request{Action: "list"}, "mewla-browser")
+	if status != 200 || len(listed.Resources) != 1 {
+		t.Fatalf("list: %d %+v", status, listed.Resources)
+	}
+	id := listed.Resources[0].ID
 	if _, status = request(browser.Request{Action: "control", ID: id}, "mewla-browser"); status == 200 {
 		t.Fatal("HTTP bypassed viewer lease")
 	}

@@ -1,4 +1,6 @@
-// Package browser owns persistent user browsers and fences managed tool access.
+// Package browser runs the one browser an agent works in on a computer's
+// virtual screen: one profile, one Chrome, a window for each agent, and the
+// leases that decide who is typing in a window.
 package browser
 
 import (
@@ -12,7 +14,7 @@ var (
 	ErrUnavailable = errors.New("Browser runtime is unavailable")
 	ErrLease       = errors.New("Browser control changed; request control again")
 	ErrBusy        = errors.New("Browser is controlled by someone else")
-	ErrUncertain   = errors.New("Browser action could not be drained; stop and reopen this browser")
+	ErrUncertain   = errors.New("Browser action could not be drained; its window is opened again on the next request for control")
 )
 
 type Capability struct {
@@ -30,26 +32,24 @@ type Lease struct {
 	Kind       string    `json:"kind"`
 	ExpiresAt  time.Time `json:"expires_at"`
 }
+
+// Resource is one agent's window, as the Screen lists it.
 type Resource struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	CreatedAt   time.Time `json:"created_at"`
-	AllowAgents bool      `json:"allow_agents"`
-	State       string    `json:"state"`
-	Generation  string    `json:"generation,omitempty"`
-	Control     string    `json:"control"`
-	Target      string    `json:"target,omitempty"`
-	// Agent is the Worker that holds the browser, or that held it when the person
-	// took it over; empty otherwise.
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	CreatedAt  time.Time `json:"created_at"`
+	State      string    `json:"state"`
+	Generation string    `json:"generation,omitempty"`
+	Control    string    `json:"control"`
+	Target     string    `json:"target,omitempty"`
+	// Agent is the Worker whose window it is.
 	Agent string `json:"agent,omitempty"`
 }
 type Request struct {
-	Action      string   `json:"action"`
-	ID          string   `json:"id,omitempty"`
-	Name        string   `json:"name,omitempty"`
-	AllowAgents bool     `json:"allow_agents,omitempty"`
-	Lease       *Lease   `json:"lease,omitempty"`
-	Command     *Command `json:"command,omitempty"`
+	Action  string   `json:"action"`
+	ID      string   `json:"id,omitempty"`
+	Lease   *Lease   `json:"lease,omitempty"`
+	Command *Command `json:"command,omitempty"`
 	// Enabled is the new value for the "settings" action.
 	Enabled *bool `json:"enabled,omitempty"`
 }
@@ -62,7 +62,7 @@ type Response struct {
 	// Notes tell an agent what the person did in the browser since its last
 	// action, so it can judge for itself whether to go on, wait or ask.
 	Notes []string `json:"notes,omitempty"`
-	// VirtualScreen is whether new Workers get a virtual-screen browser by default.
+	// VirtualScreen is whether Workers get a browser on the virtual screen.
 	VirtualScreen *bool `json:"virtual_screen,omitempty"`
 }
 type Command struct {
@@ -90,6 +90,8 @@ type Stream interface {
 	Ack(uint64) error
 	Close() error
 }
+
+// Runtime is one agent's window: its page, input and live view.
 type Runtime interface {
 	Target() string
 	Command(context.Context, Command) (json.RawMessage, error)
@@ -98,7 +100,16 @@ type Runtime interface {
 	Alive() bool
 	Close() error
 }
+
+// Host is the computer's one browser on the one agent profile, with a private
+// display. Windows are opened and closed on it without restarting it.
+type Host interface {
+	Window(context.Context) (Runtime, error)
+	Alive() bool
+	Close() error
+}
 type Backend interface {
 	Capability(context.Context) Capability
-	Start(context.Context, string) (Runtime, error)
+	// Start brings the browser up on the profile directory and waits for it.
+	Start(ctx context.Context, profile string) (Host, error)
 }

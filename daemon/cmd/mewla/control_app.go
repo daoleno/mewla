@@ -706,27 +706,17 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		Env:              progressEnvForStateDir(a.stateDir),
 		ExecutorID:       a.spawnExecutorID(req),
 	}
-	browserID, autoBrowser := req.BrowserID, false
-	if browserID == "" && !req.Hidden && work.SupportsBrowserAttachment(command) {
-		// With the virtual screen on, a Worker gets a browser without being told which.
-		browserID = a.browsers.AutoAttachment(context.Background())
-		autoBrowser = browserID != ""
-	}
-	if browserID != "" {
-		if err := a.browsers.ValidateAttachment(context.Background(), browserID); err != nil && !autoBrowser {
-			a.recordSpawnWorkFailure(ownedWork, err, autoCreatedWork)
-			return control.ErrorResponse("browser_attachment", err.Error())
-		} else if err == nil {
-			createOpts.BrowserID = browserID
-			createOpts.Env["MEWLA_WORKER_ID"] = ""
-			createOpts.PrepareLaunch = func(command string) (string, error) {
-				launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, browserID, a.displayOn())
-				if err != nil && autoBrowser {
-					// The browser was not asked for; a command that cannot take it launches without.
-					return command, nil
-				}
-				return launch, err
+	if !req.Hidden && work.SupportsBrowserAttachment(command) && a.browsers.AgentBrowser(context.Background()) {
+		// With the virtual screen on, a Worker gets a browser on it; the window
+		// opens when the agent first asks.
+		createOpts.Env["MEWLA_WORKER_ID"] = ""
+		createOpts.PrepareLaunch = func(command string) (string, error) {
+			launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, a.displayOn())
+			if err != nil {
+				// The browser was not asked for; a command that cannot take it launches without.
+				return command, nil
 			}
+			return launch, nil
 		}
 	}
 	var routeSnap *modelprofiles.WireSessionSnapshot

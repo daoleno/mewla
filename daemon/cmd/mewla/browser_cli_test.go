@@ -17,9 +17,13 @@ type brokerBackend struct{}
 func (brokerBackend) Capability(context.Context) browser.Capability {
 	return browser.Capability{Available: true}
 }
-func (brokerBackend) Start(context.Context, string) (browser.Runtime, error) {
-	return brokerRuntime{}, nil
-}
+func (brokerBackend) Start(context.Context, string) (browser.Host, error) { return brokerHost{}, nil }
+
+type brokerHost struct{}
+
+func (brokerHost) Alive() bool                                     { return true }
+func (brokerHost) Close() error                                    { return nil }
+func (brokerHost) Window(context.Context) (browser.Runtime, error) { return brokerRuntime{}, nil }
 
 type brokerRuntime struct{}
 
@@ -33,7 +37,10 @@ func (brokerRuntime) Stream(context.Context) (browser.Stream, error) {
 func (brokerRuntime) Command(context.Context, browser.Command) (json.RawMessage, error) {
 	return json.RawMessage("{}"), nil
 }
-func TestBrowserBrokerRequiresExplicitResourceGrantAndActiveTask(t *testing.T) {
+
+// An agent gets a window of its own on the first request, needs no id, and
+// loses its lease when its task is no longer active.
+func TestBrowserBrokerOpensAWindowForAnActiveTaskOnly(t *testing.T) {
 	m, err := browser.New(t.TempDir(), brokerBackend{})
 	if err != nil {
 		t.Fatal(err)
@@ -41,40 +48,34 @@ func TestBrowserBrokerRequiresExplicitResourceGrantAndActiveTask(t *testing.T) {
 	defer m.Close()
 	human := browser.Owner{Kind: "human", ID: "owner"}
 	ctx := context.Background()
-	r, _ := m.Handle(ctx, human, browser.Request{Action: "create", Name: "Persistent"})
-	id := r.Resource.ID
-	m.Handle(ctx, human, browser.Request{Action: "start", ID: id})
 	w := newFakeControlWatcher()
-	w.workers["task"] = &classifier.Worker{ID: "task", BrowserID: id, State: classifier.StateRunning, Delegated: true}
+	w.workers["task"] = &classifier.Worker{ID: "task", State: classifier.StateRunning, Delegated: true}
 	app := &controlApp{browsers: m, watcher: w}
-	q := control.Request{Type: "browser", WorkerID: "task", Client: uuid.NewString(), BrowserRequest: &browser.Request{Action: "control", ID: id}}
-	// New browsers are shared with same-server Agents; an explicit revocation still blocks.
-	m.Handle(ctx, human, browser.Request{Action: "grant", ID: id, AllowAgents: false})
+	q := control.Request{Type: "browser", WorkerID: "task", Client: uuid.NewString(), BrowserRequest: &browser.Request{Action: "control"}}
+	// With the virtual screen off no browser starts for agents.
 	if app.HandleControlRequest(q).OK {
-		t.Fatal("revoked profile attached")
+		t.Fatal("a browser started with the virtual screen off")
 	}
-	m.Handle(ctx, human, browser.Request{Action: "grant", ID: id, AllowAgents: true})
-	w.workers["task"].BrowserID = uuid.NewString()
-	if app.HandleControlRequest(q).OK {
-		t.Fatal("task attached a granted but unselected resource")
+	on := true
+	if _, err := m.Handle(ctx, human, browser.Request{Action: "settings", Enabled: &on}); err != nil {
+		t.Fatal(err)
 	}
-	w.workers["task"].BrowserID = id
 	attached := app.HandleControlRequest(q)
 	if !attached.OK {
 		t.Fatal(attached.Error)
 	}
-	q.BrowserRequest = &browser.Request{Action: "command", ID: id, Lease: attached.Browser.Lease, Command: &browser.Command{Kind: "snapshot"}}
+	q.BrowserRequest = &browser.Request{Action: "command", Lease: attached.Browser.Lease, Command: &browser.Command{Kind: "snapshot"}}
 	w.workers["task"].State = classifier.StateDone
 	if app.HandleControlRequest(q).OK {
 		t.Fatal("completed task still read")
 	}
 	list, _ := m.Handle(ctx, human, browser.Request{Action: "list"})
-	if list.Resources[0].State != "running" || list.Resources[0].Control != "idle" {
-		t.Fatal("task completion did not preserve browser/release control")
+	if len(list.Resources) != 1 || list.Resources[0].State != "running" || list.Resources[0].Control != "idle" {
+		t.Fatalf("task completion did not preserve its window and release control: %+v", list.Resources)
 	}
 	// Quiet manual sessions must use process ownership, not terminal paint.
 	w.workers["task"].Delegated = false
-	q.BrowserRequest = &browser.Request{Action: "control", ID: id}
+	q.BrowserRequest = &browser.Request{Action: "control"}
 	if !app.HandleControlRequest(q).OK {
 		t.Fatal("quiet live manual session denied")
 	}
@@ -86,9 +87,10 @@ func TestBrowserBrokerRequiresExplicitResourceGrantAndActiveTask(t *testing.T) {
 	if list.Resources[0].Control != "idle" {
 		t.Fatal("lost process ownership retained lease")
 	}
-
-	q.BrowserRequest = &browser.Request{Action: "delete", ID: id}
-	if app.HandleControlRequest(q).OK {
-		t.Fatal("Agent deleted user profile")
+	for _, action := range []string{"start", "stop", "delete", "grant", "create"} {
+		q.BrowserRequest = &browser.Request{Action: action}
+		if app.HandleControlRequest(q).OK {
+			t.Fatalf("Agent ran %s", action)
+		}
 	}
 }

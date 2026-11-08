@@ -1,5 +1,3 @@
-//go:build !browserfixture
-
 package main
 
 import (

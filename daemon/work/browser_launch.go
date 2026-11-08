@@ -7,16 +7,12 @@ import (
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/shellquote"
-	"github.com/google/uuid"
 )
 
 // WithBrowserMCP adds only an invocation-scoped MCP entry. Global provider
 // configuration and other MCP servers are preserved. The managed launch shell
 // supplies MEWLA_WORKER_ID after tmux allocates the actual session identity.
-func WithBrowserMCP(command, executable, stateDir, resourceID string, withDisplay bool) (string, error) {
-	if _, err := uuid.Parse(resourceID); err != nil {
-		return "", fmt.Errorf("invalid Browser resource")
-	}
+func WithBrowserMCP(command, executable, stateDir string, withDisplay bool) (string, error) {
 	opts, ok := inspectLaunchCommandOptions(command)
 	if !ok || opts.terminated {
 		return "", fmt.Errorf("Browser attachment requires a direct provider command without an existing mewla_browser override")
@@ -26,7 +22,7 @@ func WithBrowserMCP(command, executable, stateDir, resourceID string, withDispla
 			return "", fmt.Errorf("Browser attachment owns the invocation MCP entry; remove a conflicting command-level MCP override")
 		}
 	}
-	args := []string{"browser", "mcp", "--id", resourceID, "--state-dir", stateDir}
+	args := []string{"browser", "mcp", "--state-dir", stateDir}
 	switch InferWorkerProvider(command) {
 	case WorkerProviderCodex:
 		quoted := make([]string, len(args))
@@ -49,7 +45,7 @@ func WithBrowserMCP(command, executable, stateDir, resourceID string, withDispla
 		raw, _ := json.Marshal(map[string]any{"mcpServers": servers})
 		return command + " --mcp-config " + shellquote.Word(string(raw)) + " --allowedTools " + allowed, nil
 	default:
-		return "", fmt.Errorf("Browser attachment currently supports Codex and Claude sessions; choose either or launch without a Browser")
+		return "", fmt.Errorf("Browser attachment currently supports Codex and Claude sessions")
 	}
 }
 
