@@ -233,14 +233,19 @@ func TestAcceptProduct(t *testing.T) {
 	check(err == nil && (strings.Contains(inert.Text, "No effect seen") || strings.Contains(inert.Text, "Effect not checked")), "a click that changes nothing doesn't claim success")
 
 	// 6. A screen action while the person types is not refused: it goes on and
-	// the answer tells the agent what the person did (one Worker's answer, then
-	// the other's, each told once).
-	told, err := act(AgentAction{Action: "key", Text: "a"})
-	check(err == nil && strings.Contains(told.Text, "person used"), "a key to the screen while the person types goes on and is told: %v %q", err, told.Text)
-	told, err = act(AgentAction{Action: "left_click", Coordinate: []int{400, 300}})
-	check(err == nil, "a click on the screen while the person types goes on: %v", err)
-	told, err = actAs(worker2, AgentAction{Action: "key", Text: "a"})
+	// the answer tells the agent what the person did, each Worker once. The
+	// action posts nothing (cursor_position), so it cannot disturb the person's
+	// text, which step 8 checks; keys and clicks that do go on are step 8b.
+	told, err := act(AgentAction{Action: "cursor_position"})
+	check(err == nil && strings.Contains(told.Text, "person used"), "a screen action while the person types goes on and is told: %v %q", err, told.Text)
+	if !strings.Contains(told.Text, "person used") {
+		say("diagnostic: %s", toldDiagnostic(svc, mb, worker))
+	}
+	told, err = actAs(worker2, AgentAction{Action: "cursor_position"})
 	check(err == nil && strings.Contains(told.Text, "person used"), "the second Worker is told too: %v %q", err, told.Text)
+	if !strings.Contains(told.Text, "person used") {
+		say("diagnostic: %s", toldDiagnostic(svc, mb, worker2))
+	}
 
 	// 7. Optional: the display sleeps and wakes.
 	if os.Getenv("MEWLA_ACCEPT_SLEEP") == "1" {
@@ -282,6 +287,26 @@ func TestAcceptProduct(t *testing.T) {
 	check(moves == 0, "the pointer never left where the person parked it (%v): %d samples off it", last, moves)
 	check(len(seen) == 1 && seen[personApp.pid] > 0, "the app in front was always the person's: %v (start %d, end %d)", seen, front0, front1)
 
+	// 8b. With the person's text checked, keys and clicks on the screen itself
+	// go on while they type again, and are told (they land in the person's
+	// app, which is why this comes after the check).
+	time.Sleep(personMargin + 100*time.Millisecond)
+	for _, key := range "xy" {
+		for _, down := range []bool{true, false} {
+			if ev := mac.CGEventCreateKeyboardEvent(source, macANSIKeys[key].code, down); ev != 0 {
+				mac.CGEventPost(cgHIDEventTap, ev)
+				mac.CFRelease(ev)
+			}
+		}
+	}
+	told, err = act(AgentAction{Action: "key", Text: "a"})
+	check(err == nil && strings.Contains(told.Text, "person used"), "a key to the screen after the person's goes on and is told: %v %q", err, told.Text)
+	if !strings.Contains(told.Text, "person used") {
+		say("diagnostic: %s", toldDiagnostic(svc, mb, worker))
+	}
+	_, err = act(AgentAction{Action: "left_click", Coordinate: []int{400, 300}})
+	check(err == nil, "a click on the screen goes on: %v", err)
+
 	// 9. The agent is done: the window is back and the display is gone.
 	svc.StopAgent()
 	var back image.Point
@@ -320,4 +345,36 @@ func displayWidth(displays []displayInfo) int {
 		}
 	}
 	return 1512
+}
+
+// toldDiagnostic says what the presence check and the agent's own accounting
+// held, for a check that expected the agent to be told and was not.
+func toldDiagnostic(svc *Service, mb *macBackend, worker string) string {
+	now := time.Now()
+	ago := func(t time.Time) string {
+		if t.IsZero() {
+			return "never"
+		}
+		return fmt.Sprintf("%.2fs ago", now.Sub(t).Seconds())
+	}
+	var b strings.Builder
+	p := mb.Presence()
+	for kind, at := range p.Input {
+		fmt.Fprintf(&b, "presence %s %s; ", InputKind(kind), ago(at))
+	}
+	svc.agentMu.Lock()
+	a := svc.agents[worker]
+	svc.agentMu.Unlock()
+	if a == nil {
+		return b.String() + "no session"
+	}
+	posts := a.shared.last()
+	a.mu.Lock()
+	fmt.Fprintf(&b, "lastPost %s; lastAppKey %s; lastAppClick %s; toldAt %s; shared post %s appKey %s appClick %s; pending",
+		ago(a.lastPost), ago(a.lastAppKey), ago(a.lastAppClick), ago(a.toldAt), ago(posts.post), ago(posts.appKey), ago(posts.appClick))
+	for kind, at := range a.pending {
+		fmt.Fprintf(&b, " %s %s", InputKind(kind), ago(at))
+	}
+	a.mu.Unlock()
+	return b.String()
 }
