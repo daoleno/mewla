@@ -554,9 +554,13 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 	prices.mu.RLock()
 	current := cloneProviderPricing(prices.models)
 	prices.mu.RUnlock()
-	if c.claudeFiles == nil || !samePricing(cloneProviderPricing(c.claudeFilesPrices), cloneProviderPricing(current)) {
+	storeKey := claudeUsageStoreKey(current)
+	if c.claudeFiles == nil {
+		c.claudeFiles, c.claudeFilesPrices = c.loadClaudeFiles(storeKey), current
+	} else if !samePricing(cloneProviderPricing(c.claudeFilesPrices), cloneProviderPricing(current)) {
 		c.claudeFiles, c.claudeFilesPrices = map[string]claudeFileUsage{}, current
 	}
+	scanned := 0
 	seen := make(map[string]bool, len(c.claudeFiles))
 	err := filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -590,6 +594,7 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 		}
 		fileAgg := make(map[string]*dateAgg)
 		c.scanSessionJSONL(path, projectName, fileAgg)
+		scanned++
 		// A file that grew while it was read is read again next time.
 		if after, err := os.Stat(path); err == nil && after.Size() == info.Size() && after.ModTime().Equal(info.ModTime()) {
 			c.claudeFiles[path] = claudeFileUsage{size: info.Size(), modified: info.ModTime(), byDate: fileAgg}
@@ -597,13 +602,20 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 		mergeDateAgg(byDate, fileAgg)
 		return nil
 	})
+	removed := 0
 	for path := range c.claudeFiles {
 		if !seen[path] {
 			delete(c.claudeFiles, path)
+			removed++
 		}
 	}
 	if err != nil {
 		c.warnf("claude-walk", "[stats] Claude sessions could not be listed: %v", err)
+	}
+	// Written only when a refresh changed it, and only after a complete walk
+	// (an unreadable directory would otherwise store the files it hid as gone).
+	if err == nil && (scanned > 0 || removed > 0) {
+		c.saveClaudeFiles(storeKey, c.claudeFiles)
 	}
 
 	return byDate
