@@ -15,13 +15,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const displayToolDescription = `Run desktop apps on a display of your own, off the person's screen, and see and drive them. The person can watch it live in Screen, take it over or stop you at any time.
+const displayToolDescription = `Run desktop apps on a display of your own, off the person's screen, and see and drive them. The person can watch and use it live in Screen, hold it or stop you at any time.
 
 Start with action "open" and command, the program and its arguments (["kcalc"], ["kate", "notes.txt"]). Your display is created then and each answer includes a picture of it; coordinates are that picture's pixels. Then use click, double_click, move, scroll (dy positive scrolls down), type (text), key (such as "Enter", "ctrl+s", "alt+F4") and screenshot. close ends your display and every app on it.
 
 There is no window manager: a window is where it opens, with no title bar, and clicking one does not raise it. Apps run as X11 clients. Prefer a command or a file edit when the task has one; this is for what only an app has.
 
-The person's input does not pause you. If they used your display, the answer tells you how many clicks, scrolls and keys, when and whether it landed during your action, never what they typed. They may have tapped by mistake or entered a password: look at the picture again and judge before you go on. If the answer says they took over, stop and report; do not poll. If they stopped you, do not ask again. Ask the person before anything sent, paid, deleted or changed in an account.`
+The person's input does not pause you. If they used your display, the answer tells you how many clicks, scrolls and keys, when and whether it landed during your action, never what they typed. They may have tapped by mistake or entered a password: look at the picture again and judge before you go on. If the answer says they are holding the display, stop and report; do not poll. If they stopped you, do not ask again. Ask the person before anything sent, paid, deleted or changed in an account.`
 
 type displayInput struct {
 	Action  string   `json:"action" jsonschema:"open, screenshot, click, double_click, move, scroll, type, key or close"`
