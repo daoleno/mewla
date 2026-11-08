@@ -24,6 +24,7 @@ import {
   messageTableRowTone,
   messageTableSemanticColors,
 } from "./InterfaceMessageTableModel";
+import { MESSAGE_TEXT_LAYOUT } from "./messageTextLayout";
 import { useTimelineSelectableTextProps } from "./TimelineTextSelectableContext";
 
 interface InterfaceMessageBlockProps {
@@ -70,6 +71,7 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
         >
           <Text
             {...selectableTextProps}
+            {...MESSAGE_TEXT_LAYOUT}
             style={[
               styles.messageHeading,
               block.level <= 2 ? styles.messageHeadingLarge : null,
@@ -132,6 +134,7 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
                 ) : (
                   <Text
                     {...selectableTextProps}
+                    {...MESSAGE_TEXT_LAYOUT}
                     style={[
                       styles.messageListMarker,
                       { color: chrome.textSubtle },
@@ -212,6 +215,7 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
                     >
                       <Text
                         {...selectableTextProps}
+                        {...MESSAGE_TEXT_LAYOUT}
                         style={[
                           styles.messageTableHeaderText,
                           compact ? styles.messageTableTextCompact : null,
@@ -267,6 +271,7 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
                         >
                           <Text
                             {...selectableTextProps}
+                            {...MESSAGE_TEXT_LAYOUT}
                             style={[
                               rowTone === "section"
                                 ? styles.messageTableSectionText
@@ -371,6 +376,7 @@ export const InterfaceMessageBlock = memo(function InterfaceMessageBlock({
       return (
         <Text
           {...selectableTextProps}
+          {...MESSAGE_TEXT_LAYOUT}
           style={[
             styles.messageText,
             compact ? styles.messageTextCompact : null,
@@ -416,6 +422,7 @@ function InterfaceMessageImage({
       {block.alt || block.title ? (
         <Text
           {...selectableTextProps}
+          {...MESSAGE_TEXT_LAYOUT}
           style={[styles.messageImageCaption, { color: chrome.textMuted }]}
         >
           {block.title || block.alt}
