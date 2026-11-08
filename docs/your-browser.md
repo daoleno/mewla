@@ -1,5 +1,13 @@
 # Agents in your browser
 
+Every agent Mewla starts has one browser tool, `mewla_chrome`, on every
+computer; the tool and its behaviour are the same everywhere. Only where the
+agent's Chrome window lives differs. On a Mac, or a desktop without the virtual
+screen, it is your own Chrome (this page). On Linux with **Settings → Labs →
+Virtual screen** on, it is the agents' own Chrome on that virtual screen, with
+the same Mewla extension, which Mewla loads itself: there is nothing to add and
+no sign-in of yours in it (see [Screen](screen.md#linux-agents-browsers-on-a-virtual-screen)).
+
 Agents that Mewla starts on a computer can use that computer's Google Chrome:
 your Chrome, with the sites you are already logged in to. They work in a tab
 group of their own, read pages by their structure rather than by pixels, and
@@ -56,8 +64,10 @@ When an agent is done, because its Worker ended or it stopped using the
 browser, Mewla closes its window and the tabs in it, so a computer that runs
 all day doesn't pile up tabs.
 
-Agents open pages, read them, fill in forms, click, upload and wait for what a
-page does next. What takes the time is the agent's turns, not the browser, so
+Agents open pages, read them (a page's text too, with `browser_read`), fill in
+forms, click, upload and wait for what a page does next. A page that never
+finishes loading does not hold them: a navigation answers within twelve seconds,
+and they read what is there. What takes the time is the agent's turns, not the browser, so
 Mewla's browser tools steer agents to few of them: an action answers with what
 changed rather than the whole page, which on a busy app such as Slack runs to
 hundreds of thousands of tokens; agents take the controls they need from your

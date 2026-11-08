@@ -45,9 +45,10 @@ func readNative(r io.Reader) ([]byte, error) {
 
 // RunNativeHost is what Chrome runs for the extension: it joins Chrome's
 // stdio to the daemon's bridge until either side ends. in and out are the
-// process's stdin and stdout.
-func RunNativeHost(stateDir string, in io.Reader, out io.Writer) error {
-	conn, err := DialBridgeHost(stateDir + "/agent-use")
+// process's stdin and stdout. agent is set for the agent
+// browser's Chrome on the virtual screen.
+func RunNativeHost(stateDir string, agent bool, in io.Reader, out io.Writer) error {
+	conn, err := DialBridgeHost(stateDir+"/agent-use", agent)
 	if err != nil {
 		return err
 	}

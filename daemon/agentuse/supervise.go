@@ -56,7 +56,7 @@ func RelayMCP(helper, env []string, stdin io.Reader, stdout, stderr *os.File) er
 // are the only tabs Playwright sees, and Chrome drops the emptied tab group.
 // (Left alone, the extension only ungroups them.) A 24/7 computer then never
 // piles up tabs.
-func SuperviseMCP(argv, env []string, stdin io.Reader, stdout, stderr io.Writer) error {
+func SuperviseMCP(argv, env []string, gate Gate, stdin io.Reader, stdout, stderr io.Writer) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = env
 	cmd.Stderr = stderr
@@ -71,7 +71,7 @@ func SuperviseMCP(argv, env []string, stdin io.Reader, stdout, stderr io.Writer)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	s := &supervisor{childIn: childIn, stdout: stdout, pending: map[string]chan json.RawMessage{}, lists: map[string]bool{}, compact: map[string]bool{}}
+	s := &supervisor{childIn: childIn, stdout: stdout, gate: gate, pending: map[string]chan json.RawMessage{}, lists: map[string]bool{}, compact: map[string]bool{}, gated: map[string]bool{}, reads: map[string]bool{}}
 	exited := make(chan error, 1)
 	relayed := make(chan struct{})
 	go func() {
@@ -106,7 +106,22 @@ func SuperviseMCP(argv, env []string, stdin io.Reader, stdout, stderr io.Writer)
 	}
 }
 
+// Gate is the daemon's say over each browser tool call of a Worker: Begin may
+// refuse it (the person took the window over, or stopped the Worker), and End
+// returns what the person did in the window meanwhile, for the Worker to hear
+// with the result. A Gate that cannot reach the daemon lets the call through.
+type Gate interface {
+	Begin() error
+	End() []string
+}
+
 type supervisor struct {
+	gate Gate
+	// outMu orders what goes to the agent: the supervisor answers some calls
+	// itself while Playwright's answers arrive.
+	outMu sync.Mutex
+	// gated are the tool calls Begin let through and End is owed for.
+	gated   map[string]bool
 	mu      sync.Mutex
 	childIn io.Writer
 	stdout  io.Writer
@@ -117,7 +132,19 @@ type supervisor struct {
 	lists map[string]bool
 	// compact are the browser_snapshot calls whose answer is to be reduced to controls.
 	compact map[string]bool
+	// reads are the browser_read calls, which Playwright answers as an evaluate.
+	reads map[string]bool
 }
+
+// maxPageText bounds what one browser_read returns to the agent, in characters.
+const maxPageText = 40000
+
+// readTool is the one tool Mewla adds to Playwright's: a snapshot lists what
+// can be clicked, and an article, a thread or a table is read as text.
+const readTool = `{"name":"browser_read","description":"Read the current page's text, as a person would read it, with the page's address. Use it for an article, a post, a table or a long page; browser_snapshot lists the controls, this reads the words. The text is cut at 40000 characters, and says so.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"title":"Read page text","readOnlyHint":true}}`
+
+// readScript is what a browser_read runs in the page.
+const readScript = `() => JSON.stringify({ url: location.href, text: document.body ? document.body.innerText : '' })`
 
 // toolAdvice is added to these tools' descriptions. The page an action
 // leaves is not sent back (--snapshot-mode none), and every tool call is a
@@ -149,10 +176,24 @@ func (s *supervisor) relayIn(r io.Reader) {
 		if len(line) > 0 {
 			var msg rpcMessage
 			if json.Unmarshal(line, &msg) == nil {
+				if msg.Method == "tools/call" && strings.HasPrefix(msg.Params.Name, "browser_") && len(msg.ID) > 0 && s.gate != nil {
+					if err := s.gate.Begin(); err != nil {
+						s.refuse(msg.ID, err.Error())
+						continue
+					}
+					s.mu.Lock()
+					s.gated[string(msg.ID)] = true
+					s.mu.Unlock()
+				}
 				s.mu.Lock()
 				if msg.Method == "tools/call" && strings.HasPrefix(msg.Params.Name, "browser_") {
 					s.used = true
 				}
+				s.mu.Unlock()
+				if msg.Method == "tools/call" && msg.Params.Name == "browser_read" && len(msg.ID) > 0 {
+					line = s.asEvaluate(msg.ID, line)
+				}
+				s.mu.Lock()
 				if msg.Method == "tools/list" && len(msg.ID) > 0 {
 					s.lists[string(msg.ID)] = true
 				}
@@ -175,12 +216,144 @@ func (s *supervisor) relayOut(r io.Reader) {
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 && !s.answered(line) {
-			_, _ = s.stdout.Write(s.advised(s.compacted(line)))
+			line = s.advised(s.compacted(s.readAnswer(line)))
+			s.outMu.Lock()
+			_, _ = s.stdout.Write(s.noted(line))
+			s.outMu.Unlock()
 		}
 		if err != nil {
 			return
 		}
 	}
+}
+
+// asEvaluate turns a browser_read call into the evaluate Playwright runs.
+func (s *supervisor) asEvaluate(id json.RawMessage, line []byte) []byte {
+	raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call",
+		"params": map[string]any{"name": "browser_evaluate", "arguments": map[string]any{"function": readScript}}})
+	if err != nil {
+		return line
+	}
+	s.mu.Lock()
+	s.reads[string(id)] = true
+	s.mu.Unlock()
+	return append(raw, '\n')
+}
+
+// resultText is the text of Playwright's evaluate answer: the JSON string the
+// page script returned, between the "Result" heading and the next.
+var resultText = regexp.MustCompile(`(?s)### Result\s*\n(.*?)(?:\n### |\z)`)
+
+// readAnswer turns the evaluate answer of a browser_read into the page's text.
+// An answer it can't read passes unchanged, so the agent sees what happened.
+func (s *supervisor) readAnswer(line []byte) []byte {
+	s.mu.Lock()
+	waiting := len(s.reads) > 0
+	s.mu.Unlock()
+	if !waiting || !bytes.Contains(line, []byte(`"result"`)) {
+		return line
+	}
+	var msg map[string]json.RawMessage
+	if json.Unmarshal(line, &msg) != nil || len(msg["id"]) == 0 {
+		return line
+	}
+	s.mu.Lock()
+	wanted := s.reads[string(msg["id"])]
+	delete(s.reads, string(msg["id"]))
+	s.mu.Unlock()
+	if !wanted {
+		return line
+	}
+	var result struct {
+		IsError bool `json:"isError"`
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if json.Unmarshal(msg["result"], &result) != nil || result.IsError || len(result.Content) == 0 {
+		return line
+	}
+	found := resultText.FindStringSubmatch(result.Content[0].Text)
+	if found == nil {
+		return line
+	}
+	var inner string
+	var page struct {
+		URL  string `json:"url"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(found[1])), &inner) != nil || json.Unmarshal([]byte(inner), &page) != nil {
+		return line
+	}
+	runes := []rune(page.Text)
+	note := ""
+	if len(runes) > maxPageText {
+		runes, note = runes[:maxPageText], "\n\n[The text was cut at 40000 characters.]"
+	}
+	text := "Page: " + page.URL + "\n\n" + string(runes) + note
+	answer, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": msg["id"], "result": map[string]any{"content": []map[string]string{{"type": "text", "text": text}}}})
+	if err != nil {
+		return line
+	}
+	return append(answer, '\n')
+}
+
+// refuse answers a tool call itself, as a failed call with the reason.
+func (s *supervisor) refuse(id json.RawMessage, why string) {
+	raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "result": map[string]any{"isError": true, "content": []map[string]string{{"type": "text", "text": why}}}})
+	s.outMu.Lock()
+	_, _ = s.stdout.Write(append(raw, '\n'))
+	s.outMu.Unlock()
+}
+
+// noted ends the gate for the tool call a line answers and adds what the
+// person did in the window since the Worker last heard, as one more block of
+// text; every other line passes unchanged.
+func (s *supervisor) noted(line []byte) []byte {
+	s.mu.Lock()
+	waiting := len(s.gated) > 0
+	s.mu.Unlock()
+	if !waiting || (!bytes.Contains(line, []byte(`"result"`)) && !bytes.Contains(line, []byte(`"error"`))) {
+		return line
+	}
+	var msg map[string]json.RawMessage
+	if json.Unmarshal(line, &msg) != nil || len(msg["id"]) == 0 {
+		return line
+	}
+	s.mu.Lock()
+	owed := s.gated[string(msg["id"])]
+	delete(s.gated, string(msg["id"]))
+	s.mu.Unlock()
+	if !owed {
+		return line
+	}
+	notes := s.gate.End()
+	if len(notes) == 0 || msg["result"] == nil {
+		return line
+	}
+	var result map[string]json.RawMessage
+	var content []json.RawMessage
+	if json.Unmarshal(msg["result"], &result) != nil {
+		return line
+	}
+	if result["content"] != nil && json.Unmarshal(result["content"], &content) != nil {
+		return line
+	}
+	block, _ := json.Marshal(map[string]string{"type": "text", "text": strings.Join(notes, "\n")})
+	content = append(content, block)
+	var err error
+	if result["content"], err = json.Marshal(content); err != nil {
+		return line
+	}
+	if msg["result"], err = json.Marshal(result); err != nil {
+		return line
+	}
+	out, err := json.Marshal(msg)
+	if err != nil {
+		return line
+	}
+	return append(out, '\n')
 }
 
 // compacted reduces the answer to a browser_snapshot call made with
@@ -254,6 +427,8 @@ func (s *supervisor) advised(line []byte) []byte {
 	if !asked || json.Unmarshal(msg["result"], &result) != nil || json.Unmarshal(result["tools"], &tools) != nil {
 		return line
 	}
+	tools = append(tools, map[string]json.RawMessage{})
+	_ = json.Unmarshal([]byte(readTool), &tools[len(tools)-1])
 	for _, tool := range tools {
 		var name, description string
 		_ = json.Unmarshal(tool["name"], &name)

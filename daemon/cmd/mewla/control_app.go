@@ -706,19 +706,6 @@ func (a *controlApp) handleWorkerSpawn(req control.Request) control.Response {
 		Env:              progressEnvForStateDir(a.stateDir),
 		ExecutorID:       a.spawnExecutorID(req),
 	}
-	if !req.Hidden && work.SupportsBrowserAttachment(command) && a.browsers.AgentBrowser(context.Background()) {
-		// With the virtual screen on, a Worker gets a browser on it; the window
-		// opens when the agent first asks.
-		createOpts.Env["MEWLA_WORKER_ID"] = ""
-		createOpts.PrepareLaunch = func(command string) (string, error) {
-			launch, err := work.WithBrowserMCP(command, watcher.ExecutablePath(), a.stateDir, a.displayOn())
-			if err != nil {
-				// The browser was not asked for; a command that cannot take it launches without.
-				return command, nil
-			}
-			return launch, nil
-		}
-	}
 	var routeSnap *modelprofiles.WireSessionSnapshot
 	var routePersist modelprofiles.PersistResult
 	workerID := ""

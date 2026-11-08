@@ -3,13 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"strings"
 	"testing"
 
 	"github.com/daoleno/mewla/daemon/browser"
-	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/control"
-	"github.com/google/uuid"
 )
 
 type brokerBackend struct{}
@@ -21,75 +19,72 @@ func (brokerBackend) Start(context.Context, string) (browser.Host, error) { retu
 
 type brokerHost struct{}
 
-func (brokerHost) Alive() bool                                     { return true }
-func (brokerHost) Close() error                                    { return nil }
-func (brokerHost) Window(context.Context) (browser.Runtime, error) { return brokerRuntime{}, nil }
+func (brokerHost) Alive() bool  { return true }
+func (brokerHost) Close() error { return nil }
+func (brokerHost) Window(context.Context, string) (browser.Runtime, error) {
+	return brokerRuntime{}, nil
+}
 
 type brokerRuntime struct{}
 
 func (brokerRuntime) Target() string                { return "tab" }
+func (brokerRuntime) SetTarget(string)              {}
 func (brokerRuntime) Alive() bool                   { return true }
 func (brokerRuntime) Close() error                  { return nil }
 func (brokerRuntime) Release(context.Context) error { return nil }
-func (brokerRuntime) Stream(context.Context) (browser.Stream, error) {
-	return nil, browser.ErrUnavailable
-}
+func (brokerRuntime) Page(context.Context) string   { return "" }
 func (brokerRuntime) Command(context.Context, browser.Command) (json.RawMessage, error) {
 	return json.RawMessage("{}"), nil
 }
+func (brokerRuntime) Input(context.Context, browser.Input) error {
+	return nil
+}
+func (brokerRuntime) Stream(context.Context) (browser.Stream, error) {
+	return nil, browser.ErrUnavailable
+}
 
-// An agent gets a window of its own on the first request, needs no id, and
-// loses its lease when its task is no longer active.
-func TestBrowserBrokerOpensAWindowForAnActiveTaskOnly(t *testing.T) {
+// An agent's browser tool calls are let through, and only begin and end are
+// the agent's to ask; a window outlives its task's last call (it closes with
+// the Worker's session, not with a classification of the task).
+func TestBrowserGateLetsACallThroughAndOnlyBeginAndEndAreAsked(t *testing.T) {
 	m, err := browser.New(t.TempDir(), brokerBackend{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer m.Close()
-	human := browser.Owner{Kind: "human", ID: "owner"}
 	ctx := context.Background()
-	w := newFakeControlWatcher()
-	w.workers["task"] = &classifier.Worker{ID: "task", State: classifier.StateRunning, Delegated: true}
-	app := &controlApp{browsers: m, watcher: w}
-	q := control.Request{Type: "browser", WorkerID: "task", Client: uuid.NewString(), BrowserRequest: &browser.Request{Action: "control"}}
-	// With the virtual screen off no browser starts for agents.
-	if app.HandleControlRequest(q).OK {
-		t.Fatal("a browser started with the virtual screen off")
-	}
-	on := true
-	if _, err := m.Handle(ctx, human, browser.Request{Action: "settings", Enabled: &on}); err != nil {
+	if err := m.EnsureHost(ctx); err != nil {
 		t.Fatal(err)
 	}
-	attached := app.HandleControlRequest(q)
-	if !attached.OK {
-		t.Fatal(attached.Error)
+	if err := m.Opened(ctx, "task", "c1", "tab"); err != nil {
+		t.Fatal(err)
 	}
-	q.BrowserRequest = &browser.Request{Action: "command", Lease: attached.Browser.Lease, Command: &browser.Command{Kind: "snapshot"}}
-	w.workers["task"].State = classifier.StateDone
-	if app.HandleControlRequest(q).OK {
-		t.Fatal("completed task still read")
+	app := &controlApp{browsers: m}
+	call := func(worker, action string) control.Response {
+		return app.HandleControlRequest(control.Request{Type: "browser", WorkerID: worker, BrowserRequest: &browser.Request{Action: action}})
 	}
-	list, _ := m.Handle(ctx, human, browser.Request{Action: "list"})
-	if len(list.Resources) != 1 || list.Resources[0].State != "running" || list.Resources[0].Control != "idle" {
-		t.Fatalf("task completion did not preserve its window and release control: %+v", list.Resources)
+	if r := call("task", "begin"); !r.OK {
+		t.Fatal(r.Error)
 	}
-	// Quiet manual sessions must use process ownership, not terminal paint.
-	w.workers["task"].Delegated = false
-	q.BrowserRequest = &browser.Request{Action: "control"}
-	if !app.HandleControlRequest(q).OK {
-		t.Fatal("quiet live manual session denied")
+	if r := call("task", "end"); !r.OK {
+		t.Fatal(r.Error)
 	}
-	w.ownershipErr = errors.New("process generation replaced")
-	if app.HandleControlRequest(q).OK {
-		t.Fatal("unproved process generation accepted")
+	if r := call("", "begin"); r.OK {
+		t.Fatal("a call without a Worker was accepted")
 	}
-	list, _ = m.Handle(ctx, human, browser.Request{Action: "list"})
-	if list.Resources[0].Control != "idle" {
-		t.Fatal("lost process ownership retained lease")
+	// The person's Stop refuses the Worker, with the reason, and only that Worker.
+	list, _ := m.Handle(ctx, browser.Owner{Kind: "human", ID: "owner"}, browser.Request{Action: "list"})
+	if _, err := m.Handle(ctx, browser.Owner{Kind: "human", ID: "owner"}, browser.Request{Action: "halt", ID: list.Resources[0].ID}); err != nil {
+		t.Fatal(err)
 	}
-	for _, action := range []string{"start", "stop", "delete", "grant", "create"} {
-		q.BrowserRequest = &browser.Request{Action: action}
-		if app.HandleControlRequest(q).OK {
+	if r := call("task", "begin"); r.OK || r.Error == nil || !strings.Contains(r.Error.Message, "stopped you") {
+		t.Fatalf("a stopped Worker: %+v", r)
+	}
+	if r := call("other", "begin"); !r.OK {
+		t.Fatal("another Worker was refused")
+	}
+	for _, action := range []string{"start", "stop", "delete", "grant", "create", "control", "command", "list"} {
+		if call("other", action).OK {
 			t.Fatalf("Agent ran %s", action)
 		}
 	}

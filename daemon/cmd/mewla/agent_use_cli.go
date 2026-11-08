@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/agentuse"
+	"github.com/daoleno/mewla/daemon/browser"
 	"github.com/daoleno/mewla/daemon/control"
 )
 
@@ -72,6 +74,7 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	service.SetVirtualScreen(virtualScreenOf(resolveCLIStateDir(stateDir)))
 	var status agentuse.Status
 	switch action {
 	case "status":
@@ -119,7 +122,7 @@ func runAgentUseCommand(args []string, stderr io.Writer) error {
 		if mcpErr != nil {
 			return fmt.Errorf("your Chrome isn't available to agents: %w", mcpErr)
 		}
-		return agentuse.SuperviseMCP(argv, env, os.Stdin, os.Stdout, os.Stderr)
+		return agentuse.SuperviseMCP(argv, env, newBrowserGate(resolveCLIStateDir(stateDir), os.Getenv("MEWLA_WORKER_ID")), os.Stdin, os.Stdout, os.Stderr)
 	default:
 		return fmt.Errorf("unknown agent-use action %q", action)
 	}
@@ -254,10 +257,14 @@ func printAgentUse(w io.Writer, status agentuse.Status) {
 // Chrome or the tools would read as a message except the protocol itself.
 func runExtensionBridge(action string, args []string, stderr io.Writer) error {
 	var stateDir string
+	agent := false
 	for len(args) > 0 {
 		switch {
 		case args[0] == "--state-dir" && len(args) > 1:
 			stateDir, args = args[1], args[2:]
+			continue
+		case args[0] == "--agent":
+			agent, args = true, args[1:]
 			continue
 		case args[0] == "--":
 			args = args[1:]
@@ -266,7 +273,7 @@ func runExtensionBridge(action string, args []string, stderr io.Writer) error {
 	}
 	stateDir = resolveCLIStateDir(stateDir)
 	if action == "native-host" {
-		return agentuse.RunNativeHost(stateDir, os.Stdin, os.Stdout)
+		return agentuse.RunNativeHost(stateDir, agent, os.Stdin, os.Stdout)
 	}
 	chrome, ok := agentuse.FindChrome()
 	err := agentuse.OpenForTools(stateDir, args, func(profile string) error {
@@ -284,4 +291,20 @@ func runExtensionBridge(action string, args []string, stderr io.Writer) error {
 		}
 	}
 	return err
+}
+
+// virtualScreenOf is the daemon's own answer about the virtual screen, read the
+// way the daemon reads it: the switch kept under the state directory, and what
+// this computer can run. The commands agents' tools start use it to build the
+// same tool the daemon says is ready.
+func virtualScreenOf(stateDir string) func() (bool, string) {
+	return func() (bool, string) {
+		if !browser.LoadSettings(filepath.Join(stateDir, "browsers")).VirtualScreen {
+			return false, ""
+		}
+		if c := browser.NewBackend(nil).Capability(context.Background()); !c.Available {
+			return true, c.Reason
+		}
+		return true, ""
+	}
 }

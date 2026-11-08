@@ -426,7 +426,7 @@ func startSupervised(t *testing.T, argv, env []string) *supervisedProc {
 	go func() {
 		defer close(done)
 		defer outW.Close()
-		_ = SuperviseMCP(argv, env, inR, outW, os.Stderr)
+		_ = SuperviseMCP(argv, env, nil, inR, outW, os.Stderr)
 	}()
 	p := &mcpProc{cmd: &exec.Cmd{}, in: inW, lines: make(chan string, 64)}
 	go func() {

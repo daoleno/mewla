@@ -32,7 +32,9 @@ const PhoneToolTimeoutSec = 800
 
 // AgentTools is what an agent launched now can use on this computer.
 type AgentTools struct {
-	// Chrome is the user's own Chrome, through the Playwright extension.
+	// Chrome is the one browser tool: the person's Chrome, or on Linux with
+	// the virtual screen on the agent browser there, both through the Mewla
+	// extension.
 	Chrome bool
 	// Computer is this computer's screen, keyboard and pointer.
 	Computer bool
@@ -62,12 +64,9 @@ func WithAgentTools(command, executable, stateDir string, tools AgentTools) stri
 		// timeoutSec is how long Codex waits for one call, where the default is too short.
 		timeoutSec int
 	}
-	if strings.Contains(command, DisplayMCPName) {
-		tools.Display = false // the browser launch already carried it
-	}
 	var servers []server
 	if tools.Chrome {
-		servers = append(servers, server{name: ChromeMCPName, args: []string{"agent-use", "chrome-mcp", "--state-dir", stateDir}})
+		servers = append(servers, server{name: ChromeMCPName, args: []string{"agent-use", "chrome-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}})
 	}
 	if tools.Computer {
 		servers = append(servers, server{name: ComputerMCPName, args: []string{"agent-use", "computer-mcp", "--state-dir", stateDir}, env: []string{"MEWLA_WORKER_ID"}})

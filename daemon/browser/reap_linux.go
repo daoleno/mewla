@@ -13,8 +13,7 @@ import (
 // reapStrays ends what a daemon that died without closing its browser left
 // running: every process a runtime starts carries the pid of the daemon that
 // started it (ownerEnv), and Pdeathsig only reaches a direct child, so KWin
-// under its bus, Chrome's helpers and each session's agent-browser helper
-// outlive a crash and keep holding the profile. Only this user's processes
+// under its bus and Chrome's helpers outlive a crash and keep holding the profile. Only this user's processes
 // whose owner is gone are signalled.
 func reapStrays() {
 	entries, err := os.ReadDir("/proc")

@@ -40,9 +40,11 @@ type hostMessage struct {
 	Message  string        `json:"message,omitempty"`
 	Reason   string        `json:"reason,omitempty"`
 	// Label names the agent's tab group.
-	Label     string          `json:"label,omitempty"`
-	Version   string          `json:"version,omitempty"`
-	WindowID  int             `json:"windowId,omitempty"`
+	Label    string `json:"label,omitempty"`
+	Version  string `json:"version,omitempty"`
+	WindowID int    `json:"windowId,omitempty"`
+	// TargetID is the DevTools target of the page the window shows.
+	TargetID  string          `json:"targetId,omitempty"`
 	Sessions  []string        `json:"sessions,omitempty"`
 	Extension json.RawMessage `json:"-"`
 }
@@ -58,7 +60,10 @@ type WindowBounds struct {
 
 // hello is the first line of every connection to the bridge.
 type hello struct {
-	Role     string        `json:"role"` // "host" or "connect"
+	Role string `json:"role"` // "host" or "connect"
+	// Agent is set by the host of the agent browser (the virtual screen's
+	// Chrome), which the person's Chrome never is.
+	Agent    bool          `json:"agent,omitempty"`
 	RelayURL string        `json:"relayUrl,omitempty"`
 	Client   string        `json:"client,omitempty"`
 	Bounds   *WindowBounds `json:"bounds,omitempty"`
@@ -75,7 +80,7 @@ type connectReply struct {
 var (
 	// ErrNoExtensionHost means Chrome isn't running the Mewla extension now.
 	ErrNoExtensionHost = errors.New("the Mewla extension isn't connected: Chrome isn't running with it")
-	connectTimeout     = 20 * time.Second
+	connectTimeout     = 60 * time.Second
 )
 
 // maxSocketPath keeps the socket's path inside what a unix socket can name:
@@ -121,17 +126,40 @@ type Bridge struct {
 	Display func(key string) (bounds WindowBounds, release func(), err error)
 	// WorkerName gives a Worker's name for its tab group, when it has one.
 	WorkerName func(worker string) string
+	// Agent, when set and on, puts agents' windows in the agent browser on the
+	// virtual screen instead of the person's Chrome.
+	Agent *AgentBrowser
 
-	mu      sync.Mutex
-	host    *bridgeHost
-	waiting map[string]chan hostMessage
-	nextID  int
+	mu        sync.Mutex
+	host      *bridgeHost
+	agentHost *bridgeHost
+	waiting   map[string]chan hostMessage
+	// open are the agent browser's windows, by connection id, with the Worker.
+	open   map[string]string
+	nextID int
 	// releases let go of each open agent window's hold on the display.
 	releases map[string]func()
 	// slots are the places on the agent display the open windows have, so
 	// Workers' windows sit side by side, not over one another (a covered
 	// window is one Chrome may stop drawing).
 	slots map[string]int
+}
+
+// AgentBrowser is the agent browser on the virtual screen, as the bridge
+// reaches it. The daemon's browser manager is on the other side of these.
+type AgentBrowser struct {
+	// On says whether agents' windows go there now.
+	On func() bool
+	// Ensure starts the agent browser and waits until it is up.
+	Ensure func(ctx context.Context) error
+	// Opened lists a window the extension opened for a Worker (key is the
+	// connection id, target the page it shows); Viewed follows the page it
+	// shows; Closed takes it off the list.
+	Opened func(ctx context.Context, worker, key, target string) error
+	Viewed func(key, target string)
+	Closed func(key string)
+	// Bounds is where each window goes on the agent browser's screen.
+	Bounds WindowBounds
 }
 
 type bridgeHost struct {
@@ -148,7 +176,27 @@ func (h *bridgeHost) send(m hostMessage) error {
 }
 
 func NewBridge(dir string) *Bridge {
-	return &Bridge{dir: dir, waiting: map[string]chan hostMessage{}, releases: map[string]func(){}}
+	return &Bridge{dir: dir, waiting: map[string]chan hostMessage{}, releases: map[string]func(){}, open: map[string]string{}}
+}
+
+// CloseWindow asks the extension to close an agent window by its connection id.
+func (b *Bridge) CloseWindow(id string) {
+	b.mu.Lock()
+	host := b.agentHost
+	if host == nil {
+		host = b.host
+	}
+	b.mu.Unlock()
+	if host != nil {
+		_ = host.send(hostMessage{Type: "disconnect", ID: id})
+	}
+}
+
+// HasAgentHost says whether the agent browser's extension is connected.
+func (b *Bridge) HasAgentHost() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.agentHost != nil
 }
 
 // HasHost says whether the extension is connected.
@@ -220,7 +268,7 @@ func (b *Bridge) serve(conn net.Conn) {
 	}
 	switch h.Role {
 	case "host":
-		b.serveHost(conn, r)
+		b.serveHost(conn, r, h.Agent)
 	case "connect":
 		reply := connectReply{OK: true}
 		ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
@@ -232,21 +280,37 @@ func (b *Bridge) serve(conn net.Conn) {
 	}
 }
 
-func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader) {
+func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 	host := &bridgeHost{conn: conn, enc: json.NewEncoder(conn)}
 	b.mu.Lock()
-	old := b.host
-	b.host = host
+	slot := &b.host
+	if agent {
+		slot = &b.agentHost
+	}
+	old := *slot
+	*slot = host
 	b.mu.Unlock()
 	if old != nil {
 		old.conn.Close() // a newer Chrome profile or window took over
 	}
 	defer func() {
 		b.mu.Lock()
-		if b.host == host {
-			b.host = nil
+		if *slot == host {
+			*slot = nil
+		}
+		var gone []string
+		if agent {
+			for id := range b.open {
+				gone = append(gone, id)
+			}
+			b.open = map[string]string{}
 		}
 		b.mu.Unlock()
+		if agent && b.Agent != nil && b.Agent.Closed != nil {
+			for _, id := range gone {
+				b.Agent.Closed(id)
+			}
+		}
 		b.failAll("Chrome closed the Mewla extension")
 	}()
 	dec := json.NewDecoder(r)
@@ -260,9 +324,22 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader) {
 			b.mu.Lock()
 			host.version = m.Version
 			b.mu.Unlock()
+		case "view":
+			if agent && b.Agent != nil && b.Agent.Viewed != nil && m.TargetID != "" {
+				b.Agent.Viewed(m.ID, m.TargetID)
+			}
 		case "connected", "error", "closed":
 			if m.Type != "connected" {
 				b.release(m.ID)
+			}
+			if agent && m.Type != "connected" {
+				b.mu.Lock()
+				_, was := b.open[m.ID]
+				delete(b.open, m.ID)
+				b.mu.Unlock()
+				if was && b.Agent != nil && b.Agent.Closed != nil {
+					b.Agent.Closed(m.ID)
+				}
 			}
 			b.mu.Lock()
 			ch := b.waiting[m.ID]
@@ -338,8 +415,27 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 	if err := validRelayURL(relayURL); err != nil {
 		return err
 	}
+	agent := b.Agent != nil && b.Agent.On != nil && b.Agent.On()
+	if agent {
+		// The agent browser starts when the first agent asks for it.
+		if b.Agent.Ensure != nil {
+			if err := b.Agent.Ensure(ctx); err != nil {
+				return fmt.Errorf("the agent browser could not start: %w", err)
+			}
+		}
+		for !b.HasAgentHost() {
+			select {
+			case <-ctx.Done():
+				return errors.New("the agent browser started but its Mewla extension did not connect")
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+	}
 	b.mu.Lock()
 	host := b.host
+	if agent {
+		host = b.agentHost
+	}
 	if host == nil {
 		b.mu.Unlock()
 		return ErrNoExtensionHost
@@ -354,7 +450,12 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 		delete(b.waiting, id)
 		b.mu.Unlock()
 	}()
-	if bounds == nil && b.Display != nil {
+	if agent {
+		// Every window of the agent browser fills its screen; they sit over
+		// one another, and the person watches one at a time.
+		cell := b.Agent.Bounds
+		bounds = &cell
+	} else if bounds == nil && b.Display != nil {
 		if got, release, err := b.Display(id); err == nil {
 			b.mu.Lock()
 			b.releases[id] = release
@@ -378,11 +479,25 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 	}
 	select {
 	case m := <-ch:
-		if m.Type == "connected" {
-			return nil
+		if m.Type != "connected" {
+			b.release(id)
+			return fmt.Errorf("the extension couldn't open the agent's window: %s", m.Message)
 		}
-		b.release(id)
-		return fmt.Errorf("the extension couldn't open the agent's window: %s", m.Message)
+		if agent {
+			b.mu.Lock()
+			b.open[id] = worker
+			b.mu.Unlock()
+			if b.Agent.Opened != nil {
+				if err := b.Agent.Opened(ctx, worker, id, m.TargetID); err != nil {
+					b.mu.Lock()
+					delete(b.open, id)
+					b.mu.Unlock()
+					_ = host.send(hostMessage{Type: "disconnect", ID: id})
+					return fmt.Errorf("the agent's window could not be shown in Screen: %w", err)
+				}
+			}
+		}
+		return nil
 	case <-ctx.Done():
 		_ = host.send(hostMessage{Type: "disconnect", ID: id})
 		b.release(id)
@@ -419,12 +534,12 @@ func ConnectViaBridgeFor(dir, relayURL, client, worker string) error {
 
 // DialBridgeHost is the host role's side: a connection to the daemon, already
 // introduced as the extension's host.
-func DialBridgeHost(dir string) (net.Conn, error) {
+func DialBridgeHost(dir string, agent bool) (net.Conn, error) {
 	conn, err := net.DialTimeout("unix", bridgeSocket(dir), 3*time.Second)
 	if err != nil {
 		return nil, errors.New("Mewla isn't running on this computer")
 	}
-	if err := json.NewEncoder(conn).Encode(hello{Role: "host"}); err != nil {
+	if err := json.NewEncoder(conn).Encode(hello{Role: "host", Agent: agent}); err != nil {
 		conn.Close()
 		return nil, err
 	}

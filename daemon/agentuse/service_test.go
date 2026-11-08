@@ -525,3 +525,65 @@ func TestTheExtensionManifestKeepsItsIDAndAsksForWhatItUses(t *testing.T) {
 		t.Fatalf("permissions %v", got)
 	}
 }
+
+// With the virtual screen on, nothing of the person's Chrome is needed: no
+// Chrome, no desktop, no extension added by hand. The tool is the same one,
+// and the agent browser's own native host and extension are what Mewla writes.
+func TestVirtualScreenNeedsNothingOfThePersonsChrome(t *testing.T) {
+	c := newFakeComputer(t)
+	c.withNode()
+	c.noDesktop = true
+	s := c.service(true)
+	s.lookChrome = func(string) (chromeInstall, bool) { return chromeInstall{}, false }
+	s.executable = func() (string, error) { return "/opt/mewla/bin/mewla", nil }
+	on, unusable := true, ""
+	s.SetVirtualScreen(func() (bool, string) { return on, unusable })
+	waitReady(t, s)
+	status := s.Status().Browser
+	if status.State != BrowserReady || !strings.Contains(status.Summary, "virtual screen") {
+		t.Fatalf("status %+v", status)
+	}
+	argv, _, err := s.MCPServer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if joined := strings.Join(argv, " "); !strings.Contains(joined, "--extension") || !strings.Contains(joined, "chrome-for-tools.sh") || !strings.Contains(joined, "--timeout-navigation") {
+		t.Fatalf("argv %q", joined)
+	}
+	// It is on but cannot run: the status says why, and no tool is offered.
+	unusable = "kwin_wayland is not installed on this server"
+	status = s.Refresh().Browser
+	if status.State != BrowserFailed || !strings.Contains(status.Summary, "kwin_wayland") {
+		t.Fatalf("status %+v", status)
+	}
+	if _, _, err := s.MCPServer(); err == nil {
+		t.Fatal("a tool was offered with no browser to run it")
+	}
+	// Off, the person's Chrome is what is missing again.
+	on = false
+	if status = s.Refresh().Browser; status.State != BrowserNoChrome {
+		t.Fatalf("status %+v", status)
+	}
+
+	// The agent browser's profile gets its own host, which tells the daemon it is the agent browser's.
+	profile := filepath.Join(c.root, "agent-profile")
+	dir, err := s.PrepareAgentBrowser(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "manifest.json")); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(profile, "NativeMessagingHosts", NativeHostName+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m hostManifest
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	launcher, _ := os.ReadFile(m.Path)
+	if m.Path != filepath.Join(c.root, "state", "agent-use", "native-host-agent.sh") || !strings.Contains(string(launcher), "agent-use native-host --state-dir") || !strings.Contains(string(launcher), " --agent") {
+		t.Fatalf("host %s launcher %q", m.Path, launcher)
+	}
+}

@@ -23,7 +23,6 @@ import (
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/fsnotify/fsnotify"
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"golang.org/x/sys/unix"
 )
@@ -32,9 +31,18 @@ import (
 // Other GUI applications can use other runtime adapters without changing leases.
 type LinuxBackend struct {
 	Chrome string
+	// Prepare gets the profile's user data directory before Chrome starts. It
+	// registers Mewla's native messaging host there (Chrome looks in the user
+	// data directory first) and returns the folder of the Mewla extension,
+	// which is loaded into Chrome each time it starts.
+	Prepare func(userDataDir string) (extensionDir string, err error)
 }
 
-func NewBackend() Backend { return &LinuxBackend{} }
+// NewBackend is the Linux backend. prepare registers Mewla's native messaging
+// host in the profile and returns the extension's folder (see LinuxBackend).
+func NewBackend(prepare func(userDataDir string) (extensionDir string, err error)) Backend {
+	return &LinuxBackend{Prepare: prepare}
+}
 func (b *LinuxBackend) chrome() string {
 	if b.Chrome != "" {
 		return b.Chrome
@@ -80,7 +88,7 @@ func (b *LinuxBackend) Capability(ctx context.Context) Capability {
 	if b.chrome() == "" {
 		return Capability{Reason: "Install a supported Chrome or Chromium browser on this server"}
 	}
-	for _, name := range []string{"kwin_wayland", "dbus-run-session", "agent-browser"} {
+	for _, name := range []string{"kwin_wayland", "dbus-run-session"} {
 		if _, e := exec.LookPath(name); e != nil {
 			return Capability{Reason: name + " is not installed on this server"}
 		}
@@ -209,8 +217,14 @@ func launchFailure(step string, cause error, p *child) error {
 }
 
 func spawn(env []string, name string, args ...string) (*child, error) {
+	return spawnWith(env, nil, name, args...)
+}
+
+// spawnWith starts a process that also gets extra files as its descriptors 3, 4, ….
+func spawnWith(env []string, extra []*os.File, name string, args ...string) (*child, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Env = env
+	cmd.ExtraFiles = extra
 	tail := &tailBuffer{}
 	cmd.Stderr = tail
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
@@ -255,22 +269,11 @@ type linuxHost struct {
 	chrome, display *child
 	lock            *os.File
 	closed          bool
-}
-
-// linuxWindow is one agent's window: a page of its own, an agent-browser
-// session pinned to it, and that session's live view. Sessions share the one
-// Chrome, so each is pinned and every page it opens is a window of its own;
-// pinned sessions do not follow one another's tabs.
-type linuxWindow struct {
-	h       *linuxHost
-	session string
-	mu      sync.Mutex
-	target  string
-	owned   map[string]bool // pages this window opened or was opened from
-	closed  bool
-	keys    map[string]bool
-	buttons map[string]bool
-	x, y    float64
+	// pipeOut and pipeIn are our ends of Chrome's debugging pipe (to Chrome,
+	// from Chrome). They stay open as long as Chrome runs.
+	pipeOut, pipeIn *os.File
+	extensionID     string
+	pipeMu          sync.Mutex
 }
 
 func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
@@ -351,14 +354,38 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	}
 	// The private profile lock is also enforced by Chrome. Never delete its SingletonLock.
 	_ = os.Remove(filepath.Join(profile, "DevToolsActivePort"))
+	extension := ""
+	if b.Prepare != nil {
+		if extension, err = b.Prepare(profile); err != nil {
+			return nil, fmt.Errorf("Mewla's extension could not be prepared: %w", err)
+		}
+	}
+	// Chrome 137 and later ignore --load-extension. An extension can still be
+	// loaded over the debugging pipe, which is also what lets nobody but this
+	// daemon do it: the pipe's other end is ours, and Chrome ends if it closes.
+	toChromeR, toChromeW, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	fromChromeR, fromChromeW, err := os.Pipe()
+	if err != nil {
+		toChromeR.Close()
+		toChromeW.Close()
+		return nil, err
+	}
 	// Despite Chrome's historical flag name, libsecret is the standard Secret
 	// Service client, also supported by installed KDE ksecretd/KWallet.
 	// Windows of different agents overlap on one small screen; none of them may
 	// be slowed down for being covered by another.
-	r.chrome, err = spawn(env, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--ozone-platform=wayland", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling", "--window-size=1280,800", "about:blank")
+	r.chrome, err = spawnWith(env, []*os.File{toChromeR, fromChromeW}, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", "--silent-debugger-extension-api", "--ozone-platform=wayland", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling", "--window-size=1280,800", "about:blank")
+	toChromeR.Close()
+	fromChromeW.Close()
 	if err != nil {
+		toChromeW.Close()
+		fromChromeR.Close()
 		return nil, err
 	}
+	r.pipeOut, r.pipeIn = toChromeW, fromChromeR
 	if err = waitForFile(ctx, 10*time.Second, profile, r.chrome, func() bool {
 		data, e := os.ReadFile(filepath.Join(profile, "DevToolsActivePort"))
 		if e != nil {
@@ -376,6 +403,13 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	if _, err = r.pages(ctx); err != nil {
 		return nil, launchFailure("Managed Chrome is up but does not answer", err, r.chrome)
 	}
+	if extension != "" {
+		id, err := r.loadExtension(ctx, extension)
+		if err != nil {
+			return nil, launchFailure("Mewla's extension could not be loaded into the agent browser", err, r.chrome)
+		}
+		r.extensionID = id
+	}
 	success = true
 	return r, nil
 }
@@ -386,43 +420,89 @@ const ownerEnv = "MEWLA_BROWSER_OWNER"
 // tempPrefix starts the private run directory of every runtime.
 const tempPrefix = "zb-"
 
+// loadExtension loads the unpacked extension in dir over the debugging pipe
+// and returns its ID. Nothing is written to the profile; the extension is
+// loaded again at every start, so it is always the daemon's own version.
+func (h *linuxHost) loadExtension(ctx context.Context, dir string) (string, error) {
+	h.pipeMu.Lock()
+	defer h.pipeMu.Unlock()
+	req, _ := json.Marshal(map[string]any{"id": 1, "method": "Extensions.loadUnpacked", "params": map[string]any{"path": dir}})
+	if _, err := h.pipeOut.Write(append(req, 0)); err != nil {
+		return "", err
+	}
+	type reply struct {
+		id  string
+		err error
+	}
+	got := make(chan reply, 1)
+	go func() {
+		// The pipe is read to its end for as long as Chrome runs: Chrome
+		// would block on a full pipe.
+		buf := make([]byte, 0, 4096)
+		chunk := make([]byte, 4096)
+		answered := false
+		for {
+			n, err := h.pipeIn.Read(chunk)
+			buf = append(buf, chunk[:n]...)
+			for {
+				i := bytes.IndexByte(buf, 0)
+				if i < 0 {
+					break
+				}
+				msg := buf[:i]
+				buf = buf[i+1:]
+				var m struct {
+					ID     int `json:"id"`
+					Result struct {
+						ID string `json:"id"`
+					} `json:"result"`
+					Error struct {
+						Message string `json:"message"`
+					} `json:"error"`
+				}
+				if !answered && json.Unmarshal(msg, &m) == nil && m.ID == 1 {
+					answered = true
+					if m.Error.Message != "" {
+						got <- reply{err: errors.New(m.Error.Message)}
+					} else {
+						got <- reply{id: m.Result.ID}
+					}
+				}
+			}
+			if len(buf) > 1<<20 {
+				buf = buf[:0]
+			}
+			if err != nil {
+				if !answered {
+					got <- reply{err: err}
+				}
+				return
+			}
+		}
+	}()
+	select {
+	case r := <-got:
+		return r.id, r.err
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-time.After(15 * time.Second):
+		return "", errors.New("Chrome did not answer the extension load")
+	}
+}
+
 func (h *linuxHost) Alive() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return !h.closed && h.chrome.alive() && h.display.alive()
 }
 
-func (h *linuxHost) sessionName() string {
-	return "w" + strings.ReplaceAll(uuid.NewString(), "-", "")[:10]
-}
-
-// Window opens a page of its own on the browser for one agent, with a session
-// pinned to it.
-func (h *linuxHost) Window(ctx context.Context) (Runtime, error) {
+// Window is the runtime for a window of the browser that shows target. The
+// extension opens and closes the window; this follows it for the person.
+func (h *linuxHost) Window(ctx context.Context, target string) (Runtime, error) {
 	if !h.Alive() {
 		return nil, ErrUnavailable
 	}
-	w := &linuxWindow{h: h, session: h.sessionName(), owned: map[string]bool{}, keys: map[string]bool{}, buttons: map[string]bool{}}
-	id, err := h.newPage(ctx, "about:blank")
-	if err != nil {
-		return nil, fmt.Errorf("Could not open a window: %w", err)
-	}
-	w.target = id
-	w.owned[id] = true
-	ok := false
-	defer func() {
-		if !ok {
-			_ = w.Close()
-		}
-	}()
-	if _, err = w.cli(ctx, "tab", id); err != nil {
-		return nil, err
-	}
-	if err = w.configureViewport(ctx); err != nil {
-		return nil, err
-	}
-	ok = true
-	return w, nil
+	return &linuxWindow{h: h, target: target, keys: map[string]bool{}, buttons: map[string]bool{}}, nil
 }
 
 // browserCDP sends one command to Chrome itself (not to a page).
@@ -484,22 +564,6 @@ func cdpCall(ctx context.Context, endpoint, method string, params any) (json.Raw
 	}
 }
 
-// newPage opens a page in a window of its own, so it is never hidden behind
-// another agent's tabs.
-func (h *linuxHost) newPage(ctx context.Context, url string) (string, error) {
-	raw, err := h.browserCDP(ctx, "Target.createTarget", map[string]any{"url": url, "newWindow": true})
-	if err != nil {
-		return "", err
-	}
-	var out struct {
-		TargetID string `json:"targetId"`
-	}
-	if json.Unmarshal(raw, &out) != nil || out.TargetID == "" {
-		return "", errors.New("Chrome opened no page")
-	}
-	return out.TargetID, nil
-}
-
 // pages lists Chrome's pages with the page that opened each (a popup names
 // its opener), across every agent's windows.
 func (h *linuxHost) pages(ctx context.Context) ([]tab, error) {
@@ -536,12 +600,6 @@ func (h *linuxHost) Close() error {
 	}
 	h.closed = true
 	h.mu.Unlock()
-	// Every session's agent-browser helper outlives the daemon unless told to go.
-	if h.endpoint != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		_, _ = commandOutput(ctx, h.env, "agent-browser", "--json", "close", "--all")
-		cancel()
-	}
 	// Ask Chrome to flush its persistent profile before terminating helpers.
 	// SIGTERM to the whole process group can kill the cookie writer too early.
 	if h.chrome.alive() && h.endpoint != "" {
@@ -551,6 +609,12 @@ func (h *linuxHost) Close() error {
 		cancel()
 	}
 	h.chrome.stop()
+	if h.pipeOut != nil {
+		h.pipeOut.Close()
+	}
+	if h.pipeIn != nil {
+		h.pipeIn.Close()
+	}
 	h.display.stop()
 	if h.lock != nil {
 		_ = unix.Flock(int(h.lock.Fd()), unix.LOCK_UN)
@@ -625,6 +689,20 @@ func waitForExit(ctx context.Context, d time.Duration, p *child) error {
 		return context.DeadlineExceeded
 	}
 }
+
+// linuxWindow is one agent's window as the person sees it: the page it shows
+// now, input for that page and the live view of it.
+type linuxWindow struct {
+	h       *linuxHost
+	mu      sync.Mutex
+	target  string
+	closed  bool
+	keys    map[string]bool
+	buttons map[string]bool
+	x, y    float64
+	streams map[*screencast]bool
+}
+
 func (r *linuxWindow) Target() string { r.mu.Lock(); defer r.mu.Unlock(); return r.target }
 func (r *linuxWindow) Alive() bool {
 	r.mu.Lock()
@@ -632,104 +710,125 @@ func (r *linuxWindow) Alive() bool {
 	r.mu.Unlock()
 	return !closed && r.h.Alive()
 }
-func (r *linuxWindow) cli(ctx context.Context, args ...string) (json.RawMessage, error) {
-	argv := append([]string{"--session", r.session, "--json", "--cdp", r.h.endpoint, "--pin-tab"}, args...)
-	raw, err := commandOutput(ctx, r.h.env, "agent-browser", argv...)
-	if ctx.Err() != nil {
-		return nil, ErrUncertain
+
+// SetTarget follows the window to another page; live views switch to it.
+func (r *linuxWindow) SetTarget(target string) {
+	r.mu.Lock()
+	if r.target == target || target == "" {
+		r.mu.Unlock()
+		return
 	}
-	var response struct {
-		Success bool            `json:"success"`
-		Data    json.RawMessage `json:"data"`
-		Error   string          `json:"error"`
+	r.target = target
+	streams := make([]*screencast, 0, len(r.streams))
+	for s := range r.streams {
+		streams = append(streams, s)
 	}
-	if len(raw) > 2<<20 || json.Unmarshal(raw, &response) != nil {
-		return nil, errors.New("Browser tool returned an invalid response")
+	r.mu.Unlock()
+	for _, s := range streams {
+		s.retarget()
 	}
-	if err != nil || !response.Success {
-		if msg := strings.TrimSpace(response.Error); msg != "" {
-			if len(msg) > 300 {
-				msg = msg[:300]
-			}
-			return nil, fmt.Errorf("Browser action failed (%s); refresh the page state before retrying", msg)
+}
+
+func (r *linuxWindow) pageEndpoint(target string) string {
+	return "ws://" + strings.TrimPrefix(r.h.endpoint, "http://") + "/devtools/page/" + target
+}
+
+func (r *linuxWindow) cdp(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	return cdpCall(ctx, r.pageEndpoint(r.Target()), method, params)
+}
+
+// Page is the shown page's address without query or fragment.
+func (r *linuxWindow) Page(ctx context.Context) string {
+	pages, err := r.h.pages(ctx)
+	if err != nil {
+		return ""
+	}
+	target := r.Target()
+	for _, p := range pages {
+		if p.ID != target {
+			continue
 		}
-		return nil, errors.New("Browser action failed; refresh the page state before retrying")
+		u, err := url.Parse(p.URL)
+		if err != nil || u.Host == "" {
+			return ""
+		}
+		return u.Scheme + "://" + u.Host + u.Path
 	}
-	return response.Data, nil
+	return ""
 }
 
 type tab struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	URL    string `json:"url"`
-	Type   string `json:"type"`
-	Socket string `json:"webSocketDebuggerUrl"`
-	Opener string `json:"-"`
+	ID     string
+	Title  string
+	URL    string
+	Type   string
+	Opener string
 }
 
-// tabs are this window's pages: the ones it opened and the popups they opened.
-func (r *linuxWindow) tabs(ctx context.Context) ([]tab, error) {
-	all, err := r.h.pages(ctx)
-	if err != nil {
-		return nil, err
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	// A popup may name an opener that is itself a popup: settle until none is new.
-	for grew := true; grew; {
-		grew = false
-		for _, t := range all {
-			if !r.owned[t.ID] && t.Opener != "" && r.owned[t.Opener] {
-				r.owned[t.ID] = true
-				grew = true
-			}
-		}
-	}
-	out := []tab{}
-	for _, t := range all {
-		if r.owned[t.ID] {
-			out = append(out, t)
-		}
-	}
-	return out, nil
-}
-func (r *linuxWindow) cdp(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	tabs, err := r.tabs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	target := r.Target()
-	found := false
-	for _, t := range tabs {
-		found = found || t.ID == target
-	}
-	if !found {
-		return nil, errors.New("Selected tab closed; choose another tab")
-	}
-	return cdpCall(ctx, "ws://"+strings.TrimPrefix(r.h.endpoint, "http://")+"/devtools/page/"+target, method, params)
-}
 func validURL(value string) bool {
+	if value == "about:blank" {
+		return true
+	}
 	u, e := url.Parse(value)
 	return e == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && u.User == nil && len(value) <= 4096
 }
 
-// A CDP attachment starts with agent-browser's default viewport metadata, which
-// can differ from the headed window's actual page size. Configure both through
-// the maintained API so rendered pixels and pointer coordinates share a space.
-// Newly selected popup pages need the same override as the original tab.
-func (r *linuxWindow) configureViewport(ctx context.Context) error {
-	_, err := r.cli(ctx, "set", "viewport", "1280", "800", "1")
-	return err
+// windowOf is the browser window a page is in.
+func (h *linuxHost) windowOf(ctx context.Context, target string) (int, error) {
+	raw, err := h.browserCDP(ctx, "Browser.getWindowForTarget", map[string]any{"targetId": target})
+	if err != nil {
+		return 0, err
+	}
+	var out struct {
+		WindowID int `json:"windowId"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return 0, err
+	}
+	return out.WindowID, nil
 }
 
+// tabs are the pages of this window.
+func (r *linuxWindow) tabs(ctx context.Context) ([]tab, error) {
+	pages, err := r.h.pages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	window, err := r.h.windowOf(ctx, r.Target())
+	if err != nil {
+		return nil, err
+	}
+	out := []tab{}
+	for _, p := range pages {
+		if w, err := r.h.windowOf(ctx, p.ID); err == nil && w == window {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// Command is the person's address bar and tab strip for the window.
 func (r *linuxWindow) Command(ctx context.Context, c Command) (json.RawMessage, error) {
 	if !r.Alive() {
 		return nil, ErrUnavailable
 	}
-	if len(c.Text) > 8192 || len(c.Ref) > 256 {
-		return nil, errors.New("Browser input exceeds its limit")
-	}
 	switch c.Kind {
+	case "navigate":
+		if !validURL(c.URL) {
+			return nil, errors.New("Enter an HTTP or HTTPS address")
+		}
+		raw, err := r.cdp(ctx, "Page.navigate", map[string]any{"url": c.URL})
+		if err != nil {
+			return nil, err
+		}
+		var started struct {
+			ErrorText string `json:"errorText"`
+		}
+		_ = json.Unmarshal(raw, &started)
+		if started.ErrorText != "" {
+			return nil, fmt.Errorf("Could not open the page: %s", started.ErrorText)
+		}
+		return json.Marshal(map[string]any{"url": c.URL})
 	case "tabs":
 		tabs, err := r.tabs(ctx)
 		if err != nil {
@@ -745,181 +844,45 @@ func (r *linuxWindow) Command(ctx context.Context, c Command) (json.RawMessage, 
 		if err != nil {
 			return nil, err
 		}
-		found := false
 		for _, t := range tabs {
 			if t.ID == c.Target {
-				found = true
+				if _, err := r.h.browserCDP(ctx, "Target.activateTarget", map[string]any{"targetId": t.ID}); err != nil {
+					return nil, err
+				}
+				r.SetTarget(t.ID)
+				return json.RawMessage("{}"), nil
 			}
 		}
-		if !found {
-			return nil, errors.New("Tab not found")
-		}
-		if err = r.Release(ctx); err != nil {
-			return nil, err
-		}
-		v, err := r.cli(ctx, "tab", c.Target)
-		if err == nil {
-			r.mu.Lock()
-			r.target = c.Target
-			r.mu.Unlock()
-			if err = r.configureViewport(ctx); err != nil {
-				return nil, ErrUncertain
-			}
-		}
-		return v, err
-	case "navigate", "new_tab":
+		return nil, errors.New("Tab not found")
+	case "new_tab":
 		if !validURL(c.URL) {
 			return nil, errors.New("Enter an HTTP or HTTPS address")
 		}
-		if c.Kind == "navigate" {
-			return r.navigate(ctx, c.URL)
-		}
-		id, err := r.h.newPage(ctx, c.URL)
-		if err != nil {
+		// A page opens its own tab in its own window; the extension reports
+		// the one that is now showing.
+		expr := "window.open(" + strconv.Quote(c.URL) + ", '_blank') && true"
+		if _, err := r.cdp(ctx, "Runtime.evaluate", map[string]any{"expression": expr, "userGesture": true}); err != nil {
 			return nil, err
 		}
-		r.mu.Lock()
-		r.owned[id] = true
-		r.mu.Unlock()
-		v, err := r.cli(ctx, "tab", id)
-		if err == nil {
-			r.mu.Lock()
-			r.target = id
-			r.mu.Unlock()
-			if err = r.configureViewport(ctx); err != nil {
-				return nil, ErrUncertain
-			}
-		}
-		return v, err
-	case "snapshot":
-		return r.cli(ctx, "snapshot", "-i")
-	case "read":
-		// The page's text, for reading an article; snapshot lists only what can be clicked.
-		data, err := r.cli(ctx, "read")
-		if err != nil {
-			return nil, err
-		}
-		return pageText(data)
-	case "click":
-		ref, ok := elementRef(c.Ref)
-		if !ok {
-			return nil, errors.New("Use an element reference from the current snapshot")
-		}
-		return r.cli(ctx, "click", ref)
-	case "fill":
-		ref, ok := elementRef(c.Ref)
-		if !ok {
-			return nil, errors.New("Use an element reference from the current snapshot")
-		}
-		return r.cli(ctx, "fill", ref, c.Text)
-	case "press":
-		if len(c.Text) > 80 {
-			return nil, errors.New("Key is too long")
-		}
-		return r.cli(ctx, "press", c.Text)
-	case "dialog_status":
-		return r.cli(ctx, "dialog", "status")
-	case "dialog_accept":
-		return r.cli(ctx, "dialog", "accept", c.Text)
-	case "dialog_dismiss":
-		return r.cli(ctx, "dialog", "dismiss")
-	case "input":
-		if c.Input == nil {
-			return nil, errors.New("Input is required")
-		}
-		return r.input(ctx, *c.Input)
+		return json.RawMessage("{}"), nil
 	default:
-		return nil, errors.New("Unsupported managed browser action")
+		return nil, errors.New("Unsupported browser command")
 	}
-}
-
-// loadWait is how long a navigation waits for its page to finish loading
-// before answering that it is still loading: a page that never finishes must
-// not hold the agent, the window or the person's view.
-var loadWait = 6 * time.Second
-
-// navigate starts the navigation and waits for the page to load, up to
-// loadWait. The agent is told whether it loaded; it can read what is there
-// either way.
-func (r *linuxWindow) navigate(ctx context.Context, address string) (json.RawMessage, error) {
-	raw, err := r.cdp(ctx, "Page.navigate", map[string]any{"url": address})
-	if errors.Is(err, ErrUncertain) && ctx.Err() == nil {
-		// Chrome did not answer within its own bound: a server that accepts and
-		// says nothing. The navigation is under way; the window is fine.
-		return json.Marshal(map[string]any{"url": address, "loaded": false})
-	}
-	if err != nil {
-		return nil, err
-	}
-	var started struct {
-		ErrorText string `json:"errorText"`
-	}
-	_ = json.Unmarshal(raw, &started)
-	if started.ErrorText != "" {
-		return nil, fmt.Errorf("Could not open the page: %s", started.ErrorText)
-	}
-	loaded := false
-	deadline := time.Now().Add(loadWait)
-	for !loaded && time.Now().Before(deadline) && ctx.Err() == nil {
-		time.Sleep(200 * time.Millisecond)
-		state, err := r.cdp(ctx, "Runtime.evaluate", map[string]any{"expression": "document.readyState", "returnByValue": true})
-		if err != nil {
-			break
-		}
-		var v struct {
-			Result struct {
-				Value string `json:"value"`
-			} `json:"result"`
-		}
-		loaded = json.Unmarshal(state, &v) == nil && v.Result.Value == "complete"
-	}
-	return json.Marshal(map[string]any{"url": address, "loaded": loaded})
-}
-
-// maxPageText bounds what one read returns to the agent, in characters.
-const maxPageText = 40000
-
-// pageText is what an agent gets from a read: the address and the text,
-// cut at maxPageText with a note saying so.
-func pageText(data json.RawMessage) (json.RawMessage, error) {
-	var page struct {
-		Content   string `json:"content"`
-		URL       string `json:"finalUrl"`
-		Truncated bool   `json:"truncated"`
-	}
-	if json.Unmarshal(data, &page) != nil {
-		return nil, errors.New("Browser tool returned an invalid response")
-	}
-	text := []rune(page.Content)
-	if len(text) > maxPageText {
-		text, page.Truncated = text[:maxPageText], true
-	}
-	return json.Marshal(map[string]any{"url": page.URL, "text": string(text), "truncated": page.Truncated})
-}
-
-// elementRef accepts a snapshot reference as the agent sees it, "e2" in the
-// snapshot text or "@e2" as agent-browser takes it, and returns the latter.
-func elementRef(ref string) (string, bool) {
-	rest := strings.TrimPrefix(ref, "@")
-	if !strings.HasPrefix(rest, "e") {
-		return "", false
-	}
-	digits := rest[1:]
-	if digits == "" || len(digits) > 9 || strings.Trim(digits, "0123456789") != "" {
-		return "", false
-	}
-	return "@e" + digits, true
 }
 
 var namedKeys = map[string]int{"Backspace": 8, "Tab": 9, "Enter": 13, "Escape": 27, "ArrowLeft": 37, "ArrowUp": 38, "ArrowRight": 39, "ArrowDown": 40, "Delete": 46}
 
-func (r *linuxWindow) input(ctx context.Context, i Input) (json.RawMessage, error) {
+func (r *linuxWindow) Input(ctx context.Context, i Input) error {
+	if !r.Alive() {
+		return ErrUnavailable
+	}
 	if i.X < 0 || i.Y < 0 || i.X > 16384 || i.Y > 16384 || i.DX > 10000 || i.DX < -10000 || i.DY > 10000 || i.DY < -10000 || len(i.Text) > 8192 || len(i.Key) > 64 {
-		return nil, errors.New("Invalid input coordinates or text")
+		return errors.New("Invalid input coordinates or text")
 	}
 	switch i.Kind {
 	case "text":
-		return r.cdp(ctx, "Input.insertText", map[string]any{"text": i.Text})
+		_, err := r.cdp(ctx, "Input.insertText", map[string]any{"text": i.Text})
+		return err
 	case "keyDown", "keyUp":
 		r.mu.Lock()
 		if i.Kind == "keyDown" {
@@ -938,10 +901,11 @@ func (r *linuxWindow) input(ctx context.Context, i Input) (json.RawMessage, erro
 				params["text"] = "\r"
 			}
 		}
-		return r.cdp(ctx, "Input.dispatchKeyEvent", params)
+		_, err := r.cdp(ctx, "Input.dispatchKeyEvent", params)
+		return err
 	case "mouseMoved", "mousePressed", "mouseReleased", "mouseWheel":
 		if i.Button != "" && i.Button != "left" && i.Button != "right" && i.Button != "middle" {
-			return nil, errors.New("Invalid pointer button")
+			return errors.New("Invalid pointer button")
 		}
 		r.mu.Lock()
 		r.x = i.X
@@ -960,9 +924,10 @@ func (r *linuxWindow) input(ctx context.Context, i Input) (json.RawMessage, erro
 			params["deltaX"] = i.DX
 			params["deltaY"] = i.DY
 		}
-		return r.cdp(ctx, "Input.dispatchMouseEvent", params)
+		_, err := r.cdp(ctx, "Input.dispatchMouseEvent", params)
+		return err
 	default:
-		return nil, errors.New("Unsupported input event")
+		return errors.New("Unsupported input event")
 	}
 }
 func (r *linuxWindow) Release(ctx context.Context) error {
@@ -985,44 +950,9 @@ func (r *linuxWindow) Release(ctx context.Context) error {
 	}
 	return nil
 }
-func (r *linuxWindow) Stream(ctx context.Context) (Stream, error) {
-	raw, err := r.cli(ctx, "stream", "status")
-	if err != nil {
-		return nil, err
-	}
-	var status struct {
-		Port int `json:"port"`
-	}
-	if json.Unmarshal(raw, &status) != nil || status.Port < 1 || status.Port > 65535 {
-		return nil, errors.New("Browser viewer is unavailable")
-	}
-	conn, _, err := websocket.DefaultDialer.DialContext(ctx, fmt.Sprintf("ws://127.0.0.1:%d/?pacing=ack&maxFps=12", status.Port), nil)
-	if err != nil {
-		return nil, err
-	}
-	conn.SetReadLimit(3 << 20)
-	return &agentStream{conn: conn}, nil
-}
 
-type agentStream struct {
-	conn *websocket.Conn
-	mu   sync.Mutex
-}
-
-func (s *agentStream) Read() ([]byte, error) { _, raw, err := s.conn.ReadMessage(); return raw, err }
-func (s *agentStream) Ack(seq uint64) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_ = s.conn.SetWriteDeadline(time.Now().Add(3 * time.Second))
-	return s.conn.WriteJSON(map[string]any{"type": "ack", "seq": seq})
-}
-func (s *agentStream) Close() error {
-	_ = s.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "viewer detached"), time.Now().Add(time.Second))
-	return s.conn.Close()
-}
-
-// Close shuts this window's pages and its session. The browser, the other
-// agents' windows and the sign-ins stay.
+// Close ends the live views of this window. The window itself belongs to the
+// extension, which closes it with the agent's connection.
 func (r *linuxWindow) Close() error {
 	r.mu.Lock()
 	if r.closed {
@@ -1030,18 +960,13 @@ func (r *linuxWindow) Close() error {
 		return nil
 	}
 	r.closed = true
-	pages := make([]string, 0, len(r.owned))
-	for id := range r.owned {
-		pages = append(pages, id)
+	streams := make([]*screencast, 0, len(r.streams))
+	for s := range r.streams {
+		streams = append(streams, s)
 	}
 	r.mu.Unlock()
-	if r.h.Alive() {
-		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
-		defer cancel()
-		_, _ = r.cli(ctx, "close")
-		for _, id := range pages {
-			_, _ = r.h.browserCDP(ctx, "Target.closeTarget", map[string]any{"targetId": id})
-		}
+	for _, s := range streams {
+		_ = s.Close()
 	}
 	return nil
 }

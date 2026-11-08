@@ -133,6 +133,9 @@ type Service struct {
 	phone        func() phone.Status
 	iphone       *IPhoneHooks
 	bridge       *Bridge
+	// virtual says whether agents work in the agent browser on the virtual
+	// screen, and why they cannot when it is on but unusable; nil off Linux.
+	virtual func() (on bool, unusable string)
 	// executable is the mewla binary the extension's host and the tools'
 	// stand-in for Chrome run; replaced in tests.
 	executable func() (string, error)
@@ -191,6 +194,15 @@ func (s *Service) Status() Status {
 	}
 	s.mu.Unlock()
 	return s.Refresh()
+}
+
+// SetVirtualScreen says whether agents work in the agent browser on the
+// virtual screen, and why that cannot start when it is on (see browserLocked).
+func (s *Service) SetVirtualScreen(f func() (on bool, unusable string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.virtual = f
+	s.cachedAt = time.Time{}
 }
 
 // BrowserReady says whether to give a new agent the user's Chrome.
@@ -257,23 +269,43 @@ type launch struct {
 }
 
 func (s *Service) browserLocked() (BrowserStatus, launch) {
-	chrome, ok := s.lookChrome(s.home)
-	if !ok {
-		return BrowserStatus{State: BrowserNoChrome, Summary: "Google Chrome isn't installed on this computer."}, launch{}
+	virtual := false
+	if s.virtual != nil {
+		on, unusable := s.virtual()
+		if on && unusable != "" {
+			return BrowserStatus{State: BrowserFailed, Summary: "The virtual screen's browser can't start: " + unusable}, launch{}
+		}
+		virtual = on
 	}
-	desktop, ok := s.lookDesktop()
-	if !ok {
-		return BrowserStatus{State: BrowserNoDesktop, Summary: "Sign in to this computer's desktop so agents can open Chrome there."}, launch{}
-	}
-	// Mewla's own extension needs no key. The Playwright extension, which
-	// asks the person to copy its key, is still used where that was done.
-	mewlaProfile, mewlaIDs, mewla := installedMewlaExtension(chrome.UserDataDir)
-	profile, ok := mewlaProfile, mewla
-	if !mewla {
-		profile, ok = extensionProfile(chrome.UserDataDir)
-	}
-	if !ok {
-		return BrowserStatus{State: BrowserNoExtension, Summary: "Add the Mewla extension to Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
+	var chrome chromeInstall
+	var desktop []string
+	var mewlaIDs []string
+	var profile string
+	var mewla, ok bool
+	if virtual {
+		// The agent browser carries Mewla's extension itself, in its own
+		// profile on the virtual screen: nothing of the person's Chrome is used.
+		mewla = true
+	} else {
+		chrome, ok = s.lookChrome(s.home)
+		if !ok {
+			return BrowserStatus{State: BrowserNoChrome, Summary: "Google Chrome isn't installed on this computer."}, launch{}
+		}
+		desktop, ok = s.lookDesktop()
+		if !ok {
+			return BrowserStatus{State: BrowserNoDesktop, Summary: "Sign in to this computer's desktop so agents can open Chrome there."}, launch{}
+		}
+		// Mewla's own extension needs no key. The Playwright extension, which
+		// asks the person to copy its key, is still used where that was done.
+		var mewlaProfile string
+		mewlaProfile, mewlaIDs, mewla = installedMewlaExtension(chrome.UserDataDir)
+		profile, ok = mewlaProfile, mewla
+		if !mewla {
+			profile, ok = extensionProfile(chrome.UserDataDir)
+		}
+		if !ok {
+			return BrowserStatus{State: BrowserNoExtension, Summary: "Add the Mewla extension to Chrome so agents can use your logged-in sites.", Fix: FixInstallExtension}, launch{}
+		}
 	}
 	status := BrowserStatus{Profile: profile}
 	key := s.settings.Key
@@ -314,7 +346,9 @@ func (s *Service) browserLocked() (BrowserStatus, launch) {
 	}
 	status.State = BrowserReady
 	status.Summary = "Agents use your Chrome, in their own tab group."
-	if mewla {
+	if virtual {
+		status.Summary = "Agents use their own Chrome on the virtual screen."
+	} else if mewla {
 		status.Summary = "Agents use your Chrome, in a window of their own."
 		if s.prepare {
 			if exe, err := s.executable(); err == nil {
@@ -552,6 +586,9 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 		// React-style renders. Measured: a 150 ms timer after a click is read
 		// stale at 100, fresh at 500; a fetch is fresh at every value.
 		"--timeout-settle", "100",
+		// A page that never finishes loading must not hold the agent: a
+		// navigation answers within this, and the agent reads what is there.
+		"--timeout-navigation", "12000",
 		// A tab an agent works in is never the one on screen, so Chrome gives
 		// it a frame or two a second, and Playwright's click waits for two
 		// frames: one to two seconds each. This checks the same things (there,

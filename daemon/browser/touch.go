@@ -2,10 +2,8 @@ package browser
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -24,8 +22,8 @@ func (p person) Error() string        { return p.text }
 func (p person) Is(target error) bool { return target == ErrBusy || target == ErrLease }
 
 var (
-	errPersonInControl error = person{"The person took over this browser and was told you are waiting. Do other work or wait a while, then request control again; do not poll"}
-	errHalted          error = person{"The person stopped you using this browser. Do not request it again; tell them you stopped and what is left"}
+	errPersonInControl error = person{"The person took over this browser and was told you are waiting. Do other work or wait a while, then try again; do not poll"}
+	errHalted          error = person{"The person stopped you using this browser. Do not use it again; tell them you stopped and what is left"}
 )
 
 // maxTouches bounds what is remembered between two actions of an agent.
@@ -80,7 +78,7 @@ func (m *Manager) touch(ctx context.Context, e *entry, o Owner, q Request) (Resp
 	}
 	input := *q.Command.Input
 	e.mu.Lock()
-	if e.deleted || e.uncertain || e.runtime == nil || !e.runtime.Alive() {
+	if e.deleted || e.runtime == nil || !e.runtime.Alive() {
 		e.mu.Unlock()
 		return Response{}, ErrUnavailable
 	}
@@ -88,16 +86,16 @@ func (m *Manager) touch(ctx context.Context, e *entry, o Owner, q Request) (Resp
 		e.mu.Unlock()
 		return Response{}, ErrBusy
 	}
-	rt, agentHolds, during := e.runtime, e.owner.Kind == "agent", e.agentBusy
+	rt, agentHolds, during := e.runtime, e.owner.ID == "", e.agentBusy > 0
 	e.mu.Unlock()
 	actionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if _, err := rt.Command(actionCtx, Command{Kind: "input", Input: &input}); err != nil {
+	if err := rt.Input(actionCtx, input); err != nil {
 		return Response{}, err
 	}
 	if t, ok := touchOf(input, during, time.Now()); ok && agentHolds {
 		e.mu.Lock()
-		if e.owner.Kind == "agent" {
+		if e.owner.ID == "" {
 			e.addTouchLocked(t)
 		}
 		e.mu.Unlock()
@@ -105,18 +103,16 @@ func (m *Manager) touch(ctx context.Context, e *entry, o Owner, q Request) (Resp
 	return Response{}, nil
 }
 
-// halt ends the agent's control and refuses that Worker until the person
-// hands the browser back or restarts it.
+// halt refuses the agent's Worker this browser until the person hands it
+// back (or takes it over and hands it back).
 func (m *Manager) halt(ctx context.Context, e *entry) error {
 	e.mu.Lock()
-	if e.owner.Kind == "agent" {
-		if e.halted == nil {
-			e.halted = map[string]bool{}
-		}
-		e.halted[workerOf(e.owner)] = true
+	defer e.mu.Unlock()
+	if e.halted == nil {
+		e.halted = map[string]bool{}
 	}
-	e.mu.Unlock()
-	return m.releaseMatching(ctx, e, func(x Owner) bool { return x.Kind == "agent" })
+	e.halted[e.resource.Agent] = true
+	return nil
 }
 
 // notesFor drains what the person did since the agent last heard, as plain
@@ -161,7 +157,7 @@ func (m *Manager) notesFor(ctx context.Context, e *entry) []string {
 			parts = append(parts, plural(n, "scroll"))
 		}
 		last := touches[len(touches)-1].at
-		line := fmt.Sprintf("The person used the page while you held it: %s, the last %ds ago.", strings.Join(parts, ", "), int(now.Sub(last).Seconds()))
+		line := fmt.Sprintf("The person used the page while you worked in it: %s, the last %ds ago.", strings.Join(parts, ", "), int(now.Sub(last).Seconds()))
 		if during {
 			line += " Some of it happened while your own action was running, so that action may not have done what you meant."
 		}
@@ -189,22 +185,5 @@ func (m *Manager) pageOf(ctx context.Context, rt Runtime) string {
 	}
 	c, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	raw, err := rt.Command(c, Command{Kind: "tabs"})
-	if err != nil {
-		return ""
-	}
-	var tabs []struct{ ID, URL string }
-	if json.Unmarshal(raw, &tabs) != nil {
-		return ""
-	}
-	for _, t := range tabs {
-		if t.ID == rt.Target() {
-			u, err := url.Parse(t.URL)
-			if err != nil || u.Host == "" {
-				return ""
-			}
-			return u.Scheme + "://" + u.Host + u.Path
-		}
-	}
-	return ""
+	return rt.Page(c)
 }

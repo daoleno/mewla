@@ -2,7 +2,6 @@ package browser
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -114,19 +113,6 @@ func TestWaitForExitWakesWhenTheProcessEnds(t *testing.T) {
 	}
 }
 
-func TestElementRefAcceptsSnapshotAndToolForms(t *testing.T) {
-	for in, want := range map[string]string{"e2": "@e2", "@e12": "@e12"} {
-		if got, ok := elementRef(in); !ok || got != want {
-			t.Fatalf("%q -> %q, %v", in, got, ok)
-		}
-	}
-	for _, in := range []string{"", "@", "@e", "e", "2", "@2", "button", "e2x", "@e2;rm", "e1234567890"} {
-		if got, ok := elementRef(in); ok {
-			t.Fatalf("%q accepted as %q", in, got)
-		}
-	}
-}
-
 func withWallet(t *testing.T, ready bool) {
 	t.Helper()
 	previous := secretServiceReady
@@ -163,24 +149,5 @@ func TestCredentialStoreFallsBackAndStaysPinned(t *testing.T) {
 		if _, e := exec.LookPath("kwin_wayland"); e == nil {
 			t.Fatal("capability still depends on the wallet")
 		}
-	}
-}
-
-func TestPageTextKeepsTheAddressAndBoundsTheText(t *testing.T) {
-	raw := func(content string) json.RawMessage {
-		b, _ := json.Marshal(map[string]any{"content": content, "finalUrl": "https://example.test/a", "lifecycle": map[string]any{"noise": true}})
-		return b
-	}
-	got, err := pageText(raw("Hello 世界"))
-	if err != nil || string(got) != `{"text":"Hello 世界","truncated":false,"url":"https://example.test/a"}` {
-		t.Fatalf("%s %v", got, err)
-	}
-	long, err := pageText(raw(strings.Repeat("字", maxPageText+10)))
-	var out struct {
-		Text      string
-		Truncated bool
-	}
-	if err != nil || json.Unmarshal(long, &out) != nil || !out.Truncated || len([]rune(out.Text)) != maxPageText {
-		t.Fatalf("%v %v", err, out.Truncated)
 	}
 }
