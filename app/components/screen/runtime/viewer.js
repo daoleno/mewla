@@ -16,9 +16,9 @@ const XK = {
 const SLOP = 9;
 const LONG_PRESS_MS = 480;
 const DOUBLE_TAP_MS = 380;
-// One wheel notch moves a page by about this many remote pixels; a finger
+// One wheel notch moves a Chrome page by about this many remote pixels (measured); a finger
 // dragging a page scrolls it by the distance the finger moved on the picture.
-const NOTCH_REMOTE = 53;
+const NOTCH_REMOTE = 120;
 const MIN_NOTCH_LOCAL = 8;
 const MAX_ZOOM = 2; // CSS pixels per remote pixel at most
 
@@ -523,6 +523,39 @@ export function mountScreenViewer(container, post) {
     const target = canvas;
     if (target && doc.activeElement !== target) target.focus({ preventScroll: true });
   }
+
+  // A shortcut needs its modifier to have gone down with the picture focused.
+  // When the person focused it while holding Ctrl (a Ctrl-click, say), or the
+  // keyboard is an automated one that reports the flag without a Control key
+  // event, noVNC never saw the modifier: send it around the key.
+  const MODIFIER_KEYS = [
+    ["ctrlKey", ["ControlLeft", "ControlRight"], XK.Control],
+    ["altKey", ["AltLeft", "AltRight"], XK.Option],
+    ["metaKey", ["MetaLeft", "MetaRight"], XK.Command],
+  ];
+  const heldCodes = new Set();
+  const borrowed = new Map(); // key code -> modifier keysyms sent on its behalf
+  root.addEventListener("keydown", (e) => {
+    if (!rfb) return;
+    if (e.code) heldCodes.add(e.code);
+    if (/^(Control|Alt|Meta|Shift)/.test(e.code) || !e.code || borrowed.has(e.code)) return;
+    const sent = [];
+    for (const [flag, codes, keysym] of MODIFIER_KEYS) {
+      if (e[flag] && !codes.some((c) => heldCodes.has(c))) {
+        rfb.sendKey(keysym, codes[0], true);
+        sent.push([keysym, codes[0]]);
+      }
+    }
+    if (sent.length) borrowed.set(e.code, sent);
+  }, true);
+  root.addEventListener("keyup", (e) => {
+    heldCodes.delete(e.code);
+    const sent = borrowed.get(e.code);
+    if (!sent) return;
+    borrowed.delete(e.code);
+    // After noVNC has released the key itself.
+    setTimeout(() => { if (rfb) for (const [keysym, code] of sent.reverse()) rfb.sendKey(keysym, code, false); }, 0);
+  }, true);
 
   // The remote's paste reads the remote's clipboard, so the person's text goes
   // there first. The browser only offers its clipboard to a paste it is
