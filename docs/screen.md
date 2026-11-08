@@ -120,6 +120,10 @@ default** until it has been tried on real machines: start Mewla with
 turns it off. The connection details say **video** while motion is going as video, and the
 log line for a session says how many of its updates were.
 
+A connection that does not show a picture within about twenty seconds is
+treated as lost: the view says **Disconnected** with **Reconnect**, rather than
+spinning for good.
+
 ## Keep the computer reachable
 
 While a device is allowed, Mewla keeps the computer awake so you can still

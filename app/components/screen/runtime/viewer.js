@@ -4,6 +4,7 @@
 // scripts/generate-screen-viewer.mjs bundles it with noVNC for the native
 // WebView (via bootstrap.js) and for web; app code imports only the output.
 import RFB from "@novnc/novnc";
+import { createRfbFeed } from "./rfbFeed.ts";
 
 const XK = {
   BackSpace: 0xff08, Tab: 0xff09, Return: 0xff0d, Escape: 0xff1b, Delete: 0xffff,
@@ -702,9 +703,13 @@ export function mountScreenViewer(container, post) {
   // that settles a moment after the page loads; wait for it (briefly), so a
   // phone that can decode video says so.
   let opening = 0;
+  // The daemon's ProtocolVersion can arrive in the same batch as "open", before the client below
+  // exists; the feed keeps it until then.
+  const feed = createRfbFeed();
   function open() {
     close(false);
     const ticket = ++opening;
+    feed.opening();
     const ready = globalThis.__mewlaH264Ready;
     if (!ready) return start();
     Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 800))]).then(() => {
@@ -714,6 +719,7 @@ export function mountScreenViewer(container, post) {
 
   function start() {
     channel = makeChannel();
+    inbox = feed.opened();
     const target = doc.createElement("div");
     target.className = "rfb";
     root.prepend(target);
@@ -751,6 +757,8 @@ export function mountScreenViewer(container, post) {
 
   function close(notify) {
     opening++;
+    feed.closed();
+    inbox = [];
     if (!rfb) return;
     const old = rfb;
     rfb = null;
@@ -772,7 +780,10 @@ export function mountScreenViewer(container, post) {
 
   let inbox = [];
   function deliver(chunks, sentAt) {
-    if (!channel) return;
+    if (!channel) {
+      feed.accept(chunks);
+      return;
+    }
     // Wall clock on both sides of the bridge: the same device.
     if (typeof sentAt === "number" && chunks.length) {
       const hop = Date.now() - sentAt;

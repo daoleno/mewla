@@ -45,6 +45,7 @@ import {
   type IndicatorTone,
   type StreamReadout,
 } from "./screenPageModel";
+import { LIVE_DEADLINE_REASON, startLiveDeadline } from "./screenLiveDeadline";
 import type { ScreenPointerMode, ScreenViewerMessage } from "./screenViewerProtocol";
 
 type Phase = "checking" | "setup" | "agent" | "connecting" | "live" | "lost";
@@ -100,12 +101,16 @@ export function ScreenScreen() {
   const [viaPath, setViaPath] = useState<TransportPath | null>(null);
   const retriedLostPath = useRef(false);
   const epoch = useRef(0);
+  // Ends the wait for a picture: a connection that never goes live is lost, with Reconnect.
+  const liveDeadline = useRef<(() => void) | null>(null);
   const slowStreak = useRef(0);
   const saidSlow = useRef(false);
   const readoutRef = useRef<StreamReadout | null>(null);
 
   const disconnect = useCallback(() => {
     epoch.current++;
+    liveDeadline.current?.();
+    liveDeadline.current = null;
     connection.current?.close();
     connection.current = null;
     view.current?.close();
@@ -157,6 +162,12 @@ export function ScreenScreen() {
     setWatching(watch);
     setWatchedWorker(watch ? worker : undefined);
     setPhase("connecting");
+    liveDeadline.current = startLiveDeadline(() => {
+      if (!active()) return;
+      disconnect();
+      setReason(LIVE_DEADLINE_REASON);
+      setPhase("lost");
+    });
     const socket = new ScreenConnection(server, {
       open() {
         if (!active()) return;
@@ -314,7 +325,11 @@ export function ScreenScreen() {
           setPhase("lost");
         }
         break;
-      case "connected": setPhase("live"); break;
+      case "connected":
+        liveDeadline.current?.();
+        liveDeadline.current = null;
+        setPhase("live");
+        break;
       case "stats": setStats(message); break;
       case "haptic": if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); break;
     }
