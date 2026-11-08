@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/addressbook"
@@ -770,7 +771,44 @@ func appendOpenCodeProbeSummary(summary string, models, service Status) string {
 	return summary + "; " + strings.Join(parts, ", ")
 }
 
+// versionKey identifies one build of an agent CLI: a program that has not been
+// replaced prints the same version, so it is asked once.
+type versionKey struct {
+	path    string
+	size    int64
+	modTime int64
+}
+
+var knownVersions = struct {
+	sync.Mutex
+	byBuild map[versionKey]string
+}{byBuild: map[versionKey]string{}}
+
 func (e env) probeVersion(binaryPath, provider string) string {
+	info, statErr := os.Stat(binaryPath)
+	if statErr != nil {
+		return e.askVersion(binaryPath)
+	}
+	key := versionKey{path: binaryPath, size: info.Size(), modTime: info.ModTime().UnixNano()}
+	knownVersions.Lock()
+	version, known := knownVersions.byBuild[key]
+	knownVersions.Unlock()
+	if known {
+		return version
+	}
+	version = e.askVersion(binaryPath)
+	if version != "" {
+		knownVersions.Lock()
+		if len(knownVersions.byBuild) >= 64 {
+			knownVersions.byBuild = map[versionKey]string{}
+		}
+		knownVersions.byBuild[key] = version
+		knownVersions.Unlock()
+	}
+	return version
+}
+
+func (e env) askVersion(binaryPath string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
 	defer cancel()
 	out, err := e.opts.RunCommand(ctx, binaryPath, "--version")
