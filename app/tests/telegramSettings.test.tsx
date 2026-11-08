@@ -16,6 +16,8 @@ if (!process.env.MEWLA_TELEGRAM_PANEL_CHILD) {
   mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }) }));
   mock.module("../constants/tokens", () => ({ useAppColors: () => ({}), UiTextMetrics: {}, Radii: { card: 20 }, TypeScale: { body: {}, compact: {}, caption: {}, heading: {} } }));
   mock.module("../components/ui/AnimatedPressable", () => ({ AnimatedPressable: host("button") }));
+  mock.module("../components/ui/MobileSingleLineInput", () => ({ MobileSingleLineInput: ({ trailing, ...props }: any) => React.createElement(React.Fragment, null, React.createElement("input", props), trailing) }));
+  mock.module("../components/ui/IconButton", () => ({ IconButton: host("button") }));
   const { TelegramConnectionPanel } = await import("../components/settings/TelegramConnectionPanel");
   type Props = React.ComponentProps<typeof TelegramConnectionPanel>;
   const base = (): Props => ({

@@ -1,8 +1,9 @@
 import React, { useRef, useState } from "react";
-import { TextInput, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { PluginAccount } from "../../services/connections";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText, Button } from "../ui";
+import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 
 export function suggestedAWSProfile(account: PluginAccount): string {
   const accountName = account.aws?.account_name || account.aws?.account_id || "aws";
@@ -29,9 +30,9 @@ export function CloudProfileNameEntry({ account, suggest = false, onSave }: {
   };
   return <View style={styles.form}>
     <AppText variant="compact">Profile name</AppText>
-    <TextInput value={name} onChangeText={setName} accessibilityLabel="Profile name" autoCapitalize="none" autoCorrect={false} maxLength={128} editable={!busy} onSubmitEditing={() => void save()} style={[styles.input, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.bgSurface }]} />
+    <MobileSingleLineInput framed value={name} onChangeText={setName} accessibilityLabel="Profile name" placeholderTextColor={colors.textTertiary} autoCapitalize="none" autoCorrect={false} maxLength={128} editable={!busy} onSubmitEditing={() => void save()} />
     {error ? <AppText variant="caption" accessibilityLiveRegion="polite">{error}</AppText> : null}
     <Button label="Save name" variant="tinted" loading={busy} onPress={() => void save()} />
   </View>;
 }
-const styles = StyleSheet.create({ form: { padding: 14, gap: 10 }, input: { minHeight: 44, paddingHorizontal: 12, borderWidth: 1, borderRadius: 10, fontSize: 16 } });
+const styles = StyleSheet.create({ form: { padding: 14, gap: 10 } });

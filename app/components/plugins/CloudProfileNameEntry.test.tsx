@@ -14,6 +14,7 @@ if (!process.env.MEWLA_PROFILE_NAME_TEST) {
   mock.module("react-native", () => ({ StyleSheet: { create: (s: unknown) => s }, TextInput: host("input"), View: host("view") }));
   mock.module("../../constants/tokens", () => ({ useAppTheme: () => ({ colors: {} }) }));
   mock.module("../ui", () => ({ AppText: host("text"), Button: host("button") }));
+  mock.module("../ui/MobileSingleLineInput", () => ({ MobileSingleLineInput: host("input") }));
   const { CloudProfileNameEntry } = await import("./CloudProfileNameEntry");
   test("post-sign-in suggestion is editable and concurrent submission is single-use", async () => {
     const account: PluginAccount = { id: "a", integration: "aws", name: "mewla-temp", profile: "mewla-temp", identity: "", enabled: true, status: "connected", history: [], aws: { account_id: "123456789012", account_name: "ACE Labs Mgmt", who: "Admin" } };

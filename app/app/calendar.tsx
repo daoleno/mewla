@@ -70,6 +70,7 @@ import { useCurrentServer } from "../store/currentServer";
 import { Icon } from "../components/icons/Icon";
 import { ChipGroup, type ChipOption } from "../components/ui/ChipGroup";
 import { IconButton } from "../components/ui/IconButton";
+import { MobileSingleLineInput } from "../components/ui/MobileSingleLineInput";
 import { InlineNotice } from "../components/ui/InlineNotice";
 import { useDesktopWeb } from "../components/navigation/useDesktopWeb";
 
@@ -972,15 +973,21 @@ const Field = React.memo(function Field(
   return (
     <View style={[styles.field, containerStyle]}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        {...input}
-        accessibilityLabel={label}
-        placeholderTextColor={colors.textTertiary}
-        style={[
-          styles.input,
-          input.multiline ? styles.multiline : styles.singleLine,
-        ]}
-      />
+      {input.multiline ? (
+        <TextInput
+          {...input}
+          accessibilityLabel={label}
+          placeholderTextColor={colors.textTertiary}
+          style={[styles.input, styles.multiline]}
+        />
+      ) : (
+        <MobileSingleLineInput
+          {...input}
+          framed
+          accessibilityLabel={label}
+          placeholderTextColor={colors.textTertiary}
+        />
+      )}
     </View>
   );
 });
@@ -1263,11 +1270,6 @@ function createStyles(colors: any) {
       borderRadius: Radii.sm,
       paddingHorizontal: 12,
       backgroundColor: colors.bgPrimary,
-    },
-    singleLine: {
-      height: 48,
-      paddingVertical: 0,
-      textAlignVertical: "center",
     },
     multiline: {
       minHeight: 92,

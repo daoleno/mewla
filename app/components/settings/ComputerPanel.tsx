@@ -1,8 +1,9 @@
 import React from "react";
-import { StyleSheet, TextInput, View } from "react-native";
-import { Radii, TypeScale, UiTextMetrics, useAppColors } from "../../constants/tokens";
+import { StyleSheet, View } from "react-native";
+import { TypeScale, useAppColors } from "../../constants/tokens";
 import { InkSwitch } from "../ui/InkSwitch";
 import { Button } from "../ui/Button";
+import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import { ListRow, ListSection } from "../ui/ListSection";
 import type { ComputerAction, ComputerProblem } from "./computerModel";
 
@@ -39,10 +40,6 @@ export interface ComputerPanelProps {
 export function ComputerPanel(props: ComputerPanelProps) {
   const colors = useAppColors();
   const disabled = !props.reachable || props.agentsEnabled === null || props.busy !== null;
-  const inputStyle = [
-    styles.input,
-    { backgroundColor: colors.inputBackground, borderColor: colors.borderStrong, color: colors.textPrimary },
-  ];
 
   const action = (label: string, key: string, onPress: () => void, destructive?: boolean) => (
     <Button
@@ -106,16 +103,14 @@ export function ComputerPanel(props: ComputerPanelProps) {
 
       <ListSection title="Name">
         <View style={styles.field}>
-          <TextInput
-            style={inputStyle}
+          <MobileSingleLineInput
+            framed
             value={props.name}
             onChangeText={props.onName}
             onEndEditing={props.onSaveDetails}
             returnKeyType="done"
             accessibilityLabel="Computer name"
             placeholderTextColor={colors.textSecondary}
-            selectionColor={colors.selectionBackground}
-            cursorColor={colors.accentStrong}
             autoCorrect={false}
           />
         </View>
@@ -124,8 +119,9 @@ export function ComputerPanel(props: ComputerPanelProps) {
       {props.address != null && props.onAddress ? (
         <ListSection title="Address">
           <View style={styles.field}>
-            <TextInput
-              style={[inputStyle, styles.mono]}
+            <MobileSingleLineInput
+              framed
+              inputStyle={styles.mono}
               value={props.address}
               onChangeText={props.onAddress}
               onEndEditing={props.onSaveDetails}
@@ -133,8 +129,6 @@ export function ComputerPanel(props: ComputerPanelProps) {
               accessibilityLabel="Address"
               placeholder="https://mewla.example.com"
               placeholderTextColor={colors.textSecondary}
-              selectionColor={colors.selectionBackground}
-              cursorColor={colors.accentStrong}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="url"
@@ -168,15 +162,6 @@ export function ComputerPanel(props: ComputerPanelProps) {
 const styles = StyleSheet.create({
   field: {
     padding: 12,
-  },
-  input: {
-    ...UiTextMetrics,
-    ...TypeScale.body,
-    minHeight: 44,
-    borderRadius: Radii.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
   },
   mono: {
     ...TypeScale.mono,

@@ -15,10 +15,11 @@ if (!process.env.MEWLA_SIGNIN_ADDRESS_TEST_CHILD) {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   const host = (name: string) => (props: any) => React.createElement(name, props, props.children);
   mock.module("react-native", () => ({ StyleSheet: { create: (s: unknown) => s }, TextInput: host("input"), View: host("view") }));
-  mock.module("../../constants/tokens", () => ({ Radii: { md: 12 }, ContinuousCorners: {}, useAppColors: () => ({ border: "gray" }) }));
+  mock.module("../../constants/tokens", () => ({ ContinuousCorners: {}, useAppColors: () => ({ border: "gray" }) }));
   mock.module("../ui", () => ({ AppText: host("text"), Button: host("button"), InlineNotice: host("notice") }));
   const clipboard = mock(async () => "");
   mock.module("expo-clipboard", () => ({ getStringAsync: clipboard }));
+  mock.module("../ui/MobileSingleLineInput", () => ({ MobileSingleLineInput: React.forwardRef((props: any, _ref) => React.createElement("input", props)) }));
   const { SignInAddressEntry } = await import("./SignInAddressEntry");
   const callback = "http://127.0.0.1:9876/plugins/oauth/callback?state=test-state&code=test-code";
   const render = async (submit: (address: string) => Promise<void>) => {
