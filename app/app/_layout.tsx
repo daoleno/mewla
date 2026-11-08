@@ -25,7 +25,7 @@ import { removeCatGameData } from "../services/catGameCleanup";
 import { WorkProvider, useWorkDispatch } from "../store/work";
 import { CalendarProvider, useCalendarDispatch } from "../store/calendar";
 import { FriendsLabsProvider } from "../store/friendsLabs";
-import { PhoneFloat } from "../components/phone/PhoneFloat";
+import { ScreenFloatHost } from "../components/screen/ScreenFloatHost";
 import { PhoneUseProvider } from "../store/phoneUse";
 import {
   CurrentSessionProvider,
@@ -755,7 +755,7 @@ const AppNavigator = memo(function AppNavigator({
       <Stack.Screen name="screenshot-demo" options={{ headerShown: false }} />
     </Stack>
     </DesktopWebShell>
-    <PhoneFloat />
+    <ScreenFloatHost />
     </>
   );
 });

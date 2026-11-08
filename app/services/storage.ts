@@ -26,8 +26,9 @@ const KEYS = {
   interfaceRenderModes: "mewla:codex_render_modes",
   themePreference: "mewla:theme_preference",
   petPreference: "mewla:pet_preference",
-  phoneFloatCorner: "mewla:phone_float_corner",
-  phoneFloatSize: "mewla:phone_float_size",
+  // Named for the Phone, where the window began; the one window for every agent screen keeps them.
+  screenFloatCorner: "mewla:phone_float_corner",
+  screenFloatSize: "mewla:phone_float_size",
 } as const;
 
 let serverWriteTail: Promise<unknown> = Promise.resolve();
@@ -335,20 +336,20 @@ export async function setPetPreference(petId: string): Promise<void> {
   await AsyncStorage.setItem(KEYS.petPreference, petId);
 }
 
-/** The corner the agent's floating screen was left in, as the person last placed it. */
-export async function getPhoneFloatCorner(): Promise<string | null> {
-  return AsyncStorage.getItem(KEYS.phoneFloatCorner);
+/** The corner the floating agent screen was left in, as the person last placed it. */
+export async function getScreenFloatCorner(): Promise<string | null> {
+  return AsyncStorage.getItem(KEYS.screenFloatCorner);
 }
 
-export async function setPhoneFloatCorner(corner: string): Promise<void> {
-  await AsyncStorage.setItem(KEYS.phoneFloatCorner, corner);
+export async function setScreenFloatCorner(corner: string): Promise<void> {
+  await AsyncStorage.setItem(KEYS.screenFloatCorner, corner);
 }
 
-/** The share of the window's width the agent's floating screen was left at. */
-export async function getPhoneFloatSize(): Promise<string | null> {
-  return AsyncStorage.getItem(KEYS.phoneFloatSize);
+/** The share of the window's width the floating agent screen was left at. */
+export async function getScreenFloatSize(): Promise<string | null> {
+  return AsyncStorage.getItem(KEYS.screenFloatSize);
 }
 
-export async function setPhoneFloatSize(fraction: number): Promise<void> {
-  await AsyncStorage.setItem(KEYS.phoneFloatSize, String(fraction));
+export async function setScreenFloatSize(fraction: number): Promise<void> {
+  await AsyncStorage.setItem(KEYS.screenFloatSize, String(fraction));
 }

@@ -13,12 +13,16 @@ export interface AgentDisplay {
   /** The person stopped this agent; it stays stopped until they resume it. */
   stopped?: boolean;
   apps: number;
+  /** Seconds since the agent last used it; 0 while it acts. */
+  idle_s?: number;
 }
 
 export interface DisplayList {
   displays: AgentDisplay[];
   /** Whether this computer can run displays at all (Xvnc installed). */
   available: boolean;
+  /** What is missing when agents cannot have a screen or a browser on it here; empty when nothing is. */
+  reason?: string;
 }
 
 export class DisplayRequestError extends Error {
@@ -54,7 +58,7 @@ async function request(server: StoredServer, method: "GET" | "POST", body?: obje
 
 export async function listDisplays(server: StoredServer, signal?: AbortSignal): Promise<DisplayList> {
   const result = await request(server, "GET", undefined, signal);
-  return { displays: Array.isArray(result.displays) ? (result.displays as AgentDisplay[]) : [], available: result.available !== false };
+  return { displays: Array.isArray(result.displays) ? (result.displays as AgentDisplay[]) : [], available: result.available !== false, reason: typeof result.reason === "string" ? result.reason : "" };
 }
 
 /** Stop: the agent may not use its display until the person resumes it. */

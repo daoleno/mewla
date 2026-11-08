@@ -367,6 +367,28 @@ began on the wallet waits for the wallet to be unlocked rather than lose its
 sign-ins. See [Agents in your browser](your-browser.md) for the browser that
 uses your own Chrome and sign-ins on your desktop instead.
 
+## The floating screen
+
+While the agent of the Session or Work you are looking at uses a screen, that
+screen floats over the page as a small live window: its Linux display, the
+Mac's screen, or the Phone (see the Phone page). It is one window with one set
+of gestures for all three. On a page that belongs to no Session or Work it shows
+whichever agent uses a screen; when several do, tap the title to go to the next.
+It disappears when the agent is done with the screen, and on that screen's own
+page.
+
+- **The picture is the input surface**, as in Screen. On a Linux display a tap
+  clicks and the system keyboard (the keyboard button in the bar) types; the
+  agent is told, not paused. The Mac's float is a watch: Stop is in its menu, and
+  taking the screen over stays in Screen.
+- **The bar** moves the window (it snaps to a corner and remembers its corner and
+  size; a double tap goes between the default and a large size) and holds ⋮ and
+  expand. ⋮ has **Hold the agent** (it waits until you let it go on or the window
+  closes), **Stop** and Full size. Expand opens Screen. While you hold, the
+  window stays and has a ring.
+- The handle in the inner corner resizes it, the shape locked. It stays above the
+  chat input and the keyboard.
+
 ## Who can use it
 
 Only paired devices that someone allowed at the computer, and agents Mewla

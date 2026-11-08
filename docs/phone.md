@@ -57,19 +57,22 @@ running. Until then it says **Finish setting up Phone use** (not paired yet) or
 - When an agent needs you (a login, a code, a payment) your phone notifies you
   with what to do. Tap it, do it on the live screen, and tap **Done**; the agent
   carries on.
-- While an agent works, its screen also floats as a live window over every
-  other page of Mewla, so you can keep chatting with Brain and watch at once. It
-  has the agent screen's exact shape and starts at a bit over half the screen's
-  width, in the bottom-right corner above the chat input, so most of the
-  conversation stays readable. Until the agent's screen has drawn anything, it shows
-  a light card with a spinner (and the app's name, *微信*, once it is opening, or
-  *Couldn't open 微信*) instead of a black slab. Drag the handle in its inner corner, or pinch, to resize
-  it (from about a third of the screen to nearly all of it); double-tap it to go
-  between the default and a large size. Drag it: it snaps to a corner, and it
-  remembers its corner and size. It stays above the chat input and the keyboard.
-  Tap it for Take over (which opens the Phone page), Stop and expand. When the
-  agent needs you, it shows a pulsing ring. It disappears when the agent finishes
-  (its Worker ends or is closed) or you Stop, and on the Phone page itself.
+- While an agent works, its screen also floats as a live window over the page
+  you are on, so you can keep chatting and watch at once. It is the same window
+  as for an agent's Linux display or the Mac (see Screen). It has the agent
+  screen's exact shape and starts at a bit over half the screen's width, in the
+  bottom-right corner above the chat input. Until the agent's screen has drawn
+  anything, it shows a light card with a spinner (and the app's name, *微信*,
+  once it is opening, or *Couldn't open 微信*) instead of a black slab. Drag its
+  bar to move it: it snaps to a corner and remembers its corner and size. Drag
+  the handle in its inner corner to resize it (from about a third of the screen
+  to nearly all of it); double-tap the bar to go between the default and a large
+  size. It stays above the chat input and the keyboard. The bar's ⋮ menu has
+  Take over (which opens the Phone page), Stop; its expand button opens the Phone
+  page. When the agent needs you, it shows a pulsing ring, and ⋮ has Done. It
+  shows over the Session or Work whose agent is using the phone (and over pages
+  that belong to no Session), and disappears when the agent finishes (its Worker
+  ends or is closed) or you Stop, and on the Phone page itself.
 - Leave Mewla from any page while an agent works and its screen floats in a small
   window (Android's picture-in-picture), still live and showing only the agent's
   screen; tap it for Take over and Stop. Coming back returns it to the in-app
