@@ -1,7 +1,9 @@
 import React from "react";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { InterfaceSessionIdleView } from "./InterfaceSessionIdleView";
-import { InterfaceTimelineEmptyState } from "./InterfaceTimelineEmptyState";
+import { EmptyState } from "../ui/EmptyState";
+import { useBrainCompanion } from "../mewla/BrainCompanion";
+import { PetSprite } from "../pets/PetSprite";
 import { interfaceTimelinePhase } from "./interfaceTimelinePhase";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 
@@ -21,6 +23,12 @@ interface InterfaceTimelineEmptyContentProps {
   emptyBody?: string;
 }
 
+/** A loaded, empty conversation in Brain: the pet sleeps where the halo would be. */
+function useSealArt() {
+  const companion = useBrainCompanion();
+  return companion ? <PetSprite state="idle" size={112} animate={companion.animate} /> : undefined;
+}
+
 export function InterfaceTimelineEmptyContent({
   items,
   loading,
@@ -36,6 +44,7 @@ export function InterfaceTimelineEmptyContent({
   emptyTitle,
   emptyBody,
 }: InterfaceTimelineEmptyContentProps) {
+  const sealArt = useSealArt();
   switch (
     interfaceTimelinePhase({
       itemCount: items.length,
@@ -54,33 +63,29 @@ export function InterfaceTimelineEmptyContent({
       return null;
     case "error":
       return (
-        <InterfaceTimelineEmptyState
-          chrome={chrome}
+        <EmptyState
           title="Could not load this chat"
-          body={error ?? undefined}
-          tone="error"
+          detail={error}
+          tone="danger"
           icon="alert-circle"
         />
       );
     case "unavailable":
       return (
-        <InterfaceTimelineEmptyState
-          chrome={chrome}
+        <EmptyState
           title="Chat view is not available here"
-          body={unavailableReason}
+          detail={unavailableReason}
           icon="layers"
-          actionLabel={showUnavailableAction ? "Open Terminal" : undefined}
-          onAction={showUnavailableAction ? onUnavailableAction : undefined}
+          action={
+            showUnavailableAction && onUnavailableAction
+              ? { label: "Open Terminal", icon: "terminal", onPress: onUnavailableAction }
+              : undefined
+          }
         />
       );
     case "empty":
       return emptyTitle ? (
-        <InterfaceTimelineEmptyState
-          chrome={chrome}
-          title={emptyTitle}
-          body={emptyBody}
-          conversationEmpty
-        />
+        <EmptyState title={emptyTitle} detail={emptyBody} icon="chat-dots" art={sealArt} />
       ) : (
         <InterfaceSessionIdleView chrome={chrome} cwd={workerCwd} />
       );

@@ -1,12 +1,9 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
-import { TouchableOpacity } from "react-native-gesture-handler";
-import { ContinuousCorners, Radii, Typography } from "../../constants/tokens";
-import type { TerminalThemeChrome } from "../../constants/terminalThemes";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { ContinuousCorners, Radii, useAppColors } from "../../constants/tokens";
 import type { CodexSlashCommand } from "../../services/websocket";
-import { CodexQuickCommandRow } from "./CodexQuickCommandRow";
-import { slashCommandEmptyText } from "./codexSlashCommandPresentation";
-import { Icon } from "../icons/Icon";
+import { EmptyState, ListRow, ListSection } from "../ui";
+import { slashCommandEmptyText, slashCommandIcon } from "./codexSlashCommandPresentation";
 
 const COMMAND_GROUPS = [
   { key: "session", label: "Session" },
@@ -31,11 +28,11 @@ interface InterfaceComposerActionMenuProps {
   uploading: boolean;
   commands: CodexSlashCommand[];
   commandQuery: string;
-  chrome: TerminalThemeChrome;
   onUploadPress(): void;
   onSelectCommand(command: CodexSlashCommand): void;
 }
 
+/** The slash-command and attach menu. Reads the terminal theme from `TerminalThemeScope`. */
 export function InterfaceComposerActionMenu({
   visible,
   showComposerActions,
@@ -45,10 +42,10 @@ export function InterfaceComposerActionMenu({
   uploading,
   commands,
   commandQuery,
-  chrome,
   onUploadPress,
   onSelectCommand,
 }: InterfaceComposerActionMenuProps) {
+  const colors = useAppColors();
   if (!visible) {
     return null;
   }
@@ -61,130 +58,56 @@ export function InterfaceComposerActionMenu({
         styles.menu,
         // Same material as the Composer capsule so menu and dock read as
         // one floating layer.
-        { backgroundColor: chrome.composerInput, borderColor: chrome.border },
+        { backgroundColor: colors.inputBackground, borderColor: colors.border },
       ]}
     >
-      {showComposerActions ? (
-        <TouchableOpacity
-          accessibilityLabel="Upload file"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canAttach, busy: uploading }}
-          style={[
-            styles.actionRow,
-            !canAttach ? { backgroundColor: chrome.disabledSurface } : null,
-          ]}
-          onPress={onUploadPress}
-          disabled={!canAttach}
-          activeOpacity={0.78}
-        >
-          <View
-            style={[
-              styles.icon,
-              {
-                backgroundColor: canAttach
-                  ? chrome.accentSoft
-                  : chrome.disabledSurface,
-              },
-            ]}
-          >
-            <Icon
-              name={
-                uploading ? "cloud-upload" : "attach"
-              }
-              size={17}
-              color={canAttach ? chrome.accent : chrome.textSubtle}
+      <ScrollView
+        style={styles.scroller}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={commands.length > 6}
+      >
+        {showComposerActions ? (
+          <ListSection>
+            <ListRow
+              icon={uploading ? "cloud-upload" : "attach"}
+              iconColor={canAttach ? colors.accent : colors.textTertiary}
+              title="Attach File"
+              subtitle={uploading ? "Uploading..." : "Add a file to this message"}
+              accessibilityLabel="Upload file"
+              accessory="chevron"
+              loading={uploading}
+              disabled={!canAttach}
+              onPress={onUploadPress}
             />
-          </View>
-          <View style={styles.actionCopy}>
-            <Text
-              style={[styles.title, { color: chrome.text }]}
-              numberOfLines={1}
-            >
-              Attach File
-            </Text>
-            <Text
-              style={[styles.description, { color: chrome.textSubtle }]}
-              numberOfLines={1}
-            >
-              {uploading ? "Uploading..." : "Add a file to this message"}
-            </Text>
-          </View>
-          <Icon
-            name="chevron-right"
-            size={14}
-            color={chrome.textSubtle}
-          />
-        </TouchableOpacity>
-      ) : null}
+          </ListSection>
+        ) : null}
 
-      {showCommandList ? (
-        <View
-          style={[
-            styles.commandSection,
-            showComposerActions ? { borderTopColor: chrome.border } : null,
-            !showComposerActions ? styles.commandSectionFirst : null,
-          ]}
-        >
-          <View style={styles.sectionHeader}>
-            <Icon
-              name="code"
-              size={14}
-              color={chrome.textSubtle}
-            />
-            <Text style={[styles.sectionLabel, { color: chrome.textSubtle }]}>
-              Commands
-            </Text>
-          </View>
-          {commands.length > 0 ? (
-            <ScrollView
-              style={styles.scroller}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={commands.length > 6}
-            >
-              {commandGroups.map((group, groupIndex) => {
-                return (
-                  <View key={group.key}>
-                    <Text
-                      style={[
-                        styles.commandGroupLabel,
-                        groupIndex === 0 ? styles.commandGroupLabelFirst : null,
-                        { color: chrome.textMuted },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {group.label}
-                    </Text>
-                    {group.commands.map((command) => {
-                      const selected = commandQuery === command.value;
-                      return (
-                        <CodexQuickCommandRow
-                          key={command.value}
-                          command={command}
-                          selected={selected}
-                          chrome={chrome}
-                          onSelect={onSelectCommand}
-                        />
-                      );
-                    })}
-                  </View>
-                );
-              })}
-              <View style={styles.scrollerBottomSpacer} />
-            </ScrollView>
+        {showCommandList ? (
+          commands.length > 0 ? (
+            commandGroups.map((group) => (
+              <ListSection key={group.key} title={group.label}>
+                {group.commands.map((command) => (
+                  <ListRow
+                    key={command.value}
+                    icon={slashCommandIcon(command.name)}
+                    iconColor={colors.accent}
+                    title={command.value}
+                    subtitle={command.description}
+                    accessibilityLabel={`${command.value} ${command.description}`}
+                    accessory="check"
+                    selected={commandQuery === command.value}
+                    accessibilityRole="button"
+                    onPress={() => onSelectCommand(command)}
+                  />
+                ))}
+              </ListSection>
+            ))
           ) : (
-            <View style={styles.empty}>
-              <Icon
-                name="search"
-                size={15}
-                color={chrome.textSubtle}
-              />
-              <Text style={[styles.description, { color: chrome.textSubtle }]}>
-                {slashCommandEmptyText(commandsUnavailable)}
-              </Text>
-            </View>
-          )}
-        </View>
-      ) : null}
+            <EmptyState size="inline" icon="search" detail={slashCommandEmptyText(commandsUnavailable)} />
+          )
+        ) : null}
+      </ScrollView>
     </View>
   );
 }
@@ -215,79 +138,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },
-  actionRow: {
-    minHeight: 56,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  icon: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    ...ContinuousCorners,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  title: {
-    fontSize: 14,
-    lineHeight: 19,
-    fontFamily: Typography.uiFontMedium,
-  },
-  description: {
-    marginTop: 1,
-    fontSize: 11,
-    lineHeight: 15,
-    fontFamily: Typography.uiFont,
-  },
-  commandSection: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  commandSectionFirst: {
-    borderTopWidth: 0,
-  },
-  sectionHeader: {
-    minHeight: 30,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 11,
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontFamily: Typography.uiFontMedium,
-  },
-  scroller: {
-    maxHeight: 320,
-  },
-  scrollerBottomSpacer: {
-    height: 6,
-  },
-  commandGroupLabel: {
-    paddingHorizontal: 11,
-    paddingTop: 10,
-    paddingBottom: 2,
-    fontSize: 11,
-    lineHeight: 15,
-    fontFamily: Typography.uiFontMedium,
-  },
-  commandGroupLabelFirst: {
-    paddingTop: 2,
-  },
-  empty: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-  },
+  scroller: { maxHeight: 360 },
+  content: { padding: 8 },
 });

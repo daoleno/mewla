@@ -41,6 +41,14 @@ if (!process.env.MEWLA_PREVIEW_HOOK_CHILD) {
   mock.module("../ui", () => ({
     BottomSheetFrame: ({ visible, children }: any) =>
       visible ? <>{children}</> : null,
+    // The shared state: title and detail as text, the action as a button.
+    EmptyState: ({ title, detail, action }: any) => (
+      <>
+        {title ? React.createElement("text", null, title) : null}
+        {detail ? React.createElement("text", null, detail) : null}
+        {action ? React.createElement("button", { onPress: action.onPress }) : null}
+      </>
+    ),
   }));
   mock.module("./InterfaceMessageBody", () => ({
     MessageBody: host("markdown"),

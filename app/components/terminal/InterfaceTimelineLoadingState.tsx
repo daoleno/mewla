@@ -66,7 +66,7 @@ export function InterfaceTimelineLoadingState({
 }
 
 const styles = StyleSheet.create({
-  // Matches InterfaceTimelineEmptyState's stack, so the hand-off to "Ready
+  // Matches the shared hero EmptyState's stack, so the hand-off to "Ready
   // when you are" keeps the cat in place.
   root: {
     flexGrow: 1,
