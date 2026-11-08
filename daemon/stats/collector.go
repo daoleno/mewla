@@ -45,8 +45,8 @@ type Collector struct {
 	openCodeUsage         map[string]openCodeSessionUsage
 	// claudeFiles remembers what each Claude session file contributed, so a
 	// refresh reads only the files that changed. Guarded by refreshMu.
-	claudeFiles      map[string]claudeFileUsage
-	claudeFilesPrice time.Time
+	claudeFiles       map[string]claudeFileUsage
+	claudeFilesPrices map[string]map[string]modelPricing
 }
 
 // claudeFileUsage is one session file's aggregate, valid while the file keeps
@@ -547,13 +547,15 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 		return byDate
 	}
 
-	// A file's aggregate carries cost estimates from the price table, so a
-	// new price table drops them all.
+	// A file's aggregate carries cost estimates from the price table, so
+	// different rates drop them all. A catalog downloaded again with the same
+	// rates is not different: the cache would otherwise be lost to every
+	// price refresh and the whole history read again.
 	prices.mu.RLock()
-	priced := prices.updatedAt
+	current := cloneProviderPricing(prices.models)
 	prices.mu.RUnlock()
-	if c.claudeFiles == nil || !c.claudeFilesPrice.Equal(priced) {
-		c.claudeFiles, c.claudeFilesPrice = map[string]claudeFileUsage{}, priced
+	if c.claudeFiles == nil || !samePricing(cloneProviderPricing(c.claudeFilesPrices), cloneProviderPricing(current)) {
+		c.claudeFiles, c.claudeFilesPrices = map[string]claudeFileUsage{}, current
 	}
 	seen := make(map[string]bool, len(c.claudeFiles))
 	err := filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
