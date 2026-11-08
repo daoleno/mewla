@@ -4,6 +4,7 @@ package stats
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -140,9 +141,12 @@ func TestClaudeStatsCacheSurvivesAPriceRefreshWithTheSameRates(t *testing.T) {
 		}
 	}
 	prices.mu.Unlock()
-	before = selfRchar(t)
-	c.collectClaudeSessionStats(home)
-	if read := selfRchar(t) - before; read < uint64(size.Size()) {
-		t.Fatalf("changed rates kept costs priced at the old ones: only %d bytes read", read)
+	// The scan of the file is kept, so other rates cost no read: the estimates
+	// are priced again from what the scan holds, and must be the ones a
+	// collector starting now would give.
+	got := c.collectClaudeSessionStats(home)["2026-04-04"].models["claude-sonnet-4-6"]
+	want := NewCollector().collectClaudeSessionStats(home)["2026-04-04"].models["claude-sonnet-4-6"]
+	if want.estimatedCost <= 0 || math.Abs(got.estimatedCost-want.estimatedCost) > 1e-9*want.estimatedCost {
+		t.Fatalf("changed rates kept costs priced at the old ones: %v, want %v", got.estimatedCost, want.estimatedCost)
 	}
 }
