@@ -6,7 +6,7 @@ import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
 import { usePhoneUse } from "../../store/phoneUse";
 import { browserRequest, type BrowserResource } from "../../services/browser";
-import { haltDisplay, listDisplays, type AgentDisplay } from "../../services/display";
+import { haltDisplay, listDisplays, resumeDisplay, type AgentDisplay } from "../../services/display";
 import { browserIssue, type BrowserIssue } from "../../services/browserPageModel";
 import { serverDisplayName } from "../../services/serverDisplayName";
 import { ActionMenu, EmptyState, IconButton, InlineNotice } from "../ui";
@@ -131,7 +131,8 @@ export function AgentScreens() {
           {displays.map((display) => (
             <AgentDisplayCard key={`display:${display.id}`} server={currentServer} display={display}
               agentName={workerState.workers.find((w) => w.id === display.id)?.name}
-              onStop={async (worker) => { await haltDisplay(currentServer, worker, abort.current?.signal); await list(); }} />
+              onStop={async (worker) => { await haltDisplay(currentServer, worker, abort.current?.signal); await list(); }}
+              onResume={async (worker) => { await resumeDisplay(currentServer, worker, abort.current?.signal); await list(); }} />
           ))}
           {running.map((resource) => (
             <AgentBrowserCard key={`${resource.id}:${nonces[resource.id] ?? 0}`} server={currentServer} serverName={serverName}

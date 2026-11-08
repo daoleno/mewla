@@ -9,6 +9,8 @@ export type ScreenHostMessage =
   | { type: "key"; key: ScreenKey; mods: ScreenModifier[] }
   | { type: "mode"; mode: ScreenPointerMode }
   | { type: "fit" }
+  /** Web: the view goes full size, and the browser's own shortcuts go to the remote. */
+  | { type: "fullsize" }
   /** Where a picture shorter than the page sits. */
   | { type: "align"; align: "top" | "center" };
 

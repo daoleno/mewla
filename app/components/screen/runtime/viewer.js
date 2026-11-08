@@ -16,7 +16,10 @@ const XK = {
 const SLOP = 9;
 const LONG_PRESS_MS = 480;
 const DOUBLE_TAP_MS = 380;
-const SCROLL_STEP = 14;
+// One wheel notch moves a page by about this many remote pixels; a finger
+// dragging a page scrolls it by the distance the finger moved on the picture.
+const NOTCH_REMOTE = 53;
+const MIN_NOTCH_LOCAL = 8;
 const MAX_ZOOM = 2; // CSS pixels per remote pixel at most
 
 const STYLE = `
@@ -249,7 +252,10 @@ export function mountScreenViewer(container, post) {
 
   // RFB wheel: buttons 4/5 vertical and 6/7 horizontal, one press per notch.
   let scrollRest = { x: 0, y: 0 };
+  // `dx`/`dy` are local pixels (a mouse wheel's own units, or finger travel);
+  // a notch is as long on the page as a notch is on the remote screen.
   function scrollBy(x, y, dx, dy) {
+    const step = Math.max(MIN_NOTCH_LOCAL, NOTCH_REMOTE * view.s);
     scrollRest.x += dx;
     scrollRest.y += dy;
     const send = (mask, count) => {
@@ -258,16 +264,16 @@ export function mountScreenViewer(container, post) {
         sendPointer(x, y, buttons);
       }
     };
-    const vy = Math.trunc(scrollRest.y / SCROLL_STEP);
+    const vy = Math.trunc(scrollRest.y / step);
     if (vy) {
       send(vy > 0 ? 16 : 8, Math.abs(vy));
-      scrollRest.y -= vy * SCROLL_STEP;
+      scrollRest.y -= vy * step;
       markInput();
     }
-    const vx = Math.trunc(scrollRest.x / SCROLL_STEP);
+    const vx = Math.trunc(scrollRest.x / step);
     if (vx) {
       send(vx > 0 ? 64 : 32, Math.abs(vx));
-      scrollRest.x -= vx * SCROLL_STEP;
+      scrollRest.x -= vx * step;
       markInput();
     }
   }
@@ -323,20 +329,19 @@ export function mountScreenViewer(container, post) {
     if (g.kind === "pending" && moved) {
       clearTimeout(g.timer);
       if (mode === "trackpad") g.kind = g.held ? "drag" : "move";
-      else if (g.held || view.s <= view.fit * 1.02) g.kind = "drag";
-      else g.kind = "pan";
-      if (g.kind === "drag" && g.beside) g.kind = "none";
+      // Touching the picture moves it like any page: a drag scrolls, and a
+      // press held first drags (selecting text, moving a window).
+      else g.kind = g.held ? "drag" : "scroll";
+      if ((g.kind === "drag" || g.kind === "scroll") && g.beside) g.kind = "none";
       if (g.kind === "drag") {
         if (mode === "touch") press(g.remote.x, g.remote.y);
         else press(cursor.x, cursor.y);
       }
     }
     g.last = { x: p.x, y: p.y };
-    if (g.kind === "pan") {
-      view.tx += dx;
-      view.ty += dy;
-      clampView();
-      applyView();
+    if (g.kind === "scroll") {
+      // Content follows the finger: the finger going up scrolls the page down.
+      scrollBy(g.remote.x, g.remote.y, -dx, -dy);
     } else if (g.kind === "drag" && mode === "touch") {
       const r = toRemote(p.clientX, p.clientY);
       queueMove(r.x, r.y);
@@ -358,6 +363,7 @@ export function mountScreenViewer(container, post) {
     const g = gesture;
     gesture = null;
     clearTimeout(g.timer);
+    if (g.kind === "scroll") scrollRest = { x: 0, y: 0 };
     if (cancelled) {
       if (g.kind === "drag") release(mode === "touch" ? toRemote(p.clientX, p.clientY).x : cursor.x, mode === "touch" ? toRemote(p.clientX, p.clientY).y : cursor.y);
       return;
@@ -409,7 +415,7 @@ export function mountScreenViewer(container, post) {
     const s = twoFingerState();
     if (!g.decided) {
       if (Math.abs(s.dist - g.start.dist) > 26) g.decided = "pinch";
-      else if (Math.hypot(s.cx - g.start.cx, s.cy - g.start.cy) > 12) g.decided = "scroll";
+      else if (Math.hypot(s.cx - g.start.cx, s.cy - g.start.cy) > 12) g.decided = mode === "touch" ? "pinch" : "scroll";
     }
     if (g.decided === "pinch") {
       zoomAt(g.scale * (s.dist / g.start.dist), s.cx, s.cy);
@@ -460,7 +466,10 @@ export function mountScreenViewer(container, post) {
     e.preventDefault();
     if (!rfb) return;
     try { overlay.setPointerCapture(e.pointerId); } catch {}
-    if (e.pointerType === "mouse") return mouseEvent(e, "down");
+    if (e.pointerType === "mouse") {
+      focusKeyboard();
+      return mouseEvent(e, "down");
+    }
     pointers.set(e.pointerId, pointerInfo(e));
     if (pointers.size === 1) startOne(pointers.get(e.pointerId));
     else if (pointers.size === 2) startTwo();
@@ -499,10 +508,65 @@ export function mountScreenViewer(container, post) {
       return;
     }
     const r = toRemote(e.clientX, e.clientY);
-    scrollBy(r.x, r.y, e.deltaX, e.deltaY);
+    // A notch of the wheel (about 100 px, or 3 lines) is a notch on the screen.
+    const unit = e.deltaMode === 1 ? 33 : 1;
+    const notch = Math.max(MIN_NOTCH_LOCAL, NOTCH_REMOTE * view.s) / 100;
+    scrollBy(r.x, r.y, e.deltaX * unit * notch, e.deltaY * unit * notch);
   }, { passive: false });
 
   // ---- keys ----------------------------------------------------------------
+
+  // A mouse and a keyboard use the computer directly: a click gives the
+  // picture the keyboard, and noVNC sends every key, modifiers and releases
+  // included. (Phones type through the system keyboard, which the host owns.)
+  function focusKeyboard() {
+    const target = canvas;
+    if (target && doc.activeElement !== target) target.focus({ preventScroll: true });
+  }
+
+  // The remote's paste reads the remote's clipboard, so the person's text goes
+  // there first. The browser only offers its clipboard to a paste it is
+  // allowed to run, so the key is held back (the default action stays) until
+  // the paste event arrives, then the text is sent and the key follows.
+  let heldPaste = null;
+  function releasePaste(text) {
+    const held = heldPaste;
+    heldPaste = null;
+    if (!held || !rfb) return;
+    clearTimeout(held.timer);
+    if (text) rfb.clipboardPasteFrom(text);
+    rfb.sendKey(0x76, "KeyV", true);
+    rfb.sendKey(0x76, "KeyV", false);
+    markInput();
+  }
+  root.addEventListener("keydown", (e) => {
+    if (!rfb || e.key.toLowerCase() !== "v" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.repeat) return;
+    if (!navigator.clipboard && !("onpaste" in doc)) return;
+    e.stopPropagation(); // not to noVNC
+    heldPaste = { timer: setTimeout(() => releasePaste(""), 250) };
+  }, true);
+  root.addEventListener("paste", (e) => {
+    if (!heldPaste) return;
+    e.preventDefault();
+    releasePaste(e.clipboardData ? e.clipboardData.getData("text/plain") : "");
+  });
+  root.addEventListener("keyup", (e) => {
+    // The release of a held-back V is not for the remote: its press goes out
+    // with the paste.
+    if (e.key.toLowerCase() === "v" && heldPaste) e.stopPropagation();
+  }, true);
+
+  // Full size, with the browser's own shortcuts (Ctrl+W, Ctrl+T) handed to the
+  // remote where the browser allows it.
+  function fullSize() {
+    if (!root.requestFullscreen) return;
+    root.requestFullscreen().then(() => {
+      if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(() => {});
+    }, () => {});
+  }
+  doc.addEventListener("fullscreenchange", () => {
+    if (!doc.fullscreenElement && navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+  });
 
   function keysymFor(ch) {
     if (ch === "\n" || ch === "\r") return XK.Return;
@@ -713,6 +777,7 @@ export function mountScreenViewer(container, post) {
         applyView();
         break;
       case "fit": fitView(); break;
+      case "fullsize": fullSize(); break;
     }
   }
 

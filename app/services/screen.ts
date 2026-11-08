@@ -223,6 +223,11 @@ export class ScreenConnection {
     if (!this.closed && this.socket?.readyState === WebSocket.OPEN) this.socket.send(base64ToBytes(chunk).buffer as ArrayBuffer);
   }
 
+  /** A control message for the daemon beside the RFB bytes, such as {type:"hold",on:true}. */
+  control(message: Record<string, unknown>) {
+    if (!this.closed && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
+  }
+
   private finish() {
     const reason = this.reason;
     this.close();
