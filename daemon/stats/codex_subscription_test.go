@@ -74,3 +74,70 @@ func TestCollectCodexSubscriptionKeepsRecentGoodUsageOnFailure(t *testing.T) {
 		t.Fatalf("usage older than %v still shown: %#v", codexStaleLimit, got)
 	}
 }
+
+func TestRefreshAsksCodexForItsQuotaOnlyEveryFewMinutes(t *testing.T) {
+	now := time.Now()
+	asked := 0
+	c := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) {
+		asked++
+		return codexctl.AccountUsage{Plan: "pro", Primary: &codexctl.UsageWindow{UsedPercent: float64(asked), WindowMinutes: 300}}, nil
+	})
+	c.now = func() time.Time { return now }
+
+	first := c.codexSubscriptionForRefresh()
+	if first == nil || asked != 1 {
+		t.Fatalf("first refresh: %#v after %d questions", first, asked)
+	}
+	now = now.Add(codexSubscriptionEvery - time.Minute)
+	again := c.codexSubscriptionForRefresh()
+	if asked != 1 || again == nil || again.Windows[0].UsedPercent != 1 {
+		t.Fatalf("a refresh within %v asked again: %#v after %d questions", codexSubscriptionEvery, again, asked)
+	}
+	again.Windows[0].UsedPercent = 99
+	if c.codexSubscriptionForRefresh().Windows[0].UsedPercent != 1 {
+		t.Fatal("what a refresh returns aliases the remembered answer")
+	}
+	now = now.Add(2 * time.Minute)
+	if got := c.codexSubscriptionForRefresh(); asked != 2 || got.Windows[0].UsedPercent != 2 {
+		t.Fatalf("a refresh after %v did not ask: %#v after %d questions", codexSubscriptionEvery, got, asked)
+	}
+
+	// An answer of "nothing to show" is remembered too.
+	nobody := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) {
+		asked++
+		return codexctl.AccountUsage{}, errors.New("codex is not installed")
+	})
+	asked = 0
+	nobody.now = func() time.Time { return now }
+	nobody.codexSubscriptionForRefresh()
+	nobody.codexSubscriptionForRefresh()
+	if asked != 1 {
+		t.Fatalf("an agent that cannot answer was asked %d times", asked)
+	}
+}
+
+func TestCodexQuotaAnswerSurvivesARestart(t *testing.T) {
+	now := time.Now()
+	dir := t.TempDir()
+	asked := 0
+	read := func(context.Context) (codexctl.AccountUsage, error) {
+		asked++
+		return codexctl.AccountUsage{Plan: "pro", Primary: &codexctl.UsageWindow{UsedPercent: 12, WindowMinutes: 300}}, nil
+	}
+	c := collectorWithCodexAccount(read)
+	c.usageCacheDir, c.now = dir, func() time.Time { return now }
+	c.codexSubscriptionForRefresh()
+
+	restarted := collectorWithCodexAccount(read)
+	restarted.usageCacheDir, restarted.now = dir, func() time.Time { return now.Add(10 * time.Minute) }
+	if got := restarted.codexSubscriptionForRefresh(); asked != 1 || got == nil || got.Windows[0].UsedPercent != 12 {
+		t.Fatalf("a restart asked Codex again: %#v after %d questions", got, asked)
+	}
+
+	late := collectorWithCodexAccount(read)
+	late.usageCacheDir, late.now = dir, func() time.Time { return now.Add(codexSubscriptionEvery + time.Minute) }
+	late.codexSubscriptionForRefresh()
+	if asked != 2 {
+		t.Fatalf("an answer older than %v was reused: %d questions", codexSubscriptionEvery, asked)
+	}
+}

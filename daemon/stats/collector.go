@@ -57,6 +57,10 @@ type Collector struct {
 	// refreshMu.
 	grokFiles       map[string]grokSessionUsage
 	grokFilesPrices map[string]map[string]modelPricing
+	// codexSubscriptionAt and codexSubscriptionLast are when Codex was last
+	// asked for its quota and what it answered. Guarded by refreshMu.
+	codexSubscriptionAt   time.Time
+	codexSubscriptionLast *CodexSubscriptionUsage
 }
 
 type codexThreadList struct {
@@ -474,7 +478,7 @@ func (c *Collector) refresh() {
 	c.cached = &StatsResponse{Type: "stats_data", Ranges: ranges}
 	c.mu.Unlock()
 
-	subscription := c.collectCodexSubscription()
+	subscription := c.codexSubscriptionForRefresh()
 	c.mu.Lock()
 	c.cached = &StatsResponse{
 		Type:              "stats_data",
