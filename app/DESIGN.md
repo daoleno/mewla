@@ -301,11 +301,18 @@ and tested):
   darkens it (a 22% shade on the seal, 12% on a tint) and squeezes it to 96%
   on the UI thread (a gesture's worklets that never activates, so the Pressable keeps the press), so it answers on the frame the
   finger lands even while the JS thread draws the chat; the Pressable still
-  owns the press (the list opens on release) and the accessibility action. The
-  sheet opens on its own state, so the tap never renders the chat, with its
-  slips in the first commit (the Work is already in memory, so there is no
-  spinner and no empty list) and its card drawn from the first frame, sliding
-  up rather than fading in; it takes touches at once. The sheet shows
+  owns the press (the list opens on release)
+  and the accessibility action. The sheet is not an RN Modal: it is mounted
+  once at the root over the tab bar and header (BrainWorkOverlayHost), and it
+  stays mounted with its slips drawn while shut (Brain publishes the Work, the
+  host draws it at low priority, memoised, and not again for the same Work). A
+  shut sheet waits below the screen, so opening is one shared value moving on
+  the UI thread, the card rising into view; no React commit of the sheet sits
+  between the press and the sheet. What a Modal did for free is done by hand:
+  Android's back button closes it (Esc on web), the keyboard is dismissed, the
+  rest of the app is hidden from screen readers while it is open and focus
+  lands on its title. It takes touches at once; dragging the grabber down
+  closes it. The sheet shows
   "Work", the goal line and the count line, and keeps the captions bare. Work that needs you also puts a seal dot on
   "Brain" and perches the cat on its slip in the conversation.
 - **Loading is not empty.** "Ready when you are" appears only once the

@@ -55,6 +55,52 @@ function slipMeta(slip: BrainWorkSlip): string | undefined {
 }
 
 /**
+ * One slip of the list. It renders again only when its own slip, its actions
+ * or its perch change, so a Work update redraws the slip it changed and not
+ * the whole list (the sheet keeps the list drawn while it is shut).
+ */
+const BrainWorkSlipRow = React.memo(function BrainWorkSlipRow({
+  slip,
+  statusShown,
+  perched,
+  animate,
+  onOpenSlip,
+  actionsFor,
+  onCatPress,
+  // Only here to break the memo and rebuild the actions.
+  refresh: _refresh,
+}: {
+  slip: BrainWorkSlip;
+  statusShown: boolean;
+  perched: boolean;
+  animate?: boolean;
+  onOpenSlip(slip: BrainWorkSlip): void;
+  actionsFor?: BrainWorkActionsFor;
+  onCatPress?: () => void;
+  refresh?: string;
+}) {
+  const actions = useMemo(() => actionsFor?.(slip, "slip"), [actionsFor, slip, _refresh]);
+  return (
+    <WorkSlip
+      status={slip.status}
+      statusLabel={slip.statusLabel}
+      statusShown={statusShown}
+      title={slip.title}
+      meta={slipMeta(slip)}
+      metaIcon={slip.calendarLabel ? "calendar" : undefined}
+      summary={slipLine(slip)}
+      unread={slip.unread}
+      perched={perched}
+      animate={animate}
+      onPress={() => onOpenSlip(slip)}
+      actions={actions}
+      onCatPress={onCatPress}
+      accessibilityLabel={[slip.statusLabel, slip.title, slip.summary].filter(Boolean).join(", ")}
+    />
+  );
+});
+
+/**
  * Current Work as slips, one caption per state. The captions carry no count:
  * the sheet's summary line ("6 running · 2 back") is the one count there,
  * and beside the wide column the cat's row is. The first needs-you slip
@@ -71,6 +117,7 @@ export function BrainWorkList({
   emptyCat,
   highlight,
   onGroupLayout,
+  refresh,
 }: {
   surface: BrainWorkSurface;
   chrome: TerminalThemeChrome;
@@ -84,6 +131,8 @@ export function BrainWorkList({
   /** The group the cat's row just pointed at; its caption lights up. */
   highlight?: BrainWorkGroup | null;
   onGroupLayout?(group: BrainWorkGroup, y: number): void;
+  /** Changes when the slips' actions do while `actionsFor` stays one function (see BrainWorkSlipRow). */
+  refresh?: string;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   if (surface.slips.length === 0) {
@@ -112,23 +161,17 @@ export function BrainWorkList({
               {BRAIN_WORK_GROUP_LABELS[group]}
             </Text>
             {slips.map((slip) => (
-              <WorkSlip
+              <BrainWorkSlipRow
                 key={slip.workId}
-                status={slip.status}
-                statusLabel={slip.statusLabel}
+                slip={slip}
                 // The group caption says it once; a card speaks only when it differs.
                 statusShown={slip.statusLabel !== BRAIN_WORK_GROUP_LABELS[group]}
-                title={slip.title}
-                meta={slipMeta(slip)}
-                metaIcon={slip.calendarLabel ? "calendar" : undefined}
-                summary={slipLine(slip)}
-                unread={slip.unread}
                 perched={Boolean(perch && slip.workId === firstNeeds)}
                 animate={animate}
-                onPress={() => onOpenSlip(slip)}
-                actions={actionsFor?.(slip, "slip")}
+                onOpenSlip={onOpenSlip}
+                actionsFor={actionsFor}
+                refresh={refresh}
                 onCatPress={onCatPress}
-                accessibilityLabel={[slip.statusLabel, slip.title, slip.summary].filter(Boolean).join(", ")}
               />
             ))}
           </View>
@@ -266,37 +309,41 @@ export function BrainGoalLine({
   );
 }
 
-/** Phone: the Work list as a sheet. */
-export function BrainWorkSheet({
-  visible,
+/**
+ * Phone: the Work list as a sheet's body, drawn by BrainWorkOverlayHost. It is
+ * memoised and sits mounted while the sheet is shut, so it renders when the
+ * Work changes and never because the sheet opened.
+ */
+export const BrainWorkSheetBody = React.memo(function BrainWorkSheetBody({
   surface,
   objective,
   chrome,
   onClose,
   onOpenSlip,
   actionsFor,
+  titleRef,
+  // Only here to break the memo: the slips' actions changed though no function's identity did.
+  refresh,
 }: {
-  visible: boolean;
   surface: BrainWorkSurface;
   objective?: BrainObjective;
   chrome: TerminalThemeChrome;
   onClose(): void;
   onOpenSlip(slip: BrainWorkSlip): void;
   actionsFor?: BrainWorkActionsFor;
+  /** Where a screen reader's focus lands when the sheet opens. */
+  titleRef?: React.RefObject<React.ComponentRef<typeof Text> | null>;
+  refresh?: string;
 }) {
   const styles = useMemo(() => createStyles(chrome), [chrome]);
   // With a goal line above ("2 of 5 back"), a second "back" count would read
   // as the same number; the Back group below still lists them.
   const summary = brainWorkSummaryLine(objective ? { ...surface.counts, back: 0 } : surface.counts);
-  // The Work is already in memory, so the sheet opens with its slips in the
-  // first commit and its card on the first frame: never a spinner, never an
-  // empty list. Touches are taken at once: the press that opened the sheet
-  // has already ended.
   return (
-    <BottomSheetFrame visible={visible} onClose={onClose} instantCard maxHeight="85%" cardStyle={{ backgroundColor: chrome.appBackground }}>
+    <>
       <View style={styles.sheetHeader}>
         <View style={styles.sheetHeading}>
-          <Text accessibilityRole="header" style={styles.columnTitle}>Work</Text>
+          <Text ref={titleRef} accessibilityRole="header" style={styles.columnTitle}>Work</Text>
           {objective ? <BrainGoalLine objective={objective} chrome={chrome} /> : null}
           {summary ? (
             <Text numberOfLines={1} style={styles.columnSummary}>{summary}</Text>
@@ -305,11 +352,11 @@ export function BrainWorkSheet({
         <IconButton icon="close" tone="ghost" size={44} iconSize={22} color={chrome.textMuted} accessibilityLabel="Close Work" onPress={onClose} style={styles.closeEnd} />
       </View>
       <ScrollView contentContainerStyle={styles.sheetContent}>
-        <BrainWorkList surface={surface} chrome={chrome} onOpenSlip={onOpenSlip} actionsFor={actionsFor} emptyCat />
+        <BrainWorkList surface={surface} chrome={chrome} onOpenSlip={onOpenSlip} actionsFor={actionsFor} refresh={refresh} emptyCat />
       </ScrollView>
-    </BottomSheetFrame>
+    </>
   );
-}
+});
 
 /**
  * One Work, and everything you can do with it: Brain's question with its
