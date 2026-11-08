@@ -58,6 +58,17 @@ func TestAcceptTold(t *testing.T) {
 		withPool(func() { v = elementValue(mb, app.pid, area) })
 		return v
 	}
+	// Posted keys reach TextEdit asynchronously; check one settled observation.
+	waitText := func(want string) string {
+		deadline := time.Now().Add(time.Second)
+		for {
+			got := text()
+			if strings.Contains(got, want) || !time.Now().Before(deadline) {
+				return got
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 	svc := NewServiceWith(dir, backend)
 	svc.SetAgentGate(func() bool { return true })
 	const worker, device = "%told", "accept-device"
@@ -92,7 +103,8 @@ func TestAcceptTold(t *testing.T) {
 	_, err := act(AgentAction{Action: "screenshot"})
 	check(err == nil, "the agent has the screen: %v", err)
 	r, err := act(AgentAction{Action: "type", Text: "Hello "})
-	check(err == nil && strings.Contains(text(), "Hello"), "the agent typed into the front app: err=%v text=%q", err, text())
+	got := waitText("Hello")
+	check(err == nil && strings.Contains(got, "Hello"), "the agent typed into the front app: err=%v text=%q", err, got)
 	check(!strings.Contains(r.Text, "person used"), "nothing to tell yet: %q", r.Text)
 
 	// 2. The person types a real key at the computer: the agent is not paused or
@@ -124,7 +136,8 @@ func TestAcceptTold(t *testing.T) {
 	time.Sleep(personMargin + 100*time.Millisecond)
 	_, err = act(AgentAction{Action: "type", Text: "ok "})
 	check(err == nil, "the agent goes on afterwards: %v", err)
-	check(strings.Contains(text(), "ok"), "with shift released (lower case lands): %q", text())
+	got = waitText("ok")
+	check(strings.Contains(got, "ok"), "with shift released (lower case lands): %q", got)
 
 	// 4. The Watch tap, through the daemon's Watch path.
 	time.Sleep(personMargin + 100*time.Millisecond)
