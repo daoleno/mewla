@@ -9,7 +9,7 @@ describe('Stats pager integration contract', () => {
   it('uses the shared native tab-view architecture with bounded platform behavior', () => {
     expect(source).toContain("import { TabView } from 'react-native-tab-view'");
     expect(source).toContain('onIndexChange={selectRangeIndex}');
-    expect(source).toContain('onPress={() => jumpTo(opt.key)}');
+    expect(source).toContain('onChange={jumpTo}');
     expect(source).toContain('animationEnabled={!reducedMotion}');
     expect(source).toContain('overScrollMode="never"');
   });
@@ -17,10 +17,10 @@ describe('Stats pager integration contract', () => {
   it('drives tab feedback from the pager position throughout a swipe or rollback', () => {
     expect(source).toContain('renderTabBar={({ position, jumpTo }) => (');
     expect(source).toContain('<StatsRangeTabBar');
-    expect(source).toContain('const translateX = position.interpolate({');
-    expect(source).toContain('const activeTextOpacity = position.interpolate({');
-    expect(source).toContain('styles.rangeTabIndicator');
-    expect(source).not.toContain('active && s.rangeTabActive');
+    // The thumb and ink follow `position` inside the shared SegmentedControl, not a local copy.
+    expect(source).toContain('<SegmentedControl');
+    expect(source).toContain('position={position}');
+    expect(source).not.toContain('rangeTabIndicator');
   });
 
   it('keeps the Activity chart scrub in control of its touches', () => {
