@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,6 +7,7 @@ import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { confirmDestructive } from "../../components/ui/confirmDestructive";
 import { Icon } from "../../components/icons/Icon";
 import { FriendsAvatar } from "../../components/friends/FriendsAvatar";
 import { checkDraftText, discardDraft, draftMediaImage, postDraft, removeDraftMedia } from "../../services/friendsAccount";
@@ -95,19 +96,17 @@ function DraftCard({ draft }: { draft: FriendsDraft }) {
   };
   const discard = () => {
     if (!currentServer || busy) return;
-    Alert.alert("Discard this draft?", undefined, [
-      { text: "Keep", style: "cancel" },
-      {
-        text: "Discard",
-        style: "destructive",
-        onPress: () => {
-          setBusy(true);
-          discardDraft(currentServer, draft.id)
-            .then(() => refresh())
-            .catch(() => setBusy(false));
-        },
+    confirmDestructive({
+      title: "Discard this draft?",
+      confirmLabel: "Discard",
+      cancelLabel: "Keep",
+      onConfirm: () => {
+        setBusy(true);
+        discardDraft(currentServer, draft.id)
+          .then(() => refresh())
+          .catch(() => setBusy(false));
       },
-    ]);
+    });
   };
 
   const length = text.trim().length;
