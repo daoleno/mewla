@@ -14,7 +14,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -87,6 +86,7 @@ import { AboutSection } from "../components/settings/AboutSection";
 import { CalendarAlertsSection } from "../components/settings/CalendarAlertsSection";
 import { LabsSection } from "../components/settings/LabsSection";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
+import { MultilineField } from "../components/ui/MultilineField";
 import { RisingSheet } from "../components/ui/RisingSheet";
 import {
   HEADER_BACK_BUTTON_SIZE,
@@ -697,19 +697,16 @@ export default function SettingsScreen() {
             </Text>
 
             <Text style={styles.fieldLabel}>Pairing link</Text>
-            <TextInput
-              style={[styles.input, styles.importInput]}
+            <MultilineField
+              minHeight={112}
+              style={styles.mono}
               value={draftImportValue}
               onChangeText={setDraftImportValue}
               accessibilityLabel="Pairing link"
               placeholder="mewla://settings?p=… or https://…/#pair=…"
               placeholderTextColor={colors.textSecondary}
-              selectionColor={colors.selectionBackground}
-              cursorColor={colors.accentStrong}
               autoCapitalize="none"
               autoCorrect={false}
-              multiline
-              textAlignVertical="top"
             />
             <View style={styles.modalActions}>
               <Button label="Cancel" variant="plain" style={styles.modalAction} onPress={closeEditor} />
@@ -1214,22 +1211,7 @@ function createStyles(theme: ResolvedTheme) {
       color: colors.textSecondary,
       marginBottom: 7,
     },
-    input: {
-      ...UiTextMetrics,
-      ...TypeScale.mono,
-      minHeight: 44,
-      backgroundColor: colors.inputBackground,
-      borderRadius: Radii.sm,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      color: colors.textPrimary,
-      borderWidth: 1,
-      borderColor: colors.borderStrong,
-    },
-    importInput: {
-      minHeight: 112,
-      paddingTop: 10,
-    },
+    mono: { ...TypeScale.mono },
     modalActions: {
       flexDirection: "row",
       flexWrap: "wrap",

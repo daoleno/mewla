@@ -71,6 +71,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { ChipGroup, type ChipOption } from "../components/ui/ChipGroup";
 import { IconButton } from "../components/ui/IconButton";
 import { MobileSingleLineInput } from "../components/ui/MobileSingleLineInput";
+import { MultilineField } from "../components/ui/MultilineField";
 import { InlineNotice } from "../components/ui/InlineNotice";
 import { useDesktopWeb } from "../components/navigation/useDesktopWeb";
 
@@ -928,11 +929,10 @@ const Field = React.memo(function Field(
     <View style={[styles.field, containerStyle]}>
       <Text style={styles.fieldLabel}>{label}</Text>
       {input.multiline ? (
-        <TextInput
+        <MultilineField
           {...input}
           accessibilityLabel={label}
           placeholderTextColor={colors.textTertiary}
-          style={[styles.input, styles.multiline]}
         />
       ) : (
         <MobileSingleLineInput
@@ -1161,20 +1161,6 @@ function createStyles(colors: any) {
     dateField: { flex: 1.35 },
     timeField: { flex: 1 },
     fieldLabel: { ...TypeScale.label, color: colors.textSecondary },
-    input: {
-      ...TypeScale.body,
-      color: colors.textPrimary,
-      borderWidth: 1,
-      borderColor: colors.borderSubtle,
-      borderRadius: Radii.sm,
-      paddingHorizontal: 12,
-      backgroundColor: colors.bgPrimary,
-    },
-    multiline: {
-      minHeight: 92,
-      paddingVertical: 10,
-      textAlignVertical: "top",
-    },
     ambiguity: { gap: 8 },
     validationError: { ...TypeScale.compact, color: colors.statusFailed },
     resolvedCard: {
