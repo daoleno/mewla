@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
@@ -21,6 +20,7 @@ import type {
   SkillsRequestState,
 } from "../../services/skillsManagement";
 import { skillAgentLabel, skillsRequestData } from "../../services/skillsManagement";
+import { IconButton } from "../ui/IconButton";
 import { ChipGroup } from "../ui/ChipGroup";
 import { SegmentedControl, type SegmentedOption } from "../ui/SegmentedControl";
 import { PLUGINS_SKILLS_SCREEN_PADDING } from "../../services/pluginsSkillsSurfaceModel";
@@ -464,13 +464,15 @@ function PluginInspector({
             {pluginCopyLabel(copy)}
           </Text>
         </View>
-        <Pressable
+        <IconButton
+          icon="close"
+          tone="ghost"
+          size={44}
+          iconSize={22}
+          color={colors.textSecondary}
           accessibilityLabel="Close Plugin details"
           onPress={onClose}
-          style={styles.close}
-        >
-          <Icon name="close" size={22} color={colors.textSecondary} />
-        </Pressable>
+        />
       </View>
       <ScrollView contentContainerStyle={styles.inspectorScroll}>
         {copy.description ? <PluginDetailSection title="Overview">
@@ -624,26 +626,17 @@ function PluginCopyCard({
         </View>
       )}
       {copy.capability.canUninstall ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Uninstall copy from ${copy.location}`}
-          disabled={Boolean(preparingMutation)}
-          onPress={onUninstall}
-          style={({ pressed }) => [
-            styles.rowDelete,
-            (pressed || Boolean(preparingMutation)) && styles.dimmed,
-          ]}
-        >
-          {uninstalling ? (
-            <ActivityIndicator size="small" color={colors.dangerText} />
-          ) : (
-            <Icon
-              name="trash"
-              size={20}
-              color={colors.dangerText}
-            />
-          )}
-        </Pressable>
+        <IconButton
+                  icon="trash"
+                  tone="ghost"
+                  size={44}
+                  iconSize={20}
+                  color={colors.dangerText}
+                  accessibilityLabel={`Uninstall copy from ${copy.location}`}
+                  loading={uninstalling}
+                  disabled={Boolean(preparingMutation)}
+                  onPress={onUninstall}
+                />
       ) : null}
     </View>
   );
@@ -701,13 +694,15 @@ function PluginCopySheet({
             {plugin?.displayName}
           </Text>
         </View>
-        <Pressable
+        <IconButton
+          icon="close"
+          tone="ghost"
+          size={44}
+          iconSize={22}
+          color={colors.textSecondary}
           accessibilityLabel="Close Plugin copy selector"
           onPress={onClose}
-          style={styles.close}
-        >
-          <Icon name="close" size={22} color={colors.textSecondary} />
-        </Pressable>
+        />
       </View>
       <ScrollView contentContainerStyle={styles.copySheetBody}>
         {(plugin?.copies ?? []).map((copy) => (
@@ -802,13 +797,15 @@ function PluginFilterSheet({
         <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>
           Filter Plugins
         </Text>
-        <Pressable
+        <IconButton
+          icon="close"
+          tone="ghost"
+          size={44}
+          iconSize={22}
+          color={colors.textSecondary}
           accessibilityLabel="Close Plugin filters"
           onPress={onClose}
-          style={styles.close}
-        >
-          <Icon name="close" size={22} color={colors.textSecondary} />
-        </Pressable>
+        />
       </View>
       <ScrollView contentContainerStyle={styles.filterBody}>
         <View style={styles.filterSection}>
@@ -839,13 +836,7 @@ function PluginFilterSheet({
             onChange={(capability) => onChange({ ...filters, capability })}
           />
         </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={onClose}
-          style={[styles.doneButton, { backgroundColor: colors.accent }]}
-        >
-          <Text style={{ color: colors.textOnAccent }}>Done</Text>
-        </Pressable>
+        <Button label="Done" variant="filled" block onPress={onClose} />
       </ScrollView>
     </BottomSheetFrame>
   );
@@ -981,15 +972,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING,
   },
-  rowDelete: {
-    width: 44,
-    height: 44,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   metadata: TypeScale.compact,
-  dimmed: { opacity: 0.45 },
   panel: {
     width: 420,
     maxWidth: "44%",
@@ -1008,12 +991,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   inspectorTitle: { ...TypeScale.title, fontFamily: Typography.uiFontMedium },
-  close: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   inspectorScroll: { paddingBottom: 36 },
   detailSection: {
     paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING,
@@ -1063,12 +1040,6 @@ const styles = StyleSheet.create({
   sheetTitle: { ...TypeScale.title, fontFamily: Typography.uiFontMedium },
   filterBody: { gap: 18, paddingBottom: 18 },
   filterSection: { gap: 8 },
-  doneButton: {
-    height: 46,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   state: {
     flex: 1,
     minHeight: 180,

@@ -5,6 +5,7 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import type { BrainWorkResultEvent } from "./brainWorkEvent";
 import { brainWorkEventSummary, brainWorkEventWorkTitle } from "./brainWorkEventPresentation";
 import { Icon } from "../icons/Icon";
+import { IconButton } from "../ui/IconButton";
 
 export function BrainWorkEventDetailSheet({ event, chrome, onClose, onOpenSession }: {
   event: BrainWorkResultEvent | null;
@@ -18,9 +19,7 @@ export function BrainWorkEventDetailSheet({ event, chrome, onClose, onOpenSessio
     {event ? <>
       <View style={styles.header}>
         <Text selectable style={[styles.title, { color: chrome.text }]}>{brainWorkEventWorkTitle(event)}</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close work details" onPress={onClose} style={styles.icon}>
-          <Icon name="close" size={22} color={chrome.textMuted} />
-        </Pressable>
+        <IconButton icon="close" tone="ghost" size={44} iconSize={22} color={chrome.textMuted} accessibilityLabel="Close work details" onPress={onClose} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text selectable style={{ color: chrome.text }}>{brainWorkEventSummary(event)}</Text>
@@ -39,7 +38,6 @@ export function BrainWorkEventDetailSheet({ event, chrome, onClose, onOpenSessio
 const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { flex: 1, fontSize: 18, fontWeight: "600" },
-  icon: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   content: { gap: 16, paddingVertical: 12 },
   diagnostics: { fontSize: 13 },
   action: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 },

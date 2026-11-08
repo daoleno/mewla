@@ -31,6 +31,7 @@ import { PetSprite } from "../pets/PetSprite";
 import { markWorkOpen } from "../mewla/workOpenTiming";
 import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
 import { Icon } from "../icons/Icon";
+import { IconButton } from "../ui/IconButton";
 import { composerNeutralFill } from "../terminal/composerMaterial";
 import { CalendarOriginLink } from "../calendar/CalendarOriginLink";
 
@@ -314,9 +315,7 @@ export function BrainWorkSheet({
             <Text numberOfLines={1} style={styles.columnSummary}>{summary}</Text>
           ) : null}
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close Work" onPress={onClose} style={styles.close}>
-          <Icon name="close" size={22} color={chrome.textMuted} />
-        </Pressable>
+        <IconButton icon="close" tone="ghost" size={44} iconSize={22} color={chrome.textMuted} accessibilityLabel="Close Work" onPress={onClose} style={styles.closeEnd} />
       </View>
       <ScrollView contentContainerStyle={styles.sheetContent}>
         {listReady ? (
@@ -407,9 +406,7 @@ export function BrainWorkDetailSheet({
         <View ref={rootRef} style={styles.sheetRoot}>
           <View style={styles.sheetHeader}>
             <Text selectable style={styles.detailTitle}>{slip.title}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close Work details" onPress={onClose} style={styles.close}>
-              <Icon name="close" size={22} color={chrome.textMuted} />
-            </Pressable>
+            <IconButton icon="close" tone="ghost" size={44} iconSize={22} color={chrome.textMuted} accessibilityLabel="Close Work details" onPress={onClose} style={styles.closeEnd} />
           </View>
           <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="handled">
             <View style={styles.detailMeta}>
@@ -571,13 +568,7 @@ function createStyles(chrome: TerminalThemeChrome) {
       flexShrink: 1,
       gap: 2,
     },
-    close: {
-      width: 44,
-      height: 44,
-      marginLeft: "auto",
-      alignItems: "center",
-      justifyContent: "center",
-    },
+    closeEnd: { marginLeft: "auto" },
     sheetContent: {
       paddingTop: 4,
       paddingBottom: 12,

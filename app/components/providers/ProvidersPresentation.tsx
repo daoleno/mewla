@@ -83,6 +83,8 @@ import {
   type ProvidersEditorState,
 } from "./providersPresentationModel";
 import { Icon } from "../icons/Icon";
+import { Button } from "../ui/Button";
+import { IconButton } from "../ui/IconButton";
 import { InkSwitch } from "../ui/InkSwitch";
 
 export type {
@@ -430,18 +432,15 @@ function ProviderConnectionList({
       <ListSection
         title={`${providerClientLabel(selectedClient)} uses`}
         accessory={
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            label="Add"
+            icon="add"
+            variant="plain"
+            size="sm"
             accessibilityLabel={`Add ${providerClientLabel(selectedClient)} Provider`}
-            accessibilityState={{ disabled }}
             disabled={disabled}
-            hitSlop={10}
             onPress={() => onOpenEditor({ kind: "create", client: selectedClient })}
-            style={({ pressed }) => [styles.addButton, { opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
-          >
-            <Icon name="add" size={16} color={colors.accentStrong} />
-            <Text style={styles.addButtonText}>Add</Text>
-          </Pressable>
+          />
         }
         footer={
           connections.length === 0
@@ -831,15 +830,7 @@ function ProviderEditorSheet({
           <Text style={styles.editorTitle} accessibilityRole="header">
             {title}
           </Text>
-          <Pressable
-            accessibilityLabel="Close"
-            accessibilityRole="button"
-            hitSlop={8}
-            style={styles.editorClose}
-            onPress={handleClose}
-          >
-            <Icon name="close" size={22} color={colors.textSecondary} />
-          </Pressable>
+          <IconButton icon="close" tone="tinted" size={36} iconSize={22} color={colors.textSecondary} accessibilityLabel="Close" onPress={handleClose} />
         </View>
 
         {editor?.kind === "edit" && editor.retry ? (
@@ -912,28 +903,15 @@ function ProviderEditorSheet({
         ) : null}
 
         {endpoint && normalizedClient ? (
-          <AnimatedPressable
-            style={[styles.testButton, !canTest && styles.buttonDisabled]}
-            preset="press"
-            scale={0.99}
+          <Button
+            label={testing ? "Testing…" : "Test connection"}
+            icon="pulse"
+            variant="outlined"
+            block
+            loading={testing}
             disabled={!canTest}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canTest, busy: testing }}
             onPress={() => void handleTest()}
-          >
-            {testing ? (
-              <ActivityIndicator size="small" color={colors.textPrimary} />
-            ) : (
-              <Icon
-                name="pulse"
-                size={18}
-                color={colors.textPrimary}
-              />
-            )}
-            <Text style={styles.testButtonText}>
-              {testing ? "Testing…" : "Test connection"}
-            </Text>
-          </AnimatedPressable>
+          />
         ) : null}
 
         {testState.kind === "success" ? (
@@ -956,17 +934,15 @@ function ProviderEditorSheet({
           </View>
         ) : null}
 
-        <AnimatedPressable
-          style={[styles.saveButton, !canSave && styles.buttonDisabled]}
-          preset="press"
-          scale={0.98}
+        <Button
+          label={saveLabel}
+          variant="filled"
+          size="lg"
+          block
+          loading={mutating}
           disabled={!canSave}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canSave, busy: mutating }}
           onPress={() => void handleSave()}
-        >
-          <Text style={styles.saveButtonText}>{saveLabel}</Text>
-        </AnimatedPressable>
+        />
       </ScrollView>
     </RisingSheet>
   );
@@ -1040,15 +1016,7 @@ function ModelSyncSheet({
             {picker.connection.name} · {enabledCount} of {choices.length} on
           </Text>
         </View>
-        <Pressable
-          accessibilityLabel="Close model access"
-          accessibilityRole="button"
-          hitSlop={8}
-          style={styles.editorClose}
-          onPress={onClose}
-        >
-          <Icon name="close" size={22} color={colors.textSecondary} />
-        </Pressable>
+        <IconButton icon="close" tone="tinted" size={36} iconSize={22} color={colors.textSecondary} accessibilityLabel="Close model access" onPress={onClose} />
       </View>
       {usingLocalCatalog ? (
         <Text style={styles.pickerNotice}>
@@ -1140,17 +1108,6 @@ function ModelSyncSheet({
 
 function createStyles(colors: ReturnType<typeof useAppColors>) {
   return StyleSheet.create({
-    addButton: {
-      minHeight: 28,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 2,
-    },
-    addButtonText: {
-      ...UiTextMetrics,
-      ...TypeScale.label,
-      color: colors.accentStrong,
-    },
     selectRow: {
       minHeight: 60,
       flexDirection: "row",
@@ -1241,14 +1198,6 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       ...UiTextMetrics,
       ...TypeScale.title,
       color: colors.textPrimary,
-    },
-    editorClose: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.surfaceSubtle,
     },
     pickerCard: {
       width: "100%",
@@ -1373,24 +1322,6 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       marginHorizontal: 2,
       marginTop: 3,
     },
-    testButton: {
-      minHeight: 46,
-      marginTop: 8,
-      borderRadius: Radii.xs,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 8,
-      backgroundColor: colors.surfacePressed,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-    },
-    testButtonText: {
-      ...UiTextMetrics,
-      ...TypeScale.body,
-      color: colors.textPrimary,
-      fontWeight: "600",
-    },
     rowStatus: { paddingHorizontal: 0, paddingTop: 3, alignItems: "center", gap: 5 },
     testResult: {
       flexDirection: "row",
@@ -1401,20 +1332,5 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
     },
     testResultText: { ...UiTextMetrics, ...TypeScale.caption, flex: 1, color: colors.textSecondary },
     flexText: { flex: 1, marginTop: 0 },
-    saveButton: {
-      minHeight: 50,
-      marginTop: 8,
-      borderRadius: Radii.xs,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.accent,
-    },
-    buttonDisabled: { opacity: 0.45 },
-    saveButtonText: {
-      ...UiTextMetrics,
-      ...TypeScale.body,
-      color: colors.textOnAccent,
-      fontWeight: "700",
-    },
   });
 }
