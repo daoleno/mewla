@@ -14,6 +14,8 @@ if (!process.env.MEWLA_ENROLLMENT_UI_TEST) {
   mock.module("../../constants/tokens", () => ({ useAppTheme: () => ({ colors: {} }) }));
   mock.module("../ui/AppText", () => ({ AppText: "Text" }));
   mock.module("../ui/Button", () => ({ Button: "Button" }));
+  mock.module("../ui/RisingSheet", () => ({ RisingSheet: "Modal" }));
+  mock.module("../ui/InlineNotice", () => ({ InlineNotice: ({ title }: { title: string }) => React.createElement("Text", null, title) }));
   const handlers = new Map<string, (data: any) => void>();
   let currentServer = { id: "server-a" };
   const isCurrentServer = (id: string) => id === currentServer.id;

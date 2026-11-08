@@ -8,10 +8,7 @@ import React, {
 } from "react";
 import {
   AppState,
-  KeyboardAvoidingView,
   Linking,
-  Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -68,6 +65,8 @@ import {
 import { useBrain } from "../store/brain";
 import { useCurrentServer } from "../store/currentServer";
 import { Icon } from "../components/icons/Icon";
+import { BottomSheetFrame } from "../components/ui/BottomSheetFrame";
+import { Button } from "../components/ui/Button";
 import { ChipGroup, type ChipOption } from "../components/ui/ChipGroup";
 import { IconButton } from "../components/ui/IconButton";
 import { MobileSingleLineInput } from "../components/ui/MobileSingleLineInput";
@@ -440,14 +439,7 @@ function AgendaHeading({
           {isToday ? "Today" : date}
         </Text>
         {!isToday ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Return to today"
-            onPress={onToday}
-            style={styles.todayButton}
-          >
-            <Text style={styles.todayButtonText}>Today</Text>
-          </Pressable>
+          <Button label="Today" variant="tinted" size="sm" accessibilityLabel="Return to today" onPress={onToday} />
         ) : null}
       </View>
       {isToday ? (
@@ -782,26 +774,20 @@ function EditorModal({
     }
   };
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.modalBackdrop}
-      >
-        <SafeAreaView edges={["bottom", "left", "right"]} style={styles.editor}>
+    <BottomSheetFrame visible onClose={onClose} keyboardAvoiding dragToDismiss={false} maxHeight="92%">
           <View style={styles.editorHeader}>
-            <Pressable onPress={onClose} style={styles.headerAction}>
-              <Text style={styles.secondaryText}>Cancel</Text>
-            </Pressable>
+            <Button label="Cancel" variant="plain" size="sm" onPress={onClose} />
             <Text style={styles.editorTitle}>
               {existing ? "Edit item" : "New item"}
             </Text>
-            <Pressable
-              disabled={saving || !serverId}
+            <Button
+              label="Save"
+              variant="plain"
+              size="sm"
+              loading={saving}
+              disabled={!serverId}
               onPress={() => void save()}
-              style={styles.headerAction}
-            >
-              <Text style={styles.saveText}>{saving ? "Saving…" : "Save"}</Text>
-            </Pressable>
+            />
           </View>
           <ScrollView
             style={styles.editorScroll}
@@ -956,9 +942,7 @@ function EditorModal({
               ) : null}
             </View>
           </ScrollView>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
-    </Modal>
+    </BottomSheetFrame>
   );
 }
 const Field = React.memo(function Field(
@@ -1097,16 +1081,6 @@ function createStyles(colors: any) {
     },
     agendaTitle: { ...TypeScale.heading, flex: 1, color: colors.textPrimary },
     agendaAnchor: { ...TypeScale.caption, color: colors.textSecondary },
-    todayButton: {
-      minWidth: 56,
-      minHeight: 44,
-      paddingHorizontal: Spacing.sm,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: Radii.sm,
-      backgroundColor: colors.surfaceSubtle,
-    },
-    todayButtonText: { ...TypeScale.label, color: colors.accent },
     agendaStatus: {
       minHeight: 64,
       paddingVertical: Spacing.md,
@@ -1224,20 +1198,6 @@ function createStyles(colors: any) {
       borderRadius: 2,
       backgroundColor: colors.accent,
     },
-    modalBackdrop: {
-      flex: 1,
-      justifyContent: "flex-end",
-      backgroundColor: colors.modalBackdrop,
-    },
-    secondaryText: { ...TypeScale.label, color: colors.textPrimary },
-    editor: {
-      flex: 1,
-      marginTop: Spacing.xl,
-      backgroundColor: colors.bgSurface,
-      borderTopLeftRadius: Radii.lg,
-      borderTopRightRadius: Radii.lg,
-      overflow: "hidden",
-    },
     editorHeader: {
       height: 58,
       paddingHorizontal: 8,
@@ -1248,13 +1208,6 @@ function createStyles(colors: any) {
       borderBottomColor: colors.borderSubtle,
     },
     editorTitle: { ...TypeScale.heading, color: colors.textPrimary },
-    headerAction: {
-      minWidth: 70,
-      minHeight: 44,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    saveText: { ...TypeScale.label, color: colors.accent },
     editorScroll: { flex: 1 },
     form: { padding: 16, paddingBottom: 50, gap: 14 },
     field: { gap: 6 },

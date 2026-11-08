@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Radii, TypeScale, useAppColors } from "../../constants/tokens";
 import { Icon } from "../icons/Icon";
+import { BottomSheetFrame } from "../ui/BottomSheetFrame";
+import { Button } from "../ui/Button";
+import { IconButton } from "../ui/IconButton";
+import { InlineNotice } from "../ui/InlineNotice";
+import { confirmDestructive } from "../ui/confirmDestructive";
 import { StatusMark } from "../ui/StatusMark";
 import { workStatusTextInk } from "../ui/workStatus";
 import { MarkdownView } from "../work/MarkdownView";
@@ -119,10 +121,7 @@ export function CalendarItemSheet({
       : "";
   const visibleRuns = showAll ? runs : runs.slice(0, RECENT_RUNS);
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={selectedRun ? () => setRunId(null) : onClose}>
-      <View style={styles.backdrop}>
-        <SafeAreaView edges={["bottom", "left", "right"]} style={styles.sheet}>
-          <View style={styles.handle} />
+    <BottomSheetFrame visible onClose={selectedRun ? () => setRunId(null) : onClose} maxHeight="88%" desktopWidth={760}>
           {selectedRun ? (
             <ImageOwnerContext.Provider value={imageOwner}>
             <RunView
@@ -142,9 +141,7 @@ export function CalendarItemSheet({
                   <Text style={styles.title}>{item.title}</Text>
                   <Text style={styles.schedule}>{schedule}</Text>
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.iconButton}>
-                  <Icon name="close" size={23} color={colors.textPrimary} />
-                </Pressable>
+                <IconButton icon="close" tone="ghost" size={44} iconSize={22} color={colors.textPrimary} accessibilityLabel="Close" onPress={onClose} />
               </View>
               <ScrollView contentContainerStyle={styles.content}>
                 {summary ? <Text style={styles.summary}>{summary}</Text> : null}
@@ -204,41 +201,36 @@ export function CalendarItemSheet({
                     ) : null}
                   </View>
                 ) : null}
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {error ? <InlineNotice tone="danger" title={error} /> : null}
               </ScrollView>
               <View style={styles.actions}>
                 {canRun ? (
-                  <Pressable accessibilityRole="button" onPress={() => void onRun(item)} style={styles.primaryAction}>
-                    <Text style={styles.primaryText}>{item.status === "failed" ? "Retry now" : "Run now"}</Text>
-                  </Pressable>
+                  <Button
+                    label={item.status === "failed" ? "Retry now" : "Run now"}
+                    variant="filled"
+                    style={styles.flex}
+                    onPress={() => void onRun(item)}
+                  />
                 ) : null}
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={item.status === "running"}
-                  onPress={() => onEdit(item)}
-                  style={styles.secondaryAction}
-                >
-                  <Text style={styles.secondaryText}>Edit</Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
+                <Button label="Edit" variant="tinted" disabled={item.status === "running"} onPress={() => onEdit(item)} />
+                <Button
+                  label="Cancel"
+                  variant="destructive"
                   disabled={item.status === "running" || item.status === "cancelled"}
                   onPress={() =>
-                    Alert.alert("Cancel calendar item?", "It will remain in Calendar as cancelled.", [
-                      { text: "Keep", style: "cancel" },
-                      { text: "Cancel item", style: "destructive", onPress: () => void onCancel(item) },
-                    ])
+                    confirmDestructive({
+                      title: "Cancel calendar item?",
+                      message: "It will remain in Calendar as cancelled.",
+                      confirmLabel: "Cancel item",
+                      cancelLabel: "Keep",
+                      onConfirm: () => onCancel(item),
+                    })
                   }
-                  style={styles.secondaryAction}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </Pressable>
+                />
               </View>
             </>
           )}
-        </SafeAreaView>
-      </View>
-    </Modal>
+    </BottomSheetFrame>
   );
 }
 
@@ -304,9 +296,7 @@ function RunView({
   return (
     <>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="All runs" onPress={onBack} style={styles.iconButton}>
-          <Icon name="chevron-left" size={22} color={colors.textPrimary} />
-        </Pressable>
+        <IconButton icon="chevron-left" tone="ghost" size={44} iconSize={22} color={colors.textPrimary} accessibilityLabel="All runs" onPress={onBack} />
         <View style={styles.headerText}>
           <Text numberOfLines={1} style={styles.runTitle}>
             {item.title}
@@ -318,9 +308,7 @@ function RunView({
             <CalendarStatus status={run.status} />
           </View>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.iconButton}>
-          <Icon name="close" size={23} color={colors.textPrimary} />
-        </Pressable>
+        <IconButton icon="close" tone="ghost" size={44} iconSize={22} color={colors.textPrimary} accessibilityLabel="Close" onPress={onClose} />
       </View>
       <ScrollView contentContainerStyle={styles.runContent}>
         {run.status === "failed" && run.failure_reason ? (
@@ -341,13 +329,12 @@ function RunView({
       </ScrollView>
       {run.worker_session && sessionLive ? (
         <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            label="Open Session"
+            variant={run.status === "running" ? "filled" : "tinted"}
+            block
             onPress={() => onOpenSession(run.worker_session!)}
-            style={run.status === "running" ? styles.primaryAction : styles.secondaryWide}
-          >
-            <Text style={run.status === "running" ? styles.primaryText : styles.secondaryText}>Open Session</Text>
-          </Pressable>
+          />
         </View>
       ) : null}
     </>
@@ -388,30 +375,11 @@ export function CalendarStatus({ status }: { status: CalendarItem["status"] }) {
 
 function createStyles(colors: any) {
   return StyleSheet.create({
-    backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: colors.modalBackdrop },
     // A sheet on the phone; on a wide screen a reading-width column.
-    sheet: {
-      width: "100%",
-      maxWidth: 760,
-      alignSelf: "center",
-      maxHeight: "88%",
-      backgroundColor: colors.bgSurface,
-      borderTopLeftRadius: Radii.lg,
-      borderTopRightRadius: Radii.lg,
-    },
-    handle: {
-      width: 40,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: colors.border,
-      alignSelf: "center",
-      marginTop: 8,
-    },
     header: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, flexDirection: "row", alignItems: "flex-start", gap: 8 },
     headerText: { flex: 1, minWidth: 0, gap: 4, paddingTop: 2 },
     title: { ...TypeScale.title, color: colors.textPrimary },
     schedule: { ...TypeScale.compact, color: colors.textSecondary },
-    iconButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginTop: -6 },
     content: { paddingHorizontal: 16, paddingBottom: 20, gap: 14 },
     summary: { ...TypeScale.body, color: colors.textPrimary },
     secondary: { ...TypeScale.compact, color: colors.textSecondary },
@@ -444,6 +412,7 @@ function createStyles(colors: any) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.borderSubtle,
     },
+    flex: { flex: 1 },
     pressed: { backgroundColor: colors.surfacePressed },
     runMain: { flex: 1, minWidth: 0, gap: 3 },
     runMeta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
@@ -457,7 +426,6 @@ function createStyles(colors: any) {
     moreText: { ...TypeScale.label, color: colors.accent },
     status: { flexDirection: "row", alignItems: "center", gap: 4 },
     statusText: { ...TypeScale.caption, color: colors.textTertiary },
-    errorText: { ...TypeScale.compact, color: colors.statusFailed },
     actions: {
       padding: 16,
       flexDirection: "row",
@@ -465,33 +433,5 @@ function createStyles(colors: any) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.borderSubtle,
     },
-    primaryAction: {
-      flex: 1,
-      minHeight: 46,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.accent,
-      borderRadius: Radii.sm,
-    },
-    primaryText: { ...TypeScale.label, color: colors.textOnAccent },
-    secondaryAction: {
-      minWidth: 70,
-      minHeight: 46,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 12,
-      borderRadius: Radii.sm,
-      backgroundColor: colors.surfaceSubtle,
-    },
-    secondaryWide: {
-      flex: 1,
-      minHeight: 46,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: Radii.sm,
-      backgroundColor: colors.surfaceSubtle,
-    },
-    secondaryText: { ...TypeScale.label, color: colors.textPrimary },
-    cancelText: { ...TypeScale.label, color: colors.statusFailed },
   });
 }
