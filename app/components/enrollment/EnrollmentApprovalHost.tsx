@@ -79,7 +79,7 @@ export function EnrollmentApprovalSheet({ request, onDecide }: { request: Pendin
         <AppText tone="secondary">{request.platform} · {request.origin}</AppText>
         <AppText>Choose the number shown on the new device. Only approve a request you started.</AppText>
         <View style={styles.choices}>{choices.map((number) => <Button key={number} label={number} haptic={false} accessibilityState={{ selected: selected === number }} variant={selected === number ? "filled" : "outlined"} disabled={busy} onPress={() => setSelected(number)} />)}</View>
-        {error ? <InlineNotice tone="danger" title={error} /> : null}
+        {error ? <InlineNotice tone="danger" title="Decision not sent" detail={error} detailNumberOfLines={0} /> : null}
         <Button label="Approve device" variant="filled" disabled={!selected || busy} loading={busy} onPress={() => void decide(true)} />
         <Button label="Deny" variant="destructive" disabled={busy} onPress={() => void decide(false)} />
       </ScrollView>

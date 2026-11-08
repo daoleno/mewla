@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Radii, useAppColors, TypeScale, UiTextMetrics } from "../../constants/tokens";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { IconButton } from "../ui/IconButton";
+import { InlineNotice } from "../ui/InlineNotice";
 import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import type { TelegramConnectionStatus } from "../../services/websocket";
 import { Icon, type IconName } from "../icons/Icon";
@@ -130,10 +131,7 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
       {status?.owner_hint ? <Text numberOfLines={1} style={[styles.caption, { color: colors.textTertiary }]}>{status.owner_hint}</Text> : null}
     </View>
 
-    {error || status?.last_error ? <View accessibilityLiveRegion="polite" style={[styles.error, { backgroundColor: colors.dangerSoft }]}>
-      <Icon name="alert-circle-fill" size={18} color={colors.dangerText} />
-      <Text style={[styles.errorText, { color: colors.dangerText }]}>{error || status?.last_error}</Text>
-    </View> : null}
+    {error || status?.last_error ? <InlineNotice tone="danger" title="Telegram problem" detail={error || status?.last_error} detailNumberOfLines={0} /> : null}
 
     {!connected ? <Text style={[styles.notice, { color: colors.textSecondary }]}>Reconnect the current server in Settings.</Text>
       : loading ? null : error ? action("Retry", "refresh", props.onRetry, false, true)
@@ -218,8 +216,6 @@ const styles = StyleSheet.create({
   detailValueGroup: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   sectionTitle: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, paddingBottom: 6 },
   notice: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, marginTop: 8, marginBottom: 18 },
-  error: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, marginBottom: 18 },
-  errorText: { ...UiTextMetrics, ...TypeScale.compact, flex: 1 },
   advanced: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 28, paddingRight: 16 },
   advancedLabel: { paddingBottom: 0 },
 });

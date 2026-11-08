@@ -201,7 +201,7 @@ export function CalendarItemSheet({
                     ) : null}
                   </View>
                 ) : null}
-                {error ? <InlineNotice tone="danger" title={error} /> : null}
+                {error ? <InlineNotice tone="danger" title="That did not go through" detail={error} detailNumberOfLines={0} /> : null}
               </ScrollView>
               <View style={styles.actions}>
                 {canRun ? (

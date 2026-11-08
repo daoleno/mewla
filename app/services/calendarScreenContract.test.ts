@@ -47,7 +47,9 @@ describe("Calendar screen contract", () => {
     expect(source).not.toContain("Your time is clear");
     expect(source).not.toContain("Commitments created by you or Brain");
     expect(source).not.toContain("Create item");
-    expect(source).toMatch(/empty:\s*\{[^}]*minHeight: 52/s);
+    // The states are the shared inline EmptyState, not a screen-local row.
+    expect(source).toContain('<EmptyState size="inline"');
+    expect(source).not.toContain("function EmptyState");
     expect(source).not.toContain("style={styles.primaryButton}");
   });
   test("exposes all kinds, lifecycle, execution and editing", () => {
