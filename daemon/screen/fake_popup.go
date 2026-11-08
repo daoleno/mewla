@@ -43,8 +43,8 @@ func (f *FakeBackend) ChoosePopupItem(_ context.Context, e Element, title string
 // FakeKeyGuard is one guard the fake was asked for.
 type FakeKeyGuard struct {
 	Front, Target int
-	Ended bool
-	Stats KeyGuardStats
+	Ended         bool
+	Stats         KeyGuardStats
 }
 
 // GuardKey arms a fake guard.
