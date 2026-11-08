@@ -11,3 +11,6 @@ import "time"
 func StartTime(pid int) (time.Time, bool) {
 	return time.Time{}, false
 }
+
+// StartToken is unavailable on this platform, like StartTime.
+func StartToken(pid int) (string, bool) { return "", false }

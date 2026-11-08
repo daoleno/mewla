@@ -127,3 +127,14 @@ func bootTimeSecondsFromProcStat() (int64, bool) {
 	}
 	return 0, false
 }
+
+// StartToken names one run of a process: the pid with this token never names
+// another process, as the pid alone can after it is reused. It reads the one
+// stat file.
+func StartToken(pid int) (string, bool) {
+	process, err := ReadProcStat(pid)
+	if err != nil || process.Start == "" {
+		return "", false
+	}
+	return process.Start, true
+}
