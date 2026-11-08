@@ -16,8 +16,9 @@ type Service struct{}
 func NewService(string) *Service { return &Service{} }
 
 func (*Service) Act(context.Context, string, Action) (Result, error) { return Result{}, errUnsupported }
-func (*Service) View(string, bool) (*Viewer, error)                  { return nil, errUnsupported }
+func (*Service) View(string) (*Viewer, error)                        { return nil, errUnsupported }
 func (*Service) Halt(string) error                                   { return errUnsupported }
+func (*Service) Resume(string) error                                 { return errUnsupported }
 func (*Service) List() []Info                                        { return nil }
 func (*Service) SetAlive(func(string) bool)                          {}
 func (*Service) Forget(string)                                       {}

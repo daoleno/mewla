@@ -28,7 +28,7 @@ func (s *Server) displayOn() bool {
 	return s.displays != nil && s.browsers != nil && s.browsers.VirtualScreen() && vdisplay.Capability() == nil
 }
 
-// handleDisplay lists the agents' displays (GET) and stops one (POST).
+// handleDisplay lists the agents' displays (GET) and stops or resumes one (POST).
 func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.authenticateRequest(w, r, "mewla-display"); !ok {
 		return
@@ -54,11 +54,15 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 		}
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
-		if dec.Decode(&q) != nil || q.Action != "halt" || q.Worker == "" {
+		if dec.Decode(&q) != nil || (q.Action != "halt" && q.Action != "resume") || q.Worker == "" {
 			http.Error(w, "Invalid display request", http.StatusBadRequest)
 			return
 		}
-		if err := s.displays.Halt(q.Worker); err != nil {
+		change := s.displays.Halt
+		if q.Action == "resume" {
+			change = s.displays.Resume
+		}
+		if err := change(q.Worker); err != nil {
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
 			return
@@ -70,9 +74,9 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDisplayViewer bridges an authenticated WebSocket to one agent's
-// display, speaking RFB to the viewer as the Mac's Screen does. Without
-// takeover=1 the person watches and what they do is told to the agent; with
-// it the agent is held off until the socket closes.
+// display, speaking RFB to the viewer as the Mac's Screen does. What the
+// person does is told to the agent. A {"type":"hold","on":true} message holds
+// the agent off until released or the socket closes.
 func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 	device, ok := s.authenticateRequest(w, r, "mewla-display-view")
 	if !ok {
@@ -83,7 +87,6 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	worker := r.URL.Query().Get("worker")
-	takeOver := r.URL.Query().Get("takeover") == "1"
 	conn, err := displayUpgrader.Upgrade(w, r, websocketAuthResponseHeader(r))
 	if err != nil {
 		return
@@ -103,7 +106,7 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 		raw, _ := json.Marshal(v)
 		_ = write(websocket.TextMessage, raw)
 	}
-	view, err := s.displays.View(worker, takeOver)
+	view, err := s.displays.View(worker)
 	if err != nil {
 		sendJSON(map[string]string{"type": "error", "error": err.Error()})
 		return
@@ -140,10 +143,17 @@ func (s *Server) handleDisplayViewer(w http.ResponseWriter, r *http.Request) {
 				var msg struct {
 					Type string          `json:"type"`
 					T    json.RawMessage `json:"t"`
+					On   bool            `json:"on"`
 				}
-				if json.Unmarshal(data, &msg) == nil && msg.Type == "ping" {
+				if json.Unmarshal(data, &msg) != nil {
+					break
+				}
+				switch msg.Type {
+				case "ping":
 					raw, _ := json.Marshal(map[string]any{"type": "pong", "t": msg.T})
 					_ = write(websocket.TextMessage, raw)
+				case "hold":
+					view.Hold(msg.On)
 				}
 			}
 		}

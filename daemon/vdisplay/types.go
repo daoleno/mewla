@@ -46,6 +46,9 @@ type Viewer struct {
 	Conn net.Conn
 	// Relay passes the person's messages to the display and counts them.
 	Relay func(src io.Reader) error
-	// Close ends the view and, for a take over, gives the display back.
+	// Hold holds the agent off (true) or lets it go on (false). A held view
+	// that closes lets go by itself.
+	Hold func(on bool)
+	// Close ends the view and lets go of a hold.
 	Close func()
 }

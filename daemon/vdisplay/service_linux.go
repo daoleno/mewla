@@ -25,8 +25,8 @@ const maxDisplays = 6
 // Service keeps one private display per Worker, started when the agent first
 // asks for an app, and decides who holds it. Like the browser, the person's
 // input never pauses an agent by rule: it is delivered and counted, and the
-// agent hears about it with its next result. Take over and Stop are the two
-// hard switches.
+// agent hears about it with its next result. Hold and Stop are the two hard
+// switches: Hold is the person saying "mine for now" and ends with the view.
 type Service struct {
 	rootMu   sync.Mutex
 	root     string // made on first use: a short private directory, since socket paths are short
@@ -45,14 +45,14 @@ type workerDisplay struct {
 	client  *Client
 
 	mu       sync.Mutex
-	person   int       // viewers that took over
+	person   int       // viewers that hold the display
 	halted   bool      // the person stopped this Worker
 	acting   bool      // an agent action is running
 	input    Input     // since the agent last heard
 	during   bool      // some of it landed while the agent was acting
 	last     time.Time // of the latest input
 	handback time.Time // when the person last gave it back, not yet told
-	held     time.Time // when the person took over
+	held     time.Time // when the person began to hold it
 }
 
 // NewService keeps its displays' files under root; empty means a short private
@@ -87,7 +87,7 @@ func (s *Service) rootDir() (string, error) {
 
 var (
 	errHalted   = errors.New("The person stopped you from using this display. Do not ask for it again; tell them what is done and what is left.")
-	errPerson   = errors.New("The person took over the display. Do not poll; stop and report, then try again later when they hand it back.")
+	errPerson   = errors.New("The person is holding the display. Do not poll; stop and report, then try again later when they let go.")
 	errNoScreen = errors.New("You have no display yet: use action open with the program to start")
 )
 
@@ -371,10 +371,10 @@ func roundSpan(d time.Duration) string {
 	return fmt.Sprintf("%d minutes", int(d.Minutes()+0.5))
 }
 
-// View opens the display for a person. With takeOver the agent is held off
-// until the view closes; otherwise the person only watches and what they do is
-// told to the agent.
-func (s *Service) View(worker string, takeOver bool) (*Viewer, error) {
+// View opens the display for a person. What they do reaches it at once and is
+// told to the agent with its next result, which keeps going. Hold, while the
+// view is open, holds the agent off instead until released or the view closes.
+func (s *Service) View(worker string) (*Viewer, error) {
 	w, err := s.get(context.Background(), worker, false)
 	if err != nil {
 		return nil, err
@@ -387,50 +387,56 @@ func (s *Service) View(worker string, takeOver bool) (*Viewer, error) {
 		_ = conn.Close()
 		return nil, err
 	}
-	if takeOver {
+	holding := false // guarded by w.mu
+	hold := func(on bool) {
 		w.mu.Lock()
-		if w.person == 0 {
-			w.held = time.Now()
+		defer w.mu.Unlock()
+		if on == holding {
+			return
 		}
-		w.person++
-		w.halted = false // taking over lifts a Stop, as in the browser
-		w.mu.Unlock()
+		holding = on
+		if on {
+			if w.person == 0 {
+				w.held = time.Now()
+			}
+			w.person++
+			w.halted = false // holding lifts a Stop, as in the browser
+			return
+		}
+		w.person--
+		if w.person == 0 {
+			w.handback = time.Now()
+		}
 	}
 	var once sync.Once
 	return &Viewer{
 		Conn: conn,
 		Relay: func(src io.Reader) error {
 			return RelayViewer(conn, src, func(in Input) {
-				if takeOver {
-					return
-				}
 				w.mu.Lock()
+				defer w.mu.Unlock()
+				if holding {
+					return // the agent is held off: it is told how long, not what
+				}
 				w.input = w.input.Add(in)
 				w.last = time.Now()
 				if w.acting {
 					w.during = true
 				}
-				w.mu.Unlock()
 			})
 		},
+		Hold: hold,
 		Close: func() {
 			once.Do(func() {
 				_ = conn.Close()
-				if takeOver {
-					w.mu.Lock()
-					w.person--
-					if w.person == 0 {
-						w.handback = time.Now()
-					}
-					w.mu.Unlock()
-				}
+				hold(false)
 			})
 		},
 	}, nil
 }
 
-// Halt is Stop: this Worker may not use its display until the person takes
-// it over and hands it back.
+// Halt is Stop: this Worker may not use its display until the person holds it
+// and lets go, or resumes it.
 func (s *Service) Halt(worker string) error {
 	w, err := s.get(context.Background(), worker, false)
 	if err != nil {
@@ -438,6 +444,18 @@ func (s *Service) Halt(worker string) error {
 	}
 	w.mu.Lock()
 	w.halted = true
+	w.mu.Unlock()
+	return nil
+}
+
+// Resume lifts a Stop: the Worker may use its display again.
+func (s *Service) Resume(worker string) error {
+	w, err := s.get(context.Background(), worker, false)
+	if err != nil {
+		return err
+	}
+	w.mu.Lock()
+	w.halted = false
 	w.mu.Unlock()
 	return nil
 }
