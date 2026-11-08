@@ -293,6 +293,14 @@ grow with the size of a transcript or of the machine:
   decision (which processes a Worker owns) takes records up to 10 seconds old.
   Only a decision that a process is gone, such as stopping a Worker, reads every
   process again.
+- The daemon's I/O counters include what its reaped child processes read, so a
+  process started per tick is a read cost of its own. A poll does not ask tmux
+  for what it just observed (a pane's generation is the digest of its id), and
+  the sign-in probes of the configured agents, which start every agent CLI
+  (several MB of reads each for a Node or Bun CLI), run every 5 minutes once
+  every agent is found, runnable and signed in, and every 30 seconds while one
+  is missing, signed out or unsupported. An agent's version is asked once per
+  build of its binary.
 
 ## App entry and refresh behavior
 
