@@ -4,7 +4,6 @@ import { unpricedReasonLabel } from '../services/unpricedReason';
 import { costEstimateMark, statsModelHeading, statsModelKey } from '../services/statsCostPresentation';
 import {
   Animated as NativeAnimated,
-  type LayoutChangeEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,6 +37,7 @@ import { useCurrentServer } from '../store/currentServer';
 import { wsClient } from '../services/websocket';
 import { failureMessage, warnOnce } from '../services/warnOnce';
 import { AnimatedPressable } from '../components/ui/AnimatedPressable';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { RisingSheet } from '../components/ui/RisingSheet';
 import { EmptyState } from '../components/ui/EmptyState';
 import { IconButton } from '../components/ui/IconButton';
@@ -89,7 +89,7 @@ type TimeRange = StatsRange;
 
 // ── Constants ──────────────────────────────────────────────
 
-const RANGE_OPTIONS = STATS_RANGE_TABS;
+const STATS_RANGE_OPTIONS = STATS_RANGE_TABS.map(({ key, label }) => ({ value: key, label }));
 const STATS_TAB_ROUTES: Array<{ key: TimeRange; label: string }> = [
   ...STATS_RANGE_TABS,
 ];
@@ -98,8 +98,6 @@ const MAX_LIST_ITEMS = 5;
 const EMPTY_STATS_RETRY_MS = 700;
 const EMPTY_STATS_MAX_RETRIES = 3;
 const STATS_CONTENT_MAX_WIDTH = ContentWidth.page;
-const STATS_TAB_BAR_GAP = 4;
-const STATS_TAB_BAR_PADDING = 3;
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -264,7 +262,6 @@ export default function StatsScreen() {
     [currentServerId],
   );
   const [nestedHorizontalScrollActive, setNestedHorizontalScrollActive] = useState(false);
-  const [rangeTabBarWidth, setRangeTabBarWidth] = useState(0);
   const statsSnapshotRef = useRef(statsSnapshot);
 
   useEffect(() => {
@@ -337,7 +334,6 @@ export default function StatsScreen() {
   const selectRangeIndex = useCallback((index: number) => {
     const nextRange = statsRangeAt(index);
     if (nextRange === range) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRange(nextRange);
   }, [range]);
   const beginNestedHorizontalGesture = useCallback(() => {
@@ -345,9 +341,6 @@ export default function StatsScreen() {
   }, []);
   const endNestedHorizontalGesture = useCallback(() => {
     setNestedHorizontalScrollActive(false);
-  }, []);
-  const handleRangeTabBarLayout = useCallback((event: LayoutChangeEvent) => {
-    setRangeTabBarWidth(event.nativeEvent.layout.width);
   }, []);
 
   return (
@@ -363,8 +356,6 @@ export default function StatsScreen() {
           <StatsRangeTabBar
             position={position}
             range={range}
-            width={rangeTabBarWidth}
-            onLayout={handleRangeTabBarLayout}
             jumpTo={jumpTo}
             styles={s}
           />
@@ -444,70 +435,23 @@ export function StatsScreenshotDemo({
 function StatsRangeTabBar({
   position,
   range,
-  width,
-  onLayout,
   jumpTo,
   styles,
 }: {
   position: NativeAnimated.AnimatedInterpolation<number>;
   range: TimeRange;
-  width: number;
-  onLayout(event: LayoutChangeEvent): void;
   jumpTo(key: string): void;
   styles: ReturnType<typeof createStyles>;
 }) {
-  const tabWidth = Math.max(
-    0,
-    (width - STATS_TAB_BAR_PADDING * 2 - STATS_TAB_BAR_GAP * (RANGE_OPTIONS.length - 1)) /
-      RANGE_OPTIONS.length,
-  );
-  const translateX = position.interpolate({
-    inputRange: RANGE_OPTIONS.map((_, index) => index),
-    outputRange: RANGE_OPTIONS.map((_, index) => index * (tabWidth + STATS_TAB_BAR_GAP)),
-    extrapolate: 'clamp',
-  });
-
   return (
     <View style={styles.header}>
-      <View style={styles.rangeRow} onLayout={onLayout}>
-        {tabWidth > 0 && (
-          <NativeAnimated.View
-            pointerEvents="none"
-            style={[
-              styles.rangeTabIndicator,
-              { width: tabWidth, transform: [{ translateX }] },
-            ]}
-          />
-        )}
-        {RANGE_OPTIONS.map((opt, index) => {
-          const active = range === opt.key;
-          const activeTextOpacity = position.interpolate({
-            inputRange: [index - 1, index, index + 1],
-            outputRange: [0, 1, 0],
-            extrapolate: 'clamp',
-          });
-          return (
-            <AnimatedPressable
-              key={opt.key}
-              style={styles.rangeTab}
-              scale={1}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: active }}
-              accessibilityLabel={`${opt.label} range`}
-              onPress={() => jumpTo(opt.key)}
-            >
-              <Text style={styles.rangeTabText}>{opt.label}</Text>
-              <NativeAnimated.Text
-                accessible={false}
-                aria-hidden
-                style={[styles.rangeTabText, styles.rangeTabTextActive, { opacity: activeTextOpacity }]}
-              >
-                {opt.label}
-              </NativeAnimated.Text>
-            </AnimatedPressable>
-          );
-        })}
-      </View>
+      <SegmentedControl
+        accessibilityLabel="Stats range"
+        options={STATS_RANGE_OPTIONS}
+        value={range}
+        position={position}
+        onChange={jumpTo}
+      />
     </View>
   );
 }
@@ -584,7 +528,7 @@ function StatsRangeScene({
     ? 'No stats yet'
     : range === 'day'
       ? 'No activity today'
-      : `No ${RANGE_OPTIONS.find(opt => opt.key === range)?.label.toLowerCase()} activity`;
+      : `No ${STATS_RANGE_TABS.find(opt => opt.key === range)?.label.toLowerCase()} activity`;
 
   return (
     <View
@@ -1237,41 +1181,6 @@ function createStyles(colors: AppColors, isLight = true) {
       backgroundColor: colors.bgPrimary,
       zIndex: 2,
     },
-    // The same track and thumb as SegmentedControl.
-    rangeRow: {
-      flexDirection: 'row',
-      gap: STATS_TAB_BAR_GAP,
-      padding: STATS_TAB_BAR_PADDING,
-      borderRadius: Radii.pill,
-      backgroundColor: colors.surfaceSubtle,
-    },
-    rangeTabIndicator: {
-      position: 'absolute',
-      left: STATS_TAB_BAR_PADDING,
-      top: STATS_TAB_BAR_PADDING,
-      bottom: STATS_TAB_BAR_PADDING,
-      borderRadius: Radii.pill,
-      backgroundColor: isLight ? colors.bgSurface : colors.surfaceActive,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isLight ? colors.border : 'transparent',
-    },
-    rangeTab: {
-      flex: 1,
-      minWidth: 0,
-      minHeight: 38,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 4,
-      borderRadius: Radii.pill,
-      zIndex: 1,
-    },
-    rangeTabText: {
-      ...TypeScale.label,
-      ...UiTextMetrics,
-      color: colors.textSecondary,
-      textAlign: 'center',
-    },
-    rangeTabTextActive: { position: 'absolute', color: colors.textPrimary },
     scrollView: { flex: 1 },
     scroll: {
       width: '100%',
