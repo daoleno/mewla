@@ -211,6 +211,11 @@ func TestAgentWindowsProductFlow(t *testing.T) {
 		wg.Wait()
 	}
 
+	// An agent can read the page's text, not only its controls.
+	if text, denied := tool(sessions["worker-a"], map[string]any{"action": "read"}); denied || !strings.Contains(text, "Page a") {
+		t.Fatalf("read: %s", text)
+	}
+
 	// The person watches each window over the authenticated viewer.
 	type viewer struct {
 		c        *websocket.Conn

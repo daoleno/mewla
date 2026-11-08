@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -162,5 +163,24 @@ func TestCredentialStoreFallsBackAndStaysPinned(t *testing.T) {
 		if _, e := exec.LookPath("kwin_wayland"); e == nil {
 			t.Fatal("capability still depends on the wallet")
 		}
+	}
+}
+
+func TestPageTextKeepsTheAddressAndBoundsTheText(t *testing.T) {
+	raw := func(content string) json.RawMessage {
+		b, _ := json.Marshal(map[string]any{"content": content, "finalUrl": "https://example.test/a", "lifecycle": map[string]any{"noise": true}})
+		return b
+	}
+	got, err := pageText(raw("Hello 世界"))
+	if err != nil || string(got) != `{"text":"Hello 世界","truncated":false,"url":"https://example.test/a"}` {
+		t.Fatalf("%s %v", got, err)
+	}
+	long, err := pageText(raw(strings.Repeat("字", maxPageText+10)))
+	var out struct {
+		Text      string
+		Truncated bool
+	}
+	if err != nil || json.Unmarshal(long, &out) != nil || !out.Truncated || len([]rune(out.Text)) != maxPageText {
+		t.Fatalf("%v %v", err, out.Truncated)
 	}
 }

@@ -69,7 +69,7 @@ func (a *controlApp) handleBrowserControl(req control.Request) control.Response 
 }
 
 type browserToolInput struct {
-	Action string `json:"action" jsonschema:"control, release, snapshot, tabs, select_tab, navigate, new_tab, click, fill, press, dialog_status, dialog_accept or dialog_dismiss"`
+	Action string `json:"action" jsonschema:"control, release, snapshot, read, tabs, select_tab, navigate, new_tab, click, fill, press, dialog_status, dialog_accept or dialog_dismiss"`
 	URL    string `json:"url,omitempty"`
 	Target string `json:"target,omitempty"`
 	Ref    string `json:"ref,omitempty" jsonschema:"element reference from the latest snapshot, such as e2 or @e2"`
@@ -116,14 +116,14 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 	}
 	defer func() { _, _ = call(browser.Request{Action: "release"}) }()
 	server := mcp.NewServer(&mcp.Implementation{Name: "mewla-browser", Version: "1"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use your own window on this computer's browser. Request control before reading or acting. The person can watch the window and use it too: when they do, the result carries notes saying what they did (clicks, typing length, page address, never what they typed). Read them, look at the page again, and judge for yourself whether to carry on, wait or ask the person; do not stop merely because they touched it. If the person takes the browser over, or stops you, calls fail with a message saying so: wait, don't poll, and don't request it again once stopped. Never ask for credentials; when a sign-in is needed, tell the person so they can sign in themselves. release detaches this task; the window stays open until your task ends."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use your own window on this computer's browser. Request control before reading or acting. snapshot lists the controls you can use (with refs); read returns the page's text, so use it to read an article. The person can watch the window and use it too: when they do, the result carries notes saying what they did (clicks, typing length, page address, never what they typed). Read them, look at the page again, and judge for yourself whether to carry on, wait or ask the person; do not stop merely because they touched it. If the person takes the browser over, or stops you, calls fail with a message saying so: wait, don't poll, and don't request it again once stopped. Never ask for credentials; when a sign-in is needed, tell the person so they can sign in themselves. release detaches this task; the window stays open until your task ends."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		q := browser.Request{Action: "command", Lease: lease}
 		switch in.Action {
 		case "control", "release":
 			q.Action = in.Action
-		case "snapshot", "tabs", "select_tab", "navigate", "new_tab", "click", "fill", "press", "dialog_status", "dialog_accept", "dialog_dismiss":
+		case "snapshot", "read", "tabs", "select_tab", "navigate", "new_tab", "click", "fill", "press", "dialog_status", "dialog_accept", "dialog_dismiss":
 			q.Command = &browser.Command{Kind: in.Action, URL: in.URL, Target: in.Target, Ref: in.Ref, Text: in.Text}
 		default:
 			return nil, nil, errors.New("unsupported browser action")

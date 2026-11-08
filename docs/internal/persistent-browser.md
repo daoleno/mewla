@@ -85,7 +85,7 @@ live DOM and tab identity are not promised after a Chrome restart.
 ## Agent tool
 
 The shared broker tool is named `browser`. Call `control`, then
-snapshot/tabs/select_tab/navigate/new_tab/click/fill/press or the dialog
+snapshot/read (the page's text)/tabs/select_tab/navigate/new_tab/click/fill/press or the dialog
 actions; click and fill references come from the current snapshot; `release`
 detaches. Raw CDP, arbitrary evaluation and profile paths are never returned.
 Mewla injects the tool into that launch's stdio MCP configuration only, with the
