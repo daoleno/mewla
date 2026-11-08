@@ -4,7 +4,9 @@ package vdisplay
 
 import (
 	"context"
+	"image"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +27,7 @@ func viewerInput(t *testing.T, v *Viewer, msgs ...[]byte) {
 	t.Helper()
 	r, w := io.Pipe()
 	done := make(chan error, 1)
+	go func() { _, _ = io.Copy(io.Discard, v.Conn) }()
 	go func() { done <- v.Relay(r) }()
 	if _, err := w.Write([]byte{1}); err != nil { // ClientInit
 		t.Fatal(err)
@@ -157,4 +160,62 @@ func TestTwoWorkersGetTwoDisplays(t *testing.T) {
 	if l := s.List(); len(l) != 1 || l[0].ID != "b" {
 		t.Fatalf("list = %+v", l)
 	}
+}
+
+// Two Workers share one screen: each has a monitor, an app opens on its own
+// monitor, a click is relative to the monitor, and a view shows only it.
+func TestWorkersShareOneScreenWithAMonitorEach(t *testing.T) {
+	s := newService(t)
+	ctx := context.Background()
+	for _, w := range []string{"a", "b"} {
+		if _, err := s.Act(ctx, w, Action{Action: "open", Command: []string{"xmessage", "-center", w}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ra, _ := s.Monitor(ctx, "a")
+	rb, _ := s.Monitor(ctx, "b")
+	if ra == rb || ra.Dx() != MonitorWidth || rb.Dy() != MonitorHeight {
+		t.Fatalf("monitors %v %v", ra, rb)
+	}
+	scr := s.shared
+	if len(scr.client.Screens()) != 3 { // parking + two
+		t.Fatalf("screens %+v", scr.client.Screens())
+	}
+	// xmessage -center centres on the monitor it appeared on after the mover
+	// put it there: its picture is in each agent's monitor and not the other's.
+	time.Sleep(2 * time.Second)
+	for _, tc := range []struct {
+		r    image.Rectangle
+		name string
+	}{{ra, "a"}, {rb, "b"}} {
+		pix := scr.client.Crop(tc.r)
+		if blank(pix) {
+			if png, err := scr.client.Screenshot(2 * time.Second); err == nil {
+				_ = os.WriteFile("/tmp/vd-debug.png", png, 0o644)
+			}
+			t.Fatalf("monitor of %s is empty", tc.name)
+		}
+	}
+	if !blank(scr.client.Crop(image.Rect(0, 0, MonitorWidth, MonitorHeight))) {
+		t.Fatal("something stayed on the parking monitor")
+	}
+	// A monitor goes with its Worker; the other keeps its place.
+	s.Forget("a")
+	if len(scr.client.Screens()) != 2 {
+		t.Fatalf("screens after forgetting %+v", scr.client.Screens())
+	}
+	rb2, _ := s.Monitor(ctx, "b")
+	if rb2 != rb {
+		t.Fatalf("b's monitor moved: %v -> %v", rb, rb2)
+	}
+}
+
+func blank(pix []byte) bool {
+	first := pix[:4]
+	for i := 4; i+4 <= len(pix); i += 4 {
+		if pix[i] != first[0] || pix[i+1] != first[1] || pix[i+2] != first[2] {
+			return false
+		}
+	}
+	return true
 }

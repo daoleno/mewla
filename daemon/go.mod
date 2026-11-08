@@ -29,6 +29,7 @@ require (
 
 require (
 	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
+	github.com/jezek/xgb v1.3.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 )
