@@ -105,7 +105,7 @@ import { OnboardingPresentation } from "../onboarding/OnboardingPresentation";
 import { EmptyState } from "../ui/EmptyState";
 import { sessionEmptyState } from "../../services/sessionEmptyState";
 import { BrainCompanionContext, type BrainCompanion } from "../mewla/BrainCompanion";
-import { resolveBrainCatPresence, type BrainCatPresence, type BrainCatState } from "../mewla/brainCatState";
+import { brainCatTap, resolveBrainCatPresence, type BrainCatPresence, type BrainCatState } from "../mewla/brainCatState";
 import { BrainWorkColumn } from "../brain/BrainWorkPanel";
 import { BrainWorkSheetHost, type BrainWorkSheetHandle } from "../brain/BrainWorkSheetHost";
 import {
@@ -804,7 +804,7 @@ function BrainDemo() {
  * The cat's tail row opening the real Work sheet, for measuring the tap.
  * `needs` Work needing you (default 4) and `n` Work in all (default 8) set the
  * list; `stall` blocks the JS thread for that many ms every 250 ms, a stand-in
- * for a busy timeline. Timings land in `globalThis.__workOpenTimings`.
+ * for a busy timeline.
  */
 function BrainWorkOpenDemo() {
   const { needs, n, stall } = useLocalSearchParams<{ needs?: string; n?: string; stall?: string }>();
@@ -847,8 +847,22 @@ function BrainWorkOpenDemo() {
   );
   const openWork = useCallback(() => sheetRef.current?.open(), []);
   const companion = useMemo<BrainCompanion>(
-    () => ({ presence, animate: true, onOpenWork: openWork, onCatTap: () => { openWork(); return null; } }),
-    [openWork, presence],
+    () => ({
+      presence,
+      animate: true,
+      onOpenWork: openWork,
+      // As the screen does: the cat's tap is its own answer, never the list.
+      onCatTap: ({ turnRunning, turnLabel }) => {
+        const answer = brainCatTap({ presence, turnRunning, turnLabel, counts: surface.counts });
+        if (answer.kind === "open-work") {
+          const shared = globalThis as { __catOpened?: string[] };
+          shared.__catOpened = [...(shared.__catOpened ?? []), answer.workId];
+          return null;
+        }
+        return answer.kind === "say" || answer.kind === "show-turn" ? answer.text : null;
+      },
+    }),
+    [openWork, presence, surface.counts],
   );
   useEffect(() => {
     const block = Number(stall);
@@ -867,6 +881,15 @@ function BrainWorkOpenDemo() {
         ref={sheetRef}
         surface={surface}
         chrome={chrome}
+        // As the screen gives them: the slip's next steps, one tap away.
+        actionsFor={(slip) =>
+          slip.group === "needs"
+            ? [
+                { key: "reply", label: "Reply", primary: true, onPress: () => {} },
+                { key: "open", label: "Open session", onPress: () => {} },
+              ]
+            : [{ key: "open", label: "Open session", onPress: () => {} }]
+        }
         onOpenSlip={(slip) => {
           // As the screen does: a slip closes the list; the harness reads what was opened.
           sheetRef.current?.close();

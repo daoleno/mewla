@@ -147,6 +147,24 @@ if (!process.env.MEWLA_BOTTOM_SHEET_TEST_CHILD) {
     expect(rootIgnoresTouches(renderer)).toBe(true);
   });
 
+  test("an instantCard sheet is drawn on its first frame; others fade in from nothing", async () => {
+    const cardOpacity = async (instantCard: boolean) => {
+      let renderer!: TestRenderer.ReactTestRenderer;
+      await act(async () => {
+        renderer = TestRenderer.create(
+          <BottomSheetFrame visible instantCard={instantCard} onClose={() => {}}>
+            {React.createElement("content")}
+          </BottomSheetFrame>,
+        );
+      });
+      // The mocked spring has not moved: this is the card on the commit that opens it.
+      const slot = renderer.root.findAllByType("animatedView" as any)[0];
+      return [slot.props.style].flat(Infinity).find((item: any) => item?.opacity !== undefined).opacity;
+    };
+    expect(await cardOpacity(true)).toBe(1);
+    expect(await cardOpacity(false)).toBe(0);
+  });
+
   test("other sheets take touches at once", async () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {

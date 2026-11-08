@@ -297,11 +297,15 @@ and tested):
   ⋮ → Work. The hint is a button, not a line of text: Work that needs you is
   the seal pill with a chevron (the screen's one focal point), counted Work a
   tinted paper pill with a chevron, and every other state ("All quiet") plain
-  muted words. It is drawn 32 pt tall with a 46 pt press target and presses
-  with the app's spring. The sheet opens on its own state, so the tap never
-  renders the chat: its header and close button commit on the tap and the
-  slips a frame later, and it ignores touches while it rises, so a second tap
-  from someone who sees nothing yet cannot press a slip. The sheet shows
+  muted words. It is drawn 32 pt tall with a 46 pt press target. Touching it
+  darkens it (a 22% shade on the seal, 12% on a tint) and squeezes it to 96%
+  on the UI thread (a gesture's worklets that never activates, so the Pressable keeps the press), so it answers on the frame the
+  finger lands even while the JS thread draws the chat; the Pressable still
+  owns the press (the list opens on release) and the accessibility action. The
+  sheet opens on its own state, so the tap never renders the chat, with its
+  slips in the first commit (the Work is already in memory, so there is no
+  spinner and no empty list) and its card drawn from the first frame, sliding
+  up rather than fading in; it takes touches at once. The sheet shows
   "Work", the goal line and the count line, and keeps the captions bare. Work that needs you also puts a seal dot on
   "Brain" and perches the cat on its slip in the conversation.
 - **Loading is not empty.** "Ready when you are" appears only once the

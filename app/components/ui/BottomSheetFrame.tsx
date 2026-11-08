@@ -48,6 +48,12 @@ interface BottomSheetFrameProps {
   keyboardAvoiding?: boolean;
   /** Ignore touches while the sheet rises (SHEET_SETTLE_MS), for sheets a tap opens from under the card. */
   settleGuard?: boolean;
+  /**
+   * The card is drawn from the first frame and only slides up, instead of
+   * fading in from nothing. For a sheet a tap opens, where a blank first
+   * stretch reads as a tap that did nothing.
+   */
+  instantCard?: boolean;
   /** Pull the grabber down to close. On by default. */
   dragToDismiss?: boolean;
   /** Desktop web: the dialog's width. */
@@ -69,6 +75,7 @@ export function BottomSheetFrame({
   contentStyle,
   keyboardAvoiding = false,
   settleGuard = false,
+  instantCard = false,
   dragToDismiss: dragToDismissOnPhone = true,
   desktopWidth = DESKTOP_DIALOG_WIDTH,
   onClose,
@@ -109,7 +116,7 @@ export function BottomSheetFrame({
         }
       : {
           transform: [{ translateY: (1 - progress.value) * 48 + dragY.value }],
-          opacity: Math.min(1, progress.value * 1.6),
+          opacity: instantCard ? 1 : Math.min(1, progress.value * 1.6),
         },
   );
 

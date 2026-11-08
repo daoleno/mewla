@@ -28,7 +28,41 @@ if (!process.env.MEWLA_CAT_WORK_OPEN_CHILD) {
     useAppTheme: () => ({ theme: { materials: { tint: "tint" } } }),
   }));
   mock.module("../icons/Icon", () => ({ Icon: host("icon") }));
-  mock.module("../ui/AnimatedPressable", () => ({ AnimatedPressable: host("press") }));
+  // The pill's press state is a tap gesture's worklets driving shared values; keep the handlers to call them.
+  const tapHandlers: { onBegin?: () => void; onFinalize?: () => void; hitSlop?: unknown; minDuration?: number } = {};
+  const sharedValues: { value: number }[] = [];
+  mock.module("react-native-gesture-handler", () => {
+    const tap: any = {
+      minDuration(value: number) {
+        tapHandlers.minDuration = value;
+        return tap;
+      },
+      hitSlop(value: unknown) {
+        tapHandlers.hitSlop = value;
+        return tap;
+      },
+      onBegin(fn: () => void) {
+        tapHandlers.onBegin = fn;
+        return tap;
+      },
+      onFinalize(fn: () => void) {
+        tapHandlers.onFinalize = fn;
+        return tap;
+      },
+    };
+    return { Gesture: { LongPress: () => tap }, GestureDetector: host("detector") };
+  });
+  mock.module("react-native-reanimated", () => ({
+    default: { View: host("animatedView") },
+    Easing: { out: (fn: unknown) => fn, quad: 1 },
+    useSharedValue: (value: number) => {
+      const ref = React.useRef({ value });
+      sharedValues[0] = ref.current;
+      return ref.current;
+    },
+    useAnimatedStyle: (worklet: () => unknown) => worklet(),
+    withTiming: (value: number) => value,
+  }));
   mock.module("./TappableCat", () => ({ TappableCat: host("cat") }));
   mock.module("../brain/BrainWorkPanel", () => ({
     BrainWorkSheet: (props: any) => React.createElement("sheet", props),
@@ -42,7 +76,7 @@ if (!process.env.MEWLA_CAT_WORK_OPEN_CHILD) {
   const companion = (state: any, overrides: any = {}) => ({ presence: { state, count: 4 }, animate: false, ...overrides });
 
   function press(renderer: TestRenderer.ReactTestRenderer) {
-    const target = renderer.root.findByType("press" as any);
+    const target = renderer.root.findByType("pressable" as any);
     act(() => target.props.onPress());
   }
 
@@ -101,7 +135,7 @@ if (!process.env.MEWLA_CAT_WORK_OPEN_CHILD) {
           <BrainCatRow companion={companion(state) as any} label={label} chrome={chrome} onPress={() => {}} />,
         );
       });
-      const button = renderer.root.findByType("press" as any);
+      const button = renderer.root.findByType("pressable" as any);
       const style = (button.props.style as any[]).flat(Infinity).filter(Boolean);
       return {
         background: style.find((item) => item.backgroundColor)?.backgroundColor,
@@ -135,6 +169,36 @@ if (!process.env.MEWLA_CAT_WORK_OPEN_CHILD) {
     expect(onOpenWork).toHaveBeenCalledTimes(1);
   });
 
+  test("the pill answers the finger from a gesture's worklets, not from the Pressable's JS press events", async () => {
+    const c = companion("attention");
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<BrainCatRow companion={c as any} label="4 need you" chrome={chrome} onPress={() => {}} />);
+    });
+    // The press itself and its accessibility stay on the Pressable.
+    const button = renderer.root.findByType("pressable" as any);
+    expect(button.props.onPressIn).toBeUndefined();
+    expect(button.props.accessibilityRole).toBe("button");
+    // On Android and iOS a gesture that activates cancels the JS responder, so the Pressable would get a
+    // cancel instead of onPress and the list would never open. A Tap activates on lift; this one must not.
+    expect(tapHandlers.minDuration).toBeGreaterThanOrEqual(60_000);
+    // The gesture covers the same 46 pt target the Pressable does.
+    expect(tapHandlers.hitSlop).toEqual(button.props.hitSlop);
+    const shade = () => {
+      const views = renderer.root.findAllByType("animatedView" as any);
+      return views.find((view) => view.props.pointerEvents === "none")!.props.style.flat(Infinity).filter(Boolean);
+    };
+    const opacity = () => shade().find((item: any) => item.opacity !== undefined).opacity;
+    expect(opacity()).toBe(0);
+    // Finger down: the shade is on at once, with no JS press event involved.
+    act(() => tapHandlers.onBegin!());
+    await act(async () => renderer.update(<BrainCatRow companion={c as any} label="4 need you" chrome={chrome} onPress={() => {}} />));
+    expect(opacity()).toBeGreaterThan(0.15);
+    act(() => tapHandlers.onFinalize!());
+    await act(async () => renderer.update(<BrainCatRow companion={c as any} label="4 need you" chrome={chrome} onPress={() => {}} />));
+    expect(opacity()).toBe(0);
+  });
+
   test("a running turn's Working row has no hint to press", async () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -142,6 +206,6 @@ if (!process.env.MEWLA_CAT_WORK_OPEN_CHILD) {
         <BrainCatRow companion={companion("working") as any} label="Working" detail="Running a command" chrome={chrome} onPress={() => {}} turnRunning />,
       );
     });
-    expect(renderer.root.findAllByType("press" as any)).toHaveLength(0);
+    expect(renderer.root.findAllByType("pressable" as any)).toHaveLength(0);
   });
 }

@@ -224,7 +224,6 @@ export function TappableCat({
   animate,
   style,
   onPress,
-  onPressIn,
   accessibilityLabel,
   accessibilityHint,
   stillPortrait,
@@ -234,8 +233,6 @@ export function TappableCat({
   animate?: boolean;
   style?: StyleProp<ViewStyle>;
   onPress?: () => void;
-  /** The finger lands on the cat (before any press, hold or play is decided). */
-  onPressIn?: () => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
   /** See PetSprite. */
@@ -251,10 +248,6 @@ export function TappableCat({
     if (outcome.hop) hop.trigger();
     if (outcome.press) onPress?.();
   }, [consumed, doubleTap, hop, onPress]);
-  const handlePressIn = useCallback(() => {
-    pressIn();
-    onPressIn?.();
-  }, [onPressIn, pressIn]);
   const cat = (
     <HoppingCat state={state} size={size} animate={animate} hopStyle={hop.style} cheer={play.cheer} stillPortrait={stillPortrait} />
   );
@@ -269,7 +262,7 @@ export function TappableCat({
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
           accessibilityHint={accessibilityHint}
-          onPressIn={handlePressIn}
+          onPressIn={pressIn}
           onPress={press}
           onLongPress={startPet}
           onPressOut={releasePress}
