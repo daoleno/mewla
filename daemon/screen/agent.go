@@ -1595,7 +1595,7 @@ func (a *agentSession) letGoLocked() {
 		_ = a.session.Pointer(a.pointer.X, a.pointer.Y, 0)
 		a.buttons = 0
 		a.lastPost = time.Now()
-		a.shared.notePost(a.lastPost)
+		a.shared.notePointerPost(a.lastPost)
 	}
 }
 
@@ -1872,7 +1872,7 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 			_ = send(held[i], false)
 			if !background {
 				a.lastPost = time.Now()
-				a.shared.notePost(a.lastPost)
+				a.shared.noteKeyPost(a.lastPost)
 			}
 			if pid != 0 {
 				a.lastAppKey = time.Now()
@@ -1891,7 +1891,7 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 		err := send(keysym, down)
 		if !background {
 			a.lastPost = time.Now()
-			a.shared.notePost(a.lastPost)
+			a.shared.noteKeyPost(a.lastPost)
 		}
 		if pid != 0 {
 			a.lastAppKey = time.Now()
@@ -1938,7 +1938,7 @@ func (a *agentSession) input(action AgentAction, pid int, background bool) error
 		a.pointer, a.buttons = p, buttons
 		err := a.session.Pointer(p.X, p.Y, buttons)
 		a.lastPost = time.Now()
-		a.shared.notePost(a.lastPost)
+		a.shared.notePointerPost(a.lastPost)
 		return err
 	}
 	clicks := func(mask uint8, n int) error {
@@ -2362,7 +2362,7 @@ type sharedPosts struct {
 	// The agents' own events, kept for a while, so that a person's input is told
 	// from one of theirs by when it came and not by whether an agent acted later:
 	// an agent's own keys after the person's last one must not hide it.
-	posts, appKeys, appClicks []time.Time
+	keyPosts, pointerPosts, appKeys, appClicks []time.Time
 	// wakes are the spans in which a display wake-up may read as input.
 	wakes [][2]time.Time
 }
@@ -2412,16 +2412,20 @@ func (p *sharedPosts) ownAt(kind InputKind, at time.Time) bool {
 		}
 		return false
 	}
-	if near(p.posts) {
-		return true
-	}
+	// A key the agent posted can only explain a key, and a pointer event of
+	// its own a click, move or scroll: a person's click just after the
+	// agent's typing is the person's.
 	switch kind {
 	case InputKey:
-		if near(p.appKeys) {
+		if near(p.keyPosts) || near(p.appKeys) {
 			return true
 		}
 	case InputClick:
-		if near(p.appClicks) {
+		if near(p.pointerPosts) || near(p.appClicks) {
+			return true
+		}
+	default:
+		if near(p.pointerPosts) {
 			return true
 		}
 	}
@@ -2459,11 +2463,20 @@ func (p *sharedPosts) last() postTimes {
 	return postTimes{p.post, p.appKey, p.appClick}
 }
 
-func (p *sharedPosts) notePost(at time.Time) {
+func (p *sharedPosts) notePointerPost(at time.Time) {
 	if p != nil {
 		p.mu.Lock()
 		p.post = later(p.post, at)
-		p.posts = keepRecent(p.posts, at)
+		p.pointerPosts = keepRecent(p.pointerPosts, at)
+		p.mu.Unlock()
+	}
+}
+
+func (p *sharedPosts) noteKeyPost(at time.Time) {
+	if p != nil {
+		p.mu.Lock()
+		p.post = later(p.post, at)
+		p.keyPosts = keepRecent(p.keyPosts, at)
 		p.mu.Unlock()
 	}
 }
