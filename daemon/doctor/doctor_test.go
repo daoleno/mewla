@@ -1013,3 +1013,36 @@ command = "opencode"
 		t.Fatalf("summary = %q", item.Summary)
 	}
 }
+
+func TestProbeVersionAsksOncePerBuildOfABinary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agent")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	e := newEnv(Options{RunCommand: func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		asked++
+		return []byte("agent 1.2.3\n"), nil
+	}})
+	if got := e.probeVersion(path, "claude"); got == "" {
+		t.Fatal("no version")
+	}
+	e.probeVersion(path, "claude")
+	if asked != 1 {
+		t.Fatalf("the same build was asked %d times, want 1", asked)
+	}
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, later, later); err != nil {
+		t.Fatal(err)
+	}
+	e.probeVersion(path, "claude")
+	if asked != 2 {
+		t.Fatalf("a replaced binary was asked %d times in all, want 2", asked)
+	}
+	// A path that cannot be examined is never remembered.
+	e.probeVersion(filepath.Join(t.TempDir(), "missing"), "claude")
+	e.probeVersion(filepath.Join(t.TempDir(), "missing"), "claude")
+	if asked != 4 {
+		t.Fatalf("unexaminable paths were asked %d times in all, want 4", asked)
+	}
+}

@@ -66,3 +66,47 @@ func TestHostProbesReportAnInstalledButUnsupportedAgent(t *testing.T) {
 		t.Fatalf("doctor ran %d times, want 1 (shared cache)", calls)
 	}
 }
+
+func TestHostAuthProbeKeepsASettledAnswerLongerThanAnOpenOne(t *testing.T) {
+	now := time.Unix(1000, 0)
+	calls := 0
+	items := []doctor.ExecutorCheck{
+		{ID: "claude", BinaryFound: true, Runnable: true, Auth: doctor.AuthAuthenticated, VerifiedAuthenticated: true},
+		{ID: "pi", BinaryFound: true, Runnable: true, Auth: doctor.AuthUnknown},
+	}
+	probe := newHostAuthProbe(func() doctor.ExecutorsCheck {
+		calls++
+		return doctor.ExecutorsCheck{Items: items}
+	}, func() time.Time { return now })
+
+	probe("claude")
+	now = now.Add(hostAuthProbeTTL + time.Second)
+	probe("claude")
+	if calls != 1 {
+		t.Fatalf("settled agents were asked again after %v: %d runs", hostAuthProbeTTL, calls)
+	}
+	now = now.Add(hostAuthSettledTTL)
+	probe("claude")
+	if calls != 2 {
+		t.Fatalf("settled agents were not asked again after %v: %d runs", hostAuthSettledTTL, calls)
+	}
+
+	// Someone signed out is someone about to sign in: ask soon.
+	items = []doctor.ExecutorCheck{
+		{ID: "claude", BinaryFound: true, Runnable: true, Auth: doctor.AuthAuthenticated, VerifiedAuthenticated: true},
+		{ID: "codex", BinaryFound: true, Auth: doctor.AuthUnauthenticated},
+	}
+	now = now.Add(hostAuthSettledTTL + time.Second)
+	probe("claude")
+	calls = 0
+	now = now.Add(hostAuthProbeTTL + time.Second)
+	probe("claude")
+	if calls != 1 {
+		t.Fatalf("an agent waiting for sign-in was not asked again after %v: %d runs", hostAuthProbeTTL, calls)
+	}
+	for _, missing := range []doctor.ExecutorCheck{{ID: "pi"}, {ID: "opencode", BinaryFound: true, Runnable: false}} {
+		if hostProbesSettled([]doctor.ExecutorCheck{{ID: "claude", BinaryFound: true, Runnable: true}, missing}) {
+			t.Fatalf("%+v counted as settled", missing)
+		}
+	}
+}
