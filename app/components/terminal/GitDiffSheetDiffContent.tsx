@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
 import { ContinuousCorners, Radii, TouchTarget, TypeScale, UiTextMetrics } from "../../constants/tokens";
 import {
@@ -12,6 +12,7 @@ import {
 import { EmptyState } from "../ui/EmptyState";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { GitDiffFileTree } from "./GitDiffFileTree";
+import { InkSwitch } from "../ui/InkSwitch";
 import { GitDiffReader } from "./GitDiffReader";
 import { DiffIconButton } from "./GitDiffReviewControls";
 import { GitDiffDetailHeader } from "./GitDiffSheetTopChrome";
@@ -263,7 +264,7 @@ function GitDiffOptionsStrip({
       <View style={[styles.optionsCard, { backgroundColor: chrome.surface }]}>
         <View style={[styles.option, { borderBottomColor: chrome.border }]}>
           <Text style={[styles.optionLabel, { color: chrome.text }]}>Wrap lines</Text>
-          <Switch accessibilityLabel="Wrap lines" value={wrap} onValueChange={onWrapChange} />
+          <InkSwitch accessibilityLabel="Wrap lines" value={wrap} onValueChange={onWrapChange} />
         </View>
         <View style={[styles.option, { borderBottomColor: chrome.border }]}>
           <Text style={[styles.optionLabel, { color: chrome.text }]}>Text size</Text>
@@ -287,7 +288,7 @@ function GitDiffOptionsStrip({
         </View>
         <View style={[styles.option, styles.optionLast]}>
           <Text style={[styles.optionLabel, { color: chrome.text }]}>File headers</Text>
-          <Switch
+          <InkSwitch
             accessibilityLabel="File headers"
             value={showHeaders}
             onValueChange={onShowHeadersChange}
