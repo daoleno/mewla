@@ -1,0 +1,553 @@
+{
+ "subset": "hard",
+ "seed": 1108,
+ "sites": [
+  "gitlab",
+  "reddit",
+  "shopping",
+  "shopping_admin"
+ ],
+ "tasks": [
+  {
+   "id": 526,
+   "site": "gitlab",
+   "type": "MUTATE",
+   "intent": "Star the top three most stared repos in Gitlab",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 343,
+   "site": "gitlab",
+   "type": "NAVIGATE",
+   "intent": "Go to the list of all opened issues that don't have any labels for the current project",
+   "start_urls": [
+    "__GITLAB__/root/metaseq"
+   ]
+  },
+  {
+   "id": 304,
+   "site": "gitlab",
+   "type": "RETRIEVE",
+   "intent": "How many commits did Eric Bailey make between start of Feb 2023 and end of May 2023 in the current repository?",
+   "start_urls": [
+    "__GITLAB__/a11yproject/a11yproject.com"
+   ]
+  },
+  {
+   "id": 409,
+   "site": "reddit",
+   "type": "MUTATE",
+   "intent": "Reply to the manager of the website in this post with \"thanks! I am a big fan of your website.\"",
+   "start_urls": [
+    "__REDDIT__/f/books/59421/friendly-reminder-bookshop-org-exists"
+   ]
+  },
+  {
+   "id": 68,
+   "site": "reddit",
+   "type": "RETRIEVE",
+   "intent": "Among the top 10 hottest posts in the \"Books\" forum, get the author names and book titles, exactly as they appear in the post description, from those that recommend exactly one book. Return a list of objects with keys \"book\" and \"author\".",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  },
+  {
+   "id": 586,
+   "site": "shopping",
+   "type": "MUTATE",
+   "intent": "Rate my recently purchased Jiffy Mix with 4 stars using my nickname ShoppingEmma, with the summary \"Good purchase\" and review \"I like it\"",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 328,
+   "site": "shopping",
+   "type": "NAVIGATE",
+   "intent": "Pull up the page with all \"iphone 12 phone case\" listings sorted by price.",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 124,
+   "site": "shopping",
+   "type": "RETRIEVE",
+   "intent": "What is the price range of wireless earphone in the One Stop Market?. Return an object with keys \"min\" and \"max\" (as numbers, e.g., 10.99) only, without any additional details.",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 505,
+   "site": "shopping_admin",
+   "type": "MUTATE",
+   "intent": "Mark all Aeon capri as out of stock",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 707,
+   "site": "shopping_admin",
+   "type": "NAVIGATE",
+   "intent": "Show the sales order report for for last year (today is March 15, 2023).",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 65,
+   "site": "shopping_admin",
+   "type": "RETRIEVE",
+   "intent": "Get customer email(s) who completed the fifth most number of orders in the entire history",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 578,
+   "site": "gitlab",
+   "type": "MUTATE",
+   "intent": "Add the following users to repo millennials-to-snake-people as reporter: \"yjlou\" and \"a11yproject\"",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 44,
+   "site": "gitlab",
+   "type": "NAVIGATE",
+   "intent": "Open my todos page",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 350,
+   "site": "gitlab",
+   "type": "RETRIEVE",
+   "intent": "Get the usernames of other users who have access to my repo prism-theme",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 651,
+   "site": "reddit",
+   "type": "MUTATE",
+   "intent": "Reply to the post on this page with my comment \"Yeah, pittsburgh traffic, you know...\"",
+   "start_urls": [
+    "__REDDIT__/f/pittsburgh/45899/driving-in-pittsburgh-summed-up-by-one-traffic-sign"
+   ]
+  },
+  {
+   "id": 67,
+   "site": "reddit",
+   "type": "RETRIEVE",
+   "intent": "Among the top 10 hottest posts in the \"Books\" forum, get the book titles, exactly as they appear in the post description, from those that recommend exactly one book.",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  },
+  {
+   "id": 572,
+   "site": "shopping",
+   "type": "MUTATE",
+   "intent": "I recently moved, my address is 654 Aspen Road, House #3, Boston, MA, 02110, update my information on OneStopShopping accordingly",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 301,
+   "site": "shopping",
+   "type": "NAVIGATE",
+   "intent": "Open the order details page for the most recent processing order",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 163,
+   "site": "shopping",
+   "type": "RETRIEVE",
+   "intent": "Get all review titles with 2 stars or below for the product on the current page.",
+   "start_urls": [
+    "__SHOPPING__/ostent-16gb-memory-card-stick-storage-for-sony-ps-vita-psv1000-2000-pch-z081-z161-z321-z641.html"
+   ]
+  },
+  {
+   "id": 778,
+   "site": "shopping_admin",
+   "type": "MUTATE",
+   "intent": "Reduce the price of size 28 Sahara leggings by 13.5%",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 679,
+   "site": "shopping_admin",
+   "type": "NAVIGATE",
+   "intent": "Go to the list of orders that are completed",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 184,
+   "site": "shopping_admin",
+   "type": "RETRIEVE",
+   "intent": "Give me the name and color of the products that have 0 units left. Return a list of objects with keys \"name\" and \"color\".",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 799,
+   "site": "gitlab",
+   "type": "MUTATE",
+   "intent": "create a new group \"n-lab\" with members patou, egpast, westurner, jontutcher",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 357,
+   "site": "gitlab",
+   "type": "NAVIGATE",
+   "intent": "Go to the merge requests requiring my review",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 303,
+   "site": "gitlab",
+   "type": "RETRIEVE",
+   "intent": "How many commits did Kilian make during 2023 in the current repository?",
+   "start_urls": [
+    "__GITLAB__/a11yproject/a11yproject.com"
+   ]
+  },
+  {
+   "id": 618,
+   "site": "reddit",
+   "type": "MUTATE",
+   "intent": "Re-post the image of Wife's costume from this forum to funny forum using the image URL and title \"from /f/pics\"",
+   "start_urls": [
+    "__REDDIT__/f/pics"
+   ]
+  },
+  {
+   "id": 29,
+   "site": "reddit",
+   "type": "RETRIEVE",
+   "intent": "In the DIY forum, get the username and post title of the most recent post, and count the number of comments on that post that are not from the author and have more downvotes than upvotes. Return a list of objects with keys \"username\", \"post_title\", and \"count\".",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  },
+  {
+   "id": 587,
+   "site": "shopping",
+   "type": "MUTATE",
+   "intent": "Rate my recently purchased PS3 accessory with 3 stars using my nickname GamingEmma, with the summary \"Ok I guess\" and review \"Does the job\"",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 327,
+   "site": "shopping",
+   "type": "NAVIGATE",
+   "intent": "Pull up the page with all \"iphone 12 phone case\" listings sorted by name alphabetically.",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 387,
+   "site": "shopping",
+   "type": "RETRIEVE",
+   "intent": "Who gave 4 or 5 stars for phone cases from EYZUTAK",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 502,
+   "site": "shopping_admin",
+   "type": "MUTATE",
+   "intent": "Mark all Gobi HeatTec Tee as out of stock",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 157,
+   "site": "shopping_admin",
+   "type": "NAVIGATE",
+   "intent": "View the details of all customers",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 63,
+   "site": "shopping_admin",
+   "type": "RETRIEVE",
+   "intent": "Get customer email(s) who completed the second most number of orders in the entire history",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 449,
+   "site": "gitlab",
+   "type": "MUTATE",
+   "intent": "set the homepage URL on my GitLab profile to helloworld.xyz",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 106,
+   "site": "gitlab",
+   "type": "NAVIGATE",
+   "intent": "Navigate to the page showing the list of open issues in the umano/AndroidSlidingUpPanel repository that have labels related to all except BUG",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 297,
+   "site": "gitlab",
+   "type": "RETRIEVE",
+   "intent": "Get the URL to clone the most stared Covid related project with SSH. Return the URL only, without any additional details.",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 617,
+   "site": "reddit",
+   "type": "MUTATE",
+   "intent": "Re-post the image of Firework from this forum to news forum using the image URL and title \"from /f/pics\"",
+   "start_urls": [
+    "__REDDIT__/f/pics"
+   ]
+  },
+  {
+   "id": 28,
+   "site": "reddit",
+   "type": "RETRIEVE",
+   "intent": "In the Worcester forum, get the username and post title of the most recent post, and count the number of comments on that post that are not from the author and have more downvotes than upvotes. Return a list of objects with keys \"username\", \"post_title\", and \"count\".",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  },
+  {
+   "id": 435,
+   "site": "shopping",
+   "type": "MUTATE",
+   "intent": "Add the product with the lowest per unit price from my open tabs to the shopping cart",
+   "start_urls": [
+    "__SHOPPING__/35-ft-hdmi-cable-gearit-pro-series-hdmi-cable-35-feet-high-speed-ethernet-4k-resolution-3d-video-and-arc-audio-return-channel-hdmi-cable-white.html",
+    "__SHOPPING__/dp-to-hdmi-cable-6ft-2-pack-fosmon-gold-plated-displayport-to-hdmi-cable-1080p-full-hd-for-pcs-to-hdtv-monitor-projector-with-hdmi-port.html"
+   ]
+  },
+  {
+   "id": 284,
+   "site": "shopping",
+   "type": "NAVIGATE",
+   "intent": "View the product page for the least expensive shoe storage with a minimum storage capacity of 12 pairs.",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 165,
+   "site": "shopping",
+   "type": "RETRIEVE",
+   "intent": "Get all review titles with 2 stars or below for the product on the current page.",
+   "start_urls": [
+    "__SHOPPING__/sandgrens-swedish-handmade-wooden-clog-sandal-copenhagen.html"
+   ]
+  },
+  {
+   "id": 771,
+   "site": "shopping_admin",
+   "type": "MUTATE",
+   "intent": "Approve reviews with four stars or higher to display in our store.",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 708,
+   "site": "shopping_admin",
+   "type": "NAVIGATE",
+   "intent": "Show the tax report for for this year (today is March 15, 2023).",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 204,
+   "site": "shopping_admin",
+   "type": "RETRIEVE",
+   "intent": "Get the product name and final price (low to high) of the most recent completed order.Return a list of objects with keys \"name\" (product name) and \"price\" (as number, e.g., 10.99) only, without any additional details",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 659,
+   "site": "gitlab",
+   "type": "MUTATE",
+   "intent": "Create an issue in my empathy-prompts repo with title \"Integrating LLMs for better prompts\". Assign the issue to Roshanjossey (you can invite users to the project if needed). Set due date to be the beginning of Q2 2033",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 156,
+   "site": "gitlab",
+   "type": "NAVIGATE",
+   "intent": "Go to the merge requests assigned to me",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 293,
+   "site": "gitlab",
+   "type": "RETRIEVE",
+   "intent": "Get the URL to clone Super_Awesome_Robot with SSH. Return the URL only, without any additional details.",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 721,
+   "site": "reddit",
+   "type": "MUTATE",
+   "intent": "Like all submissions created by UniversityofBath in forum IAmA",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  },
+  {
+   "id": 66,
+   "site": "reddit",
+   "type": "RETRIEVE",
+   "intent": "Among the top 10 hottest posts in the \"Books\" forum, get the post titles from those that recommend exactly one book.",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  },
+  {
+   "id": 507,
+   "site": "shopping",
+   "type": "MUTATE",
+   "intent": "Buy the highest rated product from the Ceiling light category within a budget above 1000. Discard any items in your cart if it is not empty.",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 286,
+   "site": "shopping",
+   "type": "NAVIGATE",
+   "intent": "View the product page for the least expensive ssd hard drive with a minimum storage capacity of 1TB.",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 143,
+   "site": "shopping",
+   "type": "RETRIEVE",
+   "intent": "Return how much I spent on home decoration shopping during January 29, 2023 without considering shipping and handling fee. Return the value as a number (e.g., 10.99) only, without any additional details",
+   "start_urls": [
+    "__SHOPPING__"
+   ]
+  },
+  {
+   "id": 782,
+   "site": "shopping_admin",
+   "type": "MUTATE",
+   "intent": "Increase the price of all blue running tshirts in extra small and small sizes by 23%",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 709,
+   "site": "shopping_admin",
+   "type": "NAVIGATE",
+   "intent": "Show the orders report from May 1, 2021 to March 31, 2022.",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 127,
+   "site": "shopping_admin",
+   "type": "RETRIEVE",
+   "intent": "Get the top 3 search terms that match available products in the store.",
+   "start_urls": [
+    "__SHOPPING_ADMIN__"
+   ]
+  },
+  {
+   "id": 415,
+   "site": "gitlab",
+   "type": "MUTATE",
+   "intent": "Reply on the merge request assigned to me for verification functions: if the last comment is from the author, reply \"Thank you\"; otherwise tag the author (e.g., @user) as a reminder.",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 105,
+   "site": "gitlab",
+   "type": "NAVIGATE",
+   "intent": "Navigate to the page showing the list of not yet closed issues in the OpenAPITools/openapi-generator repository that have labels related to OpenAPI Generator CLI",
+   "start_urls": [
+    "__GITLAB__"
+   ]
+  },
+  {
+   "id": 307,
+   "site": "gitlab",
+   "type": "RETRIEVE",
+   "intent": "How many commits did Nic Chan make on April 7th 2022 in the current repository?",
+   "start_urls": [
+    "__GITLAB__/a11yproject/a11yproject.com"
+   ]
+  },
+  {
+   "id": 724,
+   "site": "reddit",
+   "type": "MUTATE",
+   "intent": "Like all submissions created by Hrekires in forum news",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  },
+  {
+   "id": 31,
+   "site": "reddit",
+   "type": "RETRIEVE",
+   "intent": "In the photoshopbattles forum, get the username and post title of the most recent post, and count the number of comments on that post that are not from the author and have more downvotes than upvotes. Return a list of objects with keys \"username\", \"post_title\", and \"count\".",
+   "start_urls": [
+    "__REDDIT__"
+   ]
+  }
+ ]
+}

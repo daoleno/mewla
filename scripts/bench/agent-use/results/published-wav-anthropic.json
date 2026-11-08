@@ -1,0 +1,15 @@
+{
+ "schema": "aub-published-wav/1",
+ "source": "Anthropic, Claude Sonnet 4.6 System Card (2026-02-17), section 2.18; numbers read from Figure 2.18.2.A (WebArena-Verified) and Table 2.18.1.A (WebArena)",
+ "url": "https://www-cdn.anthropic.com/78073f739564e986ff3e28522761a7a0b4484f84.pdf",
+ "note": "Official WebArena-Verified prompt and grader; 'the same scaffolding' as 2.18.1: the Computer Use API with browser tools for screenshot and DOM based navigation, general-purpose system prompt, one policy model. Average of 5 runs per task. All sites of the benchmark (including map and wikipedia), not our single-site sample; a different tool layer and harness from every row we ran, so it is a reference for the model's level, not a tool-layer comparison. Whiskers in the figure are not read here.",
+ "rows": [
+  {"suite": "webarena-verified-hard", "subset": "Hard, 258 tasks", "model": "claude-sonnet-4.6", "pass_at_1_pct": 67.7, "runs": "Average@5"},
+  {"suite": "webarena-verified-hard", "subset": "Hard, 258 tasks", "model": "claude-opus-4.6", "pass_at_1_pct": 68.2, "runs": "Average@5"},
+  {"suite": "webarena-verified-hard", "subset": "Hard, 258 tasks", "model": "claude-opus-4.5", "pass_at_1_pct": 63.6, "runs": "Average@5"},
+  {"suite": "webarena-verified-hard", "subset": "Hard, 258 tasks", "model": "claude-sonnet-4.5", "pass_at_1_pct": 57.1, "runs": "Average@5"},
+  {"suite": "webarena-verified-hard", "subset": "full set, 812 tasks", "model": "claude-sonnet-4.6", "pass_at_1_pct": 66.4, "runs": "Average@5"},
+  {"suite": "webarena-verified-hard", "subset": "full set, 812 tasks", "model": "claude-opus-4.6", "pass_at_1_pct": 66.0, "runs": "Average@5"},
+  {"suite": "webarena", "subset": "original WebArena, 812 tasks, official grader with a Claude fuzzy_match judge", "model": "claude-sonnet-4.6", "pass_at_1_pct": 65.6, "runs": "Average@5"}
+ ]
+}
