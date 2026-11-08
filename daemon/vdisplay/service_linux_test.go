@@ -65,7 +65,7 @@ func TestPersonInputIsToldNotEnforced(t *testing.T) {
 	if _, err := s.Act(ctx, "w1", Action{Action: "open", Command: []string{"xmessage", "hello"}}); err != nil {
 		t.Fatal(err)
 	}
-	v, err := s.View("w1", false)
+	v, err := s.View("w1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,17 +89,18 @@ func TestPersonInputIsToldNotEnforced(t *testing.T) {
 	}
 }
 
-func TestTakeOverStopAndHandBack(t *testing.T) {
+func TestHoldStopAndLetGo(t *testing.T) {
 	s := newService(t)
 	ctx := context.Background()
 	if _, err := s.Act(ctx, "w1", Action{Action: "open", Command: []string{"xmessage", "hello"}}); err != nil {
 		t.Fatal(err)
 	}
-	v, err := s.View("w1", true)
+	v, err := s.View("w1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Act(ctx, "w1", Action{Action: "screenshot"}); err == nil || !strings.Contains(err.Error(), "took over") {
+	v.Hold(true)
+	if _, err := s.Act(ctx, "w1", Action{Action: "screenshot"}); err == nil || !strings.Contains(err.Error(), "holding") {
 		t.Fatalf("err = %v", err)
 	}
 	if got := s.List()[0].Control; got != "person" {
@@ -111,20 +112,31 @@ func TestTakeOverStopAndHandBack(t *testing.T) {
 	if err != nil || !strings.Contains(r.Text, "handed it back") {
 		t.Fatalf("hand back: %v %q", err, r.Text)
 	}
-	// Stop holds the agent off until the person takes over and hands back.
+	// Stop holds the agent off until the person holds and lets go, or resumes it.
 	if err := s.Halt("w1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.Act(ctx, "w1", Action{Action: "screenshot"}); err == nil || !strings.Contains(err.Error(), "stopped you") {
 		t.Fatalf("err = %v", err)
 	}
-	v, err = s.View("w1", true)
+	v, err = s.View("w1")
 	if err != nil {
 		t.Fatal(err)
 	}
+	v.Hold(true)
+	v.Hold(false)
 	v.Close()
 	if _, err := s.Act(ctx, "w1", Action{Action: "screenshot"}); err != nil {
-		t.Fatalf("after take over and hand back: %v", err)
+		t.Fatalf("after hold and let go: %v", err)
+	}
+	if err := s.Halt("w1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Resume("w1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Act(ctx, "w1", Action{Action: "screenshot"}); err != nil {
+		t.Fatalf("after resume: %v", err)
 	}
 }
 
