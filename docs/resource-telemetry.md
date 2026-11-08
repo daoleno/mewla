@@ -276,6 +276,24 @@ quick restart; normal periodic collection resumes afterwards. Telegram polling
 preserves its durable state file when no facts change, and Brain presentation
 reuses provider readers for unchanged transcript sources.
 
+The cost of these loops is read syscalls and bytes read, not CPU, and it must not
+grow with the size of a transcript or of the machine:
+
+- A Claude session file that only grew is read from where the last scan stopped
+  (the usage scan) or parsed from the bytes it gained (the conversation reader,
+  `claude_incremental.go`). A replaced, shortened or rewritten file, or a rewind
+  of the conversation, starts that file over; nothing else does.
+- The per-file Claude usage aggregates are also kept in
+  `~/.cache/mewla/usage-v1/claude-files-v1.json`, keyed by the shape of the
+  aggregate and the price table, so a restart or hot reload reads only the files
+  that changed meanwhile. Edit `claudeUsageStoreVersion` when the scan starts to
+  add up something else.
+- `/proc` is walked once per tick at most: the panes' own process trees are read
+  afresh, every other process at most every 30 seconds, and an ownership
+  decision (which processes a Worker owns) takes records up to 10 seconds old.
+  Only a decision that a process is gone, such as stopping a Worker, reads every
+  process again.
+
 ## App entry and refresh behavior
 
 Open **Resources** from the menu (☰ on a phone, the sidebar on a wide screen).
