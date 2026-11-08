@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { Alert, Platform } from "react-native";
+import { Platform } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCurrentServer } from "../store/currentServer";
@@ -14,7 +14,9 @@ import { OnboardingPresentation } from "../components/onboarding/OnboardingPrese
 import { BrowserEnrollmentScreen } from "../components/enrollment/BrowserEnrollmentScreen";
 import { serverDisplayName } from "../services/serverDisplayName";
 
+import { useToast } from "../components/ui/Toast";
 export default function OnboardingScreen() {
+  const toast = useToast();
   const router = useRouter();
   const { paired } = useLocalSearchParams<{ paired?: string }>();
   const { currentServer, isCurrentServer, refreshServers } = useCurrentServer();
@@ -41,14 +43,14 @@ export default function OnboardingScreen() {
       });
       if (!saved) {
         rejected.current = value;
-        Alert.alert("Not a pairing code", "Scan the QR code mewla shows, or paste the link from mewla pair --details.");
+        toast.show({ title: "Not a pairing code", detail: "Scan the QR code mewla shows, or paste the link from mewla pair --details.", tone: "error" });
         return;
       }
       setPairedHere(true);
     } catch (error) {
       if (error instanceof PairingCancelledError) return;
       rejected.current = value;
-      Alert.alert("Pairing failed", error instanceof Error ? error.message : "Could not pair with that computer.");
+      toast.show({ title: "Pairing failed", detail: error instanceof Error ? error.message : "Could not pair with that computer.", tone: "error" });
     } finally {
       releasePairScan(scanClaim.current);
       setPairing(false);
@@ -64,7 +66,7 @@ export default function OnboardingScreen() {
       onCode={(data) => void pair(data, true)}
       onPaste={() => void Clipboard.getStringAsync().then((text) => {
         if (text.trim()) return pair(text, false);
-        Alert.alert("Nothing to paste", "Copy the link from mewla pair --details on your computer, then tap Paste again.");
+        toast.show({ title: "Nothing to paste", detail: "Copy the link from mewla pair --details on your computer, then tap Paste again.", tone: "error" });
       })}
       onContinue={() => router.replace("/")}
       onSettings={() => router.push("/settings")}
@@ -72,7 +74,7 @@ export default function OnboardingScreen() {
         if (!server || !isCurrentServer(server.id)) return;
         void setServerAutoConnect(server.id, true).then(() => {
           if (isCurrentServer(server.id)) wsClient.connect(server);
-        }).catch((error) => Alert.alert("Connection failed", error instanceof Error ? error.message : "Could not retry this server."));
+        }).catch((error) => toast.show({ title: "Connection failed", detail: error instanceof Error ? error.message : "Could not retry this server.", tone: "error" }));
       }}
     />
   );

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
-import { Alert } from "react-native";
 import type { ConnectionState } from "../../store/workers";
 import { AttachmentUploadQueue } from "../../services/attachmentUploadQueue";
 import { browserFileAsset } from "../../services/browserFileAsset";
 import { createAttachmentUploadOperation, pickUploadDocuments, resolveServerUploadTarget, MAX_COMPOSER_ATTACHMENTS, type ActiveAttachmentUpload, type UploadDocumentAsset } from "../../services/uploads";
 import type { ComposerAttachment } from "./InterfaceChatSession";
 
+import { useToast } from "../ui/Toast";
 interface UseInterfaceComposerAttachmentsInput {
   serverId: string;
   ownerKey: string;
@@ -16,6 +16,7 @@ interface UseInterfaceComposerAttachmentsInput {
 }
 
 export function useInterfaceComposerAttachments({ serverId, ownerKey, attachments, connectionState, setAttachments, focusComposer }: UseInterfaceComposerAttachmentsInput) {
+  const toast = useToast();
   const queueRef = useRef<AttachmentUploadQueue | null>(null);
   const selectionGenerationRef = useRef(0);
   const attachmentsRef = useRef(attachments);
@@ -77,7 +78,7 @@ export function useInterfaceComposerAttachments({ serverId, ownerKey, attachment
       if (selectionGenerationRef.current !== generation) return;
       addAssets(assets);
     } catch (error) {
-      if (selectionGenerationRef.current === generation) Alert.alert("Could not attach files", error instanceof Error ? error.message : "Try selecting the files again.");
+      if (selectionGenerationRef.current === generation) toast.show({ title: "Could not attach files", detail: error instanceof Error ? error.message : "Try selecting the files again.", tone: "error" });
     } finally {
       if (selectionGenerationRef.current === generation) { selectingRef.current = false; setSelecting(false); }
     }
@@ -90,7 +91,7 @@ export function useInterfaceComposerAttachments({ serverId, ownerKey, attachment
     try {
       addAssets(files.map((file) => browserFileAsset(file)));
     } catch (error) {
-      Alert.alert("Could not attach files", error instanceof Error ? error.message : "Try adding the files again.");
+      toast.show({ title: "Could not attach files", detail: error instanceof Error ? error.message : "Try adding the files again.", tone: "error" });
     }
   }, [addAssets, canAttach]);
 

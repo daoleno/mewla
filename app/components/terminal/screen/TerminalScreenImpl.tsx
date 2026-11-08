@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Linking } from "react-native";
+import { Linking } from "react-native";
 import { isWorkerSessionListFreshForConnection, useWorkers } from "../../../store/workers";
 import { useBrain } from "../../../store/brain";
 import { useWork } from "../../../store/work";
@@ -23,7 +23,9 @@ import { useDesktopPageTitle } from "../../navigation/useDesktopWeb";
 import { useCalendarOrigin } from "../../calendar/CalendarOriginLink";
 import { calendarOriginOfWork, calendarWorkOwnsSession } from "../../../services/calendarRuns";
 
+import { useToast } from "../../ui/Toast";
 export default function TerminalScreen() {
+  const toast = useToast();
   const { state } = useWorkers();
   const { state: brainState } = useBrain();
   const { state: workState } = useWork();
@@ -178,7 +180,7 @@ export default function TerminalScreen() {
   const openDSHWeb = useCallback(() => {
     if (!dshWebURL) return;
     void Linking.openURL(dshWebURL).catch((error: any) => {
-      Alert.alert("Could not open DSH Web", error?.message || dshWebURL);
+      toast.show({ title: "Could not open DSH Web", detail: error?.message || dshWebURL, tone: "error" });
     });
   }, [dshWebURL]);
 

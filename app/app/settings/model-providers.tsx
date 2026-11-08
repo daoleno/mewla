@@ -33,7 +33,9 @@ import { wsClient } from "../../services/websocket";
 import { useWorkers } from "../../store/workers";
 import { useCurrentServer } from "../../store/currentServer";
 
+import { useToast } from "../../components/ui/Toast";
 export default function ProvidersScreen() {
+  const toast = useToast();
   const router = useRouter();
   const { state } = useWorkers();
   const { currentServer } = useCurrentServer();
@@ -163,7 +165,7 @@ export default function ProvidersScreen() {
     action: () => Promise<ProvidersMutationResult>,
   ): Promise<ProvidersMutationResult | null> => {
     if (!currentServerId || !currentConnected) {
-      Alert.alert("Offline", "Connect the current server first.");
+      toast.show({ title: "Offline", detail: "Connect the current server first.", tone: "error" });
       return null;
     }
     if (ownerRef.current.catalogRequiresRefresh()) {
@@ -177,7 +179,7 @@ export default function ProvidersScreen() {
     }
     const admission = ownerRef.current.admitCatalogMutation();
     if (!admission.ok) {
-      Alert.alert("Busy", admission.reason);
+      toast.show({ title: "Busy", detail: admission.reason, tone: "error" });
       return null;
     }
     const token = admission.token;
@@ -194,10 +196,7 @@ export default function ProvidersScreen() {
       });
       if (classification === "ambiguous") {
         syncWriteLockUi();
-        Alert.alert(
-          "Refresh required",
-          "Provider write settled ambiguously. Refresh before mutating again.",
-        );
+        toast.show({ title: "Refresh required", detail: "Provider write settled ambiguously. Refresh before mutating again.", tone: "error" });
         void loadCatalog({ soft: true });
         return null;
       }
@@ -216,7 +215,7 @@ export default function ProvidersScreen() {
       });
       syncWriteLockUi();
       const presented = presentProviderError(mutationError);
-      Alert.alert(presented.title, presented.message);
+      toast.show({ title: presented.title, detail: presented.message, tone: "error" });
       return null;
     } finally {
       if (ownerRef.current.isCurrent(token)) {
@@ -251,7 +250,7 @@ export default function ProvidersScreen() {
     }
     const admission = ownerRef.current.admitCatalogMutation();
     if (!admission.ok) {
-      Alert.alert("Busy", admission.reason);
+      toast.show({ title: "Busy", detail: admission.reason, tone: "error" });
       return { status: "create_failed" };
     }
     const token = admission.token;
@@ -288,10 +287,7 @@ export default function ProvidersScreen() {
       });
       if (classification === "ambiguous") {
         syncWriteLockUi();
-        Alert.alert(
-          "Refresh required",
-          "Provider write settled ambiguously. Refresh before mutating again.",
-        );
+        toast.show({ title: "Refresh required", detail: "Provider write settled ambiguously. Refresh before mutating again.", tone: "error" });
         void loadCatalog({ soft: true });
         return { status: "create_failed" };
       }
@@ -322,7 +318,7 @@ export default function ProvidersScreen() {
           ownerRef.current.requireCatalogRefresh();
           syncWriteLockUi();
           const presented = presentProviderError(identityError);
-          Alert.alert(presented.title, presented.message);
+          toast.show({ title: presented.title, detail: presented.message, tone: "error" });
           void loadCatalog({ soft: true });
           return { status: "create_failed" };
         }
@@ -400,7 +396,7 @@ export default function ProvidersScreen() {
       });
       syncWriteLockUi();
       const presented = presentProviderError(saveError);
-      Alert.alert(presented.title, presented.message);
+      toast.show({ title: presented.title, detail: presented.message, tone: "error" });
       await loadCatalog({ soft: true });
       return { status: "create_failed" };
     } finally {
@@ -424,7 +420,7 @@ export default function ProvidersScreen() {
     }
     const admission = ownerRef.current.admitCatalogMutation();
     if (!admission.ok) {
-      Alert.alert("Busy", admission.reason);
+      toast.show({ title: "Busy", detail: admission.reason, tone: "error" });
       return;
     }
     const token = admission.token;
@@ -460,15 +456,9 @@ export default function ProvidersScreen() {
           });
           return;
         }
-        Alert.alert(
-          "Connection successful",
-          "Models were discovered, but this connection has no supported client.",
-        );
+        toast.show({ title: "Connection successful", detail: "Models were discovered, but this connection has no supported client.", tone: "info" });
       } else {
-        Alert.alert(
-          "Models unavailable",
-          "The upstream model list is unavailable. Mewla is using its local model catalog; Sync can refresh it.",
-        );
+        toast.show({ title: "Models unavailable", detail: "The upstream model list is unavailable. Mewla is using its local model catalog; Sync can refresh it.", tone: "error" });
       }
     } catch (discoverError) {
       if (!ownerRef.current.isCurrent(token)) return;
@@ -477,7 +467,7 @@ export default function ProvidersScreen() {
       });
       syncWriteLockUi();
       const presented = presentProviderError(discoverError);
-      Alert.alert(presented.title, presented.message);
+      toast.show({ title: presented.title, detail: presented.message, tone: "error" });
     } finally {
       if (ownerRef.current.isCurrent(token)) {
         setMutating(false);
