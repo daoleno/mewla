@@ -294,7 +294,8 @@ grow with the size of a transcript or of the machine:
   Codex's thread list is asked of `sqlite3` only when its database or log
   changed, so a refresh with nothing new reads nothing. Codex's quota is asked
   of its app server (a child that reads about 100 MB to start) at most every 15
-  minutes, and the last answer survives a restart.
+  minutes while Codex's state database changes and every hour while it does
+  not; the last answer survives a restart.
 - `/proc` is walked once per tick at most: the panes' own process trees are read
   afresh, every other process at most every 30 seconds, and an ownership
   decision (which processes a Worker owns) takes records up to 10 seconds old.
