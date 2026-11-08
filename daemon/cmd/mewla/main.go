@@ -728,12 +728,16 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := connectionManager.EnsureDefaults(); err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
-	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), newBrowserBackend())
+	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend())
 	if err != nil {
 		return fmt.Errorf("initialize Browser: %w", err)
 	}
 	defer browserManager.Close()
 	srv.SetBrowser(browserManager)
+	// A Worker's window goes with its session, not with its last answer.
+	browserManager.SetWorkerLive(func(id string) bool {
+		return w.GetWorker(id) != nil && w.HasSession(id)
+	})
 	screenService := screen.NewService(authManager.StorageDir())
 	go screenService.Run(ctx)
 	if daemonSupervised() {
@@ -1581,7 +1585,6 @@ func parseWorkerSpawnArgs(args []string, stderr io.Writer) (cliConfig, control.R
 	fs.BoolVar(&cfg.json, "json", true, "print JSON output")
 	fs.StringVar(&req.Name, "name", "", "visible Worker name")
 	fs.StringVar(&req.Executor, "executor", "", "configured executor name (default: the Brain host executor)")
-	fs.StringVar(&req.BrowserID, "browser", "", "explicit persistent Browser resource to attach")
 	fs.StringVar(&req.Command, "command", "", "explicit command override (delegated client policy still applies)")
 	fs.StringVar(&req.ModelID, "model", "", "model for this launch (codex, claude, pi, grok, agent); empty keeps the client default")
 	fs.StringVar(&req.ReasoningEffort, "reasoning", "", "reasoning level for this launch (codex, claude, pi); empty keeps the client default")

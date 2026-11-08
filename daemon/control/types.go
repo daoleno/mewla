@@ -21,9 +21,9 @@ import (
 	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
 	"github.com/daoleno/mewla/daemon/screen"
-	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/statedir"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
+	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
 	"github.com/daoleno/mewla/daemon/watcher"
 )
@@ -31,18 +31,17 @@ import (
 const SocketName = "control.sock"
 
 type Request struct {
-	BrowserID            string                                 `json:"browser_id,omitempty"`
-	BrowserRequest       *browser.Request                       `json:"browser_request,omitempty"`
-	ConnectionRequest    *connections.Request                   `json:"connection_request,omitempty"`
-	WatchRequest         *watch.Request                         `json:"watch_request,omitempty"`
-	ComputersRequest     *computers.Request                     `json:"computers_request,omitempty"`
-	AgentsRequest        *outsideagents.ControlRequest          `json:"agents_request,omitempty"`
-	ComputerAction       *screen.AgentAction                    `json:"computer_action,omitempty"`
-	DisplayAction        *vdisplay.Action                       `json:"display_action,omitempty"`
-	PhoneAction          *phone.AgentAction                     `json:"phone_action,omitempty"`
+	BrowserRequest    *browser.Request              `json:"browser_request,omitempty"`
+	ConnectionRequest *connections.Request          `json:"connection_request,omitempty"`
+	WatchRequest      *watch.Request                `json:"watch_request,omitempty"`
+	ComputersRequest  *computers.Request            `json:"computers_request,omitempty"`
+	AgentsRequest     *outsideagents.ControlRequest `json:"agents_request,omitempty"`
+	ComputerAction    *screen.AgentAction           `json:"computer_action,omitempty"`
+	DisplayAction     *vdisplay.Action              `json:"display_action,omitempty"`
+	PhoneAction       *phone.AgentAction            `json:"phone_action,omitempty"`
 	// IPhoneAction is one action on the iPhone, through iPhone Mirroring (type "iphone"); its
 	// answer is PhoneResult.
-	IPhoneAction *phone.AgentAction `json:"iphone_action,omitempty"`
+	IPhoneAction         *phone.AgentAction                     `json:"iphone_action,omitempty"`
 	ProcessID            int                                    `json:"process_id,omitempty"`
 	ProcessStart         string                                 `json:"process_start,omitempty"`
 	Type                 string                                 `json:"type"`

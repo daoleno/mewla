@@ -23,7 +23,7 @@ import (
 // Local control is owner-UID access, not a sandbox against arbitrary shell.
 func (a *controlApp) handleBrowserControl(req control.Request) control.Response {
 	if a.browsers == nil || req.BrowserRequest == nil || req.WorkerID == "" || len(req.Client) > 80 {
-		return control.ErrorResponse("browser_unavailable", "A managed task and browser attachment are required")
+		return control.ErrorResponse("browser_unavailable", "A managed task is required")
 	}
 	if _, err := uuid.Parse(req.Client); err != nil {
 		return control.ErrorResponse("browser_attachment", "Invalid attachment")
@@ -37,9 +37,6 @@ func (a *controlApp) handleBrowserControl(req control.Request) control.Response 
 		var active bool
 		if a.watcher != nil {
 			w := a.watcher.GetWorker(req.WorkerID)
-			if w != nil && w.BrowserID != q.ID {
-				return control.ErrorResponse("browser_attachment", "This task is not attached to the selected Browser")
-			}
 			active = w != nil && a.watcher.HasSession(req.WorkerID)
 			if active {
 				// Quiet/noninteractive provider processes can be classified idle
@@ -81,7 +78,7 @@ type browserToolInput struct {
 
 func runBrowserCommand(args []string, stderr io.Writer) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
-		fmt.Fprintln(stderr, "Usage: mewla browser mcp --id PROFILE_ID --task WORKER_ID [--state-dir DIR]\nAttach this MCP server to the selected task. Open Browser in Mewla and enable Agent access first. Browser/profile outlives this process.")
+		fmt.Fprintln(stderr, "Usage: mewla browser mcp --task WORKER_ID [--state-dir DIR]\nGive this task a window on the computer's virtual-screen browser (Settings, Labs, Virtual screen). The window opens when the task first asks; the profile and its sign-ins outlive it.")
 		return flag.ErrHelp
 	}
 	if args[0] != "mcp" {
@@ -90,15 +87,14 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("browser mcp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var cfg cliConfig
-	var id, task string
+	var task string
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "daemon state directory")
-	fs.StringVar(&id, "id", "", "explicit browser resource")
 	fs.StringVar(&task, "task", os.Getenv("MEWLA_WORKER_ID"), "active Mewla Worker ID (provided by managed launch)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if _, err := uuid.Parse(id); err != nil || task == "" || fs.NArg() != 0 {
-		return errors.New("explicit --id and --task required")
+	if task == "" || fs.NArg() != 0 {
+		return errors.New("--task required")
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -106,7 +102,6 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 	var mu sync.Mutex
 	var lease *browser.Lease
 	call := func(q browser.Request) (*browser.Response, error) {
-		q.ID = id
 		r, err := callControl(cfg, control.Request{Type: "browser", WorkerID: task, Client: client, BrowserRequest: &q})
 		if err != nil {
 			return nil, err
@@ -121,7 +116,7 @@ func runBrowserCommand(args []string, stderr io.Writer) error {
 	}
 	defer func() { _, _ = call(browser.Request{Action: "release"}) }()
 	server := mcp.NewServer(&mcp.Implementation{Name: "mewla-browser", Version: "1"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use the explicitly selected persistent Mewla Browser. Request control before reading or acting. The person can watch this browser and use it too: when they do, the result carries notes saying what they did (clicks, typing length, page address, never what they typed). Read them, look at the page again, and judge for yourself whether to carry on, wait or ask the person; do not stop merely because they touched it. If the person takes the browser over, or stops you, calls fail with a message saying so: wait, don't poll, and don't request it again once stopped. Never ask for credentials; when a sign-in is needed, tell the person so they can sign in themselves. release detaches this task without closing the browser."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "browser", Description: "Use your own window on this computer's browser. Request control before reading or acting. The person can watch the window and use it too: when they do, the result carries notes saying what they did (clicks, typing length, page address, never what they typed). Read them, look at the page again, and judge for yourself whether to carry on, wait or ask the person; do not stop merely because they touched it. If the person takes the browser over, or stops you, calls fail with a message saying so: wait, don't poll, and don't request it again once stopped. Never ask for credentials; when a sign-in is needed, tell the person so they can sign in themselves. release detaches this task; the window stays open until your task ends."}, func(ctx context.Context, req *mcp.CallToolRequest, in browserToolInput) (*mcp.CallToolResult, map[string]any, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		q := browser.Request{Action: "command", Lease: lease}

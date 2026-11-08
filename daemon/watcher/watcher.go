@@ -4134,7 +4134,6 @@ func (w *Watcher) SendAction(sessionID, action string) error {
 }
 
 type CreateSessionOptions struct {
-	BrowserID     string
 	PrepareLaunch func(string) (string, error)
 	Cwd           string
 	Command       string
@@ -4435,7 +4434,6 @@ func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionO
 		w.resourceManager().Bind(target, opts.resource.Unit)
 	}
 	worker := &classifier.Worker{
-		BrowserID:    opts.BrowserID,
 		ID:           target,
 		Name:         formatWorkerName(createdSessionName(opts), target),
 		Window:       strings.TrimSpace(createdSessionName(opts)),

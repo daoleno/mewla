@@ -21,9 +21,8 @@ const (
 
 // Worker holds the current state and metadata for a single execution session.
 type Worker struct {
-	BrowserID string `json:"browser_id,omitempty"`
-	ID        string `json:"id"`
-	Name      string `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
 	// Window is the tmux window name alone; Name adds the pane target to it.
 	// Notifications name the Worker by it.
 	Window  string `json:"-"`
