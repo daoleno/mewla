@@ -55,41 +55,63 @@ func parseClaudeConversationTail(path string) (CodexConversation, bool, error) {
 	if err != nil {
 		return CodexConversation{}, false, err
 	}
+	seed, ok, err := claudeTailSeed(file, info, path)
+	if err != nil || !ok {
+		return CodexConversation{}, false, err
+	}
+	return seed.builder.conversation(), true, nil
+}
+
+// claudeTailParse is the state a tail parse ends in: the builder has consumed
+// the window to offset, so it can go on from there when the transcript grows.
+type claudeTailParse struct {
+	builder    *claudeConversationBuilder
+	scan       *claudeBranchScan
+	offset     int64
+	lineNumber int
+}
+
+// claudeTailSeed is the tail parse: nil, false when the end of the file cannot
+// be proven to hold the whole answer. The window and the builder stop at the
+// last complete line, or at a last line that is a complete record already.
+func claudeTailSeed(file *os.File, info os.FileInfo, path string) (*claudeTailParse, bool, error) {
 	size := info.Size()
 	if size < claudeTailMinBytes {
-		return CodexConversation{}, false, nil
+		return nil, false, nil
 	}
 	sourceID := strings.TrimSuffix(pathBase(path), ".jsonl")
 	sessionID, cwd, ok, err := readClaudeHead(file, sourceID)
 	if err != nil || !ok {
-		return CodexConversation{}, false, err
+		return nil, false, err
 	}
 
 	for window := claudeTailInitialWindow; window <= claudeTailMaxWindow && window < size; window *= 2 {
 		data, start, found, err := readClaudeTailWindow(file, size, window)
 		if err != nil {
-			return CodexConversation{}, false, err
+			return nil, false, err
 		}
 		if !found {
 			continue
 		}
-		var scan claudeBranchScan
+		data = claudeUsableLines(data)
+		scan := &claudeBranchScan{}
 		consumeClaudeLines(data, 1, scan.add)
 		if scan.openParents() > 1 {
 			continue
 		}
 		prefixLines, err := claudeLinesBefore(file, info, path, start)
 		if err != nil {
-			return CodexConversation{}, false, err
+			return nil, false, err
 		}
 		builder := newClaudeConversationBuilder(sourceID)
 		builder.sessionID = sessionID
 		builder.cwd = cwd
 		builder.abandoned = scan.abandoned()
-		parsed := 0
-		consumeClaudeLines(data, prefixLines+1, func(lineNumber int, line []byte) {
+		parsed, lineNumber := 0, prefixLines
+		consumeClaudeLines(data, prefixLines+1, func(number int, line []byte) {
 			parsed++
-			builder.consumeLine(lineNumber, line)
+			lineNumber = number
+			builder.consumeLine(number, line)
 		})
 		if builder.supportedRecords == 0 || len(builder.events) < maxCodexConversationEvents {
 			continue
@@ -97,9 +119,11 @@ func parseClaudeConversationTail(path string) (CodexConversation, bool, error) {
 		if claudeTailObserve != nil {
 			claudeTailObserve(parsed)
 		}
-		return builder.conversation(), true, nil
+		return &claudeTailParse{
+			builder: builder, scan: scan, offset: start + int64(len(data)), lineNumber: lineNumber,
+		}, true, nil
 	}
-	return CodexConversation{}, false, nil
+	return nil, false, nil
 }
 
 func pathBase(path string) string {
