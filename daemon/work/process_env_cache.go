@@ -39,8 +39,8 @@ func cachedProcessTreeEnvironValue(processID int, key string) string {
 	if processID <= 0 {
 		return ""
 	}
-	process, err := workerproc.ReadProcStat(processID)
-	if err != nil || process.Start == "" {
+	start, ok := workerproc.StartToken(processID)
+	if !ok {
 		return firstProcessTreeEnvironValue(processID, key)
 	}
 	now := time.Now()
@@ -48,7 +48,7 @@ func cachedProcessTreeEnvironValue(processID int, key string) string {
 	processEnvCache.Lock()
 	entry, ok := processEnvCache.entries[k]
 	processEnvCache.Unlock()
-	if ok && entry.start == process.Start && now.Sub(entry.at) < processEnvTTL {
+	if ok && entry.start == start && now.Sub(entry.at) < processEnvTTL {
 		return entry.value
 	}
 	value := firstProcessTreeEnvironValue(processID, key)
@@ -67,6 +67,6 @@ func cachedProcessTreeEnvironValue(processID int, key string) string {
 			processEnvCache.entries = map[processEnvKey]processEnvEntry{}
 		}
 	}
-	processEnvCache.entries[k] = processEnvEntry{start: process.Start, value: value, at: now}
+	processEnvCache.entries[k] = processEnvEntry{start: start, value: value, at: now}
 	return value
 }

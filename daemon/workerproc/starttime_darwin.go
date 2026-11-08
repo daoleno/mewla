@@ -26,3 +26,13 @@ func StartTime(pid int) (time.Time, bool) {
 	}
 	return start, true
 }
+
+// StartToken names one run of a process: the pid with this token never names
+// another process, as the pid alone can after it is reused.
+func StartToken(pid int) (string, bool) {
+	started, ok := StartTime(pid)
+	if !ok || started.IsZero() {
+		return "", false
+	}
+	return started.Format(time.RFC3339Nano), true
+}
