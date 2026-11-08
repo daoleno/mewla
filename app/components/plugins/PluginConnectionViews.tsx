@@ -7,9 +7,10 @@ import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { ActivityIndicator, Linking, StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 import { ContinuousCorners, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, EmptyState, InkSwitch, InlineNotice, ListRow, ListSection, StatusPill } from "../ui";
+import { Spinner } from "../ui/Spinner";
 import type { StatusTone } from "../ui/StatusPill";
 import { accountStatus, type PluginAccount, type PluginIntegration } from "../../services/connections";
 import { brainCanNow, type ConnectPhase, type PendingConnection } from "../../services/pluginOnboarding";
@@ -166,7 +167,7 @@ function ServiceListRow({ row, connecting, disabled, onOpen, onConnect, onReconn
     trailing = <Button label="Reconnect" size="sm" variant="tinted" loading={connecting} disabled={disabled} onPress={() => onReconnect(state.account)} accessibilityLabel={`Reconnect ${state.account.name}`} />;
   } else if (state.kind === "status") {
     label = `${plugin.name}, ${names}, ${state.label}`;
-    trailing = connecting ? <ActivityIndicator /> : <StatusPill label={state.label} tone={state.tone} />;
+    trailing = connecting ? <Spinner /> : <StatusPill label={state.label} tone={state.tone} />;
   } else {
     label = `${plugin.name}, ${state.label}. ${subtitle}`;
     trailing = <StatusPill label={state.label} tone="neutral" />;
@@ -402,7 +403,7 @@ function StatusCard({ title, detail, busy, glyph, glyphColor, children }: {
     <ListSection>
       <View style={styles.card} accessibilityLiveRegion="polite">
         <View style={styles.cardTitle}>
-          {busy ? <ActivityIndicator color={colors.textSecondary} /> : glyph ? <Icon name={glyph} size={20} color={glyphColor ?? colors.textSecondary} /> : null}
+          {busy ? <Spinner color={colors.textSecondary} /> : glyph ? <Icon name={glyph} size={20} color={glyphColor ?? colors.textSecondary} /> : null}
           <AppText variant="heading" accessibilityRole="header" style={styles.flexShrink}>{title}</AppText>
         </View>
         {detail ? <AppText variant="compact" tone="secondary">{detail}</AppText> : null}
@@ -495,7 +496,7 @@ export function AccountCard({
     const describe = name === "read" ? job?.read : job?.write;
     if (control.kind === "none") return null;
     const pending = running === `${name}:${account.id}` || name === "write" && control.kind === "consent" && running === `connect:${plugin.id}`;
-    const trailing = pending ? <ActivityIndicator /> : control.kind === "consent" ? (
+    const trailing = pending ? <Spinner /> : control.kind === "consent" ? (
       <Button label="Allow" size="sm" variant="tinted" disabled={busy} onPress={() => onAccess(name, true)} accessibilityLabel={`Allow changes in ${plugin.name}`} />
     ) : (
       <InkSwitch accessibilityLabel={title} value={control.on} disabled={busy} onValueChange={(allowed) => onAccess(name, allowed)} />
@@ -517,7 +518,7 @@ export function AccountCard({
             {/* Mainnet is the default and needs no tag; testnet always has one, so it is never taken for mainnet. */}
             {network ? <StatusPill label={network} tone={account.network === "testnet" ? "warning" : "accent"} /> : null}
             {recovery ? null : <StatusPill label={accountStatus(account)} tone={accountTone(account)} />}
-            {running === `enabled:${account.id}` ? <ActivityIndicator /> : (
+            {running === `enabled:${account.id}` ? <Spinner /> : (
               <InkSwitch accessibilityLabel={`${plugin.name} ${account.name} on`} value={account.enabled} disabled={busy} onValueChange={onSetEnabled} />
             )}
           </View>
@@ -631,7 +632,7 @@ export function ToolsView({
           icon="power"
           title="On"
           subtitle="Brain and Workers can use this account."
-          trailing={running === `enabled:${account.id}` ? <ActivityIndicator /> : <InkSwitch accessibilityLabel="Account on" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />}
+          trailing={running === `enabled:${account.id}` ? <Spinner /> : <InkSwitch accessibilityLabel="Account on" value={account.enabled} disabled={busy} onValueChange={onToggleEnabled} />}
         />
         <ListRow
           icon="pulse"

@@ -1,6 +1,5 @@
 import React, { Children, Fragment, isValidElement, type ReactNode } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   View,
@@ -15,6 +14,7 @@ import {
   useAppTheme,
 } from "../../constants/tokens";
 import { AppText } from "./AppText";
+import { Spinner } from "./Spinner";
 import { Icon, type IconName } from "../icons/Icon";
 
 interface ListSectionProps {
@@ -151,7 +151,7 @@ export function ListRow({
   ) : null;
   const accessoryNodes = loading || accessory !== "none" ? (
     <>
-      {loading ? <ActivityIndicator size="small" color={colors.textTertiary} /> : null}
+      {loading ? <Spinner /> : null}
       {accessory === "chevron" && !loading ? (
         <Icon name="chevron-right" size={17} color={colors.textTertiary} />
       ) : null}

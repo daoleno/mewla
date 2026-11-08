@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
@@ -57,7 +57,7 @@ export default function FriendsNotificationsScreen() {
   if (rows === null) {
     return (
       <View style={[styles.center, { backgroundColor: colors.bgPrimary }]}>
-        <ActivityIndicator color={colors.textTertiary} />
+        <EmptyState size="inline" busy />
       </View>
     );
   }
