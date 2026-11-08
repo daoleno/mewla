@@ -57,6 +57,7 @@ import {
 } from "../../constants/tokens";
 import { shouldShowBrainWorkColumn } from "../../constants/windowRoom";
 import { buildChatChrome } from "../../theme";
+import { TerminalThemeScope } from "../../theme/provider";
 import {
   SCREENSHOT_CHOICE_FIXTURE,
   SCREENSHOT_BRAIN_EVENTS,
@@ -537,6 +538,7 @@ function ChatDemo() {
   const topChromeInset = CHAT_HEADER_HEIGHT + CHAT_HEADER_OUTER_GAP * 2;
 
   return (
+    <TerminalThemeScope chrome={chrome}>
     <SafeAreaView
       style={[styles.flex, { backgroundColor: chrome.appBackground }]}
       edges={["top", "bottom"]}
@@ -578,7 +580,6 @@ function ChatDemo() {
                   promptKey="demo-choice"
                   choice={SCREENSHOT_CHOICE_FIXTURE}
                   connected
-                  chrome={chrome}
                   maxHeight={choiceCardMaxHeight({
                     windowHeight,
                     topChromeInset,
@@ -665,6 +666,7 @@ function ChatDemo() {
         />
       </ChatCanvas>
     </SafeAreaView>
+    </TerminalThemeScope>
   );
 }
 
@@ -860,6 +862,7 @@ function BrainWorkOpenDemo() {
   return (
     <BrainCompanionContext.Provider value={companion}>
       <BrainChatDemo empty={false} running={false} events={SCREENSHOT_BRAIN_EVENTS} />
+      <TerminalThemeScope chrome={chrome}>
       <BrainWorkSheetHost
         ref={sheetRef}
         surface={surface}
@@ -870,6 +873,7 @@ function BrainWorkOpenDemo() {
           (globalThis as { __workOpened?: string[] }).__workOpened = [...((globalThis as { __workOpened?: string[] }).__workOpened ?? []), slip.workId];
         }}
       />
+      </TerminalThemeScope>
     </BrainCompanionContext.Provider>
   );
 }

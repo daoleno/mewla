@@ -1,11 +1,11 @@
 import React, { useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { Typography, TypeScale } from "../../constants/tokens";
+import { Typography, TypeScale, useAppColors, type AppColors } from "../../constants/tokens";
 import { TappableCat } from "../mewla/TappableCat";
 import { Icon, type IconName } from "../icons/Icon";
-import { StatusMark } from "../ui/StatusMark";
-import { workStatusInk, workStatusTextInk, type WorkStatus } from "../ui/workStatus";
+import { Button } from "../ui/Button";
+import { StatusPill, type StatusTone } from "../ui/StatusPill";
+import type { WorkStatus } from "../ui/workStatus";
 import {
   BRAIN_WORK_CARD_GAP,
   BRAIN_WORK_CARD_HORIZONTAL_PADDING,
@@ -24,8 +24,8 @@ const PERCH_CAT = 58;
  * and the cat on top when Brain is waiting on it. Blocked Work is a dashed,
  * unfilled slip. The Brain conversation and the Work column share it.
  */
+/** Reads its colours from the theme scope it sits in (chat chrome on Brain and Session screens). */
 export function WorkSlip({
-  chrome,
   status,
   statusLabel,
   statusShown = true,
@@ -42,7 +42,6 @@ export function WorkSlip({
   actions,
   onCatPress,
 }: {
-  chrome: TerminalThemeChrome;
   status: WorkStatus;
   statusLabel: string;
   /** False when the list's group caption already says the same word. */
@@ -64,7 +63,8 @@ export function WorkSlip({
   /** Tapping the perched cat (it answers for Brain). */
   onCatPress?: () => void;
 }) {
-  const styles = useMemo(() => createWorkSlipStyles(chrome), [chrome]);
+  const colors = useAppColors();
+  const styles = useMemo(() => createWorkSlipStyles(colors), [colors]);
   const needs = status === "needs";
   const hasActions = Boolean(actions?.length);
   // The actions sit beside the tappable body, never inside it: a button in a
@@ -92,7 +92,7 @@ export function WorkSlip({
         <View style={meta ? styles.meta : styles.titleRow}>
           {meta ? (
             <>
-              {metaIcon ? <Icon name={metaIcon} size={12} color={chrome.textMuted} /> : null}
+              {metaIcon ? <Icon name={metaIcon} size={12} color={colors.textSecondary} /> : null}
               <Text numberOfLines={1} style={styles.who}>
                 {meta}
               </Text>
@@ -103,7 +103,7 @@ export function WorkSlip({
             </Text>
           )}
           {unread && !needs ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
-          {statusShown ? <WorkStatusWord status={status} label={statusLabel} chrome={chrome} /> : null}
+          {statusShown ? <StatusPill tone={WORK_STATUS_TONE[status]} label={statusLabel} /> : null}
         </View>
         {meta ? (
           <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>
@@ -119,7 +119,7 @@ export function WorkSlip({
       </Pressable>
       {actions?.length ? (
         <View style={styles.slipFoot}>
-          <WorkSlipActions actions={actions} chrome={chrome} />
+          <WorkSlipActions actions={actions} />
         </View>
       ) : null}
     </View>
@@ -149,75 +149,46 @@ export type WorkSlipAction = {
   onPress(): void;
 };
 
-/** The mock's slip buttons: one ink primary, the rest outlined, compact. */
-export function WorkSlipActions({
-  actions,
-  chrome,
-}: {
-  actions: readonly WorkSlipAction[];
-  chrome: TerminalThemeChrome;
-}) {
-  const styles = useMemo(() => createWorkSlipStyles(chrome), [chrome]);
+/** A Work state as the shared status pill's tone. */
+export const WORK_STATUS_TONE: Readonly<Record<WorkStatus, StatusTone>> = {
+  ready: "success",
+  running: "accent",
+  needs: "needs",
+  warning: "warning",
+  failed: "danger",
+  blocked: "blocked",
+};
+
+/** The slip's buttons: one filled primary, the rest outlined, compact. */
+export function WorkSlipActions({ actions }: { actions: readonly WorkSlipAction[] }) {
   return (
-    <View style={styles.actions}>
+    <View style={actionStyles.actions}>
       {actions.map((action) => (
-        <Pressable
+        <Button
           key={action.key}
-          accessibilityRole="button"
-          accessibilityLabel={action.label}
-          accessibilityState={{ busy: action.busy, disabled: action.disabled || action.busy }}
-          disabled={action.disabled || action.busy}
+          label={action.label}
+          size="sm"
+          variant={action.primary ? "filled" : "outlined"}
+          loading={action.busy}
+          disabled={action.disabled}
           onPress={action.onPress}
           hitSlop={4}
-          style={({ pressed }) => [
-            styles.action,
-            action.primary ? styles.actionPrimary : null,
-            action.disabled ? styles.actionDisabled : null,
-            pressed ? styles.slipPressed : null,
-          ]}
-        >
-          <Text
-            numberOfLines={1}
-            style={[styles.actionLabel, action.primary ? styles.actionLabelPrimary : null]}
-          >
-            {action.busy ? "…" : action.label}
-          </Text>
-        </Pressable>
+          style={actionStyles.action}
+        />
       ))}
     </View>
   );
 }
 
-/** The state as a glyph and word; Needs you is the filled seal pill. */
-export function WorkStatusWord({
-  status,
-  label,
-  chrome,
-}: {
-  status: WorkStatus;
-  label: string;
-  chrome: TerminalThemeChrome;
+export function chromeStatusInks(chrome: {
+  statusReady: string;
+  statusRunning: string;
+  seal: string;
+  sealText: string;
+  statusWarning: string;
+  danger: string;
+  statusBlocked: string;
 }) {
-  const styles = useMemo(() => createWorkSlipStyles(chrome), [chrome]);
-  if (status === "needs") {
-    return (
-      <View style={styles.needsPill}>
-        <Text style={styles.needsPillText}>{label}</Text>
-      </View>
-    );
-  }
-  const inks = chromeStatusInks(chrome);
-  return (
-    <View style={styles.status}>
-      <StatusMark status={status} color={workStatusInk(status, inks)} knockout={chrome.surface} />
-      <Text numberOfLines={1} style={[styles.statusLabel, { color: workStatusTextInk(status, inks) }]}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-export function chromeStatusInks(chrome: TerminalThemeChrome) {
   return {
     statusReady: chrome.statusReady,
     statusRunning: chrome.statusRunning,
@@ -229,7 +200,7 @@ export function chromeStatusInks(chrome: TerminalThemeChrome) {
   };
 }
 
-function createWorkSlipStyles(chrome: TerminalThemeChrome) {
+function createWorkSlipStyles(colors: AppColors) {
   return StyleSheet.create({
     wrap: {
       marginHorizontal: 1,
@@ -246,8 +217,8 @@ function createWorkSlipStyles(chrome: TerminalThemeChrome) {
     slip: {
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: chrome.border,
-      backgroundColor: chrome.surface,
+      borderColor: colors.border,
+      backgroundColor: colors.bgSurface,
     },
     slipBody: {
       paddingHorizontal: BRAIN_WORK_CARD_HORIZONTAL_PADDING + 2,
@@ -263,7 +234,7 @@ function createWorkSlipStyles(chrome: TerminalThemeChrome) {
     },
     slipNeeds: {
       borderWidth: 1.5,
-      borderColor: chrome.text,
+      borderColor: colors.textPrimary,
     },
     slipBlocked: {
       borderStyle: "dashed",
@@ -289,80 +260,31 @@ function createWorkSlipStyles(chrome: TerminalThemeChrome) {
     },
     who: {
       ...TypeScale.caption,
-      color: chrome.textMuted,
+      color: colors.textSecondary,
       flex: 1,
       minWidth: 0,
-    },
-    status: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      flexShrink: 0,
-    },
-    statusLabel: {
-      ...TypeScale.caption,
-      fontFamily: Typography.uiFontMedium,
-    },
-    needsPill: {
-      minHeight: 22,
-      paddingHorizontal: 9,
-      borderRadius: 11,
-      justifyContent: "center",
-      backgroundColor: chrome.seal,
-      flexShrink: 0,
-    },
-    needsPillText: {
-      ...TypeScale.caption,
-      fontFamily: Typography.uiFontSemibold,
-      color: chrome.onSeal,
     },
     title: {
       ...TypeScale.body,
       fontFamily: Typography.uiFontSemibold,
-      color: chrome.text,
+      color: colors.textPrimary,
     },
     unreadDot: {
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: chrome.text,
+      backgroundColor: colors.textPrimary,
     },
     summary: {
       ...TypeScale.compact,
-      color: chrome.textMuted,
+      color: colors.textSecondary,
       marginTop: 3,
       lineHeight: 20,
     },
-    actions: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginTop: 12,
-    },
-    action: {
-      minHeight: 32,
-      paddingHorizontal: 13,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: chrome.border,
-      backgroundColor: chrome.surface,
-      justifyContent: "center",
-      maxWidth: "100%",
-    },
-    actionPrimary: {
-      borderColor: chrome.text,
-      backgroundColor: chrome.text,
-    },
-    actionDisabled: {
-      opacity: 0.5,
-    },
-    actionLabel: {
-      ...TypeScale.compact,
-      fontFamily: Typography.uiFontMedium,
-      color: chrome.text,
-    },
-    actionLabelPrimary: {
-      color: chrome.surface,
-    },
   });
 }
+
+const actionStyles = StyleSheet.create({
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
+  action: { maxWidth: "100%" },
+});

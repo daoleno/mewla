@@ -71,7 +71,6 @@ export function BrainWorkEventCard({
 
   return (
     <WorkSlip
-      chrome={chrome}
       status={status}
       statusLabel={presentation.label}
       title={workTitle}

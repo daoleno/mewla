@@ -252,7 +252,6 @@ export function InterfaceChatBody({
           promptKey={choicePrompt.key}
           choice={choicePrompt.choice}
           connected={choicePrompt.connected}
-          chrome={chrome}
           maxHeight={choiceCardMaxHeight({
             windowHeight,
             topChromeInset,
@@ -264,8 +263,6 @@ export function InterfaceChatBody({
         <TerminalActionPromptCard
           key={terminalActionPrompt.id}
           prompt={terminalActionPrompt}
-          chrome={chrome}
-          theme={theme}
           onAnswer={onTerminalActionAnswer}
         />
       ) : null}
