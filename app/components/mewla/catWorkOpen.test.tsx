@@ -64,13 +64,10 @@ if (!process.env.MEWLA_CAT_WORK_OPEN_CHILD) {
     withTiming: (value: number) => value,
   }));
   mock.module("./TappableCat", () => ({ TappableCat: host("cat") }));
-  mock.module("../brain/BrainWorkPanel", () => ({
-    BrainWorkSheet: (props: any) => React.createElement("sheet", props),
-  }));
 
   const chrome = { text: "ink", textMuted: "soft", seal: "seal", onSeal: "paper" } as any;
   const { BrainCatRow } = await import("./BrainCompanion");
-  const { BrainWorkSheetHost } = await import("../brain/BrainWorkSheetHost");
+  const { brainWorkOverlay } = await import("../brain/brainWorkOverlayStore");
 
   const surface = { slips: [], counts: { needs: 0, running: 0, back: 0, waiting: 0 } } as any;
   const companion = (state: any, overrides: any = {}) => ({ presence: { state, count: 4 }, animate: false, ...overrides });
@@ -80,51 +77,44 @@ if (!process.env.MEWLA_CAT_WORK_OPEN_CHILD) {
     act(() => target.props.onPress());
   }
 
-  test("pressing the hint opens the sheet through the host, and the screen never renders", async () => {
+  const published = { surface, chrome, onOpenSlip: () => {} } as any;
+
+  test("pressing the hint opens the sheet through the store, and the screen never renders", async () => {
     let screenRenders = 0;
-    const handle: { current: any } = { current: null };
     function Screen() {
       screenRenders += 1;
-      const c = companion("attention", { onOpenWork: () => handle.current?.open() });
-      return (
-        <>
-          <BrainCatRow companion={c} label="4 need you" chrome={chrome} onPress={c.onOpenWork} />
-          <BrainWorkSheetHost ref={handle} surface={surface} chrome={chrome} onOpenSlip={() => {}} />
-        </>
-      );
+      const c = companion("attention", { onOpenWork: () => brainWorkOverlay.open() });
+      return <BrainCatRow companion={c} label="4 need you" chrome={chrome} onPress={c.onOpenWork} />;
     }
+    brainWorkOverlay.publish(published);
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(<Screen />);
     });
     const rendersBefore = screenRenders;
-    expect(renderer.root.findByType("sheet" as any).props.visible).toBe(false);
+    expect(brainWorkOverlay.getOpen()).toBe(false);
     press(renderer);
-    expect(renderer.root.findByType("sheet" as any).props.visible).toBe(true);
-    // Opening the list renders the sheet only: the chat, composer and menus wait for nothing.
+    expect(brainWorkOverlay.getOpen()).toBe(true);
+    // Opening the list renders nothing of the screen: the chat, composer and menus wait for nothing.
     expect(screenRenders).toBe(rendersBefore);
-    act(() => renderer.root.findByType("sheet" as any).props.onClose());
-    expect(renderer.root.findByType("sheet" as any).props.visible).toBe(false);
+    act(() => brainWorkOverlay.close());
+    expect(brainWorkOverlay.getOpen()).toBe(false);
+    brainWorkOverlay.publish(null);
   });
 
-  test("the wide Work column keeps the sheet shut, and closes one that was open", async () => {
-    const handle: { current: any } = { current: null };
-    const tree = (suppressed: boolean) => (
-      <BrainWorkSheetHost ref={handle} suppressed={suppressed} surface={surface} chrome={chrome} onOpenSlip={() => {}} />
-    );
-    let renderer!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      renderer = TestRenderer.create(tree(false));
-    });
-    act(() => handle.current.open());
-    expect(renderer.root.findByType("sheet" as any).props.visible).toBe(true);
-    await act(async () => renderer.update(tree(true)));
-    expect(renderer.root.findByType("sheet" as any).props.visible).toBe(false);
-    act(() => handle.current.open());
-    expect(renderer.root.findByType("sheet" as any).props.visible).toBe(false);
+  test("the wide Work column keeps the sheet shut, and closes one that was open", () => {
+    brainWorkOverlay.publish(published);
+    brainWorkOverlay.open();
+    expect(brainWorkOverlay.getOpen()).toBe(true);
+    // The screen publishes no content while the column shows.
+    brainWorkOverlay.publish(null);
+    expect(brainWorkOverlay.getOpen()).toBe(false);
+    brainWorkOverlay.open();
+    expect(brainWorkOverlay.getOpen()).toBe(false);
     // The column going away does not bring the old sheet back.
-    await act(async () => renderer.update(tree(false)));
-    expect(renderer.root.findByType("sheet" as any).props.visible).toBe(false);
+    brainWorkOverlay.publish(published);
+    expect(brainWorkOverlay.getOpen()).toBe(false);
+    brainWorkOverlay.publish(null);
   });
 
   test("the hint says how it looks by state: seal for needs you, tint for counts, words when quiet", async () => {

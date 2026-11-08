@@ -26,6 +26,7 @@ import { WorkProvider, useWorkDispatch } from "../store/work";
 import { CalendarProvider, useCalendarDispatch } from "../store/calendar";
 import { FriendsLabsProvider } from "../store/friendsLabs";
 import { ScreenFloatHost } from "../components/screen/ScreenFloatHost";
+import { BrainWorkOverlayHost, HideWhenWorkOpen } from "../components/brain/BrainWorkOverlay";
 import { PhoneUseProvider } from "../store/phoneUse";
 import {
   CurrentSessionProvider,
@@ -714,6 +715,7 @@ const AppNavigator = memo(function AppNavigator({
 
   return (
     <>
+    <HideWhenWorkOpen>
     <DesktopWebShell>
     <Stack
       screenOptions={screenOptions}
@@ -756,6 +758,9 @@ const AppNavigator = memo(function AppNavigator({
     </Stack>
     </DesktopWebShell>
     <ScreenFloatHost />
+    </HideWhenWorkOpen>
+    {/* The phone's Work sheet: mounted once, over the tab bar and header, so opening it renders nothing. */}
+    <BrainWorkOverlayHost />
     </>
   );
 });

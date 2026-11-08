@@ -35,7 +35,8 @@ import {
   BrainWorkDetailSheet,
   type BrainWorkReveal,
 } from "../../components/brain/BrainWorkPanel";
-import { BrainWorkSheetHost, type BrainWorkSheetHandle } from "../../components/brain/BrainWorkSheetHost";
+import { brainWorkOverlay } from "../../components/brain/brainWorkOverlayStore";
+import { useBrainWorkOverlayContent } from "../../components/brain/useBrainWorkOverlayContent";
 import {
   BRAIN_WORK_GROUP_ORDER,
   brainWorkSlipStale,
@@ -221,16 +222,15 @@ export default function BrainScreen() {
       ),
     [activeBrain?.current_work, activeBrain?.workers, activeBrain?.open_work, calendarItems],
   );
-  const workSheetRef = useRef<BrainWorkSheetHandle>(null);
   const [workReveal, setWorkReveal] = useState<BrainWorkReveal | null>(null);
   const [selectedWorkSlip, setSelectedWorkSlip] = useState<BrainWorkSlip | null>(null);
   const [brainTurnRunning, setBrainTurnRunning] = useState(false);
   useEffect(() => {
-    workSheetRef.current?.close();
+    brainWorkOverlay.close();
     setWorkReveal(null);
     setSelectedWorkSlip(null);
   }, [activeServer?.id]);
-  const openWorkList = useCallback(() => workSheetRef.current?.open(), []);
+  const openWorkList = useCallback(() => brainWorkOverlay.open(), []);
   const sessionLabels = useMemo(() => {
     const labels = new Map<string, string>();
     for (const worker of activeBrain?.workers ?? []) {
@@ -576,7 +576,7 @@ export default function BrainScreen() {
   const openWorkerSession = useCallback(
     (sessionId: string) => {
       if (!activeServer) return;
-      workSheetRef.current?.close();
+      brainWorkOverlay.close();
       setSelectedWorkSlip(null);
       router.push({ pathname: "/terminal/[id]", params: terminalRouteParams(sessionId, activeServer.id) });
     },
@@ -584,7 +584,7 @@ export default function BrainScreen() {
   );
   const openWorkSlip = useCallback(
     (slip: BrainWorkSlip) => {
-      workSheetRef.current?.close();
+      brainWorkOverlay.close();
       if (slip.unread && activeServer) {
         wsClient.markBrainWorkRead(activeServer.id, slip.workId);
       }
@@ -657,12 +657,12 @@ export default function BrainScreen() {
           if (slip.sessionId) openWorkerSession(slip.sessionId);
           return;
         case "reply":
-          workSheetRef.current?.close();
+          brainWorkOverlay.close();
           setReplyOpenFor(slip.workId);
           setSelectedWorkSlip(slip);
           return;
         case "ask":
-          workSheetRef.current?.close();
+          brainWorkOverlay.close();
           setSelectedWorkSlip(null);
           setPendingAskDraft(brainWorkAskDraft(slip));
           return;
@@ -781,6 +781,16 @@ export default function BrainScreen() {
     liveSelectedSlip?.calendar ?? null,
     { title: liveSelectedSlip?.title },
   );
+  // The phone's Work sheet lives at the root, over the tab bar; this screen only hands it the Work.
+  const workOverlayContent = useMemo(
+    () =>
+      workColumn
+        ? null
+        : { surface: workSurface, objective: activeBrain?.objective, chrome, onOpenSlip: openWorkSlip, actionsFor: workActionsFor },
+    [activeBrain?.objective, chrome, openWorkSlip, workActionsFor, workColumn, workSurface],
+  );
+  useBrainWorkOverlayContent(workOverlayContent);
+
   return (
     <TerminalThemeScope chrome={chrome}>
     <SafeAreaView
@@ -906,15 +916,6 @@ export default function BrainScreen() {
       ) : null}
       </View>
 
-      <BrainWorkSheetHost
-        ref={workSheetRef}
-        suppressed={workColumn}
-        surface={workSurface}
-        objective={activeBrain?.objective}
-        chrome={chrome}
-        onOpenSlip={openWorkSlip}
-        actionsFor={workActionsFor}
-      />
       <BrainWorkDetailSheet
         slip={liveSelectedSlip}
         waitFor={activeBrain?.current_work?.find((work) => work.work_id === selectedWorkSlip?.workId)?.wait_for}

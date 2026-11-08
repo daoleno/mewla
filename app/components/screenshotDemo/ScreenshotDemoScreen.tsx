@@ -107,7 +107,8 @@ import { sessionEmptyState } from "../../services/sessionEmptyState";
 import { BrainCompanionContext, type BrainCompanion } from "../mewla/BrainCompanion";
 import { brainCatTap, resolveBrainCatPresence, type BrainCatPresence, type BrainCatState } from "../mewla/brainCatState";
 import { BrainWorkColumn } from "../brain/BrainWorkPanel";
-import { BrainWorkSheetHost, type BrainWorkSheetHandle } from "../brain/BrainWorkSheetHost";
+import { brainWorkOverlay } from "../brain/brainWorkOverlayStore";
+import { useBrainWorkOverlayContent } from "../brain/useBrainWorkOverlayContent";
 import {
   brainWorkSurface,
   type BrainCurrentWork,
@@ -804,13 +805,23 @@ function BrainDemo() {
  * The cat's tail row opening the real Work sheet, for measuring the tap.
  * `needs` Work needing you (default 4) and `n` Work in all (default 8) set the
  * list; `stall` blocks the JS thread for that many ms every 250 ms, a stand-in
- * for a busy timeline.
+ * for a busy timeline. `churn` renames a running Work every that many ms (Work
+ * updates while the sheet is shut) and `sheet=0` publishes no sheet, the control.
  */
 function BrainWorkOpenDemo() {
-  const { needs, n, stall } = useLocalSearchParams<{ needs?: string; n?: string; stall?: string }>();
+  const { needs, n, stall, churn, sheet } = useLocalSearchParams<{ needs?: string; n?: string; stall?: string; churn?: string; sheet?: string }>();
+  // `churn` renames one running Work every that many ms, like Brain pushing Work updates while the sheet is shut.
+  // One clock for the fixture, so a Work update changes the Work it renames and no other.
+  const started = useMemo(() => Date.now(), []);
+  const [churned, setChurned] = useState(0);
+  useEffect(() => {
+    const every = Number(churn);
+    if (!every) return;
+    const timer = setInterval(() => setChurned((count) => count + 1), every);
+    return () => clearInterval(timer);
+  }, [churn]);
   const { theme: appTheme } = useAppTheme();
   const { chrome } = useMemo(() => buildChatChrome(appTheme), [appTheme]);
-  const sheetRef = useRef<BrainWorkSheetHandle>(null);
   const currentWork = useMemo<BrainCurrentWork[]>(() => {
     const asking = Number(needs ?? 4);
     const total = Math.max(n === undefined ? 8 : Number(n), asking);
@@ -825,27 +836,27 @@ function BrainWorkOpenDemo() {
             unread_result: false,
             wait_for: "Keep both copies, or the newest edit?",
             wake: { kind: "user_input", ref: "Keep both copies, or the newest edit?" },
-            updated_at: new Date(Date.now() - (index + 2) * 60_000).toISOString(),
+            updated_at: new Date(started - (index + 2) * 60_000).toISOString(),
           }
         : {
             work_id: `run-${index}`,
             revision: 1,
-            title: `Worker task ${index + 1}`,
+            title: `Worker task ${index + 1}${index === asking && churned ? ` · ${churned}` : ""}`,
             status: "running",
             progress_mode: "owned",
             attempt_session_id: `%${40 + index}`,
             attempt_delegated: true,
             unread_result: false,
-            updated_at: new Date(Date.now() - 30_000).toISOString(),
+            updated_at: new Date(started - 30_000).toISOString(),
           },
     );
-  }, [n, needs]);
+  }, [churned, n, needs, started]);
   const surface = useMemo(() => brainWorkSurface(currentWork, undefined), [currentWork]);
   const presence = useMemo(
     () => resolveBrainCatPresence({ hasServer: true, connection: "connected", hydrated: true, currentWork }),
     [currentWork],
   );
-  const openWork = useCallback(() => sheetRef.current?.open(), []);
+  const openWork = useCallback(() => brainWorkOverlay.open(), []);
   const companion = useMemo<BrainCompanion>(
     () => ({
       presence,
@@ -864,6 +875,30 @@ function BrainWorkOpenDemo() {
     }),
     [openWork, presence, surface.counts],
   );
+  // The sheet is the root's (BrainWorkOverlayHost); the demo hands it the Work as the screen does.
+  const workContent = useMemo(
+    () => ({
+      surface,
+      chrome,
+      // As the screen gives them: the slip's next steps, one tap away.
+      actionsFor: (slip: { group: string }) =>
+        slip.group === "needs"
+          ? [
+              { key: "reply", label: "Reply", primary: true, onPress: () => {} },
+              { key: "open", label: "Open session", onPress: () => {} },
+            ]
+          : [{ key: "open", label: "Open session", onPress: () => {} }],
+      onOpenSlip: (slip: { workId: string }) => {
+        // As the screen does: a slip closes the list; the harness reads what was opened.
+        brainWorkOverlay.close();
+        const shared = globalThis as { __workOpened?: string[] };
+        shared.__workOpened = [...(shared.__workOpened ?? []), slip.workId];
+      },
+    }),
+    [chrome, surface],
+  );
+  // `sheet=0` publishes no sheet at all: the control for what a shut sheet costs.
+  useBrainWorkOverlayContent(sheet === "0" ? null : workContent);
   useEffect(() => {
     const block = Number(stall);
     if (!block) return;
@@ -876,27 +911,6 @@ function BrainWorkOpenDemo() {
   return (
     <BrainCompanionContext.Provider value={companion}>
       <BrainChatDemo empty={false} running={false} events={SCREENSHOT_BRAIN_EVENTS} />
-      <TerminalThemeScope chrome={chrome}>
-      <BrainWorkSheetHost
-        ref={sheetRef}
-        surface={surface}
-        chrome={chrome}
-        // As the screen gives them: the slip's next steps, one tap away.
-        actionsFor={(slip) =>
-          slip.group === "needs"
-            ? [
-                { key: "reply", label: "Reply", primary: true, onPress: () => {} },
-                { key: "open", label: "Open session", onPress: () => {} },
-              ]
-            : [{ key: "open", label: "Open session", onPress: () => {} }]
-        }
-        onOpenSlip={(slip) => {
-          // As the screen does: a slip closes the list; the harness reads what was opened.
-          sheetRef.current?.close();
-          (globalThis as { __workOpened?: string[] }).__workOpened = [...((globalThis as { __workOpened?: string[] }).__workOpened ?? []), slip.workId];
-        }}
-      />
-      </TerminalThemeScope>
     </BrainCompanionContext.Provider>
   );
 }
