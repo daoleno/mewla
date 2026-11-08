@@ -48,16 +48,22 @@ type entry struct {
 	handedBack *span           // the person's last turn, not yet told to the agent
 	lastAgent  string
 }
+
+// Lock order: m.mu guards only the two maps and workerLive, and is never held
+// while an entry's lock is taken, nor taken while one is held. Everything an
+// entry's code needs from the manager (the switch, whether it is closed) is
+// atomic for that reason; a deadlock here once froze every agent at once.
 type Manager struct {
 	mu       sync.Mutex
 	root     string
 	backend  Backend
 	entries  map[string]*entry // agents' windows, by window id
 	byWorker map[string]*entry // the same, by the Worker whose window it is
-	closed   bool
+	closed   atomic.Bool
 	done     chan struct{}
 
-	settings Settings
+	virtual    atomic.Bool // Settings.VirtualScreen
+	settingsMu sync.Mutex  // serializes writes of settings.json
 
 	// The computer's one browser. Starting and stopping it, and opening a
 	// window on it, go through hostGate one at a time, so an agent that asks
@@ -112,7 +118,7 @@ func New(root string, backend Backend) (*Manager, error) {
 	}
 	m := &Manager{root: root, backend: backend, entries: map[string]*entry{}, byWorker: map[string]*entry{}, done: make(chan struct{}), hostGate: make(chan struct{}, 1)}
 	m.hostGate <- struct{}{}
-	m.settings = loadSettings(root)
+	m.virtual.Store(loadSettings(root).VirtualScreen)
 	go m.sweep(sweepEvery)
 	return m, nil
 }
@@ -175,11 +181,11 @@ func (m *Manager) get(id string) (*entry, error) {
 	if !validID.MatchString(id) {
 		return nil, errors.New("Invalid browser resource")
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
+	if m.closed.Load() {
 		return nil, ErrUnavailable
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	e := m.entries[id]
 	if e == nil {
 		return nil, errors.New("Browser not found")
@@ -224,17 +230,15 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 		return Response{}, errors.New("Browser owner is required")
 	}
 	if q.Action == "list" {
-		m.mu.Lock()
-		defer m.mu.Unlock()
 		resources := []Resource{}
-		for _, e := range m.entries {
+		for _, e := range m.allEntries() {
 			e.mu.Lock()
 			resources = append(resources, snapshot(e))
 			e.mu.Unlock()
 		}
 		sort.Slice(resources, func(i, j int) bool { return resources[i].CreatedAt.Before(resources[j].CreatedAt) })
 		c := m.backend.Capability(ctx)
-		on := m.settings.VirtualScreen
+		on := m.VirtualScreen()
 		return Response{Resources: resources, Capability: &c, VirtualScreen: &on}, nil
 	}
 	if q.Action == "settings" {
@@ -326,13 +330,24 @@ func (m *Manager) Handle(ctx context.Context, o Owner, q Request) (Response, err
 	}
 }
 
+// allEntries is a copy of the entries, so a caller can lock each without holding m.mu.
+func (m *Manager) allEntries() []*entry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	entries := make([]*entry, 0, len(m.entries))
+	for _, e := range m.entries {
+		entries = append(entries, e)
+	}
+	return entries
+}
+
 // agentWindow is the window of the Worker an agent owner belongs to; with
 // create, it makes the entry when the Worker has none (nothing is opened yet).
 func (m *Manager) agentWindow(o Owner, create bool) (*entry, error) {
 	worker := workerOf(o)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.closed {
+	if m.closed.Load() {
 		return nil, ErrUnavailable
 	}
 	if e := m.byWorker[worker]; e != nil {
@@ -412,8 +427,13 @@ func (m *Manager) sweep(every time.Duration) {
 		}
 		m.mu.Lock()
 		live := m.workerLive
-		var gone []string
+		workers := make(map[string]*entry, len(m.byWorker))
 		for w, e := range m.byWorker {
+			workers[w] = e
+		}
+		m.mu.Unlock()
+		var gone []string
+		for w, e := range workers {
 			e.mu.Lock()
 			person := e.owner.Kind == "human"
 			e.mu.Unlock()
@@ -421,7 +441,6 @@ func (m *Manager) sweep(every time.Duration) {
 				gone = append(gone, w)
 			}
 		}
-		m.mu.Unlock()
 		for _, w := range gone {
 			m.Forget(w)
 		}
@@ -447,10 +466,7 @@ func (m *Manager) withHost(ctx context.Context, f func(Host) error) error {
 	case <-m.hostGate:
 	}
 	defer func() { m.hostGate <- struct{}{} }()
-	m.mu.Lock()
-	closed := m.closed
-	m.mu.Unlock()
-	if closed {
+	if m.closed.Load() {
 		return ErrUnavailable
 	}
 	if m.host != nil && !m.host.Alive() {
@@ -709,13 +725,7 @@ func (m *Manager) releaseMatching(ctx context.Context, e *entry, match func(Owne
 }
 func (m *Manager) ReleaseOwner(o Owner) { m.ReleaseWhere(func(x Owner) bool { return x == o }) }
 func (m *Manager) ReleaseWhere(match func(Owner) bool) {
-	m.mu.Lock()
-	entries := make([]*entry, 0, len(m.entries))
-	for _, e := range m.entries {
-		entries = append(entries, e)
-	}
-	m.mu.Unlock()
-	for _, e := range entries {
+	for _, e := range m.allEntries() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		e.transition.Lock()
 		_ = m.releaseMatching(ctx, e, match)
@@ -788,19 +798,11 @@ func (m *Manager) expireLease(e *entry) {
 	_ = m.releaseMatching(ctx, e, func(x Owner) bool { return x == owner && time.Now().After(e.expires) })
 }
 func (m *Manager) Close() error {
-	m.mu.Lock()
-	if m.closed {
-		m.mu.Unlock()
+	if !m.closed.CompareAndSwap(false, true) {
 		return nil
 	}
-	m.closed = true
 	close(m.done)
-	entries := []*entry{}
-	for _, e := range m.entries {
-		entries = append(entries, e)
-	}
-	m.mu.Unlock()
-	for _, e := range entries {
+	for _, e := range m.allEntries() {
 		ctx, c := context.WithTimeout(context.Background(), 15*time.Second)
 		e.transition.Lock()
 		_ = acquire(ctx, e)

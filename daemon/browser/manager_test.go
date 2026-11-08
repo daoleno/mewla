@@ -690,3 +690,57 @@ func TestStopEndsAgentControlUntilHandBack(t *testing.T) {
 	must(t, m, human, Request{Action: "release", ID: id})
 	must(t, m, agent, Request{Action: "control"})
 }
+
+// Recovering a stuck window while the Screen lists and the sweeper looks must
+// not deadlock on the manager and entry locks; it once froze every agent.
+func TestRecoveringAWindowWhileListingAndSweepingDoesNotDeadlock(t *testing.T) {
+	previous := sweepEvery
+	sweepEvery = time.Millisecond
+	t.Cleanup(func() { sweepEvery = previous })
+	m, b := newManager(t)
+	m.SetWorkerLive(func(string) bool { return true })
+	other := Owner{Kind: "agent", ID: "other/client"}
+	must(t, m, other, Request{Action: "control"})
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					m.Handle(context.Background(), human, Request{Action: "list"})
+					m.VirtualScreen()
+				}
+			}
+		}()
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 40; i++ {
+			r, err := m.Handle(context.Background(), agent, Request{Action: "control"})
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			b.last().uncertain = false
+			e, _ := m.get(windowID(t, m, "task"))
+			e.mu.Lock()
+			e.uncertain = true
+			e.mu.Unlock()
+			_ = r
+			m.Handle(context.Background(), agent, Request{Action: "release"})
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("deadlock: recovery, list and sweep did not finish")
+	}
+	close(stop)
+	wg.Wait()
+}
