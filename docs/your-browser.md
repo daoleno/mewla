@@ -4,9 +4,9 @@ Every agent Mewla starts has one browser tool, `mewla_chrome`, on every
 computer; the tool and its behaviour are the same everywhere. Only where the
 agent's Chrome window lives differs. On a Mac, or a desktop without the virtual
 screen, it is your own Chrome (this page). On Linux with **Settings → Labs →
-Virtual screen** on, it is the agents' own Chrome on that virtual screen, with
-the same Mewla extension, which Mewla loads itself: there is nothing to add and
-no sign-in of yours in it (see [Screen](screen.md#linux-agents-browsers-on-a-virtual-screen)).
+Virtual screen** on, it is the agents' own Chrome on that virtual screen, each
+agent's window on a monitor of its own, with the same Mewla extension, which
+Mewla loads itself: there is nothing to add and no sign-in of yours in it (see [Screen](screen.md#linux-agents-on-a-virtual-screen)).
 
 Agents that Mewla starts on a computer can use that computer's Google Chrome:
 your Chrome, with the sites you are already logged in to. They work in a tab
@@ -51,7 +51,7 @@ time they start their browser tools.
 Each agent gets a window of its own and sees only the tabs in it, in a tab
 group named for the Worker, so you can see whose tabs they are. Several agents
 work in your Chrome at the same time, each in its own window, none waiting for
-another; on an agent display their windows sit side by side. Your own
+another; on an agent display each window is on its agent's monitor. Your own
 windows and tabs are never read, moved or focused, and Chrome stays behind
 whatever you are using. On a Mac with an agent display (see [Screen](screen.md))
 the window opens there, off your screen. Where there is no agent display, the

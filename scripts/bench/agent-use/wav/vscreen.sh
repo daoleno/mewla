@@ -2,7 +2,7 @@
 # The agent browser on the virtual screen (Settings -> Labs -> Virtual screen), for the agent-use benchmark and the live
 # proofs, behind an ISOLATED daemon: its own state dir, port and tmux server; the live daemon, its tmux and its Brain are
 # never touched. The Workers get the one browser tool every Worker gets, mewla_chrome (the Mewla extension, here in the
-# agent browser's own Chrome on a private kwin_wayland screen).
+# agent browser's own Chrome on the agent screen, an Xvnc with a monitor per agent).
 #
 #   vscreen.sh start DIR [N]  build mewla, start the daemon with the switch on, spawn N Workers (default 1; stand-in
 #                             `claude` programs that only idle, so the daemon builds the real tool attachment for them)
@@ -13,7 +13,7 @@
 #
 # The agent then runs the entry in DIR/mcp-<worker>.json (`mewla agent-use chrome-mcp --state-dir VS_STATE`) with
 # MEWLA_WORKER_ID set to that Worker, which is exactly the entry the daemon puts in a Worker's --mcp-config. Needs Chrome,
-# kwin_wayland, dbus-run-session and Node (the tool's own prerequisites, `Capability` in daemon/browser/runtime_linux.go).
+# Xvnc, xauth and Node (the tool's own prerequisites, `Capability` in daemon/browser/chrome_linux.go).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)

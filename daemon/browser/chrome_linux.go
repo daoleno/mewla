@@ -438,7 +438,7 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Host, error) {
 	// Service client, also supported by installed KDE ksecretd/KWallet. The
 	// windows of different agents are on different monitors, but a window
 	// that is covered or off screen must not be slowed down for it.
-	h.chrome, err = spawnWith(env, []*os.File{toChromeR, fromChromeW}, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", "--silent-debugger-extension-api", "--ozone-platform=x11", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--no-startup-window", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling")
+	h.chrome, err = spawnWith(env, []*os.File{toChromeR, fromChromeW}, b.chrome(), "--user-data-dir="+profile, "--remote-debugging-pipe", "--enable-unsafe-extension-debugging", "--silent-debugger-extension-api", "--ozone-platform=x11", "--password-store="+store, "--no-first-run", "--no-default-browser-check", "--no-startup-window", "--check-for-update-interval=31536000", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--disable-background-timer-throttling")
 	toChromeR.Close()
 	fromChromeW.Close()
 	if err != nil {

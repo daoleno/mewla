@@ -35,7 +35,6 @@ export interface LocalDeviceIdentity {
 export type AuthPurpose =
   | "mewla-connect"
   | "mewla-browser"
-  | `mewla-browser-view:${string}`
   | "mewla-screen"
   | "mewla-screen-view"
   | "mewla-display"
