@@ -4,7 +4,6 @@ import { join } from "node:path";
 import {
   effectRowsForRuntime,
   resolveModelSheetListMaxHeight,
-  runtimeRowSurfaceKey,
 } from "./sessionModelSheetModel";
 import type { ProviderPickerModelRow } from "../../services/providers/sessionModelHelpers";
 
@@ -59,9 +58,10 @@ describe("SessionModelSheet hierarchy", () => {
     expect(sessionProviderHookSource.match(/setVisible\(true\)/g)).toHaveLength(1);
   });
 
-  test("selected rows use accent-soft and unselected rows use neutral surface", () => {
-    expect(runtimeRowSurfaceKey(true)).toBe("accentSoft");
-    expect(runtimeRowSurfaceKey(false)).toBe("surfaceMuted");
+  test("rows are shared ListRows that show the current runtime with a check", () => {
+    expect(sheetSource).toContain("<ListRow");
+    expect(sheetSource).toContain("selected={row.current}");
+    expect(sheetSource).not.toContain("chrome");
   });
 
   test("list height remains bounded", () => {

@@ -72,16 +72,8 @@ export function useTerminalViewportModel({
         hasTerminalRoute,
         connectionState,
         connectionIssue,
-        terminalTheme,
-        chromeColors,
       }),
-    [
-      chromeColors,
-      connectionIssue,
-      connectionState,
-      hasTerminalRoute,
-      terminalTheme,
-    ],
+    [connectionIssue, connectionState, hasTerminalRoute],
   );
 
   return {

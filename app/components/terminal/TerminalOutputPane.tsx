@@ -24,7 +24,7 @@ interface TerminalOutputPaneProps {
   canRenderTerminal: boolean;
   shouldMountTerminalSurface: boolean;
   terminalSurfaceActive: boolean;
-  terminalStateAccent: string;
+  terminalStateFailed: boolean;
   terminalStateBusy: boolean;
   terminalStateTitle: string;
   terminalStateDetail: string;
@@ -52,7 +52,7 @@ function TerminalOutputPaneImpl({
   canRenderTerminal,
   shouldMountTerminalSurface,
   terminalSurfaceActive,
-  terminalStateAccent,
+  terminalStateFailed,
   terminalStateBusy,
   terminalStateTitle,
   terminalStateDetail,
@@ -123,14 +123,12 @@ function TerminalOutputPaneImpl({
         ) : null}
         {canRenderTerminal ? null : (
           <TerminalOutputStateCard
-            accent={terminalStateAccent}
+            failed={terminalStateFailed}
             busy={terminalStateBusy}
             title={terminalStateTitle}
             detail={terminalStateDetail}
             hint={terminalStateHint}
             showRetry={hasTerminalRoute}
-            chrome={chrome}
-            theme={theme}
             onRetry={onRetryConnection}
           />
         )}

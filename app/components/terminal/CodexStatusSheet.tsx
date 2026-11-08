@@ -1,43 +1,29 @@
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useMemo } from "react";
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import type {
-  TerminalThemeChrome,
-  TerminalThemePalette,
-} from "../../constants/terminalThemes";
-import { ContinuousCorners, Typography } from "../../constants/tokens";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { useAppColors } from "../../constants/tokens";
 import { codexStatusSections } from "../../services/codexStatus";
 import type { CodexStatusState } from "./useCodexStatus";
-import { BottomSheetFrame } from "../ui";
-import { ComposerLoadingDots } from "./ComposerLoadingDots";
-import { OutlineWidth, outlinedSurface } from "../ui/outlinedSurface";
-import { Icon } from "../icons/Icon";
+import { AppText, BottomSheetFrame, EmptyState, IconButton, ListRow, ListSection } from "../ui";
+import { Spinner } from "../ui/Spinner";
 
 interface CodexStatusSheetProps {
   visible: boolean;
   state: CodexStatusState;
-  chrome: TerminalThemeChrome;
-  theme: TerminalThemePalette;
   onRetry(): void;
   onSwitchToTerminal?: () => void;
   onClose(): void;
 }
 
+/** Reads the terminal theme from the surrounding `TerminalThemeScope`. */
 export function CodexStatusSheet({
   visible,
   state,
-  chrome,
-  theme,
   onRetry,
   onSwitchToTerminal,
   onClose,
 }: CodexStatusSheetProps) {
+  const colors = useAppColors();
   const sections = useMemo(
     () => (state.phase === "ready" ? codexStatusSections(state.status) : []),
     [state],
@@ -53,40 +39,16 @@ export function CodexStatusSheet({
       onClose={onClose}
     >
       <View style={styles.header}>
-        <View
-          style={[
-            styles.headerIcon,
-            { backgroundColor: chrome.accentSoft },
-          ]}
-        >
-          <Icon name="pulse" size={18} color={chrome.accent} />
-        </View>
         <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: chrome.text }]}>Status</Text>
-          <Text style={[styles.subtitle, { color: chrome.textSubtle }]}>
+          <AppText variant="title">Status</AppText>
+          <AppText variant="caption" tone="tertiary">
             {timestamp || "Codex"}
-          </Text>
+          </AppText>
         </View>
         {state.phase === "ready" ? (
-          <TouchableOpacity
-            accessibilityLabel="Refresh status"
-            accessibilityRole="button"
-            style={[styles.closeButton, { backgroundColor: chrome.surfaceMuted }]}
-            onPress={onRetry}
-            activeOpacity={0.78}
-          >
-            <Icon name="refresh" size={18} color={chrome.textSubtle} />
-          </TouchableOpacity>
+          <IconButton icon="refresh" tone="input" size={40} accessibilityLabel="Refresh status" onPress={onRetry} />
         ) : null}
-        <TouchableOpacity
-          accessibilityLabel="Close status"
-          accessibilityRole="button"
-          style={[styles.closeButton, { backgroundColor: chrome.surfaceMuted }]}
-          onPress={onClose}
-          activeOpacity={0.78}
-        >
-          <Icon name="close" size={18} color={chrome.textSubtle} />
-        </TouchableOpacity>
+        <IconButton icon="close" tone="input" size={40} accessibilityLabel="Close status" onPress={onClose} />
       </View>
 
       {state.phase === "ready" ? (
@@ -96,144 +58,56 @@ export function CodexStatusSheet({
           showsVerticalScrollIndicator={false}
         >
           {sections.length === 0 ? (
-            <Text style={[styles.stateText, { color: chrome.textSubtle }]}>
-              Codex reported nothing for this chat yet.
-            </Text>
+            <EmptyState size="inline" detail="Codex reported nothing for this chat yet." />
           ) : null}
           {sections.map((section) => (
-            <View key={section.key} style={styles.rawSection}>
-              <Text style={[styles.sectionLabel, { color: chrome.textSubtle }]}>
-                {section.title}
-              </Text>
-              <View
-                style={[
-                  styles.rows,
-                  { borderColor: chrome.border, backgroundColor: chrome.surfaceMuted },
-                ]}
-              >
-                {section.meters?.map((meter, index) => (
-                  <View
+            <ListSection key={section.key} title={section.title}>
+              {[
+                ...(section.meters ?? []).map((meter) => (
+                  <ListRow
                     key={meter.key}
-                    style={[
-                      styles.row,
-                      index > 0
-                        ? {
-                            borderTopColor: chrome.border,
-                            borderTopWidth: StyleSheet.hairlineWidth,
-                          }
-                        : null,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.rowKey, { color: chrome.textSubtle }]}
-                      numberOfLines={1}
-                    >
-                      {meter.label}
-                    </Text>
-                    <View
-                      style={[styles.meterTrack, { backgroundColor: chrome.border }]}
-                    >
-                      <View
-                        style={[
-                          styles.meterFill,
-                          {
-                            width: `${Math.max(0, 100 - meter.usedPercent)}%`,
-                            backgroundColor:
-                              meter.usedPercent >= 90 ? theme.red : chrome.accent,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={[styles.rowValue, { color: chrome.text }]}>
-                      {`${Math.round(100 - meter.usedPercent)}% left${meter.resets ? ` · ${meter.resets}` : ""}`}
-                    </Text>
-                  </View>
-                ))}
-                {section.rows.map((row, index) => (
-                  <View
-                    key={row.key}
-                    style={[
-                      styles.row,
-                      index > 0 || section.meters?.length
-                        ? {
-                            borderTopColor: chrome.border,
-                            borderTopWidth: StyleSheet.hairlineWidth,
-                          }
-                        : null,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.rowKey, { color: chrome.textSubtle }]}
-                      numberOfLines={1}
-                    >
-                      {row.label}
-                    </Text>
-                    <Text
-                      style={[styles.rowValue, { color: chrome.text }]}
-                      selectable
-                    >
-                      {row.value}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
+                    title={meter.label}
+                    subtitle={`${Math.round(100 - meter.usedPercent)}% left${meter.resets ? ` · ${meter.resets}` : ""}`}
+                    trailing={
+                      <View style={[styles.meterTrack, { backgroundColor: colors.border }]}>
+                        <View
+                          style={[
+                            styles.meterFill,
+                            {
+                              width: `${Math.max(0, 100 - meter.usedPercent)}%`,
+                              backgroundColor: meter.usedPercent >= 90 ? colors.statusFailed : colors.accent,
+                            },
+                          ]}
+                        />
+                      </View>
+                    }
+                  />
+                )),
+                ...section.rows.map((row) => (
+                  <ListRow key={row.key} title={row.label} subtitle={row.value} subtitleNumberOfLines={0} />
+                )),
+              ]}
+            </ListSection>
           ))}
         </ScrollView>
       ) : state.phase === "failed" ? (
-        <View style={styles.state}>
-          <Icon name="warning-fill" size={20} color={theme.yellow} />
-          <Text style={[styles.stateTitle, { color: chrome.text }]}>
-            {state.unavailable
-              ? "No status for this chat"
-              : "Couldn't load status"}
-          </Text>
-          <Text style={[styles.stateText, { color: chrome.textSubtle }]}>
-            {state.unavailable
+        <EmptyState
+          size="inline"
+          tone={state.unavailable ? "default" : "danger"}
+          title={state.unavailable ? "No status for this chat" : "Couldn't load status"}
+          detail={
+            state.unavailable
               ? "Mewla reads status from the Codex it started. For this chat, type /status in the terminal."
-              : state.message}
-          </Text>
-          <View style={styles.actions}>
-            {state.unavailable ? null : (
-              <TouchableOpacity
-                accessibilityLabel="Retry status"
-                accessibilityRole="button"
-                style={[styles.actionButton, { backgroundColor: chrome.accent }]}
-                onPress={onRetry}
-                activeOpacity={0.82}
-              >
-                <Icon name="refresh" size={15} color={theme.cursorAccent} />
-                <Text style={[styles.primaryActionText, { color: theme.cursorAccent }]}>
-                  Retry
-                </Text>
-              </TouchableOpacity>
-            )}
-            {onSwitchToTerminal ? (
-              <TouchableOpacity
-                accessibilityLabel="Open terminal"
-                accessibilityRole="button"
-                style={[
-                  styles.actionButton,
-                  styles.secondaryActionButton,
-                  { borderColor: chrome.border, backgroundColor: chrome.surfaceMuted },
-                ]}
-                onPress={onSwitchToTerminal}
-                activeOpacity={0.78}
-              >
-                <Icon name="terminal" size={15} color={chrome.textSubtle} />
-                <Text style={[styles.secondaryActionText, { color: chrome.text }]}>
-                  Terminal
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        </View>
+              : state.message
+          }
+          action={state.unavailable ? undefined : { label: "Retry", icon: "refresh", onPress: onRetry }}
+          secondary={onSwitchToTerminal ? { label: "Terminal", icon: "terminal", onPress: onSwitchToTerminal } : undefined}
+          style={styles.state}
+        />
       ) : (
-        <View style={styles.state}>
-          <ComposerLoadingDots color={chrome.accent} size={10} />
-          <Text style={[styles.stateTitle, { color: chrome.text }]}>
-            Asking Codex
-          </Text>
+        <View style={styles.loading}>
+          <Spinner />
+          <AppText variant="compact" tone="secondary">Asking Codex</AppText>
         </View>
       )}
     </BottomSheetFrame>
@@ -252,141 +126,13 @@ function formatStatusTimestamp(value?: string) {
 }
 
 const styles = StyleSheet.create({
-  sheet: {
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 18,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 4,
-    paddingBottom: 12,
-  },
-  headerIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  title: {
-    fontSize: 17,
-    lineHeight: 22,
-    fontFamily: Typography.uiFontMedium,
-  },
-  subtitle: {
-    marginTop: 1,
-    fontSize: 12,
-    lineHeight: 16,
-    fontFamily: Typography.uiFont,
-  },
-  closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  content: {
-    maxHeight: 470,
-  },
-  contentBody: {
-    paddingBottom: 8,
-  },
-  rows: {
-    ...outlinedSurface(8),
-    overflow: "hidden",
-  },
-  row: {
-    minHeight: 42,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 3,
-  },
-  rowKey: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontFamily: Typography.uiFontMedium,
-    textTransform: "uppercase",
-  },
-  rowValue: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: Typography.terminalFont,
-  },
-  rawSection: {
-    marginTop: 12,
-    gap: 6,
-  },
-  sectionLabel: {
-    paddingHorizontal: 2,
-    fontSize: 11,
-    lineHeight: 14,
-    fontFamily: Typography.uiFontMedium,
-    textTransform: "uppercase",
-  },
-  meterTrack: {
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  meterFill: {
-    height: 6,
-    borderRadius: 3,
-  },
-  state: {
-    minHeight: 190,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 20,
-  },
-  stateTitle: {
-    fontSize: 14,
-    lineHeight: 18,
-    textAlign: "center",
-    fontFamily: Typography.uiFontMedium,
-  },
-  stateText: {
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: "center",
-    fontFamily: Typography.uiFont,
-  },
-  actions: {
-    marginTop: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  actionButton: {
-    minHeight: 44,
-    borderRadius: 8,
-    ...ContinuousCorners,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  secondaryActionButton: {
-    borderWidth: OutlineWidth,
-  },
-  primaryActionText: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontFamily: Typography.uiFontMedium,
-  },
-  secondaryActionText: {
-    fontSize: 13,
-    lineHeight: 17,
-    fontFamily: Typography.uiFontMedium,
-  },
+  sheet: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 18 },
+  header: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 4, paddingBottom: 12 },
+  headerCopy: { flex: 1, minWidth: 0 },
+  content: { maxHeight: 470 },
+  contentBody: { paddingBottom: 8 },
+  meterTrack: { width: 72, height: 6, borderRadius: 3, overflow: "hidden" },
+  meterFill: { height: 6, borderRadius: 3 },
+  state: { minHeight: 190 },
+  loading: { minHeight: 190, alignItems: "center", justifyContent: "center", gap: 10 },
 });

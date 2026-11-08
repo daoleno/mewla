@@ -1,16 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import BottomSheet, { BottomSheetScrollView } from "@expo/ui/community/bottom-sheet";
 import { HeaderBackButton } from "../navigation/HeaderBackButton";
-import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { TypeScale } from "../../constants/tokens";
+import { useAppColors } from "../../constants/tokens";
+import { AppText } from "../ui/AppText";
+import { IconButton } from "../ui/IconButton";
+import { InlineNotice } from "../ui/InlineNotice";
+import { ListRow, ListSection } from "../ui/ListSection";
+import { Spinner } from "../ui/Spinner";
 import type { ProviderError, ThreadRuntimeChoice } from "../../services/providers";
 import {
   reasoningEffortLabel,
@@ -20,9 +17,7 @@ import {
 import {
   effectRowsForRuntime,
   resolveModelSheetListMaxHeight,
-  runtimeRowSurfaceKey,
 } from "./sessionModelSheetModel";
-import { Icon } from "../icons/Icon";
 
 interface SessionModelSheetProps {
   visible: boolean;
@@ -30,7 +25,6 @@ interface SessionModelSheetProps {
   activating: boolean;
   error?: ProviderError | string | null;
   rows: ProviderPickerModelRow[];
-  chrome: TerminalThemeChrome;
   onRetry(): void;
   onClose(): void;
   onActivate(runtime: ThreadRuntimeChoice): void;
@@ -42,14 +36,13 @@ export function SessionModelSheet({
   activating,
   error,
   rows,
-  chrome,
   onRetry,
   onClose,
   onActivate,
 }: SessionModelSheetProps) {
   const sheetRef = useRef<BottomSheet>(null);
   const [effectTarget, setEffectTarget] = useState<ProviderPickerModelRow | null>(null);
-  const styles = useMemo(() => createStyles(), []);
+  const colors = useAppColors();
   const { height: windowHeight } = useWindowDimensions();
   const rowCount = effectTarget ? effectTarget.effects.length : rows.length;
   const listMaxHeight = resolveModelSheetListMaxHeight({ windowHeight, rowCount });
@@ -87,27 +80,27 @@ export function SessionModelSheet({
         {effectTarget ? (
           <HeaderBackButton
             surface="bare"
-            color={chrome.text}
+            color={colors.textPrimary}
             accessibilityLabel="Back to Model and Effect"
             onPress={() => setEffectTarget(null)}
           />
         ) : null}
-        <Text style={[styles.title, { color: chrome.text }]}>
+        <AppText variant="title" style={styles.title}>
           {effectTarget ? "Effect" : "Model & Effect"}
-        </Text>
-        <Pressable
-          style={styles.iconButton}
-          onPress={onClose}
-          accessibilityRole="button"
+        </AppText>
+        <IconButton
+          icon="close"
+          tone="ghost"
+          size={36}
+          iconSize={20}
           accessibilityLabel="Close runtime selection"
-        >
-          <Icon name="close" size={20} color={chrome.textMuted} />
-        </Pressable>
+          onPress={onClose}
+        />
       </View>
 
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={chrome.accent} />
+          <Spinner />
         </View>
       ) : (
         <BottomSheetScrollView
@@ -117,95 +110,64 @@ export function SessionModelSheet({
         >
           {effectTarget ? (
             <>
-              <Text style={[styles.context, { color: chrome.textMuted }]}>
+              <AppText variant="caption" tone="secondary" style={styles.context}>
                 {effectTarget.modelId}
-              </Text>
-              {effectRowsForRuntime(effectTarget).map(({ key, effect, selected }) => {
-                return (
-                  <Pressable
+              </AppText>
+              <ListSection>
+                {effectRowsForRuntime(effectTarget).map(({ key, effect, selected }) => (
+                  <ListRow
                     key={key}
-                    style={[
-                      styles.row,
-                      {
-                        backgroundColor: chrome[runtimeRowSurfaceKey(selected)],
-                      },
-                    ]}
+                    title={reasoningEffortLabel(effect)}
+                    accessory="check"
+                    selected={selected}
                     disabled={activating}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected, disabled: activating }}
                     accessibilityLabel={`Use ${reasoningEffortLabel(effect)} effect`}
+                    accessibilityRole="button"
                     onPress={() => {
                       const runtime = runtimeChoiceForRow(effectTarget, effect);
                       if (runtime) onActivate(runtime);
                     }}
-                  >
-                    <Text style={[styles.rowText, { color: chrome.text }]}>
-                      {reasoningEffortLabel(effect)}
-                    </Text>
-                    {selected ? (
-                      <Icon name="check" size={16} color={chrome.accent} />
-                    ) : null}
-                  </Pressable>
-                );
-              })}
+                  />
+                ))}
+              </ListSection>
             </>
-          ) : (
-            rows.map((row) => (
-              <Pressable
-                key={row.key}
-                style={[
-                  styles.row,
-                  {
-                    backgroundColor: chrome[runtimeRowSurfaceKey(row.current)],
-                    opacity: row.disabled && !row.current ? 0.55 : 1,
-                  },
-                ]}
-                disabled={row.disabled}
-                accessibilityRole="button"
-                accessibilityState={{
-                  selected: row.current,
-                  disabled: row.disabled,
-                }}
-                accessibilityLabel={`Use ${row.modelId} model`}
-                onPress={() => activateRow(row)}
-              >
-                <View style={styles.rowCopy}>
-                  <Text style={[styles.rowText, { color: chrome.text }]} numberOfLines={1}>
-                    {row.label}
-                  </Text>
-                  {row.unavailableCurrent ? (
-                    <Text style={[styles.caption, { color: chrome.textMuted }]}>
-                      Current runtime is no longer selectable.
-                    </Text>
-                  ) : null}
-                </View>
-                {row.effects.length > 0 ? (
-                  <Icon name="chevron-right" size={16} color={chrome.textMuted} />
-                ) : row.current ? (
-                  <Icon name="check" size={16} color={chrome.accent} />
-                ) : null}
-              </Pressable>
-            ))
-          )}
+          ) : rows.length > 0 ? (
+            <ListSection>
+              {rows.map((row) => (
+                <ListRow
+                  key={row.key}
+                  title={row.label}
+                  subtitle={row.unavailableCurrent ? "Current runtime is no longer selectable." : null}
+                  accessory={row.effects.length > 0 ? "chevron" : "check"}
+                  selected={row.current}
+                  disabled={row.disabled}
+                  accessibilityLabel={`Use ${row.modelId} model`}
+                  accessibilityRole="button"
+                  onPress={() => activateRow(row)}
+                />
+              ))}
+            </ListSection>
+          ) : null}
 
           {activating ? (
             <View style={styles.status}>
-              <ActivityIndicator size="small" color={chrome.accent} />
-              <Text style={[styles.caption, { color: chrome.textMuted }]}>Switching…</Text>
+              <Spinner />
+              <AppText variant="caption" tone="secondary">Switching…</AppText>
             </View>
           ) : null}
           {errorMessage ? (
-            <View style={styles.status}>
-              <Text style={[styles.rowText, { color: chrome.textMuted }]}>{errorMessage}</Text>
-              <Pressable onPress={onRetry} accessibilityRole="button">
-                <Text style={[styles.retry, { color: chrome.accent }]}>Retry</Text>
-              </Pressable>
-            </View>
+            <InlineNotice
+              tone="danger"
+              title="Could not load models"
+              detail={errorMessage}
+              detailNumberOfLines={0}
+              action={{ label: "Retry", onPress: onRetry }}
+            />
           ) : null}
           {!activating && !errorMessage && rows.length === 0 ? (
-            <Text style={[styles.rowText, { color: chrome.textMuted }]}>
+            <AppText variant="body" tone="secondary">
               No configured runtime is available. Sync models in Settings.
-            </Text>
+            </AppText>
           ) : null}
         </BottomSheetScrollView>
       )}
@@ -213,19 +175,11 @@ export function SessionModelSheet({
   );
 }
 
-function createStyles() {
-  return StyleSheet.create({
-    header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 8 },
-    title: { ...TypeScale.title, flex: 1 },
-    iconButton: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
-    center: { paddingVertical: 32, alignItems: "center" },
-    body: { paddingHorizontal: 16, gap: 10, paddingBottom: 16 },
-    context: { ...TypeScale.caption, paddingHorizontal: 2 },
-    row: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-    rowCopy: { flex: 1, minWidth: 0, gap: 2 },
-    rowText: { ...TypeScale.body },
-    caption: { ...TypeScale.caption },
-    status: { gap: 6, paddingVertical: 6 },
-    retry: { ...TypeScale.body, fontWeight: "600" },
-  });
-}
+const styles = StyleSheet.create({
+  header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6, gap: 8 },
+  title: { flex: 1 },
+  center: { paddingVertical: 32, alignItems: "center" },
+  body: { paddingHorizontal: 16, gap: 10, paddingBottom: 16 },
+  context: { paddingHorizontal: 2 },
+  status: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6 },
+});
