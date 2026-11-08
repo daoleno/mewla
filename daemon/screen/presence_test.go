@@ -257,3 +257,17 @@ func TestANewSessionIsToldOnlyOfRecentInput(t *testing.T) {
 		t.Fatalf("an hour-old key was told as news: %q", r.Text)
 	}
 }
+
+// A person's click that comes right after the agent's typing is the person's:
+// the agent's keys can only explain a key.
+func TestAPersonsClickRightAfterTheAgentsTypingIsTold(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	act(t, s, "%7", AgentAction{Action: "type", Text: "hello"})
+	backend.PersonInputOf(InputClick)
+	r := act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if !strings.Contains(r.Text, "person used") || !strings.Contains(r.Text, "click") {
+		t.Fatalf("a person's click just after the agent's typing was taken for its own: %q", r.Text)
+	}
+}
