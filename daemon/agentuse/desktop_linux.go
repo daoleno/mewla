@@ -5,7 +5,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
+
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 // desktopVars are what Chrome on Linux needs to open on the user's desktop.
@@ -18,12 +22,19 @@ func findDesktop() ([]string, bool) {
 	if vars := desktopFromEnviron(os.Environ(), socketExists); len(vars) > 0 {
 		return vars, true
 	}
+	if vars, ok := desktopFromDonor(); ok {
+		return vars, true
+	}
 	uid := uint32(os.Getuid())
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil, false
 	}
-	var fallback []string
+	// Chrome is told from the other programs by its executable, which costs no
+	// read; only its environment is read. Reading the environment of every
+	// process of the user to find it was a thousand reads each time the status
+	// was refreshed.
+	var others []string
 	for _, entry := range entries {
 		if _, err := strconv.Atoi(entry.Name()); err != nil {
 			continue
@@ -36,22 +47,47 @@ func findDesktop() ([]string, bool) {
 		if stat, ok := info.Sys().(*syscall.Stat_t); !ok || stat.Uid != uid {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(dir, "environ"))
-		if err != nil {
+		exe, _ := os.Readlink(filepath.Join(dir, "exe"))
+		if !strings.Contains(filepath.Base(exe), "chrome") {
+			others = append(others, entry.Name())
 			continue
 		}
-		vars := desktopFromEnviron(strings.Split(string(raw), "\x00"), socketExists)
-		if len(vars) == 0 {
-			continue
-		}
-		if exe, _ := os.Readlink(filepath.Join(dir, "exe")); strings.Contains(filepath.Base(exe), "chrome") {
+		if vars := desktopOfProcess(entry.Name()); len(vars) > 0 {
+			rememberDesktopDonor(entry.Name())
 			return vars, true
 		}
-		if fallback == nil {
-			fallback = vars
+	}
+	// No Chrome shows a desktop: any other program of the person's that does.
+	// This walk is the expensive one, so a walk that found nothing is not
+	// repeated for desktopWalkPause.
+	desktopDonor.Lock()
+	pause := time.Since(desktopDonor.emptyAt) < desktopWalkPause
+	desktopDonor.Unlock()
+	if pause {
+		return nil, false
+	}
+	for _, pid := range others {
+		if vars := desktopOfProcess(pid); len(vars) > 0 {
+			return vars, true
 		}
 	}
-	return fallback, fallback != nil
+	desktopDonor.Lock()
+	desktopDonor.emptyAt = time.Now()
+	desktopDonor.Unlock()
+	return nil, false
+}
+
+// desktopWalkPause is how long a walk over the person's other programs, which
+// found no desktop, is not repeated.
+const desktopWalkPause = 5 * time.Minute
+
+// desktopOfProcess is the desktop one process's environment names.
+func desktopOfProcess(pid string) []string {
+	raw, err := os.ReadFile(filepath.Join("/proc", pid, "environ"))
+	if err != nil {
+		return nil
+	}
+	return desktopFromEnviron(strings.Split(string(raw), "\x00"), socketExists)
 }
 
 // desktopFromEnviron keeps the desktop variables of one environment, or
@@ -112,4 +148,50 @@ func socketExists(path string) bool {
 	}
 	info, err := os.Stat(path)
 	return err == nil && info.Mode()&os.ModeSocket != 0
+}
+
+// desktopDonor is the Chrome process the last walk of /proc took the desktop
+// from. Looking again at that one process, and walking only when it is gone or
+// no longer names a desktop, turns a read of every process's environment each
+// time the status is refreshed into two reads.
+var desktopDonor struct {
+	sync.Mutex
+	pid   string
+	start string
+	// emptyAt is when a walk over the other programs last found no desktop.
+	emptyAt time.Time
+}
+
+func rememberDesktopDonor(pid string) {
+	number, err := strconv.Atoi(pid)
+	if err != nil {
+		return
+	}
+	process, err := workerproc.ReadProcStat(number)
+	if err != nil {
+		return
+	}
+	desktopDonor.Lock()
+	desktopDonor.pid, desktopDonor.start = pid, process.Start
+	desktopDonor.Unlock()
+}
+
+func desktopFromDonor() ([]string, bool) {
+	desktopDonor.Lock()
+	pid, start := desktopDonor.pid, desktopDonor.start
+	desktopDonor.Unlock()
+	number, err := strconv.Atoi(pid)
+	if err != nil {
+		return nil, false
+	}
+	// The start time fences a reused pid.
+	if process, err := workerproc.ReadProcStat(number); err != nil || process.Start != start {
+		return nil, false
+	}
+	raw, err := os.ReadFile(filepath.Join("/proc", pid, "environ"))
+	if err != nil {
+		return nil, false
+	}
+	vars := desktopFromEnviron(strings.Split(string(raw), "\x00"), socketExists)
+	return vars, len(vars) > 0
 }
