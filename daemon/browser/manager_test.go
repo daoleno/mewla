@@ -551,3 +551,48 @@ func TestAgentControlStartsAttachedBrowserOnlyWithVirtualScreen(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// An agent's first control on a browser that is running but stuck "uncertain"
+// (an action that could not be drained, never cleared by anyone) starts it
+// again instead of answering "unavailable" for ever; the person's session and
+// another agent's live lease are left alone.
+func TestAgentControlRestartsAnUncertainBrowser(t *testing.T) {
+	m, b, id := setup(t)
+	virtualScreen(t, m, true)
+	first := must(t, m, agent, Request{Action: "control", ID: id})
+	if first.Lease == nil || b.starts.Load() != 1 {
+		t.Fatalf("lease %v, starts %d", first.Lease, b.starts.Load())
+	}
+	e, _ := m.get(id)
+	e.mu.Lock()
+	e.uncertain = true
+	e.mu.Unlock()
+	// Another agent's live lease keeps the browser: no restart under it.
+	other := Owner{Kind: "agent", ID: "other-worker/client"}
+	if _, err := m.Handle(context.Background(), other, Request{Action: "control", ID: id}); !errors.Is(err, ErrBusy) || b.starts.Load() != 1 {
+		t.Fatalf("other agent: err %v, starts %d", err, b.starts.Load())
+	}
+	// The agent that held it asks again and gets a fresh runtime and lease.
+	again := must(t, m, agent, Request{Action: "control", ID: id})
+	if again.Lease == nil || again.Lease.Epoch == first.Lease.Epoch || b.starts.Load() != 2 {
+		t.Fatalf("lease %+v, starts %d", again.Lease, b.starts.Load())
+	}
+	// A person holding an uncertain browser is not restarted from under them.
+	must(t, m, human, Request{Action: "release", ID: id})
+	must(t, m, human, Request{Action: "control", ID: id})
+	e.mu.Lock()
+	e.uncertain = true
+	e.mu.Unlock()
+	if _, err := m.Handle(context.Background(), agent, Request{Action: "control", ID: id}); err == nil || b.starts.Load() != 2 {
+		t.Fatalf("restarted under the person: err %v, starts %d", err, b.starts.Load())
+	}
+}
+
+// A refusal names why, not a bare "unavailable".
+func TestControlRefusalsNameTheirCause(t *testing.T) {
+	m, _, id := setup(t)
+	_, err := m.Handle(context.Background(), agent, Request{Action: "control", ID: id})
+	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "virtual screen is off") {
+		t.Fatalf("err = %v", err)
+	}
+}
