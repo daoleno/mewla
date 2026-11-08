@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "../../components/ui/AppText";
 import { Button } from "../../components/ui/Button";
+import { MultilineField } from "../../components/ui/MultilineField";
 import { EmptyState } from "../../components/ui/EmptyState";
 import { confirmDestructive } from "../../components/ui/confirmDestructive";
 import { Icon } from "../../components/icons/Icon";
@@ -127,13 +128,13 @@ function DraftCard({ draft }: { draft: FriendsDraft }) {
           </AppText>
         </View>
       </View>
-      <TextInput
+      <MultilineField
         value={text}
         onChangeText={setText}
-        multiline
+        minHeight={110}
         maxLength={FRIENDS_POST_LIMIT + 50}
         accessibilityLabel="Draft text"
-        style={[styles.input, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle, color: colors.textPrimary }]}
+        style={styles.input}
       />
       {draft.media?.length ? (
         <View style={styles.mediaRow}>
@@ -206,7 +207,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row", alignItems: "center", gap: 12 },
   headCopy: { flex: 1 },
   needs: { borderRadius: 14, paddingHorizontal: 12, paddingVertical: 5 },
-  input: { minHeight: 110, borderRadius: 18, borderWidth: 1, padding: 14, fontSize: 18, lineHeight: 26, textAlignVertical: "top" },
+  input: { fontSize: 18, lineHeight: 26 },
   check: { flexDirection: "row", alignItems: "center", gap: 8 },
   checkText: { flex: 1 },
   buttons: { flexDirection: "row", gap: 12 },

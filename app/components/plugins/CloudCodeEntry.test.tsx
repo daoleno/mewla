@@ -18,6 +18,7 @@ if (!process.env.MEWLA_CLOUD_CODE_TEST_CHILD) {
   mock.module("../../constants/tokens", () => ({ Radii: { md: 12 }, ContinuousCorners: {}, useAppColors: () => ({ border: "gray" }) }));
   mock.module("../ui", () => ({ AppText: host("text"), Button: host("button"), InlineNotice: host("notice") }));
   const clipboard = mock(async () => "");
+  mock.module("../ui/MultilineField", () => ({ MultilineField: React.forwardRef((props: any, _ref) => React.createElement("input", props)) }));
   mock.module("expo-clipboard", () => ({ getStringAsync: clipboard }));
   const { CloudCodeEntry } = await import("./CloudCodeEntry");
   const callback = "Y29kZT10ZXN0LWNvZGUmc3RhdGU9dGVzdC1zdGF0ZQ==";

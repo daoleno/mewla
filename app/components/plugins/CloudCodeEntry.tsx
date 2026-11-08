@@ -1,14 +1,12 @@
 import React, { useRef, useState } from "react";
-import { StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
+import { StyleSheet, View, type TextInputInstance } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Radii, useAppColors } from "../../constants/tokens";
 import { AppText, Button, InlineNotice } from "../ui";
-import { outlinedSurface } from "../ui/outlinedSurface";
+import { MultilineField } from "../ui/MultilineField";
 
 
 /** The vendor CLI owns the remote sign-in; codes are sent only on Continue. */
 export function CloudCodeEntry({ onSubmit, serviceName = "AWS", noun = "code" }: { onSubmit(code: string): Promise<void>; serviceName?: string; /** What the person pastes: a sign-in code, or a client secret. */ noun?: string }) {
-  const colors = useAppColors();
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,17 +33,15 @@ export function CloudCodeEntry({ onSubmit, serviceName = "AWS", noun = "code" }:
   return <>
     <View style={styles.field}>
       <AppText variant="caption" tone="secondary">{noun === "code" ? `Paste the code ${serviceName} shows` : `Paste the ${noun}`}</AppText>
-      <TextInput
+      <MultilineField
         ref={input}
+        minHeight={48}
         accessibilityLabel={noun === "code" ? `Paste the code ${serviceName} shows` : `Paste the ${noun}`}
         testID="sign-in-code"
         placeholder={`Paste ${noun} here`}
-        placeholderTextColor={colors.textTertiary}
-        style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.bgElevated, borderColor: colors.border }]}
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="off"
-        multiline
         editable={!busy}
         value={code}
         onChangeText={(text) => { setCode(text); setError(""); }}
@@ -61,5 +57,4 @@ export function CloudCodeEntry({ onSubmit, serviceName = "AWS", noun = "code" }:
 
 const styles = StyleSheet.create({
   field: { gap: 8 },
-  input: { ...outlinedSurface(Radii.md), minHeight: 48, fontSize: 16, paddingHorizontal: 12, paddingVertical: 12 },
 });

@@ -111,14 +111,12 @@ describe("Calendar screen contract", () => {
       source.indexOf("const Field = React.memo"),
       source.indexOf("function AmbiguityChoice"),
     );
-    const styles = source.slice(source.indexOf("function createStyles"));
-
-    // Single-line text lives in the shared input, which owns the 48px geometry.
+    // Each geometry lives in one shared field: 48px single-line, top-aligned multiline.
     expect(field).toContain("<MobileSingleLineInput");
-    expect(field).toContain("styles.multiline");
-    expect(styles).toMatch(
-      /multiline:\s*\{[^}]*minHeight: 92,[^}]*paddingVertical: 10,[^}]*textAlignVertical: "top"/s,
-    );
+    expect(field).toContain("<MultilineField");
+    const multiline = readFileSync(join(import.meta.dir, "../components/ui/MultilineField.tsx"), "utf8");
+    expect(multiline).toMatch(/minHeight = 92/);
+    expect(multiline).toContain('textAlignVertical: "top"');
   });
   test("keeps Calendar copy concise and action-oriented", () => {
     for (const copy of [
