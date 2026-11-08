@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
   View, type TextInputInstance,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import * as ScreenOrientation from "expo-screen-orientation";
@@ -31,6 +31,7 @@ import { AgentScreens } from "./AgentScreens";
 import { phoneMenuItem } from "./phoneRow";
 import { usePhoneUse } from "../../store/phoneUse";
 import { useVirtualScreenLabs } from "../../store/virtualScreenLabs";
+import { VirtualScreenSwitch } from "../settings/VirtualScreenSettings";
 import { warnOnce } from "../../services/warnOnce";
 import { serverDisplayName } from "../../services/serverDisplayName";
 import {
@@ -130,6 +131,9 @@ export function ScreenScreen() {
   const iphone = useIPhoneUse(5_000);
   const phone = usePhoneUse();
   const virtualScreen = useVirtualScreenLabs();
+  // Coming back from Settings, where the switch may have changed.
+  const refreshVirtualScreen = virtualScreen.refresh;
+  useFocusEffect(useCallback(() => { refreshVirtualScreen(); }, [refreshVirtualScreen]));
   const [watching, setWatching] = useState(false);
   // Which agent is being watched, when several work at once.
   const [watchedWorker, setWatchedWorker] = useState<string | undefined>();
@@ -808,6 +812,10 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
   onChooseComputer(): void;
 }) {
   const { colors } = useAppTheme();
+  if (!status.supported && status.platform === "linux") {
+    // No screen to share, but its agents' browsers can have one: the switch is the way in.
+    return <View style={styles.setupBlock}><VirtualScreenSwitch /></View>;
+  }
   if (!status.supported) {
     const unsupported = unsupportedScreen(status, Platform.OS !== "web");
     return <EmptyState icon="desktop" title={unsupported.title} detail={unsupported.detail}

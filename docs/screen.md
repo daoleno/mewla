@@ -298,8 +298,10 @@ Workers started afterwards; one already running keeps it until it ends.
 ## Linux: agents' browsers on a virtual screen
 
 A Linux computer has no screen of yours to share, but the browsers agents use
-there run on a virtual screen of their own, off your desktop. With **Settings →
-Labs → Virtual screen** on, **Screen** lists every agent using a browser, each
+there run on a virtual screen of their own, off your desktop. **Screen** on a
+Linux computer shows the **Virtual screen** switch until it is on (the same
+switch as **Settings → Labs → Virtual screen**); a switch that cannot be read or
+set says why under it, with Retry. Once on, **Screen** lists every agent using a browser, each
 with its own live view, and the same three choices as on a Mac. A row keeps its
 place and its agent's name while you hold the browser. **New browser** in the
 menu opens one for signing in; the Phone, where phone use is on, is a row in
