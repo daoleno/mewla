@@ -42,10 +42,10 @@ func claudeProcessRecord(root string, pid int) (claudeProcessSession, bool, erro
 }
 
 func claudeIdentityRoot(pid int) string {
-	if root := firstProcessTreeEnvironValue(pid, "CLAUDE_CONFIG_DIR"); root != "" {
+	if root := cachedProcessTreeEnvironValue(pid, "CLAUDE_CONFIG_DIR"); root != "" {
 		return root
 	}
-	if home := firstProcessTreeEnvironValue(pid, "HOME"); home != "" {
+	if home := cachedProcessTreeEnvironValue(pid, "HOME"); home != "" {
 		return filepath.Join(home, ".claude")
 	}
 	return ""

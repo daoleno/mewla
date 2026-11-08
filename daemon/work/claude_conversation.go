@@ -228,14 +228,14 @@ func findClaudeTranscript(worker classifier.Worker, now time.Time) (claudeTransc
 // claudeWorkerConfigDir resolves the Claude config root the Worker's process
 // uses. ok=false means it cannot be resolved safely (relative path).
 func claudeWorkerConfigDir(worker classifier.Worker) (string, bool, error) {
-	configDir := firstProcessTreeEnvironValue(worker.ProcessID, "CLAUDE_CONFIG_DIR")
+	configDir := cachedProcessTreeEnvironValue(worker.ProcessID, "CLAUDE_CONFIG_DIR")
 	if configDir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", false, err
 		}
 		if worker.ProcessID > 0 {
-			if processHome := firstProcessTreeEnvironValue(worker.ProcessID, "HOME"); processHome != "" {
+			if processHome := cachedProcessTreeEnvironValue(worker.ProcessID, "HOME"); processHome != "" {
 				home = processHome
 			}
 		}
