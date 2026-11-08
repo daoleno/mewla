@@ -161,8 +161,16 @@ for the field box. Status tags are `StatusPill`, centred waits are
 `EmptyState busy`, in-line busy marks are `Spinner`, errors beside a form are
 `InlineNotice`, bottom sheets are `BottomSheetFrame` and centred cards
 `RisingSheet`, and an irreversible confirmation is `confirmDestructive`.
-Terminal-themed surfaces still draw their own buttons and notices from
-`TerminalThemeChrome`; the kit reads the app theme.
+A multi-line field is `MultilineField`, a list row is `ListRow` in a
+`ListSection`, and a failure with nothing to decide is a persistent error
+`Toast` (stays until tapped or swiped; anything tied to a visible form or
+sheet is an `InlineNotice` there, because a Toast sits under a Modal). Only a
+decision is an `Alert`.
+
+Terminal and Brain surfaces wear the terminal theme through the same
+tokens: wrap them in `TerminalThemeScope chrome={…}` (`theme/provider.tsx`)
+and the kit reads `TerminalThemeChrome` as `useAppColors()`. Never add a
+palette prop to a component.
 
 ### Gestures
 
