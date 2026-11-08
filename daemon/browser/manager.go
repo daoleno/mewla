@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -385,7 +386,9 @@ func (m *Manager) start(ctx context.Context, e *entry) error {
 	defer unlock(e)
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.runtime != nil && e.runtime.Alive() {
+	// A runtime whose last action could not be drained is running but cannot
+	// be trusted: starting it again is the way out, and the only one.
+	if e.runtime != nil && e.runtime.Alive() && !e.uncertain {
 		return nil
 	}
 	if e.runtime != nil {
@@ -394,6 +397,7 @@ func (m *Manager) start(ctx context.Context, e *entry) error {
 	}
 	runtime, err := m.backend.Start(ctx, filepath.Join(m.root, e.resource.ID))
 	if err != nil {
+		log.Printf("browser: starting %q (%s) failed: %v", e.resource.Name, e.resource.ID, err)
 		return err
 	}
 	e.runtime = runtime
@@ -408,15 +412,37 @@ func (m *Manager) start(ctx context.Context, e *entry) error {
 	return nil
 }
 
+// notRunning says why control cannot go ahead on this browser, in words the
+// agent can act on, or nil when it is running and trusted. Caller holds e.mu.
+func (m *Manager) notRunning(e *entry, o Owner) error {
+	switch {
+	case e.uncertain:
+		return ErrUncertain
+	case e.runtime != nil && e.runtime.Alive():
+		return nil
+	case o.Kind == "agent" && !e.resource.AllowAgents:
+		return fmt.Errorf("%w: agent access is off for this browser", ErrUnavailable)
+	case o.Kind == "agent" && !m.VirtualScreen():
+		return fmt.Errorf("%w: it is not running and the virtual screen is off, so it does not start for agents; the person can open it in Mewla Browser", ErrUnavailable)
+	}
+	return fmt.Errorf("%w: it is not running", ErrUnavailable)
+}
+
 func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, error) {
 	if o.Kind == "agent" && m.VirtualScreen() {
 		// With the virtual screen on, a browser an agent is attached to starts when
 		// the agent first asks for it, not when the Worker launches.
 		e.mu.Lock()
 		allowed, halted := e.resource.AllowAgents, e.halted[workerOf(o)]
+		// Not running, or running but stuck "uncertain" after an action that
+		// could not be drained (nobody can clear that from the phone but a
+		// restart). The person's own session and another agent's live lease
+		// are left alone.
 		down := e.runtime == nil || !e.runtime.Alive()
+		stuck := e.uncertain && !e.transferring && e.owner.Kind != "human" &&
+			(e.owner.ID == "" || e.owner == o || time.Now().After(e.expires))
 		e.mu.Unlock()
-		if down && allowed && !halted {
+		if (down || stuck) && allowed && !halted {
 			if err := m.start(ctx, e); err != nil {
 				return Response{}, err
 			}
@@ -439,9 +465,9 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 		e.mu.Unlock()
 		return Response{}, ErrBusy
 	}
-	if e.uncertain || e.runtime == nil || !e.runtime.Alive() {
+	if err := m.notRunning(e, o); err != nil {
 		e.mu.Unlock()
-		return Response{}, ErrUnavailable
+		return Response{}, err
 	}
 	e.transferring = true
 	e.mu.Unlock()
@@ -458,8 +484,8 @@ func (m *Manager) control(ctx context.Context, e *entry, o Owner) (Response, err
 	if e.uncertain {
 		return Response{}, ErrUncertain
 	}
-	if e.runtime == nil || !e.runtime.Alive() {
-		return Response{}, ErrUnavailable
+	if err := m.notRunning(e, o); err != nil {
+		return Response{}, err
 	}
 	if err := e.runtime.Release(ctx); err != nil {
 		e.uncertain = true

@@ -158,18 +158,71 @@ func (b *LinuxBackend) credentialStore(ctx context.Context, root string) (string
 }
 
 type child struct {
-	cmd  *exec.Cmd
-	done chan struct{}
+	cmd    *exec.Cmd
+	done   chan struct{}
+	stderr *tailBuffer
+}
+
+// tailBuffer keeps the last few KiB a process wrote, so a launch that failed
+// can say why instead of only that it did.
+type tailBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+const tailLimit = 2048
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > tailLimit {
+		t.buf = append([]byte(nil), t.buf[len(t.buf)-tailLimit:]...)
+	}
+	return len(p), nil
+}
+
+// reason is the last lines the process said, as one short string.
+func (p *child) reason() string {
+	if p == nil || p.stderr == nil {
+		return ""
+	}
+	p.stderr.mu.Lock()
+	text := strings.TrimSpace(strings.ToValidUTF8(string(p.stderr.buf), ""))
+	p.stderr.mu.Unlock()
+	lines := strings.Split(text, "\n")
+	if len(lines) > 4 {
+		lines = lines[len(lines)-4:]
+	}
+	text = strings.Join(lines, " | ")
+	if len(text) > 600 {
+		text = text[len(text)-600:]
+	}
+	return text
+}
+
+// launchFailure names the step that failed and why: what the process said, or
+// how the wait ended.
+func launchFailure(step string, cause error, p *child) error {
+	detail := p.reason()
+	if detail == "" {
+		detail = cause.Error()
+	} else if p != nil && !p.alive() {
+		detail = fmt.Sprintf("exited (%v): %s", p.cmd.ProcessState, detail)
+	}
+	return fmt.Errorf("%s: %s", step, detail)
 }
 
 func spawn(env []string, name string, args ...string) (*child, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Env = env
+	tail := &tailBuffer{}
+	cmd.Stderr = tail
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	p := &child{cmd: cmd, done: make(chan struct{})}
+	p := &child{cmd: cmd, done: make(chan struct{}), stderr: tail}
 	go func() { _ = cmd.Wait(); close(p.done) }()
 	return p, nil
 }
@@ -280,7 +333,7 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 		_, e := os.Stat(filepath.Join(dir, "run", "mewla-browser"))
 		return e == nil
 	}); err != nil {
-		return nil, errors.New("Private graphical session could not start")
+		return nil, launchFailure("Private graphical session (kwin_wayland) could not start", err, r.display)
 	}
 	// The private profile lock is also enforced by Chrome. Never delete its SingletonLock.
 	_ = os.Remove(filepath.Join(profile, "DevToolsActivePort"))
@@ -303,11 +356,15 @@ func (b *LinuxBackend) Start(ctx context.Context, root string) (Runtime, error) 
 		r.endpoint = fmt.Sprintf("http://127.0.0.1:%d", port)
 		return r.chrome.alive()
 	}); err != nil {
-		return nil, errors.New("Managed Chrome could not start; check its profile lock and graphical runtime")
+		return nil, launchFailure("Managed Chrome could not start", err, r.chrome)
 	}
 	tabs, err := r.tabs(ctx)
 	if err != nil || len(tabs) == 0 {
-		return nil, errors.New("Managed browser has no page")
+		cause := errors.New("it listed no page")
+		if err != nil {
+			cause = err
+		}
+		return nil, launchFailure("Managed Chrome is up but has no page", cause, r.chrome)
 	}
 	r.target = tabs[0].ID
 	if _, err = r.cli(ctx, "tab", r.target); err != nil {
@@ -401,11 +458,18 @@ func (r *linuxRuntime) cli(ctx context.Context, args ...string) (json.RawMessage
 	var response struct {
 		Success bool            `json:"success"`
 		Data    json.RawMessage `json:"data"`
+		Error   string          `json:"error"`
 	}
 	if len(raw) > 2<<20 || json.Unmarshal(raw, &response) != nil {
 		return nil, errors.New("Browser tool returned an invalid response")
 	}
 	if err != nil || !response.Success {
+		if msg := strings.TrimSpace(response.Error); msg != "" {
+			if len(msg) > 300 {
+				msg = msg[:300]
+			}
+			return nil, fmt.Errorf("Browser action failed (%s); refresh the page state before retrying", msg)
+		}
 		return nil, errors.New("Browser action failed; refresh the page state before retrying")
 	}
 	return response.Data, nil
