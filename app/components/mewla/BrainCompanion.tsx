@@ -4,7 +4,6 @@ import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { TypeScale } from "../../constants/tokens";
 import { workHintTone, type BrainCatPresence } from "./brainCatState";
 import { BrainWorkHint } from "./BrainWorkHint";
-import { markWorkOpen } from "./workOpenTiming";
 import { TappableCat } from "./TappableCat";
 import type { BrainWorkSlip } from "../brain/brainWorkSurface";
 import type { WorkSlipAction } from "../brain/WorkSlip";
@@ -79,7 +78,6 @@ export function BrainCatRow({
         size={ROW_CAT}
         animate={companion.animate}
         onPress={companion.onCatTap ? tap : undefined}
-        onPressIn={() => markWorkOpen("pressIn")}
         accessibilityLabel={`Brain: ${label}`}
         accessibilityHint={turnRunning ? "Says what Brain is doing" : "Brain answers"}
       />
@@ -125,7 +123,6 @@ export function useCatSays(companion: BrainCompanion | null, turnRunning: boolea
     return () => clearTimeout(timer);
   }, [said]);
   const tap = useCallback(() => {
-    markWorkOpen("press");
     const line = companion?.onCatTap?.({ turnRunning, turnLabel });
     if (line) {
       setSaid(line);
