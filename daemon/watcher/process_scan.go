@@ -40,7 +40,7 @@ var psFailures logonce.Log
 
 // processColdAge is how old a reading of a process outside every pane's tree
 // may be before the poll loop reads it again.
-const processColdAge = 10 * time.Second
+const processColdAge = 30 * time.Second
 
 // snapshotProcessesNear is snapshotProcesses for the poll loop: where the
 // platform can, it keeps reading the panes' own process trees afresh and
@@ -55,6 +55,15 @@ func snapshotProcessesNear(roots []int) map[int]processInfo {
 // ownership-probe diagnostics.
 func snapshotProcessesErr() (map[int]processInfo, error) {
 	return snapshotProcessTable()
+}
+
+// snapshotProcessesNearErr is the table a decision about one pane needs: the
+// panes' own process trees (and the pane at pid, which an inventory may not
+// have reached yet) are read afresh, the rest of the machine is the shared
+// reading of the last processColdAge. Reading every process of the machine for
+// each such decision was a /proc walk of its own, several a second.
+func snapshotProcessesNearErr(roots []int, pid int) (map[int]processInfo, error) {
+	return snapshotProcessTableNear(append(append([]int(nil), roots...), pid))
 }
 
 // commandStderr returns ": <stderr>" for a failed exec.Cmd.Output, truncated

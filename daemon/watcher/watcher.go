@@ -843,7 +843,7 @@ func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIden
 	if err != nil || panePID <= 0 {
 		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s reported pane_pid %q", target, fields[1])
 	}
-	processes, err := snapshotProcessesErr()
+	processes, err := snapshotProcessesNearErr(w.screens.paneRoots(), panePID)
 	if err != nil {
 		return targetProcessIdentity{}, err
 	}
