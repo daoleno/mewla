@@ -86,3 +86,15 @@ func TestMatchPopupItem(t *testing.T) {
 		}
 	}
 }
+
+func TestPressingAPopUpPointsToSetValue(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	backend.RunningApps = popupApp(false)
+	backend.PopupItems = map[string][]string{"Team": {"Choose", "Platform"}}
+	state := act(t, s, "%7", AgentAction{Action: "app_state", App: "Tickets"}).Text
+	id := idOf(t, state, `PopUpButton "Team"`)
+	got := act(t, s, "%7", AgentAction{Action: "element", Element: id, ElementAction: "press"}).Text
+	if !strings.Contains(got, "Choose with set_value and the item's title") || len(backend.KeyGuards) != 1 {
+		t.Fatalf("guards %d: %s", len(backend.KeyGuards), got)
+	}
+}

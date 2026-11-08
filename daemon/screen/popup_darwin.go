@@ -122,7 +122,14 @@ func choosePopupItem(ctx context.Context, e Element, title string) (PopupChoice,
 	press := func(action string) {
 		go withPool(func() { pressed <- axAction(popup, action) })
 	}
-	press("AXPress")
+	// A menu an earlier press left open already lists its items (a closed
+	// Chromium pop-up lists only the selected one); pressing again would
+	// close it.
+	if len(closed) > 1 {
+		closed = nil
+	} else {
+		press("AXPress")
+	}
 	alternate := false
 	defer func() {
 		// No AX call may outlive this one, and the timeout goes back to the default.
