@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "../../components/ui/AppText";
 import { EmptyState } from "../../components/ui/EmptyState";
+import { ListRow, ListSection } from "../../components/ui/ListSection";
 import { Icon, type IconName } from "../../components/icons/Icon";
 import { friendsCall } from "../../services/friendsAccount";
 import { notificationRows, relativeTime, type FriendsNotification, type NotificationRow } from "../../services/friendsApi";
@@ -43,15 +44,15 @@ export default function FriendsNotificationsScreen() {
   const agent = status?.me?.agent_name || "Brain";
   const draftsRow =
     draftCount > 0 ? (
-      <Pressable accessibilityRole="button" onPress={() => router.push("/friends/drafts")} style={[styles.row, { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderSubtle }]}>
-        <Icon name="edit" color={colors.textSecondary} size={22} />
-        <View style={styles.copy}>
-          <AppText variant="body">
-            {agent} has {draftCount === 1 ? "a draft" : `${draftCount} drafts`} waiting for you
-          </AppText>
-        </View>
-        <Icon name="chevron-right" color={colors.textTertiary} size={20} />
-      </Pressable>
+      <ListSection style={styles.drafts}>
+        <ListRow
+          icon="edit"
+          title={`${agent} has ${draftCount === 1 ? "a draft" : `${draftCount} drafts`} waiting for you`}
+          numberOfLines={2}
+          accessory="chevron"
+          onPress={() => router.push("/friends/drafts")}
+        />
+      </ListSection>
     ) : null;
 
   if (rows === null) {
@@ -97,6 +98,7 @@ export default function FriendsNotificationsScreen() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   row: { flexDirection: "row", alignItems: "flex-start", gap: 14, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  drafts: { marginHorizontal: 16, marginTop: 12, marginBottom: 4 },
   copy: { flex: 1, gap: 2 },
   unread: { width: 10, height: 10, borderRadius: 5, marginTop: 6 },
 });

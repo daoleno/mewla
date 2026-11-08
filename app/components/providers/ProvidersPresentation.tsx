@@ -3,7 +3,6 @@ import * as Clipboard from "expo-clipboard";
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -28,7 +27,6 @@ import { ListRow, ListSection } from "../ui/ListSection";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { StatusPill } from "../ui/StatusPill";
 import { StatusMark } from "../ui/StatusMark";
-import type { WorkStatus } from "../ui/workStatus";
 import type {
   ProviderClient,
   ProviderConnection,
@@ -65,7 +63,6 @@ function catalogAgeLabel(connection: ProviderConnection): string {
   if (hours < 24) return `Models ${hours}h ago`;
   return `Models ${Math.round(hours / 24)}d ago`;
 }
-import { AnimatedPressable } from "../ui/AnimatedPressable";
 import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import { RisingSheet } from "../ui/RisingSheet";
 import { EmptyState } from "../ui/EmptyState";
@@ -84,6 +81,7 @@ import {
 } from "./providersPresentationModel";
 import { Icon } from "../icons/Icon";
 import { Button } from "../ui/Button";
+import { Spinner } from "../ui/Spinner";
 import { IconButton } from "../ui/IconButton";
 import { InkSwitch } from "../ui/InkSwitch";
 
@@ -451,20 +449,16 @@ function ProviderConnectionList({
         }
       >
         <View accessibilityRole="radiogroup">
-          <Pressable
-            style={({ pressed }) => [styles.selectRow, styles.directRow, pressed && { backgroundColor: colors.surfacePressed }]}
+          <ListRow
+            leading={<SelectionMark selected={directSelected} />}
+            title="Official login"
+            subtitle="Direct · uses the native account"
             accessibilityRole="radio"
             accessibilityLabel={`${providerClientLabel(selectedClient)} official login`}
-            accessibilityState={{ checked: directSelected, disabled }}
+            selected={directSelected}
             disabled={disabled || directSelected}
             onPress={() => onUseDirect(selectedClient)}
-          >
-            <SelectionMark selected={directSelected} />
-            <View style={styles.providerRowCopy}>
-              <Text style={styles.rowTitle}>Official login</Text>
-              <Text style={styles.rowSubtitle}>Direct · uses the native account</Text>
-            </View>
-          </Pressable>
+          />
         </View>
         {connections.map((connection) => (
           <ProviderConnectionRow
@@ -553,7 +547,7 @@ function ProviderConnectionRow({
       });
     }
   };
-  const status: { text: string; mark?: WorkStatus } | null =
+  const status: { text: string } | null =
     testState.kind === "testing"
       ? { text: "Testing connection…" }
       : testState.kind === "success"
@@ -561,58 +555,46 @@ function ProviderConnectionRow({
             text: `Connected · ${testState.latencyMs} ms${
               testState.modelCount > 0 ? ` · ${testState.modelCount} models found` : ""
             }`,
-            mark: "ready",
           }
         : testState.kind === "error"
-          ? { text: testState.message, mark: "failed" }
+          ? { text: testState.message }
           : switchState?.kind === "error"
-            ? { text: switchState.message ?? "Could not switch Provider.", mark: "failed" }
+            ? { text: switchState.message ?? "Could not switch Provider." }
             : null;
   return (
     <View>
-      <View style={styles.selectRow}>
-        <AnimatedPressable
-          style={styles.providerSelect}
-          preset="press"
-          disabled={disabled}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: selected, disabled: disabled || !ready }}
-          accessibilityLabel={`${connection.name}, ${connectionSubtitle(connection, catalog)}${ready ? "" : ", API key required"}`}
-          onPress={ready ? onSelectConnectionForClient : onOpenEditor}
-        >
-          <SelectionMark selected={selected} />
-          <View style={styles.providerRowCopy}>
-            <Text style={styles.rowTitle} numberOfLines={1}>
-              {connection.name}
-            </Text>
-            <Text style={styles.rowSubtitle} numberOfLines={1}>
-              {connectionSubtitle(connection, catalog)} · {exposedCount} models ·{" "}
-              {catalogAgeLabel(connection)}
-            </Text>
-            {status ? (
-              <View style={[styles.testResult, styles.rowStatus]}>
-                {status.mark ? <StatusMark status={status.mark} knockout={colors.bgSurface} /> : null}
-                <Text style={[styles.rowSubtitle, styles.flexText]} numberOfLines={2}>
-                  {status.text}
-                </Text>
-              </View>
+      <ListRow
+        leading={<SelectionMark selected={selected} />}
+        title={connection.name}
+        subtitle={[
+          `${connectionSubtitle(connection, catalog)} · ${exposedCount} models · ${catalogAgeLabel(connection)}`,
+          status?.text,
+        ].filter(Boolean).join("\n")}
+        subtitleNumberOfLines={3}
+        accessibilityRole="radio"
+        accessibilityLabel={`${connection.name}, ${connectionSubtitle(connection, catalog)}${ready ? "" : ", API key required"}`}
+        selected={selected}
+        disabled={disabled}
+        onPress={ready ? onSelectConnectionForClient : onOpenEditor}
+        trailing={
+          <View style={styles.rowTrailing}>
+            {switchState?.kind === "pending" ? (
+              <Spinner color={colors.accent} />
+            ) : !ready ? (
+              <StatusPill label="Key required" tone="warning" />
             ) : null}
+            <IconButton
+              icon="more-horizontal"
+              tone="ghost"
+              size={44}
+              iconSize={18}
+              color={colors.textSecondary}
+              accessibilityLabel={`${connection.name} actions`}
+              onPress={() => setMenuVisible(true)}
+            />
           </View>
-          {switchState?.kind === "pending" ? (
-            <ActivityIndicator size="small" color={colors.accent} />
-          ) : !ready ? (
-            <StatusPill label="Key required" tone="warning" />
-          ) : null}
-        </AnimatedPressable>
-        <Pressable
-          style={({ pressed }) => [styles.moreAction, pressed && { opacity: 0.5 }]}
-          accessibilityRole="button"
-          accessibilityLabel={`${connection.name} actions`}
-          onPress={() => setMenuVisible(true)}
-        >
-          <Icon name="more-horizontal" size={18} color={colors.textSecondary} />
-        </Pressable>
-      </View>
+        }
+      />
       <ActionMenu
         visible={menuVisible}
         title={connection.name}
@@ -1111,16 +1093,6 @@ function ModelSyncSheet({
 
 function createStyles(colors: ReturnType<typeof useAppColors>) {
   return StyleSheet.create({
-    selectRow: {
-      minHeight: 60,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      paddingLeft: 16,
-    },
-    directRow: {
-      paddingRight: 16,
-    },
     safe: { flex: 1, backgroundColor: colors.bgPrimary },
     content: {
       paddingHorizontal: 16,
@@ -1138,22 +1110,7 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
     providerList: { gap: 16 },
     agentSelector: {},
     providerSearch: { marginBottom: 2 },
-    providerSelect: {
-      flex: 1,
-      minWidth: 0,
-      minHeight: 60,
-      paddingVertical: 10,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-    },
-    providerRowCopy: { flex: 1, minWidth: 0, gap: 2 },
-    moreAction: {
-      minHeight: 48,
-      minWidth: 48,
-      alignItems: "center",
-      justifyContent: "center",
-    },
+    rowTrailing: { flexDirection: "row", alignItems: "center", gap: 6 },
     radioOuter: {
       width: 20,
       height: 20,
@@ -1171,17 +1128,6 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       height: 10,
       borderRadius: 5,
       backgroundColor: colors.accent,
-    },
-    rowTitle: {
-      ...UiTextMetrics,
-      ...TypeScale.body,
-      color: colors.textPrimary,
-    },
-    rowSubtitle: {
-      ...UiTextMetrics,
-      ...TypeScale.caption,
-      color: colors.textTertiary,
-      marginTop: 2,
     },
     editorCard: {
       backgroundColor: colors.bgSurface,
@@ -1312,7 +1258,6 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       marginHorizontal: 2,
       marginTop: 3,
     },
-    rowStatus: { paddingHorizontal: 0, paddingTop: 3, alignItems: "center", gap: 5 },
     testResult: {
       flexDirection: "row",
       alignItems: "flex-start",
@@ -1321,6 +1266,5 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       paddingTop: 2,
     },
     testResultText: { ...UiTextMetrics, ...TypeScale.caption, flex: 1, color: colors.textSecondary },
-    flexText: { flex: 1, marginTop: 0 },
   });
 }

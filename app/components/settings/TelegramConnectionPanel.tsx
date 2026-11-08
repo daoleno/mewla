@@ -1,9 +1,11 @@
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Radii, useAppColors, TypeScale, UiTextMetrics } from "../../constants/tokens";
-import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { useAppColors, TypeScale, UiTextMetrics } from "../../constants/tokens";
+import { Button } from "../ui/Button";
+import { ListRow, ListSection } from "../ui/ListSection";
+import { Spinner } from "../ui/Spinner";
 import { IconButton } from "../ui/IconButton";
 import { InlineNotice } from "../ui/InlineNotice";
 import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
@@ -58,41 +60,13 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
 
   // A primary action is the one filled call to action; everything else is a
   // row in a grouped card.
-  const action = (name: string, icon: IconName, onPress: () => void, danger = false, primary = false, unavailable = disabled) => {
-    const ink = primary ? colors.textOnAccent : danger ? colors.dangerText : colors.accentStrong;
-    return (
-      <AnimatedPressable key={name} onPress={onPress} disabled={unavailable} accessibilityRole="button"
-        accessibilityLabel={name} accessibilityState={{ disabled: unavailable, busy }}
-        style={[primary ? styles.primary : styles.row, primary ? { backgroundColor: colors.accent } : null, { opacity: unavailable ? 0.45 : 1 }]}>
-        <View style={primary ? styles.primaryIcon : styles.rowIcon}>
-          <Icon name={icon} size={primary ? 18 : 19} color={ink} />
-        </View>
-        <Text numberOfLines={2} style={[primary ? styles.primaryText : styles.rowText, { color: primary ? ink : danger ? colors.dangerText : colors.textPrimary }]}>{name}</Text>
-      </AnimatedPressable>
-    );
-  };
-  const group = (children: React.ReactNode[]) => {
-    const rows = children.filter(Boolean);
-    if (rows.length === 0) return null;
-    return (
-      <View style={[styles.group, { backgroundColor: colors.bgSurface }]}>
-        {rows.map((row, index) => (
-          <View key={index}>
-            {index > 0 ? <View pointerEvents="none" style={[styles.divider, { backgroundColor: colors.borderSubtle }]} /> : null}
-            {row}
-          </View>
-        ))}
-      </View>
-    );
-  };
-  // Label and value share one line: the label keeps its width, the value
-  // takes the rest and truncates instead of wrapping or widening the card.
-  const detail = (name: string, value: string) => (
-    <View key={name} style={styles.detail}>
-      <Text numberOfLines={1} style={[styles.detailLabel, { color: colors.textPrimary }]}>{name}</Text>
-      <Text numberOfLines={1} style={[styles.detailValue, { color: colors.textSecondary }]}>{value}</Text>
-    </View>
+  const primary = (name: string, icon: IconName, onPress: () => void, unavailable = disabled) => (
+    <Button key={name} label={name} icon={icon} variant="filled" size="lg" block disabled={unavailable} onPress={onPress} />
   );
+  const row = (name: string, icon: IconName, onPress: () => void, destructive = false) => (
+    <ListRow key={name} title={name} icon={icon} destructive={destructive} disabled={disabled} onPress={onPress} />
+  );
+  const detail = (name: string, value: string) => <ListRow key={name} title={name} value={value} />;
   // Opaque identifiers keep both ends readable and copy in full on tap.
   const copyableDetail = (name: string, value: string) => {
     const done = copied === name;
@@ -103,19 +77,14 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
       copiedTimer.current = setTimeout(() => setCopied(null), 1600);
     };
     return (
-      <AnimatedPressable key={name} onPress={() => void copy()} accessibilityRole="button"
-        accessibilityLabel={`${name} ${value}`} accessibilityHint={`Copies the ${name.toLowerCase()} ID`} style={styles.detail}>
-        <Text numberOfLines={1} style={[styles.detailLabel, { color: colors.textPrimary }]}>{name}</Text>
-        <View style={styles.detailValueGroup}>
-          <Text numberOfLines={1} ellipsizeMode="middle" style={[styles.detailValue, { color: done ? colors.accentStrong : colors.textSecondary }]}>{done ? "Copied" : value}</Text>
-          <Icon name={done ? "check" : "copy"} size={16} color={done ? colors.accentStrong : colors.textTertiary} />
-        </View>
-      </AnimatedPressable>
+      <ListRow key={name} title={name} value={done ? "Copied" : value} accessibilityLabel={`${name} ${value}`}
+        accessibilityHint={`Copies the ${name.toLowerCase()} ID`} onPress={() => void copy()} />
     );
   };
-  const sectionTitle = (name: string) => (
-    <Text accessibilityRole="header" style={[styles.sectionTitle, { color: colors.textTertiary }]}>{name}</Text>
-  );
+  const group = (children: React.ReactNode[], title?: string) => {
+    const rows = children.filter(Boolean);
+    return rows.length === 0 ? null : <ListSection title={title}>{rows}</ListSection>;
+  };
 
   return <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
     contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 24 }]}>
@@ -125,49 +94,45 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
       </View>
       <Text numberOfLines={1} style={[styles.title, { color: colors.textPrimary }]}>{configured ? `@${status?.bot_username}` : "Telegram"}</Text>
       <View style={styles.statusLine}>
-        {loading || busy ? <ActivityIndicator size="small" accessibilityLabel="Updating Telegram connection" color={colors.textTertiary} /> : null}
+        {loading || busy ? <Spinner /> : null}
         <Text style={[styles.subtitle, { color: labelInk }]}>{label}</Text>
       </View>
       {status?.owner_hint ? <Text numberOfLines={1} style={[styles.caption, { color: colors.textTertiary }]}>{status.owner_hint}</Text> : null}
     </View>
 
-    {error || status?.last_error ? <InlineNotice tone="danger" title="Telegram problem" detail={error || status?.last_error} detailNumberOfLines={0} /> : null}
+    {error || status?.last_error ? <InlineNotice tone="danger" title="Telegram problem" detail={error || status?.last_error} detailNumberOfLines={0} style={styles.gap} /> : null}
 
     {!connected ? <Text style={[styles.notice, { color: colors.textSecondary }]}>Reconnect the current server in Settings.</Text>
-      : loading ? null : error ? action("Retry", "refresh", props.onRetry, false, true)
-      : !configured || props.editingToken ? <View>
-        {sectionTitle("Bot token")}
-        <MobileSingleLineInput framed value={props.token} onChangeText={props.onToken} secureTextEntry editable={!disabled}
-          accessibilityLabel="Telegram bot token" placeholder="Paste the BotFather token" autoCapitalize="none" autoCorrect={false}
-          textContentType="none" importantForAutofill="no" returnKeyType="done" onSubmitEditing={props.onConfigure}
-          placeholderTextColor={colors.textTertiary}
-          trailing={<IconButton icon="clipboard" tone="ghost" size={44} iconSize={21} color={colors.accentStrong} disabled={disabled}
-            accessibilityLabel="Paste Telegram bot token from clipboard" onPress={props.onPaste} />} />
-        <Text style={[styles.notice, { color: colors.textTertiary }]}>Bot chats are stored by Telegram. Your token stays on the connected server.</Text>
-        <View style={styles.stack}>
-          {action(busy ? "Verifying" : "Verify token", "check", props.onConfigure, false, true, disabled || !props.token.trim())}
-          {group([props.editingToken ? action("Cancel", "close", props.onCancelToken) : action("BotFather", "open-external", props.onBotFather)])}
-        </View>
+      : loading ? null : error ? primary("Retry", "refresh", props.onRetry)
+      : !configured || props.editingToken ? <View style={styles.stack}>
+        <ListSection title="Bot token" footer="Bot chats are stored by Telegram. Your token stays on the connected server." style={styles.flush}>
+          <MobileSingleLineInput framed value={props.token} onChangeText={props.onToken} secureTextEntry editable={!disabled}
+            accessibilityLabel="Telegram bot token" placeholder="Paste the BotFather token" autoCapitalize="none" autoCorrect={false}
+            textContentType="none" importantForAutofill="no" returnKeyType="done" onSubmitEditing={props.onConfigure}
+            placeholderTextColor={colors.textTertiary}
+            trailing={<IconButton icon="clipboard" tone="ghost" size={44} iconSize={21} color={colors.accentStrong} disabled={disabled}
+              accessibilityLabel="Paste Telegram bot token from clipboard" onPress={props.onPaste} />} />
+        </ListSection>
+        {primary(busy ? "Verifying" : "Verify token", "check", props.onConfigure, disabled || !props.token.trim())}
+        {group([props.editingToken ? row("Cancel", "close", props.onCancelToken) : row("BotFather", "open-external", props.onBotFather)])}
       </View> : <View style={styles.stack}>
         {bound ? <>
-          {status?.enabled ? action("Open Telegram", "open-external", props.onOpen, false, true) : action("Reconnect", "refresh", props.onReconnect, false, true)}
+          {status?.enabled ? primary("Open Telegram", "open-external", props.onOpen) : primary("Reconnect", "refresh", props.onReconnect)}
           {group([
             detail("Status", label),
             detail("Recipient", recipient),
-            status?.enabled ? action("Disconnect", "pause", props.onDisconnect) : action("Open Telegram", "open-external", props.onOpen),
+            status?.enabled ? row("Disconnect", "pause", props.onDisconnect) : row("Open Telegram", "open-external", props.onOpen),
           ])}
         </> : <>
-          {action(status?.binding_pending ? "Open connection link" : "Connect Telegram", "open-external", props.onBind, false, true)}
+          {primary(status?.binding_pending ? "Open connection link" : "Connect Telegram", "open-external", props.onBind)}
           {group([detail("Status", label)])}
         </>}
       </View>}
 
     {configured && connected && !loading ? <>
-      <AnimatedPressable onPress={() => setAdvanced(value => !value)} accessibilityRole="button" accessibilityLabel="Advanced"
-        accessibilityState={{ expanded: advanced }} style={styles.advanced}>
-        <Text style={[styles.sectionTitle, styles.advancedLabel, { color: colors.textTertiary }]}>Advanced</Text>
-        <Icon name={advanced ? "chevron-up" : "chevron-down"} size={16} color={colors.textTertiary} />
-      </AnimatedPressable>
+      <ListSection style={styles.advanced}>
+        <ListRow title="Advanced" expanded={advanced} accessory="chevron" accessibilityLabel="Advanced" onPress={() => setAdvanced(value => !value)} />
+      </ListSection>
       {advanced ? <View style={styles.stack}>
         {group([
           detail("Chat mode", status?.topics_available ? "Native topics" : "Private chat"),
@@ -179,12 +144,12 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
           status?.last_send_at ? detail("Last sent", formatDate(status.last_send_at, DateStyle.dateTime)) : null,
         ])}
         {group([
-          action("Refresh", "refresh", props.onRetry),
-          action("Replace token", "key", props.onEditToken),
+          row("Refresh", "refresh", props.onRetry),
+          row("Replace token", "key", props.onEditToken),
         ])}
         {group([
-          bound ? action("Unlink account", "person-remove", props.onRevoke, true) : null,
-          action("Remove bot", "trash", props.onRemove, true),
+          bound ? row("Unlink account", "person-remove", props.onRevoke, true) : null,
+          row("Remove bot", "trash", props.onRemove, true),
         ])}
       </View> : null}
     </> : null}
@@ -199,23 +164,9 @@ const styles = StyleSheet.create({
   statusLine: { flexDirection: "row", alignItems: "center", gap: 6 },
   subtitle: { ...UiTextMetrics, ...TypeScale.compact, flexShrink: 1 },
   caption: { ...UiTextMetrics, ...TypeScale.caption },
-  stack: { gap: 18 },
-  group: { borderRadius: Radii.card, overflow: "hidden" },
-  // Inset hairline drawn over the row, so every row keeps the same 16pt
-  // content inset instead of shifting right under an indented border.
-  divider: { position: "absolute", top: 0, left: 16, right: 0, height: StyleSheet.hairlineWidth },
-  row: { minHeight: 52, paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", alignItems: "center", gap: 12 },
-  rowIcon: { width: 22, height: 22, alignItems: "center", justifyContent: "center" },
-  rowText: { ...UiTextMetrics, ...TypeScale.body, flex: 1, minWidth: 0 },
-  primary: { minHeight: 52, paddingHorizontal: 20, borderRadius: 999, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  primaryIcon: { width: 20, height: 20, alignItems: "center", justifyContent: "center" },
-  primaryText: { ...UiTextMetrics, ...TypeScale.body, fontWeight: "600", flexShrink: 1, textAlign: "center" },
-  detail: { minHeight: 52, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12, gap: 16 },
-  detailLabel: { ...UiTextMetrics, ...TypeScale.body, flexShrink: 0, maxWidth: "60%" },
-  detailValue: { ...UiTextMetrics, ...TypeScale.compact, flex: 1, minWidth: 0, textAlign: "right", fontVariant: ["tabular-nums"] },
-  detailValueGroup: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
-  sectionTitle: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, paddingBottom: 6 },
+  stack: { gap: 4 },
+  gap: { marginBottom: 12 },
+  flush: { marginBottom: 6 },
   notice: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, marginTop: 8, marginBottom: 18 },
-  advanced: { minHeight: 48, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 28, paddingRight: 16 },
-  advancedLabel: { paddingBottom: 0 },
+  advanced: { marginTop: 12, marginBottom: 8 },
 });

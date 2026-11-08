@@ -17,6 +17,9 @@ import { AppText } from "./AppText";
 import { Spinner } from "./Spinner";
 import { Icon, type IconName } from "../icons/Icon";
 
+const ICON_TILE = 30;
+const ROW_PADDING = 16;
+
 interface ListSectionProps {
   title?: string;
   footer?: string | null;
@@ -57,7 +60,12 @@ export function ListSection({ title, footer, accessory, children, style }: ListS
         {rows.map((row, index) => (
           <Fragment key={row.key ?? index}>
             {index > 0 ? (
-              <View style={[styles.separator, { backgroundColor: theme.materials.separator }]} />
+              <View
+                style={[
+                  styles.separator,
+                  { backgroundColor: theme.materials.separator, marginLeft: leadingInset(row) },
+                ]}
+              />
             ) : null}
             {row}
           </Fragment>
@@ -70,6 +78,12 @@ export function ListSection({ title, footer, accessory, children, style }: ListS
       ) : null}
     </View>
   );
+}
+
+/** A hairline starts under the text, so a row with nothing leading starts at the edge padding. */
+function leadingInset(row: React.ReactElement): number {
+  const props = row.props as { icon?: IconName; leading?: ReactNode };
+  return props.icon || props.leading ? ROW_PADDING + ICON_TILE + 12 : ROW_PADDING;
 }
 
 type Accessory = "chevron" | "check" | "none";
@@ -89,6 +103,8 @@ export interface ListRowProps {
   loading?: boolean;
   disabled?: boolean;
   selected?: boolean;
+  /** A disclosure row: the chevron points down or up and the state is spoken. */
+  expanded?: boolean;
   onPress?: () => void;
   onLongPress?: () => void;
   accessibilityLabel?: string;
@@ -112,6 +128,7 @@ export function ListRow({
   loading = false,
   disabled = false,
   selected,
+  expanded,
   onPress,
   onLongPress,
   accessibilityLabel,
@@ -153,7 +170,11 @@ export function ListRow({
     <>
       {loading ? <Spinner /> : null}
       {accessory === "chevron" && !loading ? (
-        <Icon name="chevron-right" size={17} color={colors.textTertiary} />
+        <Icon
+          name={expanded === undefined ? "chevron-right" : expanded ? "chevron-up" : "chevron-down"}
+          size={17}
+          color={colors.textTertiary}
+        />
       ) : null}
       {accessory === "check" ? (
         <Icon
@@ -202,6 +223,7 @@ export function ListRow({
         disabled: disabled || loading,
         busy: loading,
         ...(role === "radio" ? { checked: Boolean(selected) } : {}),
+        ...(expanded === undefined ? {} : { expanded }),
       }}
       android_ripple={{ color: colors.surfacePressed }}
       style={(state) => [
@@ -234,7 +256,6 @@ export function ListRow({
   return pressTarget(styles.row, content);
 }
 
-const ICON_TILE = 30;
 
 const styles = StyleSheet.create({
   section: {
@@ -259,7 +280,6 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    marginLeft: 16 + ICON_TILE + 12,
   },
   footer: {
     paddingHorizontal: 16,

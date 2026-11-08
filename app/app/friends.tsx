@@ -7,6 +7,7 @@ import { AppText } from "../components/ui/AppText";
 import { Icon } from "../components/icons/Icon";
 import { EmptyState } from "../components/ui/EmptyState";
 import { IconButton } from "../components/ui/IconButton";
+import { ListRow, ListSection } from "../components/ui/ListSection";
 import { FriendsAvatar } from "../components/friends/FriendsAvatar";
 import { PostList } from "../components/friends/PostList";
 import { useFriendsLabs } from "../store/friendsLabs";
@@ -68,25 +69,22 @@ export default function FriendsScreen() {
         ))}
       </View>
       {draftCount > 0 ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${draftCount} draft${draftCount === 1 ? "" : "s"} waiting`}
-          onPress={() => router.push("/friends/drafts")}
-          style={[styles.banner, { backgroundColor: colors.bgSurface, borderBottomColor: colors.borderSubtle }]}
-        >
-          <View style={[styles.count, { backgroundColor: colors.seal }]}>
-            <AppText variant="label" style={{ color: colors.onSeal }}>
-              {draftCount}
-            </AppText>
-          </View>
-          <View style={styles.bannerCopy}>
-            <AppText variant="subtitle">{draftCount === 1 ? "Draft waiting" : "Drafts waiting"}</AppText>
-            <AppText variant="caption" tone="secondary">
-              Brain wrote {draftCount === 1 ? "this" : "these"} for you to check
-            </AppText>
-          </View>
-          <Icon name="chevron-right" color={colors.textTertiary} size={20} />
-        </Pressable>
+        <ListSection style={styles.banner}>
+          <ListRow
+            leading={
+              <View style={[styles.count, { backgroundColor: colors.seal }]}>
+                <AppText variant="label" style={{ color: colors.onSeal }}>
+                  {draftCount}
+                </AppText>
+              </View>
+            }
+            title={draftCount === 1 ? "Draft waiting" : "Drafts waiting"}
+            subtitle={`Brain wrote ${draftCount === 1 ? "this" : "these"} for you to check`}
+            accessibilityLabel={`${draftCount} draft${draftCount === 1 ? "" : "s"} waiting`}
+            accessory="chevron"
+            onPress={() => router.push("/friends/drafts")}
+          />
+        </ListSection>
       ) : null}
     </View>
   );
@@ -124,8 +122,7 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: "row", gap: 24, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth },
   tab: { paddingTop: 12 },
   underline: { height: 2, marginTop: 8, borderRadius: 1 },
-  banner: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
+  banner: { marginHorizontal: 16, marginTop: 12, marginBottom: 4 },
   count: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  bannerCopy: { flex: 1 },
   off: { flex: 1, justifyContent: "center" },
 });

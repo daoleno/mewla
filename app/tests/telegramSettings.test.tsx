@@ -15,7 +15,9 @@ if (!process.env.MEWLA_TELEGRAM_PANEL_CHILD) {
   mock.module("../components/icons/Icon", () => ({ Icon: host("icon") }));
   mock.module("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }) }));
   mock.module("../constants/tokens", () => ({ useAppColors: () => ({}), UiTextMetrics: {}, Radii: { card: 20 }, TypeScale: { body: {}, compact: {}, caption: {}, heading: {} } }));
-  mock.module("../components/ui/AnimatedPressable", () => ({ AnimatedPressable: host("button") }));
+  mock.module("../components/ui/Button", () => ({ Button: host("button") }));
+  mock.module("../components/ui/ListSection", () => ({ ListSection: host("view"), ListRow: host("button") }));
+  mock.module("../components/ui/Spinner", () => ({ Spinner: host("busy") }));
   mock.module("../components/ui/MobileSingleLineInput", () => ({ MobileSingleLineInput: ({ trailing, ...props }: any) => React.createElement(React.Fragment, null, React.createElement("input", props), trailing) }));
   mock.module("../components/ui/InlineNotice", () => ({ InlineNotice: ({ title, detail }: any) => React.createElement("text", null, title, detail) }));
   mock.module("../components/ui/IconButton", () => ({ IconButton: host("button") }));
@@ -27,7 +29,7 @@ if (!process.env.MEWLA_TELEGRAM_PANEL_CHILD) {
     onToken() {}, onPaste() {}, onConfigure() {}, onBind() {}, onOpen() {}, onBotFather() {}, onReconnect() {}, onDisconnect() {}, onEditToken() {}, onCancelToken() {}, onRevoke() {}, onRemove() {}, onRetry() {}, onCopy: async () => true,
   });
   const mount = async (props: Props) => { let tree!: TestRenderer.ReactTestRenderer; await act(async () => { tree = TestRenderer.create(<TelegramConnectionPanel {...props} />); }); return tree; };
-  const button = (tree: TestRenderer.ReactTestRenderer, label: string) => tree.root.findAllByType("button" as any).find(node => node.props.accessibilityLabel === label)!;
+  const button = (tree: TestRenderer.ReactTestRenderer, label: string) => tree.root.findAllByType("button" as any).find(node => (node.props.accessibilityLabel ?? node.props.label ?? node.props.title) === label)!;
 
   test("connected view keeps diagnostics and destructive actions closed until Advanced", async () => {
     let disconnects = 0;
@@ -39,7 +41,7 @@ if (!process.env.MEWLA_TELEGRAM_PANEL_CHILD) {
     expect(disconnects).toBe(1);
     await act(async () => button(tree, "Advanced").props.onPress());
     expect(button(tree, "Remove bot")).toBeDefined();
-    expect(button(tree, "Advanced").props.accessibilityState.expanded).toBe(true);
+    expect(button(tree, "Advanced").props.expanded).toBe(true);
     await act(async () => tree.unmount());
   });
 
