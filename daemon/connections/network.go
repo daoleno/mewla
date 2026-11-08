@@ -264,10 +264,9 @@ func (t bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 	resp, err := t.base.RoundTrip(c)
 	if err != nil {
-		if r.Context().Err() == nil {
-			diag.Report("plugins.request", diag.SeverityWarn, t.origin, fmt.Sprintf("%.300s", err))
-		}
-		return nil, errNetwork
+		// The failure is reported once per outage, not per request: see
+		// outages. Only its cause, in fixed words, travels on.
+		return nil, networkError(err)
 	}
 	if resp.StatusCode == 401 {
 		resp.Body.Close()

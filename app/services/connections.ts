@@ -59,6 +59,9 @@ export type PluginAccount = {
   credential_removal_pending?: boolean;
   status: "connected" | "configured" | "error" | "authorization_required" | "disconnected";
   verified_at?: string;
+  /** Why the service cannot be reached right now; Mewla retries by itself. */
+  unavailable?: string;
+  unavailable_since?: string;
   tools?: ConnectionTool[];
   history: { at: string; tool: string; status: string; message?: string }[];
   /** What Brain may do with this account, summarized by the server. */
@@ -127,7 +130,7 @@ export function accountStatus(account: PluginAccount): string {
   return {
     connected: "Connected",
     configured: "Not checked yet",
-    error: "Last call failed",
+    error: account.unavailable ? "Unavailable" : "Last call failed",
     authorization_required: "Needs sign-in again",
   }[account.status];
 }

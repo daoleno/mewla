@@ -50,6 +50,18 @@ secrets and variables, webhooks, environments, or creating a release; do those
 by hand on GitHub or with `gh`. When GitHub changes a tool you had allowed, it
 waits for your confirmation like any other updated tool.
 
+When a remote service (GitHub, Linear, Notion and the other MCP services) cannot
+be reached, Mewla treats it as one outage, not one error per attempt. It tries
+the setup once more at once, then backs off (5 seconds, doubling to 5 minutes)
+while background readers such as Watch fail without touching the network; one
+attempt per backoff step finds out whether the service is back. After three
+failed attempts in a row the account shows **Unavailable** with the real reason
+(for example "connection timed out" or "the service answered 503 Service
+Unavailable"), and it clears by itself once the service answers. The daemon log
+gets one line when the outage starts and one when it ends. Your own and Brain's
+calls are never held back by the backoff, and a refused sign-in is never an
+outage.
+
 There are no tokens, client IDs or callback URLs to type for sign-in services.
 
 ## Sign-in availability

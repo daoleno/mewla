@@ -97,6 +97,10 @@ type Account struct {
 	// Updates names the tools the service added or changed that wait for
 	// confirmation. Projected, never stored.
 	Updates []string `json:"updates,omitempty"`
+	// Unavailable is why a remote service cannot be reached right now, while
+	// Mewla backs off and tries again by itself. Projected, never stored.
+	Unavailable      string     `json:"unavailable,omitempty"`
+	UnavailableSince *time.Time `json:"unavailable_since,omitempty"`
 }
 
 // Access summarizes what Brain may do with an account, so a client can show

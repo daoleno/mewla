@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PluginAccount, PluginIntegration } from "./connections";
+import { accountStatus, type PluginAccount, type PluginIntegration } from "./connections";
 import {
   accessControl,
   accountRecovery,
@@ -114,6 +114,12 @@ describe("account status and capability boundaries", () => {
     expect(accountRecovery(account({ credential_removal_pending: true, enabled: false }), "GitHub")?.action).toBe("disconnect");
     // Off is the switch's state, never a fault to fix.
     expect(accountRecovery(account({ enabled: false, status: "error" }), "GitHub")).toBeNull();
+    // An outage names its real reason and says Mewla recovers by itself.
+    const down = accountRecovery(account({ status: "error", unavailable: "connection timed out" }), "GitHub");
+    expect(down).toMatchObject({ title: "Unavailable", action: "refresh", tone: "warning" });
+    expect(down?.detail).toContain("connection timed out");
+    expect(accountStatus(account({ status: "error", unavailable: "connection timed out" }))).toBe("Unavailable");
+    expect(accountStatus(account({ status: "error" }))).toBe("Last call failed");
     expect(accountRecovery(account({ enabled: false, status: "authorization_required" }), "GitHub")).toBeNull();
     expect(accountRecovery(account({ status: "authorization_required" }), "GitHub")?.action).toBe("reconnect");
     expect(accountRecovery(account({ status: "error" }), "GitHub")?.action).toBe("refresh");
