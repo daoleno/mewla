@@ -54,6 +54,16 @@ type FakeBackend struct {
 	RunningApps    []FakeApp
 	Retained       int
 	ElementActions []FakeElementAction
+	// PopupItems are the items of the fake's pop-up buttons by title: listed
+	// only while a menu is open, as an app does. PopupChoices record what
+	// was chosen, KeyGuards what was guarded.
+	PopupItems   map[string][]string
+	PopupChoices []FakePopupChoice
+	KeyGuards    []*FakeKeyGuard
+	// NoKeyGuard turns the guard off; GuardTakes is how many keyboard
+	// takings each guard sees.
+	NoKeyGuard bool
+	GuardTakes int
 	// OnElementAction, when set, runs after an element action on a fake app,
 	// to change its elements as the app would: a sheet opening, a field
 	// clearing. It runs holding the backend's lock.

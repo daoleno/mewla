@@ -53,6 +53,9 @@ func appRows(tree ElementTree, screen image.Rectangle, toAgent func(image.Point)
 		if !e.Enabled {
 			line += " (disabled)"
 		}
+		if e.Role == "AXPopUpButton" && e.Enabled {
+			line += popupHint
+		}
 		if e.Focused {
 			line += " (focused)"
 		}
