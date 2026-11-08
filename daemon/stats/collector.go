@@ -59,8 +59,11 @@ type Collector struct {
 	grokFilesPrices map[string]map[string]modelPricing
 	// codexSubscriptionAt and codexSubscriptionLast are when Codex was last
 	// asked for its quota and what it answered. Guarded by refreshMu.
-	codexSubscriptionAt   time.Time
-	codexSubscriptionLast *CodexSubscriptionUsage
+	codexSubscriptionAt    time.Time
+	codexSubscriptionState string
+	codexSubscriptionLast  *CodexSubscriptionUsage
+	// codexState names the state of Codex's database; tests replace it.
+	codexState func() string
 }
 
 type codexThreadList struct {

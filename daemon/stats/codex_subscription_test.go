@@ -141,3 +141,49 @@ func TestCodexQuotaAnswerSurvivesARestart(t *testing.T) {
 		t.Fatalf("an answer older than %v was reused: %d questions", codexSubscriptionEvery, asked)
 	}
 }
+
+func TestCodexQuotaIsAskedLessOftenWhileCodexIsIdle(t *testing.T) {
+	now := time.Now()
+	state := "db-1"
+	asked := 0
+	c := collectorWithCodexAccount(func(context.Context) (codexctl.AccountUsage, error) {
+		asked++
+		return codexctl.AccountUsage{Primary: &codexctl.UsageWindow{UsedPercent: float64(asked), WindowMinutes: 300}}, nil
+	})
+	c.now = func() time.Time { return now }
+	c.codexState = func() string { return state }
+	c.codexSubscriptionForRefresh()
+
+	// Unused Codex: the answer stands past the usual interval, not past the idle one.
+	now = now.Add(codexSubscriptionEvery + time.Minute)
+	c.codexSubscriptionForRefresh()
+	if asked != 1 {
+		t.Fatalf("an idle Codex was asked again after %v: %d questions", codexSubscriptionEvery, asked)
+	}
+	now = now.Add(codexSubscriptionIdleEvery)
+	c.codexSubscriptionForRefresh()
+	if asked != 2 {
+		t.Fatalf("an idle Codex was not asked after %v: %d questions", codexSubscriptionIdleEvery, asked)
+	}
+
+	// Used Codex: asked every codexSubscriptionEvery.
+	state = "db-2"
+	now = now.Add(codexSubscriptionEvery - time.Minute)
+	c.codexSubscriptionForRefresh()
+	if asked != 2 {
+		t.Fatalf("Codex was asked again within %v: %d questions", codexSubscriptionEvery, asked)
+	}
+	now = now.Add(2 * time.Minute)
+	c.codexSubscriptionForRefresh()
+	if asked != 3 {
+		t.Fatalf("a used Codex was not asked after %v: %d questions", codexSubscriptionEvery, asked)
+	}
+
+	// An unreadable state counts as used.
+	state = ""
+	now = now.Add(codexSubscriptionEvery + time.Minute)
+	c.codexSubscriptionForRefresh()
+	if asked != 4 {
+		t.Fatalf("an unexaminable Codex was not asked: %d questions", asked)
+	}
+}

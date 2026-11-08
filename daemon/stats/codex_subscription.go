@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/providerpaths"
 )
 
 // codexStaleLimit is how long a failed refresh may keep showing the last
@@ -28,21 +29,53 @@ func readCodexAccountWithAppServer(ctx context.Context) (codexctl.AccountUsage, 
 	return codexctl.ReadAccountUsage(ctx, binary, nil)
 }
 
-// codexSubscriptionEvery is how often a refresh asks Codex for its quota. Codex
-// answers by starting its app server, which reads some 100 MB to do so (the
-// daemon is charged for what its children read), and a quota moves slowly
-// enough for a reading a few minutes old.
-const codexSubscriptionEvery = 15 * time.Minute
+// codexSubscriptionEvery is how often a refresh asks Codex for its quota while
+// Codex is being used, and codexSubscriptionIdleEvery how often while it is
+// not. Codex answers by starting its app server, which reads some 100 MB to do
+// so (the daemon is charged for what its children read), and a quota moves with
+// use: when Codex's state database has not changed since the last answer there
+// is little new to learn.
+const (
+	codexSubscriptionEvery     = 15 * time.Minute
+	codexSubscriptionIdleEvery = time.Hour
+)
 
-// codexSubscriptionForRefresh is collectCodexSubscription, asked at most every
-// codexSubscriptionEvery: a refresh in between shows what the last answer was.
+// codexSubscriptionFresh reports whether the last answer still stands.
+func (c *Collector) codexSubscriptionFresh(now time.Time) bool {
+	if c.codexSubscriptionAt.IsZero() {
+		return false
+	}
+	age := now.Sub(c.codexSubscriptionAt)
+	if age < 0 || age >= codexSubscriptionIdleEvery {
+		return false
+	}
+	if age < codexSubscriptionEvery {
+		return true
+	}
+	state := c.codexStateNow()
+	return state != "" && state == c.codexSubscriptionState
+}
+
+func (c *Collector) codexStateNow() string {
+	if c.codexState != nil {
+		return c.codexState()
+	}
+	home := homeDir()
+	if home == "" {
+		return ""
+	}
+	return codexStateStamp(providerpaths.CodexStateDB(home))
+}
+
+// codexSubscriptionForRefresh is collectCodexSubscription, asked only when the
+// last answer no longer stands: a refresh in between shows what it was.
 func (c *Collector) codexSubscriptionForRefresh() *CodexSubscriptionUsage {
 	now := c.now()
 	if c.codexSubscriptionAt.IsZero() {
 		// A restart or hot reload carries on from the last answer.
 		c.loadCodexSubscription()
 	}
-	if !c.codexSubscriptionAt.IsZero() && now.Sub(c.codexSubscriptionAt) >= 0 && now.Sub(c.codexSubscriptionAt) < codexSubscriptionEvery {
+	if c.codexSubscriptionFresh(now) {
 		if last := c.codexSubscriptionLast; last != nil {
 			clone := *last
 			clone.Windows = append([]CodexUsageWindow(nil), last.Windows...)
@@ -50,6 +83,7 @@ func (c *Collector) codexSubscriptionForRefresh() *CodexSubscriptionUsage {
 		}
 		return nil
 	}
+	c.codexSubscriptionState = c.codexStateNow()
 	c.codexSubscriptionLast = c.collectCodexSubscription()
 	c.codexSubscriptionAt = now
 	c.saveCodexSubscription()
@@ -126,12 +160,12 @@ const codexSubscriptionFile = "codex-subscription.json"
 
 type codexSubscriptionRecord struct {
 	At    time.Time
+	State string
 	Usage *CodexSubscriptionUsage
 }
 
-// loadCodexSubscription takes the stored answer when it is still within
-// codexSubscriptionEvery; an older, missing or damaged one is as if Codex had
-// never been asked.
+// loadCodexSubscription takes the stored answer when it can still stand; an
+// older, missing or damaged one is as if Codex had never been asked.
 func (c *Collector) loadCodexSubscription() {
 	if c.usageCacheDir == "" {
 		return
@@ -144,17 +178,17 @@ func (c *Collector) loadCodexSubscription() {
 	if json.Unmarshal(raw, &record) != nil || record.At.IsZero() {
 		return
 	}
-	if age := c.now().Sub(record.At); age < 0 || age >= codexSubscriptionEvery {
+	if age := c.now().Sub(record.At); age < 0 || age >= codexSubscriptionIdleEvery {
 		return
 	}
-	c.codexSubscriptionAt, c.codexSubscriptionLast = record.At, record.Usage
+	c.codexSubscriptionAt, c.codexSubscriptionState, c.codexSubscriptionLast = record.At, record.State, record.Usage
 }
 
 func (c *Collector) saveCodexSubscription() {
 	if c.usageCacheDir == "" {
 		return
 	}
-	raw, err := json.Marshal(codexSubscriptionRecord{At: c.codexSubscriptionAt, Usage: c.codexSubscriptionLast})
+	raw, err := json.Marshal(codexSubscriptionRecord{At: c.codexSubscriptionAt, State: c.codexSubscriptionState, Usage: c.codexSubscriptionLast})
 	if err == nil {
 		_ = writeUsageCache(filepath.Join(c.usageCacheDir, codexSubscriptionFile), raw)
 	}
