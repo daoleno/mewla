@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from "react-native";
+import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
 import { EmptyState } from "../ui/EmptyState";
+import { Spinner } from "../ui/Spinner";
 import { PostCard } from "./PostCard";
 import { useFriendsActions } from "./useFriendsActions";
 import { friendsCall } from "../../services/friendsAccount";
@@ -82,7 +83,7 @@ export function PostList({ path, header = null, emptyTitle, emptyDetail, reloadT
   if (posts === null && !error) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.textTertiary} />
+        <EmptyState size="inline" busy />
       </View>
     );
   }
@@ -112,7 +113,7 @@ export function PostList({ path, header = null, emptyTitle, emptyDetail, reloadT
       ListEmptyComponent={
         <EmptyState size="inline" title={error ? "Could not load" : emptyTitle} detail={error ?? emptyDetail} icon={error ? "cloud-offline" : "people"} />
       }
-      ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.textTertiary} style={styles.footer} /> : undefined}
+      ListFooterComponent={loadingMore ? <Spinner style={styles.footer} /> : undefined}
       onEndReachedThreshold={0.6}
       onEndReached={() => {
         if (!next || loadingMore) return;

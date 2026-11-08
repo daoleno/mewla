@@ -1,6 +1,6 @@
 import { DateStyle, formatDate } from "../../../services/dateFormat";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../../constants/tokens";
@@ -71,7 +71,7 @@ export default function FriendsPostScreen() {
   if (!detail) {
     return (
       <View style={[styles.center, { backgroundColor: colors.bgPrimary }]}>
-        <ActivityIndicator color={colors.textTertiary} />
+        <EmptyState size="inline" busy />
       </View>
     );
   }
