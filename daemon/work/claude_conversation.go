@@ -472,13 +472,11 @@ func parseClaudeConversation(path string) (CodexConversation, error) {
 	return conversation, nil
 }
 
+// parseClaudeConversationEvents answers what parseClaudeConversationFull
+// would, but a transcript that only grew since the last parse costs the bytes
+// it grew by: see claude_incremental.go.
 func parseClaudeConversationEvents(path string) (CodexConversation, error) {
-	if conversation, ok, err := parseClaudeConversationTail(path); err != nil {
-		return CodexConversation{}, err
-	} else if ok {
-		return conversation, nil
-	}
-	return parseClaudeConversationFull(path)
+	return parseClaudeConversationIncremental(path)
 }
 
 func parseClaudeConversationFull(path string) (CodexConversation, error) {
@@ -504,7 +502,9 @@ func consumeClaudeJSONL(path string, consume func(int, []byte)) error {
 	}
 	defer file.Close()
 
-	reader := bufio.NewReader(file)
+	// A transcript is read front to back; a large buffer keeps that to a read
+	// per megabyte instead of one per 4 KiB.
+	reader := bufio.NewReaderSize(file, claudeReadBuffer)
 	lineNumber := 0
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -520,6 +520,9 @@ func consumeClaudeJSONL(path string, consume func(int, []byte)) error {
 		}
 	}
 }
+
+// claudeReadBuffer is the read size of a sequential pass over a transcript.
+const claudeReadBuffer = 1 << 20
 
 // consumeClaudeLines feeds the non-blank lines of data to consume, numbering
 // them from firstLine like consumeClaudeJSONL numbers a whole file.
@@ -566,6 +569,9 @@ type claudeConversationBuilder struct {
 	// firstTimestamp and lastTimestamp bracket a sidechain's records.
 	firstTimestamp string
 	lastTimestamp  string
+	// evicted counts the oldest events compactEvents dropped from a builder
+	// that keeps consuming a growing transcript.
+	evicted int
 }
 
 type claudePendingTaskTurn struct {
@@ -1142,7 +1148,7 @@ func (b *claudeConversationBuilder) addEvent(event CodexConversationEvent) bool 
 		return false
 	}
 	if event.ID == "" {
-		event.ID = b.eventID(fmt.Sprintf("event-%d", len(b.events)+1), "event", 0)
+		event.ID = b.eventID(fmt.Sprintf("event-%d", b.evicted+len(b.events)+1), "event", 0)
 	}
 	b.events = append(b.events, event)
 	return true
