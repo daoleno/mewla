@@ -225,6 +225,8 @@ export function TelegramChatHeader({
                 accessibilityLabel={action.accessibilityLabel}
                 accessibilityState={{ disabled: action.disabled }}
                 disabled={action.disabled}
+                // Visual width 36 + 4pt slop each side keeps the 44pt touch target.
+                hitSlop={flat ? undefined : ACTION_HIT_SLOP}
                 style={[
                   styles.iconButton,
                   flat ? styles.iconButtonFlat : null,
@@ -284,6 +286,8 @@ export function TelegramChatHeader({
 
 // Only states that ask for a glance get a mark; a finished or idle Session
 // keeps a clean avatar.
+const ACTION_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
+
 const HEADER_STATUS_MARK: Record<WorkerStatus, WorkStatus | null> = {
   running: 'running',
   blocked: 'blocked',
@@ -403,7 +407,7 @@ function createStyles(colors: AppColors, chrome?: TerminalThemeChrome) {
     },
     actionsChip: {
       flexShrink: 0,
-      paddingHorizontal: 2,
+      paddingHorizontal: 6,
     },
     actionsFlat: {
       height: 52,
@@ -413,7 +417,7 @@ function createStyles(colors: AppColors, chrome?: TerminalThemeChrome) {
       borderRadius: 0,
     },
     iconButton: {
-      minWidth: 44,
+      minWidth: 36,
       height: 44,
       borderRadius: Radii.pill,
       alignItems: 'center',
