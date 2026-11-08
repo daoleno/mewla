@@ -12,7 +12,7 @@ import argparse, glob, json, os, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUB = os.path.join(HERE, "..", "aub.py")
-RUN_ID = {"mewla": "wav-hard-mewla_chrome-bg", "vscreen": "wav-hard-mewla_virtual_screen-isolated", "ab": "wav-hard-agent-browser-fg", "bu": "wav-hard-browser-use-fg"}
+RUN_ID = {"mewla": "wav-hard-mewla_chrome-bg", "vscreen": "wav-hard-mewla_chrome-virtual_screen", "bu": "wav-hard-browser-use-fg"}
 
 
 def main():
@@ -20,7 +20,7 @@ def main():
     ap.add_argument("--stamp", required=True)
     ap.add_argument("--note", default="")
     ap.add_argument("--config", help="config.json of the run (default: the part's own)")
-    ap.add_argument("--only-side", help="write only these sides (comma list: mewla,ab,bu,vscreen)")
+    ap.add_argument("--only-side", help="write only these sides (comma list: mewla,bu,vscreen)")
     ap.add_argument("--id-suffix", default="", help="added to every run id (e.g. -cold)")
     ap.add_argument("parts", nargs="+")
     a = ap.parse_args()

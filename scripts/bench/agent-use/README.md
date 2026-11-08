@@ -10,8 +10,8 @@ tokens are computed by `aub.py report` from the trial rows in `results/*.json` (
 
 | Suite | Tool layers | Where | Source |
 |---|---|---|---|
-| `web-fixture` (14 tasks, checker reads the fixture's own event log) + a person typing in another window | `mewla_chrome` (real extension, native host, bridge), `agent-browser` for comparison | this Linux box | `../browser/` + `web/` |
-| `webarena-verified-hard` (a seeded, stratified sample of the Hard subset's single-site tasks on shopping, shopping_admin, reddit and gitlab; WebArena-Verified's own checker, no LLM judge) | `mewla_chrome` (background, person typing), `mewla_virtual_screen` (the virtual-screen browser of `daemon/browser`, behind an isolated daemon), `agent-browser`, `browser-use` (its MCP server), all on the same model and prompt; Anthropic's published numbers as a reference | this Linux box, Docker | `wav/` |
+| `web-fixture` (14 tasks, checker reads the fixture's own event log) + a person typing in another window | `mewla_chrome` (real extension, native host, bridge) | this Linux box | `../browser/` + `web/` |
+| `webarena-verified-hard` (a seeded, stratified sample of the Hard subset's single-site tasks on shopping, shopping_admin, reddit and gitlab; WebArena-Verified's own checker, no LLM judge) | `mewla_chrome` (background, person typing), `mewla_chrome` on the virtual screen (the same tool in the agent browser of `daemon/browser`, behind an isolated daemon; `--sides vscreen`), `browser-use` (its MCP server), all on the same model and prompt; Anthropic's published numbers as a reference | this Linux box, Docker | `wav/` |
 | `cdb-macos-benchlab` (Cua Driver Bench v2: IR-01..04, MB-09 background; MB-10/11 foreground) | `mewla_computer`, `agent-desktop`; cua-driver, Codex CU, browser-use as published numbers | the Mac | `cdb/`, upstream [trycua/cua](https://github.com/trycua/cua/tree/main/libs/cua-driver-bench) (FSL-1.1-MIT, pinned in `cdb/PIN`, not vendored) |
 
 The model is fixed (`claude-sonnet-5-5`, written into every file) so the numbers move with the tool layer, not the model.
@@ -20,7 +20,7 @@ The model is fixed (`claude-sonnet-5-5`, written into every file) so the numbers
 
 ```bash
 # Web, on this computer: own Xvnc display, own Chrome for Testing, throwaway state; the live daemon and the user's
-# Chrome are never touched. ~30 min for 3 reps of 14 tasks on both sides.
+# Chrome are never touched. ~30 min for 3 reps of 14 tasks on the side.
 scripts/bench/agent-use/web/run.sh --reps 3 --with-long
 # Same, on a display with a real window manager (kwin_x11; a bare X server is not a desktop), tagged for before/after:
 scripts/bench/agent-use/web/run.sh --reps 3 --with-long --sides mewla --wm kwin --tag after-my-change
@@ -80,7 +80,7 @@ python3 scripts/bench/agent-use/aub.py check results/*.json
   the task type is added to the prompt (the official input leaves it to the model, which turned out to be noise).
 - The shortcut of reading the answers (the dataset file in the package, the repo, the public dataset): the tools given to the model
   are only the browser tool, and every trial is audited afterwards (`wav/tasks.mjs`, `guard`): a tool call that mentions the dataset,
-  the package, `file:`, the repository or a host that is not a site, or (agent-browser's CLI) fetches a site with curl/wget, makes the
+  the package, `file:`, the repository or a host that is not a site makes the
   trial a failure and is counted in the report. Raw calls and the HAR of each trial are kept in the run's `trials/` directory.
 - Spend guard: `AUB_COST_LEDGER` / `AUB_COST_STOP` in `browser/suite.mjs` stop a run once its trials' `cost_usd` sums to the limit.
 

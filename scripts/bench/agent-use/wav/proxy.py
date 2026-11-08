@@ -5,7 +5,7 @@ WebArena-Verified judges a task that changes something (or navigates) from the n
 what the agent says. So that every tool layer is judged the same way, whatever browser it drives, each site is
 published on the port the agent's browser opens (the site's own base URL) by this proxy, and the site itself sits
 on a private port behind it. The proxy writes a HAR of everything that passes: the same bytes whichever of
-mewla_chrome, the virtual-screen browser, agent-browser or browser-use sent them. Standard library only.
+mewla_chrome (in the person's Chrome or on the virtual screen) or browser-use sent them. Standard library only.
 
   proxy.py --site shopping_admin:7780:17780[:user:pass] --site gitlab:8023:18023 ... --ctl 17999
 
