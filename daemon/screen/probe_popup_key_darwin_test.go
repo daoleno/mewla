@@ -9,9 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ebitengine/purego"
 )
 
 // A probe, not a test: does choosing from a pop-up of an app behind the
@@ -297,6 +300,100 @@ func TestPopupKeyProbe(t *testing.T) {
 			say("     %s", l)
 		}
 	}
+	// Why did the guard hold nothing? Look at everything the person's app, the target and the
+	// session are sent while a pop-up is chosen from, and try choosing with no menu at all.
+	type seenEvent struct {
+		at       time.Time
+		who      string
+		typ      uint64
+		f64, f73 int64
+	}
+	var dmu sync.Mutex
+	var seen []seenEvent
+	callbackFor := func(who string) uintptr {
+		return purego.NewCallback(func(proxy, typ, event, info uintptr) uintptr {
+			typ &= 0xFFFFFFFF
+			e := seenEvent{at: time.Now(), who: who, typ: uint64(typ)}
+			if event != 0 && typ < 0xFFFFFFF0 {
+				e.f64, e.f73 = kg.field(event, 64), kg.field(event, 73)
+			}
+			dmu.Lock()
+			seen = append(seen, e)
+			dmu.Unlock()
+			return event
+		})
+	}
+	taps := []*keyTap{
+		startTapMask(personPid, ^uint64(0), false, callbackFor("person")),
+		startTapMask(targetPid, ^uint64(0), false, callbackFor("target")),
+		startTapMask(0, ^uint64(0), true, callbackFor("session")),
+	}
+	for i, name := range []string{"person", "target", "session"} {
+		say("diagnostic tap on %s: created=%v", name, taps[i] != nil)
+	}
+	report1 := func(title string, since time.Time) {
+		time.Sleep(900 * time.Millisecond)
+		dmu.Lock()
+		defer dmu.Unlock()
+		counts := map[string]int{}
+		var lines []string
+		for _, e := range seen {
+			if e.at.Before(since) {
+				continue
+			}
+			counts[e.who]++
+			if e.who == "session" && (e.typ == 1 || e.typ == 2 || e.typ == 5 || e.typ == 6) {
+				continue // pointer moves and clicks of the person's own session are noise
+			}
+			if len(lines) < 80 {
+				lines = append(lines, fmt.Sprintf("   +%4d ms %-7s type %d f64=%#x f73=%d", e.at.Sub(since).Milliseconds(), e.who, e.typ, e.f64, e.f73))
+			}
+		}
+		say("---- diagnostic: %s | events by tap %v", title, counts)
+		for _, l := range lines {
+			say("%s", l)
+		}
+		var key []string
+		for _, e := range personLog.events(since.UnixMilli()) {
+			if e["ev"] == "window" || e["ev"] == "app" {
+				t, _ := e["t"].(float64)
+				key = append(key, fmt.Sprintf("%s@+%dms", strings.TrimSuffix(strings.TrimPrefix(fmt.Sprint(e["name"]), "NS"), "Notification"), int64(t)-since.UnixMilli()))
+			}
+		}
+		say("   person's window: %v; target picked %q", key, picked(since.UnixMilli()))
+	}
+	keyGuardVariant = "off"
+	since := time.Now()
+	_ = mb.RaiseApp(ctx, personPid)
+	report1("the person's app is raised (what a regained key looks like)", since)
+	if p := popupOf(); p != nil {
+		since = time.Now()
+		choice, err := mb.ChoosePopupItem(ctx, *p, "Beta")
+		say("one-step choose Beta, no guard: err=%v open=%v", err, choice.Open)
+		report1("one-step choose, no guard", since)
+		_ = mb.RaiseApp(ctx, personPid)
+		time.Sleep(700 * time.Millisecond)
+	}
+	// No menu at all: focus the pop-up, then type the first letter or press Down at the app.
+	if p := popupOf(); p != nil {
+		window := windowOf(t, mb, targetPid)
+		clicker := session.(*macSession)
+		since = time.Now()
+		say("focus the pop-up: %v", mb.ActOnElement(ctx, *p, "focus", ""))
+		say("type G at the target: %v", clicker.typeTo(targetPid, window, "g", keyStyle{}))
+		report1("focus + type g (type-select, no menu)", since)
+		_ = mb.RaiseApp(ctx, personPid)
+		time.Sleep(700 * time.Millisecond)
+		since = time.Now()
+		say("press Down at the target: %v %v", clicker.KeyTo(targetPid, 0xff54, true), clicker.KeyTo(targetPid, 0xff54, false))
+		report1("focus + Down (no menu?)", since)
+		_ = mb.RaiseApp(ctx, personPid)
+		time.Sleep(700 * time.Millisecond)
+	}
+	for _, tap := range taps {
+		stopTap(tap)
+	}
+
 	chosen := "none"
 	switch {
 	case !unguardedResigns:
