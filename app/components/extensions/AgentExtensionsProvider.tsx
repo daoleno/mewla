@@ -126,11 +126,6 @@ function useAgentExtensionsState() {
     setInspectedCopyId(null);
     setNotice(null);
   }, [projectCwd]);
-  useEffect(() => {
-    if (notice?.kind !== "success") return;
-    const timer = setTimeout(() => setNotice(null), 3200);
-    return () => clearTimeout(timer);
-  }, [notice]);
 
   const refreshInventory = useCallback(async () => {
     const requestContext = skillsContextKey;

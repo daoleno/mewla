@@ -8,7 +8,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import { AccessibilityInfo, Pressable, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, PanResponder, Pressable, StyleSheet, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInUp, FadeOutUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -34,7 +34,8 @@ const ToastContext = createContext<{ show(options: ToastOptions): void } | null>
 const VISIBLE_MS = 2600;
 
 /**
- * Non-blocking confirmations and recoverable failures. Anything that needs a
+ * Non-blocking confirmations and recoverable failures: confirmations hide
+ * themselves, failures stay until tapped or swiped up. Anything that needs a
  * decision stays an Alert.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -61,6 +62,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     AccessibilityInfo.announceForAccessibility(
       options.detail ? `${options.title}. ${options.detail}` : options.title,
     );
+    // A failure is news the person must be able to read and act on: it stays
+    // until tapped or swiped away. Everything else leaves on its own.
+    if (tone === "error") {
+      timer.current = null;
+      return;
+    }
     timer.current = setTimeout(() => {
       timer.current = null;
       setToast(null);
@@ -85,22 +92,39 @@ function ToastView({ toast, onDismiss }: { toast: ToastEntry; onDismiss(): void 
   const insets = useSafeAreaInsets();
   const icon = toast.tone === "error" ? "alert-circle-fill" : toast.tone === "success" ? "check-circle-fill" : "info-fill";
   const ink = toast.tone === "error" ? colors.dangerText : toast.tone === "success" ? colors.success : colors.accentStrong;
+  const error = toast.tone === "error";
+  const swipe = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) => gesture.dy < -8 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        onPanResponderRelease: (_event, gesture) => {
+          if (gesture.dy < -20 || gesture.vy < -0.5) onDismiss();
+        },
+      }),
+    [onDismiss],
+  );
   return (
     <View pointerEvents="box-none" style={[
         styles.layer,
         // Beside a foldable's rail, not under it.
         { top: insets.top + 8, left: insets.left + 16, right: insets.right + 16 },
       ]}>
-      <Animated.View entering={FadeInUp.springify().damping(20)} exiting={FadeOutUp.duration(160)}>
-        <Pressable onPress={onDismiss} accessibilityRole="alert" accessibilityLabel={toast.title}>
+      <Animated.View entering={FadeInUp.springify().damping(20)} exiting={FadeOutUp.duration(160)} {...swipe.panHandlers}>
+        <Pressable
+          onPress={onDismiss}
+          accessibilityRole="alert"
+          accessibilityLabel={toast.title}
+          accessibilityLiveRegion={error ? "assertive" : "polite"}
+          accessibilityHint={error ? "Tap or swipe up to dismiss" : undefined}
+        >
           <GlassSurface material="thick" radius={24} elevation="float" style={styles.toast}>
             <Icon name={icon} size={20} color={ink} />
             <View style={styles.copy}>
-              <AppText variant="label" numberOfLines={2}>
+              <AppText variant="label" numberOfLines={error ? 4 : 2}>
                 {toast.title}
               </AppText>
               {toast.detail ? (
-                <AppText variant="caption" tone="secondary" numberOfLines={3}>
+                <AppText variant="caption" tone="secondary" numberOfLines={error ? 6 : 3}>
                   {toast.detail}
                 </AppText>
               ) : null}
