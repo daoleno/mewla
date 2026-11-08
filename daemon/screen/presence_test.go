@@ -207,3 +207,53 @@ func TestWatchPassesThePersonsInputOn(t *testing.T) {
 		t.Fatalf("its own click was told as the person's: %q", r.Text)
 	}
 }
+
+// The agent's own keys sent to an app after the person's last key must not
+// hide it: it is told, because the person's key came before them. (The Mac
+// showed the first Worker missing the notice while its own app keys were newer.)
+func TestAnAgentsLaterOwnEventsDoNotHideThePersons(t *testing.T) {
+	s, backend, _ := newAgentService(t)
+	apps := fakeApps()
+	apps[1].Hidden = false
+	apps[1].Windows = []AppWindow{{ID: 7, Bounds: image.Rect(0, 0, 400, 300)}}
+	backend.RunningApps = apps
+	backend.SkyLight = true
+	backend.AppEventsSeen = true
+	act(t, s, "%7", AgentAction{Action: "screenshot"})
+	time.Sleep(personMargin + 50*time.Millisecond)
+	backend.PersonInput()
+	time.Sleep(personMargin + 100*time.Millisecond)
+	// Its own app key and click come after the person's key.
+	act(t, s, "%7", AgentAction{Action: "type", Text: "x", App: "Safari"})
+	act(t, s, "%7", AgentAction{Action: "left_click", Coordinate: []int{100, 100}, App: "Safari"})
+	r := act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if !strings.Contains(r.Text, "person used") || !strings.Contains(r.Text, "key press") {
+		t.Fatalf("the person's earlier key was hidden by the agent's own later events: %q", r.Text)
+	}
+}
+
+// A session that starts is told about input from just before it began, not
+// about input from long ago, and not twice.
+func TestANewSessionIsToldOnlyOfRecentInput(t *testing.T) {
+	defer func(saved, look time.Duration) { wakeDeclares, personLookback = saved, look }(wakeDeclares, personLookback)
+	wakeDeclares = 5 * time.Second
+	personLookback = 3 * time.Second
+	s, backend, _ := newAgentService(t)
+	backend.PersonInput()
+	time.Sleep(personMargin + 50*time.Millisecond)
+	r := act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if !strings.Contains(r.Text, "person used") {
+		t.Fatalf("input just before the session began was not told: %q", r.Text)
+	}
+	// Input from long ago is not news: a second session after a long quiet.
+	s.StopAgent()
+	waitFor(t, func() bool { _, ok := s.Agent(); return !ok })
+	time.Sleep(3200 * time.Millisecond) // past the lookback
+	backend.mu.Lock()
+	backend.input[InputKey] = time.Now().Add(-time.Hour)
+	backend.mu.Unlock()
+	r = act(t, s, "%7", AgentAction{Action: "cursor_position"})
+	if strings.Contains(r.Text, "person used") {
+		t.Fatalf("an hour-old key was told as news: %q", r.Text)
+	}
+}

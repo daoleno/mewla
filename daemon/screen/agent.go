@@ -43,6 +43,10 @@ var (
 // pressed under their hand; the agent is told its drag or hold was cut.
 var personMargin = 300 * time.Millisecond
 
+// personLookback is how far before a session started input still counts as
+// something the agent should hear: someone typing as it begins, not hours ago.
+var personLookback = 10 * time.Second
+
 // errPersonInterrupted ends an action that was holding a button or keys when
 // the person used the computer. What it held is already let go.
 var errPersonInterrupted = errors.New("the person used the computer while the action held a button or key")
@@ -517,7 +521,7 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	// at the computer is never overlooked.
 	if woke := time.Unix(0, displayWoke.Load()); !woke.Before(starting) {
 		lastPost = later(lastPost, woke.Add(wakeDeclares))
-		s.posts.notePost(woke.Add(wakeDeclares))
+		s.posts.noteWake(woke, woke.Add(wakeDeclares))
 	}
 	label := worker
 	if s.workerName != nil {
@@ -526,7 +530,7 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		}
 	}
 	agent := &agentSession{
-		worker: worker, label: label, since: time.Now(), session: session, control: control, presence: s.presence, lastPost: lastPost, ids: &s.elementIDs,
+		worker: worker, label: label, since: time.Now(), toldAt: time.Now().Add(-personLookback), session: session, control: control, presence: s.presence, lastPost: lastPost, ids: &s.elementIDs,
 		cancel: cancel, ctx: ctx, ready: make(chan struct{}), changed: make(chan struct{}), lastUse: time.Now(),
 		inflight: 1, // the caller's use, see agentFor
 		stopped:  stopped,
@@ -562,6 +566,7 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	s.agents[worker] = agent
 	go agent.capture()
 	go s.watchAgent(agent)
+	go agent.sampleInput()
 	Notify("Mewla", "An agent ("+label+") is using this computer. Open Screen in the app to watch or stop it.")
 	return agent, nil
 }
@@ -780,22 +785,27 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		if window.ID == 0 {
 			return AgentResult{}, fmt.Errorf("[%d, %d] is not on a window of %s; its app_state or window screenshot gives points on it", action.Coordinate[0], action.Coordinate[1], oneLine(app.Name))
 		}
+		// A click can open a menu, which takes the keyboard from the person's
+		// window: guard it from here.
+		endGuard := a.guardKey(ctx, app)
 		// A plain click on something the app can press is pressed through
 		// accessibility, which an app behind others acts on for sure.
 		if presser, ok := a.apps.(appPresser); ok && click == appClicks["left_click"] {
 			what, pressed, err := presser.PressAt(ctx, app.PID, p.X, p.Y)
 			if err != nil {
+				endGuard()
 				return AgentResult{}, err
 			}
 			if pressed {
 				a.mu.Lock()
 				a.lastAct = time.Now()
 				a.mu.Unlock()
-				return AgentResult{Text: fmt.Sprintf("Pressed %s at that point in %s, behind other windows (path: accessibility press); it and the pointer stayed where they were. Read it with app_state to see the result.", what, oneLine(app.Name))}, nil
+				return AgentResult{Text: fmt.Sprintf("Pressed %s at that point in %s, behind other windows (path: accessibility press); it and the pointer stayed where they were.%s Read it with app_state to see the result.", what, oneLine(app.Name), endGuard())}, nil
 			}
 		}
 		before, haveBefore := a.witnessBefore(ctx, app.PID)
 		err := a.session.(appClicker).ClickTo(app.PID, window, p.X, p.Y, click.button, click.count)
+		guarded := endGuard()
 		a.mu.Lock()
 		a.lastAppClick = time.Now()
 		a.shared.noteAppClick(a.lastAppClick)
@@ -806,7 +816,7 @@ func (a *agentSession) clickInApp(ctx context.Context, action AgentAction) (Agen
 		a.mu.Lock()
 		a.lastAct = time.Now()
 		a.mu.Unlock()
-		return AgentResult{Text: fmt.Sprintf("Sent a click to %s behind other windows (path: SkyLight); it and the pointer stayed where they were. %s", oneLine(app.Name), a.effect(ctx, app, "click", before, haveBefore))}, nil
+		return AgentResult{Text: fmt.Sprintf("Sent a click to %s behind other windows (path: SkyLight); it and the pointer stayed where they were.%s %s", oneLine(app.Name), guarded, a.effect(ctx, app, "click", before, haveBefore))}, nil
 	}
 	return a.onScreenInApp(ctx, action, app, "Clicked", why)
 }
@@ -906,7 +916,9 @@ func (a *agentSession) dragInApp(ctx context.Context, action AgentAction) (Agent
 		return AgentResult{}, fmt.Errorf("%v is outside the window the drag starts in; a drag behind other windows stays inside one window of %s", action.Coordinate, oneLine(app.Name))
 	}
 	before, haveBefore := a.witnessBefore(ctx, app.PID)
+	endGuard := a.guardKey(ctx, app)
 	err = dragger.DragTo(app.PID, window, start.X, start.Y, end.X-start.X, end.Y-start.Y)
+	guarded := endGuard()
 	a.mu.Lock()
 	a.lastAppClick = time.Now()
 	a.shared.noteAppClick(a.lastAppClick)
@@ -917,7 +929,7 @@ func (a *agentSession) dragInApp(ctx context.Context, action AgentAction) (Agent
 	a.mu.Lock()
 	a.lastAct = time.Now()
 	a.mu.Unlock()
-	return AgentResult{Text: fmt.Sprintf("Sent a drag to %s behind other windows (path: SkyLight, the app stays inactive); it and the pointer stayed where they were. %s", oneLine(app.Name), a.effect(ctx, app, "drag", before, haveBefore))}, nil
+	return AgentResult{Text: fmt.Sprintf("Sent a drag to %s behind other windows (path: SkyLight, the app stays inactive); it and the pointer stayed where they were.%s %s", oneLine(app.Name), guarded, a.effect(ctx, app, "drag", before, haveBefore))}, nil
 }
 
 // listApps lists the apps an agent can read and act on.
@@ -1062,6 +1074,7 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if err != nil {
 		return AgentResult{}, err
 	}
+	chosen := ""
 	// Listen to the app before acting, so its first notification isn't missed.
 	var watch AppWatch
 	if watcher, ok := a.apps.(appWatcher); ok && axObserverOn {
@@ -1071,8 +1084,23 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 		}
 	}
 	// An accessibility action posts no input event, so it leaves the
-	// agent's last event as it was.
-	if err := actor.ActOnElement(ctx, e, name, intent.text); err != nil {
+	// agent's last event as it was. An app behind the person's window that
+	// opens a menu would take the keyboard from it: the guard stands for that.
+	endGuard := a.guardKey(ctx, a.treeApp)
+	chooser, canChoose := a.apps.(popupChooser)
+	if canChoose && e.Role == "AXPopUpButton" && name == "set_value" {
+		// A pop-up's items exist only while its menu is open: choose in one
+		// step, so the menu is open for as short a time as the app needs.
+		var choice PopupChoice
+		if choice, err = chooser.ChoosePopupItem(ctx, e, intent.text); err == nil {
+			intent.wantValue = choice.Title
+			chosen = fmt.Sprintf(" Chose %q from the pop-up in one step; its menu was open for %d ms.", choice.Title, choice.Open.Milliseconds())
+		}
+	} else {
+		err = actor.ActOnElement(ctx, e, name, intent.text)
+	}
+	guarded := endGuard()
+	if err != nil {
 		return AgentResult{}, notDelivered(a.gone(ctx, a.treeApp, err))
 	}
 	announced := false
@@ -1142,7 +1170,7 @@ func (a *agentSession) actOnElement(ctx context.Context, action AgentAction) (Ag
 	if i := tree.index(action.Element); i >= 0 {
 		after = &tree.Elements[i]
 	}
-	did := fmt.Sprintf("Done: %s on [%d]. %s ", strings.TrimPrefix(name, "AX"), action.Element, intent.delivery(after))
+	did := fmt.Sprintf("Done: %s on [%d]. %s%s%s ", strings.TrimPrefix(name, "AX"), action.Element, intent.delivery(after), chosen, guarded)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	// What changed is the answer, unless it would mislead or save little;
@@ -1391,14 +1419,23 @@ func (a *agentSession) personSeenLocked(since time.Time) [inputKinds]time.Time {
 	var seen [inputKinds]time.Time
 	if a.presence != nil {
 		for kind, at := range a.presence().Input {
-			own := later(a.lastPost, a.shared.last().post)
+			if at.IsZero() || !at.After(since) {
+				continue
+			}
+			if a.shared != nil {
+				if !a.shared.ownAt(InputKind(kind), at) {
+					seen[kind] = at
+				}
+				continue
+			}
+			own := a.lastPost
 			switch InputKind(kind) {
 			case InputKey:
-				own = later(own, later(a.lastAppKey, a.shared.last().appKey))
+				own = later(own, a.lastAppKey)
 			case InputClick:
-				own = later(own, later(a.lastAppClick, a.shared.last().appClick))
+				own = later(own, a.lastAppClick)
 			}
-			if !at.IsZero() && at.After(own.Add(personMargin)) && at.After(since) {
+			if at.After(own.Add(personMargin)) {
 				seen[kind] = at
 			}
 		}
@@ -1426,6 +1463,27 @@ func anySeen(seen [inputKinds]time.Time) bool {
 		}
 	}
 	return false
+}
+
+// sampleInput looks at the person's input while the session lives, so that what
+// they did is kept even if the agent's own events later become the last input
+// of that kind (the system reports only the latest time per kind). It skips a
+// beat rather than wait for an action that holds the session.
+func (a *agentSession) sampleInput() {
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-a.ctx.Done():
+			return
+		case <-tick.C:
+		}
+		if !a.mu.TryLock() {
+			continue
+		}
+		a.notePendingLocked(a.personSeenLocked(a.toldAt))
+		a.mu.Unlock()
+	}
 }
 
 // notePendingLocked keeps what the person did, to tell the agent later.
@@ -2298,6 +2356,78 @@ type sharedPosts struct {
 	// any agent: one Worker's own events that follow must not hide it from
 	// another that has not heard yet.
 	person [inputKinds]time.Time
+	// The agents' own events, kept for a while, so that a person's input is told
+	// from one of theirs by when it came and not by whether an agent acted later:
+	// an agent's own keys after the person's last one must not hide it.
+	posts, appKeys, appClicks []time.Time
+	// wakes are the spans in which a display wake-up may read as input.
+	wakes [][2]time.Time
+}
+
+const ownHistory = 90 * time.Second
+
+func keepRecent(ring []time.Time, at time.Time) []time.Time {
+	ring = append(ring, at)
+	cut := 0
+	for cut < len(ring)-1 && time.Since(ring[cut]) > ownHistory {
+		cut++
+	}
+	if over := len(ring) - cut - 2048; over > 0 {
+		cut += over
+	}
+	return ring[cut:]
+}
+
+// noteWake records a span in which waking the display reads as input.
+func (p *sharedPosts) noteWake(from, until time.Time) {
+	if p != nil {
+		p.mu.Lock()
+		p.wakes = append(p.wakes, [2]time.Time{from, until})
+		if len(p.wakes) > 16 {
+			p.wakes = p.wakes[len(p.wakes)-16:]
+		}
+		p.mu.Unlock()
+	}
+}
+
+// ownAt says whether an input of this kind at that time was an agent's own: the
+// system counts an event a moment after it is posted, so an input that came
+// within personMargin after one of theirs is theirs.
+func (p *sharedPosts) ownAt(kind InputKind, at time.Time) bool {
+	if p == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	near := func(ring []time.Time) bool {
+		for i := len(ring) - 1; i >= 0; i-- {
+			e := ring[i]
+			if e.After(at.Add(50 * time.Millisecond)) {
+				continue // later than this input
+			}
+			return at.Sub(e) <= personMargin // the nearest one before it
+		}
+		return false
+	}
+	if near(p.posts) {
+		return true
+	}
+	switch kind {
+	case InputKey:
+		if near(p.appKeys) {
+			return true
+		}
+	case InputClick:
+		if near(p.appClicks) {
+			return true
+		}
+	}
+	for _, w := range p.wakes {
+		if !at.Before(w[0].Add(-50*time.Millisecond)) && !at.After(w[1].Add(personMargin)) {
+			return true
+		}
+	}
+	return false
 }
 
 // notePerson records what an agent saw of the person and returns what is known.
@@ -2330,6 +2460,7 @@ func (p *sharedPosts) notePost(at time.Time) {
 	if p != nil {
 		p.mu.Lock()
 		p.post = later(p.post, at)
+		p.posts = keepRecent(p.posts, at)
 		p.mu.Unlock()
 	}
 }
@@ -2338,6 +2469,7 @@ func (p *sharedPosts) noteAppKey(at time.Time) {
 	if p != nil {
 		p.mu.Lock()
 		p.appKey = later(p.appKey, at)
+		p.appKeys = keepRecent(p.appKeys, at)
 		p.mu.Unlock()
 	}
 }
@@ -2346,6 +2478,7 @@ func (p *sharedPosts) noteAppClick(at time.Time) {
 	if p != nil {
 		p.mu.Lock()
 		p.appClick = later(p.appClick, at)
+		p.appClicks = keepRecent(p.appClicks, at)
 		p.mu.Unlock()
 	}
 }
