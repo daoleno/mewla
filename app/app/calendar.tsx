@@ -68,6 +68,7 @@ import {
 import { useBrain } from "../store/brain";
 import { useCurrentServer } from "../store/currentServer";
 import { Icon } from "../components/icons/Icon";
+import { ChipGroup, type ChipOption } from "../components/ui/ChipGroup";
 import { IconButton } from "../components/ui/IconButton";
 import { InlineNotice } from "../components/ui/InlineNotice";
 import { useDesktopWeb } from "../components/navigation/useDesktopWeb";
@@ -814,23 +815,12 @@ function EditorModal({
               placeholder="What is the commitment?"
             />
             <Text style={styles.fieldLabel}>Kind</Text>
-            <View style={styles.chips}>
-              {(
-                [
-                  "event",
-                  "reminder",
-                  "deadline",
-                  "scheduled_action",
-                ] as CalendarKind[]
-              ).map((option) => (
-                <Chip
-                  key={option}
-                  selected={kind === option}
-                  label={kindLabel[option]}
-                  onPress={() => setKind(option)}
-                />
-              ))}
-            </View>
+            <ChipGroup<CalendarKind>
+              accessibilityLabel="Kind"
+              options={KIND_OPTIONS}
+              value={kind}
+              onChange={setKind}
+            />
             <Text style={styles.fieldLabel}>
               {kind === "event"
                 ? "Starts"
@@ -915,18 +905,12 @@ function EditorModal({
               autoCapitalize="none"
             />
             <Text style={styles.fieldLabel}>Repeats</Text>
-            <View style={styles.chips}>
-              {(
-                ["none", "daily", "weekly", "weekdays"] as CalendarRecurrence[]
-              ).map((option) => (
-                <Chip
-                  key={option}
-                  selected={recurrence === option}
-                  label={option[0].toUpperCase() + option.slice(1)}
-                  onPress={() => setRecurrence(option)}
-                />
-              ))}
-            </View>
+            <ChipGroup<CalendarRecurrence>
+              accessibilityLabel="Repeats"
+              options={RECURRENCE_OPTIONS}
+              value={recurrence}
+              onChange={setRecurrence}
+            />
             <Field
               label="Notes"
               value={notes}
@@ -1017,41 +1001,25 @@ function AmbiguityChoice({
   return (
     <View style={styles.ambiguity}>
       <Text style={styles.validationError}>{resolution.message}</Text>
-      <View style={styles.chips}>
-        {resolution.instants.map((instant, index) => (
-          <Chip
-            key={instant}
-            selected={selected === index}
-            label={`${index === 0 ? "First" : "Second"} · ${formatDate(instant, DateStyle.time, { timeZone: timezone, timeZoneName: "short" })}`}
-            onPress={() => onSelect(index as 0 | 1)}
-          />
-        ))}
-      </View>
+      <ChipGroup
+        accessibilityLabel="Which occurrence"
+        options={resolution.instants.map((instant, index) => ({
+          value: String(index) as "0" | "1",
+          label: `${index === 0 ? "First" : "Second"} · ${formatDate(instant, DateStyle.time, { timeZone: timezone, timeZoneName: "short" })}`,
+        }))}
+        value={selected === null ? null : (String(selected) as "0" | "1")}
+        onChange={(value) => onSelect(Number(value) as 0 | 1)}
+      />
     </View>
   );
 }
-function Chip({
-  selected,
-  label,
-  onPress,
-}: {
-  selected: boolean;
-  label: string;
-  onPress(): void;
-}) {
-  const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[styles.chip, selected && styles.chipSelected]}
-    >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+const KIND_OPTIONS: readonly ChipOption<CalendarKind>[] = (
+  ["event", "reminder", "deadline", "scheduled_action"] as const
+).map((value) => ({ value, label: kindLabel[value] }));
+const RECURRENCE_OPTIONS: readonly ChipOption<CalendarRecurrence>[] = (
+  ["none", "daily", "weekly", "weekdays"] as const
+).map((value) => ({ value, label: value[0].toUpperCase() + value.slice(1) }));
+
 function chosenInstant(
   resolution: LocalDateTimeResolution,
   occurrence: 0 | 1 | null,
@@ -1315,23 +1283,6 @@ function createStyles(colors: any) {
       backgroundColor: colors.surfaceSubtle,
     },
     resolvedLabel: { ...TypeScale.label, color: colors.textPrimary },
-    chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-    chip: {
-      minHeight: 40,
-      paddingHorizontal: 12,
-      alignItems: "center",
-      justifyContent: "center",
-      borderRadius: Radii.pill,
-      backgroundColor: colors.surfaceSubtle,
-      borderWidth: 1,
-      borderColor: "transparent",
-    },
-    chipSelected: { borderColor: colors.accent },
-    chipText: { ...TypeScale.caption, color: colors.textSecondary },
-    chipTextSelected: {
-      color: colors.accent,
-      fontFamily: Typography.uiFontMedium,
-    },
     resolved: { ...TypeScale.caption, color: colors.textTertiary },
   });
 }

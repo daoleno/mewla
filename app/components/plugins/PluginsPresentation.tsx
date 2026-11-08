@@ -20,7 +20,9 @@ import type {
   ManagedSkillAgent,
   SkillsRequestState,
 } from "../../services/skillsManagement";
-import { skillsRequestData } from "../../services/skillsManagement";
+import { skillAgentLabel, skillsRequestData } from "../../services/skillsManagement";
+import { ChipGroup } from "../ui/ChipGroup";
+import { SegmentedControl, type SegmentedOption } from "../ui/SegmentedControl";
 import { PLUGINS_SKILLS_SCREEN_PADDING } from "../../services/pluginsSkillsSurfaceModel";
 import {
   filterLogicalPlugins,
@@ -34,7 +36,8 @@ import {
   pluginSkillEntries,
 } from "../../services/pluginSkillsDirectory";
 import { MANAGED_SKILL_AGENTS } from "../../services/skillsScreenModel";
-import { AgentLogoSet } from "../agents/AgentLogoSet";
+import { AgentLogoSet, agentKind } from "../agents/AgentLogoSet";
+import { AgentKindIcon } from "../terminal/AgentKindIcon";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
 import { BottomSheetFrame } from "../ui/BottomSheetFrame";
 import { Button } from "../ui/Button";
@@ -769,6 +772,12 @@ function PluginActiveFilters({
   );
 }
 
+const CAPABILITY_OPTIONS: readonly SegmentedOption<PluginFilters["capability"]>[] = [
+  { value: "all", label: "All" },
+  { value: "uninstallable", label: "Uninstallable" },
+  { value: "readonly", label: "Read-only" },
+];
+
 function PluginFilterSheet({
   visible,
   filters,
@@ -806,83 +815,29 @@ function PluginFilterSheet({
           <Text style={[styles.sectionLabel, { color: colors.textPrimary }]}>
             Available to
           </Text>
-          <View style={styles.optionWrap}>
-            {MANAGED_SKILL_AGENTS.map((agent) => {
-              const selected = filters.agents.includes(agent);
-              return (
-                <Pressable
-                  key={agent}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: selected }}
-                  accessibilityLabel={`Filter Plugins available to ${agent}`}
-                  onPress={() =>
-                    onChange({
-                      ...filters,
-                      agents: selected
-                        ? filters.agents.filter((item) => item !== agent)
-                        : [...filters.agents, agent],
-                    })
-                  }
-                  style={[
-                    styles.choice,
-                    {
-                      borderColor: selected
-                        ? colors.accent
-                        : colors.borderSubtle,
-                      backgroundColor: selected
-                        ? colors.accentSoft
-                        : "transparent",
-                    },
-                  ]}
-                >
-                  <AgentLogoSet agents={[agent]} showLabels size={17} />
-                </Pressable>
-              );
-            })}
-          </View>
+          <ChipGroup
+            multiple
+            accessibilityLabel="Available to"
+            options={MANAGED_SKILL_AGENTS.map((agent) => ({
+              value: agent,
+              label: skillAgentLabel(agent),
+              leading: <AgentKindIcon kind={agentKind(agent)} size={17} />,
+              accessibilityLabel: `Filter Plugins available to ${agent}`,
+            }))}
+            value={filters.agents}
+            onChange={(agents) => onChange({ ...filters, agents })}
+          />
         </View>
         <View style={styles.filterSection}>
           <Text style={[styles.sectionLabel, { color: colors.textPrimary }]}>
             Uninstall
           </Text>
-          <View style={styles.optionWrap}>
-            {(["all", "uninstallable", "readonly"] as const).map((value) => {
-              const selected = filters.capability === value;
-              const label =
-                value === "all"
-                  ? "All"
-                  : value === "uninstallable"
-                    ? "Uninstallable"
-                    : "Read-only";
-              return (
-                <Pressable
-                  key={value}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  onPress={() => onChange({ ...filters, capability: value })}
-                  style={[
-                    styles.choice,
-                    {
-                      borderColor: selected
-                        ? colors.accent
-                        : colors.borderSubtle,
-                      backgroundColor: selected
-                        ? colors.accentSoft
-                        : "transparent",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      color: selected ? colors.accent : colors.textSecondary,
-                    }}
-                  >
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <SegmentedControl
+            accessibilityLabel="Uninstall"
+            options={CAPABILITY_OPTIONS}
+            value={filters.capability}
+            onChange={(capability) => onChange({ ...filters, capability })}
+          />
         </View>
         <Pressable
           accessibilityRole="button"
@@ -1108,16 +1063,6 @@ const styles = StyleSheet.create({
   sheetTitle: { ...TypeScale.title, fontFamily: Typography.uiFontMedium },
   filterBody: { gap: 18, paddingBottom: 18 },
   filterSection: { gap: 8 },
-  optionWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  choice: {
-    minHeight: 40,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderRadius: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
   doneButton: {
     height: 46,
     borderRadius: 6,

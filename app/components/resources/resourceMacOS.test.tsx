@@ -52,6 +52,11 @@ if (!process.env.MEWLA_MACOS_RENDER_CHILD) {
   mock.module("react-native-svg", () => ({ default: "Svg", Defs: "Defs", Line: "Line", LinearGradient: "LinearGradient", Path: "Path", Rect: "Rect", Stop: "Stop" }));
   mock.module("../ui/AnimatedPressable", () => ({ AnimatedPressable: "Pressable" }));
   mock.module("../ui/IconButton", () => ({ IconButton: "Pressable" }));
+  mock.module("../ui/ChipGroup", () => ({
+    ChipGroup: ({ options, value, onChange }: any) => options.map((o: any) => React.createElement("Pressable", {
+      key: o.value, accessibilityLabel: o.accessibilityLabel ?? o.label, accessibilityState: { selected: o.value === value }, onPress: () => onChange(o.value),
+    })),
+  }));
   mock.module("../icons/Icon", () => ({ Icon: "Icon" }));
   mock.module("../ui/StatusMark", () => ({ StatusMark: "StatusMark" }));
   mock.module("../ui/StatusPill", () => ({ StatusPill: "StatusPill" }));
