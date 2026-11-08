@@ -553,8 +553,8 @@ export function mountScreenViewer(container, post) {
     const sent = borrowed.get(e.code);
     if (!sent) return;
     borrowed.delete(e.code);
-    // After noVNC has released the key itself.
-    setTimeout(() => { if (rfb) for (const [keysym, code] of sent.reverse()) rfb.sendKey(keysym, code, false); }, 0);
+    // The shortcut fired on the key's press; the modifier need not outlast it.
+    if (rfb) for (const [keysym, code] of sent.reverse()) rfb.sendKey(keysym, code, false);
   }, true);
 
   // The remote's paste reads the remote's clipboard, so the person's text goes
