@@ -220,6 +220,7 @@ class AgentWindow {
       await chrome.windows.remove(this.windowId).catch(() => {});
     if (!quiet)
       tell({ type: 'closed', id: this.id, reason });
+    reloadWhenIdle();
   }
 }
 
@@ -247,7 +248,39 @@ async function onHostMessage(message) {
     case 'ping':
       tell({ type: 'pong', sessions: [...sessions.keys()], version: chrome.runtime.getManifest().version });
       return;
+    case 'reload':
+      // The daemon carries a newer extension than this one. Unpacked, its files on disk are the new
+      // ones and a reload is the update; from the store, the store updates it and a reload changes
+      // nothing (the daemon asks once per version, so that does not repeat). Never while an agent
+      // has a window open: a reload would close it.
+      if (isNewer(message.version, chrome.runtime.getManifest().version)) {
+        reloadForVersion = message.version;
+        reloadWhenIdle();
+      }
+      return;
   }
+}
+
+let reloadForVersion;
+function reloadWhenIdle() {
+  if (reloadForVersion === undefined || sessions.size > 0)
+    return;
+  reloadForVersion = undefined;
+  chrome.runtime.reload();
+}
+
+/** Whether dotted version `a` is newer than `b`; anything that is not numbers is not. */
+function isNewer(a, b) {
+  const parse = v => String(v ?? '').split('.').map(Number);
+  const x = parse(a), y = parse(b);
+  if (x.some(n => !Number.isInteger(n) || n < 0) || y.some(n => !Number.isInteger(n) || n < 0))
+    return false;
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const p = x[i] ?? 0, q = y[i] ?? 0;
+    if (p !== q)
+      return p > q;
+  }
+  return false;
 }
 
 function connectHost() {

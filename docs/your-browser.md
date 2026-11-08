@@ -32,6 +32,13 @@ the extension connects to it whenever Chrome runs. If Chrome isn't running when
 an agent needs it, Mewla starts it in the background with no window, and the
 agent's window is the only one that appears.
 
+When Mewla updates, the extension updates with it. A Chrome that loaded it
+unpacked keeps running the old version until it is reloaded; Mewla notices the
+older version when the extension connects and has it reload itself, so there is
+nothing to click. It waits while an agent has a window open, and asks once per
+version, so an extension the Web Store has not updated yet is not asked again
+and again.
+
 Mewla downloads the browser tools the first time (it needs Node.js 20 or later
 on the computer). A computer without a desktop session, such as a headless
 server, has no Chrome for agents to use; its page shows nothing about it. Mewla

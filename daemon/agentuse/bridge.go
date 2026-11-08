@@ -141,6 +141,12 @@ type Bridge struct {
 	// Workers' windows sit side by side, not over one another (a covered
 	// window is one Chrome may stop drawing).
 	slots map[string]int
+	// reloadAsked are the running extension versions this daemon has already asked to reload,
+	// so an extension that stays at its version (the store has not updated it yet, or the files
+	// on disk are the same) is asked once, not on every connect.
+	reloadAsked map[string]bool
+	// bundled is the version of the extension this daemon carries; tests set it.
+	bundled string
 }
 
 // AgentBrowser is the agent browser on the virtual screen, as the bridge
@@ -322,6 +328,9 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 			b.mu.Lock()
 			host.version = m.Version
 			b.mu.Unlock()
+			if m.Type == "hello" {
+				b.askToReload(host, m.Version)
+			}
 		case "connected", "error", "closed":
 			if m.Type != "connected" {
 				b.release(m.ID)
@@ -349,6 +358,86 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 			}
 		}
 	}
+}
+
+// askToReload tells an extension that runs an older version than the one this daemon carries to
+// reload itself. With the unpacked install the files on disk are already the new ones, so the reload
+// is the update; with the store install the store updates the extension and a reload changes
+// nothing, which is why each running version is asked once per daemon, and the extension reloads
+// only for a version newer than its own. An extension that sent no version is older than any.
+func (b *Bridge) askToReload(host *bridgeHost, running string) {
+	b.mu.Lock()
+	bundled := b.bundled
+	if bundled == "" {
+		bundled = BundledExtensionVersion()
+	}
+	if !versionOlder(running, bundled) || b.reloadAsked[running] {
+		b.mu.Unlock()
+		return
+	}
+	if b.reloadAsked == nil {
+		b.reloadAsked = map[string]bool{}
+	}
+	b.reloadAsked[running] = true
+	b.mu.Unlock()
+	_ = host.send(hostMessage{Type: "reload", Version: bundled})
+}
+
+// BundledExtensionVersion is the version of the extension files this daemon carries.
+func BundledExtensionVersion() string {
+	raw, err := extensionFiles.ReadFile("extension/manifest.json")
+	if err != nil {
+		return ""
+	}
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(raw, &manifest) != nil {
+		return ""
+	}
+	return manifest.Version
+}
+
+// versionOlder says whether running is an older dotted version than bundled. An empty running
+// version (an extension too old to say) is older than any; one that does not parse is left alone.
+func versionOlder(running, bundled string) bool {
+	want, ok := parseVersion(bundled)
+	if !ok {
+		return false
+	}
+	if running == "" {
+		return true
+	}
+	have, ok := parseVersion(running)
+	if !ok {
+		return false
+	}
+	for i := 0; i < len(want) || i < len(have); i++ {
+		var a, c int
+		if i < len(have) {
+			a = have[i]
+		}
+		if i < len(want) {
+			c = want[i]
+		}
+		if a != c {
+			return a < c
+		}
+	}
+	return false
+}
+
+func parseVersion(v string) ([]int, bool) {
+	parts := strings.Split(v, ".")
+	out := make([]int, 0, len(parts))
+	for _, part := range parts {
+		n, err := strconv.Atoi(part)
+		if err != nil || n < 0 {
+			return nil, false
+		}
+		out = append(out, n)
+	}
+	return out, len(out) > 0
 }
 
 // release lets go of a window's hold on the agent display.
