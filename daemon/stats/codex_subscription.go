@@ -2,7 +2,10 @@ package stats
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -23,6 +26,39 @@ func readCodexAccountWithAppServer(ctx context.Context) (codexctl.AccountUsage, 
 		return codexctl.AccountUsage{}, err
 	}
 	return codexctl.ReadAccountUsage(ctx, binary, nil)
+}
+
+// codexSubscriptionEvery is how often a refresh asks Codex for its quota. Codex
+// answers by starting its app server, which reads some 100 MB to do so (the
+// daemon is charged for what its children read), and a quota moves slowly
+// enough for a reading a few minutes old.
+const codexSubscriptionEvery = 15 * time.Minute
+
+// codexSubscriptionForRefresh is collectCodexSubscription, asked at most every
+// codexSubscriptionEvery: a refresh in between shows what the last answer was.
+func (c *Collector) codexSubscriptionForRefresh() *CodexSubscriptionUsage {
+	now := c.now()
+	if c.codexSubscriptionAt.IsZero() {
+		// A restart or hot reload carries on from the last answer.
+		c.loadCodexSubscription()
+	}
+	if !c.codexSubscriptionAt.IsZero() && now.Sub(c.codexSubscriptionAt) >= 0 && now.Sub(c.codexSubscriptionAt) < codexSubscriptionEvery {
+		if last := c.codexSubscriptionLast; last != nil {
+			clone := *last
+			clone.Windows = append([]CodexUsageWindow(nil), last.Windows...)
+			return &clone
+		}
+		return nil
+	}
+	c.codexSubscriptionLast = c.collectCodexSubscription()
+	c.codexSubscriptionAt = now
+	c.saveCodexSubscription()
+	if c.codexSubscriptionLast == nil {
+		return nil
+	}
+	clone := *c.codexSubscriptionLast
+	clone.Windows = append([]CodexUsageWindow(nil), c.codexSubscriptionLast.Windows...)
+	return &clone
 }
 
 // collectCodexSubscription returns the official ChatGPT-backed Codex quota, or
@@ -84,4 +120,42 @@ func (c *Collector) staleCodexSubscription() *CodexSubscriptionUsage {
 	stale.Windows = append([]CodexUsageWindow(nil), last.Windows...)
 	stale.Stale = true
 	return &stale
+}
+
+const codexSubscriptionFile = "codex-subscription.json"
+
+type codexSubscriptionRecord struct {
+	At    time.Time
+	Usage *CodexSubscriptionUsage
+}
+
+// loadCodexSubscription takes the stored answer when it is still within
+// codexSubscriptionEvery; an older, missing or damaged one is as if Codex had
+// never been asked.
+func (c *Collector) loadCodexSubscription() {
+	if c.usageCacheDir == "" {
+		return
+	}
+	raw, err := os.ReadFile(filepath.Join(c.usageCacheDir, codexSubscriptionFile))
+	if err != nil {
+		return
+	}
+	var record codexSubscriptionRecord
+	if json.Unmarshal(raw, &record) != nil || record.At.IsZero() {
+		return
+	}
+	if age := c.now().Sub(record.At); age < 0 || age >= codexSubscriptionEvery {
+		return
+	}
+	c.codexSubscriptionAt, c.codexSubscriptionLast = record.At, record.Usage
+}
+
+func (c *Collector) saveCodexSubscription() {
+	if c.usageCacheDir == "" {
+		return
+	}
+	raw, err := json.Marshal(codexSubscriptionRecord{At: c.codexSubscriptionAt, Usage: c.codexSubscriptionLast})
+	if err == nil {
+		_ = writeUsageCache(filepath.Join(c.usageCacheDir, codexSubscriptionFile), raw)
+	}
 }
