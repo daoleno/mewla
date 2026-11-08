@@ -45,7 +45,17 @@ func (s *Server) handleDisplay(w http.ResponseWriter, r *http.Request) {
 		if list == nil {
 			list = []vdisplay.Info{}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": vdisplay.Capability() == nil})
+		// reason says what is missing when agents cannot have a screen (or a
+		// browser on it) on this computer.
+		reason := ""
+		if err := vdisplay.Capability(); err != nil {
+			reason = err.Error()
+		} else if s.browsers != nil {
+			if c := s.browsers.Capability(r.Context()); !c.Available {
+				reason = c.Reason
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"displays": list, "available": vdisplay.Capability() == nil, "reason": reason})
 	case http.MethodPost:
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
 		var q struct {

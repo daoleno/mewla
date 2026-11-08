@@ -5,6 +5,7 @@ package vdisplay
 import (
 	"context"
 	"errors"
+	"image"
 )
 
 var errUnsupported = errors.New("virtual displays are only available on Linux")
@@ -23,3 +24,11 @@ func (*Service) List() []Info                                        { return ni
 func (*Service) SetAlive(func(string) bool)                          {}
 func (*Service) Forget(string)                                       {}
 func (*Service) Close()                                              {}
+
+func (*Service) Begin(string) error                              { return nil }
+func (*Service) End(string) []string                             { return nil }
+func (*Service) Windows(string, int)                             {}
+func (*Service) DisplayEnv(context.Context) (int, string, error) { return 0, "", errUnsupported }
+func (*Service) Monitor(context.Context, string) (image.Rectangle, error) {
+	return image.Rectangle{}, errUnsupported
+}

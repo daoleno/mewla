@@ -1,7 +1,6 @@
 package browser
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,7 +8,7 @@ import (
 	"github.com/daoleno/mewla/daemon/atomicfile"
 )
 
-// Settings are the computer-wide Browser choices, kept beside the profiles.
+// Settings are the computer-wide Browser choices, kept beside the profile.
 type Settings struct {
 	// VirtualScreen: new agent Workers get a browser on the virtual screen
 	// without being told which one (Settings → Labs → Virtual screen).
@@ -66,6 +65,3 @@ func (m *Manager) SetSwitchHook(f func()) {
 	m.switchHook = f
 	m.mu.Unlock()
 }
-
-// Capability is whether this computer can run the agent browser, and why not.
-func (m *Manager) Capability(ctx context.Context) Capability { return m.backend.Capability(ctx) }

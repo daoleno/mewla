@@ -302,7 +302,7 @@ func virtualScreenOf(stateDir string) func() (bool, string) {
 		if !browser.LoadSettings(filepath.Join(stateDir, "browsers")).VirtualScreen {
 			return false, ""
 		}
-		if c := browser.NewBackend(nil).Capability(context.Background()); !c.Available {
+		if c := browser.NewBackend(nil, nil).Capability(context.Background()); !c.Available {
 			return true, c.Reason
 		}
 		return true, ""

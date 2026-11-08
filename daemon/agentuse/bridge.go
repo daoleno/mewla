@@ -40,11 +40,9 @@ type hostMessage struct {
 	Message  string        `json:"message,omitempty"`
 	Reason   string        `json:"reason,omitempty"`
 	// Label names the agent's tab group.
-	Label    string `json:"label,omitempty"`
-	Version  string `json:"version,omitempty"`
-	WindowID int    `json:"windowId,omitempty"`
-	// TargetID is the DevTools target of the page the window shows.
-	TargetID  string          `json:"targetId,omitempty"`
+	Label     string          `json:"label,omitempty"`
+	Version   string          `json:"version,omitempty"`
+	WindowID  int             `json:"windowId,omitempty"`
 	Sessions  []string        `json:"sessions,omitempty"`
 	Extension json.RawMessage `json:"-"`
 }
@@ -152,14 +150,14 @@ type AgentBrowser struct {
 	On func() bool
 	// Ensure starts the agent browser and waits until it is up.
 	Ensure func(ctx context.Context) error
+	// Monitor is where the window of a Worker (or, with no Worker, of the
+	// connection named "window:" and its id) goes on the agent screen: the
+	// Worker's monitor, given to it if it has none.
+	Monitor func(ctx context.Context, name string) (WindowBounds, error)
 	// Opened lists a window the extension opened for a Worker (key is the
-	// connection id, target the page it shows); Viewed follows the page it
-	// shows; Closed takes it off the list.
-	Opened func(ctx context.Context, worker, key, target string) error
-	Viewed func(key, target string)
+	// connection id); Closed takes it off the list.
+	Opened func(worker, key string) error
 	Closed func(key string)
-	// Bounds is where each window goes on the agent browser's screen.
-	Bounds WindowBounds
 }
 
 type bridgeHost struct {
@@ -324,10 +322,6 @@ func (b *Bridge) serveHost(conn net.Conn, r *bufio.Reader, agent bool) {
 			b.mu.Lock()
 			host.version = m.Version
 			b.mu.Unlock()
-		case "view":
-			if agent && b.Agent != nil && b.Agent.Viewed != nil && m.TargetID != "" {
-				b.Agent.Viewed(m.ID, m.TargetID)
-			}
 		case "connected", "error", "closed":
 			if m.Type != "connected" {
 				b.release(m.ID)
@@ -451,9 +445,18 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 		b.mu.Unlock()
 	}()
 	if agent {
-		// Every window of the agent browser fills its screen; they sit over
-		// one another, and the person watches one at a time.
-		cell := b.Agent.Bounds
+		// The window fills the Worker's monitor on the agent screen.
+		name := worker
+		if name == "" {
+			name = "window:" + id
+		}
+		if b.Agent.Monitor == nil {
+			return errors.New("the agent screen has no monitor for this window")
+		}
+		cell, err := b.Agent.Monitor(ctx, name)
+		if err != nil {
+			return fmt.Errorf("the agent screen has no monitor for this window: %w", err)
+		}
 		bounds = &cell
 	} else if bounds == nil && b.Display != nil {
 		if got, release, err := b.Display(id); err == nil {
@@ -488,7 +491,7 @@ func (b *Bridge) connect(ctx context.Context, relayURL, client, worker string, b
 			b.open[id] = worker
 			b.mu.Unlock()
 			if b.Agent.Opened != nil {
-				if err := b.Agent.Opened(ctx, worker, id, m.TargetID); err != nil {
+				if err := b.Agent.Opened(worker, id); err != nil {
 					b.mu.Lock()
 					delete(b.open, id)
 					b.mu.Unlock()

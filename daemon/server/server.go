@@ -257,9 +257,8 @@ type codexConversationSubscription struct {
 }
 
 type authenticatedClient struct {
-	browserOwner *browser.Owner
-	deviceID     string
-	revoked      atomic.Bool
+	deviceID string
+	revoked  atomic.Bool
 }
 
 type terminalCleanupState uint8
@@ -331,8 +330,7 @@ func (o *terminalCleanupOwner) Drain() {
 }
 
 type clientDetachWork struct {
-	browserOwner *browser.Owner
-	conn         *websocket.Conn
+	conn *websocket.Conn
 }
 
 // New creates a WebSocket server.
@@ -486,7 +484,6 @@ func (s *Server) Handler() http.Handler {
 	webUI := s.webUIHandler()
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.Handle("/browser", s.appRoute(webUI, http.HandlerFunc(s.handleBrowser)))
-	mux.HandleFunc("/browser/viewer", s.handleBrowserViewer)
 	mux.Handle("/screen", s.appRoute(webUI, http.HandlerFunc(s.handleScreen)))
 	mux.HandleFunc("/screen/viewer", s.handleScreenViewer)
 	mux.HandleFunc("/display", s.handleDisplay)
@@ -779,22 +776,12 @@ func (s *Server) removeClientLocked(
 	}
 	delete(s.outboxes, conn)
 	delete(s.codexSubs, conn)
-	var browserOwner *browser.Owner
-	if owner != nil {
-		browserOwner = owner.browserOwner
-	}
-	return clientDetachWork{
-		browserOwner: browserOwner,
-		conn:         conn,
-	}
+	return clientDetachWork{conn: conn}
 }
 
 func (s *Server) completeClientDetach(work clientDetachWork) {
 	if work.conn != nil {
 		_ = work.conn.Close()
-	}
-	if work.browserOwner != nil && s.browsers != nil {
-		s.browsers.ReleaseOwner(*work.browserOwner)
 	}
 }
 
@@ -3720,11 +3707,7 @@ func (s *Server) maybeNotifyForSessionEvent(ev watcher.SessionEvent) {
 func (s *Server) broadcast(data []byte) {
 	s.mu.Lock()
 	conns := make([]*websocket.Conn, 0, len(s.clients))
-	for conn, owner := range s.clients {
-		// Viewer sockets have an independent bounded writer/protocol.
-		if owner != nil && owner.browserOwner != nil {
-			continue
-		}
+	for conn := range s.clients {
 		conns = append(conns, conn)
 	}
 	s.mu.Unlock()

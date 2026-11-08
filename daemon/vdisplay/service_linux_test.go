@@ -164,7 +164,7 @@ func TestTwoWorkersGetTwoDisplays(t *testing.T) {
 
 // Two Workers share one screen: each has a monitor, an app opens on its own
 // monitor, a click is relative to the monitor, and a view shows only it.
-func TestWorkersShareOneScreenWithAMonitorEach(t *testing.T) {
+func TestWorkersShareAScreen(t *testing.T) {
 	s := newService(t)
 	ctx := context.Background()
 	for _, w := range []string{"a", "b"} {

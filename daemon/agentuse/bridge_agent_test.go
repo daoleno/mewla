@@ -43,7 +43,7 @@ func TestAgentBrowserWindowsGoToTheAgentBrowserOnly(t *testing.T) {
 			}
 			asked <- m
 			if m.Type == "connect" {
-				_ = enc.Encode(hostMessage{Type: "connected", ID: m.ID, WindowID: 7, TargetID: "page-1"})
+				_ = enc.Encode(hostMessage{Type: "connected", ID: m.ID, WindowID: 7})
 			}
 		}
 	}()
@@ -51,13 +51,15 @@ func TestAgentBrowserWindowsGoToTheAgentBrowserOnly(t *testing.T) {
 	b.Agent = &AgentBrowser{
 		On:     func() bool { return true },
 		Ensure: func(context.Context) error { ensured++; return nil },
-		Opened: func(_ context.Context, worker, key, target string) error {
-			record("opened %s %s", worker, target)
+		Monitor: func(_ context.Context, name string) (WindowBounds, error) {
+			record("monitor %s", name)
+			return WindowBounds{Left: 1280, Top: 0, Width: 1280, Height: 800}, nil
+		},
+		Opened: func(worker, key string) error {
+			record("opened %s", worker)
 			return nil
 		},
-		Viewed: func(key, target string) { record("viewed %s", target) },
 		Closed: func(key string) { record("closed") },
-		Bounds: WindowBounds{Left: 0, Top: 0, Width: 1280, Height: 800},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -65,7 +67,7 @@ func TestAgentBrowserWindowsGoToTheAgentBrowserOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := <-asked
-	if m.Type != "connect" || m.Bounds == nil || *m.Bounds != (WindowBounds{0, 0, 1280, 800}) {
+	if m.Type != "connect" || m.Bounds == nil || *m.Bounds != (WindowBounds{1280, 0, 1280, 800}) {
 		t.Fatalf("the agent browser was asked %+v", m)
 	}
 	if ensured != 1 {
@@ -78,7 +80,6 @@ func TestAgentBrowserWindowsGoToTheAgentBrowserOnly(t *testing.T) {
 		}
 	case <-time.After(100 * time.Millisecond):
 	}
-	_ = enc.Encode(hostMessage{Type: "view", ID: m.ID, TargetID: "page-2"})
 	_ = enc.Encode(hostMessage{Type: "closed", ID: m.ID, Reason: "The agent finished"})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -92,7 +93,7 @@ func TestAgentBrowserWindowsGoToTheAgentBrowserOnly(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	want := []string{"opened worker-1 page-1", "viewed page-2", "closed"}
+	want := []string{"monitor worker-1", "opened worker-1", "closed"}
 	if len(events) != 3 || events[0] != want[0] || events[1] != want[1] || events[2] != want[2] {
 		t.Fatalf("events %v, want %v", events, want)
 	}
@@ -103,9 +104,9 @@ func TestAgentBrowserStartFailureNamesItsCause(t *testing.T) {
 	b, dir := startBridge(t)
 	person := fakeExtension(t, dir, func(hostMessage) hostMessage { return hostMessage{Type: "connected"} })
 	waitHost(t, b)
-	b.Agent = &AgentBrowser{On: func() bool { return true }, Ensure: func(context.Context) error { return errors.New("kwin_wayland could not start") }}
+	b.Agent = &AgentBrowser{On: func() bool { return true }, Ensure: func(context.Context) error { return errors.New("the agent screen could not start") }}
 	err := b.connect(context.Background(), goodRelay, "client", "w", nil)
-	if err == nil || !contains(err.Error(), "kwin_wayland could not start") {
+	if err == nil || !contains(err.Error(), "the agent screen could not start") {
 		t.Fatalf("err = %v", err)
 	}
 	select {
