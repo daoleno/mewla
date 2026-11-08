@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import * as Haptics from "expo-haptics";
 import type { TerminalThemeChrome, TerminalThemePalette } from "../../constants/terminalThemes";
-import { ContinuousCorners, Radii, TouchTarget, TypeScale, UiTextMetrics, useAppTheme } from "../../constants/tokens";
+import { ContinuousCorners, Radii, TouchTarget, TypeScale, UiTextMetrics } from "../../constants/tokens";
 import {
   filterGitDiffFiles,
   type GitDiffFileContentPayload,
@@ -11,12 +10,12 @@ import {
   type GitDiffScope,
 } from "../../services/gitDiff";
 import { EmptyState } from "../ui/EmptyState";
+import { SegmentedControl } from "../ui/SegmentedControl";
 import { GitDiffFileTree } from "./GitDiffFileTree";
 import { GitDiffReader } from "./GitDiffReader";
 import { DiffIconButton } from "./GitDiffReviewControls";
 import { GitDiffDetailHeader } from "./GitDiffSheetTopChrome";
 import { summarizeGitDiffFiles } from "./gitDiffPresentation";
-import { withAlpha } from "./colorWithAlpha";
 
 interface GitDiffSheetDiffContentProps {
   files: GitDiffFileInfo[];
@@ -145,7 +144,7 @@ export function GitDiffSheetDiffContent({
       >
         {noChanges ? null : (
           <View style={styles.listTop}>
-            <GitDiffScopeControl chrome={chrome} scope={scope} counts={scopeCounts} onChange={onScopeChange} />
+            <GitDiffScopeControl scope={scope} counts={scopeCounts} onChange={onScopeChange} />
             {scopeTotal > 0 ? (
               <Text style={[styles.listMetaText, { color: chrome.textSubtle }]} numberOfLines={1} accessibilityLiveRegion="polite">
                 {summary.label}
@@ -203,73 +202,28 @@ export function GitDiffSheetDiffContent({
   );
 }
 
+const SCOPE_LABELS: Record<GitDiffScope, string> = { all: "All", working: "Working", staged: "Staged" };
+
 function GitDiffScopeControl({
-  chrome,
   scope,
   counts,
   onChange,
 }: {
-  chrome: TerminalThemeChrome;
   scope: GitDiffScope;
   counts: Record<GitDiffScope, number>;
   onChange(scope: GitDiffScope): void;
 }) {
-  const { colors, isLight } = useAppTheme();
-  const options: { value: GitDiffScope; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "working", label: "Working" },
-    { value: "staged", label: "Staged" },
-  ];
-  return (
-    <View
-      accessibilityRole="tablist"
-      style={[styles.scopeTrack, { backgroundColor: withAlpha(chrome.text, isLight ? 0.06 : 0.08) }]}
-    >
-      {options.map((option) => {
-        const active = scope === option.value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={`${option.label}, ${counts[option.value]} files`}
-            onPress={() => {
-              if (active) return;
-              void Haptics.selectionAsync();
-              onChange(option.value);
-            }}
-            style={styles.scopeHit}
-          >
-            <View
-              style={[
-                styles.scope,
-                active && [
-                  styles.scopeActive,
-                  { backgroundColor: isLight ? colors.bgSurface : colors.bgElevated, shadowColor: chrome.shadowColor },
-                ],
-              ]}
-            >
-              <Text
-                style={[
-                  styles.scopeLabel,
-                  { color: active ? chrome.text : chrome.textMuted },
-                ]}
-                numberOfLines={1}
-              >
-                {option.label}
-              </Text>
-              <Text
-                style={[styles.scopeCount, { color: active ? chrome.textMuted : chrome.textSubtle }]}
-                numberOfLines={1}
-              >
-                {counts[option.value]}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
+  const options = useMemo(
+    () =>
+      (Object.keys(SCOPE_LABELS) as GitDiffScope[]).map((value) => ({
+        value,
+        label: SCOPE_LABELS[value],
+        count: counts[value],
+        accessibilityLabel: `${SCOPE_LABELS[value]}, ${counts[value]} files`,
+      })),
+    [counts],
   );
+  return <SegmentedControl accessibilityLabel="Changes shown" options={options} value={scope} onChange={onChange} />;
 }
 
 function GitDiffOptionsStrip({
@@ -369,39 +323,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   emptyList: { flex: 1, justifyContent: "center", paddingHorizontal: 16 },
-  scopeTrack: {
-    flexDirection: "row",
-    padding: 2,
-    borderRadius: Radii.sm,
-    ...ContinuousCorners,
-  },
-  scopeHit: {
-    flex: 1,
-    minHeight: TouchTarget - 4,
-  },
-  scope: {
-    flex: 1,
-    borderRadius: 10,
-    ...ContinuousCorners,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  scopeActive: {
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  scopeLabel: {
-    ...TypeScale.label,
-    ...UiTextMetrics,
-  },
-  scopeCount: {
-    ...TypeScale.caption,
-    ...UiTextMetrics,
-    fontVariant: ["tabular-nums"],
-  },
   textButton: {
     minHeight: TouchTarget,
     minWidth: TouchTarget,

@@ -19,6 +19,10 @@ export interface SegmentedOption<T extends string> {
   icon?: IconName;
   /** Custom glyph such as a brand mark; replaces `icon`. */
   leading?: React.ReactNode;
+  /** A trailing tally, such as a file count, in the muted ink beside the label. */
+  count?: number;
+  /** Replaces the spoken label when the visible one needs context ("All, 17 files"). */
+  accessibilityLabel?: string;
 }
 
 interface SegmentedControlProps<T extends string> {
@@ -88,19 +92,24 @@ export function SegmentedControl<T extends string>({
       ) : null}
       {options.map((option, index) => {
         const selected = option.value === value;
-        const content = (ink: string) => (
+        const content = (ink: string, countInk: string) => (
           <>
             {option.leading ?? (option.icon ? <Icon name={option.icon} size={16} color={ink} /> : null)}
             <AppText variant="label" numberOfLines={1} style={{ color: ink }}>
               {option.label}
             </AppText>
+            {option.count !== undefined ? (
+              <AppText variant="caption" numberOfLines={1} style={[styles.count, { color: countInk }]}>
+                {option.count}
+              </AppText>
+            ) : null}
           </>
         );
         return (
           <Pressable
             key={option.value}
             accessibilityRole="radio"
-            accessibilityLabel={option.label}
+            accessibilityLabel={option.accessibilityLabel ?? option.label}
             accessibilityState={{ checked: selected, selected }}
             onPress={() => {
               if (selected) return;
@@ -115,7 +124,7 @@ export function SegmentedControl<T extends string>({
           >
             {position ? (
               <>
-                {content(colors.textSecondary)}
+                {content(colors.textSecondary, colors.textTertiary)}
                 <Animated.View
                   aria-hidden
                   pointerEvents="none"
@@ -130,11 +139,13 @@ export function SegmentedControl<T extends string>({
                     },
                   ]}
                 >
-                  {content(colors.textPrimary)}
+                  {content(colors.textPrimary, colors.textSecondary)}
                 </Animated.View>
               </>
             ) : (
-              content(selected ? colors.textPrimary : colors.textSecondary)
+              selected
+                ? content(colors.textPrimary, colors.textSecondary)
+                : content(colors.textSecondary, colors.textTertiary)
             )}
           </Pressable>
         );
@@ -163,6 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   selected: {},
+  count: { fontVariant: ["tabular-nums"] },
   thumb: {
     position: "absolute",
     left: TRACK_PADDING,
