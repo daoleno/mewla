@@ -110,7 +110,7 @@ func (m *Manager) mcpResources(parent context.Context, q Request) (Response, err
 	sensitive := m.sensitiveValues(r, secret)
 	m.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(parent, mcpCallTimeout)
+	ctx, cancel := context.WithTimeout(foreground(parent), mcpCallTimeout)
 	defer cancel()
 	var out mcpOutcome
 	for attempt := 0; ; attempt++ {

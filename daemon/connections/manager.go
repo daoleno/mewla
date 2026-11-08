@@ -55,6 +55,7 @@ type Manager struct {
 	githubToken  func(context.Context) (string, error)
 	webOrigin    func(origin string) bool
 	toolsSeen    map[string]time.Time // when each MCP account's tool list was last read
+	outages      *outages             // remote MCP services that cannot be reached; see outage.go
 	cloud        *cloudRuntime
 	loopbackPort int // the port this daemon serves on; see SetLoopbackPort
 	// tailscaleBrowser creates Tailscale's OAuth client in the person's Chrome;
@@ -127,7 +128,8 @@ func (m *Manager) EnsureDefaults() error {
 }
 
 func newManager(path string, vault modelprofiles.CredentialStore, client *http.Client) (*Manager, error) {
-	m := &Manager{snapshots: newConnectionSnapshots(), cloudInfo: map[string]*CLIInfo{}, path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}}
+	m := &Manager{snapshots: newConnectionSnapshots(), cloudInfo: map[string]*CLIInfo{}, path: path, vault: vault, http: client, records: map[string]*record{}, pending: map[string]*oauthFlow{}, connectFlows: map[string]*connectFlow{}, githubToken: readGitHubToken, toolsSeen: map[string]time.Time{}, outages: newOutages()}
+	m.outages.changed = m.outageChanged
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		if err = json.Unmarshal(raw, &m.records); err != nil {
@@ -252,6 +254,31 @@ func cloneAccount(a Account) Account {
 	_ = json.Unmarshal(raw, &out)
 	return out
 }
+
+// outageChanged rebuilds the account list a client reads, which is cached at
+// save time, when an outage opens, shows or ends. When a service comes back,
+// accounts a failed call marked "error" are connected again: nothing else
+// would clear a mark that only the service's silence put there. It runs apart
+// from the caller, which may hold the manager lock.
+func (m *Manager) outageChanged(recovered string) {
+	go func() {
+		m.mu.Lock()
+		changed := false
+		for _, r := range m.records {
+			if recovered != "" && usesMCP(r) && r.Account.Status == "error" && outageKey(r) == recovered {
+				r.Account.Status = "connected"
+				changed = true
+			}
+		}
+		if changed {
+			_ = m.save()
+		}
+		m.cacheListLocked()
+		m.mu.Unlock()
+		m.pushConnections()
+	}()
+}
+
 func (m *Manager) projection(r *record) Account {
 	a := cloneAccount(r.Account)
 	for i := range a.Tools {
@@ -260,6 +287,14 @@ func (m *Manager) projection(r *record) Account {
 		_, a.Tools[i].Updated = r.Updates[a.Tools[i].Name]
 	}
 	a.Updates = updatedNames(r)
+	if usesMCP(r) && r.Account.Enabled && r.Account.Status != "disconnected" {
+		if reason, since := m.outages.problem(r); reason != "" {
+			a.Unavailable, a.UnavailableSince = reason, &since
+			if a.Status == "connected" || a.Status == "configured" {
+				a.Status = "error"
+			}
+		}
+	}
 	a.Access = &Access{Read: groupState(a.Tools, "read"), Write: groupState(a.Tools, "write"), WriteConsent: writeConsent(r), Tools: len(a.Tools)}
 	for _, t := range a.Tools {
 		if t.Allowed {
@@ -299,7 +334,7 @@ func (m *Manager) Handle(parent context.Context, q Request) (Response, error) {
 	// saved list if the service is slow or unreachable.
 	switch q.Action {
 	case "updates":
-		if err := m.syncRemoteTools(parent, q.ID, true, 20*time.Second); err != nil {
+		if err := m.syncRemoteTools(foreground(parent), q.ID, true, 20*time.Second); err != nil {
 			return Response{}, errors.New("could not check the service for tool updates: " + err.Error())
 		}
 	case "get", "describe":

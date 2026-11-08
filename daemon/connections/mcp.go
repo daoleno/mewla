@@ -15,7 +15,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/daoleno/mewla/daemon/diag"
 	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -163,9 +162,41 @@ func (m *Manager) mcpClient(r *record, secret string) (*http.Client, func()) {
 	return &client, closeIdle
 }
 
-// mcpSession opens one session. onToolsChanged runs when the service sends
-// notifications/tools/list_changed on any of the session's streams.
-func (m *Manager) mcpSession(ctx context.Context, r *record, secret string, onToolsChanged func()) (*mcp.ClientSession, error) {
+// setupError is a failed MCP setup step: the connection, the handshake or the
+// tool list. Nothing has been called yet, so it is safe to try again. reason
+// is fixed wording for the outage; msg is what the caller sees.
+type setupError struct {
+	msg, reason string
+	network     bool
+}
+
+func (e setupError) Error() string { return e.msg }
+func (e setupError) Unwrap() error {
+	if e.network {
+		return errNetwork
+	}
+	return nil
+}
+
+// setupFailure classifies an SDK error from one setup step. network and
+// other are the messages' beginnings for a request that got no answer and for
+// one the service refused.
+func setupFailure(err error, network, other string) error {
+	reason := setupReason(err)
+	if isTransportError(err, errNetwork) {
+		return setupError{msg: fmt.Sprintf("%s: %s (%s)", network, errNetwork, reason), reason: reason, network: true}
+	}
+	if reason == genericSetupReason {
+		return setupError{msg: other + "; check that its endpoint still serves MCP", reason: reason}
+	}
+	return setupError{msg: fmt.Sprintf("%s (%s)", other, reason), reason: reason}
+}
+
+// dialMCP opens one session and judges nothing about the service: openMCP
+// and mcpSession decide what a failure means. onToolsChanged runs when the
+// service sends notifications/tools/list_changed on any of the session's
+// streams.
+func (m *Manager) dialMCP(ctx context.Context, r *record, secret string, onToolsChanged func()) (*mcp.ClientSession, error) {
 	client, closeIdle := m.mcpClient(r, secret)
 	options := &mcp.ClientOptions{}
 	if onToolsChanged != nil {
@@ -176,25 +207,41 @@ func (m *Manager) mcpSession(ctx context.Context, r *record, secret string, onTo
 	if err != nil {
 		closeIdle()
 		// SDK errors carry status and JSON-RPC text, never the bearer header.
-		if ctx.Err() == nil {
-			diag.Report("plugins.mcp.connect", diag.SeverityWarn, r.Account.Integration, fmt.Sprintf("%.300s", err))
-		}
 		if isTransportError(err, errAuth) {
 			return nil, errAuth
 		}
 		if ctx.Err() != nil {
 			return nil, safeError(ctx.Err())
 		}
-		if isTransportError(err, errNetwork) {
-			return nil, fmt.Errorf("could not reach %s: %w", accountService(r), errNetwork)
-		}
-		return nil, fmt.Errorf("%s did not accept the MCP connection; check that its endpoint still serves MCP", accountService(r))
+		return nil, setupFailure(err, "could not reach "+accountService(r), accountService(r)+" did not accept the MCP connection")
 	}
 	go func() {
 		_ = session.Wait()
 		closeIdle()
 	}()
 	return session, nil
+}
+
+// settle tells the outage state how a setup ended: the service answered
+// (even to refuse the token), or it did not.
+func (m *Manager) settle(ctx context.Context, r *record, err error) {
+	var failure setupError
+	switch {
+	case err == nil, isTransportError(err, errAuth):
+		m.outages.reached(r)
+	case ctx.Err() == nil && errors.As(err, &failure):
+		m.outages.failed(r, failure.reason)
+	}
+}
+
+// mcpSession opens one session for a caller that sets up no tool list.
+func (m *Manager) mcpSession(ctx context.Context, r *record, secret string, onToolsChanged func()) (*mcp.ClientSession, error) {
+	if err := m.outages.gate(ctx, r); err != nil {
+		return nil, err
+	}
+	s, err := m.dialMCP(ctx, r, secret, onToolsChanged)
+	m.settle(ctx, r, err)
+	return s, err
 }
 
 func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
@@ -204,19 +251,16 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 	for page := 0; page < 10; page++ {
 		result, err := s.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
 		if err != nil {
-			if ctx.Err() == nil {
-				diag.Report("plugins.mcp.list_tools", diag.SeverityWarn, "", fmt.Sprintf("page %d: %.300s", page+1, err))
-			}
 			if isTransportError(err, errAuth) {
 				return nil, errAuth
 			}
 			if isTransportError(err, errResponseTooLarge) {
 				return nil, errors.New("MCP tool list exceeds 1 MB")
 			}
-			if isTransportError(err, errNetwork) {
-				return nil, fmt.Errorf("MCP discovery failed: %w", errNetwork)
+			if ctx.Err() != nil {
+				return nil, safeError(ctx.Err())
 			}
-			return nil, errors.New("MCP discovery failed")
+			return nil, setupFailure(err, "MCP discovery failed", "MCP discovery failed")
 		}
 		for _, t := range result.Tools {
 			if t.Name == "" || seen[t.Name] || len(t.Name) > 200 {
@@ -242,25 +286,36 @@ func listMCP(ctx context.Context, s *mcp.ClientSession) ([]Tool, error) {
 }
 
 // openMCP opens a session and lists its tools. Both steps are safe to repeat,
-// so a network failure gets one more attempt; nothing has been called yet.
+// so a failed setup gets one quiet second attempt; nothing has been called
+// yet. When that fails too, the service is recorded as failing (see outages),
+// and the next background attempt waits for its backoff instead of calling.
 func (m *Manager) openMCP(ctx context.Context, r *record, secret string, onToolsChanged func()) (*mcp.ClientSession, []Tool, error) {
+	if err := m.outages.gate(ctx, r); err != nil {
+		return nil, nil, err
+	}
 	for attempt := 0; ; attempt++ {
-		s, err := m.mcpSession(ctx, r, secret, onToolsChanged)
+		s, err := m.dialMCP(ctx, r, secret, onToolsChanged)
 		var tools []Tool
 		if err == nil {
 			tools, err = listMCP(ctx, s)
 			if err == nil {
+				m.outages.reached(r)
 				return s, tools, nil
 			}
 			s.Close()
 		}
-		if attempt == 1 || ctx.Err() != nil || !isTransportError(err, errNetwork) {
-			if ctx.Err() != nil {
-				err = safeError(ctx.Err())
-			}
+		if ctx.Err() != nil {
+			return nil, nil, safeError(ctx.Err())
+		}
+		var failure setupError
+		if !errors.As(err, &failure) {
+			m.settle(ctx, r, err)
 			return nil, nil, err
 		}
-		log.Printf("plugins: %s MCP setup failed once; trying again", r.Account.Integration)
+		if attempt == 1 || m.outages.open(r) {
+			m.outages.failed(r, failure.reason)
+			return nil, nil, err
+		}
 	}
 }
 
@@ -443,7 +498,9 @@ func (m *Manager) invokeMCPAccount(parent context.Context, q Request) (Response,
 	m.mu.Unlock()
 
 	timeout := mcpTimeout(t, args)
-	ctx, cancel := context.WithTimeout(parent, timeout)
+	// A person's or Brain's call always goes out, and doubles as the probe
+	// that finds the service back.
+	ctx, cancel := context.WithTimeout(foreground(parent), timeout)
 	defer cancel()
 	out := m.callMCP(ctx, &snapshot, secret, t, args, timeout)
 
@@ -489,7 +546,13 @@ func (m *Manager) finishMCP(id, tool string, sensitive []string, out mcpOutcome,
 		err = updated
 	}
 	if !record {
-		if out.Tools != nil {
+		// A routine read leaves status alone, except that an answer proves
+		// the service is reachable: a failure it was marked with is over.
+		healed := err == nil && r.Account.Status == "error"
+		if healed {
+			r.Account.Status = "connected"
+		}
+		if out.Tools != nil || healed {
 			_ = m.save()
 		}
 		return result, err

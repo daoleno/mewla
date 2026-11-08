@@ -279,6 +279,9 @@ export function accountRecovery(account: PluginAccount, serviceName: string): Ac
   if (account.status === "authorization_required") {
     return { title: "Needs sign-in again", detail: `${serviceName} stopped accepting Mewla's sign-in.`, action: "reconnect", actionLabel: "Reconnect", tone: "warning" };
   }
+  if (account.status === "error" && account.unavailable) {
+    return { title: "Unavailable", detail: `${serviceName} can't be reached: ${account.unavailable}. Mewla keeps trying and reconnects by itself.`, action: "refresh", actionLabel: "Check now", tone: "warning" };
+  }
   if (account.status === "error") {
     return { title: "Last call failed", detail: `Check that ${serviceName} and its tools still answer.`, action: "refresh", actionLabel: "Check again", tone: "danger" };
   }

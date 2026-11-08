@@ -89,7 +89,7 @@ func (m *Manager) discoverUnchecked(ctx context.Context, r *record, secret strin
 	var tools []Tool
 	if r.Account.AuthMethod == "mcp_oauth" {
 		var err error
-		tools, err = m.discoverMCP(ctx, r, secret)
+		tools, err = m.discoverMCP(foreground(ctx), r, secret)
 		if err != nil {
 			return err
 		}
@@ -382,7 +382,7 @@ func discoverOpenAPI(m *Manager, ctx context.Context, r *record, secret string) 
 }
 
 func discoverMCPToken(m *Manager, ctx context.Context, r *record, secret string) ([]Tool, error) {
-	tools, err := m.discoverMCP(ctx, r, secret)
+	tools, err := m.discoverMCP(foreground(ctx), r, secret)
 	if err != nil {
 		return nil, err
 	}
