@@ -118,8 +118,10 @@ func Relay(dst io.Writer, src io.Reader, observe func(Input)) error {
 			}
 			// Only sending the person's clipboard counts; asking for or announcing
 			// it does not.
-			const provide = 1 << 28
-			if !extended || (len(body) >= 4 && binary.BigEndian.Uint32(body)&provide != 0) {
+			// A viewer's capability announcement lists "provide" among the
+			// actions it can do; it is not a paste.
+			const caps, provide = 1 << 24, 1 << 28
+			if !extended || (len(body) >= 4 && binary.BigEndian.Uint32(body)&provide != 0 && binary.BigEndian.Uint32(body)&caps == 0) {
 				in.Pastes = 1
 			}
 		case 150: // EnableContinuousUpdates: enable flag and a rectangle

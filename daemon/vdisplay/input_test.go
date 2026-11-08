@@ -104,6 +104,8 @@ func TestRelayExtendedClipboard(t *testing.T) {
 	var in bytes.Buffer
 	// A notify (flags without "provide") is not a paste: length -8, flags, one format.
 	in.Write([]byte{6, 0, 0, 0, 0xff, 0xff, 0xff, 0xf8, 0, 0, 0, 1, 0, 0, 0, 1})
+	// A capability announcement lists provide among its actions; not a paste either.
+	in.Write([]byte{6, 0, 0, 0, 0xff, 0xff, 0xff, 0xf8, 0x11, 0, 0, 1, 0, 0, 0, 0})
 	// A provide is: length -8, flags with bit 28 set.
 	in.Write([]byte{6, 0, 0, 0, 0xff, 0xff, 0xff, 0xf8, 0x10, 0, 0, 1, 0, 0, 0, 0})
 	var out bytes.Buffer
@@ -111,7 +113,7 @@ func TestRelayExtendedClipboard(t *testing.T) {
 	if err := Relay(&out, &in, func(i Input) { total = total.Add(i) }); err != io.EOF {
 		t.Fatalf("err = %v", err)
 	}
-	if total.Pastes != 1 || out.Len() != 32 {
+	if total.Pastes != 1 || out.Len() != 48 {
 		t.Fatalf("counts = %+v, forwarded %d", total, out.Len())
 	}
 }
