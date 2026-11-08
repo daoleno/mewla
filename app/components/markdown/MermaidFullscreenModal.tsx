@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   useAnimatedStyle,
@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TerminalThemeChrome } from "../../constants/terminalThemes";
 import { Typography } from "../../constants/tokens";
 import { MermaidSvgPreview } from "./MermaidSvgPreview";
-import { Icon } from "../icons/Icon";
+import { IconButton } from "../ui/IconButton";
 
 export function MermaidFullscreenModal({
   visible,
@@ -122,15 +122,7 @@ export function MermaidFullscreenModal({
         ]}
       >
         <View style={styles.toolbar}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Close diagram"
-            hitSlop={8}
-            onPress={onClose}
-            style={styles.close}
-          >
-            <Icon name="close" size={22} color={chrome.text} />
-          </Pressable>
+          <IconButton icon="close" tone="ghost" size={44} iconSize={22} color={chrome.text} accessibilityLabel="Close diagram" onPress={onClose} />
         </View>
         <GestureDetector gesture={gesture}>
           <View
@@ -166,12 +158,6 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: 8,
     alignItems: "flex-end",
-    justifyContent: "center",
-  },
-  close: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
     justifyContent: "center",
   },
   stage: {

@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
@@ -8,7 +7,7 @@ import {
 } from "react-native";
 import { TypeScale, Typography, useAppColors } from "../../constants/tokens";
 import { AgentLogoSet } from "../agents/AgentLogoSet";
-import { Icon } from "../icons/Icon";
+import { IconButton } from "../ui/IconButton";
 
 export interface ExtensionListRowAction {
   accessibilityLabel: string;
@@ -69,22 +68,17 @@ export function ExtensionListRow({
           </Text>
         </View>
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
+      <IconButton
+        icon={action.icon}
+        tone="ghost"
+        size={44}
+        iconSize={20}
+        color={actionColor}
         accessibilityLabel={action.accessibilityLabel}
+        loading={action.busy}
         disabled={action.disabled}
         onPress={action.onPress}
-        style={({ pressed }) => [
-          styles.action,
-          (pressed || action.disabled) && styles.dimmed,
-        ]}
-      >
-        {action.busy ? (
-          <ActivityIndicator size="small" color={actionColor} />
-        ) : (
-          <Icon name={action.icon} size={20} color={actionColor} />
-        )}
-      </Pressable>
+      />
     </View>
   );
 }
@@ -118,12 +112,4 @@ const styles = StyleSheet.create({
     fontFamily: Typography.uiFontMedium,
   },
   summary: { ...TypeScale.compact, marginTop: 2 },
-  action: {
-    width: 44,
-    height: 44,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dimmed: { opacity: 0.45 },
 });

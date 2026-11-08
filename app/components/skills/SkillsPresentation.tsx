@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
@@ -55,6 +54,7 @@ import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
+import { IconButton } from "../ui/IconButton";
 import { ChipGroup } from "../ui/ChipGroup";
 import { SegmentedControl, type SegmentedOption } from "../ui/SegmentedControl";
 import { SegmentedPager } from "../ui/SegmentedPager";
@@ -481,12 +481,12 @@ function FilterSheet({
         <Text style={[styles.sheetTitle, { color: colors.textPrimary }]}>
           Filters
         </Text>
-        <Pressable
+        <Button
+          label="Reset"
+          variant="plain"
+          size="sm"
           onPress={() => onChange(DEFAULT_FILTERS)}
-          style={styles.textButton}
-        >
-          <Text style={{ color: colors.accent }}>Reset</Text>
-        </Pressable>
+        />
       </View>
       <ScrollView contentContainerStyle={styles.filterBody}>
         {agents.length > 1 ? <FilterSection title="Agents">
@@ -519,19 +519,7 @@ function FilterSheet({
           />
         </FilterSection>
       </ScrollView>
-      <Pressable
-        onPress={onClose}
-        style={[styles.doneButton, { backgroundColor: colors.accent }]}
-      >
-        <Text
-          style={{
-            color: colors.textOnAccent,
-            fontFamily: Typography.uiFontMedium,
-          }}
-        >
-          Done
-        </Text>
-      </Pressable>
+      <Button label="Done" variant="filled" block onPress={onClose} />
     </BottomSheetFrame>
   );
 }
@@ -786,13 +774,15 @@ function DeleteCopySheet({
             {logical?.name}
           </Text>
         </View>
-        <Pressable
+        <IconButton
+          icon="close"
+          tone="ghost"
+          size={44}
+          iconSize={22}
+          color={colors.textSecondary}
           accessibilityLabel="Close copy selector"
           onPress={onClose}
-          style={styles.close}
-        >
-          <Icon name="close" size={22} color={colors.textSecondary} />
-        </Pressable>
+        />
       </View>
       <ScrollView contentContainerStyle={styles.deleteSheetBody}>
         {(logical?.copies ?? []).map((copy) => {
@@ -832,26 +822,17 @@ function DeleteCopySheet({
                 ) : null}
               </View>
               {canDelete ? (
-                <Pressable
-                  accessibilityRole="button"
+                <IconButton
+                  icon="trash"
+                  tone="ghost"
+                  size={44}
+                  iconSize={20}
+                  color={colors.dangerText}
                   accessibilityLabel={`Delete ${copy.name} from ${copy.location}`}
+                  loading={deleting}
                   disabled={Boolean(preparingMutation)}
                   onPress={() => onDelete(copy)}
-                  style={({ pressed }) => [
-                    styles.rowDelete,
-                    (pressed || Boolean(preparingMutation)) && styles.dimmed,
-                  ]}
-                >
-                  {deleting ? (
-                    <ActivityIndicator size="small" color={colors.dangerText} />
-                  ) : (
-                    <Icon
-                      name="trash"
-                      size={20}
-                      color={colors.dangerText}
-                    />
-                  )}
-                </Pressable>
+                />
               ) : null}
             </View>
           );
@@ -939,14 +920,15 @@ function Inspector(
             />
           </View>
         </View>
-        <Pressable
-          accessibilityRole="button"
+        <IconButton
+          icon="close"
+          tone="ghost"
+          size={44}
+          iconSize={22}
+          color={colors.textSecondary}
           accessibilityLabel="Close Skill details"
           onPress={props.onDismissInspector}
-          style={styles.close}
-        >
-          <Icon name="close" size={22} color={colors.textSecondary} />
-        </Pressable>
+        />
       </View>
       <ScrollView contentContainerStyle={styles.inspectorScroll}>
         <DetailSection title="Overview">
@@ -1259,13 +1241,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING,
   },
-  rowDelete: {
-    width: 44,
-    height: 44,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   rowHeading: { flexDirection: "row", alignItems: "center", gap: 7 },
   metadata: { ...TypeScale.compact },
   iconAction: {
@@ -1293,12 +1268,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   inspectorTitle: { ...TypeScale.title, fontFamily: Typography.uiFontMedium },
-  close: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   inspectorScroll: { paddingBottom: 36 },
   detailSection: {
     paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING,
@@ -1352,7 +1321,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  dimmed: { opacity: 0.45 },
   lifecycleSection: {
     paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING,
     paddingVertical: 16,
@@ -1366,20 +1334,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sheetTitle: { ...TypeScale.title, fontFamily: Typography.uiFontMedium },
-  textButton: {
-    minWidth: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   filterBody: { gap: 18, paddingBottom: 18 },
   filterSection: { gap: 8 },
-  doneButton: {
-    height: 46,
-    borderRadius: 6,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   state: {
     flex: 1,
     minHeight: 180,

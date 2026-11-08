@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import {
+  ActivityIndicator,
   type PressableProps,
   type StyleProp,
   StyleSheet,
@@ -20,6 +21,8 @@ interface IconButtonProps extends Omit<PressableProps, "style" | "children"> {
   iconSize?: number;
   color?: string;
   tone?: IconButtonTone;
+  /** Swaps the glyph for a spinner and ignores presses while work is under way. */
+  loading?: boolean;
   /** Light haptic on press. */
   haptic?: boolean;
   /** Web hover text; defaults to the accessibility label. */
@@ -34,6 +37,7 @@ export function IconButton({
   iconSize = 18,
   color,
   tone = "default",
+  loading = false,
   haptic = true,
   disabled,
   style,
@@ -67,7 +71,8 @@ export function IconButton({
       hitSlop={slop}
       preset="press"
       scale={0.9}
-      disabled={disabled}
+      disabled={disabled || loading}
+      accessibilityState={{ ...props.accessibilityState, busy: loading || undefined }}
       onPress={(e) => {
         if (haptic && !disabled) {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -86,7 +91,11 @@ export function IconButton({
         style,
       ]}
     >
-      <Icon name={icon} size={iconSize} color={iconColor} />
+      {loading ? (
+        <ActivityIndicator size="small" color={iconColor} />
+      ) : (
+        <Icon name={icon} size={iconSize} color={iconColor} />
+      )}
     </AnimatedPressable>
   );
 }

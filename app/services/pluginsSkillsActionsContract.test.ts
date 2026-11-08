@@ -78,8 +78,8 @@ describe("local-only Skills surface contract", () => {
     expect(rowSource).toContain("openAccessibilityLabel={`Open ${skill.name}`}");
     expect(rowSource).toContain("? `Delete ${skill.name}`");
     expect(rowSource).toContain("<ExtensionListRow");
-    expect(extensionRow).toContain("width: 44");
-    expect(extensionRow).toContain("height: 44");
+    expect(extensionRow).toContain("<IconButton");
+    expect(extensionRow).toContain("size={44}");
   });
   test("copy-aware details preserve files, Agents, and exact deletion", () => {
     expect(screen).toContain("skillId: skill.id");
@@ -159,8 +159,8 @@ describe("local-only Skills surface contract", () => {
     expect(agentLogoSet).toContain('"opencode"');
     expect(agentLogoSet).toContain("UnknownAgent");
     expect(extensionRow).toContain("height: 88");
-    expect(extensionRow).toContain("width: 44");
-    expect(extensionRow).toContain("height: 44");
+    expect(extensionRow).toContain("<IconButton");
+    expect(extensionRow).toContain("size={44}");
     expect(pluginsPresentation).toContain(
       "paddingHorizontal: PLUGINS_SKILLS_SCREEN_PADDING",
     );
