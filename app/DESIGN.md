@@ -149,6 +149,21 @@ preference.
   `more-vertical`. A menu on one thing in a list or under a reply (a message,
   a post, a provider row) draws `more-horizontal`.
 
+### One control per concept
+
+Screens compose the kit in `components/ui`; they do not restyle it, and a
+second copy of a control is a bug. A small exclusive choice is
+`SegmentedControl`; a filter with many, variable or multiple options is
+`ChipGroup` (`multiple` for toggles, which also draw a check). Buttons are
+`Button` (capsule) and `IconButton`; either shows its own busy state with
+`loading`. A single-line text field is `MobileSingleLineInput`, with `framed`
+for the field box. Status tags are `StatusPill`, centred waits are
+`EmptyState busy`, in-line busy marks are `Spinner`, errors beside a form are
+`InlineNotice`, bottom sheets are `BottomSheetFrame` and centred cards
+`RisingSheet`, and an irreversible confirmation is `confirmDestructive`.
+Terminal-themed surfaces still draw their own buttons and notices from
+`TerminalThemeChrome`; the kit reads the app theme.
+
 ### Gestures
 
 - **Peer pages swipe; filters tap.** Pages that are peers under one header
