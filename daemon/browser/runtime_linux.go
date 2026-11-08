@@ -772,7 +772,7 @@ func (r *linuxWindow) Command(ctx context.Context, c Command) (json.RawMessage, 
 			return nil, errors.New("Enter an HTTP or HTTPS address")
 		}
 		if c.Kind == "navigate" {
-			return r.cli(ctx, "open", c.URL)
+			return r.navigate(ctx, c.URL)
 		}
 		id, err := r.h.newPage(ctx, c.URL)
 		if err != nil {
@@ -831,6 +831,49 @@ func (r *linuxWindow) Command(ctx context.Context, c Command) (json.RawMessage, 
 	default:
 		return nil, errors.New("Unsupported managed browser action")
 	}
+}
+
+// loadWait is how long a navigation waits for its page to finish loading
+// before answering that it is still loading: a page that never finishes must
+// not hold the agent, the window or the person's view.
+var loadWait = 6 * time.Second
+
+// navigate starts the navigation and waits for the page to load, up to
+// loadWait. The agent is told whether it loaded; it can read what is there
+// either way.
+func (r *linuxWindow) navigate(ctx context.Context, address string) (json.RawMessage, error) {
+	raw, err := r.cdp(ctx, "Page.navigate", map[string]any{"url": address})
+	if errors.Is(err, ErrUncertain) && ctx.Err() == nil {
+		// Chrome did not answer within its own bound: a server that accepts and
+		// says nothing. The navigation is under way; the window is fine.
+		return json.Marshal(map[string]any{"url": address, "loaded": false})
+	}
+	if err != nil {
+		return nil, err
+	}
+	var started struct {
+		ErrorText string `json:"errorText"`
+	}
+	_ = json.Unmarshal(raw, &started)
+	if started.ErrorText != "" {
+		return nil, fmt.Errorf("Could not open the page: %s", started.ErrorText)
+	}
+	loaded := false
+	deadline := time.Now().Add(loadWait)
+	for !loaded && time.Now().Before(deadline) && ctx.Err() == nil {
+		time.Sleep(200 * time.Millisecond)
+		state, err := r.cdp(ctx, "Runtime.evaluate", map[string]any{"expression": "document.readyState", "returnByValue": true})
+		if err != nil {
+			break
+		}
+		var v struct {
+			Result struct {
+				Value string `json:"value"`
+			} `json:"result"`
+		}
+		loaded = json.Unmarshal(state, &v) == nil && v.Result.Value == "complete"
+	}
+	return json.Marshal(map[string]any{"url": address, "loaded": loaded})
 }
 
 // maxPageText bounds what one read returns to the agent, in characters.

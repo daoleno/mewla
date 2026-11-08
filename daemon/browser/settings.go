@@ -29,27 +29,23 @@ func (m *Manager) VirtualScreen() bool {
 	if m == nil {
 		return false
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.settings.VirtualScreen
+	return m.virtual.Load()
 }
 
 func (m *Manager) setVirtualScreen(on bool) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed {
+	m.settingsMu.Lock()
+	defer m.settingsMu.Unlock()
+	if m.closed.Load() {
 		return ErrUnavailable
 	}
-	next := m.settings
-	next.VirtualScreen = on
-	raw, err := json.Marshal(next)
+	raw, err := json.Marshal(Settings{VirtualScreen: on})
 	if err != nil {
 		return err
 	}
 	if err := atomicfile.Write(filepath.Join(m.root, "settings.json"), raw, 0o600); err != nil {
 		return err
 	}
-	m.settings = next
+	m.virtual.Store(on)
 	return nil
 }
 

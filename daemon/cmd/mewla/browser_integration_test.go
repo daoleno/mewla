@@ -346,3 +346,105 @@ func TestAgentWindowsProductFlow(t *testing.T) {
 	}
 	t.Log("two agents, one browser, one profile: sign-in kept across a browser restart")
 }
+
+// TestSlowPageDoesNotBlockTheOtherAgent: one agent opens a page whose server
+// never finishes answering, and the other keeps working on its own window
+// with no delay; the slow agent gets an answer in bounded time and can go on.
+func TestSlowPageDoesNotBlockTheOtherAgent(t *testing.T) {
+	if os.Getenv("MEWLA_BROWSER_INTEGRATION") != "1" {
+		t.Skip("opt-in isolated graphical browser")
+	}
+	root := t.TempDir()
+	m, err := browser.New(filepath.Join(root, "browsers"), browser.NewBackend())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Close()
+	on := true
+	if _, err := m.Handle(context.Background(), browser.Owner{Kind: "human", ID: "o"}, browser.Request{Action: "settings", Enabled: &on}); err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	defer close(release)
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		if r.URL.Path == "/hang" || r.URL.Path == "/silent" {
+			if r.URL.Path == "/hang" {
+				w.(http.Flusher).Flush() // headers sent, body never ends
+			}
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
+			return
+		}
+		fmt.Fprint(w, "<!doctype html><button>fine</button>")
+	}))
+	defer site.Close()
+	watcher := newFakeControlWatcher()
+	for _, id := range []string{"slow", "quick"} {
+		watcher.workers[id] = &classifier.Worker{ID: id, State: classifier.StateRunning, Delegated: true}
+	}
+	app := &controlApp{browsers: m, watcher: watcher}
+	call := func(task string, q browser.Request) (control.Response, time.Duration) {
+		start := time.Now()
+		r := app.HandleControlRequest(control.Request{Type: "browser", WorkerID: task, Client: uuid.NewString(), BrowserRequest: &q})
+		return r, time.Since(start)
+	}
+	// One client per Worker, as the real tool does.
+	clients := map[string]string{"slow": uuid.NewString(), "quick": uuid.NewString()}
+	do := func(task string, q browser.Request) (control.Response, time.Duration) {
+		start := time.Now()
+		r := app.HandleControlRequest(control.Request{Type: "browser", WorkerID: task, Client: clients[task], BrowserRequest: &q})
+		return r, time.Since(start)
+	}
+	_ = call
+	leases := map[string]*browser.Lease{}
+	for _, task := range []string{"slow", "quick"} {
+		r, _ := do(task, browser.Request{Action: "control"})
+		if !r.OK {
+			t.Fatalf("%s control: %v", task, r.Error)
+		}
+		leases[task] = r.Browser.Lease
+	}
+	var wg sync.WaitGroup
+	var slowTook time.Duration
+	var slowResp control.Response
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		slowResp, slowTook = do("slow", browser.Request{Action: "command", Lease: leases["slow"], Command: &browser.Command{Kind: "navigate", URL: site.URL + "/hang"}})
+	}()
+	time.Sleep(300 * time.Millisecond)
+	for i := 0; i < 3; i++ {
+		r, took := do("quick", browser.Request{Action: "command", Lease: leases["quick"], Command: &browser.Command{Kind: "navigate", URL: site.URL + "/ok"}})
+		if !r.OK || took > 4*time.Second {
+			t.Fatalf("quick navigate %d: ok=%v err=%v took %s", i, r.OK, r.Error, took)
+		}
+		r, took = do("quick", browser.Request{Action: "command", Lease: leases["quick"], Command: &browser.Command{Kind: "snapshot"}})
+		if !r.OK || took > 4*time.Second || !strings.Contains(string(r.Browser.Result), "fine") {
+			t.Fatalf("quick snapshot %d: ok=%v err=%v took %s", i, r.OK, r.Error, took)
+		}
+	}
+	wg.Wait()
+	t.Logf("slow navigate: ok=%v took %s err=%v", slowResp.OK, slowTook, slowResp.Error)
+	if slowTook > 12*time.Second {
+		t.Fatalf("the slow agent waited %s", slowTook)
+	}
+	// A server that accepts and never answers at all holds nobody either.
+	started := time.Now()
+	sr, _ := do("slow", browser.Request{Action: "command", Lease: leases["slow"], Command: &browser.Command{Kind: "navigate", URL: site.URL + "/silent"}})
+	t.Logf("silent navigate: ok=%v took %s err=%v", sr.OK, time.Since(started), sr.Error)
+	if time.Since(started) > 12*time.Second {
+		t.Fatalf("a silent server held the agent for %s", time.Since(started))
+	}
+	// The slow agent is not left stuck: it can ask again and work.
+	r, _ := do("slow", browser.Request{Action: "control"})
+	if !r.OK {
+		t.Fatalf("slow agent control after: %v", r.Error)
+	}
+	nr, _ := do("slow", browser.Request{Action: "command", Lease: r.Browser.Lease, Command: &browser.Command{Kind: "navigate", URL: site.URL + "/ok"}})
+	if !nr.OK {
+		t.Fatalf("slow agent navigate after: %v", nr.Error)
+	}
+}

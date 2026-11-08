@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -34,24 +35,10 @@ func (a *controlApp) handleBrowserControl(req control.Request) control.Response 
 	}
 	actor := browser.Owner{Kind: "agent", ID: req.WorkerID + "/" + req.Client}
 	if q.Action != "release" {
-		var active bool
-		if a.watcher != nil {
-			w := a.watcher.GetWorker(req.WorkerID)
-			active = w != nil && a.watcher.HasSession(req.WorkerID)
-			if active {
-				// Quiet/noninteractive provider processes can be classified idle
-				// while executing an MCP call. Prove the current owned process,
-				// rather than treating terminal paint as task liveness.
-				_, err := a.watcher.ResolveOwnedGeneration(req.WorkerID)
-				active = err == nil
-				if w.Delegated && (w.State == classifier.StateDone || w.State == classifier.StateFailed) {
-					active = false
-				}
-			}
-		}
-		if !active {
+		if reason := a.workerInactiveReason(req.WorkerID); reason != "" {
 			a.browsers.ReleaseOwner(actor)
-			return control.ErrorResponse("browser_task_ended", "Task is no longer active; browser preserved")
+			log.Printf("browser: %s refused for Worker %s: %s", q.Action, req.WorkerID, reason)
+			return control.ErrorResponse("browser_task_ended", "Task is no longer active ("+reason+"); browser preserved")
 		}
 	}
 	wait := 12 * time.Second
@@ -66,6 +53,30 @@ func (a *controlApp) handleBrowserControl(req control.Request) control.Response 
 		return control.ErrorResponse("browser_denied", err.Error())
 	}
 	return control.Response{OK: true, Browser: &result}
+}
+
+// workerInactiveReason is why a Worker may not use the browser now, or "" when
+// it may: the session is gone, Mewla cannot prove it owns the running process,
+// or the task has finished. Quiet provider processes can be classified idle
+// while executing an MCP call, so process ownership is proved, not terminal paint.
+func (a *controlApp) workerInactiveReason(id string) string {
+	if a.watcher == nil {
+		return "Mewla has no task registry"
+	}
+	w := a.watcher.GetWorker(id)
+	if w == nil {
+		return "Mewla does not know this task"
+	}
+	if !a.watcher.HasSession(id) {
+		return "its session is gone"
+	}
+	if _, err := a.watcher.ResolveOwnedGeneration(id); err != nil {
+		return "Mewla cannot prove it owns the running process: " + err.Error()
+	}
+	if w.Delegated && (w.State == classifier.StateDone || w.State == classifier.StateFailed) {
+		return "the task is marked " + string(w.State)
+	}
+	return ""
 }
 
 type browserToolInput struct {
