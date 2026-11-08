@@ -48,13 +48,15 @@ import {
   skillPluginStatusReason,
 } from "../../services/skillsPluginOwnership";
 import { PLUGINS_SKILLS_SCREEN_PADDING } from "../../services/pluginsSkillsSurfaceModel";
-import { AgentLogoSet } from "../agents/AgentLogoSet";
+import { AgentLogoSet, agentKind } from "../agents/AgentLogoSet";
+import { AgentKindIcon } from "../terminal/AgentKindIcon";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
-import { SegmentedControl } from "../ui/SegmentedControl";
+import { ChipGroup } from "../ui/ChipGroup";
+import { SegmentedControl, type SegmentedOption } from "../ui/SegmentedControl";
 import { SegmentedPager } from "../ui/SegmentedPager";
 import { StatusPill } from "../ui/StatusPill";
 import { StatusMark } from "../ui/StatusMark";
@@ -443,6 +445,17 @@ function ActiveFilters({
   );
 }
 
+const STATUS_OPTIONS: readonly SegmentedOption<SkillStatusFilter>[] = [
+  { value: "all", label: "All" },
+  { value: "enabled", label: "Enabled" },
+  { value: "disabled", label: "Disabled" },
+];
+const SCOPE_OPTIONS: readonly SegmentedOption<SkillScopeFilter>[] = [
+  { value: "all", label: "All" },
+  { value: "global", label: "Global" },
+  { value: "project", label: "Project" },
+];
+
 function FilterSheet({
   visible,
   agents,
@@ -477,55 +490,33 @@ function FilterSheet({
       </View>
       <ScrollView contentContainerStyle={styles.filterBody}>
         {agents.length > 1 ? <FilterSection title="Agents">
-          <View style={styles.optionWrap}>
-            {agents.map((agent) => {
-              const selected = filters.agents.includes(agent);
-              return (
-                <Choice
-                  key={agent}
-                  label={skillAgentLabel(agent)}
-                  agent={agent}
-                  selected={selected}
-                  onPress={() =>
-                    onChange({
-                      ...filters,
-                      agents: selected
-                        ? filters.agents.filter((item) => item !== agent)
-                        : [...filters.agents, agent],
-                    })
-                  }
-                />
-              );
-            })}
-          </View>
+          <ChipGroup
+            multiple
+            accessibilityLabel="Agents"
+            options={agents.map((agent) => ({
+              value: agent,
+              label: skillAgentLabel(agent),
+              leading: <AgentKindIcon kind={agentKind(agent)} size={17} />,
+            }))}
+            value={filters.agents}
+            onChange={(next) => onChange({ ...filters, agents: next })}
+          />
         </FilterSection> : null}
         <FilterSection title="Status">
-          <View style={styles.optionWrap}>
-            {(["all", "enabled", "disabled"] as SkillStatusFilter[]).map(
-              (value) => (
-                <Choice
-                  key={value}
-                  label={titleCase(value)}
-                  selected={filters.status === value}
-                  onPress={() => onChange({ ...filters, status: value })}
-                />
-              ),
-            )}
-          </View>
+          <SegmentedControl
+            accessibilityLabel="Status"
+            options={STATUS_OPTIONS}
+            value={filters.status}
+            onChange={(status) => onChange({ ...filters, status })}
+          />
         </FilterSection>
         <FilterSection title="Scope">
-          <View style={styles.optionWrap}>
-            {(["all", "global", "project"] as SkillScopeFilter[]).map(
-              (value) => (
-                <Choice
-                  key={value}
-                  label={titleCase(value)}
-                  selected={filters.scope === value}
-                  onPress={() => onChange({ ...filters, scope: value })}
-                />
-              ),
-            )}
-          </View>
+          <SegmentedControl
+            accessibilityLabel="Scope"
+            options={SCOPE_OPTIONS}
+            value={filters.scope}
+            onChange={(scope) => onChange({ ...filters, scope })}
+          />
         </FilterSection>
       </ScrollView>
       <Pressable
@@ -560,47 +551,6 @@ function FilterSection({
       </Text>
       {children}
     </View>
-  );
-}
-
-function Choice({
-  label,
-  agent,
-  selected,
-  onPress,
-}: {
-  label: string;
-  agent?: ManagedSkillAgent;
-  selected: boolean;
-  onPress(): void;
-}) {
-  const colors = useAppColors();
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
-      onPress={onPress}
-      style={[
-        styles.choice,
-        {
-          borderColor: selected ? colors.accent : colors.borderSubtle,
-          backgroundColor: selected ? colors.accentSoft : colors.surfaceSubtle,
-        },
-      ]}
-    >
-      {agent ? (
-        <AgentLogoSet agents={[agent]} showLabels size={17} />
-      ) : (
-        <Text
-          style={{ color: selected ? colors.accent : colors.textSecondary }}
-        >
-          {label}
-        </Text>
-      )}
-      {selected ? (
-        <Icon name="check" size={16} color={colors.accent} />
-      ) : null}
-    </Pressable>
   );
 }
 
@@ -1213,9 +1163,6 @@ function State({
     </View>
   );
 }
-function titleCase(value: string) {
-  return value[0]!.toUpperCase() + value.slice(1);
-}
 
 const styles = StyleSheet.create({
   projectScope: {
@@ -1427,16 +1374,6 @@ const styles = StyleSheet.create({
   },
   filterBody: { gap: 18, paddingBottom: 18 },
   filterSection: { gap: 8 },
-  optionWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  choice: {
-    minHeight: 40,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderRadius: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
   doneButton: {
     height: 46,
     borderRadius: 6,

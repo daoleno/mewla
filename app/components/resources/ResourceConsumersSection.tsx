@@ -8,6 +8,7 @@ import {
 } from "../../services/resourceTelemetry";
 import { Icon, type IconName } from "../icons/Icon";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { ChipGroup } from "../ui/ChipGroup";
 import { IconButton } from "../ui/IconButton";
 import type { ResourceStyles } from "./resourceStyles";
 
@@ -48,23 +49,21 @@ export function ConsumersSection({ telemetry, styles, wide = false }: { telemetr
           tone={sort === option.value ? "tinted" : "ghost"} accessibilityLabel={option.label}
           accessibilityState={{ selected: sort === option.value }} onPress={() => setSort(option.value)} />)}
       </View>
-      <View style={styles.filterRow}>
-        {[{ key: "all", title: "All", owner: null, count: telemetry.consumers.length },
-          ...groups.map((group) => ({ key: group.key, title: group.title, owner: group.consumers[0].owner, count: group.consumers.length }))].map((group) => {
-          const selected = owner === group.owner;
-          const orphaned = group.owner === "orphaned_worker";
-          const ink = orphaned ? colors.warning : selected ? colors.textPrimary : colors.textSecondary;
-          return <AnimatedPressable key={group.key} accessibilityRole="button"
-            accessibilityLabel={`Filter ${group.title}`} accessibilityState={{ selected }}
-            onPress={() => { setOwner(group.owner); setLimit(PAGE); }}
-            style={[styles.filter, { backgroundColor: selected ? colors.surfaceSubtle : "transparent",
-              borderColor: selected ? colors.borderStrong : colors.borderSubtle }]}>
-            {group.owner ? <Icon name={OWNER_ICON[group.owner]} size={14} color={ink} /> : null}
-            <Text style={[styles.caption, { color: ink }]}>{group.title}</Text>
-            <Text style={[styles.micro, { color: ink }]}>{group.count}</Text>
-          </AnimatedPressable>;
-        })}
-      </View>
+      <ChipGroup<ResourceConsumerOwner | "all">
+        accessibilityLabel="Filter by owner"
+        options={[{ key: "all", title: "All", owner: null, count: telemetry.consumers.length },
+          ...groups.map((group) => ({ key: group.key, title: group.title, owner: group.consumers[0].owner, count: group.consumers.length }))]
+          .map((group) => ({
+            value: group.owner ?? "all",
+            label: group.title,
+            count: group.count,
+            icon: group.owner ? OWNER_ICON[group.owner] : undefined,
+            warn: group.owner === "orphaned_worker",
+            accessibilityLabel: `Filter ${group.title}`,
+          }))}
+        value={owner ?? "all"}
+        onChange={(next) => { setOwner(next === "all" ? null : next); setLimit(PAGE); }}
+      />
       <View style={styles.tableHeader}>
         <View style={{ flex: 1 }} />
         <Text style={[styles.micro, styles.cpuCell]}>CPU</Text>

@@ -44,8 +44,6 @@ export function createResourceStyles(colors: AppColors) {
       backgroundColor: colors.bgSurface,
     },
     control: { minHeight: 48, paddingHorizontal: 10, justifyContent: "center", borderRadius: Radii.xs },
-    filterRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-    filter: { minHeight: 36, paddingHorizontal: 12, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: StyleSheet.hairlineWidth, borderRadius: 999 },
     tableHeader: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 10, paddingTop: 4 },
     consumer: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSubtle },
     consumerButton: { paddingHorizontal: 10, paddingVertical: 8, minHeight: 48, justifyContent: "center" },
@@ -58,12 +56,6 @@ export function createResourceStyles(colors: AppColors) {
     pidCell: { width: 64 },
     processPanel: { padding: 12, gap: 8, backgroundColor: colors.surfaceSubtle, borderRadius: Radii.xs },
     processLine: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 5 },
-    chip: {
-      paddingHorizontal: 8,
-      minHeight: 20,
-      borderRadius: 999,
-      justifyContent: "center",
-    },
   });
 }
 
