@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, ScrollView, StyleSheet, View } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { AppState, ScrollView, StyleSheet, View, type ScrollViewInstance } from "react-native";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ContentWidth, Spacing, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkers } from "../../store/workers";
@@ -24,6 +24,19 @@ const REFRESH_MS = 4000;
  */
 export function AgentScreens() {
   const router = useRouter();
+  // /screen?worker=<id> (the floating screen's Expand) opens on that agent's row.
+  const { worker: focusWorker } = useLocalSearchParams<{ worker?: string }>();
+  const scroller = useRef<ScrollViewInstance>(null);
+  const rowTops = useRef<Record<string, number>>({});
+  const focused = useRef<string | null>(null);
+  const focusRow = useCallback((id: string | undefined) => {
+    const top = id ? rowTops.current[id] : undefined;
+    if (id && top !== undefined && focused.current !== id) {
+      focused.current = id;
+      scroller.current?.scrollTo({ y: Math.max(0, top - Spacing.md), animated: false });
+    }
+  }, []);
+  useEffect(() => { focused.current = null; focusRow(typeof focusWorker === "string" ? focusWorker : undefined); }, [focusWorker, focusRow]);
   const { currentServer, isCurrentServer } = useCurrentServer();
   const { colors } = useAppTheme();
   const { state: workerState } = useWorkers();
@@ -112,14 +125,19 @@ export function AgentScreens() {
     <View style={[styles.root, { backgroundColor: colors.bgPrimary }]}>
       {header}
       {sheet}
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView ref={scroller} contentContainerStyle={styles.list}>
         <View style={styles.inner}>
           {issue ? <InlineNotice tone={issue.tone} title={issue.title} detail={issue.detail} /> : null}
           {displays.map((display) => (
-            <AgentDisplayCard key={`display:${display.id}`} server={currentServer} display={display}
-              agentName={workerState.workers.find((w) => w.id === display.id)?.name}
-              onStop={async (worker) => { await haltDisplay(currentServer, worker, abort.current?.signal); await list(); }}
-              onResume={async (worker) => { await resumeDisplay(currentServer, worker, abort.current?.signal); await list(); }} />
+            <View key={`display:${display.id}`} onLayout={(e) => {
+              rowTops.current[display.id] = e.nativeEvent.layout.y;
+              if (typeof focusWorker === "string") focusRow(focusWorker);
+            }}>
+              <AgentDisplayCard server={currentServer} display={display}
+                agentName={workerState.workers.find((w) => w.id === display.id)?.name}
+                onStop={async (worker) => { await haltDisplay(currentServer, worker, abort.current?.signal); await list(); }}
+                onResume={async (worker) => { await resumeDisplay(currentServer, worker, abort.current?.signal); await list(); }} />
+            </View>
           ))}
         </View>
       </ScrollView>

@@ -99,7 +99,7 @@ export function ScreenFloatHost() {
   if (!source || !currentServer) return null;
   const index = sources.findIndex((s) => s.key === source.key);
   const cycle = () => setPicked(sources[(index + 1) % sources.length].key);
-  const open = () => router.push(source.kind === "phone" ? PHONE_ROUTE : SCREEN_ROUTE);
+  const open = () => router.push(source.kind === "phone" ? PHONE_ROUTE : { pathname: SCREEN_ROUTE, params: source.owner ? { worker: source.owner } : {} });
   const shared = { count: sources.length, index, onCycle: cycle, onOpen: open };
 
   if (source.kind === "phone" && status) return <PhoneContent key={source.key} source={source} {...shared} />;
