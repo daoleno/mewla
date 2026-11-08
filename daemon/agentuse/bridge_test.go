@@ -427,3 +427,68 @@ func TestWorkersConnectAtOnceEachWithItsOwnWindowAndLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestAnOlderExtensionIsAskedToReloadOncePerRunningVersion(t *testing.T) {
+	b, dir := startBridge(t)
+	b.bundled = "0.3.0"
+	hello := func(version string) chan hostMessage {
+		conn, err := DialBridgeHost(dir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.Close() })
+		got := make(chan hostMessage, 4)
+		go func() {
+			dec := json.NewDecoder(conn)
+			for {
+				var m hostMessage
+				if dec.Decode(&m) != nil {
+					return
+				}
+				got <- m
+			}
+		}()
+		_ = json.NewEncoder(conn).Encode(hostMessage{Type: "hello", Version: version})
+		return got
+	}
+	expectReload := func(got chan hostMessage, want bool, why string) {
+		t.Helper()
+		select {
+		case m := <-got:
+			if !want || m.Type != "reload" || m.Version != "0.3.0" {
+				t.Fatalf("%s: got %+v", why, m)
+			}
+		case <-time.After(300 * time.Millisecond):
+			if want {
+				t.Fatalf("%s: no reload asked", why)
+			}
+		}
+	}
+	expectReload(hello("0.1.0"), true, "older version")
+	// The same version again (the store has not updated it, or the files did not change): not again.
+	expectReload(hello("0.1.0"), false, "same running version after a reload")
+	expectReload(hello("0.2.9"), true, "a different older version is asked once too")
+	expectReload(hello("0.3.0"), false, "current version")
+	expectReload(hello("0.3.1"), false, "newer version")
+	expectReload(hello(""), true, "no version sent is older than any")
+}
+
+func TestVersionOlder(t *testing.T) {
+	for _, c := range []struct {
+		running, bundled string
+		older            bool
+	}{
+		{"0.1.0", "0.3.0", true}, {"0.3.0", "0.3.0", false}, {"0.10.0", "0.3.0", false}, {"0.3", "0.3.0", false},
+		{"0.2.9", "0.3", true}, {"", "0.3.0", true}, {"dev", "0.3.0", false}, {"0.1.0", "", false},
+	} {
+		if got := versionOlder(c.running, c.bundled); got != c.older {
+			t.Errorf("versionOlder(%q, %q) = %v, want %v", c.running, c.bundled, got, c.older)
+		}
+	}
+}
+
+func TestTheBundledExtensionVersionIsTheManifests(t *testing.T) {
+	if v := BundledExtensionVersion(); v == "" || !versionOlder("0.0.1", v) {
+		t.Fatalf("bundled version %q", v)
+	}
+}
