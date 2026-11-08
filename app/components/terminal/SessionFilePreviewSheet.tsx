@@ -56,7 +56,7 @@ import {
 } from "../../services/sessionFilePreviewDownload";
 import { createSessionFileDownloadBackend } from "../../services/sessionFilePreviewDownloadBackend";
 import { wsClient } from "../../services/websocket";
-import { BottomSheetFrame } from "../ui";
+import { BottomSheetFrame, EmptyState } from "../ui";
 import { MessageBody } from "./InterfaceMessageBody";
 import { TimelineTextSelectableContext } from "./TimelineTextSelectableContext";
 import { dirnameOf, resolveAgainst } from "../markdown/markdownLinks";
@@ -651,20 +651,13 @@ function SessionFilePreviewBody({
   );
   if (state.status === "loading") {
     return (
-      <PreviewState
-        chrome={chrome}
-        icon={<ActivityIndicator color={chrome.accent} />}
-        title="Opening file"
-      />
+      <PreviewState busy title="Opening file" />
     );
   }
   if (state.status === "error") {
     return (
       <PreviewState
-        chrome={chrome}
-        icon={
-          <Icon name="warning-fill" size={24} color={chrome.danger} />
-        }
+        tone="danger"
         title={
           state.stale
             ? "File changed"
@@ -753,59 +746,39 @@ function SessionFilePreviewBody({
       ) : null;
     default:
       return (
-        <PreviewState
-          chrome={chrome}
-          icon={
-            <Icon
-              name="document"
-              size={25}
-              color={chrome.textMuted}
-            />
-          }
-          title="Preview not supported"
-        />
+        <PreviewState title="Preview not supported" />
       );
   }
 }
 
 function PreviewState({
-  chrome,
   icon,
+  busy,
+  tone,
   title,
   detail,
   action,
   onAction,
 }: {
-  chrome: TerminalThemeChrome;
-  icon: React.ReactNode;
+  icon?: IconName;
+  busy?: boolean;
+  tone?: "default" | "danger";
   title: string;
   detail?: string;
   action?: string;
   onAction?: () => void;
 }) {
   return (
-    <View style={styles.state}>
-      {icon}
-      <Text style={[styles.stateTitle, { color: chrome.text }]}>{title}</Text>
-      {detail ? <Text
-        selectable
-        style={[styles.stateDetail, { color: chrome.textMuted }]}
-      >
-        {detail}
-      </Text> : null}
-      {action && onAction ? (
-        <TouchableOpacity
-          accessibilityRole="button"
-          activeOpacity={0.78}
-          onPress={onAction}
-          style={[styles.retry, { backgroundColor: chrome.accentSoft }]}
-        >
-          <Text style={[styles.retryText, { color: chrome.accent }]}>
-            {action}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
+    <EmptyState
+      size="inline"
+      icon={icon}
+      busy={busy}
+      tone={tone}
+      title={title}
+      detail={detail}
+      action={action && onAction ? { label: action, icon: "refresh", onPress: onAction } : undefined}
+      style={styles.state}
+    />
   );
 }
 
@@ -937,36 +910,5 @@ const styles = StyleSheet.create({
   },
   state: {
     flex: 1,
-    paddingHorizontal: 28,
-    paddingVertical: 36,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stateTitle: {
-    marginTop: 12,
-    fontFamily: Typography.uiFontMedium,
-    fontSize: 16,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  stateDetail: {
-    maxWidth: 390,
-    marginTop: 6,
-    fontFamily: Typography.uiFont,
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "center",
-  },
-  retry: {
-    marginTop: 16,
-    minHeight: 36,
-    paddingHorizontal: 15,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  retryText: {
-    fontFamily: Typography.uiFontMedium,
-    fontSize: 13,
   },
 });

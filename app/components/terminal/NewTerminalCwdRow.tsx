@@ -1,14 +1,7 @@
 import React, { useMemo } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
-import { Typography, useAppColors, type AppColors } from "../../constants/tokens";
+import { StyleSheet } from "react-native";
 import { compactPathLabel } from "../../services/pathDisplay";
-import { AppText } from "../ui";
-import { outlinedSurface } from "../ui/outlinedSurface";
-import { Icon } from "../icons/Icon";
+import { ListRow, ListSection } from "../ui";
 
 interface NewTerminalCwdRowProps {
   cwd: string;
@@ -21,39 +14,19 @@ export function NewTerminalCwdRow({
   canPickDirectory,
   onPickDirectory,
 }: NewTerminalCwdRowProps) {
-  const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
   const label = useMemo(() => formatCwdLabel(cwd), [cwd]);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Choose working directory"
-      disabled={!canPickDirectory}
-      onPress={onPickDirectory}
-      style={({ pressed }) => [
-        styles.row,
-        pressed && canPickDirectory ? styles.rowPressed : null,
-        !canPickDirectory ? styles.rowDisabled : null,
-      ]}
-    >
-      <View style={styles.iconFrame}>
-        <Icon name="folder" size={16} color={colors.textSecondary} />
-      </View>
-      <AppText
-        variant="body"
-        tone={cwd.trim() ? "primary" : "secondary"}
-        // A real path reads in mono; the default is a word, in the UI face.
-        style={[styles.path, cwd.trim() ? styles.pathMono : null]}
-        numberOfLines={1}
-        ellipsizeMode="head"
-      >
-        {label}
-      </AppText>
-      {canPickDirectory ? (
-        <Icon name="chevron-right" size={14} color={colors.disabledText} />
-      ) : null}
-    </Pressable>
+    <ListSection style={styles.section}>
+      <ListRow
+        icon="folder"
+        title={label}
+        accessibilityLabel="Choose working directory"
+        accessory={canPickDirectory ? "chevron" : "none"}
+        disabled={!canPickDirectory}
+        onPress={onPickDirectory}
+      />
+    </ListSection>
   );
 }
 
@@ -65,40 +38,6 @@ function formatCwdLabel(value: string): string {
   return compactPathLabel(trimmed);
 }
 
-function createStyles(colors: AppColors) {
-  return StyleSheet.create({
-    row: {
-      minHeight: 44,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      ...outlinedSurface(12, colors.borderSubtle),
-      backgroundColor: colors.surfaceSubtle,
-      marginBottom: 14,
-    },
-    rowPressed: {
-      opacity: 0.78,
-    },
-    rowDisabled: {
-      opacity: 0.55,
-    },
-    iconFrame: {
-      width: 28,
-      height: 28,
-      borderRadius: 8,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.surfaceActive,
-    },
-    path: {
-      flex: 1,
-      minWidth: 0,
-    },
-    pathMono: {
-      fontFamily: Typography.terminalFont,
-      fontSize: 13,
-    },
-  });
-}
+const styles = StyleSheet.create({
+  section: { marginBottom: 6 },
+});

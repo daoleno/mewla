@@ -1,11 +1,8 @@
-import React, { useMemo } from 'react';
-import {
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
-import { Typography, useAppColors, type AppColors } from '../../constants/tokens';
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import { Typography } from '../../constants/tokens';
 import { Button, AppText, IconButton } from '../ui';
+import { MobileSingleLineInput } from '../ui/MobileSingleLineInput';
 
 interface NewTerminalAdvancedFormProps {
   cwd: string;
@@ -34,22 +31,20 @@ export function NewTerminalAdvancedForm({
   onPickDirectory,
   onSubmit,
 }: NewTerminalAdvancedFormProps) {
-  const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-
   return (
     <View style={styles.advancedSection}>
       <AppText variant="label" tone="secondary" style={styles.fieldLabel}>
         Working Directory
       </AppText>
       <View style={styles.inputRow}>
-        <TextInput
-          style={[styles.input, styles.inputFlex]}
+        <MobileSingleLineInput
+          framed
+          containerStyle={styles.inputFlex}
+          inputStyle={styles.mono}
           value={cwd}
           onChangeText={onCwdChange}
           placeholder="Shell default"
           accessibilityLabel="Working directory"
-          placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           autoCorrect={false}
           autoComplete="off"
@@ -70,12 +65,13 @@ export function NewTerminalAdvancedForm({
       <AppText variant="label" tone="secondary" style={styles.fieldLabel}>
         Command
       </AppText>
-      <TextInput
-        style={styles.input}
+      <MobileSingleLineInput
+        framed
+        inputStyle={styles.mono}
+        accessibilityLabel="Command"
         value={command}
         onChangeText={onCommandChange}
         placeholder="e.g. claude --model opus"
-        placeholderTextColor={colors.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="off"
@@ -84,12 +80,13 @@ export function NewTerminalAdvancedForm({
       <AppText variant="label" tone="secondary" style={styles.fieldLabel}>
         Window Title
       </AppText>
-      <TextInput
-        style={styles.input}
+      <MobileSingleLineInput
+        framed
+        inputStyle={styles.mono}
+        accessibilityLabel="Window title"
         value={name}
         onChangeText={onNameChange}
         placeholder="Optional"
-        placeholderTextColor={colors.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="off"
@@ -100,48 +97,19 @@ export function NewTerminalAdvancedForm({
         variant="filled"
         onPress={onSubmit}
         disabled={!canSubmit}
+        block
         style={styles.launchBtn}
       />
     </View>
   );
 }
 
-function createStyles(colors: AppColors) {
-  return StyleSheet.create({
-    advancedSection: {
-      marginTop: 4,
-      gap: 4,
-    },
-    fieldLabel: {
-      marginTop: 8,
-      marginBottom: 4,
-    },
-    inputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    inputFlex: {
-      flex: 1,
-    },
-    input: {
-      minHeight: 38,
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      color: colors.textPrimary,
-      fontSize: 13,
-      fontFamily: Typography.terminalFont,
-      backgroundColor: colors.inputBackground,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderSubtle,
-    },
-    folderBtn: {
-      alignSelf: 'stretch',
-    },
-    launchBtn: {
-      minHeight: 36,
-      borderRadius: 10,
-      marginTop: 10,
-    },
-  });
-}
+const styles = StyleSheet.create({
+  advancedSection: { marginTop: 4, gap: 4 },
+  fieldLabel: { marginTop: 8, marginBottom: 4 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  inputFlex: { flex: 1 },
+  mono: { fontSize: 13, fontFamily: Typography.terminalFont },
+  folderBtn: { alignSelf: 'stretch' },
+  launchBtn: { marginTop: 10 },
+});

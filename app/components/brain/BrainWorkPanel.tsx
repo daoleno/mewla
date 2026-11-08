@@ -410,7 +410,7 @@ export function BrainWorkDetailSheet({
           </View>
           <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="handled">
             <View style={styles.detailMeta}>
-              <StatusPill tone={WORK_STATUS_TONE[slip.status]} label={slip.statusLabel} />
+              <StatusPill tone={WORK_STATUS_TONE[slip.status]} live={slip.status === "running"} label={slip.statusLabel} />
               {[meta, age].filter(Boolean).length ? (
                 <Text style={styles.columnSummary}>{[meta, age].filter(Boolean).join(" · ")}</Text>
               ) : null}

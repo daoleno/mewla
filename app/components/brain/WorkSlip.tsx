@@ -103,7 +103,7 @@ export function WorkSlip({
             </Text>
           )}
           {unread && !needs ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
-          {statusShown ? <StatusPill tone={WORK_STATUS_TONE[status]} label={statusLabel} /> : null}
+          {statusShown ? <StatusPill tone={WORK_STATUS_TONE[status]} live={status === "running"} label={statusLabel} /> : null}
         </View>
         {meta ? (
           <Text numberOfLines={BRAIN_WORK_CARD_TITLE_LINES} style={styles.title}>

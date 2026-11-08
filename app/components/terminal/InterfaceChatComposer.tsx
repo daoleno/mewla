@@ -138,7 +138,6 @@ export function InterfaceChatComposer({
             uploading={uploading}
             commands={commands}
             commandQuery={commandQuery}
-            chrome={chrome}
             onUploadPress={() => {
               onUploadPress();
               onDismissActionMenu();
