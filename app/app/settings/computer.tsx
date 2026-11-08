@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { Redirect, Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
@@ -35,9 +35,11 @@ import { wsClient } from "../../services/websocket";
 import { useCurrentServer } from "../../store/currentServer";
 import { useWorkerServerSummary } from "../../store/workers";
 
+import { useToast } from "../../components/ui/Toast";
 const POLL_MS = 5_000;
 
 export default function ComputerScreen() {
+  const toast = useToast();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useAppColors();
@@ -253,7 +255,7 @@ export default function ComputerScreen() {
     if (moved) {
       const problem = Storage.serverAddressProblem(address);
       if (problem) {
-        Alert.alert("Check the address", problem);
+        toast.show({ title: "Check the address", detail: problem, tone: "error" });
         return;
       }
     }
@@ -268,7 +270,7 @@ export default function ComputerScreen() {
         ...(moved ? { url: address } : {}),
       });
     } catch (reason) {
-      Alert.alert("Check the address", reason instanceof Error ? reason.message : String(reason));
+      toast.show({ title: "Check the address", detail: reason instanceof Error ? reason.message : String(reason), tone: "error" });
       return;
     }
     await refreshServers();
@@ -300,10 +302,7 @@ export default function ComputerScreen() {
           await refreshServers(current ? others[0]?.id : undefined);
           if (missed.length > 0) {
             const names = missed.map((other) => other.name).join(", ");
-            Alert.alert(
-              `${names} didn't answer`,
-              `It still works with ${server.name}. On it, run mewla computers remove "${server.name}".`,
-            );
+            toast.show({ title: `${names} didn't answer`, detail: `It still works with ${server.name}. On it, run mewla computers remove "${server.name}".`, tone: "error" });
           }
           router.back();
         } finally {

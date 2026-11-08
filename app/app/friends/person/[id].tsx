@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../../constants/tokens";
@@ -16,7 +16,9 @@ import { friendsCall } from "../../../services/friendsAccount";
 import { displayName, type FriendsPerson } from "../../../services/friendsApi";
 import { useCurrentServer } from "../../../store/currentServer";
 
+import { useToast } from "../../../components/ui/Toast";
 export default function FriendsPersonScreen() {
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useAppTheme();
   const router = useRouter();
@@ -41,7 +43,7 @@ export default function FriendsPersonScreen() {
     try {
       setPerson(await friendsCall<FriendsPerson>(currentServer, method, path));
     } catch (reason) {
-      Alert.alert("Friends", reason instanceof Error ? reason.message : "That did not work");
+      toast.show({ title: "Friends", detail: reason instanceof Error ? reason.message : "That did not work", tone: "error" });
     }
   };
 
@@ -132,8 +134,8 @@ export default function FriendsPersonScreen() {
             onPress: () => {
               if (!currentServer) return;
               void friendsCall(currentServer, "POST", "/reports", { kind: "person", target_id: person.id, reason: "reported" })
-                .then(() => Alert.alert("Reported", "Thanks. Three reports from different people hide a profile."))
-                .catch((reason: unknown) => Alert.alert("Friends", reason instanceof Error ? reason.message : "That did not work"));
+                .then(() => toast.show({ title: "Reported", detail: "Thanks. Three reports from different people hide a profile.", tone: "success" }))
+                .catch((reason: unknown) => toast.show({ title: "Friends", detail: reason instanceof Error ? reason.message : "That did not work", tone: "error" }));
             },
           },
           {

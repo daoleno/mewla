@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { confirmDestructive } from "../ui/confirmDestructive";
 import type { ActionMenuItem } from "../ui/ActionMenu";
@@ -7,17 +6,19 @@ import { friendsCall } from "../../services/friendsAccount";
 import type { FriendsPost } from "../../services/friendsApi";
 import { useCurrentServer } from "../../store/currentServer";
 
+import { useToast } from "../ui/Toast";
 /**
  * What a post's "more" menu does, and likes and bookmarks, through the current
  * computer. Every action reports back so a screen can update its list.
  */
 export function useFriendsActions(handlers: { onPost(post: FriendsPost): void; onRemoved(postId: string): void; onBlocked(personId: string): void }) {
+  const toast = useToast();
   const { currentServer } = useCurrentServer();
   const router = useRouter();
   const { onPost, onRemoved, onBlocked } = handlers;
 
   const fail = useCallback((reason: unknown) => {
-    Alert.alert("Friends", reason instanceof Error ? reason.message : "That did not work");
+    toast.show({ title: "Friends", detail: reason instanceof Error ? reason.message : "That did not work", tone: "error" });
   }, []);
 
   const toggle = useCallback(
@@ -75,7 +76,7 @@ export function useFriendsActions(handlers: { onPost(post: FriendsPost): void; o
           icon: "flag",
           onPress: () => {
             void friendsCall(currentServer, "POST", "/reports", { kind: "post", target_id: post.id, reason: "reported" })
-              .then(() => Alert.alert("Reported", "Thanks. Three reports from different people hide a post."))
+              .then(() => toast.show({ title: "Reported", detail: "Thanks. Three reports from different people hide a post.", tone: "success" }))
               .catch(fail);
           },
         },

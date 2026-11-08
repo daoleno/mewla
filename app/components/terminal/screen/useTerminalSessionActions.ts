@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { useCurrentServer } from "../../../store/currentServer";
 import {
@@ -35,6 +34,7 @@ import {
   providerClientForCommand,
 } from "../../../services/providers";
 
+import { useToast } from "../../ui/Toast";
 interface CreateTerminalInput {
   cwd: string;
   command: string;
@@ -98,6 +98,7 @@ export function useTerminalSessionActions({
   setInterfaceRenderModes,
   setRecentWorkerOpens,
 }: UseTerminalSessionActionsInput) {
+  const toast = useToast();
   const router = useRouter();
   const { refreshServers, isCurrentServer } = useCurrentServer();
   const createInFlightRef = useRef(false);
@@ -191,10 +192,7 @@ export function useTerminalSessionActions({
       if (!isCurrentServer(serverId) || createInFlightRef.current) return;
       if (!serverId || connectionState !== "connected" || creatingSession) {
         if (connectionState !== "connected") {
-          Alert.alert(
-            "Daemon unavailable",
-            "Reconnect to that daemon before creating a new terminal.",
-          );
+          toast.show({ title: "Daemon unavailable", detail: "Reconnect to that daemon before creating a new terminal.", tone: "error" });
         }
         return;
       }
@@ -213,10 +211,7 @@ export function useTerminalSessionActions({
       ) {
         // Request list proof — do not clear the block here.
         wsClient.listWorkerSessions(serverId);
-        Alert.alert(
-          "Refresh required",
-          "Previous create result was ambiguous. Waiting for a confirmed session list before creating another terminal.",
-        );
+        toast.show({ title: "Refresh required", detail: "Previous create result was ambiguous. Waiting for a confirmed session list before creating another terminal.", tone: "error" });
         return;
       }
 
@@ -257,12 +252,9 @@ export function useTerminalSessionActions({
             wsClient.listWorkerSessions(serverId);
           }
           if (!isCurrentServer(serverId)) return;
-          Alert.alert(
-            reconciled.kind === "ambiguous"
+          toast.show({ title: reconciled.kind === "ambiguous"
               ? "Refresh required"
-              : "Could not create terminal",
-            reconciled.message,
-          );
+              : "Could not create terminal", detail: reconciled.message, tone: "error" });
           return;
         }
         setCreateAmbiguityBlocks((current) => clearCreateAmbiguityForServer(current, serverId));
@@ -307,12 +299,9 @@ export function useTerminalSessionActions({
           wsClient.listWorkerSessions(serverId);
         }
         if (!isCurrentServer(serverId)) return;
-        Alert.alert(
-          reconciled.kind === "ambiguous"
+        toast.show({ title: reconciled.kind === "ambiguous"
             ? "Refresh required"
-            : "Could not create terminal",
-          reconciled.kind === "navigable" ? "Create failed." : reconciled.message,
-        );
+            : "Could not create terminal", detail: reconciled.kind === "navigable" ? "Create failed." : reconciled.message, tone: "error" });
       } finally {
         createInFlightRef.current = false;
         setCreatingSession(false);
@@ -337,10 +326,7 @@ export function useTerminalSessionActions({
 
   const openNewTerminal = useCallback(() => {
     if (connectionState !== "connected") {
-      Alert.alert(
-        "Daemon unavailable",
-        "Reconnect to that daemon before creating a new terminal.",
-      );
+      toast.show({ title: "Daemon unavailable", detail: "Reconnect to that daemon before creating a new terminal.", tone: "error" });
       return;
     }
     closeMenu();

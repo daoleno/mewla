@@ -22,6 +22,7 @@ import {
   type SkillTreeNode,
 } from "../../services/skillsScreenModel";
 import { Icon, type IconName } from "../icons/Icon";
+import { InlineNotice } from "../ui/InlineNotice";
 
 /**
  * Shared read-only Skill content browser: expandable file tree plus inline
@@ -141,9 +142,7 @@ export function SkillFileBrowser({
           />
         ) : null}
         {preview?.notice ? (
-          <Text style={[styles.previewNotice, { color: colors.warning }]}>
-            {preview.notice}
-          </Text>
+          <InlineNotice tone="warning" title={preview.notice} style={styles.previewNotice} />
         ) : null}
         {preview?.dataUrl ? <AppImage source={{ kind: "owned", path: `skill-file:${preview.path}`, name: preview.path }} gallery={gallery} chrome={chrome} /> : null}
         {preview?.status === "binary" ? (
@@ -172,9 +171,7 @@ export function SkillFileBrowser({
         ) : null}
         {renderer === "invalid-json" ? (
           <>
-            <Text style={[styles.previewNotice, { color: colors.warning }]}>
-              Invalid JSON; showing original text.
-            </Text>
+            <InlineNotice tone="warning" title="Invalid JSON; showing original text." style={styles.previewNotice} />
             <Code content={preview?.content ?? ""} />
           </>
         ) : null}
@@ -340,7 +337,7 @@ const styles = StyleSheet.create({
     fontFamily: Typography.uiFontMedium,
     marginBottom: 7,
   },
-  previewNotice: { ...TypeScale.compact, marginBottom: 8 },
+  previewNotice: { marginBottom: 8 },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",

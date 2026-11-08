@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Linking,
   ScrollView,
   StyleSheet,
@@ -87,7 +86,9 @@ import {
   type DiscoveredSessionService,
 } from "../../services/sessionServicesPresentation";
 
+import { useToast } from "../../components/ui/Toast";
 export default function InboxScreen() {
+  const toast = useToast();
   const { state } = useWorkers();
   const { currentServer, currentServerId, hydrated: storageHydrated, isCurrentServer } = useCurrentServer();
   const servicesRequestEpochRef = useRef(0);
@@ -296,12 +297,9 @@ export default function InboxScreen() {
                 .title
             : entry.sessionKey;
         });
-        Alert.alert(
-          summary.succeeded > 0
+        toast.show({ title: summary.succeeded > 0
             ? "Some sessions could not be terminated"
-            : "Could not terminate sessions",
-          sessionTerminationSummaryMessage(summary, failedTitles),
-        );
+            : "Could not terminate sessions", detail: sessionTerminationSummaryMessage(summary, failedTitles), tone: "error" });
       } else {
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success,
@@ -463,10 +461,7 @@ export default function InboxScreen() {
     if (createInFlightRef.current) return;
     const server = currentServer;
     if (!server || !isCurrentServer(server.id) || server.id !== input.serverId || !anyConnected) {
-      Alert.alert(
-        "Daemon unavailable",
-        "Connect to a daemon before creating a new terminal.",
-      );
+      toast.show({ title: "Daemon unavailable", detail: "Connect to a daemon before creating a new terminal.", tone: "error" });
       return;
     }
 
@@ -485,10 +480,7 @@ export default function InboxScreen() {
       })
     ) {
       wsClient.listWorkerSessions(server.id);
-      Alert.alert(
-        "Refresh required",
-        "Previous create result was ambiguous. Waiting for a confirmed session list before creating another terminal.",
-      );
+      toast.show({ title: "Refresh required", detail: "Previous create result was ambiguous. Waiting for a confirmed session list before creating another terminal.", tone: "error" });
       return;
     }
     setCreatingServerId(server.id);
@@ -517,12 +509,9 @@ export default function InboxScreen() {
           wsClient.listWorkerSessions(server.id);
         }
         if (!isCurrentServer(server.id)) return;
-        Alert.alert(
-          reconciled.kind === "ambiguous"
+        toast.show({ title: reconciled.kind === "ambiguous"
             ? "Refresh required"
-            : "Could not create terminal",
-          reconciled.message,
-        );
+            : "Could not create terminal", detail: reconciled.message, tone: "error" });
         return;
       }
       setCreateAmbiguityBlocks((current) =>
@@ -550,12 +539,9 @@ export default function InboxScreen() {
         wsClient.listWorkerSessions(server.id);
       }
       if (!isCurrentServer(server.id)) return;
-      Alert.alert(
-        reconciled.kind === "ambiguous"
+      toast.show({ title: reconciled.kind === "ambiguous"
           ? "Refresh required"
-          : "Could not create terminal",
-        reconciled.kind === "navigable" ? "Create failed." : reconciled.message,
-      );
+          : "Could not create terminal", detail: reconciled.kind === "navigable" ? "Create failed." : reconciled.message, tone: "error" });
     } finally {
       createInFlightRef.current = false;
       setCreatingServerId(null);
@@ -598,10 +584,7 @@ export default function InboxScreen() {
 
   const openSessionServices = () => {
     if (!anyConnected || !isCurrentServer(currentServerId)) {
-      Alert.alert(
-        "Daemon unavailable",
-        "Connect to a daemon before viewing session services.",
-      );
+      toast.show({ title: "Daemon unavailable", detail: "Connect to a daemon before viewing session services.", tone: "error" });
       return;
     }
     setServiceSheetVisible(true);
@@ -624,7 +607,7 @@ export default function InboxScreen() {
     try {
       await Linking.openURL(url);
     } catch (error: any) {
-      Alert.alert("Could not open URL", error?.message || url);
+      toast.show({ title: "Could not open URL", detail: error?.message || url, tone: "error" });
     }
   };
 
@@ -638,10 +621,7 @@ export default function InboxScreen() {
 
   const openCreateTerminal = () => {
     if (!anyConnected || !isCurrentServer(currentServerId)) {
-      Alert.alert(
-        "Daemon unavailable",
-        "Connect to a daemon before creating a new terminal.",
-      );
+      toast.show({ title: "Daemon unavailable", detail: "Connect to a daemon before creating a new terminal.", tone: "error" });
       return;
     }
     setCreateSheetVisible(true);
@@ -662,7 +642,7 @@ export default function InboxScreen() {
       await setServerAutoConnect(currentServer.id, true);
       if (isCurrentServer(currentServer.id)) wsClient.connect(currentServer);
     } catch (error) {
-      Alert.alert("Connection failed", error instanceof Error ? error.message : "Could not retry this server.");
+      toast.show({ title: "Connection failed", detail: error instanceof Error ? error.message : "Could not retry this server.", tone: "error" });
     }
   };
 

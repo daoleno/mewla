@@ -86,6 +86,7 @@ import { AboutSection } from "../components/settings/AboutSection";
 import { CalendarAlertsSection } from "../components/settings/CalendarAlertsSection";
 import { LabsSection } from "../components/settings/LabsSection";
 import { StatusPill, type StatusTone } from "../components/ui/StatusPill";
+import { InlineNotice } from "../components/ui/InlineNotice";
 import { MultilineField } from "../components/ui/MultilineField";
 import { RisingSheet } from "../components/ui/RisingSheet";
 import {
@@ -148,6 +149,8 @@ export default function SettingsScreen() {
   );
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraMountError, setCameraMountError] = useState<string | null>(null);
+  // A pairing failure shows inside the pairing sheet: a Toast would sit under its Modal.
+  const [pairNotice, setPairNotice] = useState<{ title: string; detail: string } | null>(null);
   const [pairProgress, setPairProgress] = useState<string | null>(null);
   const scanClaimRef = useRef(createPairScanClaim());
 
@@ -230,6 +233,7 @@ export default function SettingsScreen() {
     setPairPresentation(closePairPresentation());
     setDraftImportValue("");
     setCameraMountError(null);
+    setPairNotice(null);
   };
 
   const openScanner = () => {
@@ -238,6 +242,7 @@ export default function SettingsScreen() {
     }
     releasePairScan(scanClaimRef.current);
     setCameraMountError(null);
+    setPairNotice(null);
     // First use: the system asks as the scanner opens, not after a second tap.
     if (cameraGate(cameraPermission) === "request") void requestCameraPermission();
     setPairPresentation((current) => openPairScanner(current));
@@ -270,6 +275,7 @@ export default function SettingsScreen() {
   };
 
   const importServer = async (rawValue: string) => {
+    setPairNotice(null);
     // A failure keeps the scan claim until its alert is dismissed: the live
     // camera still sees the same QR and would resubmit a spent one-time code.
     let releaseAfterAlert = false;
@@ -287,10 +293,7 @@ export default function SettingsScreen() {
       });
 
       if (!savedServer) {
-        Alert.alert(
-          "Not a pairing link",
-          "Paste the link printed by mewla pair, or scan its QR code.",
-        );
+        setPairNotice({ title: "Not a pairing link", detail: "Paste the link printed by mewla pair, or scan its QR code." });
         return false;
       }
 
@@ -328,15 +331,13 @@ export default function SettingsScreen() {
   };
 
   const handleImportDraft = async () => {
+    setPairNotice(null);
     let rawValue = draftImportValue.trim();
     if (!rawValue) {
       rawValue = (await Clipboard.getStringAsync()).trim();
     }
     if (!rawValue) {
-      Alert.alert(
-        "Pairing link required",
-        "Paste the link printed by mewla pair, or scan its QR code.",
-      );
+      setPairNotice({ title: "Pairing link required", detail: "Paste the link printed by mewla pair, or scan its QR code." });
       return;
     }
     await importServer(rawValue);
@@ -352,6 +353,7 @@ export default function SettingsScreen() {
     // Claim before DocumentPicker so live onBarcodeScanned is disabled while
     // the system picker is open (UI lock + atomic ref owner).
     if (!tryAcquireScanClaim()) return;
+    setPairNotice(null);
 
     let importing = false;
     try {
@@ -371,10 +373,7 @@ export default function SettingsScreen() {
       const matches = await scanFromURLAsync(asset.uri, QR_BARCODE_TYPES);
       const qrMatch = matches.find((item) => (item.data || "").trim());
       if (!qrMatch?.data) {
-        Alert.alert(
-          "QR not found",
-          "No QR code was detected in that image. Use a tighter crop with the QR filling most of the frame.",
-        );
+        setPairNotice({ title: "QR not found", detail: "No QR code was detected in that image. Use a tighter crop with the QR filling most of the frame." });
         return;
       }
 
@@ -382,10 +381,7 @@ export default function SettingsScreen() {
       importing = true;
       await importServer(qrMatch.data);
     } catch (error: any) {
-      Alert.alert(
-        "Image scan failed",
-        error?.message || "Could not read a QR code from that image.",
-      );
+      setPairNotice({ title: "Image scan failed", detail: error?.message || "Could not read a QR code from that image." });
     } finally {
       if (!importing) {
         releaseScanClaim();
@@ -536,6 +532,8 @@ export default function SettingsScreen() {
                 />
               </AnimatedPressable>
             </View>
+
+            {pairNotice ? <InlineNotice tone="danger" title={pairNotice.title} detail={pairNotice.detail} detailNumberOfLines={0} style={styles.pairNotice} /> : null}
 
             {cameraMountError ? (
               <View style={styles.scannerNoticeCard}>
@@ -696,6 +694,8 @@ export default function SettingsScreen() {
               On the computer, run mewla pair. Scan its QR code or paste the link it prints.
             </Text>
 
+            {pairNotice ? <InlineNotice tone="danger" title={pairNotice.title} detail={pairNotice.detail} detailNumberOfLines={0} style={styles.pairNotice} /> : null}
+
             <Text style={styles.fieldLabel}>Pairing link</Text>
             <MultilineField
               minHeight={112}
@@ -763,6 +763,7 @@ function TelegramConnectionRow({
   serverId: string | null;
   connected: boolean;
 }) {
+  const toast = useToast();
   const { theme } = useAppTheme();
   const colors = useAppColors();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -857,10 +858,7 @@ function TelegramConnectionRow({
       setStatus(next);
     } catch (error: any) {
       if (epoch !== ownerEpoch.current) return;
-      Alert.alert(
-        "Telegram connection",
-        error?.message || "The connection could not be updated.",
-      );
+      toast.show({ title: "Telegram connection", detail: error?.message || "The connection could not be updated.", tone: "error" });
     } finally {
       if (epoch === ownerEpoch.current) setBusy(false);
     }
@@ -872,7 +870,7 @@ function TelegramConnectionRow({
     const credential = token.trim();
     if (!serverId || !credential) {
       setToken("");
-      Alert.alert("Bot token required", "Enter the token issued by BotFather.");
+      toast.show({ title: "Bot token required", detail: "Enter the token issued by BotFather.", tone: "error" });
       return;
     }
     setToken("");
@@ -888,10 +886,7 @@ function TelegramConnectionRow({
     } catch (error: any) {
       if (epoch !== ownerEpoch.current) return;
       setToken("");
-      Alert.alert(
-        "Telegram setup failed",
-        error?.message || "The bot token could not be verified.",
-      );
+      toast.show({ title: "Telegram setup failed", detail: error?.message || "The bot token could not be verified.", tone: "error" });
     } finally {
       // The credential must not survive submission in component state.
       if (epoch === ownerEpoch.current) {
@@ -906,10 +901,7 @@ function TelegramConnectionRow({
       await Linking.openURL(TELEGRAM_BOTFATHER_URL);
     } catch (error: any) {
       setToken("");
-      Alert.alert(
-        "BotFather unavailable",
-        error?.message || "The official BotFather chat could not be opened.",
-      );
+      toast.show({ title: "BotFather unavailable", detail: error?.message || "The official BotFather chat could not be opened.", tone: "error" });
     }
   };
 
@@ -920,10 +912,7 @@ function TelegramConnectionRow({
       if (ownerActive.current && epoch === ownerEpoch.current) setToken(value);
     } catch (error: any) {
       setToken("");
-      Alert.alert(
-        "Clipboard unavailable",
-        error?.message || "The bot token could not be pasted.",
-      );
+      toast.show({ title: "Clipboard unavailable", detail: error?.message || "The bot token could not be pasted.", tone: "error" });
     }
   };
 
@@ -933,7 +922,7 @@ function TelegramConnectionRow({
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       return true;
     } catch (error: any) {
-      Alert.alert("Clipboard unavailable", error?.message || "The value could not be copied.");
+      toast.show({ title: "Clipboard unavailable", detail: error?.message || "The value could not be copied.", tone: "error" });
       return false;
     }
   };
@@ -957,10 +946,7 @@ function TelegramConnectionRow({
     } catch (error: any) {
       if (epoch !== ownerEpoch.current) return;
       setToken("");
-      Alert.alert(
-        "Telegram owner binding",
-        error?.message || "The private Telegram chat could not be opened.",
-      );
+      toast.show({ title: "Telegram owner binding", detail: error?.message || "The private Telegram chat could not be opened.", tone: "error" });
     } finally {
       if (epoch === ownerEpoch.current) setBusy(false);
     }
@@ -1034,7 +1020,7 @@ function TelegramConnectionRow({
               error={loadError} token={token} editingToken={showToken}
               onToken={setToken} onPaste={() => void pasteToken()} onConfigure={() => void configure()}
               onBotFather={() => void openBotFather()} onBind={() => void beginBinding()}
-              onOpen={() => { if (visibleStatus?.bot_username) void Linking.openURL(`https://t.me/${visibleStatus.bot_username}`).catch(() => Alert.alert("Telegram unavailable", "The bot chat could not be opened.")); }}
+              onOpen={() => { if (visibleStatus?.bot_username) void Linking.openURL(`https://t.me/${visibleStatus.bot_username}`).catch(() => toast.show({ title: "Telegram unavailable", detail: "The bot chat could not be opened.", tone: "error" })); }}
               onReconnect={() => { if (activeServerId) void runStatusMutation(() => wsClient.enableTelegramConnection(activeServerId)); }}
               onDisconnect={() => { if (activeServerId) void runStatusMutation(() => wsClient.disableTelegramConnection(activeServerId)); }}
               onEditToken={() => setShowToken(true)}
@@ -1339,6 +1325,7 @@ function createStyles(theme: ResolvedTheme) {
       gap: 10,
       marginTop: 12,
     },
+    pairNotice: { marginTop: 12 },
     scannerNoticeCard: {
       marginTop: 18,
       borderRadius: Radii.md,

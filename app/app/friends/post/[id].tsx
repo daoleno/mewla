@@ -1,6 +1,6 @@
 import { DateStyle, formatDate } from "../../../services/dateFormat";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../../constants/tokens";
@@ -25,12 +25,14 @@ import {
 } from "../../../services/friendsApi";
 import { useCurrentServer } from "../../../store/currentServer";
 
+import { useToast } from "../../../components/ui/Toast";
 interface Detail {
   post: FriendsPost;
   comments: FriendsComment[];
 }
 
 export default function FriendsPostScreen() {
+  const toast = useToast();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useAppTheme();
   const router = useRouter();
@@ -87,7 +89,7 @@ export default function FriendsPostScreen() {
       setDraft("");
       setDetail((current) => (current ? { post: { ...current.post, comments: current.post.comments + 1 }, comments: [...current.comments, comment] } : current));
     } catch (reason) {
-      Alert.alert("Friends", reason instanceof Error ? reason.message : "Could not comment");
+      toast.show({ title: "Friends", detail: reason instanceof Error ? reason.message : "Could not comment", tone: "error" });
     } finally {
       setSending(false);
     }
@@ -136,7 +138,7 @@ export default function FriendsPostScreen() {
         onPress: () => {
           if (!currentServer) return;
           void friendsCall(currentServer, "POST", "/reports", { kind: "comment", target_id: comment.id, reason: "reported" })
-            .then(() => Alert.alert("Reported", "Thanks. Three reports from different people hide a comment."))
+            .then(() => toast.show({ title: "Reported", detail: "Thanks. Three reports from different people hide a comment.", tone: "success" }))
             .catch(actions.fail);
         },
       });

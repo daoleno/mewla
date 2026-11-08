@@ -1,5 +1,4 @@
 import { useCallback } from "react";
-import { Alert } from "react-native";
 import { confirmDestructive } from "../../ui/confirmDestructive";
 import { useRouter } from "expo-router";
 import type { Worker, ConnectionState } from "../../../store/workers";
@@ -7,6 +6,7 @@ import { dismissTerminalToSessions } from "../../../services/terminalExitNavigat
 import { useScreenBack } from "../../navigation/useScreenBack";
 import { wsClient } from "../../../services/websocket";
 
+import { useToast } from "../../ui/Toast";
 interface UseTerminalNavigationActionsInput {
   sessionKey: string | null;
   serverId: string;
@@ -26,6 +26,7 @@ export function useTerminalNavigationActions({
   workerServerName,
   closeMenu,
 }: UseTerminalNavigationActionsInput) {
+  const toast = useToast();
   const router = useRouter();
   const screenBack = useScreenBack({ parent: "/list" });
 
@@ -47,10 +48,7 @@ export function useTerminalNavigationActions({
     closeMenu();
 
     if (connectionState !== "connected") {
-      Alert.alert(
-        "Daemon unavailable",
-        "Reconnect to that daemon before terminating the agent.",
-      );
+      toast.show({ title: "Daemon unavailable", detail: "Reconnect to that daemon before terminating the agent.", tone: "error" });
       return;
     }
 

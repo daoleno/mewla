@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -35,6 +34,7 @@ import type { StatusTone } from "../../components/ui/StatusPill";
 import { CalendarOriginLink, useCalendarOrigin } from "../../components/calendar/CalendarOriginLink";
 import { calendarOriginOfWork } from "../../services/calendarRuns";
 
+import { useToast } from "../../components/ui/Toast";
 const AUTOSAVE_DELAY_MS = 600;
 
 function workItemKey(serverId: string, id: string) {
@@ -54,6 +54,7 @@ export default function WorkDetailScreen() {
 }
 
 function CurrentWorkDetail() {
+  const toast = useToast();
   const params = useLocalSearchParams<{ id?: string; serverId?: string }>();
   const { isCurrentServer } = useCurrentServer();
   const colors = useAppColors();
@@ -144,7 +145,7 @@ function CurrentWorkDetail() {
         setRemoteBanner(true);
         setBaseMtime(error.current.mtime || baseMtime);
       } else {
-        Alert.alert("Save failed", error?.message || "Could not save work item.");
+        toast.show({ title: "Save failed", detail: error?.message || "Could not save work item.", tone: "error" });
       }
       return null;
     } finally {
@@ -192,10 +193,7 @@ function CurrentWorkDetail() {
           goBack();
         } catch (error: any) {
           if (!isCurrentServer(serverId)) return;
-          Alert.alert(
-            "Delete failed",
-            error?.message || "Could not delete work item.",
-          );
+          toast.show({ title: "Delete failed", detail: error?.message || "Could not delete work item.", tone: "error" });
         }
       },
     });

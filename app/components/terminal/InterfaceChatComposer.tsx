@@ -20,7 +20,7 @@ import {
 import { InterfaceComposerActionMenu } from "./InterfaceComposerActionMenu";
 import { InterfaceChatComposerFrame } from "./InterfaceChatComposerFrame";
 import { InterfaceComposerPanel } from "./InterfaceComposerPanel";
-import { Icon } from "../icons/Icon";
+import { InlineNotice } from "../ui/InlineNotice";
 
 interface InterfaceChatComposerProps {
   inputRef: React.RefObject<TextInputInstance | null>;
@@ -161,23 +161,13 @@ export function InterfaceChatComposer({
       ) : null}
 
       {operationalError ? (
-        <View
-          accessible
-          accessibilityLiveRegion="polite"
-          accessibilityRole="alert"
-          accessibilityLabel={operationalError}
-          style={[styles.operationalError, { backgroundColor: chrome.dangerSoft }]}
-        >
-          <Icon
-            name="alert-circle-fill"
-            size={15}
-            color={chrome.danger}
-            style={styles.operationalErrorIcon}
-          />
-          <Text style={[styles.operationalErrorText, { color: chrome.danger }]}>
-            {operationalError}
-          </Text>
-        </View>
+        <InlineNotice
+          tone="danger"
+          title="Something went wrong"
+          detail={operationalError}
+          detailNumberOfLines={0}
+          style={styles.operationalError}
+        />
       ) : null}
 
       <InterfaceComposerPanel
@@ -221,24 +211,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     zIndex: 6,
   },
-  // Composer-scoped failure: a soft danger notice resting above the capsule.
-  operationalError: {
-    marginHorizontal: 4,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    ...ContinuousCorners,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  operationalErrorIcon: {
-    marginTop: 1,
-  },
-  operationalErrorText: {
-    ...TypeScale.caption,
-    flex: 1,
-    minWidth: 0,
-  },
+  // Composer-scoped failure: a danger notice resting above the capsule.
+  operationalError: { marginHorizontal: 4, marginBottom: 8 },
 });
