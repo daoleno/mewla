@@ -2318,7 +2318,7 @@ func (w *Watcher) applyPollFacts(
 		}
 		// PaneAbsent (no dead status readable): transient absence never
 		// terminalizes (CR.3).
-	} else if generation := w.currentPaneGeneration(id); generation != "" &&
+	} else if generation := w.observedPaneGeneration(id); generation != "" &&
 		strings.TrimSpace(turn.PaneGeneration) != "" && generation != turn.PaneGeneration {
 		// A different live pane identity owns the target: the recorded
 		// process is provably gone (CR.3 SessionReplaced).
@@ -2534,6 +2534,24 @@ func activityFactFromObservation(sessionID string, turn TurnSnapshot, provider P
 		At:         time.Now().UTC(),
 		Summary:    "Delegated provider activity " + strings.TrimSpace(provider.Status),
 	}
+}
+
+// observedPaneGeneration is the pane generation of a Session this poll has just
+// seen alive. A generation is the digest of the pane id, so the poll's own
+// observation already answers it; asking tmux again would start a process per
+// Worker per poll to learn the id it was given. A target that is not a pane id
+// has none.
+func (w *Watcher) observedPaneGeneration(sessionID string) string {
+	w.mu.RLock()
+	sources := w.pollSources
+	w.mu.RUnlock()
+	if sources != nil && sources.PaneGeneration != nil {
+		return sources.PaneGeneration(sessionID)
+	}
+	if !isPaneID(sessionID) {
+		return ""
+	}
+	return sessionInputPaneGeneration(sessionID)
 }
 
 func (w *Watcher) currentPaneGeneration(sessionID string) string {
