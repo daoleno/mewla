@@ -52,6 +52,7 @@ import { AgentKindIcon } from "../terminal/AgentKindIcon";
 import { ExtensionListRow } from "../extensions/ExtensionListRow";
 import type { ConnectionState as ServerConnection } from "../../store/workers";
 import { Button } from "../ui/Button";
+import { useOptionalToast } from "../ui/Toast";
 import { EmptyState } from "../ui/EmptyState";
 import { InlineNotice } from "../ui/InlineNotice";
 import { IconButton } from "../ui/IconButton";
@@ -331,7 +332,7 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
           props.onDeleteSkill(copy);
         }}
       />
-      <MutationToast
+      <MutationNotice
         notice={props.mutationNotice}
         onDismiss={props.onDismissNotice}
       />
@@ -339,42 +340,25 @@ export function SkillsPresentation(props: SkillsPresentationProps) {
   );
 }
 
-function MutationToast({
+/**
+ * A mutation's outcome is a Toast: a success leaves on its own, a failure
+ * stays until dismissed. The notice is handed over at once, so the owner's
+ * state never holds a message the Toast now owns.
+ */
+function MutationNotice({
   notice,
   onDismiss,
 }: {
   notice: SurfaceMutationNotice | null;
   onDismiss(): void;
 }) {
-  const colors = useAppColors();
-  if (!notice) return null;
-  const error = notice.kind === "error";
-  return (
-    <View pointerEvents="box-none" style={styles.toastWrap}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Dismiss status message"
-        accessibilityLiveRegion={error ? "assertive" : "polite"}
-        onPress={onDismiss}
-        style={[
-          styles.toast,
-          {
-            backgroundColor: colors.modalSurface,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <StatusMark status={error ? "failed" : "ready"} knockout={colors.modalSurface} />
-        <Text
-          numberOfLines={3}
-          style={[styles.toastText, { color: colors.textPrimary }]}
-        >
-          {notice.message}
-        </Text>
-        <Icon name="close" size={18} color={colors.textTertiary} />
-      </Pressable>
-    </View>
-  );
+  const toast = useOptionalToast();
+  useEffect(() => {
+    if (!notice) return;
+    toast?.show({ title: notice.message, tone: notice.kind === "error" ? "error" : "success" });
+    onDismiss();
+  }, [notice, onDismiss, toast]);
+  return null;
 }
 
 function ActiveFilters({
@@ -1166,26 +1150,6 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     gap: 8,
   },
-  toastWrap: {
-    position: "absolute",
-    left: PLUGINS_SKILLS_SCREEN_PADDING,
-    right: PLUGINS_SKILLS_SCREEN_PADDING,
-    bottom: 12,
-    zIndex: 20,
-    alignItems: "center",
-  },
-  toast: {
-    width: "100%",
-    maxWidth: 560,
-    minHeight: 48,
-    ...outlinedSurface(8),
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-  },
-  toastText: { ...TypeScale.compact, flex: 1 },
   searchArea: {
     flexDirection: "row",
     gap: 8,
