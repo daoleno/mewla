@@ -295,71 +295,70 @@ Mac, and Mewla's log doesn't record it. Brain keeps one agent on the screen at
 a time. Turning off **Agents can use this computer** turns it off for Codex
 Workers started afterwards; one already running keeps it until it ends.
 
-## Linux: agents' browsers on a virtual screen
+## Linux: agents on a virtual screen
 
-A Linux computer has no screen of yours to share, but the browsers agents use
-there run on a virtual screen of their own, off your desktop. **Screen** on a
-Linux computer shows the **Virtual screen** switch until it is on (the same
+A Linux computer has no screen of yours to share, but the agents there get a
+virtual screen of their own, off your desktop: one screen for the whole
+computer with a monitor for each agent. An agent's browser window and the
+desktop apps it opens are both on its monitor, and nothing else is. **Screen**
+on a Linux computer shows the **Virtual screen** switch until it is on (the same
 switch as **Settings → Labs → Virtual screen**); a switch that cannot be read or
-set says why under it, with Retry. Once on, **Screen** lists the agents using a
-browser right now, each with its own live view. A row keeps its place and its
-agent's name while you hold the screen.
-You never open or manage a browser yourself: an agent's row appears when it
-asks for one. The Phone, where phone use is on, is a row in the page menu.
+set says why under it, with Retry. Once on, **Screen** lists the agents using
+the screen right now, one row for each, with its own live view of its monitor
+(you are never sent another agent's). A row keeps its place and its agent's name
+while you hold the screen. You never open or manage a browser yourself: an
+agent's row appears when it asks for a browser or opens an app. The Phone, where
+phone use is on, is a row in the page menu.
 
 - **The view is the computer.** It opens live and is the input surface: on a
   desktop or in the web app, the mouse (click, double click, right click, drag),
-  the wheel and the keyboard (shortcuts included) go straight to the screen, a
-  paste sends your text there, and **Full size** (in the card's menu) fills the
-  window and hands the browser's own shortcuts to the screen where it allows.
-  Chrome on the screen has its own address bar and tabs; use them. On a phone a
-  tap clicks, a drag scrolls, a long press right-clicks (hold, then drag to drag),
-  two fingers zoom and pan the view, and the keyboard button brings up the
-  system keyboard, whose keys go straight to the screen. A slim bar of Esc, Tab,
-  the arrows and Ctrl, Alt and Shift shows only while that keyboard is up.
+  the wheel and the keyboard (shortcuts included) go straight to the agent's
+  monitor, a paste sends your text there, and **Full size** (in the card's menu)
+  fills the window and hands the browser's own shortcuts to the screen where it
+  allows. Chrome on the screen is the real Chrome with its own address bar and
+  tabs; use them. On a phone a tap clicks, a drag scrolls, a long press
+  right-clicks (hold, then drag to drag), two fingers zoom and pan the view, and
+  the keyboard button brings up the system keyboard, whose keys go straight to
+  the screen. A slim bar of Esc, Tab, the arrows and Ctrl, Alt and Shift shows
+  only while that keyboard is up.
 - **The agent is told, not paused.** What you do reaches the screen at once
   while the agent keeps going. It is told what you did (clicks, scrolls, how
   much you typed, never what you typed) and decides for itself whether to go on,
   wait or ask you; nothing stops it by rule, since you may only have tapped by
   mistake or be typing a password.
 - **Hold the agent**, in the card's menu, is the one soft switch: the agent's
-  next action says you hold the screen and it waits. **Let the agent go on**
-  releases it, and it hears how long you held it. Closing the view lets go by
-  itself.
+  next action or browser call says you hold the screen and it waits. **Let the
+  agent go on** releases it, and it hears how long you held it. Closing the view
+  lets go by itself.
 - **Stop** (menu) ends that agent's use of the screen. It is told so and does not
   ask for it again until you **Resume**.
 
-With the switch on, a Worker (Claude or Codex) works in the agents' browser on the
-virtual screen instead of your Chrome. It is the same browser tool every Worker
-has, `mewla_chrome`, with the same Mewla extension in that Chrome, so nothing
-about the tool differs from a Mac's. The browser comes up when the agent first
-asks for it, not when the Worker starts, and the agent waits for it. Every agent
-has a window of its own in one shared Chrome, so several agents work at the same
-time. The window closes when its Worker ends, and the browser stops when no agent
-is using it. The switch lives on the computer, so every device sees the same
-answer.
-
-A browser window's card shows the page its window shows, live. What you do in it
-reaches the page at once and the agent is told, not paused. **Take over** is the
-hard part: the agent's next browser call is refused with the reason (the call
-running is waited for, up to ten seconds), and an address bar and the tab
-buttons appear for you; **Hand back** lets it go on, and it hears when you held
-the window. **Stop** refuses that Worker the browser until you hand it back.
+With the switch on, a Worker (Claude or Codex) works in the agents' browser on
+the virtual screen instead of your Chrome. It is the same browser tool every
+Worker has, `mewla_chrome`, with the same Mewla extension in that Chrome, so
+nothing about the tool differs from a Mac's. The browser comes up when the agent
+first asks for it, not when the Worker starts, and the agent waits for it. It is
+one Chrome with one profile; every agent has a window of its own in it, placed
+on that agent's monitor (so are the windows its pages open, such as a sign-in
+pop-up), and several agents work at the same time. The window closes when its
+Worker ends, and the browser stops when no agent is using it. The switch lives
+on the computer, so every device sees the same answer.
 
 Desktop apps work the same way. With the switch on, a Worker (Claude or Codex)
-also has a **display** tool: it opens a program (a calculator, an editor) on a
-display of its own, sees it as a picture and clicks, types and presses keys.
-That display is private to the Worker and off your desktop; it needs TigerVNC's
-`Xvnc` on the computer, and apps run as X11 clients (there is no window manager,
-so a window sits where it opens). Screen lists it as a card for that agent with
-the same live view, Hold and Stop. The picture travels over a Unix
-socket only your user can open, no network port is used, and a display is
-closed when its Worker ends or closes it.
+also has a **display** tool: it opens a program (a calculator, an editor) on its
+monitor, sees it as a picture of that monitor and clicks, types and presses keys
+there. The screen is private to Mewla and off your desktop; it needs TigerVNC's
+`Xvnc` (and `xauth`) on the computer, and apps run as X11 clients (there is no
+window manager: Mewla moves each app's window to its agent's monitor and a
+window keeps the size it opens with). The picture travels over a Unix socket
+only your user can open, no network port is used, and an agent's monitor is
+given up when its Worker ends or closes it.
 
 The browser has one profile for all agents on the computer, not your everyday
-Chrome: to give it a sign-in, hold an agent's window, sign in yourself and
-let go; every agent's window then has it. The profile keeps its sign-ins on
-that computer. Chrome stores them in the computer's secure wallet
+Chrome: to give it a sign-in, hold an agent's screen, sign in yourself and
+let go; every agent's window then has it, because they are windows of the same
+Chrome. The profile keeps its sign-ins on that computer, also when the browser
+stops. Chrome stores them in the computer's secure wallet
 (KWallet or another Secret Service) when one is unlocked for the user Mewla
 runs as; with none, the profile uses Chrome's own basic storage, in a folder
 only that user can read. The profile keeps the store it started with, so one that

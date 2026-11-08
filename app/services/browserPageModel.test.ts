@@ -38,23 +38,11 @@ if (!process.env.MEWLA_BROWSER_PAGE_MODEL_TEST_CHILD) {
     expect(recoveryLabel("none")).toBeNull();
   });
 
-  test("Agent browser card has no per-Agent permission step and gates input on the server lease", async () => {
-    const source = await Bun.file(new URL("../components/screen/AgentBrowserCard.tsx", import.meta.url)).text();
-    expect(source).not.toMatch(/setStatus\(|\.message\)|JSON\.stringify\(value|<Switch/);
-    expect(source).toContain("browserIssue(error, serverName)");
-    // No background copy about what Agents may do later.
-    expect(source).not.toMatch(/Agents (can|on this server)/);
-    expect(source).toContain("lease(held) { if (active()) setMine(held); }");
-    // Opening is Watch: the page never claims input by itself. Input is a command under the
-    // lease when held, and a touch the agent is told about otherwise.
-    expect(source).toContain('message.type === "input" && message.input');
-    expect(source).toContain("if (mineRef.current) void viewer.current?.command({ kind: \"input\", input: message.input })");
-    expect(source).toContain("else if (viewer.current) viewer.current.touch(message.input)");
-    expect(source).not.toContain("claimable");
-    expect(source).not.toMatch(/pauses while/);
-    // The person never manages browsers: Screen lists the agents on it and nothing else.
+  test("the person never manages browsers: Screen lists the agents' displays and nothing else", async () => {
     const list = await Bun.file(new URL("../components/screen/AgentScreens.tsx", import.meta.url)).text();
-    expect(list).not.toMatch(/New browser|Open browser|Delete browser|action: "(create|start|stop|delete|grant)"/);
-    expect(source).not.toMatch(/Close browser|Delete browser/);
+    expect(list).not.toMatch(/New browser|Open browser|Delete browser|Close browser|action: "(create|start|stop|delete|grant)"/);
+    // An agent's browser is a window on its monitor of the agent screen, so there is no row of its own.
+    expect(list).not.toMatch(/AgentBrowserCard|browserRequest/);
+    expect(list).toContain("listDisplays");
   });
 }

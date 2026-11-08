@@ -1,59 +1,16 @@
-import { Platform } from "react-native";
 import { buildAuthorizationHeader } from "./auth";
 import { resolveStoredServerURL } from "./pinnedTransport";
 import type { StoredServer } from "./storage";
-import { authSubprotocol } from "./webSocketAuth";
 
-export interface BrowserResource {
-  id: string;
-  name: string;
-  state: string;
-  control: string;
-  generation?: string;
-  target?: string;
-  /** The Worker holding the browser, when an agent does. */
-  agent?: string;
-}
-export interface BrowserLease {
-  epoch: number;
-  generation: string;
-  target: string;
-  kind: string;
-  expires_at: string;
-}
-export interface BrowserCommand {
-  kind: string;
-  url?: string;
-  target?: string;
-  text?: string;
-  input?: BrowserInput;
-}
-export interface BrowserInput {
-  kind: string;
-  x?: number;
-  y?: number;
-  dx?: number;
-  dy?: number;
-  button?: string;
-  key?: string;
-  text?: string;
-}
+/**
+ * What the computer says about the agent browser. The browser itself is a window on the agent's own
+ * monitor of the agent screen, listed and shown with the agent's other programs (services/display);
+ * the one thing asked here is the Virtual screen switch.
+ */
 export interface BrowserResponse {
-  resources?: BrowserResource[];
-  resource?: BrowserResource;
   capability?: { available: boolean; reason?: string };
-  lease?: BrowserLease;
-  result?: unknown;
-  /** What the person did, told to an agent; never shown to the person. */
-  notes?: string[];
   /** Whether new Workers get a virtual-screen browser by default (the Labs switch). */
   virtual_screen?: boolean;
-}
-export interface BrowserFrame {
-  type: "frame";
-  seq: number;
-  data: string;
-  metadata: { deviceWidth: number; deviceHeight: number };
 }
 /** HTTP failure with the status kept apart from any body text, so callers can explain it. */
 export class BrowserRequestError extends Error {
@@ -70,7 +27,7 @@ async function endpoint(server: StoredServer, path: string) {
 }
 export async function browserRequest(
   server: StoredServer,
-  request: { action: "list" | "status" | "halt" | "settings"; id?: string; enabled?: boolean },
+  request: { action: "settings"; enabled?: boolean },
   signal?: AbortSignal,
 ): Promise<BrowserResponse> {
   const url = await endpoint(server, "/browser");
@@ -90,169 +47,4 @@ export async function browserRequest(
     throw new BrowserRequestError(result?.error || "Browser request failed", response.status, result?.error || body.trim().slice(0, 300));
   }
   return result;
-}
-
-// One resource and one canonical server per instance. No automatic retake on reconnect.
-export class BrowserViewer {
-  private socket: WebSocket | null = null;
-  private closed = false;
-  private serial = 0;
-  private revision = 0;
-  private lease: BrowserLease | undefined;
-  private timer: ReturnType<typeof setInterval> | undefined;
-  private pending = new Map<string, {
-    revision: number;
-    resolve(value: BrowserResponse): void;
-    reject(error: Error): void;
-    timer: ReturnType<typeof setTimeout>;
-  }>();
-  private tail: Promise<unknown> = Promise.resolve();
-  private queued = 0;
-  constructor(
-    private server: StoredServer,
-    private id: string,
-    private handlers: {
-      frame(frame: BrowserFrame): void;
-      status(value: string): void;
-      resource(value: BrowserResource): void;
-      /** Socket liveness; status strings stay informational. */
-      connection?(state: "live" | "lost"): void;
-      /** Whether this viewer holds a server-issued input lease. */
-      lease?(held: boolean): void;
-    },
-  ) {}
-  async connect() {
-    const url = await endpoint(this.server, "/browser/viewer");
-    url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
-    url.searchParams.set("id", this.id);
-    const authorization = await buildAuthorizationHeader({ daemonId: this.server.daemonId, purpose: `mewla-browser-view:${this.id}` });
-    if (this.closed) return;
-    let socket: WebSocket;
-    if (Platform.OS === "web") {
-      // A browser WebSocket cannot set a header; the daemon reads the subprotocol instead.
-      socket = new WebSocket(url.toString(), [authSubprotocol(authorization)]);
-    } else {
-      const NativeWebSocket = WebSocket as unknown as { new(url: string, protocols: undefined, options: { headers: Record<string, string> }): WebSocket };
-      socket = new NativeWebSocket(url.toString(), undefined, { headers: { Authorization: authorization } });
-    }
-    this.socket = socket;
-    socket.onopen = () => {
-      if (this.closed) return;
-      this.handlers.status("Viewing");
-      this.handlers.connection?.("live");
-      // Fresh control state for this connection; cached state may predate a drop.
-      socket.send(JSON.stringify({ type: "ping" }));
-      this.timer = setInterval(() => {
-        if (this.closed || socket.readyState !== WebSocket.OPEN) return;
-        socket.send(JSON.stringify({ type: "ping" }));
-        if (this.lease) void this.command({ kind: "heartbeat" }).catch(() => {});
-      }, 10000);
-    };
-    socket.onmessage = (event) => {
-      if (this.closed || typeof event.data !== "string" || event.data.length > 3000000) return;
-      let message;
-      try { message = JSON.parse(event.data); } catch { return; }
-      if (message.type === "frame") {
-        if (Number.isSafeInteger(message.seq) && typeof message.data === "string" && /^[A-Za-z0-9+/=]+$/.test(message.data)) this.handlers.frame(message);
-      } else if (message.type === "response") {
-        const pending = this.pending.get(message.request_id);
-        if (!pending) return;
-        clearTimeout(pending.timer);
-        this.pending.delete(message.request_id);
-        if (pending.revision !== this.revision) { pending.reject(new Error("Control changed")); return; }
-        if (message.error) {
-          if (this.lease) this.handlers.lease?.(false);
-          this.lease = undefined;
-          this.handlers.status(message.error);
-          pending.reject(new Error(message.error));
-        } else {
-          const result: BrowserResponse = message.response;
-          if (result.lease) {
-            if (!this.lease) this.handlers.lease?.(true);
-            this.lease = result.lease;
-          }
-          if (result.resource) this.handlers.resource(result.resource);
-          pending.resolve(result);
-        }
-      } else if (message.type === "pong" && message.resource) this.handlers.resource(message.resource);
-      else if (message.type === "error") this.handlers.status(message.error);
-    };
-    socket.onerror = () => {
-      if (this.closed) return;
-      this.handlers.status("Connection failed. Reconnect to view this browser.");
-      this.handlers.connection?.("lost");
-    };
-    socket.onclose = () => {
-      if (!this.closed) {
-        this.handlers.status("Disconnected. Your browser is still on the server.");
-        this.handlers.connection?.("lost");
-      }
-      this.close();
-    };
-  }
-  ack(seq: number) {
-    if (!this.closed && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: "ack", seq }));
-  }
-  private request(type: "control" | "release" | "command" | "touch" | "halt", command?: BrowserCommand): Promise<BrowserResponse> {
-    if (this.closed || this.socket?.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Viewer is disconnected"));
-    const request_id = String(++this.serial);
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(request_id);
-        reject(new Error("Browser response timed out. Reconnect before continuing."));
-        if (!this.closed) this.handlers.connection?.("lost");
-        this.close();
-      }, 15000);
-      this.pending.set(request_id, { resolve, reject, timer, revision: this.revision });
-      this.socket!.send(JSON.stringify({ type, request_id, lease: this.lease, command }));
-    });
-  }
-  control() { this.revision++; this.lease = undefined; return this.request("control"); }
-  /**
-   * The person's own input while an agent holds the browser: it reaches the
-   * page without a lease and the agent is told what happened, so the agent
-   * decides what it means. Nothing waits for an answer.
-   */
-  touch(input: BrowserInput) {
-    if (this.closed || this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify({ type: "touch", command: { kind: "input", input } }));
-  }
-  /** Stop: ends the agent's control; it is told and does not come back on its own. */
-  async halt() {
-    const response = await this.request("halt");
-    this.handlers.status("Viewing · Agent stopped");
-    return response;
-  }
-  async release() {
-    this.revision++;
-    this.lease = undefined;
-    const response = await this.request("release");
-    this.handlers.status("Viewing · Agent may request control");
-    return response;
-  }
-  command(command: BrowserCommand): Promise<BrowserResponse> {
-    if (this.queued >= 32) return Promise.reject(new Error("Input is busy; wait a moment"));
-    this.queued++;
-    const revision = this.revision;
-    const next = this.tail.then(() => {
-      if (revision !== this.revision || !this.lease) throw new Error("Take control before interacting");
-      return this.request("command", command);
-    });
-    this.tail = next.catch(() => {}).finally(() => { this.queued--; });
-    return next;
-  }
-  close() {
-    if (this.closed) return;
-    this.closed = true;
-    this.lease = undefined;
-    clearInterval(this.timer);
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
-      pending.reject(new Error("Viewer closed"));
-    }
-    this.pending.clear();
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify({ type: "close" }));
-    this.socket?.close(1000, "viewer detached");
-    this.socket = null;
-  }
 }
