@@ -3,7 +3,8 @@
 the comparison tool layers. Standard library only.
 
   aub.py published [--out FILE]        fetch Scale's per-trial Cua Driver Bench dataset and write the aggregates
-  aub.py convert-web SUITE.json ...    browser/suite.mjs output  -> results/<run>.json
+  aub.py convert-web [--merge] [--run-id ID] SUITE.json ...
+                                       browser/suite.mjs output  -> results/<run>.json (--merge: the files are one run)
   aub.py import-cdb RUN_DIR ...        Cua Driver Bench results.jsonl -> results/<run>.json
   aub.py report [FILE ...]             table per suite/condition (default: every file in results/), with the
                                        published rows next to ours when the suite matches
@@ -98,10 +99,14 @@ def check(path):
 
 # ---------------------------------------------------------------- converters
 
-def convert_web(files):
-    """browser/suite.mjs rows. `side` mewla = mewla_chrome (real chain, or stand-in: the file's meta says which)."""
-    for f in files:
-        d = json.load(open(f))
+def convert_web(files, merge=False, run_id_override=None):
+    """browser/suite.mjs rows. `side` mewla = mewla_chrome (real chain, or stand-in: the file's meta says which).
+    --merge: the files are parts of one run (one per site of WebArena-Verified): one result file, the first one's meta."""
+    docs = [json.load(open(f)) for f in files]
+    if merge:
+        docs = [dict(docs[0], rows=[r for d in docs for r in d["rows"]])]
+        files = files[:1]
+    for f, d in zip(files, docs):
         meta = d.get("meta") or {}
         rows = []
         for r in d["rows"]:
@@ -110,12 +115,16 @@ def convert_web(files):
             tok = {"input": r.get("input"), "output": r.get("output"), "cache_read": r.get("cache_read"), "cache_write": r.get("cache_create")}
             rows.append(row(r["task"], r["rep"], r["ok"], round(r["wall_ms"] / 1000, 1), r.get("turns"), r.get("tool_calls"), tok,
                             r.get("cost_usd"), None if ni is None else ni.get("undisturbed"), disturbed))
+            if r.get("extra"):
+                rows[-1]["extra"] = dict(r["extra"], **({"dir": r["extra"]["dir"] if not os.path.isabs(r["extra"]["dir"]) else os.path.basename(r["extra"]["dir"])} if r["extra"].get("dir") else {}))
+            if r.get("timed_out"):
+                rows[-1]["note"] = "no result before the trial timeout"
             if ni:
                 rows[-1]["nonint"] = {k: ni.get(k) for k in ("typed", "keys_received", "typing_lost", "key_focus_lost", "raised_over_user", "raised_covering_user", "covered_ms", "pointer_moved", "user_page_hidden")}
         tool = {"mewla": "mewla_chrome", "ab": "agent-browser"}.get(d.get("side"), d.get("side"))
-        run_id = meta.get("run_id") or os.path.basename(f).rsplit(".", 1)[0]
-        extra = {k: meta[k] for k in ("transport", "tool_version", "notes", "nonint_measured", "nonint_not_measured") if k in meta}
-        save(new_run(run_id, meta.get("suite", "web-fixture"), "linux", tool, "background" if any(r.get("nonint") for r in d["rows"]) else "foreground",
+        run_id = run_id_override or meta.get("run_id") or os.path.basename(f).rsplit(".", 1)[0]
+        extra = {k: meta[k] for k in ("transport", "tool_version", "notes", "nonint_measured", "nonint_not_measured", "limits") if k in meta}
+        save(new_run(run_id, meta.get("suite", "web-fixture"), "linux", meta.get("tool") or tool, meta.get("condition") or ("background" if any(r.get("nonint") for r in d["rows"]) else "foreground"),
                      d.get("model", "claude-sonnet-5-5"), "claude -p, one tool layer, --max-turns 30", rows, **extra))
 
 
@@ -231,10 +240,13 @@ def report(files):
     files = files or sorted(glob.glob(os.path.join(RESULTS, "*.json")))
     runs = []
     pub = None
+    pub_wav = []
     for f in files:
         d = json.load(open(f))
         if d.get("schema") == "aub-published/1":
             pub = d
+        elif d.get("schema") == "aub-published-wav/1":
+            pub_wav.append(d)
         elif d.get("schema") == SCHEMA:
             runs.append(d)
     groups = {}
@@ -242,22 +254,47 @@ def report(files):
         groups.setdefault((r["suite"], r["condition"]), []).append(r)
     for (suite, cond), rs in sorted(groups.items()):
         print("\n### %s, %s\n" % (suite, cond))
-        print("| tool layer | run | model | pass (task done) | %s | disturbed | wall s (med) | steps (med) | tokens (med) |" %
+        print("| tool layer | run | model | pass (task done) | %s | 95%% CI | disturbed | wall s (med) | steps (med) | tokens (med) | cost $ (med) |" %
               ("full pass (done + undisturbed)" if cond == "background" else "full pass"))
-        print("|---|---|---|---|---|---|---|---|---|")
+        print("|---|---|---|---|---|---|---|---|---|---|---|")
         for r in rs:
             s = summarize(r)
             dist = "%d/%d%s" % (s["disturbed"], s["measured"], " (" + ", ".join("%s %d" % kv for kv in sorted(s["by"].items())) + ")" if s["by"] else "") if s["measured"] else "n/a"
-            print("| %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (r["tool"], r["run_id"], r["model"], pct(s["ok"], s["n"]), pct(s["full"], s["n"]), dist,
-                                                                     s["wall"], s["steps"], s["tokens"]))
+            print("| %s | %s | %s | %s | %s | %s-%s%% | %s | %s | %s | %s | %s |" % (r["tool"], r["run_id"], r["model"], pct(s["ok"], s["n"]), pct(s["full"], s["n"]), s["ci"][0], s["ci"][1],
+                                                                                dist, s["wall"], s["steps"], s["tokens"], s["cost"]))
         if pub and suite.startswith("cdb-"):
             tasks = {t for r in rs for t in (x["task"] for x in r["rows"])}
             for drv in ("cua-driver", "agent-desktop", "browser-use"):
                 k, n, dn = published_rate(pub, drv, cond, tasks)
                 if n:
-                    print("| %s | published (Scale VM) | claude-sonnet-5-5 | %s | %s | | | | |" % (drv, pct(dn, n), pct(k, n)))
+                    print("| %s | published (Scale VM) | claude-sonnet-5-5 | %s | %s | | | | | | | |" % (drv, pct(dn, n), pct(k, n)))
+        for r in rs:
+            if r["suite"].startswith("webarena"):
+                wav_breakdown(r)
+        if suite.startswith("webarena"):
+            for d in pub_wav:
+                print("\nPublished (labelled as such; not our runs): %s" % d["source"])
+                for p in d["rows"]:
+                    if p["suite"] == suite or p["suite"] == "webarena":
+                        print("- %s, %s: %s%% pass@1 (%s)" % (p["model"], p["subset"], p["pass_at_1_pct"], p["runs"]))
+                print("  " + d["note"])
     if not groups:
         print("no results yet")
+
+
+def wav_breakdown(r):
+    """WebArena-Verified: where a tool layer passes and where it does not, by site and task type, and what the judge and the
+    guard said. Every row carries the judge's score and the guard's violations in `extra`."""
+    cells = {}
+    for x in r["rows"]:
+        e = x.get("extra") or {}
+        for key in (e.get("site", "?"), e.get("type", "?")):
+            c = cells.setdefault(key, [0, 0])
+            c[0] += x["ok"]; c[1] += 1
+    viol = sum(1 for x in r["rows"] if (x.get("extra") or {}).get("guard_violations"))
+    noparse = sum(1 for x in r["rows"] if (x.get("extra") or {}).get("parsed") is False)
+    print("\n%s: %s; guard violations %d, final message without JSON %d, no result before the timeout %d" % (
+        r["tool"], ", ".join("%s %d/%d" % (k, c[0], c[1]) for k, c in sorted(cells.items())), viol, noparse, sum(1 for x in r["rows"] if x.get("note"))))
 
 
 def trend(suite, tool):
@@ -275,7 +312,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("published"); p.add_argument("--out", default=os.path.join(RESULTS, "published-cdb-scale.json")); p.add_argument("--rows", help="a saved JSON list of the dataset's trial rows, instead of fetching")
-    p = sub.add_parser("convert-web"); p.add_argument("files", nargs="+")
+    p = sub.add_parser("convert-web"); p.add_argument("files", nargs="+"); p.add_argument("--merge", action="store_true"); p.add_argument("--run-id")
     p = sub.add_parser("import-cdb"); p.add_argument("dirs", nargs="+")
     p = sub.add_parser("report"); p.add_argument("files", nargs="*")
     p = sub.add_parser("trend"); p.add_argument("--suite"); p.add_argument("--tool")
@@ -285,7 +322,7 @@ def main():
     if a.cmd == "published":
         published(a.out, a.rows)
     elif a.cmd == "convert-web":
-        convert_web(a.files)
+        convert_web(a.files, a.merge, a.run_id)
     elif a.cmd == "import-cdb":
         import_cdb(a.dirs)
     elif a.cmd == "report":

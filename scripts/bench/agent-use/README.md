@@ -11,6 +11,7 @@ tokens are computed by `aub.py report` from the trial rows in `results/*.json` (
 | Suite | Tool layers | Where | Source |
 |---|---|---|---|
 | `web-fixture` (14 tasks, checker reads the fixture's own event log) + a person typing in another window | `mewla_chrome` (real extension, native host, bridge), `agent-browser` for comparison | this Linux box | `../browser/` + `web/` |
+| `webarena-verified-hard` (a seeded, stratified sample of the Hard subset's single-site tasks on shopping, shopping_admin, reddit and gitlab; WebArena-Verified's own checker, no LLM judge) | `mewla_chrome` (background, person typing), `mewla_virtual_screen` (the virtual-screen browser of `daemon/browser`, behind an isolated daemon), `agent-browser`, `browser-use` (its MCP server), all on the same model and prompt; Anthropic's published numbers as a reference | this Linux box, Docker | `wav/` |
 | `cdb-macos-benchlab` (Cua Driver Bench v2: IR-01..04, MB-09 background; MB-10/11 foreground) | `mewla_computer`, `agent-desktop`; cua-driver, Codex CU, browser-use as published numbers | the Mac | `cdb/`, upstream [trycua/cua](https://github.com/trycua/cua/tree/main/libs/cua-driver-bench) (FSL-1.1-MIT, pinned in `cdb/PIN`, not vendored) |
 
 The model is fixed (`claude-sonnet-5-5`, written into every file) so the numbers move with the tool layer, not the model.
@@ -24,6 +25,12 @@ scripts/bench/agent-use/web/run.sh --reps 3 --with-long
 # Same, on a display with a real window manager (kwin_x11; a bare X server is not a desktop), tagged for before/after:
 scripts/bench/agent-use/web/run.sh --reps 3 --with-long --sides mewla --wm kwin --tag after-my-change
 # Extra checks of what a task needs from the page being drawn (a window kept out of the way): --only shot,raf
+
+# WebArena-Verified (Docker images am1n3e/webarena-verified-<site>, ~60 GB for the four; a venv with `pip install webarena-verified`):
+# the sample is wav/tasks-hard-60.json (wav/wav.py sample --n 60 --seed 1108). Sites come up one at a time, memory-capped, behind
+# wav/proxy.py, which records the HAR the checker reads, so every tool layer is judged the same way.
+scripts/bench/agent-use/wav/run.sh --tasks scripts/bench/agent-use/wav/tasks-hard-60.json --sides mewla,ab,bu,vscreen --keep --no-convert
+# --sides vscreen starts wav/vscreen.sh: an isolated daemon (own state dir, port 9971 and tmux server) with the Virtual screen switch on.
 
 # macOS, inside a Mewla Worker on the Mac (one unlock, caffeinate inside the script). Ask the Mac with:
 #   mewla computers send mac -kind request -user-said "<the user's words>" "<what to run: see cdb/run_mac.sh>"
@@ -58,7 +65,24 @@ python3 scripts/bench/agent-use/aub.py check results/*.json
 - `cdb/run_mac.sh`, `cdb/PIN`, `cdb/mewla-arm.patch`: the Mac run. The patch adds one arm (`cc-mewla-computer`:
   `mewla agent-use computer-mcp`, tool classes for `mewla_computer`) to the pinned upstream runner; it is applied to a
   scratch checkout, never committed upstream or here as a copy of their code.
+- `wav/`: the WebArena-Verified suite: `run.sh` (the whole run), `wav.py` (site containers, sampling, judging), `proxy.py` (HAR),
+  `tasks.mjs` (prompts, reset, judge, guard), `vscreen.sh` (isolated daemon for the virtual-screen browser), `tasks-hard-60.json`.
 - `results/`: one JSON per run, `published-cdb-scale.json` for Scale's numbers. Raw recordings and transcripts stay out of git.
+
+## WebArena-Verified: what is judged, and how the answers stay out of reach
+
+- Judged by `webarena-verified`'s own evaluator: the agent's final JSON (`task_type`, `status`, `retrieved_data`) and, for tasks that
+  change something or navigate, the network trace. `wav/proxy.py` publishes each site on the port its base URL names and writes the
+  HAR (the browser's own request headers, so navigation events are recognised), whatever browser drives it. Magento admin is signed
+  in by the proxy (the auto-login header the official runner uses); the other sites' accounts are named in the prompt.
+- A task that changes something starts from a fresh container (`docker rm` + run: a restart keeps the writable layer).
+- The prompt is built from `agent-input-get` (intent + start URLs) and never from the dataset file that holds the expected answers;
+  the task type is added to the prompt (the official input leaves it to the model, which turned out to be noise).
+- The shortcut of reading the answers (the dataset file in the package, the repo, the public dataset): the tools given to the model
+  are only the browser tool, and every trial is audited afterwards (`wav/tasks.mjs`, `guard`): a tool call that mentions the dataset,
+  the package, `file:`, the repository or a host that is not a site, or (agent-browser's CLI) fetches a site with curl/wget, makes the
+  trial a failure and is counted in the report. Raw calls and the HAR of each trial are kept in the run's `trials/` directory.
+- Spend guard: `AUB_COST_LEDGER` / `AUB_COST_STOP` in `browser/suite.mjs` stop a run once its trials' `cost_usd` sums to the limit.
 
 ## Rules this keeps
 
