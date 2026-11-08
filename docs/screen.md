@@ -183,9 +183,9 @@ team, a priority, a select) is chosen from in one step: `set_value` with the
 item's title opens its menu, takes the item and closes it again in tens of
 milliseconds, not across a model's turns. An app behind your window that opens
 a menu makes macOS take the keyboard from your window while the menu is open,
-so your window resigns key and your typing is lost; Mewla puts a guard on your
-front app for as long as it acts on an app behind it, which keeps your window
-from being told (`MEWLA_SCREEN_KEYGUARD=off` turns the guard off), and the
+so your window resigns key and your typing is lost; Mewla can put a guard on your
+front app for as long as it acts on an app behind it, to keep your window
+from being told (it is off unless `MEWLA_SCREEN_KEYGUARD=drop` or `release` is set: on macOS 27 it has not been seen to hold anything, so it is an experiment), and the
 answer says when it held the keyboard. The guard needs the Accessibility
 permission and macOS's window-server calls; without them the choice is still
 made, but your typing can be blocked while the menu is open. Shortcuts and menu
