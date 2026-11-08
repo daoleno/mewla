@@ -48,6 +48,8 @@ export interface RisingSheetProps {
    */
   layout?: "card" | "fullscreen";
   avoidKeyboard?: boolean;
+  /** Backdrop colour; the theme's modal backdrop unless a surface owns its own (terminal chrome). */
+  backdropColor?: string;
   children?: React.ReactNode;
 }
 
@@ -59,9 +61,11 @@ export function RisingSheet({
   align = "center",
   layout = "card",
   avoidKeyboard = false,
+  backdropColor,
   children,
 }: RisingSheetProps) {
   const colors = useAppColors();
+  const scrim = backdropColor ?? colors.modalBackdrop;
   const desktop = useDesktopWeb();
   const insets = useSafeAreaInsets();
   // Beside a foldable's rail, not under it; backdrops still cover the window.
@@ -103,7 +107,7 @@ export function RisingSheet({
         <View style={[styles.root, styles.center, styles.dialogRoot]}>
           <AnimatedPressable
             accessibilityLabel="Close"
-            style={[styles.backdrop, { backgroundColor: colors.modalBackdrop }, backdropStyle]}
+            style={[styles.backdrop, { backgroundColor: scrim }, backdropStyle]}
             onPress={onClose}
           />
           <Animated.View
@@ -141,7 +145,7 @@ export function RisingSheet({
       <AnimatedPressable
         style={[
           styles.backdrop,
-          { backgroundColor: colors.modalBackdrop },
+          { backgroundColor: scrim },
           backdropStyle,
         ]}
         onPress={onClose}
@@ -169,7 +173,7 @@ export function RisingSheet({
           <AnimatedPressable
             style={[
               styles.backdrop,
-              { backgroundColor: colors.modalBackdrop },
+              { backgroundColor: scrim },
               backdropStyle,
             ]}
             onPress={onClose}

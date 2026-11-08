@@ -86,7 +86,8 @@ describe("structured chat keyboard overlay", () => {
     expect(appConfig).toContain('"softwareKeyboardLayoutMode": "resize"');
     expect(mode).toContain("SOFT_INPUT_ADJUST_NOTHING");
     expect(mode).toContain("KeyboardController.setDefaultMode()");
-    expect(calendar).toContain("KeyboardAvoidingView");
+    expect(calendar).toContain("keyboardAvoiding");
+    expect(source("../ui/BottomSheetFrame.tsx")).toContain("KeyboardAvoidingView");
     expect(work).toContain("KeyboardAvoidingView");
   });
 

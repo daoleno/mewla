@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { useAppTheme } from "../../constants/tokens";
 import {
   alertKey,
@@ -15,6 +15,8 @@ import { selectCurrentServerCalendar, useCalendar, type CalendarItem } from "../
 import { useCurrentServer } from "../../store/currentServer";
 import { AppText } from "../ui/AppText";
 import { Button } from "../ui/Button";
+import { InlineNotice } from "../ui/InlineNotice";
+import { RisingSheet } from "../ui/RisingSheet";
 
 /**
  * The alert card: covers the screen with the item that needs an answer, on
@@ -115,46 +117,39 @@ export function CalendarAlertCard({
   };
   const notes = item.notes?.trim();
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={() => {}}>
-      <View style={styles.backdrop}>
-        <View
-          accessibilityViewIsModal
-          testID="calendar-alert-card"
-          style={[styles.card, { backgroundColor: colors.bgPrimary }]}
-        >
-          <ScrollView contentContainerStyle={styles.content}>
-            <AppText variant="caption" tone="accent" accessibilityRole="header">
-              {kindLabel[item.kind]}
-              {more > 0 ? ` · ${more} more waiting` : ""}
-            </AppText>
-            <AppText variant="display">{item.title}</AppText>
-            <AppText variant="heading" tone="secondary">
-              {formatCalendarTime(item)}
-            </AppText>
-            {notes ? <AppText>{notes}</AppText> : null}
-            {error ? (
-              <AppText tone="danger" accessibilityRole="alert">
-                {error}
-              </AppText>
-            ) : null}
-            <View style={styles.actions}>
-              <Button label="Done" variant="filled" size="lg" block disabled={busy} onPress={() => void act(onDone)} />
-              <View style={styles.row}>
-                <Button label="Snooze 5 min" variant="tinted" block disabled={busy} style={styles.flex} onPress={() => void act(() => onSnooze(5))} />
-                <Button label="Snooze 15 min" variant="tinted" block disabled={busy} style={styles.flex} onPress={() => void act(() => onSnooze(15))} />
-              </View>
-              <Button label="Open in Calendar" variant="plain" block disabled={busy} onPress={onOpen} />
+    <RisingSheet visible onClose={dismissNothing} cardStyle={[styles.card, { backgroundColor: colors.bgPrimary }]}>
+      <View accessibilityViewIsModal testID="calendar-alert-card" style={styles.cardBody}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <AppText variant="caption" tone="accent" accessibilityRole="header">
+            {kindLabel[item.kind]}
+            {more > 0 ? ` · ${more} more waiting` : ""}
+          </AppText>
+          <AppText variant="display">{item.title}</AppText>
+          <AppText variant="heading" tone="secondary">
+            {formatCalendarTime(item)}
+          </AppText>
+          {notes ? <AppText>{notes}</AppText> : null}
+          {error ? <InlineNotice tone="danger" title={error} /> : null}
+          <View style={styles.actions}>
+            <Button label="Done" variant="filled" size="lg" block disabled={busy} onPress={() => void act(onDone)} />
+            <View style={styles.row}>
+              <Button label="Snooze 5 min" variant="tinted" block disabled={busy} style={styles.flex} onPress={() => void act(() => onSnooze(5))} />
+              <Button label="Snooze 15 min" variant="tinted" block disabled={busy} style={styles.flex} onPress={() => void act(() => onSnooze(15))} />
             </View>
-          </ScrollView>
-        </View>
+            <Button label="Open in Calendar" variant="plain" block disabled={busy} onPress={onOpen} />
+          </View>
+        </ScrollView>
       </View>
-    </Modal>
+    </RisingSheet>
   );
 }
 
+/** The card stays until the person answers: neither the backdrop nor Back closes it. */
+const dismissNothing = () => {};
+
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", justifyContent: "center", alignItems: "center", padding: 20 },
-  card: { maxWidth: 520, width: "100%", maxHeight: "92%", borderRadius: 28 },
+  card: { maxWidth: 520, width: "100%", maxHeight: "92%", alignSelf: "center", borderRadius: 28, overflow: "hidden" },
+  cardBody: { flexShrink: 1 },
   content: { padding: 28, gap: 14 },
   actions: { gap: 10, marginTop: 14 },
   row: { flexDirection: "row", gap: 10 },

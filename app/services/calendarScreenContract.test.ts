@@ -84,8 +84,9 @@ describe("Calendar screen contract", () => {
     expect(source).toContain("Reminders disabled");
     expect(source).toContain("Open notification settings");
     expect(source).toContain("syncCalendarNotifications");
-    expect(source).toContain("KeyboardAvoidingView");
-    expect(source).toContain('Platform.OS === "ios" ? "padding" : "height"');
+    // The shared sheet owns the keyboard lift; the editor only asks for it.
+    expect(source).toContain("<BottomSheetFrame");
+    expect(source).toContain("keyboardAvoiding");
     expect(source).toContain("keyboardDismissMode=\"on-drag\"");
     expect(source).toContain("editorSessionId");
     expect(source).toContain("React.memo(function Field");
