@@ -2194,11 +2194,10 @@ func (w *Watcher) resolvePendingProviderAdmission(
 	if !ok {
 		return InputAdmission{}, false
 	}
-	identity, known := w.targetForSession(submission.SessionID)
-	if !known || delegatedTurnIdentity(identity) != submission.ProcessIdentity ||
-		w.currentPaneGeneration(submission.SessionID) != submission.PaneGeneration {
-		return InputAdmission{}, false
-	}
+	// The provider's own facts are free to compare; proving the pane's
+	// process identity costs tmux commands and a process snapshot. Poll runs
+	// this for every pending admission, so the identity is proven only for the
+	// one admission the provider actually reported.
 	switch strings.TrimSpace(provider.Status) {
 	case "running", "completed", "failed", "interrupted", "cancelled":
 	default:
@@ -2207,6 +2206,11 @@ func (w *Watcher) resolvePendingProviderAdmission(
 	admission := AdmissionFromObservation(provider)
 	if strings.TrimSpace(provider.ID) == "" || admission.Empty() ||
 		strings.TrimSpace(admission.SHA256) != submission.PayloadSHA256 {
+		return InputAdmission{}, false
+	}
+	identity, known := w.targetForSession(submission.SessionID)
+	if !known || delegatedTurnIdentity(identity) != submission.ProcessIdentity ||
+		w.currentPaneGeneration(submission.SessionID) != submission.PaneGeneration {
 		return InputAdmission{}, false
 	}
 	resolved, err := ledger.ResolveInputAdmission(InputAdmissionResolution{
