@@ -20,6 +20,9 @@ type Process struct {
 	RSS, Ticks                              uint64
 	UID                                     int
 	Args, ResourceID, WorkerID, ContainerID string
+	// readAt is when the record was read: a reader may keep it for a while
+	// instead of reading the process again (see readProcesses).
+	readAt time.Time
 }
 type ProcessIdentity struct {
 	PID   int    `json:"pid"`
@@ -34,19 +37,52 @@ var ownershipRegistry struct {
 	entries map[ProcessIdentity]string
 }
 
+// Processes lists the machine's processes with their ownership. fresh reads
+// every process again: it is for deciding whether a process is gone, which a
+// zombie's old record would not show. Otherwise a list read within the last two
+// seconds is the answer, and processes read within two seconds are not read
+// again.
+func Processes(fresh bool) (map[int]Process, error) {
+	if fresh {
+		return processesWithin(0, false)
+	}
+	return processesWithin(telemetryRecordAge, true)
+}
+
+// ProcessesRecent is the list for observing what Workers own, many times a
+// minute: a process that appears is always read, and one already known is read
+// again once its record is ownershipRecordAge old. What a process is owned by
+// is settled when it is first read (its marker, or its parent's), so a record
+// of that age still answers who owns what; ticks and memory are Processes' to
+// keep current.
+func ProcessesRecent() (map[int]Process, error) {
+	return processesWithin(ownershipRecordAge, false)
+}
+
+// ownershipRecordAge is how old a process's record may be for observing
+// ownership.
+const ownershipRecordAge = 10 * time.Second
+
+// otherUserProcessAge is how old the record of a process of another user may
+// be, when the caller does not need every process read again.
+const otherUserProcessAge = 30 * time.Second
+
+// telemetryRecordAge is how old a record may be for the machine's consumers.
+const telemetryRecordAge = 2 * time.Second
+
 var processCache struct {
 	sync.Mutex
 	at        time.Time
 	processes map[int]Process
 }
 
-func Processes(fresh bool) (map[int]Process, error) {
+func processesWithin(maxAge time.Duration, wholeList bool) (map[int]Process, error) {
 	processCache.Lock()
 	defer processCache.Unlock()
-	if !fresh && processCache.processes != nil && time.Since(processCache.at) < 2*time.Second {
+	if wholeList && processCache.processes != nil && time.Since(processCache.at) < maxAge {
 		return processCache.processes, nil
 	}
-	records, err := readProcesses(processCache.processes)
+	records, err := readProcesses(processCache.processes, maxAge)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +114,11 @@ func Processes(fresh bool) (map[int]Process, error) {
 			}
 		}
 	}
-	processCache.at = time.Now()
+	if maxAge <= telemetryRecordAge {
+		// Only a list of records this young answers a caller that wants the
+		// consumers' ticks.
+		processCache.at = time.Now()
+	}
 	processCache.processes = records
 	return records, nil
 }
@@ -132,7 +172,7 @@ func ObserveLeases(dir string) error {
 		}
 	}
 	ownershipRegistry.Unlock()
-	records, err := Processes(false)
+	records, err := ProcessesRecent()
 	if err != nil {
 		return err
 	}

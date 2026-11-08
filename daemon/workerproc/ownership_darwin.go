@@ -5,11 +5,12 @@ import (
 	"encoding/binary"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/procspawn"
 )
 
-func readProcesses(_ map[int]Process) (map[int]Process, error) {
+func readProcesses(_ map[int]Process, _ time.Duration) (map[int]Process, error) {
 	records, err := processSnapshot()
 	if err != nil {
 		return nil, err

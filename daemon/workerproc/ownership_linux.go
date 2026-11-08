@@ -8,20 +8,35 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
-func readProcesses(previous map[int]Process) (map[int]Process, error) {
+func readProcesses(previous map[int]Process, maxAge time.Duration) (map[int]Process, error) {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now()
 	records := map[int]Process{}
 	for _, entry := range entries {
 		pid, err := strconv.Atoi(entry.Name())
 		if err != nil || pid <= 1 {
 			continue
 		}
+		if old, ok := previous[pid]; ok && now.Sub(old.readAt) < maxAge {
+			records[pid] = old
+			continue
+		}
 		root := filepath.Join("/proc", entry.Name())
+		if old, ok := previous[pid]; ok && maxAge > 0 && old.UID != os.Getuid() && old.ContainerID == "" && now.Sub(old.readAt) < otherUserProcessAge {
+			// Another user's process (a kernel thread, a system service) shows
+			// in no consumer view and owns nothing of a Worker's: its record
+			// is kept for longer while the directory still has its owner.
+			if info, err := os.Stat(root); err == nil && int(info.Sys().(*syscall.Stat_t).Uid) == old.UID {
+				records[pid] = old
+				continue
+			}
+		}
 		raw, err := ReadProcFile(root + "/stat")
 		if err != nil {
 			continue
@@ -30,6 +45,7 @@ func readProcesses(previous map[int]Process) (map[int]Process, error) {
 		if err != nil {
 			continue
 		}
+		p.readAt = now
 		if executable, err := os.Readlink(root + "/exe"); err == nil {
 			p.Args = filepath.Base(strings.TrimSuffix(executable, " (deleted)"))
 		}
