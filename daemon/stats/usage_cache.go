@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -31,6 +32,47 @@ type usageFileEntry[T any] struct {
 	Value T
 }
 
+// usageMemo keeps the bytes of the cache files cachedUsageFile last read or
+// wrote, so a refresh whose source files did not change reads none of them
+// again: each is a read of its own and there is one per source file. The bytes
+// are decoded afresh each time, so a caller may change what it gets. The memo
+// is bounded by the size of those bytes.
+var usageMemo = struct {
+	sync.Mutex
+	entries map[string]usageMemoEntry
+	bytes   int64
+}{entries: map[string]usageMemoEntry{}}
+
+const usageMemoLimit = 64 << 20
+
+type usageMemoEntry struct {
+	stamp usageFileStamp
+	raw   []byte
+}
+
+func usageMemoGet(target string, stamp usageFileStamp) ([]byte, bool) {
+	usageMemo.Lock()
+	defer usageMemo.Unlock()
+	entry, ok := usageMemo.entries[target]
+	if ok && entry.stamp.Size == stamp.Size && entry.stamp.Modified.Equal(stamp.Modified) && entry.stamp.Identity == stamp.Identity {
+		return entry.raw, true
+	}
+	return nil, false
+}
+
+func usageMemoPut(target string, stamp usageFileStamp, raw []byte) {
+	usageMemo.Lock()
+	defer usageMemo.Unlock()
+	if previous, ok := usageMemo.entries[target]; ok {
+		usageMemo.bytes -= int64(len(previous.raw))
+	}
+	if usageMemo.bytes+int64(len(raw)) > usageMemoLimit {
+		usageMemo.entries, usageMemo.bytes = map[string]usageMemoEntry{}, 0
+	}
+	usageMemo.entries[target] = usageMemoEntry{stamp: stamp, raw: raw}
+	usageMemo.bytes += int64(len(raw))
+}
+
 func cachedUsageFile[T any](dir, kind, path string, parse func() (T, error)) (T, error) {
 	if dir == "" {
 		return parse()
@@ -42,9 +84,16 @@ func cachedUsageFile[T any](dir, kind, path string, parse func() (T, error)) (T,
 	stamp := usageStamp(info)
 	key := sha256.Sum256([]byte(kind + "\x00" + path + "\x00" + time.Local.String()))
 	target := filepath.Join(dir, fmt.Sprintf("%x.json", key))
+	if raw, ok := usageMemoGet(target, stamp); ok {
+		var e usageFileEntry[T]
+		if json.Unmarshal(raw, &e) == nil {
+			return e.Value, nil
+		}
+	}
 	if raw, err := os.ReadFile(target); err == nil {
 		var e usageFileEntry[T]
 		if json.Unmarshal(raw, &e) == nil && e.Stamp.Size == stamp.Size && e.Stamp.Modified.Equal(stamp.Modified) && e.Stamp.Identity == stamp.Identity {
+			usageMemoPut(target, stamp, raw)
 			return e.Value, nil
 		}
 	}
@@ -57,6 +106,7 @@ func cachedUsageFile[T any](dir, kind, path string, parse func() (T, error)) (T,
 		raw, err := json.Marshal(usageFileEntry[T]{stamp, value})
 		if err == nil {
 			_ = writeUsageCache(target, raw)
+			usageMemoPut(target, stamp, raw)
 		}
 	}
 	return value, nil
