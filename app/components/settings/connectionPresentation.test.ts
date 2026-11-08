@@ -28,7 +28,7 @@ describe("Settings connection information architecture", () => {
     expect(telegram).toContain('visible={expanded} onClose={closeDetails} layout="fullscreen"');
     expect(telegram).toContain('accessibilityLabel="Back to Settings"');
     expect(telegram).toContain("<TelegramConnectionPanel");
-    expect(panelSource).toContain('action("Retry"');
+    expect(panelSource).toContain('primary("Retry"');
     expect(telegram).toContain("if (!ownerActive.current) return;");
   });
   test("Computers, Channels and Agents have separate entry points", () => {
@@ -126,13 +126,13 @@ describe("Settings connection information architecture", () => {
       'const TELEGRAM_BOTFATHER_URL = "https://t.me/BotFather"',
     );
     expect(telegram).toContain("Linking.openURL(TELEGRAM_BOTFATHER_URL)");
-    expect(panelSource).toContain('action("BotFather"');
+    expect(panelSource).toContain('row("BotFather"');
     expect(panelSource).toContain('"Verify token"');
     expect(panelSource).toContain('"Connect Telegram"');
     expect(panelSource).toContain('accessibilityLabel="Advanced"');
     expect(telegram).not.toContain("telegramStepMarker");
     expect(telegram).not.toContain("Bind Owner");
-    expect(panelSource).toContain('action("Open Telegram"');
+    expect(panelSource).toContain('primary("Open Telegram"');
   });
 
   test("token input is secure, explicitly pasted, and cleared on every exit", () => {
@@ -184,7 +184,9 @@ describe("Settings connection information architecture", () => {
     expect(computersSource).toContain('accessibilityLabel="Pair a computer"');
     expect(settingsSource).toContain('accessibilityHint="Open Telegram details and actions"');
     expect(panelSource).toContain('accessibilityLabel="Telegram bot token"');
-    expect(panelSource).toContain('accessibilityState={{ disabled: unavailable, busy }}');
+    // Disabled and busy state belong to the shared Button and ListRow.
+    expect(panelSource).toContain("<Button");
+    expect(panelSource).toContain("<ListRow");
   });
 
   test("Telegram keeps its backend operations and separates destructive actions", () => {

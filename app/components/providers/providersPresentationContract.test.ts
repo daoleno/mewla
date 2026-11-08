@@ -330,7 +330,7 @@ describe("Agent-first Providers surface contract", () => {
     expect(presentationSource).toContain("providerBaseUrlHostname(");
     expect(presentationSource).toContain("connectionSubtitle(");
     expect(presentationSource).toContain("key={connection.id}");
-    expect(presentationSource).toContain("<Text style={styles.rowTitle}");
+    expect(presentationSource).toContain("title={connection.name}");
   });
 
   test("connection actions sync models through discovery into a picker", () => {
