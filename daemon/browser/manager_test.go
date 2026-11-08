@@ -5,431 +5,224 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// fakeBackend stands in for the one browser: Start makes a host, Window
-// follows a window of it.
+type fakeHost struct{ alive atomic.Bool }
+
+func (h *fakeHost) Alive() bool  { return h.alive.Load() }
+func (h *fakeHost) Close() error { h.alive.Store(false); return nil }
+
 type fakeBackend struct {
-	starts    atomic.Int32
-	startErr  error
-	startGate chan struct{} // when set, Start waits on it
-	mu        sync.Mutex
-	host      *fakeHost
-	windows   []*fakeRuntime
+	mu      sync.Mutex
+	starts  int
+	started chan struct{}
+	err     error
+	hosts   []*fakeHost
 }
 
 func (b *fakeBackend) Capability(context.Context) Capability { return Capability{Available: true} }
-func (b *fakeBackend) Start(ctx context.Context, _ string) (Host, error) {
-	b.starts.Add(1)
-	if b.startGate != nil {
-		select {
-		case <-b.startGate:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
-	if b.startErr != nil {
-		return nil, b.startErr
-	}
-	h := &fakeHost{b: b}
-	h.live.Store(true)
+func (b *fakeBackend) Start(context.Context, string) (Host, error) {
 	b.mu.Lock()
-	b.host = h
-	b.mu.Unlock()
+	defer b.mu.Unlock()
+	if b.err != nil {
+		return nil, b.err
+	}
+	b.starts++
+	h := &fakeHost{}
+	h.alive.Store(true)
+	b.hosts = append(b.hosts, h)
 	return h, nil
 }
-func (b *fakeBackend) opened() int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return len(b.windows)
-}
-func (b *fakeBackend) hostAlive() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.host != nil && b.host.live.Load()
+
+type fakeScreens struct {
+	mu      sync.Mutex
+	windows map[string]int
 }
 
-type fakeHost struct {
-	b    *fakeBackend
-	live atomic.Bool
+func (s *fakeScreens) DisplayEnv(context.Context) (int, string, error) { return 100, "/x", nil }
+func (s *fakeScreens) Monitor(context.Context, string) (image.Rectangle, error) {
+	return image.Rect(1280, 0, 2560, 800), nil
 }
-
-func (h *fakeHost) Alive() bool  { return h.live.Load() }
-func (h *fakeHost) Close() error { h.live.Store(false); return nil }
-func (h *fakeHost) Window(_ context.Context, target string) (Runtime, error) {
-	if !h.live.Load() {
-		return nil, ErrUnavailable
+func (s *fakeScreens) Windows(worker string, n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.windows == nil {
+		s.windows = map[string]int{}
 	}
-	r := &fakeRuntime{host: h, target: target}
-	r.open.Store(true)
-	h.b.mu.Lock()
-	h.b.windows = append(h.b.windows, r)
-	h.b.mu.Unlock()
-	return r, nil
+	s.windows[worker] = n
+}
+func (s *fakeScreens) count(worker string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.windows[worker]
 }
 
-type fakeRuntime struct {
-	host     *fakeHost
-	open     atomic.Bool
-	releases atomic.Int32
-	target   string
-	page     string
-	mu       sync.Mutex
-	inputs   []Input
-}
-
-func (r *fakeRuntime) Target() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.target
-}
-func (r *fakeRuntime) SetTarget(t string) { r.mu.Lock(); r.target = t; r.mu.Unlock() }
-func (r *fakeRuntime) Alive() bool        { return r.open.Load() && r.host.live.Load() }
-func (r *fakeRuntime) Close() error       { r.open.Store(false); return nil }
-func (r *fakeRuntime) Release(context.Context) error {
-	r.releases.Add(1)
-	return nil
-}
-func (r *fakeRuntime) Stream(context.Context) (Stream, error) { return nil, ErrUnavailable }
-func (r *fakeRuntime) Page(context.Context) string            { return r.page }
-func (r *fakeRuntime) Command(_ context.Context, c Command) (json.RawMessage, error) {
-	return json.Marshal(map[string]string{"ran": c.Kind})
-}
-func (r *fakeRuntime) Input(_ context.Context, i Input) error {
-	r.mu.Lock()
-	r.inputs = append(r.inputs, i)
-	r.mu.Unlock()
-	return nil
-}
-
-var human = Owner{Kind: "human", ID: "device/viewer"}
-
-func agentOf(worker string) Owner { return Owner{Kind: "agent", ID: worker} }
-
-var agent = agentOf("task")
-
-func newManager(t *testing.T) (*Manager, *fakeBackend) {
+func newManager(t *testing.T, b *fakeBackend, s *fakeScreens) *Manager {
 	t.Helper()
-	b := &fakeBackend{}
-	m, err := New(t.TempDir(), b)
+	m, err := New(t.TempDir(), b, s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { m.Close() })
-	virtualScreen(t, m, true)
-	return m, b
+	t.Cleanup(func() { _ = m.Close() })
+	return m
 }
 
-// setup is a manager whose Worker "task" has a window: the extension opened
-// it, and id is its row's.
-func setup(t *testing.T) (*Manager, *fakeBackend, string) {
-	t.Helper()
-	m, b := newManager(t)
-	open(t, m, "task", "c1", "tab-1")
-	if b.starts.Load() != 1 || b.opened() != 1 {
-		t.Fatalf("starts %d, windows %d", b.starts.Load(), b.opened())
-	}
-	return m, b, windowID(t, m, "task")
-}
-func open(t *testing.T, m *Manager, worker, key, target string) {
-	t.Helper()
-	if err := m.EnsureHost(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.Opened(context.Background(), worker, key, target); err != nil {
-		t.Fatal(err)
-	}
-}
-func windowID(t *testing.T, m *Manager, worker string) string {
-	t.Helper()
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	e := m.byWorker[worker]
-	if e == nil {
-		t.Fatalf("no window for %s", worker)
-	}
-	return e.resource.ID
-}
-func must(t *testing.T, m *Manager, o Owner, q Request) Response {
-	t.Helper()
-	r, e := m.Handle(context.Background(), o, q)
-	if e != nil {
-		t.Fatal(e)
-	}
-	return r
-}
-func virtualScreen(t *testing.T, m *Manager, on bool) {
-	t.Helper()
-	r := must(t, m, human, Request{Action: "settings", Enabled: &on})
-	if r.VirtualScreen == nil || *r.VirtualScreen != on {
-		t.Fatalf("settings = %+v", r.VirtualScreen)
-	}
-}
-func controlOf(t *testing.T, m *Manager, id string) string {
-	t.Helper()
-	return must(t, m, human, Request{Action: "status", ID: id}).Resource.Control
-}
-func shortLeases(t *testing.T, d time.Duration) {
-	t.Helper()
-	old := leaseLifetime
-	leaseLifetime = d
-	t.Cleanup(func() { leaseLifetime = old })
-}
-func waitUntil(t *testing.T, what string, within time.Duration, f func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(within)
-	for !f() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-// Agents that ask for the browser together share one start; the ones that
-// arrive while it starts wait for it, and each gets its own row.
-func TestConcurrentFirstWindowsShareOneBrowserAndEachGetsARow(t *testing.T) {
-	m, b := newManager(t)
-	b.startGate = make(chan struct{})
+func TestConcurrentFirstWindowsShareOneBrowser(t *testing.T) {
+	b, s := &fakeBackend{}, &fakeScreens{}
+	m := newManager(t, b, s)
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			if err := m.EnsureHost(context.Background()); err != nil {
-				t.Errorf("agent %d: %v", i, err)
-				return
-			}
-			if err := m.Opened(context.Background(), fmt.Sprintf("worker-%d", i), fmt.Sprintf("c%d", i), fmt.Sprintf("tab-%d", i)); err != nil {
-				t.Errorf("agent %d: %v", i, err)
+				t.Error(err)
 			}
 		}()
 	}
-	waitUntil(t, "the browser to start", time.Second, func() bool { return b.starts.Load() == 1 })
-	time.Sleep(30 * time.Millisecond) // the others are queued behind it
-	close(b.startGate)
 	wg.Wait()
-	if b.starts.Load() != 1 || b.opened() != 5 {
-		t.Fatalf("starts %d, windows %d", b.starts.Load(), b.opened())
+	if b.starts != 1 {
+		t.Fatalf("the browser started %d times", b.starts)
 	}
-	listed := must(t, m, human, Request{Action: "list"})
-	if len(listed.Resources) != 5 {
-		t.Fatalf("Screen lists %d rows", len(listed.Resources))
-	}
-	for _, r := range listed.Resources {
-		if r.Control != "agent" || r.State != "running" || r.Agent == "" || r.Target == "" {
-			t.Fatalf("row %+v", r)
+	for _, w := range []string{"a", "b"} {
+		if err := m.Opened(w, "key-"+w); err != nil {
+			t.Fatal(err)
 		}
+	}
+	if s.count("a") != 1 || s.count("b") != 1 {
+		t.Fatalf("windows %v", s.windows)
 	}
 }
 
-// A browser that cannot start says why, to the agent that asked and the next
-// one, and nothing is left stuck afterwards.
 func TestStartFailureNamesItsCauseAndLeavesNothingStuck(t *testing.T) {
-	m, b := newManager(t)
-	b.startErr = errors.New("Private graphical session (kwin_wayland) could not start: no wayland socket")
-	for i := 0; i < 2; i++ {
-		err := m.EnsureHost(context.Background())
-		if err == nil || !strings.Contains(err.Error(), "no wayland socket") {
-			t.Fatalf("attempt %d: %v", i, err)
-		}
+	b := &fakeBackend{err: errors.New("Xvnc could not start")}
+	m := newManager(t, b, &fakeScreens{})
+	if err := m.EnsureHost(context.Background()); err == nil || err.Error() != "Xvnc could not start" {
+		t.Fatalf("err = %v", err)
 	}
-	b.startErr = nil
+	b.mu.Lock()
+	b.err = nil
+	b.mu.Unlock()
 	if err := m.EnsureHost(context.Background()); err != nil {
-		t.Fatalf("still failing once the cause is gone: %v", err)
+		t.Fatalf("the next try: %v", err)
 	}
 }
 
-func TestOnlyThePersonSetsTheSwitchAndAgentsOnlyBeginAndEnd(t *testing.T) {
-	m, _, id := setup(t)
-	for _, q := range []Request{{Action: "settings", Enabled: new(bool)}, {Action: "list"}, {Action: "control", ID: id}, {Action: "halt", ID: id}, {Action: "status", ID: id}, {Action: "touch", ID: id}} {
-		if _, err := m.Handle(context.Background(), agent, q); err == nil {
-			t.Fatalf("an agent was allowed %q", q.Action)
-		}
+func TestAWindowAgainReplacesTheOldAndClosedTakesItOff(t *testing.T) {
+	s := &fakeScreens{}
+	m := newManager(t, &fakeBackend{}, s)
+	_ = m.Opened("w", "k1")
+	_ = m.Opened("w", "k2")
+	if s.count("w") != 1 {
+		t.Fatalf("a Worker has %d windows", s.count("w"))
 	}
-	if !m.VirtualScreen() {
-		t.Fatal("an agent changed the setting")
+	m.Closed("k1") // the old one: nothing changes for the new
+	if s.count("w") != 1 {
+		t.Fatalf("closing the replaced window changed the count to %d", s.count("w"))
 	}
-}
-
-// A Worker with no window yet is not refused: its first tool call opens one.
-func TestAgentWithoutAWindowIsNotRefused(t *testing.T) {
-	m, _ := newManager(t)
-	must(t, m, agentOf("fresh"), Request{Action: "begin"})
-	if r := must(t, m, agentOf("fresh"), Request{Action: "end"}); len(r.Notes) != 0 {
-		t.Fatalf("notes %v", r.Notes)
+	m.Closed("k2")
+	if s.count("w") != 0 {
+		t.Fatalf("the window stayed: %d", s.count("w"))
 	}
 }
 
-func TestViewedFollowsThePageAndClosedTakesTheRowOff(t *testing.T) {
-	m, b, id := setup(t)
-	m.Viewed("c1", "tab-9")
-	if got := must(t, m, human, Request{Action: "status", ID: id}).Resource.Target; got != "tab-9" || b.windows[0].Target() != "tab-9" {
-		t.Fatalf("target %q", got)
-	}
-	m.Closed("c1")
-	if rows := must(t, m, human, Request{Action: "list"}).Resources; len(rows) != 0 {
-		t.Fatalf("rows %+v", rows)
-	}
-	if b.windows[0].Alive() {
-		t.Fatal("the window's runtime stayed open")
-	}
-}
-
-// A Worker that ends takes its window with it, and the extension is asked to
-// close it; the browser stops with the last one.
 func TestForgetClosesTheWindowAndTheBrowserStopsWithTheLast(t *testing.T) {
 	old := hostGrace
 	hostGrace = 0
 	t.Cleanup(func() { hostGrace = old })
-	m, b := newManager(t)
+	b, s := &fakeBackend{}, &fakeScreens{}
+	m := newManager(t, b, s)
 	var closed []string
-	m.SetWindowCloser(func(key string) { closed = append(closed, key) })
-	open(t, m, "one", "c1", "tab-1")
-	open(t, m, "two", "c2", "tab-2")
-	m.Forget("one")
-	if len(closed) != 1 || closed[0] != "c1" {
+	var mu sync.Mutex
+	m.SetWindowCloser(func(key string) { mu.Lock(); closed = append(closed, key); mu.Unlock() })
+	if err := m.EnsureHost(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_ = m.Opened("a", "ka")
+	_ = m.Opened("b", "kb")
+	m.Forget("a")
+	mu.Lock()
+	if len(closed) != 1 || closed[0] != "ka" {
 		t.Fatalf("closed %v", closed)
 	}
-	time.Sleep(50 * time.Millisecond)
-	if !b.hostAlive() {
-		t.Fatal("the browser stopped with a window left")
+	mu.Unlock()
+	if s.count("a") != 0 || s.count("b") != 1 {
+		t.Fatalf("windows %v", s.windows)
 	}
-	m.Forget("two")
-	waitUntil(t, "the browser to stop", time.Second, func() bool { return !b.hostAlive() })
+	time.Sleep(100 * time.Millisecond)
+	if !b.hosts[0].Alive() {
+		t.Fatal("the browser stopped with a window still open")
+	}
+	m.Forget("b")
+	deadline := time.Now().Add(2 * time.Second)
+	for b.hosts[0].Alive() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if b.hosts[0].Alive() {
+		t.Fatal("the browser did not stop with its last window")
+	}
 }
 
 func TestSweepClosesWindowsOfWorkersThatEnded(t *testing.T) {
-	m, _, _ := setup(t)
-	var alive atomic.Bool
-	alive.Store(true)
-	m.SetWorkerLive(func(string) bool { return alive.Load() })
-	go m.sweep(10 * time.Millisecond)
-	time.Sleep(60 * time.Millisecond)
-	if len(must(t, m, human, Request{Action: "list"}).Resources) != 1 {
-		t.Fatal("the window of a live Worker was closed")
+	old := sweepEvery
+	sweepEvery = 20 * time.Millisecond
+	t.Cleanup(func() { sweepEvery = old })
+	s := &fakeScreens{}
+	m := newManager(t, &fakeBackend{}, s)
+	var live atomic.Bool
+	live.Store(true)
+	m.SetWorkerLive(func(string) bool { return live.Load() })
+	_ = m.Opened("w", "k")
+	time.Sleep(100 * time.Millisecond)
+	if s.count("w") != 1 {
+		t.Fatal("a live Worker lost its window")
 	}
-	alive.Store(false)
-	waitUntil(t, "the sweep", time.Second, func() bool { return len(must(t, m, human, Request{Action: "list"}).Resources) == 0 })
-}
-
-func TestSweepLeavesAWindowThePersonHolds(t *testing.T) {
-	m, _, id := setup(t)
-	must(t, m, human, Request{Action: "control", ID: id})
-	m.SetWorkerLive(func(string) bool { return false })
-	go m.sweep(10 * time.Millisecond)
-	time.Sleep(80 * time.Millisecond)
-	if len(must(t, m, human, Request{Action: "list"}).Resources) != 1 {
-		t.Fatal("the person's window was closed")
+	live.Store(false)
+	deadline := time.Now().Add(2 * time.Second)
+	for s.count("w") != 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
 	}
-}
-
-// Take over refuses the agent's next call at once, waits for the one running,
-// and hand back tells the agent what happened.
-func TestTakeOverWaitsForTheRunningCallRefusesTheNextAndHandBackTellsIt(t *testing.T) {
-	m, b, id := setup(t)
-	must(t, m, agent, Request{Action: "begin"}) // a tool call is running
-	got := make(chan Response, 1)
-	go func() { got <- must(t, m, human, Request{Action: "control", ID: id}) }()
-	waitUntil(t, "the take over to start", time.Second, func() bool {
-		m.mu.Lock()
-		e := m.byWorker["task"]
-		m.mu.Unlock()
-		e.mu.Lock()
-		defer e.mu.Unlock()
-		return e.transferring
-	})
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "begin"}); !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "took over") {
-		t.Fatalf("the next call during a take over: %v", err)
-	}
-	select {
-	case <-got:
-		t.Fatal("the take over went ahead with a call still running")
-	case <-time.After(60 * time.Millisecond):
-	}
-	must(t, m, agent, Request{Action: "end"})
-	r := <-got
-	if r.Lease == nil || controlOf(t, m, id) != "human" || b.windows[0].releases.Load() == 0 {
-		t.Fatalf("lease %v, control %q", r.Lease, controlOf(t, m, id))
-	}
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "begin"}); !errors.Is(err, ErrBusy) {
-		t.Fatalf("a call while the person holds it: %v", err)
-	}
-	// The person's input under their lease reaches the page.
-	must(t, m, human, Request{Action: "command", ID: id, Lease: r.Lease, Command: &Command{Kind: "input", Input: &Input{Kind: "text", Text: "hello"}}})
-	if len(b.windows[0].inputs) != 1 {
-		t.Fatalf("inputs %v", b.windows[0].inputs)
-	}
-	must(t, m, human, Request{Action: "release", ID: id})
-	must(t, m, agent, Request{Action: "begin"})
-	notes := must(t, m, agent, Request{Action: "end"}).Notes
-	if len(notes) == 0 || !strings.Contains(strings.Join(notes, " "), "handed it back") {
-		t.Fatalf("notes %v", notes)
+	if s.count("w") != 0 {
+		t.Fatal("the window of an ended Worker stayed")
 	}
 }
 
-// A take over does not wait for a call forever.
-func TestTakeOverGoesAheadAfterTheDrainWait(t *testing.T) {
-	old := drainWait
-	drainWait = 50 * time.Millisecond
-	t.Cleanup(func() { drainWait = old })
-	m, _, id := setup(t)
-	must(t, m, agent, Request{Action: "begin"})
-	if r := must(t, m, human, Request{Action: "control", ID: id}); r.Lease == nil {
-		t.Fatal("no lease")
+func TestADeadBrowserTakesItsWindowsOffAndStartsAgain(t *testing.T) {
+	b, s := &fakeBackend{}, &fakeScreens{}
+	m := newManager(t, b, s)
+	_ = m.EnsureHost(context.Background())
+	_ = m.Opened("w", "k")
+	b.hosts[0].alive.Store(false) // Chrome crashed
+	if err := m.EnsureHost(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if b.starts != 2 || s.count("w") != 0 {
+		t.Fatalf("starts %d, windows %v", b.starts, s.windows)
 	}
 }
 
-// The person may use the window without taking it over: the page gets their
-// input, nothing stops the agent, and it hears what happened, never the text.
-func TestPersonInputDoesNotPauseAgentAndIsTold(t *testing.T) {
-	m, b, id := setup(t)
-	b.windows[0].page = "https://example.test/account"
-	must(t, m, agent, Request{Action: "begin"})
-	for _, i := range []Input{{Kind: "mousePressed", X: 3, Y: 4, Button: "left"}, {Kind: "text", Text: "secret"}, {Kind: "mouseWheel", DY: 40}} {
-		if _, err := m.Handle(context.Background(), human, Request{Action: "touch", ID: id, Command: &Command{Kind: "input", Input: &i}}); err != nil {
-			t.Fatal(err)
+func TestOnlyTheSettingsAreAsked(t *testing.T) {
+	m := newManager(t, &fakeBackend{}, &fakeScreens{})
+	on := true
+	r, err := m.Handle(context.Background(), Request{Action: "settings", Enabled: &on})
+	if err != nil || r.VirtualScreen == nil || !*r.VirtualScreen || !m.VirtualScreen() {
+		t.Fatalf("settings: %v %+v", err, r)
+	}
+	if raw, _ := os.ReadFile(filepath.Join(m.root, "settings.json")); !json.Valid(raw) {
+		t.Fatal("the switch was not kept")
+	}
+	for _, a := range []string{"list", "control", "halt", "begin"} {
+		if _, err := m.Handle(context.Background(), Request{Action: a}); err == nil {
+			t.Fatalf("%s was accepted", a)
 		}
 	}
-	if len(b.windows[0].inputs) != 3 {
-		t.Fatalf("inputs %v", b.windows[0].inputs)
-	}
-	notes := strings.Join(must(t, m, agent, Request{Action: "end"}).Notes, "\n")
-	for _, want := range []string{"1 click", "6 typed characters", "1 scroll", "while your own action was running", "https://example.test/account"} {
-		if !strings.Contains(notes, want) {
-			t.Fatalf("notes lack %q: %s", want, notes)
-		}
-	}
-	if strings.Contains(notes, "secret") {
-		t.Fatal("the typed text was told")
-	}
-	// Told once.
-	must(t, m, agent, Request{Action: "begin"})
-	if again := must(t, m, agent, Request{Action: "end"}).Notes; len(again) != 0 {
-		t.Fatalf("told twice: %v", again)
-	}
-}
-
-// Stop refuses the Worker until the person hands the browser back.
-func TestStopRefusesTheWorkerUntilHandBack(t *testing.T) {
-	m, _, id := setup(t)
-	must(t, m, human, Request{Action: "halt", ID: id})
-	if _, err := m.Handle(context.Background(), agent, Request{Action: "begin"}); err == nil || !strings.Contains(err.Error(), "stopped you") {
-		t.Fatalf("after Stop: %v", err)
-	}
-	if _, err := m.Handle(context.Background(), agentOf("other"), Request{Action: "begin"}); err != nil {
-		t.Fatalf("another Worker was stopped: %v", err)
-	}
-	must(t, m, human, Request{Action: "control", ID: id})
-	must(t, m, human, Request{Action: "release", ID: id})
-	must(t, m, agent, Request{Action: "begin"})
 }
 
 func TestAdoptOldProfileKeepsTheOldestAndItsData(t *testing.T) {
@@ -451,7 +244,7 @@ func TestAdoptOldProfileKeepsTheOldestAndItsData(t *testing.T) {
 	write(newer, "2026-11-08T06:49:48Z")
 	write(old, "2026-10-03T15:53:05Z")
 	for i := 0; i < 2; i++ { // the second start finds nothing left to adopt
-		m, err := New(root, &fakeBackend{})
+		m, err := New(root, &fakeBackend{}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -485,67 +278,3 @@ func TestRejectSymlinkParent(t *testing.T) {
 // that time.
 // A lease ends when its time runs out, on its own timer, and a renewal moves
 // that time.
-func TestLeaseExpiresOnItsOwnTimerAndRenewalsMoveIt(t *testing.T) {
-	shortLeases(t, 150*time.Millisecond)
-	m, b, id := setup(t)
-	lease := must(t, m, human, Request{Action: "control", ID: id}).Lease
-	if controlOf(t, m, id) != "human" {
-		t.Fatalf("control = %q", controlOf(t, m, id))
-	}
-	releasesBefore := b.windows[0].releases.Load()
-	until := time.Now().Add(500 * time.Millisecond)
-	for time.Now().Before(until) {
-		must(t, m, human, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "heartbeat"}})
-		time.Sleep(40 * time.Millisecond)
-	}
-	if controlOf(t, m, id) != "human" {
-		t.Fatal("a lease with heartbeats expired")
-	}
-	waitUntil(t, "the lease to expire", 2*time.Second, func() bool { return controlOf(t, m, id) == "agent" })
-	if b.windows[0].releases.Load() <= releasesBefore {
-		t.Fatal("the runtime was not told to release")
-	}
-	if _, err := m.Handle(context.Background(), human, Request{Action: "command", ID: id, Lease: lease, Command: &Command{Kind: "heartbeat"}}); !errors.Is(err, ErrLease) {
-		t.Fatalf("an expired lease was accepted: %v", err)
-	}
-}
-
-func TestExpiryTimersStopWithTheManager(t *testing.T) {
-	shortLeases(t, 50*time.Millisecond)
-	m, b, id := setup(t)
-	must(t, m, human, Request{Action: "control", ID: id})
-	if err := m.Close(); err != nil {
-		t.Fatal(err)
-	}
-	releases := b.windows[0].releases.Load()
-	time.Sleep(200 * time.Millisecond)
-	if b.windows[0].releases.Load() != releases {
-		t.Fatal("a lease timer fired after the manager closed")
-	}
-	if b.hostAlive() {
-		t.Fatal("the browser outlived the manager")
-	}
-}
-
-// A list taken while a window is reopened and the sweep runs must not deadlock.
-func TestOpeningAWindowAgainWhileListingAndSweepingDoesNotDeadlock(t *testing.T) {
-	m, _, _ := setup(t)
-	m.SetWorkerLive(func(string) bool { return true })
-	go m.sweep(2 * time.Millisecond)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for i := 0; i < 50; i++ {
-			open(t, m, "task", fmt.Sprintf("c%d", i+2), "tab-x")
-			must(t, m, human, Request{Action: "list"})
-		}
-	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("deadlock")
-	}
-	if rows := must(t, m, human, Request{Action: "list"}).Resources; len(rows) != 1 {
-		t.Fatalf("a Worker has %d rows", len(rows))
-	}
-}

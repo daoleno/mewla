@@ -174,9 +174,9 @@ func (w *workerDisplay) snapshot() (*image.RGBA, error) {
 // reach the browser too. Begin refuses while the person holds the monitor or
 // has stopped the Worker; End says what the person did meanwhile.
 func (s *Service) Begin(worker string) error {
-	w, err := s.get(context.Background(), worker, true)
-	if err != nil {
-		return err
+	w := s.live(worker)
+	if w == nil {
+		return nil // no window yet: the Worker's first tool call opens one
 	}
 	return w.begin()
 }
@@ -366,6 +366,16 @@ func (s *Service) Display(ctx context.Context) (*Display, error) {
 		}
 	}
 	return scr.display, nil
+}
+
+// DisplayEnv is Display for a program that runs outside this package: the
+// screen's X display number and authority file.
+func (s *Service) DisplayEnv(ctx context.Context) (int, string, error) {
+	d, err := s.Display(ctx)
+	if err != nil {
+		return 0, "", err
+	}
+	return d.Number, d.AuthPath(), nil
 }
 
 func (s *Service) dropScreen(scr *sharedScreen) {

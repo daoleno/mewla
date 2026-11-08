@@ -726,7 +726,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err := connectionManager.EnsureDefaults(); err != nil {
 		return fmt.Errorf("initialize Plugins: %w", err)
 	}
-	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend(agentUse.PrepareAgentBrowser))
+	// The agent screen: one display for the computer with a monitor for each
+	// agent (Linux, Labs). Desktop apps open on an agent's monitor, and so
+	// does its browser window.
+	displayService := vdisplay.NewService("")
+	displayService.SetAlive(controlHandler.liveWorker)
+	defer displayService.Close()
+	srv.SetDisplays(displayService)
+	controlHandler.displays = displayService
+	browserManager, err := browser.New(filepath.Join(authManager.StorageDir(), "browsers"), browser.NewBackend(agentUse.PrepareAgentBrowser, displayService), displayService)
 	if err != nil {
 		return fmt.Errorf("initialize Browser: %w", err)
 	}
@@ -745,10 +753,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 	agentUse.Bridge().Agent = &agentuse.AgentBrowser{
 		On:     browserManager.VirtualScreen,
 		Ensure: browserManager.EnsureHost,
+		Monitor: func(ctx context.Context, name string) (agentuse.WindowBounds, error) {
+			r, err := displayService.Monitor(ctx, name)
+			if err != nil {
+				return agentuse.WindowBounds{}, err
+			}
+			return agentuse.WindowBounds{Left: r.Min.X, Top: r.Min.Y, Width: r.Dx(), Height: r.Dy()}, nil
+		},
 		Opened: browserManager.Opened,
-		Viewed: browserManager.Viewed,
 		Closed: browserManager.Closed,
-		Bounds: agentuse.WindowBounds{Left: 0, Top: 0, Width: 1280, Height: 800},
 	}
 	browserManager.SetWindowCloser(agentUse.Bridge().CloseWindow)
 	browserManager.SetSwitchHook(func() { go agentUse.Refresh() })
@@ -766,12 +779,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	srv.SetScreen(screenService)
 	controlHandler.screen = screenService
-	// Desktop apps on a private display of the agent's own (Linux, Labs).
-	displayService := vdisplay.NewService("")
-	displayService.SetAlive(controlHandler.liveWorker)
-	defer displayService.Close()
-	srv.SetDisplays(displayService)
-	controlHandler.displays = displayService
 	// Agents use the screen through the daemon, which holds the permissions;
 	// a person viewing it always comes first.
 	screenService.SetAgentGate(agentUse.Enabled)
