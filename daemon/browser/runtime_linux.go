@@ -793,6 +793,13 @@ func (r *linuxWindow) Command(ctx context.Context, c Command) (json.RawMessage, 
 		return v, err
 	case "snapshot":
 		return r.cli(ctx, "snapshot", "-i")
+	case "read":
+		// The page's text, for reading an article; snapshot lists only what can be clicked.
+		data, err := r.cli(ctx, "read")
+		if err != nil {
+			return nil, err
+		}
+		return pageText(data)
 	case "click":
 		ref, ok := elementRef(c.Ref)
 		if !ok {
@@ -824,6 +831,27 @@ func (r *linuxWindow) Command(ctx context.Context, c Command) (json.RawMessage, 
 	default:
 		return nil, errors.New("Unsupported managed browser action")
 	}
+}
+
+// maxPageText bounds what one read returns to the agent, in characters.
+const maxPageText = 40000
+
+// pageText is what an agent gets from a read: the address and the text,
+// cut at maxPageText with a note saying so.
+func pageText(data json.RawMessage) (json.RawMessage, error) {
+	var page struct {
+		Content   string `json:"content"`
+		URL       string `json:"finalUrl"`
+		Truncated bool   `json:"truncated"`
+	}
+	if json.Unmarshal(data, &page) != nil {
+		return nil, errors.New("Browser tool returned an invalid response")
+	}
+	text := []rune(page.Content)
+	if len(text) > maxPageText {
+		text, page.Truncated = text[:maxPageText], true
+	}
+	return json.Marshal(map[string]any{"url": page.URL, "text": string(text), "truncated": page.Truncated})
 }
 
 // elementRef accepts a snapshot reference as the agent sees it, "e2" in the
