@@ -19,8 +19,6 @@ export interface AgentBrowserCardProps {
   agentName?: string;
   /** The viewer gave up: open it again. */
   onReconnect(): void;
-  onClose(resource: BrowserResource): Promise<void>;
-  onDelete(resource: BrowserResource): void;
 }
 
 /**
@@ -28,9 +26,9 @@ export interface AgentBrowserCardProps {
  * it is Watch: the person's taps and typing reach the page without taking it
  * from the agent, which is told what they did and decides for itself. Take
  * over holds the browser for the person; Stop ends the agent's use. Leaving
- * releases only this viewer; the browser and its sign-ins stay on the server.
+ * releases only this viewer; the window and the computer's sign-ins stay.
  */
-export function AgentBrowserCard({ server, serverName, resource, agentName, onReconnect, onClose, onDelete }: AgentBrowserCardProps) {
+export function AgentBrowserCard({ server, serverName, resource, agentName, onReconnect }: AgentBrowserCardProps) {
   const { colors } = useAppTheme();
   const [live, setLive] = useState<BrowserResource>(resource);
   const [phase, setPhase] = useState<ViewerPhase>("connecting");
@@ -142,7 +140,6 @@ export function AgentBrowserCard({ server, serverName, resource, agentName, onRe
   };
   const recover = (target: BrowserIssue) => {
     if (target.recovery === "take_control" && phase === "live") void run("control", acquire);
-    else if (target.recovery === "restart") void run("close", () => onClose(live));
     else onReconnect();
   };
 
@@ -165,8 +162,6 @@ export function AgentBrowserCard({ server, serverName, resource, agentName, onRe
 
   const menuItems: ActionMenuItem[] = [
     ...(mine ? [{ key: "dialog", label: "Page dialog", icon: "chatbox", onPress: () => void run("dialog", () => command("dialog_status")) } satisfies ActionMenuItem] : []),
-    { key: "close", label: "Close browser", icon: "stop-circle", detail: "Sign-ins are kept", onPress: () => void run("close", () => onClose(live)) },
-    { key: "delete", label: "Delete browser", icon: "trash", destructive: true, onPress: () => onDelete(live) },
   ];
   const inputStyle = [styles.input, { color: colors.textPrimary, backgroundColor: colors.inputBackground, borderColor: colors.border }];
 
@@ -179,7 +174,7 @@ export function AgentBrowserCard({ server, serverName, resource, agentName, onRe
           <AppText variant="label" numberOfLines={1} style={{ color: colors.textPrimary }}>{title}</AppText>
           <AppText variant="caption" numberOfLines={1} style={{ color: colors.textSecondary }}>{subtitle}</AppText>
         </View>
-        <IconButton icon="more-vertical" size={36} accessibilityLabel={`Options for ${live.name}`} onPress={() => setMenu(true)} />
+        {menuItems.length > 0 ? <IconButton icon="more-vertical" size={36} accessibilityLabel={`Options for ${live.name}`} onPress={() => setMenu(true)} /> : null}
       </View>
       {notice ? <View style={styles.notice}>{notice}</View> : null}
       {mine ? (

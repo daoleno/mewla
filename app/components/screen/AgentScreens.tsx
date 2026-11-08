@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AppState, ScrollView, StyleSheet, View } from "react-native";
+import { AppState, ScrollView, StyleSheet, View } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { ContentWidth, Spacing, useAppTheme } from "../../constants/tokens";
 import { useCurrentServer } from "../../store/currentServer";
@@ -7,8 +7,7 @@ import { useWorkers } from "../../store/workers";
 import { usePhoneUse } from "../../store/phoneUse";
 import { browserRequest, type BrowserResource } from "../../services/browser";
 import { haltDisplay, listDisplays, type AgentDisplay } from "../../services/display";
-import { getDefaultBrowserId, setDefaultBrowserId } from "../../services/browserDefault";
-import { browserIssue, DEFAULT_BROWSER_NAME, pickDefaultBrowser, type BrowserIssue } from "../../services/browserPageModel";
+import { browserIssue, type BrowserIssue } from "../../services/browserPageModel";
 import { serverDisplayName } from "../../services/serverDisplayName";
 import { ActionMenu, EmptyState, IconButton, InlineNotice } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
@@ -77,55 +76,11 @@ export function AgentScreens() {
     try { await action(); } catch (error) { fail(error); } finally { setBusy(null); }
   };
 
-  // Opening a browser by hand is for signing in: the person's own choice to use it, agents included.
-  const open = useCallback(async (target: BrowserResource | null, name = DEFAULT_BROWSER_NAME) => {
-    if (!currentServer) return;
-    const server = currentServer;
-    setIssue(null);
-    let resource = target;
-    if (!resource) {
-      const created = await browserRequest(server, { action: "create", name }, abort.current?.signal);
-      resource = created.resource ?? null;
-      if (!resource) return;
-    }
-    if (!resource.allow_agents) {
-      const granted = await browserRequest(server, { action: "grant", id: resource.id, allow_agents: true }, abort.current?.signal);
-      resource = granted.resource ?? resource;
-    }
-    await browserRequest(server, { action: "start", id: resource.id }, abort.current?.signal);
-    if (!isCurrentServer(server.id)) return;
-    await setDefaultBrowserId(server.id, resource.id);
-    await list();
-  }, [currentServer, isCurrentServer, list]);
-
-  const manage = async (action: "stop" | "delete", resource: BrowserResource) => {
-    if (!currentServer) return;
-    const server = currentServer;
-    await browserRequest(server, { action, id: resource.id }, abort.current?.signal);
-    if (isCurrentServer(server.id)) await list();
-  };
-  const confirmDelete = (resource: BrowserResource) => Alert.alert(
-    `Delete “${resource.name}”?`,
-    `This removes its saved sign-ins and browsing data from ${serverName}.`,
-    [
-      { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => void run("delete", () => manage("delete", resource)) },
-    ],
-  );
-
   // Server order, so a card keeps its place when control changes hands.
   const running = resources.filter((r) => r.state === "running");
   const nameOf = (resource: BrowserResource) => workerState.workers.find((w) => w.id === resource.agent)?.name;
 
   const menuItems: ActionMenuItem[] = [
-    ...(resources.length < 8 ? [{
-      key: "new", label: "New browser", icon: "add-circle", detail: "Separate sign-ins", disabled: Boolean(reason) || busy !== null,
-      onPress: () => void run("open", () => open(null, resources.length > 0 ? `${DEFAULT_BROWSER_NAME} ${resources.length + 1}` : DEFAULT_BROWSER_NAME)),
-    } satisfies ActionMenuItem] : []),
-    ...resources.filter((r) => r.state !== "running").map((resource): ActionMenuItem => ({
-      key: `open:${resource.id}`, label: `Open ${resource.name}`, icon: "open-external", detail: "Closed", disabled: Boolean(reason) || busy !== null,
-      onPress: () => void run("open", () => open(resource)),
-    })),
     ...(phoneMenuItem(phone, () => router.push("/phone")) ? [phoneMenuItem(phone, () => router.push("/phone"))!] : []),
   ];
   const header = (
@@ -153,21 +108,14 @@ export function AgentScreens() {
         {sheet}
         {issue ? <View style={styles.notice}><InlineNotice tone={issue.tone} title={issue.title} detail={issue.detail} /></View> : null}
         <View style={[styles.root, styles.center]}>
-          {!loaded || busy === "open" ? (
+          {!loaded ? (
             <EmptyState busy />
           ) : setupNeeded ? (
             <EmptyState icon="construct" title="Browser needs setup on this server" detail={reason}
               action={{ label: "Check again", icon: "refresh", onPress: () => void run("check", async () => { await list(); }), loading: busy === "check" }} />
           ) : (
             <EmptyState icon="desktop" title="No agent is using a screen"
-              detail={`Sign-ins are kept on ${serverName}.`}
-              action={{
-                label: "Open browser", icon: "open-external", loading: busy === "open",
-                onPress: () => void run("open", async () => {
-                  const remembered = await getDefaultBrowserId(currentServer.id);
-                  await open(pickDefaultBrowser(resources, remembered));
-                }),
-              }} />
+              detail={`When an agent opens a browser it shows here. Take it over to sign in once; sign-ins are kept on ${serverName}.`} />
           )}
         </View>
       </View>
@@ -188,8 +136,7 @@ export function AgentScreens() {
           {running.map((resource) => (
             <AgentBrowserCard key={`${resource.id}:${nonces[resource.id] ?? 0}`} server={currentServer} serverName={serverName}
               resource={resource} agentName={nameOf(resource)}
-              onReconnect={() => setNonces((n) => ({ ...n, [resource.id]: (n[resource.id] ?? 0) + 1 }))}
-              onClose={(r) => manage("stop", r)} onDelete={confirmDelete} />
+              onReconnect={() => setNonces((n) => ({ ...n, [resource.id]: (n[resource.id] ?? 0) + 1 }))} />
           ))}
         </View>
       </ScrollView>

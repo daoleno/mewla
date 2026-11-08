@@ -455,7 +455,6 @@ export default function InboxScreen() {
   ]);
 
   const createTerminalOnServer = async (input: {
-    browserId?: string;
     serverId: string;
     cwd: string;
     command: string;
@@ -498,7 +497,6 @@ export default function InboxScreen() {
     try {
       const startedAt = Date.now();
       const pending = wsClient.createSession(server.id, {
-        browserId: input.browserId,
         cwd: input.cwd,
         command: input.command,
         name: input.name,
@@ -872,7 +870,6 @@ export default function InboxScreen() {
           onSubmit={(input) => {
             if (!input.serverId) return;
             void createTerminalOnServer({
-              browserId: input.browserId,
               serverId: input.serverId,
               cwd: input.cwd,
               command: input.command,

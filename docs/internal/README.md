@@ -39,5 +39,5 @@ and [third-party assets](../third-party-assets.md).
 - [Mobile interface structure](mobile-interface.md), [mobile copy](mobile-copy.md), [interface reading](interface-reading.md)
 - [Terminal rendering](terminal-rendering.md) and [terminal scrolling](terminal-scrolling.md)
 - [Git review](git-review.md) and [Git diff design](git-diff-design.md)
-- [Persistent Browser](persistent-browser.md)
+- [Agents' browser on the virtual screen](persistent-browser.md)
 - [DSH Sessions](dsh-sessions.md)

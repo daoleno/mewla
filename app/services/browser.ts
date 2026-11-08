@@ -9,7 +9,6 @@ export interface BrowserResource {
   name: string;
   state: string;
   control: string;
-  allow_agents: boolean;
   generation?: string;
   target?: string;
   /** The Worker holding the browser, when an agent does. */
@@ -71,7 +70,7 @@ async function endpoint(server: StoredServer, path: string) {
 }
 export async function browserRequest(
   server: StoredServer,
-  request: { action: "list" | "create" | "start" | "stop" | "delete" | "grant" | "status" | "halt" | "settings"; id?: string; name?: string; allow_agents?: boolean; enabled?: boolean },
+  request: { action: "list" | "status" | "halt" | "settings"; id?: string; enabled?: boolean },
   signal?: AbortSignal,
 ): Promise<BrowserResponse> {
   const url = await endpoint(server, "/browser");
