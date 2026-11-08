@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 // userHZ is the clock tick rate of /proc times. The kernel's user-space ABI
@@ -21,24 +23,52 @@ const userHZ = 100
 // changes its arguments without changing its identity.
 const cmdlineRefresh = 10 * time.Second
 
-type cachedCmdline struct {
+// cachedProc is what one scan learned about a process. stat is the parsed
+// /proc/<pid>/stat, args the command line; each carries the time it was read
+// so a scan can leave an unchanged-looking process alone.
+type cachedProc struct {
 	start  int64
-	comm   string
+	info   processInfo
 	args   string
-	readAt time.Time
+	statAt time.Time
+	argsAt time.Time
 }
 
 var procSnapshots struct {
 	sync.Mutex
-	cmdlines map[int]cachedCmdline
-	boot     int64
+	procs map[int]cachedProc
+	boot  int64
 }
 
-// snapshotProcessTable reads the process table from /proc in this process: no
-// ps to fork and parse every few hundred milliseconds. Fields match the ps
-// invocation it replaces: ids from stat, ucomm from the stat name, args from
-// cmdline ("[name]" for a kernel thread, as ps shows it).
+// snapshotProcessTable reads the whole process table from /proc in this
+// process: no ps to fork and parse every few hundred milliseconds. Fields match
+// the ps invocation it replaces: ids from stat, ucomm from the stat name, args
+// from cmdline ("[name]" for a kernel thread, as ps shows it). Every process is
+// read afresh.
 func snapshotProcessTable() (map[int]processInfo, error) {
+	return scanProcessTable(nil, 0)
+}
+
+// snapshotProcessTableNear is the table the poll loop reads: see
+// snapshotProcessTableHot.
+func snapshotProcessTableNear(roots []int) (map[int]processInfo, error) {
+	return snapshotProcessTableHot(roots, processColdAge)
+}
+
+// snapshotProcessTableHot is the table the poll loop needs several times a
+// second. The panes' own process trees (the roots and everything below them)
+// are read afresh every call, and so is any process not seen before, so a
+// foreground change or a new tool child shows up as quickly as with a full
+// read. Every other process keeps its last reading until it is coldAge old:
+// a machine with thousands of processes is walked once per coldAge instead of
+// once per poll.
+func snapshotProcessTableHot(roots []int, coldAge time.Duration) (map[int]processInfo, error) {
+	return scanProcessTable(roots, coldAge)
+}
+
+// scanProcessTable lists /proc and reads the stat of each process that is hot,
+// new or at least coldAge old (every process when coldAge is zero).
+func scanProcessTable(roots []int, coldAge time.Duration) (map[int]processInfo, error) {
 	procSnapshots.Lock()
 	defer procSnapshots.Unlock()
 
@@ -54,15 +84,24 @@ func snapshotProcessTable() (map[int]processInfo, error) {
 		return nil, fmt.Errorf("proc process snapshot: %w", err)
 	}
 	now := time.Now()
-	previous := procSnapshots.cmdlines
-	next := make(map[int]cachedCmdline, len(previous))
+	previous := procSnapshots.procs
+	hot := hotProcesses(previous, roots)
+	next := make(map[int]cachedProc, len(previous))
 	processes := make(map[int]processInfo, len(entries))
 	for _, entry := range entries {
 		pid, err := strconv.Atoi(entry.Name())
 		if err != nil || pid <= 0 {
 			continue
 		}
-		raw, err := os.ReadFile("/proc/" + entry.Name() + "/stat")
+		cached, seen := previous[pid]
+		if seen && !hot[pid] && coldAge > 0 && now.Sub(cached.statAt) < coldAge {
+			next[pid] = cached
+			info := cached.info
+			info.args = cached.args
+			processes[pid] = info
+			continue
+		}
+		raw, err := workerproc.ReadProcFile("/proc/" + entry.Name() + "/stat")
 		if err != nil {
 			continue // exited since the directory listing
 		}
@@ -73,19 +112,50 @@ func snapshotProcessTable() (map[int]processInfo, error) {
 		info.pid = pid
 		info.startedAt = time.Unix(procSnapshots.boot+start/userHZ, 0)
 
-		cached, seen := previous[pid]
-		if !seen || cached.start != start || cached.comm != info.comm || now.Sub(cached.readAt) >= cmdlineRefresh {
-			cached = cachedCmdline{start: start, comm: info.comm, args: readCmdline(entry.Name(), info.comm), readAt: now}
+		statAt := now
+		if !seen && coldAge > 0 {
+			// Spread the cold re-reads of a first scan over the window
+			// instead of repeating them all in the same poll.
+			statAt = now.Add(-time.Duration(pid%64) * coldAge / 64)
 		}
+		if !seen || cached.start != start || cached.info.comm != info.comm || now.Sub(cached.argsAt) >= cmdlineRefresh {
+			cached = cachedProc{start: start, args: readCmdline(entry.Name(), info.comm), argsAt: now}
+		}
+		cached.start, cached.info, cached.statAt = start, info, statAt
 		next[pid] = cached
 		info.args = cached.args
 		processes[pid] = info
 	}
-	procSnapshots.cmdlines = next
+	procSnapshots.procs = next
 	if len(processes) == 0 {
 		return nil, fmt.Errorf("proc process snapshot found no processes")
 	}
 	return processes, nil
+}
+
+// hotProcesses is the roots and every process below them, by the parent ids of
+// the previous scan. A process that appeared since is not in that scan, so it
+// is read afresh anyway.
+func hotProcesses(previous map[int]cachedProc, roots []int) map[int]bool {
+	if len(roots) == 0 || len(previous) == 0 {
+		return nil
+	}
+	children := make(map[int][]int, len(previous))
+	for pid, cached := range previous {
+		children[cached.info.ppid] = append(children[cached.info.ppid], pid)
+	}
+	hot := make(map[int]bool, 4*len(roots))
+	queue := append([]int(nil), roots...)
+	for len(queue) > 0 {
+		pid := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		if hot[pid] {
+			continue
+		}
+		hot[pid] = true
+		queue = append(queue, children[pid]...)
+	}
+	return hot
 }
 
 // parseProcStatLine reads /proc/<pid>/stat. The name sits in parentheses and
@@ -119,7 +189,7 @@ func parseProcStatLine(raw []byte) (processInfo, int64, bool) {
 }
 
 func readCmdline(pid, comm string) string {
-	raw, err := os.ReadFile("/proc/" + pid + "/cmdline")
+	raw, err := workerproc.ReadProcFile("/proc/" + pid + "/cmdline")
 	if err != nil {
 		return ""
 	}

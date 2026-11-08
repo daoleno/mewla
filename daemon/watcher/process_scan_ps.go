@@ -26,3 +26,9 @@ func snapshotProcessTable() (map[int]processInfo, error) {
 	}
 	return processes, nil
 }
+
+// snapshotProcessTableNear: ps lists every process in one call, so there is
+// no cheaper partial read.
+func snapshotProcessTableNear(_ []int) (map[int]processInfo, error) {
+	return snapshotProcessTable()
+}

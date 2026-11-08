@@ -38,6 +38,19 @@ func snapshotProcesses() map[int]processInfo {
 // success, so a broken ps shows up in the log without one line per poll.
 var psFailures logonce.Log
 
+// processColdAge is how old a reading of a process outside every pane's tree
+// may be before the poll loop reads it again.
+const processColdAge = 10 * time.Second
+
+// snapshotProcessesNear is snapshotProcesses for the poll loop: where the
+// platform can, it keeps reading the panes' own process trees afresh and
+// rereads the rest of the machine's processes only now and then.
+func snapshotProcessesNear(roots []int) map[int]processInfo {
+	processes, err := snapshotProcessTableNear(roots)
+	psFailures.Note("watcher process snapshot (keeping the last known Worker process identities)", err)
+	return processes
+}
+
 // snapshotProcessesErr is snapshotProcesses with the failing detail kept for
 // ownership-probe diagnostics.
 func snapshotProcessesErr() (map[int]processInfo, error) {
