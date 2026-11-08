@@ -4,6 +4,7 @@ import { ScreenConnection } from "../../services/screen";
 import type { StoredServer } from "../../services/storage";
 import type { ScreenTarget } from "./screenFloatModel";
 import type { RemoteViewHandle } from "./RemoteView";
+import { LIVE_DEADLINE_REASON, startLiveDeadline } from "./screenLiveDeadline";
 import type { ScreenViewerMessage } from "./screenViewerProtocol";
 
 export type RemotePhase = "connecting" | "live" | "lost";
@@ -17,6 +18,7 @@ export function useRemoteScreen(server: StoredServer, target: ScreenTarget | nul
   const view = useRef<RemoteViewHandle>(null);
   const connection = useRef<ScreenConnection | null>(null);
   const epoch = useRef(0);
+  const liveDeadline = useRef<(() => void) | null>(null);
   const serverRef = useRef(server);
   serverRef.current = server;
   const targetRef = useRef(target);
@@ -30,6 +32,8 @@ export function useRemoteScreen(server: StoredServer, target: ScreenTarget | nul
 
   const disconnect = useCallback(() => {
     epoch.current++;
+    liveDeadline.current?.();
+    liveDeadline.current = null;
     connection.current?.close();
     connection.current = null;
     view.current?.close();
@@ -44,6 +48,13 @@ export function useRemoteScreen(server: StoredServer, target: ScreenTarget | nul
     setPhase("connecting");
     setReason(null);
     setHolding(false);
+    // A viewer that never completes its handshake ends in Reconnect, not in a spinner.
+    liveDeadline.current = startLiveDeadline(() => {
+      if (!active()) return;
+      disconnect();
+      setReason(LIVE_DEADLINE_REASON);
+      setPhase("lost");
+    });
     const socket = new ScreenConnection(serverRef.current, {
       open() { if (active()) view.current?.open(); },
       data(chunk) { if (active()) view.current?.feed(chunk); },
@@ -78,6 +89,8 @@ export function useRemoteScreen(server: StoredServer, target: ScreenTarget | nul
   const onEvent = useCallback((message: ScreenViewerMessage) => {
     if (message.type === "connected") {
       setSize(message.width > 0 && message.height > 0 ? { width: message.width, height: message.height } : null);
+      liveDeadline.current?.();
+      liveDeadline.current = null;
       setPhase("live");
     } else if (message.type === "closed" && connection.current) {
       connection.current.close();
