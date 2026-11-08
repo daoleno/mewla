@@ -6,6 +6,8 @@ interface ConfirmDestructiveOptions {
   message?: string;
   /** Destructive button label, e.g. "Remove" or "Terminate". */
   confirmLabel: string;
+  /** Dismiss label; "Cancel" unless the cancel word would be ambiguous ("Keep"). */
+  cancelLabel?: string;
   onConfirm(): void | Promise<void>;
 }
 
@@ -17,11 +19,12 @@ export function confirmDestructive({
   title,
   message,
   confirmLabel,
+  cancelLabel = "Cancel",
   onConfirm,
 }: ConfirmDestructiveOptions): void {
   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   Alert.alert(title, message, [
-    { text: "Cancel", style: "cancel" },
+    { text: cancelLabel, style: "cancel" },
     {
       text: confirmLabel,
       style: "destructive",

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { confirmDestructive } from '../ui/confirmDestructive';
 import { formatChatBubbleTime } from '../../constants/telegramPresentation';
 import { TouchTarget, Typography, useAppTheme } from '../../constants/tokens';
 import { PENDING_MESSAGE_UNDELIVERED_ACCESSIBILITY_LABEL } from './pendingUserMessageLifecycle';
@@ -41,10 +42,7 @@ export function MessageBubbleFooter({
 
   const confirmDelete = () => {
     if (!onDelete) return;
-    Alert.alert('Delete this message?', undefined, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: onDelete },
-    ]);
+    confirmDestructive({ title: 'Delete this message?', confirmLabel: 'Delete', onConfirm: onDelete });
   };
 
   return (

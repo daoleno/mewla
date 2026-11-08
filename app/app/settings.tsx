@@ -98,6 +98,7 @@ import { ComputersSection } from "../components/settings/ComputersSection";
 import { pathMark } from "../services/connectionPath";
 import { useTransportPath } from "../services/useTransportPath";
 import { useToast } from "../components/ui/Toast";
+import { confirmDestructive } from "../components/ui/confirmDestructive";
 import { syncComputers } from "../services/computerSync";
 import type { ComputerCheck } from "../services/computerTeam";
 import { useCurrentServer } from "../store/currentServer";
@@ -974,14 +975,7 @@ function TelegramConnectionRow({
     actionLabel: string,
     operation: () => Promise<TelegramConnectionStatus>,
   ) => {
-    Alert.alert(title, message, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: actionLabel,
-        style: "destructive",
-        onPress: () => void runStatusMutation(operation),
-      },
-    ]);
+    confirmDestructive({ title, message, confirmLabel: actionLabel, onConfirm: () => void runStatusMutation(operation) });
   };
 
 
