@@ -32,7 +32,7 @@ import (
 //
 // Two variants, chosen by MEWLA_SCREEN_KEYGUARD:
 //
-//	drop     only drop the notice. In a one-step pop-up choice the menu is open
+//	drop     only drop the notice (not the default: see keyGuardVariant). In a one-step pop-up choice the menu is open
 //	         for tens of milliseconds and AppKit gives the keyboard back itself.
 //	release  also hand the keyboard back at once, by theft id: steal on Mewla's
 //	         own connection (which takes the next id), release it, release the
@@ -73,7 +73,11 @@ var keyGuardVariant = func() string {
 	case "off", "drop", "release":
 		return v
 	}
-	return "drop"
+	// Off by default: on macOS 27 the tap on the person's app saw no
+	// lost-key notice in 15 benchmark trials and 9 probe choices, so the
+	// guard held nothing, while the benchmark's space and window_raised
+	// checks fired in 14 and 5 of 15 trials against 1 and 0 without it.
+	return "off"
 }()
 
 var kg struct {
