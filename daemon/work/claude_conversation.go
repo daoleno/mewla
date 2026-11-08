@@ -479,6 +479,9 @@ func parseClaudeConversationEvents(path string) (CodexConversation, error) {
 	return parseClaudeConversationIncremental(path)
 }
 
+// parseClaudeConversationFull is the definition of the answer: two passes over
+// the whole file. The incremental parse reaches the same answer from less, and
+// the tests hold it to this one.
 func parseClaudeConversationFull(path string) (CodexConversation, error) {
 	builder := newClaudeConversationBuilder(strings.TrimSuffix(filepath.Base(path), ".jsonl"))
 	abandoned, err := claudeAbandonedRecords(path)
