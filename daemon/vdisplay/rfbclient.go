@@ -22,11 +22,16 @@ type Client struct {
 	height int
 
 	mu      sync.Mutex
-	pix     []byte // width*height*4, B G R X
-	seq     uint64 // updates received
+	screens []Screen // the display's monitors, as it last said
+	pix     []byte   // width*height*4, B G R X
+	seq     uint64   // updates received
 	changed chan struct{}
 	err     error
 	wmu     sync.Mutex
+
+	layoutErr int
+	fullNext  bool // the picture was replaced: ask for all of it
+	watchers  map[chan struct{}]struct{}
 }
 
 // Handshake speaks RFB 3.8 up to and including security. The display offers
@@ -101,7 +106,8 @@ func Connect(conn net.Conn) (*Client, error) {
 	c := &Client{conn: conn, width: width, height: height, pix: make([]byte, width*height*4), changed: make(chan struct{}, 1)}
 	// 32 bits, true colour, little endian, red in bits 16-23.
 	pf := []byte{0, 0, 0, 0, 32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0}
-	enc := []byte{2, 0, 0, 1, 0, 0, 0, 0} // Raw
+	// Raw, and the two ways a display says its size changed.
+	enc := []byte{2, 0, 0, 3, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0x21, 0xff, 0xff, 0xfe, 0xcc}
 	if err := c.write(append(pf, enc...)); err != nil {
 		return nil, err
 	}
@@ -113,7 +119,11 @@ func Connect(conn net.Conn) (*Client, error) {
 }
 
 // Size is the display's size in pixels.
-func (c *Client) Size() (int, int) { return c.width, c.height }
+func (c *Client) Size() (int, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.width, c.height
+}
 
 // Close ends the connection.
 func (c *Client) Close() error { return c.conn.Close() }
@@ -130,10 +140,65 @@ func (c *Client) request(incremental bool) error {
 	if incremental {
 		msg[1] = 1
 	}
-	binary.BigEndian.PutUint16(msg[6:], uint16(c.width))
-	binary.BigEndian.PutUint16(msg[8:], uint16(c.height))
+	w, h := c.Size()
+	binary.BigEndian.PutUint16(msg[6:], uint16(w))
+	binary.BigEndian.PutUint16(msg[8:], uint16(h))
 	return c.write(msg)
 }
+
+// Watch is told, on the channel, whenever the picture changed or the client
+// ended. Any number of viewers can watch one client.
+func (c *Client) Watch() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	c.mu.Lock()
+	if c.watchers == nil {
+		c.watchers = map[chan struct{}]struct{}{}
+	}
+	c.watchers[ch] = struct{}{}
+	c.mu.Unlock()
+	return ch, func() {
+		c.mu.Lock()
+		delete(c.watchers, ch)
+		c.mu.Unlock()
+	}
+}
+
+func (c *Client) notify() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for ch := range c.watchers {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// Err is why the client ended, or nil while it runs.
+func (c *Client) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.err
+}
+
+// Crop copies a rectangle of the picture as B G R X rows. What lies outside
+// the display is black.
+func (c *Client) Crop(r image.Rectangle) []byte {
+	out := make([]byte, r.Dx()*r.Dy()*4)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	in := r.Intersect(image.Rect(0, 0, c.width, c.height))
+	if in.Empty() {
+		return out
+	}
+	for y := in.Min.Y; y < in.Max.Y; y++ {
+		copy(out[((y-r.Min.Y)*r.Dx()+in.Min.X-r.Min.X)*4:], c.pix[(y*c.width+in.Min.X)*4:(y*c.width+in.Max.X)*4])
+	}
+	return out
+}
+
+// Send passes a raw RFB message to the display.
+func (c *Client) Send(msg []byte) error { return c.write(msg) }
 
 func (c *Client) fail(err error) {
 	c.mu.Lock()
@@ -141,6 +206,7 @@ func (c *Client) fail(err error) {
 		c.err = err
 	}
 	c.mu.Unlock()
+	c.notify()
 	select {
 	case c.changed <- struct{}{}:
 	default:
@@ -168,7 +234,51 @@ func (c *Client) read() {
 				}
 				x, y := int(binary.BigEndian.Uint16(rect[0:])), int(binary.BigEndian.Uint16(rect[2:]))
 				w, h := int(binary.BigEndian.Uint16(rect[4:])), int(binary.BigEndian.Uint16(rect[6:]))
-				if binary.BigEndian.Uint32(rect[8:]) != 0 || x+w > c.width || y+h > c.height {
+				switch int32(binary.BigEndian.Uint32(rect[8:])) {
+				case -223: // DesktopSize
+					c.resize(w, h, nil)
+					continue
+				case -308: // ExtendedDesktopSize: x is why, y is whether it worked
+					var shead [4]byte
+					if _, err := io.ReadFull(c.conn, shead[:]); err != nil {
+						c.fail(err)
+						return
+					}
+					raw := make([]byte, int(shead[0])*16)
+					if _, err := io.ReadFull(c.conn, raw); err != nil {
+						c.fail(err)
+						return
+					}
+					var screens []Screen
+					for i := 0; i < int(shead[0]); i++ {
+						b := raw[i*16:]
+						screens = append(screens, Screen{ID: binary.BigEndian.Uint32(b), X: int(binary.BigEndian.Uint16(b[4:])), Y: int(binary.BigEndian.Uint16(b[6:])), W: int(binary.BigEndian.Uint16(b[8:])), H: int(binary.BigEndian.Uint16(b[10:]))})
+					}
+					if x == 1 && y != 0 { // this client's own request, refused
+						c.mu.Lock()
+						c.layoutErr = y
+						c.mu.Unlock()
+						select {
+						case c.changed <- struct{}{}:
+						default:
+						}
+					} else {
+						c.resize(w, h, screens)
+						select {
+						case c.changed <- struct{}{}:
+						default:
+						}
+					}
+					continue
+				case 0:
+				default:
+					c.fail(errors.New("unexpected display update"))
+					return
+				}
+				c.mu.Lock()
+				cw, ch := c.width, c.height
+				c.mu.Unlock()
+				if x+w > cw || y+h > ch {
 					c.fail(errors.New("unexpected display update"))
 					return
 				}
@@ -179,7 +289,9 @@ func (c *Client) read() {
 						return
 					}
 					c.mu.Lock()
-					copy(c.pix[((y+row)*c.width+x)*4:], line)
+					if (y+row)*c.width+x+w <= len(c.pix)/4 {
+						copy(c.pix[((y+row)*c.width+x)*4:], line)
+					}
 					c.mu.Unlock()
 				}
 			}
@@ -190,7 +302,12 @@ func (c *Client) read() {
 			case c.changed <- struct{}{}:
 			default:
 			}
-			if err := c.request(true); err != nil {
+			c.notify()
+			c.mu.Lock()
+			incremental := !c.fullNext
+			c.fullNext = false
+			c.mu.Unlock()
+			if err := c.request(incremental); err != nil {
 				c.fail(err)
 				return
 			}
@@ -211,6 +328,80 @@ func (c *Client) read() {
 		default:
 			c.fail(fmt.Errorf("unknown display message %d", head[0]))
 			return
+		}
+	}
+}
+
+// Screen is one monitor of the display: a rectangle of its picture.
+type Screen struct {
+	ID         uint32
+	X, Y, W, H int
+}
+
+func (c *Client) resize(w, h int, screens []Screen) {
+	if w <= 0 || h <= 0 || w*h > 1<<26 {
+		return
+	}
+	c.mu.Lock()
+	if w != c.width || h != c.height || c.pix == nil {
+		c.width, c.height = w, h
+		c.pix = make([]byte, w*h*4)
+		c.fullNext = true
+	}
+	if screens != nil {
+		c.screens = screens
+	}
+	c.seq++
+	c.mu.Unlock()
+	c.notify()
+}
+
+// Screens is the monitors the display last reported.
+func (c *Client) Screens() []Screen {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]Screen(nil), c.screens...)
+}
+
+// SetLayout asks the display to be width x height with these monitors (the
+// RFB SetDesktopSize message) and waits for it to say it did.
+func (c *Client) SetLayout(width, height int, screens []Screen) error {
+	msg := []byte{251, 0, 0, 0, 0, 0, byte(len(screens)), 0}
+	binary.BigEndian.PutUint16(msg[2:], uint16(width))
+	binary.BigEndian.PutUint16(msg[4:], uint16(height))
+	for _, s := range screens {
+		b := make([]byte, 16)
+		binary.BigEndian.PutUint32(b, s.ID)
+		binary.BigEndian.PutUint16(b[4:], uint16(s.X))
+		binary.BigEndian.PutUint16(b[6:], uint16(s.Y))
+		binary.BigEndian.PutUint16(b[8:], uint16(s.W))
+		binary.BigEndian.PutUint16(b[10:], uint16(s.H))
+		msg = append(msg, b...)
+	}
+	c.mu.Lock()
+	c.layoutErr = 0
+	c.mu.Unlock()
+	if err := c.write(msg); err != nil {
+		return err
+	}
+	deadline := time.After(5 * time.Second)
+	for {
+		c.mu.Lock()
+		err, w, h, lerr := c.err, c.width, c.height, c.layoutErr
+		c.mu.Unlock()
+		if err != nil {
+			return err
+		}
+		if lerr != 0 {
+			return fmt.Errorf("the display refused the layout (code %d)", lerr)
+		}
+		if w == width && h == height && len(c.Screens()) == len(screens) {
+			return nil
+		}
+		select {
+		case <-c.changed:
+		case <-deadline:
+			return errors.New("the display did not take the layout")
 		}
 	}
 }
@@ -267,8 +458,8 @@ func (c *Client) Screenshot(wait time.Duration) ([]byte, error) {
 // Pointer moves the pointer and sets the held buttons (bit 0 left, 1 middle, 2 right,
 // 3 and 4 the wheel).
 func (c *Client) Pointer(x, y int, buttons byte) error {
-	if x < 0 || y < 0 || x >= c.width || y >= c.height {
-		return fmt.Errorf("point %d,%d is outside the %dx%d display", x, y, c.width, c.height)
+	if w, h := c.Size(); x < 0 || y < 0 || x >= w || y >= h {
+		return fmt.Errorf("point %d,%d is outside the %dx%d display", x, y, w, h)
 	}
 	msg := []byte{5, buttons, 0, 0, 0, 0}
 	binary.BigEndian.PutUint16(msg[2:], uint16(x))

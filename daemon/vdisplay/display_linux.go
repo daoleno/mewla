@@ -33,6 +33,7 @@ func Capability() error {
 // clients need the cookie in the display's own auth file.
 type Display struct {
 	Dir    string // holds the socket and the auth file, mode 0700
+	cookie string // the display's X authority cookie, hex
 	Number int
 	Width  int
 	Height int
@@ -43,6 +44,9 @@ type Display struct {
 	mu   sync.Mutex
 	apps []*exec.Cmd
 }
+
+// XPid is the display server's process ID.
+func (d *Display) XPid() int { return d.cmd.Process.Pid }
 
 // SocketPath is the private RFB socket.
 func (d *Display) SocketPath() string { return filepath.Join(d.Dir, "rfb.sock") }
@@ -107,9 +111,11 @@ func startOn(ctx context.Context, dir string, number, width, height int) (*Displ
 	d := &Display{Dir: dir, Number: number, Width: width, Height: height, done: make(chan struct{})}
 	_ = os.Remove(d.SocketPath())
 	_ = os.Remove(d.AuthPath())
-	if err := writeCookieFor(d.AuthPath(), number); err != nil {
+	cookie, err := writeCookieFor(d.AuthPath(), number)
+	if err != nil {
 		return nil, err
 	}
+	d.cookie = cookie
 	cmd := exec.Command("Xvnc", fmt.Sprintf(":%d", number),
 		"-auth", d.AuthPath(),
 		"-rfbport", "-1",
@@ -145,16 +151,17 @@ func startOn(ctx context.Context, dir string, number, width, height int) (*Displ
 	return nil, errors.New("the display took too long to start")
 }
 
-func writeCookieFor(path string, number int) error {
+func writeCookieFor(path string, number int) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		return err
+		return "", err
 	}
-	cmd := exec.Command("xauth", "-q", "-f", path, "add", fmt.Sprintf(":%d", number), ".", hex.EncodeToString(b))
+	cookie := hex.EncodeToString(b)
+	cmd := exec.Command("xauth", "-q", "-f", path, "add", fmt.Sprintf(":%d", number), ".", cookie)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("xauth: %v: %s", err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("xauth: %v: %s", err, strings.TrimSpace(string(out)))
 	}
-	return os.Chmod(path, 0o600)
+	return cookie, os.Chmod(path, 0o600)
 }
 
 // Dial opens an RFB connection to the display.

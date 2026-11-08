@@ -37,6 +37,8 @@ type Info struct {
 	Control string `json:"control"` // agent or person
 	Stopped bool   `json:"stopped,omitempty"`
 	Apps    int    `json:"apps"`
+	// IdleS is the seconds since the agent last used the display (0 while it acts).
+	IdleS int `json:"idle_s"`
 }
 
 // Viewer is a person's connection to a Worker's display.
