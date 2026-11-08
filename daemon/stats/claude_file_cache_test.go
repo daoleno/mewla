@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func selfRchar(t *testing.T) uint64 {
@@ -86,5 +87,62 @@ func TestClaudeStatsRereadOnlyChangedFiles(t *testing.T) {
 	fourth := c.collectClaudeSessionStats(home)["2026-04-04"]
 	if got := fourth.models["claude-sonnet-4-6"].totalTokens; got != 3*15 {
 		t.Fatalf("removed file still counted: total %d", got)
+	}
+}
+
+// A price catalog downloaded again carries a new timestamp and, most times,
+// the same rates. Only changed rates may cost the history a second read.
+func TestClaudeStatsCacheSurvivesAPriceRefreshWithTheSameRates(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".claude", "projects", "-tmp-mewla")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "big.jsonl")
+	if err := os.WriteFile(path, []byte(claudeSessionLines(0, 4000)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	size, _ := os.Stat(path)
+
+	prices.mu.Lock()
+	savedModels, savedAt, savedSource := prices.models, prices.updatedAt, prices.source
+	prices.models = cloneProviderPricing(savedModels)
+	prices.mu.Unlock()
+	t.Cleanup(func() {
+		prices.mu.Lock()
+		prices.models, prices.updatedAt, prices.source = savedModels, savedAt, savedSource
+		prices.mu.Unlock()
+	})
+
+	c := NewCollector()
+	c.collectClaudeSessionStats(home)
+
+	prices.mu.Lock()
+	prices.updatedAt = time.Now().Add(time.Hour)
+	for _, models := range prices.models {
+		for id, p := range models {
+			p.updatedAt = time.Now()
+			models[id] = p
+		}
+	}
+	prices.mu.Unlock()
+	before := selfRchar(t)
+	c.collectClaudeSessionStats(home)
+	if read := selfRchar(t) - before; read > uint64(size.Size())/20 {
+		t.Fatalf("a price refresh with the same rates read the history again: %d bytes", read)
+	}
+
+	prices.mu.Lock()
+	for _, models := range prices.models {
+		for id, p := range models {
+			p.input += 1
+			models[id] = p
+		}
+	}
+	prices.mu.Unlock()
+	before = selfRchar(t)
+	c.collectClaudeSessionStats(home)
+	if read := selfRchar(t) - before; read < uint64(size.Size()) {
+		t.Fatalf("changed rates kept costs priced at the old ones: only %d bytes read", read)
 	}
 }
