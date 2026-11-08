@@ -191,6 +191,7 @@ func loadKeyGuard() string {
 			kg.why = "no run loop mode"
 			return
 		}
+		log.Printf("screen: key-focus guard variant %q", keyGuardVariant)
 		kg.targets = map[int]*keyTap{}
 		kg.guarded = map[int]*guardedApp{}
 		kg.frontCallback = purego.NewCallback(frontTapCallback)
