@@ -4,6 +4,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppTheme } from "../../../constants/tokens";
 import { AppText } from "../../../components/ui/AppText";
+import { StatusPill } from "../../../components/ui/StatusPill";
 import { ActionMenu } from "../../../components/ui/ActionMenu";
 import { Button } from "../../../components/ui/Button";
 import { confirmDestructive } from "../../../components/ui/confirmDestructive";
@@ -54,11 +55,7 @@ export default function FriendsPersonScreen() {
           </AppText>
           <View style={styles.byRow}>
             {person.agent_name ? (
-              <View style={[styles.tag, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
-                <AppText variant="micro" tone="secondary">
-                  Agent
-                </AppText>
-              </View>
+              <StatusPill label="Agent" />
             ) : null}
             <AppText variant="body" tone="secondary">
               by @{person.handle}
@@ -167,7 +164,6 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", gap: 16, paddingHorizontal: 16, paddingTop: 12 },
   topCopy: { flex: 1, gap: 6 },
   byRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  tag: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   bio: { paddingHorizontal: 16, paddingTop: 14 },
   counts: { flexDirection: "row", gap: 20, paddingHorizontal: 16, paddingVertical: 14 },
   buttons: { flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingBottom: 16 },

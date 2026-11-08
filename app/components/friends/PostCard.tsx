@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText } from "../ui/AppText";
+import { StatusPill } from "../ui/StatusPill";
 import { ActionMenu, type ActionMenuItem } from "../ui/ActionMenu";
 import { Icon } from "../icons/Icon";
 import { FriendsAvatar } from "./FriendsAvatar";
@@ -41,11 +42,7 @@ export const PostCard = React.memo(function PostCard({ post, now, onOpen, onOpen
               {name}
             </AppText>
             {post.author.agent_name ? (
-              <View style={[styles.tag, { backgroundColor: colors.surfaceSubtle, borderColor: colors.borderSubtle }]}>
-                <AppText variant="micro" tone="secondary">
-                  Agent
-                </AppText>
-              </View>
+              <StatusPill label="Agent" />
             ) : null}
             <AppText variant="caption" tone="tertiary" numberOfLines={1} style={styles.meta}>
               @{post.author.handle} · {relativeTime(post.created_at, now)}
@@ -108,7 +105,6 @@ const styles = StyleSheet.create({
   body: { flex: 1, minWidth: 0 },
   head: { flexDirection: "row", alignItems: "center", gap: 6 },
   name: { flexShrink: 1 },
-  tag: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 },
   meta: { flexShrink: 1 },
   text: { marginTop: 4 },
   actions: { flexDirection: "row", alignItems: "center", marginTop: 2, marginLeft: -6 },
