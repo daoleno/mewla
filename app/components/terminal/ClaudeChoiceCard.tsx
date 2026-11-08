@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,9 +7,10 @@ import {
   TextInput,
   View, type ScrollViewInstance,
 } from "react-native";
-import type { TerminalThemeChrome } from "../../constants/terminalThemes";
-import { TypeScale, Typography } from "../../constants/tokens";
+import { TypeScale, Typography, useAppColors, type AppColors } from "../../constants/tokens";
 import type { ConversationChoice } from "../../services/codexConversation";
+import { Button } from "../ui/Button";
+import { InlineNotice } from "../ui/InlineNotice";
 import { outlinedSurface } from "../ui/outlinedSurface";
 import { Icon } from "../icons/Icon";
 import {
@@ -35,7 +35,6 @@ interface ClaudeChoiceCardProps {
   choice: ConversationChoice;
   /** The daemon is reachable. The daemon re-checks the screen before any key. */
   connected: boolean;
-  chrome: TerminalThemeChrome;
   /** The tallest the card may grow before it scrolls instead of passing under the header. */
   maxHeight?: number;
   onSubmit(answers: ChoiceAnswer[]): Promise<void>;
@@ -50,10 +49,10 @@ export function ClaudeChoiceCard({
   promptKey,
   choice,
   connected,
-  chrome,
   maxHeight,
   onSubmit,
 }: ClaudeChoiceCardProps) {
+  const colors = useAppColors();
   const [draft, setDraft] = useState(() => emptyChoiceDraft(choice));
   const [step, setStep] = useState(0);
   const [typing, setTyping] = useState(false);
@@ -127,7 +126,7 @@ export function ClaudeChoiceCard({
       accessibilityLabel="Waiting for your choice"
       style={[
         styles.card,
-        { backgroundColor: chrome.surface, borderColor: chrome.borderStrong },
+        { backgroundColor: colors.bgSurface, borderColor: colors.borderStrong },
         maxHeight != null ? { maxHeight } : null,
       ]}
     >
@@ -156,15 +155,15 @@ export function ClaudeChoiceCard({
                   tabOffsets.current[index] = event.nativeEvent.layout.x;
                 }}
                 onPress={() => goTo(index)}
-                style={[styles.tab, tabColors(chrome, active)]}
+                style={[styles.tab, tabColors(colors, active)]}
               >
                 <Icon
                   name={done ? "check" : "circle"}
                   size={done ? 13 : 11}
-                  color={done ? chrome.accent : chrome.textSubtle}
+                  color={done ? colors.accent : colors.textTertiary}
                 />
                 <Text
-                  style={[styles.tabText, { color: active ? chrome.text : chrome.textMuted }]}
+                  style={[styles.tabText, { color: active ? colors.textPrimary : colors.textSecondary }]}
                   numberOfLines={1}
                 >
                   {name}
@@ -181,10 +180,10 @@ export function ClaudeChoiceCard({
               tabOffsets.current[reviewStep] = event.nativeEvent.layout.x;
             }}
             onPress={() => goTo(reviewStep)}
-            style={[styles.tab, tabColors(chrome, reviewing)]}
+            style={[styles.tab, tabColors(colors, reviewing)]}
           >
-            <Icon name="checks" size={14} color={missing.length ? chrome.textSubtle : chrome.accent} />
-            <Text style={[styles.tabText, { color: reviewing ? chrome.text : chrome.textMuted }]} numberOfLines={1}>
+            <Icon name="checks" size={14} color={missing.length ? colors.textTertiary : colors.accent} />
+            <Text style={[styles.tabText, { color: reviewing ? colors.textPrimary : colors.textSecondary }]} numberOfLines={1}>
               Review
             </Text>
           </Pressable>
@@ -199,11 +198,11 @@ export function ClaudeChoiceCard({
             keyboardShouldPersistTaps="handled"
           >
             {choice.questions.length === 1 && question.header ? (
-              <Text style={[styles.header, { color: chrome.textMuted }]} numberOfLines={1}>
+              <Text style={[styles.header, { color: colors.textSecondary }]} numberOfLines={1}>
                 {question.header}
               </Text>
             ) : null}
-            <Text accessibilityRole="header" style={[styles.questionText, { color: chrome.text }]}>
+            <Text accessibilityRole="header" style={[styles.questionText, { color: colors.textPrimary }]}>
               {question.question}
             </Text>
             {typing
@@ -221,15 +220,15 @@ export function ClaudeChoiceCard({
                       onPress={() => pickOption(optionIndex)}
                       style={({ pressed }) => [
                         styles.option,
-                        { backgroundColor: selected ? chrome.accentSoft : "transparent" },
-                        pressed ? { backgroundColor: chrome.surfaceActive } : null,
+                        { backgroundColor: selected ? colors.accentSoft : "transparent" },
+                        pressed ? { backgroundColor: colors.surfaceActive } : null,
                       ]}
                     >
-                      <Marker chrome={chrome} multi={multi} selected={selected} number={optionIndex + 1} />
+                      <Marker colors={colors} multi={multi} selected={selected} number={optionIndex + 1} />
                       <View style={styles.optionCopy}>
-                        <Text style={[styles.optionLabel, { color: chrome.text }]}>{option.label}</Text>
+                        <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>{option.label}</Text>
                         {option.description ? (
-                          <Text style={[styles.optionDescription, { color: chrome.textMuted }]} numberOfLines={3}>
+                          <Text style={[styles.optionDescription, { color: colors.textSecondary }]} numberOfLines={3}>
                             {option.description}
                           </Text>
                         ) : null}
@@ -237,7 +236,7 @@ export function ClaudeChoiceCard({
                           <Text
                             style={[
                               styles.preview,
-                              { color: chrome.text, backgroundColor: chrome.surfaceMuted, borderColor: chrome.border },
+                              { color: colors.textPrimary, backgroundColor: colors.surfaceSubtle, borderColor: colors.border },
                             ]}
                           >
                             {option.preview}
@@ -253,7 +252,7 @@ export function ClaudeChoiceCard({
               style={[
                 styles.option,
                 styles.otherRow,
-                { backgroundColor: otherActive ? chrome.accentSoft : chrome.surfaceMuted },
+                { backgroundColor: otherActive ? colors.accentSoft : colors.surfaceSubtle },
               ]}
             >
               <Pressable
@@ -266,7 +265,7 @@ export function ClaudeChoiceCard({
                 onPress={() => setDraft((existing) => toggleChoiceOther(choice, existing, current))}
               >
                 <Marker
-                  chrome={chrome}
+                  colors={colors}
                   multi={multi}
                   selected={otherActive}
                   number={question.options.length + 1}
@@ -277,7 +276,7 @@ export function ClaudeChoiceCard({
                 accessibilityLabel={`Other answer for ${question.header || question.question}`}
                 editable={editable}
                 placeholder="Type something…"
-                placeholderTextColor={chrome.textSubtle}
+                placeholderTextColor={colors.textTertiary}
                 value={answer?.other ?? ""}
                 onFocus={() => {
                   setTyping(true);
@@ -294,7 +293,7 @@ export function ClaudeChoiceCard({
                 }}
                 returnKeyType={multi ? "done" : "next"}
                 blurOnSubmit
-                style={[styles.otherInput, { color: chrome.text }]}
+                style={[styles.otherInput, { color: colors.textPrimary }]}
               />
             </View>
           ) : null}
@@ -305,7 +304,7 @@ export function ClaudeChoiceCard({
           contentContainerStyle={styles.bodyContent}
           keyboardShouldPersistTaps="handled"
         >
-          <Text accessibilityRole="header" style={[styles.questionText, { color: chrome.text }]}>
+          <Text accessibilityRole="header" style={[styles.questionText, { color: colors.textPrimary }]}>
             Review your answers
           </Text>
           {choice.questions.map((item, index) => {
@@ -319,26 +318,26 @@ export function ClaudeChoiceCard({
                 onPress={() => goTo(index)}
                 style={({ pressed }) => [
                   styles.option,
-                  pressed ? { backgroundColor: chrome.surfaceActive } : null,
+                  pressed ? { backgroundColor: colors.surfaceActive } : null,
                 ]}
               >
                 <Icon
                   name={text ? "check" : "circle"}
                   size={text ? 16 : 14}
-                  color={text ? chrome.accent : chrome.seal}
+                  color={text ? colors.accent : colors.seal}
                 />
                 <View style={styles.optionCopy}>
-                  <Text style={[styles.optionDescription, { color: chrome.textMuted }]} numberOfLines={2}>
+                  <Text style={[styles.optionDescription, { color: colors.textSecondary }]} numberOfLines={2}>
                     {item.question}
                   </Text>
                   <Text
-                    style={[styles.optionLabel, { color: text ? chrome.text : chrome.seal }]}
+                    style={[styles.optionLabel, { color: text ? colors.textPrimary : colors.seal }]}
                     numberOfLines={3}
                   >
                     {text || "Not answered"}
                   </Text>
                 </View>
-                <Icon name="chevron-right" size={14} color={chrome.textSubtle} />
+                <Icon name="chevron-right" size={14} color={colors.textTertiary} />
               </Pressable>
             );
           })}
@@ -346,104 +345,75 @@ export function ClaudeChoiceCard({
       )}
 
       {error ? (
-        <Text style={[styles.status, { color: chrome.danger }]} numberOfLines={3}>
-          {error}
-        </Text>
+        <InlineNotice tone="danger" title="Could not send" detail={error} detailNumberOfLines={3} />
       ) : !connected ? (
-        <Text style={[styles.status, { color: chrome.textMuted }]} numberOfLines={2}>
-          Reconnecting to answer…
-        </Text>
+        <InlineNotice busy title="Reconnecting to answer…" />
       ) : null}
 
       <View style={styles.actions}>
         {current > 0 ? (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            label="Previous"
             accessibilityLabel="Previous question"
+            icon="chevron-left"
+            variant="plain"
+            size="sm"
             disabled={sending}
             onPress={() => goTo(current - 1)}
-            style={({ pressed }) => [styles.back, pressed ? { backgroundColor: chrome.surfaceActive } : null]}
-          >
-            <Icon name="chevron-left" size={14} color={chrome.accent} />
-            <Text style={[styles.backText, { color: chrome.accent }]}>Previous</Text>
-          </Pressable>
+          />
         ) : (
           <View />
         )}
         {reviewing ? (
           missing.length ? (
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              label={missing.length === 1 ? "1 question left" : `${missing.length} questions left`}
               accessibilityLabel={`Answer ${missing.length} more`}
+              variant="outlined"
+              size="sm"
               disabled={sending}
               onPress={() => goTo(missing[0])}
-              style={[styles.primary, { borderColor: chrome.seal, borderWidth: 1 }]}
-            >
-              <Text style={[styles.primaryText, { color: chrome.seal }]}>
-                {missing.length === 1 ? "1 question left" : `${missing.length} questions left`}
-              </Text>
-            </Pressable>
+            />
           ) : (
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              label={sending ? "Sending…" : "Submit"}
               accessibilityLabel="Send answer"
-              accessibilityState={{ disabled: !canSend, busy: sending }}
+              variant="seal"
+              size="sm"
+              loading={sending}
               disabled={!canSend}
               onPress={submit}
-              style={[styles.primary, { backgroundColor: canSend ? chrome.seal : chrome.disabledSurface }]}
-            >
-              {sending ? <ActivityIndicator size="small" color={chrome.onSeal} /> : null}
-              <Text style={[styles.primaryText, { color: canSend ? chrome.onSeal : chrome.textSubtle }]}>
-                {sending ? "Sending…" : "Submit"}
-              </Text>
-            </Pressable>
+            />
           )
         ) : (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            label={current === reviewStep - 1 ? "Review" : "Next"}
             accessibilityLabel="Next question"
-            accessibilityState={{ disabled: !questionAnswered || sending }}
+            variant="tinted"
+            size="sm"
             disabled={!questionAnswered || sending}
             onPress={() => goTo(nextChoiceStep(choice, current))}
-            style={[
-              styles.primary,
-              { backgroundColor: questionAnswered && !sending ? chrome.accentSoft : chrome.disabledSurface },
-            ]}
-          >
-            <Text
-              style={[
-                styles.primaryText,
-                { color: questionAnswered && !sending ? chrome.text : chrome.textSubtle },
-              ]}
-            >
-              {current === reviewStep - 1 ? "Review" : "Next"}
-            </Text>
-            <Icon
-              name="chevron-right"
-              size={14}
-              color={questionAnswered && !sending ? chrome.text : chrome.textSubtle}
-            />
-          </Pressable>
+          />
         )}
       </View>
     </View>
   );
 }
 
-function tabColors(chrome: TerminalThemeChrome, active: boolean) {
+function tabColors(colors: AppColors, active: boolean) {
   return {
-    backgroundColor: active ? chrome.accentSoft : "transparent",
-    borderColor: active ? chrome.accent : chrome.border,
+    backgroundColor: active ? colors.accentSoft : "transparent",
+    borderColor: active ? colors.accent : colors.border,
   };
 }
 
 function Marker({
-  chrome,
+  colors,
   multi,
   selected,
   number,
 }: {
-  chrome: TerminalThemeChrome;
+  colors: AppColors;
   multi: boolean;
   selected: boolean;
   number: number;
@@ -454,7 +424,7 @@ function Marker({
         <Icon
           name={selected ? "checkbox" : "square"}
           size={18}
-          color={selected ? chrome.accent : chrome.textSubtle}
+          color={selected ? colors.accent : colors.textTertiary}
         />
       </View>
     );
@@ -465,12 +435,12 @@ function Marker({
         styles.marker,
         styles.numberMarker,
         {
-          backgroundColor: selected ? chrome.accent : "transparent",
-          borderColor: selected ? chrome.accent : chrome.border,
+          backgroundColor: selected ? colors.accent : "transparent",
+          borderColor: selected ? colors.accent : colors.border,
         },
       ]}
     >
-      <Text style={[styles.number, { color: selected ? chrome.surface : chrome.textMuted }]}>{number}</Text>
+      <Text style={[styles.number, { color: selected ? colors.bgSurface : colors.textSecondary }]}>{number}</Text>
     </View>
   );
 }
@@ -587,40 +557,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  status: {
-    ...TypeScale.caption,
-    paddingHorizontal: 4,
-  },
   actions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-  },
-  back: {
-    minHeight: 40,
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 8,
-  },
-  backText: {
-    ...TypeScale.label,
-    fontFamily: Typography.chatFontMedium,
-  },
-  primary: {
-    minHeight: 40,
-    borderRadius: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 16,
-  },
-  primaryText: {
-    fontFamily: Typography.chatFontMedium,
-    fontSize: 14,
-    lineHeight: 18,
-    letterSpacing: 0,
   },
 });

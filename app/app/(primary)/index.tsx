@@ -52,6 +52,7 @@ import { ChatCanvas } from "../../components/terminal/ChatCanvas";
 import { CHAT_CHROME_HORIZONTAL_INSET } from "../../components/terminal/chatChromeMetrics";
 import { InterfaceChatSurface } from "../../components/terminal/InterfaceChatSurface";
 import { buildChatChrome } from "../../theme";
+import { TerminalThemeScope } from "../../theme/provider";
 import { useAppTheme } from "../../constants/tokens";
 import { shouldShowBrainWorkColumn } from "../../constants/windowRoom";
 import { wsClient } from "../../services/websocket";
@@ -781,6 +782,7 @@ export default function BrainScreen() {
     { title: liveSelectedSlip?.title },
   );
   return (
+    <TerminalThemeScope chrome={chrome}>
     <SafeAreaView
       style={[styles.screen, { backgroundColor: chrome.appBackground }]}
       edges={[]}
@@ -975,6 +977,7 @@ export default function BrainScreen() {
         onClose={closeWorkspaceViewer}
       />
     </SafeAreaView>
+    </TerminalThemeScope>
   );
 }
 

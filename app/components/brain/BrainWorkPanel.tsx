@@ -29,9 +29,10 @@ import {
 } from "./brainWorkSurface";
 import { PetSprite } from "../pets/PetSprite";
 import { markWorkOpen } from "../mewla/workOpenTiming";
-import { WorkSlip, WorkSlipActions, WorkStatusWord, type WorkSlipAction } from "./WorkSlip";
+import { WORK_STATUS_TONE, WorkSlip, WorkSlipActions, type WorkSlipAction } from "./WorkSlip";
 import { Icon } from "../icons/Icon";
 import { IconButton } from "../ui/IconButton";
+import { StatusPill } from "../ui/StatusPill";
 import { composerNeutralFill } from "../terminal/composerMaterial";
 import { CalendarOriginLink } from "../calendar/CalendarOriginLink";
 
@@ -114,7 +115,6 @@ export function BrainWorkList({
             {slips.map((slip) => (
               <WorkSlip
                 key={slip.workId}
-                chrome={chrome}
                 status={slip.status}
                 statusLabel={slip.statusLabel}
                 // The group caption says it once; a card speaks only when it differs.
@@ -410,7 +410,7 @@ export function BrainWorkDetailSheet({
           </View>
           <ScrollView contentContainerStyle={styles.detailContent} keyboardShouldPersistTaps="handled">
             <View style={styles.detailMeta}>
-              <WorkStatusWord status={slip.status} label={slip.statusLabel} chrome={chrome} />
+              <StatusPill tone={WORK_STATUS_TONE[slip.status]} label={slip.statusLabel} />
               {[meta, age].filter(Boolean).length ? (
                 <Text style={styles.columnSummary}>{[meta, age].filter(Boolean).join(" · ")}</Text>
               ) : null}
@@ -426,7 +426,7 @@ export function BrainWorkDetailSheet({
             {waitFor && !slip.calendar && waitFor !== slip.summary && !slip.question && waitFor.includes(" ") ? (
               <Text selectable style={styles.columnSummary}>Waiting for: {waitFor}</Text>
             ) : null}
-            {actions?.length ? <WorkSlipActions actions={actions} chrome={chrome} /> : null}
+            {actions?.length ? <WorkSlipActions actions={actions} /> : null}
             {canReply ? (
               <InterfaceComposerAttachmentRail
                 attachments={attachments}

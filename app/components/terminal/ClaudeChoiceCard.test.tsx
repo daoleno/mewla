@@ -21,14 +21,23 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     View: "View",
     StyleSheet: { create: (styles: unknown) => styles },
   }));
+  const colors = new Proxy({}, { get: (_target, key) => String(key) }) as any;
   mock.module("../../constants/tokens", () => ({
     TypeScale: { micro: {}, label: {}, caption: {} },
     Typography: { chatFont: "f", chatFontMedium: "fm", chatMonoFont: "mono" },
+    useAppColors: () => colors,
+  }));
+  // The shared kit is mocked as host nodes: the card owns the flow, not the pixels.
+  mock.module("../ui/Button", () => ({
+    Button: ({ label, accessibilityLabel, ...props }: any) =>
+      React.createElement("Pressable", { ...props, accessibilityLabel: accessibilityLabel ?? label }, label),
+  }));
+  mock.module("../ui/InlineNotice", () => ({
+    InlineNotice: ({ title, detail }: any) => React.createElement("Text", null, title, detail),
   }));
   mock.module("../ui/outlinedSurface", () => ({ outlinedSurface: () => ({}) }));
   mock.module("../icons/Icon", () => ({ Icon: "Icon" }));
   const { ClaudeChoiceCard } = await import("./ClaudeChoiceCard");
-  const chrome = new Proxy({}, { get: (_target, key) => String(key) }) as any;
   const choice = {
     kind: "AskUserQuestion",
     state: "pending" as const,
@@ -99,7 +108,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
-        <ClaudeChoiceCard promptKey={promptKey} choice={shown} connected={connected} chrome={chrome} onSubmit={onSubmit} />,
+        <ClaudeChoiceCard promptKey={promptKey} choice={shown} connected={connected} onSubmit={onSubmit} />,
       );
     });
     const all = () => renderer.root.findAllByType("Pressable" as any);
@@ -305,7 +314,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     await press(optionPressable("Apple"));
     await act(async () => {
       renderer.update(
-        <ClaudeChoiceCard promptKey="toolu_1" choice={{ ...choice }} connected chrome={chrome} onSubmit={async () => {}} />,
+        <ClaudeChoiceCard promptKey="toolu_1" choice={{ ...choice }} connected onSubmit={async () => {}} />,
       );
     });
     expect(tab("Fruit").props.accessibilityLabel).toBe("Fruit, answered");
@@ -329,7 +338,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     expect(text()).toContain("Which colors?");
     await act(async () => {
       renderer.update(
-        <ClaudeChoiceCard promptKey="toolu_2" choice={choice} connected chrome={chrome} onSubmit={async () => {}} />,
+        <ClaudeChoiceCard promptKey="toolu_2" choice={choice} connected onSubmit={async () => {}} />,
       );
     });
     expect(text()).toContain("Which fruit?");
@@ -341,7 +350,7 @@ if (!process.env.MEWLA_CLAUDE_CHOICE_CARD_TEST) {
     expect(JSON.stringify(renderer.toJSON())).not.toContain("maxHeight");
     await act(async () => {
       renderer.update(
-        <ClaudeChoiceCard promptKey="toolu_1" choice={choice} connected chrome={chrome} maxHeight={321} onSubmit={async () => {}} />,
+        <ClaudeChoiceCard promptKey="toolu_1" choice={choice} connected maxHeight={321} onSubmit={async () => {}} />,
       );
     });
     expect(JSON.stringify(renderer.toJSON())).toContain('"maxHeight":321');
