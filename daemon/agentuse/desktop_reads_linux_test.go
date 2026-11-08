@@ -14,6 +14,15 @@ import (
 	"time"
 )
 
+const fakeChromeEnv = "MEWLA_FAKE_CHROME_FOR_TEST"
+
+func init() {
+	if os.Getenv(fakeChromeEnv) == "1" {
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	}
+}
+
 func selfReadSyscalls(t *testing.T) uint64 {
 	t.Helper()
 	raw, err := os.ReadFile("/proc/self/io")
@@ -45,9 +54,16 @@ func TestFindDesktopReadsOnlyChromesEnvironment(t *testing.T) {
 	}
 	defer listener.Close()
 
-	source, err := os.Open("/bin/sleep")
+	// The fake Chrome is this test binary under another name, told by an
+	// environment variable to wait: a copied /bin/sleep is a multi-call
+	// coreutils on some systems and exits when it is not called "sleep".
+	self, err := os.Executable()
 	if err != nil {
-		t.Skipf("no sleep: %v", err)
+		t.Skipf("no executable: %v", err)
+	}
+	source, err := os.Open(self)
+	if err != nil {
+		t.Skipf("cannot read the test binary: %v", err)
 	}
 	chrome := filepath.Join(dir, "chrome")
 	target, err := os.OpenFile(chrome, os.O_CREATE|os.O_WRONLY, 0o755)
@@ -59,8 +75,8 @@ func TestFindDesktopReadsOnlyChromesEnvironment(t *testing.T) {
 	}
 	source.Close()
 	target.Close()
-	cmd := exec.Command(chrome, "60")
-	cmd.Env = []string{"WAYLAND_DISPLAY=" + socket, "XDG_RUNTIME_DIR=" + dir}
+	cmd := exec.Command(chrome, "-test.run=^$")
+	cmd.Env = []string{"WAYLAND_DISPLAY=" + socket, "XDG_RUNTIME_DIR=" + dir, fakeChromeEnv + "=1"}
 	if err := cmd.Start(); err != nil {
 		t.Skipf("cannot start: %v", err)
 	}
