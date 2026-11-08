@@ -1094,11 +1094,14 @@ function ModelSyncSheet({
         }
         ListEmptyComponent={
           !saving ? (
-            <Text style={styles.pickerEmpty}>
-              {choices.length === 0
-                ? "No models were reported by this endpoint."
-                : "No models match this search."}
-            </Text>
+            <EmptyState
+              size="inline"
+              title={
+                choices.length === 0
+                  ? "No models were reported by this endpoint."
+                  : "No models match this search."
+              }
+            />
           ) : undefined
         }
       />
@@ -1280,13 +1283,6 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       ...UiTextMetrics,
       ...TypeScale.body,
       color: colors.textSecondary,
-    },
-    pickerEmpty: {
-      ...UiTextMetrics,
-      ...TypeScale.body,
-      color: colors.textTertiary,
-      textAlign: "center",
-      paddingVertical: 20,
     },
     editorRetryHint: {
       ...UiTextMetrics,

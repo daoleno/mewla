@@ -129,7 +129,7 @@ export function CalendarAlertCard({
             {formatCalendarTime(item)}
           </AppText>
           {notes ? <AppText>{notes}</AppText> : null}
-          {error ? <InlineNotice tone="danger" title={error} /> : null}
+          {error ? <InlineNotice tone="danger" title="That did not go through" detail={error} detailNumberOfLines={0} /> : null}
           <View style={styles.actions}>
             <Button label="Done" variant="filled" size="lg" block disabled={busy} onPress={() => void act(onDone)} />
             <View style={styles.row}>

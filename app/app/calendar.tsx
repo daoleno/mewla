@@ -67,6 +67,7 @@ import { useCurrentServer } from "../store/currentServer";
 import { Icon } from "../components/icons/Icon";
 import { BottomSheetFrame } from "../components/ui/BottomSheetFrame";
 import { Button } from "../components/ui/Button";
+import { EmptyState } from "../components/ui/EmptyState";
 import { ChipGroup, type ChipOption } from "../components/ui/ChipGroup";
 import { IconButton } from "../components/ui/IconButton";
 import { MobileSingleLineInput } from "../components/ui/MobileSingleLineInput";
@@ -343,14 +344,7 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
             }}
           />
           {props.loading ? (
-            <View
-              accessibilityRole="progressbar"
-              accessibilityLabel="Loading calendar"
-              style={styles.agendaStatus}
-            >
-              <Icon name="sync" size={20} color={colors.accent} />
-              <Text style={styles.emptyTitle}>Loading calendar…</Text>
-            </View>
+            <EmptyState size="inline" busy title="Loading calendar…" />
           ) : sections.length ? (
             sections.map((section) => (
               <View key={section.title} style={styles.section}>
@@ -368,8 +362,14 @@ export default function CalendarScreen(props: CalendarScreenProps = {}) {
             ))
           ) : (
             <EmptyState
-              connected={Boolean(activeServer)}
-              dateFiltered={selectedDate !== null}
+              size="inline"
+              title={
+                activeServer
+                  ? selectedDate !== null
+                    ? "Nothing planned for this date"
+                    : "Nothing planned"
+                  : "Calendar offline"
+              }
             />
           )}
         </View>
@@ -603,36 +603,6 @@ function MonthHeader({
     </View>
   );
 }
-function EmptyState({
-  connected,
-  dateFiltered,
-}: {
-  connected: boolean;
-  dateFiltered: boolean;
-}) {
-  const colors = useAppColors();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  return (
-    <View style={styles.empty}>
-      <Icon
-        name="calendar-blank"
-        size={19}
-        color={colors.textTertiary}
-      />
-      <Text
-        maxFontSizeMultiplier={CALENDAR_FONT_SCALE_MAX}
-        style={styles.emptyTitle}
-      >
-        {connected
-          ? dateFiltered
-            ? "Nothing planned for this date"
-            : "Nothing planned"
-          : "Calendar offline"}
-      </Text>
-    </View>
-  );
-}
-
 function EditorModal({
   value,
   serverId,
@@ -1081,15 +1051,6 @@ function createStyles(colors: any) {
     },
     agendaTitle: { ...TypeScale.heading, flex: 1, color: colors.textPrimary },
     agendaAnchor: { ...TypeScale.caption, color: colors.textSecondary },
-    agendaStatus: {
-      minHeight: 64,
-      paddingVertical: Spacing.md,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: Spacing.sm,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.borderSubtle,
-    },
     section: { gap: 4 },
     sectionTitle: {
       ...TypeScale.heading,
@@ -1135,21 +1096,6 @@ function createStyles(colors: any) {
     // One line: the state, then what the item does, cut to fit.
     rowMeta: { flexDirection: "row", alignItems: "center", gap: 4 },
     metaDot: { color: colors.textTertiary },
-    empty: {
-      minHeight: 52,
-      paddingVertical: Spacing.sm,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: Spacing.sm,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.borderSubtle,
-    },
-    emptyTitle: { ...TypeScale.compact, color: colors.textSecondary },
-    emptyBody: {
-      ...TypeScale.body,
-      color: colors.textTertiary,
-      textAlign: "center",
-    },
     monthHeader: {
       height: 48,
       flexDirection: "row",
