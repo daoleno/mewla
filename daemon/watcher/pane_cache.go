@@ -187,6 +187,22 @@ func (p *paneScreens) learnOwnership(asked []tmuxPane, owned map[string]bool) {
 	}
 }
 
+// paneRoots are the process ids of the panes in the latest inventory.
+func (p *paneScreens) paneRoots() []int {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	roots := make([]int, 0, len(p.stamps))
+	for _, stamp := range p.stamps {
+		if stamp.pid > 0 {
+			roots = append(roots, stamp.pid)
+		}
+	}
+	return roots
+}
+
 // processes returns the process table, read fresh only when the pane inventory
 // has moved since the last read or the last read is old. The result is shared
 // and read-only. A failed read (nil) is never kept.

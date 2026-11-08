@@ -22,7 +22,7 @@ func readProcesses(previous map[int]Process) (map[int]Process, error) {
 			continue
 		}
 		root := filepath.Join("/proc", entry.Name())
-		raw, err := os.ReadFile(root + "/stat")
+		raw, err := ReadProcFile(root + "/stat")
 		if err != nil {
 			continue
 		}

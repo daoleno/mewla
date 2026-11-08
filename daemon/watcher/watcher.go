@@ -456,7 +456,9 @@ func New(pollInterval time.Duration) *Watcher {
 	w.screens = newPaneScreens()
 	w.listPanes = w.listTmuxPanes
 	w.capturePane = w.capturePaneContent
-	w.snapshotProcesses = func() map[int]processInfo { return w.screens.processes(snapshotProcesses) }
+	w.snapshotProcesses = func() map[int]processInfo {
+		return w.screens.processes(func() map[int]processInfo { return snapshotProcessesNear(w.screens.paneRoots()) })
+	}
 	return w
 }
 
