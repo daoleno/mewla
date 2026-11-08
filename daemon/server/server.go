@@ -474,6 +474,15 @@ type clientMessage struct {
 	Runtime              *modelprofiles.ThreadRuntimeChoice     `json:"runtime"`
 	Credential           string                                 `json:"credential"`
 	ProviderConnection   *modelprofiles.ProviderConnectionInput `json:"provider_connection"`
+	GitRepoRoot          string                                 `json:"repo_root"`
+	GitPaths             []string                               `json:"paths"`
+	GitPatch             string                                 `json:"patch"`
+	GitMessage           string                                 `json:"message"`
+	GitSHA               string                                 `json:"sha"`
+	GitBranch            string                                 `json:"branch"`
+	GitCreate            bool                                   `json:"create"`
+	GitSkip              int                                    `json:"skip"`
+	GitUndo              []gitDiscardUndo                       `json:"undo"`
 }
 
 // Handler exposes the daemon's complete origin as one transport boundary.
@@ -1048,6 +1057,9 @@ func (s *Server) handleClientMessage(conn *websocket.Conn, msg []byte) {
 		go s.handleRewindMessage(conn, raw)
 	case "git_diff_status", "git_diff_patch", "git_diff_file_content", "git_repo_paths", "git_repo_file_content", "list_dir":
 		s.handleRepositoryMessage(conn, raw)
+	case "git_stage", "git_unstage", "git_discard", "git_discard_undo", "git_hunk", "git_commit", "git_push", "git_pull", "git_fetch", "git_switch", "git_branches", "git_log", "git_show":
+		// Mutations can wait on the network (push, pull), so they never block the read loop.
+		go s.handleGitMessage(conn, raw)
 	case "service_tunnel":
 		s.handleServiceTunnel(conn, raw)
 	case "list_session_services":
