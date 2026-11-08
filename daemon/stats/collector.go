@@ -47,6 +47,9 @@ type Collector struct {
 	// refresh reads only the files that changed. Guarded by refreshMu.
 	claudeFiles       map[string]claudeFileUsage
 	claudeFilesPrices map[string]map[string]modelPricing
+	// claudeScans holds the scans of the files that were modified last, to go
+	// on from when they grow. Guarded by refreshMu.
+	claudeScans map[string]*claudeScan
 }
 
 // claudeFileUsage is one session file's aggregate, valid while the file keeps
@@ -609,6 +612,7 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 			removed++
 		}
 	}
+	c.trimClaudeScans(seen)
 	if err != nil {
 		c.warnf("claude-walk", "[stats] Claude sessions could not be listed: %v", err)
 	}
@@ -619,6 +623,29 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 	}
 
 	return byDate
+}
+
+// trimClaudeScans drops the scans of files that are gone and keeps those of the
+// claudeScansKept files modified last: the ones that grow.
+func (c *Collector) trimClaudeScans(seen map[string]bool) {
+	for path := range c.claudeScans {
+		if !seen[path] {
+			delete(c.claudeScans, path)
+		}
+	}
+	if len(c.claudeScans) <= claudeScansKept {
+		return
+	}
+	paths := make([]string, 0, len(c.claudeScans))
+	for path := range c.claudeScans {
+		paths = append(paths, path)
+	}
+	sort.Slice(paths, func(i, j int) bool {
+		return c.claudeScans[paths[i]].modified.After(c.claudeScans[paths[j]].modified)
+	})
+	for _, path := range paths[claudeScansKept:] {
+		delete(c.claudeScans, path)
+	}
 }
 
 // firstSessionCwd is the first folder a session file records, from its first
@@ -647,132 +674,229 @@ type skillEntry struct {
 	projects map[string]bool
 }
 
+// claudeSessionLine is the part of a session file record the stats read.
+type claudeSessionLine struct {
+	Type      string `json:"type"`
+	Timestamp string `json:"timestamp"`
+	Cwd       string `json:"cwd"`
+	Message   struct {
+		ID      string          `json:"id"`
+		Model   string          `json:"model"`
+		Content json.RawMessage `json:"content"`
+		Usage   sessionUsage    `json:"usage"`
+	} `json:"message"`
+}
+
+type claudeUsageRecord struct {
+	occurredAt   time.Time
+	date         string
+	hour         int // 0-23, for heatmap slot bucketing
+	projectName  string
+	modelID      string
+	totalTokens  int64
+	inputTokens  int64
+	outputTokens int64
+	reasoning    int64
+	cacheRead    int64
+	cacheCreate  int64
+}
+
+// claudeScan is what reading one session file front to back has learned. A
+// file that is still being written is read again every refresh; the scan
+// goes on from where it stopped, so the refresh costs the bytes the file grew
+// by instead of the whole file (a Worker's transcript reaches hundreds of MB).
+type claudeScan struct {
+	identity    string
+	projectName string
+	// offset is where the next read starts: after the last line consumed.
+	offset int64
+	guard  []byte
+	// modified is the file's modification time when it was last read.
+	modified time.Time
+
+	messageUsage map[string]*claudeUsageRecord
+	projectDates map[string]map[string]bool
+	// counted holds the tool and skill calls, which add up line by line.
+	counted map[string]*dateAgg
+}
+
+const claudeScanGuardBytes = 256
+
+// claudeScansKept bounds the scans kept for files that may grow again.
+const claudeScansKept = 8
+
+func newClaudeScan(identity, projectName string) *claudeScan {
+	return &claudeScan{
+		identity:     identity,
+		projectName:  projectName,
+		messageUsage: make(map[string]*claudeUsageRecord),
+		projectDates: make(map[string]map[string]bool),
+		counted:      make(map[string]*dateAgg),
+	}
+}
+
+// scanSessionJSONL adds up one session file into byDate, reading only what the
+// file gained since the last scan of it when it has only grown.
 func (c *Collector) scanSessionJSONL(path, projectName string, byDate map[string]*dateAgg) {
 	f, err := os.Open(path)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-
-	type sessionLine struct {
-		Type      string `json:"type"`
-		Timestamp string `json:"timestamp"`
-		Cwd       string `json:"cwd"`
-		Message   struct {
-			ID      string          `json:"id"`
-			Model   string          `json:"model"`
-			Content json.RawMessage `json:"content"`
-			Usage   sessionUsage    `json:"usage"`
-		} `json:"message"`
+	info, err := f.Stat()
+	if err != nil {
+		return
 	}
-	type usageRecord struct {
-		occurredAt   time.Time
-		date         string
-		hour         int // 0-23, for heatmap slot bucketing
-		projectName  string
-		modelID      string
-		totalTokens  int64
-		inputTokens  int64
-		outputTokens int64
-		reasoning    int64
-		cacheRead    int64
-		cacheCreate  int64
+	scan := c.claudeScans[path]
+	if scan == nil || !scan.continues(f, info, projectName) {
+		scan = newClaudeScan(usageStamp(info).Identity, projectName)
+	}
+	scan.read(f, info)
+	scan.finish(byDate)
+	if c.claudeScans == nil {
+		c.claudeScans = map[string]*claudeScan{}
+	}
+	c.claudeScans[path] = scan
+}
+
+// continues reports whether the file is the one the scan read, grown by appends.
+func (s *claudeScan) continues(f *os.File, info os.FileInfo, projectName string) bool {
+	if s.projectName != projectName || usageStamp(info).Identity != s.identity || info.Size() < s.offset {
+		return false
+	}
+	if info.Size() == s.offset && !info.ModTime().Equal(s.modified) {
+		return false // rewritten in place
+	}
+	if len(s.guard) > 0 {
+		before := make([]byte, len(s.guard))
+		if n, err := f.ReadAt(before, s.offset-int64(len(before))); n != len(before) || (err != nil && err != io.EOF) || !bytes.Equal(before, s.guard) {
+			return false
+		}
+	}
+	return true
+}
+
+// read consumes the complete lines from the offset to the size the file had
+// when it was statted, and a last line that is a whole record already.
+func (s *claudeScan) read(f *os.File, info os.FileInfo) {
+	size := info.Size()
+	s.modified = info.ModTime()
+	reader := bufio.NewReaderSize(io.NewSectionReader(f, s.offset, size-s.offset), 1<<20)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			trimmed := bytes.TrimSpace(line)
+			if err != io.EOF || len(trimmed) == 0 || trimmed[0] != '{' || !json.Valid(trimmed) {
+				break // a line still being written waits for its newline
+			}
+		}
+		s.offset += int64(len(line))
+		s.consume(line)
+		if err != nil {
+			break
+		}
+	}
+	guard := int64(claudeScanGuardBytes)
+	if s.offset < guard {
+		guard = s.offset
+	}
+	s.guard = make([]byte, guard)
+	if n, _ := f.ReadAt(s.guard, s.offset-guard); n != len(s.guard) {
+		s.guard = nil
+	}
+}
+
+func (s *claudeScan) consume(line []byte) {
+	var entry claudeSessionLine
+	if err := json.Unmarshal(line, &entry); err != nil {
+		return
+	}
+	date := dateFromTimestamp(entry.Timestamp)
+	if date == "" {
+		return
 	}
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 1024*1024), 16*1024*1024)
-	messageUsage := make(map[string]*usageRecord)
-	projectDates := make(map[string]map[string]bool)
+	lineProjectName := s.projectName
+	if entry.Cwd != "" {
+		lineProjectName = filepath.Base(entry.Cwd)
+	}
+	if lineProjectName != "" {
+		if s.projectDates[lineProjectName] == nil {
+			s.projectDates[lineProjectName] = make(map[string]bool)
+		}
+		s.projectDates[lineProjectName][date] = true
+	}
+	if entry.Type != "assistant" {
+		return
+	}
+	if hasUsage(entry.Message.Usage) {
+		key := entry.Message.ID
+		if key == "" {
+			key = entry.Timestamp + ":" + entry.Message.Model
+		}
+		rec := s.messageUsage[key]
+		if rec == nil {
+			rec = &claudeUsageRecord{
+				occurredAt:  parseOccurrence(entry.Timestamp),
+				date:        date,
+				hour:        hourFromTimestamp(entry.Timestamp),
+				projectName: lineProjectName,
+				modelID:     entry.Message.Model,
+			}
+			s.messageUsage[key] = rec
+		}
+		rec.inputTokens = max64(rec.inputTokens, entry.Message.Usage.InputTokens)
+		rec.outputTokens = max64(rec.outputTokens, entry.Message.Usage.OutputTokens)
+		rec.cacheRead = max64(rec.cacheRead, entry.Message.Usage.CacheReadInputTokens)
+		rec.cacheCreate = max64(rec.cacheCreate, entry.Message.Usage.CacheCreationInputTokens)
+		rec.totalTokens = max64(rec.totalTokens, entry.Message.Usage.InputTokens+
+			entry.Message.Usage.OutputTokens+
+			entry.Message.Usage.CacheReadInputTokens+
+			entry.Message.Usage.CacheCreationInputTokens)
+	}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
-
-		var entry sessionLine
-		if err := json.Unmarshal(line, &entry); err != nil {
+	if !bytes.Contains(line, []byte("tool_use")) {
+		return
+	}
+	var content []struct {
+		Type  string          `json:"type"`
+		Name  string          `json:"name"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(entry.Message.Content, &content); err != nil {
+		return
+	}
+	agg := ensureDateAgg(s.counted, date)
+	for _, c := range content {
+		if c.Type != "tool_use" {
 			continue
 		}
-		date := dateFromTimestamp(entry.Timestamp)
-		if date == "" {
-			continue
-		}
-
-		lineProjectName := projectName
-		if entry.Cwd != "" {
-			lineProjectName = filepath.Base(entry.Cwd)
-		}
-		if lineProjectName != "" {
-			if projectDates[lineProjectName] == nil {
-				projectDates[lineProjectName] = make(map[string]bool)
+		if c.Name == "Skill" {
+			var inp struct {
+				Skill string `json:"skill"`
 			}
-			projectDates[lineProjectName][date] = true
-		}
-
-		if entry.Type == "assistant" {
-			if hasUsage(entry.Message.Usage) {
-				key := entry.Message.ID
-				if key == "" {
-					key = entry.Timestamp + ":" + entry.Message.Model
+			if err := json.Unmarshal(c.Input, &inp); err == nil && inp.Skill != "" {
+				se := agg.skills[inp.Skill]
+				if se == nil {
+					se = &skillEntry{projects: make(map[string]bool)}
+					agg.skills[inp.Skill] = se
 				}
-				rec := messageUsage[key]
-				if rec == nil {
-					rec = &usageRecord{
-						occurredAt:  parseOccurrence(entry.Timestamp),
-						date:        date,
-						hour:        hourFromTimestamp(entry.Timestamp),
-						projectName: lineProjectName,
-						modelID:     entry.Message.Model,
-					}
-					messageUsage[key] = rec
-				}
-				rec.inputTokens = max64(rec.inputTokens, entry.Message.Usage.InputTokens)
-				rec.outputTokens = max64(rec.outputTokens, entry.Message.Usage.OutputTokens)
-				rec.cacheRead = max64(rec.cacheRead, entry.Message.Usage.CacheReadInputTokens)
-				rec.cacheCreate = max64(rec.cacheCreate, entry.Message.Usage.CacheCreationInputTokens)
-				rec.totalTokens = max64(rec.totalTokens, entry.Message.Usage.InputTokens+
-					entry.Message.Usage.OutputTokens+
-					entry.Message.Usage.CacheReadInputTokens+
-					entry.Message.Usage.CacheCreationInputTokens)
-			}
-
-			if !strings.Contains(string(line), "tool_use") {
-				continue
-			}
-
-			var content []struct {
-				Type  string          `json:"type"`
-				Name  string          `json:"name"`
-				Input json.RawMessage `json:"input"`
-			}
-			if err := json.Unmarshal(entry.Message.Content, &content); err != nil {
-				continue
-			}
-
-			agg := ensureDateAgg(byDate, date)
-			for _, c := range content {
-				if c.Type != "tool_use" {
-					continue
-				}
-				if c.Name == "Skill" {
-					var inp struct {
-						Skill string `json:"skill"`
-					}
-					if err := json.Unmarshal(c.Input, &inp); err == nil && inp.Skill != "" {
-						se := agg.skills[inp.Skill]
-						if se == nil {
-							se = &skillEntry{projects: make(map[string]bool)}
-							agg.skills[inp.Skill] = se
-						}
-						se.calls++
-						if lineProjectName != "" {
-							se.projects[lineProjectName] = true
-						}
-					}
-				} else {
-					agg.tools[c.Name]++
+				se.calls++
+				if lineProjectName != "" {
+					se.projects[lineProjectName] = true
 				}
 			}
+		} else {
+			agg.tools[c.Name]++
 		}
 	}
+}
+
+// finish adds what the scan has learned to byDate. It leaves the scan as it
+// is, to be read on from.
+func (s *claudeScan) finish(byDate map[string]*dateAgg) {
+	mergeDateAgg(byDate, s.counted)
+	messageUsage, projectDates := s.messageUsage, s.projectDates
 
 	for name, dates := range projectDates {
 		for date := range dates {

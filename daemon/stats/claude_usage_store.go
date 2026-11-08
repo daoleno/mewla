@@ -44,6 +44,14 @@ func claudeUsageStoreKey(prices map[string]map[string]modelPricing) string {
 	hash := sha256.New()
 	fmt.Fprintf(hash, "%d\n", claudeUsageStoreVersion)
 	writeUsageShape(hash, reflect.TypeOf(map[string]*dateAgg{}))
+	writeUsagePrices(hash, prices)
+	return fmt.Sprintf("%x", hash.Sum(nil))
+}
+
+// writeUsagePrices writes the rates in an order and form that depend on
+// nothing of the process: a pointer printed as an address would give every
+// start a key of its own (see TestClaudeUsageStoreKeyNamesNoAddress).
+func writeUsagePrices(hash interface{ Write([]byte) (int, error) }, prices map[string]map[string]modelPricing) {
 	providers := make([]string, 0, len(prices))
 	for provider := range prices {
 		providers = append(providers, provider)
@@ -61,7 +69,6 @@ func claudeUsageStoreKey(prices map[string]map[string]modelPricing) string {
 			fmt.Fprintf(hash, "%s|%s|%+v\n", provider, model, price)
 		}
 	}
-	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 func writeUsageShape(out interface{ Write([]byte) (int, error) }, t reflect.Type) {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -186,5 +187,24 @@ func TestClaudeStatsCacheIsDroppedForOtherRatesAndDamage(t *testing.T) {
 	}
 	if read := selfRchar(t) - before; read < uint64(size) {
 		t.Fatalf("a damaged store was used: %d bytes read", read)
+	}
+}
+
+// The key must be the same in every process: a rate table written with an
+// address in it would never match the store of the process before.
+func TestClaudeUsageStoreKeyNamesNoAddress(t *testing.T) {
+	prices.mu.RLock()
+	current := cloneProviderPricing(prices.models)
+	prices.mu.RUnlock()
+	var text bytes.Buffer
+	writeUsagePrices(&text, current)
+	if text.Len() == 0 {
+		t.Fatal("no rates")
+	}
+	if strings.Contains(text.String(), "0xc0") {
+		t.Fatalf("the rates are written with an address: %.200s", text.String())
+	}
+	if claudeUsageStoreKey(current) != claudeUsageStoreKey(cloneProviderPricing(current)) {
+		t.Fatal("the key differs for the same rates")
 	}
 }
