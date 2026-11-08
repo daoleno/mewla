@@ -2,7 +2,7 @@
 # Web suite of the agent-use benchmark, fully automatic, on this Linux computer. No window of the user's is used:
 # its own Xvnc display, its own Chrome for Testing, its own throwaway state; nothing of the live daemon is touched.
 #
-#   web/run.sh [--reps 3] [--only id,id] [--with-long] [--sides mewla,ab] [--keep] [--wm none|kwin] [--tag label]
+#   web/run.sh [--reps 3] [--only id,id] [--with-long] [--sides mewla] [--keep] [--wm none|kwin] [--tag label]
 #   --wm kwin: run kwin_x11 (KDE's window manager, default focus-stealing prevention, no compositing) on the display, so
 #   window placement, stacking and activation are a real desktop's and not a bare X server's. --tag goes into the run id
 #   (before / after a change).
@@ -12,14 +12,12 @@
 #   run behind benchmarks' mewla-proxy.mjs (the tool advice and snapshot compaction of daemon/agentuse, mirrored),
 #   as `claude -p --tools ""` with only mewla_chrome, claude-sonnet-5-5. A person (xuser.c) types into a window of
 #   their own all the while: that is the non-interference probe (suite.mjs --nonint).
-# ab side: agent-browser on the same Chrome through CDP, success and speed only (it has no window of its own, so
-#   the probe would measure the harness, not the tool).
 # Writes results/<run>.json through aub.py. Needs: node, go, cc + libX11/libXtst headers, Xvnc, claude, network
 # (npm i @playwright/mcp at the version daemon/agentuse/playwright/package.json pins).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../../.." && pwd)
-REPS=3; ONLY=""; SIDES="mewla,ab"; LONG=""; KEEP=""; WM=none; TAG=""
+REPS=3; ONLY=""; SIDES="mewla"; LONG=""; KEEP=""; WM=none; TAG=""
 while [ $# -gt 0 ]; do
   case $1 in
     --reps) REPS=$2; shift 2;;
@@ -41,7 +39,6 @@ cleanup() {
   sleep 3
   [ -f "$WORK/wm.pid" ] && kill "$(cat "$WORK/wm.pid")" 2>/dev/null || true
   [ -f "$WORK/xvnc.pid" ] && kill "$(cat "$WORK/xvnc.pid")" 2>/dev/null || true
-  agent-browser close --all >/dev/null 2>&1 || true
   [ -n "$KEEP" ] || rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -80,9 +77,5 @@ for side in ${SIDES//,/ }; do
     AUB_META="{\"run_id\":\"$STAMP-web-fixture-mewla_chrome-bg-$WM$TAG\",\"transport\":\"Mewla extension $EXT + native host + bridge (real); supervise layer mirrored by mewla-proxy.mjs; display: $WMNOTE\",\"tool_version\":\"git:$SHA\",\"nonint_measured\":[\"key_focus_lost\",\"raised_over_user\",\"typing_lost\",\"pointer_moved\",\"user_page_hidden\"],\"nonint_not_measured\":[\"clipboard\",\"space_switch\",\"dialog_on_user\",\"app_activation\"]}" \
       "${SUITE[@]}" --side mewla --nonint --out "$WORK/mewla.json"
     python3 -I "$HERE/../aub.py" convert-web "$WORK/mewla.json"
-  else
-    AUB_META="{\"run_id\":\"$STAMP-web-fixture-agent-browser-fg\",\"transport\":\"CDP attach to the same Chrome\",\"tool_version\":\"$(agent-browser --version 2>/dev/null | head -1)\"}" \
-      "${SUITE[@]}" --side ab --out "$WORK/ab.json"
-    python3 -I "$HERE/../aub.py" convert-web "$WORK/ab.json"
   fi
 done

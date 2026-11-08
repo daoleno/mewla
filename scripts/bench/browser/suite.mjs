@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Task suite: a real agent (claude -p, same model) does each task with one
 // tool. Wall-clock, turns, tokens and success come from the run itself.
-//   node suite.mjs --side mewla|ab [--reps 3] [--only id,id] [--out file.json] [--model claude-sonnet-5-5]
+//   node suite.mjs --side mewla|vscreen|bu [--reps 3] [--only id,id] [--out file.json] [--model claude-sonnet-5-5]
 // Env: BENCH_DIR (env.sh), and for the mewla side BENCH_MCP (argv JSON of the Playwright MCP command).
 import { spawn, execFileSync } from 'node:child_process';
 import { writeFileSync, mkdtempSync, readFileSync, rmSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -30,11 +30,10 @@ const delegation = readFileSync(path.join(here, '../../../daemon/brain/templates
   .split('\n').find(l => l.includes('mewla_chrome')) ?? '';
 const SYSTEM = {
   mewla: `You are a Worker. Your browser tool is mewla_chrome (the browser_* tools): the user's own Chrome. ${delegation.replace(/^[^]*?When mewla agent-use status says your Chrome is ready, /, '')} Reply with only the answer when done.`,
-  // The Mewla Browser of a Linux computer's virtual screen (daemon/browser): one `browser` tool; the text is the tool's own.
-  vscreen: `You are a Worker. Your browser tool is browser (the Mewla Browser): a browser of your own on a virtual screen. Request control first, then work. Reply with only the answer when done.`,
+  // The same tool on a Linux computer's virtual screen: mewla_chrome, in the agent browser's own Chrome.
+  vscreen: `You are a Worker. Your browser tool is mewla_chrome (the browser_* tools): a Chrome of your own on a virtual screen. ${delegation.replace(/^[^]*?When mewla agent-use status says your Chrome is ready, /, '')} Reply with only the answer when done.`,
   // browser-use's MCP server, as its CLI/MCP ships; its two tools that call a model of their own are off (the model is the one under test).
   bu: `You are a Worker. Your browser tool is browser-use (the browser_* tools): a browser you drive by element index. Reply with only the answer when done.`,
-  ab: `You are a Worker. Use the agent-browser CLI through Bash for all browser work; attach is preconfigured (no flags needed). Start with \`agent-browser skills get core\` as its own docs say. Close your tabs when done. Reply with only the answer when done.\n\n${readFileSync(path.join(process.env.HOME, '.claude/skills/agent-browser/SKILL.md'), 'utf8').replace(/^---[^]*?---\n/, '')}`,
 };
 
 function mcpConfig() {
@@ -49,19 +48,19 @@ function mcpConfig() {
   const file = path.join(work, 'mcp.json'); writeFileSync(file, JSON.stringify(cfg)); return file;
 }
 
-// vscreen: the daemon's own `mewla browser mcp` for a Worker the isolated daemon holds (VS_BIN, VS_STATE, VS_WORKER, VS_BROWSER:
-// wav/vscreen.sh), the argv and entry the daemon builds for a real Worker, minus its desktop `display` tool.
-// VS_ENV_JSON (vscreen.sh's env.json) is read each time: a restart of the isolated daemon gives a new Worker and browser id.
+// vscreen: the entry the isolated daemon built for a Worker it holds (wav/vscreen.sh writes DIR/mcp-<worker>.json and
+// DIR/env.json): `mewla agent-use chrome-mcp`, exactly the mewla_chrome entry of a real Worker's --mcp-config. Each trial
+// gets a window of its own, which closes when the trial ends, so there is nothing to reset between trials.
 function vscreenEnv() {
   if (process.env.VS_ENV_JSON) { try { return JSON.parse(readFileSync(process.env.VS_ENV_JSON, 'utf8')); } catch {} }
-  return { VS_BIN: process.env.VS_BIN, VS_STATE: process.env.VS_STATE, VS_HOME: process.env.VS_HOME, VS_WORKER: process.env.VS_WORKER, VS_BROWSER: process.env.VS_BROWSER };
+  return { VS_BIN: process.env.VS_BIN, VS_STATE: process.env.VS_STATE, VS_HOME: process.env.VS_HOME, VS_WORKER: process.env.VS_WORKER };
 }
 function vscreenEntry() {
   const v = vscreenEnv();
-  return { command: v.VS_BIN, args: ['browser', 'mcp', '--id', v.VS_BROWSER, '--state-dir', v.VS_STATE],
-    env: { PATH: process.env.PATH, HOME: v.VS_HOME || process.env.HOME, MEWLA_WORKER_ID: v.VS_WORKER } };
+  const cfg = JSON.parse(readFileSync(path.join(path.dirname(v.VS_STATE), `mcp-${v.VS_WORKER}.json`), 'utf8'));
+  return { ...cfg.mcpServers.mewla_chrome, env: { PATH: process.env.PATH, HOME: v.VS_HOME || process.env.HOME, MEWLA_WORKER_ID: v.VS_WORKER } };
 }
-// bu: browser-use attached to the same Chrome over CDP as agent-browser.
+// bu: browser-use attached over CDP to the same Chrome the mewla side uses.
 function buEntry() {
   const dir = path.join(work, 'bu-config'); mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ browser_profile: { p1: { id: 'p1', default: true, headless: false, cdp_url: `http://127.0.0.1:${CDP}` } }, llm: { l1: { id: 'l1', default: true, model: 'none', api_key: 'none' } }, agent: { a1: { id: 'a1', default: true } } }));
@@ -70,30 +69,8 @@ function buEntry() {
 function sideMcpConfig(name, entry) {
   const file = path.join(work, `mcp-${name}.json`); writeFileSync(file, JSON.stringify({ mcpServers: { [name]: entry } })); return file;
 }
-// Before each vscreen trial the browser's page is sent somewhere neutral (there is no close-tab action to clean up with).
-// It also says whether the browser is alive: the runtime of an isolated daemon that has fallen into "could not be drained" or
-// "unavailable" stays that way, as it would for a person, until it is restarted.
-async function vscreenReset() {
-  const { McpClient } = await import('./mcpclient.mjs');
-  const e = vscreenEntry();
-  const c = new McpClient([e.command, ...e.args], e.env);
-  try {
-    await c.start();
-    const a = await c.call('browser', { action: 'control' });
-    const b = a.isError ? a : await c.call('browser', { action: 'navigate', url: `${base}/` });
-    await c.call('browser', { action: 'release' });
-    return !a.isError && !b.isError;
-  } catch { return false; } finally { await c.close(); }
-}
-let vscreenRestarts = 0;
-function vscreenRestart(why) {
-  vscreenRestarts++; console.error(`virtual-screen browser restart #${vscreenRestarts}: ${why}`);
-  execFileSync('sh', ['-c', process.env.VS_RESTART], { stdio: ['ignore', 'ignore', 'inherit'], timeout: 180000 });
-}
-
 function resetBrowser() {
-  // Other tabs closed, like a fresh Worker's start; agent-browser's daemon too.
-  try { execFileSync('agent-browser', ['close', '--all'], { stdio: 'ignore' }); } catch {}
+  // Other tabs closed, like a fresh Worker's start.
   const list = JSON.parse(execFileSync('curl', ['-s', `localhost:${CDP}/json/list`]).toString());
   const pages = list.filter(t => t.type === 'page');
   for (const t of pages.slice(1)) execFileSync('curl', ['-s', `localhost:${CDP}/json/close/${t.id}`], { stdio: 'ignore' });
@@ -156,13 +133,14 @@ function runClaude(prompt) {
   const common = ['-p', prompt, '--model', model, '--output-format', 'stream-json', '--verbose', '--max-turns', String(args['max-turns'] || 30),
     '--setting-sources', 'user', '--disable-slash-commands', '--no-session-persistence', '--permission-mode', 'bypassPermissions'];
   const sideArgs = side === 'vscreen'
-    ? ['--strict-mcp-config', '--mcp-config', sideMcpConfig('mewla_browser', vscreenEntry()), '--tools', '', '--allowedTools', 'mcp__mewla_browser__browser', '--append-system-prompt', SYSTEM.vscreen]
+    ? ['--strict-mcp-config', '--mcp-config', sideMcpConfig('mewla_chrome', vscreenEntry()), '--tools', '', '--allowedTools', 'mcp__mewla_chrome', '--append-system-prompt', SYSTEM.vscreen]
     : side === 'bu'
     ? ['--strict-mcp-config', '--mcp-config', sideMcpConfig('browser_use', buEntry()), '--tools', '', '--allowedTools', 'mcp__browser_use', '--disallowedTools', 'mcp__browser_use__browser_extract_content,mcp__browser_use__retry_with_browser_use_agent', '--append-system-prompt', SYSTEM.bu]
     : side === 'mewla'
     ? ['--strict-mcp-config', '--mcp-config', mcpConfig(), '--tools', '', '--allowedTools', 'mcp__mewla_chrome', '--append-system-prompt', SYSTEM.mewla]
-    : ['--strict-mcp-config', '--tools', 'Bash', '--allowedTools', 'Bash', '--append-system-prompt', SYSTEM.ab];
-  const env = { ...process.env, DISPLAY: process.env.DISPLAY || ':97', AGENT_BROWSER_CDP: CDP, AGENT_BROWSER_SESSION: `suite-${Date.now()}` };
+    : (() => { throw new Error('unknown side ' + side); })();
+  const env = { ...process.env, DISPLAY: process.env.DISPLAY || ':97' };
+  if (side === 'vscreen') env.MEWLA_WORKER_ID = vscreenEnv().VS_WORKER;
   const t0 = performance.now();
   return new Promise(resolve => {
     const p = spawn('claude', [...common, ...sideArgs], { cwd: work, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -199,8 +177,7 @@ for (const task of tasks) {
    // The probe sometimes fails to start (the person's window was not found in time): that trial says nothing about the
    // agent, so it is run again, once, and the row says so.
    for (let attempt = 0; attempt < 2; attempt++) {
-    events.length = 0; resetBrowser();
-    if (side === 'vscreen' && !(await vscreenReset())) { vscreenRestart('not answering before the trial'); if (!(await vscreenReset())) console.error('virtual-screen browser still not answering after a restart'); }
+    events.length = 0; if (side !== 'vscreen') resetBrowser();
     if (task.before) await task.before();
     if (NONINT) await freshBrowser();
     const user = NONINT ? await startUser() : null;
@@ -213,18 +190,6 @@ for (const task of tasks) {
     const verdict = await task.check(answer, events, { calls: r.calls ?? [], side, wall: r.wall });
     const ok = !!(verdict && typeof verdict === 'object' ? verdict.ok : verdict);
     if (task.after) await task.after();
-    // A trial that failed and left the browser dead says nothing about the tool's page handling: run it again once on a
-    // restarted browser. The row (and the report) counts the deaths either way.
-    let died = false;
-    if (side === 'vscreen') {
-      died = !(await vscreenReset());
-      if (died) {
-        if (LEDGER && r.result?.total_cost_usd) appendFileSync(LEDGER, r.result.total_cost_usd + '\n');
-        vscreenRestart(`dead after ${task.id} #${rep} (${ok ? 'trial passed' : 'trial failed'})`);
-        if (!ok && attempt === 0) continue;
-      }
-    }
-    if (verdict && typeof verdict === 'object' && verdict.extra && side === 'vscreen') Object.assign(verdict.extra, { runtime_died: died || undefined, runtime_restarts_so_far: vscreenRestarts });
     const row = { task: task.id, kind: task.kind, rep, ok, nonint, full_pass: nonint ? ok && nonint.undisturbed : undefined, wall_ms: Math.round(r.wall), api_ms: r.result?.duration_api_ms ?? null,
       turns: r.result?.num_turns ?? null, tool_calls: r.tools, input: u.input_tokens, cache_read: u.cache_read_input_tokens, cache_create: u.cache_creation_input_tokens, output: u.output_tokens,
       cost_usd: r.result?.total_cost_usd ?? null, answer: answer.slice(0, args.tasks ? 600 : 160), extra: verdict && typeof verdict === 'object' ? verdict.extra : undefined, timed_out: r.result ? undefined : true, error: r.result ? undefined : r.err, probe_retries: attempt || undefined };

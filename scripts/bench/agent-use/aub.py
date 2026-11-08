@@ -121,7 +121,7 @@ def convert_web(files, merge=False, run_id_override=None):
                 rows[-1]["note"] = "no result before the trial timeout"
             if ni:
                 rows[-1]["nonint"] = {k: ni.get(k) for k in ("typed", "keys_received", "typing_lost", "key_focus_lost", "raised_over_user", "raised_covering_user", "covered_ms", "pointer_moved", "user_page_hidden")}
-        tool = {"mewla": "mewla_chrome", "ab": "agent-browser"}.get(d.get("side"), d.get("side"))
+        tool = {"mewla": "mewla_chrome", "vscreen": "mewla_chrome"}.get(d.get("side"), d.get("side"))
         run_id = run_id_override or meta.get("run_id") or os.path.basename(f).rsplit(".", 1)[0]
         extra = {k: meta[k] for k in ("transport", "tool_version", "notes", "nonint_measured", "nonint_not_measured", "limits") if k in meta}
         save(new_run(run_id, meta.get("suite", "web-fixture"), "linux", meta.get("tool") or tool, meta.get("condition") or ("background" if any(r.get("nonint") for r in d["rows"]) else "foreground"),
