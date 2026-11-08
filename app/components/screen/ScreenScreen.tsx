@@ -5,9 +5,8 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  TextInput,
   useWindowDimensions,
-  View, type TextInputInstance,
+  View,
 } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -26,7 +25,7 @@ import { ActionMenu, BottomSheetFrame, Button, EmptyState, IconButton } from "..
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
-import { ScreenViewerHost } from "./ScreenViewerHost";
+import { MAC_MODIFIERS, needsSoftKeyboard, RemoteView, type RemoteViewHandle } from "./RemoteView";
 import { AgentScreens } from "./AgentScreens";
 import { phoneMenuItem } from "./phoneRow";
 import { usePhoneUse } from "../../store/phoneUse";
@@ -35,60 +34,20 @@ import { VirtualScreenSwitch } from "../settings/VirtualScreenSettings";
 import { warnOnce } from "../../services/warnOnce";
 import { serverDisplayName } from "../../services/serverDisplayName";
 import {
-  activeModifiers,
   connectionProblem,
   diagnosticRows,
   indicatorTone,
-  KEYBOARD_SENTINEL,
-  keyboardEdit,
-  NO_MODIFIERS,
   nextSlowStreak,
   powerSummary,
   powerWarning,
   slowLasts,
   unsupportedScreen,
-  spendModifiers,
-  tapModifier,
   type IndicatorTone,
-  type ModifierState,
   type StreamReadout,
 } from "./screenPageModel";
-import {
-  parseScreenViewerMessage,
-  type ScreenHostMessage,
-  type ScreenKey,
-  type ScreenModifier,
-  type ScreenPointerMode,
-  type ScreenViewerHostHandle,
-} from "./screenViewerProtocol";
+import type { ScreenPointerMode, ScreenViewerMessage } from "./screenViewerProtocol";
 
 type Phase = "checking" | "setup" | "agent" | "connecting" | "live" | "lost";
-
-const MODIFIERS: { key: ScreenModifier; label: string; name: string }[] = [
-  { key: "Command", label: "⌘", name: "Command" },
-  { key: "Control", label: "⌃", name: "Control" },
-  { key: "Option", label: "⌥", name: "Option" },
-  { key: "Shift", label: "⇧", name: "Shift" },
-];
-const KEYS: { key: ScreenKey; label: string; name: string }[] = [
-  { key: "Escape", label: "esc", name: "Escape" },
-  { key: "Tab", label: "tab", name: "Tab" },
-  { key: "Left", label: "←", name: "Left arrow" },
-  { key: "Up", label: "↑", name: "Up arrow" },
-  { key: "Down", label: "↓", name: "Down arrow" },
-  { key: "Right", label: "→", name: "Right arrow" },
-  { key: "BackSpace", label: "⌫", name: "Delete backward" },
-  { key: "Return", label: "↩", name: "Return" },
-];
-const SHORTCUTS: { label: string; name: string; text?: string; key?: ScreenKey; mods: ScreenModifier[] }[] = [
-  { label: "⌘ Space", name: "Spotlight", text: " ", mods: ["Command"] },
-  { label: "⌘ Tab", name: "Switch app", key: "Tab", mods: ["Command"] },
-  { label: "⌘C", name: "Copy", text: "c", mods: ["Command"] },
-  { label: "⌘V", name: "Paste", text: "v", mods: ["Command"] },
-  { label: "⌘Z", name: "Undo", text: "z", mods: ["Command"] },
-  { label: "⌘W", name: "Close window", text: "w", mods: ["Command"] },
-  { label: "⌘Q", name: "Quit app", text: "q", mods: ["Command"] },
-];
 
 /**
  * The current server's own screen, through its Screen Sharing. Leaving,
@@ -121,10 +80,7 @@ export function ScreenScreen() {
   const [details, setDetails] = useState(false);
   const [slow, setSlow] = useState(false);
   const [slowNote, setSlowNote] = useState(false);
-  // The keys tray while the phone is held sideways; portrait always shows it.
-  const [keysOpen, setKeysOpen] = useState(false);
   const [mode, setMode] = useState<ScreenPointerMode>("touch");
-  const [mods, setMods] = useState<ModifierState>(NO_MODIFIERS);
   const [typing, setTyping] = useState(false);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -137,66 +93,22 @@ export function ScreenScreen() {
   const [watching, setWatching] = useState(false);
   // Which agent is being watched, when several work at once.
   const [watchedWorker, setWatchedWorker] = useState<string | undefined>();
-  const host = useRef<ScreenViewerHostHandle>(null);
-  const input = useRef<TextInputInstance>(null);
+  const view = useRef<RemoteViewHandle>(null);
   const connection = useRef<ScreenConnection | null>(null);
   // The path the live viewer opened on, and whether it has retried its loss.
   const openedVia = useRef<TransportPath | null>(null);
   const [viaPath, setViaPath] = useState<TransportPath | null>(null);
   const retriedLostPath = useRef(false);
-  const viewerReady = useRef(false);
-  const outbox = useRef<ScreenHostMessage[]>([]);
-  const chunks = useRef<string[]>([]);
-  const flushQueued = useRef(false);
   const epoch = useRef(0);
-  const modsRef = useRef(mods);
-  modsRef.current = mods;
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
   const slowStreak = useRef(0);
   const saidSlow = useRef(false);
   const readoutRef = useRef<StreamReadout | null>(null);
-  // Held sideways the picture fills the display; upright it sits under the
-  // header, so the space below it is touch surface rather than a band above
-  // and below.
-  const alignRef = useRef<"top" | "center">("top");
-  alignRef.current = immersive ? "center" : "top";
-
-  // RFB bytes go to the viewer once per frame, so a burst of small socket
-  // messages costs one bridge crossing.
-  const flush = useCallback(() => {
-    flushQueued.current = false;
-    if (!viewerReady.current) return;
-    const batch = outbox.current;
-    outbox.current = [];
-    if (chunks.current.length) {
-      batch.push({ type: "rfb", data: chunks.current, at: Date.now() });
-      chunks.current = [];
-    }
-    if (batch.length) host.current?.post(batch);
-  }, []);
-  const schedule = useCallback(() => {
-    if (flushQueued.current) return;
-    flushQueued.current = true;
-    requestAnimationFrame(flush);
-  }, [flush]);
-  const toViewer = useCallback((message: ScreenHostMessage) => {
-    // Bytes already queued belong before any later control message.
-    if (chunks.current.length) {
-      outbox.current.push({ type: "rfb", data: chunks.current, at: Date.now() });
-      chunks.current = [];
-    }
-    outbox.current.push(message);
-    schedule();
-  }, [schedule]);
 
   const disconnect = useCallback(() => {
     epoch.current++;
     connection.current?.close();
     connection.current = null;
-    chunks.current = [];
-    outbox.current = [];
-    if (viewerReady.current) host.current?.post([{ type: "close" }]);
+    view.current?.close();
     setRtt(null);
     setStats(null);
     setDaemonStats(null);
@@ -250,13 +162,12 @@ export function ScreenScreen() {
         if (!active()) return;
         openedVia.current = socket.path;
         setViaPath(socket.path);
-        toViewer({ type: "open" });
+        view.current?.open();
       },
       data(chunk) {
         if (!active()) return;
         retriedLostPath.current = false;
-        chunks.current.push(chunk);
-        schedule();
+        view.current?.feed(chunk);
       },
       ready() {},
       rtt(ms) { if (active()) setRtt(ms); },
@@ -264,7 +175,7 @@ export function ScreenScreen() {
       streamStats(next) { if (active()) setDaemonStats(next); },
       closed(why) {
         if (!active()) return;
-        toViewer({ type: "close" });
+        view.current?.close();
         // The agent finished: look again, which opens the screen.
         if (watch) { void connect(); return; }
         // A viewer that was on a direct path when it ended retries once. The
@@ -285,7 +196,7 @@ export function ScreenScreen() {
       setReason(error instanceof Error ? error.message : String(error));
       setPhase("lost");
     }
-  }, [currentServer, disconnect, isCurrentServer, schedule, toViewer]);
+  }, [currentServer, disconnect, isCurrentServer]);
 
   useEffect(() => {
     setStatus(null);
@@ -369,10 +280,6 @@ export function ScreenScreen() {
     return () => clearInterval(timer);
   }, [currentServer, isCurrentServer, phase]);
 
-  useEffect(() => {
-    if (viewerReady.current) host.current?.post([{ type: "align", align: immersive ? "center" : "top" }]);
-  }, [immersive]);
-
   // Slowness counts only when it lasts, so one spike never lights the
   // indicator; it is said once per connection, briefly, and stays in the sheet.
   useEffect(() => {
@@ -396,16 +303,8 @@ export function ScreenScreen() {
     return () => clearTimeout(timer);
   }, [slowNote]);
 
-  const onViewerMessage = useCallback((raw: string) => {
-    const message = parseScreenViewerMessage(raw);
-    if (!message) return;
+  const onEvent = useCallback((message: ScreenViewerMessage) => {
     switch (message.type) {
-      case "ready":
-        viewerReady.current = true;
-        host.current?.post([{ type: "mode", mode: modeRef.current }, { type: "align", align: alignRef.current }]);
-        flush();
-        break;
-      case "send": connection.current?.send(message.data); break;
       case "closed":
         // The RFB client gave up (protocol error); end the socket too.
         if (connection.current) {
@@ -419,25 +318,8 @@ export function ScreenScreen() {
       case "stats": setStats(message); break;
       case "haptic": if (Platform.OS !== "web") void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); break;
     }
-  }, [flush]);
-
-  const sendKey = (key: ScreenKey, extra: ScreenModifier[] = []) => {
-    toViewer({ type: "key", key, mods: [...new Set([...activeModifiers(modsRef.current), ...extra])] });
-    setMods(spendModifiers(modsRef.current));
-  };
-  const sendText = (text: string, extra: ScreenModifier[] = []) => {
-    toViewer({ type: "text", text, mods: [...new Set([...activeModifiers(modsRef.current), ...extra])] });
-    setMods(spendModifiers(modsRef.current));
-  };
-  const onKeyboardText = (next: string) => {
-    const edit = keyboardEdit(next);
-    if (edit.kind === "text") sendText(edit.text);
-    else if (edit.kind === "backspace") for (let i = 0; i < edit.count; i++) sendKey("BackSpace");
-  };
-  const toggleKeyboard = () => {
-    if (typing) { input.current?.blur(); setTyping(false); }
-    else { setTyping(true); requestAnimationFrame(() => input.current?.focus()); }
-  };
+  }, []);
+  const onSend = useCallback((data: string) => connection.current?.send(data), []);
   const setKeepAwake = async (keep: boolean) => {
     if (!currentServer) return;
     const server = currentServer;
@@ -507,7 +389,6 @@ export function ScreenScreen() {
   };
   const changeMode = (next: ScreenPointerMode) => {
     setMode(next);
-    toViewer({ type: "mode", mode: next });
   };
 
   const title = status?.name || serverName;
@@ -525,14 +406,13 @@ export function ScreenScreen() {
   const viewerVisible = phase === "connecting" || phase === "live";
   // Held sideways the picture owns the display: no header, no status bar.
   const fullBleed = immersive && viewerVisible;
-  const active = activeModifiers(mods);
-  const agents = status?.agents?.length ? status.agents : status?.agent ? [status.agent] : [];
+    const agents = status?.agents?.length ? status.agents : status?.agent ? [status.agent] : [];
   // An agent on the iPhone works in iPhone Mirroring, off the Mac's screen: Watch can't show it,
   // so it has its own Done (for what it asked of the person) and Stop.
   const iphoneAgent = iphone.status?.enabled ? iphone.status.active : undefined;
   const agentLabel = (watchedWorker ? agents.find((a) => a.worker === watchedWorker)?.name : undefined) || status?.agent?.name || "An agent";
   const menuItems: ActionMenuItem[] = watching ? [
-    { key: "fit", icon: "expand", label: "Fit screen", onPress: () => toViewer({ type: "fit" }) },
+    { key: "fit", icon: "expand", label: "Fit screen", onPress: () => view.current?.fit() },
     { key: "disconnect", icon: "exit", label: "Stop watching", onPress: () => { disconnect(); setWatching(false); setPhase("agent"); } },
   ] : [
     {
@@ -540,7 +420,8 @@ export function ScreenScreen() {
       label: mode === "touch" ? "Use as trackpad" : "Touch to click",
       onPress: () => changeMode(mode === "touch" ? "trackpad" : "touch"),
     },
-    { key: "fit", icon: "expand", label: "Fit screen", onPress: () => toViewer({ type: "fit" }) },
+    { key: "fit", icon: "expand", label: "Fit screen", onPress: () => view.current?.fit() },
+    ...(needsSoftKeyboard() ? [] : [{ key: "full", icon: "expand", label: "Full size", onPress: () => view.current?.fullSize() } as const]),
     ...(status?.approved ? [{
       key: "awake", icon: "power", disabled: busy,
       label: status.keep_awake ? "Let this computer sleep" : "Keep this computer awake",
@@ -551,6 +432,7 @@ export function ScreenScreen() {
       ? { key: "disconnect", icon: "exit", label: "Disconnect", onPress: () => { disconnect(); setReason(null); setPhase("lost"); } }
       : { key: "reconnect", icon: "refresh", label: "Reconnect", onPress: () => void connect() },
   ];
+  const keyboardButton = phase === "live" && needsSoftKeyboard();
   const indicator = phase === "live" ? (
     <ConnectionIndicator tone={tone} locked={locked} onPress={() => setDetails(true)} />
   ) : null;
@@ -562,6 +444,10 @@ export function ScreenScreen() {
         <View style={styles.headerActions}>
           {slowNote && problem ? <AppText variant="micro" style={{ color: colors.warning }}>{problem.title}</AppText> : null}
           {indicator}
+          {keyboardButton ? (
+            <IconButton icon="keyboard" size={40} tone={typing ? "tinted" : "default"} accessibilityLabel={typing ? "Hide keyboard" : "Show keyboard"}
+              onPress={() => view.current?.toggleKeyboard()} />
+          ) : null}
           <IconButton icon="more-vertical" size={40} accessibilityLabel="Screen options" onPress={() => setMenu(true)} />
         </View>
       ) : null,
@@ -639,8 +525,9 @@ export function ScreenScreen() {
       ) : null}
       <View style={[styles.root, styles.stage, !viewerVisible && phase !== "lost" ? styles.hidden : null]}>
         <View style={styles.root}>
-          <ScreenViewerHost ref={host} onMessage={onViewerMessage} backgroundColor={colors.bgElevated}
-            accessibilityLabel={`Screen of ${title}`} />
+          <RemoteView ref={view} style={styles.root} viewStyle={styles.root} backgroundColor={colors.bgElevated}
+            accessibilityLabel={`Screen of ${title}`} align={immersive ? "center" : "top"} mode={mode} modifiers={MAC_MODIFIERS}
+            onSend={onSend} onEvent={onEvent} onKeyboardChange={setTyping} bottomInset={insets.bottom} />
           {phase === "connecting" ? (
             <View pointerEvents="none" style={[styles.center, StyleSheet.absoluteFill]}>
               <EmptyState busy />
@@ -667,50 +554,18 @@ export function ScreenScreen() {
                 <RailButton icon="stop" name={`Stop ${agentLabel}`} color={colors.dangerText} disabled={busy} onPress={stopWatched} />
               </>
             ) : null}
-            <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />
-            <KeyButton label="⌘" name={keysOpen ? "Hide keys" : "Show keys"} active={keysOpen} onPress={() => setKeysOpen(!keysOpen)} />
+            {keyboardButton ? <RailButton icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} onPress={() => view.current?.toggleKeyboard()} /> : null}
             <RailButton icon="more-vertical" name="Screen options" onPress={() => setMenu(true)} />
           </ScrollView>
         ) : null}
       </View>
       {phase === "live" && watching && !immersive ? (
-        <View style={[styles.tray, styles.watchBar, { borderTopColor: colors.borderSubtle, paddingBottom: Spacing.xs }]}>
+        <View style={[styles.watchBar, { borderTopColor: colors.borderSubtle, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.xs, paddingBottom: Spacing.xs }]}>
           <Icon name="eye" size={16} color={colors.textSecondary} />
           <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.watchLabel}>{`Watching ${agentLabel}`}</AppText>
           <Button label="Take over" icon="hand" size="sm" variant="filled" onPress={takeOver} disabled={busy} />
           <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${agentLabel}`} onPress={stopWatched} disabled={busy} />
         </View>
-      ) : null}
-      {phase === "live" && (!immersive || keysOpen) ? (
-        <View style={[styles.tray, { borderTopColor: colors.borderSubtle, paddingBottom: typing || immersive ? Spacing.xs : Math.max(insets.bottom, Spacing.xs) }]}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
-            {immersive ? null : <KeyButton label="" icon="keyboard" name={typing ? "Hide keyboard" : "Show keyboard"} active={typing} onPress={toggleKeyboard} />}
-            {MODIFIERS.map((m) => (
-              <KeyButton key={m.key} label={m.label} name={m.name} active={active.includes(m.key)} locked={mods.locked.includes(m.key)}
-                onPress={() => setMods(tapModifier(modsRef.current, m.key))} />
-            ))}
-            {KEYS.map((k) => <KeyButton key={k.key} label={k.label} name={k.name} onPress={() => sendKey(k.key)} />)}
-            {SHORTCUTS.map((s) => (
-              <KeyButton key={s.label} label={s.label} name={s.name} wide
-                onPress={() => (s.key ? sendKey(s.key, s.mods) : sendText(s.text ?? "", s.mods))} />
-            ))}
-          </ScrollView>
-        </View>
-      ) : null}
-      {phase === "live" ? (
-        // Off-screen field that only collects soft-keyboard keystrokes.
-        <TextInput ref={input} value={KEYBOARD_SENTINEL} onChangeText={onKeyboardText}
-          onSubmitEditing={() => sendKey("Return")} submitBehavior="submit"
-          onKeyPress={(event) => {
-            // Hardware keyboards on web report keys the field can't show.
-            const named: Record<string, ScreenKey> = { ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down", Escape: "Escape", Tab: "Tab" };
-            const key = named[event.nativeEvent.key];
-            if (key && Platform.OS === "web") { event.preventDefault?.(); sendKey(key); }
-          }}
-          onBlur={() => setTyping(false)}
-          autoCorrect={false} autoCapitalize="none" autoComplete="off" spellCheck={false}
-          keyboardType={Platform.OS === "android" ? "visible-password" : "default"}
-          accessibilityLabel="Type on the remote screen" style={styles.hiddenInput} caretHidden />
       ) : null}
     </View>
   );
@@ -780,7 +635,7 @@ function ConnectionSheet({ visible, onClose, problem, rows, warning, locked, bus
 }
 
 function RailButton({ icon, name, color, disabled, onPress }: {
-  icon: "hand" | "stop" | "more-vertical";
+  icon: "hand" | "stop" | "keyboard" | "more-vertical";
   name: string;
   color?: string;
   disabled?: boolean;
@@ -858,31 +713,6 @@ function ScreenSetup({ status, name, busy, reason, onEnable, onOpenSettings, onR
   );
 }
 
-function KeyButton({ label, name, icon, active, locked, wide, onPress }: {
-  label: string;
-  name: string;
-  icon?: "keyboard" | "more-vertical";
-  active?: boolean;
-  locked?: boolean;
-  wide?: boolean;
-  onPress(): void;
-}) {
-  const { colors } = useAppTheme();
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={name} accessibilityState={{ selected: !!active }}
-      onPress={onPress} hitSlop={4}
-      style={({ pressed }) => [styles.key, wide && styles.wideKey, {
-        backgroundColor: active ? colors.accentSoft : pressed ? colors.surfaceSubtle : colors.bgSurface,
-        borderColor: locked ? colors.accent : colors.borderSubtle,
-        borderWidth: locked ? 2 : StyleSheet.hairlineWidth,
-      }]}>
-      {icon ? <Icon name={icon} size={18} color={active ? colors.accentStrong : colors.textSecondary} /> : (
-        <AppText variant="label" style={{ color: active ? colors.accentStrong : colors.textPrimary }}>{label}</AppText>
-      )}
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
   hidden: { display: "none" },
@@ -905,10 +735,7 @@ const styles = StyleSheet.create({
   sheetRows: { gap: Spacing.sm },
   sheetRow: { flexDirection: "row", justifyContent: "space-between", gap: Spacing.md },
   sheetValue: { flexShrink: 1, textAlign: "right" },
-  tray: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: Spacing.xs },
-  keys: { gap: Spacing.xs, paddingHorizontal: Spacing.sm, alignItems: "center" },
   key: { minWidth: TouchTarget, height: TouchTarget, paddingHorizontal: Spacing.sm, alignItems: "center", justifyContent: "center", borderRadius: Radii.sm, ...ContinuousCorners },
-  wideKey: { paddingHorizontal: Spacing.md },
   setup: { flexGrow: 1 },
   setupBlock: { width: "100%", maxWidth: 440, gap: Spacing.md, alignItems: "stretch" },
   permission: {
@@ -916,5 +743,4 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth, borderRadius: Radii.md, ...ContinuousCorners,
   },
   permissionText: { flex: 1, gap: 2 },
-  hiddenInput: { position: "absolute", width: 1, height: 1, opacity: 0, left: -100, bottom: 0 },
 });

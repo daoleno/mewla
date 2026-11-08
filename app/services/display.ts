@@ -8,9 +8,9 @@ export interface AgentDisplay {
   id: string;
   width: number;
   height: number;
-  /** Who holds it now. */
+  /** Who holds it now: the person while they hold it, otherwise the agent. */
   control: "agent" | "person";
-  /** The person stopped this agent; it stays stopped until they take over and hand back. */
+  /** The person stopped this agent; it stays stopped until they resume it. */
   stopped?: boolean;
   apps: number;
 }
@@ -57,7 +57,12 @@ export async function listDisplays(server: StoredServer, signal?: AbortSignal): 
   return { displays: Array.isArray(result.displays) ? (result.displays as AgentDisplay[]) : [], available: result.available !== false };
 }
 
-/** Stop: the agent may not use its display until the person takes over and hands back. */
+/** Stop: the agent may not use its display until the person resumes it. */
 export async function haltDisplay(server: StoredServer, worker: string, signal?: AbortSignal): Promise<void> {
   await request(server, "POST", { action: "halt", worker }, signal);
+}
+
+/** Lifts a Stop: the agent may use its display again. */
+export async function resumeDisplay(server: StoredServer, worker: string, signal?: AbortSignal): Promise<void> {
+  await request(server, "POST", { action: "resume", worker }, signal);
 }

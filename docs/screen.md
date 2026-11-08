@@ -302,21 +302,32 @@ there run on a virtual screen of their own, off your desktop. **Screen** on a
 Linux computer shows the **Virtual screen** switch until it is on (the same
 switch as **Settings → Labs → Virtual screen**); a switch that cannot be read or
 set says why under it, with Retry. Once on, **Screen** lists the agents using a
-browser right now, each with its own live view, and the same three choices as on
-a Mac. A row keeps its place and its agent's name while you hold the browser.
+browser right now, each with its own live view. A row keeps its place and its
+agent's name while you hold the screen.
 You never open or manage a browser yourself: an agent's row appears when it
 asks for one. The Phone, where phone use is on, is a row in the page menu.
 
-- **Watch** is how it opens. Your taps, scrolls and typing reach the page
-  without taking the browser from the agent. The agent is told what you did
-  (clicks, how much you typed, the page address, never what you typed) and
-  decides for itself whether to go on, wait or ask you; nothing stops it by
-  rule, since you may only have tapped by mistake or be typing a password.
-- **Take over** holds the browser for you. The agent's next action says you
-  have it and it waits. **Hand back** gives it back, and the agent hears what
-  happened meanwhile.
-- **Stop** ends that agent's use of the browser. It is told so and does not
-  ask for it again until you take over and hand back.
+- **The view is the computer.** It opens live and is the input surface: on a
+  desktop or in the web app, the mouse (click, double click, right click, drag),
+  the wheel and the keyboard (shortcuts included) go straight to the screen, a
+  paste sends your text there, and **Full size** (in the card's menu) fills the
+  window and hands the browser's own shortcuts to the screen where it allows.
+  Chrome on the screen has its own address bar and tabs; use them. On a phone a
+  tap clicks, a drag scrolls, a long press right-clicks (hold, then drag to drag),
+  two fingers zoom and pan the view, and the keyboard button brings up the
+  system keyboard, whose keys go straight to the screen. A slim bar of Esc, Tab,
+  the arrows and Ctrl, Alt and Shift shows only while that keyboard is up.
+- **The agent is told, not paused.** What you do reaches the screen at once
+  while the agent keeps going. It is told what you did (clicks, scrolls, how
+  much you typed, never what you typed) and decides for itself whether to go on,
+  wait or ask you; nothing stops it by rule, since you may only have tapped by
+  mistake or be typing a password.
+- **Hold the agent**, in the card's menu, is the one soft switch: the agent's
+  next action says you hold the screen and it waits. **Let the agent go on**
+  releases it, and it hears how long you held it. Closing the view lets go by
+  itself.
+- **Stop** (menu) ends that agent's use of the screen. It is told so and does not
+  ask for it again until you **Resume**.
 
 With the switch on, a Worker (Claude or Codex) gets a browser on the virtual
 screen without being told which. It comes up when the agent first asks for it,
@@ -330,16 +341,14 @@ also has a **display** tool: it opens a program (a calculator, an editor) on a
 display of its own, sees it as a picture and clicks, types and presses keys.
 That display is private to the Worker and off your desktop; it needs TigerVNC's
 `Xvnc` on the computer, and apps run as X11 clients (there is no window manager,
-so a window sits where it opens). Screen lists it as another card for that agent
-with the same **Watch**, **Take over** and **Stop**: your taps and typing in
-Watch reach the app and the agent is told how many (never what you typed); Take
-over holds the display until you hand it back. The picture travels over a Unix
+so a window sits where it opens). Screen lists it as a card for that agent with
+the same live view, Hold and Stop. The picture travels over a Unix
 socket only your user can open, no network port is used, and a display is
 closed when its Worker ends or closes it.
 
 The browser has one profile for all agents on the computer, not your everyday
-Chrome: to give it a sign-in, take over an agent's window, sign in yourself and
-hand back; every agent's window then has it. The profile keeps its sign-ins on
+Chrome: to give it a sign-in, hold an agent's window, sign in yourself and
+let go; every agent's window then has it. The profile keeps its sign-ins on
 that computer. Chrome stores them in the computer's secure wallet
 (KWallet or another Secret Service) when one is unlocked for the user Mewla
 runs as; with none, the profile uses Chrome's own basic storage, in a folder
