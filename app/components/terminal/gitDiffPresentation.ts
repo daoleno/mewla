@@ -2,13 +2,7 @@ import type {
   TerminalThemeChrome,
   TerminalThemePalette,
 } from "../../constants/terminalThemes";
-import type { IconName } from "../icons/Icon";
-import {
-  describeGitDiffScope,
-  gitDiffCounts,
-  type GitDiffFileInfo,
-  type GitDiffScope,
-} from "../../services/gitDiff";
+import type { GitDiffFileInfo } from "../../services/gitDiff";
 import type { TerminalTopBarGitDiffPresentation } from "./TerminalTopBar";
 import type { TerminalGitDiffSummary } from "./useTerminalGitDiff";
 
@@ -21,22 +15,6 @@ export type GitDiffStatusTone =
   | "untracked"
   | "binary";
 
-export interface GitDiffFilePresentation {
-  name: string;
-  directory: string;
-  oldName: string | null;
-  oldDirectory: string | null;
-  statusLabel: string;
-  scopeLabel: string;
-  icon: IconName;
-  /** One-letter status mark shown in the row's tinted tile (M, A, D, R...). */
-  glyph: string;
-  tone: GitDiffStatusTone;
-  additions: number;
-  deletions: number;
-  binary: boolean;
-}
-
 const STATUS_TONES: Record<string, GitDiffStatusTone> = {
   added: "added",
   deleted: "deleted",
@@ -48,26 +26,39 @@ const STATUS_TONES: Record<string, GitDiffStatusTone> = {
   changed: "modified",
 };
 
-const TONE_ICONS: Record<GitDiffStatusTone, IconName> = {
-  added: "add-circle",
-  deleted: "remove-circle",
-  renamed: "swap-horizontal",
-  modified: "circle",
-  conflict: "warning",
-  untracked: "cloud-upload",
-  binary: "cube",
+const STATUS_MARKS: Record<GitDiffStatusTone, string> = {
+  added: "+",
+  deleted: "\u2212",
+  renamed: "\u2192",
+  modified: "\u2022",
+  conflict: "!",
+  untracked: "?",
+  binary: "\u25a0",
 };
 
-const STATUS_GLYPHS: Record<string, string> = {
-  added: "A",
-  deleted: "D",
-  renamed: "R",
-  copied: "C",
-  conflict: "!",
-  untracked: "U",
-  modified: "M",
-  changed: "M",
+const STATUS_WORDS: Record<GitDiffStatusTone, string> = {
+  added: "Added",
+  deleted: "Deleted",
+  renamed: "Renamed",
+  modified: "Modified",
+  conflict: "Conflict",
+  untracked: "Untracked",
+  binary: "Binary",
 };
+
+export function gitDiffTone(file: Pick<GitDiffFileInfo, "status" | "binary">): GitDiffStatusTone {
+  return file.binary ? "binary" : STATUS_TONES[file.status] ?? "modified";
+}
+
+/** The one-character mark a row shows for a tone. */
+export function gitDiffStatusMark(tone: GitDiffStatusTone): string {
+  return STATUS_MARKS[tone];
+}
+
+/** The status in words, for screen readers. */
+export function gitDiffStatusWord(tone: GitDiffStatusTone): string {
+  return STATUS_WORDS[tone];
+}
 
 export function splitGitDiffPath(path: string): {
   directory: string;
@@ -78,57 +69,6 @@ export function splitGitDiffPath(path: string): {
     return { directory: "", name: path };
   }
   return { directory: path.slice(0, index + 1), name: path.slice(index + 1) };
-}
-
-export function describeGitDiffFile(
-  file: GitDiffFileInfo,
-  scope: GitDiffScope,
-): GitDiffFilePresentation {
-  const { directory, name } = splitGitDiffPath(file.path);
-  const oldPath = file.old_path ? splitGitDiffPath(file.old_path) : null;
-  const tone: GitDiffStatusTone = file.binary
-    ? "binary"
-    : STATUS_TONES[file.status] ?? "modified";
-  const [additions, deletions] = gitDiffCounts(file, scope);
-  const statusLabel = file.status
-    ? file.status.charAt(0).toUpperCase() + file.status.slice(1)
-    : "Changed";
-
-  return {
-    name,
-    directory,
-    oldName: oldPath?.name ?? null,
-    oldDirectory: oldPath?.directory ?? null,
-    statusLabel,
-    scopeLabel: describeGitDiffScope(file),
-    icon: TONE_ICONS[tone],
-    glyph: STATUS_GLYPHS[file.status] ?? "M",
-    tone,
-    additions,
-    deletions,
-    binary: Boolean(file.binary),
-  };
-}
-
-/** `+12 −3 · 4 files` style summary for a set of changed files. */
-export function summarizeGitDiffFiles(
-  files: readonly GitDiffFileInfo[],
-  scope: GitDiffScope,
-): { additions: number; deletions: number; label: string } {
-  let additions = 0;
-  let deletions = 0;
-  for (const file of files) {
-    if (file.binary) continue;
-    const [added, deleted] = gitDiffCounts(file, scope);
-    additions += added;
-    deletions += deleted;
-  }
-  const count = `${files.length} ${files.length === 1 ? "file" : "files"}`;
-  return {
-    additions,
-    deletions,
-    label: files.length ? `+${additions} \u2212${deletions} \u00b7 ${count}` : "No changes",
-  };
 }
 
 /**

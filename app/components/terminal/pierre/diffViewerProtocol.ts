@@ -24,7 +24,9 @@ export type DiffHostMessage =
   /** Answer to `needFiles`; null on both sides means the sides are unavailable. */
   | { type: "files"; id: string; oldContents: string | null; newContents: string | null; oldName?: string }
   | { type: "find"; query: string }
-  | { type: "seek"; target: "match" | "hunk"; direction: "next" | "previous" }
+  | { type: "seek"; direction: "next" | "previous" }
+  /** Highlights a line range (a hunk, say); `section: null` clears it. Never echoed back. */
+  | { type: "select"; section: string | null; side: "additions" | "deletions"; start: number; end: number; scroll: boolean }
   | { type: "top" };
 
 export type DiffViewerMessage =
@@ -32,6 +34,8 @@ export type DiffViewerMessage =
   | { type: "loaded"; key: string; hunks: number; ms: number }
   | { type: "needFiles"; id: string }
   | { type: "find"; query: string; count: number; index: number }
+  /** A tap selected lines; `section` is the DiffViewerSection id, null when cleared. */
+  | { type: "selection"; section: string | null; side: "additions" | "deletions"; start: number; end: number }
   | { type: "error"; key?: string; message: string };
 
 export interface DiffViewerHostProps {
@@ -44,7 +48,7 @@ export interface DiffViewerHostHandle {
   post(batch: DiffHostMessage[]): void;
 }
 
-const VIEWER_TYPES = new Set(["ready", "loaded", "needFiles", "find", "error"]);
+const VIEWER_TYPES = new Set(["ready", "loaded", "needFiles", "find", "selection", "error"]);
 const MAX_MESSAGE_BYTES = 100_000;
 
 /** Parses a reader message; anything unexpected is dropped. */
@@ -62,6 +66,11 @@ export function parseDiffViewerMessage(raw: string): DiffViewerMessage | null {
         break;
       case "find":
         if (typeof value.query !== "string" || !Number.isInteger(value.count) || !Number.isInteger(value.index)) return null;
+        break;
+      case "selection":
+        if (value.section !== null && typeof value.section !== "string") return null;
+        if (value.side !== "additions" && value.side !== "deletions") return null;
+        if (!Number.isInteger(value.start) || !Number.isInteger(value.end)) return null;
         break;
       case "error":
         if (typeof value.message !== "string") return null;

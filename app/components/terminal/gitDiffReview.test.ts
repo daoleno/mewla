@@ -9,8 +9,7 @@ import {
   canExpandGitDiffFile,
   gitDiffExpansionSides,
   gitDiffPatchText,
-  gitDiffSectionsForScope,
-  gitDiffTreeDecoration,
+  gitDiffSectionsForGroup,
   planGitDiffReview,
 } from "./gitDiffReview";
 
@@ -33,23 +32,22 @@ const payload: GitDiffPatchPayload = {
   ],
 };
 
-describe("Git diff scopes over daemon sections", () => {
-  test("Working is unstaged plus untracked and Staged is staged only", () => {
-    expect(gitDiffSectionsForScope(payload, "all").map((s) => s.scope)).toEqual(["staged", "unstaged", "untracked"]);
-    expect(gitDiffSectionsForScope(payload, "working").map((s) => s.scope)).toEqual(["unstaged", "untracked"]);
-    expect(gitDiffSectionsForScope(payload, "staged").map((s) => s.scope)).toEqual(["staged"]);
+describe("Git diff groups over daemon sections", () => {
+  test("Changes is unstaged plus untracked and Staged is staged only", () => {
+    expect(gitDiffSectionsForGroup(payload, "changes").map((s) => s.scope)).toEqual(["unstaged", "untracked"]);
+    expect(gitDiffSectionsForGroup(payload, "staged").map((s) => s.scope)).toEqual(["staged"]);
   });
 
-  test("a file with several sections labels them, a single section does not", () => {
-    const both = planGitDiffReview(payload, file({ staged: true }), "all");
-    expect(both.kind === "sections" && both.sections.map((s) => s.label)).toEqual(["Staged", "Unstaged"]);
-    const one = planGitDiffReview(payload, file({ staged: true }), "staged");
-    expect(one.kind === "sections" && one.sections.map((s) => s.label)).toEqual([undefined]);
+  test("one group of a file with both kinds of edit shows only its own patch", () => {
+    const staged = planGitDiffReview(payload, file({ staged: true }), "staged");
+    expect(staged.kind === "sections" && staged.sections.map((s) => [s.id, s.label])).toEqual([["0-staged", undefined]]);
+    const changes = planGitDiffReview(payload, file({ staged: true }), "changes");
+    expect(changes.kind === "sections" && changes.sections.map((s) => s.id)).toEqual(["0-unstaged"]);
   });
 
-  test("blank sections vanish and an empty scope is reported as empty", () => {
-    expect(planGitDiffReview(payload, file(), "working").kind).toBe("sections");
-    expect(planGitDiffReview({ ...payload, sections: [payload.sections[2]] }, file(), "all")).toEqual({ kind: "empty" });
+  test("blank sections vanish and an empty group is reported as empty", () => {
+    expect(planGitDiffReview(payload, file(), "changes").kind).toBe("sections");
+    expect(planGitDiffReview({ ...payload, sections: [payload.sections[2]] }, file(), "changes")).toEqual({ kind: "empty" });
   });
 
   test("patches past the limit are refused with their size", () => {
@@ -57,12 +55,7 @@ describe("Git diff scopes over daemon sections", () => {
       ...payload,
       sections: [{ scope: "unstaged", title: "Unstaged", patch: "x".repeat(GIT_DIFF_PATCH_LIMIT_BYTES + 1) }],
     };
-    expect(planGitDiffReview(huge, file(), "all")).toEqual({ kind: "too-large", bytes: GIT_DIFF_PATCH_LIMIT_BYTES + 1 });
-  });
-
-  test("section ids stay unique even when a scope repeats across files", () => {
-    const plan = planGitDiffReview(payload, file({ staged: true }), "all");
-    expect(plan.kind === "sections" && new Set(plan.sections.map((s) => s.id)).size).toBe(2);
+    expect(planGitDiffReview(huge, file(), "changes")).toEqual({ kind: "too-large", bytes: GIT_DIFF_PATCH_LIMIT_BYTES + 1 });
   });
 });
 
@@ -102,14 +95,9 @@ describe("hunk expansion eligibility", () => {
   });
 });
 
-describe("Git diff text and tree rows", () => {
-  test("copying a scope joins its patches the way git printed them", () => {
+describe("Git diff text", () => {
+  test("copying a group joins its patches the way git printed them", () => {
     expect(gitDiffPatchText(payload, "staged")).toBe(`${payload.sections[0].patch}\n`);
-    expect(gitDiffPatchText(payload, "all")).toBe(`${payload.sections[0].patch}\n${payload.sections[1].patch}\n`);
-  });
-
-  test("a binary file shows Binary instead of counts", () => {
-    expect(gitDiffTreeDecoration(file({ binary: true }), [3, 4])).toEqual({ additions: 0, deletions: 0, binary: true });
-    expect(gitDiffTreeDecoration(file(), [3, 4])).toEqual({ additions: 3, deletions: 4 });
+    expect(gitDiffPatchText(payload, "changes")).toBe(`${payload.sections[1].patch}\n`);
   });
 });

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
-  describeGitDiffFile,
+  gitDiffStatusMark,
+  gitDiffStatusWord,
+  gitDiffTone,
   describeGitDiffTopBarButton,
   formatGitDelta,
   splitGitDiffPath,
@@ -31,67 +33,17 @@ describe("Git diff file presentation", () => {
       name: "app.ts",
     });
   });
-  test("status maps to a glyph tone and scope wording", () => {
-    expect(describeGitDiffFile(file({ status: "added" }), "all")).toMatchObject({
-      statusLabel: "Added",
-      scopeLabel: "Unstaged",
-      icon: "add-circle",
-      tone: "added",
-    });
-    expect(
-      describeGitDiffFile(file({ status: "untracked", untracked: true }), "all"),
-    ).toMatchObject({ scopeLabel: "Untracked", tone: "untracked" });
-    expect(
-      describeGitDiffFile(
-        file({ status: "deleted", staged: true, unstaged: false }),
-        "staged",
-      ),
-    ).toMatchObject({ scopeLabel: "Staged", tone: "deleted" });
+  test("status maps to a tone, a one-character mark and a spoken word", () => {
+    expect(gitDiffTone(file({ status: "added" }))).toBe("added");
+    expect(gitDiffStatusMark("added")).toBe("+");
+    expect(gitDiffTone(file({ status: "untracked", untracked: true }))).toBe("untracked");
+    expect(gitDiffStatusMark("untracked")).toBe("?");
+    expect(gitDiffTone(file({ status: "copied" }))).toBe("renamed");
+    expect(gitDiffStatusWord(gitDiffTone(file({ status: "deleted" })))).toBe("Deleted");
+    expect(gitDiffStatusWord(gitDiffTone(file({ status: "weird" })))).toBe("Modified");
   });
-  test("rename keeps the destination name and the source", () => {
-    const presentation = describeGitDiffFile(
-      file({
-        status: "renamed",
-        old_path: "src/old-app.ts",
-        path: "src/new/app.ts",
-      }),
-      "all",
-    );
-    expect(presentation.name).toBe("app.ts");
-    expect(presentation.directory).toBe("src/new/");
-    expect(presentation.oldName).toBe("old-app.ts");
-    expect(presentation.oldDirectory).toBe("src/");
-  });
-  test("binary overrides code stats with a binary presentation", () => {
-    const presentation = describeGitDiffFile(
-      file({ binary: true, additions: 0, deletions: 0 }),
-      "all",
-    );
-    expect(presentation.binary).toBe(true);
-    expect(presentation.icon).toBe("cube");
-    expect(presentation.tone).toBe("binary");
-  });
-  test("scope counts use the selected comparison rather than a sum", () => {
-    const both = file({
-      staged: true,
-      unstaged: true,
-      additions: 5,
-      deletions: 3,
-      staged_additions: 2,
-      staged_deletions: 1,
-      working_additions: 3,
-      working_deletions: 2,
-    });
-    expect(
-      describeGitDiffFile(both, "staged"),
-    ).toMatchObject({ additions: 2, deletions: 1 });
-    expect(
-      describeGitDiffFile(both, "working"),
-    ).toMatchObject({ additions: 3, deletions: 2 });
-    expect(describeGitDiffFile(both, "all")).toMatchObject({
-      additions: 5,
-      deletions: 3,
-    });
+  test("binary overrides the status", () => {
+    expect(gitDiffTone(file({ status: "modified", binary: true }))).toBe("binary");
   });
 });
 

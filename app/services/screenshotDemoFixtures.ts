@@ -1,4 +1,4 @@
-import type { GitDiffFileContentPayload, GitDiffPatchPayload, GitDiffStatusSnapshot } from "./gitDiff";
+import type { GitCommitDetail, GitCommitSummary, GitDiffFileContentPayload, GitDiffFileInfo, GitDiffPatchPayload, GitDiffStatusSnapshot } from "./gitDiff";
 import type { CodexConversationEvent, ConversationChoice } from "./codexConversation";
 import type { Worker } from "../store/workers";
 import type { PendingUserMessage } from "../components/terminal/InterfaceChatSession";
@@ -947,25 +947,61 @@ export const SCREENSHOT_PLUGIN_ACCOUNTS = {
   },
 };
 
-/** The Worker's git sheet: three changed files and one diff page. */
-export const SCREENSHOT_GIT_SNAPSHOT: GitDiffStatusSnapshot = {
-  available: true,
-  repo_root: "/Users/demo/Projects/atlas-notes",
-  repo_name: "atlas-notes",
-  branch: "sync-copy",
-  clean: false,
-  file_count: 3,
-  staged_file_count: 0,
-  unstaged_file_count: 2,
-  untracked_file_count: 1,
-  additions: 19,
-  deletions: 9,
-  files: [
-    { path: "app/settings/strings.ts", status: "modified", staged: false, unstaged: true, untracked: false, additions: 7, deletions: 7, working_additions: 7, working_deletions: 7 },
-    { path: "app/settings/SyncRow.tsx", status: "modified", staged: false, unstaged: true, untracked: false, additions: 4, deletions: 2, working_additions: 4, working_deletions: 2 },
-    { path: "docs/release-notes.md", status: "untracked", staged: false, unstaged: false, untracked: true, additions: 8, deletions: 0, working_additions: 8, working_deletions: 0 },
-  ],
-};
+/** The Worker's git sheet: a repository mid-review, with some files staged. */
+const gitFile = (path: string, status: string, staged: boolean, additions: number, deletions: number, extra: Partial<GitDiffFileInfo> = {}): GitDiffFileInfo => ({
+  path,
+  status,
+  staged,
+  unstaged: !staged && status !== "untracked",
+  untracked: status === "untracked",
+  additions,
+  deletions,
+  staged_additions: staged ? additions : 0,
+  staged_deletions: staged ? deletions : 0,
+  working_additions: staged ? 0 : additions,
+  working_deletions: staged ? 0 : deletions,
+  ...extra,
+});
+
+export const SCREENSHOT_GIT_FILES: GitDiffFileInfo[] = [
+  gitFile("app/components/screen/ScreenScreen.tsx", "modified", true, 16, 1),
+  gitFile("app/components/screen/screenViewerMeta.ts", "modified", true, 1, 1),
+  gitFile("app/components/screen/runtime/rfbFeed.ts", "untracked", false, 41, 0),
+  gitFile("app/components/screen/runtime/viewer.js", "modified", false, 12, 1),
+  gitFile("app/components/screen/rfbFeed.test.ts", "untracked", false, 45, 0),
+  gitFile("app/components/screen/screenLiveDeadline.ts", "untracked", false, 32, 0),
+  gitFile("app/components/screen/screenLiveDeadline.test.ts", "untracked", false, 42, 0),
+  gitFile("app/components/screen/screenViewerRuntime.js", "modified", false, 6, 6),
+  gitFile("app/components/screen/screenViewerSource.js", "modified", false, 1, 1),
+  gitFile("app/components/screen/useRemoteScreen.ts", "modified", false, 13, 0),
+  gitFile("daemon/agentuse/bridge.go", "modified", false, 94, 3),
+  gitFile("daemon/agentuse/bridge_test.go", "modified", false, 61, 2),
+  gitFile("daemon/agentuse/extension/background.js", "modified", false, 28, 4),
+  gitFile("docs/releases/reviewed/v0.2.99.md", "untracked", false, 24, 0),
+];
+
+export function screenshotGitSnapshot(files: readonly GitDiffFileInfo[], extra: Partial<GitDiffStatusSnapshot> = {}): GitDiffStatusSnapshot {
+  const counted = files.filter((file) => !file.binary);
+  return {
+    available: true,
+    repo_root: "/Users/demo/Projects/mewla",
+    repo_name: "mewla",
+    branch: "main",
+    upstream: "origin/main",
+    ahead: 2,
+    behind: 0,
+    has_commits: true,
+    clean: files.length === 0,
+    file_count: files.length,
+    staged_file_count: files.filter((file) => file.staged).length,
+    unstaged_file_count: files.filter((file) => file.unstaged).length,
+    untracked_file_count: files.filter((file) => file.untracked).length,
+    additions: counted.reduce((sum, file) => sum + (file.additions ?? 0), 0),
+    deletions: counted.reduce((sum, file) => sum + (file.deletions ?? 0), 0),
+    files: [...files],
+    ...extra,
+  };
+}
 
 const GIT_DEMO_BASE = [
   "export const strings = {",
@@ -982,11 +1018,7 @@ const GIT_DEMO_CURRENT = [...GIT_DEMO_BASE];
 GIT_DEMO_CURRENT[4] = "  syncPaused: \"Sync paused\",";
 GIT_DEMO_CURRENT[5] = "  syncConflict: \"Keep both copies\",";
 
-const GIT_DEMO_PATCH = [
-  "diff --git a/app/settings/strings.ts b/app/settings/strings.ts",
-  "index 3f2a1c4..9b7d0e2 100644",
-  "--- a/app/settings/strings.ts",
-  "+++ b/app/settings/strings.ts",
+const GIT_DEMO_HUNKS = [
   "@@ -2,7 +2,7 @@ export const strings = {",
   "   // Settings screen",
   "   title: \"Settings\",",
@@ -997,17 +1029,55 @@ const GIT_DEMO_PATCH = [
   "+  syncConflict: \"Keep both copies\",",
   "   retries: 3,",
   " };",
-].join("\n");
+  "@@ -24,6 +24,8 @@ export function formatRetry(count: number) {",
+  "   if (count <= 0) {",
+  "     return \"never\";",
+  "   }",
+  "+  // A retry is cheap; say how many are left.",
+  "+  if (count === 1) return \"once more\";",
+  "   return `${count} more times`;",
+  " }",
+  " ",
+];
 
-export function screenshotGitDiffPatch(path: string): GitDiffPatchPayload {
+export function screenshotGitDiffPatch(path: string, files: readonly GitDiffFileInfo[] = SCREENSHOT_GIT_FILES): GitDiffPatchPayload {
+  const file = files.find((candidate) => candidate.path === path);
+  const header = [`diff --git a/${path} b/${path}`, "index 3f2a1c4..9b7d0e2 100644", `--- a/${path}`, `+++ b/${path}`];
+  const sections: GitDiffPatchPayload["sections"] = [];
+  if (file?.staged) sections.push({ scope: "staged", title: "Staged", patch: [...header, ...GIT_DEMO_HUNKS].join("\n") });
+  if (file?.unstaged) sections.push({ scope: "unstaged", title: "Unstaged", patch: [...header, ...GIT_DEMO_HUNKS].join("\n") });
+  if (file?.untracked) {
+    const body = Array.from({ length: Math.min(file.additions ?? 8, 18) }, (_, index) => `+line ${index + 1} of ${path.split("/").pop()}`);
+    sections.push({
+      scope: "untracked",
+      title: "Untracked",
+      patch: [`diff --git a/${path} b/${path}`, "new file mode 100644", "--- /dev/null", `+++ b/${path}`, `@@ -0,0 +1,${body.length} @@`, ...body].join("\n"),
+    });
+  }
+  return { repo_root: "/Users/demo/Projects/mewla", path, sections };
+}
+
+export const SCREENSHOT_GIT_COMMITS: GitCommitSummary[] = [
+  { sha: "f1b87267aa", short: "f1b8726", subject: "App: the Work sheet is mounted once at the root", author: "daoleno", date: Math.floor(Date.now() / 1000) - 3600, refs: ["main", "origin/main"], parents: 1 },
+  { sha: "3e06e5a3bb", short: "3e06e5a", subject: "Browser: reap comment no longer names KWin", author: "daoleno", date: Math.floor(Date.now() / 1000) - 7200, parents: 1 },
+  { sha: "0f35d483cc", short: "0f35d48", subject: "Screen: /screen?worker=<id> opens on that agent's row", author: "daoleno", date: Math.floor(Date.now() / 1000) - 86400, parents: 1 },
+  { sha: "c26bc77d11", short: "c26bc77", subject: "App: the Work pill answers on touch-down", author: "daoleno", date: Math.floor(Date.now() / 1000) - 90000, parents: 1 },
+  { sha: "d6b490ba22", short: "d6b490b", subject: "Screen: an agent's browser is a window on its monitor", author: "daoleno", date: Math.floor(Date.now() / 1000) - 260000, parents: 1 },
+];
+
+export function screenshotGitCommit(sha: string): GitCommitDetail {
+  const summary = SCREENSHOT_GIT_COMMITS.find((commit) => commit.sha === sha) ?? SCREENSHOT_GIT_COMMITS[0];
+  const paths = ["app/components/work/WorkSheet.tsx", "app/components/work/useWorkSheet.ts"];
+  const header = (path: string) => [`diff --git a/${path} b/${path}`, "index 3f2a1c4..9b7d0e2 100644", `--- a/${path}`, `+++ b/${path}`];
   return {
-    repo_root: SCREENSHOT_GIT_SNAPSHOT.repo_root ?? "",
-    path,
-    sections: [{ scope: "unstaged", title: "Unstaged", patch: GIT_DEMO_PATCH }],
+    ...summary,
+    body: "The sheet no longer remounts on open, so the first frame has its slips drawn.",
+    files: paths.map((path) => ({ path, status: "modified", additions: 3, deletions: 2 })),
+    patch: paths.map((path) => [...header(path), ...GIT_DEMO_HUNKS].join("\n")).join("\n"),
   };
 }
 
-export function screenshotGitDiffFileContent(path: string): GitDiffFileContentPayload {
+export function screenshotGitFileContent(path: string): GitDiffFileContentPayload {
   const side = (label: string, lines: string[]) => ({
     label,
     exists: true,
@@ -1016,7 +1086,7 @@ export function screenshotGitDiffFileContent(path: string): GitDiffFileContentPa
     content: lines.join("\n"),
   });
   return {
-    repo_root: SCREENSHOT_GIT_SNAPSHOT.repo_root ?? "",
+    repo_root: "/Users/demo/Projects/mewla",
     path,
     base: side("Base", GIT_DEMO_BASE),
     current: side("Working tree", GIT_DEMO_CURRENT),

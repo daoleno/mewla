@@ -12,6 +12,14 @@ describe("diff reader messages", () => {
     expect(parseDiffViewerMessage('{"type":"needFiles","id":"0-unstaged"}')).toEqual({ type: "needFiles", id: "0-unstaged" });
     expect(parseDiffViewerMessage('{"type":"find","query":"q","count":2,"index":-1}')).toMatchObject({ count: 2, index: -1 });
     expect(parseDiffViewerMessage('{"type":"error","message":"boom"}')).toEqual({ type: "error", message: "boom" });
+    expect(parseDiffViewerMessage('{"type":"selection","section":"0-unstaged","side":"additions","start":4,"end":6}')).toMatchObject({ section: "0-unstaged", start: 4, end: 6 });
+    expect(parseDiffViewerMessage('{"type":"selection","section":null,"side":"additions","start":0,"end":0}')).toMatchObject({ section: null });
+  });
+
+  test("a malformed selection is dropped", () => {
+    expect(parseDiffViewerMessage('{"type":"selection","section":3,"side":"additions","start":1,"end":1}')).toBeNull();
+    expect(parseDiffViewerMessage('{"type":"selection","section":"s","side":"left","start":1,"end":1}')).toBeNull();
+    expect(parseDiffViewerMessage('{"type":"selection","section":"s","side":"deletions","start":1.5,"end":2}')).toBeNull();
   });
 
   test("anything unexpected is dropped", () => {

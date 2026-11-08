@@ -1975,3 +1975,22 @@ describe("a connection that stops answering", () => {
     }
   });
 });
+
+test("a Git change resolves on its own action's reply and rejects with Git's message", async () => {
+  const client = new WebSocketClient();
+  const socket = await connectClient(client, server);
+  socket.open();
+  const pending = client.runGitAction(server.id, "stage", { targetId: "worker", cwd: "/fixture", repoRoot: "/fixture", fields: { paths: ["a b.ts"] } });
+  const outbound = JSON.parse(socket.sent.at(-1)!);
+  expect(outbound).toMatchObject({ type: "git_stage", target_id: "worker", cwd: "/fixture", repo_root: "/fixture", paths: ["a b.ts"] });
+  // Another change's reply for the same request id is not this change's answer.
+  socket.receive({ type: "git_action", request_id: outbound.request_id, action: "commit", result: { sha: "x" } });
+  expect(registeredHandlerCount(client)).toBeGreaterThan(0);
+  socket.receive({ type: "git_action", request_id: outbound.request_id, action: "stage", result: { staged: 1 } });
+  await expect(pending).resolves.toEqual({ staged: 1 });
+  expect(registeredHandlerCount(client)).toBe(0);
+  const rejected = client.runGitAction(server.id, "push", { targetId: "worker", cwd: "/fixture" });
+  socket.receive({ type: "error", request_id: JSON.parse(socket.sent.at(-1)!).request_id, message: "[rejected] main -> main (non-fast-forward)" });
+  await expect(rejected).rejects.toThrow("non-fast-forward");
+  client.disconnect();
+});

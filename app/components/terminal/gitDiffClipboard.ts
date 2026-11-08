@@ -1,8 +1,9 @@
 import { useCallback, useRef } from "react";
 import * as Clipboard from "expo-clipboard";
-import type { GitDiffPatchPayload, GitDiffScope } from "../../services/gitDiff";
+import type { GitDiffPatchPayload } from "../../services/gitDiff";
 import { useToast } from "../ui/Toast";
 import { gitDiffPatchText } from "./gitDiffReview";
+import type { GitReviewGroup } from "./gitReviewModel";
 
 /** Clipboard actions with Toast feedback (Toast also owns the haptic). */
 export function useGitDiffClipboard(
@@ -30,11 +31,11 @@ export function useGitDiffClipboard(
     [copyText],
   );
   const copyPatch = useCallback(
-    async (path: string, scope: GitDiffScope) => {
+    async (path: string, group: GitReviewGroup) => {
       if (copyingPatch.current) return;
       copyingPatch.current = true;
       try {
-        const text = gitDiffPatchText(await loadPatch(path), scope);
+        const text = gitDiffPatchText(await loadPatch(path), group);
         if (!text) {
           toast.show({ tone: "error", title: "Nothing to copy" });
           return;

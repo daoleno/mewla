@@ -7,6 +7,7 @@ import {
   type GitRepoPathsPayload,
 } from "../../services/gitDiff";
 import { wsClient } from "../../services/websocket";
+import { useGitReviewActions } from "./gitReviewActions";
 
 interface UseTerminalGitDiffInput {
   serverId: string;
@@ -15,6 +16,8 @@ interface UseTerminalGitDiffInput {
   connectionState: ConnectionState;
   hasTerminalRoute: boolean;
   screenFocused: boolean;
+  /** The Session runs an agent, so a review comment can be sent to it. */
+  canAskAgent: boolean;
 }
 
 export type TerminalGitDiffTone = "clean" | "dirty" | "error" | "loading";
@@ -34,6 +37,7 @@ export function useTerminalGitDiff({
   connectionState,
   hasTerminalRoute,
   screenFocused,
+  canAskAgent,
 }: UseTerminalGitDiffInput) {
   const ownerKey = JSON.stringify([serverId, workerId, cwd]);
   const [visible, setVisible] = useState(false);
@@ -118,6 +122,15 @@ export function useTerminalGitDiff({
     const timer = setInterval(() => void refresh(), 15000);
     return () => clearInterval(timer);
   }, [connected, refresh, visible]);
+
+  const actions = useGitReviewActions({
+    serverId,
+    workerId,
+    cwd,
+    repoRoot: status?.repo_root,
+    canAskAgent,
+    refresh,
+  });
 
   const loadPatch = useCallback(
     (path: string) =>
@@ -226,6 +239,7 @@ export function useTerminalGitDiff({
       refreshKey,
       loadPatch,
       loadFileContent,
+      actions,
       repoPaths,
       repoPathsLoading,
       repoPathsError,

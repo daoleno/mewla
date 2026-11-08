@@ -43,6 +43,7 @@ import { TerminalTopBar } from "../terminal/TerminalTopBar";
 import { describeGitDiffTopBarButton } from "../terminal/gitDiffPresentation";
 import type { TerminalGitDiffSummary } from "../terminal/useTerminalGitDiff";
 import { GitDiffSheet } from "../terminal/GitDiffSheet";
+import type { GitReviewActions } from "../terminal/gitReviewActions";
 import { TerminalPaletteFixture } from "../terminal/TerminalPaletteFixture";
 import { useTerminalThemeChrome } from "../terminal/screen/useTerminalThemeChrome";
 import {
@@ -68,9 +69,12 @@ import {
   SCREENSHOT_SUBAGENT_WORK_EVENTS,
   screenshotToolHeavyEvents,
   SCREENSHOT_CHAT_EVENTS,
-  SCREENSHOT_GIT_SNAPSHOT,
-  screenshotGitDiffFileContent,
+  SCREENSHOT_GIT_COMMITS,
+  SCREENSHOT_GIT_FILES,
+  screenshotGitCommit,
   screenshotGitDiffPatch,
+  screenshotGitFileContent,
+  screenshotGitSnapshot,
   SCREENSHOT_PLUGIN_ACCOUNTS,
   SCREENSHOT_PLUGINS,
   SCREENSHOT_SESSION_AGENTS,
@@ -671,22 +675,88 @@ function ChatDemo() {
   );
 }
 
-/** The Worker's git sheet on fixture changes; tap a file for its diff. */
+/**
+ * The Worker's git review on a fixture repository. The fake actions move
+ * files between Staged and Changes, so the whole flow can be tried without a
+ * daemon.
+ */
 function GitDiffDemo() {
   // The route hands the sheet the terminal palette, not the chat one.
   const { terminalTheme: theme } = useTerminalThemeChrome();
-  const loadPatch = useCallback(async (path: string) => screenshotGitDiffPatch(path), []);
-  const loadFileContent = useCallback(async (path: string) => screenshotGitDiffFileContent(path), []);
+  const [files, setFiles] = useState(SCREENSHOT_GIT_FILES);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const change = useCallback((next: typeof SCREENSHOT_GIT_FILES) => {
+    setFiles(next);
+    setRefreshKey((value) => value + 1);
+  }, []);
+  const move = useCallback(
+    (paths: string[], staged: boolean) =>
+      change(
+        filesRef.current.map((file) =>
+          paths.includes(file.path)
+            ? {
+                ...file,
+                staged,
+                unstaged: !staged && !file.untracked,
+                staged_additions: staged ? file.additions : 0,
+                staged_deletions: staged ? file.deletions : 0,
+                working_additions: staged ? 0 : file.additions,
+                working_deletions: staged ? 0 : file.deletions,
+              }
+            : file,
+        ),
+      ),
+    [change],
+  );
+  const actions = useMemo<GitReviewActions>(
+    () => ({
+      stage: async (paths) => move(paths, true),
+      unstage: async (paths) => move(paths, false),
+      discard: async (paths) => {
+        change(filesRef.current.filter((file) => !paths.includes(file.path)));
+        return [];
+      },
+      undoDiscard: async () => {},
+      hunk: async (path, scope) => move([path], scope === "unstaged"),
+      commit: async () => {
+        change(filesRef.current.filter((file) => !file.staged));
+        return { sha: "a1b2c3d4e5f6", subject: "Screen: the live deadline" };
+      },
+      push: async () => "main -> origin/main",
+      pull: async () => "Already up to date.",
+      fetch: async () => {},
+      branches: async () => ({
+        current: "main",
+        detached: false,
+        branches: [
+          { name: "main", current: true, remote: false, upstream: "origin/main", ahead: 2, subject: "App: the Work sheet is mounted once", date: Math.floor(Date.now() / 1000) - 3600 },
+          { name: "git-review", current: false, remote: false, subject: "Git review redesign", date: Math.floor(Date.now() / 1000) - 86400 },
+          { name: "release/0.2.98", current: false, remote: true, subject: "Release 0.2.98", date: Math.floor(Date.now() / 1000) - 604800 },
+        ],
+      }),
+      switchBranch: async () => {},
+      log: async () => ({ commits: SCREENSHOT_GIT_COMMITS, has_more: false }),
+      show: async (sha) => screenshotGitCommit(sha),
+      askAgent: () => {},
+    }),
+    [change, move],
+  );
+  const loadPatch = useCallback(async (path: string) => screenshotGitDiffPatch(path, filesRef.current), []);
+  const loadFileContent = useCallback(async (path: string) => screenshotGitFileContent(path), []);
+  const snapshot = useMemo(() => screenshotGitSnapshot(files), [files]);
   return (
     <GitDiffSheet
       visible
       theme={theme}
-      snapshot={SCREENSHOT_GIT_SNAPSHOT}
+      snapshot={snapshot}
       loading={false}
       error={null}
       loadPatch={loadPatch}
       loadFileContent={loadFileContent}
-      refreshKey={0}
+      actions={actions}
+      refreshKey={refreshKey}
       ownerKey="demo-git"
       repoPaths={null}
       repoPathsLoading={false}

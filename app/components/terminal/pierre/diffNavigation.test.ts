@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { findMatches, hunkStarts, sectionLines, stepHunk, stepIndex, type NavSection } from "./runtime/diffNavigation";
+import { findMatches, sectionLines, stepHunk, stepIndex, type NavSection } from "./runtime/diffNavigation";
 
 // @@ -10,4 +10,5 @@ : one context line, a change that swaps one line for two, one context line.
 const section: NavSection = {
@@ -38,15 +38,6 @@ describe("diff reader line model", () => {
     expect(findMatches([section], "old")).toEqual([{ id: "s", side: "deletions", line: 11 }]);
     expect(findMatches([section], "")).toEqual([]);
     expect(findMatches([section], "absent")).toEqual([]);
-  });
-
-  test("hunks start on the first changed side", () => {
-    expect(hunkStarts([section])).toEqual([{ id: "s", side: "additions", line: 10 }]);
-    const deletionFirst: NavSection = {
-      ...section,
-      hunks: [{ additionStart: 4, deletionStart: 7, hunkContent: [{ type: "change", deletions: 2, deletionLineIndex: 0, additions: 0, additionLineIndex: 0 }] }],
-    };
-    expect(hunkStarts([deletionFirst])).toEqual([{ id: "s", side: "deletions", line: 7 }]);
   });
 });
 

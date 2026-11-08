@@ -17,8 +17,11 @@ import {
   transportFailed,
 } from "./pinnedTransport";
 import type {
+  GitBranchesPayload,
+  GitCommitDetail,
   GitDiffFileContentPayload,
   GitDiffPatchPayload,
+  GitLogPayload,
   GitRepoFileContentPayload,
   GitRepoPathsPayload,
   GitDiffStatusSnapshot,
@@ -780,6 +783,16 @@ class ServerSocket {
 }
 
 /** One correlated request: the reply that settles it and how it can fail. */
+export interface GitRepoTarget {
+  targetId?: string;
+  cwd?: string;
+  repoRoot?: string;
+}
+
+function gitTargetBody(options: GitRepoTarget) {
+  return { target_id: options.targetId, cwd: options.cwd };
+}
+
 interface RequestOptions<T> {
   /** The reply type that resolves the request. */
   responseType: string;
@@ -1601,6 +1614,77 @@ export class WebSocketClient {
         timeout: "Timed out while loading repository file.",
         error: "Failed to load repository file.",
         parse: (payload) => payload.content as GitRepoFileContentPayload,
+      },
+    );
+  }
+
+  getGitBranches(serverId: string, options: GitRepoTarget) {
+    return this.request<GitBranchesPayload>(
+      serverId,
+      "git_branches",
+      gitTargetBody(options),
+      {
+        responseType: "git_branches",
+        timeoutMs: 15000,
+        timeout: "Timed out while loading branches.",
+        error: "Failed to load branches.",
+        parse: (payload) => payload.branches as GitBranchesPayload,
+      },
+    );
+  }
+
+  getGitLog(serverId: string, options: GitRepoTarget & { limit?: number; skip?: number }) {
+    return this.request<GitLogPayload>(
+      serverId,
+      "git_log",
+      { ...gitTargetBody(options), limit: options.limit, skip: options.skip },
+      {
+        responseType: "git_log",
+        timeoutMs: 15000,
+        timeout: "Timed out while loading history.",
+        error: "Failed to load history.",
+        parse: (payload) => payload.log as GitLogPayload,
+      },
+    );
+  }
+
+  getGitShow(serverId: string, options: GitRepoTarget & { sha: string }) {
+    return this.request<GitCommitDetail>(
+      serverId,
+      "git_show",
+      { ...gitTargetBody(options), sha: options.sha },
+      {
+        responseType: "git_show",
+        timeoutMs: 20000,
+        timeout: "Timed out while loading the commit.",
+        error: "Failed to load the commit.",
+        parse: (payload) => payload.commit as GitCommitDetail,
+      },
+    );
+  }
+
+  /**
+   * One Git change in the Session's repository (stage, discard, commit, push…).
+   * `repoRoot` is the repository the person is looking at; the daemon refuses
+   * if the terminal has since moved to another one. A failure rejects with
+   * Git's own message.
+   */
+  runGitAction<T = Record<string, unknown>>(
+    serverId: string,
+    action: string,
+    options: GitRepoTarget & { fields?: Record<string, unknown>; timeoutMs?: number },
+  ) {
+    return this.request<T>(
+      serverId,
+      `git_${action}`,
+      { ...gitTargetBody(options), repo_root: options.repoRoot, ...options.fields },
+      {
+        responseType: "git_action",
+        matchesReply: (payload) => payload.action === action,
+        timeoutMs: options.timeoutMs ?? 40000,
+        timeout: `Git ${action} timed out.`,
+        error: `Git ${action} failed.`,
+        parse: (payload) => (payload.result ?? {}) as T,
       },
     );
   }

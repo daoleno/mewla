@@ -2,7 +2,7 @@
 // page on web). It renders only; the host owns chrome, data and clipboard.
 // Messages in and out are described by ../diffViewerProtocol.ts.
 import { CodeView, parsePatchFiles, registerCustomCSSVariableTheme } from "@pierre/diffs";
-import { findMatches, hunkStarts, stepHunk, stepIndex } from "./diffNavigation.ts";
+import { findMatches, stepIndex } from "./diffNavigation.ts";
 
 const THEME = "mewla";
 
@@ -29,8 +29,7 @@ export function mountDiffViewer(container, post) {
   let matches = [];
   let query = "";
   let matchIndex = -1;
-  let hunkIndex = -1;
-  const positions = new Map();
+    const positions = new Map();
   const pendingFiles = new Map();
   let disposed = false;
 
@@ -64,6 +63,16 @@ export function mountDiffViewer(container, post) {
       stickyHeaders: true,
       layout: { paddingTop: 0, paddingBottom: 24 + layout.inset, gap: 0 },
       loadDiffFiles: (fileDiff) => requestFiles(fileDiff),
+      // A tap on a line (or its number) selects it; the host turns the
+      // selection into hunk and comment actions. The host's own selections
+      // are written with notify:false and never echo back.
+      enableLineSelection: true,
+      lineHoverHighlight: "disabled",
+      onSelectedLinesChange: (selection) => {
+        if (!selection) { send({ type: "selection", section: null, side: "additions", start: 0, end: 0 }); return; }
+        const { range } = selection;
+        send({ type: "selection", section: String(selection.id).split(":")[0], side: range.side || "additions", start: range.start, end: range.end });
+      },
       renderHeaderPrefix: (fileDiff) => {
         const label = sectionLabel(fileDiff);
         if (!label) return null;
@@ -138,7 +147,7 @@ export function mountDiffViewer(container, post) {
       return;
     }
     current = { key: message.key, kind: "diff", items, sections, labels, expandable: expandable.size ? expandable : null, hunks };
-    matches = []; query = ""; matchIndex = -1; hunkIndex = -1;
+    matches = []; query = ""; matchIndex = -1;
     build();
   }
 
@@ -150,7 +159,7 @@ export function mountDiffViewer(container, post) {
       items: [{ id: "file", type: "file", file: { name: message.path, contents: message.contents }, version: 1 }],
       sections: [], labels: new Map(), expandable: null, hunks: 0,
     };
-    matches = []; query = ""; matchIndex = -1; hunkIndex = -1;
+    matches = []; query = ""; matchIndex = -1;
     build();
   }
 
@@ -176,11 +185,14 @@ export function mountDiffViewer(container, post) {
     send({ type: "find", query, count: matches.length, index: matchIndex });
   }
 
-  function seekHunk(direction) {
-    if (!current) return;
-    const starts = hunkStarts(current.sections);
-    hunkIndex = stepHunk(hunkIndex, starts.length, direction);
-    scrollToLine(starts[hunkIndex], "start");
+  // The host picks a line range (a whole hunk, say): highlight it, and bring
+  // it into view when asked.
+  function select(message) {
+    if (!view) return;
+    if (!message.section) { view.clearSelectedLines({ notify: false }); return; }
+    const id = `${message.section}:0`;
+    view.setSelectedLines({ id, range: { start: message.start, end: message.end, side: message.side } }, { notify: false });
+    if (message.scroll) scrollToLine({ id, line: message.start, side: message.side }, "start");
   }
 
   function handleOne(message) {
@@ -210,7 +222,8 @@ export function mountDiffViewer(container, post) {
         break;
       }
       case "find": find(message.query); break;
-      case "seek": message.target === "hunk" ? seekHunk(message.direction) : seekMatch(message.direction); break;
+      case "seek": seekMatch(message.direction); break;
+      case "select": select(message); break;
       case "top": root.scrollTop = 0; break;
     }
   }
