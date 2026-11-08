@@ -58,6 +58,15 @@ export interface GitDiffStatusSnapshot {
   additions: number;
   deletions: number;
   files?: GitDiffFileInfo[];
+  /** Tracking branch, e.g. `origin/main`; empty when none is set. */
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  detached?: boolean;
+  /** False in a repository with no commit yet. */
+  has_commits?: boolean;
+  /** A merge, rebase, cherry-pick or revert is in progress. */
+  operation?: "" | "merge" | "rebase" | "cherry-pick" | "revert" | string;
 }
 
 export interface GitDiffPatchSection {
@@ -133,3 +142,65 @@ export function describeGitDiffScope(file: GitDiffFileInfo): string {
   if (file.unstaged) return "Unstaged";
   return "Changed";
 }
+
+export interface GitBranchInfo {
+  name: string;
+  current: boolean;
+  /** Only on the remote; switching creates a local tracking branch. */
+  remote: boolean;
+  upstream?: string;
+  ahead?: number;
+  behind?: number;
+  subject?: string;
+  /** Unix seconds of the last commit. */
+  date?: number;
+}
+
+export interface GitBranchesPayload {
+  current: string;
+  detached: boolean;
+  branches: GitBranchInfo[];
+}
+
+export interface GitCommitSummary {
+  sha: string;
+  short: string;
+  subject: string;
+  author: string;
+  /** Unix seconds. */
+  date: number;
+  refs?: string[];
+  parents?: number;
+}
+
+export interface GitLogPayload {
+  commits: GitCommitSummary[];
+  has_more: boolean;
+}
+
+export interface GitCommitFile {
+  path: string;
+  old_path?: string;
+  status: GitDiffFileStatus | string;
+  additions: number;
+  deletions: number;
+  binary?: boolean;
+}
+
+export interface GitCommitDetail extends GitCommitSummary {
+  body: string;
+  files: GitCommitFile[];
+  patch: string;
+  truncated?: boolean;
+}
+
+/** What a discard left behind, kept by the app so one tap can put it back. */
+export interface GitDiscardUndo {
+  path: string;
+  blob: string;
+  after: string;
+  mode: string;
+  staged: boolean;
+}
+
+export type GitHunkAction = "stage" | "unstage" | "discard" | "apply";

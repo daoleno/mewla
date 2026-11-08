@@ -2,9 +2,9 @@ import type {
   GitDiffFileContentPayload,
   GitDiffFileInfo,
   GitDiffPatchPayload,
-  GitDiffScope,
 } from "../../services/gitDiff";
 import type { DiffViewerSection } from "./pierre/diffViewerProtocol";
+import type { GitReviewGroup } from "./gitReviewModel";
 
 /**
  * A comparison larger than this is not sent into the reader: the patch crosses
@@ -17,15 +17,9 @@ export type GitDiffReviewPlan =
   | { kind: "empty" }
   | { kind: "too-large"; bytes: number };
 
-/** The daemon sections that belong to a scope: Working is unstaged plus untracked. */
-export function gitDiffSectionsForScope(payload: GitDiffPatchPayload, scope: GitDiffScope) {
-  return payload.sections.filter((section) =>
-    scope === "all"
-      ? true
-      : scope === "staged"
-        ? section.scope === "staged"
-        : section.scope !== "staged",
-  );
+/** The daemon sections of one group: Changes is the unstaged and untracked ones. */
+export function gitDiffSectionsForGroup(payload: GitDiffPatchPayload, group: GitReviewGroup) {
+  return payload.sections.filter((section) => (group === "staged" ? section.scope === "staged" : section.scope !== "staged"));
 }
 
 /**
@@ -43,9 +37,9 @@ export function canExpandGitDiffFile(file: GitDiffFileInfo): boolean {
 export function planGitDiffReview(
   payload: GitDiffPatchPayload,
   file: GitDiffFileInfo,
-  scope: GitDiffScope,
+  group: GitReviewGroup,
 ): GitDiffReviewPlan {
-  const selected = gitDiffSectionsForScope(payload, scope).filter((section) => section.patch.trim() !== "");
+  const selected = gitDiffSectionsForGroup(payload, group).filter((section) => section.patch.trim() !== "");
   if (!selected.length) return { kind: "empty" };
   const bytes = selected.reduce((total, section) => total + section.patch.length, 0);
   if (bytes > GIT_DIFF_PATCH_LIMIT_BYTES) return { kind: "too-large", bytes };
@@ -63,9 +57,9 @@ export function planGitDiffReview(
   };
 }
 
-/** What Copy diff puts on the clipboard: every patch of the scope, as git printed them. */
-export function gitDiffPatchText(payload: GitDiffPatchPayload, scope: GitDiffScope): string {
-  return gitDiffSectionsForScope(payload, scope)
+/** What Copy diff puts on the clipboard: every patch of the group, as git printed them. */
+export function gitDiffPatchText(payload: GitDiffPatchPayload, group: GitReviewGroup): string {
+  return gitDiffSectionsForGroup(payload, group)
     .filter((section) => section.patch.trim() !== "")
     .map((section) => `${section.patch}\n`)
     .join("");
@@ -91,16 +85,6 @@ export function gitDiffExpansionSides(
     newContents: current.content ?? "",
     oldName: file.old_path,
   };
-}
-
-/** The line counts a Trees row shows for one file in a scope. */
-export function gitDiffTreeDecoration(
-  file: GitDiffFileInfo,
-  counts: readonly number[],
-) {
-  return file.binary
-    ? { additions: 0, deletions: 0, binary: true }
-    : { additions: counts[0] ?? 0, deletions: counts[1] ?? 0 };
 }
 
 export function formatGitDiffBytes(bytes: number): string {

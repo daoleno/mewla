@@ -23,15 +23,19 @@ export interface ToastOptions {
   title: string;
   detail?: string;
   tone?: ToastTone;
+  /** One follow-up the toast offers, such as Undo; it keeps the toast up longer. */
+  action?: { label: string; onPress(): void };
 }
 
 interface ToastEntry extends Required<Pick<ToastOptions, "title" | "tone">> {
   id: number;
   detail?: string;
+  action?: ToastOptions["action"];
 }
 
 const ToastContext = createContext<{ show(options: ToastOptions): void } | null>(null);
 const VISIBLE_MS = 2600;
+const VISIBLE_WITH_ACTION_MS = 7000;
 
 /**
  * Non-blocking confirmations and recoverable failures: confirmations hide
@@ -53,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const tone = options.tone ?? "info";
     if (timer.current) clearTimeout(timer.current);
     nextId.current += 1;
-    setToast({ id: nextId.current, title: options.title, detail: options.detail, tone });
+    setToast({ id: nextId.current, title: options.title, detail: options.detail, tone, action: options.action });
     void Haptics.notificationAsync(
       tone === "error"
         ? Haptics.NotificationFeedbackType.Error
@@ -71,7 +75,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     timer.current = setTimeout(() => {
       timer.current = null;
       setToast(null);
-    }, VISIBLE_MS);
+    }, options.action ? VISIBLE_WITH_ACTION_MS : VISIBLE_MS);
   }, []);
 
   useEffect(() => () => {
@@ -129,6 +133,23 @@ function ToastView({ toast, onDismiss }: { toast: ToastEntry; onDismiss(): void 
                 </AppText>
               ) : null}
             </View>
+            {toast.action ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={toast.action.label}
+                hitSlop={8}
+                onPress={() => {
+                  const run = toast.action?.onPress;
+                  onDismiss();
+                  run?.();
+                }}
+                style={styles.action}
+              >
+                <AppText variant="label" style={{ color: colors.accentStrong }}>
+                  {toast.action.label}
+                </AppText>
+              </Pressable>
+            ) : null}
           </GlassSurface>
         </Pressable>
       </Animated.View>
@@ -165,5 +186,10 @@ const styles = StyleSheet.create({
   },
   copy: {
     flexShrink: 1,
+  },
+  action: {
+    minHeight: 32,
+    justifyContent: "center",
+    paddingLeft: 6,
   },
 });

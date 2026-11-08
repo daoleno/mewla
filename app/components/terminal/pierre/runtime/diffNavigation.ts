@@ -1,4 +1,4 @@
-// Find and hunk navigation over parsed patch metadata. Pure, so the same code
+// Find and hunk stepping over parsed patch metadata. Pure, so the same code
 // runs inside the diff WebView and under unit tests.
 
 export interface NavContext {
@@ -83,23 +83,6 @@ export function findMatches(sections: readonly NavSection[], query: string): Lin
     }
   }
   return matches;
-}
-
-/** First line of every hunk, in reading order. */
-export function hunkStarts(sections: readonly NavSection[]): LineRef[] {
-  const starts: LineRef[] = [];
-  for (const section of sections) {
-    for (const hunk of section.hunks) {
-      const first = hunk.hunkContent[0];
-      const deletionsFirst = first?.type === "change" && first.additions === 0 && first.deletions > 0;
-      starts.push({
-        id: section.id,
-        side: deletionsFirst ? "deletions" : "additions",
-        line: deletionsFirst ? hunk.deletionStart : hunk.additionStart,
-      });
-    }
-  }
-  return starts;
 }
 
 /** Wraps around: past the last match comes the first, before the first the last. */

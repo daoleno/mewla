@@ -55,7 +55,7 @@ The header is three glass capsules: Back, the Session identity, and actions. The
 
 ### Git
 
-The Git sheet has one Back/Close control, a title with a one-line change summary, and a single **More actions** menu. Changed files sit in one inset group with status letter tiles. Diffs use soft add/remove tints with a two-column line gutter. See [git-diff-design.md](git-diff-design.md).
+The Git sheet reviews and acts on the Session's repository: Staged and Changes groups of one-line rows with a stage toggle, a branch chip with its push or pull step, a diff reader with per-hunk actions, History, and a comment that goes to the Session's agent. See [git-diff-design.md](git-diff-design.md).
 
 ## Settings
 

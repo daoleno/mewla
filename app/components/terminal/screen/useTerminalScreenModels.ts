@@ -77,6 +77,7 @@ export function useTerminalScreenModels({
     connectionState: route.connectionState,
     hasTerminalRoute: route.hasTerminalRoute,
     screenFocused,
+    canAskAgent: route.isStructuredChatWorker,
   });
 
   return {

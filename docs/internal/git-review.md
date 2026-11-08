@@ -1,37 +1,36 @@
 # Git Review
 
-Git Diff in a terminal reviews changes on that terminal's current server and
-working directory. Android and iOS share the same overview, comparisons, reader,
-search, and navigation. Reviewing does not stage, discard, or otherwise modify
-the repository.
+Git review works on the current server and the Session's working directory: it
+shows what changed there and can stage, unstage, discard, commit, push, pull,
+switch branches and read history, all by running `git` on the daemon in that
+repository. Android and iOS share every feature; desktop web uses the same code
+with a two-pane layout. Interaction layout is specified in
+`docs/internal/git-diff-design.md`. The notes below cover data, actions and
+freshness.
 
-Interaction layout, navigation, scrolling, safe-area and acceptance criteria are
-specified in `docs/internal/git-diff-design.md`. The notes below cover data and freshness
-semantics.
+## Groups
 
-## Comparisons
+The status groups changes the way the index holds them:
 
-- **All** lists staged, working-tree, and untracked changes. A file changed in both
-  index and working tree has separate, explicitly labeled patch sections.
-- **Working** compares the index with the working tree and includes untracked
-  files as additions.
-- **Staged** compares HEAD with the index, including an initial, unborn index.
+- **Staged**: HEAD against the index, including an initial, unborn index.
+- **Changes**: the index against the working tree, plus untracked files as
+  additions.
 
-Overview counts follow the selected comparison. The top-level repository summary
-includes all changes. Paths can be filtered by destination or rename source.
-Git handles rename detection, binary classification of patches, submodules, and
-diff generation. No arbitrary commit/branch comparison is implied by these modes.
+A file edited both ways is listed once in each group, and each row opens that
+group's patch (`gitDiffSectionsForGroup`). Git handles rename detection, binary
+classification, submodules and diff generation. Paths can be filtered by
+destination or rename source. No arbitrary commit/branch comparison is implied.
 
 ## Reader
 
 The reader is [@pierre/diffs](https://diffs.com) (the file view too) and the
-changed-file list and Files browser are [@pierre/trees](https://trees.software),
+Files browser is [@pierre/trees](https://trees.software),
 both running from bundled offline copies (see
 `docs/third-party-assets.md`). On Android and iOS each is a WebView document that
 cannot navigate or fetch; on web the same code mounts straight into the page,
 because the web UI's CSP allows only same-origin scripts. The sheet keeps all
-chrome in React Native (header, scope control, find bar, display options, action
-menu); the WebViews draw content only. Messages between them are typed in
+chrome in React Native (header, list, find bar, display options, action bar,
+menus); the WebViews draw content only. Messages between them are typed in
 `app/components/terminal/pierre/diffViewerProtocol.ts` and
 `treeViewerProtocol.ts`, and every message from a WebView is parsed and dropped
 if unexpected.
@@ -53,25 +52,55 @@ palette and the font is the terminal's, so a diff matches the terminal beside it
 
 Files keeps one file viewer mounted after the first file opens, parked under the tree, so later files reuse its WebView and Back finds the tree as it was left.
 
-Back unwinds one level at a time (`file -> tree -> changes -> close`); Android
-hardware back follows the same stack. The reader WebView is one long-lived
-document per sheet: it stays mounted and empty while the list shows, so opening a
-file never pays the runtime's start-up, and it restores each comparison's scroll
-position. Wrap, text size and file headers re-render the open comparison in
-place. A file with both staged and unstaged edits shows one labeled section per
-half.
+Back unwinds one level at a time (`diff -> list -> close`, `commit file -> commit
+-> history`, `file browser -> list`); Android hardware back follows the same
+stack. The reader WebView is one long-lived document per sheet: it stays mounted and empty while the list shows, so opening a
+file never pays the runtime's start-up, and it restores each diff's scroll
+position, also across the reload a stage or discard causes. Wrap, text size and file
+headers re-render the open diff in place.
 
-Find is case-insensitive over the whole selected comparison, runs inside the
+Find is case-insensitive over the whole open diff, runs inside the
 reader, wraps around at either end and highlights the current line. Its arrows
-step through matching lines; screen-reader actions step through hunks and stop at
-the first and last.
+step through matching lines; the hunk arrows (and screen-reader actions) step through hunks, select them and
+stop at the first and last.
 
-The changed-file list is a tree with git status marks, `+a -d` counts for the
-selected comparison and Trees' own path search (shown from six files up). A tap
-opens the diff in one step; a long press opens the file's action menu. The Files
-browser is the same tree over every tracked and untracked-but-not-ignored path
-of the working tree, not a historical comparison, with a file opening into the
-reader's file view (its byte limit is separate: a truncated file says so).
+The changed-file list is native (React Native rows, not Trees): each row carries a
+stage toggle and the list has two groups, which a WebView tree cannot host. The
+Files browser is Trees over every tracked and untracked-but-not-ignored path of
+the working tree, with a file opening into the reader's file view (its byte limit
+is separate: a truncated file says so).
+
+## Actions
+
+Mutations are `git_stage`, `git_unstage`, `git_discard`, `git_discard_undo`,
+`git_hunk`, `git_commit`, `git_push`, `git_pull`, `git_fetch` and `git_switch`.
+Each answers `{type: "git_action", request_id, action, result}`, or an error frame
+with Git's own message (trimmed, without hints, ANSI or URLs). Reads are
+`git_branches`, `git_log` and `git_show`.
+
+- Every request names the Session (`target_id`/`cwd`) and the repository the person
+  is looking at (`repo_root`); the daemon refuses when the terminal has since moved
+  to another repository. Git runs with argument arrays (no shell), pathspecs as
+  `:(literal)` and validated paths (no absolute, `..` or `.git`); a branch name goes
+  through `check-ref-format --branch`, a sha through `rev-parse --verify`.
+- Mutations of one repository run one at a time; if Git reports a lock, the message
+  says another git command is running. `git_fetch` only moves remote-tracking refs
+  and does not wait for them. Commands carry a timeout (30 s local, 60 s for the
+  network), `GIT_TERMINAL_PROMPT=0` and `ssh -o BatchMode=yes`, so an unreachable
+  remote or a credential prompt fails instead of hanging.
+- `git_hunk` takes only the hunk text (from `@@`); the daemon builds the file header
+  from the current diff itself, validates the hunk's line counts, and applies it with
+  `git apply` (`--cached`, `--reverse` or both as the action needs). A hunk that no
+  longer applies says so. A discarded hunk is undone by applying it forward.
+- `git_discard` saves each affected file with `git hash-object -w` and returns
+  `undo` tokens (`path`, `blob`, `after`, `mode`, `staged`); `git_discard_undo`
+  restores them and refuses when the file no longer matches `after`.
+- `git_commit` takes the message on stdin (`-F -`); `git_push` publishes with
+  `-u origin <branch>` when there is no upstream; `git_pull` is `--ff-only`.
+- The status adds `upstream`, `ahead`, `behind`, `detached`, `has_commits` and
+  `operation` (a merge, rebase, cherry-pick or revert in progress).
+- "Ask the agent" sends no request of its own: the app queues a message to the
+  Session through the chat outbox, with `file:line` and the quoted lines.
 
 ## Data And Freshness
 
@@ -83,7 +112,7 @@ Files tree. Verify the current server identity and deploy the matching daemon.
 literal filenames, including whitespace and Git pathspec metacharacters.
 `git_diff_patch` returns the complete patch of one file as sections (`staged`,
 `unstaged`, `untracked`); the client keeps the sections of the selected
-comparison (Working is unstaged plus untracked) and hands them to the reader.
+group (Changes is unstaged plus untracked) and hands them to the reader.
 `git_diff_file_content` returns the full HEAD and working-tree text, which is
 what hunk expansion uses. Expansion is offered only when those two sides are
 exactly what the patch compares, that is when a file has staged or unstaged edits
@@ -95,7 +124,8 @@ A comparison larger than 5 MB is not sent to the reader; the sheet says it is to
 large, and Copy diff still copies it. There is no daemon-side paging: the patch
 crosses the WebView bridge once and is parsed in one pass.
 
-A reader is a snapshot. Refresh reloads the overview and selected diff. Expansion
+A reader is a snapshot. Refresh reloads the overview and selected diff, and every
+change the sheet makes reloads them itself. Expansion
 reads the working tree when it is asked for, so a file edited after its patch was
 loaded can expand to lines that no longer match until Refresh. Repository errors
 are visible even after an earlier successful overview. Changing server, session,
@@ -104,12 +134,14 @@ responses cannot restore it.
 
 ## Verification
 
-Disposable Git fixtures and authenticated WebSocket regressions are in
-`daemon/server/git_diff_*_test.go`. Run:
+Disposable Git fixtures (a repository, a bare remote and a second clone, with
+Git's global configuration disabled) and authenticated WebSocket regressions are in
+`daemon/server/git_diff_*_test.go` and `git_actions*_test.go`; they cover conflict,
+diverged, stale-hunk and rejected-push cases. Run:
 
 ```sh
 cd daemon
-go test ./server -run 'GitDiff|GitRepo'
+go test ./server -run 'Git'
 go test ./server -run '^$' -bench '^BenchmarkGitDiff$' -benchtime=3x
 ```
 
@@ -119,7 +151,10 @@ repositories. `TestGitDiffNativeFixtureServer` is opt-in with
 authenticated WebSocket handler against temporary repositories. `/stop` shuts
 down this test resource. It is not a daemon entry point or a product route.
 
-The app side is `bun test components/terminal`. The generated viewers are
+The app side is `bun test components/terminal services`. The review's pure
+models (groups, rows, hunks, the agent message) are in `gitReview.test.ts`. The
+route `/screenshot-demo?demo=1&state=chat&fixture=git` (development builds with
+`EXPO_PUBLIC_MEWLA_SCREENSHOT_DEMO=1`) shows the whole sheet on a fake repository. The generated viewers are
 rebuilt with `bun run pierre:generate` (`--check` reports stale output).
 
 Native performance evidence must come from Android/iOS execution, not these Go
