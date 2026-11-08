@@ -43,6 +43,18 @@ type Collector struct {
 	warnings              map[string]string
 	openCodeUsageMu       sync.Mutex
 	openCodeUsage         map[string]openCodeSessionUsage
+	// claudeFiles remembers what each Claude session file contributed, so a
+	// refresh reads only the files that changed. Guarded by refreshMu.
+	claudeFiles      map[string]claudeFileUsage
+	claudeFilesPrice time.Time
+}
+
+// claudeFileUsage is one session file's aggregate, valid while the file keeps
+// its size and modification time.
+type claudeFileUsage struct {
+	size     int64
+	modified time.Time
+	byDate   map[string]*dateAgg
 }
 
 // warnf logs a degraded-state warning once per change. Refreshes repeat every
@@ -535,6 +547,15 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 		return byDate
 	}
 
+	// A file's aggregate carries cost estimates from the price table, so a
+	// new price table drops them all.
+	prices.mu.RLock()
+	priced := prices.updatedAt
+	prices.mu.RUnlock()
+	if c.claudeFiles == nil || !c.claudeFilesPrice.Equal(priced) {
+		c.claudeFiles, c.claudeFilesPrice = map[string]claudeFileUsage{}, priced
+	}
+	seen := make(map[string]bool, len(c.claudeFiles))
 	err := filepath.WalkDir(projectsDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			// Totals built from a partial walk must not look complete.
@@ -542,6 +563,15 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 			return nil
 		}
 		if d.IsDir() || !strings.HasSuffix(d.Name(), ".jsonl") {
+			return nil
+		}
+		info, statErr := d.Info()
+		if statErr != nil {
+			return nil
+		}
+		seen[path] = true
+		if cached, ok := c.claudeFiles[path]; ok && cached.size == info.Size() && cached.modified.Equal(info.ModTime()) {
+			mergeDateAgg(byDate, cached.byDate)
 			return nil
 		}
 		rel, err := filepath.Rel(projectsDir, path)
@@ -556,9 +586,20 @@ func (c *Collector) collectClaudeSessionStats(home string) map[string]*dateAgg {
 		if cwd := firstSessionCwd(path); cwd != "" {
 			projectName = filepath.Base(cwd)
 		}
-		c.scanSessionJSONL(path, projectName, byDate)
+		fileAgg := make(map[string]*dateAgg)
+		c.scanSessionJSONL(path, projectName, fileAgg)
+		// A file that grew while it was read is read again next time.
+		if after, err := os.Stat(path); err == nil && after.Size() == info.Size() && after.ModTime().Equal(info.ModTime()) {
+			c.claudeFiles[path] = claudeFileUsage{size: info.Size(), modified: info.ModTime(), byDate: fileAgg}
+		}
+		mergeDateAgg(byDate, fileAgg)
 		return nil
 	})
+	for path := range c.claudeFiles {
+		if !seen[path] {
+			delete(c.claudeFiles, path)
+		}
+	}
 	if err != nil {
 		c.warnf("claude-walk", "[stats] Claude sessions could not be listed: %v", err)
 	}
