@@ -10,13 +10,15 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import { TypeScale, UiTextMetrics, useAppColors } from "../../constants/tokens";
+import { Radii, TypeScale, UiTextMetrics, useAppColors } from "../../constants/tokens";
 import {
   MOBILE_SINGLE_LINE_INPUT_LAYOUT,
   mobileSingleLineTextInsets,
 } from "./mobileSingleLineInputModel";
 
 export interface MobileSingleLineInputProps extends TextInputProps {
+  /** Draws the field box: sunken fill, hairline stroke, small radius. */
+  framed?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
   inputStyle?: StyleProp<TextStyle>;
   leading?: ReactNode;
@@ -38,6 +40,7 @@ export const MobileSingleLineInput = forwardRef<
   MobileSingleLineInputProps
 >(function MobileSingleLineInput(
   {
+    framed = false,
     containerStyle,
     inputStyle,
     leading,
@@ -60,7 +63,20 @@ export const MobileSingleLineInput = forwardRef<
   const insets = mobileSingleLineTextInsets(Boolean(leading), Boolean(trailing));
 
   return (
-    <View style={[styles.frame, containerStyle]}>
+    <View
+      style={[
+        styles.frame,
+        framed
+          ? {
+              borderRadius: Radii.xs,
+              backgroundColor: colors.inputBackground,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: colors.borderSubtle,
+            }
+          : null,
+        containerStyle,
+      ]}
+    >
       <TextInput
         {...inputProps}
         ref={ref}

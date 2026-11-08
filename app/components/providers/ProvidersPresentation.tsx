@@ -852,7 +852,7 @@ function ProviderEditorSheet({
           accessibilityLabel="Provider name"
           autoCapitalize="words"
           autoCorrect={false}
-          containerStyle={styles.field}
+          framed
         />
         {nameIssue ? <Text style={styles.fieldError}>{nameIssue}</Text> : null}
 
@@ -871,7 +871,7 @@ function ProviderEditorSheet({
               autoComplete="off"
               textContentType="URL"
               keyboardType="url"
-              containerStyle={styles.field}
+              framed
             />
           </>
         ) : null}
@@ -890,7 +890,7 @@ function ProviderEditorSheet({
           autoCorrect={false}
           autoComplete="off"
           textContentType="none"
-          containerStyle={styles.field}
+          framed
         />
         {editor?.kind === "edit" && connection?.credential_hint ? (
           <Text style={styles.fieldHint} numberOfLines={1}>
@@ -1301,12 +1301,6 @@ function createStyles(colors: ReturnType<typeof useAppColors>) {
       marginTop: 8,
       marginBottom: 2,
       marginHorizontal: 2,
-    },
-    field: {
-      borderRadius: Radii.xs,
-      backgroundColor: colors.inputBackground,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.borderSubtle,
     },
     fieldError: {
       ...UiTextMetrics,

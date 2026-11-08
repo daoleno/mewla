@@ -110,12 +110,9 @@ describe("Calendar screen contract", () => {
     );
     const styles = source.slice(source.indexOf("function createStyles"));
 
-    expect(field).toContain(
-      "input.multiline ? styles.multiline : styles.singleLine",
-    );
-    expect(styles).toMatch(
-      /singleLine:\s*\{[^}]*height: 48,[^}]*paddingVertical: 0,[^}]*textAlignVertical: "center"/s,
-    );
+    // Single-line text lives in the shared input, which owns the 48px geometry.
+    expect(field).toContain("<MobileSingleLineInput");
+    expect(field).toContain("styles.multiline");
     expect(styles).toMatch(
       /multiline:\s*\{[^}]*minHeight: 92,[^}]*paddingVertical: 10,[^}]*textAlignVertical: "top"/s,
     );

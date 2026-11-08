@@ -1,9 +1,11 @@
 import { DateStyle, formatDate } from "../../services/dateFormat";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Radii, useAppColors, TypeScale, UiTextMetrics } from "../../constants/tokens";
 import { AnimatedPressable } from "../ui/AnimatedPressable";
+import { IconButton } from "../ui/IconButton";
+import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import type { TelegramConnectionStatus } from "../../services/websocket";
 import { Icon, type IconName } from "../icons/Icon";
 
@@ -137,17 +139,12 @@ export function TelegramConnectionPanel(props: TelegramConnectionPanelProps) {
       : loading ? null : error ? action("Retry", "refresh", props.onRetry, false, true)
       : !configured || props.editingToken ? <View>
         {sectionTitle("Bot token")}
-        <View style={[styles.inputRow, { backgroundColor: colors.bgSurface }]}>
-          <TextInput value={props.token} onChangeText={props.onToken} secureTextEntry editable={!disabled}
-            accessibilityLabel="Telegram bot token" placeholder="Paste the BotFather token" autoCapitalize="none" autoCorrect={false}
-            textContentType="none" importantForAutofill="no" returnKeyType="done" onSubmitEditing={props.onConfigure}
-            placeholderTextColor={colors.textTertiary} selectionColor={colors.selectionBackground}
-            style={[styles.input, { color: colors.textPrimary }]} />
-          <AnimatedPressable onPress={props.onPaste} disabled={disabled} accessibilityRole="button"
-            accessibilityLabel="Paste Telegram bot token from clipboard" accessibilityState={{ disabled }} style={styles.paste}>
-            <Icon name="clipboard" size={21} color={colors.accentStrong} />
-          </AnimatedPressable>
-        </View>
+        <MobileSingleLineInput framed value={props.token} onChangeText={props.onToken} secureTextEntry editable={!disabled}
+          accessibilityLabel="Telegram bot token" placeholder="Paste the BotFather token" autoCapitalize="none" autoCorrect={false}
+          textContentType="none" importantForAutofill="no" returnKeyType="done" onSubmitEditing={props.onConfigure}
+          placeholderTextColor={colors.textTertiary}
+          trailing={<IconButton icon="clipboard" tone="ghost" size={44} iconSize={21} color={colors.accentStrong} disabled={disabled}
+            accessibilityLabel="Paste Telegram bot token from clipboard" onPress={props.onPaste} />} />
         <Text style={[styles.notice, { color: colors.textTertiary }]}>Bot chats are stored by Telegram. Your token stays on the connected server.</Text>
         <View style={styles.stack}>
           {action(busy ? "Verifying" : "Verify token", "check", props.onConfigure, false, true, disabled || !props.token.trim())}
@@ -220,9 +217,6 @@ const styles = StyleSheet.create({
   detailValue: { ...UiTextMetrics, ...TypeScale.compact, flex: 1, minWidth: 0, textAlign: "right", fontVariant: ["tabular-nums"] },
   detailValueGroup: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   sectionTitle: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, paddingBottom: 6 },
-  inputRow: { flexDirection: "row", alignItems: "center", gap: 4, borderRadius: Radii.card, paddingLeft: 16, paddingRight: 4 },
-  input: { ...UiTextMetrics, ...TypeScale.body, minHeight: 52, flex: 1, minWidth: 0 },
-  paste: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   notice: { ...UiTextMetrics, ...TypeScale.caption, paddingHorizontal: 16, marginTop: 8, marginBottom: 18 },
   error: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, marginBottom: 18 },
   errorText: { ...UiTextMetrics, ...TypeScale.compact, flex: 1 },

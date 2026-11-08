@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import type { PluginAccount } from "../../services/connections";
 import { cloudProfileGroups } from "../../services/cloudProfilesModel";
 import { accountRow, openAccountId } from "../../services/accountListModel";
 import { useAppTheme } from "../../constants/tokens";
 import { AppText, ListSection, StatusPill } from "../ui";
+import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import { Icon } from "../icons/Icon";
 
 /**
@@ -44,7 +45,7 @@ export function AccountList({ accounts, renderDetails }: {
     </View>;
   });
   return <>
-    {groups.filterVisible ? <TextInput accessibilityLabel="Filter accounts" placeholder="Filter accounts" placeholderTextColor={colors.textTertiary} value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} clearButtonMode="while-editing" style={[styles.filter, { color: colors.textPrimary, borderColor: colors.border, backgroundColor: colors.bgSurface }]} /> : null}
+    {groups.filterVisible ? <MobileSingleLineInput framed accessibilityLabel="Filter accounts" placeholder="Filter accounts" placeholderTextColor={colors.textTertiary} value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false} clearButtonMode="while-editing" /> : null}
     {groups.signedIn.length || groups.unchecked.length ? <ListSection>{rows([...groups.signedIn, ...groups.unchecked])}</ListSection> : null}
     {groups.expired.length ? <ListSection>
       <Pressable accessibilityRole="button" accessibilityLabel={`Expired (${groups.expired.length})`} accessibilityState={{ expanded: showExpired }} onPress={() => setExpanded(!expanded)} style={styles.row}>
@@ -65,5 +66,4 @@ const styles = StyleSheet.create({
   state: { alignItems: "flex-end", gap: 3 },
   group: { flex: 1 },
   details: { paddingHorizontal: 8, paddingBottom: 8 },
-  filter: { minHeight: 44, paddingHorizontal: 14, borderWidth: 1, borderRadius: 12, fontSize: 16 },
 });

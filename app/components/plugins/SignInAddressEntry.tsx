@@ -1,9 +1,9 @@
 import React, { useRef, useState } from "react";
-import { StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
+import { StyleSheet, View, type TextInputInstance } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { Radii, useAppColors } from "../../constants/tokens";
+import { useAppColors } from "../../constants/tokens";
 import { AppText, Button, InlineNotice } from "../ui";
-import { outlinedSurface } from "../ui/outlinedSurface";
+import { MobileSingleLineInput } from "../ui/MobileSingleLineInput";
 import { signInAddressFromText } from "../../services/pluginConnectionsModel";
 
 /** The loopback address copied from a browser on another computer. */
@@ -38,13 +38,13 @@ export function SignInAddressEntry({ onSubmit }: { onSubmit(address: string): Pr
   return <>
     <View style={styles.field}>
       <AppText variant="caption" tone="secondary">Address from the browser</AppText>
-      <TextInput
+      <MobileSingleLineInput
         ref={input}
+        framed
         accessibilityLabel="Address the sign-in ended on"
         testID="sign-in-address"
         placeholder="Address starting with http…"
         placeholderTextColor={colors.textTertiary}
-        style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.bgElevated, borderColor: colors.border }]}
         autoCapitalize="none"
         autoCorrect={false}
         autoComplete="off"
@@ -64,5 +64,4 @@ export function SignInAddressEntry({ onSubmit }: { onSubmit(address: string): Pr
 
 const styles = StyleSheet.create({
   field: { gap: 8 },
-  input: { ...outlinedSurface(Radii.md), minHeight: 48, fontSize: 16, paddingHorizontal: 12, paddingVertical: 12 },
 });
