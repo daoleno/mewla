@@ -26,6 +26,12 @@ type gitDiffStatusPayload struct {
 	RepoRoot           string            `json:"repo_root,omitempty"`
 	RepoName           string            `json:"repo_name,omitempty"`
 	Branch             string            `json:"branch,omitempty"`
+	Upstream           string            `json:"upstream,omitempty"`
+	Ahead              int               `json:"ahead"`
+	Behind             int               `json:"behind"`
+	Detached           bool              `json:"detached"`
+	HasCommits         bool              `json:"has_commits"`
+	Operation          string            `json:"operation,omitempty"`
 	Clean              bool              `json:"clean"`
 	FileCount          int               `json:"file_count"`
 	StagedFileCount    int               `json:"staged_file_count"`
@@ -109,6 +115,8 @@ func (s *Server) buildGitDiffStatus(targetID, cwd string) (gitDiffStatusPayload,
 		FileCount: len(files),
 		Files:     files,
 	}
+
+	payload.fillBranchState(repoRoot)
 
 	for _, file := range files {
 		payload.Additions += file.Additions
