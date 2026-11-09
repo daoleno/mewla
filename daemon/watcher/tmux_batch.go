@@ -128,7 +128,7 @@ func capturePaneDialog(socket, target string) (string, classifier.CaptureInfo, e
 
 // ownedPaneSetFor is ownedPaneSet over an inventory. It returns nil when the
 // batch could not answer, and the caller then probes each pane on its own.
-func ownedPaneSetFor(socket string, panes []tmuxPane) map[string]bool {
+func ownedPaneSetFor(socket string, panes []sessionPane) map[string]bool {
 	targets := make([]string, 0, len(panes))
 	for _, pane := range panes {
 		targets = append(targets, pane.target)

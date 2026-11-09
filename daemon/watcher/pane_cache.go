@@ -83,7 +83,7 @@ func newPaneScreens() *paneScreens {
 
 // inventory records the stamps of the panes just listed and forgets every pane
 // that is gone.
-func (p *paneScreens) inventory(panes []tmuxPane) {
+func (p *paneScreens) inventory(panes []sessionPane) {
 	if p == nil {
 		return
 	}
@@ -154,7 +154,7 @@ func (p *paneScreens) remember(target, content string, alive bool, deadStatus in
 
 // ownership splits panes into those whose ownership is already believed and
 // those that need asking tmux.
-func (p *paneScreens) ownership(panes []tmuxPane) (owned map[string]bool, ask []tmuxPane) {
+func (p *paneScreens) ownership(panes []sessionPane) (owned map[string]bool, ask []sessionPane) {
 	if p == nil {
 		return map[string]bool{}, panes
 	}
@@ -175,7 +175,7 @@ func (p *paneScreens) ownership(panes []tmuxPane) (owned map[string]bool, ask []
 	return owned, ask
 }
 
-func (p *paneScreens) learnOwnership(asked []tmuxPane, owned map[string]bool) {
+func (p *paneScreens) learnOwnership(asked []sessionPane, owned map[string]bool) {
 	if p == nil {
 		return
 	}

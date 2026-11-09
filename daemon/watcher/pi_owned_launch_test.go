@@ -207,7 +207,7 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 	}, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC))
 	drainWatcherEvents(w)
 
-	windows := []tmuxPane{
+	windows := []sessionPane{
 		{target: "%1", name: "pi", cwd: "/repo/mewla", command: "pi", panePID: 444, delegated: true},
 	}
 	processes := map[int]processInfo{
@@ -244,7 +244,7 @@ func TestPollPreservesOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 
 	// A provider switch clears the stale Pi ownership.
 	restore()
-	restore = installFakePollSeams(w, []tmuxPane{
+	restore = installFakePollSeams(w, []sessionPane{
 		{target: "%1", name: "codex", cwd: "/repo/mewla", command: "codex", panePID: 555, delegated: true},
 	}, map[string]string{
 		"%1": "Codex\n",
@@ -289,7 +289,7 @@ func TestPollPreservesQuotedOwnedPiLaunchCommandAcrossRefresh(t *testing.T) {
 	}, time.Date(2026, 8, 7, 9, 0, 0, 0, time.UTC))
 	drainWatcherEvents(w)
 
-	restore := installFakePollSeams(w, []tmuxPane{
+	restore := installFakePollSeams(w, []sessionPane{
 		{target: "%1", name: "pi", cwd: "/repo/mewla", command: "pi", panePID: 448, delegated: true},
 	}, map[string]string{
 		"%1": "pi v0.73.1\nworking\n",
@@ -340,7 +340,7 @@ func TestPollPiSiblingWorkersNeverShareOwnedPaths(t *testing.T) {
 	}, time.Date(2026, 8, 7, 9, 0, 1, 0, time.UTC))
 	drainWatcherEvents(w)
 
-	restore := installFakePollSeams(w, []tmuxPane{
+	restore := installFakePollSeams(w, []sessionPane{
 		{target: "%1", name: "pi", cwd: "/repo/mewla", command: "pi", panePID: 610, delegated: true},
 		{target: "%2", name: "pi", cwd: "/repo/mewla", command: "pi", panePID: 620, delegated: true},
 	}, map[string]string{
@@ -379,7 +379,7 @@ func TestPollDiscoveredPiWithoutLaunchCommandKeepsDetectedIdentity(t *testing.T)
 	w.pollNow = fakePollClock([]time.Time{
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxPane{
+	restore := installFakePollSeams(w, []sessionPane{
 		{target: "%0", name: "pi", cwd: "/repo/mewla", command: "pi", panePID: 710},
 	}, map[string]string{
 		"%0": "pi\n",
@@ -419,7 +419,7 @@ func TestPollRediscoveredPiWindowRestoresOwnedLaunchCommandFromTmuxOption(t *tes
 		time.Date(2026, 8, 7, 10, 0, 2, 0, time.UTC),
 		time.Date(2026, 8, 7, 10, 0, 3, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxPane{
+	restore := installFakePollSeams(w, []sessionPane{
 		{
 			target: "%1", name: "pi", cwd: "/repo/mewla",
 			command: "pi", panePID: 900,
@@ -537,7 +537,7 @@ func TestPollPiSessionBindingFailsClosedOnCorruptedOption(t *testing.T) {
 	w.pollNow = fakePollClock([]time.Time{
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxPane{
+	restore := installFakePollSeams(w, []sessionPane{
 		{
 			target: "%1", name: "pi", cwd: "/repo/mewla",
 			command: "pi", panePID: 910,
@@ -569,7 +569,7 @@ func TestPollPiSessionBindingClearedOnProviderSwitch(t *testing.T) {
 	w.pollNow = fakePollClock([]time.Time{
 		time.Date(2026, 8, 7, 10, 0, 1, 0, time.UTC),
 	})
-	restore := installFakePollSeams(w, []tmuxPane{
+	restore := installFakePollSeams(w, []sessionPane{
 		{
 			target: "%1", name: "codex", cwd: "/repo/mewla",
 			command: "codex", panePID: 920,
@@ -656,7 +656,7 @@ func TestMarkCreatedSessionPersistsOnlyValidPiBinding(t *testing.T) {
 			if err := os.Remove(logPath); err != nil && !os.IsNotExist(err) {
 				t.Fatal(err)
 			}
-			if err := markCreatedSession("", "%9", CreateSessionOptions{Command: tc.command}); err != nil {
+			if err := markCreatedSession("", "%9", createdSessionLabels(CreateSessionOptions{Command: tc.command})); err != nil {
 				t.Fatal(err)
 			}
 			found := false

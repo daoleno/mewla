@@ -63,7 +63,7 @@ func TestPollProviderEvidenceLossEmitsUncertainAfterBoundedWindow(t *testing.T) 
 		w.providerActivityProbe = &fixedStateProbe{obs: ProviderActivityObservation{
 			Structured: true, FallbackAllowed: true, ProbeState: ProbeStateUnreadable,
 		}}
-		windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
+		windows := []sessionPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
 		restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, base)})
 		defer restore()
 		for i := 0; i < 95; i++ {
@@ -86,7 +86,7 @@ func TestPollProviderEvidenceLossEmitsUncertainAfterBoundedWindow(t *testing.T) 
 		w.providerActivityProbe = &fixedStateProbe{obs: ProviderActivityObservation{
 			Structured: true, FallbackAllowed: true, ProbeState: ProbeStateUnlocatable,
 		}}
-		windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
+		windows := []sessionPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
 		restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, base)})
 		defer restore()
 		for i := 0; i < 95; i++ {
@@ -111,7 +111,7 @@ func TestPollProviderEvidenceLossEmitsUncertainAfterBoundedWindow(t *testing.T) 
 			Structured: true, FallbackAllowed: true, ProbeState: ProbeStateUnreadable,
 		}}
 		w.providerActivityProbe = probe
-		windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
+		windows := []sessionPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
 		restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, base)})
 		defer restore()
 
@@ -151,7 +151,7 @@ func TestPollProviderEvidenceLossEmitsUncertainAfterBoundedWindow(t *testing.T) 
 		w.providerActivityProbe = &fixedStateProbe{obs: ProviderActivityObservation{
 			Structured: true, FallbackAllowed: true, ProbeState: ProbeStateUnreadable,
 		}}
-		windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
+		windows := []sessionPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
 		restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, base)})
 		defer restore()
 
@@ -199,7 +199,7 @@ func TestPollProviderEvidenceLossEmitsUncertainAfterBoundedWindow(t *testing.T) 
 		w.providerActivityProbe = &fixedStateProbe{obs: ProviderActivityObservation{
 			Structured: true, FallbackAllowed: true, ProbeState: ProbeStateOK,
 		}}
-		windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
+		windows := []sessionPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
 		restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, base)})
 		defer restore()
 		for i := 0; i < 95; i++ {

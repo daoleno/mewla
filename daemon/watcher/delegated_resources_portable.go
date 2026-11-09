@@ -99,7 +99,7 @@ func (m *portableDelegatedResourceManager) UnitForTarget(target string) string {
 
 // Re-observation never kills: live legacy scopes and their processes survive
 // daemon replacement. Only explicit Worker/Work cleanup calls Release.
-func (m *portableDelegatedResourceManager) Reconcile(windows []tmuxPane) {
+func (m *portableDelegatedResourceManager) Reconcile(windows []sessionPane) {
 	m.mu.Lock()
 	observe := m.lastFullScan.IsZero() || m.now().Sub(m.lastFullScan) >= 5*time.Second
 	if observe {

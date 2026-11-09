@@ -2,10 +2,8 @@ package watcher
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +14,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,7 +22,6 @@ import (
 	"github.com/daoleno/mewla/daemon/agentevents"
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/shellquote"
-	"github.com/daoleno/mewla/daemon/tmuxguard"
 	"github.com/google/uuid"
 )
 
@@ -267,7 +263,7 @@ func (w *Watcher) resolveLaunchIdentity(
 			if dismissed {
 				return
 			}
-			dismissed = w.dismissLaunchShellPrompt(w.socketPathFor(sessionID), sessionID, shell, resolver)
+			dismissed = w.dismissLaunchShellPrompt(sessionID, shell, resolver)
 		},
 	)
 	if known {
@@ -283,7 +279,7 @@ func (w *Watcher) resolveLaunchIdentity(
 // shell, with the key that quits and changes nothing. It reports whether the
 // key was sent.
 func (w *Watcher) dismissLaunchShellPrompt(
-	socket, sessionID string,
+	sessionID string,
 	shell targetProcessIdentity,
 	resolver func(string) (targetProcessIdentity, bool),
 ) bool {
@@ -295,7 +291,7 @@ func (w *Watcher) dismissLaunchShellPrompt(
 	if guardTargetIdentity(resolver, sessionID, shell) != nil {
 		return false
 	}
-	return tmuxCommand(socket, "send-keys", "-t", sessionID, zshNewUserQuitKey).Run() == nil
+	return w.sessions().sendKeys(sessionID, zshNewUserQuitKey) == nil
 }
 
 func isTransientLaunchShell(command string) bool {
@@ -410,6 +406,7 @@ type Watcher struct {
 	pending               []SessionEvent
 	pendingPumping        bool
 	resources             delegatedResourceManager
+	backend               sessionBackend // runs the Sessions; see sessionBackend
 	sessionInput          *sessionInputOwner
 	screens               *paneScreens
 	targetProcessResolver func(string) (targetProcessIdentity, bool)
@@ -417,7 +414,7 @@ type Watcher struct {
 	// Poll and input readers are owned by the watcher instance. Keeping these
 	// seams local prevents one test or embedded watcher from changing another
 	// watcher's tmux view while a poll or mutation is in flight.
-	listPanes         func() ([]tmuxPane, error)
+	listPanes         func() ([]sessionPane, error)
 	capturePane       func(string) (string, bool, int)
 	snapshotProcesses func() map[int]processInfo
 	submitSleep       func(time.Duration)
@@ -450,11 +447,12 @@ func New(pollInterval time.Duration) *Watcher {
 		resources:        noopDelegatedResourceManager{},
 		submitSleep:      time.Sleep,
 	}
-	// The production session input IO and poll sources are bound to this
-	// watcher so every tmux invocation resolves each target's server.
-	w.sessionInput = newSessionInputOwner(realSessionInputIO{socketFor: w.socketPathFor})
+	// The production session input IO and poll sources are the backend's,
+	// bound to this watcher.
+	w.backend = &tmuxBackend{w: w}
+	w.sessionInput = newSessionInputOwner(w.sessions().inputIO())
 	w.screens = newPaneScreens()
-	w.listPanes = w.listTmuxPanes
+	w.listPanes = w.sessions().listOwned
 	w.capturePane = w.capturePaneContent
 	w.snapshotProcesses = func() map[int]processInfo {
 		return w.screens.processes(func() map[int]processInfo { return snapshotProcessesNear(w.screens.paneRoots()) })
@@ -462,7 +460,7 @@ func New(pollInterval time.Duration) *Watcher {
 	return w
 }
 
-func (w *Watcher) pollReaders() (func() ([]tmuxPane, error), func(string) (string, bool, int), func() map[int]processInfo) {
+func (w *Watcher) pollReaders() (func() ([]sessionPane, error), func(string) (string, bool, int), func() map[int]processInfo) {
 	w.mu.RLock()
 	list, capture, snapshot := w.listPanes, w.capturePane, w.snapshotProcesses
 	w.mu.RUnlock()
@@ -478,7 +476,7 @@ type probeLossState struct {
 // Keeping capture data separate from ledger mutation makes the polling boundary
 // explicit and allows tests to exercise observation without a live reducer.
 type paneObservation struct {
-	win        tmuxPane
+	win        sessionPane
 	content    string
 	alive      bool
 	deadStatus int
@@ -516,7 +514,7 @@ type probedPollWorker struct {
 }
 
 func observePanes(
-	windows []tmuxPane,
+	windows []sessionPane,
 	capture func(string) (string, bool, int),
 ) []paneObservation {
 	observations := make([]paneObservation, 0, len(windows))
@@ -531,46 +529,6 @@ func observePanes(
 		})
 	}
 	return observations
-}
-
-// SetTmuxServer installs the one caller-visible tmux server that hosts every
-// Mewla-owned Brain and delegated Session, plus the private TMUX_TMPDIR used by
-// provider-internal plain tmux commands. Call it once before Run or CreateSession.
-func (w *Watcher) SetTmuxServer(socketPath, scratchDir string) {
-	if w == nil {
-		return
-	}
-	w.mu.Lock()
-	w.tmuxSocketPath = socketPath
-	w.tmuxScratchDir = strings.TrimSpace(scratchDir)
-	w.mu.Unlock()
-}
-
-// SetTmuxGuard installs the directory of the pane `tmux` shim. Call it once
-// before Run or CreateSession.
-func (w *Watcher) SetTmuxGuard(dir string) {
-	if w == nil {
-		return
-	}
-	w.mu.Lock()
-	w.tmuxGuardDir = strings.TrimSpace(dir)
-	w.mu.Unlock()
-}
-
-// SocketPathFor returns the selected host server only for a currently known
-// Mewla-owned target. Unknown targets resolve to "" so user-visible surfaces do
-// not acquire access to a custom caller server without watcher ownership.
-func (w *Watcher) SocketPathFor(target string) string {
-	if w == nil {
-		return ""
-	}
-	target = strings.TrimSpace(target)
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if _, owned := w.workers[target]; !owned {
-		return ""
-	}
-	return w.tmuxSocketPath
 }
 
 // targetIsDurablyOwned requires both an existing target and Mewla's pane-local
@@ -591,21 +549,8 @@ func (w *Watcher) targetIsDurablyOwned(target string) (bool, error) {
 	if resolver != nil {
 		return resolver(target)
 	}
-	present, owned, err := probeTmuxTargetOwnership(w.socketPathFor(target), target)
+	present, owned, err := w.sessions().probeOwnership(target)
 	return present && owned, err
-}
-
-// socketPathFor resolves every internal tmux operation to the one immutable
-// host server selected at startup. Ownership is enforced separately through
-// the durable @mewla_worker_created marker and the owned discovery projection.
-func (w *Watcher) socketPathFor(target string) string {
-	if w == nil {
-		return ""
-	}
-	w.mu.RLock()
-	socket := w.tmuxSocketPath
-	w.mu.RUnlock()
-	return socket
 }
 
 // SetTurnLedger installs the canonical per-turn ledger. The watcher applies
@@ -618,6 +563,15 @@ func (w *Watcher) SetTurnLedger(ledger TurnLedger) {
 	if w.sessionInput != nil {
 		w.sessionInput.ledger = ledger
 	}
+}
+
+// sessions is the Session backend. A Watcher built without New gets the one
+// New would give it.
+func (w *Watcher) sessions() sessionBackend {
+	if w.backend != nil {
+		return w.backend
+	}
+	return &tmuxBackend{w: w}
 }
 
 func (w *Watcher) sessionInputOwner() *sessionInputOwner {
@@ -828,20 +782,9 @@ func (w *Watcher) resolveTargetProcessIdentity(target string) (targetProcessIden
 	if target == "" {
 		return targetProcessIdentity{}, fmt.Errorf("empty tmux target")
 	}
-	out, err := tmuxCommand(w.socketPathFor(target), "display-message", "-p", "-t", target, "#{pane_dead}\t#{pane_pid}").Output()
+	panePID, err := w.sessions().processRoot(target)
 	if err != nil {
-		return targetProcessIdentity{}, fmt.Errorf("tmux display-message for %s: %w%s", target, err, commandStderr(err))
-	}
-	fields := strings.Split(strings.TrimSuffix(string(out), "\n"), "\t")
-	if len(fields) != 2 {
-		return targetProcessIdentity{}, fmt.Errorf("tmux display-message for %s returned %q, want pane_dead<TAB>pane_pid", target, truncateDiagnostic(string(out)))
-	}
-	if fields[0] == "1" {
-		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s is dead", target)
-	}
-	panePID, err := strconv.Atoi(strings.TrimSpace(fields[1]))
-	if err != nil || panePID <= 0 {
-		return targetProcessIdentity{}, fmt.Errorf("tmux pane %s reported pane_pid %q", target, fields[1])
+		return targetProcessIdentity{}, err
 	}
 	processes, err := snapshotProcessesNearErr(w.screens.paneRoots(), panePID)
 	if err != nil {
@@ -1474,7 +1417,7 @@ func (w *Watcher) ProbeSession(target string) (SessionPresence, error) {
 	if target == "" {
 		return SessionPresenceAbsent, nil
 	}
-	present, owned, err := probeTmuxTargetOwnership(w.socketPathFor(target), target)
+	present, owned, err := w.sessions().probeOwnership(target)
 	if err != nil {
 		return SessionPresenceUnknown, err
 	}
@@ -1497,16 +1440,7 @@ func (w *Watcher) ResolveDelegatedAbsence(target string) (bool, error) {
 	if target == "" {
 		return false, fmt.Errorf("missing session id")
 	}
-	socket := w.socketPathFor(target)
-	present, owned, err := probeTmuxTargetOwnershipOn(socket, target, true)
-	if err != nil && errors.Is(err, ErrOwnershipProbeUnavailable) && !w.sawTmuxServer.Load() && tmuxSocketUnreachable(socket) {
-		// This process never saw a tmux server and nothing listens on the
-		// selected socket now: a Session recorded by an earlier run (a reboot, a
-		// restart after tmux exited) is gone. A server that vanishes after being
-		// seen stays Unknown.
-		return true, nil
-	}
-	return !present || !owned, err
+	return w.sessions().resolveAbsence(target, w.sawTmuxServer.Load())
 }
 
 // ProbeProviderEvidence returns the current provider-native observation for a
@@ -2556,11 +2490,11 @@ func activityFactFromObservation(sessionID string, turn TurnSnapshot, provider P
 	}
 }
 
-// observedPaneGeneration is the pane generation of a Session this poll has just
-// seen alive. A generation is the digest of the pane id, so the poll's own
-// observation already answers it; asking tmux again would start a process per
-// Worker per poll to learn the id it was given. A target that is not a pane id
-// has none.
+// observedPaneGeneration is the generation of a Session this poll has just
+// seen alive. The backend answers it from the id alone, so the poll's own
+// observation already answers it; asking the backend again would start a
+// process per Worker per poll to learn the id it was given. An id the backend
+// could not have issued has none.
 func (w *Watcher) observedPaneGeneration(sessionID string) string {
 	w.mu.RLock()
 	sources := w.pollSources
@@ -2568,10 +2502,7 @@ func (w *Watcher) observedPaneGeneration(sessionID string) string {
 	if sources != nil && sources.PaneGeneration != nil {
 		return sources.PaneGeneration(sessionID)
 	}
-	if !isPaneID(sessionID) {
-		return ""
-	}
-	return sessionInputPaneGeneration(sessionID)
+	return w.sessions().observedGeneration(sessionID)
 }
 
 func (w *Watcher) currentPaneGeneration(sessionID string) string {
@@ -2774,248 +2705,30 @@ func classifyPaneAndApplyProgressInvalidation(worker *classifier.Worker, alive b
 	return classified, summary
 }
 
-// tmuxPane represents a single immutable tmux pane.
-type tmuxPane struct {
-	target           string // immutable %pane_id; the only execution identity
+// sessionPane is one owned Session as the backend's inventory reports it,
+// labels included.
+type sessionPane struct {
+	target           string // the backend's Session id; opaque outside the backend
 	sessionName      string // display/grouping metadata only
 	name             string // window name (e.g. "claude", "node")
-	cwd              string // owned pane cwd
-	command          string // owned pane command
-	piSessionBinding string // durable Pi ownership binding (@mewla_worker_pi_session)
+	cwd              string // owned Session cwd
+	command          string // owned Session command
+	piSessionBinding string // durable Pi ownership binding (label piSession)
 	panePID          int
 	hidden           bool
 	delegated        bool
 	resourceUnit     string
-	executorID       string // executors.toml entry the pane was launched from (@mewla_worker_executor)
-	agentControl     string // the agent's control socket (@mewla_worker_agent_control)
-	activity         int64  // tmux window_activity: the second the pane last printed
-	dead             bool   // tmux pane_dead
+	executorID       string // executors.toml entry the Session was launched from
+	agentControl     string // the agent's control socket
+	activity         int64  // the second the Session last printed
+	dead             bool   // the Session's process has exited
 }
 
-// listTmuxPanes inventories only explicitly Mewla-owned panes on the one
-// caller-visible server selected at startup. Ambient user panes are read only
-// as part of tmux's formatted listing and are discarded by the durable
-// @mewla_worker_created marker before they can enter discovery or reconciliation.
-// A missing/unreadable server is Unknown, never a successful empty inventory.
-// Only a successful observation may drive removal reconciliation.
-func (w *Watcher) listTmuxPanes() ([]tmuxPane, error) {
-	if w == nil {
-		return nil, nil
-	}
-	w.mu.RLock()
-	socket := w.tmuxSocketPath
-	w.mu.RUnlock()
-	onSocket, err := listTmuxPanesOn(socket)
-	if err != nil {
-		return nil, err
-	}
-	w.screens.inventory(onSocket)
-	windows := make([]tmuxPane, 0, len(onSocket))
-	markers, ask := w.screens.ownership(onSocket)
-	if len(ask) > 0 {
-		if asked := ownedPaneSetFor(socket, ask); asked != nil {
-			w.screens.learnOwnership(ask, asked)
-			for target := range asked {
-				markers[target] = true
-			}
-		} else {
-			markers = nil
-		}
-	}
-	for _, win := range onSocket {
-		if markers != nil {
-			if markers[win.target] {
-				windows = append(windows, win)
-			}
-			continue
-		}
-		present, owned, probeErr := probeTmuxTargetOwnershipOn(socket, win.target, true)
-		if probeErr != nil {
-			return nil, probeErr
-		}
-		if present && owned {
-			windows = append(windows, win)
-		}
-	}
-	return windows, nil
-}
-
-// malformedPaneInventoryLogged keeps one diagnostic per daemon run for a pane
-// inventory whose separators did not survive tmux output.
-var malformedPaneInventoryLogged atomic.Bool
-
-func listTmuxPanesOn(socket string) ([]tmuxPane, error) {
-	cmd := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{@mewla_worker_hidden}\t#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}\t#{@mewla_worker_pi_session}\t#{@mewla_worker_executor}\t#{@mewla_worker_agent_control}\t#{window_activity}\t#{pane_dead}\t#{session_name}")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, tmuxFailure(socket, "list-panes", err, out)
-	}
-	var windows []tmuxPane
-	seen := map[string]bool{}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\t", 14)
-		if len(parts) != 14 && malformedPaneInventoryLogged.CompareAndSwap(false, true) {
-			log.Printf("watcher: tmux list-panes line has %d of 14 tab-separated fields (non-UTF-8 tmux client?): %q", len(parts), truncateDiagnostic(line))
-		}
-		target := parts[0]
-		// Terminal views link an owned window but are not execution Sessions.
-		sessionName := ""
-		if len(parts) >= 14 {
-			sessionName = parts[13]
-		}
-		if strings.HasPrefix(sessionName, "mewla-view-") || seen[target] {
-			continue
-		}
-		seen[target] = true
-		name := target
-		if len(parts) >= 2 {
-			name = parts[1]
-		}
-		cwd := ""
-		if len(parts) >= 3 {
-			cwd = strings.TrimSpace(parts[2])
-		}
-		command := ""
-		if len(parts) >= 4 {
-			command = strings.TrimSpace(parts[3])
-		}
-		panePID := 0
-		if len(parts) >= 5 {
-			panePID, _ = strconv.Atoi(strings.TrimSpace(parts[4]))
-		}
-		hidden := false
-		if len(parts) >= 6 {
-			hidden = tmuxBoolOption(parts[5])
-		}
-		delegated := false
-		if len(parts) >= 7 {
-			delegated = tmuxBoolOption(parts[6])
-		}
-		resourceUnit := ""
-		if len(parts) >= 8 {
-			resourceUnit = strings.TrimSpace(parts[7])
-		}
-		piSessionBinding := ""
-		if len(parts) >= 9 {
-			piSessionBinding = strings.TrimSpace(parts[8])
-		}
-		executorID := ""
-		if len(parts) >= 10 {
-			executorID = strings.TrimSpace(parts[9])
-		}
-		agentControl := ""
-		if len(parts) >= 11 {
-			agentControl = strings.TrimSpace(parts[10])
-		}
-		var activity int64
-		dead := false
-		if len(parts) >= 14 {
-			activity, _ = strconv.ParseInt(strings.TrimSpace(parts[11]), 10, 64)
-			dead = strings.TrimSpace(parts[12]) == "1"
-		}
-		windows = append(windows, tmuxPane{
-			activity: activity, dead: dead,
-			target: target, name: name, cwd: cwd, command: command, sessionName: sessionName,
-			piSessionBinding: piSessionBinding, executorID: executorID, agentControl: agentControl,
-			panePID: panePID, hidden: hidden, delegated: delegated,
-			resourceUnit: resourceUnit,
-		})
-	}
-	return windows, nil
-}
-
-func tmuxBoolOption(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
-
-// probeTmuxTargetOwnership reads only pane-local ownership on the selected
-// server. The exact pane inventory proves presence; show-options omits -A so
-// ownership cannot be inherited from window, session, or global configuration.
-// Missing targets are absence; unavailable inventory remains unknown.
-func probeTmuxTargetOwnership(socket, target string) (present, owned bool, err error) {
-	return probeTmuxTargetOwnershipOn(socket, target, false)
-}
-
-// requireServer distinguishes inventory evidence from an exact cleanup probe:
-// cleanup may regard a missing server as absent, but discovery cannot publish
-// absence when any step of its multi-command inventory lost server access.
-func probeTmuxTargetOwnershipOn(socket, target string, requireServer bool) (present, owned bool, err error) {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return false, false, nil
-	}
-	present, err = tmuxTargetPresentOn(socket, target, requireServer)
-	if err != nil || !present {
-		return false, false, err
-	}
-	out, commandErr := tmuxCommand(
-		socket,
-		"show-options",
-		"-p",
-		"-qv",
-		"-t",
-		target,
-		"@mewla_worker_created",
-	).CombinedOutput()
-	if commandErr != nil {
-		// The pane was listed a moment ago. A list that no longer has it (or
-		// no server) says it went away in between; otherwise ownership simply
-		// could not be read, which is unknown, never "not owned".
-		present, presenceErr := tmuxTargetPresentOn(socket, target, requireServer)
-		if presenceErr != nil {
-			return false, false, presenceErr
-		}
-		if !present {
-			return false, false, nil
-		}
-		return false, false, fmt.Errorf("%w: %w", ErrOwnershipProbeUnavailable, tmuxFailure(socket, "show-options "+target, commandErr, out))
-	}
-	return true, tmuxBoolOption(string(out)), nil
-}
-
-func tmuxTargetPresentOn(socket, target string, requireServer bool) (bool, error) {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return false, nil
-	}
-	out, commandErr := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}").CombinedOutput()
-	outText := strings.TrimSpace(string(out))
-	if commandErr != nil {
-		failure := tmuxFailure(socket, "list-panes", commandErr, out)
-		if errors.Is(failure, ErrTmuxServerGone) {
-			if requireServer {
-				return false, fmt.Errorf("%w: selected tmux server became unavailable", ErrOwnershipProbeUnavailable)
-			}
-			return false, nil
-		}
-		return false, fmt.Errorf("probe tmux presence for %s: %w", target, failure)
-	}
-	if outText == "" {
-		return false, fmt.Errorf("%w: tmux presence for %s returned no pane identity", ErrOwnershipProbeUnavailable, target)
-	}
-	for _, line := range strings.Split(outText, "\n") {
-		if strings.TrimSpace(line) == target {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// capturePaneContent captures the visible content of an owned tmux pane on
-// the selected server socket. The second result reports pane
-// liveness; the third is the recorded pane exit status (#{pane_dead_status})
-// when the pane is dead, or -1 when unknown. Exit status is authoritative
-// abnormal-exit evidence only for the recorded pane identity; absence of the
-// pane is never death by itself.
+// capturePaneContent captures the content of an owned Session. The second
+// result reports liveness; the third is the recorded exit status when the
+// Session's process has exited, or -1 when unknown. Exit status is
+// authoritative abnormal-exit evidence only for the recorded Session identity;
+// absence of the Session is never death by itself.
 func (w *Watcher) capturePaneContent(target string) (string, bool, int) {
 	if w == nil {
 		return "", false, -1
@@ -3024,38 +2737,9 @@ func (w *Watcher) capturePaneContent(target string) (string, bool, int) {
 		return content, alive, deadStatus
 	}
 	startedAt, startedUnix := w.screens.readStarted()
-	content, alive, deadStatus := capturePaneContentOn(w.socketPathFor(target), target)
+	content, alive, deadStatus := w.sessions().captureState(target)
 	w.screens.remember(target, content, alive, deadStatus, startedAt, startedUnix)
 	return content, alive, deadStatus
-}
-
-func capturePaneContentOn(socket, target string) (string, bool, int) {
-	if !isPaneID(target) {
-		return "", false, -1
-	}
-	if screen, alive, deadStatus, err := capturePaneWithState(socket, target); err == nil {
-		return screen, alive, deadStatus
-	}
-	// A tmux that does not answer the combined call (older builds differ in
-	// how they run a command list) is read with one call per fact.
-	cmd := tmuxCommand(socket, "capture-pane", "-t", target, "-p", "-S", "-200")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", false, -1
-	}
-	alive, deadStatus := true, -1
-	if aliveOut, err := tmuxCommand(socket, "display-message", "-p", "-t", target, "#{pane_dead}\t#{pane_dead_status}").Output(); err == nil {
-		fields := strings.Split(strings.TrimSpace(string(aliveOut)), "\t")
-		if len(fields) >= 1 && fields[0] == "1" {
-			alive = false
-			if len(fields) >= 2 {
-				if status, parseErr := strconv.Atoi(strings.TrimSpace(fields[1])); parseErr == nil {
-					deadStatus = status
-				}
-			}
-		}
-	}
-	return string(out), alive, deadStatus
 }
 
 // CapturePaneContent returns a plain-text snapshot of a owned tmux pane.
@@ -3067,11 +2751,10 @@ func (w *Watcher) CapturePaneContent(sessionID string) (string, error) {
 	if _, ownershipErr := w.ResolveDelegatedControl(sessionID); ownershipErr != nil {
 		return "", ownershipErr
 	}
-	out, err := tmuxCommand(w.socketPathFor(sessionID), "capture-pane", "-t", sessionID, "-p", "-S", "-200").Output()
+	text, err := w.sessions().captureRecent(sessionID)
 	if err != nil {
-		return "", fmt.Errorf("capture pane: %w", err)
+		return "", err
 	}
-	text := string(out)
 	if text != "" && !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
@@ -3100,7 +2783,7 @@ func (w *Watcher) SendKey(sessionID, key string) error {
 		if err := guardTargetIdentity(resolver, sessionID, identity); err != nil {
 			return err
 		}
-		return tmuxCommand(w.socketPathFor(sessionID), "send-keys", "-t", sessionID, key).Run()
+		return w.sessions().sendKeys(sessionID, key)
 	}
 	return w.sessionInputOwner().serialized(sessionID, action)
 }
@@ -3198,7 +2881,7 @@ func (w *Watcher) SendInput(sessionID, text string) error {
 		if err := guardTargetIdentity(resolver, sessionID, identity); err != nil {
 			return definitelyNotSubmitted("", err)
 		}
-		return w.sendDraftInputLocked(w.socketPathFor(sessionID), sessionID, text, tmuxSubmitDelay(identity.Command), nil)
+		return w.sendDraftInputLocked(sessionID, text, tmuxSubmitDelay(identity.Command), nil)
 	})
 }
 
@@ -3255,7 +2938,6 @@ func (w *Watcher) SendInputWithReceiptWhenReadyResult(
 		return InputResult{Outcome: InputNotSubmitted}, OwnedGeneration{}, err
 	}
 	if !w.waitForInputReadyGuarded(
-		w.socketPathFor(sessionID),
 		sessionID,
 		identity.Command,
 		inputReadyTimeout(identity.Command),
@@ -3374,7 +3056,7 @@ func (w *Watcher) sendInputWhenReadyAttempt(
 	guard := func() error {
 		return guardTargetIdentity(resolver, sessionID, identity)
 	}
-	if !w.waitForInputReadyGuarded(w.socketPathFor(sessionID), sessionID, command, timeout, guard) &&
+	if !w.waitForInputReadyGuarded(sessionID, command, timeout, guard) &&
 		needsInputReadinessWait(command, "") {
 		return workerInputNotReady(command)
 	}
@@ -3389,7 +3071,7 @@ func (w *Watcher) sendInputWhenReadyAttempt(
 		}
 		// The non-submit draft send is a server-local mutation: route it
 		// through the target's own tmux server exactly like the submit path.
-		return w.sendDraftInputLocked(w.socketPathFor(sessionID), sessionID, text, tmuxSubmitDelay(command), nil)
+		return w.sendDraftInputLocked(sessionID, text, tmuxSubmitDelay(command), nil)
 	})
 }
 
@@ -3449,7 +3131,7 @@ func (w *Watcher) submitDelegatedInputWhenReadyAttempt(
 	if err != nil {
 		return InputResult{Outcome: InputNotSubmitted, Receipt: turnID}, err
 	}
-	if !w.waitForInputReadyGuarded(w.socketPathFor(sessionID), sessionID, identity.Command, timeout, func() error {
+	if !w.waitForInputReadyGuarded(sessionID, identity.Command, timeout, func() error {
 		return guardTargetIdentity(resolver, sessionID, identity)
 	}) && needsInputReadinessWait(identity.Command, "") {
 		return InputResult{Outcome: InputNotSubmitted, Receipt: turnID},
@@ -3762,14 +3444,14 @@ func firstNonEmptyString(values ...string) string {
 }
 
 func (w *Watcher) sendDraftInputLocked(
-	socket, sessionID string,
+	sessionID string,
 	text string,
 	submitDelay time.Duration,
 	guard func() error,
 ) error {
 	body, submit := splitTmuxInput(text)
 	if body != "" {
-		if err := sendLiteralTmuxInputGuarded(socket, sessionID, body, guard); err != nil {
+		if err := w.sendLiteralInputGuarded(sessionID, body, guard); err != nil {
 			return err
 		}
 	}
@@ -3782,13 +3464,13 @@ func (w *Watcher) sendDraftInputLocked(
 				return err
 			}
 		}
-		return tmuxCommand(socket, "send-keys", "-t", sessionID, "Enter").Run()
+		return w.sessions().sendKeys(sessionID, "Enter")
 	}
 	return nil
 }
 
 func (w *Watcher) waitForInputReadyGuarded(
-	socket, sessionID string,
+	sessionID string,
 	command string,
 	timeout time.Duration,
 	guard func() error,
@@ -3821,7 +3503,7 @@ func (w *Watcher) waitForInputReadyGuarded(
 					// mutates Pi's project trust configuration.
 					keys = []string{"Down", "Down", "Enter"}
 				}
-				return tmuxCommand(socket, append([]string{"send-keys", "-t", sessionID}, keys...)...).Run()
+				return w.sessions().sendKeys(sessionID, keys...)
 			},
 		)
 		if !ok {
@@ -4068,7 +3750,7 @@ func latestCursorPaneContent(content string) string {
 	return normalized
 }
 
-func sendLiteralTmuxInputGuarded(socket, sessionID, body string, guard func() error) error {
+func (w *Watcher) sendLiteralInputGuarded(sessionID, body string, guard func() error) error {
 	for _, chunk := range splitStringByMaxBytes(body, tmuxSendInputChunkBytes) {
 		if chunk == "" {
 			continue
@@ -4078,8 +3760,8 @@ func sendLiteralTmuxInputGuarded(socket, sessionID, body string, guard func() er
 				return err
 			}
 		}
-		if out, err := tmuxCommand(socket, "send-keys", "-l", "-t", sessionID, "--", chunk).CombinedOutput(); err != nil {
-			return fmt.Errorf("send literal tmux input: %w%s", err, commandOutputSuffix(out))
+		if err := w.sessions().sendLiteral(sessionID, chunk); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -4148,10 +3830,10 @@ func commandOutputSuffix(output []byte) string {
 // production action is "pause", sent by the app's stop control: an agent with a
 // typed way to stop its turn is stopped there, any other gets Ctrl-C.
 func (w *Watcher) SendAction(sessionID, action string) error {
-	var args []string
+	var keys []string
 	switch action {
 	case "pause":
-		args = []string{"send-keys", "-t", sessionID, "C-c"}
+		keys = []string{"C-c"}
 	default:
 		return fmt.Errorf("unknown action: %s", action)
 	}
@@ -4172,7 +3854,7 @@ func (w *Watcher) SendAction(sessionID, action string) error {
 				return err
 			}
 		}
-		return tmuxCommand(w.socketPathFor(sessionID), args...).Run()
+		return w.sessions().sendKeys(sessionID, keys...)
 	}
 	return w.sessionInputOwner().serialized(sessionID, send)
 }
@@ -4211,50 +3893,15 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 			opts.ExecutorID = resolve(opts.Command)
 		}
 	}
-	createSocket := w.socketPathFor("")
-	if preferredTarget != "" {
-		present, owned, err := probeTmuxTargetOwnership(createSocket, preferredTarget)
-		if err != nil {
-			return "", err
-		}
-		if !present {
-			return "", fmt.Errorf("preferred tmux target %q is missing", preferredTarget)
-		}
-		if !owned {
-			return "", fmt.Errorf("%w: %s", ErrUnownedTmuxTarget, preferredTarget)
-		}
-	}
-	sessionName := ""
-	if preferredTarget != "" {
-		out, err := tmuxCommand(createSocket, "display-message", "-p", "-t", preferredTarget, "#{session_name}").Output()
-		if err != nil {
-			return "", err
-		}
-		sessionName = strings.TrimSpace(string(out))
-	}
-	createDetachedSession := opts.Detached
-	if sessionName == "" {
-		if !createDetachedSession {
-			sessions, err := listTmuxSessionsOn(createSocket)
-			if err != nil {
-				if !isNoTmuxServerError(err) {
-					return "", err
-				}
-			}
-			if len(sessions) > 0 {
-				sessionName = sessions[0]
-			} else {
-				createDetachedSession = true
-			}
-		}
-		if sessionName == "" {
-			sessionName = newTmuxSessionName(opts)
-		}
+	backend := w.sessions()
+	placement, err := backend.place(preferredTarget, opts.Detached, createdSessionName(opts))
+	if err != nil {
+		return "", err
 	}
 
 	cwd := strings.TrimSpace(opts.Cwd)
 	if cwd == "" && preferredTarget != "" {
-		currentPath, err := currentPathForTarget(createSocket, preferredTarget)
+		currentPath, err := backend.currentPath(preferredTarget)
 		if err == nil {
 			cwd = currentPath
 		}
@@ -4335,133 +3982,19 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 	if err != nil {
 		return "", err
 	}
-	// Allocate the immutable pane first. respawn-pane -e is pane-local;
-	// new-session -e would contaminate the environment of later user panes.
-	var args []string
-	if createDetachedSession {
-		args = buildNewSessionArgs(sessionName, cwd, opts, "sleep 86400")
-	} else {
-		args = buildNewWindowArgs(sessionName, cwd, opts, "sleep 86400")
-	}
-	out, err := tmuxCommand(createSocket, args...).Output()
+	target, err := backend.create(placement, backendCreateSpec{
+		name:    strings.TrimSpace(opts.Name),
+		cwd:     cwd,
+		command: shellCommand,
+		env:     workerLaunchEnvironment(opts),
+		labels:  createdSessionLabels(opts),
+	})
 	if err != nil {
-		return "", fmt.Errorf("allocate Worker pane: %w", err)
-	}
-	target := strings.TrimSpace(string(out))
-	if !isPaneID(target) {
-		return "", fmt.Errorf("tmux returned invalid pane identity %q", target)
-	}
-	cleanup := func(cause error) (string, error) {
-		if err := tmuxCommand(createSocket, "kill-pane", "-t", target).Run(); err != nil && !tmuxTargetGone(createSocket, target) {
-			return "", fmt.Errorf("%v; remove allocated pane: %w", cause, err)
-		}
-		return "", cause
-	}
-	// The pane's first output is its origin marker: tmux evicts the oldest
-	// lines first, so a capture that still holds the marker holds every line
-	// after it. The nonce is kept in the pane's own option, which outlives a
-	// daemon restart.
-	nonce, err := newOriginNonce()
-	if err != nil {
-		return cleanup(fmt.Errorf("origin marker: %w", err))
-	}
-	if err := setTmuxPaneUserOption(createSocket, target, strings.TrimPrefix(originOption, "@"), nonce); err != nil {
-		return cleanup(fmt.Errorf("origin marker: %w", err))
-	}
-	shellCommand = originMarkerCommand(nonce) + shellCommand
-	args = []string{"respawn-pane", "-k", "-t", target}
-	for _, entry := range workerLaunchEnvironment(opts) {
-		args = append(args, "-e", entry)
-	}
-	args = append(args, shellCommand)
-	if err := tmuxCommand(createSocket, args...).Run(); err != nil {
-		return cleanup(fmt.Errorf("launch Worker pane: %w", err))
-	}
-	if err := markCreatedSession(createSocket, target, opts); err != nil {
-		return cleanup(fmt.Errorf("mark owned tmux pane: %w", err))
+		return "", err
 	}
 	w.registerCreatedSession(target, cwd, opts, createdAt)
 	resourceCommitted = true
 	return target, nil
-}
-
-// newOriginNonce is the private part of a pane's origin marker.
-func newOriginNonce() (string, error) {
-	raw := make([]byte, 12)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw), nil
-}
-
-// originMarkerCommand prints the marker, concealed (SGR 8), as the very first
-// output of the pane, before the login shell and anything its startup prints.
-func originMarkerCommand(nonce string) string {
-	return "printf '\\033[8m%s\\033[0m\\n' " + shellquote.Quote(classifier.OriginMarkerLine(nonce)) + "; "
-}
-
-func buildNewWindowArgs(sessionName, cwd string, opts CreateSessionOptions, shellCommand string) []string {
-	args := []string{
-		"new-window",
-		"-P",
-		"-F",
-		"#{pane_id}",
-		"-t",
-		sessionName,
-	}
-	args = appendTmuxCreateOptions(args, cwd, opts)
-	if shellCommand != "" {
-		args = append(args, shellCommand)
-	}
-	return args
-}
-
-func buildNewSessionArgs(sessionName, cwd string, opts CreateSessionOptions, shellCommand string) []string {
-	args := []string{
-		"new-session",
-		"-d",
-		"-P",
-		"-F",
-		"#{pane_id}",
-		"-s",
-		sessionName,
-	}
-	args = appendTmuxCreateOptions(args, cwd, opts)
-	if shellCommand != "" {
-		args = append(args, shellCommand)
-	}
-	return args
-}
-
-func appendTmuxCreateOptions(args []string, cwd string, opts CreateSessionOptions) []string {
-	if name := strings.TrimSpace(opts.Name); name != "" {
-		args = append(args, "-n", name)
-	}
-	if cwd != "" {
-		args = append(args, "-c", cwd)
-	}
-	return args
-}
-
-func newTmuxSessionName(opts CreateSessionOptions) string {
-	base := strings.ToLower(createdSessionName(opts))
-	base = strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z':
-			return r
-		case r >= '0' && r <= '9':
-			return r
-		case r == '-' || r == '_':
-			return r
-		default:
-			return '-'
-		}
-	}, base)
-	base = strings.Trim(base, "-_")
-	if base == "" {
-		base = "worker"
-	}
-	return fmt.Sprintf("mewla-worker-%s-%d", base, time.Now().UnixNano())
 }
 
 func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionOptions, createdAt time.Time) {
@@ -4526,97 +4059,6 @@ func (w *Watcher) registerCreatedSession(target, cwd string, opts CreateSessionO
 	})
 }
 
-func markCreatedSession(socket, target string, opts CreateSessionOptions) error {
-	if err := setTmuxPaneUserOption(socket, target, "mewla_worker_created", "1"); err != nil {
-		return err
-	}
-	// Durable Pi ownership binding only: the raw launch command is never
-	// persisted (it may contain secrets or delimiter-breaking characters).
-	// Only a validated Pi launch with an absolute owned --session/
-	// --session-dir writes an option, encoded delimiter-safe; non-Pi commands
-	// and Pi commands without an owned binding write nothing. The binding
-	// outlives the daemon in the tmux server, because node-based Pi rewrites
-	// its own argv and pane re-discovery after a daemon restart cannot
-	// recover the owned path from the process table.
-	if commandExecutableBase(opts.Command) == "pi" {
-		if flag, path := piOwnedLaunchFlag(opts.Command); flag != "" {
-			if err := setTmuxPaneUserOption(socket, target, "mewla_worker_pi_session", EncodePiSessionBinding(flag, path)); err != nil {
-				return err
-			}
-		}
-	}
-	if id := strings.TrimSpace(opts.ExecutorID); id != "" {
-		if err := setTmuxPaneUserOption(socket, target, "mewla_worker_executor", id); err != nil {
-			return err
-		}
-	}
-	if control := strings.TrimSpace(opts.AgentControl); control != "" {
-		if err := setTmuxPaneUserOption(socket, target, "mewla_worker_agent_control", control); err != nil {
-			return err
-		}
-	}
-	if opts.Hidden {
-		if err := setTmuxPaneUserOption(socket, target, "mewla_worker_hidden", "1"); err != nil {
-			return err
-		}
-	}
-	if opts.Delegated && !opts.Hidden {
-		if err := setTmuxPaneUserOption(socket, target, "mewla_worker_delegated", "1"); err != nil {
-			return err
-		}
-		if opts.resource != nil {
-			if err := setTmuxPaneUserOption(socket, target, "mewla_worker_resource_unit", opts.resource.Unit); err != nil {
-				return err
-			}
-			if err := setTmuxPaneUserOption(socket, target, "mewla_worker_resource_owner", opts.resource.Owner); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func setTmuxPaneUserOption(socket, target, key, value string) error {
-	if !isPaneID(target) {
-		return fmt.Errorf("invalid pane identity %q", target)
-	}
-	target = strings.TrimSpace(target)
-	key = strings.TrimSpace(key)
-	value = strings.TrimSpace(value)
-	if target == "" || key == "" || value == "" {
-		return fmt.Errorf("tmux pane option target, key, and value are required")
-	}
-	out, err := tmuxCommand(socket, "set-option", "-p", "-t", target, "@"+key, value).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("set @%s on %s: %w: %s", key, target, err, strings.TrimSpace(string(out)))
-	}
-	return nil
-}
-
-func tmuxPaneUserOption(socket, target, key string) (string, error) {
-	if !isPaneID(target) {
-		return "", fmt.Errorf("invalid pane identity %q", target)
-	}
-	target = strings.TrimSpace(target)
-	key = strings.TrimSpace(key)
-	if target == "" || key == "" {
-		return "", fmt.Errorf("tmux pane option target and key are required")
-	}
-	out, err := tmuxCommand(
-		socket,
-		"show-options",
-		"-p",
-		"-qv",
-		"-t",
-		target,
-		"@"+key,
-	).CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("show @%s on %s: %w: %s", key, target, err, strings.TrimSpace(string(out)))
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 func createdSessionName(opts CreateSessionOptions) string {
 	if name := strings.TrimSpace(opts.Name); name != "" {
 		return name
@@ -4626,6 +4068,34 @@ func createdSessionName(opts CreateSessionOptions) string {
 		return ""
 	}
 	return filepath.Base(fields[0])
+}
+
+// createdSessionLabels is what a created Session records about itself; the
+// backend keeps it for as long as the Session lives.
+func createdSessionLabels(opts CreateSessionOptions) sessionLabels {
+	labels := sessionLabels{
+		hidden:       opts.Hidden,
+		delegated:    opts.Delegated && !opts.Hidden,
+		executorID:   strings.TrimSpace(opts.ExecutorID),
+		agentControl: strings.TrimSpace(opts.AgentControl),
+	}
+	// Durable Pi ownership binding only: the raw launch command is never
+	// recorded (it may contain secrets or delimiter-breaking characters). Only a
+	// validated Pi launch with an absolute owned --session/--session-dir records
+	// a binding, encoded delimiter-safe; non-Pi commands and Pi commands without
+	// an owned binding record nothing. The binding outlives the daemon, because
+	// node-based Pi rewrites its own argv and Session re-discovery after a
+	// daemon restart cannot recover the owned path from the process table.
+	if commandExecutableBase(opts.Command) == "pi" {
+		if flag, path := piOwnedLaunchFlag(opts.Command); flag != "" {
+			labels.piSession = EncodePiSessionBinding(flag, path)
+		}
+	}
+	if labels.delegated && opts.resource != nil {
+		labels.resourceUnit = opts.resource.Unit
+		labels.resourceOwner = opts.resource.Owner
+	}
+	return labels
 }
 
 func buildWindowCommand(opts CreateSessionOptions) (string, error) {
@@ -4808,32 +4278,6 @@ func loginShellFromPasswd() string {
 	return ""
 }
 
-// applyProviderTmuxIsolation points provider-internal plain tmux at per-agent
-// resource scratch (or daemon scratch for the hidden Brain host). The launch
-// shell derives its Mewla identity against the shared host server and then
-// unsets TMUX, so later plain tmux commands cannot reach that server.
-func applyProviderTmuxIsolation(opts *CreateSessionOptions, w *Watcher) {
-	if opts == nil || w == nil || !opts.ProgressEnv {
-		return
-	}
-	opts.Env = cloneEnvironment(opts.Env)
-	scratch := strings.TrimSpace(w.tmuxScratchDir)
-	if opts.resource != nil && strings.TrimSpace(opts.resource.TempDir) != "" {
-		scratch = strings.TrimSpace(opts.resource.TempDir)
-	}
-	if scratch == "" {
-		return
-	}
-	opts.Env["TMUX_TMPDIR"] = scratch
-	// The pane's `tmux` shim (first on PATH, see tmuxguard) refuses a tmux that
-	// would fall back to the live default server and judges "own scratch"
-	// against this directory.
-	if w.tmuxGuardDir != "" {
-		opts.Env[tmuxguard.ScratchEnv] = scratch
-		opts.Env[tmuxguard.DirEnv] = w.tmuxGuardDir
-	}
-}
-
 // KillCompletedSession shares the input lock with sends, so acceptance cleanup
 // cannot kill a newer turn admitted between its eligibility read and teardown.
 func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
@@ -4856,7 +4300,7 @@ func (w *Watcher) KillCompletedSession(sessionID, turnID string) error {
 		if len(pending) != 0 {
 			return fmt.Errorf("completed Session %s has pending input", sessionID)
 		}
-		present, owned, err := probeTmuxTargetOwnership(w.socketPathFor(sessionID), sessionID)
+		present, owned, err := w.sessions().probeOwnership(sessionID)
 		if err != nil {
 			return err
 		}
@@ -4968,8 +4412,7 @@ func (w *Watcher) KillSession(sessionID string) error {
 	manager := w.resourceManager()
 	unit := manager.UnitForTarget(sessionID)
 	delegated := unit != ""
-	socket := w.socketPathFor(sessionID)
-	present, owned, ownershipErr := probeTmuxTargetOwnership(socket, sessionID)
+	present, owned, ownershipErr := w.sessions().probeOwnership(sessionID)
 	if ownershipErr != nil {
 		return ownershipErr
 	}
@@ -4977,7 +4420,7 @@ func (w *Watcher) KillSession(sessionID string) error {
 		return fmt.Errorf("%w: %s", ErrUnownedTmuxTarget, sessionID)
 	}
 	if present && !delegated {
-		delegated, unit = tmuxDelegatedResource(socket, sessionID)
+		delegated, unit = w.sessions().delegatedResource(sessionID)
 	}
 	if delegated && unit != "" {
 		if capture, ok := manager.(interface{ CaptureOwnership(string) error }); ok {
@@ -4988,14 +4431,10 @@ func (w *Watcher) KillSession(sessionID string) error {
 	}
 
 	if present {
-		out, killErr := tmuxCommand(socket, "kill-pane", "-t", sessionID).CombinedOutput()
-		outText := strings.TrimSpace(string(out))
-		// A failed kill is "already gone" only when a fresh listing says so.
-		missing := killErr != nil && tmuxTargetGone(socket, sessionID)
-		if killErr != nil && !missing {
-			// Non-missing kill failure: pane may still be live. Do not release
-			// delegated resources; surface the kill error for retry.
-			return fmt.Errorf("kill tmux pane: %w: %s", killErr, outText)
+		if err := w.sessions().kill(sessionID); err != nil {
+			// The Session may still be live. Do not release delegated
+			// resources; surface the kill error for retry.
+			return err
 		}
 	}
 	if delegated {
@@ -5004,70 +4443,6 @@ func (w *Watcher) KillSession(sessionID string) error {
 		}
 	}
 	return nil
-}
-
-func tmuxDelegatedResource(socket, target string) (bool, string) {
-	target = strings.TrimSpace(target)
-	if target == "" {
-		return false, ""
-	}
-	out, err := tmuxCommand(
-		socket,
-		"display-message",
-		"-p",
-		"-t",
-		target,
-		"#{@mewla_worker_delegated}\t#{@mewla_worker_resource_unit}",
-	).Output()
-	if err != nil {
-		return false, ""
-	}
-	parts := strings.SplitN(strings.TrimSpace(string(out)), "\t", 2)
-	if len(parts) != 2 || !tmuxBoolOption(parts[0]) {
-		return false, ""
-	}
-	return true, strings.TrimSpace(parts[1])
-}
-
-func listTmuxSessionsOn(socket string) ([]string, error) {
-	windows, err := listTmuxPanesOn(socket)
-	if err != nil {
-		return nil, err
-	}
-
-	sessions := make([]string, 0)
-	seen := make(map[string]bool)
-	markers := ownedPaneSetFor(socket, windows)
-	for _, win := range windows {
-		if markers != nil {
-			if !markers[win.target] {
-				continue
-			}
-		} else {
-			present, owned, probeErr := probeTmuxTargetOwnership(socket, win.target)
-			if probeErr != nil {
-				return nil, probeErr
-			}
-			if !present || !owned {
-				continue
-			}
-		}
-		sessionName := win.sessionName
-		if sessionName == "" || seen[sessionName] {
-			continue
-		}
-		seen[sessionName] = true
-		sessions = append(sessions, sessionName)
-	}
-	return sessions, nil
-}
-
-func currentPathForTarget(socket, target string) (string, error) {
-	out, err := tmuxCommand(socket, "display-message", "-p", "-t", target, "#{pane_current_path}").Output()
-	if err != nil {
-		return "", fmt.Errorf("tmux current path: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 func workerProviderFamily(command string) string {

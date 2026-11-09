@@ -1,17 +1,13 @@
 package watcher
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -213,150 +209,21 @@ type sessionInputPane struct {
 }
 
 type sessionInputIO interface {
-	// socket resolves the target's own tmux server ("" = the user default
-	// server). Buffer and queue operations are server-local: the caller
-	// threads the target's resolved server so load/paste/cleanup never touch
-	// a different server's buffers or panes.
+	// socket resolves the backend server the target lives on, opaque to the
+	// owner. Every operation is server-local: the caller threads the
+	// target's resolved server so a paste or receipt never reaches a
+	// different server's Sessions.
 	socket(sessionID string) string
 	pane(socket, sessionID string) sessionInputPane
-	loadBuffer(socket, buffer, payload string) error
-	deleteBuffer(socket, buffer string)
-	runQueue(socket string, args []string, beforeStart func() error) (started bool, err error)
+	// submitPaste clears the target's draft, pastes payload as one exact
+	// paste and submits it with the adapter's timing. beforeStart runs
+	// immediately before the first byte can reach the target; its error
+	// means nothing was sent. started reports whether bytes may have
+	// reached the target, so an error with started is ambiguous and one
+	// without it left the target untouched.
+	submitPaste(socket, paneID, payload string, adapter sessionInputProvider, beforeStart func() error) (started bool, err error)
 	receiptLedger(socket, target string) (sessionInputReceiptLedger, error)
 	writeReceiptLedger(socket, target string, ledger sessionInputReceiptLedger) error
-}
-
-// realSessionInputIO executes every tmux mutation on the one host server
-// selected at daemon startup. socketFor returns that immutable server binding;
-// nil keeps ordinary default-server semantics for test doubles.
-type realSessionInputIO struct {
-	socketFor func(sessionID string) string
-}
-
-func (io realSessionInputIO) socket(sessionID string) string {
-	if io.socketFor != nil {
-		return io.socketFor(sessionID)
-	}
-	return ""
-}
-
-func (io realSessionInputIO) pane(socket, sessionID string) sessionInputPane {
-	if !isPaneID(sessionID) {
-		return sessionInputPane{}
-	}
-	out, err := tmuxCommand(
-		socket,
-		"display-message",
-		"-p",
-		"-t",
-		sessionID,
-		// Immutable pane lifetime only. App Terminal opens a disposable
-		// link-window view session; display-message -t %pane_id can therefore
-		// report a different session_id/session_created than
-		// display-message -t session:window for the same pane. pane_pid and
-		// pane_start_command are launch/process metadata, not pane identity.
-		// Live provider process identity (PID + start times) remains
-		// fail-closed at every mutation boundary via guardTargetIdentity.
-		"#{pane_dead}\t#{pane_id}",
-	).Output()
-	if err != nil {
-		return sessionInputPane{}
-	}
-	fields := strings.Split(strings.TrimSuffix(string(out), "\n"), "\t")
-	if len(fields) != 2 || fields[0] == "1" || strings.TrimSpace(fields[1]) != sessionID {
-		return sessionInputPane{}
-	}
-	paneID := strings.TrimSpace(fields[1])
-	return sessionInputPane{
-		alive:      true,
-		paneID:     paneID,
-		generation: sessionInputPaneGeneration(paneID),
-	}
-}
-
-// sessionInputPaneGeneration is the opaque digest of an immutable tmux pane
-// lifetime id. It must not include session_id/session_created (linked App view
-// sessions), window linkage metadata that is not pane-exclusive, pane_pid, or
-// pane_start_command. Replaced panes get a new pane_id; respawned processes in
-// the same pane are rejected by targetProcessIdentity instead.
-func sessionInputPaneGeneration(paneID string) string {
-	paneID = strings.TrimSpace(paneID)
-	if paneID == "" {
-		return ""
-	}
-	digest := sha256.Sum256([]byte(paneID))
-	return fmt.Sprintf("%x", digest[:])
-}
-
-func (realSessionInputIO) loadBuffer(socket, buffer, payload string) error {
-	command := tmuxCommand(socket, "load-buffer", "-b", buffer, "-")
-	command.Stdin = strings.NewReader(payload)
-	if out, err := command.CombinedOutput(); err != nil {
-		return fmt.Errorf("load payload into tmux buffer: %w%s", err, commandOutputSuffix(out))
-	}
-	return nil
-}
-
-func (realSessionInputIO) deleteBuffer(socket, buffer string) {
-	_ = tmuxCommand(socket, "delete-buffer", "-b", buffer).Run()
-}
-
-func (realSessionInputIO) runQueue(
-	socket string,
-	args []string,
-	beforeStart func() error,
-) (bool, error) {
-	command := tmuxCommand(socket, args...)
-	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	// This is the last pre-mutation operation: the target-bound tmux command
-	// has already been constructed, but Start has not been called. The guard
-	// re-proves the provider process lifetime and immutable pane generation.
-	// It closes deterministic replacements during baseline/ledger work; it
-	// does not pretend an external process can never race after this check.
-	if beforeStart != nil {
-		if err := beforeStart(); err != nil {
-			return false, err
-		}
-	}
-	if err := command.Start(); err != nil {
-		return false, err
-	}
-	if err := command.Wait(); err != nil {
-		return true, fmt.Errorf("%w%s", err, commandOutputSuffix(stderr.Bytes()))
-	}
-	return true, nil
-}
-
-func (io realSessionInputIO) receiptLedger(socket, target string) (sessionInputReceiptLedger, error) {
-	value, err := tmuxPaneUserOption(socket, target, sessionInputReceiptOption)
-	if err != nil {
-		return sessionInputReceiptLedger{}, err
-	}
-	return decodeSessionInputReceiptLedger(value)
-}
-
-func (io realSessionInputIO) writeReceiptLedger(socket, target string, ledger sessionInputReceiptLedger) error {
-	if err := validateSessionInputReceiptLedger(ledger); err != nil {
-		return err
-	}
-	raw, err := json.Marshal(ledger)
-	if err != nil {
-		return fmt.Errorf("encode Session input receipt ledger: %w", err)
-	}
-	out, err := tmuxCommand(
-		socket,
-		"set-option",
-		"-p",
-		"-t",
-		target,
-		"@"+sessionInputReceiptOption,
-		string(raw),
-	).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("write Session input receipt ledger: %w%s", err, commandOutputSuffix(out))
-	}
-	return nil
 }
 
 type sessionInputSession struct {
@@ -430,7 +297,6 @@ func (owner *sessionInputOwner) serialized(sessionID string, action func() error
 	return action()
 }
 
-const sessionInputReceiptOption = "mewla_session_input_receipts"
 const sessionInputReceiptLedgerSchema = 1
 const sessionInputReceiptLedgerLimit = 64
 const sessionInputReceiptMaxBytes = 512
@@ -445,8 +311,6 @@ type sessionInputReceiptLedger struct {
 	SchemaVersion int                        `json:"schema_version"`
 	Entries       []sessionInputReceiptEntry `json:"entries"`
 }
-
-var sessionInputBufferSequence atomic.Uint64
 
 func (owner *sessionInputOwner) submit(
 	sessionID string,
@@ -927,26 +791,17 @@ func (owner *sessionInputOwner) submitWithTurn(
 			}
 		}
 		if !structuredSent {
-			buffer := fmt.Sprintf("mewla-session-input-%d-%d", os.Getpid(), sessionInputBufferSequence.Add(1))
-			if err := owner.io.loadBuffer(socket, buffer, payload); err != nil {
-				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, err)
-			}
-			defer owner.io.deleteBuffer(socket, buffer)
-
 			adapter := sessionInputProviderForCommand(command)
 			// Claude 2.1.285 labels bracketed input as pasted_content. A delegated
 			// task needs explicit typed intent outside that data wrapper; manual
-			// input keeps its native semantics. The brief remains one exact buffer.
+			// input keeps its native semantics. The brief remains one exact paste.
 			adapter.delegatedIntent = delegatedTransportSubmit && isClaudeCommand(command)
-			started, queueErr := owner.io.runQueue(socket, sessionInputSubmitQueue(
-				current.paneID,
-				buffer,
-				adapter,
-			), func() error {
-				// Run this inside runQueue immediately before command.Start. The
-				// queue is bound to the immutable pane id; the two identity reads
-				// bracket the pane-generation proof so deterministic process/pane
-				// replacement during provider baseline cannot reach mutation.
+			started, queueErr := owner.io.submitPaste(socket, current.paneID, payload, adapter, func() error {
+				// This runs immediately before the first byte can reach the
+				// target. The paste is bound to the immutable Session id; the two
+				// identity reads bracket the generation proof so deterministic
+				// process/Session replacement during provider baseline cannot
+				// reach mutation.
 				if err := guardTargetIdentity(resolver, sessionID, expected); err != nil {
 					return err
 				}
@@ -977,10 +832,9 @@ func (owner *sessionInputOwner) submitWithTurn(
 						}
 					}
 					result.Outcome = InputAmbiguous
-					return ambiguousSubmission(result.Receipt, fmt.Errorf("run target-bound tmux command queue: %w", queueErr))
+					return ambiguousSubmission(result.Receipt, queueErr)
 				}
-				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared,
-					fmt.Errorf("start target-bound tmux command queue: %w", queueErr))
+				return owner.abortBeforeMutation(socket, current.paneID, originalLedger, sessionID, result.Receipt, turn, payloadDigest, prepared, queueErr)
 			}
 		}
 		var confirmation delegatedInputConfirmation
@@ -1583,39 +1437,6 @@ func validateSessionInputPane(pane sessionInputPane) error {
 // DelegatedInputPrefix is typed before a delegated Worker input is pasted, so
 // the input reads as an instruction to carry out.
 const DelegatedInputPrefix = "Execute: "
-
-func sessionInputSubmitQueue(
-	paneID string,
-	buffer string,
-	adapter sessionInputProvider,
-) []string {
-	args := []string{
-		// Chat is authoritative over an unsent Terminal draft.
-		"send-keys", "-t", paneID, "C-u",
-	}
-	if adapter.prepare > 0 {
-		args = append(args,
-			";", "run-shell", "sleep "+strconv.FormatFloat(adapter.prepare.Seconds(), 'f', 3, 64),
-		)
-	}
-	if adapter.delegatedIntent {
-		args = append(args, ";", "send-keys", "-l", "-t", paneID, DelegatedInputPrefix,
-			";", "run-shell", "sleep 0.050")
-	}
-	args = append(args,
-		// -r is part of the payload contract: without it tmux rewrites every
-		// LF byte as CR, which terminal composers interpret as submit keys.
-		";", "paste-buffer", "-r", "-p", "-b", buffer, "-t", paneID,
-	)
-	if adapter.settle > 0 {
-		args = append(args,
-			";", "run-shell", "sleep "+strconv.FormatFloat(adapter.settle.Seconds(), 'f', 3, 64),
-		)
-	}
-	args = append(args, ";", "send-keys", "-t", paneID, adapter.submitKey)
-	args = append(args, ";", "delete-buffer", "-b", buffer)
-	return args
-}
 
 func definitelyNotSubmitted(receipt string, cause error) error {
 	return &InputSubmissionError{

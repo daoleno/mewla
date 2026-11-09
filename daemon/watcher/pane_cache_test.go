@@ -14,8 +14,8 @@ func screensAt(now *time.Time) *paneScreens {
 func TestAnIdlePaneIsNotReadAgainUntilItPrints(t *testing.T) {
 	now := time.Unix(1000, 0)
 	p := screensAt(&now)
-	pane := tmuxPane{target: "%1", activity: 990}
-	p.inventory([]tmuxPane{pane})
+	pane := sessionPane{target: "%1", activity: 990}
+	p.inventory([]sessionPane{pane})
 	if _, _, _, ok := p.reuse("%1"); ok {
 		t.Fatal("a pane never read was reused")
 	}
@@ -23,13 +23,13 @@ func TestAnIdlePaneIsNotReadAgainUntilItPrints(t *testing.T) {
 	p.remember("%1", "screen", true, -1, startedAt, startedUnix)
 
 	now = now.Add(500 * time.Millisecond)
-	p.inventory([]tmuxPane{pane})
+	p.inventory([]sessionPane{pane})
 	if content, alive, _, ok := p.reuse("%1"); !ok || content != "screen" || !alive {
 		t.Fatalf("an idle pane was read again: %q %v %v", content, alive, ok)
 	}
 
 	pane.activity = 1000
-	p.inventory([]tmuxPane{pane})
+	p.inventory([]sessionPane{pane})
 	if _, _, _, ok := p.reuse("%1"); ok {
 		t.Fatal("a pane that printed since it was read was reused")
 	}
@@ -38,8 +38,8 @@ func TestAnIdlePaneIsNotReadAgainUntilItPrints(t *testing.T) {
 func TestOutputInTheSecondOfTheReadIsNotTakenAsSeen(t *testing.T) {
 	now := time.Unix(1000, 0).Add(200 * time.Millisecond)
 	p := screensAt(&now)
-	pane := tmuxPane{target: "%1", activity: 1000}
-	p.inventory([]tmuxPane{pane})
+	pane := sessionPane{target: "%1", activity: 1000}
+	p.inventory([]sessionPane{pane})
 	startedAt, startedUnix := p.readStarted()
 	p.remember("%1", "screen", true, -1, startedAt, startedUnix)
 	if _, _, _, ok := p.reuse("%1"); ok {
@@ -54,8 +54,8 @@ func TestOutputInTheSecondOfTheReadIsNotTakenAsSeen(t *testing.T) {
 func TestAReusedScreenExpiresAndAPaneThatDiedIsReadAgain(t *testing.T) {
 	now := time.Unix(1000, 0)
 	p := screensAt(&now)
-	pane := tmuxPane{target: "%1", activity: 900}
-	p.inventory([]tmuxPane{pane})
+	pane := sessionPane{target: "%1", activity: 900}
+	p.inventory([]sessionPane{pane})
 	startedAt, startedUnix := p.readStarted()
 	p.remember("%1", "screen", true, -1, startedAt, startedUnix)
 
@@ -68,7 +68,7 @@ func TestAReusedScreenExpiresAndAPaneThatDiedIsReadAgain(t *testing.T) {
 		t.Fatal("setup: the screen should be reusable again")
 	}
 	pane.dead = true
-	p.inventory([]tmuxPane{pane})
+	p.inventory([]sessionPane{pane})
 	if _, _, _, ok := p.reuse("%1"); ok {
 		t.Fatal("a pane that died was not read again")
 	}
@@ -77,7 +77,7 @@ func TestAReusedScreenExpiresAndAPaneThatDiedIsReadAgain(t *testing.T) {
 func TestAFailedReadIsNeverReused(t *testing.T) {
 	now := time.Unix(1000, 0)
 	p := screensAt(&now)
-	p.inventory([]tmuxPane{{target: "%1", activity: 900}})
+	p.inventory([]sessionPane{{target: "%1", activity: 900}})
 	startedAt, startedUnix := p.readStarted()
 	p.remember("%1", "", false, -1, startedAt, startedUnix)
 	if _, _, _, ok := p.reuse("%1"); ok {
@@ -88,7 +88,7 @@ func TestAFailedReadIsNeverReused(t *testing.T) {
 func TestOwnershipIsBelievedForOwnedPanesAndRecheckedForTheRest(t *testing.T) {
 	now := time.Unix(1000, 0)
 	p := screensAt(&now)
-	panes := []tmuxPane{{target: "%1"}, {target: "%2"}}
+	panes := []sessionPane{{target: "%1"}, {target: "%2"}}
 	p.inventory(panes)
 	owned, ask := p.ownership(panes)
 	if len(owned) != 0 || len(ask) != 2 {
@@ -106,8 +106,8 @@ func TestOwnershipIsBelievedForOwnedPanesAndRecheckedForTheRest(t *testing.T) {
 	if !owned["%1"] || len(ask) != 1 || ask[0].target != "%2" {
 		t.Fatalf("after the recheck window: owned=%v ask=%v", owned, ask)
 	}
-	p.inventory([]tmuxPane{{target: "%2"}})
-	if owned, _ := p.ownership([]tmuxPane{{target: "%1"}}); owned["%1"] {
+	p.inventory([]sessionPane{{target: "%2"}})
+	if owned, _ := p.ownership([]sessionPane{{target: "%1"}}); owned["%1"] {
 		t.Fatal("a pane that is gone stayed owned")
 	}
 }
@@ -121,7 +121,7 @@ func TestProcessTableIsReadOnlyWhenTheInventoryMovesOrAges(t *testing.T) {
 		reads++
 		return map[int]processInfo{1: {pid: 1}}
 	}
-	panes := []tmuxPane{{target: "%1", panePID: 10, activity: 5}}
+	panes := []sessionPane{{target: "%1", panePID: 10, activity: 5}}
 
 	p.inventory(panes)
 	p.processes(read)
@@ -157,7 +157,7 @@ func TestPollSlowsOnlyAfterTheInventoryStaysQuiet(t *testing.T) {
 	p.now = func() time.Time { return now }
 	p.changedAt = now
 	base := 500 * time.Millisecond
-	panes := []tmuxPane{{target: "%1", panePID: 10, activity: 5}}
+	panes := []sessionPane{{target: "%1", panePID: 10, activity: 5}}
 	p.inventory(panes)
 	if got := p.nextPollDelay(base); got != base {
 		t.Fatalf("a fresh change polled at %v, want %v", got, base)

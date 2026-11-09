@@ -191,6 +191,16 @@ func (io *fakeSessionInputIO) runQueue(
 	return started, err
 }
 
+// submitPaste is the tmux paste path over the fake's buffers and queue, so the
+// recorded queues are exactly what the tmux backend would run.
+func (io *fakeSessionInputIO) submitPaste(
+	socket, paneID, payload string,
+	adapter sessionInputProvider,
+	beforeStart func() error,
+) (bool, error) {
+	return submitTmuxPaste(io, socket, paneID, payload, adapter, beforeStart)
+}
+
 func (io *fakeSessionInputIO) receiptLedger(socket, target string) (sessionInputReceiptLedger, error) {
 	io.mu.Lock()
 	defer io.mu.Unlock()
@@ -2964,7 +2974,7 @@ func TestWatcherPollResolvesOnlyExactPendingRowAmongCoexistingRows(t *testing.T)
 		AdmissionStream: "opencode_db\x00coexist\x00/db", AdmissionID: "msg-b",
 		AdmissionCursor: 2, AdmissionAt: now, InputSHA256: digestB, Structured: true,
 	}
-	windows := []tmuxPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
+	windows := []sessionPane{{target: sessionID, name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true}}
 	restore := installFakePollSeams(w, windows, map[string]string{sessionID: "OpenCode\nworking\n"}, map[int]processInfo{333: fakeProcess(333, now)})
 	defer restore()
 	w.poll()

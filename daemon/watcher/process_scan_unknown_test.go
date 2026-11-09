@@ -8,7 +8,7 @@ import (
 func TestPollKeepsWorkerIdentityWhenPSFails(t *testing.T) {
 	w := New(time.Second)
 	started := time.Date(2026, 8, 7, 8, 0, 0, 0, time.UTC)
-	windows := []tmuxPane{{target: "sess-a:@1", name: "alpha", cwd: "/repo/a", command: "claude", panePID: 111}}
+	windows := []sessionPane{{target: "sess-a:@1", name: "alpha", cwd: "/repo/a", command: "claude", panePID: 111}}
 	content := map[string]string{"sess-a:@1": contentA}
 	restore := installFakePollSeams(w, windows, content, map[int]processInfo{111: fakeProcess(111, started)})
 	defer restore()

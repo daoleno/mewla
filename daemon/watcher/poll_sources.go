@@ -52,14 +52,14 @@ func (w *Watcher) SetPollSources(sources PollSources) func() {
 	previousSnapshot := w.snapshotProcesses
 	w.pollSources = &sources
 	if sources.ListPanes != nil {
-		w.listPanes = func() ([]tmuxPane, error) {
+		w.listPanes = func() ([]sessionPane, error) {
 			windows, err := sources.ListPanes()
 			if err != nil {
 				return nil, err
 			}
-			out := make([]tmuxPane, 0, len(windows))
+			out := make([]sessionPane, 0, len(windows))
 			for _, win := range windows {
-				out = append(out, tmuxPane{
+				out = append(out, sessionPane{
 					target: win.Target, name: win.Name, cwd: win.Cwd,
 					command: win.Command, piSessionBinding: win.PiSessionBinding, panePID: win.PanePID,
 					hidden: win.Hidden, delegated: win.Delegated,

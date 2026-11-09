@@ -29,7 +29,7 @@ func TestRealPiStartupReadinessAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = h.w.KillSession(target) })
-	if !h.w.waitForInputReadyGuarded(h.selected, target, command, 20*time.Second, nil) {
+	if !h.w.waitForInputReadyGuarded(target, command, 20*time.Second, nil) {
 		pane, _, _ := h.w.capturePaneContent(target)
 		t.Fatalf("installed Pi did not reach input-ready state; pane:\n%s", pane)
 	}

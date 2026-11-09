@@ -8,7 +8,7 @@ import (
 )
 
 func TestObservePanesCapturesImmutableObservation(t *testing.T) {
-	windows := []tmuxPane{{target: "a"}, {target: "b"}}
+	windows := []sessionPane{{target: "a"}, {target: "b"}}
 	got := observePanes(windows, func(target string) (string, bool, int) {
 		if target == "a" {
 			return "one\ntwo", true, 0
@@ -207,7 +207,7 @@ func TestPollRemovedTurnReconciliationAppliesUncertain(t *testing.T) {
 		ProcessIdentity: "recorded-proc",
 	})
 	w.turnLedger = ledger
-	windows := []tmuxPane{
+	windows := []sessionPane{
 		{target: "mewla-worker-worker:@1", name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 333, delegated: true},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
@@ -271,7 +271,7 @@ func TestPollPiBlockedPaneNeverWakesTurnTrackedSession(t *testing.T) {
 	if classified, _ := classifier.Classify(true, []string{content}, "pi"); classified != classifier.StateBlocked {
 		t.Fatalf("fixture classification = %s, want blocked (the Pi frame)", classified)
 	}
-	windows := []tmuxPane{
+	windows := []sessionPane{
 		{target: "mewla-worker-pi:@1", name: "pi", cwd: "/repo/mewla", command: "pi", panePID: 444, delegated: true},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
@@ -321,7 +321,7 @@ func TestPollLivenessAppliesWithoutProviderProbe(t *testing.T) {
 	w.turnLedger = ledger
 	// No Provider probe installed (nil): the mutable turn must still be
 	// applied, with only the Provider observation gated.
-	windows := []tmuxPane{
+	windows := []sessionPane{
 		{target: "mewla-worker-worker:@1", name: "worker", cwd: "/repo/mewla", command: "opencode", panePID: 100, delegated: true},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{

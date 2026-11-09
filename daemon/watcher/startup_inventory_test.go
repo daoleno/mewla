@@ -62,7 +62,7 @@ echo 'no server running on fixture' >&2; exit 1`
 			// Unknown must not cache an identity forever after real removal.
 			// The server is now really gone: nothing listens on its socket.
 			t.Setenv("PATH", writeFakeTmux(t, `exit 1`))
-			w.listPanes = func() ([]tmuxPane, error) { return nil, nil }
+			w.listPanes = func() ([]sessionPane, error) { return nil, nil }
 			w.poll()
 			if w.GetWorker("%1") != nil || len(ledger.applied) != 1 || !ledger.applied[0].ProcessDead {
 				t.Fatal("confirmed absence did not converge after the observation gap")
