@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // Mewla 0.3 runs every Session in the session host. Sessions an earlier Mewla
@@ -152,7 +152,7 @@ func waitProcessesGone(pids []int, limit time.Duration) bool {
 	for {
 		alive := false
 		for _, pid := range pids {
-			if pid > 0 && syscall.Kill(pid, 0) == nil {
+			if pid > 0 && platform.ProcessAlive(pid) {
 				alive = true
 				break
 			}
