@@ -123,3 +123,17 @@ func LiveClaudeSessionOwner(sessionID, root string) (int, error) {
 	}
 	return 0, nil
 }
+
+// ClaudeTranscriptPath is where the Claude process pid keeps conversation
+// sessionID that runs in cwd, or "" when its config directory is unknown.
+func ClaudeTranscriptPath(pid int, cwd, sessionID string) string {
+	root := claudeIdentityRoot(pid)
+	if !filepath.IsAbs(root) || strings.TrimSpace(sessionID) == "" {
+		return ""
+	}
+	dir := claudeProjectDir(root, cwd)
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, sessionID+".jsonl")
+}
