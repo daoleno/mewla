@@ -144,6 +144,89 @@ func TestHostTerminalView(t *testing.T) {
 	}
 }
 
+// The App opens a view at the grid it measured, and its grid can settle a
+// row smaller before the replay lands: the replay scrolls the viewer by a row
+// and the cursor lands a row below the text. The resize that follows draws
+// the view again at the settled size, as tmux redraws a client.
+func TestHostTerminalViewRedrawsOnResize(t *testing.T) {
+	socket, client := startTestHost(t)
+	dir := t.TempDir()
+	const id = "mh-0123456789abcdef76543210"
+	script := `i=0; while [ $i -lt 6 ]; do printf 'line %d\r\n' $i; i=$((i+1)); done; printf 'ready '; read x; exit 0`
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := client.Create(ctx, sessionhost.CreateParams{
+		ID: id, Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/bin:/bin", "HOME=" + dir}, Dir: dir, Cols: 80, Rows: 24,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitHostScreen(t, client, id, "ready")
+
+	sent := make(chan map[string]any, 1024)
+	manager := NewManager(&HostBackend{Version: "test-daemon"})
+	view, err := manager.Open("owner", HostBackendName, id, OpenOptions{Cols: 70, Rows: 20, Socket: socket}, func(v any) { sent <- v.(map[string]any) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened := <-sent; opened["type"] != "terminal_opened" {
+		t.Fatalf("opened = %v", opened)
+	}
+	viewer, err := ghosttyvt.New(ghosttyvt.Options{Cols: 70, Rows: 19})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer viewer.Close()
+	settle := func() {
+		for {
+			select {
+			case msg := <-sent:
+				if msg["type"] != "terminal_output" {
+					t.Fatalf("unexpected %v", msg)
+				}
+				viewer.Write([]byte(msg["data"].(string)))
+			case <-time.After(300 * time.Millisecond):
+				return
+			}
+		}
+	}
+	settle()
+	if screen, _ := viewer.Capture(ghosttyvt.CaptureOptions{Scope: ghosttyvt.ScopeScreen}); strings.HasPrefix(screen, "line 0") {
+		t.Fatalf("a 20-row replay did not scroll a 19-row viewer: %q", screen)
+	}
+	if err := manager.Resize("owner", view.ID(), 70, 19); err != nil {
+		t.Fatal(err)
+	}
+	settle()
+	matchHost(t, viewer, client, id)
+
+	if _, err := viewer.Resize(50, 12); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Resize("owner", view.ID(), 50, 12); err != nil {
+		t.Fatal(err)
+	}
+	settle()
+	matchHost(t, viewer, client, id)
+
+	// The view still carries the program's output and input.
+	if err := manager.Input("owner", view.ID(), "x\r"); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		select {
+		case msg := <-sent:
+			if msg["type"] == "terminal_exit" {
+				if msg["exit_code"] != 0 {
+					t.Fatalf("exit = %v", msg)
+				}
+				return
+			}
+		case <-ctx.Done():
+			t.Fatal("the program did not exit after its input")
+		}
+	}
+}
+
 func TestHostTerminalRefusesWithoutAHost(t *testing.T) {
 	manager := NewManager(&HostBackend{})
 	if _, err := manager.Open("owner", HostBackendName, "mh-x", OpenOptions{}, func(any) {}); err == nil {

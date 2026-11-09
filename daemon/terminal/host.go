@@ -55,6 +55,11 @@ const fullReset = "\x1bc"
 // screen and then streams the program's output; this view is an active one,
 // so its size becomes the Session's. The host keeps the history, so there is
 // no copy-mode to scroll: the App reads History instead.
+//
+// A resize draws the view again at its new size, as tmux redraws a client: a
+// viewer's terminal and the host's reflow on their own, and a replay that
+// reached the viewer while its grid was another size (the App's grid settles
+// while the view opens) would otherwise stay misdrawn until it reopens.
 type hostSession struct {
 	id       string
 	targetID string
@@ -67,6 +72,8 @@ type hostSession struct {
 	view   *sessionhost.Attachment
 	cancel context.CancelFunc
 	closed bool
+	// redraw asks the pump for a fresh replay at size once the view ends.
+	redraw bool
 
 	events    chan Event
 	closeOnce sync.Once
@@ -108,9 +115,9 @@ func (s *hostSession) Start(ctx context.Context) error {
 	return nil
 }
 
-// pump forwards the replay and then the output. A view that fell behind
-// starts over: a full reset and a fresh replay leave nothing stale on the
-// viewer's terminal.
+// pump forwards the replay and then the output. A view that fell behind or
+// was resized starts over: a full reset and a fresh replay leave nothing
+// stale on the viewer's terminal.
 func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment) {
 	defer s.closeEvents()
 	prefix := ""
@@ -128,6 +135,14 @@ func (s *hostSession) pump(ctx context.Context, view *sessionhost.Attachment) {
 		}
 		end, err := view.End()
 		switch {
+		case s.takeRedraw():
+			next, err := s.reattach(ctx)
+			if err != nil {
+				s.send(ctx, Event{Type: EventError, Err: err})
+				s.send(ctx, Event{Type: EventExit, ExitCode: 1})
+				return
+			}
+			view, prefix = next, fullReset
 		case err != nil:
 			s.send(ctx, Event{Type: EventError, Err: fmt.Errorf("the session host stopped streaming Session %s: %w", s.targetID, err)})
 			s.send(ctx, Event{Type: EventExit, ExitCode: 1})
@@ -162,13 +177,27 @@ func (s *hostSession) reattach(ctx context.Context) (*sessionhost.Attachment, er
 		return nil, fmt.Errorf("reopen Session %s: %w", s.targetID, err)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.closed {
+		s.mu.Unlock()
 		view.Close()
 		return nil, fmt.Errorf("terminal view of Session %s is closed", s.targetID)
 	}
 	s.view = view
+	again := s.redraw // resized while this view was attaching
+	s.mu.Unlock()
+	if again {
+		view.Close()
+	}
 	return view, nil
+}
+
+// takeRedraw reports, once, that a resize ended the view for a redraw.
+func (s *hostSession) takeRedraw() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	redraw := s.redraw
+	s.redraw = false
+	return redraw
 }
 
 func (s *hostSession) send(ctx context.Context, ev Event) bool {
@@ -219,7 +248,12 @@ func (s *hostSession) Resize(cols, rows int) error {
 	}
 	s.mu.Lock()
 	s.size = Size{Cols: cols, Rows: rows}
+	s.redraw = true
+	view := s.view
 	s.mu.Unlock()
+	if view != nil {
+		view.Close() // the pump attaches again at the new size
+	}
 	return nil
 }
 
