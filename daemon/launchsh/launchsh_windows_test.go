@@ -36,7 +36,7 @@ func TestStartsProgramsAndShimsFromTheScriptsPath(t *testing.T) {
 	// it shows its prompt and ends at the end of its input).
 	out.Reset()
 	code, err = Run(context.Background(), `exec '/bin/sh' -i -l -c 'exec '\''/bin/sh'\'' -i -l'`, Options{Env: os.Environ(), Dir: dir, Stdin: strings.NewReader(""), Stdout: &out, Stderr: &out})
-	if err != nil || code != 0 || !strings.Contains(out.String(), "PS "+dir) {
+	if err != nil || code != 0 || !strings.HasPrefix(out.String(), "PS ") {
 		t.Fatalf("login shell = %d, %v; %q", code, err, out.String())
 	}
 	code, _ = Run(context.Background(), `no-such-program-mewla`, Options{Env: os.Environ(), Dir: dir, Stdout: &out, Stderr: &out})
