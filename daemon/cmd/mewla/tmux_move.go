@@ -242,7 +242,7 @@ func (plan tmuxMovePlan) prepare(worker classifier.Worker) (watcher.TmuxMove, er
 	if info, err := os.Stat(cwd); cwd == "" || err != nil || !info.IsDir() {
 		return watcher.TmuxMove{}, fmt.Errorf("its directory %q is gone", cwd)
 	}
-	env := tmuxMoveEnvironment(workerproc.Environ(worker.ProcessID))
+	env := tmuxMoveEnvironment(workerproc.Environ(worker.ProcessID), watcher.ExecutablePath())
 	if len(env) == 0 {
 		return watcher.TmuxMove{}, fmt.Errorf("the environment of process %d cannot be read", worker.ProcessID)
 	}
@@ -253,8 +253,10 @@ func (plan tmuxMovePlan) prepare(worker classifier.Worker) (watcher.TmuxMove, er
 }
 
 // tmuxMoveEnvironment is the running program's environment without what
-// named its tmux pane; the host sets the Session's own id and terminal.
-func tmuxMoveEnvironment(environ []string) []string {
+// named its tmux pane; the host sets the Session's own id and terminal. The
+// agent reports to the Mewla that now runs, mewla, not the one that started
+// it.
+func tmuxMoveEnvironment(environ []string, mewla string) []string {
 	out := make([]string, 0, len(environ))
 	for _, entry := range environ {
 		key, _, ok := strings.Cut(entry, "=")
@@ -265,6 +267,8 @@ func tmuxMoveEnvironment(environ []string) []string {
 		case "TMUX", "TMUX_PANE", "TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM",
 			"MEWLA_SESSION_ID", "MEWLA_TMUX_GUARD_DIR", "_", "SHLVL", "OLDPWD", "PWD":
 			continue
+		case "MEWLA_WORKER_PROGRESS_CMD":
+			entry = key + "=" + mewla
 		}
 		out = append(out, entry)
 	}

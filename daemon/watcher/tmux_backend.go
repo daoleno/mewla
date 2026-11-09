@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -35,9 +36,27 @@ func (b *tmuxBackend) observedGeneration(id string) string {
 	return sessionInputPaneGeneration(id)
 }
 
-func (b *tmuxBackend) listOwned() ([]sessionPane, error) { return b.w.listTmuxPanes() }
+// serverGone reports that no tmux server can hold Sessions from an earlier
+// Mewla: tmux is not installed, or nothing listens on its socket. Mewla no
+// longer needs tmux, so neither is a failure.
+func (b *tmuxBackend) serverGone() bool {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		return true
+	}
+	return tmuxSocketUnreachable(b.socket())
+}
+
+func (b *tmuxBackend) listOwned() ([]sessionPane, error) {
+	if b.serverGone() {
+		return nil, ErrTmuxServerGone
+	}
+	return b.w.listTmuxPanes()
+}
 
 func (b *tmuxBackend) listServices() ([]servicePane, error) {
+	if b.serverGone() {
+		return nil, nil
+	}
 	socket := b.socket()
 	onSocket, err := listServicePanesOn(socket)
 	if err != nil {
