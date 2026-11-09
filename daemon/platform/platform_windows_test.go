@@ -4,12 +4,15 @@ package platform
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 // A job ends the whole tree: a child that starts its own child is gone
@@ -159,5 +162,25 @@ func TestProcessCreationFiletime(t *testing.T) {
 	}
 	if _, err := ProcessCreationFiletime(child.Process.Pid); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("a finished process = %v", err)
+	}
+}
+
+// Codex's app-server refuses a socket directory unless its ACL is exactly the
+// one Codex itself would set; see MkdirPrivate.
+func TestMkdirPrivateMatchesCodexSocketDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "codex-ctl")
+	for round := 0; round < 2; round++ { // creating it, then repairing it
+		if err := MkdirPrivate(dir); err != nil {
+			t.Fatal(err)
+		}
+		sd, err := windows.GetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, sid, _ := CurrentUser()
+		want := fmt.Sprintf("O:%sD:P(A;OICI;FA;;;%s)", sid, sid)
+		if got := sd.String(); got != want {
+			t.Fatalf("round %d: descriptor %s, want %s", round, got, want)
+		}
 	}
 }

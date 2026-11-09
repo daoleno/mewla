@@ -2,6 +2,7 @@ package codex
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/daoleno/mewla/daemon/agentevents"
@@ -49,8 +50,13 @@ func (a Adapter) PrepareLaunch(command string) (agentevents.Launch, error) {
 	// (mewla_chrome, mewla_computer) are forwarded too.
 	server := program + " app-server --listen unix://" + shellquote.Word(socket) + codextrust.Forwarded(rest) + forwardedMCP(rest)
 	log, pid := ControlLogPath(socket), ControlPidPath(socket)
-	wrapped := "set +m; " + server + " > " + shellquote.Word(log) + " 2>&1 & echo $! > " + shellquote.Word(pid) +
+	wrapped := server + " > " + shellquote.Word(log) + " 2>&1 & echo $! > " + shellquote.Word(pid) +
 		"; exec " + program + " --remote unix://" + shellquote.Word(socket)
+	// Keep the server in the pane's process group. Windows launches through
+	// `mewla sh`, which has no job control and no -m option.
+	if runtime.GOOS != "windows" {
+		wrapped = "set +m; " + wrapped
+	}
 	if rest != "" {
 		wrapped += " " + rest
 	}

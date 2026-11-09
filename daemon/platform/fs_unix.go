@@ -16,3 +16,7 @@ func SyncDir(dir string) error {
 
 // SyncOpenDir fsyncs an already open directory.
 func SyncOpenDir(dir *os.File) error { return dir.Sync() }
+
+// MkdirPrivate creates dir, and any missing parents, readable only by this
+// user.
+func MkdirPrivate(dir string) error { return os.MkdirAll(dir, 0o700) }
