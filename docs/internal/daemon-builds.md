@@ -53,18 +53,42 @@ Product version for banners and release staging comes from `app/app.base.json` (
 
 ## Release binaries (Linux and Apple Silicon macOS)
 
-`scripts/build-daemon-linux.sh` builds Linux amd64, Linux arm64 and Darwin
-arm64 binaries with `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false` and stripped
-ldflags. All targets use the same daemon feature set.
+`scripts/build-daemon-linux.sh` builds the Linux amd64, Linux arm64 and Darwin
+arm64 release binaries with `-trimpath`, `-buildvcs=false` and stripped ldflags.
+Every release binary carries the session host's terminal engine: build tags
+`ghosttyvt,netgo,osusergo`, `CGO_ENABLED=1`, and libghostty-vt linked
+statically from `scripts/build-libghostty-desktop.sh` (signed, pinned release,
+pinned Zig; cached in `~/.cache/mewla/ghostty-desktop`). `netgo` and `osusergo`
+keep DNS and user lookups on the same pure-Go code as the earlier
+`CGO_ENABLED=0` releases.
+
+- **Linux** binaries are linked fully static against musl with the pinned
+  Zig's `zig cc` (library targets `linux_amd64_musl`, `linux_arm64_musl`), so
+  they run on any distribution, glibc or musl. Both build on any Linux host.
+- **macOS** links with Apple's clang and so builds only on a Mac (minimum
+  macOS 12.0, the same floor as before). The release workflow builds it on a
+  `macos-26` runner.
 
 ```bash
-./scripts/build-daemon-linux.sh
-# → dist-download/staging/bin/mewla-linux-amd64
-# → dist-download/staging/bin/mewla-linux-arm64
-# → dist-download/staging/bin/mewla-darwin-arm64
+./scripts/build-daemon-linux.sh                           # Linux: linux-amd64, linux-arm64
+./scripts/build-daemon-linux.sh --targets darwin-arm64    # on a Mac
+./scripts/build-daemon-linux.sh --engine off              # all three, CGO_ENABLED=0, no session host
+# → dist-download/staging/bin/mewla-<os>-<arch>
 ```
 
-Full local stage (clean directory each run; **no** GitHub Release):
+The release workflow runs every binary on its own platform before staging it
+(`daemon/releasesmoke`): `mewla version`, the session host with the engine, a
+shell and `vi` in host Sessions, `mewla attach` in a real terminal, and the
+daemon's `/health`. Run it by hand on any built binary:
+
+```bash
+cd daemon && MEWLA_RELEASE_SMOKE_BINARY=../dist-download/staging/bin/mewla-linux-amd64 \
+  MEWLA_RELEASE_SMOKE_VERSION=0.3.0 go test -count=1 -v ./releasesmoke/
+```
+
+Full local stage (clean directory each run; **no** GitHub Release). It needs
+all three binaries, so on Linux build `mewla-darwin-arm64` on a Mac first and
+pass `--skip-build`:
 
 ```bash
 ./scripts/stage-release.sh

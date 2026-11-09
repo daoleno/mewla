@@ -13,7 +13,7 @@ The separate [`native-libs.yml`](../.github/workflows/native-libs.yml) workflow 
 | Release tag push (`vX.Y.Z` / `vX.Y.Z-beta.N`) | yes | yes |
 | Manual `workflow_dispatch` of `ci.yml` | yes | yes |
 
-The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior contracts, and the publisher-config check. It also tests the session host's terminal engine (`daemon/ghosttyvt`, build tag `ghosttyvt`) with libghostty-vt linked, through `scripts/test-ghosttyvt.sh -race`. That script builds the static library with `scripts/build-libghostty-desktop.sh` from the same signed, pinned release and Zig as the app, into `~/.cache/mewla/ghostty-desktop`, which the [`ghostty-desktop`](../.github/actions/ghostty-desktop/action.yml) action caches. It never writes `daemon/ghostty-libs`: that directory switches `mewla-dev` to the tagged build. Untagged builds, including every release so far, compile the engine's stub and stay `CGO_ENABLED=0`; the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64, darwin arm64, with the embedded web UI) build only with the native/packaging checks. The `app` fast job runs unit tests, typecheck and the Android and iOS JS exports; the web export runs only inside the daemon release build, which embeds it. `ci.yml` cancels superseded runs for the same ref.
+The `daemon` fast job runs `go test ./...`, `go vet`, the scripted behavior contracts, and the publisher-config check. It also tests the session host's terminal engine (`daemon/ghosttyvt`, build tag `ghosttyvt`) with libghostty-vt linked, through `scripts/test-ghosttyvt.sh -race`. That script builds the static library with `scripts/build-libghostty-desktop.sh` from the same signed, pinned release and Zig as the app, into `~/.cache/mewla/ghostty-desktop`, which the [`ghostty-desktop`](../.github/actions/ghostty-desktop/action.yml) action caches. It never writes `daemon/ghostty-libs`: that directory switches `mewla-dev` to the tagged build. Untagged builds (`go test ./...`, `mewla-dev` without `daemon/ghostty-libs`, `build-mewla-local.sh`) compile the engine's stub and stay `CGO_ENABLED=0`. Release binaries carry the engine: the release-shaped `build-daemon-linux.sh` binaries (linux amd64/arm64 static with `zig cc` and musl, with the embedded web UI) build only with the native/packaging checks; see [Daemon builds](internal/daemon-builds.md). The `app` fast job runs unit tests, typecheck and the Android and iOS JS exports; the web export runs only inside the daemon release build, which embeds it. `ci.yml` cancels superseded runs for the same ref.
 
 A `windows` job on `windows-latest` builds every daemon package for Windows, vets and tests the Windows platform layer (`daemon/platform`: file locks, Job Objects, replacing a running executable, the per-user logon task; plus `control`, `sqlitedb` and `selfupdate`), builds `mewla.exe`, and runs `scripts/tests/install_ps1_test.ps1`, the offline tests of `install.ps1` under Windows PowerShell 5.1. Native Windows has not shipped yet, so the job is `continue-on-error`: it reports but does not fail the run. `scripts/ci-local.py` skips it on Linux.
 
@@ -25,7 +25,8 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | --- | --- | --- |
 | Checkout selected ref | yes | — |
 | `verify-release-identity.sh` | yes | — |
-| Linux amd64/arm64 + macOS arm64 daemon archives | yes | — |
+| Linux amd64/arm64 daemons (static, `zig cc`) on Ubuntu; macOS arm64 daemon on a `macos-26` runner; all with the session host's terminal engine (`ghosttyvt`) | yes | — |
+| Run each daemon on its own platform: Linux amd64, Linux arm64 (`ubuntu-24.04-arm`), macOS (`daemon/releasesmoke`) | yes | — |
 | Build release-grade `libghostty` arm64 | yes | — |
 | Clean Expo prebuild + signed arm64 APK | yes | — |
 | Verify package / version / ABI / Ghostty native imports / notice / cert fingerprint | yes | — |
@@ -93,8 +94,15 @@ Release notes leave out maintainer identity. It lives in tracked files instead:
 
 | Input | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `ref` | string | — | Exact annotated `vX.Y.Z` or `vX.Y.Z-beta.N` tag to rebuild |
+| `ref` | string | — | Exact annotated `vX.Y.Z` or `vX.Y.Z-beta.N` tag to rebuild, or a branch/commit for a build-only candidate |
 | `publish` | boolean | `false` | Reviewed recovery authorization to reconcile and publish the matching draft/existing release |
+| `candidate_version` | string | empty | Required for a build-only candidate: the `X.Y.Z` its binaries report, newer than the tracked version |
+
+A **build-only candidate** (`ref` is not a tag, `publish=false`) builds and verifies every daemon and the signed APK exactly as a release would, runs each daemon on its platform, and stops: no updater-key signing, no stage, no publication. Its artifacts are kept for five days. Use it to test a release candidate before tagging:
+
+```bash
+gh workflow run release-artifacts.yml --ref main -f ref=main -f publish=false -f candidate_version=0.3.0
+```
 
 Permissions: validation, build and staging jobs have `contents: read`; only the two gated publication jobs have `contents: write`. The jobs that hold the updater signing key never hold a write token, and the reverse.
 

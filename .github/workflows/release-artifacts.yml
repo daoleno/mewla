@@ -5,6 +5,15 @@ name: Release artifacts
 # An annotated vX.Y.Z or vX.Y.Z-beta.N tag push is the normal release action. Manual
 # dispatch can rebuild, and can recover publication only with explicit review.
 #
+# Candidate builds: a manual dispatch whose ref is a branch or commit, not a tag,
+# with publish=false and a candidate_version, builds and verifies every artifact
+# exactly as a release would, then stops. Nothing is signed with the updater key,
+# staged or published; the build outputs are kept for a few days for testing.
+#
+# Daemon binaries carry the session host's terminal engine (build tag ghosttyvt,
+# cgo): Linux is linked statically with zig cc on Ubuntu, macOS with Apple's
+# toolchain on a Mac. Each binary is run on its own platform before staging.
+#
 # Desktop first: the daemon archives are staged, signed and published as soon as
 # they are built. The signed APK, and the SHA256SUMS and signed manifest that
 # cover it, are attached to the same release when the Android build finishes.
@@ -36,6 +45,11 @@ on:
         required: true
         type: boolean
         default: false
+      candidate_version:
+        description: "Build-only candidate: X.Y.Z for a branch or commit ref (publish must be false)"
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: release-artifacts-${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
@@ -55,9 +69,14 @@ jobs:
     timeout-minutes: 10
     outputs:
       version: ${{ steps.meta.outputs.version }}
+      # The release tag, or candidate-<sha> for a build-only candidate; it names artifacts.
       tag: ${{ steps.meta.outputs.tag }}
       sha: ${{ steps.meta.outputs.sha }}
       publish: ${{ steps.meta.outputs.publish }}
+      # release or candidate
+      mode: ${{ steps.meta.outputs.mode }}
+      # What every later job checks out: the tag, or the candidate's exact commit.
+      checkout: ${{ steps.meta.outputs.checkout }}
     steps:
       - name: Checkout exact tag
         uses: actions/checkout@v4
@@ -73,28 +92,62 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.ref }}
           PUBLISH: ${{ github.event_name == 'push' && 'true' || inputs.publish }}
+          CANDIDATE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.candidate_version || '' }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin main
+          if [[ "$EVENT" == workflow_dispatch ]] && ! git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            # Build-only candidate: never publishable, never signed.
+            [[ "$PUBLISH" == false ]] || {
+              echo "error: $RELEASE_TAG is not a tag; only a tag can be published" >&2
+              exit 1
+            }
+            [[ "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+              echo "error: a build-only candidate needs candidate_version X.Y.Z; got '$CANDIDATE_VERSION'" >&2
+              exit 1
+            }
+            ./scripts/verify-release-identity.sh
+            python3 - "$CANDIDATE_VERSION" <<'PY'
+          import json, re, sys
+          tracked = json.load(open("app/app.base.json"))["expo"]["version"]
+          key = lambda v: tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", v).groups())
+          if key(sys.argv[1]) <= key(tracked):
+              sys.exit(f"error: candidate_version {sys.argv[1]} must be newer than the tracked {tracked}")
+          PY
+            SHA="$(git rev-parse HEAD)"
+            {
+              echo "version=$CANDIDATE_VERSION"
+              echo "tag=candidate-${SHA:0:12}"
+              echo "sha=$SHA"
+              echo "publish=false"
+              echo "mode=candidate"
+              echo "checkout=$SHA"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           ./scripts/verify-release-identity.sh --tag "$RELEASE_TAG"
           VERSION="${RELEASE_TAG#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "mode=release" >> "$GITHUB_OUTPUT"
+          echo "checkout=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
   daemon:
-    name: Build daemon archives
+    name: Build Linux daemons
     needs: validate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout exact tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
       - name: Revalidate tag at build boundary
+        if: needs.validate.outputs.mode == 'release'
         run: |
           git fetch --no-tags origin main
           ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
@@ -108,22 +161,117 @@ jobs:
           bun-version: "1.3.5"
       - name: Install web UI build dependencies
         run: bun install --frozen-lockfile
+      # The terminal engine's static libraries and Zig are built and fetched
+      # fresh from the signed, pinned sources: release builds restore no cache.
       - name: Build daemon binaries once
         env:
           MEWLA_VERSION: ${{ needs.validate.outputs.version }}
-        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin"
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets linux-amd64,linux-arm64
       - name: Verify daemon formats and architectures
         run: |
           set -euo pipefail
-          file dist-download/staging/bin/mewla-linux-amd64 | grep -Eq 'ELF 64-bit.*(x86-64|x86_64)'
-          file dist-download/staging/bin/mewla-linux-arm64 | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64)'
-          file dist-download/staging/bin/mewla-darwin-arm64 | grep -Eq 'Mach-O 64-bit.*arm64'
+          file dist-download/staging/bin/mewla-linux-amd64 | grep -Eq 'ELF 64-bit.*(x86-64|x86_64).*statically linked'
+          file dist-download/staging/bin/mewla-linux-arm64 | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64).*statically linked'
+          for f in dist-download/staging/bin/mewla-linux-*; do
+            go version -m "$f" | grep -E '^[[:space:]]+build[[:space:]]+(-tags=|CGO_ENABLED=)'
+          done
+      - name: Run the amd64 binary (version, session host, shell, vi, attach, /health)
+        working-directory: daemon
+        env:
+          MEWLA_RELEASE_SMOKE_BINARY: ${{ github.workspace }}/dist-download/staging/bin/mewla-linux-amd64
+          MEWLA_RELEASE_SMOKE_VERSION: ${{ needs.validate.outputs.version }}
+        run: go test -count=1 -v ./releasesmoke/
       - name: Upload verified daemon inputs
         uses: actions/upload-artifact@v4
         with:
-          name: mewla-daemon-binaries-${{ needs.validate.outputs.tag }}
+          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
           path: dist-download/staging/bin/mewla-*
           if-no-files-found: error
+          retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || '' }}
+
+  daemon-linux-arm64:
+    name: Run the Linux arm64 daemon
+    needs: [validate, daemon]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.checkout }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Download Linux daemon binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
+          path: bin
+      - name: Run the arm64 binary (version, session host, shell, vi, attach, /health)
+        working-directory: daemon
+        env:
+          MEWLA_RELEASE_SMOKE_BINARY: ${{ github.workspace }}/bin/mewla-linux-arm64
+          MEWLA_RELEASE_SMOKE_VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          chmod +x "$MEWLA_RELEASE_SMOKE_BINARY"
+          go test -count=1 -v ./releasesmoke/
+
+  daemon-darwin:
+    name: Build and run the macOS daemon
+    needs: validate
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.checkout }}
+          fetch-depth: 0
+      - name: Revalidate tag at build boundary
+        if: needs.validate.outputs.mode == 'release'
+        run: |
+          git fetch --no-tags origin main
+          ./scripts/verify-release-identity.sh --tag "${{ needs.validate.outputs.tag }}"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+      - name: Install web UI build dependencies
+        run: bun install --frozen-lockfile
+      - name: Build the macOS daemon
+        env:
+          MEWLA_VERSION: ${{ needs.validate.outputs.version }}
+          MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
+        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets darwin-arm64
+      - name: Verify format, architecture and minimum macOS
+        run: |
+          set -euo pipefail
+          BIN=dist-download/staging/bin/mewla-darwin-arm64
+          file "$BIN" | grep -Eq 'Mach-O 64-bit.*arm64'
+          go version -m "$BIN" | grep -E '^[[:space:]]+build[[:space:]]+(-tags=|CGO_ENABLED=)'
+          otool -l "$BIN" | grep -A4 LC_BUILD_VERSION
+          # Same floor as the earlier CGO_ENABLED=0 releases.
+          [[ "$(otool -l "$BIN" | awk '/LC_BUILD_VERSION/{f=1} f&&$1=="minos"{print $2; exit}')" == "12.0" ]]
+          otool -L "$BIN"
+      - name: Run the macOS binary (version, session host, shell, vi, attach, /health)
+        working-directory: daemon
+        env:
+          MEWLA_RELEASE_SMOKE_BINARY: ${{ github.workspace }}/dist-download/staging/bin/mewla-darwin-arm64
+          MEWLA_RELEASE_SMOKE_VERSION: ${{ needs.validate.outputs.version }}
+        run: go test -count=1 -v ./releasesmoke/
+      - name: Upload verified daemon inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: mewla-daemon-binaries-darwin-${{ needs.validate.outputs.tag }}
+          path: dist-download/staging/bin/mewla-darwin-arm64
+          if-no-files-found: error
+          retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || '' }}
 
   android:
     needs: validate
@@ -136,10 +284,11 @@ jobs:
       - name: Checkout exact tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.validate.outputs.tag }}
+          ref: ${{ needs.validate.outputs.checkout }}
           fetch-depth: 0
 
       - name: Revalidate tag at build boundary
+        if: needs.validate.outputs.mode == 'release'
         run: |
           set -euo pipefail
           git fetch --no-tags origin main
@@ -234,10 +383,12 @@ jobs:
           name: mewla-android-apk-${{ needs.validate.outputs.tag }}
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
+          retention-days: ${{ needs.validate.outputs.mode == 'candidate' && 5 || '' }}
 
   desktop-stage:
     name: Stage, sign, and verify desktop archives
-    needs: [validate, daemon]
+    needs: [validate, daemon, daemon-linux-arm64, daemon-darwin]
+    if: needs.validate.outputs.mode == 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -253,7 +404,8 @@ jobs:
       - name: Download daemon binaries
         uses: actions/download-artifact@v4
         with:
-          name: mewla-daemon-binaries-${{ needs.validate.outputs.tag }}
+          pattern: mewla-daemon-binaries-*-${{ needs.validate.outputs.tag }}
+          merge-multiple: true
           path: dist-download/staging/bin
       - name: Deterministically stage, sign, and verify
         env:
@@ -367,6 +519,7 @@ jobs:
   complete-stage:
     name: Add the signed APK to the signed asset set
     needs: [validate, daemon, android, desktop-stage]
+    if: needs.validate.outputs.mode == 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -382,7 +535,8 @@ jobs:
       - name: Download daemon binaries
         uses: actions/download-artifact@v4
         with:
-          name: mewla-daemon-binaries-${{ needs.validate.outputs.tag }}
+          pattern: mewla-daemon-binaries-*-${{ needs.validate.outputs.tag }}
+          merge-multiple: true
           path: dist-download/staging/bin
       - name: Download signed Android APK
         uses: actions/download-artifact@v4
