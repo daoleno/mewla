@@ -177,10 +177,12 @@ func TestMkdirPrivateMatchesCodexSocketDirectory(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Codex checks the owner, the protected bit and the one entry; the
+		// auto-inherited flag Windows adds (PAI) is not part of that.
 		_, sid, _ := CurrentUser()
-		want := fmt.Sprintf("O:%sD:P(A;OICI;FA;;;%s)", sid, sid)
-		if got := sd.String(); got != want {
-			t.Fatalf("round %d: descriptor %s, want %s", round, got, want)
+		got := sd.String()
+		if got != fmt.Sprintf("O:%sD:P(A;OICI;FA;;;%s)", sid, sid) && got != fmt.Sprintf("O:%sD:PAI(A;OICI;FA;;;%s)", sid, sid) {
+			t.Fatalf("round %d: descriptor %s, want owner %s and only D:P(A;OICI;FA;;;%s)", round, got, sid, sid)
 		}
 	}
 }
