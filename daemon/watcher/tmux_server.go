@@ -30,22 +30,6 @@ func (w *Watcher) SetTmuxGuard(dir string) {
 	w.mu.Unlock()
 }
 
-// SocketPathFor returns the selected host server only for a currently known
-// Mewla-owned target. Unknown targets resolve to "" so user-visible surfaces do
-// not acquire access to a custom caller server without watcher ownership.
-func (w *Watcher) SocketPathFor(target string) string {
-	if w == nil {
-		return ""
-	}
-	target = strings.TrimSpace(target)
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	if _, owned := w.workers[target]; !owned {
-		return ""
-	}
-	return w.tmuxSocketPath
-}
-
 // socketPathFor resolves every internal tmux operation to the one immutable
 // host server selected at startup. Ownership is enforced separately through
 // the durable @mewla_worker_created marker and the owned discovery projection.

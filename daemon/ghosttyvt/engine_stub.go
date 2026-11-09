@@ -23,5 +23,6 @@ func (*Terminal) Resize(int, int) (Output, error)        { return Output{}, ErrU
 func (*Terminal) Capture(CaptureOptions) (string, error) { return "", ErrUnavailable }
 func (*Terminal) State() State                           { return State{} }
 func (*Terminal) Snapshot() ([]byte, error)              { return nil, ErrUnavailable }
+func (*Terminal) Replay() ([]byte, error)                { return nil, ErrUnavailable }
 func (*Terminal) Close()                                 {}
 func (*Terminal) EncodeKey(string) ([]byte, error)       { return nil, ErrUnavailable }

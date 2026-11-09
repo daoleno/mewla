@@ -515,6 +515,9 @@ func TestRevokeClaimsPendingTerminalStartExactlyOnce(t *testing.T) {
 		&blockingTerminalBackend{session: session},
 	)
 	server.terminal.SetCleanupSubmitter(server.terminalCleanup.Submit)
+	server.terminalTarget = func(string) (watcher.TerminalTarget, error) {
+		return watcher.TerminalTarget{Backend: "blocking"}, nil
+	}
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 	conn := dialDeviceWebSocket(

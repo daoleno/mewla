@@ -24,6 +24,10 @@ func (b *tmuxBackend) socket() string { return b.w.socketPathFor("") }
 
 func (b *tmuxBackend) validID(id string) bool { return isPaneID(id) }
 
+func (b *tmuxBackend) terminal(string) TerminalTarget {
+	return TerminalTarget{Backend: "tmux", Socket: b.w.tmuxSocketPath}
+}
+
 func (b *tmuxBackend) observedGeneration(id string) string {
 	if !isPaneID(id) {
 		return ""

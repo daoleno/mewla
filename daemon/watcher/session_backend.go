@@ -1,6 +1,10 @@
 package watcher
 
-import "github.com/daoleno/mewla/daemon/classifier"
+import (
+	"strings"
+
+	"github.com/daoleno/mewla/daemon/classifier"
+)
 
 // sessionBackend runs Sessions and keeps what Mewla records on them. Outside
 // the backend a Session id is an opaque string: only the backend knows how ids
@@ -19,6 +23,8 @@ type sessionBackend interface {
 	// as the id itself proves it ("" when it proves none). A replaced Session
 	// never has the generation of the one it replaced.
 	observedGeneration(id string) string
+	// terminal names how a Terminal view of the Session is opened.
+	terminal(id string) TerminalTarget
 
 	// listOwned is the authoritative inventory of this daemon's Sessions. A
 	// backend that cannot be read is an error, never an empty inventory;
@@ -112,4 +118,25 @@ type sessionLabels struct {
 	piSession     string // EncodePiSessionBinding, or ""
 	resourceUnit  string
 	resourceOwner string
+}
+
+// TerminalTarget is how a Terminal view of a Session is opened: the terminal
+// backend that shows it and the server that backend reaches.
+type TerminalTarget struct {
+	Backend string // "tmux" or "host", the terminal package's backend names
+	Socket  string
+}
+
+// TerminalTarget says how to open a Terminal view of a Session this watcher
+// owns; ok is false for any other id.
+func (w *Watcher) TerminalTarget(id string) (TerminalTarget, bool) {
+	id = strings.TrimSpace(id)
+	w.mu.RLock()
+	_, owned := w.workers[id]
+	backend := w.backend
+	w.mu.RUnlock()
+	if !owned || backend == nil {
+		return TerminalTarget{}, false
+	}
+	return backend.terminal(id), true
 }

@@ -199,6 +199,12 @@ agent's screen and type into it, so it is locked to you:
   and fails if the host answers it.
 - The daemon checks the same thing the other way: a socket served by another
   user is not your session host, so nobody can put a fake one in its place.
+- The app's Terminal screen reaches a Session in the host through the daemon,
+  over the same socket. The host redraws the current screen for it and then
+  streams what the program writes, without the questions a program asks its
+  terminal, such as the cursor position, the colors or what is on the
+  clipboard. The host answers the ones it supports, so a viewer never answers
+  twice or hands over its own clipboard.
 - Like tmux, it does not protect your terminals from root or from other
   programs running as you.
 

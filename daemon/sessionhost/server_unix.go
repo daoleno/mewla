@@ -251,8 +251,12 @@ func (s *Server) serveConn(ctx context.Context, conn *net.UnixConn) {
 		if err := readJSON(conn, &req); err != nil {
 			return
 		}
-		if req.Method == MethodSubscribe {
+		switch req.Method {
+		case MethodSubscribe:
 			s.serveEvents(ctx, conn, req, &writeMu)
+			return
+		case MethodAttach:
+			s.serveAttach(ctx, conn, req, &writeMu)
 			return
 		}
 		inFlight <- struct{}{}
@@ -334,7 +338,12 @@ func (s *Server) publish(event Event) {
 
 func (s *Server) handle(req request) response {
 	result, err := s.dispatch(req)
-	resp := response{ID: req.ID}
+	return reply(req.ID, result, err)
+}
+
+// reply is the response to request id: its result, or its error.
+func reply(id uint64, result any, err error) response {
+	resp := response{ID: id}
 	if result != nil {
 		payload, marshalErr := json.Marshal(result)
 		if marshalErr != nil {

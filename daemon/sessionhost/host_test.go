@@ -71,7 +71,10 @@ func (f *fakeScreen) Capture(ghosttyvt.CaptureOptions) (string, error) {
 func (f *fakeScreen) State() ghosttyvt.State {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return ghosttyvt.State{Cols: f.cols, Rows: f.rows, BracketedPaste: f.bracketed}
+	// Between sequences unless the output so far ends inside one.
+	tail := f.out.Bytes()[max(0, f.out.Len()-2):]
+	ground := !bytes.HasSuffix(tail, []byte("\x1b")) && !bytes.HasSuffix(tail, []byte("\x1b["))
+	return ghosttyvt.State{Cols: f.cols, Rows: f.rows, BracketedPaste: f.bracketed, Ground: ground}
 }
 
 // EncodeKey knows the legacy encoding of a few keys.
@@ -89,7 +92,15 @@ func (f *fakeScreen) EncodeKey(spec string) ([]byte, error) {
 }
 
 func (f *fakeScreen) Snapshot() ([]byte, error) { return nil, errors.New("fake") }
-func (f *fakeScreen) Close()                    {}
+
+// Replay is everything written so far, so a test can check that a replay and
+// the output after it add up to all of the output.
+func (f *fakeScreen) Replay() ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]byte(nil), f.out.Bytes()...), nil
+}
+func (f *fakeScreen) Close() {}
 
 type testHost struct {
 	server *Server
@@ -524,7 +535,7 @@ func TestNewerClientIsServed(t *testing.T) {
 	if welcome.Protocol != ProtocolVersion || welcome.HostVersion != "0.2.99 (old)" {
 		t.Fatalf("welcome = %+v", welcome)
 	}
-	if err := writeJSON(conn, request{ID: 7, Method: "attach", Params: json.RawMessage(`{"id":"x"}`)}); err != nil {
+	if err := writeJSON(conn, request{ID: 7, Method: "rename", Params: json.RawMessage(`{"id":"x"}`)}); err != nil {
 		t.Fatal(err)
 	}
 	var resp response

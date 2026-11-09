@@ -150,6 +150,10 @@ func hostCtx() (context.Context, context.CancelFunc) {
 
 func (b *hostBackend) validID(id string) bool { return hostSessionIDPattern.MatchString(id) }
 
+func (b *hostBackend) terminal(string) TerminalTarget {
+	return TerminalTarget{Backend: "host", Socket: b.cfg.SocketPath}
+}
+
 func (b *hostBackend) observedGeneration(id string) string {
 	if !b.validID(id) {
 		return ""

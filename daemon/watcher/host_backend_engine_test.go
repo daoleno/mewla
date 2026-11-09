@@ -143,6 +143,9 @@ func TestHostBackendRunsASession(t *testing.T) {
 	if !hostSessionIDPattern.MatchString(id) || !w.sessions().validID(id) {
 		t.Fatalf("host Session id %q", id)
 	}
+	if target, ok := w.TerminalTarget(id); !ok || target != (TerminalTarget{Backend: "host", Socket: h.socket}) {
+		t.Fatalf("terminal of a host Session = %+v, %v", target, ok)
+	}
 	pane, listed := hostPaneOf(t, w, id)
 	if !listed || pane.name != "probe" || pane.sessionName != hostSessionGroup || pane.executorID != "claude-main" ||
 		pane.agentControl != "/tmp/agent.sock" || pane.panePID <= 0 || pane.dead {

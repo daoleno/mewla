@@ -89,6 +89,13 @@ static int mewla_vt_format(GhosttyTerminal t, int vt, uint32_t extras, bool unwr
 	return r;
 }
 
+// A replay restores every piece of terminal state but the palette: the
+// formatter writes all 256 entries, and a viewer keeps its own theme.
+enum {
+	mewla_vt_replay_extras = GHOSTTY_FORMATTER_EXTRAS_ALL & ~GHOSTTY_FORMATTER_EXTRA_PALETTE,
+	mewla_vt_cursor_extras = GHOSTTY_FORMATTER_EXTRA_CURSOR,
+};
+
 static GhosttyPoint mewla_vt_point(GhosttyPointTag tag, uint16_t x, uint32_t y) {
 	GhosttyPoint p = { .tag = tag };
 	p.value.coordinate.x = x;
@@ -328,13 +335,69 @@ func (term *Terminal) Capture(opts CaptureOptions) (string, error) {
 	if term.closed {
 		return "", fmt.Errorf("capture terminal: closed")
 	}
-	vt := C.int(0)
-	extras := C.uint32_t(C.GHOSTTY_FORMATTER_EXTRAS_NONE)
-	if opts.Styled || opts.Reconstruct {
-		vt = 1
+	return term.formatLocked(opts, opts.Styled, C.GHOSTTY_FORMATTER_EXTRAS_NONE)
+}
+
+// Replay returns VT that rebuilds what the terminal shows on a fresh terminal
+// of the same size: the screen and its styles, the cursor, the modes, the
+// keyboard modes, the tab stops and the rest. It leaves out the history and
+// the palette, which a viewer keeps as its own theme. While the alternate
+// screen is active the primary screen goes first, so a viewer still has it
+// when the program leaves the alternate screen.
+func (term *Terminal) Replay() ([]byte, error) {
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	if term.closed {
+		return nil, fmt.Errorf("replay terminal: closed")
 	}
-	if opts.Reconstruct {
-		extras = C.uint32_t(C.GHOSTTY_FORMATTER_EXTRAS_ALL)
+	var out []byte
+	var screen C.GhosttyTerminalScreen
+	C.ghostty_terminal_get(term.t, C.GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, unsafe.Pointer(&screen))
+	if screen == C.GHOSTTY_TERMINAL_SCREEN_ALTERNATE {
+		primary, err := term.primaryReplayLocked()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, primary...)
+	}
+	active, err := term.formatLocked(CaptureOptions{Scope: ScopeScreen}, true, C.mewla_vt_replay_extras)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, active...), nil
+}
+
+// primaryReplayLocked formats the primary screen and its cursor while the
+// alternate one is active. The formatter only reads the active screen, so a
+// copy of the terminal leaves the alternate screen the way the program
+// entered it, which also brings back the cursor that mode 1049 saved.
+func (term *Terminal) primaryReplayLocked() (string, error) {
+	snapshot, err := term.snapshotLocked()
+	if err != nil {
+		return "", err
+	}
+	primary, err := Restore(snapshot, Options{})
+	if err != nil {
+		return "", err
+	}
+	defer primary.Close()
+	leave := "\x1b[?47l"
+	switch {
+	case bool(C.mewla_vt_mode(term.t, 1049)):
+		leave = "\x1b[?1049l"
+	case bool(C.mewla_vt_mode(term.t, 1047)):
+		leave = "\x1b[?1047l"
+	}
+	primary.Write([]byte(leave))
+	primary.mu.Lock()
+	defer primary.mu.Unlock()
+	return primary.formatLocked(CaptureOptions{Scope: ScopeScreen}, true, C.mewla_vt_cursor_extras)
+}
+
+func (term *Terminal) formatLocked(opts CaptureOptions, styled bool, extras C.uint32_t) (string, error) {
+	vt := C.int(0)
+	if styled {
+		vt = 1
 	}
 	selected := C.bool(false)
 	var from, to C.GhosttyPoint
@@ -344,14 +407,27 @@ func (term *Terminal) Capture(opts CaptureOptions) (string, error) {
 		C.ghostty_terminal_get(term.t, C.GHOSTTY_TERMINAL_DATA_COLS, unsafe.Pointer(&cols))
 		C.ghostty_terminal_get(term.t, C.GHOSTTY_TERMINAL_DATA_ROWS, unsafe.Pointer(&rows))
 		C.ghostty_terminal_get(term.t, C.GHOSTTY_TERMINAL_DATA_TOTAL_ROWS, unsafe.Pointer(&total))
-		top := int(total) - int(rows)
-		if opts.Scope == ScopeRecent && opts.History > 0 {
-			top -= opts.History
+		history := int(total) - int(rows) // rows above the screen
+		top := history
+		to = C.mewla_vt_point(C.GHOSTTY_POINT_TAG_ACTIVE, cols-1, C.uint32_t(rows-1))
+		switch opts.Scope {
+		case ScopeRecent:
+			if opts.History > 0 {
+				top -= opts.History
+			}
+		case ScopeHistory:
+			if history <= 0 {
+				return "", nil
+			}
+			top = 0
+			if opts.History > 0 {
+				top = history - opts.History
+			}
+			to = C.mewla_vt_point(C.GHOSTTY_POINT_TAG_SCREEN, cols-1, C.uint32_t(history-1))
 		}
 		top = max(top, 0)
 		selected = true
 		from = C.mewla_vt_point(C.GHOSTTY_POINT_TAG_SCREEN, 0, C.uint32_t(top))
-		to = C.mewla_vt_point(C.GHOSTTY_POINT_TAG_ACTIVE, cols-1, C.uint32_t(rows-1))
 	}
 	var out *C.uint8_t
 	var n C.size_t
@@ -421,6 +497,10 @@ func (term *Terminal) Snapshot() ([]byte, error) {
 	if term.closed {
 		return nil, fmt.Errorf("snapshot terminal: closed")
 	}
+	return term.snapshotLocked()
+}
+
+func (term *Terminal) snapshotLocked() ([]byte, error) {
 	var out *C.uint8_t
 	var n C.size_t
 	if r := C.ghostty_snapshot_encode_alloc(term.t, nil, &out, &n); r != C.GHOSTTY_SUCCESS {
