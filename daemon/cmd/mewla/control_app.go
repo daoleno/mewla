@@ -43,6 +43,7 @@ type controlWatcher interface {
 	ResolveDelegatedAbsence(target string) (bool, error)
 	CreateSession(preferredTarget string, opts watcher.CreateSessionOptions) (string, error)
 	UpdateWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, error)
+	ReportWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, string, error)
 	RebindDelegatedTurnProjection(id string) (*classifier.Worker, error)
 	SendInput(sessionID, text string) error
 	SendInputWithReceiptResult(sessionID, text, receipt string) (watcher.InputResult, error)
@@ -1436,12 +1437,12 @@ func (a *controlApp) handleWorkerProgress(req control.Request) control.Response 
 	if err != nil {
 		return control.ErrorResponse("invalid_progress", err.Error())
 	}
-	worker, err := a.watcher.UpdateWorkerProgress(workerID, progress)
+	worker, notice, err := a.watcher.ReportWorkerProgress(workerID, progress)
 	if err != nil {
 		return control.ErrorResponse("progress_failed", err.Error())
 	}
 	out := controlWorker(worker)
-	return control.Response{OK: true, Worker: &out}
+	return control.Response{OK: true, Worker: &out, Confirmation: notice}
 }
 
 func (a *controlApp) handleWorkerClose(req control.Request) control.Response {

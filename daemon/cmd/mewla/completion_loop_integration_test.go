@@ -18,6 +18,11 @@ import (
 
 type completionControlWatcher struct{ *fakeControlWatcher }
 
+func (w *completionControlWatcher) ReportWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, string, error) {
+	worker, err := w.UpdateWorkerProgress(id, progress)
+	return worker, "", err
+}
+
 func (w *completionControlWatcher) UpdateWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, error) {
 	result, err := w.turnStore.ApplyDelegatedTurnProgress(watcher.TurnFact{
 		SessionID: id, TurnID: progress.TurnID, Class: watcher.EvidenceControl,

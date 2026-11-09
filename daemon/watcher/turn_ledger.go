@@ -248,6 +248,14 @@ type TurnProgressResult struct {
 	Owned   bool
 	Matched bool
 	Changed bool
+	// Rejection says why an owned Session refused the report, naming the turn
+	// to use instead; the Worker sees it verbatim.
+	Rejection string
+	// Notice is told to the Worker about an accepted report, e.g. that it was
+	// recorded on the Session's current turn.
+	Notice string
+	// CurrentTurnID is the Session's delegated turn the Worker should report on.
+	CurrentTurnID string
 }
 
 // InputAdmissionState is the durable state of one delegated input

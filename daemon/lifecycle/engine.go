@@ -647,11 +647,14 @@ func (e *Engine) admittedAttemptLocked(id WorkID, token TurnToken) (AttemptIdent
 	if err != nil || len(events) == 0 {
 		return AttemptIdentity{}, false, err
 	}
-	payload, ok := events[0].Payload.(AdmittedPayload)
+	// A lost turn that proves alive is admitted again under a higher fence, so
+	// the newest admission is the execution authority.
+	newest := events[len(events)-1]
+	payload, ok := newest.Payload.(AdmittedPayload)
 	if !ok {
 		return AttemptIdentity{}, false, nil
 	}
-	return AttemptIdentity{SessionID: payload.SessionID, TurnToken: token, Fence: events[0].Fence}, true, nil
+	return AttemptIdentity{SessionID: payload.SessionID, TurnToken: token, Fence: newest.Fence}, true, nil
 }
 
 // AdmittedAttempt reads the immutable execution fence for exact late results.
@@ -766,13 +769,81 @@ func (e *Engine) CanRecoverTerminal(id WorkID, sessionID string, token TurnToken
 	return err == nil && found && identity.SessionID == sessionID && recoverableTerminal(e.works[id], token, identity.Fence)
 }
 
+// lostSourceID names the loss of one execution generation. A turn that proved
+// alive after a loss (ReviveLostAttempt) runs under a new generation, and that
+// generation's loss is a distinct fact, not a replay of the first.
+func lostSourceID(st *State, token TurnToken, generation uint64) string {
+	if st != nil && st.SeenSources[reviveSourceID(token, generation)] {
+		return fmt.Sprintf("lost:%s@%d", token, generation)
+	}
+	return "lost:" + string(token)
+}
+
+func reviveSourceID(token TurnToken, generation uint64) string {
+	return fmt.Sprintf("revive:%s@%d", token, generation)
+}
+
+// ReviveLostAttempt re-admits a turn the lifecycle released as lost when the
+// Worker itself proves it is alive by reporting on that exact turn. A loss is
+// the supervisor's inference (a stall, a lapsed lease, a missing pane); the
+// Worker's own exact report overrides it. Eligibility is the same durable
+// proof as recoverableTerminal -- the loss is the latest transition on this
+// Work -- and additionally no newer Worker submission may be waiting, so the
+// revival can never take the slot a queued follow-up is about to claim. The
+// loss review that told Brain the turn stopped is resolved in the same batch.
+func (e *Engine) ReviveLostAttempt(id WorkID, sessionID string, token TurnToken) (*State, error) {
+	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
+		if st == nil {
+			return nil, ErrUnknownWork
+		}
+		if terminal(st) {
+			return nil, ErrTerminal
+		}
+		if st.Attempt != nil {
+			return nil, fmt.Errorf("%w: turn %s is not the active turn", ErrStaleInput, token)
+		}
+		identity, found, err := e.admittedAttemptLocked(id, token)
+		if err != nil {
+			return nil, err
+		}
+		if !found || identity.SessionID != sessionID {
+			return nil, fmt.Errorf("%w: turn %s was never admitted on this Session", ErrStaleInput, token)
+		}
+		if !recoverableTerminal(st, token, identity.Fence) {
+			return nil, fmt.Errorf("%w: turn %s was not released as lost, or execution moved on after it", ErrStaleInput, token)
+		}
+		own := st.AdmissionByToken(token)
+		for _, other := range st.Admissions {
+			if other == nil || other.TurnToken == token || other.ClaimToken != "" {
+				continue
+			}
+			if (own == nil || other.PreparedSeq > own.PreparedSeq) &&
+				(other.Status == AdmissionPrepared || other.Status == AdmissionAmbiguous) {
+				return nil, fmt.Errorf("%w: a newer prompt %s is waiting to be admitted", ErrAttemptActive, other.TurnToken)
+			}
+		}
+		fence := st.Fence + 1
+		var events []Event
+		if st.Review != nil && st.Review.Ref == string(token) &&
+			(st.Review.Reason == "turn_lost" || st.Review.Reason == "lease_expired") {
+			events = append(events, Event{WorkID: id, Kind: KReviewResolved,
+				SourceID: fmt.Sprintf("revive-resolve:%s@%d", token, fence), At: now,
+				Payload: ReviewResolvedPayload{EventID: st.Review.EventID, Disposition: DispositionContinue}})
+		}
+		return append(events, Event{WorkID: id, Kind: KTurnAdmitted, TurnToken: token, Fence: fence,
+			SourceID: reviveSourceID(token, fence), At: now,
+			Payload: AdmittedPayload{SessionID: sessionID, Delegated: true}}), nil
+	})
+}
+
 // ReportTurnLost releases an Attempt after evidence loss or lease escalation.
 func (e *Engine) ReportTurnLost(id WorkID, attempt AttemptIdentity, reason string) (*State, error) {
 	return e.dispatch(id, func(st *State, now time.Time) ([]Event, error) {
 		if st == nil {
 			return nil, ErrUnknownWork
 		}
-		if st.SeenSources["lost:"+string(attempt.TurnToken)] {
+		source := lostSourceID(st, attempt.TurnToken, attempt.Fence)
+		if st.SeenSources[source] {
 			return nil, nil // already settled: idempotent no-op
 		}
 		if !currentAttempt(st, attempt) {
@@ -780,7 +851,7 @@ func (e *Engine) ReportTurnLost(id WorkID, attempt AttemptIdentity, reason strin
 		}
 		return []Event{{
 			WorkID: id, Kind: KTurnLost, TurnToken: attempt.TurnToken, Fence: attempt.Fence,
-			SourceID: "lost:" + string(attempt.TurnToken), At: now,
+			SourceID: source, At: now,
 			Payload: LostPayload{Reason: reason},
 		}}, nil
 	})
@@ -1258,7 +1329,7 @@ func (e *Engine) Sweep() error {
 				if !now.Before(st.Attempt.LeaseDeadline.Add(LostGrace)) {
 					events = append(events, Event{
 						WorkID: id, Kind: KTurnLost, TurnToken: attempt.TurnToken, Fence: st.Attempt.Generation,
-						SourceID: "lost:" + string(attempt.TurnToken), At: now,
+						SourceID: lostSourceID(st, attempt.TurnToken, st.Attempt.Generation), At: now,
 						Payload: LostPayload{Reason: "lease_expired_escalation"},
 					})
 				}
