@@ -15,7 +15,6 @@ import (
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/sessionhost"
-	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 // Mewla 0.3 runs every Session in the session host. Sessions an earlier Mewla
@@ -31,6 +30,10 @@ type TmuxMove struct {
 	// Env is the program's whole environment.
 	Env []string
 	Cwd string
+	// ProcessID is the agent's process in tmux. It and the pane's own process
+	// must end before the agent starts again; helpers it started may outlive
+	// the pane (a Codex app-server can) and are left alone.
+	ProcessID int
 }
 
 // tmuxMoveExitWait bounds the wait for the program to end in tmux before it
@@ -139,7 +142,7 @@ func (w *Watcher) MoveToHost(id string, move TmuxMove) error {
 		if err != nil {
 			return fmt.Errorf("read the input receipts of %s: %w", id, err)
 		}
-		processes := append([]int{pane.panePID}, workerproc.Descendants(pane.panePID)...)
+		processes := []int{pane.panePID, move.ProcessID}
 		if err := c.tmux.kill(id); err != nil {
 			return err
 		}
