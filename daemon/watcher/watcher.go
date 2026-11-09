@@ -1146,6 +1146,20 @@ func (w *Watcher) GetWorker(id string) *classifier.Worker {
 // terminal states then share the one canonical reducer. Markerless and
 // pre-contract Sessions retain their existing projection behavior.
 func (w *Watcher) UpdateWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, error) {
+	worker, _, err := w.ReportWorkerProgress(id, progress)
+	return worker, err
+}
+
+// ReportWorkerProgress is UpdateWorkerProgress plus the notice the Worker must
+// be told about an accepted report (for example that it was recorded on the
+// Session's current turn rather than the superseded one it named).
+func (w *Watcher) ReportWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, string, error) {
+	notice := ""
+	worker, err := w.updateWorkerProgress(id, progress, &notice)
+	return worker, notice, err
+}
+
+func (w *Watcher) updateWorkerProgress(id string, progress classifier.WorkerProgress, notice *string) (*classifier.Worker, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return nil, fmt.Errorf("missing agent id")
@@ -1170,10 +1184,16 @@ func (w *Watcher) UpdateWorkerProgress(id string, progress classifier.WorkerProg
 			if result.Owned {
 				signalOwned = true
 				if !result.Matched {
-					if strings.TrimSpace(progress.TurnID) == "" {
-						return nil, fmt.Errorf("turn identity is required for delegated progress")
+					if result.Rejection != "" {
+						return nil, errors.New(result.Rejection)
 					}
-					return nil, fmt.Errorf("turn identity does not match the current delegated prompt")
+					if strings.TrimSpace(progress.TurnID) == "" {
+						return nil, fmt.Errorf("turn identity is required for delegated progress: pass --turn-id from your latest delegated turn contract")
+					}
+					return nil, fmt.Errorf("turn identity %s does not match the current delegated prompt", progress.TurnID)
+				}
+				if notice != nil {
+					*notice = result.Notice
 				}
 				turn = result.Turn
 				hasCurrentTurn = true

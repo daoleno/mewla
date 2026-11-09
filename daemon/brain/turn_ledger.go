@@ -1482,10 +1482,84 @@ func (s *Store) ReassertLiveTurnOwnership(workID, sessionID, turnID string) (Wor
 // delegated submission, this promotes that exact candidate to Accepted and
 // resolves the submission in memory. Exact terminal evidence after loss uses
 // the same canonical result path; it must still name the latest Session Turn.
-func (s *Store) prepareDelegatedSignalTurnLocked(database *presentationDatabase, fact watcher.TurnFact, now time.Time) error {
+func (s *Store) prepareDelegatedSignalTurnLocked(database *presentationDatabase, fact *watcher.TurnFact, now time.Time) (delegatedPrepOutcome, error) {
+	var outcome delegatedPrepOutcome
 	if database == nil {
-		return errNoDelegatedSignalContract
+		return outcome, errNoDelegatedSignalContract
 	}
+	original := fact.TurnID
+	err := s.prepareDelegatedSignalTurnOnce(database, fact, now, &outcome)
+	var rejection *delegatedTurnRejection
+	if errors.As(err, &rejection) && rejection.redirect && rejection.currentTurn != "" && fact.Kind == "attention" {
+		// An older turn of the same Session asked for attention while a newer
+		// turn owns the Work. The Worker is alive and the ask is real: record
+		// it on the turn that owns execution and tell the Worker which turn ID
+		// to use from now on, rather than dropping an ask on a stale ID. Only
+		// asks are redirected -- they add a request and cannot clear one. A
+		// stale heartbeat would clear the newer turn's blocked state and a
+		// stale terminal would settle it, so those are refused (loudly).
+		fact.TurnID = rejection.currentTurn
+		if err = s.prepareDelegatedSignalTurnOnce(database, fact, now, &outcome); err != nil {
+			fact.TurnID = original
+			return outcome, err
+		}
+		outcome.notice = fmt.Sprintf("Turn %s was superseded by turn %s; this report was recorded on %s. Use --turn-id %s from now on.",
+			original, rejection.currentTurn, rejection.currentTurn, rejection.currentTurn)
+	}
+	return outcome, err
+}
+
+// delegatedPrepOutcome carries what the Worker must be told about an accepted
+// report beyond the turn it landed on.
+type delegatedPrepOutcome struct {
+	notice  string
+	revived bool
+}
+
+// delegatedTurnRejection is a refused delegated progress report. It says why
+// and which turn ID the Worker should report on instead, so a rejection is
+// never a bare "does not match".
+type delegatedTurnRejection struct {
+	message     string
+	currentTurn string
+	// redirect marks currentTurn as the active Attempt of this Session on the
+	// same Work: a non-terminal report may be recorded there.
+	redirect bool
+}
+
+func (r *delegatedTurnRejection) Error() string        { return r.message }
+func (r *delegatedTurnRejection) Is(target error) bool { return target == errDelegatedTurnMismatch }
+
+func (s *Store) rejectDelegatedTurn(fact *watcher.TurnFact, currentTurn string, redirect bool, why string) error {
+	message := fmt.Sprintf("progress report refused: turn %s %s.", fact.TurnID, why)
+	if fact.TurnID == "" {
+		message = "progress report refused: no --turn-id was given for a Session that runs delegated prompts."
+	}
+	if currentTurn != "" {
+		message += fmt.Sprintf(" The Session's current delegated turn is %s: report with --turn-id %s.", currentTurn, currentTurn)
+	} else {
+		message += " Brain has no active delegated turn on this Session, so nothing was recorded; state the ask in your final reply and wait for Brain's next prompt."
+	}
+	return &delegatedTurnRejection{message: message, currentTurn: currentTurn, redirect: redirect}
+}
+
+// latestSignalTurn names the newest delegated signal prompt sent to a Session.
+func (s *Store) latestSignalTurn(sessionID string) string {
+	var latest string
+	var latestSeq uint64
+	for _, candidate := range s.fsm.ListViews() {
+		for _, a := range candidate.Admissions {
+			if a != nil && a.SessionID == sessionID && a.SignalProtocol && a.ClaimToken == "" &&
+				a.Status != lifecycle.AdmissionAborted && a.Status != lifecycle.AdmissionRetired &&
+				(latest == "" || a.PreparedSeq > latestSeq) {
+				latest, latestSeq = string(a.TurnToken), a.PreparedSeq
+			}
+		}
+	}
+	return latest
+}
+
+func (s *Store) prepareDelegatedSignalTurnOnce(database *presentationDatabase, fact *watcher.TurnFact, now time.Time, outcome *delegatedPrepOutcome) error {
 	var state *lifecycle.State
 	var admission *lifecycle.AdmissionState
 	if candidate, found := s.fsm.Find(func(candidate *lifecycle.State) bool {
@@ -1495,17 +1569,14 @@ func (s *Store) prepareDelegatedSignalTurnLocked(database *presentationDatabase,
 		state, admission = candidate, candidate.AdmissionByToken(lifecycle.TurnToken(fact.TurnID))
 	}
 	if state == nil || admission == nil {
-		for _, candidate := range s.fsm.ListViews() {
-			for _, a := range candidate.Admissions {
-				if a != nil && a.SessionID == fact.SessionID && a.SignalProtocol && a.ClaimToken == "" {
-					return errDelegatedTurnMismatch
-				}
-			}
+		if latest := s.latestSignalTurn(fact.SessionID); latest != "" {
+			return s.rejectDelegatedTurn(fact, latest, false, "is not a delegated prompt sent to this Session")
 		}
 		return errNoDelegatedSignalContract
 	}
+	token := lifecycle.TurnToken(fact.TurnID)
 	if fact.At.Before(admission.AttemptedAt) {
-		return errDelegatedTurnMismatch
+		return s.rejectDelegatedTurn(fact, s.latestSignalTurn(fact.SessionID), false, "was reported before its prompt was sent")
 	}
 	if admission.Status == lifecycle.AdmissionPrepared || admission.Status == lifecycle.AdmissionAmbiguous {
 		next, err := s.fsm.AcceptAdmissionBySignal(state.ID, admission.TurnToken, admission.SessionID)
@@ -1514,24 +1585,38 @@ func (s *Store) prepareDelegatedSignalTurnLocked(database *presentationDatabase,
 		}
 		state, admission = next, next.AdmissionByToken(admission.TurnToken)
 	}
-	if admission.ResultTurnToken != lifecycle.TurnToken(fact.TurnID) {
-		return errDelegatedTurnMismatch
+	if admission.ResultTurnToken != token {
+		return s.rejectDelegatedTurn(fact, s.latestSignalTurn(fact.SessionID), false, "was never accepted by the provider")
 	}
 	activeAttempt := state.Attempt != nil && state.Attempt.SessionID == fact.SessionID &&
-		state.Attempt.TurnToken == lifecycle.TurnToken(fact.TurnID)
+		state.Attempt.TurnToken == token
 	lateTerminal := state.Attempt == nil && (fact.Kind == "done" || fact.Kind == "failed") &&
-		s.fsm.CanRecoverTerminal(state.ID, fact.SessionID, lifecycle.TurnToken(fact.TurnID))
+		s.fsm.CanRecoverTerminal(state.ID, fact.SessionID, token)
 	current, currentFound := currentTurnForSession(*database, fact.SessionID)
 	duplicateTerminal := state.Attempt == nil && (fact.Kind == "done" || fact.Kind == "failed") &&
 		currentFound && current.TurnID == fact.TurnID && current.SignalProtocol &&
 		(current.Status == watcher.TurnDone || current.Status == watcher.TurnFailed)
+	if !activeAttempt && !lateTerminal && !duplicateTerminal && state.Attempt == nil &&
+		(fact.Kind == "running" || fact.Kind == "attention") {
+		// The supervisor released this turn as lost (a stall, a lapsed lease),
+		// but the Worker is reporting on it: it is alive. The Worker's own exact
+		// report overrides the inference and the turn resumes.
+		revived, err := s.fsm.ReviveLostAttempt(state.ID, fact.SessionID, token)
+		switch {
+		case err == nil:
+			state, activeAttempt, outcome.revived = revived, true, true
+		case errors.Is(err, lifecycle.ErrAttemptActive):
+			return s.rejectDelegatedTurn(fact, s.latestSignalTurn(fact.SessionID), false,
+				"was released and Brain has since sent a newer prompt that has not started yet")
+		}
+	}
 	if !activeAttempt && !lateTerminal && !duplicateTerminal {
-		return errDelegatedTurnMismatch
+		return s.explainInactiveTurn(state, fact)
 	}
 	if lateTerminal {
 		if current, found := currentTurnForSession(*database, fact.SessionID); !found ||
 			current.TurnID != fact.TurnID || !current.SignalProtocol {
-			return errDelegatedTurnMismatch
+			return s.rejectDelegatedTurn(fact, s.latestSignalTurn(fact.SessionID), false, "is no longer the Session's current turn")
 		}
 	}
 	if err := s.fsmSyncWorkLocked(database, string(state.ID), now); err != nil {
@@ -1553,6 +1638,23 @@ func (s *Store) prepareDelegatedSignalTurnLocked(database *presentationDatabase,
 		SignalProtocol: true, LeaseDeadline: now.Add(turnLeaseGrace).UTC(), UpdatedAt: now,
 	})
 	return nil
+}
+
+// explainInactiveTurn builds the rejection for a report on a turn that does
+// not own execution, naming the real reason and the turn to use.
+func (s *Store) explainInactiveTurn(state *lifecycle.State, fact *watcher.TurnFact) error {
+	switch {
+	case state.Status == lifecycle.StatusDone || state.Status == lifecycle.StatusCancelled:
+		return s.rejectDelegatedTurn(fact, "", false, fmt.Sprintf("belongs to Work that is already %s", state.Status))
+	case state.Attempt != nil && state.Attempt.SessionID == fact.SessionID:
+		current := string(state.Attempt.TurnToken)
+		return s.rejectDelegatedTurn(fact, current, true, "was superseded by a newer prompt")
+	case state.Attempt != nil:
+		return s.rejectDelegatedTurn(fact, "", false, "belongs to Work that another Session now owns")
+	default:
+		return s.rejectDelegatedTurn(fact, s.latestSignalTurn(fact.SessionID), false,
+			"already ended (reported done/failed, or Brain closed it) and cannot be resumed by a "+fact.Kind+" report")
+	}
 }
 
 // ApplyTurnFact is the single canonical reducer. Under one lock and one
@@ -1579,10 +1681,14 @@ func (s *Store) ApplyTurnFact(fact watcher.TurnFact) (watcher.TurnSnapshot, bool
 // matching signal races provider confirmation, the pending submission is
 // promoted and the fact is reduced in that same write.
 func (s *Store) ApplyDelegatedTurnProgress(fact watcher.TurnFact) (watcher.TurnProgressResult, error) {
-	snapshot, changed, err := s.applyTurnFact(fact, true)
+	var outcome delegatedPrepOutcome
+	snapshot, changed, err := s.applyTurnFactOutcome(fact, true, &outcome)
+	var rejection *delegatedTurnRejection
 	switch {
 	case errors.Is(err, errNoDelegatedSignalContract):
 		return watcher.TurnProgressResult{}, nil
+	case errors.As(err, &rejection):
+		return watcher.TurnProgressResult{Owned: true, Rejection: rejection.message, CurrentTurnID: rejection.currentTurn}, nil
 	case errors.Is(err, errDelegatedTurnMismatch):
 		return watcher.TurnProgressResult{Owned: true}, nil
 	case err != nil:
@@ -1590,11 +1696,16 @@ func (s *Store) ApplyDelegatedTurnProgress(fact watcher.TurnFact) (watcher.TurnP
 	default:
 		return watcher.TurnProgressResult{
 			Turn: snapshot, Owned: true, Matched: true, Changed: changed,
+			Notice: outcome.notice, CurrentTurnID: snapshot.TurnID,
 		}, nil
 	}
 }
 
 func (s *Store) applyTurnFact(fact watcher.TurnFact, delegatedSignal bool) (watcher.TurnSnapshot, bool, error) {
+	return s.applyTurnFactOutcome(fact, delegatedSignal, nil)
+}
+
+func (s *Store) applyTurnFactOutcome(fact watcher.TurnFact, delegatedSignal bool, outcome *delegatedPrepOutcome) (watcher.TurnSnapshot, bool, error) {
 	if s == nil {
 		return watcher.TurnSnapshot{}, false, fmt.Errorf("brain store is not configured")
 	}
@@ -1620,12 +1731,18 @@ func (s *Store) applyTurnFact(fact watcher.TurnFact, delegatedSignal bool) (watc
 	if err != nil {
 		return watcher.TurnSnapshot{}, false, err
 	}
+	revived := false
 	if delegatedSignal {
 		if fact.Class != watcher.EvidenceControl {
 			return watcher.TurnSnapshot{}, false, fmt.Errorf("delegated progress requires Control evidence")
 		}
-		if prepareErr := s.prepareDelegatedSignalTurnLocked(&database, fact, now); prepareErr != nil {
+		prepared, prepareErr := s.prepareDelegatedSignalTurnLocked(&database, &fact, now)
+		if prepareErr != nil {
 			return watcher.TurnSnapshot{}, false, prepareErr
+		}
+		revived = prepared.revived
+		if outcome != nil {
+			*outcome = prepared
 		}
 	}
 	turnIndex := -1
@@ -1637,6 +1754,11 @@ func (s *Store) applyTurnFact(fact watcher.TurnFact, delegatedSignal bool) (watc
 		}
 	}
 	if turnIndex < 0 {
+		if delegatedSignal {
+			// Identity admission just ensured the row; an exact Worker report
+			// is never dropped without telling the Worker.
+			return watcher.TurnSnapshot{}, false, s.rejectDelegatedTurn(&fact, s.latestSignalTurn(fact.SessionID), false, "has no turn record")
+		}
 		// The fact targets a turn that is not the current (or any) ledger
 		// record: per-turn identity means it is ignored, never applied to a
 		// different turn.
@@ -1650,16 +1772,29 @@ func (s *Store) applyTurnFact(fact watcher.TurnFact, delegatedSignal bool) (watc
 		// reconciliation consults the read model.
 		attemptState, attemptSet := s.fsmWorkByAttemptSession(fact.SessionID)
 		if attemptSet && attemptState.Attempt != nil && string(attemptState.Attempt.TurnToken) != fact.TurnID {
+			if delegatedSignal {
+				return watcher.TurnSnapshot{}, false, s.rejectDelegatedTurn(&fact, string(attemptState.Attempt.TurnToken), false, "was superseded by a newer prompt")
+			}
 			return watcher.TurnSnapshot{}, false, nil
 		}
 		if !attemptSet {
 			current, currentSet := currentTurnForSession(database, fact.SessionID)
 			if currentSet && current.TurnID != fact.TurnID {
+				if delegatedSignal {
+					return watcher.TurnSnapshot{}, false, s.rejectDelegatedTurn(&fact, current.TurnID, false, "is no longer the Session's current turn")
+				}
 				return watcher.TurnSnapshot{}, false, nil
 			}
 		}
 	}
 	turn := database.BrainTurns[turnIndex]
+	reawakened := false
+	if revived && turn.Status == watcher.TurnUnknown {
+		// The lifecycle released this turn as lost and the Worker's own report
+		// resumed it: the provisional Unknown row follows the canonical state.
+		turn.Status, turn.Attention, turn.SettledAt = watcher.TurnRunning, "", nil
+		reawakened = true
+	}
 	for _, recorded := range turn.Facts {
 		if recorded.FactID == factID {
 			// Replay / reorder / restart re-read: identical deterministic
@@ -1670,6 +1805,9 @@ func (s *Store) applyTurnFact(fact watcher.TurnFact, delegatedSignal bool) (watc
 	mutation, reduceErr := reduceTurnFact(&turn, fact, now)
 	if reduceErr != nil {
 		return watcher.TurnSnapshot{}, false, reduceErr
+	}
+	if reawakened {
+		mutation.changed = true
 	}
 	if !mutation.changed && mutation.eventKind == "" {
 		return turn.snapshot(), false, nil

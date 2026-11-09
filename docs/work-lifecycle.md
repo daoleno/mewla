@@ -155,6 +155,22 @@ matched the Turn and every later provider fact stayed unbound.
 - Brain receives that review with the stall summary. A repeated escalation of
   the same Turn changes nothing.
 - A later exact terminal report can still upgrade the loss.
+- So can a later exact `running` or ask (`attention`) report: a loss is the
+  supervisor's inference, and the Worker's own report on that Turn proves it
+  is alive. The Turn is re-admitted under a new generation, the loss review is
+  resolved as `continue`, and the ask opens its own review, so a Worker that
+  kept working after a stall still reaches Brain. If the Turn stops again, that
+  is a new loss and a new review. A newer prompt queued behind the loss keeps
+  the slot; the old Turn's report is then refused.
+
+**Refused progress reports.** A `worker progress` call that cannot be applied
+fails loudly, never silently. The error names the reason (the turn was
+superseded, the Work is already done, the prompt is not one sent to this
+Session, the turn ended) and the turn ID to use instead (`--turn-id <current>`).
+An ask (`attention`) that names an older turn of the same Session is recorded on
+the current turn, and the response tells the Worker to switch IDs. Heartbeats
+and terminal reports from a superseded turn are refused, because they would
+clear or settle the newer turn.
 
 **Stale prompt fence.** A delivered delegated prompt whose progress signal
 never arrives stays `prepared` and would fence every later prompt ("admission …

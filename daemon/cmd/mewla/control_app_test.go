@@ -243,6 +243,11 @@ func (w *fakeControlWatcher) CreateSession(_ string, opts watcher.CreateSessionO
 	return id, nil
 }
 
+func (w *fakeControlWatcher) ReportWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, string, error) {
+	worker, err := w.UpdateWorkerProgress(id, progress)
+	return worker, "", err
+}
+
 func (w *fakeControlWatcher) UpdateWorkerProgress(id string, progress classifier.WorkerProgress) (*classifier.Worker, error) {
 	worker := w.workers[id]
 	if worker == nil {
