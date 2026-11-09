@@ -1478,6 +1478,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-timer.C:
 			w.keepPrivateTmuxDir()
+			w.releaseEndedLeftInTmux(false)
 			w.poll()
 			timer.Reset(w.screens.nextPollDelay(w.pollInterval))
 		}
@@ -3895,6 +3896,8 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 			opts.ExecutorID = resolve(opts.Command)
 		}
 	}
+	// Decided on the command as asked for, before tools and adapters wrap it.
+	agent := sessionRunsAnAgent(opts)
 	backend := w.sessions()
 	placement, err := backend.place(preferredTarget, opts.Detached, createdSessionName(opts))
 	if err != nil {
@@ -3990,6 +3993,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		command: shellCommand,
 		env:     workerLaunchEnvironment(opts),
 		labels:  createdSessionLabels(opts),
+		agent:   agent,
 	})
 	if err != nil {
 		return "", err
@@ -4074,6 +4078,13 @@ func createdSessionName(opts CreateSessionOptions) string {
 
 // createdSessionLabels is what a created Session records about itself; the
 // backend keeps it for as long as the Session lives.
+// sessionRunsAnAgent: Brain, a Worker, or an agent a person launched, rather
+// than a person's own shell.
+func sessionRunsAnAgent(opts CreateSessionOptions) bool {
+	return opts.ProgressEnv || opts.Hidden || opts.Delegated ||
+		strings.TrimSpace(opts.ExecutorID) != "" || workerProviderFamily(opts.Command) != ""
+}
+
 func createdSessionLabels(opts CreateSessionOptions) sessionLabels {
 	labels := sessionLabels{
 		hidden:       opts.Hidden,
@@ -4425,6 +4436,12 @@ func (w *Watcher) WorkerTurnActive(id string) bool {
 func (w *Watcher) KillSession(sessionID string) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
+		return nil
+	}
+	if w.isLeftInTmux(sessionID) {
+		// Left in tmux, no longer Mewla's: ending it for Mewla lets go of it.
+		// Its programs, lease and TempDir stay until its pane ends
+		// (releaseEndedLeftInTmux).
 		return nil
 	}
 	manager := w.resourceManager()

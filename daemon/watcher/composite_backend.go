@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 )
@@ -19,7 +20,10 @@ type compositeBackend struct {
 
 	// left are the tmux Sessions that stay in tmux, no longer Mewla's.
 	leftMu sync.Mutex
-	left   map[string]string // id -> why it stayed
+	left   map[string]leftInTmux
+	// leftChecked is when tmux was last asked whether a left Session whose
+	// resources are still held has ended.
+	leftChecked time.Time
 }
 
 func (c *compositeBackend) of(id string) sessionBackend {

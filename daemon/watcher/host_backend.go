@@ -590,17 +590,20 @@ func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[stri
 	for key, value := range extra {
 		labels[key] = value
 	}
-	// The host adds MEWLA_SESSION_ID, which the Worker id comes from. No
-	// Session runs without the daemon's private TMUX_TMPDIR: a plain `tmux`
-	// inside it (`tmux kill-server` too) must never reach the user's default
-	// server, and a Session from tmux brings the TMUX_TMPDIR it had there.
-	tmuxDir, err := b.w.privateTmuxDir()
-	if err != nil {
-		return fmt.Errorf("start Worker Session: %w", err)
-	}
+	// The host adds MEWLA_SESSION_ID, which the Worker id comes from. An
+	// agent never runs without the daemon's private TMUX_TMPDIR: a plain
+	// `tmux` in it (`tmux kill-server` too) must never reach the person's own
+	// server, and an agent from tmux brings the TMUX_TMPDIR it had there. A
+	// person's own shell keeps their environment and their tmux.
 	env := spec.env
-	if tmuxDir != "" {
-		env = withEnv(env, "TMUX_TMPDIR", tmuxDir)
+	if spec.agent {
+		tmuxDir, err := b.w.privateTmuxDir()
+		if err != nil {
+			return fmt.Errorf("start Worker Session: %w", err)
+		}
+		if tmuxDir != "" {
+			env = withEnv(env, "TMUX_TMPDIR", tmuxDir)
+		}
 	}
 	ctx, cancel := hostCtx()
 	defer cancel()

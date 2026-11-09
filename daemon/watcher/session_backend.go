@@ -106,6 +106,11 @@ type backendCreateSpec struct {
 	command string   // the shell command line the Session runs
 	env     []string // KEY=value entries for the Session's environment
 	labels  sessionLabels
+	// agent says the Session runs an agent (Brain, a Worker, an agent the
+	// person launched). Its plain tmux stays in the daemon's private
+	// TMUX_TMPDIR; a person's own shell keeps their environment and reaches
+	// their own tmux.
+	agent bool
 }
 
 // sessionLabels is what Mewla records on a Session it creates. The backend
