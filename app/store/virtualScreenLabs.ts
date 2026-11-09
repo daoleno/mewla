@@ -22,9 +22,19 @@ interface Snapshot {
   error: string | null;
   /** A write is in flight. */
   busy: boolean;
+  /** What the in-flight write is turning it to; null when none is. */
+  target: boolean | null;
 }
 
-const EMPTY: Snapshot = { server: null, enabled: null, error: null, busy: false };
+const EMPTY: Snapshot = { server: null, enabled: null, error: null, busy: false, target: null };
+
+/** How long a failed change stays on screen before it is let go. */
+let errorMs = 6_000;
+
+/** Test seam: how long a failed change stays shown. */
+export function setVirtualScreenErrorMs(ms: number) {
+  errorMs = ms;
+}
 
 /**
  * One answer per app, shared by Settings → Labs and Screen so a change in one
@@ -71,10 +81,10 @@ export async function readVirtualScreenLabs(server: StoredServer) {
   if (snapshot.server !== server.id) publish({ ...EMPTY, server: server.id });
   try {
     const enabled = await request(server);
-    if (token === reads) publish({ server: server.id, enabled, error: null, busy: false });
+    if (token === reads) publish({ server: server.id, enabled, error: null, busy: false, target: null });
   } catch (error) {
     // A computer that cannot answer is not "off": say so and let the person retry.
-    if (token === reads) publish({ server: server.id, enabled: snapshot.server === server.id ? snapshot.enabled : null, error: failure(error, server), busy: false });
+    if (token === reads) publish({ server: server.id, enabled: snapshot.server === server.id ? snapshot.enabled : null, error: failure(error, server), busy: false, target: null });
   } finally {
     if (reading === server.id) reading = null;
   }
@@ -83,12 +93,20 @@ export async function readVirtualScreenLabs(server: StoredServer) {
 export async function writeVirtualScreenLabs(server: StoredServer, on: boolean, isCurrent: () => boolean) {
   const token = ++reads;
   reading = null;
-  publish({ server: server.id, enabled: snapshot.server === server.id ? snapshot.enabled : null, error: null, busy: true });
+  // Pending at once: the person sees the tap land while the computer answers.
+  publish({ server: server.id, enabled: snapshot.server === server.id ? snapshot.enabled : null, error: null, busy: true, target: on });
   try {
     const enabled = await request(server, on);
-    if (token === reads && isCurrent()) publish({ server: server.id, enabled, error: null, busy: false });
+    if (token === reads && isCurrent()) publish({ server: server.id, enabled, error: null, busy: false, target: null });
   } catch (error) {
-    if (token === reads && isCurrent()) publish({ server: server.id, enabled: snapshot.enabled, error: failure(error, server), busy: false });
+    if (token === reads && isCurrent()) {
+      // The switch goes back to what the computer last said, and the failure is shown briefly.
+      const message = failure(error, server);
+      publish({ server: server.id, enabled: snapshot.enabled, error: message, busy: false, target: null });
+      setTimeout(() => {
+        if (snapshot.error === message && !snapshot.busy) publish({ ...snapshot, error: null });
+      }, errorMs);
+    }
   }
 }
 
@@ -115,6 +133,8 @@ export function useVirtualScreenLabs(): {
   /** The computer has answered, so the switch shows the truth. */
   ready: boolean;
   busy: boolean;
+  /** While busy: the state the change is turning it to. */
+  target: boolean | null;
   error: string | null;
   set(on: boolean): Promise<void>;
   refresh(): void;
@@ -142,6 +162,7 @@ export function useVirtualScreenLabs(): {
     enabled: mine && state.enabled === true,
     ready: mine && state.enabled !== null,
     busy: mine && state.busy,
+    target: mine && state.busy ? state.target : null,
     error: mine ? state.error : null,
     set,
     refresh,

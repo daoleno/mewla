@@ -158,7 +158,9 @@ second copy of a control is a bug. A small exclusive choice is
 `Button` (capsule) and `IconButton`; either shows its own busy state with
 `loading`. A single-line text field is `MobileSingleLineInput`, with `framed`
 for the field box. Status tags are `StatusPill`, centred waits are
-`EmptyState busy`, in-line busy marks are `Spinner`, errors beside a form are
+`EmptyState busy`, in-line busy marks are `Spinner`, a switch whose change
+needs the computer's answer is `PendingSwitch` (a spinner from the tap until
+the answer, then the confirmed state), errors beside a form are
 `InlineNotice`, bottom sheets are `BottomSheetFrame` and centred cards
 `RisingSheet`, and an irreversible confirmation is `confirmDestructive`.
 A multi-line field is `MultilineField`, a list row is `ListRow` in a
