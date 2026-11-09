@@ -37,7 +37,7 @@ type StartOptions struct {
 func Connect(ctx context.Context, opts StartOptions) (client *Client, started bool, err error) {
 	if client, err := Dial(ctx, opts.SocketPath, opts.ClientVersion); err == nil {
 		return client, false, nil
-	} else if !hostAbsent(err) {
+	} else if !IsAbsent(err) {
 		return nil, false, err
 	}
 	exited, err := spawnHost(opts)
@@ -71,8 +71,9 @@ func Connect(ctx context.Context, opts StartOptions) (client *Client, started bo
 	}
 }
 
-// hostAbsent reports whether a dial failed because no host listens.
-func hostAbsent(err error) bool {
+// IsAbsent reports whether a dial failed because no host is there: no
+// socket, or nothing listening on it.
+func IsAbsent(err error) bool {
 	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
 }
 

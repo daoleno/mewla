@@ -26,7 +26,7 @@ func (w *Watcher) listTmuxPanes() ([]sessionPane, error) {
 	if err != nil {
 		return nil, err
 	}
-	w.screens.inventory(onSocket)
+	w.screens.inventoryOf(onSocket, isPaneID)
 	windows := make([]sessionPane, 0, len(onSocket))
 	markers, ask := w.screens.ownership(onSocket)
 	if len(ask) > 0 {

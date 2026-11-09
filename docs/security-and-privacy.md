@@ -172,6 +172,7 @@ All paths are under the state directory, `~/.mewla` by default.
 | `calendar/` | Calendar items |
 | `telegram/` | Telegram binding and delivery state; the bot token is in its own private file |
 | `worktrees/`, `t/` | Worker scratch space and temporary files |
+| `session-host/` | The session host's switch and log (see [The session host](#the-session-host)) |
 
 Plugin and Model Provider credentials are stored in private files in the state
 directory, never shown back in the app.

@@ -555,6 +555,7 @@ func (s *session) info() Info {
 	}
 	if s.alive {
 		info.Cwd = processCwd(s.ptmx, s.pid)
+		info.Command = processCommand(s.ptmx, s.pid)
 	}
 	if info.Cwd == "" {
 		info.Cwd = state.Pwd

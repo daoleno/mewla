@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
@@ -111,12 +112,33 @@ func TestBuildWindowCommandForShellWrapsCommandInInteractiveLoginShell(t *testin
 	}
 }
 
+// TestWorkerProgressEnvNamesTheSession runs the injected prefix: a session
+// host Session is named by the MEWLA_SESSION_ID the host sets, a tmux pane by
+// TMUX_PANE, also when the tmux backend blanks MEWLA_SESSION_ID.
+func TestWorkerProgressEnvNamesTheSession(t *testing.T) {
+	for _, tc := range []struct {
+		env  []string
+		want string
+	}{
+		{[]string{"MEWLA_SESSION_ID=mh-0123456789abcdef01234567", "TMUX_PANE="}, "mh-0123456789abcdef01234567"},
+		{[]string{"TMUX_PANE=%42"}, "%42"},
+		{[]string{"MEWLA_SESSION_ID=", "TMUX_PANE=%42"}, "%42"},
+	} {
+		cmd := exec.Command("/bin/sh", "-c", workerProgressEnvScript()+`; printf %s "$MEWLA_WORKER_ID"`)
+		cmd.Env = append([]string{"PATH=/usr/bin:/bin"}, tc.env...)
+		out, err := cmd.Output()
+		if err != nil || string(out) != tc.want {
+			t.Errorf("env %v: MEWLA_WORKER_ID = %q (%v), want %q", tc.env, out, err, tc.want)
+		}
+	}
+}
+
 func TestBuildWindowCommandForShellInjectsWorkerProgressEnv(t *testing.T) {
 	got := buildWindowCommandForShellWithOptions("/bin/zsh", "codex --dangerously-bypass-approvals-and-sandbox", true)
 	for _, want := range []string{
 		"MEWLA_WORKER_ID",
 		"MEWLA_WORKER_PROGRESS_CMD",
-		`MEWLA_WORKER_ID="$TMUX_PANE"`,
+		`MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"`,
 		"codex --dangerously-bypass-approvals-and-sandbox",
 	} {
 		if !strings.Contains(got, want) {

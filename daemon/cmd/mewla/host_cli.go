@@ -7,8 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
 	"github.com/daoleno/mewla/daemon/sessionhost"
+	"github.com/daoleno/mewla/daemon/watcher"
 )
 
 // errNoTerminalEngine is returned by `mewla host` in a build without
@@ -52,6 +55,9 @@ func runHostCommand(args []string, stderr io.Writer) error {
 	}
 	path, err := hostSocketPath(stateDir, socket)
 	if err != nil {
+		return err
+	}
+	if err := sessionhost.EnsureSocketDir(path); err != nil {
 		return err
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
@@ -127,6 +133,29 @@ func writeHostStatus(out io.Writer, path string, host sessionhost.Welcome, sessi
 		fmt.Fprintf(table, "%s\t%d\t%s\t%dx%d\t%s\t%s\n", info.ID, info.PID, state, info.Cols, info.Rows, info.Cwd, strings.Join(info.Argv, " "))
 	}
 	return table.Flush()
+}
+
+// configureSessionHost lets the watcher run Sessions in the session host
+// (Settings → Labs → Session host). Sessions a host already runs are seen
+// whatever the switch says; with the switch off and no host running, nothing
+// is started, created or dialed. The switch only takes effect in a build that
+// has the terminal engine, since the host runs from this binary.
+func configureSessionHost(w *watcher.Watcher, stateDir string) {
+	socket, err := sessionhost.SocketPath(stateDir)
+	if err != nil {
+		log.Printf("session host unavailable: %v", err)
+		return
+	}
+	w.SetSessionHost(watcher.SessionHostConfig{
+		SocketPath: socket,
+		Executable: watcher.ExecutablePath(),
+		StateDir:   stateDir,
+		LogPath:    filepath.Join(stateDir, "session-host", "host.log"),
+		Version:    hostVersion(),
+		Enabled: func() bool {
+			return ghosttyvt.Available() && sessionhost.LoadSettings(stateDir).Enabled
+		},
+	})
 }
 
 func hostSocketPath(stateDir, socket string) (string, error) {

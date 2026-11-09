@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -225,6 +226,13 @@ func TestSocketPathIsPrivatePerStateDir(t *testing.T) {
 	if filepath.Dir(a) != filepath.Join(runtimeDir, "mewla") || !strings.HasPrefix(filepath.Base(a), "host-") {
 		t.Fatalf("path %s is not under %s/mewla", a, runtimeDir)
 	}
+	// Computing the path creates nothing; the host makes the directory.
+	if _, err := os.Lstat(filepath.Dir(a)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("SocketPath left %s behind: %v", filepath.Dir(a), err)
+	}
+	if err := EnsureSocketDir(a); err != nil {
+		t.Fatal(err)
+	}
 	info, err := os.Stat(filepath.Dir(a))
 	if err != nil || info.Mode().Perm() != 0o700 {
 		t.Fatalf("socket dir mode = %v, %v", info.Mode().Perm(), err)
@@ -260,7 +268,8 @@ func TestSocketDirMustBePrivate(t *testing.T) {
 	if err := ownedPrivateDir(private, os.Getuid()+1); err == nil {
 		t.Fatal("a directory of another uid passed")
 	}
-	// An open XDG_RUNTIME_DIR is not used.
+	// An open XDG_RUNTIME_DIR is not used, nor an open mewla directory in
+	// a private one.
 	t.Setenv("XDG_RUNTIME_DIR", open)
 	t.Setenv("TMPDIR", open)
 	path, err := SocketPath("/state/x")
@@ -269,6 +278,20 @@ func TestSocketDirMustBePrivate(t *testing.T) {
 	}
 	if strings.HasPrefix(path, open) {
 		t.Fatalf("socket %s placed under an open directory", path)
+	}
+	if err := os.Mkdir(filepath.Join(private, "mewla"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(private, "mewla"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_RUNTIME_DIR", private)
+	t.Setenv("TMPDIR", private)
+	if path, _ := SocketPath("/state/x"); strings.HasPrefix(path, private) {
+		t.Fatalf("socket %s placed in an open mewla directory", path)
+	}
+	if err := EnsureSocketDir(filepath.Join(private, "mewla", "h.sock")); err == nil {
+		t.Fatal("EnsureSocketDir accepted an open directory")
 	}
 }
 
@@ -320,6 +343,13 @@ func TestSessionLifecycle(t *testing.T) {
 	}
 	if !info.Alive || info.PID <= 0 || info.ID != "s1" || info.Dir != dir {
 		t.Fatalf("created = %+v", info)
+	}
+	if runtime.GOOS == "linux" {
+		// The foreground process, named as tmux names it: here the shell.
+		waitFor(t, 5*time.Second, "foreground command", func() bool {
+			info, _ := c.Info(ctx, "s1")
+			return info.Command == "sh" && info.Cwd == dir
+		})
 	}
 	waitScreen(t, c, "s1", "ready s1 xterm-256color")
 	if started, err := c.Input(ctx, "s1", []InputStep{{Bytes: []byte("hello\r")}}); err != nil || !started {

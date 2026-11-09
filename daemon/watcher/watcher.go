@@ -4157,7 +4157,7 @@ func workerProgressEnvScript() string {
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
 	// target the host server.
-	return `MEWLA_WORKER_ID="$TMUX_PANE"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellquote.Quote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX; if [ -n "${MEWLA_TMUX_GUARD_DIR:-}" ]; then PATH="$MEWLA_TMUX_GUARD_DIR:$PATH"; export PATH; fi`
+	return `MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellquote.Quote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX; if [ -n "${MEWLA_TMUX_GUARD_DIR:-}" ]; then PATH="$MEWLA_TMUX_GUARD_DIR:$PATH"; export PATH; fi`
 }
 
 // ExecutablePath returns the absolute path of the currently running mewla
@@ -4208,6 +4208,9 @@ func tmuxPaneEnvironment(base []string) []string {
 		"TMUX":                 true,
 		"TMUX_PANE":            true,
 		"MEWLA_WORKER_ID":      true,
+		// The session host sets it to the Session's own id; one inherited
+		// from where the daemon runs would name another Session.
+		"MEWLA_SESSION_ID": true,
 	}
 
 	values := make(map[string]string, len(base))

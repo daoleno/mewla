@@ -19,23 +19,19 @@ import (
 // SocketPath is the host socket for a state directory:
 // <runtime>/host-<8 hex of the state dir>.sock, where <runtime> is
 // $XDG_RUNTIME_DIR/mewla on Linux and $TMPDIR/mewla on macOS when those
-// belong to this user, and <tmp>/mewla-<uid> otherwise. The directory is
-// created 0700 and must belong to this user; a directory anyone else could
-// have prepared is refused, as tmux does.
+// belong to this user, and /tmp/mewla-<uid> otherwise. It only computes the
+// path: the host makes the directory (EnsureSocketDir), so asking where a
+// host would be leaves nothing behind.
 func SocketPath(stateDir string) (string, error) {
 	absolute, err := filepath.Abs(stateDir)
 	if err != nil {
 		return "", fmt.Errorf("session host socket: %w", err)
 	}
 	digest := sha256.Sum256([]byte(filepath.Clean(absolute)))
-	dir, err := socketDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "host-"+hex.EncodeToString(digest[:4])+".sock"), nil
+	return filepath.Join(socketDir(), "host-"+hex.EncodeToString(digest[:4])+".sock"), nil
 }
 
-func socketDir() (string, error) {
+func socketDir() string {
 	uid := os.Getuid()
 	var base string
 	switch runtime.GOOS {
@@ -46,15 +42,21 @@ func socketDir() (string, error) {
 	}
 	if base != "" && filepath.IsAbs(base) && ownedPrivateDir(base, uid) == nil {
 		dir := filepath.Join(base, "mewla")
-		if err := ensurePrivateDir(dir, uid); err == nil {
-			return dir, nil
+		if _, err := os.Lstat(dir); errors.Is(err, os.ErrNotExist) || ownedPrivateDir(dir, uid) == nil {
+			return dir
 		}
 	}
-	dir := filepath.Join("/tmp", fmt.Sprintf("mewla-%d", uid))
-	if err := ensurePrivateDir(dir, uid); err != nil {
-		return "", fmt.Errorf("session host socket directory: %w", err)
+	return filepath.Join("/tmp", fmt.Sprintf("mewla-%d", uid))
+}
+
+// EnsureSocketDir makes the socket's directory 0700 when it is missing and
+// requires it to be this user's and private: a directory anyone else could
+// have prepared is refused, as tmux does.
+func EnsureSocketDir(socketPath string) error {
+	if err := ensurePrivateDir(filepath.Dir(socketPath), os.Getuid()); err != nil {
+		return fmt.Errorf("session host socket directory: %w", err)
 	}
-	return dir, nil
+	return nil
 }
 
 func ensurePrivateDir(dir string, uid int) error {
