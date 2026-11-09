@@ -295,7 +295,9 @@ grow with the size of a transcript or of the machine:
   changed, so a refresh with nothing new reads nothing. Codex's quota is asked
   of its app server (a child that reads about 100 MB to start) at most every 15
   minutes while Codex's state database changes and every hour while it does
-  not; the last answer survives a restart.
+  not; the last answer survives a restart. OpenCode's per-session usage
+  (`opencode-sessions-v1.json`) is kept too, because reading a session starts
+  an `opencode` process.
 - `/proc` is walked once per tick at most: the panes' own process trees are read
   afresh, every other process at most every 30 seconds, and an ownership
   decision (which processes a Worker owns) takes records up to 10 seconds old.
@@ -305,7 +307,7 @@ grow with the size of a transcript or of the machine:
   process started per tick is a read cost of its own. A poll does not ask tmux
   for what it just observed (a pane's generation is the digest of its id), and
   the sign-in probes of the configured agents, which start every agent CLI
-  (several MB of reads each for a Node or Bun CLI), run every 5 minutes once
+  (several MB of reads each for a Node or Bun CLI), run every 15 minutes once
   every agent is found, runnable and signed in, and every 30 seconds while one
   is missing, signed out or unsupported. An agent's version is asked once per
   build of its binary.

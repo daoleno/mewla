@@ -20,7 +20,7 @@ const hostAuthProbeTTL = 30 * time.Second
 // asking all of them again every 30 seconds was a burst of thousands of reads
 // and tens of MB for nothing. While some agent is missing, signed out or
 // unsupported a person may be fixing exactly that, and the short TTL stays.
-const hostAuthSettledTTL = 5 * time.Minute
+const hostAuthSettledTTL = 15 * time.Minute
 
 // hostProbesSettled reports whether no configured agent is waiting to be
 // installed, signed in or upgraded.
