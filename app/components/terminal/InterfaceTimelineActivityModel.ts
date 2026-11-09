@@ -65,11 +65,9 @@ export function splitActivityStatusDetail(
   };
 }
 
+/** Only a row that says so opens itself; a failed call starts collapsed like any other. */
 export function shouldAutoExpandActivity(item: ActivityTimelineItem) {
-  if (typeof item.defaultExpanded === "boolean") {
-    return item.defaultExpanded;
-  }
-  return item.tone === "failed";
+  return item.defaultExpanded === true;
 }
 
 export function expandedActivityStatusLine(

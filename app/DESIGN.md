@@ -606,7 +606,9 @@ changes that the service must approve all call it.
   in place of the old mono status word: Running and Waiting spin the arc,
   Succeeded and Passed are the Ready check, Failed is the crossed box with its
   cause ("exit 1"), Blocked is the dashed ring. "Done" and "Finished" only
-  say the call returned, so they show nothing. A failed call's output sits in
+  say the call returned, so they show nothing. A failed call is an ordinary
+  row: it starts collapsed and folds into its run of finished calls, and the
+  fold row's detail counts it ("5 steps · 1 failed"). Its output sits in
   the same neutral well as any other, in full ink
   (`splitActivityStatusDetail` in `InterfaceTimelineActivityModel.ts`).
 - **Git.** Added is green and deleted is the terminal's crimson; modified and
