@@ -19,9 +19,9 @@ import (
 
 	"github.com/daoleno/mewla/daemon/brain"
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/selfupdate"
 	"github.com/daoleno/mewla/daemon/server"
-	"golang.org/x/sys/unix"
 )
 
 // releaseBuild is "1" only in binaries built by the release script
@@ -40,7 +40,7 @@ const (
 	transientRetryAfter = 24 * time.Hour
 )
 
-// Linux only. On macOS the daemon runs from inside the signed Mewla.app;
+// Linux and Windows. On macOS the daemon runs from inside the signed Mewla.app;
 // staging next to it and swapping the binary would break the bundle's
 // signature and with it the Screen Recording and Accessibility grants. macOS
 // keeps `mewla update` until MAC-VERIFY.md has shown a safe way.
@@ -49,7 +49,7 @@ func selfUpdateSupported(version string) bool {
 		os.Getenv(selfupdate.ChildEnv) == "" &&
 		os.Getenv("MEWLA_NO_AUTOUPDATE") == "" &&
 		!strings.Contains(version, "-") &&
-		runtime.GOOS == "linux"
+		(runtime.GOOS == "linux" || runtime.GOOS == "windows")
 }
 
 // updateHandover ends the daemon so the same process can run the staged
@@ -94,6 +94,9 @@ func newDaemonUpdater(version, stateDir, addr, daemonID string, idle func() bool
 	if resolved, err := filepath.EvalSymlinks(installed); err == nil {
 		installed = resolved
 	}
+	// A Windows update moves the running executable aside; remove the
+	// copies nothing runs any more.
+	platform.SweepReplaced(installed)
 	return &daemonUpdater{
 		version: version, supported: selfUpdateSupported(version) && installDirWritable(installed), stateDir: stateDir, addr: addr, daemonID: daemonID,
 		installed: installed, newClient: selfupdate.NewClient, idle: idle, handover: handover,
@@ -104,7 +107,7 @@ func newDaemonUpdater(version, stateDir, addr, daemonID string, idle func() bool
 // installDirWritable: staging and swapping happen beside the installed binary,
 // so a root-owned install cannot update itself and must not offer to.
 func installDirWritable(installed string) bool {
-	return unix.Access(filepath.Dir(installed), unix.W_OK) == nil
+	return accessPath(filepath.Dir(installed), accW) == nil
 }
 
 func (u *daemonUpdater) Status() server.DaemonUpdateStatus {
@@ -351,5 +354,5 @@ func runUpdateHandover(h *updateHandover, args []string) error {
 			log.Printf("mewla: remember failed update: %v", err)
 		}
 	}
-	return syscall.Exec(h.Installed, append([]string{os.Args[0]}, args...), os.Environ())
+	return platform.ExecReplace(h.Installed, append([]string{os.Args[0]}, args...), os.Environ())
 }

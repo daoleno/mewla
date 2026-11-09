@@ -169,7 +169,7 @@ func (m *Manager) Handle(ctx context.Context, q Request) (Response, error) {
 		}
 		on := m.VirtualScreen()
 		c := m.backend.Capability(ctx)
-		return Response{VirtualScreen: &on, Capability: &c}, nil
+		return Response{VirtualScreen: &on, Capability: &c, VirtualScreenUnsupported: !virtualScreenSystem}, nil
 	}
 	return Response{}, errors.New("Unknown browser operation")
 }

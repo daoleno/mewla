@@ -24,12 +24,16 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 const (
 	ManifestAsset = "release-manifest.json"
 	// ArchiveBinary is the executable inside mewla-<os>-<arch>.tar.gz.
-	ArchiveBinary     = "mewla"
+	ArchiveBinary = "mewla"
+	// WindowsArchive is the Windows release: a zip holding WindowsBinary.
+	WindowsArchive    = "mewla-windows-amd64.zip"
+	WindowsBinary     = "mewla.exe"
 	ManifestSignature = "release-manifest.json.sig"
 	maxManifestSize   = 1 << 20
 	maxSignatureSize  = 1 << 10
@@ -110,6 +114,8 @@ func PlatformArtifactName(goos, goarch string) (string, error) {
 		return "mewla-linux-arm64.tar.gz", nil
 	case "darwin/arm64":
 		return "mewla-darwin-arm64.tar.gz", nil
+	case "windows/amd64":
+		return WindowsArchive, nil
 	default:
 		return "", fmt.Errorf("self-update is not supported on %s/%s", goos, goarch)
 	}
@@ -309,6 +315,9 @@ func manifestArtifact(manifest Manifest, goos, goarch, name string) (Artifact, b
 }
 
 func extractBinary(archive []byte) ([]byte, error) {
+	if bytes.HasPrefix(archive, []byte("PK\x03\x04")) {
+		return extractZipBinary(archive)
+	}
 	gz, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
 		return nil, fmt.Errorf("open daemon archive: %w", err)
@@ -344,7 +353,9 @@ func extractBinary(archive []byte) ([]byte, error) {
 	return binary, nil
 }
 
-var renameFile = os.Rename
+// renameFile moves the update over the executable. On Windows the running
+// executable is moved aside first (platform.ReplaceFile).
+var renameFile = platform.ReplaceFile
 
 func ReplaceExecutable(executable string, binary []byte) error {
 	target, err := filepath.EvalSymlinks(executable)

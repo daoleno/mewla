@@ -15,6 +15,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // ErrDirSync marks a failure after the rename: the new content has replaced
@@ -133,12 +135,6 @@ func write(path string, perm os.FileMode, options Options, fill func(*os.File) e
 	return nil
 }
 
-// SyncDir fsyncs a directory so a rename or create inside it is durable.
-func SyncDir(dir string) error {
-	directory, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer directory.Close()
-	return directory.Sync()
-}
+// SyncDir makes a rename or create inside dir durable: an fsync of the
+// directory on Unix, nothing on Windows (see platform.SyncDir).
+func SyncDir(dir string) error { return platform.SyncDir(dir) }

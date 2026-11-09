@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
@@ -21,9 +20,7 @@ type usageFileStamp struct {
 
 func usageStamp(info os.FileInfo) usageFileStamp {
 	s := usageFileStamp{Size: info.Size(), Modified: info.ModTime()}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok {
-		s.Identity = fmt.Sprintf("%d:%d", st.Dev, st.Ino)
-	}
+	s.Identity = fileIdentity(info)
 	return s
 }
 

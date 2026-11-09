@@ -243,6 +243,37 @@ jobs:
             -PreactNativeArchitectures=arm64-v8a -Pexpo.useLegacyPackaging=true) > "$RUNNER_TEMP/android-deps.txt"
           bun run licenses:generate --maven "$RUNNER_TEMP/android-deps.txt"
 
+  windows:
+    name: Windows (daemon build, platform tests, install.ps1)
+    runs-on: windows-latest
+    timeout-minutes: 25
+    # Native Windows is new and not shipped yet: until it is, a red Windows
+    # job is reported but does not fail the run.
+    continue-on-error: true
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: daemon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: daemon/go.mod
+          cache-dependency-path: daemon/go.sum
+      - name: Build every package
+        run: go build ./...
+      - name: Vet the Windows platform layer
+        run: go vet ./platform ./control ./sqlitedb ./selfupdate
+      - name: Test the Windows platform layer
+        run: go test -count=1 ./platform ./control ./sqlitedb ./selfupdate
+      - name: Build mewla.exe
+        run: go build -o "$env:RUNNER_TEMP\mewla.exe" ./cmd/mewla
+      - name: Test install.ps1 offline (Windows PowerShell 5.1)
+        working-directory: .
+        shell: powershell
+        run: .\scripts\tests\install_ps1_test.ps1 -Binary "$env:RUNNER_TEMP\mewla.exe"
+
   native-contract:
     name: Native terminal contract
     runs-on: ubuntu-latest

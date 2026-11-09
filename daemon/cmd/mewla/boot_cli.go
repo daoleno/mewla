@@ -18,13 +18,11 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
 	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/statedir"
-	"golang.org/x/sys/unix"
 )
 
 // `mewla boot` is the single optional boot-persistence entry for the SAME runtime
@@ -107,8 +105,11 @@ func runBootCommand(args []string, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if bootGOOS == "darwin" {
+		switch bootGOOS {
+		case "darwin":
 			return bootLaunchdInstall(config, execBootRunner{}, os.Stdout)
+		case "windows":
+			return bootTaskInstall(config, execBootRunner{}, os.Stdout)
 		}
 		return bootInstall(config, execBootRunner{}, os.Stdout)
 	case "status":
@@ -119,8 +120,11 @@ func runBootCommand(args []string, stderr io.Writer) error {
 			printBootUsage(stderr)
 			return flag.ErrHelp
 		}
-		if bootGOOS == "darwin" {
+		switch bootGOOS {
+		case "darwin":
 			return bootLaunchdStatus(execBootRunner{}, os.Stdout)
+		case "windows":
+			return bootTaskStatus(execBootRunner{}, os.Stdout)
 		}
 		return bootStatus(execBootRunner{}, os.Stdout)
 	case "uninstall":
@@ -131,8 +135,11 @@ func runBootCommand(args []string, stderr io.Writer) error {
 			printBootUsage(stderr)
 			return flag.ErrHelp
 		}
-		if bootGOOS == "darwin" {
+		switch bootGOOS {
+		case "darwin":
 			return bootLaunchdUninstall(execBootRunner{}, os.Stdout)
+		case "windows":
+			return bootTaskUninstall(execBootRunner{}, os.Stdout)
 		}
 		return bootUninstall(execBootRunner{}, os.Stdout)
 	default:
@@ -145,7 +152,7 @@ func printBootUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  install    Start this same mewla runtime at boot: a systemd user unit on Linux,")
-	fmt.Fprintln(w, "             a LaunchAgent on macOS")
+	fmt.Fprintln(w, "             a LaunchAgent on macOS, a per-user logon task on Windows")
 	fmt.Fprintln(w, "  status     Report the installed unit, its configuration, owner and /health")
 	fmt.Fprintln(w, "  uninstall  Stop, disable and remove only the unit this command installed")
 	fmt.Fprintln(w, "")
@@ -513,13 +520,13 @@ func bootValidateLocalContext(config bootConfig) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("boot binary is not a regular file: %s", config.Binary)
 	}
-	if info.Mode().Perm()&0o111 == 0 {
+	if !bootExecutableMode(info) {
 		return fmt.Errorf("boot binary is not executable: %s", config.Binary)
 	}
-	if err := unix.Access(config.Binary, unix.X_OK); err != nil {
+	if err := accessPath(config.Binary, accX); err != nil {
 		return fmt.Errorf("boot binary is not executable by this user: %s: %w", config.Binary, err)
 	}
-	if err := unix.Access(config.WorkDir, unix.R_OK|unix.X_OK); err != nil {
+	if err := accessPath(config.WorkDir, accR|accX); err != nil {
 		return fmt.Errorf("boot working directory is not accessible to this user: %s: %w", config.WorkDir, err)
 	}
 	stateDir := config.StateDir
@@ -529,7 +536,7 @@ func bootValidateLocalContext(config bootConfig) error {
 			if !info.IsDir() {
 				return fmt.Errorf("boot state directory is not a directory: %s", stateDir)
 			}
-			if err := unix.Access(stateDir, unix.W_OK|unix.X_OK); err != nil {
+			if err := accessPath(stateDir, accW|accX); err != nil {
 				return fmt.Errorf("boot state directory is not writable by this user: %s: %w", stateDir, err)
 			}
 			return nil
@@ -538,7 +545,7 @@ func bootValidateLocalContext(config bootConfig) error {
 			return fmt.Errorf("boot state directory: %w", err)
 		}
 		parent := filepath.Dir(stateDir)
-		if parent == stateDir || !strings.HasPrefix(parent, string(os.PathSeparator)) {
+		if parent == stateDir || !filepath.IsAbs(parent) {
 			return fmt.Errorf("boot state directory has no writable parent: %s", config.StateDir)
 		}
 		stateDir = parent
@@ -863,14 +870,7 @@ func bootProcessOwnerForPath(path string) bootProcessOwner {
 	if err != nil {
 		return bootProcessOwnerUnknown
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return bootProcessOwnerUnknown
-	}
-	if int(stat.Uid) == os.Getuid() {
-		return bootProcessOwnerSameUID
-	}
-	return bootProcessOwnerForeignUID
+	return bootOwnerOfInfo(info)
 }
 
 func bootProbeAddr(addr string) string {

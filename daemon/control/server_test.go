@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -149,7 +150,12 @@ func waitForSocketPath(t *testing.T, path string) {
 // t.TempDir exceeds under a long $TMPDIR and test name.
 func shortStateDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "mewla-ctl-")
+	// /tmp keeps Unix socket paths short; Windows has no /tmp.
+	base := "/tmp"
+	if runtime.GOOS == "windows" {
+		base = os.TempDir()
+	}
+	dir, err := os.MkdirTemp(base, "mewla-ctl-")
 	if err != nil {
 		t.Fatal(err)
 	}

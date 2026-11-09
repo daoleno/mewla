@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // An update never replaces the installed binary until the new one has
@@ -153,7 +154,10 @@ func (h Handover) Run(ctx context.Context) Outcome {
 	exited := make(chan error, 1)
 	go func() { exited <- child.Wait() }()
 	stop := func() {
-		_ = child.Process.Signal(syscall.SIGTERM)
+		if err := child.Process.Signal(syscall.SIGTERM); err != nil {
+			// Windows has no SIGTERM: the trial child is ended outright.
+			_ = child.Process.Kill()
+		}
 		select {
 		case <-exited:
 		case <-time.After(h.StopGrace):
@@ -220,13 +224,10 @@ func promote(installed, staged string) error {
 			return fmt.Errorf("keep the previous version: %w", errors.Join(err, copyErr))
 		}
 	}
-	if err := os.Rename(staged, target); err != nil {
+	if err := platform.ReplaceFile(staged, target); err != nil {
 		return err
 	}
-	if dir, err := os.Open(filepath.Dir(target)); err == nil {
-		_ = dir.Sync()
-		_ = dir.Close()
-	}
+	_ = platform.SyncDir(filepath.Dir(target))
 	return nil
 }
 

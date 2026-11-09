@@ -20,13 +20,15 @@ interface Snapshot {
   enabled: boolean | null;
   /** Why the last read or write failed, in a short sentence. */
   error: string | null;
+  /** The computer's system has no virtual screen, so it is not offered. */
+  unsupported: boolean;
   /** A write is in flight. */
   busy: boolean;
   /** What the in-flight write is turning it to; null when none is. */
   target: boolean | null;
 }
 
-const EMPTY: Snapshot = { server: null, enabled: null, error: null, busy: false, target: null };
+const EMPTY: Snapshot = { server: null, enabled: null, unsupported: false, error: null, busy: false, target: null };
 
 /** How long a failed change stays on screen before it is let go. */
 let errorMs = 6_000;
@@ -56,19 +58,25 @@ function failure(error: unknown, server: StoredServer): string {
 }
 
 /** One settings request, ended with a network error when the computer does not answer. */
-async function request(server: StoredServer, enabled?: boolean): Promise<boolean> {
+async function request(server: StoredServer, enabled?: boolean): Promise<{ enabled: boolean; unsupported: boolean }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const result = await browserRequest(server, enabled === undefined ? { action: "settings" } : { action: "settings", enabled }, controller.signal);
     if (typeof result.virtual_screen !== "boolean") throw new Error("Browser request failed");
-    return result.virtual_screen;
+    return { enabled: result.virtual_screen, unsupported: result.virtual_screen_unsupported === true };
   } catch (error) {
     if (controller.signal.aborted) throw new TypeError("Network request failed");
     throw error;
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** What the computer last said, kept while a new question is out. */
+function keep(server: StoredServer): Pick<Snapshot, "server" | "enabled" | "unsupported"> {
+  const same = snapshot.server === server.id;
+  return { server: server.id, enabled: same ? snapshot.enabled : null, unsupported: same && snapshot.unsupported };
 }
 
 let reading: string | null = null;
@@ -80,11 +88,11 @@ export async function readVirtualScreenLabs(server: StoredServer) {
   const token = ++reads;
   if (snapshot.server !== server.id) publish({ ...EMPTY, server: server.id });
   try {
-    const enabled = await request(server);
-    if (token === reads) publish({ server: server.id, enabled, error: null, busy: false, target: null });
+    const { enabled, unsupported } = await request(server);
+    if (token === reads) publish({ server: server.id, enabled, unsupported, error: null, busy: false, target: null });
   } catch (error) {
     // A computer that cannot answer is not "off": say so and let the person retry.
-    if (token === reads) publish({ server: server.id, enabled: snapshot.server === server.id ? snapshot.enabled : null, error: failure(error, server), busy: false, target: null });
+    if (token === reads) publish({ ...keep(server), error: failure(error, server), busy: false, target: null });
   } finally {
     if (reading === server.id) reading = null;
   }
@@ -94,15 +102,15 @@ export async function writeVirtualScreenLabs(server: StoredServer, on: boolean, 
   const token = ++reads;
   reading = null;
   // Pending at once: the person sees the tap land while the computer answers.
-  publish({ server: server.id, enabled: snapshot.server === server.id ? snapshot.enabled : null, error: null, busy: true, target: on });
+  publish({ ...keep(server), error: null, busy: true, target: on });
   try {
-    const enabled = await request(server, on);
-    if (token === reads && isCurrent()) publish({ server: server.id, enabled, error: null, busy: false, target: null });
+    const { enabled, unsupported } = await request(server, on);
+    if (token === reads && isCurrent()) publish({ server: server.id, enabled, unsupported, error: null, busy: false, target: null });
   } catch (error) {
     if (token === reads && isCurrent()) {
       // The switch goes back to what the computer last said, and the failure is shown briefly.
       const message = failure(error, server);
-      publish({ server: server.id, enabled: snapshot.enabled, error: message, busy: false, target: null });
+      publish({ server: server.id, enabled: snapshot.enabled, unsupported: snapshot.unsupported, error: message, busy: false, target: null });
       setTimeout(() => {
         if (snapshot.error === message && !snapshot.busy) publish({ ...snapshot, error: null });
       }, errorMs);
@@ -136,6 +144,8 @@ export function useVirtualScreenLabs(): {
   /** While busy: the state the change is turning it to. */
   target: boolean | null;
   error: string | null;
+  /** The computer has no virtual screen (not Linux): the switch is not offered. */
+  unsupported: boolean;
   set(on: boolean): Promise<void>;
   refresh(): void;
 } {
@@ -164,6 +174,7 @@ export function useVirtualScreenLabs(): {
     busy: mine && state.busy,
     target: mine && state.busy ? state.target : null,
     error: mine ? state.error : null,
+    unsupported: mine && state.unsupported,
     set,
     refresh,
   };

@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"syscall"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // ErrNotRunning means no Mewla answers on the control socket: it was never
@@ -44,7 +45,7 @@ func CallWithTimeoutResult(
 	}
 	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
 	if err != nil {
-		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED) {
+		if platform.NoListener(err) {
 			return CallResult{}, fmt.Errorf("%w (%v)", ErrNotRunning, err)
 		}
 		return CallResult{}, fmt.Errorf("connect to Mewla control socket: %w", err)
@@ -77,7 +78,7 @@ func PeerPID(socketPath string) (int, error) {
 	}
 	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
 	if err != nil {
-		if errors.Is(err, syscall.ENOENT) || errors.Is(err, syscall.ECONNREFUSED) {
+		if platform.NoListener(err) {
 			return 0, fmt.Errorf("%w (%v)", ErrNotRunning, err)
 		}
 		return 0, fmt.Errorf("connect to Mewla control socket: %w", err)

@@ -8,6 +8,7 @@ import (
 	"image"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -278,3 +279,22 @@ func TestRejectSymlinkParent(t *testing.T) {
 // that time.
 // A lease ends when its time runs out, on its own timer, and a renewal moves
 // that time.
+
+// Only Linux has a virtual screen; elsewhere the answer says so, and a Linux
+// answer stays as it was.
+func TestSettingsSayWhenThisSystemHasNoVirtualScreen(t *testing.T) {
+	m := newManager(t, &fakeBackend{}, &fakeScreens{})
+	for _, system := range []bool{true, false} {
+		previous := virtualScreenSystem
+		virtualScreenSystem = system
+		r, err := m.Handle(context.Background(), Request{Action: "settings"})
+		virtualScreenSystem = previous
+		if err != nil || r.VirtualScreenUnsupported == system {
+			t.Fatalf("system has a virtual screen=%v: %v %+v", system, err, r)
+		}
+		raw, _ := json.Marshal(r)
+		if system && strings.Contains(string(raw), "virtual_screen_unsupported") {
+			t.Fatalf("a Linux answer gained a field: %s", raw)
+		}
+	}
+}

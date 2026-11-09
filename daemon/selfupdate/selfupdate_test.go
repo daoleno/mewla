@@ -43,9 +43,10 @@ func TestSemVersionPrecedenceSingleStream(t *testing.T) {
 
 func TestPlatformArtifactName(t *testing.T) {
 	tests := map[string]string{
-		"linux/amd64":  "mewla-linux-amd64.tar.gz",
-		"linux/arm64":  "mewla-linux-arm64.tar.gz",
-		"darwin/arm64": "mewla-darwin-arm64.tar.gz",
+		"linux/amd64":   "mewla-linux-amd64.tar.gz",
+		"linux/arm64":   "mewla-linux-arm64.tar.gz",
+		"darwin/arm64":  "mewla-darwin-arm64.tar.gz",
+		"windows/amd64": "mewla-windows-amd64.zip",
 	}
 	for platform, want := range tests {
 		parts := strings.Split(platform, "/")
@@ -54,8 +55,8 @@ func TestPlatformArtifactName(t *testing.T) {
 			t.Fatalf("PlatformArtifactName(%s) = %q, %v; want %q", platform, got, err, want)
 		}
 	}
-	if _, err := PlatformArtifactName("windows", "amd64"); err == nil {
-		t.Fatal("windows/amd64 unexpectedly supported")
+	if _, err := PlatformArtifactName("windows", "arm64"); err == nil {
+		t.Fatal("windows/arm64 unexpectedly supported")
 	}
 }
 
