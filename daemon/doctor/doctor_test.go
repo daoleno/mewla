@@ -44,17 +44,11 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 	if report.Ready {
 		t.Fatal("expected not ready on clean PATH")
 	}
-	if report.Tmux.Status != StatusFail || report.Tmux.Remediation != RemediationInstallTmux {
-		t.Fatalf("tmux = %+v", report.Tmux)
-	}
 	if report.Executors.Status != StatusFail || report.Executors.Remediation != RemediationInstallExecutor {
 		t.Fatalf("executors = %+v", report.Executors)
 	}
 	if report.Executors.UsableCount != 0 {
 		t.Fatalf("usable_count = %d", report.Executors.UsableCount)
-	}
-	if len(report.Tmux.InstallHints) != 1 || report.Tmux.InstallHints[0].Command == "" {
-		t.Fatalf("install hints = %+v, want only this machine's command", report.Tmux.InstallHints)
 	}
 
 	raw, err := json.Marshal(report)
@@ -65,10 +59,14 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 	if err := json.Unmarshal(raw, &roundtrip); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	for _, key := range []string{"ready", "platform", "tmux", "state_dir", "listen", "executors", "checks", "remediations"} {
+	for _, key := range []string{"ready", "platform", "state_dir", "listen", "executors", "checks", "remediations"} {
 		if _, ok := roundtrip[key]; !ok {
 			t.Fatalf("missing JSON key %q in %s", key, raw)
 		}
+	}
+	// Mewla runs its own session host and no longer needs tmux.
+	if _, ok := roundtrip["tmux"]; ok || strings.Contains(string(raw), "install_tmux") {
+		t.Fatalf("doctor still checks tmux: %s", raw)
 	}
 	if strings.Contains(string(raw), "sk-") {
 		t.Fatalf("JSON leaked secret-like token: %s", raw)
@@ -81,22 +79,21 @@ func TestRunCleanPathNotReadyButValidJSON(t *testing.T) {
 	text := human.String()
 	for _, want := range []string{
 		"NOT READY",
-		"Install tmux on ",
-		report.Tmux.InstallHints[0].Command,
-		"install_tmux",
 		"install_executor",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("human output missing %q:\n%s", want, text)
 		}
 	}
+	if strings.Contains(strings.ToLower(text), "tmux") {
+		t.Fatalf("human output mentions tmux:\n%s", text)
+	}
 }
 
-func TestRunReadyWithTmuxAndAuthenticatedExecutor(t *testing.T) {
+func TestRunReadyWithAuthenticatedExecutor(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	stateDir := filepath.Join(home, ".mewla")
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeExecutorsTOML(t, home, `delegated_executor = "codex"
 
@@ -125,9 +122,6 @@ command = "codex"
 	if !report.Ready {
 		t.Fatalf("expected ready, report=%+v", report)
 	}
-	if report.Tmux.Status != StatusOK || !report.Tmux.Functional {
-		t.Fatalf("tmux = %+v", report.Tmux)
-	}
 	if report.StateDir.Status != StatusOK || report.StateDir.Path != stateDir {
 		t.Fatalf("state_dir = %+v", report.StateDir)
 	}
@@ -146,7 +140,6 @@ command = "codex"
 func TestAuthUnknownDistinctFromUnauthenticated(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Not logged in")
 	writeFakeGrok(t, binDir)
 	writeExecutorsTOML(t, home, `
@@ -200,7 +193,6 @@ command = "grok"
 func TestGrokOnlyUnknownAuthReadyWithWarning(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeGrok(t, binDir)
 	writeExecutorsTOML(t, home, `delegated_executor = "grok"
 
@@ -236,7 +228,6 @@ command = "grok"
 func TestCustomExecutorUnknownAuthReadyWithWarning(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCustom(t, binDir, "mycli")
 	writeExecutorsTOML(t, home, `delegated_executor = "mycli"
 
@@ -264,7 +255,6 @@ command = "mycli"
 func TestUnauthenticatedOnlyNotReady(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Not logged in")
 	writeExecutorsTOML(t, home, `
 [[executors]]
@@ -291,7 +281,6 @@ command = "codex"
 func TestRecommendedHostFollowsTheInstallMenuOrder(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeFakeClaude(t, binDir, `{"loggedIn": true}`)
 	writeExecutorsTOML(t, home, `[[executors]]
@@ -345,7 +334,6 @@ exit 1
 func TestAuthenticatedPreferredOverUnknown(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeFakeGrok(t, binDir)
 	writeExecutorsTOML(t, home, `delegated_executor = "grok"
@@ -385,7 +373,6 @@ command = "grok"
 func TestCodexAuthOutputNeverLeaksIntoReport(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using an API key - sk-RzC84SECRETVALUE")
 	writeExecutorsTOML(t, home, `
 [[executors]]
@@ -422,7 +409,6 @@ command = "codex"
 func TestDetectsAlreadyRunningDaemon(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeExecutorsTOML(t, home, `
 [[executors]]
@@ -458,7 +444,6 @@ command = "codex"
 func TestPortInUseByNonMewla(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeExecutorsTOML(t, home, `
 [[executors]]
@@ -585,7 +570,6 @@ func TestParseAuthHelpers(t *testing.T) {
 func TestFailedOfficialAuthCommandIsUnknown(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	// Codex auth command fails / returns empty — must not become unauthenticated.
 	writeExec(t, filepath.Join(binDir, "codex"), `#!/bin/sh
 if [ "$1" = "--version" ] || [ "$1" = "-v" ]; then echo "codex-cli 0.0.1"; exit 0; fi
@@ -661,23 +645,6 @@ func writeExecutorsTOML(t *testing.T, home, body string) {
 	if err := os.WriteFile(filepath.Join(dir, "executors.toml"), []byte(body), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-}
-
-func writeFakeTmux(t *testing.T, binDir string) {
-	t.Helper()
-	script := `#!/bin/sh
-set -e
-case "$1" in
-  -V) echo "tmux 3.4"; exit 0 ;;
-  new-session)
-    # consume args; pretend success
-    exit 0
-    ;;
-  kill-session) exit 0 ;;
-  *) echo "unexpected: $*" >&2; exit 1 ;;
-esac
-`
-	writeExec(t, filepath.Join(binDir, "tmux"), script)
 }
 
 func writeFakeCodex(t *testing.T, binDir, loginStatus string) {
@@ -756,7 +723,6 @@ func TestOpenCodeDoctorProbesAreSecretSafeAndNonMutating(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	stateDir := filepath.Join(home, ".mewla")
-	writeFakeTmux(t, binDir)
 	serviceURL := "http://127.0.0.1:49374"
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{
 		authList:   `[{"id":"openai","name":"OpenAI","connections":[{"type":"credential","id":"c1","label":"oauth","method":"oauth"}]}]`,
@@ -835,7 +801,6 @@ func TestOpenCodeDoctorProbeFailuresStayHonest(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
 	stateDir := filepath.Join(home, ".mewla")
-	writeFakeTmux(t, binDir)
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{
 		authList:    "",
 		modelsFail:  true,
@@ -960,25 +925,9 @@ func findExecutor(report Report, id string) *ExecutorCheck {
 	return nil
 }
 
-func TestTmuxInstallHintsNameOnlyThisPlatform(t *testing.T) {
-	mac := tmuxInstallHints(hostdeps.Platform{GOOS: "darwin", Pretty: "macOS", Brew: "brew"})
-	if len(mac) != 1 || mac[0].ID != "brew" || mac[0].Command != "brew install tmux" {
-		t.Fatalf("mac hints = %+v", mac)
-	}
-	fedora := tmuxInstallHints(hostdeps.Platform{GOOS: "linux", Pretty: "Fedora Linux 42", Manager: "dnf", HasSudo: true})
-	if len(fedora) != 1 || fedora[0].Command != "sudo dnf install -y tmux" || fedora[0].OS != "Fedora Linux 42" {
-		t.Fatalf("fedora hints = %+v", fedora)
-	}
-	unknown := tmuxInstallHints(hostdeps.Platform{GOOS: "linux", HasSudo: true})
-	if len(unknown) != 1 || unknown[0].ID != "manual" || unknown[0].Command != "see "+hostdeps.TmuxInstallDoc {
-		t.Fatalf("unknown hints = %+v", unknown)
-	}
-}
-
 func TestOpenCodeDoctorRejectsOpenCode1(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeOpenCode(t, binDir, openCodeFakeBehavior{version: "1.18.13", models: "openai/gpt-5\n"})
 	writeExecutorsTOML(t, home, `
 [[executors]]

@@ -2,8 +2,6 @@ package watcher
 
 import (
 	"strings"
-
-	"github.com/daoleno/mewla/daemon/tmuxguard"
 )
 
 // SetTmuxServer installs the one caller-visible tmux server that hosts every
@@ -16,17 +14,6 @@ func (w *Watcher) SetTmuxServer(socketPath, scratchDir string) {
 	w.mu.Lock()
 	w.tmuxSocketPath = socketPath
 	w.tmuxScratchDir = strings.TrimSpace(scratchDir)
-	w.mu.Unlock()
-}
-
-// SetTmuxGuard installs the directory of the pane `tmux` shim. Call it once
-// before Run or CreateSession.
-func (w *Watcher) SetTmuxGuard(dir string) {
-	if w == nil {
-		return
-	}
-	w.mu.Lock()
-	w.tmuxGuardDir = strings.TrimSpace(dir)
 	w.mu.Unlock()
 }
 
@@ -60,11 +47,4 @@ func applyProviderTmuxIsolation(opts *CreateSessionOptions, w *Watcher) {
 		return
 	}
 	opts.Env["TMUX_TMPDIR"] = scratch
-	// The pane's `tmux` shim (first on PATH, see tmuxguard) refuses a tmux that
-	// would fall back to the live default server and judges "own scratch"
-	// against this directory.
-	if w.tmuxGuardDir != "" {
-		opts.Env[tmuxguard.ScratchEnv] = scratch
-		opts.Env[tmuxguard.DirEnv] = w.tmuxGuardDir
-	}
 }

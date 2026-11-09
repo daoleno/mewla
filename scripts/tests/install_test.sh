@@ -383,17 +383,17 @@ test_missing_tools() {
   pass "reports missing curl, tar, and SHA-256 tools without network access"
 }
 
-test_tmux_check_and_next_step() {
-  new_case deps-tmux
+test_next_step_needs_no_tmux() {
+  new_case next-step-on-path
   make_archive
   mkdir -p "$HOME_DIR/install"
   FAKE_BIN="$FAKE_BIN:$HOME_DIR/install"
-  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_DEPS_STATUS=1
-  assert_contains "$CASE_DIR/output" "fixture deps deps -only tmux"
-  [[ -x "$HOME_DIR/install/mewla" ]] || fail "a missing dependency removed the installed binary"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install"
+  assert_not_contains "$CASE_DIR/output" "fixture deps"
+  assert_not_contains "$CASE_DIR/output" "tmux"
   [[ $(tail -n 1 "$CASE_DIR/output") == "  mewla" ]] || fail "last line is not mewla when the install dir is on PATH"
 
-  new_case deps-unsupported
+  new_case next-step-off-path
   make_archive
   local tool_bin="$CASE_DIR/tools" command_name
   mkdir -p "$tool_bin"
@@ -403,19 +403,11 @@ test_tmux_check_and_next_step() {
   ln -s "$FAKE_BIN/curl" "$tool_bin/curl"
   ln -s "$FAKE_BIN/uname" "$tool_bin/uname" 2>/dev/null || true
   RUN_PATH_OVERRIDE=$tool_bin
-  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_NO_DEPS=1 || fail "installer failed without tmux on PATH"
+  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" || fail "installer failed without tmux on PATH"
   unset RUN_PATH_OVERRIDE
-  assert_contains "$CASE_DIR/output" "tmux is missing. Mewla runs every agent inside tmux; see how to install it: $HOME_DIR/install/mewla doctor"
-  assert_not_contains "$CASE_DIR/output" "fixture deps"
+  assert_not_contains "$CASE_DIR/output" "tmux"
   [[ $(tail -n 1 "$CASE_DIR/output") == "  $HOME_DIR/install/mewla" ]] || fail "last line is not the runnable full path"
-
-  new_case deps-unsupported-tmux-present
-  make_archive
-  printf '#!/bin/sh\nexit 0\n' > "$FAKE_BIN/tmux"
-  chmod +x "$FAKE_BIN/tmux"
-  run_installer MEWLA_VERSION=v1.2.3 MEWLA_INSTALL_DIR="$HOME_DIR/install" FAKE_NO_DEPS=1
-  assert_not_contains "$CASE_DIR/output" "tmux is missing"
-  pass "checks tmux through mewla deps, falls back for older releases, and ends with the start command"
+  pass "needs no tmux and ends with the start command"
 }
 
 test_remote_setup_hands_over_or_falls_back() {
@@ -482,7 +474,7 @@ test_existing_update_preference
 test_install_dir_selection
 test_profile_idempotency_and_no_mutation
 test_missing_tools
-test_tmux_check_and_next_step
+test_next_step_needs_no_tmux
 test_remote_setup_hands_over_or_falls_back
 test_executable_failure_keeps_previous_install
 printf '1..%d\n' "$PASS"

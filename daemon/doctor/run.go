@@ -83,11 +83,6 @@ func newEnv(opts Options) env {
 	return e
 }
 
-// CheckTmux runs only the tmux check.
-func CheckTmux(opts Options) TmuxCheck {
-	return newEnv(opts).checkTmux()
-}
-
 // CheckExecutors runs only the executor checks, including auth probes.
 func CheckExecutors(opts Options) ExecutorsCheck {
 	return newEnv(opts).checkExecutors()
@@ -100,7 +95,6 @@ func Run(opts Options) (Report, error) {
 		GeneratedAt: e.opts.Now().UTC(),
 	}
 	report.Platform = e.checkPlatform()
-	report.Tmux = e.checkTmux()
 	report.StateDir = e.checkStateDir()
 	report.Listen = e.checkListen(report.StateDir.Path)
 	report.Executors = e.checkExecutors()
@@ -110,15 +104,10 @@ func Run(opts Options) (Report, error) {
 
 	report.Checks = []NamedCheck{
 		{ID: "platform", Status: report.Platform.Status, Remediation: report.Platform.Remediation, Summary: report.Platform.Summary},
-	}
-	if !report.Tmux.NotNeeded {
-		report.Checks = append(report.Checks, NamedCheck{ID: "tmux", Status: report.Tmux.Status, Remediation: report.Tmux.Remediation, Summary: report.Tmux.Summary})
-	}
-	report.Checks = append(report.Checks, []NamedCheck{
 		{ID: "state_dir", Status: report.StateDir.Status, Remediation: report.StateDir.Remediation, Summary: report.StateDir.Summary},
 		{ID: "listen", Status: report.Listen.Status, Remediation: report.Listen.Remediation, Summary: report.Listen.Summary},
 		{ID: "executors", Status: report.Executors.Status, Remediation: report.Executors.Remediation, Summary: report.Executors.Summary},
-	}...)
+	}
 	report.Remediations = collectRemediations(report)
 	report.Warnings = collectWarnings(report)
 	report.Ready = isReady(report)
@@ -281,9 +270,6 @@ func isReady(report Report) bool {
 	if report.Platform.Status != StatusOK {
 		return false
 	}
-	if report.Tmux.Status != StatusOK {
-		return false
-	}
 	if report.StateDir.Status != StatusOK {
 		return false
 	}
@@ -330,7 +316,6 @@ func collectRemediations(report Report) []Remediation {
 		out = append(out, code)
 	}
 	add(report.Platform.Remediation)
-	add(report.Tmux.Remediation)
 	add(report.StateDir.Remediation)
 	add(report.Listen.Remediation)
 	add(report.Executors.Remediation)
@@ -361,60 +346,6 @@ func (e env) checkPlatform() PlatformCheck {
 		check.Summary = fmt.Sprintf("%s/%s is not supported; Mewla requires Linux, macOS or Windows", check.OS, check.Arch)
 	}
 	return check
-}
-
-func (e env) checkTmux() TmuxCheck {
-	if e.opts.GOOS == "windows" {
-		// Every Session runs in the session host there; nothing uses tmux.
-		return TmuxCheck{NotNeeded: true, Status: StatusOK, Summary: "not needed on Windows"}
-	}
-	check := TmuxCheck{
-		InstallHints: TmuxInstallHints(),
-	}
-	path, err := e.opts.LookPath("tmux")
-	if err != nil || strings.TrimSpace(path) == "" {
-		check.Status = StatusFail
-		check.Remediation = RemediationInstallTmux
-		check.Summary = "tmux not found on PATH"
-		return check
-	}
-	check.Found = true
-	check.Path = path
-
-	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
-	defer cancel()
-	out, err := e.opts.RunCommand(ctx, path, "-V")
-	if err == nil {
-		check.Version = normalizeVersion(string(out))
-	}
-
-	if e.probeTmux(path) {
-		check.Functional = true
-		check.Status = StatusOK
-		if check.Version != "" {
-			check.Summary = fmt.Sprintf("tmux %s works", check.Version)
-		} else {
-			check.Summary = "tmux works"
-		}
-		return check
-	}
-
-	check.Status = StatusFail
-	check.Remediation = RemediationFixTmux
-	check.Summary = "tmux found but functional probe failed"
-	return check
-}
-
-func (e env) probeTmux(tmuxPath string) bool {
-	name := fmt.Sprintf("mewla-doctor-%d", e.opts.Now().UnixNano()%1_000_000_000)
-	ctx, cancel := context.WithTimeout(context.Background(), e.opts.ProbeTimeout)
-	defer cancel()
-
-	if _, err := e.opts.RunCommand(ctx, tmuxPath, "new-session", "-d", "-s", name, "true"); err != nil {
-		return false
-	}
-	_, _ = e.opts.RunCommand(ctx, tmuxPath, "kill-session", "-t", name)
-	return true
 }
 
 func (e env) checkStateDir() StateDirCheck {
@@ -1066,7 +997,6 @@ func normalizeVersion(raw string) string {
 	if i := strings.IndexByte(line, '\n'); i >= 0 {
 		line = strings.TrimSpace(line[:i])
 	}
-	line = strings.TrimSpace(strings.TrimPrefix(line, "tmux"))
 	line = strings.TrimSpace(strings.TrimPrefix(line, "codex-cli"))
 	return line
 }

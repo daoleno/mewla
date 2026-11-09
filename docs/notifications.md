@@ -17,7 +17,7 @@ The daemon sends a push for three agent states:
 | Failed | `<name> failed` | High |
 | Finished | `<name> finished` | Default |
 
-The name is the Session's alias or project, not a raw `tmux` name. "Finished"
+The name is the Session's alias or project, not a raw terminal name. "Finished"
 means the Session ended, not that the task succeeded; open it to check.
 
 Mewla stays silent while an agent is running, while its state is unknown, and for

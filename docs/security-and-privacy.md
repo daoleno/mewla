@@ -182,11 +182,10 @@ commit it, and never share a pairing link.
 
 ## The session host
 
-Mewla is replacing tmux with its own session host, `mewla host`: one process
+Mewla runs every Session in its own session host, `mewla host`: one process
 per state directory that owns your agents' terminals and keeps them running
-while the daemon restarts or updates. It is not turned on yet; until it is,
-Mewla uses tmux as before. Whoever can talk to the session host can read every
-agent's screen and type into it, so it is locked to you:
+while the daemon restarts or updates. Whoever can talk to the session host can
+read every agent's screen and type into it, so it is locked to you:
 
 - It has no network listener, only a Unix socket in a directory that must be
   yours with mode `0700`: `$XDG_RUNTIME_DIR/mewla` on Linux, `$TMPDIR/mewla` on
@@ -205,8 +204,9 @@ agent's screen and type into it, so it is locked to you:
   terminal, such as the cursor position, the colors or what is on the
   clipboard. The host answers the ones it supports, so a viewer never answers
   twice or hands over its own clipboard.
-- Like tmux, it does not protect your terminals from root or from other
-  programs running as you.
+- `mewla attach` reaches a Session the same way, as you, over that socket.
+- Like any terminal multiplexer, it does not protect your terminals from root
+  or from other programs running as you.
 
 ## Data on your phone
 

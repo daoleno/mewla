@@ -1,7 +1,7 @@
 // Package hostdeps names the one official command that installs a missing
-// host dependency (tmux, an agent CLI) on the machine Mewla runs on. It only
-// maps a detected platform to commands; callers decide whether to print or run
-// them. Every command shown to a person is exactly the command that runs.
+// host dependency (an agent CLI) on the machine Mewla runs on. It only maps a
+// detected platform to commands; callers decide whether to print or run them.
+// Every command shown to a person is exactly the command that runs.
 package hostdeps
 
 import (
@@ -14,29 +14,12 @@ import (
 	"strings"
 )
 
-// TmuxInstallDoc is the official tmux install page, shown when no package
-// manager is recognized.
-const TmuxInstallDoc = "https://github.com/tmux/tmux/wiki/Installing"
-
-// HomebrewInstall is the official Homebrew installer command from brew.sh.
-const HomebrewInstall = `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
-
-// homebrewBrew is where the Homebrew installer puts brew on Apple Silicon,
-// the only Mac Mewla supports. A fresh install is not on PATH yet.
-const homebrewBrew = "/opt/homebrew/bin/brew"
-
 // Platform is what dependency commands depend on.
 type Platform struct {
 	GOOS     string // "linux" or "darwin"
-	Distro   string // os-release ID, e.g. "ubuntu"
-	IDLike   []string
 	Pretty   string // os-release PRETTY_NAME or NAME
 	WSL      bool
-	Root     bool
-	HasSudo  bool
-	Brew     string // "brew" on PATH, its full path off PATH, "" when missing
-	Manager  string // apt, dnf, yum, pacman, zypper, apk; "" when unknown
-	Headless bool   // no local display or an SSH session
+	Headless bool // no local display or an SSH session
 }
 
 // Detect reads the running machine.
@@ -45,38 +28,22 @@ func Detect() Platform {
 	procVersion, _ := os.ReadFile("/proc/version")
 	headless := os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "" ||
 		(runtime.GOOS == "linux" && os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "")
-	return DetectFrom(runtime.GOOS, string(osRelease), string(procVersion), os.Geteuid(), headless, exec.LookPath)
+	return DetectFrom(runtime.GOOS, string(osRelease), string(procVersion), headless)
 }
 
 // DetectFrom maps raw facts to a Platform; tests pass fixtures.
-func DetectFrom(goos, osRelease, procVersion string, uid int, headless bool, lookPath func(string) (string, error)) Platform {
-	p := Platform{GOOS: goos, Root: uid == 0, Headless: headless}
-	has := func(name string) string {
-		path, err := lookPath(name)
-		if err != nil {
-			return ""
-		}
-		return path
-	}
-	p.HasSudo = has("sudo") != ""
+func DetectFrom(goos, osRelease, procVersion string, headless bool) Platform {
+	p := Platform{GOOS: goos, Headless: headless}
 	if goos == "darwin" {
 		p.Pretty = "macOS"
-		if has("brew") != "" {
-			p.Brew = "brew"
-		} else if has(homebrewBrew) != "" {
-			p.Brew = homebrewBrew
-		}
 		return p
 	}
 	fields := parseOSRelease(osRelease)
-	p.Distro = strings.ToLower(fields["ID"])
-	p.IDLike = strings.Fields(strings.ToLower(fields["ID_LIKE"]))
 	p.Pretty = fields["PRETTY_NAME"]
 	if p.Pretty == "" {
 		p.Pretty = fields["NAME"]
 	}
 	p.WSL = strings.Contains(strings.ToLower(procVersion), "microsoft")
-	p.Manager = packageManager(p, has)
 	return p
 }
 
@@ -105,88 +72,14 @@ func parseOSRelease(text string) map[string]string {
 	return fields
 }
 
-func packageManager(p Platform, has func(string) string) string {
-	family := append([]string{p.Distro}, p.IDLike...)
-	in := func(names ...string) bool {
-		return slices.ContainsFunc(family, func(id string) bool { return slices.Contains(names, id) })
-	}
-	switch {
-	case in("debian", "ubuntu"):
-		return "apt"
-	case in("fedora", "rhel", "centos"):
-		if has("dnf") != "" {
-			return "dnf"
-		}
-		return "yum"
-	case in("arch"):
-		return "pacman"
-	case in("opensuse", "suse", "opensuse-leap", "opensuse-tumbleweed", "sles"):
-		return "zypper"
-	case in("alpine"):
-		return "apk"
-	}
-	// An unrecognized distribution: trust the one manager it has.
-	for _, manager := range []string{"apt-get", "dnf", "pacman", "zypper", "apk"} {
-		if has(manager) != "" {
-			if manager == "apt-get" {
-				return "apt"
-			}
-			return manager
-		}
-	}
-	return ""
-}
-
-// Plan is the command sequence that installs one dependency. Doc replaces
-// Steps when no command is known.
+// Plan is the command sequence that installs one dependency.
 type Plan struct {
 	Steps []string
-	Doc   string
-	// Blocked says why the steps cannot run here (no sudo); they still print.
-	Blocked string
 }
 
 // Command is the whole plan as one line a person can paste.
 func (plan Plan) Command() string {
 	return strings.Join(plan.Steps, " && ")
-}
-
-// TmuxPlan returns the official tmux install for p.
-func TmuxPlan(p Platform) Plan {
-	if p.GOOS == "darwin" {
-		if p.Brew != "" {
-			return Plan{Steps: []string{p.Brew + " install tmux"}}
-		}
-		return Plan{Steps: []string{HomebrewInstall, homebrewBrew + " install tmux"}}
-	}
-	var commands []string
-	switch p.Manager {
-	case "apt":
-		commands = []string{"apt update", "apt install -y tmux"}
-	case "dnf":
-		commands = []string{"dnf install -y tmux"}
-	case "yum":
-		commands = []string{"yum install -y tmux"}
-	case "pacman":
-		commands = []string{"pacman -S --needed --noconfirm tmux"}
-	case "zypper":
-		commands = []string{"zypper install -y tmux"}
-	case "apk":
-		commands = []string{"apk add tmux"}
-	default:
-		return Plan{Doc: TmuxInstallDoc}
-	}
-	plan := Plan{}
-	for _, command := range commands {
-		if !p.Root {
-			command = "sudo " + command
-		}
-		plan.Steps = append(plan.Steps, command)
-	}
-	if !p.Root && !p.HasSudo {
-		plan.Blocked = "sudo is not installed; run this as root without sudo"
-	}
-	return plan
 }
 
 // OpenCodeInstall is OpenCode 2's official installer (opencode.ai/v2/docs).
@@ -309,7 +202,7 @@ func LookPath(name string) (string, error) {
 }
 
 // AddToPath appends dir to this process's PATH when missing, so the daemon,
-// the tmux server it starts and a boot unit that copies PATH all find tools
+// the Sessions it starts and a boot unit that copies PATH all find tools
 // installed there without changing which tool the user's PATH picks first.
 func AddToPath(dir string) bool {
 	if dir == "" {

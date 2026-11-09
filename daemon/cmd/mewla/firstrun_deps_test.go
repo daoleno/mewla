@@ -16,7 +16,6 @@ import (
 
 type fakeHost struct {
 	ran        []string
-	tmuxOK     bool
 	agentState map[string]doctor.AuthState // id -> auth; missing = not installed
 	failRun    bool
 	brainHost  string // agent Brain already uses
@@ -37,20 +36,12 @@ func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Plat
 				return errors.New("exit status 1")
 			}
 			switch {
-			case strings.Contains(command, "tmux"):
-				h.tmuxOK = true
 			case strings.Contains(command, "claude.ai/install.sh"):
 				h.agentState["claude"] = doctor.AuthUnauthenticated
 			case command == "claude auth login":
 				h.agentState["claude"] = doctor.AuthAuthenticated
 			}
 			return nil
-		},
-		tmux: func() doctor.TmuxCheck {
-			if h.tmuxOK {
-				return doctor.TmuxCheck{Found: true, Path: "/usr/bin/tmux", Version: "3.4", Status: doctor.StatusOK}
-			}
-			return doctor.TmuxCheck{Status: doctor.StatusFail}
 		},
 		agents: func() doctor.ExecutorsCheck {
 			check := doctor.ExecutorsCheck{}
@@ -80,76 +71,9 @@ func (h *fakeHost) prompt(input string, interactive bool, platform hostdeps.Plat
 }
 
 var (
-	ubuntuHost = hostdeps.Platform{GOOS: "linux", Pretty: "Ubuntu 24.04 LTS", Manager: "apt", HasSudo: true}
+	ubuntuHost = hostdeps.Platform{GOOS: "linux", Pretty: "Ubuntu 24.04 LTS"}
 	macHost    = hostdeps.Platform{GOOS: "darwin", Pretty: "macOS"}
 )
-
-func TestEnsureTmuxRunsExactlyTheShownCommandAndRechecks(t *testing.T) {
-	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
-	d, out := host.prompt("\n", true, ubuntuHost)
-	if !d.ensureTmux() {
-		t.Fatalf("tmux not ready:\n%s", out)
-	}
-	want := []string{"sudo apt update", "sudo apt install -y tmux"}
-	if strings.Join(host.ran, "|") != strings.Join(want, "|") {
-		t.Fatalf("ran %q, want %q", host.ran, want)
-	}
-	text := out.String()
-	for _, line := range []string{"Install it on Ubuntu 24.04 LTS with:\n  sudo apt update && sudo apt install -y tmux", "Install tmux now? [Y/n]", "tmux 3.4 is ready."} {
-		if !strings.Contains(text, line) {
-			t.Fatalf("output missing %q:\n%s", line, text)
-		}
-	}
-}
-
-func TestEnsureTmuxOnMacWithoutBrewOffersHomebrewFirst(t *testing.T) {
-	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
-	d, out := host.prompt("y\n", true, macHost)
-	d.ensureTmux()
-	if len(host.ran) != 2 || host.ran[0] != hostdeps.HomebrewInstall || host.ran[1] != "/opt/homebrew/bin/brew install tmux" {
-		t.Fatalf("ran %q", host.ran)
-	}
-	if strings.Contains(out.String(), "apt") {
-		t.Fatalf("mac output mentions apt:\n%s", out)
-	}
-}
-
-func TestEnsureTmuxWithoutTerminalOnlyPrints(t *testing.T) {
-	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}}
-	d, out := host.prompt("y\n", false, ubuntuHost)
-	if d.ensureTmux() || len(host.ran) != 0 {
-		t.Fatalf("non-interactive ran %q", host.ran)
-	}
-	if !strings.Contains(out.String(), "sudo apt update && sudo apt install -y tmux") || strings.Contains(out.String(), "[Y/n]") {
-		t.Fatalf("output:\n%s", out)
-	}
-}
-
-func TestEnsureTmuxDeclinedOrClosedInputNeverRuns(t *testing.T) {
-	t.Setenv("PATH", os.Getenv("PATH"))
-	for _, input := range []string{"n\n", ""} {
-		host := &fakeHost{agentState: map[string]doctor.AuthState{}}
-		d, _ := host.prompt(input, true, ubuntuHost)
-		if d.ensureTmux() || len(host.ran) != 0 {
-			t.Fatalf("input %q ran %q", input, host.ran)
-		}
-	}
-}
-
-func TestEnsureTmuxFailedInstallContinues(t *testing.T) {
-	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{agentState: map[string]doctor.AuthState{}, failRun: true}
-	d, out := host.prompt("\n", true, ubuntuHost)
-	if d.ensureTmux() {
-		t.Fatal("failed install reported ready")
-	}
-	if !strings.Contains(out.String(), "tmux is still missing. Run the command above") {
-		t.Fatalf("output:\n%s", out)
-	}
-}
 
 func TestEnsureAgentInstallsThenSignsIn(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
@@ -211,9 +135,9 @@ func TestEnsureAgentSkipAndNonInteractive(t *testing.T) {
 func TestCheckAllAsksWhichAgentBrainUsesWhenSeveralAreReady(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
 	both := map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}
-	host := &fakeHost{tmuxOK: true, agentState: both}
+	host := &fakeHost{agentState: both}
 	d, out := host.prompt("\n", true, ubuntuHost)
-	if _, ready, err := d.checkAll(); !ready || err != nil {
+	if ready, err := d.checkAll(); !ready || err != nil {
 		t.Fatalf("ready=%v err=%v\n%s", ready, err, out)
 	}
 	if strings.Join(host.saved, "|") != "claude" {
@@ -231,7 +155,7 @@ func TestCheckAllAsksWhichAgentBrainUsesWhenSeveralAreReady(t *testing.T) {
 		}
 	}
 
-	host = &fakeHost{tmuxOK: true, agentState: both}
+	host = &fakeHost{agentState: both}
 	d, out = host.prompt("2\n", true, ubuntuHost)
 	d.checkAll()
 	if strings.Join(host.saved, "|") != "codex" || !strings.Contains(out.String(), "Brain uses Codex. Change it any time: mewla brain use claude") {
@@ -241,7 +165,7 @@ func TestCheckAllAsksWhichAgentBrainUsesWhenSeveralAreReady(t *testing.T) {
 
 func TestCheckAllListsClaudeCodeFirstEvenWhenOnlyCodexSignInIsVerified(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnknown}}
+	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnknown}}
 	d, out := host.prompt("\n", true, ubuntuHost)
 	d.checkAll()
 	if strings.Join(host.saved, "|") != "claude" || !strings.Contains(out.String(), "1. Claude Code   sign-in not checked") {
@@ -251,20 +175,24 @@ func TestCheckAllListsClaudeCodeFirstEvenWhenOnlyCodexSignInIsVerified(t *testin
 
 func TestCheckAllDoesNotAskWithOneReadyAgent(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnauthenticated}}
+	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthUnauthenticated}}
 	d, out := host.prompt("", true, ubuntuHost)
-	if _, ready, _ := d.checkAll(); !ready {
+	if ready, _ := d.checkAll(); !ready {
 		t.Fatalf("codex not ready\n%s", out)
 	}
 	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Codex · Brain uses it") {
 		t.Fatalf("one ready agent: saved %q\n%s", host.saved, out)
+	}
+	// Mewla runs its own session host: first run neither checks nor offers tmux.
+	if strings.Contains(strings.ToLower(out.String()), "tmux") || len(host.ran) != 0 {
+		t.Fatalf("first run mentions tmux or ran %q\n%s", host.ran, out)
 	}
 }
 
 func TestCheckAllKeepsAChosenBrainHost(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
 	both := map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}
-	host := &fakeHost{tmuxOK: true, agentState: both, brainHost: "codex"}
+	host := &fakeHost{agentState: both, brainHost: "codex"}
 	d, out := host.prompt("", true, ubuntuHost)
 	d.checkAll()
 	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Codex · Brain uses it") {
@@ -272,7 +200,7 @@ func TestCheckAllKeepsAChosenBrainHost(t *testing.T) {
 	}
 
 	// A Brain that already ran without a recorded executor keeps its agent.
-	host = &fakeHost{tmuxOK: true, agentState: both, brainSet: true}
+	host = &fakeHost{agentState: both, brainSet: true}
 	d, out = host.prompt("", true, ubuntuHost)
 	d.checkAll()
 	if len(host.saved) != 0 || strings.Contains(out.String(), "Which agent") || !strings.Contains(out.String(), "Brain keeps its agent") {
@@ -282,7 +210,7 @@ func TestCheckAllKeepsAChosenBrainHost(t *testing.T) {
 
 func TestChooseBrainHostWithoutTerminalTakesTheDefault(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
+	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
 	d, out := host.prompt("", false, ubuntuHost)
 	if err := d.chooseBrainHost(readyAgents(d.agents())); err != nil {
 		t.Fatal(err)
@@ -295,7 +223,7 @@ func TestChooseBrainHostWithoutTerminalTakesTheDefault(t *testing.T) {
 
 func TestChooseBrainHostClosedInputSavesNothing(t *testing.T) {
 	t.Setenv("PATH", os.Getenv("PATH"))
-	host := &fakeHost{tmuxOK: true, agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
+	host := &fakeHost{agentState: map[string]doctor.AuthState{"codex": doctor.AuthAuthenticated, "claude": doctor.AuthAuthenticated}}
 	d, out := host.prompt("", true, ubuntuHost)
 	if err := d.chooseBrainHost(readyAgents(d.agents())); err != nil {
 		t.Fatal(err)

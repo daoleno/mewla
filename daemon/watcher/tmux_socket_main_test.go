@@ -6,9 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
-
-	"github.com/daoleno/mewla/daemon/tmuxguard"
 )
 
 // TestMain points the default tmux socket at an empty directory for the whole
@@ -21,12 +20,25 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("TMUX_TMPDIR", dir)
-	// These tests start and kill their own isolated servers; run from a guarded
-	// Worker pane they must reach the real tmux, not the pane shim.
-	os.Setenv("PATH", tmuxguard.WithoutGuard(os.Getenv("PATH")))
+	// These tests start and kill their own isolated servers.
+	os.Setenv("PATH", withoutOldTmuxShim(os.Getenv("PATH")))
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
+}
+
+// withoutOldTmuxShim drops the `tmux` shim a Mewla before 0.3 put first on
+// PATH in its panes (<state>/tmux-guard/bin). Run from such a pane, tests that
+// start and kill their own tmux servers must reach the real tmux.
+func withoutOldTmuxShim(path string) string {
+	var kept []string
+	for _, dir := range filepath.SplitList(path) {
+		if filepath.Base(dir) == "bin" && filepath.Base(filepath.Dir(dir)) == "tmux-guard" {
+			continue
+		}
+		kept = append(kept, dir)
+	}
+	return strings.Join(kept, string(os.PathListSeparator))
 }
 
 // reachableTmuxSocket makes the default tmux socket accept connections for the
