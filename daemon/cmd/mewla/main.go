@@ -190,6 +190,8 @@ func run(args []string, stderr io.Writer) error {
 			return runLogoutCommand(args[1:], stderr)
 		case "boot":
 			return runBootCommand(args[1:], stderr)
+		case "host":
+			return runHostCommand(args[1:], stderr)
 		case "help":
 			return runDaemon([]string{"-help"}, stderr)
 		default:
@@ -2728,6 +2730,7 @@ Set up and maintain
   deps      Offer to install tmux and an agent CLI with this system's official commands
   setup     Guided first-run setup (uses doctor)
   boot      Start Mewla when you log in (systemd user unit)
+  host      Run or inspect the session host that will replace tmux (not in use yet)
   update    Verify and install the latest Mewla release
   version   Print the Mewla version, commit and platform
 

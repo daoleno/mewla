@@ -179,6 +179,28 @@ directory, never shown back in the app.
 Treat the state directory like your SSH keys: keep it private (`0700`), never
 commit it, and never share a pairing link.
 
+## The session host
+
+Mewla is replacing tmux with its own session host, `mewla host`: one process
+per state directory that owns your agents' terminals and keeps them running
+while the daemon restarts or updates. It is not turned on yet; until it is,
+Mewla uses tmux as before. Whoever can talk to the session host can read every
+agent's screen and type into it, so it is locked to you:
+
+- It has no network listener, only a Unix socket in a directory that must be
+  yours with mode `0700`: `$XDG_RUNTIME_DIR/mewla` on Linux, `$TMPDIR/mewla` on
+  macOS, or `/tmp/mewla-<uid>` when that is not usable. A directory that is
+  shared, a link, or someone else's is refused. The socket itself is `0600`.
+- On every connection the host asks the kernel which user is at the other end
+  (`SO_PEERCRED` on Linux, `LOCAL_PEERCRED` on macOS) and hangs up on anyone but
+  you before it reads a request, even if the socket's permissions were opened by
+  mistake. CI runs a client as another user against a socket open to everyone
+  and fails if the host answers it.
+- The daemon checks the same thing the other way: a socket served by another
+  user is not your session host, so nobody can put a fake one in its place.
+- Like tmux, it does not protect your terminals from root or from other
+  programs running as you.
+
 ## Data on your phone
 
 The device's private key is kept in the platform's secure storage (Keychain on
