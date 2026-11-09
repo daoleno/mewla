@@ -303,3 +303,18 @@ func (c *compositeBackend) saveLeftLocked() error {
 	}
 	return os.Rename(tmp, path)
 }
+
+func withoutMoved(c *compositeBackend, panes []sessionPane) []sessionPane {
+	c.host.movedMu.RLock()
+	defer c.host.movedMu.RUnlock()
+	if len(c.host.moved) == 0 {
+		return panes
+	}
+	kept := panes[:0:0]
+	for _, pane := range panes {
+		if !c.host.moved[pane.target] {
+			kept = append(kept, pane)
+		}
+	}
+	return kept
+}

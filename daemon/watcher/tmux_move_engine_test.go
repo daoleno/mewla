@@ -99,6 +99,18 @@ func TestTmuxSessionMovesToTheHostUnderItsID(t *testing.T) {
 	if got := restarted.sessions().terminal(id); got.Backend != "host" {
 		t.Fatalf("after a restart the terminal backend = %q", got)
 	}
+	// A restarted tmux server can number a new pane with the moved id; it is
+	// never listed as that Session.
+	if out, err := exec.Command("tmux", "-S", h.physical, "kill-server").CombinedOutput(); err != nil {
+		t.Fatalf("restart tmux: %v %s", err, out)
+	}
+	bootstrapHarnessServer(t, h.selected)
+	for !tmuxPaneExists(h, id) {
+		oldTmuxSession(t, h, "reused", sessionLabels{})
+	}
+	if n := countIn(h.w); n != 1 {
+		t.Fatalf("with a tmux pane reusing %s it is listed %d times", id, n)
+	}
 	// A Session that is not in tmux is refused.
 	if err := h.w.MoveToHost(id, TmuxMove{Command: "exec sleep 1", Cwd: dir}); err == nil {
 		t.Fatal("a host Session was moved again")

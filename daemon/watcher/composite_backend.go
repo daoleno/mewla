@@ -72,6 +72,10 @@ func (c *compositeBackend) listOwned() ([]sessionPane, error) {
 	tmuxPanes, tmuxErr := c.tmux.listOwned()
 	tmuxPanes = withoutLeft(c, tmuxPanes, func(p sessionPane) string { return p.target })
 	hostPanes, hostErr := c.host.listOwned()
+	// A Session that moved kept its pane id. A tmux server that restarted
+	// numbers its panes from %0 again; a pane there with a moved id is never
+	// that Session.
+	tmuxPanes = withoutMoved(c, tmuxPanes)
 	if errors.Is(hostErr, errSessionHostGone) && !c.knows(c.host.validID) {
 		// No host in play: tmux's answer stands as it always did, errors
 		// included, so a daemon that never used the host behaves as before.
