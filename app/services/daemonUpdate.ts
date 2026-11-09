@@ -14,6 +14,8 @@ export interface DaemonUpdateStatus {
   updating?: boolean;
   /** Why the last update did not take; the previous version kept running. */
   error?: string;
+  /** Sessions an earlier Mewla started in tmux that could not move to the session host; they run on, no longer Mewla's. */
+  sessions_in_tmux?: number;
 }
 
 /**
