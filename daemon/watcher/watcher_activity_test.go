@@ -196,14 +196,14 @@ func TestSessionDiscoveryActivityTimePriority(t *testing.T) {
 
 func installFakePollSeams(
 	w *Watcher,
-	windows []tmuxPane,
+	windows []sessionPane,
 	contentByTarget map[string]string,
 	processes map[int]processInfo,
 ) func() {
 	previousList := w.listPanes
 	previousCapture := w.capturePane
 	previousSnapshot := w.snapshotProcesses
-	w.listPanes = func() ([]tmuxPane, error) { return windows, nil }
+	w.listPanes = func() ([]sessionPane, error) { return windows, nil }
 	w.capturePane = func(target string) (string, bool, int) {
 		return contentByTarget[target], true, -1
 	}
@@ -248,8 +248,8 @@ func drainWatcherEvents(w *Watcher) {
 	}
 }
 
-func testWindows() []tmuxPane {
-	return []tmuxPane{
+func testWindows() []sessionPane {
+	return []sessionPane{
 		{target: "sess-a:@1", name: "alpha", cwd: "/repo/a", command: "claude", panePID: 111},
 		{target: "sess-b:@2", name: "beta", cwd: "/repo/b", command: "claude", panePID: 222},
 	}
@@ -380,7 +380,7 @@ func TestHiddenHostProviderTerminalEmitsActivityChangeWithoutPaneOutput(t *testi
 		{ID: "host-activity", Status: "running", StartedAt: started, Structured: true},
 		{ID: "host-activity", Status: "completed", StartedAt: started, SettledAt: settled, Structured: true},
 	}}
-	windows := []tmuxPane{{
+	windows := []sessionPane{{
 		target: "mewla-worker-brain-provider-boundary:@1", name: "Brain", cwd: "/brain",
 		command: "codex", panePID: 111, hidden: true,
 	}}
@@ -537,7 +537,7 @@ func TestPollTurnSettlementSeedsActivityAndRepeatsPreserveIt(t *testing.T) {
 		Summary:    "Finished verification",
 	})
 	w.turnLedger = ledger
-	windows := []tmuxPane{
+	windows := []sessionPane{
 		{target: "mewla-worker-worker:@1", name: "worker", cwd: "/repo/mewla", command: "claude", panePID: 333},
 	}
 	restore := installFakePollSeams(w, windows, map[string]string{
@@ -624,7 +624,7 @@ func collectWatcherEvents(w *Watcher) []SessionEvent {
 // daemon restarting.
 func TestPollFollowsAHiddenFlipInBothDirections(t *testing.T) {
 	w := New(time.Second)
-	windows := []tmuxPane{{target: "sess-a:@1", name: "A", cwd: "/a", command: "codex", panePID: 111}}
+	windows := []sessionPane{{target: "sess-a:@1", name: "A", cwd: "/a", command: "codex", panePID: 111}}
 	restore := installFakePollSeams(w, windows, map[string]string{windows[0].target: contentA},
 		map[int]processInfo{111: fakeProcess(111, sessionAStarted)})
 	defer restore()

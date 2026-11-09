@@ -66,42 +66,36 @@ func (w *Watcher) RewindMessage(sessionID string, request MessageRewindRequest) 
 	if !known {
 		return refuseMessageRewind("target provider could not be proven; no key was sent")
 	}
-	pane := &tmuxRewindPane{watcher: w, sessionID: sessionID, identity: identity}
+	pane := &sessionRewindPane{watcher: w, sessionID: sessionID, identity: identity}
 	return w.sessionInputOwner().serialized(sessionID, func() error {
 		return driveMessageRewind(pane, request, messageRewindStepTimeout)
 	})
 }
 
-type tmuxRewindPane struct {
+// sessionRewindPane drives the rewind through the Session backend, proving
+// the target's process identity before every key.
+type sessionRewindPane struct {
 	watcher   *Watcher
 	sessionID string
 	identity  targetProcessIdentity
 }
 
-func (p *tmuxRewindPane) capture(styled bool) (string, error) {
-	args := []string{"capture-pane", "-p", "-t", p.sessionID}
-	if styled {
-		args = []string{"capture-pane", "-p", "-e", "-t", p.sessionID}
-	}
-	out, err := tmuxCommand(p.watcher.socketPathFor(p.sessionID), args...).Output()
-	if err != nil {
-		return "", fmt.Errorf("capture pane: %w", err)
-	}
-	return string(out), nil
+func (p *sessionRewindPane) capture(styled bool) (string, error) {
+	return p.watcher.sessions().captureVisible(p.sessionID, styled)
 }
 
-func (p *tmuxRewindPane) sendKey(key string) error {
+func (p *sessionRewindPane) sendKey(key string) error {
 	if err := guardTargetIdentity(p.watcher.targetForSession, p.sessionID, p.identity); err != nil {
 		return err
 	}
-	return tmuxCommand(p.watcher.socketPathFor(p.sessionID), "send-keys", "-t", p.sessionID, key).Run()
+	return p.watcher.sessions().sendKeys(p.sessionID, key)
 }
 
-func (p *tmuxRewindPane) repeatKey(key string, count int) error {
+func (p *sessionRewindPane) repeatKey(key string, count int) error {
 	if err := guardTargetIdentity(p.watcher.targetForSession, p.sessionID, p.identity); err != nil {
 		return err
 	}
-	return tmuxCommand(p.watcher.socketPathFor(p.sessionID), "send-keys", "-t", p.sessionID, "-N", fmt.Sprint(count), key).Run()
+	return p.watcher.sessions().repeatKey(p.sessionID, key, count)
 }
 
 func refuseMessageRewind(format string, args ...any) error {

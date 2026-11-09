@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -64,50 +63,43 @@ func (w *Watcher) AnswerClaudeChoice(sessionID string, questions []ClaudeChoiceQ
 	if !known {
 		return refuseClaudeChoice("target provider could not be proven; no key was sent")
 	}
-	pane := &tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
+	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
 	return w.sessionInputOwner().serialized(sessionID, func() error {
 		return driveClaudeChoice(pane, questions, answers, expected, claudeChoiceStepTimeout)
 	})
 }
 
-type tmuxClaudeChoicePane struct {
+// sessionClaudeChoicePane drives the prompt through the Session backend,
+// proving the target's process identity before every key.
+type sessionClaudeChoicePane struct {
 	watcher   *Watcher
 	sessionID string
 	identity  targetProcessIdentity
 }
 
-func (p *tmuxClaudeChoicePane) capture() (string, error) {
-	out, err := tmuxCommand(p.watcher.socketPathFor(p.sessionID), "capture-pane", "-p", "-t", p.sessionID).Output()
-	if err != nil {
-		return "", fmt.Errorf("capture pane: %w", err)
-	}
-	return string(out), nil
+func (p *sessionClaudeChoicePane) capture() (string, error) {
+	return p.watcher.sessions().captureVisible(p.sessionID, false)
 }
 
 // captureDialog is the capture a dialog that asks to run something is
-// identified from, in the poll and in the answer alike (capturePaneDialog).
-func (p *tmuxClaudeChoicePane) captureDialog() (string, classifier.CaptureInfo, error) {
-	return capturePaneDialog(p.watcher.socketPathFor(p.sessionID), p.sessionID)
+// identified from, in the poll and in the answer alike (captureDialog).
+func (p *sessionClaudeChoicePane) captureDialog() (string, classifier.CaptureInfo, error) {
+	return p.watcher.sessions().captureDialog(p.sessionID)
 }
 
-func (p *tmuxClaudeChoicePane) sendKey(key string) error {
+func (p *sessionClaudeChoicePane) sendKey(key string) error {
 	if err := guardTargetIdentity(p.watcher.targetForSession, p.sessionID, p.identity); err != nil {
 		return err
 	}
-	return tmuxCommand(p.watcher.socketPathFor(p.sessionID), "send-keys", "-t", p.sessionID, key).Run()
+	return p.watcher.sessions().sendKeys(p.sessionID, key)
 }
 
-// sendText types exact bytes. -H avoids tmux argument parsing, which drops a
-// trailing ';' and treats a leading '-' as a flag.
-func (p *tmuxClaudeChoicePane) sendText(text string) error {
+// sendText types exact bytes.
+func (p *sessionClaudeChoicePane) sendText(text string) error {
 	if err := guardTargetIdentity(p.watcher.targetForSession, p.sessionID, p.identity); err != nil {
 		return err
 	}
-	args := []string{"send-keys", "-t", p.sessionID, "-H"}
-	for _, b := range []byte(text) {
-		args = append(args, hex.EncodeToString([]byte{b}))
-	}
-	return tmuxCommand(p.watcher.socketPathFor(p.sessionID), args...).Run()
+	return p.watcher.sessions().sendBytes(p.sessionID, []byte(text))
 }
 
 func refuseClaudeChoice(format string, args ...any) error {

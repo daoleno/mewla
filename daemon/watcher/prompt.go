@@ -555,7 +555,7 @@ func (w *Watcher) AnswerPrompt(sessionID, promptID string, number int) error {
 	if !known {
 		return refusePrompt("target provider could not be proven; no key was sent")
 	}
-	pane := &tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
+	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
 	return w.sessionInputOwner().serialized(sessionID, func() error {
 		return w.answerPrompt(pane, sessionID, promptID, number)
 	})
@@ -610,7 +610,7 @@ func (w *Watcher) CurrentPrompt(sessionID string) (*classifier.Prompt, error) {
 	if !known {
 		return nil, refusePrompt("target provider could not be proven")
 	}
-	pane := &tmuxClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
+	pane := &sessionClaudeChoicePane{watcher: w, sessionID: sessionID, identity: identity}
 	prompt, err := w.currentPrompt(pane, sessionID)
 	if prompt != nil || err != nil {
 		return prompt, err
@@ -681,7 +681,7 @@ func (w *Watcher) withDialogCapture(sessionID string, worker classifier.Worker, 
 	if signal.State != classifier.StateBlocked || !commandDialogSource(signal.Source) {
 		return signal
 	}
-	text, info, err := capturePaneDialog(w.socketPathFor(sessionID), sessionID)
+	text, info, err := w.sessions().captureDialog(sessionID)
 	if err != nil {
 		return signal
 	}

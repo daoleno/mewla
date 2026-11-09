@@ -218,49 +218,17 @@ type classifierWorkerSnapshot struct {
 	command string
 }
 
-// listServicePanes inventories explicitly Mewla-owned panes on the one selected
-// host server. Ambient user panes never enter service attribution. A missing
-// server is an empty inventory; other tmux failures remain hard errors.
+// listServicePanes inventories the explicitly Mewla-owned Sessions. Ambient
+// user panes never enter service attribution. Nothing running is an empty
+// inventory; other backend failures remain hard errors.
 func (w *Watcher) listServicePanes() ([]servicePane, error) {
 	w.mu.RLock()
-	socket := w.tmuxSocketPath
 	panesFn := w.servicePanesFn
 	w.mu.RUnlock()
 	if panesFn != nil {
 		return panesFn()
 	}
-	onSocket, err := listServicePanesOn(socket)
-	if err != nil {
-		if isNoTmuxServerError(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	panes := make([]servicePane, 0, len(onSocket))
-	owned := make(map[string]bool)
-	checked := make(map[string]bool)
-	for _, pane := range onSocket {
-		if !checked[pane.target] {
-			present, targetOwned, probeErr := probeTmuxTargetOwnership(socket, pane.target)
-			if probeErr != nil {
-				return nil, probeErr
-			}
-			checked[pane.target] = true
-			owned[pane.target] = present && targetOwned
-		}
-		if owned[pane.target] {
-			panes = append(panes, pane)
-		}
-	}
-	return panes, nil
-}
-
-func listServicePanesOn(socket string) ([]servicePane, error) {
-	out, err := tmuxCommand(socket, "list-panes", "-a", "-F", "#{pane_id}\t#{pane_id}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{pane_pid}\t#{pane_active}").CombinedOutput()
-	if err != nil {
-		return nil, tmuxFailure(socket, "list-panes", err, out)
-	}
-	return parseServicePanes(string(out)), nil
+	return w.sessions().listServices()
 }
 
 func parseServicePanes(output string) []servicePane {

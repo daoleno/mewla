@@ -315,16 +315,14 @@ func TestDetectAgentProcessRecognizesCursorAgent(t *testing.T) {
 }
 
 func TestNewTmuxSessionNameUsesWorkerPrefix(t *testing.T) {
-	got := newTmuxSessionName(CreateSessionOptions{Name: "Brain Codex"})
+	got := newTmuxSessionName(createdSessionName(CreateSessionOptions{Name: "Brain Codex"}))
 	if !strings.HasPrefix(got, "mewla-worker-brain-codex-") {
 		t.Fatalf("newTmuxSessionName() = %q", got)
 	}
 }
 
 func TestBuildNewSessionArgsCreatesDetachedSession(t *testing.T) {
-	got := buildNewSessionArgs("mewla-worker-codex-123", "/repo/mewla", CreateSessionOptions{
-		Name: "brain-codex",
-	}, "exec '/bin/zsh' -i -l -c 'codex'")
+	got := buildNewSessionArgs("mewla-worker-codex-123", "/repo/mewla", "brain-codex", "exec '/bin/zsh' -i -l -c 'codex'")
 	wantPrefix := []string{
 		"new-session",
 		"-d",

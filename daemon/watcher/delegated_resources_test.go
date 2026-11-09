@@ -33,7 +33,7 @@ func (m *fakeDelegatedResourceManager) UnitForTarget(target string) string {
 	return ""
 }
 
-func (*fakeDelegatedResourceManager) Reconcile([]tmuxPane) {}
+func (*fakeDelegatedResourceManager) Reconcile([]sessionPane) {}
 
 func (m *fakeDelegatedResourceManager) Release(target, unit string) error {
 	m.released = append(m.released, target+"\t"+unit)
@@ -544,7 +544,7 @@ func TestPortableResourceReconcilePreservesOrphanUntilExplicitCleanup(t *testing
 	if err := os.Mkdir(foreignTemp, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	manager.Reconcile([]tmuxPane{{
+	manager.Reconcile([]sessionPane{{
 		target:       "%1",
 		delegated:    true,
 		resourceUnit: live,
@@ -589,7 +589,7 @@ func TestPortableResourceReconcileLeavesRetiredLayoutUntouched(t *testing.T) {
 		reserved: make(map[string]time.Time),
 		now:      time.Now,
 	}
-	manager.Reconcile([]tmuxPane{{
+	manager.Reconcile([]sessionPane{{
 		target:       "%1",
 		delegated:    true,
 		resourceUnit: live,
