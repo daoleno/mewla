@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  liveTerminalBackend,
   notifyTmuxClientFocus,
   TerminalScrollCorrelation,
   TerminalSessionCorrelation,
@@ -54,6 +55,11 @@ describe("Terminal live-session correlation", () => {
     expect(notifyTmuxClientFocus("tmux", sendInput)).toBe(true);
     expect(writes).toEqual(["\u001b[I"]);
     expect(notifyTmuxClientFocus("shell", sendInput)).toBe(false);
+    // A session host terminal gets no focus report even when tmux was asked
+    // for: the daemon names the backend it opened.
+    expect(notifyTmuxClientFocus(liveTerminalBackend("host", "tmux"), sendInput)).toBe(false);
+    expect(liveTerminalBackend(undefined, "tmux")).toBe("tmux");
+    expect(liveTerminalBackend("", "tmux")).toBe("tmux");
     expect(writes).toEqual(["\u001b[I"]);
   });
 
