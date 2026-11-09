@@ -1,0 +1,19 @@
+# Context for daemon/Dockerfile (built from the repository root): only what the
+# daemon and its terminal engine's library build read.
+*
+!daemon
+!scripts
+!app/app.base.json
+!app/app.config.js
+!app/assets/notices
+!app/modules/terminal-vt
+!app/plugins
+!LICENSE
+!NOTICE
+daemon/tmp
+daemon/ghostty-libs
+app/modules/terminal-vt/android
+app/modules/terminal-vt/ios
+app/modules/terminal-vt/**/build
+**/node_modules
+**/.cache
