@@ -49,6 +49,8 @@ export interface ScreenStatus {
   agents?: ScreenAgent[];
   /** The computer is locked: a viewer sees its login window. */
   locked?: boolean;
+  /** The asking device is on this computer itself: a live view of its screen would only mirror the viewer. */
+  local?: boolean;
 }
 
 export interface ScreenAgent { worker: string; name?: string; since: string }

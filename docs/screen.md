@@ -209,6 +209,10 @@ missing, and **Open Settings** opens the right page on the Mac.
   it with **Take over**, **Watch** and **Stop**; **Take over** ends the agents'
   control and opens the screen. When the agent is done, the screen opens by
   itself. While you view it, agents wait.
+  Opened on the Mac itself (its own web UI), Screen never shows a live view, which
+  would only mirror the page you are looking at: it lists the agents using the
+  screen, each with **Stop**, and no capture runs. From a phone or another
+  computer the Mac's screen stays a live view.
   Someone using the Mac's own keyboard or trackpad does not pause the agent:
   nothing waits and nothing is refused. The agent's next answer says what you
   did (key presses, clicks, scrolls, how long ago, never what you typed) and

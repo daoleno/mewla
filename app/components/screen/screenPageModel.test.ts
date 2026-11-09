@@ -10,7 +10,10 @@ import {
   nextSlowStreak,
   powerSummary,
   powerWarning,
+  floatedScreenAgents,
   qualityReduced,
+  screenAgents,
+  screenEntry,
   slowestStage,
   spendModifiers,
   slowLasts,
@@ -204,5 +207,37 @@ describe("viewer messages", () => {
   test("a viewer stats message with the page's stages parses", () => {
     const raw = JSON.stringify({ type: "stats", fps: 20, kbps: 900, inputMs: 120, bridgeMs: 9, presentMs: 22, width: 1512, height: 982 });
     expect(parseScreenViewerMessage(raw)).toMatchObject({ type: "stats", bridgeMs: 9, presentMs: 22 });
+  });
+});
+
+describe("a computer's own screen looked at from that computer", () => {
+  const agent = { worker: "%1", name: "Spike", since: "2026-11-09T00:00:00Z" };
+  const base: ScreenStatus = { supported: true, platform: "darwin", disabled: false, approved: true, ready: true, keep_awake: false };
+
+  test("a local viewer never opens a live view, with or without an agent, whatever it asked for", () => {
+    for (const how of ["auto", "watch", "takeOver"] as const) {
+      expect(screenEntry({ ...base, local: true }, how)).toBe("local");
+      expect(screenEntry({ ...base, local: true, agent, agents: [agent] }, how)).toBe("local");
+    }
+  });
+  test("a viewer elsewhere still waits on an agent, or opens the live view", () => {
+    expect(screenEntry({ ...base, agent, agents: [agent] })).toBe("agent");
+    expect(screenEntry({ ...base, agent, agents: [agent] }, "watch")).toBe("live");
+    expect(screenEntry({ ...base, agent, agents: [agent] }, "takeOver")).toBe("live");
+    expect(screenEntry(base)).toBe("live");
+    expect(screenEntry({ ...base, local: false })).toBe("live");
+  });
+  test("setup comes before anything, even locally", () => {
+    expect(screenEntry({ ...base, ready: false, local: true })).toBe("setup");
+  });
+  test("the floating window shows the Mac's agents only to a viewer elsewhere", () => {
+    expect(floatedScreenAgents({ ...base, agent, agents: [agent] })).toEqual([agent]);
+    expect(floatedScreenAgents({ ...base, agent })).toEqual([agent]);
+    expect(floatedScreenAgents({ ...base, local: true, agent, agents: [agent] })).toEqual([]);
+    expect(floatedScreenAgents({ ...base, ready: false, agent })).toEqual([]);
+  });
+  test("agents are the list, else the single one", () => {
+    expect(screenAgents(null)).toEqual([]);
+    expect(screenAgents({ agent })).toEqual([agent]);
   });
 });

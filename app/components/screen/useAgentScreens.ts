@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 import { DisplayRequestError, listDisplays, type AgentDisplay } from "../../services/display";
 import { screenRequest, type ScreenAgent } from "../../services/screen";
+import { floatedScreenAgents } from "./screenPageModel";
 import type { StoredServer } from "../../services/storage";
 
 /** How often the current computer is asked which agents use a screen, while one might. */
@@ -58,7 +59,7 @@ export function useAgentScreens(server: StoredServer | null, enabled: boolean) {
       ]);
       if (controller.signal.aborted) return;
       if (shown) setDisplays(shown);
-      if (status) setMac(status.ready ? (status.agents?.length ? status.agents : status.agent ? [status.agent] : []) : []);
+      if (status) setMac(floatedScreenAgents(status));
     };
     void read();
     const timer = setInterval(() => void read(), POLL_MS);
