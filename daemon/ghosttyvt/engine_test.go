@@ -184,21 +184,120 @@ func TestStyledCapture(t *testing.T) {
 	}
 }
 
-func TestReconstructRebuildsTheTerminal(t *testing.T) {
-	term := newTerminal(t, 30, 6)
-	term.Write([]byte("history 1\r\nhistory 2\r\n\x1b[1;32mgreen\x1b[0m\r\n\x1b[?2004h\x1b[3;5Hmoved"))
-	rebuilt := capture(t, term, CaptureOptions{Scope: ScopeAll, Reconstruct: true})
+// sameView fails unless a viewer shows what the terminal shows: the screen
+// with its styles, the cursor and the modes a viewer acts on.
+func sameView(t *testing.T, viewer, term *Terminal) {
+	t.Helper()
+	opts := CaptureOptions{Scope: ScopeScreen, Styled: true}
+	if got, want := capture(t, viewer, opts), capture(t, term, opts); got != want {
+		t.Fatalf("viewer screen = %q, want %q", got, want)
+	}
+	got, want := viewer.State(), term.State()
+	if got.CursorX != want.CursorX || got.CursorY != want.CursorY || got.CursorVisible != want.CursorVisible ||
+		got.Alt != want.Alt || got.BracketedPaste != want.BracketedPaste || got.MouseTracking != want.MouseTracking {
+		t.Fatalf("viewer state = %+v, want %+v", got, want)
+	}
+}
 
-	fresh := newTerminal(t, 30, 6)
-	fresh.Write([]byte(rebuilt))
-	for _, opts := range []CaptureOptions{{Scope: ScopeAll, Trim: true}, {Scope: ScopeScreen, Styled: true}} {
-		if got, want := capture(t, fresh, opts), capture(t, term, opts); got != want {
-			t.Fatalf("rebuilt %+v = %q, want %q", opts, got, want)
+func replay(t *testing.T, term *Terminal) []byte {
+	t.Helper()
+	out, err := term.Replay()
+	if err != nil {
+		t.Fatalf("Replay: %v", err)
+	}
+	return out
+}
+
+func TestReplayRebuildsTheScreen(t *testing.T) {
+	term := newTerminal(t, 30, 6)
+	term.Write([]byte("history 1\r\nhistory 2\r\n\x1b[1;32mgreen\x1b[0m\r\nmore\r\nrows\r\nto\r\nscroll\r\n\x1b[?2004h\x1b[?1000h\x1b[?1h\x1b[?25l\x1b[3;5Hmoved\x1b[4m"))
+	out := replay(t, term)
+	if bytes.Contains(out, []byte("\x1b]4;")) {
+		t.Fatalf("replay sets the palette: %q", out)
+	}
+	if bytes.Contains(out, []byte("history 1")) {
+		t.Fatalf("replay carries the history: %q", out)
+	}
+
+	viewer := newTerminal(t, 30, 6)
+	viewer.Write(out)
+	sameView(t, viewer, term)
+	// Modes the viewer cannot report back are proven by what they do next:
+	// cursor key mode and the pen style the program left.
+	for _, key := range []string{"Up", "Left"} {
+		got, err := viewer.EncodeKey(key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want, _ := term.EncodeKey(key)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("viewer encodes %s as %q, want %q", key, got, want)
 		}
 	}
-	got, want := fresh.State(), term.State()
-	if got.CursorX != want.CursorX || got.CursorY != want.CursorY || got.BracketedPaste != want.BracketedPaste {
-		t.Fatalf("rebuilt state = %+v, want %+v", got, want)
+	viewer.Write([]byte("next"))
+	term.Write([]byte("next"))
+	sameView(t, viewer, term)
+}
+
+func TestReplayKeepsThePrimaryScreenUnderTheAlternate(t *testing.T) {
+	for _, mode := range []string{"1049", "1047", "47"} {
+		t.Run(mode, func(t *testing.T) {
+			term := newTerminal(t, 20, 4)
+			term.Write([]byte("shell 1\r\nshell 2\r\n\x1b[31m$ \x1b[0mvim"))
+			term.Write([]byte("\x1b[?" + mode + "h\x1b[H\x1b[2Jalt top\x1b[4;1Halt bottom\x1b[2;3H"))
+
+			viewer := newTerminal(t, 20, 4)
+			viewer.Write(replay(t, term))
+			sameView(t, viewer, term)
+
+			leave := []byte("\x1b[?" + mode + "l")
+			viewer.Write(leave)
+			term.Write(leave)
+			sameView(t, viewer, term)
+		})
+	}
+}
+
+// Ground is false inside an escape sequence and inside a multi-byte
+// character: a viewer may start reading output only between the two.
+func TestGroundCoversSequencesAndCharacters(t *testing.T) {
+	term := newTerminal(t, 20, 3)
+	for _, step := range []struct {
+		write  string
+		ground bool
+	}{{"a\xe2\x94", false}, {"\x80", true}, {"\x1b[3", false}, {"1m", true}, {"\x1b]0;ti", false}, {"tle\x07", true}} {
+		term.Write([]byte(step.write))
+		if got := term.State().Ground; got != step.ground {
+			t.Fatalf("after %q: Ground = %v, want %v", step.write, got, step.ground)
+		}
+	}
+}
+
+func TestHistoryScope(t *testing.T) {
+	term := newTerminal(t, 10, 3)
+	if got := capture(t, term, CaptureOptions{Scope: ScopeHistory}); got != "" {
+		t.Fatalf("history of a new terminal = %q, want none", got)
+	}
+	term.Write([]byte("\x1b[31mredredredredred\r\nstill red\x1b[0m plain\r\nrow3\r\nrow4\r\nrow5"))
+	// Five rows went above a three-row screen: "redredredr", "edred",
+	// "still red ", "plain" and "row3" were pushed up as the screen scrolled.
+	all := capture(t, term, CaptureOptions{Scope: ScopeHistory, Styled: true})
+	rows := strings.Split(all, "\r\n")
+	if len(rows) != term.State().ScrollbackRows {
+		t.Fatalf("history rows = %q, want %d of them", rows, term.State().ScrollbackRows)
+	}
+	for _, row := range rows[:3] {
+		// Each row carries its own style, so rows stand alone.
+		if !strings.HasPrefix(row, "\x1b[0m\x1b[38;5;1m") {
+			t.Fatalf("history row %q does not start its own style", row)
+		}
+	}
+	// Plain captures end rows with \n, styled ones with \r\n.
+	if plain := capture(t, term, CaptureOptions{Scope: ScopeHistory, History: 2}); plain != "still red \nplain" {
+		t.Fatalf("last 2 history rows = %q", plain)
+	}
+	if screen := capture(t, term, CaptureOptions{Scope: ScopeScreen}); strings.Contains(all, screen) {
+		t.Fatalf("history %q contains the screen %q", all, screen)
 	}
 }
 

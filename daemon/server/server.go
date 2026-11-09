@@ -122,6 +122,8 @@ type Server struct {
 	auth                         *auth.Manager
 	watcher                      *watcher.Watcher
 	terminal                     *terminal.Manager
+	hostTerminal                 *terminal.HostBackend // opens session host Sessions; SetVersion names the daemon to the host
+	terminalTarget               func(id string) (watcher.TerminalTarget, error)
 	pusher                       notificationPusher
 	deviceHook                   func(timeZone, locale string)
 	notifications                notificationRecorder
@@ -339,10 +341,12 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 	if authManager != nil {
 		uploadDir = filepath.Join(authManager.StorageDir(), "uploads")
 	}
+	hostTerminal := &terminal.HostBackend{}
 	srv := &Server{
 		auth:               authManager,
 		watcher:            w,
-		terminal:           terminal.NewManager(&terminal.TmuxBackend{}),
+		hostTerminal:       hostTerminal,
+		terminal:           terminal.NewManager(&terminal.TmuxBackend{}, hostTerminal),
 		stats:              sc,
 		work:               workStore,
 		execs:              execs,
@@ -384,6 +388,7 @@ func New(authManager *auth.Manager, w *watcher.Watcher, pusher *push.Client, sc 
 		srv.pusher = pusher
 	}
 	srv.terminal.SetCleanupSubmitter(srv.terminalCleanup.Submit)
+	srv.terminalTarget = srv.openableTerminal
 	return srv
 }
 
@@ -1694,26 +1699,16 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 		}
 		s.sendJSON(conn, map[string]any{"type": "terminal_snapshot", "request_id": raw.RequestID, "target_id": raw.TargetID, "text": text})
 	case "terminal_open":
-		backend := raw.Backend
-		if backend == "" {
-			backend = "tmux"
-		}
 		targetID := raw.TargetID
 		if targetID == "" {
 			targetID = raw.WorkerID
 		}
-		if backend == "tmux" {
-			presence, probeErr := s.watcher.ProbeSession(targetID)
-			if probeErr != nil || presence != watcher.SessionPresencePresent {
-				message := "tmux target is not an available Mewla-owned Session"
-				if probeErr != nil {
-					message = probeErr.Error()
-				}
-				s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": message})
-				return
-			}
+		target, err := s.terminalTarget(targetID)
+		if err != nil {
+			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
+			return
 		}
-		_, err := s.terminal.Open(clientID(conn), backend, targetID, terminal.OpenOptions{Cols: raw.Cols, Rows: raw.Rows, Socket: s.watcher.SocketPathFor(targetID)}, func(v any) { s.sendJSONWhenRoom(conn, v) })
+		_, err = s.terminal.Open(clientID(conn), target.Backend, targetID, terminal.OpenOptions{Cols: raw.Cols, Rows: raw.Rows, Socket: target.Socket}, func(v any) { s.sendJSONWhenRoom(conn, v) })
 		if err != nil {
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "code": "open_failed", "message": err.Error()})
 		}
@@ -1742,6 +1737,25 @@ func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) 
 			s.sendJSON(conn, map[string]any{"type": "terminal_error", "session_id": raw.SessionID, "code": "close_failed", "message": err.Error()})
 		}
 	}
+}
+
+// openableTerminal resolves where a Terminal view opens: only a present
+// Session this daemon owns, through the backend the watcher says runs it.
+// The client's backend field does not choose.
+func (s *Server) openableTerminal(id string) (watcher.TerminalTarget, error) {
+	unavailable := fmt.Errorf("target is not an available Mewla-owned Session")
+	target, owned := s.watcher.TerminalTarget(id)
+	if !owned {
+		return watcher.TerminalTarget{}, unavailable
+	}
+	presence, err := s.watcher.ProbeSession(id)
+	if err != nil {
+		return watcher.TerminalTarget{}, err
+	}
+	if presence != watcher.SessionPresencePresent {
+		return watcher.TerminalTarget{}, unavailable
+	}
+	return target, nil
 }
 
 func (s *Server) sendTelegramStatus(conn *websocket.Conn, requestID string) {

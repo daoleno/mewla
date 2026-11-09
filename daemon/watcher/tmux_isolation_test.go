@@ -17,11 +17,11 @@ func TestWatcherUsesOneSelectedHostServerForKnownTargets(t *testing.T) {
 	if got := w.socketPathFor("mewla-worker-worker:@3"); got != socket {
 		t.Fatalf("internal selected socket = %q, want %q", got, socket)
 	}
-	if got := w.SocketPathFor("mewla-worker-worker:@3"); got != socket {
-		t.Fatalf("known target socket = %q, want %q", got, socket)
+	if got, ok := w.TerminalTarget("mewla-worker-worker:@3"); !ok || got != (TerminalTarget{Backend: "tmux", Socket: socket}) {
+		t.Fatalf("known target terminal = %+v, %v; want tmux on %q", got, ok, socket)
 	}
-	if got := w.SocketPathFor("ambient:@9"); got != "" {
-		t.Fatalf("unknown target exposed custom socket %q", got)
+	if got, ok := w.TerminalTarget("ambient:@9"); ok || got.Socket != "" {
+		t.Fatalf("unknown target exposed %+v", got)
 	}
 }
 

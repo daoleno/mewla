@@ -50,6 +50,7 @@ const (
 	MethodShutdown  = "shutdown"
 	MethodGetData   = "get_data"
 	MethodSetData   = "set_data"
+	MethodAttach    = "attach"
 )
 
 // Error codes.
@@ -191,17 +192,19 @@ const (
 	ScopeAll    = "all"
 	ScopeScreen = "screen"
 	ScopeRecent = "recent"
+	// ScopeHistory is the history above the screen alone, up to
+	// CaptureParams.History of its last rows (all of it when 0).
+	ScopeHistory = "history"
 )
 
 // CaptureParams reads a Session's terminal as text.
 type CaptureParams struct {
-	ID          string `json:"id"`
-	Scope       string `json:"scope"`             // ScopeAll, ScopeScreen or ScopeRecent
-	History     int    `json:"history,omitempty"` // rows above the screen, for ScopeRecent
-	Unwrap      bool   `json:"unwrap,omitempty"`
-	Trim        bool   `json:"trim,omitempty"`
-	Styled      bool   `json:"styled,omitempty"`
-	Reconstruct bool   `json:"reconstruct,omitempty"`
+	ID      string `json:"id"`
+	Scope   string `json:"scope"`             // ScopeAll, ScopeScreen or ScopeRecent
+	History int    `json:"history,omitempty"` // rows above the screen, for ScopeRecent and ScopeHistory
+	Unwrap  bool   `json:"unwrap,omitempty"`
+	Trim    bool   `json:"trim,omitempty"`
+	Styled  bool   `json:"styled,omitempty"`
 }
 
 // Capture is a capture and the terminal state it was taken in.
@@ -216,6 +219,48 @@ type Capture struct {
 	MouseTracking  bool   `json:"mouse_tracking"`
 	ScrollbackRows int    `json:"scrollback_rows"`
 	OutputSeq      uint64 `json:"output_seq"`
+}
+
+// AttachParams opens a view of one Session, on a connection of its own as
+// subscribe does. Cols and Rows, when both are set, resize the Session first:
+// the viewer that attaches last sets the size, and one that only watches
+// leaves them 0.
+//
+// The answer is Attached, then a binary frame with the replay that rebuilds
+// what the Session shows on a fresh terminal of that size, then a binary frame
+// for each output after it. Terminal queries are left out of the output: the
+// host answers them, and a second answer from a viewer would reach the program
+// as typing. The stream ends with an AttachEnd JSON frame; input goes through
+// the input method as usual.
+type AttachParams struct {
+	ID   string `json:"id"`
+	Cols int    `json:"cols,omitempty"`
+	Rows int    `json:"rows,omitempty"`
+}
+
+// Attached answers attach.
+type Attached struct {
+	Cols int `json:"cols"`
+	Rows int `json:"rows"`
+	// OutputSeq is the output the replay already shows.
+	OutputSeq uint64 `json:"output_seq"`
+}
+
+// Why an attach stream ended.
+const (
+	// AttachExited: the program exited and its last output came first.
+	AttachExited = "exited"
+	// AttachRemoved: the Session was removed.
+	AttachRemoved = "removed"
+	// AttachBehind: the viewer read too slowly and missed output. Attach
+	// again for a fresh replay.
+	AttachBehind = "behind"
+)
+
+// AttachEnd is the last frame of an attach stream.
+type AttachEnd struct {
+	Reason   string `json:"reason"`
+	ExitCode *int   `json:"exit_code,omitempty"`
 }
 
 // Signals.

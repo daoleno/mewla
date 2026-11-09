@@ -34,7 +34,10 @@ type DaemonUpdater interface {
 func (s *Server) SetDaemonUpdater(updater DaemonUpdater) { s.daemonUpdater = updater }
 
 // SetVersion sets the Mewla version /health reports.
-func (s *Server) SetVersion(version string) { s.version = version }
+func (s *Server) SetVersion(version string) {
+	s.version = version
+	s.hostTerminal.Version = version
+}
 
 // ErrUpdateUnavailable: nothing to install, or this build does not update.
 var ErrUpdateUnavailable = errors.New("no update to install")

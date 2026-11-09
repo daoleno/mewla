@@ -32,6 +32,8 @@ func (c *compositeBackend) observedGeneration(id string) string {
 	return c.of(id).observedGeneration(id)
 }
 
+func (c *compositeBackend) terminal(id string) TerminalTarget { return c.of(id).terminal(id) }
+
 // knows reports whether the watcher holds a Session of the given backend. It
 // read-locks w.mu, so listOwned must never be called with w.mu held (poll
 // releases it before listing).

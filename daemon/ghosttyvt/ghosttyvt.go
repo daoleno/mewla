@@ -117,21 +117,21 @@ const (
 	// ScopeRecent is the screen and up to CaptureOptions.History rows of
 	// history above it.
 	ScopeRecent
+	// ScopeHistory is the history above the screen alone: its last
+	// CaptureOptions.History rows, or all of it when History is 0.
+	ScopeHistory
 )
 
 // CaptureOptions shapes a capture.
 type CaptureOptions struct {
 	Scope   Scope
-	History int // rows of history above the screen, for ScopeRecent
+	History int // rows of history above the screen, for ScopeRecent and ScopeHistory
 	// Unwrap joins rows that a program's long line wrapped onto.
 	Unwrap bool
 	// Trim drops trailing whitespace on each row and trailing blank rows.
 	Trim bool
-	// Styled emits the text with its SGR styles.
+	// Styled emits the text with its SGR styles, each row on its own.
 	Styled bool
-	// Reconstruct emits VT that rebuilds this terminal on a fresh one:
-	// styles, modes, cursor, palette and the rest. It implies Styled.
-	Reconstruct bool
 }
 
 // State is a terminal's current shape and modes.

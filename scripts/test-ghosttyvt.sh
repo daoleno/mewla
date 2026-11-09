@@ -25,3 +25,4 @@ go test -tags ghosttyvt -count=1 "$@" ./ghosttyvt/... ./sessionhost/...
 # The watcher's session host backend against a real host; the rest of the
 # watcher does not use the engine and runs in the untagged suite.
 go test -tags ghosttyvt -count=1 -run 'TestHost|TestSessionHost' "$@" ./watcher/
+go test -tags ghosttyvt -count=1 -run 'TestHostTerminal' "$@" ./terminal/

@@ -27,6 +27,7 @@ type screen interface {
 	State() ghosttyvt.State
 	EncodeKey(spec string) ([]byte, error)
 	Snapshot() ([]byte, error)
+	Replay() ([]byte, error)
 	Close()
 }
 
@@ -89,6 +90,9 @@ type session struct {
 	lastOutputEv time.Time
 	outputTimer  *time.Timer
 	closed       bool
+	taps         map[*viewTap]struct{} // attached viewers
+	viewsEnded   *AttachEnd            // set once no more output will come
+	removing     bool                  // close has begun: the program ends because the Session is removed
 
 	exited     chan struct{} // closed when the program has exited
 	readerDone chan struct{} // closed when the PTY reader has stopped
@@ -155,6 +159,7 @@ func startSession(host *Server, params CreateParams) (*session, error) {
 		status:     newStatusRecords(),
 		labels:     labels,
 		data:       make(map[string]string),
+		taps:       make(map[*viewTap]struct{}),
 		exited:     make(chan struct{}),
 		readerDone: make(chan struct{}),
 	}
@@ -231,6 +236,7 @@ func (s *session) consume(p []byte) {
 	}
 	out := s.screen.Write(p)
 	s.outputSeq += uint64(len(p))
+	s.feedTapsLocked(p)
 	s.lastOutputAt = now
 	var events []Event
 	for _, report := range out.Status {
@@ -317,6 +323,19 @@ func (s *session) waitLoop() {
 	close(s.exited)
 	exitCode := code
 	s.host.publish(Event{Type: EventExited, Session: s.id, ExitCode: &exitCode, At: now})
+	// Viewers get the program's last output before they hear it exited.
+	select {
+	case <-s.readerDone:
+	case <-time.After(readerDrain):
+	}
+	viewCode := code
+	end := AttachEnd{Reason: AttachExited, ExitCode: &viewCode}
+	s.mu.Lock()
+	if s.removing {
+		end = AttachEnd{Reason: AttachRemoved}
+	}
+	s.endViewsLocked(end)
+	s.mu.Unlock()
 }
 
 func exitStatus(state *os.ProcessState, err error) (int, string) {
@@ -465,11 +484,10 @@ func (s *session) resize(cols, rows int) error {
 
 func (s *session) capture(params CaptureParams) (Capture, error) {
 	opts := ghosttyvt.CaptureOptions{
-		History:     params.History,
-		Unwrap:      params.Unwrap,
-		Trim:        params.Trim,
-		Styled:      params.Styled,
-		Reconstruct: params.Reconstruct,
+		History: params.History,
+		Unwrap:  params.Unwrap,
+		Trim:    params.Trim,
+		Styled:  params.Styled,
 	}
 	switch params.Scope {
 	case ScopeAll, "":
@@ -478,6 +496,8 @@ func (s *session) capture(params CaptureParams) (Capture, error) {
 		opts.Scope = ghosttyvt.ScopeScreen
 	case ScopeRecent:
 		opts.Scope = ghosttyvt.ScopeRecent
+	case ScopeHistory:
+		opts.Scope = ghosttyvt.ScopeHistory
 	default:
 		return Capture{}, errorf(ErrCodeBadRequest, "unknown capture scope %q", params.Scope)
 	}
@@ -596,6 +616,9 @@ func (s *session) setData(key, value string) error {
 // close ends the program if it still runs (hangup, then kill after
 // removeGrace) and frees the PTY and terminal.
 func (s *session) close() {
+	s.mu.Lock()
+	s.removing = true
+	s.mu.Unlock()
 	if s.isAlive() {
 		_ = syscall.Kill(-s.pid, syscall.SIGHUP)
 		select {
@@ -612,6 +635,7 @@ func (s *session) close() {
 	}
 	s.mu.Lock()
 	s.closed = true
+	s.endViewsLocked(AttachEnd{Reason: AttachRemoved})
 	if s.outputTimer != nil {
 		s.outputTimer.Stop()
 	}
