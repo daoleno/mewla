@@ -40,6 +40,8 @@ import {
   nextSlowStreak,
   powerSummary,
   powerWarning,
+  screenAgents,
+  screenEntry,
   slowLasts,
   unsupportedScreen,
   type IndicatorTone,
@@ -48,7 +50,7 @@ import {
 import { LIVE_DEADLINE_REASON, startLiveDeadline } from "./screenLiveDeadline";
 import type { ScreenPointerMode, ScreenViewerMessage } from "./screenViewerProtocol";
 
-type Phase = "checking" | "setup" | "agent" | "connecting" | "live" | "lost";
+type Phase = "checking" | "setup" | "agent" | "local" | "connecting" | "live" | "lost";
 
 /**
  * The current server's own screen, through its Screen Sharing. Leaving,
@@ -149,13 +151,15 @@ export function ScreenScreen() {
     setLocked(!!next.locked);
     // Unsupported, off at the computer, not yet allowed, or missing
     // permissions: the setup view explains the one next step.
-    if (!next.ready) {
+    const entry = screenEntry(next, how);
+    if (entry === "setup") {
       setReason(next.reason || null);
       setPhase("setup");
       return;
     }
-    if (next.agent && how === "auto") {
-      setPhase("agent");
+    // On the computer itself the screen is the one in front of the person: no live view, no stream.
+    if (entry === "local" || entry === "agent") {
+      setPhase(entry);
       return;
     }
     const watch = how === "watch" && !!next.agent;
@@ -267,15 +271,16 @@ export function ScreenScreen() {
     return () => clearInterval(timer);
   }, [connect, currentServer, isCurrentServer, waitingForPermissions]);
 
-  // While an agent uses the screen, look again until it is done, then open.
+  // While an agent uses the screen, look again until it is done, then open. On the computer itself
+  // the card just follows the agents.
   useEffect(() => {
-    if (phase !== "agent" || !currentServer) return;
+    if ((phase !== "agent" && phase !== "local") || !currentServer) return;
     const server = currentServer;
     const timer = setInterval(() => {
       void screenRequest(server).then((next) => {
         if (!isCurrentServer(server.id)) return;
         setStatus(next);
-        if (!next.agent) void connect();
+        if (phase === "agent" && !next.agent) void connect();
       }).catch((error) => warnOnce("screen.status", error));
     }, 3000);
     return () => clearInterval(timer);
@@ -421,12 +426,20 @@ export function ScreenScreen() {
   const viewerVisible = phase === "connecting" || phase === "live";
   // Held sideways the picture owns the display: no header, no status bar.
   const fullBleed = immersive && viewerVisible;
-    const agents = status?.agents?.length ? status.agents : status?.agent ? [status.agent] : [];
+  const agents = screenAgents(status);
   // An agent on the iPhone works in iPhone Mirroring, off the Mac's screen: Watch can't show it,
   // so it has its own Done (for what it asked of the person) and Stop.
   const iphoneAgent = iphone.status?.enabled ? iphone.status.active : undefined;
   const agentLabel = (watchedWorker ? agents.find((a) => a.worker === watchedWorker)?.name : undefined) || status?.agent?.name || "An agent";
-  const menuItems: ActionMenuItem[] = watching ? [
+  const keepAwakeItem: ActionMenuItem[] = status?.approved ? [{
+    key: "awake", icon: "power", disabled: busy,
+    label: status.keep_awake ? "Let this computer sleep" : "Keep this computer awake",
+    onPress: () => void setKeepAwake(!status.keep_awake),
+  }] : [];
+  const menuItems: ActionMenuItem[] = phase === "local" ? [
+    ...keepAwakeItem,
+    ...(phoneMenuItem(phone, () => router.push("/phone")) ? [phoneMenuItem(phone, () => router.push("/phone"))!] : []),
+  ] : watching ? [
     { key: "fit", icon: "expand", label: "Fit screen", onPress: () => view.current?.fit() },
     { key: "disconnect", icon: "exit", label: "Stop watching", onPress: () => { disconnect(); setWatching(false); setPhase("agent"); } },
   ] : [
@@ -437,11 +450,7 @@ export function ScreenScreen() {
     },
     { key: "fit", icon: "expand", label: "Fit screen", onPress: () => view.current?.fit() },
     ...(needsSoftKeyboard() ? [] : [{ key: "full", icon: "expand", label: "Full size", onPress: () => view.current?.fullSize() } as const]),
-    ...(status?.approved ? [{
-      key: "awake", icon: "power", disabled: busy,
-      label: status.keep_awake ? "Let this computer sleep" : "Keep this computer awake",
-      onPress: () => void setKeepAwake(!status.keep_awake),
-    } satisfies ActionMenuItem] : []),
+    ...keepAwakeItem,
     ...(phoneMenuItem(phone, () => router.push("/phone")) ? [phoneMenuItem(phone, () => router.push("/phone"))!] : []),
     phase === "live"
       ? { key: "disconnect", icon: "exit", label: "Disconnect", onPress: () => { disconnect(); setReason(null); setPhase("lost"); } }
@@ -484,6 +493,17 @@ export function ScreenScreen() {
     return <AgentScreens />;
   }
 
+  const iphoneRow = iphoneAgent ? (
+    <View style={styles.agentActions}>
+      <AppText variant="body" style={styles.agentTitle}>{`${iphoneAgent.name || "An agent"} is using your iPhone`}</AppText>
+      <Button label="Watch" icon="eye" size="sm" accessibilityLabel={`Watch ${iphoneAgent.name || "the agent"} on your iPhone`}
+        onPress={() => router.push("/settings/iphone")} />
+      <Button label="Done" icon="check" size="sm" accessibilityLabel="Done: tell the agent you finished on your iPhone"
+        onPress={() => void iphone.change({ handoff_done: true })} disabled={iphone.busy} />
+      <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${iphoneAgent.name || "the agent"} on your iPhone`}
+        onPress={() => void iphone.change({ stop_agent: true })} disabled={iphone.busy} />
+    </View>
+  ) : null;
   const takeOver = () => void connect("takeOver");
   const stopWatched = () => void stopAgent(watchedWorker);
 
@@ -519,20 +539,32 @@ export function ScreenScreen() {
               </View>
             );
           })}
-          {iphoneAgent ? (
-            <View style={styles.agentActions}>
-              <AppText variant="body" style={styles.agentTitle}>{`${iphoneAgent.name || "An agent"} is using your iPhone`}</AppText>
-              <Button label="Watch" icon="eye" size="sm" accessibilityLabel={`Watch ${iphoneAgent.name || "the agent"} on your iPhone`}
-                onPress={() => router.push("/settings/iphone")} />
-              <Button label="Done" icon="check" size="sm" accessibilityLabel="Done: tell the agent you finished on your iPhone"
-                onPress={() => void iphone.change({ handoff_done: true })} disabled={iphone.busy} />
-              <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${iphoneAgent.name || "the agent"} on your iPhone`}
-                onPress={() => void iphone.change({ stop_agent: true })} disabled={iphone.busy} />
-            </View>
-          ) : null}
+          {iphoneRow}
           <View style={styles.agentActions}>
             <Button label={agents.length > 1 ? "Take over (stops all)" : "Take over"} icon="hand" size="sm" variant="filled" onPress={() => void connect("takeOver")} disabled={busy} />
           </View>
+        </View>
+      ) : null}
+      {phase === "local" ? (
+        <View style={[styles.root, styles.center]}>
+          <View style={[styles.localCard, { backgroundColor: colors.bgSurface, borderColor: colors.borderSubtle }]}>
+            {agents.length === 0 ? (
+              <View style={styles.localRow}>
+                <Icon name="desktop" size={20} color={colors.textTertiary} />
+                <AppText variant="body" tone="secondary" style={styles.watchLabel}>No agent on this screen</AppText>
+              </View>
+            ) : agents.map((agent) => {
+              const label = agent.name || "An agent";
+              return (
+                <View key={agent.worker} style={styles.localRow}>
+                  <Icon name="desktop" size={20} color={colors.textSecondary} />
+                  <AppText variant="body" numberOfLines={1} style={styles.watchLabel}>{label}</AppText>
+                  <Button label="Stop" size="sm" variant="outlined" accessibilityLabel={`Stop ${label}`} onPress={() => void stopAgent(agent.worker)} disabled={busy} />
+                </View>
+              );
+            })}
+          </View>
+          {iphoneRow}
         </View>
       ) : null}
       {phase === "checking" && !status ? (
@@ -743,6 +775,11 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: "row", alignItems: "center", gap: Spacing.xs },
   indicator: { width: TouchTarget, height: TouchTarget, alignItems: "center", justifyContent: "center" },
   dot: { width: 8, height: 8, borderRadius: 4 },
+  localCard: {
+    alignSelf: "stretch", maxWidth: 440, width: "100%", gap: Spacing.sm, padding: Spacing.md,
+    borderWidth: StyleSheet.hairlineWidth, borderRadius: Radii.md, ...ContinuousCorners,
+  },
+  localRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
   watchBar: { flexDirection: "row", alignItems: "center", gap: Spacing.sm, paddingHorizontal: Spacing.md },
   watchLabel: { flex: 1 },
   sheet: { gap: Spacing.md, paddingHorizontal: Spacing.lg, paddingBottom: Spacing.lg },

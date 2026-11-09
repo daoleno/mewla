@@ -1,4 +1,4 @@
-import type { ScreenPower, ScreenStatus } from "../../services/screen";
+import type { ScreenAgent, ScreenPower, ScreenStatus } from "../../services/screen";
 import { PATH_LABELS } from "../../services/connectionPath";
 import type { ScreenPath, ScreenStreamStats } from "../../services/screenStream";
 import type { ScreenModifier } from "./screenViewerProtocol";
@@ -216,4 +216,31 @@ export function diagnosticRows(readout: StreamReadout, power: string | null): Di
   if (slowest && slowest.stage !== "network") rows.push({ label: "Slowest", value: `${slowest.label} ${Math.round(slowest.ms)} ms` });
   if (power) rows.push({ label: "Computer", value: power });
   return rows;
+}
+
+/** What a Screen page shows for a computer's own screen, once it can be opened. */
+export type ScreenEntry = "setup" | "local" | "agent" | "live";
+
+/** The agents using the computer's screen now. */
+export function screenAgents(status: Pick<ScreenStatus, "agent" | "agents"> | null | undefined): ScreenAgent[] {
+  if (!status) return [];
+  return status.agents?.length ? status.agents : status.agent ? [status.agent] : [];
+}
+
+/**
+ * What Screen does with a computer's status. A device on the computer itself looks at the very screen the
+ * viewer would stream, so a live view is a mirror of itself: it never opens one (no capture stream either),
+ * and shows which agents use the screen with Stop instead. Elsewhere an agent at work waits for the person
+ * to choose Watch or Take over, and a free screen opens.
+ */
+export function screenEntry(status: ScreenStatus, how: "auto" | "takeOver" | "watch" = "auto"): ScreenEntry {
+  if (!status.ready) return "setup";
+  if (status.local) return "local";
+  if (how === "auto" && screenAgents(status).length > 0) return "agent";
+  return "live";
+}
+
+/** The agents of the computer's screen that float as a live view: none on that computer itself, which would mirror it. */
+export function floatedScreenAgents(status: ScreenStatus): ScreenAgent[] {
+  return status.ready && !status.local ? screenAgents(status) : [];
 }
