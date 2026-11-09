@@ -6,6 +6,7 @@ import { AppText } from "../ui/AppText";
 import { Button } from "../ui/Button";
 import { ListRow, ListSection } from "../ui";
 import { InkSwitch } from "../ui/InkSwitch";
+import { PendingSwitch } from "../ui/PendingSwitch";
 import { FriendsAvatar } from "../friends/FriendsAvatar";
 import { FriendsSheet } from "../friends/FriendsSheet";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
@@ -50,9 +51,10 @@ export function FriendsSettings() {
               disabled={!available && !enabled}
               accessibilityRole="switch"
               trailing={
-                <InkSwitch
+                <PendingSwitch
                   value={enabled || busy || phase === "signing_in"}
-                  disabled={busy || deleting || (!available && !enabled)}
+                  pending={busy}
+                  disabled={deleting || (!available && !enabled)}
                   accessibilityLabel="Friends"
                   onValueChange={(next) => {
                     if (next) void friends.turnOn();

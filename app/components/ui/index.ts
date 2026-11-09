@@ -8,4 +8,5 @@ export { InlineNotice } from "./InlineNotice";
 export { confirmDestructive } from "./confirmDestructive";
 export { IconButton } from "./IconButton";
 export { ListRow, ListSection } from "./ListSection";
+export { PendingSwitch } from "./PendingSwitch";
 export { StatusPill } from "./StatusPill";

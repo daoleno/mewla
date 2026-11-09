@@ -10,7 +10,7 @@ mock.module("../services/browser", () => ({
 }));
 mock.module("./currentServer", () => ({ useCurrentServer: () => ({}) }));
 
-const { readVirtualScreenLabs, writeVirtualScreenLabs, resetVirtualScreenLabs, setVirtualScreenTimeout, virtualScreenSnapshot } = await import("./virtualScreenLabs");
+const { readVirtualScreenLabs, writeVirtualScreenLabs, resetVirtualScreenLabs, setVirtualScreenTimeout, setVirtualScreenErrorMs, virtualScreenSnapshot } = await import("./virtualScreenLabs");
 const { BrowserRequestError } = await import("../services/browser");
 
 const server = { id: "s1", name: "manjaro" };
@@ -47,6 +47,30 @@ describe("virtual screen labs", () => {
     handler = async () => { throw new BrowserRequestError("x", 401, "unauthorized"); };
     await writeVirtualScreenLabs(server, false, () => true);
     expect(virtualScreenSnapshot()).toMatchObject({ enabled: true, error: "This phone needs to pair again", busy: false });
+  });
+
+  test("a write is pending at once, with what it turns to, until the computer answers", async () => {
+    let answer: (value: { virtual_screen: boolean }) => void = () => {};
+    handler = async () => ({ virtual_screen: false });
+    await readVirtualScreenLabs(server);
+    handler = () => new Promise((resolve) => { answer = resolve; });
+    const writing = writeVirtualScreenLabs(server, true, () => true);
+    expect(virtualScreenSnapshot()).toMatchObject({ enabled: false, busy: true, target: true });
+    answer({ virtual_screen: true });
+    await writing;
+    expect(virtualScreenSnapshot()).toMatchObject({ enabled: true, busy: false, target: null });
+  });
+
+  test("a failed write's message is let go after a moment", async () => {
+    handler = async () => ({ virtual_screen: false });
+    await readVirtualScreenLabs(server);
+    handler = async () => { throw new BrowserRequestError("x", 401, "unauthorized"); };
+    setVirtualScreenErrorMs(20);
+    await writeVirtualScreenLabs(server, true, () => true);
+    setVirtualScreenErrorMs(6_000);
+    expect(virtualScreenSnapshot()).toMatchObject({ enabled: false, busy: false, error: "This phone needs to pair again" });
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(virtualScreenSnapshot()).toMatchObject({ enabled: false, error: null });
   });
 
   test("an answer from a computer that is no longer current is dropped", async () => {

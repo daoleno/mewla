@@ -3,7 +3,7 @@ import { Image, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
 import { AppText, Button, ListRow, ListSection } from "../ui";
-import { InkSwitch } from "../ui/InkSwitch";
+import { PendingSwitch } from "../ui/PendingSwitch";
 import { useIPhoneUse } from "../../store/iphoneUse";
 
 /**
@@ -31,9 +31,10 @@ export function IPhoneSettings() {
             icon="phone"
             accessibilityRole="switch"
             trailing={
-              <InkSwitch
+              <PendingSwitch
                 value={!!status?.enabled}
-                disabled={!status || unsupported || iphone.busy}
+                pending={iphone.busy}
+                disabled={!status || unsupported}
                 accessibilityLabel="iPhone use"
                 onValueChange={(next) => void iphone.change({ enabled: next })}
               />

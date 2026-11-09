@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ContentWidth, useAppTheme } from "../../constants/tokens";
 import { InlineNotice, ListRow, ListSection } from "../ui";
-import { InkSwitch } from "../ui/InkSwitch";
+import { PendingSwitch } from "../ui/PendingSwitch";
 import { useVirtualScreenLabs } from "../../store/virtualScreenLabs";
 
 /**
@@ -19,12 +19,14 @@ export function VirtualScreenSwitch() {
       <ListSection>
         <ListRow
           title="Virtual screen"
+          subtitle={labs.busy ? (labs.target ? "Turning on…" : "Turning off…") : undefined}
           icon="desktop"
           accessibilityRole="switch"
           trailing={
-            <InkSwitch
+            <PendingSwitch
               value={labs.enabled}
-              disabled={waiting || labs.busy}
+              pending={labs.busy}
+              disabled={waiting}
               accessibilityLabel="Virtual screen"
               onValueChange={(next) => void labs.set(next)}
             />

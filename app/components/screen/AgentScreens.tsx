@@ -11,6 +11,7 @@ import { serverDisplayName } from "../../services/serverDisplayName";
 import { ActionMenu, EmptyState, IconButton, InlineNotice } from "../ui";
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AgentDisplayCard } from "./AgentDisplayCard";
+import { ScreenArt } from "./ScreenArt";
 import { phoneMenuItem } from "./phoneRow";
 
 /** How often the list reads the computer again, so an agent that starts or ends shows up. */
@@ -114,8 +115,8 @@ export function AgentScreens() {
             <EmptyState icon="construct" title="Browser needs setup on this server" detail={reason}
               action={{ label: "Check again", icon: "refresh", onPress: () => void run("check", async () => { await list(); }), loading: busy === "check" }} />
           ) : (
-            <EmptyState icon="desktop" title="No agent is using a screen"
-              detail={`When an agent opens a browser it shows here. Take it over to sign in once; sign-ins are kept on ${serverName}.`} />
+            <EmptyState art={<ScreenArt />} title="Nothing on screen"
+              detail="An agent's screen shows up here while it works." />
           )}
         </View>
       </View>
