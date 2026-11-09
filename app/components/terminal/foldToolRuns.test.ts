@@ -6,6 +6,7 @@ import {
   isFoldableToolRow,
   summarizeToolRun,
 } from "./foldToolRuns";
+import { shouldAutoExpandActivity } from "./InterfaceTimelineActivityModel";
 import type { ActivityTimelineItem } from "./InterfaceTimelineActivityTypes";
 import type { TimelineItem } from "./InterfaceTimelineItemView";
 import { buildTimelineFromSortedEvents } from "./InterfaceTimelineModel";
@@ -77,7 +78,41 @@ describe("folding a turn's finished tool rows", () => {
     ]);
   });
 
-  test("a running, failed, blocked, streaming or self-opening row stays visible and splits the run", () => {
+  test("a failed row is an ordinary finished row: collapsed and folded into the run", () => {
+    const failed = row("failed", "run_command", {
+      tone: "failed",
+      detail: "Failed · exit 1",
+    });
+    expect(isFoldableToolRow(failed)).toBe(true);
+    expect(shouldAutoExpandActivity(failed)).toBe(false);
+    const out = createToolRunFolder()([
+      row("a", "read_files"),
+      failed,
+      row("c", "read_files"),
+    ]);
+    expect(out.map((item) => item.id)).toEqual(["a"]);
+    const group = out[0] as ActivityTimelineItem;
+    expect(group.steps?.map((step) => step.id)).toEqual(["a", "failed", "c"]);
+    expect(group.detail).toBe("3 steps · 1 failed");
+    // Quiet like any fold: the count says it, the title is not painted.
+    expect(group.tone).toBe("neutral");
+    expect(group.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(group)).toBe(false);
+    // The failed step inside the opened run starts collapsed too.
+    expect(shouldAutoExpandActivity(group.steps![1])).toBe(false);
+  });
+
+  test("a run with no failure keeps the plain step count", () => {
+    const out = createToolRunFolder()([
+      row("a", "read_files"),
+      row("b", "read_files"),
+    ]);
+    const group = out[0] as ActivityTimelineItem;
+    expect(group.detail).toBe("2 steps");
+    expect(group.tone).toBe("neutral");
+  });
+
+  test("a running, blocked, streaming or self-opening row stays visible and splits the run", () => {
     const kept = [
       row("running", "run_command", { tone: "running" }),
       row("failed", "run_command", { tone: "failed", defaultExpanded: true }),
@@ -204,19 +239,25 @@ describe("summarising a run", () => {
 });
 
 describe("the activity demo fixture", () => {
-  test("folds the finished exploration, edit and test rows; the failure and the live row stay", () => {
+  test("folds the finished exploration, edit, test and failed rows; the live row stays", () => {
     const items = buildTimelineFromSortedEvents(
       SCREENSHOT_CHAT_ACTIVITY_EVENTS as CodexConversationEvent[],
     );
     const out = createToolRunFolder()(items);
     const folded = out.filter(
       (item) => item.type === "activity" && item.steps?.length,
-    );
+    ) as ActivityTimelineItem[];
     expect(folded).toHaveLength(1);
-    const failed = out.find(
-      (item) => item.type === "activity" && item.tone === "failed",
+    expect(folded[0].steps?.map((step) => step.id)).toContain("activity-failed");
+    expect(folded[0].detail).toBe("5 steps · 1 failed");
+    expect(
+      out.some((item) => item.type === "activity" && item.id === "activity-failed"),
+    ).toBe(false);
+    const failed = folded[0].steps?.find((step) => step.id === "activity-failed");
+    expect(failed && shouldAutoExpandActivity(failed)).toBe(false);
+    const running = out.find(
+      (item) => item.type === "activity" && item.tone === "running",
     );
-    expect(failed).toBeDefined();
-    expect(failed && "steps" in failed && failed.steps).toBeFalsy();
+    expect(running).toBeDefined();
   });
 });

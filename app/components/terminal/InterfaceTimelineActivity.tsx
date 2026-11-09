@@ -41,8 +41,8 @@ export function ActivityEvent({
     item.id,
     defaultExpanded,
   );
-  // Only a person's own tap fades the details in; a row that mounts open (a
-  // failure, or one scrolled back into the window) simply shows them.
+  // Only a person's own tap fades the details in; a row that mounts open (one
+  // that opens itself, or one scrolled back into the window) simply shows them.
   const openedByPressRef = useRef(false);
   const activityPresentation = buildInterfaceTimelineActivityPresentation(
     item,

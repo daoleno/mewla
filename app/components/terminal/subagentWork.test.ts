@@ -81,22 +81,21 @@ describe("a subagent's own steps on its delegating row", () => {
 describe("folding a subagent's steps", () => {
   const folded = () => createToolRunFolder()(buildTimelineFromSortedEvents(events));
 
-  test("its finished steps fold like a turn's, the failure stays visible and splits the run", () => {
+  test("its finished steps fold like a turn's, the failed one inside the run", () => {
     const [finished] = delegates(folded());
     const steps = finished.steps ?? [];
-    expect(steps.map((step) => step.id)).toEqual([
-      "sub-1-read",
-      "sub-1-test",
-      "sub-1-read-3",
-    ]);
+    expect(steps.map((step) => step.id)).toEqual(["sub-1-read"]);
     expect(steps[0].steps?.map((step) => step.id)).toEqual([
       "sub-1-read",
       "sub-1-read-2",
       "sub-1-grep",
+      "sub-1-test",
+      "sub-1-read-3",
+      "sub-1-read-4",
     ]);
-    expect(steps[0].detail).toBe("3 steps");
-    expect(steps[1].tone).toBe("failed");
-    expect(steps[2].steps).toHaveLength(2);
+    expect(steps[0].detail).toBe("6 steps · 1 failed");
+    expect(steps[0].defaultExpanded).toBe(false);
+    expect(steps[0].steps?.[3].tone).toBe("failed");
   });
 
   test("the subagent row is never folded into its neighbours", () => {

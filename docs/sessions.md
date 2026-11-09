@@ -45,8 +45,9 @@ Open a Session to read it in one of three ways:
 - **Chat**: the structured conversation, with your messages, the agent's
   replies, tool calls, plans and attachments. A run of finished tool calls
   folds into one row that says what it did ("Read 3 files and ran 2
-  commands"); tap it for the calls. A call that is running or failed stays on
-  its own row, and so does a subagent, which reads as the task it was given. On Claude, tap a subagent to see the calls it made, folded the same way, with how many there were, how long it took and whether it is still working. Available for Claude, Codex, Cursor, Grok, Pi and OpenCode.
+  commands"); tap it for the calls. A call that failed is folded like any other
+  and the row says so ("4 steps · 1 failed"); a call that is running or waiting
+  on you stays on its own row, and so does a subagent, which reads as the task it was given. On Claude, tap a subagent to see the calls it made, folded the same way, with how many there were, how long it took and whether it is still working. Available for Claude, Codex, Cursor, Grok, Pi and OpenCode.
 - **Terminal**: the live terminal, rendered natively. Works for any command,
   including a Shell. A key row above the keyboard adds Ctrl, Esc, Tab and arrows.
 - **Git**: read-only All, Working and Staged diffs for the Session's

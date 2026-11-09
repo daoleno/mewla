@@ -280,7 +280,7 @@ describe("timeline presentation", () => {
     expect(activities[4]?.tone).toBe("failed");
     expect(activities[5]?.tone).toBe("running");
     expect(shouldAutoExpandActivity(activities[0]!)).toBe(false);
-    expect(shouldAutoExpandActivity(activities[4]!)).toBe(true);
+    expect(shouldAutoExpandActivity(activities[4]!)).toBe(false);
     expect(shouldAutoExpandActivity(activities[5]!)).toBe(false);
     expect(activities[5]?.defaultExpanded).toBe(false);
     expect(activities[5]?.icon).toBe("time");
@@ -366,16 +366,16 @@ describe("timeline presentation", () => {
     expect(activities).toHaveLength(5);
 
     expect(activities[0]?.tone).toBe("failed");
-    expect(activities[0]?.defaultExpanded).toBe(true);
-    expect(shouldAutoExpandActivity(activities[0]!)).toBe(true);
+    expect(activities[0]?.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(activities[0]!)).toBe(false);
 
     expect(activities[1]?.tone).toBe("failed");
-    expect(activities[1]?.defaultExpanded).toBe(true);
-    expect(shouldAutoExpandActivity(activities[1]!)).toBe(true);
+    expect(activities[1]?.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(activities[1]!)).toBe(false);
 
     expect(activities[2]?.tone).toBe("failed");
-    expect(activities[2]?.defaultExpanded).toBe(true);
-    expect(shouldAutoExpandActivity(activities[2]!)).toBe(true);
+    expect(activities[2]?.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(activities[2]!)).toBe(false);
 
     expect(activities[3]?.tone).toBe("running");
     expect(activities[3]?.defaultExpanded).toBe(false);

@@ -49,10 +49,10 @@ function bucketOf(kind: SemanticActionKind): RunBucket {
 }
 
 /**
- * A finished, quiet tool row that carries its kind. Anything the person has to
- * look at stays on its own: a subagent, a running or streaming row, a failure or block
- * (those open themselves), the agent's own words, the choice card and the
- * provider's live row.
+ * A finished tool row that carries its kind, failed or not. Anything the person
+ * has to look at stays on its own: a subagent, a running or streaming row, a
+ * block or any row that opens itself, the agent's own words, the choice card
+ * and the provider's live row.
  */
 export function isFoldableToolRow(
   item: TimelineItem,
@@ -60,15 +60,13 @@ export function isFoldableToolRow(
   if (item.type !== "activity" || !item.semanticKind) return false;
   // A subagent is a piece of work in its own right, not a step to summarise.
   if (item.semanticKind === "delegate_agent") return false;
-  if (item.tone === "running" || item.tone === "failed" || item.streaming) {
-    return false;
-  }
+  if (item.tone === "running" || item.streaming) return false;
   if (item.activityKind) return false;
   if (item.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX)) return false;
   if (item.statusKey?.startsWith("choice:")) return false;
   if (shouldAutoExpandActivity(item)) return false;
   const mark = splitActivityStatusDetail(item.detail, item.tone).mark;
-  return mark === null || mark === "ready";
+  return mark === null || mark === "ready" || mark === "failed";
 }
 
 /** "Read 3 files, ran 2 commands and edited a file": what a folded run did. */
@@ -127,6 +125,7 @@ export function foldedToolRun(
 ): ActivityTimelineItem {
   const title = summarizeToolRun(steps);
   const last = steps[steps.length - 1];
+  const failed = steps.filter((step) => step.tone === "failed").length;
   return {
     type: "activity",
     // The first step's id: the list keeps that row mounted (and the reading
@@ -136,7 +135,9 @@ export function foldedToolRun(
     statusKey: "done",
     title,
     // How many calls the row stands for, quiet beside the chevron.
-    detail: `${steps.length} steps`,
+    detail: failed
+      ? `${steps.length} steps · ${failed} failed`
+      : `${steps.length} steps`,
     tone: "neutral",
     icon: "layers",
     defaultExpanded: false,
@@ -149,7 +150,7 @@ export type ToolRunFolder = (items: TimelineItem[]) => TimelineItem[];
 
 /**
  * Folds each turn's finished tool rows into one summary row that opens onto
- * the real rows. Runs end at anything else (words, plans, a running or failed
+ * the real rows. Runs end at anything else (words, plans, a running or blocked
  * call), so a run never crosses a turn. One row stays as it is.
  *
  * The folder keeps the group it built for a run while that run's rows are the

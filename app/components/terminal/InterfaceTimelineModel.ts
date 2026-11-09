@@ -656,7 +656,7 @@ function activityFromEvent(
         queryText: details.query,
         statusLine: details.statusLine,
         files: details.files,
-        defaultExpanded: failed,
+        defaultExpanded: false,
         semanticKind: action.kind,
         accessibilityLabel: semantic.accessibilityLabel,
         providerToolId:
@@ -707,7 +707,7 @@ function activityFromEvent(
         fileSummaries: summary.files,
         files: summary.files.map((file) => file.path),
         body: summary.files.length > 0 ? undefined : event.body,
-        defaultExpanded: failed,
+        defaultExpanded: false,
         semanticKind: "update_files",
         accessibilityLabel: semantic.accessibilityLabel,
         providerToolId: semantic.providerToolId,
@@ -858,7 +858,7 @@ function activityFromEvent(
         statusLine: details.statusLine,
         files: details.files,
         previewPath,
-        defaultExpanded: failed,
+        defaultExpanded: false,
         semanticKind: action.kind,
         accessibilityLabel: isWait
           ? details.statusLine || (running ? "Waiting" : "Finished")
@@ -893,7 +893,7 @@ function activityFromEvent(
         detail: webSearchEventDetail(event),
         body,
         bodyKind: body ? "terminal" : undefined,
-        defaultExpanded: failed,
+        defaultExpanded: false,
       };
     }
     case "update": {
