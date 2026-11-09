@@ -116,7 +116,9 @@ func (s *Server) handleScreen(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	_ = json.NewEncoder(w).Encode(s.screen.Status(r.Context(), device.ID))
+	status := s.screen.Status(r.Context(), device.ID)
+	status.Local = clientaddr.Local(r)
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 // handleScreenViewer bridges an authenticated WebSocket to an in-process RFB

@@ -11,6 +11,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"strings"
 )
 
 type contextKey struct{}
@@ -95,4 +96,39 @@ func Parse(value string) net.IP {
 		return nil
 	}
 	return net.ParseIP(value)
+}
+
+// forwardedHeaders are what a reverse proxy or tunnel adds when it relays a
+// client: a request carrying one did not come from the proxy's own computer.
+var forwardedHeaders = []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "Cf-Connecting-Ip", "True-Client-Ip"}
+
+// Local reports whether the request comes from a browser or app on this very
+// computer: it arrived over loopback, addressed to a loopback host, not through
+// Mewla Link and not through a proxy or tunnel on this computer that relays
+// someone else. It exists so a viewer of this computer's own screen can be
+// told it is looking at itself; like Path it grants nothing, and when in doubt
+// it says false, which only costs a live view.
+func Local(r *http.Request) bool {
+	if Path(r) != "loopback" {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(r.Host); err == nil {
+		host = h
+	}
+	host = strings.Trim(strings.ToLower(host), "[]")
+	if host != "localhost" && !net.ParseIP(host).IsLoopback() {
+		return false
+	}
+	for _, name := range forwardedHeaders {
+		if r.Header.Get(name) != "" {
+			return false
+		}
+	}
+	for name := range r.Header {
+		if strings.HasPrefix(strings.ToLower(name), "tailscale-") {
+			return false
+		}
+	}
+	return true
 }
