@@ -1,8 +1,13 @@
 # Sessions
 
-A **Session** is one agent or shell running in `tmux` on your computer. Mewla
-starts it, lists it and lets you read or drive it from the phone. Because it is
-plain `tmux`, the same Session is there when you sit down at the desk.
+A **Session** is one agent or shell running on your computer in Mewla's session
+host. Mewla starts it, lists it and lets you read or drive it from the phone.
+The session host keeps it running while Mewla restarts or updates, and the same
+Session is there when you sit down at the desk: `mewla attach <session>` shows
+it in your terminal, and Ctrl-\ detaches. `mewla host status` lists them.
+
+Sessions an earlier Mewla started in `tmux` move to the session host when their
+agent is idle; see [Updating from Mewla 0.2](install-daemon.md#updating-from-mewla-02).
 
 ## Start a Session
 
@@ -53,7 +58,7 @@ Open a Session to read it in one of three ways:
 - **Git**: read-only All, Working and Staged diffs for the Session's
   repository. Reading a diff never stages or discards anything.
 
-What you type in either Chat or Terminal goes to the same `tmux` pane.
+What you type in either Chat or Terminal goes to the same terminal.
 
 ### Copy from the Terminal in a browser
 
@@ -221,44 +226,26 @@ Cursor and Grok can only be hooked through the user's own global
 configuration, and Mewla never writes to it. They stay on the transcript and the
 screen, and so does anything an agent offers only through such a file.
 
-## Plain `tmux` inside a Worker or Brain pane
+## `tmux` inside a Session
 
-tmux ignores a `TMUX_TMPDIR` whose directory is missing or unset and falls back
-to `/tmp/tmux-<uid>/default`, which is your live server. A cleanup such as
-`TMUX_TMPDIR=<deleted scratch> tmux kill-server` therefore kills every Session.
-So every Worker and Brain pane gets a `tmux` shim first on `PATH`
-(`<state dir>/tmux-guard/bin/tmux`, rewritten at each daemon start). Without
-`-S`, it passes the command on only when the socket tmux would pick is under the
-pane's own scratch (`$MEWLA_TMUX_SCRATCH`, the same directory as `TMUX_TMPDIR`),
-and it refuses `kill-server`, including a prefix such as `kill-ser` or one inside
-a `;` sequence, unless `-S` names a socket under that scratch. A refusal exits 1
-and says why. Everything else passes through to the real tmux with its
-arguments unchanged.
-
-The daemon never goes through the shim: it resolves the real `tmux` itself and
-always passes an explicit socket for Mewla-owned Sessions. The shim stops
-accidents, not a command that runs the real binary by absolute path, or one that
-clears `PATH`, as `env -i` does. The Worker protocol asks for `tmux` only with an
-explicit `-S` socket.
+Sessions run in the session host, not in `tmux`, so a `tmux` command an agent
+runs, `tmux kill-server` included, cannot end them. Worker and Brain Sessions
+point `TMUX_TMPDIR` at their own scratch directory, so a plain `tmux` there
+starts a server of its own.
 
 ## What the daemon costs while idle
 
-The daemon watches your `tmux` Sessions by listing their panes and reading the
-process table, not by attaching to them. With nothing happening it settles to
-under 1% of one CPU core (it was above 6% when it forked `ps` and `tmux` several
-times a second):
+The daemon watches your Sessions by listing them and reading the process table,
+not by attaching to them. With nothing happening it settles to under 1% of one
+CPU core (it was above 6% when it forked `ps` several times a second):
 
 - The process table is read straight from `/proc` on Linux (`ps` elsewhere), and
-  again only when a pane printed, appeared or went away, or when it is five
+  again only when a Session printed, appeared or went away, or when it is five
   seconds old.
-- A pane's screen is read again only when `tmux` says the pane printed
-  (`window_activity`), or when the last read is 30 seconds old.
-- After three quiet seconds the pane list is checked every two seconds instead
-  of every half second; the first change brings the fast cadence back.
-
-`tmux` control mode was tried and rejected: its subscriptions only cover panes of
-the session the control client is attached to, and each Worker is its own
-`tmux` session.
+- A Session's screen is read again only when the session host says it printed,
+  or when the last read is 30 seconds old.
+- After three quiet seconds the Session list is checked every two seconds
+  instead of every half second; the first change brings the fast cadence back.
 
 ## Services
 
@@ -282,7 +269,7 @@ whose state cannot be read shows **Error** with the reason.
 
 ### Keep a service after its Session ends
 
-A service started outside `tmux`, such as a user `systemd` unit, stays hidden
+A service started outside a Session, such as a user `systemd` unit, stays hidden
 until you register it. Registering never starts, stops or changes the unit:
 
 ```sh

@@ -22,14 +22,6 @@ func WriteHuman(w io.Writer, report Report) error {
 	}
 
 	writeCheck(w, "Platform", report.Platform.Status, report.Platform.Summary)
-	if !report.Tmux.NotNeeded {
-		writeCheck(w, "tmux", report.Tmux.Status, report.Tmux.Summary)
-	}
-	if report.Tmux.Status == StatusFail && report.Tmux.Remediation == RemediationInstallTmux {
-		for _, hint := range report.Tmux.InstallHints {
-			fmt.Fprintf(w, "  Install tmux on %s: %s\n", hint.OS, hint.Command)
-		}
-	}
 	writeCheck(w, "State dir", report.StateDir.Status, report.StateDir.Summary)
 	writeCheck(w, "Listen", report.Listen.Status, report.Listen.Summary)
 	writeCheck(w, "Executors", report.Executors.Status, report.Executors.Summary)
@@ -103,9 +95,6 @@ func WriteHuman(w io.Writer, report Report) error {
 	if !report.Ready {
 		fmt.Fprintln(w, "")
 		fmt.Fprintln(w, "Fix the failing checks above, then re-run: mewla doctor")
-		if report.Tmux.Status == StatusFail && report.Tmux.Remediation == RemediationInstallTmux {
-			fmt.Fprintln(w, "Missing tmux blocks all session runtimes.")
-		}
 		if report.Executors.UsableCount == 0 {
 			fmt.Fprintln(w, "Mewla needs at least one runnable executor (binary present and not explicitly unauthenticated).")
 		}

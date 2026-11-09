@@ -17,7 +17,6 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/daoleno/mewla/daemon/procspawn"
-	"github.com/daoleno/mewla/daemon/tmuxguard"
 	"github.com/daoleno/mewla/daemon/tmuxsocket"
 )
 
@@ -29,11 +28,11 @@ var terminalIDCounter atomic.Int64
 // Sessions). Mewla-owned Brain/delegated Sessions live on the daemon-namespaced
 // server, so their linked view sessions are created there too.
 func tmuxCommand(socketPath string, args ...string) *exec.Cmd {
-	return tmuxguard.Pin(procspawn.Command(procspawn.Label("tmux", args), "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...))
+	return procspawn.Command(procspawn.Label("tmux", args), "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...)
 }
 
 func tmuxCommandContext(ctx context.Context, socketPath string, args ...string) *exec.Cmd {
-	return tmuxguard.Pin(procspawn.CommandContext(ctx, procspawn.Label("tmux", args), "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...))
+	return procspawn.CommandContext(ctx, procspawn.Label("tmux", args), "tmux", append(tmuxsocket.ClientArgs(socketPath), args...)...)
 }
 
 // TmuxBackend attaches a dedicated tmux client to an existing tmux session

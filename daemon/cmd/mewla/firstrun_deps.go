@@ -20,8 +20,8 @@ import (
 	"github.com/daoleno/mewla/daemon/hostdeps"
 )
 
-// depsPrompt checks the two things Brain cannot work without, tmux and one
-// signed-in agent CLI, and offers the official command for what is missing.
+// depsPrompt checks the one thing Brain cannot work without, a signed-in agent
+// CLI, and offers the official command when it is missing.
 // It never blocks a start: a "no", a failed install or a closed input prints
 // the command and moves on.
 type depsPrompt struct {
@@ -31,8 +31,7 @@ type depsPrompt struct {
 	platform    hostdeps.Platform
 	// run executes one shown command attached to the terminal.
 	run func(command string) error
-	// tmux and agents re-check the machine; tests replace them.
-	tmux   func() doctor.TmuxCheck
+	// agents re-checks the machine; tests replace it.
 	agents func() doctor.ExecutorsCheck
 	// brainHost names the agent Brain already uses; chosen is true when one
 	// is set by mewla brain use, an earlier first run, a Brain that already
@@ -50,7 +49,6 @@ func newDepsPrompt(in *bufio.Reader, w io.Writer, interactive bool) *depsPrompt 
 		interactive: interactive,
 		platform:    hostdeps.Detect(),
 		run:         runShownCommand,
-		tmux:        func() doctor.TmuxCheck { return doctor.CheckTmux(options) },
 		agents:      func() doctor.ExecutorsCheck { return doctor.CheckExecutors(options) },
 		brainHost:   currentBrainHost,
 		setBrainHost: func(id string) error {
@@ -154,19 +152,12 @@ func agentName(id string) string {
 	return id
 }
 
-// checkAll shows tmux and the agent CLI as aligned status rows, then offers
-// whatever is missing, tmux first.
-func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool, err error) {
+// checkAll shows the agent CLI as a status row, then offers one when none is
+// ready.
+func (d *depsPrompt) checkAll() (agentReady bool, err error) {
 	style := d.style()
-	tmux, agents := d.tmux(), d.agents()
-	tmuxReady = tmux.Status == doctor.StatusOK
+	agents := d.agents()
 	agentReady = readyAgent(agents) != ""
-	tmuxValue := "missing"
-	if tmuxReady {
-		tmuxValue = strings.TrimSpace("tmux " + tmux.Version)
-	} else if tmux.Found {
-		tmuxValue = "found, but it does not work"
-	}
 	agentValue := "none installed"
 	var choices []doctor.ExecutorCheck
 	switch {
@@ -189,7 +180,6 @@ func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool, err error) {
 	}
 	fmt.Fprintln(d.w)
 	fmt.Fprintln(d.w, style.bold("This computer"))
-	fmt.Fprintln(d.w, style.check(tmuxReady, "tmux", tmuxValue))
 	fmt.Fprintln(d.w, style.check(agentReady, "Agent CLI", agentValue))
 	for _, item := range agents.Items {
 		if outdatedAgent(item) {
@@ -198,18 +188,14 @@ func (d *depsPrompt) checkAll() (tmuxReady, agentReady bool, err error) {
 	}
 	if len(choices) > 1 {
 		if err := d.chooseBrainHost(choices); err != nil {
-			return tmuxReady, agentReady, err
+			return agentReady, err
 		}
-	}
-	if !tmuxReady {
-		fmt.Fprintln(d.w)
-		tmuxReady = d.ensureTmux()
 	}
 	if !agentReady {
 		fmt.Fprintln(d.w)
 		agentReady = d.ensureAgent()
 	}
-	return tmuxReady, agentReady, nil
+	return agentReady, nil
 }
 
 // chooseBrainHost asks once which ready agent Brain runs on, Claude Code
@@ -305,42 +291,6 @@ func anyInstalledAgent(check doctor.ExecutorsCheck) string {
 // support (OpenCode 1); doctor's summary says how to upgrade.
 func outdatedAgent(item doctor.ExecutorCheck) bool {
 	return item.BinaryFound && item.Remediation == doctor.RemediationInstallExecutor
-}
-
-// ensureTmux reports whether tmux works, after offering to install it.
-func (d *depsPrompt) ensureTmux() bool {
-	check := d.tmux()
-	if check.Status == doctor.StatusOK {
-		addToolDirToPath(check.Path)
-		return true
-	}
-	if check.Found {
-		fmt.Fprintf(d.w, "tmux at %s does not work (%s). Fix it, then start mewla again.\n", check.Path, check.Summary)
-		return false
-	}
-	plan := hostdeps.TmuxPlan(d.platform)
-	fmt.Fprintln(d.w, "tmux is missing. Mewla runs every agent inside tmux.")
-	if len(plan.Steps) == 0 {
-		fmt.Fprintf(d.w, "Install tmux for %s: %s\n", d.platform.Name(), plan.Doc)
-		return false
-	}
-	fmt.Fprintf(d.w, "Install it on %s with:\n  %s\n", d.platform.Name(), d.style().cmd(plan.Command()))
-	if plan.Blocked != "" {
-		fmt.Fprintf(d.w, "(%s)\n", plan.Blocked)
-		return false
-	}
-	if !d.ask("Install tmux now?") {
-		return false
-	}
-	d.runPlan(plan)
-	check = d.tmux()
-	if check.Status != doctor.StatusOK {
-		fmt.Fprintln(d.w, "tmux is still missing. Run the command above, then start mewla again.")
-		return false
-	}
-	addToolDirToPath(check.Path)
-	fmt.Fprintf(d.w, "✓ %s is ready.\n", strings.TrimSpace("tmux "+check.Version))
-	return true
 }
 
 // ensureAgent reports whether one agent CLI is usable, after offering to
@@ -457,7 +407,7 @@ func addToolDirToPath(binary string) {
 
 // prepareToolPath puts this executable's directory and the installers'
 // usual directories on PATH, so tools installed there are found by the
-// daemon, its tmux server and a boot unit that copies PATH.
+// daemon, the Sessions it starts and a boot unit that copies PATH.
 func prepareToolPath() {
 	if executable, err := os.Executable(); err == nil && !strings.Contains(executable, ".app/Contents/") {
 		addToolDirToPath(executable)
@@ -471,14 +421,11 @@ func prepareToolPath() {
 }
 
 // quickDepsCheck runs on every start that skips the first-run conversation:
-// tmux plus whether any agent CLI is installed (no sign-in probes). It offers
-// installs in a terminal and prints the commands otherwise.
+// whether any agent CLI is installed (no sign-in probes). It offers an install
+// in a terminal and prints the commands otherwise.
 func quickDepsCheck(stderr io.Writer) {
 	interactive := stdioIsTerminal() && !daemonSupervised() && os.Getenv("CI") == ""
 	d := newDepsPrompt(bufio.NewReader(os.Stdin), stderr, interactive)
-	if d.tmux().Status != doctor.StatusOK {
-		d.ensureTmux()
-	}
 	installed := doctor.CheckExecutors(doctor.Options{
 		LookPath: hostdeps.LookPath,
 		RunCommand: func(context.Context, string, ...string) ([]byte, error) {
@@ -543,37 +490,26 @@ func bootServiceInstalled() bool {
 	return err == nil && strings.Contains(string(data), marker)
 }
 
-// runDepsCommand is `mewla deps`: check tmux and an agent CLI, offering to
-// install what is missing. The installer runs `mewla deps -only tmux`.
+// runDepsCommand is `mewla deps`: check for an agent CLI, offering to
+// install one when none is ready.
 func runDepsCommand(args []string, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla deps", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	only := ""
-	fs.StringVar(&only, "only", "", "check one dependency: tmux or agent")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla deps [-only tmux|agent]")
+		fmt.Fprintln(stderr, "Usage: mewla deps")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Check tmux and an agent CLI. In a terminal, offer this computer's official")
+		fmt.Fprintln(stderr, "Check for an agent CLI. In a terminal, offer this computer's official")
 		fmt.Fprintln(stderr, "install command and run it after you agree; otherwise print it.")
-		fmt.Fprintln(stderr, "")
-		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() > 0 || (only != "" && only != "tmux" && only != "agent") {
-		return fmt.Errorf("usage: mewla deps [-only tmux|agent]")
+	if fs.NArg() > 0 {
+		return fmt.Errorf("usage: mewla deps")
 	}
 	prepareToolPath()
 	d := newDepsPrompt(bufio.NewReader(os.Stdin), stderr, stdioIsTerminal())
-	ok := true
-	if only != "agent" {
-		ok = d.ensureTmux() && ok
-	}
-	if only != "tmux" {
-		ok = d.ensureAgent() && ok
-	}
-	if !ok {
+	if !d.ensureAgent() {
 		return errDepsMissing
 	}
 	return nil

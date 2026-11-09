@@ -56,15 +56,6 @@ func machineBlockedLines(report doctor.Report) []string {
 	if report.Platform.Status == doctor.StatusFail {
 		lines = append(lines, "  - platform: "+report.Platform.Summary)
 	}
-	if report.Tmux.Status == doctor.StatusFail {
-		lines = append(lines, "  - tmux: "+report.Tmux.Summary)
-		if report.Tmux.Remediation == doctor.RemediationInstallTmux {
-			for _, hint := range report.Tmux.InstallHints {
-				lines = append(lines, fmt.Sprintf("    Install tmux on %s: %s", hint.OS, hint.Command))
-			}
-			lines = append(lines, "    Or let Mewla offer it: mewla deps -only tmux")
-		}
-	}
 	if report.StateDir.Status == doctor.StatusFail {
 		lines = append(lines, "  - state dir: "+report.StateDir.Summary)
 	}
@@ -76,11 +67,6 @@ func machineBlockedLines(report doctor.Report) []string {
 
 func machineRemediationSteps(report doctor.Report) []string {
 	var steps []string
-	if report.Tmux.Status == doctor.StatusFail && report.Tmux.Remediation == doctor.RemediationInstallTmux {
-		for _, hint := range report.Tmux.InstallHints {
-			steps = append(steps, hint.Command)
-		}
-	}
 	if report.StateDir.Status == doctor.StatusFail {
 		steps = append(steps, "ensure the Mewla state directory is writable")
 	}

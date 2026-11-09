@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	// ErrBlocked is returned when platform/tmux/state-dir (or listen) blocks readiness.
+	// ErrBlocked is returned when platform/state-dir (or listen) blocks readiness.
 	ErrBlocked = errors.New("mewla setup: machine is not ready")
 	// ErrNoExecutor is returned when no runnable executor is available.
 	ErrNoExecutor = errors.New("mewla setup: no runnable executor")

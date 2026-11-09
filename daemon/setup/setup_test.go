@@ -17,15 +17,20 @@ import (
 	"github.com/daoleno/mewla/daemon/work"
 )
 
-func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
+func TestSetupUnwritableStateDirStopsCleanly(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
+	// The state directory's parent is a file, so it can never be created.
+	blocker := filepath.Join(home, "not-a-dir")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	var out bytes.Buffer
 	result, err := Run(Options{
 		NonInteractive: true,
 		Host:           "codex",
 		Home:           home,
-		StateDir:       filepath.Join(home, ".mewla"),
+		StateDir:       filepath.Join(blocker, ".mewla"),
 		ExecutorsPath:  filepath.Join(home, ".mewla", "executors.toml"),
 		Addr:           "127.0.0.1:0",
 		PathEnv:        binDir,
@@ -42,7 +47,7 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 	text := out.String()
-	for _, want := range []string{"not ready", "tmux", "Install tmux on ", "mewla deps -only tmux", "mewla setup"} {
+	for _, want := range []string{"not ready", "state dir", "mewla setup"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
@@ -55,7 +60,6 @@ func TestSetupMissingTmuxStopsCleanly(t *testing.T) {
 func TestSetupNoExecutorStopsWithLoginHints(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	var out bytes.Buffer
 	result, err := Run(Options{
 		NonInteractive: true,
@@ -83,12 +87,15 @@ func TestSetupNoExecutorStopsWithLoginHints(t *testing.T) {
 			t.Fatalf("missing %q:\n%s", want, text)
 		}
 	}
+	// No tmux is on PATH: Mewla no longer needs it, so nothing asks for it.
+	if strings.Contains(strings.ToLower(text), "tmux") {
+		t.Fatalf("setup asked for tmux:\n%s", text)
+	}
 }
 
 func TestSetupVerifiedBeforeUnknownOrderingAndWrite(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeFakeGrok(t, binDir)
 	writeExecutorsSeed(t, home, `
@@ -159,7 +166,6 @@ command = "grok --no-alt-screen --permission-mode bypassPermissions"
 func TestSetupConfiguresBrainAndFullAuthority(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	writeFakeCursor(t, binDir)
 
@@ -281,7 +287,6 @@ func TestSetupNonInteractiveInvalidArgs(t *testing.T) {
 func TestSetupDoesNotEmitSecrets(t *testing.T) {
 	home := t.TempDir()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using an API key - sk-SECRETVALUE")
 	var out bytes.Buffer
 	opts := baseOpts(home, binDir, "codex")
@@ -362,7 +367,6 @@ func baseOpts(home, binDir, host string) Options {
 func readyBinDir(t *testing.T) string {
 	t.Helper()
 	binDir := t.TempDir()
-	writeFakeTmux(t, binDir)
 	writeFakeCodex(t, binDir, "Logged in using ChatGPT")
 	return binDir
 }
@@ -376,17 +380,6 @@ func writeExecutorsSeed(t *testing.T, home, body string) {
 	if err := os.WriteFile(filepath.Join(dir, "executors.toml"), []byte(body), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-}
-
-func writeFakeTmux(t *testing.T, binDir string) {
-	t.Helper()
-	writeExec(t, filepath.Join(binDir, "tmux"), `#!/bin/sh
-case "$1" in
-  -V) echo "tmux 3.4"; exit 0 ;;
-  new-session|kill-session) exit 0 ;;
-  *) exit 1 ;;
-esac
-`)
 }
 
 func writeFakeCodex(t *testing.T, binDir, loginStatus string) {

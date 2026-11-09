@@ -223,9 +223,6 @@ func machineBlocked(report doctor.Report) (bool, string) {
 	if report.Platform.Status == doctor.StatusFail {
 		return true, report.Platform.Summary
 	}
-	if report.Tmux.Status == doctor.StatusFail {
-		return true, report.Tmux.Summary
-	}
 	if report.StateDir.Status == doctor.StatusFail {
 		return true, report.StateDir.Summary
 	}

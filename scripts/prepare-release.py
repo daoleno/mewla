@@ -334,7 +334,7 @@ def build_release_notes(
 
 - **Already installed?** Run `mewla update` on your computer, and install the new APK on Android.
 - **New here?** `curl -fsSL {INSTALL_SCRIPT_URL} | sh` picks the right file for you. See [Install]({INSTALL_DOCS_URL}).
-- **Mac (Apple Silicon):** `mewla-darwin-arm64.tar.gz`. Needs `tmux` (`brew install tmux`).
+- **Mac (Apple Silicon):** `mewla-darwin-arm64.tar.gz`.
 - **Linux x64:** `mewla-linux-amd64.tar.gz`
 - **Linux ARM:** `mewla-linux-arm64.tar.gz`
 - **Windows x64:** `mewla-windows-amd64.zip`, or in PowerShell: `irm https://mewla.ai/install.ps1 | iex`

@@ -377,9 +377,6 @@ type Watcher struct {
 	// it is never the host server.
 	tmuxSocketPath string
 	tmuxScratchDir string
-	// tmuxGuardDir holds the `tmux` shim that Worker and Brain panes put first
-	// on PATH ("" = no shim). See package tmuxguard.
-	tmuxGuardDir string
 	// managedServicesPath is the persisted explicit registry for
 	// Agent-retained persistent services (user systemd units). Empty means
 	// persistent discovery is disabled; tmux discovery is unaffected.
@@ -4158,7 +4155,7 @@ func workerProgressEnvScript() string {
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
 	// target the host server.
-	return `MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellquote.Quote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX; if [ -n "${MEWLA_TMUX_GUARD_DIR:-}" ]; then PATH="$MEWLA_TMUX_GUARD_DIR:$PATH"; export PATH; fi`
+	return `MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellquote.Quote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX`
 }
 
 // ExecutablePath returns the absolute path of the currently running mewla
