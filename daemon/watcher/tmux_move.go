@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"time"
@@ -132,6 +133,7 @@ func (w *Watcher) MoveToHost(id string, move TmuxMove) error {
 			cwd:     move.Cwd,
 			command: move.Command,
 			env:     move.Env,
+			agent:   true, // only an agent that can resume moves
 			labels: sessionLabels{
 				hidden:       pane.hidden,
 				delegated:    pane.delegated,
@@ -167,6 +169,16 @@ func waitProcessesGone(pids []int, limit time.Duration) bool {
 	}
 }
 
+// leftInTmux is a Session left in tmux. Unit is its delegated resource unit
+// while Mewla still holds it: the lease and TempDir stay with the Session
+// until its pane ends, since its programs keep using them (its TMUX_TMPDIR
+// may be that TempDir, and tmux whose TMUX_TMPDIR is gone falls back to the
+// person's default server).
+type leftInTmux struct {
+	Why  string `json:"why"`
+	Unit string `json:"unit,omitempty"`
+}
+
 // LeaveInTmux stops seeing the tmux Session id: it keeps running in tmux, no
 // longer Mewla's. The choice is kept across restarts.
 func (w *Watcher) LeaveInTmux(id, why string) {
@@ -174,14 +186,92 @@ func (w *Watcher) LeaveInTmux(id, why string) {
 	if c == nil {
 		return
 	}
-	c.leftMu.Lock()
-	defer c.leftMu.Unlock()
-	if _, ok := c.left[id]; ok {
+	if c.isLeft(id) {
 		return
 	}
-	c.left[id] = why
+	unit := w.resourceManager().UnitForTarget(id)
+	if unit == "" {
+		if panes, err := c.tmux.listOwned(); err == nil {
+			for _, pane := range panes {
+				if pane.target == id && pane.delegated {
+					unit = pane.resourceUnit
+				}
+			}
+		}
+	}
+	c.leftMu.Lock()
+	defer c.leftMu.Unlock()
+	c.left[id] = leftInTmux{Why: why, Unit: unit}
 	if err := c.saveLeftLocked(); err != nil {
 		log.Printf("watcher: record that %s stays in tmux: %v", id, err)
+	}
+}
+
+// isLeftInTmux reports a Session left in tmux.
+func (w *Watcher) isLeftInTmux(id string) bool {
+	c := w.composite()
+	return c != nil && c.isLeft(id)
+}
+
+// leftInTmuxCheckEvery spaces the tmux inventory that finds left Sessions
+// whose pane ended.
+const leftInTmuxCheckEvery = 10 * time.Second
+
+// releaseEndedLeftInTmux releases the resources of each Session left in tmux
+// whose pane has ended. It asks tmux at most every leftInTmuxCheckEvery
+// unless now is set, and only while some left Session holds resources. When
+// it cannot tell (tmux is not installed while its server may still run),
+// it keeps them: releasing would end programs that may still run.
+func (w *Watcher) releaseEndedLeftInTmux(now bool) {
+	c := w.composite()
+	if c == nil {
+		return
+	}
+	c.leftMu.Lock()
+	held := map[string]string{}
+	for id, left := range c.left {
+		if left.Unit != "" {
+			held[id] = left.Unit
+		}
+	}
+	due := now || time.Since(c.leftChecked) >= leftInTmuxCheckEvery
+	if len(held) > 0 && due {
+		c.leftChecked = time.Now()
+	}
+	c.leftMu.Unlock()
+	if len(held) == 0 || !due {
+		return
+	}
+	if _, err := exec.LookPath("tmux"); err != nil {
+		return
+	}
+	panes, err := c.tmux.listOwned()
+	if err != nil && !errors.Is(err, ErrTmuxServerGone) {
+		return
+	}
+	alive := map[string]bool{}
+	for _, pane := range panes {
+		if !pane.dead {
+			alive[pane.target] = true
+		}
+	}
+	for id, unit := range held {
+		if alive[id] {
+			continue
+		}
+		if err := w.resourceManager().Release(id, unit); err != nil {
+			log.Printf("watcher: release the resources of %s, which ended in tmux: %v", id, err)
+			continue
+		}
+		c.leftMu.Lock()
+		if left, ok := c.left[id]; ok && left.Unit == unit {
+			left.Unit = ""
+			c.left[id] = left
+			if err := c.saveLeftLocked(); err != nil {
+				log.Printf("watcher: record that %s ended in tmux: %v", id, err)
+			}
+		}
+		c.leftMu.Unlock()
 	}
 }
 
@@ -237,7 +327,7 @@ func (c *compositeBackend) leftPath() string {
 func (c *compositeBackend) loadLeftInTmux() {
 	c.leftMu.Lock()
 	defer c.leftMu.Unlock()
-	c.left = map[string]string{}
+	c.left = map[string]leftInTmux{}
 	path := c.leftPath()
 	if path == "" {
 		return
@@ -248,7 +338,7 @@ func (c *compositeBackend) loadLeftInTmux() {
 	}
 	if err := json.Unmarshal(raw, &c.left); err != nil {
 		log.Printf("watcher: %s: %v", path, err)
-		c.left = map[string]string{}
+		c.left = map[string]leftInTmux{}
 	}
 }
 

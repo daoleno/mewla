@@ -60,3 +60,31 @@ func TestProviderWindowEnvironmentGetsPrivateTmuxScratch(t *testing.T) {
 		t.Fatal("host environment injected TMUX")
 	}
 }
+
+// Brain, a Worker and an agent a person launched keep their plain tmux in
+// the daemon's private TMUX_TMPDIR; a person's own shell keeps their own.
+func TestOnlyAgentSessionsGetThePrivateTmux(t *testing.T) {
+	for _, opts := range []CreateSessionOptions{
+		{ProgressEnv: true, Command: "bash"},
+		{Hidden: true},
+		{Delegated: true, Command: "bash --norc -i"},
+		{ExecutorID: "my-agent", Command: "/opt/agent/run"},
+		{Command: "claude --permission-mode bypassPermissions"},
+		{Command: "codex resume 019a1b2c-3d4e-7f00-8a9b-0c1d2e3f4a5b"},
+		{Command: "grok"},
+	} {
+		if !sessionRunsAnAgent(opts) {
+			t.Errorf("%+v is not an agent", opts)
+		}
+	}
+	for _, opts := range []CreateSessionOptions{
+		{},
+		{Command: "/bin/zsh"},
+		{Command: "bash -l"},
+		{Command: "htop"},
+	} {
+		if sessionRunsAnAgent(opts) {
+			t.Errorf("%+v, a person's own shell, is an agent", opts)
+		}
+	}
+}

@@ -5,9 +5,12 @@ package watcher
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
 // oldTmuxSession starts a Session in tmux as Mewla before 0.3 did.
@@ -170,5 +173,67 @@ func TestTmuxSessionLeftInTmuxIsNoLongerMewlas(t *testing.T) {
 	}
 	if n := h.w.LeftInTmux(); n != 0 {
 		t.Fatalf("LeftInTmux after it ended = %d", n)
+	}
+}
+
+// Closing the Work of a Session left in tmux only lets go of it: its programs,
+// lease and TempDir (maybe its TMUX_TMPDIR) stay while its pane runs, also
+// across a daemon restart, and are released once the pane ends.
+func TestLeftSessionKeepsItsResourcesUntilItsPaneEnds(t *testing.T) {
+	h := newSharedTmuxHarness(t, false)
+	host := startInProcessHost(t)
+	manager := newTestPortableResourceManager(t, "daemon-left")
+	spec, err := manager.Prepare(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lease, err := workerproc.LeasePath(manager.leaseDir, spec.Unit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(lease); err != nil {
+		t.Fatalf("lease before: %v", err)
+	}
+	id := oldTmuxSession(t, h, "grok", sessionLabels{delegated: true, resourceUnit: spec.Unit, resourceOwner: spec.Owner})
+	cfg := SessionHostConfig{SocketPath: host.socket, Executable: "/nonexistent/mewla", StateDir: t.TempDir(), Version: "t"}
+	h.w.resources = manager
+	h.w.SetSessionHost(cfg)
+	// The first inventories bound its unit before the move left it in tmux.
+	manager.Bind(id, spec.Unit)
+	h.w.LeaveInTmux(id, "Mewla cannot resume grok")
+
+	held := func(w *Watcher, what string) {
+		t.Helper()
+		w.releaseEndedLeftInTmux(true)
+		if !tmuxPaneExists(h, id) {
+			t.Fatalf("%s: %s no longer runs in tmux", what, id)
+		}
+		if _, err := os.Stat(spec.TempDir); err != nil {
+			t.Fatalf("%s: TempDir of a running left Session: %v", what, err)
+		}
+	}
+	if err := h.w.KillSession(id); err != nil {
+		t.Fatal(err)
+	}
+	held(h.w, "after its Work closed")
+	restarted := New(10 * time.Millisecond)
+	restarted.SetTmuxServer(h.selected, h.scratch)
+	restarted.resources = manager
+	restarted.SetSessionHost(cfg)
+	held(restarted, "after a restart")
+
+	if out, err := exec.Command("tmux", "-S", h.physical, "kill-pane", "-t", id).CombinedOutput(); err != nil {
+		t.Fatalf("kill %s: %v %s", id, err, out)
+	}
+	restarted.releaseEndedLeftInTmux(true)
+	if _, err := os.Stat(spec.TempDir); !os.IsNotExist(err) {
+		t.Fatalf("TempDir after the pane ended: %v", err)
+	}
+	if _, err := os.Stat(lease); !os.IsNotExist(err) {
+		t.Fatalf("lease after the pane ended: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(cfg.StateDir, "session-host", "left-in-tmux.json"))
+	if err != nil || strings.Contains(string(raw), spec.Unit) || !strings.Contains(string(raw), id) {
+		t.Fatalf("left-in-tmux.json after release = %s, %v", raw, err)
 	}
 }
