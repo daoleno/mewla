@@ -377,6 +377,9 @@ type Watcher struct {
 	// it is never the host server.
 	tmuxSocketPath string
 	tmuxScratchDir string
+	// privateTmuxDirFailed logs a missing private TMUX_TMPDIR once, not every
+	// poll.
+	privateTmuxDirFailed atomic.Bool
 	// managedServicesPath is the persisted explicit registry for
 	// Agent-retained persistent services (user systemd units). Empty means
 	// persistent discovery is disabled; tmux discovery is unaffected.
@@ -1474,6 +1477,7 @@ func (w *Watcher) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-timer.C:
+			w.keepPrivateTmuxDir()
 			w.poll()
 			timer.Reset(w.screens.nextPollDelay(w.pollInterval))
 		}

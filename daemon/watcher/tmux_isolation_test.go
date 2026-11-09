@@ -51,8 +51,10 @@ func TestProviderWindowEnvironmentGetsPrivateTmuxScratch(t *testing.T) {
 	delegated := CreateSessionOptions{Name: "worker", Delegated: true, ProgressEnv: true, Env: map[string]string{}}
 	delegated.resource = &delegatedResourceSpec{TempDir: "/home/user/.mewla/t/abc123"}
 	applyProviderTmuxIsolation(&delegated, w)
-	if delegated.Env["TMUX_TMPDIR"] != "/home/user/.mewla/t/abc123" {
-		t.Fatalf("delegated TMUX_TMPDIR = %q, want per-agent scratch", delegated.Env["TMUX_TMPDIR"])
+	// Never the Worker's own scratch: it goes when the Worker ends, and tmux
+	// whose TMUX_TMPDIR is gone falls back to the user's default server.
+	if delegated.Env["TMUX_TMPDIR"] != scratch {
+		t.Fatalf("delegated TMUX_TMPDIR = %q, want the daemon's %q", delegated.Env["TMUX_TMPDIR"], scratch)
 	}
 	if _, present := host.Env["TMUX"]; present {
 		t.Fatal("host environment injected TMUX")
