@@ -120,3 +120,32 @@ func TestWriteSettingsIsPrivateAndIdempotent(t *testing.T) {
 		t.Fatal("changed command not written")
 	}
 }
+
+func TestExecFormHookFile(t *testing.T) {
+	raw, err := HookSettingsJSON(Hook{Command: `C:\m\mewla.exe`, Args: []string{"agent-event", "claude"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Type    string   `json:"type"`
+				Command string   `json:"command"`
+				Args    []string `json:"args"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range HookEvents {
+		entry := file.Hooks[name][0].Hooks[0]
+		if entry.Type != "command" || entry.Command != `C:\m\mewla.exe` || strings.Join(entry.Args, " ") != "agent-event claude" {
+			t.Fatalf("%s = %+v", name, entry)
+		}
+	}
+	plain, _ := SettingsJSON("mewla agent-event claude")
+	if strings.Contains(string(plain), `"args"`) {
+		t.Fatalf("a command line hook carries args: %s", plain)
+	}
+}

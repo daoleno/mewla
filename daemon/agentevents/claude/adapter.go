@@ -61,16 +61,33 @@ func hasSettingsFlag(command string) bool {
 	return false
 }
 
-// SettingsJSON is the hook file for hookCommand, the command line Claude runs
-// for each hook (it receives the payload on stdin). PermissionRequest may
-// wait on Brain or a person, so it gets the longest timeout Claude allows by
-// default. The file also acknowledges Claude's one-time bypass-mode warning,
-// which every Mewla-launched Claude starts in, so a first Worker on a fresh
-// install is never left at that dialog.
+// Hook is what Claude runs for each hook (it receives the payload on stdin):
+// a shell command line, or with Args a program run directly with those
+// arguments and no shell (Claude's exec form). Windows uses the exec form:
+// there Claude runs a command line in PowerShell, or Git Bash when installed,
+// and no one quoting reads the same in both.
+type Hook struct {
+	Command string
+	Args    []string
+}
+
+// SettingsJSON is the hook file for hookCommand, a shell command line.
 func SettingsJSON(hookCommand string) ([]byte, error) {
+	return HookSettingsJSON(Hook{Command: hookCommand})
+}
+
+// HookSettingsJSON is the hook file for hook. PermissionRequest may wait on
+// Brain or a person, so it gets the longest timeout Claude allows by default.
+// The file also acknowledges Claude's one-time bypass-mode warning, which
+// every Mewla-launched Claude starts in, so a first Worker on a fresh install
+// is never left at that dialog.
+func HookSettingsJSON(hook Hook) ([]byte, error) {
 	hooks := map[string]any{}
 	for _, name := range HookEvents {
-		entry := map[string]any{"type": "command", "command": hookCommand}
+		entry := map[string]any{"type": "command", "command": hook.Command}
+		if hook.Args != nil {
+			entry["args"] = hook.Args
+		}
 		if name == "PermissionRequest" {
 			entry["timeout"] = 600
 		} else {
@@ -81,10 +98,15 @@ func SettingsJSON(hookCommand string) ([]byte, error) {
 	return json.MarshalIndent(map[string]any{"hooks": hooks, "skipDangerousModePermissionPrompt": true}, "", "  ")
 }
 
-// WriteSettings writes the hook file when its content changed, so concurrent
-// launches never see a half-written file.
+// WriteSettings writes the hook file for a shell command line.
 func WriteSettings(path, hookCommand string) error {
-	want, err := SettingsJSON(hookCommand)
+	return WriteHookSettings(path, Hook{Command: hookCommand})
+}
+
+// WriteHookSettings writes the hook file when its content changed, so
+// concurrent launches never see a half-written file.
+func WriteHookSettings(path string, hook Hook) error {
+	want, err := HookSettingsJSON(hook)
 	if err != nil {
 		return err
 	}

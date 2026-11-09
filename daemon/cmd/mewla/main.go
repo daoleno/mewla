@@ -447,7 +447,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	resourceSampler.ConfigureResourceFiles(authManager.StorageDir())
 	if executable, exeErr := os.Executable(); exeErr != nil {
 		log.Printf("WARN agent events: cannot find this executable, Claude Workers will be followed from their transcript: %v", exeErr)
-	} else if err := claudeadapter.WriteSettings(claudeSettingsPath(authManager.StorageDir()), claudeHookCommand(executable, authManager.StorageDir())); err != nil {
+	} else if err := claudeadapter.WriteHookSettings(claudeSettingsPath(authManager.StorageDir()), claudeHook(runtime.GOOS, executable, authManager.StorageDir())); err != nil {
 		log.Printf("WARN agent events: cannot write the Claude hook file, Claude Workers will be followed from their transcript: %v", err)
 	} else {
 		adapters.Register(claudeadapter.Provider, claudeadapter.Adapter{SettingsPath: claudeSettingsPath(authManager.StorageDir())})

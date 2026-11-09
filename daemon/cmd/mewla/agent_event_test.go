@@ -297,3 +297,15 @@ func TestClaudeBindingSurvivesADaemonRestartOnTheNextHook(t *testing.T) {
 		t.Fatalf("exited Worker still bound to %q", got)
 	}
 }
+
+// On Windows Claude runs a hook's command line in PowerShell or Git Bash, so
+// the hook is the program and its arguments, run without a shell.
+func TestClaudeHookOnWindowsIsExecForm(t *testing.T) {
+	hook := claudeHook("windows", `C:\Users\ana b\AppData\Local\Programs\Mewla\mewla.exe`, `C:\Users\ana b\.mewla`)
+	if hook.Command != `C:\Users\ana b\AppData\Local\Programs\Mewla\mewla.exe` || strings.Join(hook.Args, "|") != `agent-event|-state-dir|C:\Users\ana b\.mewla|claude` {
+		t.Fatalf("windows hook = %+v", hook)
+	}
+	if unix := claudeHook("linux", "/bin/mewla", "/state"); unix.Args != nil || unix.Command != claudeHookCommand("/bin/mewla", "/state") {
+		t.Fatalf("linux hook = %+v", unix)
+	}
+}

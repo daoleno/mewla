@@ -270,6 +270,16 @@ func claudeHookCommand(executable, stateDir string) string {
 	return shellquote.Word(executable) + " agent-event -state-dir " + shellquote.Word(stateDir) + " " + claude.Provider
 }
 
+// claudeHook is what the hook file runs for Claude: the command line, or on
+// Windows the same program and arguments in Claude's exec form (see
+// claude.Hook).
+func claudeHook(goos, executable, stateDir string) claude.Hook {
+	if goos == "windows" {
+		return claude.Hook{Command: executable, Args: []string{"agent-event", "-state-dir", stateDir, claude.Provider}}
+	}
+	return claude.Hook{Command: claudeHookCommand(executable, stateDir)}
+}
+
 // claudeSettingsPath is where the daemon keeps Claude's hook file.
 func claudeSettingsPath(stateDir string) string {
 	return filepath.Join(stateDir, "agent-events", "claude-settings.json")
