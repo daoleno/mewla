@@ -294,10 +294,15 @@ func descendantPIDsIncludingRoot(rootPID int, processes map[int]processInfo) []i
 	}
 
 	result := []int{rootPID}
+	visited := map[int]bool{rootPID: true}
 	queue := append([]int(nil), children[rootPID]...)
 	for len(queue) > 0 {
 		pid := queue[0]
 		queue = queue[1:]
+		if visited[pid] {
+			continue
+		}
+		visited[pid] = true
 		result = append(result, pid)
 		queue = append(queue, children[pid]...)
 	}
