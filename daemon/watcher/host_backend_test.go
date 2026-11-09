@@ -112,15 +112,25 @@ func TestHostOnlyInventoryNeedsNoTmux(t *testing.T) {
 	w := New(50 * time.Millisecond)
 	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
 	w.SetSessionHost(config)
-	if panes, err := w.sessions().listOwned(); err != nil || len(panes) != 0 {
-		t.Fatalf("host-only inventory before the host runs = %v, %v", panes, err)
+	if panes, err := w.sessions().listOwned(); !errors.Is(err, ErrTmuxServerGone) || len(panes) != 0 {
+		t.Fatalf("host-only inventory before the host runs = %v, %v; want nothing running", panes, err)
 	}
 	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
 		t.Fatalf("host-only services = %v, %v", services, err)
 	}
+	// The first poll is an empty, ready inventory that saw no host, so a
+	// Session an earlier run recorded (Brain's, before a reboot) is gone.
+	w.poll()
+	if !w.SnapshotReady() {
+		t.Fatal("watcher not ready after the first host-only poll")
+	}
+	recorded := "mh-0123456789abcdef01234567"
+	if gone, err := w.ResolveDelegatedAbsence(recorded); err != nil || !gone {
+		t.Fatalf("a Session from before the reboot = gone %v, %v", gone, err)
+	}
 	// Once the watcher holds a host Session, a vanished host is unknown.
 	w.mu.Lock()
-	w.workers["mh-0123456789abcdef01234567"] = &classifier.Worker{}
+	w.workers[recorded] = &classifier.Worker{}
 	w.mu.Unlock()
 	if panes, err := w.sessions().listOwned(); err == nil {
 		t.Fatalf("host-only inventory with a known Session and no host = %v, nil", panes)

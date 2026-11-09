@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"errors"
 	"net"
 	"os"
 	"os/exec"
@@ -139,5 +140,24 @@ func TestNoListenerOnEveryAbsentSocket(t *testing.T) {
 		if err == nil || !NoListener(err) {
 			t.Errorf("dial %s = %v; NoListener false", path, err)
 		}
+	}
+}
+
+// Claude's process registry records this FILETIME; a finished process has none.
+func TestProcessCreationFiletime(t *testing.T) {
+	self, err := ProcessCreationFiletime(os.Getpid())
+	if err != nil || self == 0 {
+		t.Fatalf("this process = %d, %v", self, err)
+	}
+	started, _ := ProcessStartTime(os.Getpid())
+	if got := time.Unix(0, int64(self-116444736000000000)*100); !got.Equal(started) {
+		t.Fatalf("FILETIME %d is %v; start time is %v", self, got, started)
+	}
+	child := exec.Command("cmd.exe", "/d", "/c", "exit 0")
+	if err := child.Run(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ProcessCreationFiletime(child.Process.Pid); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a finished process = %v", err)
 	}
 }

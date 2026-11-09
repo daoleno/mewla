@@ -159,3 +159,25 @@ func ProcessCommandLine(pid int) (string, error) {
 		buf = make([]byte, size)
 	}
 }
+
+// ProcessCreationFiletime is when pid started, as the FILETIME (100 ns ticks
+// since 1601) Windows records. A pid with no process is os.ErrNotExist.
+func ProcessCreationFiletime(pid int) (uint64, error) {
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
+		return 0, fmt.Errorf("process %d: %w", pid, os.ErrNotExist)
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer windows.CloseHandle(handle)
+	var creation, exit, kernel, user windows.Filetime
+	if err := windows.GetProcessTimes(handle, &creation, &exit, &kernel, &user); err != nil {
+		return 0, err
+	}
+	var code uint32
+	if err := windows.GetExitCodeProcess(handle, &code); err == nil && code != 259 { // STILL_ACTIVE
+		return 0, fmt.Errorf("process %d exited: %w", pid, os.ErrNotExist)
+	}
+	return uint64(creation.HighDateTime)<<32 | uint64(creation.LowDateTime), nil
+}

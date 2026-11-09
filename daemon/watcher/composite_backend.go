@@ -55,9 +55,12 @@ func (c *compositeBackend) knows(valid func(string) bool) bool {
 // ending.
 func (c *compositeBackend) listOwned() ([]sessionPane, error) {
 	if c.host.cfg.HostOnly {
+		// No host running is nothing running at all, as a tmux server that
+		// is not: the first inventory is empty, and a Session an earlier run
+		// recorded is gone with the host that held it.
 		panes, err := c.host.listOwned()
-		if errors.Is(err, errSessionHostGone) && !c.knows(c.host.validID) {
-			return nil, nil
+		if errors.Is(err, errSessionHostGone) {
+			return nil, fmt.Errorf("%w: %w", ErrTmuxServerGone, err)
 		}
 		return panes, err
 	}
