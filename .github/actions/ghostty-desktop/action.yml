@@ -1,0 +1,18 @@
+name: Session host terminal engine libraries
+description: >
+  The static libghostty-vt that scripts/test-ghosttyvt.sh links into
+  daemon/ghosttyvt, with the signed release tarballs and the pinned Zig it is
+  built from. The cache key covers everything that derives the libraries; on a
+  miss the test script builds them and this cache saves them on main.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore or save libghostty-vt desktop build
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/mewla/ghostty-desktop
+          ~/.cache/mewla/ghostty
+          .cache/mewla-tools
+        key: ghostty-desktop-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-desktop.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig.sh') }}

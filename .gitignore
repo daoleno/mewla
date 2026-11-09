@@ -103,3 +103,9 @@ daemon/webui/dist/*
 /daemon/cmd/mewla/mewla
 # go build ./cmd/mewla in daemon/ drops the binary here
 /daemon/mewla
+
+# Session host terminal engine: static libghostty-vt built by
+# scripts/build-libghostty-desktop.sh. mewla-dev builds with the ghosttyvt tag
+# whenever this directory exists.
+/daemon/ghostty-libs/
+/daemon/.ghostty-libs.*
