@@ -25,6 +25,7 @@ require (
 	golang.org/x/term v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.44.3
+	mvdan.cc/sh/v3 v3.12.0
 )
 
 require (

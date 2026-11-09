@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -152,8 +153,9 @@ func configureSessionHost(w *watcher.Watcher, stateDir string) {
 		StateDir:   stateDir,
 		LogPath:    filepath.Join(stateDir, "session-host", "host.log"),
 		Version:    hostVersion(),
+		// Windows has no tmux: there the host is the only place Sessions run.
 		Enabled: func() bool {
-			return ghosttyvt.Available() && sessionhost.LoadSettings(stateDir).Enabled
+			return ghosttyvt.Available() && (runtime.GOOS == "windows" || sessionhost.LoadSettings(stateDir).Enabled)
 		},
 	})
 }

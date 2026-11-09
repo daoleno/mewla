@@ -264,9 +264,9 @@ jobs:
       - name: Build every package
         run: go build ./...
       - name: Vet the Windows platform layer
-        run: go vet ./platform ./control ./sqlitedb ./selfupdate
+        run: go vet ./platform ./control ./sqlitedb ./selfupdate ./launchsh ./sessionhost
       - name: Test the Windows platform layer
-        run: go test -count=1 ./platform ./control ./sqlitedb ./selfupdate
+        run: go test -count=1 ./platform ./control ./sqlitedb ./selfupdate ./launchsh
       - name: Build mewla.exe
         run: go build -o "$env:RUNNER_TEMP\mewla.exe" ./cmd/mewla
       - name: Test install.ps1 offline (Windows PowerShell 5.1)
