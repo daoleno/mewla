@@ -38,7 +38,7 @@ func (p *conptyProgram) PID() int                    { return p.pc.PID() }
 func (p *conptyProgram) Close() error                { return p.pc.Close() }
 
 // Cwd is unknown here; the Session falls back to the directory the program
-// reports with OSC 7.
+// reports with OSC 7, then to the one it started in.
 func (p *conptyProgram) Cwd() string { return "" }
 
 // Command names what the Session runs, as a Unix Session reports its

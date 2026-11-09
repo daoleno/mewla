@@ -102,7 +102,7 @@ func TestWindowsHostRunsAnInteractiveProgram(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.Alive || info.PID == 0 || info.Command != "cmd" {
+	if !info.Alive || info.PID == 0 || info.Command != "cmd" || info.Cwd != dir {
 		t.Fatalf("info = %+v", info)
 	}
 	if _, err := c.Input(ctx, "shell", []InputStep{{Bytes: []byte("echo typed-%MEWLA_SESSION_ID%-ok")}, {Key: "Enter"}}); err != nil {

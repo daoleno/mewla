@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -105,6 +106,10 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 		return os.Getenv(key)
 	}
 	home := value("HOME")
+	if home == "" && runtime.GOOS == "windows" {
+		// Claude's home on Windows (Node's os.homedir()).
+		home = value("USERPROFILE")
+	}
 	if home == "" {
 		return "", fmt.Errorf("delegated provider HOME is missing")
 	}
@@ -135,6 +140,10 @@ func PrepareDelegatedWorkspace(command, cwd string, env map[string]string) (stri
 		}
 		changed := false
 		for _, dir := range dirs {
+			if runtime.GOOS == "windows" {
+				// Claude keys its projects by the path with forward slashes there.
+				dir = filepath.ToSlash(dir)
+			}
 			project := map[string]json.RawMessage{}
 			if p := projects[dir]; p != nil {
 				if err := json.Unmarshal(p, &project); err != nil {

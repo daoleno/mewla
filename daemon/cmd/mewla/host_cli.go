@@ -157,6 +157,7 @@ func configureSessionHost(w *watcher.Watcher, stateDir string) {
 		Enabled: func() bool {
 			return ghosttyvt.Available() && (runtime.GOOS == "windows" || sessionhost.LoadSettings(stateDir).Enabled)
 		},
+		HostOnly: runtime.GOOS == "windows",
 	})
 }
 

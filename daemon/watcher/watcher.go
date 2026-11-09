@@ -13,6 +13,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -4240,6 +4241,12 @@ func tmuxPaneEnvironment(base []string) []string {
 }
 
 func currentLoginShell() (string, error) {
+	// Windows: the launch script always runs in `mewla sh`. $SHELL there is
+	// whatever started the daemon (OpenSSH sets it to cmd.exe), never a POSIX
+	// shell to hand the script to.
+	if runtime.GOOS == "windows" {
+		return "/bin/sh", nil
+	}
 	if shell := loginShellFromPasswd(); shell != "" {
 		return shell, nil
 	}

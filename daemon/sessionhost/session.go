@@ -533,6 +533,11 @@ func (s *session) info() Info {
 	if info.Cwd == "" {
 		info.Cwd = state.Pwd
 	}
+	if info.Cwd == "" {
+		// Where it cannot be read (Windows) and the program never said with
+		// OSC 7: the directory the program started in.
+		info.Cwd = s.dir
+	}
 	return info
 }
 
