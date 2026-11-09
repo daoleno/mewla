@@ -127,3 +127,5 @@ try {
 }
 if ($failures -gt 0) { Write-Host "$failures install.ps1 test(s) failed"; exit 1 }
 Write-Host 'install.ps1 tests passed'
+# The last refused install left a non-zero $LASTEXITCODE; this run passed.
+exit 0

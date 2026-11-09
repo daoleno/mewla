@@ -1,16 +1,14 @@
-//go:build linux || darwin
-
 package sessionhost
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // StartOptions say how to reach a host, and how to start one when none
@@ -74,7 +72,7 @@ func Connect(ctx context.Context, opts StartOptions) (client *Client, started bo
 // IsAbsent reports whether a dial failed because no host is there: no
 // socket, or nothing listening on it.
 func IsAbsent(err error) bool {
-	return errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
+	return platform.NoListener(err)
 }
 
 // spawnHost starts `mewla host` detached and returns a channel that gets its
@@ -98,15 +96,14 @@ func spawnHost(opts StartOptions) (<-chan error, error) {
 	args := append([]string{"host", "--socket", opts.SocketPath}, opts.Args...)
 	cmd := exec.Command(opts.Executable, args...)
 	cmd.Env = opts.Env
-	cmd.Dir = "/"
+	cmd.Dir = filepath.VolumeName(opts.Executable) + string(filepath.Separator)
 	if logFile != nil {
 		cmd.Stdout = logFile
 		cmd.Stderr = logFile
 	}
-	// Its own session: no controlling terminal, and no signal sent to the
-	// caller's process group reaches it.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
+	// Its own session (Unix) or a detached process outside the caller's Job
+	// (Windows): no terminal, and nothing sent to the caller reaches it.
+	if err := platform.StartDetached(cmd); err != nil {
 		return nil, fmt.Errorf("start session host: %w", err)
 	}
 	exited := make(chan error, 1)

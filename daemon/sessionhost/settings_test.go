@@ -2,6 +2,7 @@ package sessionhost
 
 import (
 	"os"
+	"runtime"
 	"testing"
 )
 
@@ -17,7 +18,8 @@ func TestSettingsDefaultOff(t *testing.T) {
 		t.Fatal("saved setting not read back")
 	}
 	info, err := os.Stat(SettingsPath(dir))
-	if err != nil || info.Mode().Perm() != 0o600 {
+	// Windows has no mode bits; the folder's ACL keeps the file private.
+	if err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o600) {
 		t.Fatalf("settings file mode %v, %v", info.Mode().Perm(), err)
 	}
 	if err := os.WriteFile(SettingsPath(dir), []byte("{not json"), 0o600); err != nil {

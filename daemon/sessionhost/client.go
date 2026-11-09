@@ -1,5 +1,3 @@
-//go:build linux || darwin
-
 package sessionhost
 
 import (
@@ -19,7 +17,7 @@ var ErrClosed = errors.New("session host connection closed")
 
 // serverUIDAllowed is the client's half of the socket boundary: a socket put
 // there by another user is not the host, whatever it answers.
-var serverUIDAllowed = func(uid uint32) bool { return int(uid) == os.Getuid() }
+var serverUIDAllowed = func(uid uint32) bool { return uid == uint32(os.Getuid()) }
 
 // Client is a connection to a host. Calls may run concurrently.
 type Client struct {
