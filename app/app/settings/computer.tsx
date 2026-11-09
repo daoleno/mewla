@@ -8,7 +8,7 @@ import { ContentWidth, useAppColors } from "../../constants/tokens";
 import { ComputerPanel } from "../../components/settings/ComputerPanel";
 import {
   computerProblems,
-  computerUpdateProblem,
+  computerUpdateProblem, computerTmuxProblem,
   computerProblemsMayChange,
   computerStatusWord,
   type ComputerAction,
@@ -224,8 +224,10 @@ export default function ComputerScreen() {
     .map((daemonId) => others.find((other) => other.daemonId === daemonId)?.name)
     .filter((name): name is string => Boolean(name));
   const updateProblem = reachable ? computerUpdateProblem(daemonUpdate, effectiveMinComputerVersion(MIN_COMPUTER_VERSION, appVersion)) : null;
+  const tmuxProblem = reachable ? computerTmuxProblem(daemonUpdate) : null;
   const problems: ComputerProblem[] = [
     ...(updateProblem ? [updateProblem] : []),
+    ...(tmuxProblem ? [tmuxProblem] : []),
     ...(reachable ? computerProblems(agentUse) : []),
     ...apartNames.map((name) => ({
       key: `apart:${name}`,

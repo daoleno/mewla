@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentUseStatus } from "../../services/agentUse";
-import { computerProblems, computerProblemsMayChange, computerStatusWord, computerUpdateProblem } from "./computerModel";
+import { computerProblems, computerProblemsMayChange, computerStatusWord, computerTmuxProblem, computerUpdateProblem } from "./computerModel";
 
 const macMissingExtension: AgentUseStatus = {
   enabled: true,
@@ -135,5 +135,19 @@ describe("computerUpdateProblem", () => {
     expect(
       computerUpdateProblem({ version: "0.2.88", supported: true, error: "Mewla 0.2.89 did not start; still on 0.2.88" }, min)?.text,
     ).toBe("Mewla 0.2.89 did not start; still on 0.2.88");
+  });
+});
+
+describe("computerTmuxProblem", () => {
+  const status = { version: "0.3.0", supported: true };
+  test("says nothing while every Session is Mewla's", () => {
+    expect(computerTmuxProblem(null)).toBeNull();
+    expect(computerTmuxProblem(status)).toBeNull();
+    expect(computerTmuxProblem({ ...status, sessions_in_tmux: 0 })).toBeNull();
+  });
+  test("counts the Sessions left in tmux in one line", () => {
+    expect(computerTmuxProblem({ ...status, sessions_in_tmux: 1 })?.text).toBe("1 session still runs in tmux and is no longer controlled by Mewla");
+    expect(computerTmuxProblem({ ...status, sessions_in_tmux: 3 })?.text).toBe("3 sessions still run in tmux and are no longer controlled by Mewla");
+    expect(computerTmuxProblem({ ...status, sessions_in_tmux: 3 })?.action).toBeUndefined();
   });
 });
