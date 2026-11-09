@@ -337,3 +337,51 @@ func TestOpenCodeModelsFlowIntoStatsPayload(t *testing.T) {
 		}
 	}
 }
+
+// Each OpenCode session read is a process started; a start of the daemon must
+// not start one per session again.
+func TestOpenCodeStatsRestartReadsOnlyChangedSessions(t *testing.T) {
+	service := opencodeapitest.Install(t)
+	updated := time.Now()
+	for index := range 6 {
+		id := "ses-" + strconv.Itoa(index)
+		service.PutSession(opencodeapitest.Session{ID: id, Directory: "/tmp/mewla", Created: updated, Updated: updated})
+		service.PutMessage(id, map[string]any{
+			"id": "msg-" + strconv.Itoa(index), "type": "assistant", "time": map[string]any{"created": updated.UnixMilli()},
+			"tokens": map[string]any{"input": 10, "output": 5, "reasoning": 0, "cache": map[string]any{"read": 0, "write": 0}},
+			"model":  map[string]any{"id": "gpt-5", "providerID": "openai"}, "cost": 0.01, "content": []any{},
+		})
+	}
+	dir := t.TempDir()
+	first := &Collector{usageCacheDir: dir}
+	want := first.collectOpenCodeStats()
+	if got := service.Calls["session.message.list"]; got != 6 {
+		t.Fatalf("first collector read %d sessions, want 6", got)
+	}
+
+	restarted := &Collector{usageCacheDir: dir}
+	got := restarted.collectOpenCodeStats()
+	if calls := service.Calls["session.message.list"]; calls != 6 {
+		t.Fatalf("a restarted collector read sessions again: %d reads in all", calls)
+	}
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("stored sessions add up differently:\n got %+v\nwant %+v", got, want)
+	}
+
+	// A session that moved is read again; one that is gone stops counting.
+	later := updated.Add(time.Minute)
+	service.PutSession(opencodeapitest.Session{ID: "ses-0", Directory: "/tmp/mewla", Created: updated, Updated: later})
+	service.DeleteSession("ses-5")
+	restarted.collectOpenCodeStats()
+	if calls := service.Calls["session.message.list"]; calls != 7 {
+		t.Fatalf("a changed session was read %d times in all, want 7", calls)
+	}
+	again := &Collector{usageCacheDir: dir}
+	again.collectOpenCodeStats()
+	if calls := service.Calls["session.message.list"]; calls != 7 {
+		t.Fatalf("a restart after a change read sessions again: %d reads in all", calls)
+	}
+	if _, ok := again.openCodeUsage["ses-5"]; ok {
+		t.Fatal("a removed session was kept in the store")
+	}
+}

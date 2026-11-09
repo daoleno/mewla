@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -71,11 +72,19 @@ func (c *Collector) openCodeUsageRows() ([]openCodeUsageRow, error) {
 	}
 	c.openCodeUsageMu.Lock()
 	defer c.openCodeUsageMu.Unlock()
+	if c.openCodeUsage == nil {
+		// A restart or hot reload carries on from what was stored: each session
+		// read again is a process started, and the daemon is charged for what
+		// that process reads.
+		c.openCodeUsage = c.loadOpenCodeUsage()
+	}
 	next := make(map[string]openCodeSessionUsage, len(sessions))
 	var rows []openCodeUsageRow
+	changed := false
 	for _, session := range sessions {
 		cached, ok := c.openCodeUsage[session.ID]
 		if !ok || cached.updated != session.Time.Updated {
+			changed = true
 			messages, err := opencodeapi.ListMessages(ctx, session.ID, "assistant")
 			if err != nil {
 				return nil, err
@@ -108,8 +117,60 @@ func (c *Collector) openCodeUsageRows() ([]openCodeUsageRow, error) {
 		next[session.ID] = cached
 		rows = append(rows, cached.rows...)
 	}
+	if len(next) != len(c.openCodeUsage) {
+		changed = true
+	}
 	c.openCodeUsage = next
+	if changed {
+		c.saveOpenCodeUsage(next)
+	}
 	return rows, nil
+}
+
+const openCodeUsageStoreFile = "opencode-sessions-v1.json"
+
+type openCodeUsageStore struct {
+	Sessions map[string]openCodeStoredSession
+}
+
+type openCodeStoredSession struct {
+	Updated float64
+	Rows    []openCodeUsageRow
+}
+
+// loadOpenCodeUsage returns the stored sessions; a missing or damaged store
+// only costs a read of every session.
+func (c *Collector) loadOpenCodeUsage() map[string]openCodeSessionUsage {
+	sessions := map[string]openCodeSessionUsage{}
+	if c.usageCacheDir == "" {
+		return sessions
+	}
+	raw, err := os.ReadFile(filepath.Join(c.usageCacheDir, openCodeUsageStoreFile))
+	if err != nil {
+		return sessions
+	}
+	var store openCodeUsageStore
+	if json.Unmarshal(raw, &store) != nil {
+		return sessions
+	}
+	for id, stored := range store.Sessions {
+		sessions[id] = openCodeSessionUsage{updated: stored.Updated, rows: stored.Rows}
+	}
+	return sessions
+}
+
+func (c *Collector) saveOpenCodeUsage(sessions map[string]openCodeSessionUsage) {
+	if c.usageCacheDir == "" {
+		return
+	}
+	store := openCodeUsageStore{Sessions: make(map[string]openCodeStoredSession, len(sessions))}
+	for id, session := range sessions {
+		store.Sessions[id] = openCodeStoredSession{Updated: session.updated, Rows: session.rows}
+	}
+	raw, err := json.Marshal(store)
+	if err == nil {
+		_ = writeUsageCache(filepath.Join(c.usageCacheDir, openCodeUsageStoreFile), raw)
+	}
 }
 
 // collectOpenCodeStats aggregates OpenCode usage per date: assistant-message
