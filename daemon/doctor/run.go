@@ -44,6 +44,8 @@ type Options struct {
 	HTTPGet       func(ctx context.Context, url string) (status int, body []byte, err error)
 	Listen        func(network, address string) (io.Closer, error)
 	ProbeTimeout  time.Duration
+	// GOOS is the platform diagnosed; empty means this one.
+	GOOS string
 }
 
 type env struct {
@@ -57,6 +59,9 @@ func newEnv(opts Options) env {
 	}
 	if e.opts.Addr == "" {
 		e.opts.Addr = defaultListenAddr
+	}
+	if e.opts.GOOS == "" {
+		e.opts.GOOS = runtime.GOOS
 	}
 	if e.opts.ProbeTimeout <= 0 {
 		e.opts.ProbeTimeout = 3 * time.Second
@@ -105,11 +110,15 @@ func Run(opts Options) (Report, error) {
 
 	report.Checks = []NamedCheck{
 		{ID: "platform", Status: report.Platform.Status, Remediation: report.Platform.Remediation, Summary: report.Platform.Summary},
-		{ID: "tmux", Status: report.Tmux.Status, Remediation: report.Tmux.Remediation, Summary: report.Tmux.Summary},
+	}
+	if !report.Tmux.NotNeeded {
+		report.Checks = append(report.Checks, NamedCheck{ID: "tmux", Status: report.Tmux.Status, Remediation: report.Tmux.Remediation, Summary: report.Tmux.Summary})
+	}
+	report.Checks = append(report.Checks, []NamedCheck{
 		{ID: "state_dir", Status: report.StateDir.Status, Remediation: report.StateDir.Remediation, Summary: report.StateDir.Summary},
 		{ID: "listen", Status: report.Listen.Status, Remediation: report.Listen.Remediation, Summary: report.Listen.Summary},
 		{ID: "executors", Status: report.Executors.Status, Remediation: report.Executors.Remediation, Summary: report.Executors.Summary},
-	}
+	}...)
 	report.Remediations = collectRemediations(report)
 	report.Warnings = collectWarnings(report)
 	report.Ready = isReady(report)
@@ -333,24 +342,32 @@ func collectRemediations(report Report) []Remediation {
 
 func (e env) checkPlatform() PlatformCheck {
 	check := PlatformCheck{
-		OS:   runtime.GOOS,
+		OS:   e.opts.GOOS,
 		Arch: runtime.GOARCH,
 	}
-	switch runtime.GOOS {
+	switch e.opts.GOOS {
 	case "linux", "darwin":
 		check.Supported = true
 		check.Status = StatusOK
 		check.Summary = fmt.Sprintf("%s/%s is supported", check.OS, check.Arch)
+	case "windows":
+		check.Supported = true
+		check.Status = StatusOK
+		check.Summary = fmt.Sprintf("%s/%s is supported; Sessions run in Mewla's session host", check.OS, check.Arch)
 	default:
 		check.Supported = false
 		check.Status = StatusFail
 		check.Remediation = RemediationUnsupportedPlatform
-		check.Summary = fmt.Sprintf("%s/%s is not supported; Mewla requires Linux or macOS", check.OS, check.Arch)
+		check.Summary = fmt.Sprintf("%s/%s is not supported; Mewla requires Linux, macOS or Windows", check.OS, check.Arch)
 	}
 	return check
 }
 
 func (e env) checkTmux() TmuxCheck {
+	if e.opts.GOOS == "windows" {
+		// Every Session runs in the session host there; nothing uses tmux.
+		return TmuxCheck{NotNeeded: true, Status: StatusOK, Summary: "not needed on Windows"}
+	}
 	check := TmuxCheck{
 		InstallHints: TmuxInstallHints(),
 	}
