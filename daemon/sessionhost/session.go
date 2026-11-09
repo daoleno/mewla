@@ -1,21 +1,14 @@
-//go:build linux || darwin
-
 package sessionhost
 
 import (
 	"bytes"
 	"errors"
-	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
-	"github.com/creack/pty"
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
 )
 
@@ -29,6 +22,26 @@ type screen interface {
 	Snapshot() ([]byte, error)
 	Replay() ([]byte, error)
 	Close()
+}
+
+// program is a Session's running program and the terminal device it runs
+// on: a Unix pty, or a Windows pseudo console. Signals reach every process
+// the program started (its process group, or its Job).
+type program interface {
+	Read(p []byte) (int, error)
+	Write(p []byte) (int, error)
+	Resize(cols, rows int) error
+	// Wait blocks until the program exits and returns its exit code and,
+	// when a signal ended it, the signal's name.
+	Wait() (code int, signal string)
+	Signal(name string) error
+	// Close releases the device; the program's last output has been read
+	// or is dropped.
+	Close() error
+	PID() int
+	// Cwd and Command describe the foreground process ("" when unknown).
+	Cwd() string
+	Command() string
 }
 
 func newEngineScreen(opts ghosttyvt.Options) (screen, error) {
@@ -67,8 +80,7 @@ type session struct {
 	argv      []string
 	dir       string
 	createdAt time.Time
-	cmd       *exec.Cmd
-	ptmx      *os.File
+	proc      program // the program and its terminal device
 	pid       int
 	host      *Server
 
@@ -122,7 +134,7 @@ func startSession(host *Server, params CreateParams) (*session, error) {
 		labels[key] = value
 	}
 	env := sessionEnvironment(params.Env, params.ID)
-	program, err := lookPath(params.Argv[0], env)
+	path, err := lookPath(params.Argv[0], env)
 	if err != nil {
 		return nil, errorf(ErrCodeBadRequest, "%v", err)
 	}
@@ -133,13 +145,7 @@ func startSession(host *Server, params CreateParams) (*session, error) {
 		}
 		return nil, errorf(ErrCodeInternal, "terminal: %v", err)
 	}
-	cmd := exec.Command(program, params.Argv[1:]...)
-	cmd.Args = append([]string(nil), params.Argv...)
-	cmd.Env = env
-	cmd.Dir = params.Dir
-	// StartWithSize makes the program a session leader with the PTY as its
-	// controlling terminal, so its process group is the Session's.
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(params.Cols), Rows: uint16(params.Rows)})
+	proc, err := startProgram(path, params.Argv, env, params.Dir, params.Cols, params.Rows)
 	if err != nil {
 		term.Close()
 		return nil, errorf(ErrCodeBadRequest, "start %s: %v", params.Argv[0], err)
@@ -149,9 +155,8 @@ func startSession(host *Server, params CreateParams) (*session, error) {
 		argv:       append([]string(nil), params.Argv...),
 		dir:        params.Dir,
 		createdAt:  time.Now().UTC(),
-		cmd:        cmd,
-		ptmx:       ptmx,
-		pid:        cmd.Process.Pid,
+		proc:       proc,
+		pid:        proc.PID(),
 		host:       host,
 		replies:    make(chan []byte, 64),
 		screen:     term,
@@ -190,34 +195,11 @@ func sessionEnvironment(base []string, id string) []string {
 	return append(env, "MEWLA_SESSION_ID="+id)
 }
 
-// lookPath resolves argv[0] against the Session's PATH, not the host's.
-func lookPath(name string, env []string) (string, error) {
-	if strings.Contains(name, "/") {
-		return name, nil
-	}
-	path := ""
-	for _, entry := range env {
-		if value, ok := strings.CutPrefix(entry, "PATH="); ok {
-			path = value
-		}
-	}
-	for _, dir := range filepath.SplitList(path) {
-		if dir == "" {
-			dir = "."
-		}
-		candidate := filepath.Join(dir, name)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("%s: not found in the Session's PATH", name)
-}
-
 func (s *session) readLoop() {
 	defer close(s.readerDone)
 	buf := make([]byte, 32<<10)
 	for {
-		n, err := s.ptmx.Read(buf)
+		n, err := s.proc.Read(buf)
 		if n > 0 {
 			s.consume(buf[:n])
 		}
@@ -310,9 +292,8 @@ func (s *session) replyLoop() {
 }
 
 func (s *session) waitLoop() {
-	err := s.cmd.Wait()
+	code, signal := s.proc.Wait()
 	now := time.Now().UTC()
-	code, signal := exitStatus(s.cmd.ProcessState, err)
 	s.mu.Lock()
 	s.alive = false
 	s.exitCode = &code
@@ -338,30 +319,6 @@ func (s *session) waitLoop() {
 	s.mu.Unlock()
 }
 
-func exitStatus(state *os.ProcessState, err error) (int, string) {
-	if state == nil {
-		return -1, ""
-	}
-	if status, ok := state.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-		return 128 + int(status.Signal()), signalName(status.Signal())
-	}
-	return state.ExitCode(), ""
-}
-
-func signalName(sig syscall.Signal) string {
-	switch sig {
-	case syscall.SIGHUP:
-		return SignalHangup
-	case syscall.SIGINT:
-		return SignalInterrupt
-	case syscall.SIGTERM:
-		return SignalTerminate
-	case syscall.SIGKILL:
-		return SignalKill
-	}
-	return sig.String()
-}
-
 func (s *session) isAlive() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -371,7 +328,7 @@ func (s *session) isAlive() bool {
 func (s *session) writePTY(p []byte) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	_, err := s.ptmx.Write(p)
+	_, err := s.proc.Write(p)
 	return err
 }
 
@@ -475,7 +432,7 @@ func (s *session) resize(cols, rows int) error {
 	if err != nil {
 		return errorf(ErrCodeInternal, "resize terminal: %v", err)
 	}
-	if err := pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)}); err != nil && s.isAlive() {
+	if err := s.proc.Resize(cols, rows); err != nil && s.isAlive() {
 		return errorf(ErrCodeInternal, "resize PTY: %v", err)
 	}
 	s.queueReply(out.Reply)
@@ -523,20 +480,16 @@ func (s *session) capture(params CaptureParams) (Capture, error) {
 }
 
 func (s *session) signal(name string) error {
-	sig, ok := map[string]syscall.Signal{
-		SignalInterrupt: syscall.SIGINT,
-		SignalTerminate: syscall.SIGTERM,
-		SignalHangup:    syscall.SIGHUP,
-		SignalKill:      syscall.SIGKILL,
-	}[name]
-	if !ok {
+	switch name {
+	case SignalInterrupt, SignalTerminate, SignalHangup, SignalKill:
+	default:
 		return errorf(ErrCodeBadRequest, "unknown signal %q", name)
 	}
 	if !s.isAlive() {
 		return errorf(ErrCodeExited, "the program has exited")
 	}
-	// The program leads its own process group: signal all of it.
-	if err := syscall.Kill(-s.pid, sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+	// The whole tree the program started gets it, not the program alone.
+	if err := s.proc.Signal(name); err != nil {
 		return errorf(ErrCodeInternal, "signal %s: %v", name, err)
 	}
 	return nil
@@ -574,8 +527,8 @@ func (s *session) info() Info {
 		info.ExitCode = &code
 	}
 	if s.alive {
-		info.Cwd = processCwd(s.ptmx, s.pid)
-		info.Command = processCommand(s.ptmx, s.pid)
+		info.Cwd = s.proc.Cwd()
+		info.Command = s.proc.Command()
 	}
 	if info.Cwd == "" {
 		info.Cwd = state.Pwd
@@ -614,21 +567,21 @@ func (s *session) setData(key, value string) error {
 }
 
 // close ends the program if it still runs (hangup, then kill after
-// removeGrace) and frees the PTY and terminal.
+// removeGrace) and frees the terminal device and terminal.
 func (s *session) close() {
 	s.mu.Lock()
 	s.removing = true
 	s.mu.Unlock()
 	if s.isAlive() {
-		_ = syscall.Kill(-s.pid, syscall.SIGHUP)
+		_ = s.proc.Signal(SignalHangup)
 		select {
 		case <-s.exited:
 		case <-time.After(removeGrace):
-			_ = syscall.Kill(-s.pid, syscall.SIGKILL)
+			_ = s.proc.Signal(SignalKill)
 			<-s.exited
 		}
 	}
-	_ = s.ptmx.Close()
+	_ = s.proc.Close()
 	select {
 	case <-s.readerDone:
 	case <-time.After(readerDrain):
