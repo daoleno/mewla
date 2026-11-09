@@ -30,8 +30,9 @@ const tmuxMoveIdleChecks = 2
 // under the same Session id. A Session whose agent cannot resume stays in
 // tmux, no longer Mewla's. Until a Session moves it stays visible and takes
 // input in tmux. Nothing is touched unless the session host runs and can
-// start Sessions.
-func moveSessionsFromTmux(ctx context.Context, w *watcher.Watcher) {
+// start Sessions. conversation names the provider conversation Mewla
+// recorded for a Session, for an agent whose live process no longer proves it.
+func moveSessionsFromTmux(ctx context.Context, w *watcher.Watcher, conversation func(sessionID string) (string, bool)) {
 	if !ghosttyvt.Available() {
 		if len(w.TmuxSessions()) > 0 {
 			log.Printf("tmux move: this build has no session host engine; Sessions in tmux stay where they are")
@@ -62,8 +63,8 @@ func moveSessionsFromTmux(ctx context.Context, w *watcher.Watcher) {
 		seen := map[string]bool{}
 		for _, worker := range sessions {
 			seen[worker.ID] = true
-			plan := planTmuxMove(worker, workerproc.Args(worker.ProcessID))
-			if plan.leave != "" {
+			plan := planTmuxMove(worker, workerproc.Args(worker.ProcessID), conversation)
+			if plan.leave != "" && plan.final {
 				log.Printf("tmux move: %s (%s) stays in tmux: %s", worker.ID, worker.Name, plan.leave)
 				w.LeaveInTmux(worker.ID, plan.leave)
 				continue
@@ -74,6 +75,13 @@ func moveSessionsFromTmux(ctx context.Context, w *watcher.Watcher) {
 			}
 			idle[worker.ID]++
 			if idle[worker.ID] < tmuxMoveIdleChecks {
+				continue
+			}
+			if plan.leave != "" {
+				// What could still change mid-turn (a conversation id not yet
+				// known) is settled once the agent is idle.
+				log.Printf("tmux move: %s (%s) stays in tmux: %s", worker.ID, worker.Name, plan.leave)
+				w.LeaveInTmux(worker.ID, plan.leave)
 				continue
 			}
 			move, err := plan.prepare(worker)
@@ -107,6 +115,9 @@ type tmuxMovePlan struct {
 	provider string
 	// leave says why the Session cannot resume; empty when it can.
 	leave string
+	// final says leave cannot change while the agent runs on: its provider
+	// cannot resume at all, or its command names no session.
+	final bool
 	// resume is the agent's command resumed into its conversation.
 	resume string
 }
@@ -116,11 +127,11 @@ type tmuxMovePlan struct {
 // its live process proves. argv is the running agent's whole command line,
 // with every flag its launch gave it; the Worker's command keeps only what
 // names the conversation.
-func planTmuxMove(worker classifier.Worker, argv []string) tmuxMovePlan {
+func planTmuxMove(worker classifier.Worker, argv []string, conversation func(string) (string, bool)) tmuxMovePlan {
 	provider := work.InferWorkerProvider(worker.Command, worker.Name)
 	plan := tmuxMovePlan{provider: provider}
 	if strings.TrimSpace(worker.Command) == "" {
-		plan.leave = "no program is known"
+		plan.leave, plan.final = "no program is known", true
 		return plan
 	}
 	switch provider {
@@ -129,7 +140,7 @@ func planTmuxMove(worker classifier.Worker, argv []string) tmuxMovePlan {
 		if provider == "" {
 			provider = work.WorkerProviderCustom
 		}
-		plan.leave = fmt.Sprintf("Mewla cannot resume %s", provider)
+		plan.leave, plan.final = fmt.Sprintf("Mewla cannot resume %s", provider), true
 		return plan
 	}
 	if len(argv) == 0 {
@@ -168,8 +179,15 @@ func planTmuxMove(worker classifier.Worker, argv []string) tmuxMovePlan {
 		case token == "" && present:
 			token = declared
 		case token == "":
-			plan.leave = fmt.Sprintf("its %s conversation id is unknown", provider)
-			return plan
+			if conversation != nil {
+				if recorded, ok := conversation(worker.ID); ok {
+					token = strings.TrimSpace(recorded)
+				}
+			}
+			if token == "" {
+				plan.leave = fmt.Sprintf("its %s conversation id is unknown", provider)
+				return plan
+			}
 		}
 		if provider == work.WorkerProviderCodex {
 			// A resumed Codex that finds a newer release stops on an update
@@ -202,7 +220,7 @@ func planTmuxMove(worker classifier.Worker, argv []string) tmuxMovePlan {
 	case work.WorkerProviderPi, work.WorkerProviderOpenCode, work.WorkerProviderDSH:
 		// These name their session in the launch; the same command reopens it.
 		if !present {
-			plan.leave = fmt.Sprintf("its %s session is not named in its command", provider)
+			plan.leave, plan.final = fmt.Sprintf("its %s session is not named in its command", provider), true
 			return plan
 		}
 		plan.resume = command
@@ -265,7 +283,8 @@ func tmuxMoveEnvironment(environ []string, mewla string) []string {
 		}
 		switch key {
 		case "TMUX", "TMUX_PANE", "TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM",
-			"MEWLA_SESSION_ID", "MEWLA_TMUX_GUARD_DIR", "_", "SHLVL", "OLDPWD", "PWD":
+			"MEWLA_SESSION_ID", "MEWLA_TMUX_GUARD_DIR", "_", "SHLVL", "OLDPWD", "PWD",
+			"SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY":
 			continue
 		case "MEWLA_WORKER_PROGRESS_CMD":
 			entry = key + "=" + mewla

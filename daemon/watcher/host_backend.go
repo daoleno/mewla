@@ -170,10 +170,55 @@ func (b *hostBackend) noteMoved(infos []sessionhost.Info) {
 	b.movedMu.Lock()
 	defer b.movedMu.Unlock()
 	for _, info := range infos {
-		if info.Labels[hostLabelMovedFrom] == "tmux" && isPaneID(info.ID) {
+		if info.Labels[hostLabelMovedFrom] == "tmux" {
 			b.moved[info.ID] = true
 		}
 	}
+}
+
+// ready starts the host if needed and checks it can start Sessions by
+// running a probe Session.
+func (b *hostBackend) ready() error {
+	client, err := b.conn(true)
+	if err != nil {
+		return fmt.Errorf("session host: %w", err)
+	}
+	if !client.Welcome().Engine {
+		return errors.New("the session host has no terminal engine")
+	}
+	id, err := newHostSessionID()
+	if err != nil {
+		return err
+	}
+	probe := "probe-" + strings.TrimPrefix(id, "mh-")
+	ctx, cancel := hostCtx()
+	defer cancel()
+	if _, err := client.Create(ctx, sessionhost.CreateParams{
+		ID: probe, Argv: []string{"/bin/sh", "-c", "sleep 5"}, Env: []string{"PATH=/usr/bin:/bin"}, Dir: "/", Cols: 80, Rows: 24,
+	}); err != nil {
+		return fmt.Errorf("session host probe: %w", err)
+	}
+	if _, err := client.Remove(ctx, probe); err != nil {
+		return fmt.Errorf("session host probe: %w", err)
+	}
+	return nil
+}
+
+// adoptFromTmux starts a Session that moved from tmux under the id it had
+// there, with its labels and input receipts.
+func (b *hostBackend) adoptFromTmux(id string, spec backendCreateSpec, ledger sessionInputReceiptLedger) error {
+	if err := b.createAs(id, spec, map[string]string{hostLabelMovedFrom: "tmux"}); err != nil {
+		return err
+	}
+	b.movedMu.Lock()
+	b.moved[id] = true
+	b.movedMu.Unlock()
+	if len(ledger.Entries) > 0 {
+		if err := b.inputIO().writeReceiptLedger(hostInputServer, id, ledger); err != nil {
+			log.Printf("watcher: %s moved to the session host without its input receipts: %v", id, err)
+		}
+	}
+	return nil
 }
 
 func (b *hostBackend) terminal(string) TerminalTarget {

@@ -355,7 +355,6 @@ func runDaemon(args []string, stderr io.Writer) error {
 		log.Printf("remove the old tmux shim: %v", err)
 	}
 	configureSessionHost(w, stateDir)
-	go moveSessionsFromTmux(ctx, w)
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
 	adapters := agentevents.NewRegistry()
 	agentEvents := newAgentEventService(eventHub, w.Workers)
@@ -405,6 +404,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)
 	}
+	// Sessions an earlier Mewla started in tmux move to the session host.
+	go moveSessionsFromTmux(ctx, w, brainStore.SessionConversation)
 	// Brain hears of the Friends playbook only while Friends is on.
 	brainStore.GateSeed("playbooks/friends.md", func() bool {
 		_, on := (&friends.Local{StateDir: authManager.StorageDir()}).Enabled()
