@@ -7,6 +7,8 @@ package ghosttyvt
 #cgo linux,amd64 LDFLAGS: -L${SRCDIR}/../ghostty-libs/linux_amd64
 #cgo linux,arm64 LDFLAGS: -L${SRCDIR}/../ghostty-libs/linux_arm64
 #cgo darwin,arm64 LDFLAGS: -L${SRCDIR}/../ghostty-libs/darwin_arm64
+#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/../ghostty-libs/windows_amd64
+#cgo windows CFLAGS: -DGHOSTTY_STATIC
 #cgo LDFLAGS: -lghostty-vt
 #cgo linux LDFLAGS: -lm
 

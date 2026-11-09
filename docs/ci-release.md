@@ -25,8 +25,8 @@ The release flow does not depend on the `ci.yml` tag trigger. `release-next-beta
 | --- | --- | --- |
 | Checkout selected ref | yes | — |
 | `verify-release-identity.sh` | yes | — |
-| Linux amd64/arm64 daemons (static, `zig cc`) on Ubuntu; macOS arm64 daemon on a `macos-26` runner; all with the session host's terminal engine (`ghosttyvt`) | yes | — |
-| Run each daemon on its own platform: Linux amd64, Linux arm64 (`ubuntu-24.04-arm`), macOS (`daemon/releasesmoke`) | yes | — |
+| Linux amd64/arm64 (static, musl) and Windows amd64 (static, MinGW) daemons with `zig cc` on Ubuntu; macOS arm64 daemon on a `macos-26` runner; all with the session host's terminal engine (`ghosttyvt`) | yes | — |
+| Run each daemon on its own platform: Linux amd64, Linux arm64 (`ubuntu-24.04-arm`), macOS (`daemon/releasesmoke`), Windows (`windows-latest`: version, the host with the engine, `/health`, `install.ps1` from a release-shaped zip, `scripts/tests/release_smoke_windows.ps1`) | yes | — |
 | Build release-grade `libghostty` arm64 | yes | — |
 | Clean Expo prebuild + signed arm64 APK | yes | — |
 | Verify package / version / ABI / Ghostty native imports / notice / cert fingerprint | yes | — |
@@ -39,7 +39,7 @@ The canonical normal flow is one manual **Release reviewed version** dispatch wi
 GitHub suppresses recursive workflow triggers for pushes made with `GITHUB_TOKEN`, so the workflow explicitly dispatches both downstream workflows after the atomic push. It dispatches `release-artifacts.yml` with the exact new tag and `publish=true`, and dispatches `ios-release.yml` at the same tag with the tracked next iOS build number, `app_identity=preview`, and `destination=testflight`. This preserves the two downstream effects of a maintainer-pushed release tag. The artifact workflow checks out that immutable tag, proves strict syntax, version equality, annotated-tag identity, exact HEAD resolution, and ancestry on `origin/main`, then reruns the tracked identity verifier. Daemon builds and Android/native work run in parallel, and the desktop archives do not wait for Android:
 
 1. As soon as the daemon binaries are verified, a signing job creates the deterministic archives, `SHA256SUMS` and the signed updater manifest for them. A write-scoped job then creates or reuses the matching draft, uploads that set and publishes the release. `mewla update` and the installer can use it from this point.
-2. When the signed APK is verified, a second signing job stages the complete set. It fails unless the daemon archives are byte-identical to the published ones. A write-scoped job then checks the published archives against the new `SHA256SUMS`, uploads the APK, `SHA256SUMS`, `release-manifest.json` and its signature with `--clobber`, and verifies the exact seven-asset set.
+2. When the signed APK is verified, a second signing job stages the complete set. It fails unless the daemon archives are byte-identical to the published ones. A write-scoped job then checks the published archives against the new `SHA256SUMS`, uploads the APK, `SHA256SUMS`, `release-manifest.json` and its signature with `--clobber`, and verifies the exact eight-asset set.
 
 Stable tags become normal Latest releases; beta tags remain prereleases. A failed daemon build cannot create a public release, and a failed first upload can leave only a draft. If Android fails, the release stays public with the desktop archives only, until a rerun of the failed jobs attaches the APK. While the Android assets replace the desktop-only `SHA256SUMS` and manifest, an install or update in those few seconds can fail its checksum or signature check and should be retried.
 
@@ -283,12 +283,13 @@ Under `dist-download/v<version>/` (and the workflow artifact):
 - `mewla-linux-amd64.tar.gz`
 - `mewla-linux-arm64.tar.gz`
 - `mewla-darwin-arm64.tar.gz`
+- `mewla-windows-amd64.zip`
 - `mewla-android-arm64-v<version>.apk`
 - `SHA256SUMS`
 - `release-manifest.json`
 - `release-manifest.json.sig`
 
-Daemon archives contain `mewla`, `LICENSE`, `NOTICE`, and `TRADEMARKS.md`. Release notes stay in the GitHub Release body; Android third-party notices remain embedded in the APK. This keeps the download list focused without dropping required attribution.
+Daemon archives contain `mewla` (`mewla.exe` in the Windows zip), `LICENSE`, `NOTICE`, and `TRADEMARKS.md` at their root. The site serves `install.sh` and `install.ps1` from the repository byte for byte. Release notes stay in the GitHub Release body; Android third-party notices remain embedded in the APK. This keeps the download list focused without dropping required attribution.
 
 ## Local helper scripts
 

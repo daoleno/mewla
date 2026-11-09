@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Build release-shaped mewla binaries for Linux amd64/arm64 and macOS arm64.
+# Build release-shaped mewla binaries for Linux amd64/arm64, macOS arm64 and
+# Windows amd64.
 #
 # Release binaries carry the session host's terminal engine (build tag
 # ghosttyvt): libghostty-vt linked statically through cgo, built by
 # scripts/build-libghostty-desktop.sh from the signed, pinned release with the
 # pinned Zig. Linux binaries are linked fully static against musl with
-# `zig cc`; the macOS binary links with the system clang and so builds only on
-# a Mac (minimum macOS 12, as before). netgo and osusergo keep DNS and user
-# lookups the same pure-Go code the CGO_ENABLED=0 releases used.
+# `zig cc`, and the Windows one (mewla-windows-amd64.exe) statically against
+# MinGW with `zig cc` too, both from any Linux host; the macOS binary links with
+# the system clang and so builds only on a Mac (minimum macOS 12, as before).
+# netgo and osusergo keep DNS and user lookups the same pure-Go code the
+# CGO_ENABLED=0 releases used.
 #
 # Reads product version from app/app.base.json (expo.version) unless MEWLA_VERSION is set.
 # Embeds the web UI via scripts/build-web-ui.sh (needs `bun install`).
@@ -16,11 +19,12 @@
 # Usage:
 #   ./scripts/build-daemon-linux.sh                        # this host's targets, with the engine
 #   ./scripts/build-daemon-linux.sh --targets linux-amd64,linux-arm64 --out-dir dist-download/staging/bin
-#   ./scripts/build-daemon-linux.sh --engine off           # all three, CGO_ENABLED=0, no engine
+#   ./scripts/build-daemon-linux.sh --targets windows-amd64
+#   ./scripts/build-daemon-linux.sh --engine off           # every target, CGO_ENABLED=0, no engine
 #   MEWLA_VERSION=0.1.2 ./scripts/build-daemon-linux.sh
 #
-# --targets defaults to linux-amd64,linux-arm64 on Linux and darwin-arm64 on a
-# Mac (all three with --engine off). Library cache:
+# --targets defaults to linux-amd64,linux-arm64,windows-amd64 on Linux and
+# darwin-arm64 on a Mac (all four with --engine off). Library cache:
 # ${MEWLA_GHOSTTY_DESKTOP_CACHE:-$HOME/.cache/mewla/ghostty-desktop}.
 
 set -euo pipefail
@@ -46,7 +50,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     -h|--help)
-      sed -n '2,25p' "$0"
+      sed -n '2,28p' "$0"
       exit 0
       ;;
     *)
@@ -63,10 +67,10 @@ esac
 
 if [[ -z "$TARGETS" ]]; then
   if [[ "$ENGINE" == off ]]; then
-    TARGETS="linux-amd64,linux-arm64,darwin-arm64"
+    TARGETS="linux-amd64,linux-arm64,darwin-arm64,windows-amd64"
   else
     case "$(uname -s)" in
-      Linux) TARGETS="linux-amd64,linux-arm64" ;;
+      Linux) TARGETS="linux-amd64,linux-arm64,windows-amd64" ;;
       Darwin) TARGETS="darwin-arm64" ;;
       *) echo "error: no default targets on $(uname -s); pass --targets" >&2; exit 2 ;;
     esac
@@ -75,8 +79,8 @@ fi
 IFS=, read -r -a TARGET_LIST <<<"$TARGETS"
 for target in "${TARGET_LIST[@]}"; do
   case "$target" in
-    linux-amd64|linux-arm64|darwin-arm64) ;;
-    *) echo "error: unknown target $target (linux-amd64, linux-arm64, darwin-arm64)" >&2; exit 2 ;;
+    linux-amd64|linux-arm64|darwin-arm64|windows-amd64) ;;
+    *) echo "error: unknown target $target (linux-amd64, linux-arm64, darwin-arm64, windows-amd64)" >&2; exit 2 ;;
   esac
   if [[ "$ENGINE" == required && "$target" == darwin-* && "$(uname -s)" != Darwin ]]; then
     echo "error: darwin-arm64 with the session host's terminal engine links with Apple's toolchain and builds only on a Mac; build it there or pass --engine off" >&2
@@ -113,10 +117,11 @@ if [[ "$ENGINE" == required ]]; then
       linux-amd64) lib_targets+=(linux_amd64_musl) ;;
       linux-arm64) lib_targets+=(linux_arm64_musl) ;;
       darwin-arm64) lib_targets+=(darwin_arm64) ;;
+      windows-amd64) lib_targets+=(windows_amd64) ;;
     esac
   done
   "$ROOT/scripts/build-libghostty-desktop.sh" --out "$LIBS" --targets "$(IFS=,; echo "${lib_targets[*]}")"
-  if [[ "$TARGETS" == *linux-* ]]; then
+  if [[ "$TARGETS" == *linux-* || "$TARGETS" == *windows-* ]]; then
     # shellcheck source=lib/zig.sh
     source "$ROOT/scripts/lib/zig.sh"
     ZIG_BIN_PATH="$(mewla_resolve_zig "$LOCK" "${MEWLA_TOOL_CACHE:-$ROOT/.cache/mewla-tools}")"
@@ -136,11 +141,22 @@ build_one() {
   local goos="${target%-*}"
   local goarch="${target#*-}"
   local out_path="$OUT_DIR/mewla-$target"
+  [[ "$goos" != windows ]] || out_path="$out_path.exe"
   if [[ "$ENGINE" == off ]]; then
     echo "Building ${goos}/${goarch} CGO=0 → ${out_path} (version=${VERSION})"
     (
       cd "$ROOT/daemon"
       CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -buildvcs=false -ldflags="$LDFLAGS" -o "$out_path" ./cmd/mewla/
+    )
+  elif [[ "$goos" == windows ]]; then
+    echo "Building ${goos}/${goarch} CGO=1 ghosttyvt static MinGW (zig cc) → ${out_path} (version=${VERSION})"
+    (
+      cd "$ROOT/daemon"
+      ZIG_GLOBAL_CACHE_DIR="$ZIG_CC_CACHE" ZIG_LOCAL_CACHE_DIR="$ZIG_CC_CACHE" \
+      CC="$ZIG_BIN_PATH cc -target x86_64-windows-gnu" \
+      CGO_ENABLED=1 GOOS="$goos" GOARCH="$goarch" \
+      CGO_CFLAGS="-I$LIBS/include" CGO_LDFLAGS="-L$LIBS/windows_amd64" \
+        go build -buildvcs=false -tags ghosttyvt,netgo,osusergo -ldflags="$LDFLAGS" -o "$out_path" ./cmd/mewla/
     )
   elif [[ "$goos" == linux ]]; then
     local zig_arch
@@ -188,6 +204,6 @@ echo "VERSION=$VERSION"
 echo "ENGINE=$ENGINE"
 echo "OUT_DIR=$OUT_DIR"
 for target in "${TARGET_LIST[@]}"; do
-  ls -la "$OUT_DIR/mewla-$target"
+  ls -la "$OUT_DIR/mewla-$target"*
 done
 echo "Done (no publish)."

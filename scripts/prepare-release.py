@@ -337,6 +337,7 @@ def build_release_notes(
 - **Mac (Apple Silicon):** `mewla-darwin-arm64.tar.gz`. Needs `tmux` (`brew install tmux`).
 - **Linux x64:** `mewla-linux-amd64.tar.gz`
 - **Linux ARM:** `mewla-linux-arm64.tar.gz`
+- **Windows x64:** `mewla-windows-amd64.zip`, or in PowerShell: `irm https://mewla.ai/install.ps1 | iex`
 - **Android:** `mewla-android-arm64-{next_tag}.apk`. Android asks you to allow installs from unknown sources.
 
 All changes: [{current_tag}...{next_tag}]({REPOSITORY_URL}/compare/{current_tag}...{next_tag})
@@ -349,6 +350,12 @@ All changes: [{current_tag}...{next_tag}]({REPOSITORY_URL}/compare/{current_tag}
 ```sh
 grep 'mewla-linux-amd64.tar.gz$' SHA256SUMS | sha256sum -c -        # Linux
 grep 'mewla-darwin-arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -   # Mac
+```
+
+On Windows, in PowerShell, compare with the `mewla-windows-amd64.zip` line of `SHA256SUMS`:
+
+```powershell
+(Get-FileHash mewla-windows-amd64.zip -Algorithm SHA256).Hash.ToLower()
 ```
 
 Android signing certificate SHA-256:

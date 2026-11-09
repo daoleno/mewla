@@ -450,6 +450,8 @@ class PrepareReleaseIntegrationTests(unittest.TestCase):
             "- **Mac (Apple Silicon):** `mewla-darwin-arm64.tar.gz`",
             "- **Linux x64:** `mewla-linux-amd64.tar.gz`",
             "- **Linux ARM:** `mewla-linux-arm64.tar.gz`",
+            "- **Windows x64:** `mewla-windows-amd64.zip`",
+            "irm https://mewla.ai/install.ps1 | iex",
             f"- **Android:** `mewla-android-arm64-{NEXT_TAG}.apk`",
             "unknown sources",
             f"https://github.com/daoleno/mewla/compare/{CURRENT_TAG}...{NEXT_TAG}",

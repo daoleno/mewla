@@ -247,9 +247,6 @@ jobs:
     name: Windows (daemon build, platform tests, install.ps1)
     runs-on: windows-latest
     timeout-minutes: 25
-    # Native Windows is new and not shipped yet: until it is, a red Windows
-    # job is reported but does not fail the run.
-    continue-on-error: true
     permissions:
       contents: read
     defaults:

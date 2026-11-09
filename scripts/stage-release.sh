@@ -2,7 +2,8 @@
 # Deterministic local staging for a release candidate.
 #
 # Stages under dist-download/v<version>/ (gitignored), always from a clean dir:
-#   - Linux amd64/arm64 and macOS arm64 daemon archives
+#   - Linux amd64/arm64 and macOS arm64 daemon archives (.tar.gz) and the
+#     Windows amd64 one (.zip)
 #   - SHA256SUMS, release-manifest.json, and its detached Ed25519 signature
 #   - optional Android APK
 #
@@ -107,7 +108,7 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
   "$ROOT/scripts/build-daemon-linux.sh" --out-dir "$BUILD_TMP"
 else
   # Prefer existing stage binaries if present; else staging default from build script.
-  for f in mewla-linux-amd64 mewla-linux-arm64 mewla-darwin-arm64; do
+  for f in mewla-linux-amd64 mewla-linux-arm64 mewla-darwin-arm64 mewla-windows-amd64.exe; do
     if [[ -f "$EXPECTED_STAGE/$f" ]]; then
       cp -f "$EXPECTED_STAGE/$f" "$BUILD_TMP/$f"
     elif [[ -f "$EXPECTED_STAGE/bin/$f" ]]; then
@@ -121,7 +122,7 @@ else
   done
 fi
 
-for f in mewla-linux-amd64 mewla-linux-arm64 mewla-darwin-arm64; do
+for f in mewla-linux-amd64 mewla-linux-arm64 mewla-darwin-arm64 mewla-windows-amd64.exe; do
   if [[ ! -f "$BUILD_TMP/$f" ]]; then
     echo "error: build output missing $f" >&2
     exit 1
@@ -175,6 +176,26 @@ for platform in linux-amd64 linux-arm64 darwin-arm64; do
   package_daemon "mewla-$platform" "mewla-$platform.tar.gz"
 done
 
+# Windows: a zip holding exactly LICENSE, NOTICE, TRADEMARKS.md and mewla.exe
+# at its root (what install.ps1 and the updater accept), with fixed metadata so
+# the bytes are stable across CI runs.
+python3 - "$BUILD_TMP/mewla-windows-amd64.exe" "$ROOT" "$STAGE_DIR/mewla-windows-amd64.zip" "$ARCHIVE_EPOCH" <<'PY'
+import sys, time, zipfile
+from pathlib import Path
+
+exe, root, out, epoch = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4])
+stamp = time.gmtime(max(epoch, 315532800))[:6]  # zip dates start in 1980
+entries = [("LICENSE", root / "LICENSE", 0o644), ("NOTICE", root / "NOTICE", 0o644),
+           ("TRADEMARKS.md", root / "TRADEMARKS.md", 0o644), ("mewla.exe", exe, 0o755)]
+with zipfile.ZipFile(out, "w") as archive:
+    for name, source, mode in entries:
+        info = zipfile.ZipInfo(name, date_time=stamp)
+        info.compress_type = zipfile.ZIP_DEFLATED
+        info.create_system = 3
+        info.external_attr = (0o100000 | mode) << 16
+        archive.writestr(info, source.read_bytes(), compresslevel=9)
+PY
+
 STAGED_APK=""
 if [[ $WITH_APK -eq 1 ]]; then
   "$ROOT/scripts/android-release-apk.sh"
@@ -207,6 +228,7 @@ SUMS="$STAGE_DIR/SHA256SUMS"
     mewla-linux-amd64.tar.gz
     mewla-linux-arm64.tar.gz
     mewla-darwin-arm64.tar.gz
+    mewla-windows-amd64.zip
   )
   if [[ -n "$STAGED_APK" && -f "$(basename "$STAGED_APK")" ]]; then
     files+=("$(basename "$STAGED_APK")")
@@ -248,6 +270,7 @@ artifacts = [
     artifact("mewla-linux-amd64.tar.gz", "daemon_archive", goos="linux", goarch="amd64"),
     artifact("mewla-linux-arm64.tar.gz", "daemon_archive", goos="linux", goarch="arm64"),
     artifact("mewla-darwin-arm64.tar.gz", "daemon_archive", goos="darwin", goarch="arm64"),
+    artifact("mewla-windows-amd64.zip", "daemon_archive", goos="windows", goarch="amd64"),
 ]
 
 if staged_apk:
@@ -278,11 +301,13 @@ identity = {
     },
     "daemon": {
         "module": "github.com/daoleno/mewla/daemon",
-        "targets": ["linux/amd64", "linux/arm64", "darwin/arm64"],
+        "targets": ["linux/amd64", "linux/arm64", "darwin/arm64", "windows/amd64"],
+        # Every release daemon links the session host's terminal engine.
         "cgo": {
-            "linux/amd64": False,
-            "linux/arm64": False,
-            "darwin/arm64": False,
+            "linux/amd64": True,
+            "linux/arm64": True,
+            "darwin/arm64": True,
+            "windows/amd64": True,
         },
         "artifact_layout": "platform_archives",
     },

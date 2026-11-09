@@ -129,6 +129,11 @@
         "go": "linux_arm64_musl",
         "zig_target": "aarch64-linux-musl",
         "role": "release"
+      },
+      {
+        "go": "windows_amd64",
+        "zig_target": "x86_64-windows-gnu",
+        "role": "release"
       }
     ]
   },
