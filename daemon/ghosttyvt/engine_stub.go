@@ -24,3 +24,4 @@ func (*Terminal) Capture(CaptureOptions) (string, error) { return "", ErrUnavail
 func (*Terminal) State() State                           { return State{} }
 func (*Terminal) Snapshot() ([]byte, error)              { return nil, ErrUnavailable }
 func (*Terminal) Close()                                 {}
+func (*Terminal) EncodeKey(string) ([]byte, error)       { return nil, ErrUnavailable }

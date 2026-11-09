@@ -234,6 +234,18 @@ func (c *Client) Remove(ctx context.Context, id string) (Info, error) {
 	return info, err
 }
 
+// GetData reads a value kept on a Session.
+func (c *Client) GetData(ctx context.Context, id, key string) (Data, error) {
+	var data Data
+	err := c.call(ctx, MethodGetData, DataParams{ID: id, Key: key}, &data)
+	return data, err
+}
+
+// SetData keeps a value on a Session; "" removes it.
+func (c *Client) SetData(ctx context.Context, id, key, value string) error {
+	return c.call(ctx, MethodSetData, DataParams{ID: id, Key: key, Value: value}, nil)
+}
+
 // Shutdown stops the host; without force it refuses while a program runs.
 func (c *Client) Shutdown(ctx context.Context, force bool) error {
 	return c.call(ctx, MethodShutdown, ShutdownParams{Force: force}, nil)

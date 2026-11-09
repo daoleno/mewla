@@ -111,6 +111,32 @@ static int mewla_vt_restore(const uint8_t* p, size_t n, GhosttyTerminal* out) {
 	return r;
 }
 
+static int mewla_vt_encode_key(GhosttyTerminal t, int key, uint16_t mods, const uint8_t* text, size_t text_len,
+                               uint32_t unshifted, uint8_t* buf, size_t buf_len, size_t* written) {
+	GhosttyKeyEncoder e;
+	int r = ghostty_key_encoder_new(NULL, &e);
+	if (r != GHOSTTY_SUCCESS) return r;
+	GhosttyKeyEvent ev;
+	r = ghostty_key_event_new(NULL, &ev);
+	if (r != GHOSTTY_SUCCESS) {
+		ghostty_key_encoder_free(e);
+		return r;
+	}
+	r |= ghostty_key_encoder_set_from_terminal(e, t);
+	r |= ghostty_key_event_set_action(ev, GHOSTTY_KEY_ACTION_PRESS);
+	r |= ghostty_key_event_set_key(ev, (GhosttyKey)key);
+	r |= ghostty_key_event_set_mods(ev, mods);
+	if (text_len > 0) {
+		GhosttyString s = { .ptr = text, .len = text_len };
+		r |= ghostty_key_event_set_utf8(ev, s);
+	}
+	if (unshifted) r |= ghostty_key_event_set_unshifted_codepoint(ev, unshifted);
+	if (r == GHOSTTY_SUCCESS) r = ghostty_key_encoder_encode(e, ev, buf, buf_len, written);
+	ghostty_key_event_free(ev);
+	ghostty_key_encoder_free(e);
+	return r;
+}
+
 static size_t mewla_vt_version(const uint8_t** ptr) {
 	GhosttyString s = { 0 };
 	if (ghostty_build_info(GHOSTTY_BUILD_INFO_VERSION_STRING, &s) != GHOSTTY_SUCCESS) return 0;
@@ -415,6 +441,102 @@ func (term *Terminal) Close() {
 	term.closed = true
 	C.ghostty_terminal_free(term.t)
 	term.release()
+}
+
+// EncodeKey returns the bytes a terminal sends for one key press, in tmux's
+// key notation ("Enter", "C-c", "BTab", "Up", "q"), encoded for the modes the
+// program has set: cursor key mode, the Kitty keyboard protocol and the rest.
+func (term *Terminal) EncodeKey(spec string) ([]byte, error) {
+	press, err := parseKey(spec)
+	if err != nil {
+		return nil, err
+	}
+	key, text := cKey(press)
+	var mods C.uint16_t
+	if press.shift {
+		mods |= C.GHOSTTY_MODS_SHIFT
+	}
+	if press.ctrl {
+		mods |= C.GHOSTTY_MODS_CTRL
+	}
+	if press.alt {
+		mods |= C.GHOSTTY_MODS_ALT
+	}
+	var textPtr *C.uint8_t
+	if len(text) > 0 {
+		cText := C.CBytes([]byte(text))
+		defer C.free(cText)
+		textPtr = (*C.uint8_t)(cText)
+	}
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	if term.closed {
+		return nil, fmt.Errorf("encode key: terminal closed")
+	}
+	var buf [128]C.uint8_t
+	var written C.size_t
+	r := C.mewla_vt_encode_key(term.t, key, mods, textPtr, C.size_t(len(text)), C.uint32_t(press.unshifted()),
+		&buf[0], C.size_t(len(buf)), &written)
+	if r != C.GHOSTTY_SUCCESS {
+		return nil, fmt.Errorf("encode key %q: libghostty result %d", spec, int(r))
+	}
+	return C.GoBytes(unsafe.Pointer(&buf[0]), C.int(written)), nil
+}
+
+// cKey is a parsed key as libghostty's key and the text it types.
+func cKey(press keyPress) (C.int, string) {
+	switch press.name {
+	case keyEnter:
+		return C.GHOSTTY_KEY_ENTER, ""
+	case keyEscape:
+		return C.GHOSTTY_KEY_ESCAPE, ""
+	case keyTab:
+		return C.GHOSTTY_KEY_TAB, ""
+	case keySpace:
+		return C.GHOSTTY_KEY_SPACE, " "
+	case keyBackspace:
+		return C.GHOSTTY_KEY_BACKSPACE, ""
+	case keyUp:
+		return C.GHOSTTY_KEY_ARROW_UP, ""
+	case keyDown:
+		return C.GHOSTTY_KEY_ARROW_DOWN, ""
+	case keyLeft:
+		return C.GHOSTTY_KEY_ARROW_LEFT, ""
+	case keyRight:
+		return C.GHOSTTY_KEY_ARROW_RIGHT, ""
+	case keyHome:
+		return C.GHOSTTY_KEY_HOME, ""
+	case keyEnd:
+		return C.GHOSTTY_KEY_END, ""
+	case keyPageUp:
+		return C.GHOSTTY_KEY_PAGE_UP, ""
+	case keyPageDown:
+		return C.GHOSTTY_KEY_PAGE_DOWN, ""
+	case keyDelete:
+		return C.GHOSTTY_KEY_DELETE, ""
+	case keyInsert:
+		return C.GHOSTTY_KEY_INSERT, ""
+	case keyText:
+		text := string(press.text)
+		switch r := press.unshifted(); {
+		case r >= 'a' && r <= 'z':
+			return C.GHOSTTY_KEY_A + C.int(r-'a'), text
+		case r >= '0' && r <= '9':
+			return C.GHOSTTY_KEY_DIGIT_0 + C.int(r-'0'), text
+		}
+		if key, ok := punctuationKeys[press.text]; ok {
+			return key, text
+		}
+		return C.GHOSTTY_KEY_UNIDENTIFIED, text
+	}
+	return C.GHOSTTY_KEY_F1 + C.int(press.name-keyF1), ""
+}
+
+var punctuationKeys = map[rune]C.int{
+	'`': C.GHOSTTY_KEY_BACKQUOTE, '\\': C.GHOSTTY_KEY_BACKSLASH, '[': C.GHOSTTY_KEY_BRACKET_LEFT,
+	']': C.GHOSTTY_KEY_BRACKET_RIGHT, ',': C.GHOSTTY_KEY_COMMA, '=': C.GHOSTTY_KEY_EQUAL,
+	'-': C.GHOSTTY_KEY_MINUS, '.': C.GHOSTTY_KEY_PERIOD, '\'': C.GHOSTTY_KEY_QUOTE,
+	';': C.GHOSTTY_KEY_SEMICOLON, '/': C.GHOSTTY_KEY_SLASH,
 }
 
 func checkSize(cols, rows int) (C.uint16_t, C.uint16_t, error) {

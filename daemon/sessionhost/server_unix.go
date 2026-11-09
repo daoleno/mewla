@@ -430,6 +430,19 @@ func (s *Server) dispatch(req request) (any, error) {
 			return nil, err
 		}
 		return s.remove(p.ID)
+	case MethodGetData, MethodSetData:
+		var p DataParams
+		if err := decode(req.Params, &p); err != nil {
+			return nil, err
+		}
+		sess, err := s.session(p.ID)
+		if err != nil {
+			return nil, err
+		}
+		if req.Method == MethodGetData {
+			return sess.getData(p.Key)
+		}
+		return struct{}{}, sess.setData(p.Key, p.Value)
 	case MethodShutdown:
 		var p ShutdownParams
 		if err := decode(req.Params, &p); err != nil {

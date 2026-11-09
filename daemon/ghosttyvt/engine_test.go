@@ -266,3 +266,49 @@ func TestClosedTerminal(t *testing.T) {
 		t.Fatal("Resize on a closed terminal succeeded")
 	}
 }
+
+func TestEncodeKey(t *testing.T) {
+	term := newTerminal(t, 80, 24)
+	encode := func(spec string) string {
+		t.Helper()
+		out, err := term.EncodeKey(spec)
+		if err != nil {
+			t.Fatalf("EncodeKey(%q): %v", spec, err)
+		}
+		return string(out)
+	}
+	for spec, want := range map[string]string{
+		"Enter": "\r", "Escape": "\x1b", "Tab": "\t", "BTab": "\x1b[Z", "Space": " ",
+		"BSpace": "\x7f", "C-c": "\x03", "C-u": "\x15", "Up": "\x1b[A", "Down": "\x1b[B",
+		"Left": "\x1b[D", "Right": "\x1b[C", "q": "q", "Q": "Q", "1": "1", "/": "/", "日": "日",
+	} {
+		if got := encode(spec); got != want {
+			t.Errorf("legacy %s = %q, want %q", spec, got, want)
+		}
+	}
+	// Cursor key application mode changes the arrows.
+	term.Write([]byte("\x1b[?1h"))
+	if got := encode("Up"); got != "\x1bOA" {
+		t.Errorf("Up in cursor key application mode = %q", got)
+	}
+	term.Write([]byte("\x1b[?1l"))
+	// The Kitty keyboard protocol's disambiguate flag changes Escape only.
+	term.Write([]byte("\x1b[>1u"))
+	if got := encode("Escape"); got != "\x1b[27u" {
+		t.Errorf("Escape with Kitty disambiguate = %q", got)
+	}
+	if got := encode("Enter"); got != "\r" {
+		t.Errorf("Enter with Kitty disambiguate = %q", got)
+	}
+	term.Write([]byte("\x1b[<u"))
+	if got := encode("Escape"); got != "\x1b" {
+		t.Errorf("Escape after popping Kitty flags = %q", got)
+	}
+	if _, err := term.EncodeKey("Nope"); err == nil {
+		t.Error("an unknown key was encoded")
+	}
+	term.Close()
+	if _, err := term.EncodeKey("Enter"); err == nil {
+		t.Error("a closed terminal encoded a key")
+	}
+}

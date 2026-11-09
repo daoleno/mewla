@@ -4,6 +4,7 @@ package sessionhost
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -162,5 +163,32 @@ func TestEngineBracketsPastesForTheProgram(t *testing.T) {
 	}
 	if got := string(readWhenDone(t, c, "paste", out)); got != want {
 		t.Fatalf("program read %q, want %q", got, want)
+	}
+}
+
+func TestEngineEncodesKeysForTheProgramsModes(t *testing.T) {
+	c := startEngineHost(t)
+	// Cursor key application mode first, then the Kitty keyboard protocol,
+	// whose CSI form replaces it.
+	dir := shortTempDir(t)
+	first, second := filepath.Join(dir, "a.bin"), filepath.Join(dir, "b.bin")
+	script := fmt.Sprintf(`stty raw -echo; printf '\033[?1hA-READY\n'; dd bs=1 count=3 of=%s 2>/dev/null; `+
+		`printf '\033[>1uB-READY\n'; dd bs=1 count=8 of=%s 2>/dev/null; printf 'RAW-DONE\n'; sleep 30`, first, second)
+	if _, err := c.Create(ctxT(t), shellSession("modes", dir, script)); err != nil {
+		t.Fatal(err)
+	}
+	waitScreen(t, c, "modes", "A-READY")
+	if _, err := c.Input(ctxT(t), "modes", []InputStep{{Key: "Up"}}); err != nil {
+		t.Fatal(err)
+	}
+	waitScreen(t, c, "modes", "B-READY")
+	if _, err := c.Input(ctxT(t), "modes", []InputStep{{Key: "Up"}, {Key: "Escape"}}); err != nil {
+		t.Fatal(err)
+	}
+	waitScreen(t, c, "modes", "RAW-DONE")
+	a, _ := os.ReadFile(first)
+	b, _ := os.ReadFile(second)
+	if string(a) != "\x1bOA" || string(b) != "\x1b[A\x1b[27u" {
+		t.Fatalf("program read %q then %q", a, b)
 	}
 }
