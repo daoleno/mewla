@@ -40,6 +40,7 @@ func snapshotProcessTable() (map[int]processInfo, error) {
 	if len(processes) == 0 {
 		return nil, fmt.Errorf("windows process snapshot listed no processes")
 	}
+	dropReusedParents(processes)
 	leaders := map[int]bool{}
 	for pid, info := range processes {
 		if launcherProcess(info) {

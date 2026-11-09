@@ -593,14 +593,37 @@ func descendantProcesses(rootPID int, processes map[int]processInfo) []processIn
 		children[proc.ppid] = append(children[proc.ppid], proc)
 	}
 
+	// A cycle in the parent ids (a reused pid) must not walk forever.
+	visited := map[int]bool{rootPID: true}
 	var result []processInfo
 	queue := append([]processInfo(nil), children[rootPID]...)
 	for len(queue) > 0 {
 		proc := queue[0]
 		queue = queue[1:]
+		if visited[proc.pid] {
+			continue
+		}
+		visited[proc.pid] = true
 		result = append(result, proc)
 		queue = append(queue, children[proc.pid]...)
 	}
 
 	return result
+}
+
+// dropReusedParents clears a parent id that names a process started after
+// its child. Windows keeps a process's parent id after the parent exits and
+// may hand that pid to a later process, even one below the child, so the
+// recorded parent is then a stranger and can close a cycle.
+func dropReusedParents(processes map[int]processInfo) {
+	for pid, proc := range processes {
+		parent, ok := processes[proc.ppid]
+		if !ok || proc.ppid == pid {
+			continue
+		}
+		if !parent.startedAt.IsZero() && !proc.startedAt.IsZero() && parent.startedAt.After(proc.startedAt) {
+			proc.ppid = 0
+			processes[pid] = proc
+		}
+	}
 }
