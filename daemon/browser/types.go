@@ -33,6 +33,9 @@ type Response struct {
 	Notes []string `json:"notes,omitempty"`
 	// VirtualScreen is whether Workers get a browser on the virtual screen.
 	VirtualScreen *bool `json:"virtual_screen,omitempty"`
+	// VirtualScreenUnsupported is true on a computer whose system has no
+	// virtual screen (only Linux has one), so the app does not offer it.
+	VirtualScreenUnsupported bool `json:"virtual_screen_unsupported,omitempty"`
 }
 
 // Host is the computer's one browser on the one agent profile, running on

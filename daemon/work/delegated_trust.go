@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/daoleno/mewla/daemon/codextrust"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/shellquote"
 )
 
@@ -222,5 +223,5 @@ func updateTrustFileOnce(path string, patch func([]byte) ([]byte, error)) error 
 		return err
 	}
 	defer dir.Close()
-	return dir.Sync()
+	return platform.SyncOpenDir(dir)
 }

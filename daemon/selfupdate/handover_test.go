@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -56,6 +57,9 @@ func (f handoverFixture) handover(t *testing.T, staged string, healthy func() er
 }
 
 func stage(t *testing.T, f handoverFixture, body string) string {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake versions are shell scripts; the Windows handover is proven on a Windows machine")
+	}
 	t.Helper()
 	script := "#!/bin/sh\nif [ \"$1\" = version ]; then echo '{\"version\":\"2.0.0\"}'; exit 0; fi\n" + body + "\n"
 	staged, err := Stage(f.installed, []byte(script), "2.0.0")

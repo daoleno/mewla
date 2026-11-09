@@ -39,6 +39,7 @@ WORKFLOW = ROOT / ".github/workflows/ci.yml"
 SKIPPED_JOBS = {
     "ios-native": "needs macOS and Xcode (unsigned Simulator build)",
     "android-native": "needs the Android SDK and a Gradle native link",
+    "windows": "needs a Windows runner (Windows PowerShell and the Win32 API)",
 }
 
 # Path globs (git paths, fnmatch with * crossing "/") that make a job relevant.

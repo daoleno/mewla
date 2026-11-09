@@ -80,7 +80,7 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("raw terminal: %w", err)
 	}
 	resized := make(chan os.Signal, 1)
-	signal.Notify(resized, syscall.SIGWINCH)
+	notifyTerminalResize(resized)
 	defer signal.Stop(resized)
 	size := func() (int, int) {
 		cols, rows, err := term.GetSize(int(out.Fd()))

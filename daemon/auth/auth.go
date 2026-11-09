@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/statedir"
 )
 
@@ -1001,9 +1002,7 @@ func writeFileAtomic(
 		path,
 		data,
 		perm,
-		func(parent *os.File) error {
-			return parent.Sync()
-		},
+		platform.SyncOpenDir,
 	)
 }
 

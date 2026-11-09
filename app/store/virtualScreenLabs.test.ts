@@ -24,6 +24,19 @@ describe("virtual screen labs", () => {
     expect(virtualScreenSnapshot()).toMatchObject({ server: "s1", enabled: true, error: null });
   });
 
+  test("a computer with no virtual screen says so, and an older one is taken as having one", async () => {
+    handler = async () => ({ virtual_screen: false, virtual_screen_unsupported: true });
+    await readVirtualScreenLabs(server);
+    expect(virtualScreenSnapshot()).toMatchObject({ enabled: false, unsupported: true });
+    handler = async () => { throw new BrowserRequestError("Browser request failed", 502, "down"); };
+    await readVirtualScreenLabs(server);
+    expect(virtualScreenSnapshot()).toMatchObject({ unsupported: true });
+    resetVirtualScreenLabs();
+    handler = async () => ({ virtual_screen: false });
+    await readVirtualScreenLabs(server);
+    expect(virtualScreenSnapshot()).toMatchObject({ enabled: false, unsupported: false });
+  });
+
   test("a failed read is an error, not an off switch", async () => {
     handler = async () => { throw new BrowserRequestError("Browser request failed", 404, "not found"); };
     await readVirtualScreenLabs(server);

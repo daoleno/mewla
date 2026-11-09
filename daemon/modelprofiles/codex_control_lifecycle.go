@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/procspawn"
@@ -40,12 +39,12 @@ func CleanupCodexControlArtifacts(socketPath string) error {
 	pidPath := CodexControlPidPath(socketPath)
 	if raw, err := os.ReadFile(pidPath); err == nil {
 		if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw))); parseErr == nil && pid > 0 && codexAppServerProcess(pid, socketPath) {
-			_ = syscall.Kill(pid, syscall.SIGTERM)
+			signalProcess(pid, false)
 			for i := 0; i < 30 && processAlive(pid); i++ {
 				time.Sleep(100 * time.Millisecond)
 			}
 			if processAlive(pid) && codexAppServerProcess(pid, socketPath) {
-				_ = syscall.Kill(pid, syscall.SIGKILL)
+				signalProcess(pid, true)
 			}
 		}
 	}
@@ -88,9 +87,7 @@ func removeCodexControlFiles(socketPath string) {
 }
 
 // processAlive reports whether pid exists (signal 0 probe).
-func processAlive(pid int) bool {
-	return syscall.Kill(pid, 0) == nil
-}
+func processAlive(pid int) bool { return processExists(pid) }
 
 // codexAppServerProcess verifies that pid is the codex app-server for the
 // given control socket by inspecting its command line. This guards kill/sweep

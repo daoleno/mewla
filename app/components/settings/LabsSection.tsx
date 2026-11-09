@@ -22,13 +22,15 @@ export function LabsSection() {
 
   return (
     <ListSection>
-      <ListRow
-        title="Virtual screen"
-        value={virtualScreen.enabled ? "On" : "Off"}
-        icon="desktop"
-        accessory="chevron"
-        onPress={() => router.push("/settings/virtual-screen")}
-      />
+      {virtualScreen.unsupported ? null : (
+        <ListRow
+          title="Virtual screen"
+          value={virtualScreen.enabled ? "On" : "Off"}
+          icon="desktop"
+          accessory="chevron"
+          onPress={() => router.push("/settings/virtual-screen")}
+        />
+      )}
       {native ? (
         <ListRow
           title="Friends"

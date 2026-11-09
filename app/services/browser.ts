@@ -11,6 +11,8 @@ export interface BrowserResponse {
   capability?: { available: boolean; reason?: string };
   /** Whether new Workers get a virtual-screen browser by default (the Labs switch). */
   virtual_screen?: boolean;
+  /** True on a computer whose system has no virtual screen (only Linux has one). */
+  virtual_screen_unsupported?: boolean;
 }
 /** HTTP failure with the status kept apart from any body text, so callers can explain it. */
 export class BrowserRequestError extends Error {

@@ -4,9 +4,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
 )
+
+// virtualScreenSystem: the virtual screen (Xvnc) exists only on Linux.
+// Elsewhere the app hides the Labs switch.
+var virtualScreenSystem = runtime.GOOS == "linux"
 
 // Settings are the computer-wide Browser choices, kept beside the profile.
 type Settings struct {
