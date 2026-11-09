@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/codexctl"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/google/uuid"
 )
 
@@ -253,7 +254,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		// this directory before exec'ing the TUI client. Missing here means
 		// the app-server half never starts and the --remote TUI client dies;
 		// fail closed at startup instead of launching a broken pane.
-		if err := os.MkdirAll(codexControlDir, 0o700); err != nil {
+		if err := platform.MkdirPrivate(codexControlDir); err != nil {
 			return nil, fmt.Errorf("%w: create codex control dir: %v", ErrInvalid, err)
 		}
 	}

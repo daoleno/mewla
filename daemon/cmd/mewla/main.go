@@ -47,6 +47,7 @@ import (
 	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/outsideagents"
 	"github.com/daoleno/mewla/daemon/phone"
+	"github.com/daoleno/mewla/daemon/platform"
 	"github.com/daoleno/mewla/daemon/push"
 	"github.com/daoleno/mewla/daemon/remote"
 	"github.com/daoleno/mewla/daemon/screen"
@@ -454,7 +455,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	}
 	codexControlDir := filepath.Join(authManager.StorageDir(), "codex-ctl")
 	var codexFollow *codexEvents
-	if err := os.MkdirAll(codexControlDir, 0o700); err != nil {
+	if err := platform.MkdirPrivate(codexControlDir); err != nil {
 		log.Printf("WARN agent events: cannot create %s, Codex Workers will be followed from their transcript: %v", codexControlDir, err)
 	} else {
 		adapters.Register(codexadapter.Provider, codexadapter.Adapter{ControlDir: codexControlDir})
