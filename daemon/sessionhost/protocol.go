@@ -48,6 +48,8 @@ const (
 	MethodRemove    = "remove"
 	MethodSubscribe = "subscribe"
 	MethodShutdown  = "shutdown"
+	MethodGetData   = "get_data"
+	MethodSetData   = "set_data"
 )
 
 // Error codes.
@@ -120,6 +122,28 @@ type CreateParams struct {
 	Dir  string   `json:"dir"`
 	Cols int      `json:"cols"`
 	Rows int      `json:"rows"`
+	// Labels are what the caller records on the Session, fixed at create
+	// and reported by Info: up to maxLabels keys, maxLabelBytes each.
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// A Session's labels and data live and die with it, like tmux pane options:
+// they outlast the program's exit and go with remove. An in-place upgrade
+// (the snapshot) must carry both, or a re-sent input would not find the
+// receipt that says it already landed.
+
+// DataParams reads (get_data) or writes (set_data) one opaque value kept on a
+// Session. Writing "" removes it.
+type DataParams struct {
+	ID    string `json:"id"`
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"`
+}
+
+// Data is a value read with get_data.
+type Data struct {
+	Value   string `json:"value"`
+	Present bool   `json:"present"`
 }
 
 // IDParams names a Session.
@@ -134,6 +158,9 @@ type InputStep struct {
 	// Paste is written as one paste, inside bracketed-paste markers when the
 	// program asked for them, with line feeds kept as they are.
 	Paste string `json:"paste,omitempty"`
+	// Key is one key press in tmux's notation ("Enter", "C-u", "BTab", "Up",
+	// "q"), encoded the way a terminal would for the modes the program set.
+	Key string `json:"key,omitempty"`
 	// SleepMS waits before the next step, with the script still holding the
 	// Session's input.
 	SleepMS int `json:"sleep_ms,omitempty"`
@@ -226,23 +253,24 @@ type ProgramStatus struct {
 
 // Info is a Session as the host sees it.
 type Info struct {
-	ID           string          `json:"id"`
-	PID          int             `json:"pid"`
-	Argv         []string        `json:"argv"`
-	Dir          string          `json:"dir"`
-	Alive        bool            `json:"alive"`
-	ExitCode     *int            `json:"exit_code,omitempty"`   // set once the program has exited
-	ExitSignal   string          `json:"exit_signal,omitempty"` // the signal that ended it, if any
-	Cols         int             `json:"cols"`
-	Rows         int             `json:"rows"`
-	Alt          bool            `json:"alt"`
-	OutputSeq    uint64          `json:"output_seq"` // bytes of output so far
-	CreatedAt    time.Time       `json:"created_at"`
-	LastOutputAt time.Time       `json:"last_output_at,omitzero"`
-	ExitedAt     time.Time       `json:"exited_at,omitzero"`
-	Title        string          `json:"title,omitempty"`
-	Cwd          string          `json:"cwd,omitempty"`
-	Status       []ProgramStatus `json:"status,omitempty"`
+	ID           string            `json:"id"`
+	PID          int               `json:"pid"`
+	Argv         []string          `json:"argv"`
+	Dir          string            `json:"dir"`
+	Alive        bool              `json:"alive"`
+	ExitCode     *int              `json:"exit_code,omitempty"`   // set once the program has exited
+	ExitSignal   string            `json:"exit_signal,omitempty"` // the signal that ended it, if any
+	Cols         int               `json:"cols"`
+	Rows         int               `json:"rows"`
+	Alt          bool              `json:"alt"`
+	OutputSeq    uint64            `json:"output_seq"` // bytes of output so far
+	CreatedAt    time.Time         `json:"created_at"`
+	LastOutputAt time.Time         `json:"last_output_at,omitzero"`
+	ExitedAt     time.Time         `json:"exited_at,omitzero"`
+	Title        string            `json:"title,omitempty"`
+	Cwd          string            `json:"cwd,omitempty"`
+	Status       []ProgramStatus   `json:"status,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
 }
 
 // Event types.

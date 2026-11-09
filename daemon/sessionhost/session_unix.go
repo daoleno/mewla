@@ -25,6 +25,7 @@ type screen interface {
 	Resize(cols, rows int) (ghosttyvt.Output, error)
 	Capture(ghosttyvt.CaptureOptions) (string, error)
 	State() ghosttyvt.State
+	EncodeKey(spec string) ([]byte, error)
 	Snapshot() ([]byte, error)
 	Close()
 }
@@ -37,9 +38,16 @@ func newEngineScreen(opts ghosttyvt.Options) (screen, error) {
 	return term, nil
 }
 
-var sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+var (
+	sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+	metaKeyPattern   = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
+)
 
 const (
+	maxLabels      = 16
+	maxLabelBytes  = 1 << 10
+	maxDataKeys    = 8
+	maxDataBytes   = 64 << 10
 	maxInputBytes  = 8 << 20
 	maxInputSleep  = 10 * time.Second
 	removeGrace    = 2 * time.Second
@@ -76,6 +84,8 @@ type session struct {
 	exitSignal   string
 	exitedAt     time.Time
 	status       *statusRecords
+	labels       map[string]string
+	data         map[string]string
 	lastOutputEv time.Time
 	outputTimer  *time.Timer
 	closed       bool
@@ -96,6 +106,16 @@ func startSession(host *Server, params CreateParams) (*session, error) {
 	}
 	if params.Dir == "" || !filepath.IsAbs(params.Dir) {
 		return nil, errorf(ErrCodeBadRequest, "dir %q must be an absolute path", params.Dir)
+	}
+	if len(params.Labels) > maxLabels {
+		return nil, errorf(ErrCodeBadRequest, "%d labels, over %d", len(params.Labels), maxLabels)
+	}
+	labels := make(map[string]string, len(params.Labels))
+	for key, value := range params.Labels {
+		if !metaKeyPattern.MatchString(key) || len(value) > maxLabelBytes {
+			return nil, errorf(ErrCodeBadRequest, "label %q: keys are a-z 0-9 _ . - (64 at most), values %d bytes at most", key, maxLabelBytes)
+		}
+		labels[key] = value
 	}
 	env := sessionEnvironment(params.Env, params.ID)
 	program, err := lookPath(params.Argv[0], env)
@@ -133,6 +153,8 @@ func startSession(host *Server, params CreateParams) (*session, error) {
 		screen:     term,
 		alive:      true,
 		status:     newStatusRecords(),
+		labels:     labels,
+		data:       make(map[string]string),
 		exited:     make(chan struct{}),
 		readerDone: make(chan struct{}),
 	}
@@ -348,11 +370,17 @@ func (s *session) input(steps []InputStep) (bool, error) {
 		if step.Paste != "" {
 			kinds++
 		}
+		if step.Key != "" {
+			kinds++
+			if err := ghosttyvt.ValidKey(step.Key); err != nil {
+				return false, errorf(ErrCodeBadRequest, "input step %d: %v", i, err)
+			}
+		}
 		if step.SleepMS > 0 {
 			kinds++
 		}
 		if kinds != 1 || step.SleepMS < 0 {
-			return false, errorf(ErrCodeBadRequest, "input step %d must have exactly one of bytes, paste or sleep_ms", i)
+			return false, errorf(ErrCodeBadRequest, "input step %d must have exactly one of bytes, paste, key or sleep_ms", i)
 		}
 		if time.Duration(step.SleepMS)*time.Millisecond > maxInputSleep {
 			return false, errorf(ErrCodeBadRequest, "input step %d sleeps longer than %s", i, maxInputSleep)
@@ -378,8 +406,18 @@ func (s *session) input(steps []InputStep) (bool, error) {
 			continue
 		}
 		data := step.Bytes
-		if step.Paste != "" {
+		switch {
+		case step.Paste != "":
 			data = s.pasteBytes(step.Paste)
+		case step.Key != "":
+			// Encoded now, for the modes the program has set by this step.
+			s.mu.Lock()
+			encoded, err := s.screen.EncodeKey(step.Key)
+			s.mu.Unlock()
+			if err != nil {
+				return started, errorf(ErrCodeInputFailed, "input step %d: %v", i, err)
+			}
+			data = encoded
 		}
 		started = true
 		if err := s.writePTY(data); err != nil {
@@ -505,6 +543,12 @@ func (s *session) info() Info {
 		Title:        state.Title,
 		Status:       s.status.list(),
 	}
+	if len(s.labels) > 0 {
+		info.Labels = make(map[string]string, len(s.labels))
+		for key, value := range s.labels {
+			info.Labels[key] = value
+		}
+	}
 	if s.exitCode != nil {
 		code := *s.exitCode
 		info.ExitCode = &code
@@ -516,6 +560,36 @@ func (s *session) info() Info {
 		info.Cwd = state.Pwd
 	}
 	return info
+}
+
+func (s *session) getData(key string) (Data, error) {
+	if !metaKeyPattern.MatchString(key) {
+		return Data{}, errorf(ErrCodeBadRequest, "data key %q: a-z 0-9 _ . - (64 at most)", key)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, ok := s.data[key]
+	return Data{Value: value, Present: ok}, nil
+}
+
+func (s *session) setData(key, value string) error {
+	if !metaKeyPattern.MatchString(key) {
+		return errorf(ErrCodeBadRequest, "data key %q: a-z 0-9 _ . - (64 at most)", key)
+	}
+	if len(value) > maxDataBytes {
+		return errorf(ErrCodeBadRequest, "data %q is %d bytes, over %d", key, len(value), maxDataBytes)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if value == "" {
+		delete(s.data, key)
+		return nil
+	}
+	if _, exists := s.data[key]; !exists && len(s.data) >= maxDataKeys {
+		return errorf(ErrCodeBadRequest, "session %q already keeps %d data keys", s.id, maxDataKeys)
+	}
+	s.data[key] = value
+	return nil
 }
 
 // close ends the program if it still runs (hangup, then kill after

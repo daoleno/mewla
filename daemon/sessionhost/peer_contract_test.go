@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -24,11 +26,38 @@ const probeEnv = "MEWLA_SESSIONHOST_PROBE"
 // default is sudo -n -u nobody.
 const otherUserEnv = "MEWLA_SESSIONHOST_OTHER_USER_CMD"
 
+// testHostEnv makes the test binary serve as `mewla host` (with the fake
+// screen) when Connect starts it.
+const testHostEnv = "MEWLA_SESSIONHOST_TEST_HOST"
+
 func TestMain(m *testing.M) {
 	if path := os.Getenv(probeEnv); path != "" {
 		os.Exit(probeHost(path))
 	}
+	if os.Getenv(testHostEnv) != "" && len(os.Args) > 1 && os.Args[1] == "host" {
+		os.Exit(serveTestHost(os.Args[2:]))
+	}
 	os.Exit(m.Run())
+}
+
+func serveTestHost(args []string) int {
+	if os.Getenv(testHostEnv) == "fail" {
+		fmt.Println("test host: failing at start as asked")
+		return 2
+	}
+	if len(args) < 2 || args[0] != "--socket" {
+		fmt.Printf("test host: bad arguments %q\n", args)
+		return 2
+	}
+	engine := true
+	server := NewServer(ServerOptions{SocketPath: args[1], HostVersion: "test-host", newScreen: newFakeScreen, engine: &engine})
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	if err := server.Run(ctx); err != nil {
+		fmt.Println("test host:", err)
+		return 1
+	}
+	return 0
 }
 
 func probeHost(path string) int {

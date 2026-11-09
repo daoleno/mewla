@@ -73,6 +73,20 @@ func (f *fakeScreen) State() ghosttyvt.State {
 	return ghosttyvt.State{Cols: f.cols, Rows: f.rows, BracketedPaste: f.bracketed}
 }
 
+// EncodeKey knows the legacy encoding of a few keys.
+func (f *fakeScreen) EncodeKey(spec string) ([]byte, error) {
+	if err := ghosttyvt.ValidKey(spec); err != nil {
+		return nil, err
+	}
+	if encoded, ok := map[string]string{"Enter": "\r", "C-u": "\x15", "Escape": "\x1b", "Up": "\x1b[A", "BSpace": "\x7f"}[spec]; ok {
+		return []byte(encoded), nil
+	}
+	if len(spec) == 1 {
+		return []byte(spec), nil
+	}
+	return nil, fmt.Errorf("fake screen cannot encode %q", spec)
+}
+
 func (f *fakeScreen) Snapshot() ([]byte, error) { return nil, errors.New("fake") }
 func (f *fakeScreen) Close()                    {}
 
@@ -387,6 +401,26 @@ func TestInputBytesArriveExactly(t *testing.T) {
 	}
 }
 
+func TestKeysAreEncodedByTheTerminal(t *testing.T) {
+	h := startHost(t, ServerOptions{})
+	c := dialHost(t, h)
+	want := "\x15q\x1b[A\r"
+	out := rawReader(t, c, "keys", len(want))
+	steps := []InputStep{{Key: "C-u"}, {Key: "q"}, {Key: "Up"}, {Key: "Enter"}}
+	if _, err := c.Input(ctxT(t), "keys", steps); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(readWhenDone(t, c, "keys", out)); got != want {
+		t.Fatalf("program read %q, want %q", got, want)
+	}
+	if _, err := c.Input(ctxT(t), "keys", []InputStep{{Key: "Enterr"}}); !IsCode(err, ErrCodeBadRequest) {
+		t.Fatalf("unknown key: %v", err)
+	}
+	if _, err := c.Input(ctxT(t), "keys", []InputStep{{Key: "Enter", Bytes: []byte("x")}}); !IsCode(err, ErrCodeBadRequest) {
+		t.Fatalf("a step with a key and bytes: %v", err)
+	}
+}
+
 func TestPasteIsBracketedOnlyWhenAsked(t *testing.T) {
 	h := startHost(t, ServerOptions{})
 	c := dialHost(t, h)
@@ -560,6 +594,71 @@ func processAlive(pid int) bool {
 	return true
 }
 
+func TestLabelsAndData(t *testing.T) {
+	h := startHost(t, ServerOptions{})
+	c := dialHost(t, h)
+	ctx := ctxT(t)
+	params := shellSession("meta", shortTempDir(t), "read x")
+	params.Labels = map[string]string{"worker.created": "1", "executor": "claude-main"}
+	if _, err := c.Create(ctx, params); err != nil {
+		t.Fatal(err)
+	}
+	params.Labels["executor"] = "changed after create"
+	list, err := c.List(ctx)
+	if err != nil || len(list) != 1 || list[0].Labels["executor"] != "claude-main" || list[0].Labels["worker.created"] != "1" {
+		t.Fatalf("list = %+v, %v", list, err)
+	}
+
+	if data, err := c.GetData(ctx, "meta", "receipts"); err != nil || data.Present {
+		t.Fatalf("unset data = %+v, %v", data, err)
+	}
+	ledger := strings.Repeat("r", maxDataBytes)
+	if err := c.SetData(ctx, "meta", "receipts", ledger); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetData(ctx, "meta", "receipts", ledger+"x"); !IsCode(err, ErrCodeBadRequest) {
+		t.Fatalf("oversized data: %v", err)
+	}
+	if err := c.SetData(ctx, "meta", "Bad Key", "x"); !IsCode(err, ErrCodeBadRequest) {
+		t.Fatalf("bad data key: %v", err)
+	}
+	for i := 1; i < maxDataKeys; i++ {
+		if err := c.SetData(ctx, "meta", fmt.Sprintf("k%d", i), "v"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.SetData(ctx, "meta", "one-too-many", "v"); !IsCode(err, ErrCodeBadRequest) {
+		t.Fatalf("data key over the cap: %v", err)
+	}
+	if err := c.SetData(ctx, "meta", "k1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetData(ctx, "meta", "one-too-many", "v"); err != nil {
+		t.Fatalf("a removed key did not free its place: %v", err)
+	}
+
+	// Labels and data outlast the program and go with the Session.
+	if _, err := c.Input(ctx, "meta", []InputStep{{Bytes: []byte("\r")}}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 5*time.Second, "exit", func() bool {
+		info, _ := c.Info(ctx, "meta")
+		return !info.Alive
+	})
+	if data, err := c.GetData(ctx, "meta", "receipts"); err != nil || data.Value != ledger {
+		t.Fatalf("data after exit: %d bytes, %v", len(data.Value), err)
+	}
+	if info, _ := c.Info(ctx, "meta"); info.Labels["executor"] != "claude-main" {
+		t.Fatalf("labels after exit: %+v", info.Labels)
+	}
+	if _, err := c.Remove(ctx, "meta"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.GetData(ctx, "meta", "receipts"); !IsCode(err, ErrCodeNotFound) {
+		t.Fatalf("data after remove: %v", err)
+	}
+}
+
 func TestCreateValidation(t *testing.T) {
 	h := startHost(t, ServerOptions{})
 	c := dialHost(t, h)
@@ -572,6 +671,8 @@ func TestCreateValidation(t *testing.T) {
 		"relative dir":   func(p *CreateParams) { p.Dir = "rel" },
 		"zero size":      func(p *CreateParams) { p.Cols = 0 },
 		"unknown binary": func(p *CreateParams) { p.Argv = []string{"no-such-program-mewla"} },
+		"bad label key":  func(p *CreateParams) { p.Labels = map[string]string{"Has Space": "x"} },
+		"long label":     func(p *CreateParams) { p.Labels = map[string]string{"k": strings.Repeat("x", maxLabelBytes+1)} },
 	}
 	for name, mutate := range cases {
 		params := good
