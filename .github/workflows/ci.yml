@@ -52,6 +52,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y tmux rsync
       - name: Test
         run: go test ./...
+      - name: Session host terminal engine libraries
+        uses: ./.github/actions/ghostty-desktop
+      - name: Session host terminal engine (libghostty-vt linked)
+        working-directory: .
+        run: ./scripts/test-ghosttyvt.sh -race
       - name: Executable behavior contracts (scripted, not real AI)
         shell: bash
         run: |

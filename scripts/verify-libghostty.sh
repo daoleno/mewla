@@ -140,6 +140,19 @@ assert lock["ios"]["device_architecture"] == "arm64"
 assert lock["ios"]["simulator_architecture"] == "arm64"
 assert lock["ios"]["xcframework_name"] == "GhosttyVt.xcframework"
 
+desktop = lock["desktop"]
+assert desktop["lib_dir"] == "daemon/ghostty-libs", "the daemon's cgo directives and mewla-dev read daemon/ghostty-libs"
+assert desktop["library_filename"] == "libghostty-vt.a"
+assert desktop["manifest_filename"]
+desktop_targets = set()
+for target in desktop["targets"]:
+    assert re.fullmatch(r"(linux|darwin|windows)_(amd64|arm64)", target["go"]), target["go"]
+    assert target["go"] not in desktop_targets, f"duplicate desktop target {target['go']}"
+    desktop_targets.add(target["go"])
+    assert target["zig_target"]
+assert "linux_amd64" in desktop_targets, "CI tests the engine on linux_amd64"
+assert (root / "daemon" / "ghosttyvt").is_dir(), "desktop libraries without the daemon/ghosttyvt package"
+
 # Notice must embed exact upstream MIT body (sha256 of LICENSE text).
 # Extract from first "MIT License" through end; compare hash of that region
 # after normalizing to the pure LICENSE content when possible.

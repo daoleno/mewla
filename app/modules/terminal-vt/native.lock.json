@@ -98,6 +98,30 @@
     "notice_source": "app/assets/notices/GHOSTTY-MIT.txt",
     "notice_packaging": "Expo plugin withIOSBuild copies into the iOS app bundle; verified by scripts/verify-ios-artifact.sh for Simulator .app and IPA"
   },
+  "desktop": {
+    "note": "Static libghostty-vt for the daemon's session host: Go package daemon/ghosttyvt, build tag ghosttyvt. Same signed release and Zig as the app. Built by scripts/build-libghostty-desktop.sh.",
+    "lib_dir": "daemon/ghostty-libs",
+    "lib_dir_note": "Gitignored. A mewla-dev build adds the ghosttyvt tag only when this directory exists; tests and CI use a cache outside the checkout.",
+    "library_filename": "libghostty-vt.a",
+    "manifest_filename": "manifest.json",
+    "targets": [
+      {
+        "go": "linux_amd64",
+        "zig_target": "x86_64-linux-gnu",
+        "role": "dev_and_ci"
+      },
+      {
+        "go": "linux_arm64",
+        "zig_target": "aarch64-linux-gnu",
+        "role": "dev"
+      },
+      {
+        "go": "darwin_arm64",
+        "zig_target": "aarch64-macos",
+        "role": "dev"
+      }
+    ]
+  },
   "outputs": {
     "lib_dir": "app/modules/terminal-vt/libs/android",
     "library_filename": "libghostty_vt.so",
