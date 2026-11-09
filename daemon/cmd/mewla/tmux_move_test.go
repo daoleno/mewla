@@ -61,8 +61,9 @@ func TestTmuxMoveEnvironmentDropsThePane(t *testing.T) {
 	got := tmuxMoveEnvironment([]string{
 		"HOME=/home/u", "TMUX=/tmp/s,1,0", "TMUX_PANE=%7", "TERM=tmux-256color", "MEWLA_SESSION_ID=", "MEWLA_WORKER_ID=%7",
 		"PATH=/usr/bin:/bin", "MEWLA_TMUX_GUARD_DIR=/x", "SHLVL=2", "PWD=/w", "CLAUDE_CONFIG_DIR=/c", "", "junk",
-	})
-	want := []string{"HOME=/home/u", "MEWLA_WORKER_ID=%7", "PATH=/usr/bin:/bin", "CLAUDE_CONFIG_DIR=/c"}
+		"MEWLA_WORKER_PROGRESS_CMD=/old/mewla-0.2.99",
+	}, "/new/mewla")
+	want := []string{"HOME=/home/u", "MEWLA_WORKER_ID=%7", "PATH=/usr/bin:/bin", "CLAUDE_CONFIG_DIR=/c", "MEWLA_WORKER_PROGRESS_CMD=/new/mewla"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("environment = %v, want %v", got, want)
 	}

@@ -98,16 +98,8 @@ func TestHostOnlyInventoryNeedsNoTmux(t *testing.T) {
 		StateDir:   filepath.Join(root, "state"),
 		LogPath:    filepath.Join(root, "state", "session-host", "host.log"),
 		Version:    "t",
-		Enabled:    func() bool { return true },
+		HostOnly:   true,
 	}
-	mixed := New(50 * time.Millisecond)
-	mixed.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
-	mixed.SetSessionHost(config)
-	if _, err := mixed.sessions().listOwned(); err == nil || errors.Is(err, ErrTmuxServerGone) {
-		t.Fatalf("without tmux installed, tmux's inventory = %v; want a failure that is not 'server gone'", err)
-	}
-
-	config.HostOnly = true
 	w := New(50 * time.Millisecond)
 	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
 	w.SetSessionHost(config)
@@ -133,5 +125,27 @@ func TestHostOnlyInventoryNeedsNoTmux(t *testing.T) {
 	w.mu.Unlock()
 	if panes, err := w.sessions().listOwned(); err == nil {
 		t.Fatalf("host-only inventory with a known Session and no host = %v, nil", panes)
+	}
+}
+
+// TestNoTmuxIsNoSessions: Mewla no longer needs tmux. Without it installed,
+// the inventory is the host's alone, not a failure.
+func TestNoTmuxIsNoSessions(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	root := t.TempDir()
+	w := New(50 * time.Millisecond)
+	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
+	w.SetSessionHost(SessionHostConfig{SocketPath: filepath.Join(root, "host.sock"), Executable: "/nonexistent/mewla", StateDir: root, Version: "t"})
+	// With no host running either, this is the "no server" answer the poll
+	// reads as nothing running; it is never a tmux failure.
+	panes, err := w.sessions().listOwned()
+	if (err != nil && !errors.Is(err, ErrTmuxServerGone)) || len(panes) != 0 {
+		t.Fatalf("inventory without tmux = %v, %v", panes, err)
+	}
+	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
+		t.Fatalf("services without tmux = %v, %v", services, err)
+	}
+	if n := w.LeftInTmux(); n != 0 {
+		t.Fatalf("LeftInTmux without tmux = %d", n)
 	}
 }
