@@ -1,25 +1,19 @@
 // Browser regression against a built export, using an already paired, owned
-// agent-browser session. Never point this at somebody else's browser session.
-// Usage: bun scripts/tests/web-navigation.mjs SESSION ORIGIN [EVIDENCE_DIR]
+// Chrome that exposes CDP (a mewla_chrome browser or a throwaway profile).
+// Never point this at somebody else's browser.
+// Usage: bun scripts/tests/web-navigation.mjs CDP_HOST:PORT ORIGIN [EVIDENCE_DIR]
 // It reloads once to start cold, then rejects every additional JS request and
 // switches pages twice, including while the browser's socket is disconnected.
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const [session, origin, evidenceDir] = process.argv.slice(2);
-assert(session && origin, "Provide an owned, paired session and its origin");
+const [cdpHost, origin, evidenceDir] = process.argv.slice(2);
+assert(cdpHost && origin, "Provide an owned, paired browser's CDP host:port and its origin");
 if (evidenceDir) mkdirSync(evidenceDir, { recursive: true });
-const exec = promisify(execFile);
-const ab = async (...args) => (await exec("agent-browser", ["--session", session, ...args], {
-  encoding: "utf8", timeout: 30_000,
-})).stdout.trim();
-const browserURL = new URL(await ab("get", "cdp-url"));
-const targets = await (await fetch(`http://${browserURL.host}/json/list`)).json();
+const targets = await (await fetch(`http://${cdpHost}/json/list`)).json();
 const target = targets.find((page) => page.type === "page" && page.url.startsWith(origin));
-assert(target, "The session must already be open on the tested origin");
+assert(target, "The browser must already be open on the tested origin");
 const socket = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
 let nextId = 0;
