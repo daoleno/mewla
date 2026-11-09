@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/platform"
 )
@@ -40,9 +41,35 @@ func (p *conptyProgram) Close() error                { return p.pc.Close() }
 // reports with OSC 7.
 func (p *conptyProgram) Cwd() string { return "" }
 
-// Command is the program's name, as a Unix Session reports its foreground
-// process.
-func (p *conptyProgram) Command() string { return p.command }
+// Command names what the Session runs, as a Unix Session reports its
+// foreground process: the oldest process in its Job other than mewla
+// itself (`mewla sh` starts the agent and waits for it), which is the agent
+// rather than a tool it runs for a moment. The program's own name when that
+// cannot be read.
+func (p *conptyProgram) Command() string {
+	pids, err := p.pc.PIDs()
+	if err != nil {
+		return p.command
+	}
+	name, oldest := p.command, time.Time{}
+	for _, pid := range pids {
+		image, err := platform.ProcessImageName(pid)
+		if err != nil {
+			continue
+		}
+		base := filepath.Base(image)
+		base = strings.TrimSuffix(base, filepath.Ext(base))
+		if strings.EqualFold(base, "mewla") || strings.EqualFold(base, "conhost") {
+			continue
+		}
+		started, err := platform.ProcessStartTime(pid)
+		if err != nil || (!oldest.IsZero() && !started.Before(oldest)) {
+			continue
+		}
+		name, oldest = base, started
+	}
+	return name
+}
 
 func (p *conptyProgram) Wait() (int, string) {
 	code, err := p.pc.Wait()

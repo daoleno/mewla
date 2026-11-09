@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ import (
 	"github.com/daoleno/mewla/daemon/enrollment"
 	"github.com/daoleno/mewla/daemon/friends"
 	"github.com/daoleno/mewla/daemon/iphone"
+	"github.com/daoleno/mewla/daemon/launchsh"
 	"github.com/daoleno/mewla/daemon/link"
 	"github.com/daoleno/mewla/daemon/logfile"
 	"github.com/daoleno/mewla/daemon/modelprofiles"
@@ -126,6 +128,13 @@ func run(args []string, stderr io.Writer) error {
 		switch args[0] {
 		case "dsh-session":
 			return runDSHSessionCLI(args[1:])
+		case "sh":
+			// Hidden: runs a Session's launch script where there is no
+			// /bin/sh (Windows); see package launchsh.
+			if code := launchsh.Main(args[1:], stderr); code != 0 {
+				os.Exit(code)
+			}
+			return nil
 		case "serve":
 			return runDaemonUpdating(args[1:], stderr)
 		case "pair":
@@ -346,11 +355,14 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetTmuxServer(tmuxSocketPath, tmuxScratchDir)
 	// A plain `tmux` in a Worker or Brain pane must never fall back to the live
 	// default server. Best effort: without the shim panes keep the older
-	// TMUX_TMPDIR containment.
-	if guardDir, err := tmuxguard.Install(stateDir, watcher.ExecutablePath()); err != nil {
-		log.Printf("tmux guard shim unavailable: %v", err)
-	} else {
-		w.SetTmuxGuard(guardDir)
+	// TMUX_TMPDIR containment. Windows has no tmux to guard, and the shim is
+	// a POSIX script.
+	if runtime.GOOS != "windows" {
+		if guardDir, err := tmuxguard.Install(stateDir, watcher.ExecutablePath()); err != nil {
+			log.Printf("tmux guard shim unavailable: %v", err)
+		} else {
+			w.SetTmuxGuard(guardDir)
+		}
 	}
 	configureSessionHost(w, stateDir)
 	w.SetActivityProbe(classifier.DefaultActivityProbe())

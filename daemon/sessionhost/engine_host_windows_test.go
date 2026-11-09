@@ -11,8 +11,19 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
+	"github.com/daoleno/mewla/daemon/launchsh"
 	"github.com/daoleno/mewla/daemon/platform"
 )
+
+// asShEnv makes a copy of this test binary serve as `mewla sh`, the way the
+// daemon launches a Session's script on Windows.
+const asShEnv = "MEWLA_SESSIONHOST_TEST_AS_SH"
+
+func init() {
+	if os.Getenv(asShEnv) != "" && len(os.Args) > 1 && os.Args[1] == "sh" {
+		os.Exit(launchsh.Main(os.Args[2:], os.Stderr))
+	}
+}
 
 // The session host on Windows: programs in a pseudo console (ConPTY) with
 // the real libghostty-vt terminal, over an AF_UNIX socket only this user
@@ -179,6 +190,57 @@ func TestWindowsHostIsOnlyForThisUser(t *testing.T) {
 	// The System process (pid 4) is not this user's.
 	if other, _ := platform.ProcessIsCurrentUser(4); other {
 		t.Fatal("pid 4 counted as this user")
+	}
+}
+
+func TestWindowsHostRunsALaunchScriptThroughMewlaSh(t *testing.T) {
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	mewla := filepath.Join(bin, "mewla.exe")
+	if err := os.WriteFile(mewla, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := startWindowsHost(t)
+	ctx := windowsCtx(t)
+	// The watcher's launch: origin marker, then a login shell around the
+	// program.
+	script := `printf '\033[8m%s\033[0m\n' 'mewla-origin 0123abcd'; exec '/bin/sh' -i -l -c 'MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; export MEWLA_WORKER_ID; unset TMUX; exec cmd.exe /d /q'`
+	params := cmdSession("launch", t.TempDir(), mewla, "sh", "-c", script)
+	params.Env = append(os.Environ(), asShEnv+"=1", "TMUX=stale")
+	if _, err := c.Create(ctx, params); err != nil {
+		t.Fatal(err)
+	}
+	waitWindowsScreen(t, c, "launch", "mewla-origin 0123abcd")
+	if _, err := c.Input(ctx, "launch", []InputStep{{Bytes: []byte("echo worker-%MEWLA_WORKER_ID%-tmux-%TMUX%")}, {Key: "Enter"}}); err != nil {
+		t.Fatal(err)
+	}
+	waitWindowsScreen(t, c, "launch", "worker-launch-tmux-%TMUX%")
+	// The Session is named after the program, not the launcher.
+	if info, err := c.Info(ctx, "launch"); err != nil || info.Command != "cmd" {
+		t.Fatalf("info = %+v, %v", info, err)
+	}
+	// Ctrl+C goes to the program; the launcher stays.
+	if _, err := c.Input(ctx, "launch", []InputStep{{Key: "C-c"}}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Second)
+	if _, err := c.Input(ctx, "launch", []InputStep{{Bytes: []byte("echo still-here")}, {Key: "Enter"}}); err != nil {
+		t.Fatal(err)
+	}
+	waitWindowsScreen(t, c, "launch", "\nstill-here")
+	if _, err := c.Input(ctx, "launch", []InputStep{{Bytes: []byte("exit 5")}, {Key: "Enter"}}); err != nil {
+		t.Fatal(err)
+	}
+	info := waitExited(t, c, "launch")
+	if info.ExitCode == nil || *info.ExitCode != 5 {
+		t.Fatalf("exit code = %v", info.ExitCode)
 	}
 }
 

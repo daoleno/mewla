@@ -95,3 +95,18 @@ func ProcessStartTime(pid int) (time.Time, error) {
 	}
 	return time.Unix(0, creation.Nanoseconds()), nil
 }
+
+// ProcessImageName is the executable file of pid, as a full path.
+func ProcessImageName(pid int) (string, error) {
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return "", err
+	}
+	defer windows.CloseHandle(handle)
+	buf := make([]uint16, windows.MAX_LONG_PATH)
+	size := uint32(len(buf))
+	if err := windows.QueryFullProcessImageName(handle, 0, &buf[0], &size); err != nil {
+		return "", err
+	}
+	return windows.UTF16ToString(buf[:size]), nil
+}

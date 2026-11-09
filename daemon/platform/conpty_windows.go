@@ -273,6 +273,10 @@ func StartPseudoConsole(spec ConsoleSpec) (_ *PseudoConsole, err error) {
 	return pc, nil
 }
 
+// PIDs lists the processes in the console's Job now: the program and what
+// it started.
+func (p *PseudoConsole) PIDs() ([]int, error) { return p.job.PIDs() }
+
 // PID is the program's process id.
 func (p *PseudoConsole) PID() int { return p.pid }
 

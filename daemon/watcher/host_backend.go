@@ -503,10 +503,11 @@ func (b *hostBackend) create(at backendPlacement, spec backendCreateSpec) (strin
 	ctx, cancel := hostCtx()
 	defer cancel()
 	// The Session's first output is its origin marker, as in a tmux pane; the
-	// command runs under /bin/sh -c as tmux runs a pane command.
+	// command runs under /bin/sh -c as tmux runs a pane command (`mewla sh
+	// -c` on Windows, see hostLaunchArgv).
 	_, err = client.Create(ctx, sessionhost.CreateParams{
 		ID:     id,
-		Argv:   []string{"/bin/sh", "-c", originMarkerCommand(nonce) + spec.command},
+		Argv:   hostLaunchArgv(originMarkerCommand(nonce) + spec.command),
 		Env:    env,
 		Dir:    spec.cwd,
 		Cols:   hostDefaultCols,
