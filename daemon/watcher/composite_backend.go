@@ -54,6 +54,13 @@ func (c *compositeBackend) knows(valid func(string) bool) bool {
 // a vanished tmux server always was: a crash must not read as every Session
 // ending.
 func (c *compositeBackend) listOwned() ([]sessionPane, error) {
+	if c.host.cfg.HostOnly {
+		panes, err := c.host.listOwned()
+		if errors.Is(err, errSessionHostGone) && !c.knows(c.host.validID) {
+			return nil, nil
+		}
+		return panes, err
+	}
 	tmuxPanes, tmuxErr := c.tmux.listOwned()
 	hostPanes, hostErr := c.host.listOwned()
 	if errors.Is(hostErr, errSessionHostGone) && !c.knows(c.host.validID) {
@@ -74,6 +81,9 @@ func (c *compositeBackend) listOwned() ([]sessionPane, error) {
 }
 
 func (c *compositeBackend) listServices() ([]servicePane, error) {
+	if c.host.cfg.HostOnly {
+		return c.host.listServices()
+	}
 	tmuxPanes, err := c.tmux.listServices()
 	if err != nil {
 		return nil, err

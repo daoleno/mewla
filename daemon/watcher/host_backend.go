@@ -32,6 +32,9 @@ type SessionHostConfig struct {
 	Version string
 	// Enabled reports the Labs switch; it is read at each create.
 	Enabled func() bool
+	// HostOnly says this computer has no tmux (Windows): every Session is
+	// the host's, and tmux is never listed.
+	HostOnly bool
 }
 
 // SetSessionHost lets Sessions run in the session host. Sessions the host

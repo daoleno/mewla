@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/classifier"
 )
 
 // TestSessionHostSwitchOffLeavesNoTrace: with the Labs switch off and no host
@@ -82,5 +84,45 @@ func TestHostSessionIDs(t *testing.T) {
 	}
 	if b.observedGeneration("mh-0123456789abcdef01234567") == "" || b.observedGeneration("%1") != "" {
 		t.Fatal("generation")
+	}
+}
+
+// TestHostOnlyInventoryNeedsNoTmux: on a computer without tmux (Windows) the
+// first inventory is empty until the host runs, so the watcher becomes ready
+// and Brain's host can start; tmux is never asked.
+func TestHostOnlyInventoryNeedsNoTmux(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("PATH", filepath.Join(root, "empty-path"))
+	config := SessionHostConfig{
+		SocketPath: filepath.Join(root, "run", "host-00000000.sock"),
+		Executable: "/nonexistent/mewla",
+		StateDir:   filepath.Join(root, "state"),
+		LogPath:    filepath.Join(root, "state", "session-host", "host.log"),
+		Version:    "t",
+		Enabled:    func() bool { return true },
+	}
+	mixed := New(50 * time.Millisecond)
+	mixed.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
+	mixed.SetSessionHost(config)
+	if _, err := mixed.sessions().listOwned(); err == nil || errors.Is(err, ErrTmuxServerGone) {
+		t.Fatalf("without tmux installed, tmux's inventory = %v; want a failure that is not 'server gone'", err)
+	}
+
+	config.HostOnly = true
+	w := New(50 * time.Millisecond)
+	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
+	w.SetSessionHost(config)
+	if panes, err := w.sessions().listOwned(); err != nil || len(panes) != 0 {
+		t.Fatalf("host-only inventory before the host runs = %v, %v", panes, err)
+	}
+	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
+		t.Fatalf("host-only services = %v, %v", services, err)
+	}
+	// Once the watcher holds a host Session, a vanished host is unknown.
+	w.mu.Lock()
+	w.workers["mh-0123456789abcdef01234567"] = &classifier.Worker{}
+	w.mu.Unlock()
+	if panes, err := w.sessions().listOwned(); err == nil {
+		t.Fatalf("host-only inventory with a known Session and no host = %v, nil", panes)
 	}
 }

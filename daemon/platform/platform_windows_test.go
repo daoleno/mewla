@@ -3,8 +3,10 @@
 package platform
 
 import (
+	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -119,4 +121,23 @@ func TestHelperSleep(t *testing.T) {
 		t.Skip("helper process")
 	}
 	time.Sleep(60 * time.Second)
+}
+
+// Nothing serves a socket in a folder that does not exist yet (the host's
+// before its first start), a missing socket file or a stale one.
+func TestNoListenerOnEveryAbsentSocket(t *testing.T) {
+	dir := t.TempDir()
+	stale := filepath.Join(dir, "stale.sock")
+	l, err := net.Listen("unix", stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.(*net.UnixListener).SetUnlinkOnClose(false)
+	l.Close()
+	for _, path := range []string{filepath.Join(dir, "no-folder", "h.sock"), filepath.Join(dir, "h.sock"), stale} {
+		_, err := net.Dial("unix", path)
+		if err == nil || !NoListener(err) {
+			t.Errorf("dial %s = %v; NoListener false", path, err)
+		}
+	}
 }

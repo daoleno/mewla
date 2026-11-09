@@ -32,6 +32,13 @@ func TestStartsProgramsAndShimsFromTheScriptsPath(t *testing.T) {
 	if err != nil || code != 6 {
 		t.Fatalf("cmd exit = %d, %v; %q", code, err, out.String())
 	}
+	// A Shell Session's login shell is PowerShell (here without a console, so
+	// it shows its prompt and ends at the end of its input).
+	out.Reset()
+	code, err = Run(context.Background(), `exec '/bin/sh' -i -l -c 'exec '\''/bin/sh'\'' -i -l'`, Options{Env: os.Environ(), Dir: dir, Stdin: strings.NewReader(""), Stdout: &out, Stderr: &out})
+	if err != nil || code != 0 || !strings.Contains(out.String(), "PS "+dir) {
+		t.Fatalf("login shell = %d, %v; %q", code, err, out.String())
+	}
 	code, _ = Run(context.Background(), `no-such-program-mewla`, Options{Env: os.Environ(), Dir: dir, Stdout: &out, Stderr: &out})
 	if code != 127 {
 		t.Fatalf("a missing program = %d; %q", code, out.String())

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -109,4 +110,52 @@ func ProcessImageName(pid int) (string, error) {
 		return "", err
 	}
 	return windows.UTF16ToString(buf[:size]), nil
+}
+
+// ProcessEntry is one process in a ProcessList.
+type ProcessEntry struct {
+	PID, PPID int
+	// Image is the executable's file name ("claude.exe").
+	Image string
+}
+
+// ProcessList is every process of the machine at one moment.
+func ProcessList() ([]ProcessEntry, error) {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer windows.CloseHandle(snapshot)
+	var entry windows.ProcessEntry32
+	entry.Size = uint32(unsafe.Sizeof(entry))
+	var list []ProcessEntry
+	for err = windows.Process32First(snapshot, &entry); err == nil; err = windows.Process32Next(snapshot, &entry) {
+		list = append(list, ProcessEntry{PID: int(entry.ProcessID), PPID: int(entry.ParentProcessID), Image: windows.UTF16ToString(entry.ExeFile[:])})
+	}
+	if !errors.Is(err, windows.ERROR_NO_MORE_FILES) {
+		return nil, err
+	}
+	return list, nil
+}
+
+// ProcessCommandLine is pid's command line, for a process this user may
+// query.
+func ProcessCommandLine(pid int) (string, error) {
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return "", err
+	}
+	defer windows.CloseHandle(handle)
+	buf := make([]byte, 4096)
+	for {
+		var size uint32
+		err := windows.NtQueryInformationProcess(handle, windows.ProcessCommandLineInformation, unsafe.Pointer(&buf[0]), uint32(len(buf)), &size)
+		if err == nil {
+			return (*windows.NTUnicodeString)(unsafe.Pointer(&buf[0])).String(), nil
+		}
+		if !errors.Is(err, windows.STATUS_INFO_LENGTH_MISMATCH) || int(size) <= len(buf) || size > 1<<20 {
+			return "", err
+		}
+		buf = make([]byte, size)
+	}
 }
