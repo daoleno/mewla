@@ -69,7 +69,9 @@ describe('release asset workflow contract', () => {
   it('publishes desktop archives first and attaches the signed APK when it is ready', () => {
     expect(workflow).toContain('daemon:');
     expect(workflow).toContain('android:');
-    expect(workflow).toMatch(/desktop-stage:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, daemon\]\n/);
+    expect(workflow).toMatch(
+      /desktop-stage:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, daemon, daemon-linux-arm64, daemon-darwin\]\n/,
+    );
     expect(workflow).toMatch(/desktop-publish:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, desktop-stage\]\n/);
     expect(workflow).toContain('needs: [validate, daemon, android, desktop-stage]');
     expect(workflow).toContain('needs: [validate, desktop-publish, complete-stage]');
@@ -77,11 +79,32 @@ describe('release asset workflow contract', () => {
     // The complete set must reuse the already-public archive bytes.
     expect(workflow).toContain('diff -u <(daemon_sums inputs/desktop/SHA256SUMS) <(daemon_sums "$STAGE/SHA256SUMS")');
     expect(workflow).toContain('sha256sum -c --ignore-missing SHA256SUMS');
-    expect(workflow).toContain("grep -Eq 'ELF 64-bit.*(x86-64|x86_64)'");
+    expect(workflow).toContain("grep -Eq 'ELF 64-bit.*(x86-64|x86_64).*statically linked'");
     expect(workflow).toContain("grep -Eq 'Mach-O 64-bit.*arm64'");
     expect(workflow).toContain('--out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin"');
     expect(workflow).toContain('./scripts/stage-release.sh --skip-build --apk "$APK"');
     expect(workflow).toContain('SOURCE_DATE_EPOCH');
+  });
+
+  it('builds every daemon with the terminal engine and runs it on its own platform', () => {
+    expect(workflow).toContain('--targets linux-amd64,linux-arm64');
+    expect(workflow).toContain('--targets darwin-arm64');
+    expect(workflow).toContain('runs-on: macos-26');
+    expect(workflow).toContain('runs-on: ubuntu-24.04-arm');
+    expect(workflow).toContain('.*statically linked');
+    expect(workflow.match(/go test -count=1 -v \.\/releasesmoke\//g)?.length).toBe(3);
+    expect(workflow).toContain('pattern: mewla-daemon-binaries-*-${{ needs.validate.outputs.tag }}');
+  });
+
+  it('builds candidates without signing, staging or publishing them', () => {
+    expect(workflow).toContain('candidate_version:');
+    expect(workflow).toContain('only a tag can be published');
+    for (const job of ['desktop-stage', 'complete-stage']) {
+      const block = workflow.slice(workflow.indexOf(`  ${job}:`));
+      expect(block.slice(0, block.indexOf('steps:'))).toContain("if: needs.validate.outputs.mode == 'release'");
+    }
+    const signing = [...workflow.matchAll(/ZEN_UPDATE_SIGNING_KEY_BASE64 \}\}/g)].length;
+    expect(signing).toBe(2);
   });
 
   it('keeps recovery reviewed and caches no signing material or signed output', () => {

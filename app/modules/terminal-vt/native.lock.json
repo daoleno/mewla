@@ -101,7 +101,7 @@
   "desktop": {
     "note": "Static libghostty-vt for the daemon's session host: Go package daemon/ghosttyvt, build tag ghosttyvt. Same signed release and Zig as the app. Built by scripts/build-libghostty-desktop.sh.",
     "lib_dir": "daemon/ghostty-libs",
-    "lib_dir_note": "Gitignored. A mewla-dev build adds the ghosttyvt tag only when this directory exists; tests and CI use a cache outside the checkout.",
+    "lib_dir_note": "Gitignored. A mewla-dev build adds the ghosttyvt tag only when this directory exists; tests and CI use a cache outside the checkout. Release binaries link the *_musl libraries statically on Linux (scripts/build-daemon-linux.sh).",
     "library_filename": "libghostty-vt.a",
     "manifest_filename": "manifest.json",
     "targets": [
@@ -118,7 +118,17 @@
       {
         "go": "darwin_arm64",
         "zig_target": "aarch64-macos",
-        "role": "dev"
+        "role": "dev_and_release"
+      },
+      {
+        "go": "linux_amd64_musl",
+        "zig_target": "x86_64-linux-musl",
+        "role": "release"
+      },
+      {
+        "go": "linux_arm64_musl",
+        "zig_target": "aarch64-linux-musl",
+        "role": "release"
       }
     ]
   },

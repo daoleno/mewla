@@ -146,7 +146,7 @@ assert desktop["library_filename"] == "libghostty-vt.a"
 assert desktop["manifest_filename"]
 desktop_targets = set()
 for target in desktop["targets"]:
-    assert re.fullmatch(r"(linux|darwin|windows)_(amd64|arm64)", target["go"]), target["go"]
+    assert re.fullmatch(r"(linux|darwin|windows)_(amd64|arm64)(_musl)?", target["go"]), target["go"]
     assert target["go"] not in desktop_targets, f"duplicate desktop target {target['go']}"
     desktop_targets.add(target["go"])
     assert target["zig_target"]
