@@ -76,3 +76,31 @@ func parseProcArgsEnvironment(raw []byte) []string {
 	}
 	return strings.Split(string(rest), "\x00")
 }
+
+// parseProcArgs reads argv from kern.procargs2: argc, the executable path,
+// padding, then argc strings.
+func parseProcArgs(raw []byte) []string {
+	if len(raw) < 4 {
+		return nil
+	}
+	argc := int(binary.LittleEndian.Uint32(raw[:4]))
+	if argc <= 0 || argc > 65536 {
+		return nil
+	}
+	rest := raw[4:]
+	end := bytes.IndexByte(rest, 0)
+	if end < 0 {
+		return nil
+	}
+	rest = bytes.TrimLeft(rest[end+1:], "\x00")
+	args := make([]string, 0, argc)
+	for i := 0; i < argc; i++ {
+		end = bytes.IndexByte(rest, 0)
+		if end < 0 {
+			return nil
+		}
+		args = append(args, string(rest[:end]))
+		rest = rest[end+1:]
+	}
+	return args
+}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/daoleno/mewla/daemon/classifier"
 	"github.com/daoleno/mewla/daemon/ghosttyvt"
+	"github.com/daoleno/mewla/daemon/shellquote"
 	"github.com/daoleno/mewla/daemon/watcher"
 	"github.com/daoleno/mewla/daemon/work"
 	"github.com/daoleno/mewla/daemon/workerproc"
@@ -61,7 +62,7 @@ func moveSessionsFromTmux(ctx context.Context, w *watcher.Watcher) {
 		seen := map[string]bool{}
 		for _, worker := range sessions {
 			seen[worker.ID] = true
-			plan := planTmuxMove(worker)
+			plan := planTmuxMove(worker, workerproc.Args(worker.ProcessID))
 			if plan.leave != "" {
 				log.Printf("tmux move: %s (%s) stays in tmux: %s", worker.ID, worker.Name, plan.leave)
 				w.LeaveInTmux(worker.ID, plan.leave)
@@ -112,12 +113,13 @@ type tmuxMovePlan struct {
 
 // planTmuxMove names how the agent in a tmux Session resumes in a new
 // process, from its conversation id: the one its launch declared, or the one
-// its live process proves.
-func planTmuxMove(worker classifier.Worker) tmuxMovePlan {
-	command := strings.TrimSpace(worker.Command)
-	provider := work.InferWorkerProvider(command, worker.Name)
+// its live process proves. argv is the running agent's whole command line,
+// with every flag its launch gave it; the Worker's command keeps only what
+// names the conversation.
+func planTmuxMove(worker classifier.Worker, argv []string) tmuxMovePlan {
+	provider := work.InferWorkerProvider(worker.Command, worker.Name)
 	plan := tmuxMovePlan{provider: provider}
-	if command == "" {
+	if strings.TrimSpace(worker.Command) == "" {
 		plan.leave = "no program is known"
 		return plan
 	}
@@ -130,10 +132,27 @@ func planTmuxMove(worker classifier.Worker) tmuxMovePlan {
 		plan.leave = fmt.Sprintf("Mewla cannot resume %s", provider)
 		return plan
 	}
+	if len(argv) == 0 {
+		plan.leave = "its command line cannot be read"
+		return plan
+	}
+	if provider == work.WorkerProviderPi {
+		// Pi renames its process, so its command line no longer names the
+		// session file; the Worker's command does.
+		argv = strings.Fields(worker.Command)
+	}
+	command := resumableCommandLine(provider, argv)
 	declared, present, err := work.ProviderResumeToken(provider, command)
 	if err != nil {
 		plan.leave = fmt.Sprintf("its %s command cannot be read: %v", provider, err)
 		return plan
+	}
+	if !present && provider != work.WorkerProviderPi {
+		// The Worker's command may name the conversation where the command
+		// line does not (a Codex launched without an id, then bound).
+		if named, ok, err := work.ProviderResumeToken(provider, worker.Command); err == nil && ok {
+			declared, present = named, true
+		}
 	}
 	switch provider {
 	case work.WorkerProviderClaude, work.WorkerProviderCodex:
@@ -194,6 +213,27 @@ func planTmuxMove(worker classifier.Worker) tmuxMovePlan {
 	return plan
 }
 
+// resumableCommandLine joins argv into a shell command line. A Codex TUI that
+// talked to an app-server beside it in the pane loses that server with the
+// pane, so it resumes on its own.
+func resumableCommandLine(provider string, argv []string) string {
+	words := make([]string, 0, len(argv))
+	for i := 0; i < len(argv); i++ {
+		arg := argv[i]
+		if provider == work.WorkerProviderCodex {
+			if arg == "--remote" && i+1 < len(argv) {
+				i++
+				continue
+			}
+			if strings.HasPrefix(arg, "--remote=") {
+				continue
+			}
+		}
+		words = append(words, shellquote.Word(arg))
+	}
+	return strings.Join(words, " ")
+}
+
 // prepare reads what the resumed program needs from the running one: its
 // environment and directory. It fails, leaving the Session in tmux, when the
 // program could not start again there.
@@ -209,7 +249,7 @@ func (plan tmuxMovePlan) prepare(worker classifier.Worker) (watcher.TmuxMove, er
 	if err := commandOnPath(plan.resume, env, cwd); err != nil {
 		return watcher.TmuxMove{}, err
 	}
-	return watcher.TmuxMove{Command: "exec " + plan.resume, Env: env, Cwd: cwd}, nil
+	return watcher.TmuxMove{Command: "exec " + plan.resume, Env: env, Cwd: cwd, ProcessID: worker.ProcessID}, nil
 }
 
 // tmuxMoveEnvironment is the running program's environment without what

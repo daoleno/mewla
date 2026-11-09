@@ -31,10 +31,29 @@ func TestPlanTmuxMoveNamesHowEachAgentResumes(t *testing.T) {
 		{name: "empty", command: "", leave: "no program is known"},
 	}
 	for _, tc := range cases {
-		plan := planTmuxMove(classifier.Worker{ID: "%7", Name: tc.name, Command: tc.command})
+		plan := planTmuxMove(classifier.Worker{ID: "%7", Name: tc.name, Command: tc.command}, strings.Fields(tc.command))
 		if plan.resume != tc.resume || plan.leave != tc.leave {
 			t.Errorf("%q: resume %q, leave %q; want %q, %q", tc.command, plan.resume, plan.leave, tc.resume, tc.leave)
 		}
+	}
+}
+
+func TestPlanTmuxMoveKeepsTheLaunchFlags(t *testing.T) {
+	const thread = "01a1c22f-2a33-7b61-9300-569f4efec35a"
+	codex := []string{"/opt/codex/bin/codex", "--remote", "unix:///s/codex-ctl-1.sock", "--dangerously-bypass-approvals-and-sandbox",
+		"--dangerously-bypass-hook-trust", "-c", "check_for_update_on_startup=false", "--config", `projects={"/w/xw"={trust_level="trusted"}}`}
+	plan := planTmuxMove(classifier.Worker{ID: "%3", Name: "R4 codex", Command: "codex resume " + thread}, codex)
+	want := `/opt/codex/bin/codex --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust -c check_for_update_on_startup=false --config 'projects={"/w/xw"={trust_level="trusted"}}' resume ` + thread
+	if plan.leave != "" || plan.resume != want {
+		t.Fatalf("codex: resume %q, leave %q\nwant %q", plan.resume, plan.leave, want)
+	}
+	// Pi's process no longer names its session file; the Worker's command does.
+	plan = planTmuxMove(classifier.Worker{ID: "%5", Name: "pi", Command: "pi --session /p/s.jsonl"}, []string{"pi"})
+	if plan.resume != "pi --session /p/s.jsonl" {
+		t.Fatalf("pi: resume %q, leave %q", plan.resume, plan.leave)
+	}
+	if plan := planTmuxMove(classifier.Worker{ID: "%6", Name: "claude", Command: "claude --session-id x"}, nil); plan.leave != "its command line cannot be read" {
+		t.Fatalf("no argv: %+v", plan)
 	}
 }
 
