@@ -318,3 +318,31 @@ func TestCoveredWorkerIsReResolvedWhenItsAgentAnnouncesAnotherConversation(t *te
 		t.Fatalf("links for the covered Worker = %v, want conv-a then conv-b", ids)
 	}
 }
+
+func TestSessionConversationNamesTheLatestConversation(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := store.SessionConversation("%12"); ok {
+		t.Fatal("a Session with no links has a conversation")
+	}
+	for _, link := range []WorkTranscriptLink{
+		{WorkID: "w1", SessionID: "%12", Executor: "claude", ProviderSessionID: "first"},
+		{WorkID: "w2", SessionID: "%12", Executor: "claude", ProviderSessionID: "second"},
+		{WorkID: "w1", SessionID: "%13", Executor: "claude", ProviderSessionID: "other"},
+	} {
+		if _, err := store.RecordWorkTranscript(link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if id, ok := store.SessionConversation("%12"); !ok || id != "second" {
+		t.Fatalf("SessionConversation(%%12) = %q, %v", id, ok)
+	}
+	if err := store.ReplaceHostSessionBinding("%2", "codex", "host-thread", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if id, ok := store.SessionConversation("%2"); !ok || id != "host-thread" {
+		t.Fatalf("Brain host conversation = %q, %v", id, ok)
+	}
+}

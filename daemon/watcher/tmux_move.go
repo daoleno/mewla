@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,12 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
-	"github.com/daoleno/mewla/daemon/sessionhost"
 )
 
 // Mewla 0.3 runs every Session in the session host. Sessions an earlier Mewla
@@ -78,35 +75,13 @@ func (w *Watcher) TmuxSessions() []classifier.Worker {
 }
 
 // SessionHostReady checks, once per call, that the session host runs and can
-// start Sessions: it starts the host if needed and runs a probe Session.
+// start Sessions.
 func (w *Watcher) SessionHostReady() error {
 	c := w.composite()
 	if c == nil {
 		return errors.New("no session host is configured")
 	}
-	client, err := c.host.conn(true)
-	if err != nil {
-		return fmt.Errorf("session host: %w", err)
-	}
-	if !client.Welcome().Engine {
-		return errors.New("the session host has no terminal engine")
-	}
-	id, err := newHostSessionID()
-	if err != nil {
-		return err
-	}
-	probe := "probe-" + strings.TrimPrefix(id, "mh-")
-	ctx, cancel := context.WithTimeout(context.Background(), hostCallTimeout)
-	defer cancel()
-	if _, err := client.Create(ctx, sessionhost.CreateParams{
-		ID: probe, Argv: []string{"/bin/sh", "-c", "sleep 5"}, Env: []string{"PATH=/usr/bin:/bin"}, Dir: "/", Cols: 80, Rows: 24,
-	}); err != nil {
-		return fmt.Errorf("session host probe: %w", err)
-	}
-	if _, err := client.Remove(ctx, probe); err != nil {
-		return fmt.Errorf("session host probe: %w", err)
-	}
-	return nil
+	return c.host.ready()
 }
 
 // MoveToHost ends the tmux Session id and starts move in the host under the
@@ -165,16 +140,8 @@ func (w *Watcher) MoveToHost(id string, move TmuxMove) error {
 				resourceUnit: pane.resourceUnit,
 			},
 		}
-		if err := c.host.createAs(id, spec, map[string]string{hostLabelMovedFrom: "tmux"}); err != nil {
+		if err := c.host.adoptFromTmux(id, spec, ledger); err != nil {
 			return fmt.Errorf("%s ended in tmux but did not start in the session host: %w", id, err)
-		}
-		c.host.movedMu.Lock()
-		c.host.moved[id] = true
-		c.host.movedMu.Unlock()
-		if len(ledger.Entries) > 0 {
-			if err := c.host.inputIO().writeReceiptLedger(hostInputServer, id, ledger); err != nil {
-				log.Printf("watcher: %s moved to the session host without its input receipts: %v", id, err)
-			}
 		}
 		return nil
 	})
@@ -305,14 +272,9 @@ func (c *compositeBackend) saveLeftLocked() error {
 }
 
 func withoutMoved(c *compositeBackend, panes []sessionPane) []sessionPane {
-	c.host.movedMu.RLock()
-	defer c.host.movedMu.RUnlock()
-	if len(c.host.moved) == 0 {
-		return panes
-	}
 	kept := panes[:0:0]
 	for _, pane := range panes {
-		if !c.host.moved[pane.target] {
+		if !c.host.validID(pane.target) {
 			kept = append(kept, pane)
 		}
 	}

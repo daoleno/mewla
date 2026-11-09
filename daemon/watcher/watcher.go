@@ -4209,6 +4209,13 @@ func tmuxPaneEnvironment(base []string) []string {
 		// The session host sets it to the Session's own id; one inherited
 		// from where the daemon runs would name another Session.
 		"MEWLA_SESSION_ID": true,
+		// They describe the login the daemon was started from, not the
+		// Session. A shell startup file that attaches tmux for SSH logins
+		// would otherwise take the Session over before its program starts.
+		// SSH_AUTH_SOCK stays: git over ssh uses it.
+		"SSH_CONNECTION": true,
+		"SSH_CLIENT":     true,
+		"SSH_TTY":        true,
 	}
 
 	values := make(map[string]string, len(base))
