@@ -103,10 +103,12 @@ available while its server connection reconnects. Keep this setting explicit
 when upgrading Expo, whose web default is asynchronous routes.
 
 To exercise cold and repeated tab/page switches against a built export, pair
-an owned `agent-browser` session, then run:
+an owned, paired `mewla_chrome` browser (or a throwaway Chrome with
+`--remote-debugging-port`) that is open on the export, then run it against that
+browser's CDP host and port:
 
 ```bash
-bun scripts/tests/web-navigation.mjs SESSION http://127.0.0.1:PORT /tmp/web-evidence
+bun scripts/tests/web-navigation.mjs 127.0.0.1:CDP_PORT http://127.0.0.1:PORT /tmp/web-evidence
 ```
 
 The browser regression rejects subsequent JavaScript requests, checks visible

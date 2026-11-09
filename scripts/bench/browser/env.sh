@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Isolated benchmark environment: own X display (Xvnc), own Chrome for Testing
 # profile with the Playwright extension (built from source), CDP on :9333 for
-# agent-browser. Never touches the user's Chrome or display.
+# the benchmarked tools. Never touches the user's Chrome or display.
 #   env.sh up      start (idempotent), print the extension key
 #   env.sh down    stop and remove
 # State lives in $BENCH_DIR (default $TMPDIR/bench).
@@ -42,9 +42,7 @@ exec "$CFT" --user-data-dir="$BENCH_DIR/profile" --no-sandbox "\$@"
 WRAP
   chmod +x "$BENCH_DIR/chrome-wrap.sh"
   # The extension's key, read from its own status page.
-  AGENT_BROWSER_SESSION=envkey agent-browser --cdp "$CDP_PORT" open "chrome-extension://$EXT_ID/status.html" >/dev/null
-  KEY=$(AGENT_BROWSER_SESSION=envkey agent-browser get text body | grep -o 'PLAYWRIGHT_MCP_EXTENSION_TOKEN=[A-Za-z0-9_=-]*' | cut -d= -f2-)
-  AGENT_BROWSER_SESSION=envkey agent-browser close >/dev/null 2>&1 || true
+  KEY=$(node "$HERE/ext-key.mjs" "$CDP_PORT" "$EXT_ID")
   echo "$KEY" >"$BENCH_DIR/ext-key"
   echo "display :$DISPLAY_NUM cdp $CDP_PORT key-file $BENCH_DIR/ext-key"
   ;;
@@ -52,7 +50,6 @@ down)
   # Only this environment's own processes: never a bare `pkill chrome`.
   pkill -f -- "--user-data-dir=$BENCH_DIR/profile" 2>/dev/null || true
   [ -f "$BENCH_DIR/xvnc.pid" ] && kill "$(cat "$BENCH_DIR/xvnc.pid")" 2>/dev/null || true
-  agent-browser close --all >/dev/null 2>&1 || true
   sleep 1; rm -rf "$BENCH_DIR/profile" "$BENCH_DIR"/*.pid
   ;;
 esac
