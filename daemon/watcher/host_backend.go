@@ -20,8 +20,7 @@ import (
 )
 
 // SessionHostConfig is how the daemon reaches its session host (mewla host),
-// which runs Sessions in place of tmux when Settings → Labs → Session host is
-// on.
+// which runs every new Session.
 type SessionHostConfig struct {
 	SocketPath string
 	// Executable is the mewla binary that serves `host`; StateDir goes to it.
@@ -30,22 +29,20 @@ type SessionHostConfig struct {
 	LogPath    string
 	// Version names this daemon in the host's log.
 	Version string
-	// Enabled reports the Labs switch; it is read at each create.
-	Enabled func() bool
 	// HostOnly says this computer has no tmux (Windows): every Session is
 	// the host's, and tmux is never listed.
 	HostOnly bool
 }
 
-// SetSessionHost lets Sessions run in the session host. Sessions the host
-// already runs are inventoried whatever the switch says; new ones go there
-// only while it is on. Nothing is started, created or dialed while the switch
-// is off and no host socket exists.
+// SetSessionHost runs new Sessions in the session host. Sessions still in
+// tmux from before are inventoried until they move to the host (MoveToHost)
+// or are left in tmux (LeaveInTmux).
 func (w *Watcher) SetSessionHost(cfg SessionHostConfig) {
 	if w == nil || cfg.SocketPath == "" {
 		return
 	}
-	backend := &compositeBackend{w: w, tmux: &tmuxBackend{w: w}, host: &hostBackend{w: w, cfg: cfg}}
+	backend := &compositeBackend{w: w, tmux: &tmuxBackend{w: w}, host: &hostBackend{w: w, cfg: cfg, moved: map[string]bool{}}}
+	backend.loadLeftInTmux()
 	w.mu.Lock()
 	w.backend = backend
 	w.listPanes = backend.listOwned
@@ -76,11 +73,14 @@ const (
 	hostLabelPiSession     = "pi-session"
 	hostLabelResourceUnit  = "resource-unit"
 	hostLabelResourceOwner = "resource-owner"
-	hostDataInputReceipts  = "input-receipts"
-	hostSessionGroup       = "mewla"
-	hostDefaultCols        = 200
-	hostDefaultRows        = 50
-	hostCallTimeout        = 10 * time.Second
+	// hostLabelMovedFrom marks a Session that moved from tmux and kept its
+	// pane id.
+	hostLabelMovedFrom    = "moved-from"
+	hostDataInputReceipts = "input-receipts"
+	hostSessionGroup      = "mewla"
+	hostDefaultCols       = 200
+	hostDefaultRows       = 50
+	hostCallTimeout       = 10 * time.Second
 )
 
 // errSessionHostGone says the host is not running: no socket, or nothing
@@ -96,6 +96,11 @@ type hostBackend struct {
 
 	mu     sync.Mutex
 	client *sessionhost.Client
+
+	// moved holds the ids of Sessions that moved from tmux: they keep their
+	// %pane id, so the id pattern alone does not name them.
+	movedMu sync.RWMutex
+	moved   map[string]bool
 }
 
 // conn returns a client. With start false it only dials a host that is
@@ -151,7 +156,25 @@ func hostCtx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), hostCallTimeout)
 }
 
-func (b *hostBackend) validID(id string) bool { return hostSessionIDPattern.MatchString(id) }
+func (b *hostBackend) validID(id string) bool {
+	if hostSessionIDPattern.MatchString(id) {
+		return true
+	}
+	b.movedMu.RLock()
+	defer b.movedMu.RUnlock()
+	return b.moved[id]
+}
+
+// noteMoved records which listed Sessions came from tmux.
+func (b *hostBackend) noteMoved(infos []sessionhost.Info) {
+	b.movedMu.Lock()
+	defer b.movedMu.Unlock()
+	for _, info := range infos {
+		if info.Labels[hostLabelMovedFrom] == "tmux" && isPaneID(info.ID) {
+			b.moved[info.ID] = true
+		}
+	}
+}
 
 func (b *hostBackend) terminal(string) TerminalTarget {
 	return TerminalTarget{Backend: "host", Socket: b.cfg.SocketPath}
@@ -180,6 +203,7 @@ func (b *hostBackend) listOwned() ([]sessionPane, error) {
 	if err != nil {
 		return nil, err
 	}
+	b.noteMoved(infos)
 	panes := make([]sessionPane, 0, len(infos))
 	for _, info := range infos {
 		if !b.validID(info.ID) {
@@ -469,17 +493,23 @@ func (b *hostBackend) place(near string, detached bool, name string) (backendPla
 }
 
 func (b *hostBackend) create(at backendPlacement, spec backendCreateSpec) (string, error) {
-	client, err := b.conn(true)
-	if err != nil {
-		return "", fmt.Errorf("session host: %w", err)
-	}
 	id, err := newHostSessionID()
 	if err != nil {
 		return "", err
 	}
+	return id, b.createAs(id, spec, nil)
+}
+
+// createAs starts a Session with the given id; extra labels are added to the
+// ones spec names.
+func (b *hostBackend) createAs(id string, spec backendCreateSpec, extra map[string]string) error {
+	client, err := b.conn(true)
+	if err != nil {
+		return fmt.Errorf("session host: %w", err)
+	}
 	nonce, err := newOriginNonce()
 	if err != nil {
-		return "", fmt.Errorf("origin marker: %w", err)
+		return fmt.Errorf("origin marker: %w", err)
 	}
 	labels := map[string]string{
 		hostLabelName:   spec.name,
@@ -501,6 +531,9 @@ func (b *hostBackend) create(at backendPlacement, spec backendCreateSpec) (strin
 	setLabel(hostLabelExecutor, spec.labels.executorID)
 	setLabel(hostLabelAgentControl, spec.labels.agentControl)
 	setLabel(hostLabelPiSession, spec.labels.piSession)
+	for key, value := range extra {
+		labels[key] = value
+	}
 	// The host adds MEWLA_SESSION_ID, which the Worker id comes from.
 	env := spec.env
 	ctx, cancel := hostCtx()
@@ -518,9 +551,9 @@ func (b *hostBackend) create(at backendPlacement, spec backendCreateSpec) (strin
 		Labels: labels,
 	})
 	if err != nil {
-		return "", fmt.Errorf("start Worker Session: %w", err)
+		return fmt.Errorf("start Worker Session: %w", err)
 	}
-	return id, nil
+	return nil
 }
 
 // kill removes the Session; one the host no longer has is not an error.

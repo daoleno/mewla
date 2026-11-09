@@ -366,6 +366,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 		}
 	}
 	configureSessionHost(w, stateDir)
+	go moveSessionsFromTmux(ctx, w)
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
 	adapters := agentevents.NewRegistry()
 	agentEvents := newAgentEventService(eventHub, w.Workers)
