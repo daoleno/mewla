@@ -69,3 +69,44 @@ func TestPathNamesHowARequestArrived(t *testing.T) {
 		t.Errorf("a request with a relay-reported client is %s", got)
 	}
 }
+
+func TestLocalIsOnlyABrowserOnThisComputer(t *testing.T) {
+	type req struct {
+		remote, host string
+		header       map[string]string
+		relayed      bool
+		relayIP      string
+	}
+	for name, tc := range map[string]struct {
+		req  req
+		want bool
+	}{
+		"ipv4 loopback":         {req{remote: "127.0.0.1:5", host: "127.0.0.1:9876"}, true},
+		"ipv6 loopback":         {req{remote: "[::1]:5", host: "[::1]:9876"}, true},
+		"localhost name":        {req{remote: "127.0.0.1:5", host: "localhost:9876"}, true},
+		"tailnet phone":         {req{remote: "100.73.112.9:5", host: "100.73.112.8:9877"}, false},
+		"lan device":            {req{remote: "192.168.1.20:5", host: "192.168.1.8:9877"}, false},
+		"relayed, no client ip": {req{remote: "127.0.0.1:5", host: "127.0.0.1:9876", relayed: true}, false},
+		"relayed with client":   {req{remote: "127.0.0.1:5", host: "127.0.0.1:9876", relayIP: "203.0.113.7"}, false},
+		"tunnel keeps its host": {req{remote: "127.0.0.1:5", host: "mac.example.com"}, false},
+		"proxy rewrites host":   {req{remote: "127.0.0.1:5", host: "127.0.0.1:9876", header: map[string]string{"X-Forwarded-For": "203.0.113.7"}}, false},
+		"cloudflare":            {req{remote: "127.0.0.1:5", host: "127.0.0.1:9876", header: map[string]string{"Cf-Connecting-Ip": "203.0.113.7"}}, false},
+		"forwarded":             {req{remote: "127.0.0.1:5", host: "127.0.0.1:9876", header: map[string]string{"Forwarded": "for=203.0.113.7"}}, false},
+		"tailscale serve":       {req{remote: "127.0.0.1:5", host: "127.0.0.1:9876", header: map[string]string{"Tailscale-User-Login": "a@b"}}, false},
+	} {
+		request := httptest.NewRequest("GET", "/screen", nil)
+		request.RemoteAddr, request.Host = tc.req.remote, tc.req.host
+		for k, v := range tc.req.header {
+			request.Header.Set(k, v)
+		}
+		if tc.req.relayed {
+			request = request.WithContext(MarkRelayed(request.Context()))
+		}
+		if tc.req.relayIP != "" {
+			request = request.WithContext(With(request.Context(), net.ParseIP(tc.req.relayIP)))
+		}
+		if got := Local(request); got != tc.want {
+			t.Errorf("%s: Local = %v, want %v", name, got, tc.want)
+		}
+	}
+}

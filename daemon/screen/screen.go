@@ -112,6 +112,10 @@ type Status struct {
 	// Locked means the computer is locked now, so a viewer sees its login
 	// window and the display may sleep.
 	Locked bool `json:"locked,omitempty"`
+	// Local means the device that asked is on this computer itself: its
+	// screen is the one the person is looking at, so a live view of it would
+	// only mirror the viewer. The server sets it from the request.
+	Local bool `json:"local,omitempty"`
 }
 
 // Service reads its config on every use, so `mewla screen enable|disable`

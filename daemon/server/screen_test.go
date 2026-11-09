@@ -424,3 +424,39 @@ func TestScreenViewerHearsLockStateAndStreamStats(t *testing.T) {
 		t.Fatalf("stats %+v", stats)
 	}
 }
+
+// A viewer on the computer itself is told so, and nobody else: a live view of the
+// screen from the screen's own computer is a mirror of the viewer.
+func TestScreenStatusSaysWhetherTheAskerIsOnThisComputer(t *testing.T) {
+	a, priv, device := sessionFileAuthFixture(t)
+	s := New(a, nil, nil, nil, nil, nil, nil)
+	s.SetScreen(screen.NewServiceWith(t.TempDir(), screen.NewFakeBackend(320, 200)))
+	ask := func(remote, host string, header map[string]string) screen.Status {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/screen", nil)
+		req.RemoteAddr, req.Host = remote, host
+		req.Header.Set("Authorization", calendarAuthHeader(priv, a.DaemonID(), device, "mewla-screen"))
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+		}
+		var status screen.Status
+		if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+			t.Fatal(err)
+		}
+		return status
+	}
+	if !ask("127.0.0.1:4000", "127.0.0.1:9876", nil).Local {
+		t.Error("the web UI on this computer was not local")
+	}
+	if ask("100.73.112.9:4000", "100.73.112.8:9877", nil).Local {
+		t.Error("a phone on the tailnet was local")
+	}
+	if ask("127.0.0.1:4000", "127.0.0.1:9876", map[string]string{"X-Forwarded-For": "203.0.113.7"}).Local {
+		t.Error("a request relayed by a proxy on this computer was local")
+	}
+}
