@@ -178,4 +178,10 @@ touched.
 
 ## Docker (advanced)
 
-See `daemon/Dockerfile`. Prefer the host binary so tmux and local agent CLIs share the same environment. Container use requires mounting state, publishing or proxying port 9876, and arranging access to host agent tools yourself.
+See `daemon/Dockerfile`. Prefer the host binary so agents and their CLIs share your own environment. Build from the repository root:
+
+```bash
+docker build -f daemon/Dockerfile -t mewla .
+```
+
+The image's daemon carries the session host's terminal engine, built and linked statically the same way as the Linux release binaries (`zig cc`, musl, `ghosttyvt`), so Sessions run in the container without tmux. `daemon/Dockerfile.dockerignore` keeps the build context to `daemon/`, `scripts/` and the few `app/` files the engine's library build reads. The image never updates itself; rebuild it. Container use requires mounting state, publishing or proxying port 9876, and installing or mounting the agent CLIs yourself.
