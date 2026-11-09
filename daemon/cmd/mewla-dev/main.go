@@ -41,7 +41,14 @@ type devRunner struct {
 	stderr     io.Writer
 	child      *runningProcess
 	webDirty   bool
+	// goBuild runs `go build`; a test seam.
+	goBuild func(dir string, env, args []string) ([]byte, error)
 }
+
+// engineLibDir holds the session host's terminal engine libraries
+// (scripts/build-libghostty-desktop.sh). While it exists the daemon is built
+// with them (-tags ghosttyvt), so Settings → Labs → Session host can work.
+const engineLibDir = "ghostty-libs"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
@@ -68,6 +75,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		stdout:     stdout,
 		stderr:     stderr,
 		webDirty:   true,
+		goBuild:    runGoBuild,
 	}
 
 	if err := runner.rebuild(); err != nil {
@@ -308,17 +316,34 @@ func (r *devRunner) rebuild() error {
 		}
 		r.webDirty = false
 	}
-	built := r.binary + ".building"
 	flags, err := publisherFlags(r.root)
 	if err != nil {
 		return err
 	}
-	args := []string{"build", "-ldflags=" + flags, "-o", built}
-	args = append(args, "./cmd/mewla")
-	cmd := exec.Command("go", args...)
-	cmd.Dir = r.root
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-	output, err := cmd.CombinedOutput()
+	return r.buildDaemon(flags)
+}
+
+// buildDaemon builds cmd/mewla into the runner's binary, with the session
+// host's terminal engine when its libraries are present.
+func (r *devRunner) buildDaemon(flags string) error {
+	built := r.binary + ".building"
+	args := func(extra ...string) []string {
+		return append([]string{"build", "-ldflags=" + flags, "-o", built}, append(extra, "./cmd/mewla")...)
+	}
+	if r.engineLibsPresent() {
+		// A reload must never leave the daemon down: a tagged build that fails
+		// (cgo, the libraries) is followed by one untagged build, and the
+		// daemon runs on without the terminal engine.
+		output, err := r.goBuild(r.root, []string{"CGO_ENABLED=1"}, args("-tags", "ghosttyvt"))
+		if err == nil {
+			return commitBuiltBinary(built, r.binary)
+		}
+		_ = os.Remove(built)
+		logPath := r.binary + "-tagged-build.log"
+		_ = os.WriteFile(logPath, output, 0o644)
+		fmt.Fprintf(r.stderr, "mewla-dev: building with the session host's terminal engine (%s) failed: %v; built without it, so the Session host Labs switch stays off; details in %s\n", engineLibDir, firstLine(output, err), logPath)
+	}
+	output, err := r.goBuild(r.root, []string{"CGO_ENABLED=0"}, args())
 	if len(output) > 0 {
 		_, _ = r.stderr.Write(output)
 	}
@@ -331,6 +356,28 @@ func (r *devRunner) rebuild() error {
 		return err
 	}
 	return nil
+}
+
+func (r *devRunner) engineLibsPresent() bool {
+	info, err := os.Stat(filepath.Join(r.root, engineLibDir))
+	return err == nil && info.IsDir()
+}
+
+func runGoBuild(dir string, env, args []string) ([]byte, error) {
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
+	return cmd.CombinedOutput()
+}
+
+// firstLine is the first line of a failed build's output, or its error.
+func firstLine(output []byte, err error) string {
+	for _, line := range strings.Split(string(output), "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			return line
+		}
+	}
+	return err.Error()
 }
 
 func commitBuiltBinary(built, dest string) error {

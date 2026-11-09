@@ -41,6 +41,14 @@ bun run daemon:build
 `CGO_ENABLED=0`. The development watcher rebuilds Go source changes and restarts
 the daemon with its existing arguments. No display libraries are required.
 
+While `daemon/ghostty-libs` exists (made by `scripts/build-libghostty-desktop.sh`),
+`mewla-dev` builds with `CGO_ENABLED=1 -tags ghosttyvt` instead, so the session
+host, a Labs feature, has its terminal engine; that needs a C compiler. If the
+tagged build fails, it builds once more without the tag and the daemon keeps
+running without the engine; it prints one line, and the full output goes to
+`<binary>-tagged-build.log`. The runner rebuilds only `cmd/mewla`: after its
+own source changes, restart `go run ./cmd/mewla-dev`.
+
 Product version for banners and release staging comes from `app/app.base.json` (`expo.version`). The daemon default is `daemon/cmd/mewla/version.go` and can be overridden at link time (`-X main.Version=…`).
 
 ## Release binaries (Linux and Apple Silicon macOS)

@@ -117,3 +117,111 @@ func TestDevFailedWebExportKeepsPreviousBinary(t *testing.T) {
 		t.Fatalf("failed export replaced daemon or cleared retry: %s, %v", got, err)
 	}
 }
+
+// fakeGo records go build calls and writes the -o output unless told to fail.
+type fakeGo struct {
+	calls      [][]string
+	failTagged bool
+	failPlain  bool
+}
+
+func (f *fakeGo) build(dir string, env, args []string) ([]byte, error) {
+	f.calls = append(f.calls, append(append([]string(nil), env...), args...))
+	tagged := strings.Contains(strings.Join(args, " "), "-tags ghosttyvt")
+	if (tagged && f.failTagged) || (!tagged && f.failPlain) {
+		return []byte("# github.com/daoleno/mewla/daemon/ghosttyvt\n/usr/bin/ld: cannot find -lghostty-vt\ncollect2: error: ld returned 1 exit status\n"), errors.New("exit status 1")
+	}
+	for i, arg := range args {
+		if arg == "-o" {
+			mode := "plain"
+			if tagged {
+				mode = "tagged"
+			}
+			return nil, os.WriteFile(args[i+1], []byte(mode), 0o755)
+		}
+	}
+	return nil, errors.New("no -o")
+}
+
+func devRunnerForBuild(t *testing.T, libs bool, fake *fakeGo) (*devRunner, *strings.Builder) {
+	t.Helper()
+	root := t.TempDir()
+	if libs {
+		if err := os.MkdirAll(filepath.Join(root, engineLibDir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var stderr strings.Builder
+	return &devRunner{root: root, binary: filepath.Join(root, "mewla-dev"), stderr: &stderr, stdout: &stderr, goBuild: fake.build}, &stderr
+}
+
+func TestDevBuildIsUntaggedWithoutEngineLibs(t *testing.T) {
+	fake := &fakeGo{}
+	r, _ := devRunnerForBuild(t, false, fake)
+	if err := r.buildDaemon("-X x=y"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 || strings.Contains(strings.Join(fake.calls[0], " "), "ghosttyvt") || fake.calls[0][0] != "CGO_ENABLED=0" {
+		t.Fatalf("calls = %q", fake.calls)
+	}
+	if got, _ := os.ReadFile(r.binary); string(got) != "plain" {
+		t.Fatalf("binary = %q", got)
+	}
+}
+
+func TestDevBuildIsTaggedWithEngineLibs(t *testing.T) {
+	fake := &fakeGo{}
+	r, stderr := devRunnerForBuild(t, true, fake)
+	if err := r.buildDaemon("-X x=y"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 1 || fake.calls[0][0] != "CGO_ENABLED=1" || !strings.Contains(strings.Join(fake.calls[0], " "), "-tags ghosttyvt ./cmd/mewla") {
+		t.Fatalf("calls = %q", fake.calls)
+	}
+	if got, _ := os.ReadFile(r.binary); string(got) != "tagged" || stderr.Len() != 0 {
+		t.Fatalf("binary = %q, stderr = %q", got, stderr.String())
+	}
+}
+
+// TestDevBuildFallsBackWhenTheTaggedBuildFails: a reload never leaves the
+// daemon down; one untagged build follows and one line says why.
+func TestDevBuildFallsBackWhenTheTaggedBuildFails(t *testing.T) {
+	fake := &fakeGo{failTagged: true}
+	r, stderr := devRunnerForBuild(t, true, fake)
+	if err := os.WriteFile(r.binary, []byte("previous"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.buildDaemon("-X x=y"); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.calls) != 2 || fake.calls[1][0] != "CGO_ENABLED=0" || strings.Contains(strings.Join(fake.calls[1], " "), "ghosttyvt") {
+		t.Fatalf("calls = %q", fake.calls)
+	}
+	if got, _ := os.ReadFile(r.binary); string(got) != "plain" {
+		t.Fatalf("binary = %q", got)
+	}
+	lines := strings.Split(strings.TrimSpace(stderr.String()), "\n")
+	if len(lines) != 1 || !strings.Contains(lines[0], "cannot find -lghostty-vt") || !strings.Contains(lines[0], "built without it") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+	if log, _ := os.ReadFile(r.binary + "-tagged-build.log"); !strings.Contains(string(log), "collect2") {
+		t.Fatalf("tagged build log = %q", log)
+	}
+	if _, err := os.Stat(r.binary + ".building"); !os.IsNotExist(err) {
+		t.Fatalf("leftover partial binary: %v", err)
+	}
+}
+
+func TestDevBuildKeepsThePreviousBinaryWhenBothBuildsFail(t *testing.T) {
+	fake := &fakeGo{failTagged: true, failPlain: true}
+	r, _ := devRunnerForBuild(t, true, fake)
+	if err := os.WriteFile(r.binary, []byte("previous"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.buildDaemon("-X x=y"); err == nil {
+		t.Fatal("a failed build reported success")
+	}
+	if got, _ := os.ReadFile(r.binary); string(got) != "previous" {
+		t.Fatalf("binary = %q", got)
+	}
+}
