@@ -149,6 +149,13 @@ func TestTmuxSessionLeftInTmuxIsNoLongerMewlas(t *testing.T) {
 	if n := h.w.LeftInTmux(); n != 1 {
 		t.Fatalf("LeftInTmux = %d", n)
 	}
+	// It has ended as far as Mewla goes, and Mewla no longer owns it.
+	if gone, err := h.w.sessions().resolveAbsence(id, true); err != nil || !gone {
+		t.Fatalf("resolveAbsence of a left Session = %v, %v", gone, err)
+	}
+	if present, owned, err := h.w.sessions().probeOwnership(id); err != nil || present || owned {
+		t.Fatalf("probeOwnership of a left Session = %v, %v, %v", present, owned, err)
+	}
 	restarted := New(10 * time.Millisecond)
 	restarted.SetTmuxServer(h.selected, h.scratch)
 	restarted.SetSessionHost(cfg)

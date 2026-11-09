@@ -109,11 +109,31 @@ func (c *compositeBackend) listServices() ([]servicePane, error) {
 	return append(tmuxPanes, hostPanes...), nil
 }
 
+// isLeft reports a tmux Session left in tmux: it is no longer Mewla's.
+func (c *compositeBackend) isLeft(id string) bool {
+	if c.host.validID(id) {
+		return false
+	}
+	c.leftMu.Lock()
+	defer c.leftMu.Unlock()
+	_, left := c.left[id]
+	return left
+}
+
+// probeOwnership never claims a Session left in tmux: it runs on there, but
+// Mewla no longer owns it, so nothing of Mewla's may type into or end it.
 func (c *compositeBackend) probeOwnership(id string) (bool, bool, error) {
+	if c.isLeft(id) {
+		return false, false, nil
+	}
 	return c.of(id).probeOwnership(id)
 }
 
+// resolveAbsence: a Session left in tmux has ended as far as Mewla goes.
 func (c *compositeBackend) resolveAbsence(id string, sawInventory bool) (bool, error) {
+	if c.isLeft(id) {
+		return true, nil
+	}
 	return c.of(id).resolveAbsence(id, sawInventory)
 }
 
