@@ -22,7 +22,9 @@ func WriteHuman(w io.Writer, report Report) error {
 	}
 
 	writeCheck(w, "Platform", report.Platform.Status, report.Platform.Summary)
-	writeCheck(w, "tmux", report.Tmux.Status, report.Tmux.Summary)
+	if !report.Tmux.NotNeeded {
+		writeCheck(w, "tmux", report.Tmux.Status, report.Tmux.Summary)
+	}
 	if report.Tmux.Status == StatusFail && report.Tmux.Remediation == RemediationInstallTmux {
 		for _, hint := range report.Tmux.InstallHints {
 			fmt.Fprintf(w, "  Install tmux on %s: %s\n", hint.OS, hint.Command)

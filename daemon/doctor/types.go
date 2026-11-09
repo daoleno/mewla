@@ -139,10 +139,13 @@ type PlatformCheck struct {
 
 // TmuxCheck reports tmux availability and a safe functional probe.
 type TmuxCheck struct {
-	Found        bool          `json:"found"`
-	Path         string        `json:"path,omitempty"`
-	Version      string        `json:"version,omitempty"`
-	Functional   bool          `json:"functional"`
+	Found      bool   `json:"found"`
+	Path       string `json:"path,omitempty"`
+	Version    string `json:"version,omitempty"`
+	Functional bool   `json:"functional"`
+	// NotNeeded: this platform runs no tmux (Windows); the check is left
+	// out of the report.
+	NotNeeded    bool          `json:"not_needed,omitempty"`
 	Status       Status        `json:"status"`
 	Remediation  Remediation   `json:"remediation,omitempty"`
 	Summary      string        `json:"summary"`
