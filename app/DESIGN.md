@@ -611,6 +611,8 @@ changes that the service must approve all call it.
   fold row's detail counts it ("5 steps · 1 failed"). Its output sits in
   the same neutral well as any other, in full ink
   (`splitActivityStatusDetail` in `InterfaceTimelineActivityModel.ts`).
+  Agent status rows (Failed, Blocked) follow the same rule: they start
+  collapsed with their normal mark; only a running one opens by itself.
 - **Git.** Added is green and deleted is the terminal's crimson; modified and
   renamed are ink, because amber means Warning and blue means Running.
 

@@ -42,6 +42,16 @@ describe("Calendar result timeline", () => {
     });
   });
 
+  test("failed and blocked status rows start collapsed, a running one stays open", () => {
+    const rows = ["failed", "blocked", "running"].map((status, index) => {
+      const [item] = buildTimeline([
+        { id: `s${index}`, seq: index, kind: "status", title: "Agent status", body: "detail", status },
+      ]);
+      return item?.type === "activity" ? item.defaultExpanded : undefined;
+    });
+    expect(rows).toEqual([false, false, true]);
+  });
+
   test("a terminal Calendar result cannot keep the composer in Working state", () => {
     expect(isProviderActivityRunning(undefined)).toBe(false);
   });
