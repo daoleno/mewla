@@ -1,4 +1,13 @@
 /**
+ * The backend that runs the open terminal is the one the daemon names when it
+ * opens it; the one the App asked for is only a fallback for older daemons.
+ * tmux-only behaviour (focus reports, pane focus) must follow the daemon's.
+ */
+export function liveTerminalBackend(opened: unknown, requested: string): string {
+  return typeof opened === 'string' && opened ? opened : requested;
+}
+
+/**
  * A normal terminal FocusIn report is enough for tmux's native `latest`
  * policy to treat this attached client as the most recently active one.
  * Keep this stateless: session correlation and live-only delivery stay owned by

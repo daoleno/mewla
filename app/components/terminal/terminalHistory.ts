@@ -5,8 +5,9 @@ export const TERMINAL_HISTORY_MAX_BYTES = 4 * 1024 * 1024;
 export const TERMINAL_HISTORY_MAX_HTML = 16 * 1024 * 1024;
 
 export function historyRows(snapshot: TerminalHistorySnapshot): string[] {
+  // pane_id is opaque: a tmux pane (%12) or a session host Session (mh-…).
   if (!snapshot || typeof snapshot.pane_id !== 'string' ||
-      !/^%[0-9]+$/.test(snapshot.pane_id) || typeof snapshot.alternate !== 'boolean' ||
+      !snapshot.pane_id || snapshot.pane_id.length > 128 || typeof snapshot.alternate !== 'boolean' ||
       typeof snapshot.ansi !== 'string' ||
       snapshot.ansi.length > TERMINAL_HISTORY_MAX_BYTES ||
       !Number.isInteger(snapshot.cols) || snapshot.cols < 1 || snapshot.cols > 1000 ||

@@ -12,6 +12,12 @@ describe('bounded pane history', () => {
     expect(historyRows({ ...snapshot, alternate: true })).toEqual([]);
   });
 
+  test('takes any Session id as the pane, tmux or session host', () => {
+    expect(historyRows({ ...snapshot, pane_id: 'mh-0123456789abcdef01234567' })).toEqual(['a', 'b', 'c']);
+    expect(() => historyRows({ ...snapshot, pane_id: '' })).toThrow();
+    expect(() => historyRows({ ...snapshot, pane_id: 'x'.repeat(129) })).toThrow();
+  });
+
   test('bounds rows, bytes and grid dimensions before native allocation', () => {
     expect(historyRows({ ...snapshot, ansi: 'x\n'.repeat(6000) })).toHaveLength(6000);
     for (const bad of [

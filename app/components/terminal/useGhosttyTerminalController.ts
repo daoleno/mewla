@@ -20,6 +20,7 @@ import { encodeTerminalWheel, selectTerminalScrollRoute } from './terminalWheel'
 import type { TerminalHistoryRender } from './terminalHistory';
 import { isCurrentTerminalRendererGeneration } from './terminalSurfaceBootstrap';
 import {
+  liveTerminalBackend,
   notifyTmuxClientFocus,
   TerminalScrollCorrelation,
 } from './terminalSessionCorrelation';
@@ -202,8 +203,12 @@ export function useGhosttyTerminalController({
     scheduleRenderState();
   }, [ghostty, postToRenderer, scheduleRenderState, theme]);
 
+  // The backend the daemon opened the terminal on; tmux-only behaviour follows
+  // it, not the one requested.
+  const liveBackendRef = useRef<string | null>(null);
   const session = useTerminalSession(serverId, targetId, backend, {
-    onOpened: ({ sessionId }) => {
+    onOpened: ({ sessionId, backend: openedBackend }) => {
+      liveBackendRef.current = liveTerminalBackend(openedBackend, backend);
       replaceScrollContext(sessionId, 'session-change');
       history.attach(sessionId);
       setScrolledUp(false);
@@ -220,6 +225,7 @@ export function useGhosttyTerminalController({
       }
     },
     onSessionInvalidated: (sessionId, reason) => {
+      liveBackendRef.current = null;
       history.attach(null);
       replaceScrollContext(
         null,
@@ -266,7 +272,7 @@ export function useGhosttyTerminalController({
   const canDeliverInput = useCallback(() => session.canSendInput(), [session]);
 
   const notifyClientFocus = useCallback(() => {
-    return notifyTmuxClientFocus(backend, session.sendInput);
+    return notifyTmuxClientFocus(liveBackendRef.current ?? backend, session.sendInput);
   }, [backend, session]);
 
   const deliverInput = useCallback((data: string) => {
@@ -276,7 +282,7 @@ export function useGhosttyTerminalController({
   }, [cancelLocalScroll, runRendererCommand, session]);
 
   const focusPaneAtPoint = useCallback((x: number, y: number) => {
-    if (backend !== 'tmux') {
+    if ((liveBackendRef.current ?? backend) !== 'tmux') {
       return;
     }
     const grid = ghostty.currentGrid();
