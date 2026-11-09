@@ -965,8 +965,7 @@ function activityFromEvent(
         bodyKind: calendarResult
           ? undefined
           : statusActivityBodyKind(event, body),
-        defaultExpanded:
-          running || event.status === "failed" || event.status === "blocked",
+        defaultExpanded: running,
       };
     }
     default:
