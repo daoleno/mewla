@@ -167,7 +167,11 @@ while read -r go_target zig_target action; do
       -Doptimize=ReleaseFast "-Dtarget=$zig_target"
   )
   rm -rf -- "$zig_cache"
-  cp "$prefix/lib/libghostty-vt.a" "$NEW/$go_target/libghostty-vt.a"
+  # Zig names the Windows static library ghostty-vt-static.lib; it is the same
+  # kind of archive, kept under the one name the cgo directives link.
+  lib="$prefix/lib/libghostty-vt.a"
+  [[ "$zig_target" != *-windows-* ]] || lib="$prefix/lib/ghostty-vt-static.lib"
+  cp "$lib" "$NEW/$go_target/libghostty-vt.a"
 done <<<"$PLAN"
 
 python3 - "$LOCK" "$NEW" "$ZIG_VER" "$(release_field signature_verified)" "$PLAN" <<'PY'

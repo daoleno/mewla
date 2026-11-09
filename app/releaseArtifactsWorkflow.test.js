@@ -70,7 +70,7 @@ describe('release asset workflow contract', () => {
     expect(workflow).toContain('daemon:');
     expect(workflow).toContain('android:');
     expect(workflow).toMatch(
-      /desktop-stage:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, daemon, daemon-linux-arm64, daemon-darwin\]\n/,
+      /desktop-stage:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin\]\n/,
     );
     expect(workflow).toMatch(/desktop-publish:\s*\n\s*name: [^\n]+\n\s*needs: \[validate, desktop-stage\]\n/);
     expect(workflow).toContain('needs: [validate, daemon, android, desktop-stage]');
@@ -87,7 +87,11 @@ describe('release asset workflow contract', () => {
   });
 
   it('builds every daemon with the terminal engine and runs it on its own platform', () => {
-    expect(workflow).toContain('--targets linux-amd64,linux-arm64');
+    expect(workflow).toContain('--targets linux-amd64,linux-arm64,windows-amd64');
+    expect(workflow).toContain('runs-on: windows-latest');
+    expect(workflow).toContain('./scripts/tests/release_smoke_windows.ps1');
+    expect(workflow).toContain("grep -Eq 'PE32\\+ executable.*x86-64'");
+    expect(workflow.match(/mewla-windows-amd64\.zip/g)?.length).toBe(3);
     expect(workflow).toContain('--targets darwin-arm64');
     expect(workflow).toContain('runs-on: macos-26');
     expect(workflow).toContain('runs-on: ubuntu-24.04-arm');

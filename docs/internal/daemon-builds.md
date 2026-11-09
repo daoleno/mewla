@@ -65,14 +65,15 @@ keep DNS and user lookups on the same pure-Go code as the earlier
 - **Linux** binaries are linked fully static against musl with the pinned
   Zig's `zig cc` (library targets `linux_amd64_musl`, `linux_arm64_musl`), so
   they run on any distribution, glibc or musl. Both build on any Linux host.
+- **Windows** (`mewla-windows-amd64.exe`) is linked statically against MinGW with the same `zig cc` (library target `windows_amd64`, Zig's `ghostty-vt-static.lib` kept as `libghostty-vt.a`); it needs only Windows' own DLLs and the Universal CRT that ships with Windows 10 and later. It builds on any Linux host and is packaged as `mewla-windows-amd64.zip`.
 - **macOS** links with Apple's clang and so builds only on a Mac (minimum
   macOS 12.0, the same floor as before). The release workflow builds it on a
   `macos-26` runner.
 
 ```bash
-./scripts/build-daemon-linux.sh                           # Linux: linux-amd64, linux-arm64
+./scripts/build-daemon-linux.sh                           # Linux: linux-amd64, linux-arm64, windows-amd64
 ./scripts/build-daemon-linux.sh --targets darwin-arm64    # on a Mac
-./scripts/build-daemon-linux.sh --engine off              # all three, CGO_ENABLED=0, no session host
+./scripts/build-daemon-linux.sh --engine off              # every target, CGO_ENABLED=0, no session host
 # → dist-download/staging/bin/mewla-<os>-<arch>
 ```
 
@@ -87,7 +88,7 @@ cd daemon && MEWLA_RELEASE_SMOKE_BINARY=../dist-download/staging/bin/mewla-linux
 ```
 
 Full local stage (clean directory each run; **no** GitHub Release). It needs
-all three binaries, so on Linux build `mewla-darwin-arm64` on a Mac first and
+all four binaries, so on Linux build `mewla-darwin-arm64` on a Mac first and
 pass `--skip-build`:
 
 ```bash

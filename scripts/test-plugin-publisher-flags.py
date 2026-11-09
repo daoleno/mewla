@@ -61,8 +61,8 @@ pathlib.Path(sys.argv[sys.argv.index('-o')+1]).touch()
             subprocess.run(['bash', str(root / 'scripts/build-mewla-local.sh')], env=env, check=True, capture_output=True)
             subprocess.run(['bash', str(root / 'scripts/build-daemon-linux.sh'), '--engine', 'off'], env=env, check=True, capture_output=True)
             calls = [json.loads(line) for line in capture.read_text().splitlines()]
-            self.assertEqual(len(calls), 4)
-            self.assertEqual([(c['os'], c['arch']) for c in calls[1:]], [('linux','amd64'), ('linux','arm64'), ('darwin','arm64')])
+            self.assertEqual(len(calls), 5)
+            self.assertEqual([(c['os'], c['arch']) for c in calls[1:]], [('linux','amd64'), ('linux','arm64'), ('darwin','arm64'), ('windows','amd64')])
             for call in calls:
                 flags = next(a for a in call['args'] if a.startswith('-ldflags='))
                 self.assertIn('connections.GitHubPublicClientID=fixture.github', flags)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the public Mewla docs site.
 
-Copies site/ and the repository install.sh to --out, then renders the pages listed in nav.json (plus every
+Copies site/ and the repository install.sh and install.ps1 to --out, then renders the pages listed in nav.json (plus every
 docs/releases/v*.md) to <out>/docs/<slug>/index.html. Styling lives in
 site/docs/docs.css and search in site/docs/search.js.
 
@@ -390,9 +390,11 @@ def build(out: Path) -> list[str]:
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(SITE, out)
-    # The short install command, curl -fsSL https://mewla.ai/install.sh | sh,
-    # serves the repository's installer byte for byte.
+    # The short install commands, curl -fsSL https://mewla.ai/install.sh | sh
+    # and irm https://mewla.ai/install.ps1 | iex, serve the repository's
+    # installers byte for byte.
     shutil.copy2(ROOT / "install.sh", out / "install.sh")
+    shutil.copy2(ROOT / "install.ps1", out / "install.ps1")
     assets: set[Path] = set()
     problems = scan_site()
     for page in pages:

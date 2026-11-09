@@ -1,6 +1,7 @@
 name: Release artifacts
 
-# Secure release pipeline: Linux amd64/arm64, macOS arm64, signed Android arm64 APK.
+# Secure release pipeline: Linux amd64/arm64, macOS arm64, Windows amd64, signed
+# Android arm64 APK.
 #
 # An annotated vX.Y.Z or vX.Y.Z-beta.N tag push is the normal release action. Manual
 # dispatch can rebuild, and can recover publication only with explicit review.
@@ -11,8 +12,9 @@ name: Release artifacts
 # staged or published; the build outputs are kept for a few days for testing.
 #
 # Daemon binaries carry the session host's terminal engine (build tag ghosttyvt,
-# cgo): Linux is linked statically with zig cc on Ubuntu, macOS with Apple's
-# toolchain on a Mac. Each binary is run on its own platform before staging.
+# cgo): Linux and Windows are linked statically with zig cc on Ubuntu, macOS
+# with Apple's toolchain on a Mac. Each binary is run on its own platform
+# before staging.
 #
 # Desktop first: the daemon archives are staged, signed and published as soon as
 # they are built. The signed APK, and the SHA256SUMS and signed manifest that
@@ -136,7 +138,7 @@ jobs:
           echo "checkout=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
   daemon:
-    name: Build Linux daemons
+    name: Build Linux and Windows daemons
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -167,13 +169,14 @@ jobs:
         env:
           MEWLA_VERSION: ${{ needs.validate.outputs.version }}
           MEWLA_BUILD_TMPDIR: ${{ runner.temp }}/mewla-build
-        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets linux-amd64,linux-arm64
+        run: ./scripts/build-daemon-linux.sh --out-dir "$GITHUB_WORKSPACE/dist-download/staging/bin" --targets linux-amd64,linux-arm64,windows-amd64
       - name: Verify daemon formats and architectures
         run: |
           set -euo pipefail
           file dist-download/staging/bin/mewla-linux-amd64 | grep -Eq 'ELF 64-bit.*(x86-64|x86_64).*statically linked'
           file dist-download/staging/bin/mewla-linux-arm64 | grep -Eq 'ELF 64-bit.*(ARM aarch64|ARM64).*statically linked'
-          for f in dist-download/staging/bin/mewla-linux-*; do
+          file dist-download/staging/bin/mewla-windows-amd64.exe | grep -Eq 'PE32\+ executable.*x86-64'
+          for f in dist-download/staging/bin/mewla-*; do
             go version -m "$f" | grep -E '^[[:space:]]+build[[:space:]]+(-tags=|CGO_ENABLED=)'
           done
       - name: Run the amd64 binary (version, session host, shell, vi, attach, /health)
@@ -217,6 +220,29 @@ jobs:
         run: |
           chmod +x "$MEWLA_RELEASE_SMOKE_BINARY"
           go test -count=1 -v ./releasesmoke/
+
+  daemon-windows:
+    name: Run the Windows daemon
+    needs: [validate, daemon]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.checkout }}
+      - name: Download daemon binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: mewla-daemon-binaries-linux-${{ needs.validate.outputs.tag }}
+          path: bin
+      # version, the session host with the engine, the daemon's /health, and
+      # install.ps1 installing it from a release-shaped zip.
+      - name: Run the Windows binary
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: ./scripts/tests/release_smoke_windows.ps1 -Binary bin/mewla-windows-amd64.exe -Version $env:VERSION
 
   daemon-darwin:
     name: Build and run the macOS daemon
@@ -387,7 +413,7 @@ jobs:
 
   desktop-stage:
     name: Stage, sign, and verify desktop archives
-    needs: [validate, daemon, daemon-linux-arm64, daemon-darwin]
+    needs: [validate, daemon, daemon-linux-arm64, daemon-windows, daemon-darwin]
     if: needs.validate.outputs.mode == 'release'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -485,6 +511,7 @@ jobs:
             mewla-linux-amd64.tar.gz
             mewla-linux-arm64.tar.gz
             mewla-darwin-arm64.tar.gz
+            mewla-windows-amd64.zip
             SHA256SUMS
             release-manifest.json
             release-manifest.json.sig
@@ -563,9 +590,9 @@ jobs:
           (cd "$STAGE" && sha256sum -c SHA256SUMS)
           # The desktop archives are already public: the complete set must carry
           # the same bytes, or its checksums and manifest would not match them.
-          daemon_sums() { grep -E '  mewla-(linux|darwin)-[a-z0-9]+\.tar\.gz$' "$1" | LC_ALL=C sort; }
+          daemon_sums() { grep -E '  mewla-(linux|darwin|windows)-[a-z0-9]+\.(tar\.gz|zip)$' "$1" | LC_ALL=C sort; }
           diff -u <(daemon_sums inputs/desktop/SHA256SUMS) <(daemon_sums "$STAGE/SHA256SUMS")
-          test "$(daemon_sums "$STAGE/SHA256SUMS" | wc -l)" -eq 3
+          test "$(daemon_sums "$STAGE/SHA256SUMS" | wc -l)" -eq 4
       - name: Upload complete verified stage
         uses: actions/upload-artifact@v4
         with:
@@ -616,10 +643,11 @@ jobs:
           gh release download "$TAG" --dir "$published" \
             --pattern mewla-linux-amd64.tar.gz \
             --pattern mewla-linux-arm64.tar.gz \
-            --pattern mewla-darwin-arm64.tar.gz
+            --pattern mewla-darwin-arm64.tar.gz \
+            --pattern mewla-windows-amd64.zip
           cp stage/SHA256SUMS "$published/SHA256SUMS"
           (cd "$published" && sha256sum -c --ignore-missing SHA256SUMS)
-          test "$(find "$published" -name '*.tar.gz' | wc -l)" -eq 3
+          test "$(find "$published" -name '*.tar.gz' -o -name '*.zip' | wc -l)" -eq 4
           cd stage
           android=(
             "mewla-android-arm64-v${VERSION}.apk"
@@ -635,6 +663,7 @@ jobs:
             mewla-linux-amd64.tar.gz
             mewla-linux-arm64.tar.gz
             mewla-darwin-arm64.tar.gz
+            mewla-windows-amd64.zip
             "mewla-android-arm64-v${VERSION}.apk"
             SHA256SUMS
             release-manifest.json

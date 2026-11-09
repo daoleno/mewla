@@ -161,7 +161,9 @@ DAEMON_ARCHIVE_ENTRIES = {
     "mewla-linux-amd64.tar.gz": "mewla",
     "mewla-linux-arm64.tar.gz": "mewla",
     "mewla-darwin-arm64.tar.gz": "mewla",
+    "mewla-windows-amd64.zip": "mewla.exe",
 }
+DAEMON_TARGETS = ["linux/amd64", "linux/arm64", "darwin/arm64", "windows/amd64"]
 DAEMON_ARCHIVES = tuple(DAEMON_ARCHIVE_ENTRIES)
 
 
@@ -368,10 +370,14 @@ else:
         errors.append("release notes missing official certificate SHA-256 fingerprint")
     if not re.search(r"^## (New|Fixed)\n\n- ", notes, re.MULTILINE):
         errors.append("release notes missing user-facing ## New or ## Fixed bullets")
+    # Windows ships from 0.3.0; earlier notes name only the other archives.
+    first_windows = (0, 3, 0)
+    tracked = tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", exp_version).groups())
+    notes_archives = [a for a in DAEMON_ARCHIVES if tracked >= first_windows or not a.endswith(".zip")]
     for needle in (
         "## Get it",
         "mewla update",
-        *DAEMON_ARCHIVES,
+        *notes_archives,
         f"mewla-android-arm64-v{exp_version}.apk",
         "unknown sources",
         "SHA256SUMS",
@@ -456,8 +462,11 @@ if stage:
                 if roles.get(path) != role:
                     errors.append(f"release-manifest.json role for {path}: got {roles.get(path)!r} want {role!r}")
             daemon = ident.get("daemon") or {}
-            if daemon.get("targets") != ["linux/amd64", "linux/arm64", "darwin/arm64"]:
+            if daemon.get("targets") != DAEMON_TARGETS:
                 errors.append(f"release manifest daemon targets: got {daemon.get('targets')!r}")
+            # Every release daemon carries the session host's terminal engine.
+            if daemon.get("cgo") != {target: True for target in DAEMON_TARGETS}:
+                errors.append(f"release manifest daemon cgo: got {daemon.get('cgo')!r}")
 
             signature_path = stage_p / "release-manifest.json.sig"
             public_key = root / "release/mewla-update-public-key.pem"
@@ -476,15 +485,20 @@ if stage:
                     errors.append("release manifest Ed25519 signature verification failed")
 
         import tarfile
+        import zipfile
         for archive, entry in DAEMON_ARCHIVE_ENTRIES.items():
             archive_path = stage_p / archive
             if not archive_path.is_file():
                 continue
-            with tarfile.open(archive_path, "r:gz") as tf:
-                names = sorted(member.name.lstrip("./") for member in tf.getmembers() if member.isfile())
-                expected = sorted(["LICENSE", "NOTICE", "TRADEMARKS.md", entry])
-                if names != expected:
-                    errors.append(f"{archive} contents: got {names!r} want {expected!r}")
+            if archive.endswith(".zip"):
+                with zipfile.ZipFile(archive_path) as zf:
+                    names = sorted(zf.namelist())
+            else:
+                with tarfile.open(archive_path, "r:gz") as tf:
+                    names = sorted(member.name.lstrip("./") for member in tf.getmembers() if member.isfile())
+            expected = sorted(["LICENSE", "NOTICE", "TRADEMARKS.md", entry])
+            if names != expected:
+                errors.append(f"{archive} contents: got {names!r} want {expected!r}")
 
 
 if errors:
