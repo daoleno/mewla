@@ -83,7 +83,12 @@ func newPaneScreens() *paneScreens {
 
 // inventory records the stamps of the panes just listed and forgets every pane
 // that is gone.
-func (p *paneScreens) inventory(panes []sessionPane) {
+func (p *paneScreens) inventory(panes []sessionPane) { p.inventoryOf(panes, nil) }
+
+// inventoryOf is inventory for one backend's listing: it forgets only the
+// panes owns claims (all of them when owns is nil), so backends listed apart
+// do not forget each other's.
+func (p *paneScreens) inventoryOf(panes []sessionPane, owns func(target string) bool) {
 	if p == nil {
 		return
 	}
@@ -100,7 +105,7 @@ func (p *paneScreens) inventory(panes []sessionPane) {
 		p.stamps[pane.target] = stamp
 	}
 	for target := range p.stamps {
-		if !live[target] {
+		if !live[target] && (owns == nil || owns(target)) {
 			p.inventoryGen++
 			p.changedAt = p.now()
 			delete(p.stamps, target)

@@ -242,7 +242,10 @@ func (b *tmuxBackend) create(at backendPlacement, spec backendCreateSpec) (strin
 	if err := setTmuxPaneUserOption(socket, target, strings.TrimPrefix(originOption, "@"), nonce); err != nil {
 		return cleanup(fmt.Errorf("origin marker: %w", err))
 	}
-	args = []string{"respawn-pane", "-k", "-t", target}
+	// A tmux server started inside a session host Session holds that
+	// Session's MEWLA_SESSION_ID in its global environment; blank it so the
+	// pane's Worker id comes from TMUX_PANE.
+	args = []string{"respawn-pane", "-k", "-t", target, "-e", "MEWLA_SESSION_ID="}
 	for _, entry := range spec.env {
 		args = append(args, "-e", entry)
 	}

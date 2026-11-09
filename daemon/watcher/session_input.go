@@ -243,6 +243,17 @@ type sessionInputOwner struct {
 	interrupt func(sessionID string) (handled bool, err error)
 }
 
+// setIO replaces the input surface; the daemon calls it at startup, before
+// any input.
+func (owner *sessionInputOwner) setIO(io sessionInputIO) {
+	if owner == nil {
+		return
+	}
+	owner.mu.Lock()
+	owner.io = io
+	owner.mu.Unlock()
+}
+
 // StructuredSender sends a message through the agent's own interface. It
 // reports handled=false, having done nothing, for a Session that has none.
 // begin must run once the Session is known to take the message, immediately

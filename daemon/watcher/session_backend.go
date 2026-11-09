@@ -79,11 +79,19 @@ type sessionBackend interface {
 	inputIO() sessionInputIO
 }
 
-// backendPlacement is a backend's answer to place; only the backend reads it.
+// backendPlacement is a backend's answer to place; only the backend reads it,
+// and backend says which one gave it.
 type backendPlacement struct {
 	group    string
 	newGroup bool
+	backend  string
 }
+
+// Backends a placement can name.
+const (
+	backendTmux = ""
+	backendHost = "host"
+)
 
 // backendCreateSpec is everything a backend needs to start a Session.
 type backendCreateSpec struct {

@@ -253,24 +253,26 @@ type ProgramStatus struct {
 
 // Info is a Session as the host sees it.
 type Info struct {
-	ID           string            `json:"id"`
-	PID          int               `json:"pid"`
-	Argv         []string          `json:"argv"`
-	Dir          string            `json:"dir"`
-	Alive        bool              `json:"alive"`
-	ExitCode     *int              `json:"exit_code,omitempty"`   // set once the program has exited
-	ExitSignal   string            `json:"exit_signal,omitempty"` // the signal that ended it, if any
-	Cols         int               `json:"cols"`
-	Rows         int               `json:"rows"`
-	Alt          bool              `json:"alt"`
-	OutputSeq    uint64            `json:"output_seq"` // bytes of output so far
-	CreatedAt    time.Time         `json:"created_at"`
-	LastOutputAt time.Time         `json:"last_output_at,omitzero"`
-	ExitedAt     time.Time         `json:"exited_at,omitzero"`
-	Title        string            `json:"title,omitempty"`
-	Cwd          string            `json:"cwd,omitempty"`
-	Status       []ProgramStatus   `json:"status,omitempty"`
-	Labels       map[string]string `json:"labels,omitempty"`
+	ID           string    `json:"id"`
+	PID          int       `json:"pid"`
+	Argv         []string  `json:"argv"`
+	Dir          string    `json:"dir"`
+	Alive        bool      `json:"alive"`
+	ExitCode     *int      `json:"exit_code,omitempty"`   // set once the program has exited
+	ExitSignal   string    `json:"exit_signal,omitempty"` // the signal that ended it, if any
+	Cols         int       `json:"cols"`
+	Rows         int       `json:"rows"`
+	Alt          bool      `json:"alt"`
+	OutputSeq    uint64    `json:"output_seq"` // bytes of output so far
+	CreatedAt    time.Time `json:"created_at"`
+	LastOutputAt time.Time `json:"last_output_at,omitzero"`
+	ExitedAt     time.Time `json:"exited_at,omitzero"`
+	Title        string    `json:"title,omitempty"`
+	Cwd          string    `json:"cwd,omitempty"`
+	// Command names the foreground process, as tmux's pane_current_command.
+	Command string            `json:"command,omitempty"`
+	Status  []ProgramStatus   `json:"status,omitempty"`
+	Labels  map[string]string `json:"labels,omitempty"`
 }
 
 // Event types.

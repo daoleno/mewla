@@ -350,6 +350,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	} else {
 		w.SetTmuxGuard(guardDir)
 	}
+	configureSessionHost(w, stateDir)
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
 	adapters := agentevents.NewRegistry()
 	agentEvents := newAgentEventService(eventHub, w.Workers)
