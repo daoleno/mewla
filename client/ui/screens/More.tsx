@@ -1,14 +1,14 @@
 import { Text, View } from "nsh";
 import { Button, NavPage } from "nsh/base";
 import type { NavStackState } from "nsh/base";
-import { connection, current, problem, servers, switchTo } from "../session";
+import { connection, current, problem } from "../session";
 import type { MoreRoute } from "../shell/routes";
 
 const destinations: { title: string; route: MoreRoute }[] = [
-  { title: "Screen", route: { name: "stub", title: "Screen" } },
-  { title: "Extensions", route: { name: "stub", title: "Extensions" } },
-  { title: "Stats", route: { name: "stub", title: "Stats" } },
-  { title: "Resources", route: { name: "stub", title: "Resources" } },
+  { title: "Screen", route: { name: "screen" } },
+  { title: "Extensions", route: { name: "extensions" } },
+  { title: "Stats", route: { name: "stats" } },
+  { title: "Resources", route: { name: "resources" } },
   { title: "Settings", route: { name: "settings" } },
 ];
 
@@ -45,28 +45,6 @@ export function More(props: { nav: NavStackState<MoreRoute> }) {
         </View>
         <ConnectionLine />
       </View>
-    </NavPage>
-  );
-}
-
-export function Settings(props: { onPair: () => void }) {
-  return (
-    <NavPage title="Settings">
-      <View class="flex-1 bg-background">
-        <Text class="px-4 pb-2 pt-6 text-sm text-muted-foreground">Computers</Text>
-        <View class="border-t border-border">
-          {servers().map((s) => <Row title={s.name || s.url} detail={s.id === current()?.id ? "Current" : undefined} onPress={() => switchTo(s)} />)}
-          <Row testID="pair-another" title="Pair a computer" onPress={props.onPair} />
-        </View>
-      </View>
-    </NavPage>
-  );
-}
-
-export function StubPage(props: { title: string }) {
-  return (
-    <NavPage title={props.title}>
-      <View class="flex-1 items-center justify-center bg-background"><Text class="text-base text-muted-foreground">{`${props.title} arrives in a later preview.`}</Text></View>
     </NavPage>
   );
 }

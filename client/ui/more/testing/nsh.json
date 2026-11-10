@@ -1,0 +1,13 @@
+{
+  "name": "Mewla page tests",
+  "id": "com.daoleno.mewla.pagetests",
+  "version": "0.0.0",
+  "appearance": "system",
+  "capabilities": {
+    "host": ["app.*", "secure.*", "files.*", "links.*"],
+    "network": { "hosts": ["*"] },
+    "openUrl": true,
+    "webview": { "hosts": ["*"] }
+  },
+  "theme": "../../theme.json"
+}
