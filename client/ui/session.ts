@@ -5,6 +5,8 @@ import { chatCacheKey, Draft } from "../core/conversation/draft";
 import { createOutbox } from "../core/conversation/outboxRuntime";
 import { forgetInterfaceConversationsOutsideServer, initialInterfaceChatThreadState, type InterfaceChatThreadState } from "../core/conversation/thread";
 import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentServerId, type StoredServer } from "../core/servers";
+import { WorkerSessions } from "../core/sessions/store";
+import type { Worker } from "../core/sessions/workers";
 import { Transport, type ConnectionState } from "../core/transport";
 
 /**
@@ -59,6 +61,34 @@ export function onTransport(use: TransportUser): () => void {
   }
   return () => transportUsers.delete(use);
 }
+
+/**
+ * The current computer's Sessions, for every screen that lists or opens one
+ * (Sessions, Work, Calendar, Brain's Work cards). Empty, and not `hydrated`,
+ * until this connection's list arrives; cleared on a computer switch.
+ */
+export const workers = signal<Worker[]>([]);
+export const workersHydrated = signal(false);
+let workerSessions: WorkerSessions | null = null;
+
+export function currentWorkerSessions(): WorkerSessions | null {
+  return workerSessions;
+}
+
+onTransport((owner, server) => {
+  const store = new WorkerSessions(owner, server, (next) => {
+    if (workerSessions !== next) return;
+    workers.set(next.workers);
+    workersHydrated.set(next.hydrated);
+  });
+  workerSessions = store;
+  return () => {
+    store.stop();
+    if (workerSessions === store) workerSessions = null;
+    workers.set([]);
+    workersHydrated.set(false);
+  };
+});
 
 export async function loadSession(): Promise<void> {
   const list = await getServers();
