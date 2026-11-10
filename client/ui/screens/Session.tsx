@@ -17,6 +17,7 @@ import { workerStatusLabel } from "../../core/sessions/workerStatusPresentation"
 import { buildTerminalActionPrompt, type TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
 import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingChoice, PROMPT_GONE_NOTICE, visiblePendingChoice, type ChoiceAnswer } from "../../core/timeline/claudeChoiceModel";
 import { ActionPromptCard } from "../chat/ActionPromptCard";
+import { DSHPanel } from "../chat/DSHPanel";
 import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
@@ -139,6 +140,11 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
       : null;
   });
   const questionKey = computed(() => question()?.key ?? "");
+  // A DSH Session asks through its own channel; one panel per run of it.
+  const dshRun = computed(() => {
+    const w = worker();
+    return thread().conversation?.source === "dsh_session_jsonl" && w?.process_id && w.started_at ? `${w.process_id}|${w.started_at}` : "";
+  });
   const actionPrompt = computed(() => (question() || !workersHydrated() || connection() !== "connected" ? null : buildTerminalActionPrompt({
     prompt: livePrompt(),
     approvals: worker()?.approvals,
@@ -275,6 +281,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"}>
                 {editor.edit() ? <EditChip editor={editor} /> : null}
+                {dshRun() ? <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(dshRun().split("|")[0]), startedAt: Number(dshRun().split("|")[1]) }} /> : null}
                 {questionKey() ? (
                   <ChoiceCard choice={untracked(question)!.choice} connected={() => connection() === "connected"}
                     submit={(answers) => untracked(question)!.submit(answers)}
