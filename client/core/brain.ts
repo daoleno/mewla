@@ -82,3 +82,19 @@ export function newBrainChat(transport: Transport): Promise<BrainSnapshot> {
     .request<{ brain?: BrainSnapshot }>("brain_chat_new", {}, { reply: "brain_snapshot" })
     .then((frame) => frame.brain ?? {});
 }
+
+/**
+ * What Brain's screen shows. `waking` until the computer reports a running host
+ * (the composer keeps the draft meanwhile); `host_down` when the computer says
+ * why there is none, which waiting will not fix.
+ */
+export type BrainSurface = "no_computer" | "offline" | "waking" | "host_down" | "chat";
+
+export function brainSurface(input: { hasServer: boolean; connected: boolean; snapshot: BrainSnapshot | null }): BrainSurface {
+  if (!input.hasServer) return "no_computer";
+  const { snapshot } = input;
+  // The computer states a problem only while the host is not running, so it outranks a recorded host id.
+  if (snapshot?.host_problem) return input.connected ? "host_down" : "offline";
+  if (snapshot?.host_worker?.id && snapshot.chat_thread_id) return "chat";
+  return input.connected ? "waking" : "offline";
+}

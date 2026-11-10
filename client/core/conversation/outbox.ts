@@ -286,6 +286,24 @@ export class MessageOutbox {
     this.emit({ kind: "changed", serverId: entry.serverId });
   }
 
+  /**
+   * Moves a conversation's messages to the worker that now answers it. Brain's
+   * host is a worker the computer can restart under a new id while the thread
+   * stays the same; what was queued for the old one goes to the new one.
+   */
+  retarget(serverId: string, conversationScopeKey: string, workerId: string) {
+    let moved = false;
+    for (const entry of this.entries) {
+      if (entry.serverId !== serverId || entry.conversationScopeKey !== conversationScopeKey || entry.workerId === workerId) continue;
+      entry.workerId = workerId;
+      moved = true;
+    }
+    if (!moved) return;
+    this.persist();
+    this.emit({ kind: "changed", serverId });
+    this.scheduleDrain(serverId);
+  }
+
   /** Forgets everything held for a server, e.g. once it is removed. */
   forgetServer(serverId: string) {
     for (const entry of this.entries.filter((e) => e.serverId === serverId)) {

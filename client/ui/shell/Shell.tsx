@@ -3,7 +3,8 @@ import { Button, createNavStack, NavStack } from "nsh/base";
 import { isAvailable as mobile, TabBar } from "nsh/mobile";
 import { Onboarding } from "../screens/Onboarding";
 import { More, Settings, StubPage } from "../screens/More";
-import { Brain, Calendar, Sessions } from "../screens/Placeholders";
+import { Brain } from "../screens/Brain";
+import { Calendar, Sessions } from "../screens/Placeholders";
 import type { MoreRoute } from "./routes";
 
 const tabs = [

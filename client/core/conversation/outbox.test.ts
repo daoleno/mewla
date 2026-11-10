@@ -165,6 +165,20 @@ describe("MessageOutbox", () => {
     expect(store.saved).toEqual([]);
   });
 
+  test("a restarted Brain host gets the thread's queued messages, under the same ids", async () => {
+    const { transport, outbox, connect, store } = setup();
+    const queued = outbox.enqueue({ serverId: "s1", workerId: "old-host", conversationScopeKey: "brain-thread:t1", text: "hello" });
+    const other = outbox.enqueue({ serverId: "s1", workerId: "old-host", conversationScopeKey: "brain-thread:t2", text: "elsewhere" });
+    await tick();
+    outbox.retarget("s1", "brain-thread:t1", "new-host");
+    expect(outbox.entriesFor("s1", "new-host", "brain-thread:t1").map((e) => e.id)).toEqual([queued.id]);
+    expect(outbox.get(other.id)?.workerId).toBe("old-host");
+    await tick();
+    expect(store.saved.find((e) => e.id === queued.id)?.workerId).toBe("new-host");
+    await connect();
+    expect(transport.sent.map((sent) => [sent.workerId, sent.requestId])).toContainEqual(["new-host", queued.id]);
+  });
+
   test("a lost connection never fails the message: it is sent again under the same id", async () => {
     const { transport, send, connect, disconnect, outbox, events } = setup();
     await connect();

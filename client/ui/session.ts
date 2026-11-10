@@ -1,20 +1,37 @@
-import { signal } from "nsh";
+import { signal, Storage } from "nsh";
+import { brainThreadScopeKey, requestBrainSnapshot, type BrainSnapshot } from "../core/brain";
+import { Chat } from "../core/conversation/chat";
+import { createOutbox } from "../core/conversation/outboxRuntime";
+import { forgetInterfaceConversationsOutsideServer, initialInterfaceChatThreadState, type InterfaceChatThreadState } from "../core/conversation/thread";
 import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentServerId, type StoredServer } from "../core/servers";
 import { Transport, type ConnectionState } from "../core/transport";
 
 /**
  * Everything that belongs to the current computer. There is exactly one; switching
- * computers closes this one's transport and starts a fresh session, so nothing of the
- * previous computer's state survives into the next.
+ * computers closes this one's transport and Brain chat and starts fresh, so nothing of
+ * the previous computer's state survives into the next.
  */
 export const servers = signal<StoredServer[]>([]);
 export const current = signal<StoredServer | null>(null);
 export const connection = signal<ConnectionState>("idle");
 export const problem = signal("");
 export const ready = signal(false);
+/** `brain_snapshot.brain` of the current computer; null until the first one. */
+export const brain = signal<BrainSnapshot | null>(null);
+/** Brain's open chat (its current thread on its current host), and what it shows. */
+export const brainChat = signal<Chat | null>(null);
+export const brainThread = signal<InterfaceChatThreadState>(initialInterfaceChatThreadState(""));
 
 let transport: Transport | null = null;
-let stopState: (() => void) | null = null;
+let stops: Array<() => void> = [];
+let wakeTimer: ReturnType<typeof setInterval> | null = null;
+
+/** The app's one send queue; a server's messages go only over that server's live connection. */
+export const outbox = createOutbox(Storage, (serverId) => (transport && current()?.id === serverId ? transport : null));
+void outbox.hydrate();
+
+/** While Brain's host is starting, ask again now and then: a missed broadcast must never leave Brain "starting". */
+const WAKE_POLL_MS = 3_000;
 
 export function currentTransport(): Transport | null {
   return transport;
@@ -29,21 +46,104 @@ export async function loadSession(): Promise<void> {
 }
 
 export function switchTo(server: StoredServer | null): void {
-  stopState?.();
+  const previous = current();
+  if (previous) outbox.onDisconnected(previous.id);
+  stops.splice(0).forEach((stop) => stop());
+  stopWakePoll();
+  closeBrainChat();
   transport?.close();
   transport = null;
+  brain.set(null);
   current.set(server);
   connection.set("idle");
   problem.set("");
+  forgetInterfaceConversationsOutsideServer(server?.id ?? "");
   if (!server) return;
   void setCurrentServerId(server.id);
   const next = new Transport(server);
   transport = next;
-  stopState = next.onState((state) => {
-    connection.set(state);
-    problem.set(next.problem);
-  });
+  stops = [
+    next.onState((state) => {
+      connection.set(state);
+      problem.set(next.problem);
+    }),
+    next.on("connected", () => {
+      outbox.onConnected(server.id);
+      requestBrainSnapshot(next);
+    }),
+    next.on("disconnected", () => {
+      outbox.onDisconnected(server.id);
+      stopWakePoll();
+    }),
+    next.on("brain_snapshot", (frame) => {
+      const snapshot = frame.brain as BrainSnapshot | undefined;
+      if (snapshot && typeof snapshot === "object") applyBrainSnapshot(server, next, snapshot);
+    }),
+  ];
   next.connect();
+}
+
+/** Opens Brain's chat for the thread and host the computer reports, and keeps it in step as they change. */
+function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: BrainSnapshot): void {
+  if (transport !== owner) return;
+  brain.set(snapshot);
+  const host = snapshot.host_problem ? null : snapshot.host_worker;
+  const threadId = snapshot.chat_thread_id;
+  if (!host?.id || !threadId) {
+    if (!snapshot.host_problem) startWakePoll(owner);
+    return;
+  }
+  stopWakePoll();
+  const scope = brainThreadScopeKey(threadId);
+  const open = brainChat();
+  if (open && open.cacheKey.endsWith(`:scope:${scope}`) && openHost === host.id) return;
+  closeBrainChat();
+  // A restarted host answers the same thread under a new id: what waited for the old one goes to it.
+  outbox.retarget(server.id, scope, host.id);
+  const chat = new Chat({
+    serverId: server.id,
+    transport: owner,
+    outbox,
+    storage: Storage,
+    target: {
+      targetId: host.id,
+      workerId: host.id,
+      cwd: host.cwd,
+      command: host.command,
+      name: host.name,
+      startedAt: host.started_at,
+      processId: host.process_id,
+      conversationScopeKey: scope,
+    },
+  });
+  openHost = host.id;
+  brainThread.set(chat.current);
+  stopChat = chat.onChange((state) => brainThread.set(state));
+  brainChat.set(chat);
+}
+
+let openHost = "";
+let stopChat: (() => void) | null = null;
+
+function closeBrainChat(): void {
+  stopChat?.();
+  stopChat = null;
+  brainChat()?.close();
+  brainChat.set(null);
+  openHost = "";
+  brainThread.set(initialInterfaceChatThreadState(""));
+}
+
+function startWakePoll(owner: Transport): void {
+  if (wakeTimer) return;
+  wakeTimer = setInterval(() => {
+    if (transport === owner && owner.state === "connected") requestBrainSnapshot(owner);
+  }, WAKE_POLL_MS);
+}
+
+function stopWakePoll(): void {
+  if (wakeTimer) clearInterval(wakeTimer);
+  wakeTimer = null;
 }
 
 export async function addPairedServer(server: Parameters<typeof saveServer>[0]): Promise<void> {
