@@ -1,0 +1,29 @@
+{
+  "cssVars": {
+    "theme": { "radius": "0.75rem" },
+    "light": {
+      "background": "#FBFAF7", "foreground": "#161412",
+      "card": "#FFFFFF", "card-foreground": "#161412",
+      "popover": "#FFFFFF", "popover-foreground": "#161412",
+      "primary": "#161412", "primary-foreground": "#FBFAF7",
+      "secondary": "#F5F3EE", "secondary-foreground": "#161412",
+      "muted": "#F5F3EE", "muted-foreground": "#57514A",
+      "accent": "#EFEBE3", "accent-foreground": "#161412",
+      "destructive": "#BC3328",
+      "border": "#DDD6C9", "input": "#DDD6C9", "ring": "#2C55C0",
+      "seal": "#C8372B", "warning": "#9A6212"
+    },
+    "dark": {
+      "background": "#141210", "foreground": "#F4F0EA",
+      "card": "#201D19", "card-foreground": "#F4F0EA",
+      "popover": "#201D19", "popover-foreground": "#F4F0EA",
+      "primary": "#F4F0EA", "primary-foreground": "#141210",
+      "secondary": "#2C2823", "secondary-foreground": "#F4F0EA",
+      "muted": "#2C2823", "muted-foreground": "#C9C1B6",
+      "accent": "#322D28", "accent-foreground": "#F4F0EA",
+      "destructive": "#FF9466",
+      "border": "#3F3933", "input": "#3F3933", "ring": "#9AB6FF",
+      "seal": "#D2412F", "warning": "#EDBA5A"
+    }
+  }
+}
