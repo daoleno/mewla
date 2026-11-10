@@ -4,6 +4,9 @@ import type { MessageTimelineItem } from "../../core/timeline/types";
 import { isEditablePrompt, messageCopyText, messageEditMode, type MessageEdit } from "../../core/timeline/messageActionsModel";
 import type { ComposerText } from "./Composer";
 
+/** The text the Select Text sheet shows; "" while it is closed. */
+export const selectingText = signal("");
+
 const INPUT_NOT_CLEAN = "Rewound, but the agent's input box still has text. Clear it in the Terminal, then send.";
 
 /**
@@ -92,10 +95,12 @@ export async function showMessageMenu(item: MessageTimelineItem, env: { editor?:
     presentation: "actionSheet",
     actions: [
       { id: "copy", label: "Copy" },
+      { id: "select", label: "Select Text" },
       ...(editable ? [{ id: "edit", label: "Edit" }] : []),
       { id: "cancel", label: "Cancel", role: "cancel" as const },
     ],
   });
   if (action === "copy") await Clipboard.writeText(messageCopyText(subject)).catch(() => {});
+  else if (action === "select") selectingText.set(subject.body);
   else if (action === "edit") env.editor?.open(item);
 }

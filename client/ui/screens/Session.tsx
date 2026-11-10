@@ -250,15 +250,18 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
 
   return (
     <NavPage title={title()}
+      headerTitle={
+        <View class="max-w-[240px]">
+          <Text class="text-base font-semibold line-clamp-1">{title()}</Text>
+          {worker() ? (
+            <Text testID="session-status" class="text-xs text-muted-foreground line-clamp-1">
+              {[workerStatusLabel(worker()!.status), worker()!.delegated ? "Delegated" : "", connection() !== "connected" ? "Offline" : ""].filter(Boolean).join(" · ")}
+            </Text>
+          ) : null}
+        </View>
+      }
       headerRight={<Button testID="session-menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>}>
       <View class="flex-1 bg-background">
-        {worker() ? (
-          <View class="flex-row items-center gap-2 border-b border-border px-4 py-1.5">
-            <Text testID="session-status" class="text-xs text-muted-foreground">{workerStatusLabel(worker()!.status)}</Text>
-            {worker()!.delegated ? <Text class="text-xs text-muted-foreground">· Delegated</Text> : null}
-            {connection() !== "connected" ? <Text class="text-xs text-muted-foreground">· Offline</Text> : null}
-          </View>
-        ) : null}
         <View class="flex-1">
           <View class="absolute inset-0" style={{ display: mode() === "terminal" ? "flex" : "none" }}>
             <TerminalPane transport={transport} targetId={props.workerId} active={() => props.active() && mode() === "terminal"} />
@@ -288,7 +291,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           ) : null}
         </View>
       </View>
-      <Sheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3">
+      <Sheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
         <View class="gap-3 pb-6">
           <Text class="text-lg font-semibold">Rename</Text>
           <Text class="text-sm text-muted-foreground">A name for this Session on this phone. Empty uses its own name.</Text>

@@ -29,6 +29,10 @@ describe("Sessions list rows", () => {
     expect(sessionRowModel(worker({ name: "release notes", provider: "codex" }), { workTitle: "Ship" }).title).toBe("release notes");
   });
 
+  test("a name that is only the Session's id is no name: the folder names it", () => {
+    expect(sessionRowModel(worker({ id: "mh-b0455a19", name: "mh-b0455a19", cwd: "/home/me/mewla", provider: "claude" })).title).toBe("mewla");
+  });
+
   test("a running Session is live; one waiting on you says so", () => {
     expect(sessionRowModel(worker({ status: "running", updated_at: Date.now() })).time).toBe("live");
     expect(sessionRowModel(worker({ needs_attention: true })).needsYou).toBe(true);
