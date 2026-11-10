@@ -80,13 +80,23 @@ mewla worker answer -id <session> -prompt <id> -choice 1   # any blocking prompt
 mewla worker approvals [-id <session>]        # decisions agents wait on (Codex app-server requests)
 mewla worker approve -id <session> -approval <id> -option allow   # or deny
 mewla worker close -id <session>
-mewla attach <session>                        # show a Session in this terminal; Ctrl-\ detaches
+mewla attach [name|id]                        # pick a live Session, or name one; Ctrl-\ detaches
 mewla host status [--json]                    # the session host and the Sessions it runs
 ```
 
 `attach` shows a Session's terminal where you type, at its size, and types
 into it; Ctrl-\ detaches and the Session keeps running. Every Session runs in
 the session host, which outlives daemon restarts and updates.
+
+With no argument it opens a picker of the live Sessions, newest first: name
+(the Worker's name, `Brain` or `Shell`), agent, state (working, idle, needs
+input), directory and age. The arrow keys move, typing filters, Enter attaches
+and Esc cancels. Without a terminal it prints the list with each Session's id.
+With an argument it takes a Worker's name in any case (or the start of exactly
+one name), `brain`, or an id (`mh-…` or `%N`); a name that fits several
+Sessions lists them and exits non-zero. A Session an earlier Mewla left in
+tmux opens the same way, in tmux itself, which detaches with its own prefix key
+(Ctrl-\ is not tmux's detach key); `attach` says so on its first line.
 
 `answer` replies to a prompt a delegated Worker is stopped at: a numbered menu
 (a permission or plan request, a startup question) by `-choice <option number>`,
