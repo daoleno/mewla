@@ -6,11 +6,17 @@
   "appearance": "system",
   "capabilities": {
     "host": [
-      "secure.*",
-      "push.*",
       "app.*",
+      "secure.*",
+      "links.*",
       "scan.*",
-      "links.*"
+      "push.*",
+      "terminal.*",
+      "calendar.*",
+      "live.*",
+      "files.*",
+      "phone.*",
+      "update.*"
     ],
     "network": {
       "hosts": [

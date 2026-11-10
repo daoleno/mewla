@@ -62,7 +62,7 @@ JOB_PATHS = {
 
 # Actions that only set up the runner or publish results; nothing to run here.
 IGNORED_ACTIONS = (
-    "actions/checkout@", "oven-sh/setup-bun@", "actions/setup-go@", "actions/upload-artifact@", "actions/cache@",
+    "actions/checkout@", "oven-sh/setup-bun@", "actions/setup-go@", "actions/upload-artifact@", "actions/cache/restore@",
 )
 
 # Steps CI runs only on tags and manual dispatch.
