@@ -49,7 +49,7 @@ describe("the Calendar tab", () => {
     await app.press("id:editor-save");
     await app.waitUntil(() => framesOf(app.host.posts(), "create_calendar_item").length === 1);
     expect(framesOf(app.host.posts(), "create_calendar_item")[0].calendar_item).toMatchObject({
-      title: "Pick up the parcel", kind: "reminder", timezone: "Asia/Shanghai", recurrence: "none", notify_at: "2031-07-14T10:20:00.000Z",
+      title: "Pick up the parcel", kind: "reminder", timezone: "Asia/Shanghai", recurrence: "none", notify_at: "2031-07-14T18:20:00+08:00",
     });
     await app.waitFor("text:Pick up the parcel");
   }, 20_000);
@@ -112,6 +112,14 @@ describe("notifications", () => {
     expect(app.texts()).toContain("Call the bank");
     await app.waitUntil(() => framesOf(app.host.posts(), "notification_response").length === 1);
     expect(framesOf(app.host.posts(), "notification_response")[0]).toMatchObject({ notification_id: "n-1", action: "tapped" });
+  }, 20_000);
+
+  test("a tap that starts the app opens its item once the computers are loaded", async () => {
+    // The phone is slow to hand over the old app's storage: the tap comes first.
+    const slowStart = { "app.legacyStorage": () => new Promise((resolve) => setTimeout(() => resolve(null), 500)) };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }, slowStart), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("push.opened", { data: { screen: "calendar", calendar_id: "Call the bank", server_id: "s1" } });
+    await app.waitFor("id:calendar-item-page");
   }, 20_000);
 
   test("an alert's link opens the item too, and a link for a computer this phone does not know opens nothing", async () => {

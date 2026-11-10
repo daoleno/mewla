@@ -24,6 +24,12 @@ describe("a wall-clock time in a zone", () => {
   test("round-trips the fields of an instant", () => {
     expect(zones.localFields(Date.parse("2026-07-14T10:20:00Z"), "Asia/Shanghai")).toEqual({ date: "2026-07-14", time: "18:20" });
   });
+  test("an instant goes to the computer with its zone's offset then, which the computer requires", () => {
+    expect(zones.iso(Date.parse("2026-11-12T02:30:00Z"), "Asia/Shanghai")).toBe("2026-11-12T10:30:00+08:00");
+    expect(zones.iso(Date.parse("2026-07-14T16:30:00Z"), "America/New_York")).toBe("2026-07-14T12:30:00-04:00");
+    expect(zones.iso(Date.parse("2026-12-14T16:30:00Z"), "America/New_York")).toBe("2026-12-14T11:30:00-05:00");
+    expect(zones.iso(Date.parse("2026-07-14T16:30:00Z"), "UTC")).toBe("2026-07-14T16:30:00+00:00");
+  });
   test("an instant's date depends on the zone it is read in", () => {
     const at = Date.parse("2026-07-14T16:30:00Z");
     expect(zones.dateKey(at, "Asia/Shanghai")).toBe("2026-07-15");
