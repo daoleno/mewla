@@ -25,7 +25,7 @@ import { ActionMenu, BottomSheetFrame, Button, EmptyState, IconButton } from "..
 import type { ActionMenuItem } from "../ui/ActionMenu";
 import { AppText } from "../ui/AppText";
 import { Icon } from "../icons/Icon";
-import { MAC_MODIFIERS, needsSoftKeyboard, RemoteView, type RemoteViewHandle } from "./RemoteView";
+import { MAC_MODIFIERS, WINDOWS_MODIFIERS, needsSoftKeyboard, RemoteView, type RemoteViewHandle } from "./RemoteView";
 import { AgentScreens } from "./AgentScreens";
 import { phoneMenuItem } from "./phoneRow";
 import { usePhoneUse } from "../../store/phoneUse";
@@ -574,7 +574,7 @@ export function ScreenScreen() {
       <View style={[styles.root, styles.stage, !viewerVisible && phase !== "lost" ? styles.hidden : null]}>
         <View style={styles.root}>
           <RemoteView ref={view} style={styles.root} viewStyle={styles.root} backgroundColor={colors.bgElevated}
-            accessibilityLabel={`Screen of ${title}`} align={immersive ? "center" : "top"} mode={mode} modifiers={MAC_MODIFIERS}
+            accessibilityLabel={`Screen of ${title}`} align={immersive ? "center" : "top"} mode={mode} modifiers={status?.platform === "windows" ? WINDOWS_MODIFIERS : MAC_MODIFIERS}
             onSend={onSend} onEvent={onEvent} onKeyboardChange={setTyping} bottomInset={insets.bottom} />
           {phase === "connecting" ? (
             <View pointerEvents="none" style={[styles.center, StyleSheet.absoluteFill]}>
@@ -584,7 +584,7 @@ export function ScreenScreen() {
           {phase === "lost" ? (
             <View style={[styles.center, StyleSheet.absoluteFill, { backgroundColor: colors.bgPrimary }]}>
               <Icon name={locked ? "lock" : "cloud-offline"} size={40} color={colors.textTertiary} />
-              <AppText variant="title" style={styles.agentTitle}>{locked ? "Mac is locked" : "Disconnected"}</AppText>
+              <AppText variant="title" style={styles.agentTitle}>{locked ? "Computer is locked" : "Disconnected"}</AppText>
               {reason && !locked ? <AppText variant="caption" tone="secondary" numberOfLines={1} style={styles.agentTitle}>{reason}</AppText> : null}
               <Button label="Reconnect" icon="refresh" size="sm" variant="filled" onPress={() => void connect()} style={styles.reconnect} />
             </View>
@@ -628,7 +628,7 @@ export function ScreenScreen() {
 function ConnectionIndicator({ tone, locked, onPress }: { tone: IndicatorTone; locked: boolean; onPress(): void }) {
   const { colors } = useAppTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={locked ? "Mac is locked, connection details" : tone === "warn" ? "Connection needs attention" : "Connection details"}
+    <Pressable accessibilityRole="button" accessibilityLabel={locked ? "Computer is locked, connection details" : tone === "warn" ? "Connection needs attention" : "Connection details"}
       onPress={onPress} style={styles.indicator}>
       {locked ? <Icon name="lock" size={14} color={colors.textTertiary} /> : (
         <View style={[styles.dot, tone === "warn" ? { backgroundColor: colors.warning } : { backgroundColor: colors.textTertiary, opacity: 0.45 }]} />
@@ -661,7 +661,7 @@ function ConnectionSheet({ visible, onClose, problem, rows, warning, locked, bus
           {problem.fix ? <AppText variant="caption" tone="secondary">{problem.fix}</AppText> : null}
         </View>
       ) : null}
-      {locked ? <AppText variant="label" tone="secondary">Mac is locked</AppText> : null}
+      {locked ? <AppText variant="label" tone="secondary">Computer is locked</AppText> : null}
       {warning ? (
         <View style={styles.sheetNote}>
           <AppText variant="label" style={{ color: warning.label === "On battery" ? colors.textSecondary : colors.warning }}>
