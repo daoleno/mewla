@@ -25,9 +25,9 @@ import re, sys
 xml, pattern = sys.stdin.read(), re.compile(sys.argv[1], re.I)
 for node in re.finditer(r"<node [^>]*>", xml):
     n = node.group(0)
-    label = " ".join(re.findall(r"(?:text|content-desc|class)=\"([^\"]*)\"", n))
+    values = re.findall(r"(?:text|content-desc|class)=\"([^\"]*)\"", n)
     box = re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", n)
-    if box and pattern.search(label):
+    if box and any(pattern.search(v) for v in values):
         x1, y1, x2, y2 = map(int, box.groups()); print((x1 + x2) // 2, (y1 + y2) // 2); break
 ' "$1")
     if [[ -n "$at" ]]; then adb shell input tap $at; return 0; fi
@@ -47,10 +47,12 @@ env -i HOME="$state/home" PATH="$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXEC
 daemon=$!
 trap 'kill "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state"' EXIT
 for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && break; sleep 1; done
-link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" | grep -o 'mewla://settings?p=[^ ]*' | head -1)
+link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" 2>&1 | grep -o 'mewla://settings?p=[^ ]*' | head -1)
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"
 
 log "1. the Expo app pairs and keeps a draft"
+adb uninstall "$PKG" > /dev/null 2>&1 || true
+adb logcat -c
 adb install "$OLD_APK" | tail -1 | tee -a "$OUT/gate.log"
 adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
 adb shell am start -W -a android.intent.action.VIEW -d "$link" "$PKG" > /dev/null
@@ -60,6 +62,13 @@ before=$(devices)
 device_id=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["devices"][0]["id"])' "$before")
 log "paired as device $device_id"
 shot 1-paired
+# v0.3.0 can die on an unhandled "Daemon is not connected." right after pairing; it is paired by then.
+sleep 3
+if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
+  adb logcat -d -b crash > "$OUT/old-app-crash.txt"
+  log "the Expo app quit after pairing ($(grep -m1 -o 'JavascriptException: .*' "$OUT/old-app-crash.txt" || echo 'see old-app-crash.txt')); opening it again"
+  adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
+fi
 tap "android.widget.EditText" 60 || { shot 1-no-composer; fail "no composer to type the draft in"; }
 adb shell input text "${DRAFT// /%s}"
 sleep 3 # the draft is written 400 ms after typing stops
@@ -68,7 +77,7 @@ adb shell am force-stop "$PKG"
 sleep 2
 
 log "2. the NSH app installs over it"
-install=$(adb install -r "$NEW_APK" 2>&1 | tail -1)
+install=$(adb install -r "$NEW_APK" 2>&1 | tail -1 || true)
 log "install -r: $install"
 [[ "$install" == Success* ]] || fail "install over the Expo app refused (INSTALL_FAILED_UPDATE_INCOMPATIBLE means another signing key)"
 seen_before=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["devices"][0].get("last_seen_at",""))' "$before")
