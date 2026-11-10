@@ -35,10 +35,9 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+      # Java 17, the SDK and NDK, and the verified arm64 libghostty-vt the terminal links (cached on main).
+      - name: Android SDK, arm64 Ghostty and Gradle home
+        uses: ./.github/actions/android-native
       - uses: actions/cache@v4
         with:
           path: ~/.nsh
@@ -110,10 +109,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+      # Java 17, the SDK and NDK, and the verified arm64 libghostty-vt the terminal links (cached on main).
+      - name: Android SDK, arm64 Ghostty and Gradle home
+        uses: ./.github/actions/android-native
       - uses: actions/cache@v4
         with:
           path: ~/.nsh
@@ -151,7 +149,7 @@ jobs:
           MEWLA_ANDROID_KEY_ALIAS: ${{ secrets.ZEN_ANDROID_KEY_ALIAS }}
           MEWLA_ANDROID_KEY_PASSWORD: ${{ secrets.ZEN_ANDROID_KEY_PASSWORD }}
         run: |
-          ./gradlew --no-daemon --console=plain assembleProductionRelease
+          ./gradlew --no-daemon --console=plain assembleProductionRelease -Pmewla.abis=arm64-v8a
           echo "NEW_APK=$PWD/app/build/outputs/apk/production/release/app-production-release.apk" >> "$GITHUB_ENV"
       - name: Shred the keystore
         if: always()

@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import com.daoleno.mewla.live.LiveHost
 import com.daoleno.mewla.push.PushHost
+import com.daoleno.mewla.terminal.TerminalComponent
 import com.longbridge.nsh.NshHostReply
 import com.longbridge.nsh.NshView
 
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
     nsh = NshView(this)
     nsh.setErrorListener { Log.e(TAG, it) }
     nsh.registerComponent("mewla.qrScanner") { events -> QrScanner(this, events) }
+    nsh.registerComponent("mewla.terminal") { events -> TerminalComponent(this, events) }
     nsh.handle("secure.get") { data, reply -> answer(reply) { secure.get(key(data)) } }
     nsh.handle("secure.set") { data, reply -> answer(reply) { secure.set(key(data), field(data, "value")); null } }
     nsh.handle("secure.remove") { data, reply -> answer(reply) { secure.remove(key(data)); null } }

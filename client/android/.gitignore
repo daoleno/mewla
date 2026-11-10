@@ -4,3 +4,4 @@ app/build/
 app/libs/
 app/src/main/assets/nsh/
 local.properties
+app/.cxx/

@@ -15,6 +15,15 @@ val nshCli = providers.environmentVariable("NSH").orElse("$nshHome/bin/nsh").get
 // The release keystore is the one the Expo app is signed with (CI secrets only); without it, debug.
 val releaseKeystore = providers.environmentVariable("MEWLA_ANDROID_KEYSTORE").orNull?.takeIf { it.isNotBlank() }
 
+// The terminal's libghostty-vt: built once per ABI by scripts/build-libghostty.sh into app/modules/terminal-vt
+// (it moves into client/ at the cutover). -Pmewla.ghostty=<dir> points elsewhere.
+val ghostty = file(providers.gradleProperty("mewla.ghostty").orNull ?: "${rootDir}/../../app/modules/terminal-vt")
+val abis = (providers.gradleProperty("mewla.abis").orNull ?: "arm64-v8a,x86_64").split(",")
+for (abi in abis) {
+  val so = ghostty.resolve("libs/android/$abi/libghostty_vt.so")
+  if (!so.exists()) throw GradleException("libghostty-vt for $abi is missing ($so). Build it: ./scripts/build-libghostty.sh --abis $abi, or pass -Pmewla.abis / -Pmewla.ghostty.")
+}
+
 android {
   namespace = "com.daoleno.mewla"
   compileSdk = 36
@@ -25,7 +34,8 @@ android {
     versionCode = major * 1_000_000 + minor * 10_000 + patch * 100
     versionName = version
     // -Pmewla.abis=arm64-v8a for a phone-only build (half the size).
-    ndk { abiFilters += (providers.gradleProperty("mewla.abis").orNull ?: "arm64-v8a,x86_64").split(",") }
+    ndk { abiFilters += abis }
+    externalNativeBuild { cmake { arguments += "-DMEWLA_GHOSTTY=${ghostty.absolutePath}" } }
   }
   flavorDimensions += "identity"
   productFlavors {
@@ -53,6 +63,9 @@ android {
   buildFeatures { buildConfig = true; resValues = true }
   packaging { jniLibs { useLegacyPackaging = true } }
   testOptions { unitTests.isReturnDefaultValues = true }
+  externalNativeBuild { cmake { path = file("CMakeLists.txt"); version = "3.22.1" } }
+  ndkVersion = "27.1.12297006"
+  sourceSets { getByName("main") { jniLibs.directories.add(ghostty.resolve("libs/android").path) } }
 }
 
 // The app itself: client/ui (and the core it imports) bundled and compiled to bytecode, as assets/nsh.
