@@ -4,6 +4,7 @@ import { ExtensionsPageView } from "./extensions/Pages";
 import { FilesPageView } from "./files/Pages";
 import { FriendsPageView } from "./friends/FriendsPages";
 import { FriendsSettings } from "./friends/FriendsSettings";
+import { GitPageView } from "./git/GitPages";
 import { PetPage } from "./pet/Pet";
 import { restorePet } from "./pet/pets";
 import { Resources } from "./resources/Resources";
@@ -61,6 +62,13 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "extensions-tools":
     case "extensions-agent":
       return <ExtensionsPageView route={route} nav={props.nav} />;
+    case "git":
+    case "git-diff":
+    case "git-commit":
+    case "git-commit-file":
+    case "git-files":
+    case "git-file":
+      return <GitPageView route={route} nav={props.nav} />;
     case "files-preview":
     case "files-workspace":
       return <FilesPageView route={route} nav={props.nav} />;
