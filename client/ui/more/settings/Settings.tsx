@@ -4,6 +4,7 @@ import manifest from "../../nsh.json";
 import { daemon, daemonState } from "../daemon";
 import { Icon } from "../kit/Icon";
 import { Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
+import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../pet/pets";
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
@@ -50,6 +51,7 @@ export const SUPPORT_URL = "https://mewla.ai/support/";
 /** Settings: the computers, then each thing this phone decides, then About. */
 export function Settings(props: { nav: PageNav; onPair: () => void }) {
   void untracked(probeComputers);
+  followFriends();
   void loadStrongAlerts();
   // Back from Android's settings: ask again whether the lock-screen alert is allowed.
   effect(() => {
@@ -94,7 +96,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       </Section>
 
       <Section title="Labs">
-        <Row testID="settings-friends" icon="people" title="Friends" chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
+        <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
         <Row testID="settings-iphone" icon="phone" title="iPhone use" disabled={!current()} chevron onPress={current() ? () => props.nav.push({ name: "settings-iphone" }) : undefined} />
       </Section>
 
