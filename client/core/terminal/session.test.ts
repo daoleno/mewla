@@ -6,6 +6,11 @@ import { TerminalSession, type TerminalHandlers } from "./session";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Waits until `ready()` holds (a timer-driven step finished), at most a second: a fixed sleep loses under load. */
+const until = async (ready: () => boolean, ms = 1000) => {
+  const end = Date.now() + ms;
+  while (!ready() && Date.now() < end) await wait(2);
+};
 const saved = { ...transportTiming };
 let sockets: FakeSocket[];
 
@@ -68,10 +73,11 @@ describe("TerminalSession", () => {
     const tb = new TerminalSession(transport, "w2", b.handlers);
     ta.resize(80, 24);
     tb.resize(80, 24);
+    await until(() => frames(socket, "terminal_open").length > 0);
     await wait();
     expect(frames(socket, "terminal_open").map((f) => f.target_id)).toEqual(["w1"]);
     socket.receive({ type: "terminal_opened", session_id: "t1", cols: 80, rows: 24 });
-    await wait();
+    await until(() => frames(socket, "terminal_open").length > 1);
     expect(frames(socket, "terminal_open").map((f) => f.target_id)).toEqual(["w1", "w2"]);
     socket.receive({ type: "terminal_opened", session_id: "t2", cols: 80, rows: 24 });
     socket.receive({ type: "terminal_output", session_id: "t2", data: "b" });

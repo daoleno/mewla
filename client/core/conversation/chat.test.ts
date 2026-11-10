@@ -8,6 +8,11 @@ import { createOutbox } from "./outboxRuntime";
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
 const target = { targetId: "brain-host", conversationScopeKey: "brain-thread:t1" };
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Waits until `ready()` holds (a timer-driven step finished), at most a second: a fixed sleep loses under load. */
+const until = async (ready: () => boolean, ms = 1000) => {
+  const end = Date.now() + ms;
+  while (!ready() && Date.now() < end) await wait(2);
+};
 const saved = { ...transportTiming };
 let sockets: FakeSocket[];
 
@@ -123,11 +128,16 @@ describe("Chat", () => {
     chat.send("while offline");
     await wait();
     expect(chat.current.pendingUserMessages[0]?.lifecycle).toBe("pending");
-    await wait(30);
-    const next = sockets.at(-1)!;
-    next.open();
-    await wait(10);
-    const inputs = sent(next, "send_input");
+    // The computer comes back: open whichever socket the transport is trying now (under load a
+    // reconnect can be replaced by the next one) until the queued message goes out on one of them.
+    const before = sockets.length;
+    const fresh = () => sockets.slice(before);
+    await until(() => {
+      const latest = sockets.at(-1)!;
+      if (sockets.length > before && latest.readyState === 0) latest.open();
+      return fresh().some((s) => sent(s, "send_input").length > 0);
+    }, 3000);
+    const inputs = fresh().flatMap((s) => sent(s, "send_input"));
     expect(inputs).toHaveLength(1);
     expect(inputs[0].text).toBe("while offline");
     chat.close();
