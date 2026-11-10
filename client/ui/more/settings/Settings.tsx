@@ -1,9 +1,10 @@
-import { effect, host, lifecycle, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
+import { effect, host, Image, lifecycle, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
 import { daemon, daemonState } from "../daemon";
 import { Icon } from "../kit/Icon";
 import { Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
+import { pet } from "../pet/pets";
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
 import { probeComputers, statusWord } from "./computers";
@@ -125,7 +126,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       </Section>
 
       <Section title="Pet">
-        <Row testID="settings-pet" icon="paw" title="Pet" chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
+        <Row testID="settings-pet" leading={<Image src={pet().portrait} style={{ width: 22, height: 22 }} />} title="Pet" value={pet().name} chevron onPress={() => props.nav.push({ name: "settings-pet" })} />
       </Section>
 
       <Section title="About">

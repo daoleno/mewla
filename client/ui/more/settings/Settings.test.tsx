@@ -65,6 +65,18 @@ describe("Settings", () => {
   });
 });
 
+describe("Pet", () => {
+  test("the pet the Expo app chose stays chosen, and a new choice is kept in the same key", async () => {
+    const c = computer({ name: "settings-pet" }, () => null, { storage: { "mewla:pet_preference": "p03" } });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:pet-chosen");
+    await app.waitUntil(() => app.texts()[0] === "Pip");
+    await app.press("id:pet-p09");
+    await app.waitUntil(() => app.texts()[0] === "Tama");
+    await app.waitUntil(() => app.storage()["mewla:pet_preference"] === "p09");
+  });
+});
+
 describe("Model Providers", () => {
   test("lists the agent's connections, and choosing one routes the agent through it", async () => {
     let current = snapshot();
