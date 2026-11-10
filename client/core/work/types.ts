@@ -1,0 +1,103 @@
+/**
+ * Brain's Work as `brain_snapshot` carries it (daemon brain/lifecycle.go CurrentWork):
+ * what Brain is doing for you, each with where it stands. Not the Calendar's items, and
+ * not the Markdown Work files (`workItems.ts`).
+ */
+export type BrainWorkStatus =
+  | "open"
+  | "running"
+  | "waiting"
+  | "needs_input"
+  | "done"
+  | "cancelled";
+
+export type BrainWorkWake = {
+  kind: "session_terminal" | "calendar_result" | "user_input";
+  ref: string;
+};
+
+export type BrainWorkProgressMode = "owned" | "waiting" | "ready";
+
+export type BrainSessionFinalization = {
+  session_id: string;
+  delegated: boolean;
+  state: "pending" | "failed" | "complete" | "skipped";
+  attempts?: number;
+  last_error?: string;
+  updated_at: string;
+};
+
+export type BrainWorkAttentionState = "queued" | "reserved" | "reviewing";
+
+export type BrainCurrentWork = {
+  work_id: string;
+  revision: number;
+  title: string;
+  status: BrainWorkStatus;
+  progress_mode?: BrainWorkProgressMode;
+  attempt_session_id?: string;
+  attempt_delegated?: boolean;
+  wait_for?: string;
+  wake?: BrainWorkWake;
+  attention_state?: BrainWorkAttentionState;
+  session_finalizations?: BrainSessionFinalization[];
+  unread_result: boolean;
+  /** One line about the newest outcome; daemons before 0.2.1 omit it. */
+  summary?: string;
+  updated_at?: string;
+  /** What Brain asks you about this Work, with one-tap answers. */
+  question?: string;
+  choices?: string[];
+  /** When the Work started waiting on a decision; never moves while it waits. */
+  attention_since?: string;
+  /** The open review's reason, e.g. "turn_lost" for an unknown outcome. */
+  attention_reason?: string;
+  /** Hidden from Needs you until then; the app compares the time. */
+  snoozed_until?: string;
+  /** Your newest decision on it, until a newer result comes back. */
+  user_action?: BrainWorkUserAction;
+  /** The schedule and run a Calendar occurrence's Work came from. */
+  calendar?: BrainWorkCalendarRef;
+};
+
+export type BrainWorkCalendarRef = { item_id: string; run_id: string };
+
+/**
+ * Unfinished Work outside current_work: no Worker has it yet, or it waits on
+ * something that is not live. The Work rail lists it with its state.
+ */
+export type BrainOpenWork = {
+  work_id: string;
+  title: string;
+  status: BrainWorkStatus;
+  progress_mode?: BrainWorkProgressMode;
+  wait_for?: string;
+  wake?: BrainWorkWake;
+  updated_at?: string;
+  calendar?: BrainWorkCalendarRef;
+};
+
+export type BrainWorkUserActionKind = "reply" | "close" | "dismiss" | "stop" | "snooze";
+
+export type BrainWorkUserAction = {
+  kind: "reply" | "close" | "snooze";
+  text?: string;
+  at: string;
+  /** For a reply: Brain's admission ("accepted", "uncertain"). */
+  admission?: string;
+};
+
+/** Brain's declared current objective and how much of its Work is back. */
+export type BrainObjective = {
+  title: string;
+  total: number;
+  back: number;
+};
+
+export type BrainWorkBacklog = {
+  total: number;
+  queued_attention: number;
+  historical_results: number;
+};
+
+export type { BrainWorkerRef } from "../brain";
