@@ -28,8 +28,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 }
 
 /// The whole app is client/ui on NSH; this host gives it what only the platform has:
-/// the Keychain, the camera reader, the links the system opens, notifications, the Live
-/// Activity and widgets, calendar alerts, zones and pickers and, in a debug build linked
+/// the Keychain, the camera reader, the terminal view, the links the system opens, notifications,
+/// the Live Activity and widgets, calendar alerts, zones and pickers and, in a debug build linked
 /// with NativeShellDev, hot reload from `nsh dev`.
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   var window: UIWindow?
@@ -41,6 +41,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     guard let scene = scene as? UIWindowScene else { return }
     app.onError = { NSLog("Mewla: %@", $0) }
     app.register(component: "mewla.qrScanner") { QrScanner($0) }
+    app.register(component: "mewla.terminal") { TerminalComponent($0) }
     app.handle("secure.get") { [secure] data in try secure.get(Self.field(data, "key")) }
     app.handle("secure.set") { [secure] data in try secure.set(Self.field(data, "key"), Self.field(data, "value")); return nil }
     app.handle("secure.remove") { [secure] data in try secure.remove(Self.field(data, "key")); return nil }
