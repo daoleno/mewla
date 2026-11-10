@@ -90,8 +90,15 @@ func TestFindDesktopReadsOnlyChromesEnvironment(t *testing.T) {
 	before := selfReadSyscalls(t)
 	vars, ok := findDesktop()
 	walk := selfReadSyscalls(t) - before
-	if !ok || !strings.Contains(strings.Join(vars, " "), "WAYLAND_DISPLAY="+socket) {
+	if !ok || len(vars) == 0 {
 		t.Fatalf("desktop = %v, %v", vars, ok)
+	}
+	// The fake Chrome's desktop, unless a real Chrome of this machine (an
+	// agent's browser on its virtual screen, the person's own) was met first:
+	// any Chrome's live desktop is a right answer, and the reads are what
+	// this test is about.
+	if !strings.Contains(strings.Join(vars, " "), "WAYLAND_DISPLAY="+socket) && countChromeProcesses() < 2 {
+		t.Fatalf("desktop = %v with no other Chrome running", vars)
 	}
 	// A handful of reads per Chrome process (any Chrome of this machine may be
 	// met first), and none for the rest.
@@ -99,13 +106,21 @@ func TestFindDesktopReadsOnlyChromesEnvironment(t *testing.T) {
 		t.Fatalf("finding the desktop took %d read syscalls, more than %d for the Chrome processes", walk, limit)
 	}
 
-	// The Chrome that was borrowed from is asked again before any walk.
+	// The Chrome that was borrowed from is asked again before any walk: the
+	// reads of its environment (more for a real Chrome's than the fake's) and
+	// a few more.
+	desktopDonor.Lock()
+	donor := desktopDonor.pid
+	desktopDonor.Unlock()
+	before = selfReadSyscalls(t)
+	_, _ = os.ReadFile(filepath.Join("/proc", donor, "environ"))
+	environReads := selfReadSyscalls(t) - before
 	before = selfReadSyscalls(t)
 	if vars, ok := findDesktop(); !ok || len(vars) == 0 {
 		t.Fatalf("second lookup = %v, %v", vars, ok)
 	}
-	if again := selfReadSyscalls(t) - before; again > 8 {
-		t.Fatalf("the second lookup took %d read syscalls", again)
+	if again := selfReadSyscalls(t) - before; again > environReads+6 {
+		t.Fatalf("the second lookup took %d read syscalls, reading the donor's environment takes %d", again, environReads)
 	}
 }
 
