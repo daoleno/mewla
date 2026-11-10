@@ -117,13 +117,12 @@ function Empty() {
 }
 
 export function CalendarPage(props: { nav: NavStackState<CalendarRoute> }) {
-  const sticky = () => rows().flatMap((row, index) => (row.kind === "section" ? [index + 0] : []));
   return (
     <NavPage title="Calendar" testID="calendar-page"
       headerLeft={<Button testID="toggle-month" onPress={() => showMonth.set(!showMonth())}><Text class="text-base text-primary">{showMonth() ? "Hide month" : "Month"}</Text></Button>}
       headerRight={<Button testID="add-item" accessibilityLabel="Add calendar item" disabled={!calendar()} onPress={() => openEditor(null)}><Text class={calendar() ? "text-2xl text-primary" : "text-2xl text-muted-foreground"}>+</Text></Button>}>
       <View class="flex-1 bg-background">
-        <List testID="agenda" class="flex-1" each={rows()} stickyHeaderIndices={sticky()}
+        <List testID="agenda" class="flex-1" each={rows()}
           keyExtractor={(row) => (row.kind === "section" ? `s:${row.title}` : `i:${row.item.id}`)}
           header={() => <View>{showMonth() ? <Month /> : null}<Heading /></View>}
           empty={() => <Empty />}>

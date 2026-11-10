@@ -69,7 +69,8 @@ function instantOf(resolution: LocalResolution): number | null {
   return null;
 }
 
-const ISO = (at: number) => new Date(at).toISOString();
+/** The instant with its zone's offset then: the computer refuses any other. */
+const ISO = (at: number) => clock().zones.iso(at, zone().trim());
 
 async function save(): Promise<void> {
   const model = calendar();

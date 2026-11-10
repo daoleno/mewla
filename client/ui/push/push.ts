@@ -10,7 +10,7 @@ import { startCalendarAlerts } from "../calendar/alerts";
 import { deviceZone } from "../calendar/clock";
 import { calendarLinks, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
-import { current, currentTransport, onTransport, servers, switchTo } from "../session";
+import { current, currentTransport, onTransport, ready, servers, switchTo } from "../session";
 import { brainNav, selectedTab, openSession } from "../shell/Shell";
 import { draftForBrain } from "../work/WorkPage";
 import { workLinks } from "../work/routes";
@@ -125,11 +125,18 @@ function sendLiveAnswer(transport: Transport | null): void {
   }
 }
 
+let waitingLink: string | null = null;
+
 /**
  * Opens what a notification, an alert or a widget points at: its computer first (one
  * that is paired; another computer's link opens nothing of it), then the page.
  */
 export function openNotificationLink(url: string): void {
+  // A cold start's tap comes before the computers are loaded: it waits for them.
+  if (!ready()) {
+    waitingLink = url;
+    return;
+  }
   const link = parseLink(url);
   if (!link) return;
   const serverId = link.params.serverId;
@@ -171,6 +178,12 @@ export function startNotifications(): void {
     brainNav.popToRoot();
   };
   startCalendarAlerts();
+  effect(() => {
+    if (!ready() || waitingLink === null) return;
+    const url = waitingLink;
+    waitingLink = null;
+    openNotificationLink(url);
+  });
   if (!hosted) return;
 
   void loadStrongAlerts();

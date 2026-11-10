@@ -91,6 +91,18 @@ export class Zones {
     };
   }
 
+  /**
+   * "2026-11-12T10:30:00+08:00": an instant as the computer stores it, with the offset its
+   * zone has then. The computer refuses any other offset (a UTC "Z" for Asia/Shanghai).
+   */
+  iso(at: number, zone: string): string {
+    const c = this.wallClock(at, zone);
+    const offset = this.offsetMinutes(zone, at);
+    const sign = offset < 0 ? "-" : "+";
+    const abs = Math.abs(offset);
+    return `${this.dateKey(at, zone)}T${pad(c.hour)}:${pad(c.minute)}:${pad(c.second)}${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+  }
+
   /** "2026-10-27": the date of an instant in a zone; agenda days and month dots use it. */
   dateKey(at: number, zone: string): string {
     const c = this.wallClock(at, zone);
