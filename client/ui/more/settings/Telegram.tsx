@@ -6,7 +6,7 @@ import { beginTelegramBinding, configureTelegram, telegramLabel, telegramRecipie
 import { connected, daemon } from "../daemon";
 import { Icon } from "../kit/Icon";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner } from "../kit/kit";
-import { loadTelegram, setTelegram, telegram } from "./telegram";
+import { loadTelegram, setTelegram, telegram } from "./telegramState";
 
 const POLL_MS = 5_000;
 

@@ -26,7 +26,7 @@ import { Icon } from "../kit/Icon";
 import { confirmDestructive, EmptyState, Field, Notice, Page, PillButton, Row, Section, Spinner, SwitchRow, Tag } from "../kit/kit";
 import { Segmented } from "../kit/Segmented";
 import type { PageNav } from "../routes";
-import { change, changing, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providers";
+import { change, changing, forgetProviders, locked, modelsAge, providers, refreshProviders, snapshot, warning } from "./providerState";
 
 const CLIENTS = [
   { key: "codex", label: "Codex" },
