@@ -49,6 +49,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     PushHost.register(app)
     LiveHost.register(app)
     CalendarHost.register(app)
+    _ = FilesHost(app)
     app.params = ["deviceName": UIDevice.current.name]
 
     let window = UIWindow(windowScene: scene)
