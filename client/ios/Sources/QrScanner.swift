@@ -5,7 +5,8 @@ import UIKit
 /// `mewla.qrScanner`: AVFoundation's QR reader. `scan` fires once with the first code read;
 /// `unavailable` when the camera is refused or missing (the simulator has none).
 final class QrScanner: NSObject, NshComponent, AVCaptureMetadataOutputObjectsDelegate {
-  let view = PreviewView()
+  private let camera = PreviewView()
+  var view: UIView { camera }
   private let events: NshComponentContext
   private let session = AVCaptureSession()
   private var configured = false
@@ -14,9 +15,9 @@ final class QrScanner: NSObject, NshComponent, AVCaptureMetadataOutputObjectsDel
   init(_ events: NshComponentContext) {
     self.events = events
     super.init()
-    view.backgroundColor = .black
-    view.preview.session = session
-    view.preview.videoGravity = .resizeAspectFill
+    camera.backgroundColor = .black
+    camera.preview.session = session
+    camera.preview.videoGravity = .resizeAspectFill
   }
 
   func setProp(_ name: String, _ value: Any?) {
@@ -39,7 +40,7 @@ final class QrScanner: NSObject, NshComponent, AVCaptureMetadataOutputObjectsDel
 
   private func run() {
     if !configured {
-      guard let camera = AVCaptureDevice.default(for: .video), let input = try? AVCaptureDeviceInput(device: camera),
+      guard let device = AVCaptureDevice.default(for: .video), let input = try? AVCaptureDeviceInput(device: device),
             session.canAddInput(input) else { return unavailable("no camera") }
       session.addInput(input)
       let output = AVCaptureMetadataOutput()
