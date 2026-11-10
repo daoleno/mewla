@@ -75,7 +75,8 @@ Open **Sessions**, tap **New session**, pick one of your repositories and tap
 an agent. Ask it something small. Switch between **Chat** and **Terminal** from
 the Session's ⋮ menu: both show the same terminal, which you can also open at
 your desk with `mewla attach` (pick a Session from the list, or name one:
-`mewla attach brain`; Ctrl-\ detaches and leaves it running). More in
+`mewla attach brain`; Ctrl-\ detaches and leaves it running), or all of them
+at once with `mewla attach --all`. More in
 [Sessions](sessions.md).
 
 ## 4. Give Brain a goal

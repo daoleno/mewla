@@ -81,6 +81,7 @@ mewla worker approvals [-id <session>]        # decisions agents wait on (Codex 
 mewla worker approve -id <session> -approval <id> -option allow   # or deny
 mewla worker close -id <session>
 mewla attach [name|id]                        # pick a live Session, or name one; Ctrl-\ detaches
+mewla attach --all                            # every live Session tiled in this terminal, updating
 mewla host status [--json]                    # the session host and the Sessions it runs
 ```
 
@@ -97,6 +98,19 @@ one name), `brain`, or an id (`mh-…` or `%N`); a name that fits several
 Sessions lists them and exits non-zero. A Session an earlier Mewla left in
 tmux opens the same way, in tmux itself, which detaches with its own prefix key
 (Ctrl-\ is not tmux's detach key); `attach` says so on its first line.
+
+`mewla attach --all` (or Tab in the picker) tiles every live Session in the
+terminal as a grid that keeps updating. Each tile shows its number, name,
+agent and state, and the end of that Session's screen, read from the session
+host's own terminal state: the grid only watches, and never resizes or types
+into a Session. The arrow keys or Tab move, 1-9 or a click choose, and Enter
+opens the chosen one full screen to type into (this terminal's size becomes
+its size, as with a plain `attach`). In an opened Session Ctrl-] returns to the
+grid, Ctrl-\ leaves, and a Session that ends returns to the grid; q or Ctrl-\
+leaves from the grid. Resizing the terminal re-tiles it. Tiles are at least 36
+columns by 7 rows, so when more Sessions are live than fit, the grid shows
+the newest ones and its last line says how many need a bigger terminal. Only
+Sessions in the session host are tiled; the last line counts any in tmux.
 
 `answer` replies to a prompt a delegated Worker is stopped at: a numbered menu
 (a permission or plan request, a startup question) by `-choice <option number>`,

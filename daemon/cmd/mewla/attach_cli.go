@@ -37,10 +37,12 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("mewla attach", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var stateDir, socket string
+	var tileAll bool
+	fs.BoolVar(&tileAll, "all", false, "tile every live Session as a grid that updates; pick one to open")
 	fs.StringVar(&stateDir, "state-dir", "", "state directory whose session host to use (default: ~/.mewla)")
 	fs.StringVar(&socket, "socket", "", "session host socket (default: derived from the state directory)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla attach [--state-dir DIR] [--socket PATH] [SESSION]")
+		fmt.Fprintln(stderr, "Usage: mewla attach [--all] [--state-dir DIR] [--socket PATH] [SESSION]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Show a live Session in this terminal and type into it. SESSION is a Worker's")
 		fmt.Fprintln(stderr, "name (any case, or the start of one name), \"brain\", an id (mh-... or %N). With")
@@ -48,6 +50,10 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stderr, "(without a terminal the list is printed). Ctrl-\\ detaches; the Session keeps")
 		fmt.Fprintln(stderr, "running. This terminal's size becomes the Session's. A Session still in tmux")
 		fmt.Fprintln(stderr, "opens in tmux, which detaches with its own prefix key.")
+		fmt.Fprintln(stderr, "")
+		fmt.Fprintln(stderr, "--all (or Tab in the picker) tiles every live Session in this terminal and keeps")
+		fmt.Fprintln(stderr, "them updating, without touching them. Arrow keys, Tab, 1-9 or a click choose;")
+		fmt.Fprintln(stderr, "Enter opens one to type into; Ctrl-] returns to the grid; q or Ctrl-\\ leaves.")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
@@ -59,9 +65,12 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("name one Session to attach to")
 	}
 	query := strings.TrimSpace(fs.Arg(0))
+	if tileAll && query != "" {
+		return fmt.Errorf("--all shows every Session; it takes no name")
+	}
 	in, out := os.Stdin, os.Stdout
 	interactive := term.IsTerminal(int(in.Fd())) && term.IsTerminal(int(out.Fd()))
-	if query != "" && !interactive {
+	if (query != "" || tileAll) && !interactive {
 		return fmt.Errorf("mewla attach needs a terminal")
 	}
 	path, err := hostSocketPath(stateDir, socket)
@@ -85,7 +94,8 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	var entry attachEntry
-	if query == "" {
+	wantGrid := tileAll
+	if query == "" && !wantGrid {
 		listed := listedAttachEntries(all)
 		if !interactive || len(listed) == 0 {
 			if len(listed) == 0 {
@@ -98,12 +108,16 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 			writeAttachTable(stdout, listed, time.Now(), true)
 			return nil
 		}
-		chosen, err := pickAttachEntry(in, out, listed)
-		if err != nil || chosen == nil {
+		chosen, grid, err := pickAttachEntry(in, out, listed)
+		if err != nil || (chosen == nil && !grid) {
 			return err
 		}
-		entry = *chosen
-	} else {
+		if grid {
+			wantGrid = true
+		} else {
+			entry = *chosen
+		}
+	} else if !wantGrid {
 		entry, err = resolveAttach(all, query)
 		var missing *attachNotFoundError
 		if errors.As(err, &missing) && hostDown {
@@ -112,6 +126,25 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		if err != nil {
 			return err
 		}
+	}
+	if wantGrid {
+		if client == nil {
+			return fmt.Errorf("no session host is running on %s", path)
+		}
+		outside := 0
+		for _, listed := range listedAttachEntries(all) {
+			if listed.Tmux != nil {
+				outside++
+			}
+		}
+		outcome, err := runGridCommand(ctx, client, outside, in, out)
+		if err != nil {
+			return err
+		}
+		if outcome != "" {
+			fmt.Fprintln(stdout, outcome)
+		}
+		return nil
 	}
 	if entry.Tmux != nil {
 		return runTmuxAttach(entry)
@@ -178,11 +211,12 @@ func gatherAttachEntries(ctx context.Context, client *sessionhost.Client, stateD
 }
 
 // pickAttachEntry shows the picker on this terminal and returns the chosen
-// Session; nil when the person cancels.
-func pickAttachEntry(in, out *os.File, entries []attachEntry) (*attachEntry, error) {
+// Session; nil when the person cancels, with grid set when they asked for the
+// grid of every Session instead.
+func pickAttachEntry(in, out *os.File, entries []attachEntry) (*attachEntry, bool, error) {
 	saved, err := term.MakeRaw(int(in.Fd()))
 	if err != nil {
-		return nil, fmt.Errorf("raw terminal: %w", err)
+		return nil, false, fmt.Errorf("raw terminal: %w", err)
 	}
 	defer term.Restore(int(in.Fd()), saved)
 	size := func() (int, int) {
@@ -198,26 +232,15 @@ func pickAttachEntry(in, out *os.File, entries []attachEntry) (*attachEntry, err
 // attachLoop shows one host Session on out and sends what in reads to it,
 // until Ctrl-\ is read or the Session ends. It reports how it ended.
 func attachLoop(ctx context.Context, client *sessionhost.Client, id string, in io.Reader, out io.Writer, size func() (int, int), resized <-chan os.Signal) (string, error) {
-	attach := func() (*sessionhost.Attachment, error) {
-		cols, rows := size()
-		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: id, Cols: cols, Rows: rows})
-		var hostErr *sessionhost.Error
-		if errors.As(err, &hostErr) && hostErr.Code == sessionhost.ErrCodeNotFound {
-			return nil, fmt.Errorf("no Session %s in the session host", id)
-		}
-		return view, err
-	}
-	view, err := attach()
-	if err != nil {
-		return "", err
-	}
-	defer func() { view.Close() }()
-	io.WriteString(out, enterAttach)
-	defer io.WriteString(out, leaveAttach)
-	out.Write(view.Replay)
+	outcome, _, err := attachLoopTyped(ctx, client, id, startInputPump(ctx, in), out, size, resized, 0)
+	return outcome, err
+}
 
+// startInputPump reads in on a goroutine and hands each chunk on; the channel
+// closes when in ends. A caller that reads one terminal through several views
+// in turn (the grid, then a Session) keeps one pump, so no view leaves a read
+// behind to eat the next one's keys.
+func startInputPump(ctx context.Context, in io.Reader) <-chan []byte {
 	typed := make(chan []byte)
 	go func() {
 		buf := make([]byte, 4096)
@@ -236,6 +259,33 @@ func attachLoop(ctx context.Context, client *sessionhost.Client, id string, in i
 			}
 		}
 	}()
+	return typed
+}
+
+// attachLoopTyped is attachLoop over keys that arrive on typed. A nonzero
+// backKey ends it too, with back set, for a caller that shows a Session from a
+// grid; keys after it in the same read are dropped, as after Ctrl-\.
+func attachLoopTyped(ctx context.Context, client *sessionhost.Client, id string, typed <-chan []byte, out io.Writer, size func() (int, int), resized <-chan os.Signal, backKey byte) (outcome string, back bool, err error) {
+	attach := func() (*sessionhost.Attachment, error) {
+		cols, rows := size()
+		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		view, err := client.Attach(callCtx, sessionhost.AttachParams{ID: id, Cols: cols, Rows: rows})
+		var hostErr *sessionhost.Error
+		if errors.As(err, &hostErr) && hostErr.Code == sessionhost.ErrCodeNotFound {
+			return nil, fmt.Errorf("no Session %s in the session host", id)
+		}
+		return view, err
+	}
+	view, err := attach()
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { view.Close() }()
+	io.WriteString(out, enterAttach)
+	defer io.WriteString(out, leaveAttach)
+	out.Write(view.Replay)
+
 	send := func(data []byte) error {
 		if len(data) == 0 {
 			return nil
@@ -255,32 +305,38 @@ func attachLoop(ctx context.Context, client *sessionhost.Client, id string, in i
 			end, err := view.End()
 			switch {
 			case err != nil:
-				return "", fmt.Errorf("the session host stopped showing %s: %w", id, err)
+				return "", false, fmt.Errorf("the session host stopped showing %s: %w", id, err)
 			case end.Reason == sessionhost.AttachBehind:
 				// This terminal fell behind: start the screen over.
 				view.Close()
 				if view, err = attach(); err != nil {
-					return "", err
+					return "", false, err
 				}
 				io.WriteString(out, redraw)
 				out.Write(view.Replay)
 			case end.Reason == sessionhost.AttachExited && end.ExitCode != nil:
-				return fmt.Sprintf("[%s exited with code %d]", id, *end.ExitCode), nil
+				return fmt.Sprintf("[%s exited with code %d]", id, *end.ExitCode), false, nil
 			default:
-				return fmt.Sprintf("[%s ended: %s]", id, end.Reason), nil
+				return fmt.Sprintf("[%s ended: %s]", id, end.Reason), false, nil
 			}
 		case data, ok := <-typed:
 			if !ok {
-				return fmt.Sprintf("[detached from %s]", id), nil
+				return fmt.Sprintf("[detached from %s]", id), false, nil
 			}
-			if i := bytes.IndexByte(data, detachKey); i >= 0 {
-				if err := send(data[:i]); err != nil {
-					return "", err
+			cut, isBack := bytes.IndexByte(data, detachKey), false
+			if backKey != 0 {
+				if i := bytes.IndexByte(data, backKey); i >= 0 && (cut < 0 || i < cut) {
+					cut, isBack = i, true
 				}
-				return fmt.Sprintf("[detached from %s]", id), nil
+			}
+			if cut >= 0 {
+				if err := send(data[:cut]); err != nil {
+					return "", false, err
+				}
+				return fmt.Sprintf("[detached from %s]", id), isBack, nil
 			}
 			if err := send(data); err != nil {
-				return "", err
+				return "", false, err
 			}
 		case <-resized:
 			if cols, rows := size(); cols > 0 && rows > 0 {
@@ -288,11 +344,34 @@ func attachLoop(ctx context.Context, client *sessionhost.Client, id string, in i
 				err := client.Resize(callCtx, id, cols, rows)
 				cancel()
 				if err != nil {
-					return "", err
+					return "", false, err
 				}
 			}
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", false, ctx.Err()
 		}
 	}
+}
+
+// runGridCommand tiles the live Sessions on this terminal until the person
+// leaves, reporting how it ended ("" when they left from the grid).
+func runGridCommand(ctx context.Context, client *sessionhost.Client, outside int, in, out *os.File) (string, error) {
+	saved, err := term.MakeRaw(int(in.Fd()))
+	if err != nil {
+		return "", fmt.Errorf("raw terminal: %w", err)
+	}
+	defer term.Restore(int(in.Fd()), saved)
+	resized := make(chan os.Signal, 1)
+	notifyTerminalResize(resized)
+	defer signal.Stop(resized)
+	size := func() (int, int) {
+		cols, rows, err := term.GetSize(int(out.Fd()))
+		if err != nil {
+			return 0, 0
+		}
+		return cols, rows
+	}
+	pumpCtx, stopPump := context.WithCancel(ctx)
+	defer stopPump()
+	return runGrid(ctx, client, outside, startInputPump(pumpCtx, in), out, size, resized, styleForWriter(out))
 }

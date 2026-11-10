@@ -20,6 +20,9 @@ const (
 	keyBackspace
 	keyClear // Ctrl-U
 	keyCancel
+	keyLeft
+	keyRight
+	keyTab // Tab: the grid of every Session
 )
 
 type pickerKey struct {
@@ -77,6 +80,9 @@ func parsePickerKeys(data []byte) []pickerKey {
 		case b == 0x0e: // Ctrl-N
 			keys = append(keys, pickerKey{kind: keyDown})
 			data = data[1:]
+		case b == '\t':
+			keys = append(keys, pickerKey{kind: keyTab})
+			data = data[1:]
 		case b == 0x15:
 			keys = append(keys, pickerKey{kind: keyClear})
 			data = data[1:]
@@ -126,6 +132,7 @@ type pickerModel struct {
 	query   []rune
 	sel     int
 	offset  int
+	grid    bool // Tab was pressed: the person wants the grid of every Session
 }
 
 func (m *pickerModel) shown() []attachEntry {
@@ -179,6 +186,9 @@ func (m *pickerModel) apply(key pickerKey, rows int) (done bool, chosen *attachE
 		m.query = nil
 		m.sel, m.offset = 0, 0
 	case keyCancel:
+		return true, nil
+	case keyTab:
+		m.grid = true
 		return true, nil
 	case keyEnter:
 		shown := m.shown()
@@ -254,7 +264,7 @@ func renderPicker(m *pickerModel, width, height int, style termStyle, now time.T
 
 	var b strings.Builder
 	b.WriteString("\x1b[H\x1b[2J")
-	b.WriteString(style.title("Attach to a Session") + style.dim(cutTo("   ↑↓ move · type to filter · Enter attach · Esc cancel", width-len("■ Attach to a Session"), false)))
+	b.WriteString(style.title("Attach to a Session") + style.dim(cutTo("   ↑↓ move · type to filter · Enter attach · Tab grid · Esc cancel", width-len("■ Attach to a Session"), false)))
 	b.WriteString("\r\n")
 	b.WriteString("› " + string(m.query))
 	cursor := 2 + len(m.query)
@@ -289,9 +299,9 @@ func renderPicker(m *pickerModel, width, height int, style termStyle, now time.T
 }
 
 // runPicker lets the person pick one of entries and reports it; nil when they
-// cancel or input ends. It reads input itself, one chunk at a time, and leaves
+// cancel or input ends, with grid set when they pressed Tab for the grid. It reads input itself, one chunk at a time, and leaves
 // nothing reading when it returns, so what is typed next belongs to the caller.
-func runPicker(in io.Reader, out io.Writer, entries []attachEntry, size func() (int, int), style termStyle, now func() time.Time) (*attachEntry, error) {
+func runPicker(in io.Reader, out io.Writer, entries []attachEntry, size func() (int, int), style termStyle, now func() time.Time) (chosen *attachEntry, grid bool, err error) {
 	m := &pickerModel{entries: entries}
 	io.WriteString(out, enterAttach)
 	defer io.WriteString(out, leaveAttach)
@@ -305,14 +315,14 @@ func runPicker(in io.Reader, out io.Writer, entries []attachEntry, size func() (
 		n, err := in.Read(buf)
 		for _, key := range parsePickerKeys(buf[:n]) {
 			if done, chosen := m.apply(key, pickerRows(rows)); done {
-				return chosen, nil
+				return chosen, m.grid, nil
 			}
 		}
 		if err != nil {
 			if err == io.EOF {
-				return nil, nil
+				return nil, false, nil
 			}
-			return nil, err
+			return nil, false, err
 		}
 	}
 }
