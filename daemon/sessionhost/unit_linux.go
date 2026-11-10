@@ -31,17 +31,18 @@ var userUnits struct {
 	ok   bool
 }
 
-// userManagerEnv is the environment to reach the person's systemd user
-// manager with, whatever XDG_RUNTIME_DIR the daemon itself was given.
-func userManagerEnv() ([]string, bool) {
+// userManagerEnv is base with the XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS
+// to reach the person's systemd user manager with, whatever the daemon itself
+// was given.
+func userManagerEnv(base []string) ([]string, bool) {
 	runtime := fmt.Sprintf("/run/user/%d", os.Getuid())
 	if _, err := os.Stat(filepath.Join(runtime, "bus")); err != nil {
 		if _, err := os.Stat(filepath.Join(runtime, "systemd", "private")); err != nil {
 			return nil, false
 		}
 	}
-	env := make([]string, 0, len(os.Environ())+1)
-	for _, entry := range os.Environ() {
+	env := make([]string, 0, len(base)+1)
+	for _, entry := range base {
 		if strings.HasPrefix(entry, "XDG_RUNTIME_DIR=") || strings.HasPrefix(entry, "DBUS_SESSION_BUS_ADDRESS=") {
 			continue
 		}
@@ -59,7 +60,7 @@ func systemdUserUnits() bool {
 		if err != nil {
 			return
 		}
-		env, ok := userManagerEnv()
+		env, ok := userManagerEnv(os.Environ())
 		if !ok {
 			return
 		}
@@ -88,10 +89,6 @@ func hostUnitCommand(opts StartOptions, args []string, log *os.File) (*exec.Cmd,
 	if err != nil {
 		return nil, false
 	}
-	env, ok := userManagerEnv()
-	if !ok {
-		return nil, false
-	}
 	digest := sha256.Sum256([]byte(opts.SocketPath))
 	unit := fmt.Sprintf("mewla-session-host-%s-%04x", hex.EncodeToString(digest[:4]), time.Now().UnixNano()&0xffff)
 	flags := []string{
@@ -105,14 +102,30 @@ func hostUnitCommand(opts StartOptions, args []string, log *os.File) (*exec.Cmd,
 	if opts.LogPath != "" {
 		flags = append(flags, "-p", "StandardOutput=append:"+opts.LogPath, "-p", "StandardError=append:"+opts.LogPath)
 	}
+	// The host's environment holds the daemon's secrets (API keys), and a
+	// process's command line is readable by every user: it travels in the
+	// environment of systemd-run, which only its owner can read, and the
+	// command line names the variables (--setenv=NAME takes the value from
+	// there). Only the two paths that reach the user manager, which are not
+	// secrets, go by value.
 	hostEnv := opts.Env
 	if hostEnv == nil {
 		hostEnv = os.Environ()
 	}
 	for _, entry := range hostEnv {
-		if name, _, ok := strings.Cut(entry, "="); ok && validEnvName(name) {
-			flags = append(flags, "--setenv="+entry)
+		name, _, ok := strings.Cut(entry, "=")
+		if !ok || !validEnvName(name) {
+			continue
 		}
+		if name == "XDG_RUNTIME_DIR" || name == "DBUS_SESSION_BUS_ADDRESS" {
+			flags = append(flags, "--setenv="+entry)
+		} else {
+			flags = append(flags, "--setenv="+name)
+		}
+	}
+	env, ok := userManagerEnv(hostEnv)
+	if !ok {
+		return nil, false
 	}
 	flags = append(flags, "--", opts.Executable)
 	cmd := exec.Command(run, append(flags, args...)...)
