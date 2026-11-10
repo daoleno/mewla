@@ -219,7 +219,7 @@ func elementAction(e Element, asked string) (string, error) {
 }
 
 // ErrNoApps means this computer can't read apps as elements.
-var ErrNoApps = errors.New("Reading apps works on Macs; use screenshots here")
+var ErrNoApps = errors.New("This computer can't read apps as elements; use screenshots here")
 
 // resolveApp finds the one app a name or pid means. A name matches without
 // case; a name several apps share is an error that lists them.

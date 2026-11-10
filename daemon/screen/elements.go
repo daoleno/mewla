@@ -11,7 +11,7 @@ import (
 
 // ErrNoElements means this computer can't read what is on its screen as
 // elements; screenshots still work.
-var ErrNoElements = errors.New("Reading the screen's elements works on Macs; use screenshots here")
+var ErrNoElements = errors.New("This computer can't read what is on its screen as elements; use screenshots here")
 
 // Element is one accessibility element of the focused window, as a backend
 // reads it, in framebuffer pixels. Depth is its nesting under the window.

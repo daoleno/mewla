@@ -30,6 +30,25 @@ type Backend interface {
 // the display goes to sleep.
 var ErrCaptureStopped = errors.New("screen capture stopped")
 
+// workerStarter is a backend whose sessions are each Worker's own, such as an
+// agent display on Linux: an agent's session starts with StartFor, and a
+// session that reads apps reads its own.
+type workerStarter interface {
+	StartFor(ctx context.Context, worker string) (Session, error)
+}
+
+// workerGate is a backend whose person-first rules are each Worker's: Begin
+// refuses an action while the person holds or has stopped the Worker, and End
+// gives what the person did meanwhile, to tell the agent.
+type workerGate interface {
+	Begin(worker string) error
+	End(worker string) []string
+}
+
+// errLinuxViewerText says why a computer whose agents each have a display of
+// their own (Linux) has no screen of the person's to view.
+const errLinuxViewerText = "On Linux each agent has a display of its own; watch and stop it in Screen"
+
 // appKeyer is a session that can send keys to one app, in front or not.
 type appKeyer interface {
 	KeyTo(pid int, keysym uint32, down bool) error
@@ -138,7 +157,7 @@ type Frame struct {
 
 var (
 	// ErrUnsupported means this computer has no Screen backend yet.
-	ErrUnsupported = errors.New("Screen works only on Macs for now")
+	ErrUnsupported = errors.New("Screen isn't available on this computer yet")
 	// ErrPermissions means a required operating-system permission is missing.
 	ErrPermissions = errors.New("Screen needs permissions on this computer")
 )

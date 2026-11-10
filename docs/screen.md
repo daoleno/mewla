@@ -7,15 +7,15 @@ opens no new port and needs no extra password.
 
 ## Which computers
 
-Screen works on Macs for now. On another computer the Screen page says
-**Screen works on Macs for now**; in the app, **Choose a computer** opens
-Settings, where you add the Mewla running on your Mac and switch to it.
+Screen works on Macs, Windows and Linux computers. On another computer the
+Screen page says so; in the app, **Choose a computer** opens Settings, where you
+add the Mewla running on one of them and switch to it.
 
 | Computer | Status |
 | --- | --- |
 | macOS 13 or later (Apple Silicon) | Supported |
-| Linux | Agents' browsers only, on a virtual screen (see below); turn on **Settings → Labs → Virtual screen** |
-| Windows | Not yet |
+| Windows 10 or 11 | Supported, with no permission to grant. Mewla has to run in your signed-in session (its sign-in task does); started as a service or over SSH, it can't see the screen and says so |
+| Linux | Agents get displays of their own, off your desktop (see below); needs TigerVNC's `Xvnc` |
 
 ## Turn it on
 
@@ -303,15 +303,26 @@ Mac, and Mewla's log doesn't record it. Brain keeps one agent on the screen at
 a time. Turning off **Agents can use this computer** turns it off for Codex
 Workers started afterwards; one already running keeps it until it ends.
 
+### Windows
+
+On Windows, agents use your screen as on a Mac: screenshots, the keyboard and
+the pointer, and apps' buttons, fields and text through UI Automation, so
+`app_state`, `element` and `steps` work there too (there is no `menu` tool).
+Nothing needs a permission. Keys go only to the app in front: an agent setting
+text in an app behind yours uses `element set_value`, which doesn't move your
+focus. Windows refuses input to apps running as administrator, and the agent
+is told so. Your own keys, clicks and pointer moves are told to the agent as on
+a Mac, never what you typed; the lock screen, the sign-in screen and a UAC
+prompt count as locked. Allowing a device to view the screen asks at the
+computer in a Windows dialog.
+
 ## Linux: agents on a virtual screen
 
 A Linux computer has no screen of yours to share, but the agents there get a
 virtual screen of their own, off your desktop: one screen for the whole
 computer with a monitor for each agent. An agent's browser window and the
 desktop apps it opens are both on its monitor, and nothing else is. **Screen**
-on a Linux computer shows the **Virtual screen** switch until it is on (the same
-switch as **Settings → Labs → Virtual screen**); a switch that cannot be read or
-set says why under it, with Retry. Once on, **Screen** lists the agents using
+on a Linux computer lists the agents using
 the screen right now, one row for each, with its own live view of its monitor
 (you are never sent another agent's). A row keeps its place and its agent's name
 while you hold the screen. You never open or manage a browser yourself: an
@@ -352,10 +363,17 @@ pop-up), and several agents work at the same time. The window closes when its
 Worker ends, and the browser stops when no agent is using it. The switch lives
 on the computer, so every device sees the same answer.
 
-Desktop apps work the same way. With the switch on, a Worker (Claude or Codex)
-also has a **display** tool: it opens a program (a calculator, an editor) on its
-monitor, sees it as a picture of that monitor and clicks, types and presses keys
-there. The screen is private to Mewla and off your desktop; it needs TigerVNC's
+Desktop apps need no switch. A Worker (Claude or Codex) has the same computer
+tool as on a Mac (`mewla_computer`): `open_app` starts an installed app (by the
+name its menu entry shows, such as KWrite, or its program) on the agent's own
+monitor, `app_state` reads the app's buttons, fields and text through AT-SPI,
+and `element`, `steps`, screenshots, clicks and keys act there. Screen lists the
+agent as soon as it has a monitor, with the same live view, Hold and Stop. The
+apps join an accessibility bus private to the agent screen, so nothing of your
+desktop's accessibility is used or switched on (it needs `at-spi2-core`; without
+it the agent works from screenshots). Without `Xvnc` the agent has no computer
+tool on Linux, and with the virtual screen switch on but the computer tool off
+it has the older **display** tool instead: coordinates only, on its monitor. The screen is private to Mewla and off your desktop; it needs TigerVNC's
 `Xvnc` (and `xauth`) on the computer, and apps run as X11 clients (there is no
 window manager: Mewla moves each app's window to its agent's monitor and a
 window keeps the size it opens with). The picture travels over a Unix socket

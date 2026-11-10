@@ -673,7 +673,10 @@ func runDaemon(args []string, stderr io.Writer) error {
 	w.SetAgentTools(func(command string, worker bool) string {
 		// The screen and the phone act for a named Worker, so only sessions that
 		// carry their Worker identity get them.
-		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: worker && agentUse.ComputerReady(), Display: worker && controlHandler.displayOn(), Phone: worker && agentUse.PhoneReady(), IPhone: worker && agentUse.IPhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
+		computer := worker && agentUse.ComputerReady()
+		// On Linux the computer tool drives the agent's own display, which
+		// the display tool did with coordinates alone: one tool, not both.
+		tools := work.AgentTools{Chrome: agentUse.BrowserReady(), Computer: computer, Display: worker && !computer && controlHandler.displayOn(), Phone: worker && agentUse.PhoneReady(), IPhone: worker && agentUse.IPhoneReady(), NoCodexComputerUse: agentUse.CodexComputerUseOff()}
 		return work.WithAgentTools(command, watcher.ExecutablePath(), authManager.StorageDir(), tools)
 	})
 	srv.SetAgentUse(agentUse)
@@ -786,7 +789,7 @@ func runDaemon(args []string, stderr io.Writer) error {
 	browserManager.SetWorkerLive(func(id string) bool {
 		return w.GetWorker(id) != nil && w.HasSession(id)
 	})
-	screenService := screen.NewService(authManager.StorageDir())
+	screenService := screen.NewPlatformService(authManager.StorageDir(), displayService)
 	go screenService.Run(ctx)
 	if daemonSupervised() {
 		// Exiting with an error makes launchd or systemd start Mewla again,

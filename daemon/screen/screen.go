@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/atomicfile"
+	"github.com/daoleno/mewla/daemon/vdisplay"
 )
 
 const configFile = "screen.json"
@@ -112,6 +113,9 @@ type Status struct {
 	// Locked means the computer is locked now, so a viewer sees its login
 	// window and the display may sleep.
 	Locked bool `json:"locked,omitempty"`
+	// AgentDisplays means agents here each use a display of their own (Linux),
+	// listed and viewed one by one, instead of this computer's screen.
+	AgentDisplays bool `json:"agent_displays,omitempty"`
 	// Local means the device that asked is on this computer itself: its
 	// screen is the one the person is looking at, so a live view of it would
 	// only mirror the viewer. The server sets it from the request.
@@ -182,6 +186,12 @@ type Service struct {
 
 func NewService(stateDir string) *Service { return NewServiceWith(stateDir, newBackend()) }
 
+// NewPlatformService is the daemon's Service: this computer's own screen, or
+// on Linux the agents' displays on the agent screen.
+func NewPlatformService(stateDir string, displays *vdisplay.Service) *Service {
+	return NewServiceWith(stateDir, platformBackend(displays))
+}
+
 // NewServiceWith uses an explicit backend, for tests.
 func NewServiceWith(stateDir string, backend Backend) *Service {
 	return &Service{stateDir: stateDir, backend: backend}
@@ -229,6 +239,12 @@ func (s *Service) update(change func(*Config) error) error {
 // Status reports support, permissions and this device's approval.
 func (s *Service) Status(ctx context.Context, deviceID string) Status {
 	capability := s.backend.Capability(ctx)
+	if _, perAgent := s.backend.(workerStarter); perAgent && capability.Supported {
+		// Agents each have a display of their own (Linux): there is no
+		// screen of the person's to view, and agents' displays are listed
+		// and viewed on their own, so they aren't the screen's agents either.
+		return Status{Platform: runtime.GOOS, Reason: errLinuxViewerText, Name: computerName(), AgentDisplays: true}
+	}
 	status := Status{
 		Supported:   capability.Supported,
 		Platform:    runtime.GOOS,

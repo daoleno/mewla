@@ -47,9 +47,9 @@ func comboSet(combo string) []string {
 // guardedKeys refuses a key combo that quits an app or ends the session.
 func guardedKeys(combo string) error {
 	set := comboSet(combo)
-	for _, g := range guardedCombos {
+	for _, g := range append(guardedCombos, systemGuarded...) {
 		if slices.Equal(set, comboSet(g.combo)) {
-			return fmt.Errorf("%s would %s, which the person may lose work to. Ask them first; if they say yes, choose the item in the app's menus with the menu action", combo, g.what)
+			return fmt.Errorf("%s would %s, which the person may lose work to. Ask them first; %s", combo, g.what, guardedAfterYes)
 		}
 	}
 	return nil

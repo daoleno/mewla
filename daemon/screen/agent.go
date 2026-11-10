@@ -409,7 +409,7 @@ func (s *Service) OpenAgentSettings(ctx context.Context, permission string) erro
 
 // act is Act with what the person did kept apart, in notes, so a batch of
 // steps can tell it once.
-func (s *Service) act(ctx context.Context, worker string, action AgentAction) (AgentResult, error) {
+func (s *Service) act(ctx context.Context, worker string, action AgentAction) (result AgentResult, err error) {
 	if strings.TrimSpace(worker) == "" {
 		return AgentResult{}, errors.New("computer use needs the Worker it acts for")
 	}
@@ -419,6 +419,17 @@ func (s *Service) act(ctx context.Context, worker string, action AgentAction) (A
 	started := time.Now()
 	if _, err := s.AgentReady(ctx); err != nil {
 		return AgentResult{}, err
+	}
+	if gate, ok := s.backend.(workerGate); ok {
+		if err := gate.Begin(worker); err != nil {
+			s.audit(worker, action, AgentResult{}, started, err)
+			return AgentResult{}, err
+		}
+		defer func() {
+			if notes := strings.Join(gate.End(worker), "\n"); notes != "" && err == nil {
+				result.notes = strings.TrimSpace(result.notes + "\n" + notes)
+			}
+		}()
 	}
 	agent, err := s.agentFor(worker)
 	if err != nil {
@@ -446,7 +457,7 @@ func (s *Service) act(ctx context.Context, worker string, action AgentAction) (A
 		}
 		defer release()
 	}
-	result, err := agent.act(ctx, action, background)
+	result, err = agent.act(ctx, action, background)
 	if errors.Is(err, ErrCaptureStopped) {
 		err = ErrDisplayAsleep
 	}
@@ -510,7 +521,13 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 	s.control.Unlock()
 
 	starting := time.Now()
-	session, err := s.backend.Start(ctx)
+	var session Session
+	var err error
+	if starter, ok := s.backend.(workerStarter); ok {
+		session, err = starter.StartFor(ctx, worker)
+	} else {
+		session, err = s.backend.Start(ctx)
+	}
 	if err != nil {
 		cancel(err)
 		s.ReleaseControl(control)
@@ -539,6 +556,10 @@ func (s *Service) agentFor(worker string) (*agentSession, error) {
 		agent.readElements = reader.Elements
 	}
 	if reader, ok := s.backend.(appReader); ok {
+		agent.apps = reader
+	}
+	if reader, ok := session.(appReader); ok {
+		// The agent's own display reads its own apps.
 		agent.apps = reader
 	}
 	agent.releaseDisplay = s.holdDisplay()
@@ -1397,13 +1418,13 @@ func (a *agentSession) openApp(ctx context.Context, name string) (AgentResult, e
 				app := found[0]
 				where := "behind the app in front"
 				if app.Active {
-					where = "and macOS brought it to the front"
+					where = "and " + systemName + " brought it to the front"
 				}
 				return AgentResult{Text: fmt.Sprintf("Opened %s (pid %d) %s; read it with app_state.", oneLine(app.Name), app.PID, where)}, nil
 			}
 		}
 		if time.Now().After(deadline) {
-			return AgentResult{Text: fmt.Sprintf("Asked macOS to open %s, but no new app has shown a window yet. It may still be starting, or be running with no window open: look with apps.", oneLine(name))}, nil
+			return AgentResult{Text: fmt.Sprintf("Asked "+systemName+" to open %s, but no new app has shown a window yet. It may still be starting, or be running with no window open: look with apps.", oneLine(name))}, nil
 		}
 		select {
 		case <-ctx.Done():

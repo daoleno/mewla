@@ -40,6 +40,8 @@ type Display struct {
 
 	cmd  *exec.Cmd
 	done chan struct{}
+	// a11y is the display's accessibility bus; nil without AT-SPI.
+	a11y *a11yBus
 
 	mu   sync.Mutex
 	apps []*exec.Cmd
@@ -143,6 +145,8 @@ func startOn(ctx context.Context, dir string, number, width, height int) (*Displ
 		}
 		if c, err := d.Dial(); err == nil {
 			_ = c.Close()
+			// Without AT-SPI the display still works, as pictures and input.
+			d.a11y, _ = startA11y(dir)
 			return d, nil
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -202,6 +206,7 @@ func (d *Display) Launch(dir string, argv ...string) (*App, error) {
 		"GDK_BACKEND=x11",
 		"MOZ_ENABLE_WAYLAND=0",
 	)
+	cmd.Env = append(cmd.Env, d.a11y.env()...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGTERM}
 	if err := cmd.Start(); err != nil {
 		return nil, err
@@ -229,7 +234,8 @@ func filteredEnv() []string {
 		switch {
 		case strings.HasPrefix(kv, "DISPLAY="), strings.HasPrefix(kv, "WAYLAND_DISPLAY="),
 			strings.HasPrefix(kv, "XAUTHORITY="), strings.HasPrefix(kv, "QT_QPA_PLATFORM="),
-			strings.HasPrefix(kv, "GDK_BACKEND="):
+			strings.HasPrefix(kv, "GDK_BACKEND="), strings.HasPrefix(kv, "AT_SPI_BUS_ADDRESS="),
+			strings.HasPrefix(kv, "NO_AT_BRIDGE="):
 			continue
 		}
 		out = append(out, kv)
@@ -258,6 +264,7 @@ func (d *Display) Stop() {
 			_ = syscall.Kill(-a.Process.Pid, syscall.SIGTERM)
 		}
 	}
+	d.a11y.stop()
 	if d.cmd != nil && d.cmd.Process != nil {
 		_ = syscall.Kill(-d.cmd.Process.Pid, syscall.SIGTERM)
 		select {
