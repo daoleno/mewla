@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
+import { Linking } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { dispatchRenderer } from '../../modules/terminal-vt/src';
 import { createTerminalRendererTransport } from './terminalRendererTransport';
+import type { TerminalSearchState } from './terminalSearch';
 import type {
   MouseAction,
   MouseButton,
@@ -16,7 +18,7 @@ import type { TerminalInputHandleRef } from './TerminalInputHandler';
 import { TerminalLiveGridOwner } from './terminalLiveGrid';
 import type { TerminalScrollCancelReason } from './terminalScrollGesture';
 import { useTerminalHistory } from './useTerminalHistory';
-import { encodeTerminalWheel, selectTerminalScrollRoute } from './terminalWheel';
+import { encodeTerminalKeys, encodeTerminalWheel, selectTerminalScrollRoute } from './terminalWheel';
 import type { TerminalHistoryRender } from './terminalHistory';
 import { isCurrentTerminalRendererGeneration } from './terminalSurfaceBootstrap';
 import {
@@ -43,6 +45,8 @@ type BridgeMessage = { rendererGeneration: number } & (
   | { type: 'historyRetry'; sessionId: string | null }
   | { type: 'viewportScroll'; sessionId: string | null; atBottom: boolean }
   | { type: 'copyText'; text: string }
+  | { type: 'openLink'; sessionId: string | null; kind: 'url' | 'path'; value: string; line?: number; column?: number }
+  | { type: 'searchResult'; query: string; total: number; index: number }
   | { type: 'wheel'; sessionId: string | null; token: string | null; ticks: number; x: number; y: number }
   | {
       type: 'mouse';
@@ -70,6 +74,21 @@ type RendererStateMessage =
   | { type: 'theme'; theme: TerminalThemePalette }
   | { type: 'history'; history: TerminalHistoryRender };
 
+/** Only web addresses leave the terminal for the system. */
+export function openableTerminalUrl(value: string): string | null {
+  return /^https?:\/\/[^\s]+$/i.test(value) ? value : null;
+}
+
+/** The path a file: URL names, which is opened as a path is. */
+export function terminalFileUrlPath(value: string): string | null {
+  if (!/^file:\/\/\/[^\s]+$/i.test(value)) return null;
+  try {
+    return decodeURIComponent(value.slice('file://'.length));
+  } catch {
+    return null;
+  }
+}
+
 interface UseGhosttyTerminalControllerArgs {
   serverId: string;
   targetId: string;
@@ -78,6 +97,8 @@ interface UseGhosttyTerminalControllerArgs {
   rendererGeneration: number;
   onCtrlArmedChange?: (next: boolean) => void;
   onRendererBootstrapFailure?: (message: string, generation: number) => void;
+  /** A path in the output was tapped. */
+  onOpenPath?: (path: string, position: { line?: number; column?: number }) => void;
 }
 
 /**
@@ -93,6 +114,7 @@ export function useGhosttyTerminalController({
   rendererGeneration,
   onCtrlArmedChange,
   onRendererBootstrapFailure,
+  onOpenPath,
 }: UseGhosttyTerminalControllerArgs) {
   const webviewRef = useRef<WebView>(null);
   const inputRef = useRef<TerminalInputHandleRef>(null);
@@ -106,6 +128,9 @@ export function useGhosttyTerminalController({
   rendererGenerationRef.current = rendererGeneration;
   const [readyGeneration, setReadyGeneration] = useState<number | null>(null);
   const [scrolledUp, setScrolledUp] = useState(false);
+  const [search, setSearch] = useState<TerminalSearchState>({ query: '', total: 0, index: -1 });
+  const onOpenPathRef = useRef(onOpenPath);
+  onOpenPathRef.current = onOpenPath;
   const ready = readyGeneration === rendererGeneration;
 
   const ghostty = useGhosttyCoreTerminal();
@@ -327,6 +352,30 @@ export function useGhosttyTerminalController({
     }
   }, [canDeliverInput, cancelLocalScroll, notifyClientFocus, runRendererCommand, session]);
 
+  const jumpPrompt = useCallback((direction: -1 | 1) => {
+    if (webReadyRef.current) {
+      rendererTransport.send(
+        `window.__mewlaJumpPrompt && window.__mewlaJumpPrompt(${direction}); true;`,
+      );
+    }
+  }, [rendererTransport]);
+
+  /** step 0 searches for a new query, 1 and -1 move to the next newer and
+   * older row that holds it. */
+  const runSearch = useCallback((query: string, step: -1 | 0 | 1) => {
+    if (!webReadyRef.current) return;
+    rendererTransport.send(
+      `window.__mewlaSearch && window.__mewlaSearch(${JSON.stringify(query)}, ${step}); true;`,
+    );
+  }, [rendererTransport]);
+
+  const clearSearch = useCallback(() => {
+    setSearch({ query: '', total: 0, index: -1 });
+    if (webReadyRef.current) {
+      rendererTransport.send('window.__mewlaSearchClear && window.__mewlaSearchClear(); true;');
+    }
+  }, [rendererTransport]);
+
   const resumeInput = useCallback(() => {
     wakeRenderer();
     enterLiveMode('resumeInput');
@@ -458,6 +507,27 @@ export function useGhosttyTerminalController({
         return;
       }
 
+      if (payload.type === 'searchResult') {
+        setSearch({ query: payload.query, total: payload.total, index: payload.index });
+        return;
+      }
+
+      if (payload.type === 'openLink') {
+        if (!session.acceptInteractionSession(payload.sessionId)) {
+          return;
+        }
+        const filePath = payload.kind === 'url' ? terminalFileUrlPath(payload.value) : null;
+        if (filePath) {
+          onOpenPathRef.current?.(filePath, {});
+        } else if (payload.kind === 'url') {
+          const url = openableTerminalUrl(payload.value);
+          if (url) void Linking.openURL(url).catch(() => {});
+        } else if (payload.kind === 'path' && payload.value) {
+          onOpenPathRef.current?.(payload.value, { line: payload.line, column: payload.column });
+        }
+        return;
+      }
+
       if (payload.type === 'historyInteraction') {
         if (session.acceptInteractionSession(payload.sessionId)) {
           history.interaction(payload.active);
@@ -514,11 +584,18 @@ export function useGhosttyTerminalController({
             !scrollCorrelationRef.current.accept(payload.sessionId, payload.token) ||
             !canDeliverInput() || !Number.isFinite(payload.x) || !Number.isFinite(payload.y)) return;
         const grid = ghostty.currentGrid();
-        if (!grid || selectTerminalScrollRoute(paneModesRef.current || [],
-          Math.floor(payload.x / grid.cellWidth), Math.floor(payload.y / grid.cellHeight)) !== 'wheel') return;
-        const encoded = encodeTerminalWheel(payload.ticks, (button) => ghostty.encodePointer({
-          action: 'press', button, x: payload.x, y: payload.y, anyButtonPressed: false,
-        }));
+        if (!grid) return;
+        const panes = paneModesRef.current || [];
+        const col = Math.floor(payload.x / grid.cellWidth);
+        const row = Math.floor(payload.y / grid.cellHeight);
+        const route = selectTerminalScrollRoute(panes, col, row);
+        if (route !== 'wheel' && route !== 'keys') return;
+        const appCursor = panes.some((p) => p.app_cursor === true);
+        const encoded = route === 'keys'
+          ? encodeTerminalKeys(payload.ticks, appCursor)
+          : encodeTerminalWheel(payload.ticks, (button) => ghostty.encodePointer({
+            action: 'press', button, x: payload.x, y: payload.y, anyButtonPressed: false,
+          }));
         // Wheel input must not focus the IME, clear the composer, jump the
         // native viewport or invalidate the gesture that produced this batch.
         if (encoded) {
@@ -556,6 +633,10 @@ export function useGhosttyTerminalController({
     ready,
     readyGeneration,
     scrolledUp,
+    search,
+    jumpPrompt,
+    runSearch,
+    clearSearch,
     onInput,
     onCtrlConsumed() {
       onCtrlArmedChange?.(false);

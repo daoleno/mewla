@@ -40,11 +40,15 @@ export function retainedHistoryOverlap(previous: readonly string[], next: readon
   return matched;
 }
 
+/** What the renderer is told to do with the history it holds: void it
+ * (`reset`), drop `removed` rows from its front, then append `rows` at the
+ * end, each with its `flags` (TERMINAL_ROW_* bits) when the host marks them. */
 export interface TerminalHistoryRender {
   rows: string[];
   removed: number;
   reset: boolean;
   notice: string;
+  flags?: number[];
   panes?: TerminalPaneScrollMode[];
   paneId?: string;
 }

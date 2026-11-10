@@ -7,7 +7,41 @@ history scrolling stays entirely local. Alternate-screen scrolling forwards
 bounded mouse-wheel batches through the existing authenticated terminal input
 path so the application scrolls its own transcript.
 
-## History and live output
+## Session host Sessions: numbered scrollback
+
+A Session that runs in the session host (`mewla host`) has no copy-mode and no
+snapshot. The host's libghostty-vt keeps the history (10,000 rows), and the
+App is sent only what it is missing. `terminal_history` takes an optional
+`since` cursor, `{epoch, next}`, and a host Session answers with a delta:
+
+- `lines` are styled ANSI rows, oldest first, and `flags` has one bit set per
+  row: 1 soft-wrapped onto the next row, 2 continues the row above, 4 starts a
+  shell prompt (OSC 133), 8 continues a prompt.
+- Rows are numbered from the first the daemon saw. `first` is the oldest row
+  still kept, `from` the number of `lines[0]`, `next` the number after the last
+  row. The App's next request names `{epoch, next}`.
+- The daemon numbers a view's rows by matching what each capture shares with
+  the last one (`daemon/terminal/scrollback.go`); no host support is needed,
+  so a host that predates marks and modes still works. A new `epoch` with
+  `reset: true` voids what the App holds: a resize (every row reflows), the
+  scrollback erased, or more new output than the history keeps. A cursor from
+  another epoch, another view or another daemon run also gets a reset.
+- While the program is on the alternate screen the answer carries no rows and
+  the viewer keeps its place; the primary history is unchanged until it leaves.
+- `alt_scroll` (DEC 1007) and `app_cursor` (DECCKM) come with every answer
+  from a host that reports them, `mouse` always. Absent means unknown.
+
+A request without `since` (an older App), and every tmux Session, still gets the
+snapshot described below. The App turns both into the same instruction for the
+WebView: void the history, drop `removed` rows from its front, append `rows`
+(`terminalHistoryModel.ts`).
+
+Rows only ever append at the end, which moves nothing the reader sees, so the
+WebView takes them at once, under a finger or a selection, and refreshes 250 ms
+after output. Voiding and dropping rows replace nodes under the finger and wait
+for the touch to end; held instructions merge in order.
+
+## History and live output (tmux Sessions)
 
 The authenticated `terminal_history` request takes an open `session_id` and is
 checked against that connection's terminal-session owner. It captures the active
@@ -89,7 +123,11 @@ metadata/history refresh remains a coalesced idle operation, suspended throughou
 the drag and fling. App start/exit and pane focus refresh this metadata after
 output settles. Tmux does not expose DEC 1007 alternate-scroll opt-in; without
 mouse reporting, Mewla leaves the gesture alone rather than injecting arrow keys
-that could edit a prompt. Inline TUIs retain plain-screen history scrolling.
+that could edit a prompt. A host Session does report it: on the alternate screen
+with no mouse reporting and DEC 1007 on, as a desktop terminal treats it, the
+swipe becomes cursor keys (`ESC [ A/B`, or `ESC O A/B` when the program asked
+for application cursor keys), at most three per frame; with 1007 off or unknown
+the gesture is left alone. Inline TUIs retain plain-screen history scrolling.
 
 On width changes, tmux remains responsible for terminal reflow. Mewla fetches the
 pane history again at its new width and retains the nearest physical reading
@@ -106,6 +144,28 @@ row under the finger is retained even when it leaves that mounted range. Live
 HTML replacement waits for interaction to settle: replacing a touched DOM node
 was the Android regression that dropped subsequent touch events after the first
 few tmux scroll batches.
+
+## Selecting, links, prompts, search
+
+Rows carry their wrap flags as `data-wrap` and `data-wrap-continuation`, so
+copying a selection joins the rows a soft wrap split, in history as in the live
+grid. While a selection is held, 600 rows on either side of the viewport are
+mounted and none are unmounted, so a selection can be dragged across the
+scrollback.
+
+A tap on a URL (http, https) opens it; one on a path (absolute, `~/`, `./`,
+`../`, or with a directory and an extension, with an optional `:line:column`)
+or a `file:` URL opens the Session file preview, for a Worker whose run is
+known. The line is the logical one: a link a soft wrap split is found whole.
+A program that reports the mouse keeps taps on its own screen; history is
+always static. `terminalLinks.ts` holds the matcher.
+
+While scrolled up, the buttons beside **Scroll to bottom** jump to the previous
+and next prompt and open search. Prompts are the rows the program marked with
+OSC 133; when no row of the history is marked, lines that look like a prompt
+(`❯ `, `› `, `$ `, `user@host … $`) stand in. Next past the last prompt returns
+to the live screen. Search is over the history rows' text, case-insensitive;
+the match shows as a tinted row, older and newer matches are the arrows.
 
 ## Verification
 
