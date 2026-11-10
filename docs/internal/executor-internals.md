@@ -314,7 +314,13 @@ Provider model availability prefers the live Provider catalog and its last-known
 cache. When discovery is unavailable, Mewla projects local Codex/Claude contract
 IDs, installed caches, models.dev metadata and exact configured/session IDs as
 display-only candidates with a freshness warning; those fallback rows do not
-reject a custom Agent request. Mewla may enrich discovered rows from the
+reject a custom Agent request. When a connection has a discovered (reliable) list and a
+request names a model that list lacks, the Router first does one live rediscovery of that
+connection (shared by concurrent requests, skipped if the list was fetched in the last
+30 seconds) and refuses only a model the upstream really does not list; the 404 names the
+model and the connection, and says the list could not be refreshed when the upstream was
+unreachable. There is no periodic refresh: the list changes only on an explicit sync or
+this on-miss lookup. Mewla may enrich discovered rows from the
 secret-free public `models.dev` metadata cache (display name, limits, capabilities,
 prices, and release date); that metadata never adds a routable model or re-enables
 one disabled in Settings. The `daemon/modelfacts` package owns the one download and
