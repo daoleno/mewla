@@ -1,0 +1,557 @@
+import { effect, Scroll, signal, Text, untracked, View } from "nsh";
+import type { JSX } from "nsh";
+import { Button, Input, Sheet } from "nsh/base";
+import { agentExtensionsScopeLabel, pluginsForScope, skillCopyScope, skillsForScope, type AgentExtensionsScope } from "../../../../core/extensions/agentExtensionsModel";
+import type { InstalledPluginCopy } from "../../../../core/extensions/pluginsManagement";
+import { filterLogicalPlugins, groupLogicalPlugins, pluginCopyLabel, type LogicalPlugin, type PluginCapabilityFilter, type PluginFilters } from "../../../../core/extensions/pluginsScreenModel";
+import { skillAgentLabel, skillsRequestData, type InstalledSkill, type ManagedSkillAgent } from "../../../../core/extensions/skillsManagement";
+import { filterLogicalSkills, MANAGED_SKILL_AGENTS, type LogicalSkill, type SkillFilters, type SkillScopeFilter, type SkillStatusFilter } from "../../../../core/extensions/skillsScreenModel";
+import { skillRowSupportsDelete, type SkillsSurfaceSection } from "../../../../core/extensions/skillsSurfaceModel";
+import { daemon, daemonState } from "../../daemon";
+import { Icon, type IconName } from "../../kit/Icon";
+import { EmptyState, Notice, Page, PillButton, Spinner } from "../../kit/kit";
+import { Segmented } from "../../kit/Segmented";
+import type { PageNav } from "../../routes";
+import { isManaged, PluginDetails, SkillInspector } from "./Inspector";
+import { AgentMarks } from "./marks";
+import {
+  allSkills,
+  closeInspector,
+  deleteSkillCopy,
+  followComputer,
+  inspected,
+  inspectSkill,
+  listableSkills,
+  mutationOperations,
+  notice,
+  pluginCopies,
+  pluginsState,
+  preparing,
+  projectCwd,
+  refreshAll,
+  refreshPlugins,
+  refreshSkills,
+  skillsState,
+  uninstallPluginCopy,
+} from "./state";
+
+const SHEET = "max-h-[94%] rounded-t-3xl bg-card px-4 pb-8 pt-3";
+const BACKDROP = "bg-black/30";
+
+const NO_SKILL_FILTERS: SkillFilters = { agents: [], status: "all", scope: "all" };
+const NO_PLUGIN_FILTERS: PluginFilters = { agents: [], capability: "all" };
+
+/**
+ * One tool's own plugins and Skills (only Codex and Claude Code have plugins),
+ * or the Skills several tools share. Read-only but for delete and uninstall,
+ * each of one exact copy, after the computer said what it would do.
+ */
+export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) {
+  const hasPlugins = props.scope === "codex" || props.scope === "claude-code";
+  const chosen = signal<SkillsSurfaceSection | null>(null);
+  const skillQuery = signal("");
+  const pluginQuery = signal("");
+  const skillFilters = signal<SkillFilters>(NO_SKILL_FILTERS);
+  const pluginFilters = signal<PluginFilters>(NO_PLUGIN_FILTERS);
+  const filtersOpen = signal<SkillsSurfaceSection | null>(null);
+  /** The Skill whose copies are offered for delete, the Plugin whose copies for uninstall. */
+  const skillPicker = signal<LogicalSkill | null>(null);
+  const pluginPicker = signal<LogicalPlugin | null>(null);
+  const openPluginKey = signal<string | null>(null);
+
+  effect(() => {
+    const current = daemon();
+    followComputer(current?.server.id ?? "");
+    if (current && daemonState() === "connected") untracked(refreshAll);
+  });
+
+  const allPlugins = () => groupLogicalPlugins(pluginCopies());
+  const plugins = () => pluginsForScope(pluginCopies(), props.scope);
+  const skills = () => skillsForScope(listableSkills(), props.scope);
+  const pluginOwned = () => allSkills().filter((copy) => skillCopyScope(copy) === props.scope).length - listableSkills().filter((copy) => skillCopyScope(copy) === props.scope).length;
+  // A tool opens on its plugins while it has any, otherwise on its Skills.
+  const section = (): SkillsSurfaceSection => chosen() ?? (hasPlugins && plugins().length ? "plugins" : "skills");
+  const filterAgents = (): ManagedSkillAgent[] => (props.scope === "shared" ? MANAGED_SKILL_AGENTS.filter((agent) => skills().some((skill) => skill.agents.includes(agent))) : []);
+  const shownSkills = () => filterLogicalSkills(skills(), skillQuery(), skillFilters());
+  const shownPlugins = () => filterLogicalPlugins(plugins(), pluginQuery(), pluginFilters());
+  const logicalOf = (copy: InstalledSkill) => skills().find((skill) => skill.copies.some((candidate) => candidate.id === copy.id)) ?? null;
+  const openPlugin = () => allPlugins().find((plugin) => plugin.key === openPluginKey()) ?? null;
+
+  const chooseDelete = (skill: LogicalSkill) => {
+    if (skill.copies.length > 1) skillPicker.set(skill);
+    else void deleteSkillCopy(skill.copies[0]!);
+  };
+  const chooseUninstall = (plugin: LogicalPlugin) => {
+    const uninstallable = plugin.copies.filter((copy) => copy.capability.canUninstall);
+    // A protected Plugin is never sent: its details say why.
+    if (!uninstallable.length) openPluginKey.set(plugin.key);
+    else if (uninstallable.length > 1) pluginPicker.set(plugin);
+    else void uninstallPluginCopy(uninstallable[0]!);
+  };
+  const refresh = () => (section() === "plugins" ? void refreshPlugins() : void refreshSkills());
+  const loadingNow = () => (section() === "plugins" ? pluginsState() : skillsState()).status === "loading";
+
+  return (
+    <Page title={agentExtensionsScopeLabel(props.scope)} testID="agent-page" refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))} onRefresh={refresh}>
+      {projectCwd() ? (
+        <View class="mt-2 flex-row items-center gap-1.5 self-start rounded-full bg-secondary px-3 py-1" accessibilityLabel={`Project ${projectCwd().split("/").filter(Boolean).at(-1)}`}>
+          <Icon name="folder" size={14} />
+          <Text class="text-xs">{projectCwd().split("/").filter(Boolean).at(-1) ?? projectCwd()}</Text>
+        </View>
+      ) : null}
+      {hasPlugins ? (
+        <View class="mt-2">
+          <Segmented
+            testID="agent-section"
+            accessibilityLabel="Plugins and Skills"
+            options={[{ key: "plugins", label: "Plugins" }, { key: "skills", label: "Skills" }] as const}
+            value={section()}
+            onChange={(key) => chosen.set(key)}
+          />
+        </View>
+      ) : null}
+      {notice() ? (
+        <View testID="mutation-notice">
+          <Notice tone={notice()!.kind === "error" ? "failed" : undefined} title={notice()!.message} action="Dismiss" onAction={() => notice.set(null)} />
+        </View>
+      ) : null}
+      {section() === "skills" ? (
+        <SkillsList
+          rows={shownSkills()}
+          total={skills().length}
+          pluginOwned={hasPlugins ? pluginOwned() : 0}
+          query={skillQuery()}
+          filters={skillFilters()}
+          onQuery={(value) => skillQuery.set(value)}
+          onFilters={() => filtersOpen.set("skills")}
+          onClearFilters={() => { skillQuery.set(""); skillFilters.set(NO_SKILL_FILTERS); }}
+          onRemoveFilter={(next) => skillFilters.set(next)}
+          onShowPlugins={() => chosen.set("plugins")}
+          onOpen={(skill) => void inspectSkill(skill.primaryCopy)}
+          onDelete={chooseDelete}
+          nav={props.nav}
+        />
+      ) : (
+        <PluginsList
+          rows={shownPlugins()}
+          total={plugins().length}
+          query={pluginQuery()}
+          filters={pluginFilters()}
+          onQuery={(value) => pluginQuery.set(value)}
+          onFilters={() => filtersOpen.set("plugins")}
+          onClearFilters={() => { pluginQuery.set(""); pluginFilters.set(NO_PLUGIN_FILTERS); }}
+          onRemoveFilter={(next) => pluginFilters.set(next)}
+          onOpen={(plugin) => openPluginKey.set(plugin.key)}
+          onUninstall={chooseUninstall}
+          nav={props.nav}
+        />
+      )}
+
+      <Sheet open={filtersOpen() === "skills"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        <SkillFilterSheet agents={filterAgents()} filters={skillFilters()} onChange={(next) => skillFilters.set(next)} onClose={() => filtersOpen.set(null)} />
+      </Sheet>
+      <Sheet open={filtersOpen() === "plugins"} onOpenChange={({ open }) => !open && filtersOpen.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        <PluginFilterSheet agents={MANAGED_SKILL_AGENTS.filter((agent) => plugins().some((plugin) => plugin.agents.includes(agent)))} filters={pluginFilters()} onChange={(next) => pluginFilters.set(next)} onClose={() => filtersOpen.set(null)} />
+      </Sheet>
+
+      <Sheet open={skillPicker() !== null} onOpenChange={({ open }) => !open && skillPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        {skillPicker() ? (
+          <View testID="skill-copy-picker" class="gap-2">
+            <Text class="text-xl font-semibold" role="header">Delete copy</Text>
+            <Text class="text-sm text-muted-foreground">{skillPicker()!.name}</Text>
+            {skillPicker()!.copies.map((copy) => {
+              const deletable = skillRowSupportsDelete(copy, mutationOperations());
+              return (
+                <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
+                  <View class="min-w-0 flex-1">
+                    <Text class="text-sm">{copy.location}</Text>
+                    <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{copy.rootPath}</Text>
+                    {deletable ? null : <Text class="text-xs text-muted-foreground">This copy cannot be deleted from here.</Text>}
+                  </View>
+                  {deletable ? (
+                    <Button
+                      testID={`pick-delete-${copy.id}`}
+                      accessibilityLabel={`Delete ${copy.name} from ${copy.location}`}
+                      disabled={Boolean(preparing())}
+                      onPress={() => { skillPicker.set(null); void deleteSkillCopy(copy); }}
+                      class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
+                    >
+                      <Icon name="trash" size={20} tone="seal" />
+                    </Button>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+      </Sheet>
+      <Sheet open={pluginPicker() !== null} onOpenChange={({ open }) => !open && pluginPicker.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        {pluginPicker() ? (
+          <View testID="plugin-copy-picker" class="gap-2">
+            <Text class="text-xl font-semibold" role="header">Uninstall copy</Text>
+            <Text class="text-sm text-muted-foreground">{pluginPicker()!.displayName}</Text>
+            {pluginPicker()!.copies.map((copy) => (
+              <View class="flex-row items-center gap-2 rounded-xl border border-border px-3 py-2">
+                <View class="min-w-0 flex-1">
+                  <Text class="text-sm">{pluginCopyLabel(copy)}</Text>
+                  <Text class="font-mono text-xs text-muted-foreground line-clamp-1">{copy.rootPath}</Text>
+                </View>
+                {copy.capability.canUninstall ? (
+                  <Button
+                    testID={`pick-uninstall-${copy.copyId}`}
+                    accessibilityLabel={`Uninstall copy from ${copy.location}`}
+                    disabled={Boolean(preparing())}
+                    onPress={() => { pluginPicker.set(null); void uninstallPluginCopy(copy); }}
+                    class="size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50"
+                  >
+                    <Icon name="trash" size={20} tone="seal" />
+                  </Button>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </Sheet>
+
+      <Sheet open={inspected() !== null} onOpenChange={({ open }) => !open && closeInspector()} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        {inspected() ? (
+          <Scroll class="shrink">
+            <SkillInspector
+              logical={logicalOf(inspected()!)}
+              copy={inspected()!}
+              plugins={allPlugins()}
+              pluginsShown={hasPlugins}
+              onSelectFile={(path) => void inspectSkill(inspected()!, path)}
+              onDelete={(copy) => void deleteSkillCopy(copy)}
+              onOpenPlugin={(key) => { closeInspector(); chosen.set("plugins"); openPluginKey.set(key); }}
+              onClose={closeInspector}
+            />
+          </Scroll>
+        ) : null}
+      </Sheet>
+      <Sheet open={openPlugin() !== null} onOpenChange={({ open }) => !open && openPluginKey.set(null)} closeOnSwipe popupClass={SHEET} backdropClass={BACKDROP}>
+        {openPlugin() ? (
+          <Scroll class="shrink">
+            <PluginDetails plugin={openPlugin()!} onUninstall={(copy: InstalledPluginCopy) => void uninstallPluginCopy(copy)} onClose={() => openPluginKey.set(null)} />
+          </Scroll>
+        ) : null}
+      </Sheet>
+    </Page>
+  );
+}
+
+/** Search and Filter above a list. */
+function Toolbar(props: { placeholder: string; label: string; query: string; onQuery: (value: string) => void; filterLabel: string; filtered: boolean; onFilters: () => void; testID: string }) {
+  return (
+    <View class="mt-4 flex-row items-center gap-2">
+      <View class="min-h-[44px] flex-1 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
+        <Icon name="search" size={16} />
+        <Input
+          testID={`${props.testID}-search`}
+          accessibilityLabel={props.label}
+          class="min-h-[44px] flex-1 py-2 text-base"
+          value={props.query}
+          placeholder={props.placeholder}
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChange={({ value }) => props.onQuery(value)}
+        />
+        {props.query ? (
+          <Button accessibilityLabel="Clear search" onPress={() => props.onQuery("")} class="size-8 items-center justify-center active:opacity-60">
+            <Icon name="close-circle" size={16} tone="faint" />
+          </Button>
+        ) : null}
+      </View>
+      <Button testID={`${props.testID}-filter`} accessibilityLabel={props.filterLabel} onPress={props.onFilters} class={`size-11 items-center justify-center rounded-xl border border-border active:bg-accent ${props.filtered ? "bg-secondary" : "bg-card"}`}>
+        <Icon name="options" size={18} tone={props.filtered ? "ink" : "soft"} />
+      </Button>
+    </View>
+  );
+}
+
+/** An active filter, removable on its own. */
+function Chip(props: { label: string; removeLabel: string; onRemove: () => void }) {
+  return (
+    <Button accessibilityLabel={props.removeLabel} onPress={props.onRemove} class="flex-row items-center gap-1 rounded-full bg-secondary px-3 py-1 active:opacity-70">
+      <Text class="text-xs font-medium">{props.label}</Text>
+      <Icon name="close" size={12} />
+    </Button>
+  );
+}
+
+/** One logical item: its name and line, the agents it serves, and its one action (remove, or why not). */
+function ItemRow(props: { testID: string; name: string; summary: string; agents: readonly ManagedSkillAgent[]; openLabel: string; action: { label: string; icon: IconName; destructive: boolean; busy: boolean; disabled: boolean; onPress: () => void }; onOpen: () => void }) {
+  return (
+    <View class="flex-row items-center">
+      <Button testID={props.testID} accessibilityLabel={props.openLabel} onPress={props.onOpen} class="min-w-0 flex-1 gap-1 py-3 pl-4 pr-2 active:bg-accent">
+        <Text class="text-base font-medium line-clamp-1">{props.name}</Text>
+        <Text class="text-sm text-muted-foreground line-clamp-2">{props.summary}</Text>
+        <AgentMarks agents={props.agents} size={15} />
+      </Button>
+      <Button testID={`${props.testID}-action`} accessibilityLabel={props.action.label} disabled={props.action.disabled} onPress={props.action.onPress} class="mr-1 size-11 items-center justify-center rounded-full active:bg-accent disabled:opacity-50">
+        {props.action.busy ? <Spinner size={16} /> : <Icon name={props.action.icon} size={20} tone={props.action.destructive ? "seal" : "faint"} />}
+      </Button>
+      <View class="absolute bottom-0 left-4 right-0 h-px bg-border" />
+    </View>
+  );
+}
+
+function Card(props: { children?: JSX.Element }) {
+  return (
+    <View class="mt-3 overflow-hidden rounded-2xl border border-border bg-card">
+      <View class="-mb-px">{props.children}</View>
+    </View>
+  );
+}
+
+function SkillsList(props: {
+  rows: LogicalSkill[];
+  total: number;
+  pluginOwned: number;
+  query: string;
+  filters: SkillFilters;
+  onQuery: (value: string) => void;
+  onFilters: () => void;
+  onClearFilters: () => void;
+  onRemoveFilter: (next: SkillFilters) => void;
+  onShowPlugins: () => void;
+  onOpen: (skill: LogicalSkill) => void;
+  onDelete: (skill: LogicalSkill) => void;
+  nav: PageNav;
+}) {
+  const state = () => skillsState();
+  const inventory = () => skillsRequestData(state());
+  const filtered = () => props.filters.agents.length > 0 || props.filters.status !== "all" || props.filters.scope !== "all";
+  const offline = () => daemonState() !== "connected";
+  const body = () => {
+    if (!daemon()) return <EmptyState icon="server" title="No current server" detail="Choose one in Settings." action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} />;
+    if (!inventory() && daemonState() === "connecting") return <EmptyState busy title="Connecting to server" />;
+    if (!inventory() && state().status === "error") {
+      return (
+        <View>
+          <EmptyState testID="skills-failed" icon={offline() ? "cloud-offline" : "warning"} title={offline() ? "Server disconnected" : "Skills unavailable"} detail={state().error} action="Try again" onAction={() => void refreshSkills()} />
+          {offline() ? <View class="items-center"><PillButton title="Open Settings" onPress={() => props.nav.push({ name: "settings" })} /></View> : null}
+        </View>
+      );
+    }
+    if (!inventory()) return <EmptyState busy title="Loading local Skills" />;
+    if (!props.total && !props.pluginOwned) return <EmptyState icon="skills" title="No local Skills" action="Refresh" onAction={() => void refreshSkills()} />;
+    if (!props.total && !filtered() && !props.query && props.pluginOwned > 0) {
+      return <EmptyState icon="plugins" title="All Skills come with plugins" action="Show plugins" onAction={props.onShowPlugins} />;
+    }
+    if (!props.rows.length) return <EmptyState icon="search" title="No matches" action="Clear filters" onAction={props.onClearFilters} />;
+    return (
+      <Card>
+        {props.rows.map((skill) => {
+          const canDelete = skill.copies.some((copy) => skillRowSupportsDelete(copy, mutationOperations()));
+          const readonlyReason = skill.copies.find((copy) => !copy.capability.canDelete && copy.capability.reason)?.capability.reason;
+          return (
+            <ItemRow
+              testID={`skill-${skill.name}`}
+              name={skill.name}
+              summary={skill.description || readonlyReason || "Local Skill"}
+              agents={skill.agents}
+              openLabel={`Open ${skill.name}`}
+              onOpen={() => props.onOpen(skill)}
+              action={{
+                label: canDelete ? `Delete ${skill.name}` : `Open why ${skill.name} is protected`,
+                icon: canDelete ? "trash" : "lock",
+                destructive: canDelete,
+                busy: skill.copies.some((copy) => preparing() === `delete:${copy.id}`),
+                disabled: canDelete && Boolean(preparing()),
+                onPress: () => (canDelete ? props.onDelete(skill) : props.onOpen(skill)),
+              }}
+            />
+          );
+        })}
+      </Card>
+    );
+  };
+  return (
+    <View>
+      {inventory() ? (
+        <Toolbar testID="skills" placeholder="Search Skills" label="Search local Skills" query={props.query} onQuery={props.onQuery} filterLabel="Filter Skills" filtered={filtered()} onFilters={props.onFilters} />
+      ) : null}
+      {filtered() ? (
+        <View class="mt-2 flex-row flex-wrap gap-1.5">
+          {props.filters.agents.map((agent) => (
+            <Chip label={skillAgentLabel(agent)} removeLabel={`Remove ${skillAgentLabel(agent)} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, agents: props.filters.agents.filter((item) => item !== agent) })} />
+          ))}
+          {props.filters.status !== "all" ? (
+            <Chip label={STATUS_LABEL[props.filters.status]} removeLabel={`Remove ${STATUS_LABEL[props.filters.status]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, status: "all" })} />
+          ) : null}
+          {props.filters.scope !== "all" ? (
+            <Chip label={SCOPE_LABEL[props.filters.scope]} removeLabel={`Remove ${SCOPE_LABEL[props.filters.scope]} filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, scope: "all" })} />
+          ) : null}
+        </View>
+      ) : null}
+      <OwnershipNotice count={props.pluginOwned} onView={props.onShowPlugins} />
+      {body()}
+    </View>
+  );
+}
+
+/** Where the Skills a plugin brings are: inside it, or, while ownership is unknown, here and protected. */
+function OwnershipNotice(props: { count: number; onView: () => void }) {
+  const state = () => pluginsState();
+  return (
+    <View>
+      {state().status === "error" ? (
+        <Notice testID="ownership-failed" title="Plugin ownership unavailable" detail="Skills that come with plugins may appear here. They stay protected." action="Retry" onAction={() => void refreshPlugins()} />
+      ) : props.count > 0 ? (
+        <Notice testID="ownership-notice" tone={undefined} title={`${props.count} more ${props.count === 1 ? "Skill comes" : "Skills come"} with plugins`} action="View" onAction={props.onView} />
+      ) : null}
+    </View>
+  );
+}
+
+function PluginsList(props: {
+  rows: LogicalPlugin[];
+  total: number;
+  query: string;
+  filters: PluginFilters;
+  onQuery: (value: string) => void;
+  onFilters: () => void;
+  onClearFilters: () => void;
+  onRemoveFilter: (next: PluginFilters) => void;
+  onOpen: (plugin: LogicalPlugin) => void;
+  onUninstall: (plugin: LogicalPlugin) => void;
+  nav: PageNav;
+}) {
+  const state = () => pluginsState();
+  const inventory = () => skillsRequestData(state());
+  const filtered = () => props.filters.agents.length > 0 || props.filters.capability !== "all";
+  const body = () => {
+    if (!daemon()) return <EmptyState icon="server" title="No current server" detail="Choose one in Settings." action="Open Settings" onAction={() => props.nav.push({ name: "settings" })} />;
+    if (!inventory() && state().status === "error") return <EmptyState testID="plugins-failed" icon="warning" title="Plugins unavailable" detail={state().error} action="Try again" onAction={() => void refreshPlugins()} />;
+    if (!inventory()) return <EmptyState busy title="Loading installed Plugins" />;
+    if (!props.total) return <EmptyState icon="plugins" title="No plugins installed" />;
+    if (!props.rows.length) return <EmptyState icon="search" title="No matches" action="Clear search" onAction={props.onClearFilters} />;
+    return (
+      <Card>
+        {props.rows.map((plugin) => {
+          const canUninstall = plugin.copies.some((copy) => copy.capability.canUninstall);
+          const readonlyReason = plugin.copies.find((copy) => !copy.capability.canUninstall && copy.capability.reason)?.capability.reason;
+          return (
+            <ItemRow
+              testID={`plugin-${plugin.name}`}
+              name={plugin.displayName}
+              summary={plugin.description || readonlyReason || "Local Plugin"}
+              agents={plugin.agents.filter(isManaged)}
+              openLabel={`Open ${plugin.displayName} Plugin details`}
+              onOpen={() => props.onOpen(plugin)}
+              action={{
+                label: canUninstall ? `Uninstall ${plugin.displayName}` : `Open why ${plugin.displayName} is protected`,
+                icon: canUninstall ? "trash" : "lock",
+                destructive: canUninstall,
+                busy: plugin.copies.some((copy) => preparing() === `uninstall:${copy.copyId}`),
+                disabled: canUninstall && Boolean(preparing()),
+                onPress: () => (canUninstall ? props.onUninstall(plugin) : props.onOpen(plugin)),
+              }}
+            />
+          );
+        })}
+      </Card>
+    );
+  };
+  return (
+    <View>
+      {inventory() ? (
+        <Toolbar testID="plugins" placeholder="Search Plugins" label="Search installed Plugins" query={props.query} onQuery={props.onQuery} filterLabel="Filter Plugins" filtered={filtered()} onFilters={props.onFilters} />
+      ) : null}
+      {filtered() ? (
+        <View class="mt-2 flex-row flex-wrap gap-1.5">
+          {props.filters.agents.map((agent) => (
+            <Chip label={skillAgentLabel(agent)} removeLabel={`Remove ${skillAgentLabel(agent)} Plugin filter`} onRemove={() => props.onRemoveFilter({ ...props.filters, agents: props.filters.agents.filter((item) => item !== agent) })} />
+          ))}
+          {props.filters.capability !== "all" ? (
+            <Chip label={CAPABILITY_LABEL[props.filters.capability]} removeLabel="Remove Plugin capability filter" onRemove={() => props.onRemoveFilter({ ...props.filters, capability: "all" })} />
+          ) : null}
+        </View>
+      ) : null}
+      {body()}
+    </View>
+  );
+}
+
+const STATUS_LABEL: Record<SkillStatusFilter, string> = { all: "All", enabled: "Enabled", disabled: "Disabled" };
+const SCOPE_LABEL: Record<SkillScopeFilter, string> = { all: "All", global: "Global", project: "Project" };
+const CAPABILITY_LABEL: Record<PluginCapabilityFilter, string> = { all: "All", uninstallable: "Uninstallable", readonly: "Read-only" };
+
+/** One exclusive choice inside a filter sheet. */
+function Choice<K extends string>(props: { title: string; options: readonly K[]; labels: Record<K, string>; value: K; onChange: (value: K) => void; testID: string }) {
+  return (
+    <View class="mt-4 gap-2">
+      <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
+      <View class="flex-row flex-wrap gap-2">
+        {props.options.map((option) => (
+          <Button
+            testID={`${props.testID}-${option}`}
+            role="radio"
+            selected={props.value === option}
+            onPress={() => props.onChange(option)}
+            class={`rounded-full border px-3 py-1.5 active:opacity-70 ${props.value === option ? "border-foreground bg-secondary" : "border-border"}`}
+          >
+            <Text class="text-sm">{props.labels[option]}</Text>
+          </Button>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function AgentChoice(props: { agents: readonly ManagedSkillAgent[]; value: readonly ManagedSkillAgent[]; onChange: (agents: ManagedSkillAgent[]) => void; title: string }) {
+  return (
+    <View class="mt-4 gap-2" style={{ display: props.agents.length < 2 ? "none" : "flex" }}>
+      <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
+      <View class="flex-row flex-wrap gap-2">
+        {props.agents.map((agent) => {
+          const on = props.value.includes(agent);
+          return (
+            <Button
+              testID={`filter-agent-${agent}`}
+              role="checkbox"
+              selected={on}
+              onPress={() => props.onChange(on ? props.value.filter((item) => item !== agent) : [...props.value, agent])}
+              class={`rounded-full border px-3 py-1.5 active:opacity-70 ${on ? "border-foreground bg-secondary" : "border-border"}`}
+            >
+              <Text class="text-sm">{skillAgentLabel(agent)}</Text>
+            </Button>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function SheetButtons(props: { onReset: () => void; onDone: () => void }) {
+  return (
+    <View class="mt-6 flex-row justify-end gap-2">
+      <PillButton title="Reset" onPress={props.onReset} />
+      <PillButton testID="filter-done" title="Done" filled onPress={props.onDone} />
+    </View>
+  );
+}
+
+function SkillFilterSheet(props: { agents: ManagedSkillAgent[]; filters: SkillFilters; onChange: (next: SkillFilters) => void; onClose: () => void }) {
+  return (
+    <View testID="skill-filters">
+      <Text class="text-xl font-semibold" role="header">Filter Skills</Text>
+      <AgentChoice title="Agents" agents={props.agents} value={props.filters.agents} onChange={(agents) => props.onChange({ ...props.filters, agents })} />
+      <Choice testID="filter-status" title="Status" options={["all", "enabled", "disabled"] as const} labels={STATUS_LABEL} value={props.filters.status} onChange={(status) => props.onChange({ ...props.filters, status })} />
+      <Choice testID="filter-scope" title="Scope" options={["all", "global", "project"] as const} labels={SCOPE_LABEL} value={props.filters.scope} onChange={(scope) => props.onChange({ ...props.filters, scope })} />
+      <SheetButtons onReset={() => props.onChange(NO_SKILL_FILTERS)} onDone={props.onClose} />
+    </View>
+  );
+}
+
+function PluginFilterSheet(props: { agents: ManagedSkillAgent[]; filters: PluginFilters; onChange: (next: PluginFilters) => void; onClose: () => void }) {
+  return (
+    <View testID="plugin-filters">
+      <Text class="text-xl font-semibold" role="header">Filter Plugins</Text>
+      <AgentChoice title="Available to" agents={props.agents} value={props.filters.agents} onChange={(agents) => props.onChange({ ...props.filters, agents })} />
+      <Choice testID="filter-capability" title="Capability" options={["all", "uninstallable", "readonly"] as const} labels={CAPABILITY_LABEL} value={props.filters.capability} onChange={(capability) => props.onChange({ ...props.filters, capability })} />
+      <SheetButtons onReset={() => props.onChange(NO_PLUGIN_FILTERS)} onDone={props.onClose} />
+    </View>
+  );
+}

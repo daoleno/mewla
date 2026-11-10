@@ -130,3 +130,55 @@ export function failureText(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   return message.trim() || fallback;
 }
+
+/** A request the computer refused: its words, and its `code` when it sent one. */
+export class DaemonError extends Error {
+  constructor(message: string, readonly code?: string) {
+    super(message);
+  }
+}
+
+export interface CodedRequestOptions {
+  reply: string;
+  /** Frame types that fail it, besides `error`. */
+  errors?: string[];
+  timeoutMs: number;
+  /** Said when it times out, fails with no words, or the computer goes away. */
+  timeout: string;
+  failure: string;
+  disconnected: string;
+}
+
+/**
+ * Like `Daemon.request`, but a refusal keeps the computer's `code`
+ * (`plugin_request_failed`), which tells a refusal from a request that never got there.
+ */
+export function codedRequest<T = Frame>(daemon: Daemon, type: string, body: Record<string, unknown>, options: CodedRequestOptions): Promise<T> {
+  const requestId = `${type}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return new Promise<T>((resolve, reject) => {
+    const stops: Array<() => void> = [];
+    const finish = (action: () => void) => {
+      stops.forEach((stop) => stop());
+      clearTimeout(timer);
+      action();
+    };
+    const mine = (frame: Frame) => frame.request_id === requestId;
+    stops.push(daemon.on(options.reply, (frame) => mine(frame) && finish(() => resolve(frame as T))));
+    for (const errorType of new Set(["error", ...(options.errors ?? [])])) {
+      stops.push(
+        daemon.on(errorType, (frame) => {
+          if (!mine(frame)) return;
+          const message = typeof frame.message === "string" && frame.message.trim() ? frame.message : options.failure;
+          finish(() => reject(new DaemonError(message, typeof frame.code === "string" ? frame.code : undefined)));
+        }),
+      );
+    }
+    stops.push(daemon.onState((state) => state !== "connected" && finish(() => reject(new DaemonError(options.disconnected)))));
+    const timer = setTimeout(() => finish(() => reject(new DaemonError(options.timeout))), options.timeoutMs);
+    try {
+      daemon.send({ type, request_id: requestId, ...body });
+    } catch {
+      finish(() => reject(new DaemonError(options.disconnected)));
+    }
+  });
+}
