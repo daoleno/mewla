@@ -55,10 +55,13 @@ jobs:
 
   ios:
     name: iOS host (Simulator, upgrade tests)
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      # The verified libghostty-vt XCFramework the terminal links (app/modules/terminal-vt/libs/ios, cached on main).
+      - name: iOS Ghostty XCFramework
+        uses: ./.github/actions/ios-native
       - uses: actions/cache@v4
         with:
           path: ~/.nsh
@@ -74,10 +77,14 @@ jobs:
           SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
           echo "SIM=$SIM" >> "$GITHUB_ENV"
       # Signed to run locally: the Keychain refuses an unsigned app.
-      - name: Upgrade tests (Keychain and AsyncStorage of the Expo app)
+      # TerminalTests saves the terminal it drew as out/terminal.png.
+      - name: Unit tests (the Expo app's Keychain and AsyncStorage, the terminal)
         working-directory: client/ios
+        env:
+          TEST_RUNNER_MEWLA_TEST_OUT: ${{ github.workspace }}/client/ios/out
         run: |
           set -o pipefail
+          mkdir -p out
           xcodebuild test -project Mewla.xcodeproj -scheme Mewla -destination "id=$SIM" -derivedDataPath build/dd \
             CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tail -40
       - name: Open it on the Simulator

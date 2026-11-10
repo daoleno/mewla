@@ -6,6 +6,11 @@ options:
   deploymentTarget: { iOS: "16.0" }
 settings:
   base:
+    # The terminal's libghostty-vt: scripts/build-libghostty-ios.sh builds GhosttyVt.xcframework into
+    # app/modules/terminal-vt/libs/ios (CI: .github/actions/ios-native); it moves into client/ at the cutover.
+    # `xcodebuild MEWLA_GHOSTTY=<terminal-vt dir>` points elsewhere (Android: -Pmewla.ghostty). Declared on the
+    # project so every target resolves the xcframework's source tree from it.
+    MEWLA_GHOSTTY: $(SRCROOT)/../../app/modules/terminal-vt
     # The Expo app's identity, so the App Store / TestFlight build replaces it in place: the app,
     # its Live Activity / widget extension (`.live`) and their App Group all follow from it.
     # Preview builds pass MEWLA_APP_ID=com.daoleno.mewla.preview (not PRODUCT_BUNDLE_IDENTIFIER,
@@ -35,7 +40,16 @@ targets:
     dependencies:
       - { framework: "Frameworks/${NSH_FRAMEWORK}.xcframework", embed: false }
       - { target: MewlaLiveWidgets, embed: true }
+      # Static, linked in; its path is relative to the MEWLA_GHOSTTY build setting (a custom source tree).
+      - { sdk: libs/ios/GhosttyVt.xcframework, root: MEWLA_GHOSTTY }
     preBuildScripts:
+      - name: Check libghostty-vt
+        basedOnDependencyAnalysis: false
+        script: |
+          xcf="$MEWLA_GHOSTTY/libs/ios/GhosttyVt.xcframework"
+          [ -f "$xcf/Info.plist" ] && exit 0
+          echo "error: libghostty-vt for iOS is missing ($xcf). Build it: ./scripts/build-libghostty-ios.sh, or pass MEWLA_GHOSTTY=<terminal-vt dir> to xcodebuild."
+          exit 1
       - name: Bundle client/ui
         basedOnDependencyAnalysis: false
         script: |
@@ -48,7 +62,10 @@ targets:
         PRODUCT_NAME: Mewla
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        OTHER_LDFLAGS: "-ObjC"
+        OTHER_LDFLAGS: "-ObjC -lc++"
+        # Sources/Terminal: TerminalVt.cpp over libghostty-vt, called from Swift through its C header.
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/Terminal/TerminalVt.h
+        CLANG_CXX_LANGUAGE_STANDARD: c++20
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     scheme:
       testTargets: [MewlaTests]
