@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
 import { FakeSocket, installMemoryPlatform, memoryStore } from "../testing/memoryPlatform";
 import { Transport, transportTiming } from "../transport";
-import { Chat, DRAFT_MAX_AGE_MS, DRAFT_WRITE_DELAY_MS } from "./chat";
+import { Chat } from "./chat";
 import { createOutbox } from "./outboxRuntime";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
@@ -36,7 +36,7 @@ async function open(storage = memoryStore()) {
   transport.connect();
   await wait();
   sockets.at(-1)!.open();
-  const chat = new Chat({ serverId: server.id, transport, target, outbox, storage });
+  const chat = new Chat({ serverId: server.id, transport, target, outbox });
   await wait();
   return { transport, outbox, chat, storage, socket: sockets.at(-1)! };
 }
@@ -146,26 +146,6 @@ describe("Chat", () => {
     chat.actOnFailed(chat.current.pendingUserMessages[0].id, "discard");
     expect(chat.current.pendingUserMessages).toHaveLength(0);
     chat.close();
-    transport.close();
-  });
-
-  test("drafts use the Expo app's key and format, and an old one is dropped", async () => {
-    const storage = memoryStore({ "mewla.draft.v1:s1:scope:brain-thread:t1": JSON.stringify({ t: Date.now(), v: "half a thought" }) });
-    const { chat, transport } = await open(storage);
-    expect(await chat.loadDraft()).toBe("half a thought");
-    chat.saveDraft("a new thought");
-    await wait(DRAFT_WRITE_DELAY_MS + 20);
-    expect(JSON.parse(storage.entries.get("mewla.draft.v1:s1:scope:brain-thread:t1")!).v).toBe("a new thought");
-    chat.send("a new thought");
-    await wait();
-    expect(storage.entries.has("mewla.draft.v1:s1:scope:brain-thread:t1")).toBe(false);
-    storage.entries.set("mewla.draft.v1:s1:scope:brain-thread:t1", JSON.stringify({ t: Date.now() - DRAFT_MAX_AGE_MS - 1, v: "stale" }));
-    expect(await chat.loadDraft()).toBe("");
-    // Closing right after typing keeps what was typed.
-    chat.saveDraft("last words");
-    chat.close();
-    await wait();
-    expect(JSON.parse(storage.entries.get("mewla.draft.v1:s1:scope:brain-thread:t1")!).v).toBe("last words");
     transport.close();
   });
 });

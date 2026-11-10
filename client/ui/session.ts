@@ -1,6 +1,7 @@
 import { signal, Storage } from "nsh";
 import { brainThreadScopeKey, requestBrainSnapshot, type BrainSnapshot } from "../core/brain";
 import { Chat } from "../core/conversation/chat";
+import { chatCacheKey, Draft } from "../core/conversation/draft";
 import { createOutbox } from "../core/conversation/outboxRuntime";
 import { forgetInterfaceConversationsOutsideServer, initialInterfaceChatThreadState, type InterfaceChatThreadState } from "../core/conversation/thread";
 import { getCurrentServerId, getServers, markOnboarded, saveServer, setCurrentServerId, type StoredServer } from "../core/servers";
@@ -21,6 +22,8 @@ export const brain = signal<BrainSnapshot | null>(null);
 /** Brain's open chat (its current thread on its current host), and what it shows. */
 export const brainChat = signal<Chat | null>(null);
 export const brainThread = signal<InterfaceChatThreadState>(initialInterfaceChatThreadState(""));
+/** The draft of Brain's current thread: there as soon as the thread is known, whether or not Brain's host runs. */
+export const brainDraft = signal<Draft | null>(null);
 
 let transport: Transport | null = null;
 let stops: Array<() => void> = [];
@@ -51,6 +54,8 @@ export function switchTo(server: StoredServer | null): void {
   stops.splice(0).forEach((stop) => stop());
   stopWakePoll();
   closeBrainChat();
+  brainDraft()?.flush();
+  brainDraft.set(null);
   transport?.close();
   transport = null;
   brain.set(null);
@@ -88,6 +93,13 @@ export function switchTo(server: StoredServer | null): void {
 function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: BrainSnapshot): void {
   if (transport !== owner) return;
   brain.set(snapshot);
+  if (snapshot.chat_thread_id) {
+    const key = chatCacheKey(server.id, "", brainThreadScopeKey(snapshot.chat_thread_id));
+    if (brainDraft()?.cacheKey !== key) {
+      brainDraft()?.flush();
+      brainDraft.set(new Draft(Storage, key));
+    }
+  }
   const host = snapshot.host_problem ? null : snapshot.host_worker;
   const threadId = snapshot.chat_thread_id;
   if (!host?.id || !threadId) {
@@ -106,7 +118,6 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
     serverId: server.id,
     transport: owner,
     outbox,
-    storage: Storage,
     target: {
       targetId: host.id,
       workerId: host.id,

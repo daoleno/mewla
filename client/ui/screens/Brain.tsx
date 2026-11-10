@@ -3,26 +3,26 @@ import { Button, Input, NavPage, TextView } from "nsh/base";
 import { brainSurface, newBrainChat } from "../../core/brain";
 import { chatRows, type ChatRow } from "../../core/conversation/rows";
 import { belowSections } from "../shell/Shell";
-import { brain, brainChat, brainThread, connection, current, currentTransport } from "../session";
+import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport } from "../session";
 
 const draft = signal("");
 const draftFor = signal("");
 const startingChat = signal(false);
 
 /**
- * Brings the composer to the open chat's draft, once per chat (typing owns it
- * afterwards). What was typed while Brain was starting stays, as this chat's draft.
+ * Brings the composer to the thread's draft, once per thread (typing owns it
+ * afterwards). What was typed before the thread was known stays, as its draft.
  */
 function syncDraft(): void {
-  const chat = brainChat();
-  const key = chat?.cacheKey ?? "";
+  const current = brainDraft();
+  const key = current?.cacheKey ?? "";
   if (untracked(draftFor) === key) return;
-  const typedBeforeChat = untracked(draftFor) === "" ? untracked(draft) : "";
+  const typedBefore = untracked(draftFor) === "" ? untracked(draft) : "";
   draftFor.set(key);
-  if (!chat) return draft.set("");
-  if (typedBeforeChat) return chat.saveDraft(typedBeforeChat);
+  if (!current) return draft.set("");
+  if (typedBefore) return current.save(typedBefore);
   draft.set("");
-  void chat.loadDraft().then((value) => untracked(brainChat) === chat && !untracked(draft) && draft.set(value));
+  void current.load().then((value) => untracked(brainDraft) === current && !untracked(draft) && draft.set(value));
 }
 
 function surface() {
@@ -35,6 +35,7 @@ function send(): void {
   if (!chat || !text.trim()) return;
   chat.send(text);
   draft.set("");
+  brainDraft()?.save("");
 }
 
 async function startNewChat(): Promise<void> {
@@ -129,7 +130,7 @@ function Composer() {
         <Input testID="composer" multiline value={draft()} placeholder="Tell Brain…" class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"
           onChange={({ value }) => {
             draft.set(value);
-            brainChat()?.saveDraft(value);
+            brainDraft()?.save(value);
           }} />
         <Button testID="send" onPress={send} disabled={!brainChat() || !draft().trim()} class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
           <Text class="text-base font-semibold text-primary-foreground">Send</Text>
