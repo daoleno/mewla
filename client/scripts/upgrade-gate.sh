@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# The in-place upgrade gate on an Android emulator that is already booted (adb sees one device):
+#   1. the released Expo app (OLD_APK) pairs with a fresh daemon and keeps a typed draft;
+#   2. the NSH app (NEW_APK, same package, same signing key) installs over it with `install -r`;
+#   3. it opens without pairing, signs in with the same device key (the daemon lists one device,
+#      seen again after the upgrade) and holds the draft.
+# Inputs: OLD_APK, NEW_APK, MEWLA (daemon binary), OUT (evidence directory). Exit 0 only if all hold.
+set -euo pipefail
+: "${OLD_APK:?}" "${NEW_APK:?}" "${MEWLA:?}" "${OUT:?}"
+PKG=com.daoleno.mewla
+PORT=9941
+DRAFT="upgrade gate draft"
+mkdir -p "$OUT"
+state="$(mktemp -d)"
+log() { echo "[$(date +%T)] $*" | tee -a "$OUT/gate.log"; }
+fail() { log "FAIL: $*"; exit 1; }
+shot() { adb exec-out screencap -p > "$OUT/$1.png" 2>/dev/null || true; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb shell cat /sdcard/ui.xml > "$OUT/$1.xml" || true; }
+screen() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb shell cat /sdcard/ui.xml; }
+# Taps the first node whose text, description or class matches $1 (case-insensitive regex), waiting up to $2 s.
+tap() {
+  local deadline=$((SECONDS + ${2:-20})) at
+  while ((SECONDS < deadline)); do
+    at=$(screen | python3 -c '
+import re, sys
+xml, pattern = sys.stdin.read(), re.compile(sys.argv[1], re.I)
+for node in re.finditer(r"<node [^>]*>", xml):
+    n = node.group(0)
+    label = " ".join(re.findall(r"(?:text|content-desc|class)=\"([^\"]*)\"", n))
+    box = re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", n)
+    if box and pattern.search(label):
+        x1, y1, x2, y2 = map(int, box.groups()); print((x1 + x2) // 2, (y1 + y2) // 2); break
+' "$1")
+    if [[ -n "$at" ]]; then adb shell input tap $at; return 0; fi
+    sleep 1
+  done
+  return 1
+}
+shows() { screen | grep -qiE "$1"; }
+devices() { HOME="$state/home" "$MEWLA" devices list -json -state-dir "$state/mewla"; }
+
+log "emulator ABIs: $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
+mkdir -p "$state/home"
+HOME="$state/home" MEWLA_BRAIN_HOST_EXECUTOR=agent "$MEWLA" serve -addr "0.0.0.0:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
+daemon=$!
+trap 'kill "$daemon" 2>/dev/null || true; rm -rf "$state"' EXIT
+for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && break; sleep 1; done
+link=$(HOME="$state/home" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" | grep -o 'mewla://settings?p=[^ ]*' | head -1)
+[[ -n "$link" ]] || fail "the daemon gave no pairing link"
+
+log "1. the Expo app pairs and keeps a draft"
+adb install "$OLD_APK" | tail -1 | tee -a "$OUT/gate.log"
+adb shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+adb shell am start -W -a android.intent.action.VIEW -d "$link" "$PKG" > /dev/null
+tap "^pair and grant access$" 60 || { shot 1-no-confirm; fail "the Expo app did not ask to pair"; }
+for _ in $(seq 1 60); do [[ "$(devices | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["devices"]))')" == 1 ]] && break; sleep 1; done
+before=$(devices)
+device_id=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["devices"][0]["id"])' "$before")
+log "paired as device $device_id"
+shot 1-paired
+tap "android.widget.EditText" 60 || { shot 1-no-composer; fail "no composer to type the draft in"; }
+adb shell input text "${DRAFT// /%s}"
+sleep 3 # the draft is written 400 ms after typing stops
+shot 1-draft
+adb shell am force-stop "$PKG"
+sleep 2
+
+log "2. the NSH app installs over it"
+install=$(adb install -r "$NEW_APK" 2>&1 | tail -1)
+log "install -r: $install"
+[[ "$install" == Success* ]] || fail "install over the Expo app refused (INSTALL_FAILED_UPDATE_INCOMPATIBLE means another signing key)"
+seen_before=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["devices"][0].get("last_seen_at",""))' "$before")
+sleep 2
+
+log "3. it opens paired, signs in with the same key and holds the draft"
+adb shell am start -W -n "$PKG/.MainActivity" > /dev/null
+sleep 10
+shot 3-opened
+shows "Pair a computer" && fail "the NSH app asks to pair again"
+tap "^More$" 10 || true
+sleep 3
+shot 3-more
+after=$(devices)
+python3 - "$before" "$after" "$seen_before" "$device_id" <<'PY' | tee -a "$OUT/gate.log"
+import json, sys
+before, after, seen_before, device_id = json.loads(sys.argv[1]), json.loads(sys.argv[2]), sys.argv[3], sys.argv[4]
+ids = [d["id"] for d in after["devices"]]
+assert ids == [device_id], f"devices after the upgrade: {ids}, expected only {device_id}"
+seen_after = after["devices"][0].get("last_seen_at", "")
+assert seen_after > seen_before, f"device not seen again after the upgrade ({seen_before} -> {seen_after})"
+print(f"same device {device_id}, seen again at {seen_after}")
+PY
+grep -q "device=$device_id" "$OUT/daemon.log" && log "daemon log: connection from $device_id"
+adb root > /dev/null 2>&1 || true
+sleep 2
+storage=$(adb shell cat "/data/data/$PKG/files/nsh/$PKG/storage.json" 2>/dev/null || adb shell run-as "$PKG" cat "files/nsh/$PKG/storage.json")
+echo "$storage" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+keys = sorted(data)
+print("NSH storage keys:", ", ".join(k.split(":")[0] + ":…" if k.startswith("mewla.draft") else k for k in keys))
+drafts = [v for k, v in data.items() if k.startswith("mewla.draft.v1:")]
+assert any(sys.argv[1] in v for v in drafts), "the draft did not come over"
+assert "mewla:v3:servers" in data, "the computers did not come over"
+print("draft and computers came over")
+' "$DRAFT" | tee -a "$OUT/gate.log"
+log "PASS"

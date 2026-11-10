@@ -34,8 +34,11 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         OTHER_LDFLAGS: "-ObjC"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         DEVELOPMENT_TEAM: HD84J3DJ2B
         CODE_SIGN_STYLE: Automatic
+    scheme:
+      testTargets: [MewlaTests]
     info:
       path: build/Info.plist
       properties:
@@ -54,3 +57,13 @@ targets:
         CFBundleURLTypes:
           - { CFBundleURLName: com.daoleno.mewla, CFBundleURLSchemes: [mewla] }
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+  MewlaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies: [{ target: Mewla }]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.daoleno.mewla.tests
+        SWIFT_VERSION: "5.0"
