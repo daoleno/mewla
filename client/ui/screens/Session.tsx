@@ -195,15 +195,15 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     cleanup(() => clearTimeout(timer));
   });
 
+  const aliases = signal<Record<string, string>>({});
+  const aliasOf = (id: string) => aliases()[id];
+  void getWorkerAliases(Storage).then((a) => aliases.set(a)).catch(() => {});
   const renaming = signal(false);
   const renameValue = signal("");
   const title = computed(() => {
     const w = worker();
     return w ? sessionRowModel(w, { alias: aliasOf(props.workerId) }).title : hint.name || "Session";
   });
-  const aliases = signal<Record<string, string>>({});
-  const aliasOf = (id: string) => aliases()[id];
-  void getWorkerAliases(Storage).then((a) => aliases.set(a)).catch(() => {});
 
   const saveRename = async () => {
     const name = untracked(renameValue).trim();
