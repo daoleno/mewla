@@ -123,6 +123,7 @@ export function Brain() {
     onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
       void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
     isFinalReply: (id: string) => finalReplies().has(id),
+    workingSince: () => activity()?.started_at,
   };
   return (
     <NavPage title="Brain" headerLeft={<WorkHeaderButton onPress={() => brainNav.push({ name: "work" })} />}
