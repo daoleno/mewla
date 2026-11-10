@@ -1,0 +1,2291 @@
+import type {
+  CodexConversation,
+  CodexConversationEvent,
+  ConversationSubagent,
+  ProviderActivity,
+} from "../conversation/conversation";
+import type { BrainWorkResultEvent } from "./brainWorkEvent";
+import type { BrainCurrentWork } from "./types";
+import { brainWorkEventFromConversationEvent } from "./brainWorkEventProjection";
+import {
+  buildExpandedToolDetails,
+  isWaitSessionPoll,
+  toolResultStatusLine,
+} from "./toolCallDetails";
+import {
+  collapsedToolLabel,
+  distinctivePath,
+  hasDistinctToolIdentity,
+  isExecWrapperToolName,
+  isUnsafeCollapsedDetail,
+  parseExecWrapperCalls,
+  primarySemanticAction,
+  semanticActionTitle,
+  type SemanticAction,
+  type SemanticActionKind,
+} from "./toolCallSemantics";
+import type { PendingUserMessage } from "../conversation/thread";
+import {
+  presentPendingUserMessageLifecycle,
+  type PendingUserMessageAction,
+} from "../conversation/pendingUserMessages";
+import {
+  type PatchFileSummary,
+  type PatchOperation,
+  type ActivityChild,
+  type ActivityTimelineItem,
+} from "./activityTypes";
+import type { DisplayAttachment } from "./types";
+import type { ReplyIds } from "./messageActionsModel";
+import type { TimelineItem } from "./types";
+import { compareConversationEvents } from "../conversation/reconciliation";
+import { isImageAttachment } from "./imageSource";
+import { taskNotificationTimelineItem } from "./taskNotificationCardModel";
+import { computerMessageTimelineItem } from "./computerMessageCardModel";
+import { pathBasename } from "./pathDisplay";
+import { choiceAnswerDetails, choiceAnsweredSummary } from "./claudeChoiceModel";
+
+const COMMAND_OUTPUT_PREVIEW_LINES = 7;
+const COMMAND_OUTPUT_PREVIEW_CHARS = 1200;
+const TOOL_PAYLOAD_PREVIEW_LINES = 6;
+const TOOL_PAYLOAD_PREVIEW_CHARS = 1000;
+const FULL_OUTPUT_HINT = "Expand this item for full output.";
+
+type TimelineIconName = ActivityTimelineItem["icon"];
+
+type ToolPresentation = {
+  subtitle?: string;
+  icon: TimelineIconName;
+  localImagePath?: string;
+};
+
+type CommandKind =
+  "read" | "list" | "search" | "test" | "check" | "git" | "install" | "run";
+
+type CommandPresentation = {
+  kind: CommandKind;
+  target?: string;
+  query?: string;
+  detail?: string;
+  icon: TimelineIconName;
+  runningTitle: string;
+  doneTitle: string;
+  failedTitle: string;
+  groupable: boolean;
+  explorationLabel?: string;
+};
+
+type OutputPreview = {
+  text: string;
+  truncated: boolean;
+};
+
+type OutputPreviewOptions = {
+  maxLines: number;
+  maxChars: number;
+};
+
+type ExplorationEntry = {
+  event: CodexConversationEvent;
+  presentation: CommandPresentation;
+  running: boolean;
+  failed: boolean;
+  output: OutputPreview;
+};
+
+type PatchSummary = {
+  title: string;
+  detail?: string;
+  files: PatchFileSummary[];
+  totalAdded?: number;
+  totalRemoved?: number;
+};
+
+export function buildTimeline(
+  events: CodexConversationEvent[],
+  turnFocusAnchorAliases?: ReadonlyMap<string, string>,
+): TimelineItem[] {
+  return buildTimelineFromSortedEvents(
+    events.slice().sort(compareConversationEvents),
+    turnFocusAnchorAliases,
+  );
+}
+
+/**
+ * Canonical projection core. Callers must pass events already ordered by
+ * `compareConversationEvents` — this path never sorts.
+ */
+export function buildTimelineFromSortedEvents(
+  sortedEvents: CodexConversationEvent[],
+  turnFocusAnchorAliases?: ReadonlyMap<string, string>,
+): TimelineItem[] {
+  const items: TimelineItem[] = [];
+  const workItemIndexById = new Map<string, number>();
+  let explorationEntries: ExplorationEntry[] = [];
+
+  const flushExploration = () => {
+    if (explorationEntries.length === 0) {
+      return;
+    }
+    items.push(explorationActivityFromEntries(explorationEntries));
+    explorationEntries = [];
+  };
+
+  for (const event of sortedEvents) {
+    if (event.kind === "user_message" || event.kind === "assistant_message") {
+      flushExploration();
+      const body = cleanStructuredMessageText(event.body || "");
+      const attachments = displayAttachments(event);
+      if (!body && attachments.length === 0) {
+        continue;
+      }
+      const turnFocusAnchorId =
+        event.kind === "user_message"
+          ? turnFocusAnchorAliases?.get(event.id)
+          : undefined;
+      items.push({
+        type: "message",
+        id: event.id || `${event.kind}:${event.seq}`,
+        role: event.kind === "user_message" ? "user" : "assistant",
+        timestamp: event.timestamp,
+        body,
+        attachments,
+        streaming: event.partial,
+        ...(turnFocusAnchorId ? { turnFocusAnchorId } : {}),
+      });
+      continue;
+    }
+
+    if (event.kind === "plan") {
+      flushExploration();
+      items.push({
+        type: "plan",
+        id: event.id || `plan:${event.seq}`,
+        timestamp: event.timestamp,
+        explanation: event.explanation || event.body,
+        steps: event.plan ?? [],
+      });
+      continue;
+    }
+
+    if (event.kind === "status") {
+      flushExploration();
+      const taskCard = taskNotificationTimelineItem(event);
+      if (taskCard) {
+        items.push(taskCard);
+        continue;
+      }
+      const computerCard = computerMessageTimelineItem(event);
+      if (computerCard) {
+        items.push(computerCard);
+        continue;
+      }
+      const workCard = brainWorkEventTimelineItemFromConversationEvent(event);
+      if (workCard) {
+        const existingIndex = workItemIndexById.get(workCard.event.work_id);
+        if (existingIndex == null) {
+          workItemIndexById.set(workCard.event.work_id, items.length);
+          items.push(workCard);
+        } else {
+          const existing = items[existingIndex];
+          if (existing.type === "brain-work-event") {
+            const events = existing.events.concat(workCard.event);
+            items[existingIndex] = {
+              ...existing,
+              event:
+                workCard.event.current_result || !existing.event.current_result
+                  ? workCard.event
+                  : existing.event,
+              events,
+              sourceCount: countBrainWorkSources(events),
+            };
+          }
+        }
+        continue;
+      }
+      if (event.source === "work_result") {
+        continue;
+      }
+      if (shouldRenderStatusAsMessage(event)) {
+        const body = (event.body || "").trim();
+        if (body) {
+          items.push({
+            type: "message",
+            id: event.id || `status:${event.seq}`,
+            role: "assistant",
+            timestamp: event.timestamp,
+            body,
+            attachments: [],
+            streaming: event.partial,
+          });
+        }
+      } else {
+        const activity = activityFromEvent(event);
+        if (activity) {
+          items.push(activity);
+        }
+      }
+      continue;
+    }
+
+    if (event.kind === "command") {
+      const entry = explorationEntryFromEvent(event);
+      if (entry) {
+        explorationEntries.push(entry);
+        continue;
+      }
+      flushExploration();
+    } else {
+      flushExploration();
+    }
+
+    if (
+      event.kind === "tool" &&
+      isWaitSessionPoll(event.tool_name || event.title || "", event.input || "")
+    ) {
+      attachWaitStatusToLastCommand(items, event);
+      continue;
+    }
+    const activity = activityFromEvent(event);
+    if (activity) {
+      items.push(
+        event.subagent ? withSubagentWork(activity, event.subagent) : activity,
+      );
+    }
+  }
+  flushExploration();
+  return items;
+}
+
+/**
+ * A delegating call carries the calls its subagent made. They become the row's
+ * own steps, in the same shape as a folded run, with the count and, once it has
+ * finished, how long it took beside the chevron. A subagent that is still
+ * working keeps the row running; the mark says so.
+ */
+function withSubagentWork(
+  activity: TimelineItem,
+  subagent: ConversationSubagent,
+): TimelineItem {
+  if (activity.type !== "activity" || activity.semanticKind !== "delegate_agent") {
+    return activity;
+  }
+  const steps = buildTimelineFromSortedEvents(subagent.steps).filter(
+    (item): item is ActivityTimelineItem => item.type === "activity",
+  );
+  const working = !subagent.finished && activity.tone !== "failed";
+  const parts = [
+    steps.length > 0
+      ? `${steps.length} ${steps.length === 1 ? "step" : "steps"}`
+      : undefined,
+    subagent.finished
+      ? formatSubagentDuration(subagent.started_at, subagent.ended_at)
+      : undefined,
+  ].filter((part): part is string => Boolean(part));
+  return {
+    ...activity,
+    tone: working ? "running" : activity.tone,
+    icon: working ? "time" : activity.icon,
+    detail: parts.length > 0 ? parts.join(" · ") : activity.detail,
+    ...(steps.length > 0 ? { steps } : {}),
+  };
+}
+
+/** "45s", "2m 14s", "1h 3m": whole seconds, nothing under a second. */
+export function formatSubagentDuration(
+  startedAt?: string,
+  endedAt?: string,
+): string | undefined {
+  if (!startedAt || !endedAt) return undefined;
+  const ms = Date.parse(endedAt) - Date.parse(startedAt);
+  if (!Number.isFinite(ms) || ms < 1000) return undefined;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    const rest = seconds % 60;
+    return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`;
+}
+
+function attachWaitStatusToLastCommand(
+  items: TimelineItem[],
+  event: CodexConversationEvent,
+) {
+  const details = buildExpandedToolDetails({
+    toolName: event.tool_name || event.title,
+    input: event.input,
+    output: event.output || event.body,
+    command: event.command,
+    status: event.status,
+    exitCode: event.exit_code,
+    semanticKind: "wait",
+  });
+  const statusLine = details.statusLine;
+  if (!statusLine) {
+    return;
+  }
+  // Prefer linked in-progress exploration / last command activity.
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item.type !== "activity") {
+      continue;
+    }
+    if (
+      item.tone === "running" ||
+      item.statusKey === "running" ||
+      item.statusKey === "done"
+    ) {
+      items[index] = {
+        ...item,
+        statusLine: item.statusLine || statusLine,
+        detail: item.detail || statusLine,
+      };
+      return;
+    }
+  }
+}
+
+export function mergePendingUserMessagesIntoTimeline(
+  timelineItems: TimelineItem[],
+  pendingUserMessages: PendingUserMessage[],
+  onPendingUserMessageAction?: (
+    id: string,
+    action: PendingUserMessageAction,
+  ) => void,
+): TimelineItem[] {
+  if (pendingUserMessages.length === 0) {
+    return timelineItems;
+  }
+  const merged = [...timelineItems];
+  const placedLocalRowIDs = new Set<string>();
+  for (const message of pendingUserMessages) {
+    const item = {
+      type: "message" as const,
+      id: message.id,
+      role: "user" as const,
+      timestamp: message.createdAt,
+      body: message.body,
+      attachments: message.attachments,
+    };
+    // Only an undeliverable row has anything to tap: resend, or delete on a
+    // long press. Waiting rows show just the clock.
+    const undelivered = message.lifecycle === "failed";
+
+    const pendingItem = {
+      ...item,
+      pending: true,
+      pendingLifecycle: message.lifecycle,
+      pendingAccessibilityLabel:
+        presentPendingUserMessageLifecycle(message).accessibilityLabel,
+      onRetryPending:
+        undelivered && onPendingUserMessageAction
+          ? () => onPendingUserMessageAction(message.id, "retry")
+          : undefined,
+      onDiscardPending:
+        undelivered && onPendingUserMessageAction
+          ? () => onPendingUserMessageAction(message.id, "discard")
+          : undefined,
+    };
+
+    insertPendingCurrentAtCausalBoundary(
+      merged,
+      pendingItem,
+      message,
+      placedLocalRowIDs,
+    );
+    placedLocalRowIDs.add(pendingItem.id);
+  }
+  return merged;
+}
+
+function insertPendingCurrentAtCausalBoundary(
+  timelineItems: TimelineItem[],
+  item: TimelineItem,
+  message: PendingUserMessage,
+  placedLocalRowIDs: ReadonlySet<string>,
+) {
+  const previousEventIds = new Set(message.createdAfterEventIds ?? []);
+  let lastPreviousIndex = -1;
+  timelineItems.forEach((candidate, index) => {
+    if (previousEventIds.has(candidate.id)) {
+      lastPreviousIndex = index;
+    }
+  });
+  if (lastPreviousIndex >= 0) {
+    let insertAt = lastPreviousIndex + 1;
+    while (
+      insertAt < timelineItems.length &&
+      placedLocalRowIDs.has(timelineItems[insertAt].id)
+    ) {
+      insertAt += 1;
+    }
+    timelineItems.splice(insertAt, 0, item);
+    return;
+  }
+  insertTimelineItemByTimestamp(timelineItems, item);
+}
+
+/**
+ * A provider choice is one line once settled. While pending, the composer's
+ * choice card is its only expression.
+ */
+function choiceActivityFromEvent(event: CodexConversationEvent): TimelineItem | null {
+  const choice = event.choice;
+  if (!choice || choice.state === "pending") {
+    return null;
+  }
+  if (choice.state !== "answered") {
+    const title = choice.state === "declined" ? "Choice dismissed" : "Not answered";
+    return {
+      type: "activity",
+      id: event.id,
+      timestamp: event.timestamp,
+      statusKey: `choice:${choice.state}`,
+      title,
+      tone: "neutral",
+      icon: "close-circle",
+      detail: choice.questions[0]?.question,
+      defaultExpanded: false,
+      accessibilityLabel: title,
+    };
+  }
+  const detail = choiceAnsweredSummary(choice);
+  return {
+    type: "activity",
+    id: event.id,
+    timestamp: event.timestamp,
+    statusKey: `choice:${choice.state}`,
+    title: "Answered",
+    tone: "success",
+    icon: "check-circle",
+    detail,
+    body: choiceAnswerDetails(choice),
+    defaultExpanded: false,
+    accessibilityLabel: `Answered: ${detail}`,
+  };
+}
+
+export const PROVIDER_ACTIVITY_ITEM_PREFIX = "provider-activity:";
+
+export function mergeRunningActivityIntoTimeline(
+  timelineItems: TimelineItem[],
+  activity?: ProviderActivity,
+) {
+  if (activity?.status !== "running") {
+    return timelineItems;
+  }
+  const id = `${PROVIDER_ACTIVITY_ITEM_PREFIX}${activity.id}`;
+  if (timelineItems.some((item) => item.id === id)) {
+    return timelineItems;
+  }
+  const merged = [...timelineItems];
+  merged.push({
+    type: "activity",
+    id,
+    title: "Working",
+    tone: "running",
+    icon: "time",
+    statusKey: "running",
+    defaultExpanded: false,
+  });
+  return merged;
+}
+
+function insertTimelineItemByTimestamp(
+  timelineItems: TimelineItem[],
+  item: TimelineItem,
+) {
+  const timestamp = item.timestamp
+    ? new Date(item.timestamp).getTime()
+    : Number.NaN;
+  if (!Number.isFinite(timestamp)) {
+    timelineItems.push(item);
+    return;
+  }
+  const insertAt = timelineItems.findIndex((candidate) => {
+    if (candidate.id.startsWith(PROVIDER_ACTIVITY_ITEM_PREFIX)) {
+      return true;
+    }
+    if (!candidate.timestamp) {
+      return false;
+    }
+    const candidateTimestamp = new Date(candidate.timestamp).getTime();
+    return (
+      Number.isFinite(candidateTimestamp) && candidateTimestamp > timestamp
+    );
+  });
+  if (insertAt < 0) {
+    timelineItems.push(item);
+    return;
+  }
+  timelineItems.splice(insertAt, 0, item);
+}
+
+function shouldRenderStatusAsMessage(event: CodexConversationEvent) {
+  return (
+    event.kind === "status" &&
+    (event.title || "").trim() === "Codex" &&
+    !(event.status || "").trim() &&
+    Boolean((event.body || "").trim())
+  );
+}
+
+function brainWorkEventTimelineItemFromConversationEvent(
+  event: CodexConversationEvent,
+): import("./types").BrainWorkEventTimelineItem | null {
+  const workEvent = brainWorkEventFromConversationEvent(event);
+  if (!workEvent) {
+    return null;
+  }
+  return {
+    type: "brain-work-event",
+    id: `brain-work:${workEvent.work_id}`,
+    timestamp: workEvent.occurred_at,
+    event: workEvent,
+    events: [workEvent],
+    sourceCount: workEvent.session_id ? 1 : undefined,
+  };
+}
+
+function countBrainWorkSources(events: BrainWorkResultEvent[]) {
+  const sourceIds = new Set<string>();
+  events.forEach((event) => {
+    if (event.session_id) {
+      sourceIds.add(event.session_id);
+    }
+  });
+  return sourceIds.size > 0 ? sourceIds.size : undefined;
+}
+
+export function attachBrainWorkEventActions(
+  items: TimelineItem[],
+  onActivate?: (event: BrainWorkResultEvent, canOpenSession: boolean) => void,
+  openSessionIds?: ReadonlySet<string>,
+  currentWork?: readonly BrainCurrentWork[],
+): TimelineItem[] {
+  if (!onActivate && !currentWork?.length) {
+    return items;
+  }
+  const currentWorkById = new Map(
+    currentWork?.map((work) => [work.work_id, work] as const),
+  );
+  return items.map((item) => {
+    if (item.type !== "brain-work-event") {
+      return item;
+    }
+    const canOpenSession = Boolean(
+      item.event.session_id && openSessionIds?.has(item.event.session_id),
+    );
+    const work = currentWorkById.get(item.event.work_id);
+    const onPress =
+      onActivate
+        ? () => onActivate(item.event, canOpenSession)
+        : undefined;
+    return {
+      ...item,
+      currentWork: work,
+      onPress,
+    };
+  });
+}
+
+function activityFromEvent(
+  event: CodexConversationEvent,
+): TimelineItem | null {
+  switch (event.kind) {
+    case "command": {
+      const presentation = commandPresentation(event.command || "");
+      const failed = isCommandFailed(event, presentation);
+      const running = isEventRunning(event);
+      const command = event.command || "";
+      const status = running
+        ? "running"
+        : failed
+          ? "failed"
+          : event.status || "done";
+      const semantic = collapsedToolLabel({
+        kind: "command",
+        command,
+        toolName: "exec_command",
+        status,
+        exitCode: event.exit_code,
+      });
+      const action = primarySemanticAction({
+        kind: "command",
+        command,
+        toolName: "exec_command",
+        status,
+        exitCode: event.exit_code,
+      });
+      const details = buildExpandedToolDetails({
+        kind: "command",
+        toolName: "exec_command",
+        command,
+        output: event.body,
+        status,
+        exitCode: event.exit_code,
+        semanticKind: action.kind,
+        files: presentation.target ? [presentation.target] : event.files,
+      });
+      const output = formatOutputPreview(details.result || event.body || "", {
+        maxLines: COMMAND_OUTPUT_PREVIEW_LINES,
+        maxChars: COMMAND_OUTPUT_PREVIEW_CHARS,
+      });
+      return {
+        type: "activity",
+        id: event.id || `command:${event.seq}`,
+        timestamp: event.timestamp,
+        statusKey: event.status || "done",
+        title: semantic.title,
+        tone: running ? "running" : failed ? "failed" : "success",
+        icon: running
+          ? "time"
+          : failed
+            ? "alert-circle"
+            : presentation.icon,
+        detail: safeCollapsedDetail(details.statusLine || semantic.detail),
+        body: output.text || undefined,
+        bodyKind: output.text
+          ? commandOutputBodyKind(command, output.text)
+          : undefined,
+        commandText: details.command,
+        queryText: details.query,
+        statusLine: details.statusLine,
+        files: details.files,
+        defaultExpanded: false,
+        semanticKind: action.kind,
+        accessibilityLabel: semantic.accessibilityLabel,
+        providerToolId:
+          action.kind === "read_files" || action.kind === "search_code"
+            ? undefined
+            : details.developer?.providerToolId,
+        developerDetails:
+          action.kind === "read_files" || action.kind === "search_code"
+            ? undefined
+            : details.developer,
+      };
+    }
+    case "patch": {
+      const summary = patchSummaryFromEvent(event);
+      const failed =
+        isFailureLikeStatus(event.status) || (event.exit_code ?? 0) !== 0;
+      const running = isEventRunning(event);
+      const status = running ? "running" : failed ? "failed" : "done";
+      const semantic = collapsedToolLabel({
+        kind: "patch",
+        toolName: "apply_patch",
+        files: summary.files.map((file) => file.path),
+        status,
+        exitCode: event.exit_code,
+      });
+      const result = toolResultStatusLine(
+        "update_files",
+        status,
+        event.exit_code,
+      );
+      const detail =
+        status === "done"
+          ? summary.detail || result
+          : [result, summary.detail].filter(Boolean).join(" · ");
+      return {
+        type: "activity",
+        id: event.id || `patch:${event.seq}`,
+        timestamp: event.timestamp,
+        statusKey: status,
+        title: summary.title,
+        tone: running ? "running" : failed ? "failed" : "success",
+        icon: running
+          ? "time"
+          : failed
+            ? "alert-circle"
+            : "git-compare",
+        detail,
+        fileSummaries: summary.files,
+        files: summary.files.map((file) => file.path),
+        body: summary.files.length > 0 ? undefined : event.body,
+        defaultExpanded: false,
+        semanticKind: "update_files",
+        accessibilityLabel: semantic.accessibilityLabel,
+        providerToolId: semantic.providerToolId,
+        developerDetails: semantic.providerToolId
+          ? { providerToolId: semantic.providerToolId }
+          : undefined,
+      };
+    }
+    case "tool": {
+      if (event.choice) {
+        return choiceActivityFromEvent(event);
+      }
+      const name = event.tool_name || event.title || "tool";
+      if (isLowSignalToolEvent(name, event.input || "")) {
+        return null;
+      }
+      const preliminaryAction = primarySemanticAction({
+        kind: "tool",
+        toolName: name,
+        title: event.title,
+        input: event.input,
+        command: event.command,
+        status: event.status,
+        exitCode: event.exit_code,
+        files: event.files,
+      });
+      const failed =
+        isFailureLikeStatus(event.status) ||
+        isSemanticToolExitFailure(event, preliminaryAction.kind);
+      const running = isEventRunning(event);
+      const status = running
+        ? "running"
+        : failed
+          ? "failed"
+          : event.status || "done";
+      const presentation = toolPresentation(event);
+      const previewPath =
+        presentation.localImagePath || imagePathFromTool(event);
+      const semantic = collapsedToolLabel({
+        kind: "tool",
+        toolName: name,
+        title: event.title,
+        input: event.input,
+        command: event.command,
+        status,
+        exitCode: event.exit_code,
+        files: event.files,
+      });
+      const action = primarySemanticAction({
+        kind: "tool",
+        toolName: name,
+        title: event.title,
+        input: event.input,
+        command: event.command,
+        status,
+        exitCode: event.exit_code,
+        files: event.files,
+      });
+      const details = buildExpandedToolDetails({
+        kind: "tool",
+        toolName: name,
+        title: event.title,
+        input: event.input,
+        output: event.output || event.body,
+        command: event.command,
+        status,
+        exitCode: event.exit_code,
+        files: event.files,
+        semanticKind: action.kind,
+      });
+      if (details.hideCard || details.mergeIntoCommand) {
+        return null;
+      }
+      const result = formatOutputPreview(details.result || "", {
+        maxLines: TOOL_PAYLOAD_PREVIEW_LINES,
+        maxChars: TOOL_PAYLOAD_PREVIEW_CHARS,
+      });
+      const isWait = action.kind === "wait";
+      const hasDistinctStatus = Boolean(
+        details.statusLine &&
+          !["Done", "Finished"].includes(details.statusLine.trim()),
+      );
+      const hasMeaningfulPayload = Boolean(
+        result.text ||
+          details.command ||
+          details.query ||
+          details.files?.length ||
+          previewPath ||
+          semantic.children?.length,
+      );
+      if (
+        !running &&
+        !failed &&
+        !hasDistinctStatus &&
+        !hasMeaningfulPayload &&
+        (isWait || !hasDistinctToolIdentity(action))
+      ) {
+        return null;
+      }
+      const developerDetails =
+        isWait || action.kind === "read_files" || action.kind === "search_code"
+          ? details.developer
+          : details.developer
+            ? {
+                ...details.developer,
+                providerToolId:
+                  semantic.providerToolId || details.developer.providerToolId,
+              }
+            : semantic.providerToolId
+              ? { providerToolId: semantic.providerToolId }
+              : undefined;
+      const title = isWait
+        ? running
+          ? "Waiting"
+          : "Finished"
+        : semantic.title;
+      const detail = safeCollapsedDetail(
+        details.statusLine || (isWait ? details.quietDetail : semantic.detail),
+      );
+      return {
+        type: "activity",
+        id: event.id || `tool:${event.seq}`,
+        timestamp: event.timestamp,
+        statusKey: event.status || "done",
+        title,
+        tone: running ? "running" : failed ? "failed" : "success",
+        icon:
+          // A subagent's title is the task it was given, not a verb to read an icon from.
+          action.kind === "delegate_agent"
+            ? running
+              ? "time"
+              : failed
+                ? "alert-circle"
+                : "git-network"
+            : semanticActivityIcon(
+                semantic.title,
+                presentation.icon,
+                running,
+                failed,
+              ),
+        detail: detail?.trim() === title ? undefined : detail,
+        body: result.text || undefined,
+        bodyKind: result.text
+          ? toolOutputBodyKind(event, result.text)
+          : undefined,
+        commandText: isWait ? undefined : details.command,
+        queryText: details.query,
+        statusLine: details.statusLine,
+        files: details.files,
+        previewPath,
+        defaultExpanded: false,
+        semanticKind: action.kind,
+        accessibilityLabel: isWait
+          ? details.statusLine || (running ? "Waiting" : "Finished")
+          : semantic.accessibilityLabel,
+        providerToolId:
+          action.kind === "read_files" ||
+          action.kind === "search_code" ||
+          isWait
+            ? undefined
+            : developerDetails?.providerToolId,
+        developerDetails,
+        children: semanticChildren(
+          event.id || `tool:${event.seq}`,
+          semantic.children,
+        ),
+      };
+    }
+    case "web_search": {
+      const failed =
+        isFailureLikeStatus(event.status) || (event.exit_code ?? 0) !== 0;
+      const running = isEventRunning(event);
+      const action = parseToolPayload(event.input);
+      const body = webSearchActivityBody(event);
+      return {
+        type: "activity",
+        id: event.id || `web-search:${event.seq}`,
+        timestamp: event.timestamp,
+        statusKey: event.status || "done",
+        title: webSearchActivityTitle(action, running, failed),
+        tone: running ? "running" : failed ? "failed" : "success",
+        icon: "search",
+        detail: webSearchEventDetail(event),
+        body,
+        bodyKind: body ? "terminal" : undefined,
+        defaultExpanded: false,
+      };
+    }
+    case "update": {
+      // Words the provider's own terminal prints between steps (Claude
+      // "updates"): a quiet in-turn line, not reasoning and not a message.
+      const body = cleanStructuredMessageText(event.body || "");
+      if (!body) {
+        return null;
+      }
+      return {
+        type: "activity",
+        id: event.id || `update:${event.seq}`,
+        timestamp: event.timestamp,
+        title: body,
+        statusKey: "done",
+        tone: "neutral",
+        icon: "bulb",
+        activityKind: "update",
+        body,
+      };
+    }
+    case "commentary": {
+      if (!event.body?.trim()) {
+        return null;
+      }
+      const running = isEventRunning(event);
+      return {
+        type: "activity",
+        id: event.id || `commentary:${event.seq}`,
+        timestamp: event.timestamp,
+        title: event.title || "Reasoning",
+        statusKey: event.status || "done",
+        tone: running ? "running" : "neutral",
+        icon: running ? "time" : "bulb",
+        activityKind: "reasoning",
+        streaming: event.partial,
+        body: event.body,
+        defaultExpanded: running,
+      };
+    }
+    case "status": {
+      const calendarResult = event.source === "calendar_result";
+      const running = isEventRunning(event);
+      const title =
+        cleanTerminalDisplayText(event.title || "") ||
+        statusActivityTitle(event.status);
+      const body = cleanTerminalDisplayText(event.body || "");
+      if ((!title && !body) || (isLowSignalStatus(title) && !body)) {
+        return null;
+      }
+      const detail = statusActivityDetail(body);
+      return {
+        type: "activity",
+        id: event.id || `status:${event.seq}`,
+        timestamp: event.timestamp,
+        statusKey: event.status || "done",
+        title: title || "Agent status",
+        tone: running
+          ? "running"
+          : calendarResult && event.status !== "failed"
+            ? "success"
+            : statusActivityTone(event.status),
+        icon: calendarResult
+          ? "calendar"
+          : statusActivityIcon(running ? "running" : event.status),
+        streaming: event.partial,
+        detail,
+        body: body || undefined,
+        bodyKind: calendarResult
+          ? undefined
+          : statusActivityBodyKind(event, body),
+        defaultExpanded: running,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+function explorationEntryFromEvent(
+  event: CodexConversationEvent,
+): ExplorationEntry | null {
+  const presentation = commandPresentation(event.command || "");
+  if (!presentation.groupable) {
+    return null;
+  }
+  const failed = isCommandFailed(event, presentation);
+  const running = isEventRunning(event);
+  return {
+    event,
+    presentation,
+    running,
+    failed,
+    output: formatOutputPreview(event.body || "", {
+      maxLines: 4,
+      maxChars: 520,
+    }),
+  };
+}
+
+function explorationActivityFromEntries(
+  entries: ExplorationEntry[],
+): Extract<TimelineItem, { type: "activity" }> {
+  const first = entries[0];
+  const last = entries[entries.length - 1] ?? first;
+  const running = entries.some((entry) => entry.running);
+  const failed = entries.some((entry) => entry.failed);
+  const files = uniqueStrings(
+    entries
+      .map((entry) => entry.presentation.target)
+      .filter((value): value is string => Boolean(value)),
+  ).slice(0, 12);
+  const commandLines = entries.map((entry) => explorationEntryLine(entry));
+  const failedOutputs = entries
+    .filter((entry) => entry.failed && entry.output.text)
+    .flatMap((entry) => [
+      "",
+      `${entry.presentation.explorationLabel || "Lookup"} output:`,
+      entry.output.text,
+    ]);
+  const body =
+    failedOutputs.length > 0
+      ? cleanTerminalDisplayText([...commandLines, ...failedOutputs].join("\n"))
+      : "";
+  const semantic = primarySemanticAction({
+    kind: "command",
+    command: first?.event.command,
+    toolName: "exec_command",
+    status: running ? "running" : failed ? "failed" : "done",
+  });
+  const resultStatus = running ? "running" : failed ? "failed" : "done";
+  const title =
+    entries.length > 1
+      ? semantic.target
+        ? `${semantic.label} ${semantic.target} + ${entries.length - 1}`
+        : `Explore ${entries.length} lookups`
+      : semanticActionTitle(semantic);
+  const quietDetail = toolResultStatusLine(
+    semantic.kind,
+    resultStatus,
+    entries.find((entry) => entry.failed)?.event.exit_code,
+  );
+
+  return {
+    type: "activity",
+    id: `explore:${first?.event.id || first?.event.seq}`,
+    timestamp: last?.event.timestamp || first?.event.timestamp,
+    statusKey: running ? "running" : failed ? "failed" : "done",
+    title,
+    tone: running ? "running" : failed ? "failed" : "success",
+    icon: failed
+      ? "alert-circle"
+      : running
+        ? "time"
+        : "folder-open",
+    detail: quietDetail,
+    body: body || undefined,
+    files,
+    defaultExpanded: false,
+    semanticKind: semantic.kind,
+    accessibilityLabel:
+      entries.length > 1
+        ? `${title}, ${quietDetail}`
+        : semantic.accessibilityLabel,
+    providerToolId: undefined,
+    developerDetails: undefined,
+    children:
+      entries.length > 1
+        ? entries.map((entry, index) => ({
+            id: `${first?.event.id || "explore"}:child:${index}`,
+            title: collapsedToolLabel({
+              kind: "command",
+              command: entry.event.command,
+              toolName: "exec_command",
+              status: entry.running
+                ? "running"
+                : entry.failed
+                  ? "failed"
+                  : "done",
+            }).title,
+            tone: entry.running
+              ? "running"
+              : entry.failed
+                ? "failed"
+                : "success",
+            providerToolId: "exec_command",
+          }))
+        : undefined,
+  };
+}
+
+function explorationEntryLine(entry: ExplorationEntry) {
+  const action = collapsedToolLabel({
+    kind: "command",
+    command: entry.event.command,
+    toolName: "exec_command",
+    status: entry.running ? "running" : entry.failed ? "failed" : "done",
+  }).title;
+  const suffix = entry.running ? " (running)" : entry.failed ? " (failed)" : "";
+  return `${action}${suffix}`;
+}
+
+/**
+ * The id of each turn's final finished reply. A turn with tool calls between
+ * pieces of text gets its row under the last piece only.
+ */
+export function finalReplyIdsOf(unsortedEvents: readonly CodexConversationEvent[]): ReplyIds {
+  const events = [...unsortedEvents].sort(compareConversationEvents);
+  const ids = new Set<string>();
+  let reply: CodexConversationEvent | undefined;
+  const close = () => {
+    if (reply) ids.add(reply.id || `${reply.kind}:${reply.seq}`);
+    reply = undefined;
+  };
+  for (const event of events) {
+    if (event.kind === "user_message") {
+      close();
+    } else if (
+      event.kind === "assistant_message" &&
+      !event.partial &&
+      cleanStructuredMessageText(event.body || "")
+    ) {
+      reply = event;
+    }
+  }
+  close();
+  return ids;
+}
+
+function displayAttachments(event: CodexConversationEvent): DisplayAttachment[] {
+  return (event.attachments ?? []).map((file) => ({
+    name: file.name,
+    path: file.path,
+    mimeType: file.content_type,
+  }));
+}
+
+function cleanStructuredMessageText(value: string) {
+  return finishDisplayText(stripTerminalControlSequences(value));
+}
+
+function cleanTerminalDisplayText(value: string) {
+  const withoutSpinnerPrefixes = stripTerminalControlSequences(value)
+    .split("\n")
+    .map(stripProgressSpinnerPrefix)
+    .join("\n");
+  return finishDisplayText(withoutSpinnerPrefixes);
+}
+
+function finishDisplayText(value: string) {
+  return value.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/**
+ * Any `[` immediately followed by CSI-prefix characters (space–slash, digit,
+ * or `?`) can be a CSI-lookalike that the slow path rewrites. ESC and CR are
+ * required by the escape-sequence rules. When none can exist, the full regex
+ * chain reduces to a single C0 control-character scan with identical output.
+ */
+const CSI_LOOKALIKE_PREFIX_RE = /\[(?:[\x20-\x2F\d]|\?)/;
+const C0_CONTROL_CHARS_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+function stripTerminalControlSequences(value: string) {
+  if (
+    !value.includes("\u001B") &&
+    !value.includes("\r") &&
+    !CSI_LOOKALIKE_PREFIX_RE.test(value)
+  ) {
+    return value.replace(C0_CONTROL_CHARS_RE, "");
+  }
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\u001B\[[0-?]*[ -/]*K\u001B\[[0-?]*[ -/]*G/g, "\n")
+    .replace(/\u001B\[[0-?]*[ -/]*G/g, "\n")
+    .replace(
+      /\u001B(?:\][^\u0007]*(?:\u0007|\u001B\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_])/g,
+      "",
+    )
+    .replace(/\[2K\[1G/g, "\n")
+    .replace(/\[(?:\?\d+[hl]|\d+(?:;\d+)*[mKGH])/g, "")
+    .replace(C0_CONTROL_CHARS_RE, "");
+}
+
+function stripProgressSpinnerPrefix(line: string) {
+  return line.replace(/^[ \t]*[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏◐◓◑◒]+[ \t]*(?=\S)/, "");
+}
+
+function patchSummaryFromEvent(event: CodexConversationEvent): PatchSummary {
+  const structuredFiles = (event.file_changes ?? []).map((change) => ({
+    path: change.path,
+    movePath: change.move_path,
+    operation: change.operation,
+    added: change.additions,
+    removed: change.deletions,
+  }));
+  const parsed = parseApplyPatchSummary(event.body || "");
+  const fallbackFiles =
+    structuredFiles.length > 0
+      ? structuredFiles
+      : parsed.files.length > 0
+        ? parsed.files
+        : (event.files ?? []).map((path) => ({
+            path,
+            operation: "update" as PatchOperation,
+          }));
+  const files = fallbackFiles.sort((left, right) =>
+    left.path.localeCompare(right.path),
+  );
+  const { totalAdded, totalRemoved } = knownPatchTotals(files);
+  const title = patchSummaryTitle(files);
+  return {
+    title,
+    detail: patchLineTotals(totalAdded, totalRemoved),
+    files,
+    totalAdded,
+    totalRemoved,
+  };
+}
+
+function parseApplyPatchSummary(patch: string): PatchSummary {
+  const normalized = patch.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const complete = normalized
+    .split("\n")
+    .some((line) => line.trimEnd() === "*** End Patch");
+  const files: PatchFileSummary[] = [];
+  let current: PatchFileSummary | null = null;
+
+  const finishCurrent = () => {
+    if (!current) {
+      return;
+    }
+    if (!complete || current.operation === "delete") {
+      current.added = undefined;
+      current.removed = undefined;
+    }
+    files.push(current);
+    current = null;
+  };
+
+  for (const rawLine of normalized.split("\n")) {
+    const line = rawLine.trimEnd();
+    const add = /^\*\*\* Add File:\s+(.+)$/.exec(line);
+    if (add) {
+      finishCurrent();
+      current = {
+        path: add[1].trim(),
+        operation: "add",
+        added: 0,
+        removed: 0,
+      };
+      continue;
+    }
+    const update = /^\*\*\* Update File:\s+(.+)$/.exec(line);
+    if (update) {
+      finishCurrent();
+      current = {
+        path: update[1].trim(),
+        operation: "update",
+        added: 0,
+        removed: 0,
+      };
+      continue;
+    }
+    const del = /^\*\*\* Delete File:\s+(.+)$/.exec(line);
+    if (del) {
+      finishCurrent();
+      current = {
+        path: del[1].trim(),
+        operation: "delete",
+        added: 0,
+        removed: 0,
+      };
+      continue;
+    }
+    const move = /^\*\*\* Move to:\s+(.+)$/.exec(line);
+    if (move && current) {
+      current.movePath = move[1].trim();
+      continue;
+    }
+    if (!current || line.startsWith("***") || line.startsWith("@@")) {
+      continue;
+    }
+    if (line.startsWith("+")) {
+      current.added = (current.added ?? 0) + 1;
+    } else if (line.startsWith("-")) {
+      current.removed = (current.removed ?? 0) + 1;
+    }
+  }
+  finishCurrent();
+
+  const { totalAdded, totalRemoved } = knownPatchTotals(files);
+  return {
+    title: patchSummaryTitle(files),
+    detail: patchLineTotals(totalAdded, totalRemoved),
+    files,
+    totalAdded,
+    totalRemoved,
+  };
+}
+
+function patchSummaryTitle(files: PatchFileSummary[]) {
+  if (files.length === 0) {
+    return "Edit files";
+  }
+  if (files.length === 1) {
+    const file = files[0];
+    const verb =
+      file.operation === "add"
+        ? "Add"
+        : file.operation === "delete"
+          ? "Delete"
+          : "Edit";
+    const target = safePatchDisplayPath(file) || "1 file";
+    return `${verb} ${target}`;
+  }
+
+  const firstTarget = files
+    .map(safePatchDisplayPath)
+    .find((path): path is string => Boolean(path));
+  return firstTarget
+    ? `Edit ${firstTarget} + ${files.length - 1}`
+    : `Edit ${files.length} files`;
+}
+
+export function patchDisplayPath(file: PatchFileSummary) {
+  return file.movePath ? `${file.path} -> ${file.movePath}` : file.path;
+}
+
+function knownPatchTotals(files: PatchFileSummary[]): {
+  totalAdded?: number;
+  totalRemoved?: number;
+} {
+  if (
+    files.length === 0 ||
+    files.some((file) => file.added == null || file.removed == null)
+  ) {
+    return {};
+  }
+  return {
+    totalAdded: files.reduce((sum, file) => sum + file.added!, 0),
+    totalRemoved: files.reduce((sum, file) => sum + file.removed!, 0),
+  };
+}
+
+function safePatchDisplayPath(file: PatchFileSummary): string | undefined {
+  const from = distinctivePath(file.path);
+  if (!from) {
+    return undefined;
+  }
+  if (!file.movePath) {
+    return from;
+  }
+  const to = distinctivePath(file.movePath);
+  return to ? `${from} → ${to}` : from;
+}
+
+function patchLineTotals(added?: number, removed?: number) {
+  return added == null || removed == null ? undefined : `+${added} −${removed}`;
+}
+
+export function truncateRunes(value: string, limit: number) {
+  const chars = Array.from(value);
+  if (chars.length <= limit) {
+    return value;
+  }
+  return chars.slice(0, Math.max(0, limit - 1)).join("") + "…";
+}
+
+function isLowSignalStatus(value: string) {
+  return /^(Task started|Goal updated|Patch applied)$/i.test(value.trim());
+}
+
+function isLowSignalToolEvent(name: string, input: string) {
+  const normalized = name.trim();
+  if (normalized.endsWith(".write_stdin")) {
+    return isWaitSessionPoll("write_stdin", input);
+  }
+  return isWaitSessionPoll(normalized, input);
+}
+
+export function isEventRunning(event: CodexConversationEvent) {
+  return event.partial === true || event.status === "running";
+}
+
+function imagePathFromTool(event: CodexConversationEvent) {
+  const nested = parseExecWrapperCalls(event.input);
+  if (nested.length === 1 && nested[0].name === "view_image") {
+    const path =
+      typeof nested[0].object?.path === "string"
+        ? nested[0].object.path
+        : typeof nested[0].object?.image_url === "string"
+          ? nested[0].object.image_url
+          : "";
+    if (path && !previewableImageUri(path) && isImageAttachment({ path })) {
+      return path;
+    }
+  }
+  const parsed = parseToolPayload(event.input);
+  if (!isRecord(parsed)) {
+    return undefined;
+  }
+  const path = stringField(parsed, "path") || stringField(parsed, "image_url");
+  if (!path || previewableImageUri(path) || !isImageAttachment({ path })) {
+    return undefined;
+  }
+  return path;
+}
+
+function commandPresentation(command: string): CommandPresentation {
+  const normalized = cleanTerminalDisplayText(command);
+  const firstLine =
+    normalized
+      .split("\n")
+      .find((line) => line.trim())
+      ?.trim() || "";
+  const tokens = commandTokens(firstLine);
+  const executable = commandExecutable(tokens);
+  const lower = firstLine.toLowerCase();
+  const fallbackDetail = commandSummary(command);
+
+  if (["cat", "sed", "nl", "less", "head", "tail"].includes(executable)) {
+    const target = commandTarget(tokens, executable);
+    return {
+      kind: "read",
+      target,
+      detail: target || fallbackDetail,
+      icon: "document-text",
+      runningTitle: "Reading file",
+      doneTitle: "Read file",
+      failedTitle: "Read failed",
+      groupable: true,
+      explorationLabel: "Read",
+    };
+  }
+
+  if (
+    executable === "ls" ||
+    (executable === "find" && !/\s-name\s|\s-iname\s|\s-type\s+f/.test(lower))
+  ) {
+    const target = commandTarget(tokens, executable) || ".";
+    return {
+      kind: "list",
+      target,
+      detail: target,
+      icon: "folder-open",
+      runningTitle: "Listing files",
+      doneTitle: "Listed files",
+      failedTitle: "List failed",
+      groupable: true,
+      explorationLabel: "List",
+    };
+  }
+
+  if (
+    ["rg", "grep", "ag", "ack"].includes(executable) ||
+    executable === "find"
+  ) {
+    const query = searchQuery(tokens, executable);
+    const target = searchTarget(tokens, executable);
+    const detail = [query ? truncateRunes(query, 36) : "", target]
+      .filter(Boolean)
+      .join(" in ");
+    return {
+      kind: "search",
+      query,
+      target,
+      detail: detail || fallbackDetail,
+      icon: "search",
+      runningTitle: "Searching project",
+      doneTitle: "Searched project",
+      failedTitle: "Search failed",
+      groupable: true,
+      explorationLabel: "Search",
+    };
+  }
+
+  if (
+    /\b(go test|bun test|npm test|pnpm test|yarn test|jest|vitest|pytest)\b/.test(
+      lower,
+    )
+  ) {
+    return {
+      kind: "test",
+      detail: fallbackDetail,
+      icon: "checks",
+      runningTitle: "Running",
+      doneTitle: "Ran",
+      failedTitle: "Ran",
+      groupable: false,
+    };
+  }
+
+  if (
+    /\b(tsc|lint|typecheck|doctor|gradlew|xcodebuild|build|assemble)\b/.test(
+      lower,
+    )
+  ) {
+    return {
+      kind: "check",
+      detail: fallbackDetail,
+      icon: "construct",
+      runningTitle: "Running",
+      doneTitle: "Ran",
+      failedTitle: "Ran",
+      groupable: false,
+    };
+  }
+
+  if (/\bgit\b/.test(lower)) {
+    return {
+      kind: "git",
+      detail: fallbackDetail,
+      icon: "git-branch",
+      runningTitle: "Running",
+      doneTitle: "Ran",
+      failedTitle: "Ran",
+      groupable: false,
+    };
+  }
+
+  if (/\b(bun install|npm install|pnpm install|yarn install)\b/.test(lower)) {
+    return {
+      kind: "install",
+      detail: fallbackDetail,
+      icon: "download",
+      runningTitle: "Running",
+      doneTitle: "Ran",
+      failedTitle: "Ran",
+      groupable: false,
+    };
+  }
+
+  return {
+    kind: "run",
+    detail: fallbackDetail,
+    icon: "terminal",
+    runningTitle: "Running",
+    doneTitle: "Ran",
+    failedTitle: "Ran",
+    groupable: false,
+  };
+}
+
+function commandOutputBodyKind(
+  command: string,
+  output: string,
+): ActivityTimelineItem["bodyKind"] {
+  const summary = (commandSummary(command) || "").toLowerCase();
+  if (/\bgit\s+diff\b/.test(summary) && /\s\|\s+\d+\s+[+-]+/.test(output)) {
+    return "diff-stat";
+  }
+  return "terminal";
+}
+
+function toolOutputBodyKind(
+  event: CodexConversationEvent,
+  output: string,
+): ActivityTimelineItem["bodyKind"] {
+  const name = (event.tool_name || event.title || "")
+    .trim()
+    .replace(/^functions\./, "");
+  if (name === "exec_command" || name === "write_stdin") {
+    return commandOutputBodyKind(event.command || "", output);
+  }
+  return output ? "terminal" : undefined;
+}
+
+function webSearchEventDetail(event: CodexConversationEvent) {
+  const body = cleanTerminalDisplayText(event.body || "");
+  if (body) {
+    return body;
+  }
+  const action = parseToolPayload(event.input);
+  if (!isRecord(action)) {
+    return undefined;
+  }
+  return webSearchActionDetail(action) || undefined;
+}
+
+function webSearchActivityTitle(
+  action: unknown,
+  running: boolean,
+  failed: boolean,
+) {
+  if (running) {
+    return "Searching the web";
+  }
+  if (failed) {
+    return "Search failed";
+  }
+  if (!isRecord(action)) {
+    return "Searched the web";
+  }
+  switch (stringField(action, "type")) {
+    case "open_page":
+      return "Opened page";
+    case "find_in_page":
+      return "Searched page";
+    case "search":
+      return "Searched the web";
+    default:
+      return "Web search";
+  }
+}
+
+function webSearchActivityBody(event: CodexConversationEvent) {
+  const input = cleanTerminalDisplayText(event.input || "");
+  if (input) {
+    return input;
+  }
+  const body = cleanTerminalDisplayText(event.body || "");
+  return body || undefined;
+}
+
+function webSearchActionDetail(action: Record<string, unknown>) {
+  const type = stringField(action, "type");
+  if (type === "search") {
+    const query = stringField(action, "query");
+    if (query) {
+      return query;
+    }
+    const firstQuery = firstString(action.queries);
+    if (!firstQuery) {
+      return "";
+    }
+    return Array.isArray(action.queries) && action.queries.length > 1
+      ? `${firstQuery} ...`
+      : firstQuery;
+  }
+  if (type === "open_page") {
+    return stringField(action, "url");
+  }
+  if (type === "find_in_page") {
+    const pattern = stringField(action, "pattern");
+    const url = stringField(action, "url");
+    if (pattern && url) {
+      return `'${pattern}' in ${url}`;
+    }
+    if (pattern) {
+      return `'${pattern}'`;
+    }
+    return url;
+  }
+  return (
+    stringField(action, "query") ||
+    stringField(action, "url") ||
+    stringField(action, "pattern")
+  );
+}
+
+function statusActivityTitle(status?: string) {
+  switch ((status || "").trim()) {
+    case "failed":
+    case "error":
+      return "Agent error";
+    case "running":
+      return "Agent status";
+    case "warning":
+      return "Agent warning";
+    default:
+      return "Agent status";
+  }
+}
+
+function statusActivityTone(status?: string): ActivityTimelineItem["tone"] {
+  switch ((status || "").trim()) {
+    case "failed":
+    case "error":
+      return "failed";
+    case "running":
+      return "running";
+    default:
+      return "neutral";
+  }
+}
+
+function statusActivityIcon(status?: string): TimelineIconName {
+  switch ((status || "").trim()) {
+    case "failed":
+    case "error":
+      return "alert-circle";
+    case "warning":
+      return "warning";
+    case "running":
+      return "sync";
+    default:
+      return "info";
+  }
+}
+
+function statusActivityDetail(body: string) {
+  const clean = cleanTerminalDisplayText(body);
+  if (!clean) {
+    return undefined;
+  }
+  const firstLine =
+    clean
+      .split("\n")
+      .find((line) => line.trim())
+      ?.trim() || clean;
+  return truncateRunes(firstLine, 140);
+}
+
+function statusActivityBodyKind(
+  event: CodexConversationEvent,
+  body: string,
+): ActivityTimelineItem["bodyKind"] {
+  if (!body) {
+    return undefined;
+  }
+  if (event.source === "terminal_snapshot") {
+    return "terminal";
+  }
+  return statusActivityTone(event.status) === "failed" ? "terminal" : undefined;
+}
+
+function commandSummary(command: string) {
+  command = cleanTerminalDisplayText(command);
+  if (!command) {
+    return undefined;
+  }
+  const firstLine = command.split("\n")[0];
+  return truncateRunes(firstLine, 72);
+}
+
+function tokenizeShellLike(value: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | "" = "";
+  let escaping = false;
+
+  for (const char of value) {
+    if (escaping) {
+      current += char;
+      escaping = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = "";
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+  return tokens;
+}
+
+function commandTokens(value: string): string[] {
+  const tokens = tokenizeShellLike(value);
+  const executable = pathBasename(tokens[0] || "").toLowerCase();
+  if (executable === "bash" || executable === "sh" || executable === "zsh") {
+    const commandIndex = tokens.findIndex(
+      (token) => token === "-c" || token === "-lc",
+    );
+    if (commandIndex >= 0 && tokens[commandIndex + 1]) {
+      return commandTokens(tokens[commandIndex + 1]);
+    }
+  }
+  return tokens;
+}
+
+function commandExecutable(tokens: string[]) {
+  const executableTokens = tokens.filter((token) => token !== "env");
+  while (executableTokens[0]?.includes("=")) {
+    executableTokens.shift();
+  }
+  const executable = executableTokens[0] || "";
+  return pathBasename(executable).toLowerCase();
+}
+
+function commandTarget(tokens: string[], executable: string) {
+  const positional = commandPositionals(tokens, executable);
+  if (positional.length === 0) {
+    return "";
+  }
+  if (executable === "sed") {
+    return (
+      positional.find(
+        (token) => !/^\d*,?\d*p$/.test(token) && !/^s[|/]/.test(token),
+      ) || positional[positional.length - 1]
+    );
+  }
+  if (executable === "find") {
+    return positional[0];
+  }
+  return positional[positional.length - 1];
+}
+
+function commandPositionals(tokens: string[], executable: string) {
+  const start = tokens.findIndex(
+    (token) => pathBasename(token).toLowerCase() === executable,
+  );
+  const relevant = start >= 0 ? tokens.slice(start + 1) : tokens.slice(1);
+  const positionals: string[] = [];
+  for (let index = 0; index < relevant.length; index++) {
+    const token = relevant[index];
+    if (!token || token === "--") {
+      continue;
+    }
+    if (token.startsWith("-")) {
+      const optionTakesValue =
+        [
+          "-e",
+          "-f",
+          "-g",
+          "--glob",
+          "--type",
+          "-t",
+          "-m",
+          "--max-count",
+          "-C",
+          "-A",
+          "-B",
+        ].includes(token) &&
+        relevant[index + 1] &&
+        !relevant[index + 1].startsWith("-");
+      if (optionTakesValue) {
+        index++;
+      }
+      continue;
+    }
+    if (token.includes("=") && positionals.length === 0) {
+      continue;
+    }
+    positionals.push(token);
+  }
+  return positionals;
+}
+
+function searchQuery(tokens: string[], executable: string) {
+  const positionals = commandPositionals(tokens, executable);
+  if (executable === "find") {
+    const nameIndex = tokens.findIndex(
+      (token) => token === "-name" || token === "-iname",
+    );
+    return nameIndex >= 0
+      ? tokens[nameIndex + 1] || ""
+      : positionals.slice(1).join(" ");
+  }
+  return positionals[0] || "";
+}
+
+function searchTarget(tokens: string[], executable: string) {
+  const positionals = commandPositionals(tokens, executable);
+  if (executable === "find") {
+    return positionals[0] || ".";
+  }
+  return positionals.slice(1).join(", ");
+}
+
+function isFailureLikeStatus(status?: string): boolean {
+  switch ((status || "").trim().toLowerCase()) {
+    case "failed":
+    case "blocked":
+    case "error":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function isCommandFailed(
+  event: CodexConversationEvent,
+  presentation: CommandPresentation,
+) {
+  if (isFailureLikeStatus(event.status)) {
+    return true;
+  }
+  if ((event.exit_code ?? 0) !== 0) {
+    if (
+      presentation.kind === "search" &&
+      event.exit_code === 1 &&
+      !cleanToolOutput(event.body || "")
+    ) {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+function isSemanticToolExitFailure(
+  event: CodexConversationEvent,
+  kind: SemanticActionKind,
+) {
+  if ((event.exit_code ?? 0) === 0) {
+    return false;
+  }
+  if (
+    kind === "search_code" &&
+    event.exit_code === 1 &&
+    !cleanToolOutput(event.output || event.body || "")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function cleanToolOutput(value: string) {
+  value = cleanTerminalDisplayText(value);
+  if (!value) {
+    return "";
+  }
+  const lines = value.split("\n");
+  const outputLine = lines.findIndex((line) => line.trim() === "Output:");
+  const bodyLines = outputLine >= 0 ? lines.slice(outputLine + 1) : lines;
+  return cleanTerminalDisplayText(
+    bodyLines.filter((line) => !isToolMetadataLine(line)).join("\n"),
+  );
+}
+
+function formatOutputPreview(
+  value: string,
+  options: OutputPreviewOptions,
+): OutputPreview {
+  let output = cleanToolOutput(value);
+  if (!output) {
+    return { text: "", truncated: false };
+  }
+
+  output = compactJsonForPreview(output);
+  const charLimited = truncateOutputChars(output, options.maxChars);
+  const lineLimited = truncateOutputLines(charLimited.text, options.maxLines);
+  return {
+    text: lineLimited.text,
+    truncated: charLimited.truncated || lineLimited.truncated,
+  };
+}
+
+function compactJsonForPreview(value: string) {
+  const trimmed = value.trim();
+  if (!/^[\[{]/.test(trimmed)) {
+    return value;
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    const compact = JSON.stringify(parsed);
+    return compact.replace(/":/g, '": ').replace(/,"/g, ', "');
+  } catch {
+    return value;
+  }
+}
+
+function truncateOutputChars(value: string, maxChars: number): OutputPreview {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) {
+    return { text: value, truncated: false };
+  }
+  const headCount = Math.max(120, Math.floor(maxChars * 0.58));
+  const tailCount = Math.max(80, maxChars - headCount - 80);
+  const hidden = chars.length - headCount - tailCount;
+  return {
+    text: cleanTerminalDisplayText(
+      [
+        chars.slice(0, headCount).join(""),
+        `... ${hidden} chars hidden. ${FULL_OUTPUT_HINT}`,
+        chars.slice(chars.length - tailCount).join(""),
+      ].join("\n"),
+    ),
+    truncated: true,
+  };
+}
+
+function truncateOutputLines(value: string, maxLines: number): OutputPreview {
+  const lines = value.split("\n");
+  if (lines.length <= maxLines) {
+    return { text: value, truncated: false };
+  }
+  const headCount = Math.max(1, Math.ceil(maxLines / 2));
+  const tailCount = Math.max(1, Math.floor(maxLines / 2));
+  const hidden = lines.length - headCount - tailCount;
+  return {
+    text: cleanTerminalDisplayText(
+      [
+        ...lines.slice(0, headCount),
+        `... +${hidden} lines hidden. ${FULL_OUTPUT_HINT}`,
+        ...lines.slice(lines.length - tailCount),
+      ].join("\n"),
+    ),
+    truncated: true,
+  };
+}
+
+function isToolMetadataLine(line: string) {
+  const trimmed = line.trim();
+  return (
+    trimmed.startsWith("Chunk ID:") ||
+    trimmed.startsWith("Wall time:") ||
+    trimmed.startsWith("Exit code:") ||
+    trimmed.startsWith("Process exited with code ") ||
+    trimmed.startsWith("Process running with session ID ") ||
+    trimmed.startsWith("Original token count:") ||
+    trimmed.startsWith("Total output lines:")
+  );
+}
+
+function toolPresentation(event: CodexConversationEvent): ToolPresentation {
+  let name = (event.tool_name || event.title || "tool").trim() || "tool";
+  name = name.replace(/^functions\./, "");
+  let input = parseToolPayload(event.input);
+  let inputObject = isRecord(input) ? input : {};
+
+  if (isExecWrapperToolName(name) || name.startsWith("multi:")) {
+    const nested = parseExecWrapperCalls(event.input);
+    if (nested.length === 1) {
+      name = nested[0].name;
+      if (nested[0].object) {
+        inputObject = nested[0].object;
+      } else if (nested[0].text) {
+        inputObject = { path: nested[0].text };
+      }
+    } else if (nested.length > 1) {
+      return {
+        icon: "git-network",
+      };
+    }
+  }
+
+  const browserAction = /^browser_/.test(name)
+    ? humanizeToolName(name.replace(/^browser_/, ""))
+    : "";
+
+  if (name === "view_image") {
+    const path =
+      stringField(inputObject, "path") || stringField(inputObject, "image_url");
+    const previewUri = previewableImageUri(path);
+    return {
+      icon: "image",
+      localImagePath: path && !previewUri ? path : undefined,
+    };
+  }
+
+  if (name === "write_stdin") {
+    const chars = stringField(inputObject, "chars");
+    return {
+      icon:
+        chars === ""
+          ? "sync"
+          : chars === "\u0003"
+            ? "stop-circle"
+            : "return-forward",
+    };
+  }
+
+  if (browserAction) {
+    const browserFile =
+      stringField(inputObject, "filename") || firstString(inputObject.paths);
+    const browserPreviewUri = isImageAttachment({ path: browserFile })
+      ? previewableImageUri(browserFile)
+      : undefined;
+    return {
+      icon: browserToolIcon(name),
+      localImagePath:
+        browserFile && !browserPreviewUri && isImageAttachment({ path: browserFile })
+          ? browserFile
+          : undefined,
+    };
+  }
+
+  if (name.includes("query_docs") || name.includes("resolve_library_id")) {
+    return {
+      icon: "library",
+    };
+  }
+
+  if (name.includes("search_query") || name === "web.run") {
+    return {
+      icon: "search",
+    };
+  }
+
+  if (name.includes("multi_tool_use.parallel") || name.startsWith("multi:")) {
+    return {
+      icon: "git-network",
+    };
+  }
+
+  if (
+    name.includes("spawn_agent") ||
+    name.includes("send_input") ||
+    name.includes("wait_agent")
+  ) {
+    return {
+      icon: "git-network",
+    };
+  }
+
+  const semantic = primarySemanticAction({
+    toolName: name,
+    input: event.input,
+    command: event.command,
+    status: event.status,
+  });
+  return {
+    icon: semanticKindIcon(semantic.kind),
+  };
+}
+
+function parseToolPayload(value?: string): unknown {
+  if (!value) {
+    return null;
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringField(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function firstString(value: unknown): string {
+  return Array.isArray(value) && typeof value[0] === "string" ? value[0] : "";
+}
+
+function humanizeToolName(value: string): string {
+  return (
+    value
+      .replace(/^mcp__/, "")
+      .replace(/^functions\./, "")
+      .replace(/__/g, " ")
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase()) || "Tool"
+  );
+}
+
+function browserToolIcon(name: string): TimelineIconName {
+  if (name.includes("navigate")) {
+    return "navigate";
+  }
+  if (name.includes("click")) {
+    return "radio-on";
+  }
+  if (name.includes("type") || name.includes("fill")) {
+    return "text";
+  }
+  if (name.includes("screenshot")) {
+    return "camera";
+  }
+  if (name.includes("snapshot")) {
+    return "scan";
+  }
+  return "browser";
+}
+
+function previewableImageUri(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+  if (/^(https?:|data:image\/|file:)/.test(value)) {
+    return value;
+  }
+  return undefined;
+}
+
+function uniqueStrings(values: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function safeCollapsedDetail(value?: string): string | undefined {
+  if (!value || isUnsafeCollapsedDetail(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+function semanticChildren(
+  parentId: string,
+  children?: SemanticAction[],
+): ActivityChild[] | undefined {
+  if (!children?.length) {
+    return undefined;
+  }
+  return children.map((child, index) => ({
+    id: `${parentId}:action:${index}`,
+    title: semanticActionTitle(child),
+    tone:
+      child.status === "running"
+        ? "running"
+        : child.status === "failed" || child.status === "blocked"
+          ? "failed"
+          : "success",
+    providerToolId: child.providerToolId,
+  }));
+}
+
+function semanticActivityIcon(
+  title: string,
+  fallback: TimelineIconName,
+  running: boolean,
+  failed: boolean,
+): TimelineIconName {
+  if (running) {
+    return "time";
+  }
+  if (failed) {
+    return "alert-circle";
+  }
+  const lower = title.toLowerCase();
+  if (lower.includes("search")) {
+    return "search";
+  }
+  if (lower.includes("read")) {
+    return "document-text";
+  }
+  if (lower.includes("updated files") || lower.includes("updating files")) {
+    return "git-compare";
+  }
+  if (lower.includes("plan")) {
+    return "map";
+  }
+  if (lower.includes("image")) {
+    return "image";
+  }
+  if (lower.includes("test")) {
+    return "checks";
+  }
+  if (lower.includes("build")) {
+    return "construct";
+  }
+  if (lower.includes("wait")) {
+    return "time";
+  }
+  if (lower.includes("command")) {
+    return "terminal";
+  }
+  return fallback;
+}
+
+function semanticKindIcon(kind: SemanticActionKind): TimelineIconName {
+  switch (kind) {
+    case "read_files":
+      return "document-text";
+    case "search_code":
+      return "search";
+    case "run_command":
+      return "terminal";
+    case "update_files":
+      return "git-compare";
+    case "update_plan":
+      return "map";
+    case "view_image":
+      return "image";
+    case "test_app":
+      return "checks";
+    case "wait":
+      return "time";
+    case "delegate_agent":
+      return "git-network";
+    default:
+      return "cube";
+  }
+}
