@@ -184,3 +184,12 @@ export function reasoningEffortLabel(value: string): string {
       return value.trim();
   }
 }
+
+/** The Effect sub-list of a model row (Expo's sessionModelSheetModel.ts): "" is the model's default. */
+export function effectRowsForRuntime(row: ProviderPickerModelRow): { key: string; effect: string; selected: boolean }[] {
+  return row.effects.map((effect) => ({
+    key: effect || "default",
+    effect,
+    selected: row.current && row.currentEffect === effect,
+  }));
+}
