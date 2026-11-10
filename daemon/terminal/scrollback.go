@@ -49,10 +49,10 @@ type HistoryDelta struct {
 	First uint64 `json:"first"`
 	From  uint64 `json:"from"`
 	Next  uint64 `json:"next"`
-	// Lines are styled rows, oldest first. Flags, when present, has one
-	// byte of Row* flags per line.
+	// Lines are styled rows, oldest first. Flags, when present, has the Row*
+	// flags of each line.
 	Lines []string `json:"lines"`
-	Flags []uint8  `json:"flags,omitempty"`
+	Flags []int    `json:"flags,omitempty"`
 }
 
 type scrollbackProvider interface {
@@ -91,10 +91,11 @@ type scrollbackTracker struct {
 var trackerEpochs = struct {
 	sync.Mutex
 	last uint64
-}{last: uint64(time.Now().UnixNano())}
+}{last: uint64(time.Now().UnixMilli())}
 
 // nextEpoch is unique within the process and differs between daemon runs, so
-// a cursor from another run or another view never matches.
+// a cursor from another run or another view never matches. It stays below
+// 2^53, which is what a JSON number in the App can hold.
 func nextEpoch() uint64 {
 	trackerEpochs.Lock()
 	defer trackerEpochs.Unlock()
@@ -210,9 +211,12 @@ func (s *hostSession) HistoryFrom(cursor HistoryCursor) (HistoryDelta, error) {
 	if size > historyByteLimit {
 		return HistoryDelta{}, fmt.Errorf("pane history exceeds 4 MiB")
 	}
-	var flags []uint8
+	var flags []int
 	if len(capture.RowFlags) == len(lines) && len(lines) > 0 {
-		flags = capture.RowFlags
+		flags = make([]int, len(lines))
+		for i, f := range capture.RowFlags {
+			flags[i] = int(f)
+		}
 	}
 	start, reset := t.advance(capture.Cols, lines)
 	next := start + uint64(len(lines))
