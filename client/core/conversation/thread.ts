@@ -1,0 +1,1221 @@
+import {
+  conversationChoicesEqual,
+  conversationSubagentsEqual,
+  type CodexConversation,
+} from "./conversation";
+import {
+  beginPendingUserMessageAttempt as beginPendingUserMessageAttemptState,
+  acknowledgePendingUserMessage,
+  markPendingUserMessageUncertain,
+  rejectPendingUserMessage,
+  reconcilePendingUserMessagesAgainstEvents,
+  type ProviderEventTurnFocusAlias,
+  type PendingDeliverySettlement,
+  type PendingUserMessageLifecycle,
+} from "./pendingUserMessages";
+import {
+  EMPTY_CONVERSATION_STREAM_CURSOR,
+  acceptConversationEnvelope,
+  conversationIdentity,
+  reconcileConversationDeltaEvents,
+  reconcileConversationSnapshot,
+  providerActivitiesEqual,
+  type ConversationStreamCursor,
+} from "./reconciliation";
+import { shouldDropStructuredChatEvent } from "./visibility";
+
+/**
+ * One chat's state: the transcript as the daemon streams it (a snapshot, then
+ * revisions) and the messages the person sent that it has not echoed yet. A
+ * pure reducer; the screen keeps one per conversation and drops it when the
+ * computer or the thread changes.
+ */
+
+/** A file the person attached, as the composer keeps it until the send settles. */
+export type ComposerAttachment = {
+  name: string;
+  path: string;
+  localUri?: string;
+  mimeType?: string;
+};
+
+export type { PendingUserMessageLifecycle };
+
+/** `codex_conversation_snapshot`. The daemon calls the server generation `generation`. */
+export interface CodexConversationSnapshotPayload {
+  request_id?: string;
+  worker_id?: string;
+  conversation_id?: string;
+  revision: number;
+  generation?: string;
+  conversation: CodexConversation;
+}
+
+/** `codex_conversation_delta`: `activity` is present only when it changed, null when cleared. */
+export interface CodexConversationDeltaPayload {
+  request_id?: string;
+  worker_id?: string;
+  conversation_id?: string;
+  revision: number;
+  base_revision: number;
+  generation?: string;
+  available?: boolean;
+  reason?: string;
+  source?: string;
+  path?: string;
+  session_id?: string;
+  cwd?: string;
+  updated_at?: string;
+  activity?: CodexConversation["activity"] | null;
+  upserts: CodexConversation["events"];
+  deletes: string[];
+}
+
+/** `codex_conversation_sync_status`. */
+export interface CodexConversationSyncStatusPayload {
+  request_id?: string;
+  worker_id?: string;
+  conversation_id?: string;
+  revision: number;
+  generation?: string;
+  state: "syncing" | "ready" | "unavailable" | string;
+  reason?: string;
+}
+
+type KeyedState<T> = {
+  cacheKey: string;
+  value: T;
+};
+
+
+export type PendingUserMessage = {
+  id: string;
+  body: string;
+  sentText: string;
+  attachments: ComposerAttachment[];
+  createdAt: string;
+  lifecycle: PendingUserMessageLifecycle;
+  dispatchRequestId: string;
+  dispatchAttemptOrder: number;
+  failureCode?: string;
+  failureMessage?: string;
+  createdAfterMaxSeq?: number;
+  createdAfterEventIds?: string[];
+  claimedElsewhereEventIds?: string[];
+};
+
+export type PendingUserMessageInput = Omit<
+  PendingUserMessage,
+  | "id"
+  | "createdAt"
+  | "dispatchAttemptOrder"
+  | "createdAfterMaxSeq"
+  | "createdAfterEventIds"
+  | "claimedElsewhereEventIds"
+>;
+
+export type PendingUserMessageAttempt = {
+  requestId: string;
+};
+
+/** The outcome of one send attempt, correlated by its request id. */
+export type PendingUserMessageSettlement = PendingDeliverySettlement & {
+  requestId: string;
+};
+
+export function interfaceConversationStreamErrorMessage(error: Error) {
+  return error.message || "Could not stream this conversation.";
+}
+
+export type InterfaceChatThreadState = {
+  cacheKey: string;
+  conversation: CodexConversation | null;
+  loading: boolean;
+  error: string | null;
+  pendingUserMessages: PendingUserMessage[];
+  turnFocusAnchorAliases: ReadonlyMap<string, string>;
+  streamCursor: ConversationStreamCursor;
+  awaitingSnapshot: boolean;
+  resyncToken: number;
+};
+
+export type InterfaceChatThreadAction =
+  | { type: "cache_key_changed"; cacheKey: string }
+  | { type: "stream_start"; generation: number }
+  | {
+      type: "snapshot";
+      payload: CodexConversationSnapshotPayload;
+      generation: number;
+    }
+  | { type: "delta"; delta: CodexConversationDeltaPayload; generation: number }
+  | {
+      type: "sync_status";
+      status: CodexConversationSyncStatusPayload;
+      generation: number;
+    }
+  | { type: "stream_error"; error: string; generation: number }
+  | {
+      type: "add_pending_user_message";
+      message: PendingUserMessageInput & { id: string; createdAt: string };
+    }
+  | {
+      type: "begin_pending_user_message_attempt";
+      id: string;
+      requestId: string;
+      staleReceiptAutoRetried?: boolean;
+    }
+  | {
+      type: "settle_pending_user_message";
+      id: string;
+      settlement: PendingUserMessageSettlement;
+    }
+  | { type: "discard_pending_user_message"; id: string };
+
+export function initialInterfaceChatThreadState(
+  cacheKey: string,
+): InterfaceChatThreadState {
+  const conversation = cachedInterfaceConversation(cacheKey);
+  return {
+    cacheKey,
+    conversation,
+    loading: !conversation,
+    error: null,
+    pendingUserMessages: [],
+    turnFocusAnchorAliases: new Map(),
+    streamCursor: EMPTY_CONVERSATION_STREAM_CURSOR,
+    awaitingSnapshot: false,
+    resyncToken: 0,
+  };
+}
+
+/** @internal Exported for behavior tests of the process-local Chat state. */
+export function interfaceChatThreadReducer(
+  state: InterfaceChatThreadState,
+  action: InterfaceChatThreadAction,
+): InterfaceChatThreadState {
+  switch (action.type) {
+    case "cache_key_changed":
+      if (state.cacheKey === action.cacheKey) {
+        return state;
+      }
+      return initialInterfaceChatThreadState(action.cacheKey);
+    case "stream_start":
+      return {
+        ...state,
+        loading: !state.conversation?.events.length,
+        error: null,
+        awaitingSnapshot: true,
+        streamCursor: {
+          conversationId: conversationIdentity(state.conversation),
+          revision: 0,
+          generation: action.generation,
+        },
+      };
+    case "snapshot":
+      return applyCodexConversationSnapshot(
+        state,
+        action.payload,
+        action.generation,
+      );
+    case "delta":
+      return applyCodexConversationDelta(
+        state,
+        action.delta,
+        action.generation,
+      );
+    case "sync_status":
+      return applyCodexConversationSyncStatus(
+        state,
+        action.status,
+        action.generation,
+      );
+    case "stream_error":
+      if (action.generation !== state.streamCursor.generation) {
+        return state;
+      }
+      return {
+        ...state,
+        loading: false,
+        error: action.error,
+      };
+    case "add_pending_user_message": {
+      const message = {
+        ...action.message,
+        dispatchAttemptOrder: nextPendingDispatchAttemptOrder(
+          state.pendingUserMessages,
+        ),
+        createdAfterMaxSeq: maxUserEventSeq(state.conversation),
+        createdAfterEventIds: Array.from(
+          conversationEventIdSet(state.conversation),
+        ),
+      };
+      return reconcileLocalPendingMessages({
+        ...state,
+        pendingUserMessages: [...state.pendingUserMessages, message],
+        turnFocusAnchorAliases:
+          state.turnFocusAnchorAliases.size === 0
+            ? state.turnFocusAnchorAliases
+            : new Map(),
+      });
+    }
+    case "begin_pending_user_message_attempt": {
+      const createdAfterMaxSeq = maxUserEventSeq(state.conversation);
+      const createdAfterEventIds = Array.from(
+        conversationEventIdSet(state.conversation),
+      );
+      const dispatchAttemptOrder = nextPendingDispatchAttemptOrder(
+        state.pendingUserMessages,
+      );
+      let changed = false;
+      const pendingUserMessages = state.pendingUserMessages.map((message) => {
+        if (message.id !== action.id) {
+          return message;
+        }
+        changed = true;
+        return beginPendingUserMessageAttemptState(message, {
+          requestId: action.requestId,
+          dispatchAttemptOrder,
+          createdAfterMaxSeq,
+          createdAfterEventIds,
+        });
+      });
+      return changed
+        ? reconcileLocalPendingMessages({ ...state, pendingUserMessages })
+        : state;
+    }
+    case "settle_pending_user_message": {
+      let changed = false;
+      const pendingUserMessages = state.pendingUserMessages.map((message) => {
+        if (message.id !== action.id) {
+          return message;
+        }
+        const next = settlePendingUserMessageState(message, action.settlement);
+        changed ||= next !== message;
+        return next;
+      });
+      return !changed ? state : { ...state, pendingUserMessages };
+    }
+    case "discard_pending_user_message": {
+      // Only a row the computer did not take can be discarded; an in-flight
+      // row settles first.
+      const pendingUserMessages = state.pendingUserMessages.filter(
+        (message) => message.id !== action.id || message.lifecycle === "pending",
+      );
+      return pendingUserMessages.length === state.pendingUserMessages.length
+        ? state
+        : { ...state, pendingUserMessages };
+    }
+    default:
+      return state;
+  }
+}
+
+function settlePendingUserMessageState(
+  message: PendingUserMessage,
+  settlement: PendingUserMessageSettlement,
+): PendingUserMessage {
+  switch (settlement.kind) {
+    case "acknowledge":
+      return acknowledgePendingUserMessage(message, settlement.requestId);
+    case "reject":
+      return rejectPendingUserMessage(message, settlement);
+    case "uncertain":
+      return markPendingUserMessageUncertain(message, settlement);
+  }
+}
+
+// sendInput writes before adding/updating the optimistic row. A canonical
+// receipt may therefore already be present when that local action is reduced.
+// Reconcile on both sides of the race, using the same identity rules.
+function reconcileLocalPendingMessages(state: InterfaceChatThreadState) {
+  const reconciled = reconcilePendingUserMessagesAgainstEvents(
+    state.pendingUserMessages,
+    state.conversation?.events ?? [],
+  );
+  return {
+    ...state,
+    pendingUserMessages: reconciled.pendingUserMessages,
+    turnFocusAnchorAliases: extendTurnFocusAnchorAliases(
+      state.turnFocusAnchorAliases,
+      reconciled.providerEventAliases,
+      resolveCurrentTurnFocusAnchorId(
+        state.turnFocusAnchorAliases,
+        state.pendingUserMessages,
+      ),
+    ),
+  };
+}
+
+function nextPendingDispatchAttemptOrder(
+  pendingUserMessages: PendingUserMessage[],
+) {
+  return (
+    pendingUserMessages.reduce(
+      (latest, message) =>
+        Number.isFinite(message.dispatchAttemptOrder)
+          ? Math.max(latest, message.dispatchAttemptOrder)
+          : latest,
+      0,
+    ) + 1
+  );
+}
+
+function applyCodexConversationSnapshot(
+  state: InterfaceChatThreadState,
+  payload: CodexConversationSnapshotPayload,
+  generation: number,
+): InterfaceChatThreadState {
+  const accepted = acceptConversationEnvelope(
+    state.streamCursor,
+    {
+      requestId: payload.request_id,
+      conversationId: payload.conversation_id,
+      revision: payload.revision,
+      generation,
+      kind: "snapshot",
+    },
+    conversationIdentity(payload.conversation),
+  );
+  if (!accepted.accepted) {
+    return state;
+  }
+  const conversation = reconcileConversationSnapshot(
+    state.conversation,
+    payload.conversation,
+    accepted.sameConversation,
+  );
+  // Never-erase guard (mirror of the daemon subscription guard): a fresh
+  // generation snapshot that reports an unavailable empty load (transcript
+  // miss after daemon restart, cursor loss, binding recovery race) must never
+  // replace an already-populated timeline when the conversation identity is
+  // unchanged or unknown. The stream still advances on the accepted base so
+  // the next delta resumes the held history; only an available snapshot, a
+  // genuinely different conversation identity, or an authoritative delta with
+  // explicit deletes can change what is rendered.
+  if (
+    accepted.sameConversation &&
+    state.conversation &&
+    state.conversation.events.length > 0 &&
+    !conversation.available &&
+    conversation.events.length === 0
+  ) {
+    return {
+      ...state,
+      awaitingSnapshot: false,
+      loading: false,
+      error: null,
+      streamCursor: {
+        ...accepted.cursor,
+        conversationId: state.streamCursor.conversationId,
+      },
+    };
+  }
+  // Revisit/reconnect with identical history: reuse the previously cleaned
+  // conversation and projection instead of re-running the full cleaning and
+  // projection over every past event. Keyed by a full content fingerprint, so
+  // any changed body, input, or output forces a fresh clean (no stale rows).
+  const cleaned = cleanConversationForChatSnapshot(conversation, state.conversation);
+  return applyIncomingConversation(
+    {
+      ...state,
+      awaitingSnapshot: false,
+      pendingUserMessages: accepted.sameConversation
+        ? state.pendingUserMessages
+        : [],
+      turnFocusAnchorAliases: accepted.sameConversation
+        ? state.turnFocusAnchorAliases
+        : new Map(),
+    },
+    cleaned,
+    accepted.cursor,
+    true,
+  );
+}
+
+/**
+ * Content-keyed reuse of cleaned conversation events across remounts
+ * (revisit/reconnect). Reuse is proven by an exact field-by-field identity
+ * comparison between the incoming raw events and the cached cleaned events
+ * (the full codexEventsEqual, covering every normalized field), so a hit can
+ * never serve stale content — there is no hash to collide. Bounded LRU keeps
+ * memory proportional to a few sessions.
+ */
+const CLEANED_CONVERSATION_CACHE_MAX = 4;
+const cleanedConversationCache = new Map<
+  string,
+  { events: CodexConversation["events"] }
+>();
+
+function cleanConversationForChatSnapshot(
+  conversation: CodexConversation,
+  previousConversation: CodexConversation | null,
+): CodexConversation {
+  const identity = conversationIdentity(conversation);
+  if (identity) {
+    // The drop rules read conversation.source, so it is part of the cache key.
+    // JSON.stringify of the [identity, source] pair is unambiguous regardless
+    // of the characters inside either value.
+    const cacheKey = JSON.stringify([identity, conversation.source ?? ""]);
+    const cached = cleanedConversationCache.get(cacheKey);
+    if (cached && cleanedConversationEventsEqual(conversation.events, cached.events)) {
+      cleanedConversationCache.delete(cacheKey);
+      cleanedConversationCache.set(cacheKey, cached);
+      return { ...conversation, events: cached.events };
+    }
+    const filtered = filterCodexConversationForChat(
+      conversation,
+      previousConversation,
+    );
+    const cleanedEvents = filtered.events;
+    cleanedConversationCache.delete(cacheKey);
+    if (cleanedConversationCache.size >= CLEANED_CONVERSATION_CACHE_MAX) {
+      const oldest = cleanedConversationCache.keys().next().value;
+      if (oldest !== undefined) {
+        cleanedConversationCache.delete(oldest);
+      }
+    }
+    cleanedConversationCache.set(cacheKey, { events: cleanedEvents });
+    return filtered;
+  }
+  return filterCodexConversationForChat(conversation, previousConversation);
+}
+
+/**
+ * Exact identity between the incoming raw events and the cached cleaned
+ * events. Cleaning is idempotent on clean text, so an incoming raw event that
+ * equals the previously cleaned event field-for-field cannot change the
+ * cleaning result; and the comparison covers every normalized field, so no
+ * field can carry a stale value through the reuse.
+ */
+function cleanedConversationEventsEqual(
+  incoming: CodexConversation["events"],
+  cached: CodexConversation["events"],
+) {
+  if (incoming.length !== cached.length) {
+    return false;
+  }
+  for (let index = 0; index < incoming.length; index += 1) {
+    if (!codexEventsEqual(incoming[index]!, cached[index]!)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function applyIncomingConversation(
+  state: InterfaceChatThreadState,
+  conversation: CodexConversation,
+  streamCursor: ConversationStreamCursor = state.streamCursor,
+  alreadyFiltered = false,
+): InterfaceChatThreadState {
+  const filteredConversation = alreadyFiltered
+    ? conversation
+    : filterCodexConversationForChat(conversation, state.conversation);
+  const nextConversation = reuseStableConversationEvents(
+    state.conversation,
+    filteredConversation,
+  );
+  const pendingReconciliation = reconcilePendingUserMessagesAgainstEvents(
+    state.pendingUserMessages,
+    nextConversation.events,
+  );
+  const pendingUserMessages = pendingReconciliation.pendingUserMessages;
+  const currentTurnFocusAnchorId = resolveCurrentTurnFocusAnchorId(
+    state.turnFocusAnchorAliases,
+    state.pendingUserMessages,
+  );
+  const turnFocusAnchorAliases = extendTurnFocusAnchorAliases(
+    state.turnFocusAnchorAliases,
+    pendingReconciliation.providerEventAliases,
+    currentTurnFocusAnchorId,
+  );
+  if (
+    state.conversation === nextConversation &&
+    state.pendingUserMessages === pendingUserMessages &&
+    state.turnFocusAnchorAliases === turnFocusAnchorAliases &&
+    state.loading === false &&
+    state.error === null &&
+    state.streamCursor === streamCursor
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    conversation: nextConversation,
+    pendingUserMessages,
+    turnFocusAnchorAliases,
+    loading: false,
+    error: null,
+    streamCursor,
+  };
+}
+
+function applyCodexConversationDelta(
+  state: InterfaceChatThreadState,
+  delta: CodexConversationDeltaPayload,
+  generation: number,
+): InterfaceChatThreadState {
+  if (state.awaitingSnapshot) {
+    return state;
+  }
+  const accepted = acceptConversationEnvelope(
+    state.streamCursor,
+    {
+      requestId: delta.request_id,
+      conversationId: delta.conversation_id,
+      revision: delta.revision,
+      baseRevision: delta.base_revision,
+      generation,
+      kind: "delta",
+    },
+    conversationIdentity(state.conversation),
+  );
+  if (accepted.gap) {
+    return {
+      ...state,
+      awaitingSnapshot: true,
+      resyncToken: state.resyncToken + 1,
+    };
+  }
+  if (!accepted.accepted || !accepted.sameConversation) {
+    return state;
+  }
+  const baseConversation = state.conversation ?? {
+    available: delta.available ?? false,
+    reason: delta.reason,
+    source: delta.source,
+    path: delta.path,
+    session_id: delta.session_id,
+    cwd: delta.cwd,
+    updated_at: delta.updated_at,
+    activity: delta.activity ?? undefined,
+    events: [],
+  };
+  if (
+    delta.upserts.length === 0 &&
+    delta.deletes.length === 0 &&
+    !codexDeltaMetadataChanged(baseConversation, delta)
+  ) {
+    if (
+      state.loading ||
+      state.error !== null ||
+      state.streamCursor !== accepted.cursor
+    ) {
+      return {
+        ...state,
+        loading: false,
+        error: null,
+        streamCursor: accepted.cursor,
+      };
+    }
+    return state;
+  }
+  // Delta upserts are the only events that can differ from the previous
+  // state; the base events are already filtered/cleaned. Cleaning just the
+  // upserts keeps the per-delta cost proportional to the change instead of
+  // the whole history.
+  const filteredUpserts = filterCodexConversationEventsForChat(
+    delta.source ?? baseConversation.source,
+    delta.upserts,
+  );
+  // An upsert that cleans to droppable means the provider's authoritative
+  // update is invisible in the Interface; leaving the stale base event in the
+  // timeline would show content the provider already superseded, so its id is
+  // removed exactly like an authoritative delete.
+  const staleUpsertIds = filteredUpserts.droppedIds;
+  const nextEvents = reconcileConversationDeltaEvents(
+    baseConversation.events,
+    filteredUpserts.events,
+    delta.deletes.concat(staleUpsertIds),
+  );
+  const nextConversation = {
+    ...baseConversation,
+    available: delta.available ?? baseConversation.available,
+    reason: delta.reason ?? baseConversation.reason,
+    source: delta.source ?? baseConversation.source,
+    path: delta.path ?? baseConversation.path,
+    session_id: delta.session_id ?? baseConversation.session_id,
+    cwd: delta.cwd ?? baseConversation.cwd,
+    updated_at: delta.updated_at ?? baseConversation.updated_at,
+    activity:
+      delta.activity !== undefined
+        ? (delta.activity ?? undefined)
+        : baseConversation.activity,
+    events: nextEvents,
+  };
+  return applyIncomingConversation(state, nextConversation, accepted.cursor, true);
+}
+
+function codexDeltaMetadataChanged(
+  baseConversation: CodexConversation,
+  delta: CodexConversationDeltaPayload,
+) {
+  return (
+    (delta.available !== undefined &&
+      delta.available !== baseConversation.available) ||
+    (delta.reason !== undefined && delta.reason !== baseConversation.reason) ||
+    (delta.source !== undefined && delta.source !== baseConversation.source) ||
+    (delta.path !== undefined && delta.path !== baseConversation.path) ||
+    (delta.session_id !== undefined &&
+      delta.session_id !== baseConversation.session_id) ||
+    (delta.cwd !== undefined && delta.cwd !== baseConversation.cwd) ||
+    (delta.updated_at !== undefined &&
+      delta.updated_at !== baseConversation.updated_at) ||
+    (delta.activity !== undefined &&
+      !providerActivitiesEqual(
+        baseConversation.activity,
+        delta.activity ?? undefined,
+      ))
+  );
+}
+
+function applyCodexConversationSyncStatus(
+  state: InterfaceChatThreadState,
+  status: CodexConversationSyncStatusPayload,
+  generation: number,
+): InterfaceChatThreadState {
+  const accepted = acceptConversationEnvelope(state.streamCursor, {
+    requestId: status.request_id,
+    conversationId: status.conversation_id,
+    revision: status.revision,
+    generation,
+    kind: "sync",
+  });
+  if (!accepted.accepted) {
+    return state;
+  }
+  // Sync is transport availability only. It cannot mutate Activity or visible
+  // history; the next revisioned snapshot owns that replacement.
+  return {
+    ...state,
+    loading: status.state === "syncing" && !state.conversation?.events.length,
+    error: null,
+    streamCursor: accepted.cursor,
+  };
+}
+
+function reuseStableConversationEvents(
+  previousConversation: CodexConversation | null,
+  nextConversation: CodexConversation,
+): CodexConversation {
+  if (!previousConversation?.events.length) {
+    return nextConversation;
+  }
+  const previousById = new Map(
+    previousConversation.events.map((event) => [event.id, event]),
+  );
+  let changed =
+    previousConversation.events.length !== nextConversation.events.length;
+  const events = nextConversation.events.map((event, index) => {
+    const previousEvent = previousById.get(event.id);
+    if (previousEvent && codexEventsEqual(previousEvent, event)) {
+      if (previousConversation.events[index] !== previousEvent) {
+        changed = true;
+      }
+      return previousEvent;
+    }
+    changed = true;
+    return event;
+  });
+  if (
+    !changed &&
+    codexConversationMetadataEqual(previousConversation, nextConversation)
+  ) {
+    return previousConversation;
+  }
+  return {
+    ...nextConversation,
+    events: changed ? events : previousConversation.events,
+  };
+}
+
+function codexConversationMetadataEqual(
+  left: CodexConversation,
+  right: CodexConversation,
+) {
+  return (
+    left.available === right.available &&
+    left.reason === right.reason &&
+    left.source === right.source &&
+    left.path === right.path &&
+    left.session_id === right.session_id &&
+    left.cwd === right.cwd &&
+    left.updated_at === right.updated_at &&
+    providerActivitiesEqual(left.activity, right.activity)
+  );
+}
+
+function extendTurnFocusAnchorAliases(
+  current: ReadonlyMap<string, string>,
+  additions: ProviderEventTurnFocusAlias[],
+  currentTurnFocusAnchorId: string | undefined,
+) {
+  if (!currentTurnFocusAnchorId) {
+    return current.size === 0 ? current : new Map<string, string>();
+  }
+  let providerEventId: string | undefined;
+  current.forEach((localPendingId, candidateProviderEventId) => {
+    if (localPendingId === currentTurnFocusAnchorId) {
+      providerEventId = candidateProviderEventId;
+    }
+  });
+  additions.forEach((addition) => {
+    if (addition.localPendingId === currentTurnFocusAnchorId) {
+      providerEventId = addition.providerEventId;
+    }
+  });
+  if (!providerEventId) {
+    return current.size === 0 ? current : new Map<string, string>();
+  }
+  if (
+    current.size === 1 &&
+    current.get(providerEventId) === currentTurnFocusAnchorId
+  ) {
+    return current;
+  }
+  return new Map([[providerEventId, currentTurnFocusAnchorId]]);
+}
+
+function resolveCurrentTurnFocusAnchorId(
+  currentAliases: ReadonlyMap<string, string>,
+  pendingUserMessages: PendingUserMessage[],
+) {
+  let currentAlias: string | undefined;
+  currentAliases.forEach((localPendingId) => {
+    currentAlias = localPendingId;
+  });
+  return (
+    currentAlias ?? pendingUserMessages[pendingUserMessages.length - 1]?.id
+  );
+}
+
+function codexEventsEqual(
+  left: CodexConversation["events"][number],
+  right: CodexConversation["events"][number],
+) {
+  return (
+    left === right ||
+    (left.id === right.id &&
+      left.seq === right.seq &&
+      left.timestamp === right.timestamp &&
+      left.kind === right.kind &&
+      left.role === right.role &&
+      left.title === right.title &&
+      left.body === right.body &&
+      attachmentsEqual(left.attachments, right.attachments) &&
+      left.command === right.command &&
+      left.tool_name === right.tool_name &&
+      left.input === right.input &&
+      left.output === right.output &&
+      left.call_id === right.call_id &&
+      left.exit_code === right.exit_code &&
+      left.status === right.status &&
+      left.partial === right.partial &&
+      left.transient === right.transient &&
+      left.explanation === right.explanation &&
+      left.source === right.source &&
+      left.work_id === right.work_id &&
+      left.work_session_id === right.work_session_id &&
+      left.session_name === right.session_name &&
+      left.unread === right.unread &&
+      stringArraysEqual(left.files, right.files) &&
+      fileChangesEqual(left.file_changes, right.file_changes) &&
+      planStepsEqual(left.plan, right.plan) &&
+      conversationChoicesEqual(left.choice, right.choice) &&
+      conversationSubagentsEqual(left.subagent, right.subagent))
+  );
+}
+
+function attachmentsEqual(
+  left?: CodexConversation["events"][number]["attachments"],
+  right?: CodexConversation["events"][number]["attachments"],
+) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  return left.every(
+    (file, index) =>
+      file.name === right[index].name &&
+      file.path === right[index].path &&
+      file.content_type === right[index].content_type,
+  );
+}
+
+function stringArraysEqual(left?: string[], right?: string[]) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function fileChangesEqual(
+  left?: CodexConversation["events"][number]["file_changes"],
+  right?: CodexConversation["events"][number]["file_changes"],
+) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftChange = left[index];
+    const rightChange = right[index];
+    if (
+      leftChange?.path !== rightChange?.path ||
+      leftChange?.move_path !== rightChange?.move_path ||
+      leftChange?.operation !== rightChange?.operation ||
+      leftChange?.additions !== rightChange?.additions ||
+      leftChange?.deletions !== rightChange?.deletions
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function planStepsEqual(
+  left?: CodexConversation["events"][number]["plan"],
+  right?: CodexConversation["events"][number]["plan"],
+) {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const leftStep = left[index];
+    const rightStep = right[index];
+    if (
+      leftStep?.step !== rightStep?.step ||
+      leftStep?.status !== rightStep?.status
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function filterCodexConversationForChat(
+  conversation: CodexConversation,
+  previousConversation: CodexConversation | null,
+): CodexConversation {
+  const filtered = filterCodexConversationEventsForChat(
+    conversation.source,
+    conversation.events,
+    previousConversation,
+  );
+  if (!filtered.changed) {
+    return conversation;
+  }
+  return { ...conversation, events: filtered.events };
+}
+
+function filterCodexConversationEventsForChat(
+  source: CodexConversation["source"],
+  events: CodexConversation["events"],
+  previousConversation: CodexConversation | null = null,
+): { events: CodexConversation["events"]; changed: boolean; droppedIds: string[] } {
+  let changed = false;
+  const cleaned: CodexConversation["events"] = [];
+  const droppedIds: string[] = [];
+  // Unchanged events keep their previous cleaned object identity: re-cleaning
+  // the full history on every snapshot/delta would re-run the regex chains
+  // over all past text. An event that equals its previously cleaned form
+  // cannot change the cleaning result (cleaning is idempotent on clean text),
+  // and drop decisions depend only on stable fields.
+  const previousById =
+    previousConversation && previousConversation.events.length > 0
+      ? new Map(previousConversation.events.map((event) => [event.id, event]))
+      : null;
+  for (const event of events) {
+    if (shouldDropStructuredChatEvent(source, event)) {
+      changed = true;
+      if (event.id) {
+        droppedIds.push(event.id);
+      }
+      continue;
+    }
+    if (previousById) {
+      const previousEvent = previousById.get(event.id);
+      if (previousEvent && codexEventsEqual(previousEvent, event)) {
+        if (previousEvent !== event) {
+          changed = true;
+        }
+        cleaned.push(previousEvent);
+        continue;
+      }
+    }
+    const cleanedEvent = cleanCodexConversationEventForChat(event);
+    if (!cleanedEvent) {
+      changed = true;
+      if (event.id) {
+        droppedIds.push(event.id);
+      }
+      continue;
+    }
+    if (cleanedEvent !== event) {
+      changed = true;
+    }
+    cleaned.push(cleanedEvent);
+  }
+  return { events: cleaned, changed, droppedIds };
+}
+
+function cleanCodexConversationEventForChat(
+  event: CodexConversation["events"][number],
+): CodexConversation["events"][number] | null {
+  const body = cleanCodexVisibleText(event.body || "");
+  const input = cleanCodexVisibleText(event.input || "");
+  const output = cleanCodexVisibleText(event.output || "");
+  const explanation = cleanCodexVisibleText(event.explanation || "");
+  const command = cleanCodexVisibleText(event.command || "");
+  const title = cleanCodexVisibleText(event.title || "");
+  const toolName = cleanCodexVisibleText(event.tool_name || "");
+  const nextPlan = event.plan
+    ?.map((step) => ({
+      ...step,
+      step: cleanCodexVisibleText(step.step || ""),
+    }))
+    .filter((step) => step.step.trim().length > 0);
+  const planChanged =
+    (event.plan?.length ?? 0) !== (nextPlan?.length ?? 0) ||
+    Boolean(
+      event.plan?.some((step, index) => step.step !== nextPlan?.[index]?.step),
+    );
+
+  if (
+    !body &&
+    !input &&
+    !output &&
+    !explanation &&
+    !command &&
+    !title &&
+    !toolName &&
+    !event.attachments?.length &&
+    !event.files?.length &&
+    !event.file_changes?.length &&
+    !nextPlan?.length
+  ) {
+    return null;
+  }
+
+  if (
+    body === (event.body || "") &&
+    input === (event.input || "") &&
+    output === (event.output || "") &&
+    explanation === (event.explanation || "") &&
+    command === (event.command || "") &&
+    title === (event.title || "") &&
+    toolName === (event.tool_name || "") &&
+    !planChanged
+  ) {
+    return event;
+  }
+
+  return {
+    ...event,
+    body,
+    input,
+    output,
+    explanation,
+    command,
+    title,
+    tool_name: toolName,
+    plan: nextPlan,
+  };
+}
+
+// Codex injects the AGENTS.md preamble as a user-role record. Its fixed
+// "AGENTS.md instructions for <cwd>" header, a document that opens with the
+// standard contributor-guide heading, or its environment/skills/permissions
+// wrappers identify it; no project-specific phrase is matched.
+function looksLikeCodexInstructionContext(value: string) {
+  const text = normalizeInstructionContextText(value);
+  if (!text) {
+    return false;
+  }
+  const lower = text.toLowerCase();
+  return (
+    lower.startsWith("# repository guidelines") ||
+    lower.startsWith("repository guidelines ") ||
+    lower.startsWith("## project structure & module organization") ||
+    lower.includes("agents.md instructions for ") ||
+    lower.includes("<environment_context>") ||
+    lower.includes("<skills_instructions>") ||
+    lower.includes("<permissions instructions>")
+  );
+}
+
+function normalizeInstructionContextText(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanCodexVisibleText(value: string) {
+  const stripped = stripCodexContextualFragments(value);
+  if (looksLikeCodexInstructionContext(stripped)) {
+    return "";
+  }
+  return stripped;
+}
+
+function stripCodexContextualFragments(value: string) {
+  if (!value.includes("<")) {
+    // No XML-like marker open/close pair can exist without "<"; the scan
+    // loop over every marker would be pure waste on plain body text.
+    return normalizeDisplayText(value.trim());
+  }
+  let stripped = value.trim();
+  stripped = stripGoalInternalContext(stripped);
+  if (!stripped) {
+    return "";
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    let best: { start: number; end: number } | null = null;
+    for (const [open, close] of CODEX_CONTEXTUAL_FRAGMENT_MARKERS) {
+      const range = markedTextRange(open, close, stripped);
+      if (!range) {
+        continue;
+      }
+      if (!best || range.start < best.start) {
+        best = range;
+      }
+    }
+    if (best) {
+      stripped =
+        `${stripped.slice(0, best.start)}\n${stripped.slice(best.end)}`.trim();
+      changed = true;
+    }
+  }
+  return normalizeDisplayText(stripped);
+}
+
+function stripGoalInternalContext(value: string) {
+  return value
+    .replace(
+      /<codex_internal_context\b[^>]*\bsource\s*=\s*["']goal["'][^>]*>[\s\S]*?<\/codex_internal_context\s*>/gi,
+      "\n",
+    )
+    .replace(
+      /<codex_internal_context\b[^>]*\bsource\s*=\s*["']goal["'][^>]*\/\s*>/gi,
+      "\n",
+    )
+    .trim();
+}
+
+function normalizeDisplayText(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+const CODEX_CONTEXTUAL_FRAGMENT_MARKERS = [
+  ["# AGENTS.md instructions for ", "</INSTRUCTIONS>"],
+  ["<environment_context>", "</environment_context>"],
+  ["<apps_instructions>", "</apps_instructions>"],
+  ["<skills_instructions>", "</skills_instructions>"],
+  ["<plugins_instructions>", "</plugins_instructions>"],
+  ["<collaboration_mode>", "</collaboration_mode>"],
+  ["<realtime_conversation>", "</realtime_conversation>"],
+  ["<permissions instructions>", "</permissions instructions>"],
+  ["<skill>", "</skill>"],
+  ["<user_shell_command>", "</user_shell_command>"],
+  ["<turn_aborted>", "</turn_aborted>"],
+  ["<subagent_notification>", "</subagent_notification>"],
+  ["<goal_context>", "</goal_context>"],
+  ["<model_switch>", "</model_switch>"],
+  ["<personality_spec>", "</personality_spec>"],
+] as const;
+
+function markedTextRange(
+  openMarker: string,
+  closeMarker: string,
+  value: string,
+) {
+  let searchFrom = 0;
+  while (searchFrom < value.length) {
+    const start = value.indexOf(openMarker, searchFrom);
+    if (start < 0) {
+      return null;
+    }
+    if (!isLineStartMarker(value, start)) {
+      searchFrom = start + openMarker.length;
+      continue;
+    }
+    const closeSearchFrom = start + openMarker.length;
+    const closeStart = value.indexOf(closeMarker, closeSearchFrom);
+    if (closeStart < 0) {
+      return null;
+    }
+    return {
+      start,
+      end: closeStart + closeMarker.length,
+    };
+  }
+  return null;
+}
+
+function isLineStartMarker(value: string, index: number) {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const char = value[cursor];
+    if (char === " " || char === "\t" || char === "\r") {
+      continue;
+    }
+    return char === "\n";
+  }
+  return true;
+}
+
+function conversationEventIdSet(conversation: CodexConversation | null) {
+  const ids = new Set<string>();
+  conversation?.events.forEach((event) => {
+    if (event.id) {
+      ids.add(event.id);
+    }
+  });
+  return ids;
+}
+
+/**
+ * The send boundary for the causal echo fallback. Candidates are user events,
+ * so the boundary must come from user events too: a Brain timeline numbers its
+ * durable rows by position, while live provider events (tools, partials) are
+ * numbered by transcript line, orders of magnitude higher. A boundary taken
+ * from every event sat above every durable user row, so no echo could ever
+ * consume its send.
+ */
+function maxUserEventSeq(conversation: CodexConversation | null) {
+  let maxSeq = 0;
+  conversation?.events.forEach((event) => {
+    if (
+      event.kind === "user_message" &&
+      typeof event.seq === "number" &&
+      event.seq > maxSeq
+    ) {
+      maxSeq = event.seq;
+    }
+  });
+  return maxSeq;
+}
+

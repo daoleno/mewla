@@ -1,0 +1,396 @@
+import { describe, expect, test } from "bun:test";
+import type { PendingUserMessage } from "./thread";
+import {
+  beginPendingUserMessageAttempt,
+  presentPendingUserMessageLifecycle,
+  reconcilePendingUserMessagesAgainstEvents,
+  rejectPendingUserMessage,
+  showsPendingSendStatusMark,
+} from "./pendingUserMessages";
+
+function pending(
+  overrides: Partial<PendingUserMessage> = {},
+): PendingUserMessage {
+  return {
+    id: "pending-a",
+    body: "hello",
+    sentText: "hello",
+    attachments: [],
+    createdAt: "2026-07-17T10:00:00.000Z",
+    lifecycle: "pending",
+    dispatchRequestId: "request-a",
+    dispatchAttemptOrder: 1,
+    createdAfterMaxSeq: 10,
+    createdAfterEventIds: ["history"],
+    ...overrides,
+  };
+}
+
+describe("pending user message lifecycle", () => {
+  test("presentation is never prose: the clock while waiting, one mark when undeliverable", () => {
+    expect(presentPendingUserMessageLifecycle(pending())).toEqual({
+      lifecycle: "pending",
+      accessibilityLabel: "Message pending provider transcript",
+    });
+    expect(
+      presentPendingUserMessageLifecycle(pending({ lifecycle: "failed" })),
+    ).toEqual({
+      lifecycle: "failed",
+      accessibilityLabel:
+        "Message not delivered. Tap to send again. Press and hold to delete.",
+    });
+  });
+
+  test("pending send mark is shown only for in-flight transport", () => {
+    expect(
+      showsPendingSendStatusMark({ pending: true, lifecycle: "pending" }),
+    ).toBe(true);
+    expect(
+      showsPendingSendStatusMark({ pending: true, lifecycle: "failed" }),
+    ).toBe(false);
+    expect(showsPendingSendStatusMark({ pending: false })).toBe(false);
+    expect(showsPendingSendStatusMark({})).toBe(false);
+  });
+
+  test("manual retry keeps one UI row but starts a fresh request attempt", () => {
+    const failed = pending({
+      lifecycle: "failed",
+      failureCode: "send_input_failed",
+      failureMessage: "provider unavailable",
+    });
+    const retried = beginPendingUserMessageAttempt(failed, {
+      requestId: "request-b",
+      dispatchAttemptOrder: 2,
+      createdAfterMaxSeq: 20,
+      createdAfterEventIds: ["history", "provider-between"],
+    });
+    expect(retried).toEqual({
+      ...failed,
+      lifecycle: "pending",
+      dispatchRequestId: "request-b",
+      dispatchAttemptOrder: 2,
+      failureCode: undefined,
+      failureMessage: undefined,
+      createdAfterMaxSeq: 20,
+      createdAfterEventIds: ["history", "provider-between"],
+    });
+    expect(retried.id).toBe(failed.id);
+    expect(retried.createdAt).toBe(failed.createdAt);
+  });
+
+  test("only the latest attempt's correlated failure can fail a row", () => {
+    const current = pending({ dispatchRequestId: "request-current" });
+    const stale = rejectPendingUserMessage(current, {
+      requestId: "request-previous",
+      code: "old_failure",
+      message: "old attempt",
+    });
+    expect(stale).toBe(current);
+
+    expect(
+      rejectPendingUserMessage(current, {
+        requestId: "request-current",
+        code: "send_input_failed",
+        message: "provider refused input",
+      }),
+    ).toMatchObject({
+      id: current.id,
+      lifecycle: "failed",
+      dispatchRequestId: "request-current",
+      failureCode: "send_input_failed",
+      failureMessage: "provider refused input",
+    });
+  });
+});
+
+describe("provider transcript reconciliation", () => {
+  test("exact receipt match clears Pending before causal FIFO", () => {
+    // Live duplicate: durable Brain admission id === dispatchRequestId, but
+    // seq is inside the send boundary so FIFO alone would leave the optimistic
+    // row on screen beside the canonical event.
+    const receiptId = "msh1e2ak_atzbs1";
+    const local = pending({
+      id: "local-optimistic",
+      body: "canonical admitted body",
+      sentText: "canonical admitted body",
+      dispatchRequestId: receiptId,
+      createdAfterMaxSeq: 99,
+      createdAfterEventIds: ["history"],
+    });
+    const admission = {
+      id: receiptId,
+      seq: 5,
+      kind: "user_message",
+    };
+    const reconciled = reconcilePendingUserMessagesAgainstEvents(
+      [local],
+      [{ id: "history", seq: 1, kind: "user_message" }, admission],
+    );
+    expect(reconciled.pendingUserMessages).toEqual([]);
+    expect(reconciled.providerEventAliases).toEqual([
+      { providerEventId: receiptId, localPendingId: "local-optimistic" },
+    ]);
+  });
+
+  test("exact receipt matching is global across concurrent out-of-order admissions", () => {
+    const rows = [
+      pending({
+        id: "local-a",
+        dispatchRequestId: "receipt-a",
+        dispatchAttemptOrder: 1,
+        createdAfterMaxSeq: 50,
+      }),
+      pending({
+        id: "local-b",
+        dispatchRequestId: "receipt-b",
+        dispatchAttemptOrder: 2,
+        createdAfterMaxSeq: 50,
+      }),
+    ];
+    // Snapshot delivers B before A; both seqs would be blocked by FIFO bounds.
+    const reconciled = reconcilePendingUserMessagesAgainstEvents(rows, [
+      { id: "receipt-b", seq: 3, kind: "user_message" },
+      { id: "receipt-a", seq: 2, kind: "user_message" },
+    ]);
+    expect(reconciled.pendingUserMessages).toEqual([]);
+    expect(reconciled.providerEventAliases).toEqual([
+      { providerEventId: "receipt-a", localPendingId: "local-a" },
+      { providerEventId: "receipt-b", localPendingId: "local-b" },
+    ]);
+  });
+
+  test("retry exact-matches the new receipt; prior admission id does not steal it", () => {
+    const failed = pending({
+      id: "local-row",
+      lifecycle: "failed",
+      dispatchRequestId: "receipt-old",
+      dispatchAttemptOrder: 1,
+      createdAfterMaxSeq: 10,
+      createdAfterEventIds: ["history", "receipt-old"],
+    });
+    const retried = beginPendingUserMessageAttempt(failed, {
+      requestId: "receipt-new",
+      dispatchAttemptOrder: 2,
+      createdAfterMaxSeq: 10,
+      createdAfterEventIds: ["history", "receipt-old"],
+    });
+    const mid = reconcilePendingUserMessagesAgainstEvents([retried], [
+      { id: "history", seq: 1, kind: "user_message" },
+      { id: "receipt-old", seq: 2, kind: "user_message" },
+    ]);
+    expect(mid.pendingUserMessages).toHaveLength(1);
+    expect(mid.pendingUserMessages[0]?.dispatchRequestId).toBe("receipt-new");
+
+    const done = reconcilePendingUserMessagesAgainstEvents(
+      mid.pendingUserMessages,
+      [
+        { id: "history", seq: 1, kind: "user_message" },
+        { id: "receipt-old", seq: 2, kind: "user_message" },
+        { id: "receipt-new", seq: 3, kind: "user_message" },
+      ],
+    );
+    expect(done.pendingUserMessages).toEqual([]);
+    expect(done.providerEventAliases).toEqual([
+      { providerEventId: "receipt-new", localPendingId: "local-row" },
+    ]);
+  });
+
+  test("provider echo with a different id still clears via causal FIFO after exact pass", () => {
+    const local = pending({
+      id: "local-optimistic",
+      dispatchRequestId: "client-request-1",
+      createdAfterMaxSeq: 10,
+    });
+    const reconciled = reconcilePendingUserMessagesAgainstEvents([local], [
+      { id: "history", seq: 10, kind: "user_message" },
+      { id: "provider-echo-xyz", seq: 11, kind: "user_message" },
+    ]);
+    expect(reconciled.pendingUserMessages).toEqual([]);
+    expect(reconciled.providerEventAliases).toEqual([
+      {
+        providerEventId: "provider-echo-xyz",
+        localPendingId: "local-optimistic",
+      },
+    ]);
+  });
+
+  test("retry reconciliation follows dispatch attempts without reordering UI rows", () => {
+    const failedA = pending({
+      id: "pending-a",
+      lifecycle: "failed",
+      dispatchAttemptOrder: 1,
+    });
+    const pendingB = pending({
+      id: "pending-b",
+      dispatchRequestId: "request-b",
+      dispatchAttemptOrder: 2,
+    });
+    const retriedA = beginPendingUserMessageAttempt(failedA, {
+      requestId: "request-a-retry",
+      dispatchAttemptOrder: 3,
+      createdAfterMaxSeq: 10,
+      createdAfterEventIds: ["history"],
+    });
+    const localPresentationOrder = [retriedA, pendingB];
+    expect(localPresentationOrder.map((message) => message.id)).toEqual([
+      "pending-a",
+      "pending-b",
+    ]);
+
+    const providerB = {
+      id: "provider-b",
+      seq: 11,
+      kind: "user_message",
+    };
+    const providerA = {
+      id: "provider-a-retry",
+      seq: 12,
+      kind: "user_message",
+    };
+    const combined = reconcilePendingUserMessagesAgainstEvents(
+      localPresentationOrder,
+      [{ id: "history", seq: 10, kind: "user_message" }, providerB, providerA],
+    );
+    expect(combined.pendingUserMessages).toEqual([]);
+    expect(combined.providerEventAliases).toEqual([
+      { providerEventId: "provider-b", localPendingId: "pending-b" },
+      { providerEventId: "provider-a-retry", localPendingId: "pending-a" },
+    ]);
+
+    const firstEcho = reconcilePendingUserMessagesAgainstEvents(
+      localPresentationOrder,
+      [{ id: "history", seq: 10, kind: "user_message" }, providerB],
+    );
+    expect(firstEcho.pendingUserMessages.map((message) => message.id)).toEqual([
+      "pending-a",
+    ]);
+    expect(firstEcho.providerEventAliases).toEqual([
+      { providerEventId: "provider-b", localPendingId: "pending-b" },
+    ]);
+
+    const secondEcho = reconcilePendingUserMessagesAgainstEvents(
+      firstEcho.pendingUserMessages,
+      [{ id: "history", seq: 10, kind: "user_message" }, providerB, providerA],
+    );
+    expect(secondEcho.pendingUserMessages).toEqual([]);
+    expect(secondEcho.providerEventAliases).toEqual([
+      { providerEventId: "provider-a-retry", localPendingId: "pending-a" },
+    ]);
+  });
+
+  test("causal reconciliation projects provider ids onto local turn anchors", () => {
+    const rows = [
+      pending({ id: "pending-a" }),
+      pending({ id: "pending-b", dispatchRequestId: "request-b" }),
+    ];
+    const reconciled = reconcilePendingUserMessagesAgainstEvents(rows, [
+      { id: "history", seq: 10, kind: "user_message" },
+      { id: "provider-echo-a", seq: 11, kind: "user_message" },
+      { id: "provider-echo-b", seq: 12, kind: "user_message" },
+    ]);
+
+    expect(reconciled.pendingUserMessages).toEqual([]);
+    expect(reconciled.providerEventAliases).toEqual([
+      { providerEventId: "provider-echo-a", localPendingId: "pending-a" },
+      { providerEventId: "provider-echo-b", localPendingId: "pending-b" },
+    ]);
+  });
+
+  test("provider user events consume local rows in causal FIFO order", () => {
+    const rows = [
+      pending({ id: "first" }),
+      pending({ id: "second", dispatchRequestId: "request-b" }),
+    ];
+    expect(
+      reconcilePendingUserMessagesAgainstEvents(rows, [
+        { id: "history", seq: 10, kind: "user_message" },
+        { id: "provider-echo-a", seq: 11, kind: "user_message" },
+        { id: "provider-echo-b", seq: 12, kind: "user_message" },
+      ]).pendingUserMessages,
+    ).toEqual([]);
+  });
+
+  test("an echo consumed by an earlier row cannot consume the next row later", () => {
+    const rows = [
+      pending({ id: "first" }),
+      pending({ id: "second", dispatchRequestId: "request-b" }),
+    ];
+    const afterFirstEcho = reconcilePendingUserMessagesAgainstEvents(rows, [
+      { id: "history", seq: 10, kind: "user_message" },
+      { id: "provider-echo-a", seq: 11, kind: "user_message" },
+    ]).pendingUserMessages;
+    expect(afterFirstEcho).toHaveLength(1);
+    expect(afterFirstEcho[0]).toMatchObject({
+      id: "second",
+      createdAfterEventIds: ["history", "provider-echo-a"],
+    });
+
+    expect(
+      reconcilePendingUserMessagesAgainstEvents(afterFirstEcho, [
+        { id: "history", seq: 10, kind: "user_message" },
+        { id: "provider-echo-a", seq: 11, kind: "user_message" },
+      ]).pendingUserMessages,
+    ).toHaveLength(1);
+    expect(
+      reconcilePendingUserMessagesAgainstEvents(afterFirstEcho, [
+        { id: "history", seq: 10, kind: "user_message" },
+        { id: "provider-echo-a", seq: 11, kind: "user_message" },
+        { id: "provider-echo-b", seq: 12, kind: "user_message" },
+      ]).pendingUserMessages,
+    ).toEqual([]);
+  });
+
+  test("events at or before the send boundary never consume a local row via FIFO", () => {
+    const row = pending({
+      dispatchRequestId: "unrelated-request",
+      createdAfterMaxSeq: 20,
+      createdAfterEventIds: ["known-by-id"],
+    });
+    expect(
+      reconcilePendingUserMessagesAgainstEvents(
+        [row],
+        [
+          { id: "known-by-id", seq: 21, kind: "user_message" },
+          { id: "old-by-seq", seq: 20, kind: "user_message" },
+        ],
+      ).pendingUserMessages,
+    ).toEqual([row]);
+  });
+
+  test("message bodies never participate in provider echo identity", () => {
+    const row = pending({ body: "same body", sentText: "same body" });
+    const oldEventWithSameBody = {
+      id: "old-by-seq",
+      seq: 10,
+      kind: "user_message",
+      body: "same body",
+    };
+    expect(
+      reconcilePendingUserMessagesAgainstEvents([row], [oldEventWithSameBody])
+        .pendingUserMessages,
+    ).toEqual([row]);
+
+    const futureEventWithDifferentBody = {
+      id: "provider-echo",
+      seq: 11,
+      kind: "user_message",
+      body: "different body",
+    };
+    expect(
+      reconcilePendingUserMessagesAgainstEvents(
+        [row],
+        [futureEventWithDifferentBody],
+      ).pendingUserMessages,
+    ).toEqual([]);
+  });
+
+  test("provider transcript wins even if the matching local attempt was marked failed", () => {
+    const row = pending({ lifecycle: "failed" });
+    expect(
+      reconcilePendingUserMessagesAgainstEvents(
+        [row],
+        [{ id: "provider-echo", seq: 11, kind: "user_message" }],
+      ).pendingUserMessages,
+    ).toEqual([]);
+  });
+});
