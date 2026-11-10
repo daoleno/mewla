@@ -7,6 +7,10 @@ import {
 import { buildTimeline } from "./model";
 import type { CodexConversationEvent } from "../conversation/conversation";
 import type { ActivityTimelineItem } from "./activityTypes";
+import {
+  buildInterfaceTimelineActivityPresentation,
+  expandedActivityStatusLine,
+} from "./activityModel";
 
 const absoluteWatcher = "/home/daoleno/workspace/mewla/daemon/watcher/watcher.go";
 const absoluteTmux = "/home/daoleno/workspace/mewla/daemon/terminal/tmux.go";
@@ -351,6 +355,35 @@ describe("actionable collapsed tool-call projection", () => {
     expect(rows[4]?.title).toBe("Finished");
     expect(rows[4]?.detail).toBeUndefined();
     expect(rows[4]?.body).toBe("Build artifact ready");
+  });
+
+  test("expansion does not repeat the collapsed result but keeps richer facts", () => {
+    const base = {
+      type: "activity" as const,
+      id: "status-detail",
+      title: "Run go test ./...",
+      tone: "success" as const,
+      icon: "terminal" as const,
+    };
+    const duplicate = {
+      ...base,
+      detail: "Succeeded",
+      statusLine: "Succeeded",
+    };
+    const richer = {
+      ...base,
+      detail: "Succeeded",
+      statusLine: "Succeeded · 2.5s",
+    };
+
+    expect(expandedActivityStatusLine(duplicate)).toBeUndefined();
+    expect(expandedActivityStatusLine(richer)).toBe("Succeeded · 2.5s");
+    expect(
+      buildInterfaceTimelineActivityPresentation(
+        duplicate,
+        {} as Parameters<typeof buildInterfaceTimelineActivityPresentation>[1],
+      ).canExpand,
+    ).toBe(false);
   });
 
   test("patch providers keep exact files expanded and compact line totals collapsed", () => {

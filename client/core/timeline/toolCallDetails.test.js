@@ -8,6 +8,7 @@ import {
   isWaitSessionPoll,
 } from "./toolCallDetails";
 import { buildTimeline } from "./model";
+import { buildInterfaceTimelineActivityPresentation } from "./activityModel";
 
 describe("toolCallDetails", () => {
   test("read details prefer file paths over exec_command", () => {
@@ -107,4 +108,109 @@ describe("toolCallDetails", () => {
 });
 
 describe("timeline wait/read presentation", () => {
+  test("read lists paths; wait polls do not become raw cards", () => {
+    const events = [
+      {
+        id: "read-nested",
+        seq: 1,
+        kind: "tool",
+        tool_name: "exec",
+        input: `const r = await tools.exec_command({"cmd":"sed -n \\"1,20p\\" app/foo.ts"});`,
+        output: "export const foo = 1",
+        status: "done",
+      },
+      {
+        id: "cmd",
+        seq: 2,
+        kind: "command",
+        command: "./gradlew assembleDebug",
+        status: "running",
+        body: "starting",
+      },
+      {
+        id: "wait-poll",
+        seq: 3,
+        kind: "tool",
+        tool_name: "wait",
+        input: JSON.stringify({
+          session_id: 98430,
+          chars: "",
+          yield_time_ms: 30000,
+        }),
+        output: JSON.stringify({
+          chunk_id: "build-2",
+          wall_time: 7.8274,
+          session_id: 98430,
+          original_token_count: 4,
+        }),
+        status: "done",
+      },
+      {
+        id: "wait-alone",
+        seq: 4,
+        kind: "tool",
+        tool_name: "wait",
+        output: JSON.stringify({
+          chunk_id: "x",
+          wall_time: 1.5,
+          session_id: 1,
+          original_token_count: 1,
+        }),
+        status: "done",
+      },
+      {
+        id: "claude-read",
+        seq: 5,
+        kind: "tool",
+        tool_name: "Read",
+        input: JSON.stringify({ file_path: "/repo/app/bar.ts" }),
+        files: ["/repo/app/bar.ts"],
+        output: "package main",
+        status: "done",
+      },
+    ];
+
+    const activities = buildTimeline(events).filter(
+      (item) => item.type === "activity",
+    );
+    expect(activities.map((item) => item.title)).toEqual([
+      "Read app/foo.ts",
+      "Build assembleDebug",
+      "Finished",
+      "Read app/bar.ts",
+    ]);
+
+    expect(activities[0].files).toEqual(["app/foo.ts"]);
+    expect(activities[0].body).toContain("foo");
+    expect(activities[0].commandText).toBe('sed -n "1,20p" app/foo.ts');
+    expect(activities[0].detail).toBe("Done");
+    expect(activities[0].providerToolId).toBeUndefined();
+    expect(activities[0].developerDetails?.providerToolId).toBeUndefined();
+
+    // Poll merged into previous command — no raw wait card with chunk_id body
+    expect(activities[1].statusLine || activities[1].detail).toBeTruthy();
+    expect(activities[1].detail).toBe("Running");
+    expect(JSON.stringify(activities[1])).not.toContain("chunk_id");
+
+    expect(activities[2].title).toBe("Finished");
+    expect(activities[2].detail || activities[2].statusLine).toContain(
+      "Finished",
+    );
+    expect(activities[2].body).toBeUndefined();
+
+    expect(activities[3].files[0]).toContain("bar.ts");
+
+    const chrome = {
+      textMuted: "#888",
+      textSubtle: "#666",
+      accent: "#aaa",
+      border: "#333",
+      appBackground: "#111",
+    };
+    const theme = { red: "#f00", yellow: "#ff0", green: "#0f0" };
+    expect(
+      buildInterfaceTimelineActivityPresentation(activities[0], chrome, theme)
+        .canExpand,
+    ).toBe(true);
+  });
 });

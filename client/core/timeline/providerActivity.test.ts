@@ -11,6 +11,7 @@ import {
   mergeRunningActivityIntoTimeline,
 } from "./model";
 import { reconcileConversationSnapshot } from "../conversation/reconciliation";
+import { resolveRunningProviderActivity } from "./providerActivity";
 
 const START = "2026-07-15T01:00:00.000Z";
 const LATER = "2026-07-15T01:00:01.000Z";
@@ -72,6 +73,16 @@ describe("provider-native Activity Working", () => {
       "Agent warning",
       "Agent status",
     ]);
+  });
+
+  test("a local pending input cannot invent Working", () => {
+    expect(resolveRunningProviderActivity(undefined)).toBeUndefined();
+    const timeline = mergePendingUserMessagesIntoTimeline(
+      [],
+      [localPending("pending-a")],
+    );
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0]?.type).toBe("message");
   });
 
   test("silent reasoning and tool gaps keep one stable Working footer", () => {
@@ -220,6 +231,17 @@ describe("authoritative Activity snapshots", () => {
     ).toBe(false);
   });
 
+  for (const status of [
+    "completed",
+    "failed",
+    "interrupted",
+    "cancelled",
+  ] as const) {
+    test(`${status} authoritatively settles Working`, () => {
+      expect(resolveRunningProviderActivity(activity(status))).toBeUndefined();
+    });
+  }
+
   test("same-thread snapshot exactly clears Activity and events", () => {
     const previous = normalizeCodexConversation({
       available: true,
@@ -240,6 +262,15 @@ describe("authoritative Activity snapshots", () => {
     );
     expect(snapshot.activity).toBeUndefined();
     expect(snapshot.events).toEqual([]);
+  });
+
+  test("only a successor provider Activity can reopen Working", () => {
+    expect(
+      resolveRunningProviderActivity(activity("completed")),
+    ).toBeUndefined();
+    expect(
+      resolveRunningProviderActivity(activity("running", "activity-b", LATER)),
+    ).toMatchObject({ id: "activity-b", status: "running", started_at: LATER });
   });
 });
 
