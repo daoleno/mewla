@@ -370,7 +370,7 @@ else:
         errors.append("release notes missing official certificate SHA-256 fingerprint")
     if not re.search(r"^## (New|Fixed)\n\n- ", notes, re.MULTILINE):
         errors.append("release notes missing user-facing ## New or ## Fixed bullets")
-    # Windows ships from 0.3.0; earlier notes name only the other archives.
+    # Windows ships from first_windows on; earlier notes name only the other archives.
     first_windows = (0, 3, 0)
     tracked = tuple(int(x) for x in re.match(r"(\d+)\.(\d+)\.(\d+)", exp_version).groups())
     notes_archives = [a for a in DAEMON_ARCHIVES if tracked >= first_windows or not a.endswith(".zip")]
