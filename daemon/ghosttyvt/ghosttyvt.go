@@ -142,9 +142,19 @@ type State struct {
 	CursorVisible    bool
 	BracketedPaste   bool // the program asked for bracketed paste (mode 2004)
 	MouseTracking    bool // the program asked for mouse reports
+	AppCursor        bool // application cursor keys (DECCKM, mode 1)
+	AltScroll        bool // the wheel sends cursor keys on the alternate screen (mode 1007)
 	ScrollbackRows   int
 	TotalRows        int
 	Title            string
 	Pwd              string // the working directory the program reported (OSC 7)
 	Ground           bool   // the parser is between sequences
 }
+
+// Row flags, as RowFlags reports them.
+const (
+	RowWrapped      = 1 << iota // soft-wrapped onto the next row
+	RowContinuation             // continues the row above
+	RowPrompt                   // starts a shell prompt (OSC 133)
+	RowPromptMore               // continues a shell prompt
+)

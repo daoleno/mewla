@@ -24,6 +24,11 @@ type screen interface {
 	Close()
 }
 
+// rowFlagReader is what a screen offers to mark its history rows.
+type rowFlagReader interface {
+	RowFlags(top, count int) []uint8
+}
+
 // program is a Session's running program and the terminal device it runs
 // on: a Unix pty, or a Windows pseudo console. Signals reach every process
 // the program started (its process group, or its Job).
@@ -466,7 +471,22 @@ func (s *session) capture(params CaptureParams) (Capture, error) {
 		return Capture{}, errorf(ErrCodeInternal, "capture: %v", err)
 	}
 	state := s.screen.State()
+	var flags []byte
+	if params.Marks && params.Scope == ScopeHistory && !state.Alt {
+		if reader, ok := s.screen.(rowFlagReader); ok {
+			history := state.TotalRows - state.Rows
+			count := history
+			if params.History > 0 && params.History < history {
+				count = params.History
+			}
+			flags = reader.RowFlags(history-count, count)
+		}
+	}
 	return Capture{
+		Modes:          true,
+		AppCursor:      state.AppCursor,
+		AltScroll:      state.AltScroll,
+		RowFlags:       flags,
 		Text:           text,
 		Cols:           state.Cols,
 		Rows:           state.Rows,
