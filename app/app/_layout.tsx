@@ -613,7 +613,15 @@ const NotificationObserver = memo(function NotificationObserver() {
         if (cancelled) return;
         rememberPushToken(token);
         const message = registerPushMessage(serverId, token);
-        if (message) wsClient.send(serverId, message);
+        if (!message) return;
+        // The token can take a while (the permission prompt backgrounds the
+        // app), and the connection may have ended or been replaced meanwhile.
+        // Every connection registers again, so a dropped message is retried.
+        try {
+          wsClient.send(serverId, message);
+        } catch {
+          // Not connected; the next connection registers.
+        }
       });
     };
 

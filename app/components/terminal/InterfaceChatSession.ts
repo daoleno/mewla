@@ -127,6 +127,8 @@ interface UseInterfaceChatSessionInput {
   conversationScopeKey?: string;
   workerInfo?: InterfaceChatWorkerInfo;
   connectionState: ConnectionState;
+  /** Bumps on every new connection, so a flap between two renders still resubscribes. */
+  connectionGeneration?: number;
   screenFocused: boolean;
 }
 
@@ -979,6 +981,7 @@ export function useInterfaceChatSession({
   conversationScopeKey,
   workerInfo,
   connectionState,
+  connectionGeneration = 0,
   screenFocused,
 }: UseInterfaceChatSessionInput) {
   const composerCacheKey = interfaceChatSessionCacheKey(
@@ -1178,6 +1181,13 @@ export function useInterfaceChatSession({
     ) {
       return;
     }
+    // The store's "connected" is the last render's view. The socket can end
+    // (or be replaced by the server binder) before this effect runs; the next
+    // connection changes `connectionState` or `connectionGeneration` and
+    // subscribes then. Subscribing now would throw out of React.
+    if (!wsClient.isConnected(serverId)) {
+      return;
+    }
     const generation = streamGenerationRef.current + 1;
     streamGenerationRef.current = generation;
     dispatchThread({ type: "stream_start", generation });
@@ -1241,6 +1251,7 @@ export function useInterfaceChatSession({
     workerInfo?.startedAt,
     conversationScopeKey,
     connectionState,
+    connectionGeneration,
     screenFocused,
     serverId,
     resyncToken,
