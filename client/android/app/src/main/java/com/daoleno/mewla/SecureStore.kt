@@ -20,11 +20,15 @@ class SecureStore(context: Context) {
   private val prefs = context.getSharedPreferences("SecureStore", Context.MODE_PRIVATE)
   private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
+  /**
+   * Null only when nothing is stored under [key]. An entry that exists but can't be read throws:
+   * answering null would make the app mint a new device key over the one the computer knows.
+   */
   fun get(key: String): String? {
     val item = (prefs.getString(prefsKey(key), null) ?: prefs.getString(key, null))?.let(::JSONObject) ?: return null
-    if (item.optString("scheme") != "aes" || item.optBoolean("requireAuthentication")) return null
+    check(item.optString("scheme") == "aes" && !item.optBoolean("requireAuthentication")) { "$key is stored in a form this app can't read" }
     val alias = if (item.optBoolean("usesKeystoreSuffix")) SUFFIXED_ALIAS else BASE_ALIAS
-    val secret = (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.secretKey ?: return null
+    val secret = (keyStore.getEntry(alias, null) as? KeyStore.SecretKeyEntry)?.secretKey ?: error("the key that protects $key is missing")
     val cipher = Cipher.getInstance(CIPHER)
     cipher.init(Cipher.DECRYPT_MODE, secret, GCMParameterSpec(item.getInt("tlen"), Base64.decode(item.getString("iv"), Base64.DEFAULT)))
     return String(cipher.doFinal(Base64.decode(item.getString("ct"), Base64.DEFAULT)), Charsets.UTF_8)

@@ -1,0 +1,52 @@
+# Mewla client (NSH)
+
+The app on [NSH](https://nsh.dev): one TSX app with native views on iOS and Android, and the same TSX on the web.
+It is built complete beside `app/` (Expo) and replaces it in one release, in place: same package and signing key on
+Android, same bundle id on iOS, so a phone keeps its pairing and its drafts. Until then `app/` is what ships.
+
+| Directory | What it is | Owns |
+|---|---|---|
+| `core/` | Plain TypeScript: pairing, device auth, the transport, stored computers, the upgrade copy. Never imports `nsh`; `bun test core`. | Protocol and state |
+| `ui/` | The NSH app (`nsh.json`, `App.tsx`): the TabBar shell (Brain · Sessions · Calendar · More), screens, `platform.ts`. `nsh check`, `nsh test`. | Everything the person sees |
+| `android/` | Gradle host: `NshView`, the Keystore secrets, the camera reader, `mewla://` links. Bundles `ui/` with `nsh build`. | Android-only capabilities |
+| `ios/` | xcodegen host: `NshAppView`, the Keychain, the camera reader, links. Bundles `ui/` the same way. | iOS-only capabilities |
+| `scripts/` | Pinned NSH install, hot reload, the upgrade gate. | |
+
+## Set up
+
+```sh
+client/scripts/fetch-nsh.sh          # NSH 0.4.0 into ~/.nsh (checksums pinned); --ios also fetches the framework
+cd client && bun test core           # core
+cd client/ui && nsh check && nsh test
+```
+
+## Run it
+
+- **Android, hot reload:** `client/scripts/dev-android.sh` installs the preview debug build on the one device `adb`
+  sees and runs it from `nsh dev`: every save reloads it.
+- **Android, a build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`.
+  The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app.
+- **iOS:** `client/scripts/fetch-nsh.sh --ios && client/scripts/ios-project.sh` (`--dev` links NativeShellDev), then
+  open `client/ios/Mewla.xcodeproj`. With `--dev`, launch with `-devServer ws://127.0.0.1:8790/ws` and run
+  `nsh dev --server-only client/ui`. Preview builds pass `PRODUCT_BUNDLE_IDENTIFIER=com.daoleno.mewla.preview`.
+- **Web:** `nsh dev --target web client/ui`.
+
+## What the hosts give the app
+
+| Call / event / component | |
+|---|---|
+| `secure.get` / `secure.set` / `secure.remove` `{key, value}` | The device key and other secrets, in the store and format the Expo app used (Android: expo-secure-store's `SecureStore` prefs and Keystore key; iOS: Keychain service `app:no-auth`). A stored item that can't be read is an error, never `null`. |
+| `app.legacyStorage` → entries or `null`, `app.legacyStorageCopied` | The Expo app's AsyncStorage `mewla*` entries, once; `core/legacyStorage.ts` copies them into `Storage` before anything reads it. |
+| `links.open` `{url}` (event) | A `mewla://` link the system opened the app with; held until the app listens. |
+| `mewla.qrScanner` `{active}` → `scan {value}`, `unavailable {reason}` | The camera's QR reader. |
+| `host.params.deviceName` | The name a computer lists this phone under. |
+
+## Upgrade
+
+Version code = `major·1 000 000 + minor·10 000 + patch·100` from `ui/nsh.json`, above every Expo build. The
+upgrade gate (`client.yml`, manual dispatch) installs the released Expo APK on an emulator, pairs it with a fresh
+daemon and types a draft, installs the release-signed NSH app over it, and passes only if the daemon still lists
+that one device and sees it sign in again and the draft is in the new storage
+(`client/scripts/upgrade-gate.sh`). On iOS, `ios/Tests/UpgradeTests.swift` reads Keychain items and AsyncStorage
+files written in the Expo app's formats; that the App Store build keeps the same Keychain access group is
+proven only by a TestFlight upgrade.

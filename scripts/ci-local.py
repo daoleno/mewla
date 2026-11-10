@@ -52,6 +52,7 @@ JOB_PATHS = {
         "app/*", "bun.lock", "package.json", "patches/*", "scripts/app-licenses/*",
         "scripts/generate-*.mjs", "docs/*",
     ],
+    "client": ["client/*"],
     "native-contract": ["scripts/verify-libghostty.sh", "scripts/lib/*", "app/modules/terminal-vt/*"],
     "release-identity": [
         "scripts/*", "app/app.base.json", "app/ios-build.json", "app/package.json",
@@ -60,7 +61,9 @@ JOB_PATHS = {
 }
 
 # Actions that only set up the runner or publish results; nothing to run here.
-IGNORED_ACTIONS = ("actions/checkout@", "oven-sh/setup-bun@", "actions/setup-go@", "actions/upload-artifact@")
+IGNORED_ACTIONS = (
+    "actions/checkout@", "oven-sh/setup-bun@", "actions/setup-go@", "actions/upload-artifact@", "actions/cache@",
+)
 
 # Steps CI runs only on tags and manual dispatch.
 RELEASE_ONLY = re.compile(r"workflow_dispatch|ref_type\s*==\s*'tag'")

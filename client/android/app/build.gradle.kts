@@ -24,7 +24,8 @@ android {
     targetSdk = 36
     versionCode = major * 1_000_000 + minor * 10_000 + patch * 100
     versionName = version
-    ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+    // -Pmewla.abis=arm64-v8a for a phone-only build (half the size).
+    ndk { abiFilters += (providers.gradleProperty("mewla.abis").orNull ?: "arm64-v8a,x86_64").split(",") }
   }
   flavorDimensions += "identity"
   productFlavors {
