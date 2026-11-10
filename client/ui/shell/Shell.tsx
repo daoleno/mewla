@@ -1,4 +1,4 @@
-import { platform, signal, Text, View } from "nsh";
+import { platform, signal, Text, View, windowSize } from "nsh";
 import { Button, createNavStack, NavStack } from "nsh/base";
 import { isAvailable as mobile, TabBar } from "nsh/mobile";
 import { Onboarding } from "../screens/Onboarding";
@@ -15,6 +15,8 @@ const tabs = [
 ];
 
 export const selectedTab = signal(0);
+/** What lies below the sections (the TabBar, the system bar): the keyboard covers it before it reaches a page. */
+export const belowSections = signal(0);
 
 /** The section a `mewla://` link opens: `mewla://brain`, `…/sessions`, `…/calendar`, `…/more`. */
 export function sectionOfLink(url: string): number | null {
@@ -67,7 +69,7 @@ export function Shell() {
   }
   return (
     <View class="flex-1 bg-background">
-      <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
+      <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
       <TabBar testID="tabs" items={tabs.map((t) => ({ title: t.title, icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>

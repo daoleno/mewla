@@ -96,6 +96,11 @@ for _ in $(seq 1 30); do shows "· Connected" && break; sleep 1; done
 shot 3-more
 shows "· Connected" || fail "the NSH app does not show the computer as connected"
 log "the app shows the computer as Connected"
+tap "^Brain$" 10 || true
+for _ in $(seq 1 60); do shows "$DRAFT" && break; sleep 1; done
+shot 3-brain-draft
+shows "$DRAFT" || fail "Brain's composer does not show the draft typed in the Expo app"
+log "Brain's composer shows the draft"
 after=$(devices)
 python3 - "$before" "$after" "$seen_before" "$device_id" <<'PY' | tee -a "$OUT/gate.log"
 import json, sys

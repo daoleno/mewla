@@ -1,7 +1,8 @@
-import { effect, keyboardFrame, List, untracked, safeAreaInsets, signal, Text, View } from "nsh";
+import { effect, keyboardFrame, List, untracked, signal, Text, View } from "nsh";
 import { Button, Input, NavPage, TextView } from "nsh/base";
 import { brainSurface, newBrainChat } from "../../core/brain";
 import { chatRows, type ChatRow } from "../../core/conversation/rows";
+import { belowSections } from "../shell/Shell";
 import { brain, brainChat, brainThread, connection, current, currentTransport } from "../session";
 
 const draft = signal("");
@@ -101,7 +102,7 @@ function Body() {
       {surface() === "chat" ? (
         <List testID="brain-chat" class="flex-1" each={chatRows(brainThread())} keyExtractor={(row) => row.key}
           maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
-          empty={brainThread().loading ? <Notice title="Loading…" /> : <Notice title="What should Brain do?" detail="Brain plans the work and runs the agents on your computer." />}>
+          empty={brainThread().loading ? <Notice title={connection() === "connected" ? "Loading…" : "The conversation shows when your computer is back"} /> : <Notice title="What should Brain do?" detail="Brain plans the work and runs the agents on your computer." />}>
           {(row) => <Row row={row} />}
         </List>
       ) : surface() === "waking" ? (
@@ -118,22 +119,22 @@ function Body() {
 }
 
 function Composer() {
-  const insets = safeAreaInsets();
   effect(syncDraft);
   return (
-    <View class="flex-row items-end gap-2 border-t border-border bg-background px-3 py-2"
-      style={{ marginBottom: Math.max(0, keyboardFrame().height - insets().bottom) }}>
+    <View class="border-t border-border bg-background px-3 py-2" style={{ marginBottom: Math.max(0, keyboardFrame().height - belowSections()) }}>
       {connection() !== "connected" && surface() === "chat" ? (
-        <Text testID="offline" class="absolute -top-7 left-0 right-0 text-center text-sm text-muted-foreground">Offline · messages send when your computer is back</Text>
+        <Text testID="offline" class="pb-1.5 text-center text-sm text-muted-foreground">Offline · messages send when your computer is back</Text>
       ) : null}
-      <Input testID="composer" multiline value={draft()} placeholder="Tell Brain…" class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"
-        onChange={({ value }) => {
-          draft.set(value);
-          brainChat()?.saveDraft(value);
-        }} />
-      <Button testID="send" onPress={send} disabled={!brainChat() || !draft().trim()} class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
-        <Text class="text-base font-semibold text-primary-foreground">Send</Text>
-      </Button>
+      <View class="flex-row items-end gap-2">
+        <Input testID="composer" multiline value={draft()} placeholder="Tell Brain…" class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"
+          onChange={({ value }) => {
+            draft.set(value);
+            brainChat()?.saveDraft(value);
+          }} />
+        <Button testID="send" onPress={send} disabled={!brainChat() || !draft().trim()} class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
+          <Text class="text-base font-semibold text-primary-foreground">Send</Text>
+        </Button>
+      </View>
     </View>
   );
 }
