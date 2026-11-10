@@ -155,6 +155,8 @@ func guardTargetIdentity(
 ) error {
 	current, ok := resolver(target)
 	if !ok || !current.equal(expected) {
+		// What moved, so a refused input can be explained from the log.
+		log.Printf("watcher: %s provider identity changed before input (resolved=%v): expected %+v, now %+v", target, ok, expected, current)
 		return fmt.Errorf("target provider process identity changed; terminal mutation was not sent")
 	}
 	return nil

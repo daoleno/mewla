@@ -396,6 +396,23 @@ func detectWorkerProcess(baseCommand string, panePID int, processes map[int]proc
 
 // Preserve only the explicit transcript identity from the proven provider
 // process. Other launch arguments (including settings/credentials) are private.
+// claudeBundledToolRun is Claude running its bundled ripgrep: its own
+// executable started under the name rg (on Windows, claude.exe with the
+// command line `rg --files …`). Such a child comes and goes with every file
+// search; it is a tool run, never the agent, and taking it for the agent made
+// a new Session's identity change under its first prompt.
+func claudeBundledToolRun(args string) bool {
+	fields := strings.Fields(strings.TrimSpace(args))
+	if len(fields) == 0 {
+		return false
+	}
+	first := strings.ToLower(strings.Trim(fields[0], `"'`))
+	if i := strings.LastIndexAny(first, `/\`); i >= 0 {
+		first = first[i+1:]
+	}
+	return strings.TrimSuffix(first, ".exe") == "rg"
+}
+
 func claudeProcessCommand(command, args string) string {
 	fields := splitLaunchFields(args)
 	for i, field := range fields {
@@ -428,6 +445,9 @@ func workerCommandFromProcess(proc processInfo) string {
 	}
 
 	if lowerComm == "claude" || lowerComm == "claude-code" || lowerComm == "cc" {
+		if claudeBundledToolRun(proc.args) {
+			return ""
+		}
 		return claudeProcessCommand(lowerComm, proc.args)
 	}
 	// Provider identity comes from the executable, not option values. Cursor
