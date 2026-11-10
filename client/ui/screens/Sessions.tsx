@@ -1,0 +1,203 @@
+import { computed, effect, List, signal, Storage, Text, untracked, View } from "nsh";
+import { AlertDialog, Button, NavPage, type NavStackState } from "nsh/base";
+import { makeSessionKey } from "../../core/sessions/sessionKeys";
+import { sessionRowModel } from "../../core/sessions/listRow";
+import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
+import { sessionEmptyState } from "../../core/sessions/sessionEmptyState";
+import { countSessionSelection, EMPTY_SESSION_SELECTION, pruneSessionSelection, selectionCountLabel, toggleSessionSelection, type SessionSelection } from "../../core/sessions/sessionSelection";
+import {
+  SessionTerminationBatch,
+  createSessionTerminationEntries,
+  sessionTerminationConfirmMessage,
+  sessionTerminationSummaryMessage,
+} from "../../core/sessions/sessionBulkTerminate";
+import { getCollapsedSessionSections, getWorkerAliases, markWorkerOpened, setCollapsedSessionSections, type StoredWorkerAliases } from "../../core/sessions/deviceState";
+import { groupWorkersByDirectory } from "../../core/sessions/workerDirectory";
+import type { Worker } from "../../core/sessions/workers";
+import { AgentIcon } from "../icons/AgentIcon";
+import { Icon, type ColorToken, type IconName } from "../icons/Icon";
+import { connection, current, currentTransport, resumeConnection, workers, workersHydrated } from "../session";
+import type { SessionsRoute } from "../shell/routes";
+
+const aliases = signal<StoredWorkerAliases>({});
+const collapsed = signal<ReadonlySet<string>>(new Set());
+const selection = signal<SessionSelection>(EMPTY_SESSION_SELECTION);
+const terminating = signal(false);
+const notice = signal("");
+
+/** Nicknames are saved on this device; the Session screen's Rename changes them. */
+export async function reloadAliases(): Promise<void> {
+  aliases.set(await getWorkerAliases(Storage).catch(() => ({})));
+}
+void reloadAliases();
+void getCollapsedSessionSections(Storage).then((keys) => collapsed.set(new Set(keys))).catch(() => {});
+
+const selecting = computed(() => countSessionSelection(selection()) > 0);
+
+type Row = { key: string; kind: "header"; section: SessionListSection } | { key: string; kind: "row"; worker: Worker };
+
+const rows = computed<Row[]>(() => {
+  const sections = buildSessionListSections(groupWorkersByDirectory(workers()), collapsed(), selecting());
+  const out: Row[] = [];
+  for (const section of sections) {
+    if (sections.length > 1) out.push({ key: `h:${section.key}`, kind: "header", section });
+    for (const worker of section.data) out.push({ key: worker.key, kind: "row", worker });
+  }
+  return out;
+});
+
+function toggleSection(key: string): void {
+  const next = toggleCollapsedSection(collapsed(), key);
+  collapsed.set(next);
+  void setCollapsedSessionSections(Storage, collapsedSectionsToStore(next)).catch(() => {});
+}
+
+function toggleSelected(worker: Worker): void {
+  if (connection() !== "connected") return;
+  selection.set(toggleSessionSelection(selection(), worker.key));
+}
+
+async function terminateSelected(): Promise<void> {
+  const transport = currentTransport();
+  const server = current();
+  const keys = [...selection()];
+  if (!transport || !server || keys.length === 0 || terminating()) return;
+  const { action } = await AlertDialog.show({
+    title: "Terminate sessions?",
+    description: sessionTerminationConfirmMessage(keys.length),
+    actions: [{ id: "cancel", label: "Cancel", role: "cancel" }, { id: "terminate", label: "Terminate", role: "destructive" }],
+  });
+  if (action !== "terminate") return;
+  const byKey = new Map(workers().map((w) => [w.key, w] as const));
+  const targets = keys.flatMap((key) => {
+    const worker = byKey.get(key);
+    return worker ? [{ sessionKey: key, serverId: server.id, workerId: worker.id }] : [];
+  });
+  terminating.set(true);
+  const batch = new SessionTerminationBatch({
+    transport,
+    entries: createSessionTerminationEntries(targets),
+    onSettled: (summary) => {
+      if (summary.running) return;
+      terminating.set(false);
+      const failed = new Set(summary.failedEntries.map((e) => e.sessionKey));
+      selection.set(failed.size ? new Set([...failed]) : EMPTY_SESSION_SELECTION);
+      const titles = summary.failedEntries.map((e) => (byKey.get(e.sessionKey) ? sessionRowModel(byKey.get(e.sessionKey)!, { alias: untracked(aliases)[e.workerId] }).title : ""));
+      notice.set(sessionTerminationSummaryMessage(summary, titles));
+    },
+  });
+  batch.start();
+}
+
+const STATUS_MARK: Record<string, { icon: IconName; color: ColorToken } | undefined> = {
+  done: { icon: "check-circle-fill", color: "muted-foreground" },
+  failed: { icon: "close-circle-fill", color: "destructive" },
+  blocked: { icon: "pause-circle", color: "warning" },
+};
+
+function SectionHeader(props: { section: () => SessionListSection }) {
+  const s = props.section;
+  return (
+    <Button testID="section" onPress={() => !selecting() && toggleSection(s().key)} class="flex-row items-center gap-2 px-4 pb-1 pt-4">
+      <Text class="flex-1 text-xs font-semibold uppercase text-muted-foreground line-clamp-1">{s().title}</Text>
+      {s().collapsed ? <Text class="text-xs text-muted-foreground">{String(s().count)}</Text> : null}
+      {s().mark === "needs" ? <Icon name="hand" size={14} color="seal" /> : s().mark === "failed" ? <Icon name="close-circle-fill" size={14} color="destructive" /> : s().mark === "running" ? <Icon name="time" size={14} /> : null}
+      <Icon name={s().collapsed ? "chevron-right" : "chevron-down"} size={14} />
+    </Button>
+  );
+}
+
+function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => void }) {
+  const model = () => sessionRowModel(props.worker(), { alias: aliases()[props.worker().id] });
+  const selected = () => selection().has(props.worker().key);
+  const toneClass = () => (model().tone === "danger" ? "text-destructive" : model().tone === "needs" ? "text-seal" : model().tone === "accent" ? "text-foreground" : "text-muted-foreground");
+  return (
+    <View testID="session-row" delayLongPress={400}
+      onPress={() => (selecting() ? toggleSelected(props.worker()) : props.open(props.worker()))}
+      onLongPress={() => !selecting() && toggleSelected(props.worker())}
+      class="flex-row items-center gap-3 px-4 py-2.5 active:bg-accent">
+      {selecting() ? <Icon name={selected() ? "check-circle-fill" : "circle"} size={22} color={selected() ? "primary" : "muted-foreground"} /> : null}
+      <View class="items-center justify-center">
+        <AgentIcon kind={model().kind} flavor={model().flavor} size={24} />
+        {model().delegated ? <View class="absolute -bottom-0.5 -right-0.5 rounded-full bg-background p-0.5"><Icon name="git-network" size={10} color="primary" /></View> : null}
+      </View>
+      <View class="flex-1 gap-0.5">
+        <Text class="text-base font-semibold line-clamp-1">{model().title}</Text>
+        <Text class={`text-sm line-clamp-1 ${toneClass()}`}>{`${model().previewPrefix ?? ""}${model().preview}`}</Text>
+      </View>
+      <View class="items-end gap-1">
+        {model().time !== "live" ? <Text class="text-xs text-muted-foreground">{model().time}</Text> : null}
+        {model().needsYou ? <Icon name="hand" size={16} color="seal" />
+          : model().status === "running" ? <View class="h-2 w-2 rounded-full bg-primary" />
+          : STATUS_MARK[model().status] ? <Icon name={STATUS_MARK[model().status]!.icon} size={16} color={STATUS_MARK[model().status]!.color} /> : null}
+      </View>
+    </View>
+  );
+}
+
+function Empty(props: { onPair: () => void; onNew: () => void }) {
+  const state = () => sessionEmptyState(Boolean(current()), connection() === "waiting" ? "offline" : connection() === "idle" ? "connecting" : connection());
+  const loading = () => connection() === "connected" && !workersHydrated();
+  return (
+    <View class="flex-1 items-center justify-center gap-3 p-8">
+      <Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />
+      <Text testID="sessions-empty" class="text-center text-lg font-semibold">{loading() ? "Loading sessions" : state().title}</Text>
+      {!loading() && state().action ? (
+        <Button testID="sessions-empty-action" onPress={() => (state().action === "pair" ? props.onPair() : state().action === "retry" ? resumeConnection() : props.onNew())}
+          class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
+          <Text class="text-base font-semibold text-primary-foreground">{state().label}</Text>
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * The current computer's Sessions, grouped by directory (a caption per
+ * directory once there are two; a tap folds it). A tap opens a Session; a
+ * long press starts selecting, and the bar terminates what is selected.
+ */
+export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () => void; onNew: () => void }) {
+  const open = (worker: Worker) => {
+    void markWorkerOpened(Storage, worker.id).catch(() => {});
+    props.nav.push({ name: "session", workerId: worker.id, hint: { name: worker.name, cwd: worker.cwd, command: worker.command, startedAt: worker.started_at } });
+  };
+  // A Session that left the list cannot stay selected.
+  effect(() => {
+    const next = pruneSessionSelection(selection(), workers().map((w) => w.key));
+    if (next !== untracked(selection)) selection.set(next);
+  });
+  return (
+    <NavPage title="Sessions"
+      headerRight={selecting() ? null : <Button testID="new-session" onPress={props.onNew} disabled={connection() !== "connected"}><Icon name="add" size={22} color="primary" /></Button>}>
+      <View class="flex-1 bg-background">
+        {selecting() ? (
+          <View class="flex-row items-center gap-3 border-b border-border px-4 py-2">
+            <Button testID="selection-cancel" onPress={() => selection.set(EMPTY_SESSION_SELECTION)}><Text class="text-base text-primary">Cancel</Text></Button>
+            <Text class="flex-1 text-center text-base font-semibold">{selectionCountLabel(countSessionSelection(selection()))}</Text>
+            <Button testID="selection-terminate" onPress={() => void terminateSelected()} disabled={terminating() || connection() !== "connected"}>
+              <Text class="text-base font-semibold text-destructive">{terminating() ? "Terminating…" : "Terminate"}</Text>
+            </Button>
+          </View>
+        ) : null}
+        {notice() ? <Text testID="sessions-notice" class="px-4 py-2 text-sm text-destructive" onPress={() => notice.set("")}>{notice()}</Text> : null}
+        <List testID="sessions" class="flex-1" each={rows()} keyExtractor={(row) => row.key} contentClass="pb-24"
+          empty={<Empty onPair={props.onPair} onNew={props.onNew} />}>
+          {(row) => (
+            <View>
+              {row().kind === "header"
+                ? <SectionHeader section={() => (row() as Extract<Row, { kind: "header" }>).section} />
+                : <SessionRow worker={() => (row() as Extract<Row, { kind: "row" }>).worker} open={open} />}
+            </View>
+          )}
+        </List>
+      </View>
+    </NavPage>
+  );
+}
+
+/** Builds the key the device state and the route use for a Session of the current computer. */
+export function currentSessionKey(workerId: string): string | null {
+  const server = current();
+  return server ? makeSessionKey(server.id, workerId) : null;
+}

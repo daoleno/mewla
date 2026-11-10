@@ -25,13 +25,15 @@ export class WorkerSessions {
   private state: WorkerSessionsState = initialWorkerState;
   private readonly feed = new WorkerSessionFeed();
   private readonly stops: Array<() => void> = [];
+  private readonly identity: { serverId: string; serverName: string; serverUrl: string };
+  private createsBlocked = false;
 
   constructor(
     private readonly transport: Transport,
     private readonly server: StoredServer,
     private readonly changed: (sessions: WorkerSessions) => void,
   ) {
-    const identity = { serverId: server.id, serverName: server.name, serverUrl: server.url };
+    const identity = (this.identity = { serverId: server.id, serverName: server.name, serverUrl: server.url });
     const onFrame = (frame: Frame) => {
       const verdict = this.feed.accept(frame);
       if (verdict === "resync") {
@@ -43,8 +45,11 @@ export class WorkerSessions {
         return;
       }
       if (verdict !== "apply") return;
+      const unblocked = frame.type === "worker_session_list" && this.createsBlocked;
+      if (unblocked) this.createsBlocked = false;
       const action = workerSessionFeedAction(frame, identity);
       if (action) this.apply(action);
+      if (unblocked) this.changed(this);
     };
     for (const type of WORKER_SESSION_FEED_TYPES) this.stops.push(transport.on(type, onFrame));
     this.stops.push(
@@ -70,6 +75,27 @@ export class WorkerSessions {
 
   find(workerId: string): Worker | undefined {
     return this.workers.find((worker) => worker.id === workerId);
+  }
+
+  /** False after a create whose outcome is unknown, until a fresh list shows what happened. */
+  get canCreate(): boolean {
+    return !this.createsBlocked;
+  }
+
+  /** A create went out and no clear answer came back: ask for the list, and refuse creates until it comes. */
+  blockCreatesUntilList(): void {
+    this.createsBlocked = true;
+    try {
+      this.transport.send({ type: "list_worker_sessions" });
+    } catch {
+      // Offline: the list comes with the next connection.
+    }
+    this.changed(this);
+  }
+
+  /** The row `session_created` carried: the list shows the new Session before its feed change arrives. */
+  added(raw: Record<string, unknown>): void {
+    if (typeof raw.id === "string" && raw.id) this.apply({ type: "UPSERT_WORKER", ...this.identity, worker: raw as never });
   }
 
   stop(): void {

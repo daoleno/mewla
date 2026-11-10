@@ -77,3 +77,22 @@ describe("the computer's Sessions", () => {
     expect(sessions.workers).toEqual([]);
   });
 });
+
+describe("creating a Session", () => {
+  test("an unclear create blocks the next until a fresh list arrives", async () => {
+    const { sessions, socket } = await setup();
+    socket.receive({ type: "worker_session_list", seq: 1, worker_sessions: [] });
+    sessions.blockCreatesUntilList();
+    expect(sessions.canCreate).toBe(false);
+    expect(JSON.parse(socket.sent.at(-1)!).type).toBe("list_worker_sessions");
+    socket.receive({ type: "worker_session_list", seq: 2, worker_sessions: [worker("new")] });
+    expect(sessions.canCreate).toBe(true);
+  });
+
+  test("the created row shows at once", async () => {
+    const { sessions, socket } = await setup();
+    socket.receive({ type: "worker_session_list", seq: 1, worker_sessions: [] });
+    sessions.added(worker("fresh"));
+    expect(sessions.find("fresh")?.status).toBe("running");
+  });
+});
