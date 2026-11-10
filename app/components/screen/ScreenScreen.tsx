@@ -487,9 +487,10 @@ export function ScreenScreen() {
     );
   }
 
-  // A Linux computer has no screen to share, but its agents' browsers run on a
-  // virtual display of their own, shown here with the same Watch, Take over and Stop.
-  if (virtualScreen.enabled && status && !status.supported && status.platform === "linux") {
+  // A Linux computer's agents never use the person's own screen: each one has
+  // a display of its own (its apps and its browser), shown here with Watch,
+  // Hold and Stop.
+  if (status && status.platform === "linux" && (status.agent_displays || virtualScreen.enabled)) {
     return <AgentScreens />;
   }
 

@@ -18,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/jezek/xgb"
 )
 
 // maxDisplays bounds how many agents share a computer's agent screen at once.
@@ -59,6 +61,11 @@ type sharedScreen struct {
 	display *Display
 	client  *Client
 	mover   *mover
+
+	// query answers questions about the screen's windows (Surface.Windows);
+	// opened on first use.
+	queryMu sync.Mutex
+	query   *xgb.Conn
 }
 
 type workerDisplay struct {
@@ -388,6 +395,7 @@ func (s *Service) dropScreen(scr *sharedScreen) {
 	s.mu.Unlock()
 	_ = gone
 	scr.mover.stop()
+	scr.closeQuery()
 	scr.client.Close()
 	scr.display.Stop()
 }
@@ -790,6 +798,7 @@ func (s *Service) Close() {
 	s.mu.Unlock()
 	if scr != nil {
 		scr.mover.stop()
+		scr.closeQuery()
 		scr.client.Close()
 		scr.display.Stop()
 	}
@@ -816,4 +825,13 @@ func safeName(worker string) string {
 		name = name[:24]
 	}
 	return name
+}
+
+func (scr *sharedScreen) closeQuery() {
+	scr.queryMu.Lock()
+	defer scr.queryMu.Unlock()
+	if scr.query != nil {
+		scr.query.Close()
+		scr.query = nil
+	}
 }

@@ -87,7 +87,12 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	}
 
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 7 {
+	// The menu tool is a Mac's alone.
+	want := 6
+	if thisComputerTexts().menu {
+		want = 7
+	}
+	if err != nil || len(tools.Tools) != want {
 		t.Fatalf("tools %+v %v", tools, err)
 	}
 
@@ -213,5 +218,22 @@ func TestComputerUseThroughTheControlSocket(t *testing.T) {
 	audit, err := os.ReadFile(filepath.Join(root, "screen-agent-audit.jsonl"))
 	if err != nil || strings.Contains(string(audit), "收到") || !strings.Contains(string(audit), `"worker":"%7"`) {
 		t.Fatalf("audit %v: %s", err, audit)
+	}
+}
+
+func TestComputerTextsPerSystem(t *testing.T) {
+	mac, linux, windows := computerTextsFor("darwin"), computerTextsFor("linux"), computerTextsFor("windows")
+	if !mac.menu || linux.menu || windows.menu {
+		t.Fatal("only a Mac has the menu tool")
+	}
+	for name, texts := range map[string]computerTexts{"linux": linux, "windows": windows} {
+		for _, text := range []string{texts.computer, texts.openApp, texts.appState} {
+			if strings.Contains(text, "Mac") || strings.Contains(text, "cmd+") || strings.Contains(text, "bundle id") {
+				t.Errorf("%s text speaks of a Mac: %q", name, text)
+			}
+		}
+	}
+	if !strings.Contains(linux.computer, "display of your own") || !strings.Contains(windows.computer, "UI Automation") {
+		t.Error("each system's text says how it works there")
 	}
 }

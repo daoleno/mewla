@@ -51,6 +51,8 @@ export interface ScreenStatus {
   locked?: boolean;
   /** The asking device is on this computer itself: a live view of its screen would only mirror the viewer. */
   local?: boolean;
+  /** Agents here each use a display of their own (Linux), listed in Screen one by one. */
+  agent_displays?: boolean;
 }
 
 export interface ScreenAgent { worker: string; name?: string; since: string }

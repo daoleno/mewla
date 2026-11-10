@@ -84,16 +84,24 @@ describe("unsupported computers", () => {
   const status = (platform: string, reason?: string): ScreenStatus => ({
     supported: false, platform, reason, disabled: false, approved: false, ready: false, keep_awake: false,
   });
-  test("away from a Mac, the app points to switching computers", () => {
-    const linux = unsupportedScreen(status("linux", "Screen works only on Macs for now"), true);
-    expect(linux.title).toBe("Screen needs a Mac");
-    expect(linux.detail).toBeNull();
-    expect(linux.canChooseComputer).toBe(true);
+  test("on another system, the app points to switching computers", () => {
+    const other = unsupportedScreen(status("freebsd", "Screen isn't available on this computer yet"), true);
+    expect(other.title).toBe("Screen needs a Mac, Windows or Linux computer");
+    expect(other.detail).toBeNull();
+    expect(other.canChooseComputer).toBe(true);
   });
   test("a browser can't switch, so it says where to go instead", () => {
-    const web = unsupportedScreen(status("linux"), false);
+    const web = unsupportedScreen(status("freebsd"), false);
     expect(web.canChooseComputer).toBe(false);
     expect(web.detail).toContain("Open Mewla from a Mac");
+  });
+  test("Windows and Linux keep their own reason", () => {
+    const windows = unsupportedScreen(status("windows", "Mewla must run in the signed-in session"), true);
+    expect(windows.title).toBe("Screen can't start on this computer");
+    expect(windows.detail).toBe("Mewla must run in the signed-in session");
+    expect(windows.canChooseComputer).toBe(false);
+    const linux = unsupportedScreen(status("linux", "Agents use a display of their own on Linux, which needs TigerVNC: Xvnc is not installed"), true);
+    expect(linux.detail).toContain("TigerVNC");
   });
   test("a Mac that can't start keeps its own reason", () => {
     const mac = unsupportedScreen(status("darwin", "Screen needs macOS 13 or later"), true);

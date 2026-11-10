@@ -10,7 +10,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -240,14 +239,6 @@ func measureSession(t *testing.T, ctx context.Context, session Session, drive fu
 	<-done
 	_ = summary
 	return res
-}
-
-func cpuTime() time.Duration {
-	var usage syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &usage) != nil {
-		return 0
-	}
-	return time.Duration(usage.Utime.Nano() + usage.Stime.Nano())
 }
 
 // skimmer reads server messages and counts their bytes, skipping pixel data.

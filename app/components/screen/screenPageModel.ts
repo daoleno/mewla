@@ -65,22 +65,24 @@ export function powerSummary(power: ScreenPower | undefined, keepAwake: boolean)
 }
 
 /**
- * What to say when this computer can't share its screen. Screen works only
- * on Macs for now, so anywhere else the way forward is the Mewla on a Mac,
- * which the app can switch to; a browser stays bound to the computer that
- * served it. The title is the state; a detail appears only where there is
- * something to act on or the computer gave its own reason.
+ * What to say when this computer can't share its screen. Macs, Windows and
+ * Linux computers have Screen, so one that can't start gives its own reason;
+ * anywhere else the way forward is another computer, which the app can
+ * switch to; a browser stays bound to the computer that served it. The title
+ * is the state; a detail appears only where there is something to act on or
+ * the computer gave its own reason.
  */
 export function unsupportedScreen(
   status: ScreenStatus,
   canSwitchComputer: boolean,
 ): { title: string; detail: string | null; canChooseComputer: boolean } {
-  if (status.platform === "darwin") {
-    return { title: "Screen can't start on this Mac", detail: status.reason || null, canChooseComputer: false };
+  if (status.platform === "darwin" || status.platform === "windows" || status.platform === "linux") {
+    const what = status.platform === "darwin" ? "Mac" : "computer";
+    return { title: `Screen can't start on this ${what}`, detail: status.reason || null, canChooseComputer: false };
   }
   return {
-    title: "Screen needs a Mac",
-    detail: canSwitchComputer ? null : "Open Mewla from a Mac.",
+    title: "Screen needs a Mac, Windows or Linux computer",
+    detail: canSwitchComputer ? null : "Open Mewla from a Mac, Windows or Linux computer.",
     canChooseComputer: canSwitchComputer,
   };
 }

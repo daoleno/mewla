@@ -46,10 +46,14 @@ func (a *controlApp) handleComputerControl(req control.Request) control.Response
 // computerStatus turns the screen's state into the app's one line.
 func computerStatus(ctx context.Context, s *screen.Service) agentuse.ComputerStatus {
 	capability, err := s.AgentReady(ctx)
-	status := agentuse.ComputerStatus{State: agentuse.ComputerReady, Summary: "Agents can see and use this screen. Watch or stop them from Screen."}
+	status := agentuse.ComputerStatus{State: agentuse.ComputerReady, Summary: screen.ReadySummary}
 	switch {
 	case errors.Is(err, screen.ErrUnsupported):
-		return agentuse.ComputerStatus{State: agentuse.ComputerUnsupported, Summary: "Agents can use the screen on Macs for now."}
+		summary := "Agents can't use this computer's screen yet."
+		if capability.Reason != "" && capability.Reason != screen.ErrUnsupported.Error() {
+			summary = capability.Reason
+		}
+		return agentuse.ComputerStatus{State: agentuse.ComputerUnsupported, Summary: summary}
 	case errors.Is(err, screen.ErrScreenLocked):
 		// Common on a computer left to lock itself.
 		return agentuse.ComputerStatus{State: agentuse.ComputerLocked, Summary: "This computer's screen is locked. Agents can use it again once it's unlocked."}
@@ -261,21 +265,24 @@ func runComputerMCP(args []string, stderr io.Writer) error {
 	}
 	// The output type is any and stays nil: a tool result with structured
 	// content makes Codex drop its image.
-	mcp.AddTool(server, &mcp.Tool{Name: "computer", Description: computerToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in computerInput) (*mcp.CallToolResult, any, error) {
+	texts := thisComputerTexts()
+	mcp.AddTool(server, &mcp.Tool{Name: "computer", Description: texts.computer}, func(_ context.Context, _ *mcp.CallToolRequest, in computerInput) (*mcp.CallToolResult, any, error) {
 		return relay(in.action())
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "apps", Description: appsToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "apps", Description: texts.apps}, func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "apps"})
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "open_app", Description: openAppToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in openAppInput) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "open_app", Description: texts.openApp}, func(_ context.Context, _ *mcp.CallToolRequest, in openAppInput) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "open_app", App: in.App})
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "app_state", Description: appStateToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in appInput) (*mcp.CallToolResult, any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "app_state", Description: texts.appState}, func(_ context.Context, _ *mcp.CallToolRequest, in appInput) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "app_state", App: in.App, Match: in.Match, Under: in.Under, Depth: in.Depth, Interactive: in.Interactive})
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "menu", Description: menuToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in menuInput) (*mcp.CallToolResult, any, error) {
-		return relay(screen.AgentAction{Action: "menu", App: in.App, Text: in.Path, ConfirmUserAsked: in.ConfirmUserAsked})
-	})
+	if texts.menu {
+		mcp.AddTool(server, &mcp.Tool{Name: "menu", Description: menuToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in menuInput) (*mcp.CallToolResult, any, error) {
+			return relay(screen.AgentAction{Action: "menu", App: in.App, Text: in.Path, ConfirmUserAsked: in.ConfirmUserAsked})
+		})
+	}
 	mcp.AddTool(server, &mcp.Tool{Name: "element", Description: elementToolDescription}, func(_ context.Context, _ *mcp.CallToolRequest, in elementInput) (*mcp.CallToolResult, any, error) {
 		return relay(screen.AgentAction{Action: "element", Element: in.ID, ElementAction: in.Action, Text: in.Value})
 	})

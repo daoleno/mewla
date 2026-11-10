@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/vdisplay"
 )
 
 // The screenfake build serves FakeBackend instead of the real screen, for
@@ -57,3 +59,5 @@ func computerName() string { return "Fake screen" }
 
 // ProcessPermissions has nothing to report without a permission model.
 func ProcessPermissions() map[string]bool { return nil }
+
+func platformBackend(*vdisplay.Service) Backend { return newBackend() }
