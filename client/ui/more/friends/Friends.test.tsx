@@ -110,6 +110,7 @@ describe("the Friends feed", () => {
     expect(app.shows("label:Notifications, 2 new")).toBe(true);
     await app.press("id:like-p1");
     await app.waitFor("label:Unlike, 2 likes");
+    await app.waitUntil(() => c.ops.some((op) => op.method === "PUT"));
     expect(c.ops.find((op) => op.method === "PUT")).toMatchObject({ path: "/posts/p1/like", body: null });
   });
 
@@ -204,7 +205,7 @@ describe("a post", () => {
     await app.type("id:friends-comment", "  Thanks for this  ");
     await app.press("id:friends-send");
     await app.waitFor("text:Thanks for this");
-    expect(app.texts()).toContain("1 like   2 comments");
+    await app.waitFor("text:1 like   2 comments");
     expect(c.ops.find((op) => op.path === "/posts/p1/comments")!.body).toEqual({ text: "Thanks for this" });
   });
 });
