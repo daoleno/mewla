@@ -17,7 +17,7 @@ func TestPlanTmuxMoveNamesHowEachAgentResumes(t *testing.T) {
 		leave   string
 	}{
 		{name: "codex", command: "codex --dangerously-bypass-approvals-and-sandbox resume " + codexID,
-			resume: "codex --dangerously-bypass-approvals-and-sandbox resume " + codexID + " -c check_for_update_on_startup=false"},
+			resume: "codex --dangerously-bypass-approvals-and-sandbox resume " + codexID},
 		{name: "codex", command: "codex -c check_for_update_on_startup=false resume " + codexID,
 			resume: "codex -c check_for_update_on_startup=false resume " + codexID},
 		{name: "codex", command: "codex --dangerously-bypass-approvals-and-sandbox", leave: "its codex conversation id is unknown"},
@@ -47,6 +47,10 @@ func TestPlanTmuxMoveKeepsTheLaunchFlags(t *testing.T) {
 	if plan.leave != "" || plan.resume != want {
 		t.Fatalf("codex: resume %q, leave %q\nwant %q", plan.resume, plan.leave, want)
 	}
+	// The app-server it talked to holds the conversation; the move waits for it.
+	if plan.codexControl != "/s/codex-ctl-1.sock" {
+		t.Fatalf("codex control socket = %q", plan.codexControl)
+	}
 	// Pi's process no longer names its session file; the Worker's command does.
 	plan = planTmuxMove(classifier.Worker{ID: "%5", Name: "pi", Command: "pi --session /p/s.jsonl"}, []string{"pi"}, nil)
 	if plan.resume != "pi --session /p/s.jsonl" {
@@ -61,6 +65,11 @@ func TestPlanTmuxMoveKeepsTheLaunchFlags(t *testing.T) {
 	plan = planTmuxMove(classifier.Worker{ID: "%8", Name: "codex", Command: "codex"}, []string{"codex", "--dangerously-bypass-approvals-and-sandbox"}, recorded)
 	if plan.leave != "" || !strings.HasSuffix(plan.resume, " resume "+thread) {
 		t.Fatalf("recorded conversation: %+v", plan)
+	}
+	// A Codex launched without config overrides runs against Codex's own
+	// app-server daemon; it resumes the same way, with none added.
+	if strings.Contains(plan.resume, " -c ") {
+		t.Fatalf("an override was added to a Codex launched without any: %q", plan.resume)
 	}
 	if plan := planTmuxMove(classifier.Worker{ID: "%9", Name: "codex", Command: "codex"}, []string{"codex"}, recorded); plan.leave == "" || plan.final {
 		t.Fatalf("an unknown conversation must wait for idle, not leave at once: %+v", plan)

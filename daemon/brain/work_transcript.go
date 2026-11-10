@@ -277,8 +277,9 @@ func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
 }
 
 // SessionConversation names the provider conversation Session sessionID last
-// ran in: the Brain host's recorded conversation when it is the host, else
-// the latest Work transcript link that names one. A Codex link without an id
+// ran in: the Brain host's recorded conversation when it is the host (for a
+// Codex Brain, the latest Codex thread in the Brain workspace), else the
+// latest Work transcript link that names one. A Codex link without an id
 // takes it from its rollout.
 func (s *Store) SessionConversation(sessionID string) (string, bool) {
 	sessionID = strings.TrimSpace(sessionID)
@@ -291,6 +292,13 @@ func (s *Store) SessionConversation(sessionID string) (string, bool) {
 		}
 		if id := work.CodexSessionIDFromRolloutPath(host.TranscriptPath); id != "" {
 			return id, true
+		}
+		// A Codex Brain's conversation was never recorded: its TUI holds
+		// nothing that names it. The Brain workspace is the Brain's alone.
+		if work.InferWorkerProvider(host.ExecutorID) == work.WorkerProviderCodex {
+			if id, ok := work.CodexWorkspaceConversation(s.WorkspacePath()); ok {
+				return id, true
+			}
 		}
 	}
 	workTranscriptsMu.Lock()

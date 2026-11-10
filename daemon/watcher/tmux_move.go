@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/platform"
 )
 
@@ -29,9 +30,14 @@ type TmuxMove struct {
 	Env []string
 	Cwd string
 	// ProcessID is the agent's process in tmux. It and the pane's own process
-	// must end before the agent starts again; helpers it started may outlive
-	// the pane (a Codex app-server can) and are left alone.
+	// must end before the agent starts again; other helpers it started may
+	// outlive the pane and are left alone.
 	ProcessID int
+	// CodexControl is the socket of the app-server Mewla started beside a
+	// Codex TUI. That server holds the conversation and outlives the pane by
+	// a few seconds; a Codex resumed before it ends finds the conversation
+	// open in another app.
+	CodexControl string
 }
 
 // tmuxMoveExitWait bounds the wait for the program to end in tmux before it
@@ -119,10 +125,19 @@ func (w *Watcher) MoveToHost(id string, move TmuxMove) error {
 			return fmt.Errorf("read the input receipts of %s: %w", id, err)
 		}
 		processes := []int{pane.panePID, move.ProcessID}
+		if server := modelprofiles.CodexControlProcess(move.CodexControl); server > 0 {
+			processes = append(processes, server)
+		}
 		if err := c.tmux.kill(id); err != nil {
 			return err
 		}
-		if !waitProcessesGone(processes, tmuxMoveExitWait) {
+		gone := waitProcessesGone(processes, tmuxMoveExitWait)
+		if move.CodexControl != "" {
+			// Ends a server that has not ended by now, and removes its files.
+			_ = modelprofiles.CleanupCodexControlArtifacts(move.CodexControl)
+			gone = gone || waitProcessesGone(processes, time.Second)
+		}
+		if !gone {
 			// The tmux pane is gone; a program that outlives it still holds
 			// the conversation, and a second one must not start.
 			return fmt.Errorf("%s did not end after its tmux pane closed; it was not started in the session host", id)
@@ -208,6 +223,10 @@ func (w *Watcher) LeaveInTmux(id, why string) {
 }
 
 // isLeftInTmux reports a Session left in tmux.
+// IsLeftInTmux reports a Session the move from tmux left there: it still
+// runs in tmux and is no longer Mewla's.
+func (w *Watcher) IsLeftInTmux(id string) bool { return w.isLeftInTmux(id) }
+
 func (w *Watcher) isLeftInTmux(id string) bool {
 	c := w.composite()
 	return c != nil && c.isLeft(id)

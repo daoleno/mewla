@@ -2854,6 +2854,7 @@ func calendarWorkID(itemID, runID string) string {
 // They answer: why did ensureHostWorker create a new Brain host instead of reusing one?
 const (
 	hostReplaceReasonMissingTmux               = "missing_tmux"
+	hostReplaceReasonLeftInTmux                = "left_in_tmux"
 	hostReplaceReasonMissingTmuxResumeLaunched = "missing_tmux_resume_launched"
 	hostReplaceReasonMissingTmuxUnrecoverable  = "missing_tmux_unrecoverable"
 	hostReplaceReasonProviderMismatch          = "provider_mismatch"
@@ -3059,7 +3060,7 @@ func (s *Service) ensureHostContinuity(executor work.WorkerExecutor, automatic b
 		killErr := s.watcher.KillSession(workerID)
 		return WorkerRef{}, errors.Join(err, killErr)
 	}
-	if replaceReason == hostReplaceReasonMissingTmux || replaceReason == hostReplaceReasonProviderMismatch {
+	if replaceReason == hostReplaceReasonMissingTmux || replaceReason == hostReplaceReasonProviderMismatch || replaceReason == hostReplaceReasonLeftInTmux {
 		createdReason := replaceReason + "_created"
 		if resumeToken != "" {
 			// Honest: tmux launched a resume command; provider acceptance is later.
