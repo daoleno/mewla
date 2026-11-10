@@ -31,6 +31,9 @@ describe("Sessions list rows", () => {
 
   test("a name that is only the Session's id is no name: the folder names it", () => {
     expect(sessionRowModel(worker({ id: "mh-b0455a19", name: "mh-b0455a19", cwd: "/home/me/mewla", provider: "claude" })).title).toBe("mewla");
+    const hostId = "mh-b0455a19d53b45ed0dce9dba";
+    expect(sessionRowModel(worker({ id: hostId, name: `${hostId} (${hostId})`, cwd: "/home/me/mewla", provider: "claude" })).title).toBe("mewla");
+    expect(sessionRowModel(worker({ id: "%3", name: hostId, cwd: "/home/me/mewla", provider: "claude" })).title).toBe("mewla");
   });
 
   test("a running Session is live; one waiting on you says so", () => {

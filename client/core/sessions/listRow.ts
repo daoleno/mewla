@@ -39,17 +39,26 @@ export type SessionRowModel = {
 };
 
 /**
+ * The daemon names an unnamed Session after its id ("mh-…", or "mh-… (target)"):
+ * that is no name to show.
+ */
+function hasGeneratedName(worker: Worker): boolean {
+  const name = shortWorkerLabel(worker.name);
+  return !name || name === worker.id || /^mh-[0-9a-f]{24}$/.test(name);
+}
+
+/**
  * A row of the Sessions list (WorkerListRowContainer): the person's nickname,
  * else the Session's own name, else the Calendar or Work it runs for, else a
  * short title from its command and directory.
  */
 export function sessionRowModel(worker: Worker, options: { alias?: string; calendarLabel?: string; workTitle?: string } = {}): SessionRowModel {
-  // The daemon names an unnamed Session after its id ("mh-…"): that is no name to show.
-  const presented = presentWorker(worker.name === worker.id ? { ...worker, name: "" } : worker, options.alias);
+  const generated = hasGeneratedName(worker);
+  const presented = presentWorker(generated ? { ...worker, name: "" } : worker, options.alias);
   const workTitle = options.calendarLabel?.trim() || options.workTitle?.trim();
   const title = presented.titleSource !== "default"
     ? presented.title
-    : workTitle || presented.shortTitle || (worker.name === worker.id ? "" : shortWorkerLabel(worker.name)) || presented.title;
+    : workTitle || presented.shortTitle || (generated ? "" : shortWorkerLabel(worker.name)) || presented.title;
   const preview = formatWorkerSessionPreview(worker);
   return {
     title,
