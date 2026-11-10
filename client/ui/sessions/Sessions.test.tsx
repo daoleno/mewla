@@ -96,4 +96,22 @@ describe("a Session", () => {
     await app.back();
     await app.waitFor("text:Scratchpad");
   }, 20_000);
+
+  test("a DSH Session's permission request is reviewed and allowed once", async () => {
+    const dshSession = session("w5", { name: "dsh run", status: "running", provider: "dsh", command: "dsh", process_id: 77, started_at: 1_700_000_000_000, capabilities: { structured_events: true } });
+    const app = await sessionsApp({
+      worker_sessions: [dshSession],
+      conversations: { w5: { source: "dsh_session_jsonl", events: [] } },
+      dsh: { epoch: "e1", items: [{ rpcId: "r1", payload: { type: "approval/requested", sessionId: "s", toolName: "Bash", reason: "Run `make deploy`" } }] },
+    });
+    await app.press("text:dsh run");
+    await app.waitFor("id:dsh-banner");
+    expect(app.texts()).toContain("Permission requested");
+    await app.press("id:dsh-review");
+    await app.waitFor("id:dsh-allow");
+    await app.press("id:dsh-allow");
+    await app.waitFor("id:dsh-banner", { state: "gone" });
+    const answers = framesOf(app.host.posts(), "dsh_interaction").filter((f) => f.dsh_answer);
+    expect(answers.at(-1)).toMatchObject({ worker_id: "w5", process_id: 77, dsh_answer: { epoch: "e1", rpcId: "r1", outcome: "allowed-once" } });
+  }, 20_000);
 });

@@ -15,7 +15,9 @@ export interface FakeDaemonState {
   /** The Sessions `worker_session_list` sends; `create_session` and `kill_worker` change them. */
   worker_sessions?: Record<string, unknown>[];
   /** Each Session's transcript (by worker id), as `codex_conversation_subscribe` answers it. */
-  conversations?: Record<string, Record<string, unknown>[]>;
+  conversations?: Record<string, Record<string, unknown>[] | { source?: string; events: Record<string, unknown>[] }>;
+  /** A DSH Session's pending requests (`dsh_interaction`). */
+  dsh?: { epoch: string; items: Record<string, unknown>[] };
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -24,6 +26,9 @@ export class FakeDaemon {
   private sockets = new Set<FakeSocket>();
   private revision = 100;
   private seq = 1;
+  private dshRev = 1;
+  /** `dsh_interaction` calls held until the requests change, as the daemon holds them. */
+  private dshWaiting: Array<() => void> = [];
 
   constructor(private state: FakeDaemonState) {}
 
@@ -141,7 +146,11 @@ export class FakeDaemon {
       case "widget_token_issue":
         return reply("widget_token", { token: "widget-token", id: "w1" });
       case "codex_conversation_subscribe":
-        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: 1, conversation: { available: true, events: this.state.conversations?.[String(frame.worker_id)] ?? [] } });
+      {
+        const entry = this.state.conversations?.[String(frame.worker_id)] ?? [];
+        const conversation = Array.isArray(entry) ? { available: true, events: entry } : { available: true, ...entry };
+        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: 1, conversation });
+      }
       case "answer_prompt": {
         const answer = frame.prompt_answer as { prompt_id?: string } | undefined;
         reply("prompt_answered", { prompt_id: answer?.prompt_id });
@@ -150,6 +159,20 @@ export class FakeDaemon {
         const next: Record<string, unknown> = { ...answered, status: "running", prompt: undefined };
         this.state.worker_sessions = (this.state.worker_sessions ?? []).map((w) => (w.id === next.id ? next : w));
         return this.broadcast({ type: "worker_session_updated", seq: ++this.seq, worker_session: next });
+      }
+      case "dsh_interaction": {
+        const dsh = this.state.dsh ?? { epoch: "e0", items: [] };
+        const answer = frame.dsh_answer as { rpcId?: string } | undefined;
+        if (answer) {
+          dsh.items = dsh.items.filter((item) => item.rpcId !== answer.rpcId);
+          this.state.dsh = dsh;
+          this.dshRev += 1;
+          this.dshWaiting.splice(0).forEach((flush) => flush());
+          return reply("dsh_interaction", { result: { accepted: true } });
+        }
+        const send = () => reply("dsh_interaction", { result: { epoch: dsh.epoch, connected: true, items: this.state.dsh?.items ?? [], rev: this.dshRev } });
+        if (frame.dsh_after_rev === this.dshRev) return void this.dshWaiting.push(send);
+        return send();
       }
       case "list_worker_sessions":
         return this.to(socket, { type: "worker_session_list", seq: this.seq, worker_sessions: this.state.worker_sessions ?? [] });
