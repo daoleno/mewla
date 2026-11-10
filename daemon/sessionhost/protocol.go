@@ -205,6 +205,9 @@ type CaptureParams struct {
 	Unwrap  bool   `json:"unwrap,omitempty"`
 	Trim    bool   `json:"trim,omitempty"`
 	Styled  bool   `json:"styled,omitempty"`
+	// Marks asks for the flags of the captured history rows, in
+	// Capture.RowFlags. A host that predates it leaves them out.
+	Marks bool `json:"marks,omitempty"`
 }
 
 // Capture is a capture and the terminal state it was taken in.
@@ -217,8 +220,18 @@ type Capture struct {
 	CursorY        int    `json:"cursor_y"`
 	BracketedPaste bool   `json:"bracketed_paste"`
 	MouseTracking  bool   `json:"mouse_tracking"`
-	ScrollbackRows int    `json:"scrollback_rows"`
-	OutputSeq      uint64 `json:"output_seq"`
+	// AppCursor and AltScroll are the cursor-key mode (DECCKM) and the
+	// wheel-sends-cursor-keys mode (1007). They are only ever sent when the
+	// host knows them: Modes says it does, so a host that predates them reads
+	// as unknown rather than as off.
+	Modes          bool `json:"modes,omitempty"`
+	AppCursor      bool `json:"app_cursor,omitempty"`
+	AltScroll      bool `json:"alt_scroll,omitempty"`
+	ScrollbackRows int  `json:"scrollback_rows"`
+	// RowFlags holds one ghosttyvt.Row* byte per captured history row when
+	// the capture asked for Marks and the host could read them.
+	RowFlags  []byte `json:"row_flags,omitempty"`
+	OutputSeq uint64 `json:"output_seq"`
 }
 
 // AttachParams opens a view of one Session, on a connection of its own as

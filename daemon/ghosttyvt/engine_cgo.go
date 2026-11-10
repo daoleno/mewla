@@ -111,6 +111,25 @@ static bool mewla_vt_mode(GhosttyTerminal t, uint16_t mode) {
 	return c.value;
 }
 
+// A row's flags: bit 0 soft-wrapped onto the next row, bit 1 continues the
+// row above, bit 2 starts a shell prompt (OSC 133), bit 3 continues one.
+static int mewla_vt_row_flags(GhosttyTerminal t, uint32_t y, uint8_t* out) {
+	GhosttyGridRef ref = {0};
+	GhosttyRow row = 0;
+	int r = ghostty_terminal_grid_ref(t, mewla_vt_point(GHOSTTY_POINT_TAG_SCREEN, 0, y), &ref);
+	if (r == GHOSTTY_SUCCESS) r = ghostty_grid_ref_row(&ref, &row);
+	if (r != GHOSTTY_SUCCESS) return r;
+	bool wrap = false, cont = false;
+	GhosttyRowSemanticPrompt prompt = GHOSTTY_ROW_SEMANTIC_NONE;
+	ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP, &wrap);
+	ghostty_row_get(row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &cont);
+	ghostty_row_get(row, GHOSTTY_ROW_DATA_SEMANTIC_PROMPT, &prompt);
+	*out = (wrap ? 1 : 0) | (cont ? 2 : 0) |
+		(prompt == GHOSTTY_ROW_SEMANTIC_PROMPT ? 4 : 0) |
+		(prompt == GHOSTTY_ROW_SEMANTIC_PROMPT_CONTINUATION ? 8 : 0);
+	return GHOSTTY_SUCCESS;
+}
+
 static int mewla_vt_restore(const uint8_t* p, size_t n, GhosttyTerminal* out) {
 	GhosttySnapshotDecoder d;
 	int r = ghostty_snapshot_decoder_new_buf(NULL, &d, p, n);
@@ -445,6 +464,26 @@ func (term *Terminal) formatLocked(opts CaptureOptions, styled bool, extras C.ui
 	return text, nil
 }
 
+// RowFlags reads the flags of count rows of the primary screen's history and
+// screen, from row top (zero is the oldest). It returns nil when a row
+// cannot be read; while the alternate screen is active the rows are its own.
+func (term *Terminal) RowFlags(top, count int) []uint8 {
+	term.mu.Lock()
+	defer term.mu.Unlock()
+	if term.closed || top < 0 || count <= 0 {
+		return nil
+	}
+	flags := make([]uint8, count)
+	for i := range flags {
+		var f C.uint8_t
+		if C.mewla_vt_row_flags(term.t, C.uint32_t(top+i), &f) != C.GHOSTTY_SUCCESS {
+			return nil
+		}
+		flags[i] = uint8(f)
+	}
+	return flags
+}
+
 // State reads the terminal's shape and modes.
 func (term *Terminal) State() State {
 	term.mu.Lock()
@@ -478,6 +517,8 @@ func (term *Terminal) State() State {
 		CursorY:        int(cy),
 		CursorVisible:  bool(cursorVisible),
 		BracketedPaste: bool(C.mewla_vt_mode(term.t, 2004)),
+		AppCursor:      bool(C.mewla_vt_mode(term.t, 1)),
+		AltScroll:      bool(C.mewla_vt_mode(term.t, 1007)),
 		MouseTracking:  bool(mouse),
 		ScrollbackRows: int(scrollback),
 		TotalRows:      int(total),

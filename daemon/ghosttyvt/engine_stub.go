@@ -22,6 +22,7 @@ func (*Terminal) Write([]byte) Output                    { return Output{} }
 func (*Terminal) Resize(int, int) (Output, error)        { return Output{}, ErrUnavailable }
 func (*Terminal) Capture(CaptureOptions) (string, error) { return "", ErrUnavailable }
 func (*Terminal) State() State                           { return State{} }
+func (*Terminal) RowFlags(int, int) []uint8              { return nil }
 func (*Terminal) Snapshot() ([]byte, error)              { return nil, ErrUnavailable }
 func (*Terminal) Replay() ([]byte, error)                { return nil, ErrUnavailable }
 func (*Terminal) Close()                                 {}

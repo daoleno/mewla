@@ -411,3 +411,53 @@ func TestEncodeKey(t *testing.T) {
 		t.Error("a closed terminal encoded a key")
 	}
 }
+
+func TestRowFlagsMarkWrapAndPrompts(t *testing.T) {
+	term := newTerminal(t, 10, 3)
+	// A prompt (OSC 133 A), a command's output that wraps, another prompt.
+	term.Write([]byte("\x1b]133;A\x07$ one\r\n0123456789ABCDEF\r\n\x1b]133;A\x07$ two\r\nx\r\ny\r\nz"))
+	state := term.State()
+	history := state.ScrollbackRows
+	if history < 3 {
+		t.Fatalf("history = %d rows, want at least 3", history)
+	}
+	text := capture(t, term, CaptureOptions{Scope: ScopeHistory, Styled: true})
+	if got := strings.Count(text, "\n") + 1; got != history {
+		t.Fatalf("history capture has %d lines, state says %d rows:\n%q", got, history, text)
+	}
+	flags := term.RowFlags(0, history+state.Rows)
+	if len(flags) != history+state.Rows {
+		t.Fatalf("RowFlags returned %d rows, want %d", len(flags), history+state.Rows)
+	}
+	if flags[0]&RowPrompt == 0 {
+		t.Fatalf("row 0 flags = %b, want a prompt", flags[0])
+	}
+	if flags[1]&RowWrapped == 0 || flags[2]&RowContinuation == 0 {
+		t.Fatalf("flags of the wrapped line = %b %b, want wrapped then continuation", flags[1], flags[2])
+	}
+	if flags[3]&RowPrompt == 0 {
+		t.Fatalf("row 3 flags = %b, want the second prompt", flags[3])
+	}
+	if term.RowFlags(0, 0) != nil || term.RowFlags(-1, 2) != nil {
+		t.Fatal("RowFlags answered an empty or negative range")
+	}
+}
+
+func TestStateReportsKeyModes(t *testing.T) {
+	term := newTerminal(t, 10, 3)
+	before := term.State()
+	t.Logf("defaults: app_cursor=%v alt_scroll=%v", before.AppCursor, before.AltScroll)
+	if before.AppCursor {
+		t.Fatal("application cursor keys are on in a fresh terminal")
+	}
+	term.Write([]byte("\x1b[?1h\x1b[?1007l"))
+	after := term.State()
+	if !after.AppCursor || after.AltScroll {
+		t.Fatalf("after ?1h ?1007l: app_cursor=%v alt_scroll=%v", after.AppCursor, after.AltScroll)
+	}
+	term.Write([]byte("\x1b[?1l\x1b[?1007h"))
+	again := term.State()
+	if again.AppCursor || !again.AltScroll {
+		t.Fatalf("after ?1l ?1007h: app_cursor=%v alt_scroll=%v", again.AppCursor, again.AltScroll)
+	}
+}

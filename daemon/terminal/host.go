@@ -77,6 +77,9 @@ type hostSession struct {
 
 	events    chan Event
 	closeOnce sync.Once
+
+	// scrollback numbers the history rows this view has served.
+	scrollback scrollbackTracker
 }
 
 func (s *hostSession) ID() string { return s.id }

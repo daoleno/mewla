@@ -434,6 +434,7 @@ type clientMessage struct {
 	Col                  int                                    `json:"col"`
 	Row                  int                                    `json:"row"`
 	Lines                int                                    `json:"lines"`
+	Since                *terminal.HistoryCursor                `json:"since,omitempty"`
 	ProcessID            int                                    `json:"process_id"`
 	Path                 string                                 `json:"path"`
 	FileGeneration       string                                 `json:"file_generation"`
@@ -1684,6 +1685,19 @@ func (s *Server) handleRepositoryMessage(conn *websocket.Conn, raw clientMessage
 func (s *Server) handleTerminalMessage(conn *websocket.Conn, raw clientMessage) {
 	switch raw.Type {
 	case "terminal_history":
+		// A cursor asks for the scrollback after it. A Session without
+		// numbered scrollback (tmux) answers with its snapshot instead.
+		if raw.Since != nil {
+			delta, ok, err := s.terminal.HistoryFrom(clientID(conn), raw.SessionID, *raw.Since)
+			if err != nil {
+				s.sendErrorWithRequestID(conn, raw.RequestID, "terminal_history_failed", err.Error())
+				return
+			}
+			if ok {
+				s.sendJSON(conn, map[string]any{"type": "terminal_history", "request_id": raw.RequestID, "session_id": raw.SessionID, "history": delta})
+				return
+			}
+		}
 		history, err := s.terminal.History(clientID(conn), raw.SessionID)
 		if err != nil {
 			s.sendErrorWithRequestID(conn, raw.RequestID, "terminal_history_failed", err.Error())
