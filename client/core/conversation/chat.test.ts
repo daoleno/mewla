@@ -39,10 +39,10 @@ async function open(storage = memoryStore()) {
   transport.on("connected", () => outbox.onConnected(server.id));
   transport.on("disconnected", () => outbox.onDisconnected(server.id));
   transport.connect();
-  await wait();
+  await until(() => sockets.length > 0);
   sockets.at(-1)!.open();
   const chat = new Chat({ serverId: server.id, transport, target, outbox });
-  await wait();
+  await until(() => sent(sockets.at(-1)!, "codex_conversation_subscribe").length > 0);
   return { transport, outbox, chat, storage, socket: sockets.at(-1)! };
 }
 
