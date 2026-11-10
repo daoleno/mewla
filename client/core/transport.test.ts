@@ -106,6 +106,18 @@ describe("Transport", () => {
     expect(() => transport.send({ type: "ping" })).toThrow("not connected");
   });
 
+  test("drop replaces a socket that stopped answering, at once and as lost", async () => {
+    const { transport, socket } = await connected();
+    const pending = transport.request("get_stats", {}, { reply: "stats" });
+    transport.drop("no answer for 180 s");
+    await expect(pending).rejects.toThrow("not connected");
+    expect(socket.readyState).toBe(3);
+    expect(transport.problem).toBe("no answer for 180 s");
+    await wait(15);
+    expect(sockets).toHaveLength(2);
+    transport.close();
+  });
+
   test("a socket that carries nothing for the silent limit is replaced", async () => {
     const { transport } = await connected();
     await wait(80);

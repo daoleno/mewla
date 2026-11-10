@@ -171,6 +171,43 @@ export type InterfaceChatThreadAction =
     }
   | { type: "discard_pending_user_message"; id: string };
 
+/**
+ * The last messages each Brain thread showed, so reopening it starts from them
+ * and the next snapshot replaces them in place, instead of a loading screen
+ * while the daemon (slow right after a restart) sends its first snapshot. Only
+ * messages are kept: Activity is live. A Session's chat starts clean (its
+ * transcript is the authority). Keys begin with the server id; the other
+ * servers' entries go when the server changes.
+ */
+const BRAIN_THREAD_KEY = ":scope:brain-thread:";
+const CONVERSATION_CACHE_MAX = 8;
+const conversationCache = new Map<string, CodexConversation>();
+
+export function cachedInterfaceConversation(cacheKey: string): CodexConversation | null {
+  return conversationCache.get(cacheKey) ?? null;
+}
+
+export function rememberInterfaceConversation(cacheKey: string, conversation: CodexConversation | null) {
+  if (!conversation?.events.length || !cacheKey.includes(BRAIN_THREAD_KEY)) return;
+  conversationCache.delete(cacheKey);
+  conversationCache.set(cacheKey, { ...conversation, activity: undefined });
+  while (conversationCache.size > CONVERSATION_CACHE_MAX) {
+    const oldest = conversationCache.keys().next().value;
+    if (oldest === undefined) break;
+    conversationCache.delete(oldest);
+  }
+}
+
+export function forgetInterfaceConversationsOutsideServer(serverId: string) {
+  for (const key of Array.from(conversationCache.keys())) {
+    if (!key.startsWith(`${serverId}:`)) conversationCache.delete(key);
+  }
+}
+
+export function clearInterfaceConversationCache() {
+  conversationCache.clear();
+}
+
 export function initialInterfaceChatThreadState(
   cacheKey: string,
 ): InterfaceChatThreadState {

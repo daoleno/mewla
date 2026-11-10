@@ -91,6 +91,13 @@ export class Transport {
     void this.open();
   }
 
+  /** Replaces a socket that stopped answering: closes it as lost and reconnects without waiting. */
+  drop(reason: string): void {
+    if (!this.socket) return;
+    this.retryMs = transportTiming.firstRetryMs;
+    this.kill(reason);
+  }
+
   on(type: string, listener: Listener): () => void {
     let set = this.listeners.get(type);
     if (!set) this.listeners.set(type, (set = new Set()));
@@ -230,11 +237,15 @@ export class Transport {
       // A late tick means the app itself was away; frames may be queued behind it.
       const away = now - lastTick > transportTiming.checkMs * 3;
       lastTick = now;
-      if (!away && now - this.lastFrameAt > transportTiming.silentLimitMs) {
-        this.socket?.close(4000, "silent");
-        this.socket?.onclose?.({ code: 4000, reason: "silent" });
-      }
+      if (!away && now - this.lastFrameAt > transportTiming.silentLimitMs) this.kill("silent");
     }, transportTiming.checkMs);
+  }
+
+  /** Ends the current socket as lost (not intentional): what is waiting fails, and the retry follows. */
+  private kill(reason: string): void {
+    const socket = this.socket;
+    socket?.close(4000, reason);
+    socket?.onclose?.({ code: 4000, reason });
   }
 
   private clearTimers(): void {
