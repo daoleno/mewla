@@ -1,0 +1,56 @@
+# xcodegen spec for the iOS host. client/scripts/fetch-nsh.sh --ios puts the framework in Frameworks/;
+# NSH_FRAMEWORK=NativeShellDev xcodegen generate makes a project that can hot reload from `nsh dev`.
+name: Mewla
+options:
+  bundleIdPrefix: com.daoleno
+  deploymentTarget: { iOS: "16.0" }
+targets:
+  Mewla:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - { path: build/nsh, type: folder, buildPhase: resources }
+      - { path: Assets.xcassets }
+    dependencies:
+      - { framework: "Frameworks/${NSH_FRAMEWORK}.xcframework", embed: false }
+    preBuildScripts:
+      - name: Bundle client/ui
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          "${NSH:-$HOME/.nsh/bin/nsh}" build --release -o "$SRCROOT/build/nsh" "$SRCROOT/../ui"
+          rm -f "$SRCROOT/build/nsh/bundle.js.map"
+    settings:
+      base:
+        # The Expo app's identity, so the App Store / TestFlight build replaces it in place.
+        # Preview builds pass PRODUCT_BUNDLE_IDENTIFIER=com.daoleno.mewla.preview.
+        PRODUCT_BUNDLE_IDENTIFIER: com.daoleno.mewla
+        PRODUCT_NAME: Mewla
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        OTHER_LDFLAGS: "-ObjC"
+        DEVELOPMENT_TEAM: HD84J3DJ2B
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: build/Info.plist
+      properties:
+        CFBundleDisplayName: Mewla
+        CADisableMinimumFrameDurationOnPhone: true
+        ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: Allow Mewla to access your camera to scan Mewla pairing QR codes.
+        NSLocalNetworkUsageDescription: Allow Mewla to connect to your self-hosted daemon on the local network.
+        NSAppTransportSecurity: { NSAllowsLocalNetworking: true, NSAllowsArbitraryLoads: false }
+        UILaunchScreen: { UIColorName: LaunchBackground }
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - { UISceneConfigurationName: Default, UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate }
+        CFBundleURLTypes:
+          - { CFBundleURLName: com.daoleno.mewla, CFBundleURLSchemes: [mewla] }
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

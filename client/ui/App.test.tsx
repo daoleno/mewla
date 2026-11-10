@@ -6,6 +6,8 @@ const host = {
     "secure.get": ({ key }: { key: string }) => secure.get(key) ?? null,
     "secure.set": ({ key, value }: { key: string; value: string }) => void secure.set(key, value),
     "secure.remove": ({ key }: { key: string }) => void secure.delete(key),
+    "app.legacyStorage": () => null,
+    "app.legacyStorageCopied": () => undefined,
   },
 };
 const paired = {
@@ -45,5 +47,27 @@ describe("a paired phone", () => {
     await app.waitFor("id:pair-another");
     expect(app.texts()).toContain("Desk");
     expect(app.texts()).toContain("Current");
+  });
+});
+
+describe("the in-place upgrade from the Expo app", () => {
+  test("opens on the computer the Expo app had, without pairing, and takes the entries only once", async () => {
+    let offered = 0;
+    let copied = false;
+    const upgrade = {
+      handlers: {
+        ...host.handlers,
+        "app.legacyStorage": () => (copied ? null : (offered++, { ...paired, "mewla.draft.v1:s1:chat": '{"t":1,"v":"half"}' })),
+        "app.legacyStorageCopied": () => void (copied = true),
+      },
+    };
+    const app = await open("./App.tsx", { host: upgrade, platform: "android" });
+    await app.waitFor("text:Brain");
+    expect(app.shows("id:scan")).toBe(false);
+    expect(copied).toBe(true);
+    expect(app.storage()["mewla.draft.v1:s1:chat"]).toContain("half");
+    const again = await open("./App.tsx", { host: upgrade, platform: "android" });
+    await again.waitFor("id:scan");
+    expect(offered).toBe(1);
   });
 });
