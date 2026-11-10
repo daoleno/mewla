@@ -54,6 +54,24 @@ func CleanupCodexControlArtifacts(socketPath string) error {
 	return nil
 }
 
+// CodexControlProcess is the pid of the live app-server a Session's Codex TUI
+// talked to through socketPath, or 0 when none runs.
+func CodexControlProcess(socketPath string) int {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return 0
+	}
+	raw, err := os.ReadFile(CodexControlPidPath(socketPath))
+	if err != nil {
+		return 0
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid <= 0 || !processAlive(pid) || !codexAppServerProcess(pid, socketPath) {
+		return 0
+	}
+	return pid
+}
+
 // SweepCodexControlArtifacts removes stale daemon-owned app-server artifacts
 // for a restored Session binding: when the recorded app-server pid is dead or
 // no longer matches this socket, the socket/pid/log files are daemon-owned

@@ -120,6 +120,8 @@ type tmuxMovePlan struct {
 	final bool
 	// resume is the agent's command resumed into its conversation.
 	resume string
+	// codexControl is the socket of the app-server a Codex TUI talked to.
+	codexControl string
 }
 
 // planTmuxMove names how the agent in a tmux Session resumes in a new
@@ -190,9 +192,15 @@ func planTmuxMove(worker classifier.Worker, argv []string, conversation func(str
 			}
 		}
 		if provider == work.WorkerProviderCodex {
+			plan.codexControl = codexControlSocket(argv)
 			// A resumed Codex that finds a newer release stops on an update
-			// prompt and waits for a key.
-			if !strings.Contains(command, "check_for_update_on_startup") {
+			// prompt and waits for a key. Only a Codex launched with config
+			// overrides is told not to look: one launched without runs
+			// against Codex's own app-server daemon, which keeps the
+			// conversation for a minute after the old Codex ends; given an
+			// override, the resumed one runs its own server and finds the
+			// conversation open in another app.
+			if !strings.Contains(command, "check_for_update_on_startup") && codexConfigOverridden(argv) {
 				command += " -c check_for_update_on_startup=false"
 			}
 			plan.resume, err = work.CodexNativeResumeCommand(command, token)
@@ -252,6 +260,35 @@ func resumableCommandLine(provider string, argv []string) string {
 	return strings.Join(words, " ")
 }
 
+// codexControlSocket is the unix socket of the app-server a Codex TUI's
+// --remote names, empty when it names none.
+func codexControlSocket(argv []string) string {
+	for i, arg := range argv {
+		value, ok := strings.CutPrefix(arg, "--remote=")
+		if !ok && arg == "--remote" && i+1 < len(argv) {
+			value, ok = argv[i+1], true
+		}
+		if ok {
+			if path, unix := strings.CutPrefix(value, "unix://"); unix {
+				return path
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// codexConfigOverridden reports a Codex command line that sets config with
+// -c or --config.
+func codexConfigOverridden(argv []string) bool {
+	for _, arg := range argv {
+		if arg == "-c" || arg == "--config" || strings.HasPrefix(arg, "-c=") || strings.HasPrefix(arg, "--config=") {
+			return true
+		}
+	}
+	return false
+}
+
 // prepare reads what the resumed program needs from the running one: its
 // environment and directory. It fails, leaving the Session in tmux, when the
 // program could not start again there.
@@ -267,7 +304,7 @@ func (plan tmuxMovePlan) prepare(worker classifier.Worker) (watcher.TmuxMove, er
 	if err := commandOnPath(plan.resume, env, cwd); err != nil {
 		return watcher.TmuxMove{}, err
 	}
-	return watcher.TmuxMove{Command: "exec " + plan.resume, Env: env, Cwd: cwd, ProcessID: worker.ProcessID}, nil
+	return watcher.TmuxMove{Command: "exec " + plan.resume, Env: env, Cwd: cwd, ProcessID: worker.ProcessID, CodexControl: plan.codexControl}, nil
 }
 
 // tmuxMoveEnvironment is the running program's environment without what

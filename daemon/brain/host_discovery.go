@@ -231,6 +231,13 @@ func (s *Service) discoverHostWorker(executor work.WorkerExecutor) (hostDiscover
 		}
 		d.replaceReason = hostReplaceReasonMissingTmux
 		d.replaceDetail = fmt.Sprintf("probe=absent id=%q", d.id)
+		if left, ok := s.watcher.(interface{ IsLeftInTmux(string) bool }); ok && left.IsLeftInTmux(d.id) {
+			// Moving to the session host left this Brain in tmux, where it
+			// still runs: a fresh Brain takes over with the handoff, and the
+			// old conversation is never resumed beside it.
+			d.replaceReason = hostReplaceReasonLeftInTmux
+			d.replaceDetail = fmt.Sprintf("left_in_tmux id=%q", d.id)
+		}
 		s.recordHostReplacement(HostReplacementEvent{Reason: d.replaceReason, FromID: d.id, FromExecutorID: hostSession.ExecutorID, ResolvedExecutor: executor.ID, Detail: d.replaceDetail})
 	}
 	return d, nil

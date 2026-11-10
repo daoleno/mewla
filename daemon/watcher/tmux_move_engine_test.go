@@ -6,10 +6,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/modelprofiles"
 	"github.com/daoleno/mewla/daemon/workerproc"
 )
 
@@ -235,5 +237,58 @@ func TestLeftSessionKeepsItsResourcesUntilItsPaneEnds(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(cfg.StateDir, "session-host", "left-in-tmux.json"))
 	if err != nil || strings.Contains(string(raw), spec.Unit) || !strings.Contains(string(raw), id) {
 		t.Fatalf("left-in-tmux.json after release = %s, %v", raw, err)
+	}
+}
+
+// A Codex that talked to an app-server beside it resumes only once that
+// server ended: it holds the conversation for a few seconds after the pane
+// closes, and a Codex resumed before then finds it open in another app.
+func TestTmuxMoveWaitsForTheCodexAppServer(t *testing.T) {
+	h := newSharedTmuxHarness(t, false)
+	host := startInProcessHost(t)
+	dir := t.TempDir()
+	socket := filepath.Join(dir, "codex-ctl-1.sock")
+	// As Mewla's Codex launch: the server in the background, its pid beside
+	// the socket, the TUI in front. This server ends 2s after a hangup.
+	server := `sh -c 'trap "sleep 2; exit 0" HUP; while :; do sleep 0.1; done' app-server --listen unix://` + socket
+	tmux := &tmuxBackend{w: h.w}
+	at, err := tmux.place("", true, "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := tmux.create(at, backendCreateSpec{name: "codex", cwd: dir, command: "set +m; " + server + " & echo $! > " + socket + ".pid; exec sleep 300"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pid int
+	waitUntil(t, 10*time.Second, "the app-server's pid", func() bool {
+		pid = modelprofiles.CodexControlProcess(socket)
+		return pid > 0
+	})
+	h.w.SetSessionHost(SessionHostConfig{SocketPath: host.socket, Executable: "/nonexistent/mewla", StateDir: t.TempDir(), Version: "t"})
+	if err := h.w.SessionHostReady(); err != nil {
+		t.Fatal(err)
+	}
+	resumed := filepath.Join(dir, "resumed")
+	move := TmuxMove{
+		Command:      "if kill -0 " + strconv.Itoa(pid) + " 2>/dev/null; then echo open; else echo ended; fi > " + resumed + "; exec sleep 300",
+		Env:          []string{"PATH=/usr/bin:/bin", "HOME=" + dir},
+		Cwd:          dir,
+		CodexControl: socket,
+	}
+	if err := h.w.MoveToHost(id, move); err != nil {
+		t.Fatal(err)
+	}
+	var got string
+	waitUntil(t, 10*time.Second, "the resumed program", func() bool {
+		raw, err := os.ReadFile(resumed)
+		got = strings.TrimSpace(string(raw))
+		return err == nil && got != ""
+	})
+	if got != "ended" {
+		t.Fatalf("the resumed Codex started while its app-server ran (%q)", got)
+	}
+	if _, err := os.Stat(socket + ".pid"); !os.IsNotExist(err) {
+		t.Fatalf("the app-server's pid file is left: %v", err)
 	}
 }

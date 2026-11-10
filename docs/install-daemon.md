@@ -180,8 +180,10 @@ and you can still read and type into them. Each one moves to the session host
 on its own once its agent finishes its turn: the agent starts again in the
 same conversation, under the same Session, with its Work. An agent Mewla cannot
 resume this way (Grok, Cursor Agent, a plain shell) keeps running in `tmux`,
-no longer controlled by Mewla; **Settings → your computer** says how many. You
-can uninstall `tmux` once none are left that you need.
+no longer controlled by Mewla; **Settings → your computer** says how many. If
+Brain itself has to stay behind, a new Brain starts in the session host and
+picks up from its handoff notes and your Work. You can uninstall `tmux` once
+none are left that you need.
 
 ## Keep it running
 
