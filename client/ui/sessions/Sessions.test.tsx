@@ -114,4 +114,13 @@ describe("a Session", () => {
     const answers = framesOf(app.host.posts(), "dsh_interaction").filter((f) => f.dsh_answer);
     expect(answers.at(-1)).toMatchObject({ worker_id: "w5", process_id: 77, dsh_answer: { epoch: "e1", rpcId: "r1", outcome: "allowed-once" } });
   }, 20_000);
+
+  test("a mewla://sessions/<id> link (a notification, Work, Calendar) opens that Session", async () => {
+    const app = await sessionsApp({ worker_sessions: [session("w7", { name: "linked" })], conversations: { w7: [] } });
+    await app.waitFor("text:linked");
+    await app.host.send("links.open", { url: "mewla://brain" });
+    await app.host.send("links.open", { url: "mewla://sessions/w7" });
+    await app.waitFor("id:session-menu");
+    expect(framesOf(app.host.posts(), "set_active_worker").at(-1)?.worker_id).toBe("w7");
+  }, 20_000);
 });

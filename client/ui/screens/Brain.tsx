@@ -9,6 +9,9 @@ import { answerChoice, stopTurn } from "../../core/conversation/turn";
 import { visiblePendingChoice } from "../../core/timeline/claudeChoiceModel";
 import { brainSurface, newBrainChat } from "../../core/brain";
 import { createChatTimeline } from "../../core/conversation/timeline";
+import type { BrainWorkResultEvent } from "../../core/timeline/brainWorkEvent";
+import type { BrainCurrentWork } from "../../core/timeline/types";
+import { markWorkRead } from "../../core/work/brainWork";
 import { brainNav } from "../shell/Shell";
 import { WorkHeaderButton } from "../work/WorkPage";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport } from "../session";
@@ -23,7 +26,17 @@ const activity = computed(() => brainThread().conversation?.activity);
 /** The activity a Stop was sent for: the button says "Stopping…" until that turn ends. */
 const stoppingFor = signal("");
 const timeline = createChatTimeline("brain");
-const items = computed(() => timeline(brainThread(), { onPendingAction: (id, action) => untracked(brainChat)?.actOnFailed(id, action) }));
+// A Work card opens its Work (what came back, what it needs), as the Expo app's result sheet did.
+const openWorkEvent = (event: BrainWorkResultEvent) => {
+  const transport = currentTransport();
+  if (transport && event.unread) markWorkRead(transport, event.work_id);
+  brainNav.push({ name: "workDetail", workId: event.work_id });
+};
+const items = computed(() => timeline(brainThread(), {
+  onPendingAction: (id, action) => untracked(brainChat)?.actOnFailed(id, action),
+  onWorkEvent: openWorkEvent,
+  currentWork: brain()?.current_work as readonly BrainCurrentWork[] | undefined,
+}));
 
 function hostId(): string {
   return brain()?.host_worker?.id ?? "";

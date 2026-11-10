@@ -11,7 +11,7 @@ import { deviceZone } from "../calendar/clock";
 import { calendarLinks, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
 import { current, currentTransport, onTransport, servers, switchTo } from "../session";
-import { brainNav, selectedTab } from "../shell/Shell";
+import { brainNav, selectedTab, openSession } from "../shell/Shell";
 import { draftForBrain } from "../work/WorkPage";
 import { workLinks } from "../work/routes";
 
@@ -154,7 +154,9 @@ export function openNotificationLink(url: string): void {
       else brainNav.popToRoot();
       return;
     case "sessions":
-      selectedTab.set(1);
+      // mewla://sessions/<id> opens that Session of the current computer.
+      if (link.path[0]) openSession(link.path[0]);
+      else selectedTab.set(1);
       return;
   }
 }
