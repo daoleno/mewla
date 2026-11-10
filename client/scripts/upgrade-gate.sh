@@ -65,7 +65,7 @@ before=$(devices)
 device_id=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["devices"][0]["id"])' "$before")
 log "paired as device $device_id"
 shot 1-paired
-# v0.3.0 can die on an unhandled "Daemon is not connected." right after pairing; it is paired by then.
+# v0.3.0 could die on an unhandled "Daemon is not connected." right after pairing (fixed in v0.3.1); it is paired by then.
 sleep 3
 if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
   adb logcat -d -b crash > "$OUT/old-app-crash.txt"

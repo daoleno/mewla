@@ -18,8 +18,8 @@ on:
         type: boolean
         default: true
       old_version:
-        description: "Expo release the gate upgrades from"
-        default: "v0.3.0"
+        description: "Expo release the gate upgrades from (a tag, or latest)"
+        default: "latest"
 
 concurrency:
   group: client-${{ github.ref }}-${{ github.event_name }}
@@ -104,7 +104,7 @@ jobs:
           retention-days: 14
 
   upgrade-gate:
-    name: Android upgrade gate (Expo ${{ inputs.old_version }} → NSH)
+    name: Android upgrade gate (Expo ${{ inputs.old_version || 'latest' }} → NSH)
     if: github.event_name == 'workflow_dispatch' && inputs.gate
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -123,9 +123,12 @@ jobs:
       - name: The released Expo APK and daemon
         env:
           GH_TOKEN: ${{ github.token }}
-          OLD: ${{ inputs.old_version }}
+          OLD: ${{ inputs.old_version || 'latest' }}
         run: |
           set -euo pipefail
+          # The gate upgrades from what users run: the latest release unless a tag is named.
+          [[ "$OLD" == latest ]] && OLD=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          echo "upgrading from $OLD"
           mkdir -p "$RUNNER_TEMP/old"
           gh release download "$OLD" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/old" \
             --pattern "mewla-android-arm64-$OLD.apk" --pattern mewla-linux-amd64.tar.gz --pattern SHA256SUMS
