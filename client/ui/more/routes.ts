@@ -3,6 +3,17 @@ import type { DayCell, ModelStat, PricingStatus } from "../../core/stats/statsPa
 /** The pages behind More, and the pages they push. */
 export type MorePage =
   | { name: "settings" }
+  | { name: "settings-computer"; id: string }
+  | { name: "settings-telegram" }
+  | { name: "settings-providers" }
+  | { name: "settings-provider-editor"; client: "codex" | "claude"; connectionId?: string; retry?: boolean }
+  | { name: "settings-provider-models"; connectionId: string }
+  | { name: "settings-agents" }
+  | { name: "settings-friends" }
+  | { name: "settings-iphone" }
+  | { name: "settings-pet" }
+  | { name: "settings-licenses" }
+  | { name: "settings-license"; id: string }
   | { name: "stats" }
   | { name: "stats-model"; model: ModelStat; pricing?: PricingStatus }
   | { name: "stats-day"; day: DayCell }

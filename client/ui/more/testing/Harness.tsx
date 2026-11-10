@@ -7,6 +7,7 @@ import { bindDaemon } from "../daemon";
 import { MorePageView } from "../Pages";
 import type { MorePage } from "../routes";
 import { FakeDaemon, testServer } from "./fakeDaemon";
+import { current, servers } from "../../session";
 
 /**
  * A More page on its own, for `nsh test`: the test plays the computer. Its host
@@ -26,6 +27,9 @@ fake.request = (async (type: string, body: Record<string, unknown>, options: { r
   return { type: options.reply, ...(answer ?? {}) };
 }) as FakeDaemon["request"];
 bindDaemon(fake);
+// The computers this phone has: the test's one, current.
+servers.set([fake.server]);
+current.set(fake.server);
 host.on("app.daemonState", (state) => fake.setState(state as ConnectionState));
 host.on("app.daemonPush", (frame) => fake.push(frame as Frame));
 host.on("app.daemonSwitch", (server) => {

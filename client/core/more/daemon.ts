@@ -24,6 +24,28 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 const HTTP_TIMEOUT_MS = 30_000;
 
+/**
+ * What the signature is for: a fixed purpose, or one made from the body's SHA-256
+ * (`mewla-agent-use:POST:/agent-use:sha256=<hex>`), so the signature covers the body.
+ */
+export type Purpose = string | ((bodySha256: string) => string);
+
+export interface SignedOptions {
+  body?: unknown;
+  query?: Record<string, string | undefined>;
+  timeoutMs?: number;
+}
+
+/** `prefix:sha256=<hex of the body>`, the purpose of a signed POST. */
+export function bodyPurpose(prefix: string): Purpose {
+  return (digest) => `${prefix}:sha256=${digest}`;
+}
+
+export async function sha256Hex(text: string): Promise<string> {
+  const digest = await platform().sha256(new TextEncoder().encode(text));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 /** The computer's HTTP address for `pathname` (and `query`), on the address the socket uses. */
 export function daemonURL(server: StoredServer, pathname: string, query?: Record<string, string | undefined>): string {
   const url = buildHTTPURL(server.url, pathname);
@@ -50,10 +72,12 @@ export async function signedFetch(
   server: StoredServer,
   method: HttpMethod,
   pathname: string,
-  purpose: string,
-  options: { body?: unknown; query?: Record<string, string | undefined>; timeoutMs?: number } = {},
+  purpose: Purpose,
+  options: SignedOptions = {},
 ): Promise<Response> {
   const url = daemonURL(server, pathname, options.query);
+  const text = options.body === undefined ? undefined : JSON.stringify(options.body);
+  const signed = typeof purpose === "function" ? purpose(text === undefined ? "" : await sha256Hex(text)) : purpose;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? HTTP_TIMEOUT_MS);
   try {
@@ -62,9 +86,9 @@ export async function signedFetch(
       signal: controller.signal,
       headers: {
         ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
-        Authorization: await deviceAuthorization(server, purpose),
+        Authorization: await deviceAuthorization(server, signed),
       },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+      body: text,
     });
   } catch (error) {
     throw controller.signal.aborted ? new Error(`${server.name || "The computer"} did not answer`) : error;
@@ -92,8 +116,8 @@ export async function signedJSON<T>(
   server: StoredServer,
   method: HttpMethod,
   pathname: string,
-  purpose: string,
-  options: { body?: unknown; query?: Record<string, string | undefined>; timeoutMs?: number } = {},
+  purpose: Purpose,
+  options: SignedOptions = {},
 ): Promise<T> {
   const response = await signedFetch(server, method, pathname, purpose, options);
   if (!response.ok) throw await answerError(server, response);

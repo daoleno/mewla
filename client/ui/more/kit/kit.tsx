@@ -1,6 +1,6 @@
 import type { JSX } from "nsh";
 import { Canvas, Scroll, Text, View } from "nsh";
-import { Button, NavPage, Switch } from "nsh/base";
+import { AlertDialog, Button, Input, NavPage, Switch } from "nsh/base";
 import { color, type ColorName } from "./colors";
 import { Icon, type IconName } from "./Icon";
 
@@ -265,4 +265,57 @@ export function Meter(props: { share: number; tone?: ColorName; height?: number 
       <View class="h-full rounded-full" style={{ width: `${Math.round(Math.max(0, Math.min(1, props.share)) * 1000) / 10}%`, backgroundColor: color(props.tone ?? "ink") }} />
     </View>
   );
+}
+
+/** A framed one-line field (or several lines) on the card, with what it is for above it. */
+export function Field(props: {
+  label?: string;
+  value: string;
+  placeholder?: string;
+  masked?: boolean;
+  mono?: boolean;
+  multiline?: boolean;
+  keyboardType?: "default" | "url" | "email-address" | "number-pad";
+  testID?: string;
+  onChange: (value: string) => void;
+  onSubmit?: () => void;
+  /** The field lost focus: commit what was typed. */
+  onCommit?: () => void;
+  trailing?: JSX.Element;
+}) {
+  return (
+    <View class="gap-1.5 px-4 py-3">
+      {props.label ? <Text class="text-xs font-medium text-muted-foreground">{props.label}</Text> : null}
+      <View class="flex-row items-center gap-2 rounded-xl border border-border bg-background px-3">
+        <Input
+          testID={props.testID}
+          class={props.mono ? "min-h-[44px] flex-1 py-2.5 font-mono text-sm" : "min-h-[44px] flex-1 py-2.5 text-base"}
+          value={props.value}
+          placeholder={props.placeholder}
+          masked={props.masked}
+          multiline={props.multiline}
+          keyboardType={props.keyboardType}
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChange={({ value }) => props.onChange(value)}
+          onSubmit={() => (props.onSubmit ?? props.onCommit)?.()}
+          onBlur={() => props.onCommit?.()}
+        />
+        {props.trailing ?? null}
+      </View>
+    </View>
+  );
+}
+
+/** Asks before an irreversible step; resolves true when the person chose `action`. */
+export async function confirmDestructive(title: string, message: string, action: string): Promise<boolean> {
+  const answer = await AlertDialog.show({
+    title,
+    description: message,
+    actions: [
+      { id: "cancel", label: "Cancel", role: "cancel" },
+      { id: "go", label: action, role: "destructive" },
+    ],
+  });
+  return answer.action === "go";
 }
