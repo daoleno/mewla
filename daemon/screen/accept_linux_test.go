@@ -85,6 +85,20 @@ func TestAcceptLinuxComputer(t *testing.T) {
 	if dir := os.Getenv("MEWLA_ACCEPT_OUT"); dir != "" {
 		_ = os.WriteFile(dir+"/linux-agent-screen.jpg", shot.Image, 0o600)
 	}
+	// The person holds the display from Screen (takes control): the agent
+	// waits, and goes on once they let go.
+	view, err := displays.View(worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view.Hold(true)
+	if _, err := s.Act(ctx, worker, AgentAction{Action: "screenshot"}); err == nil || !strings.Contains(err.Error(), "holding the display") {
+		t.Fatalf("while held, an action was not refused: %v", err)
+	}
+	t.Logf("while held: refused as expected")
+	view.Hold(false)
+	view.Close()
+	act(AgentAction{Action: "screenshot"})
 	// The person stops the agent from Screen: its next action is refused.
 	if err := displays.Halt(worker); err != nil {
 		t.Fatal(err)

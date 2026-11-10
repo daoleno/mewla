@@ -28,6 +28,13 @@ export const LINUX_MODIFIERS: RemoteModifier[] = [
   { key: "Option", label: "Alt", name: "Alt" },
   { key: "Shift", label: "Shift", name: "Shift" },
 ];
+/** Windows' own: Command is the Windows key there. */
+export const WINDOWS_MODIFIERS: RemoteModifier[] = [
+  { key: "Control", label: "Ctrl", name: "Control" },
+  { key: "Option", label: "Alt", name: "Alt" },
+  { key: "Shift", label: "Shift", name: "Shift" },
+  { key: "Command", label: "Win", name: "Windows key" },
+];
 export const MAC_MODIFIERS: RemoteModifier[] = [
   { key: "Command", label: "⌘", name: "Command" },
   { key: "Control", label: "⌃", name: "Control" },
