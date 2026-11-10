@@ -3,7 +3,9 @@ import { AlertDialog, Button, Input, NavPage, Sheet, type NavStackState } from "
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
 import { createChatTimeline } from "../../core/conversation/timeline";
-import { answerChoice, answerPrompt, decideApproval, stopTurn } from "../../core/conversation/turn";
+import { answerChoice, answerPrompt, decideApproval, rewindMessage, stopTurn } from "../../core/conversation/turn";
+import { finalReplyIdsOf } from "../../core/timeline/model";
+import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
 import { resolveBlockedTerminal } from "../../core/session/blockedTerminalSurface";
 import { shouldLeaveMissingSession } from "../../core/session/missingSession";
 import { resolveInterfaceRenderMode, resolveTerminalRouteWorker, supportsChatInterface, type TerminalRouteSessionHint } from "../../core/session/sessionRoute";
@@ -93,6 +95,19 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const timeline = createChatTimeline("session");
   const items = computed(() => timeline(thread(), { onPendingAction: (id, action) => chat.actOnFailed(id, action) }));
   const activity = computed(() => thread().conversation?.activity);
+  const editor = createMessageEdit({
+    text,
+    brain: false,
+    messageRewind: () => worker()?.capabilities?.message_rewind === true,
+    rewind: (eventId) => rewindMessage(transport, props.workerId, eventId),
+    send: (value) => chat.send(value),
+  });
+  const finalReplies = computed(() => finalReplyIdsOf(thread().conversation?.events ?? []));
+  const handlers = {
+    onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
+      void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
+    isFinalReply: (id: string) => finalReplies().has(id),
+  };
   const stoppingFor = signal("");
   const notice = signal("");
   // What the Session waits on. Brain's hidden host has no terminal prompt: its question is read from the
@@ -245,11 +260,12 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
-              <ChatTimeline testID="session-chat" items={items}
+              <ChatTimeline testID="session-chat" items={items} handlers={handlers}
                 empty={() => <View class="flex-1 items-center justify-center p-8"><Text class="text-center text-base text-muted-foreground">{thread().loading ? "Loading conversation" : thread().error ?? "Nothing here yet."}</Text></View>} />
-              <Composer text={text} placeholder="Message" canSend={() => true} onSend={(value) => chat.send(value)}
+              <Composer text={text} placeholder="Message" canSend={() => true} onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : chat.send(value))}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"}>
+                {editor.edit() ? <EditChip editor={editor} /> : null}
                 {questionKey() ? (
                   <ChoiceCard choice={untracked(question)!.choice} connected={() => connection() === "connected"}
                     submit={(answers) => untracked(question)!.submit(answers)}

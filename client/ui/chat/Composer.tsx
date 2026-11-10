@@ -46,7 +46,8 @@ export function Composer(props: {
   text: ComposerText;
   placeholder: string;
   canSend: () => boolean;
-  onSend: (text: string) => void;
+  /** Returns false to keep the text (an edit that sends once its rewind is done). */
+  onSend: (text: string) => void | false;
   running: () => boolean;
   stopping: () => boolean;
   canStop: () => boolean;
@@ -59,8 +60,7 @@ export function Composer(props: {
   const send = () => {
     const text = value();
     if (!props.canSend() || !text.trim()) return;
-    props.onSend(text);
-    props.text.clear();
+    if (props.onSend(text) !== false) props.text.clear();
   };
   return (
     <View class="border-t border-border bg-background px-3 py-2"
