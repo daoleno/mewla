@@ -2,6 +2,7 @@ import { computed, effect, List, signal, Storage, Text, untracked, View } from "
 import { AlertDialog, Button, NavPage, type NavStackState } from "nsh/base";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { sessionRowModel } from "../../core/sessions/listRow";
+import { servicesOpen } from "../sessions/ServicesSheet";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
 import { sessionEmptyState } from "../../core/sessions/sessionEmptyState";
 import { countSessionSelection, EMPTY_SESSION_SELECTION, pruneSessionSelection, selectionCountLabel, toggleSessionSelection, type SessionSelection } from "../../core/sessions/sessionSelection";
@@ -162,6 +163,19 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
     void markWorkerOpened(Storage, worker.id).catch(() => {});
     props.nav.push({ name: "session", workerId: worker.id, hint: { name: worker.name, cwd: worker.cwd, command: worker.command, startedAt: worker.started_at } });
   };
+  const menu = async () => {
+    const live = untracked(connection) === "connected";
+    const { action } = await AlertDialog.show({
+      title: "Sessions",
+      presentation: "actionSheet",
+      actions: [
+        ...(live ? [{ id: "new", label: "New session" }, { id: "services", label: "Services" }] : []),
+        { id: "cancel", label: "Cancel", role: "cancel" as const },
+      ],
+    });
+    if (action === "new") props.onNew();
+    else if (action === "services") servicesOpen.set(true);
+  };
   // A Session that left the list cannot stay selected.
   effect(() => {
     const next = pruneSessionSelection(selection(), workers().map((w) => w.key));
@@ -169,7 +183,12 @@ export function Sessions(props: { nav: NavStackState<SessionsRoute>; onPair: () 
   });
   return (
     <NavPage title="Sessions"
-      headerRight={selecting() ? null : <Button testID="new-session" onPress={props.onNew} disabled={connection() !== "connected"}><Icon name="add" size={22} color="primary" /></Button>}>
+      headerRight={selecting() ? null : (
+        <View class="flex-row items-center gap-4">
+          <Button testID="sessions-menu" accessibilityLabel="Sessions menu" onPress={() => void menu()}><Icon name="more-horizontal" size={22} color="primary" /></Button>
+          <Button testID="new-session" onPress={props.onNew} disabled={connection() !== "connected"}><Icon name="add" size={22} color="primary" /></Button>
+        </View>
+      )}>
       <View class="flex-1 bg-background">
         {selecting() ? (
           <View class="flex-row items-center gap-3 border-b border-border px-4 py-2">
