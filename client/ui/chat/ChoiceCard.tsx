@@ -8,6 +8,7 @@ import {
   choiceReviewStep,
   emptyChoiceDraft,
   isChoiceGoneError,
+  isPromptGoneError,
   nextChoiceStep,
   questionAllowsOther,
   setChoiceOtherText,
@@ -50,7 +51,7 @@ export function ChoiceCard(props: {
     try {
       await props.submit(answers);
     } catch (error) {
-      if (isChoiceGoneError(error)) return props.onGone();
+      if (isChoiceGoneError(error) || isPromptGoneError(error)) return props.onGone();
       failure.set(error instanceof Error && error.message ? error.message : "Could not send the answer.");
     } finally {
       sending.set(false);

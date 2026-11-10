@@ -3,7 +3,7 @@ import { AlertDialog, Button, Input, NavPage, Sheet, type NavStackState } from "
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
 import { createChatTimeline } from "../../core/conversation/timeline";
-import { answerChoice, stopTurn } from "../../core/conversation/turn";
+import { answerChoice, answerPrompt, decideApproval, stopTurn } from "../../core/conversation/turn";
 import { resolveBlockedTerminal } from "../../core/session/blockedTerminalSurface";
 import { shouldLeaveMissingSession } from "../../core/session/missingSession";
 import { resolveInterfaceRenderMode, resolveTerminalRouteWorker, supportsChatInterface, type TerminalRouteSessionHint } from "../../core/session/sessionRoute";
@@ -12,7 +12,9 @@ import { sessionRowModel } from "../../core/sessions/listRow";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
 import { presentWorker } from "../../core/sessions/workerPresentation";
 import { workerStatusLabel } from "../../core/sessions/workerStatusPresentation";
-import { CHOICE_GONE_NOTICE, visiblePendingChoice } from "../../core/timeline/claudeChoiceModel";
+import { buildTerminalActionPrompt, type TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
+import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingChoice, PROMPT_GONE_NOTICE, visiblePendingChoice, type ChoiceAnswer } from "../../core/timeline/claudeChoiceModel";
+import { ActionPromptCard } from "../chat/ActionPromptCard";
 import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
 import { ChatTimeline } from "../chat/Timeline";
@@ -93,9 +95,54 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const activity = computed(() => thread().conversation?.activity);
   const stoppingFor = signal("");
   const notice = signal("");
-  const goneChoices = signal<ReadonlySet<string>>(new Set());
-  const pendingChoice = computed(() => visiblePendingChoice(thread().conversation?.events, goneChoices()));
-  const pendingChoiceKey = computed(() => pendingChoice()?.call_id ?? "");
+  // What the Session waits on. Brain's hidden host has no terminal prompt: its question is read from the
+  // transcript and answered with answer_choice. A listed Session's prompt is the one the daemon read off its
+  // terminal (only from a list received on this connection): a question card, or the menu/approval card.
+  const gone = signal<ReadonlySet<string>>(new Set());
+  const isHost = computed(() => !workers().some((w) => w.id === props.workerId) && brain()?.host_worker?.id === props.workerId);
+  const livePrompt = computed(() => {
+    const prompt = worker()?.prompt;
+    return connection() === "connected" && workersHydrated() && prompt && !gone().has(prompt.id) ? prompt : undefined;
+  });
+  const question = computed(() => {
+    const events = thread().conversation?.events;
+    if (isHost()) {
+      const pending = visiblePendingChoice(events, gone());
+      const callId = pending?.call_id;
+      return pending && callId
+        ? { key: callId, choice: pending.choice, goneKey: callId, goneNotice: CHOICE_GONE_NOTICE, submit: (answers: ChoiceAnswer[]) => answerChoice(transport, props.workerId, callId, answers) }
+        : null;
+    }
+    const prompt = livePrompt();
+    if (!prompt) return null;
+    const transcript = latestPendingChoice(events);
+    const choice = choiceFromPrompt(prompt, transcript?.call_id ? { callId: transcript.call_id, choice: transcript.choice } : null);
+    return choice
+      ? { key: prompt.call_id ?? prompt.id, choice, goneKey: prompt.id, goneNotice: PROMPT_GONE_NOTICE, submit: (answers: ChoiceAnswer[]) => answerPrompt(transport, props.workerId, prompt.id, { answers }) }
+      : null;
+  });
+  const questionKey = computed(() => question()?.key ?? "");
+  const actionPrompt = computed(() => (question() || !workersHydrated() || connection() !== "connected" ? null : buildTerminalActionPrompt({
+    prompt: livePrompt(),
+    approvals: worker()?.approvals,
+    scopeKey: `${props.workerId}|${worker()?.process_id ?? ""}|${worker()?.started_at ?? ""}`,
+  })));
+  const actionKey = computed(() => actionPrompt()?.id ?? "");
+  const answerAction = async (option: TerminalActionPromptOption) => {
+    const prompt = untracked(actionPrompt);
+    if (!prompt) return;
+    try {
+      if (option.approvalOptionId && prompt.approvalId) await decideApproval(transport, props.workerId, prompt.approvalId, option.approvalOptionId);
+      else if (option.number !== undefined && prompt.promptId) await answerPrompt(transport, props.workerId, prompt.promptId, { number: option.number });
+    } catch (error) {
+      if (isPromptGoneError(error) && prompt.promptId) {
+        gone.set(new Set([...untracked(gone), prompt.promptId]));
+        notice.set(PROMPT_GONE_NOTICE);
+        return;
+      }
+      throw error;
+    }
+  };
 
   const stop = async () => {
     const running = activity();
@@ -203,14 +250,17 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
               <Composer text={text} placeholder="Message" canSend={() => true} onSend={(value) => chat.send(value)}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"}>
-                {pendingChoiceKey() ? (
-                  <ChoiceCard choice={untracked(pendingChoice)!.choice} connected={() => connection() === "connected"}
-                    submit={(answers) => answerChoice(transport, props.workerId, untracked(pendingChoiceKey), answers)}
+                {questionKey() ? (
+                  <ChoiceCard choice={untracked(question)!.choice} connected={() => connection() === "connected"}
+                    submit={(answers) => untracked(question)!.submit(answers)}
                     onGone={() => {
-                      goneChoices.set(new Set([...goneChoices(), untracked(pendingChoiceKey)]));
-                      notice.set(CHOICE_GONE_NOTICE);
+                      const passed = untracked(question);
+                      if (!passed) return;
+                      gone.set(new Set([...untracked(gone), passed.goneKey]));
+                      notice.set(passed.goneNotice);
                     }} />
                 ) : null}
+                {actionKey() ? <ActionPromptCard prompt={untracked(actionPrompt)!} connected={() => connection() === "connected"} answer={answerAction} /> : null}
                 {notice() ? <Text testID="session-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
               </Composer>
             </View>
