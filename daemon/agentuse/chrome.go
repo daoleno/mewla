@@ -56,6 +56,24 @@ func findChrome(home string) (chromeInstall, bool) {
 				return chromeInstall{path, filepath.Join(config, "google-chrome")}, true
 			}
 		}
+	case "windows":
+		// Chrome installs for every user under Program Files, or for one user
+		// under their local application data; its profiles are always there.
+		local := os.Getenv("LOCALAPPDATA")
+		if local == "" && home != "" {
+			local = filepath.Join(home, "AppData", "Local")
+		}
+		var candidates []string
+		for _, root := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), local} {
+			if root != "" {
+				candidates = append(candidates, filepath.Join(root, "Google", "Chrome", "Application", "chrome.exe"))
+			}
+		}
+		for _, candidate := range candidates {
+			if local != "" && isExecutable(candidate) {
+				return chromeInstall{candidate, filepath.Join(local, "Google", "Chrome", "User Data")}, true
+			}
+		}
 	}
 	return chromeInstall{}, false
 }
@@ -158,7 +176,9 @@ func findNode(home string) (node string, npm string, ok bool) {
 		candidates = append(candidates, path)
 	}
 	candidates = append(candidates, "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node")
-	if home != "" {
+	if runtime.GOOS == "windows" {
+		candidates = append(candidates, windowsNodeCandidates()...)
+	} else if home != "" {
 		for _, pattern := range []string{
 			".local/share/mise/installs/node/*/bin/node",
 			".nvm/versions/node/*/bin/node",
@@ -179,7 +199,12 @@ func findNode(home string) (node string, npm string, ok bool) {
 			continue
 		}
 		npm := filepath.Join(filepath.Dir(candidate), "npm")
-		if !isExecutable(npm) {
+		if runtime.GOOS == "windows" {
+			npm = filepath.Join(filepath.Dir(candidate), "node_modules", "npm", "bin", "npm-cli.js")
+			if info, err := os.Stat(npm); err != nil || info.IsDir() {
+				continue
+			}
+		} else if !isExecutable(npm) {
 			continue
 		}
 		return candidate, npm, true
@@ -220,7 +245,39 @@ func nodeVersionFromPath(path string) int {
 	return 0
 }
 
+// windowsNodeCandidates are where Node.js installs itself on Windows, and
+// where nvm-windows, Volta and fnm keep their versions, newest first.
+func windowsNodeCandidates() []string {
+	var candidates []string
+	for _, root := range []string{os.Getenv("ProgramFiles"), os.Getenv("LOCALAPPDATA")} {
+		if root != "" {
+			candidates = append(candidates, filepath.Join(root, "nodejs", "node.exe"), filepath.Join(root, "Programs", "nodejs", "node.exe"))
+		}
+	}
+	var patterns []string
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		patterns = append(patterns, filepath.Join(appData, "nvm", "v*", "node.exe"), filepath.Join(appData, "fnm", "node-versions", "*", "installation", "node.exe"))
+	}
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		patterns = append(patterns, filepath.Join(local, "Volta", "tools", "image", "node", "*", "node.exe"))
+	}
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		sort.Slice(matches, func(i, j int) bool { return nodeVersionFromPath(matches[i]) > nodeVersionFromPath(matches[j]) })
+		candidates = append(candidates, matches...)
+	}
+	return candidates
+}
+
+// isExecutable is a file this computer runs as a program: on Windows a .exe,
+// which has no mode bits to say so.
 func isExecutable(path string) bool {
 	info, err := os.Stat(path)
-	return err == nil && !info.IsDir() && info.Mode()&0o111 != 0
+	if err != nil || info.IsDir() {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(filepath.Ext(path), ".exe")
+	}
+	return info.Mode()&0o111 != 0
 }

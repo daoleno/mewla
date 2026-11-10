@@ -2,8 +2,8 @@
 
 Every agent Mewla starts has one browser tool, `mewla_chrome`, on every
 computer; the tool and its behaviour are the same everywhere. Only where the
-agent's Chrome window lives differs. On a Mac, or a desktop without the virtual
-screen, it is your own Chrome (this page). On Linux with **Settings → Labs →
+agent's Chrome window lives differs. On a Mac, on Windows, or a desktop without
+the virtual screen, it is your own Chrome (this page). On Linux with **Settings → Labs →
 Virtual screen** on, it is the agents' own Chrome on that virtual screen, each
 agent's window on a monitor of its own, with the same Mewla extension, which
 Mewla loads itself: there is nothing to add and no sign-in of yours in it (see [Screen](screen.md#linux-agents-on-a-virtual-screen)).
@@ -22,13 +22,15 @@ It is on unless you turn it off. The first time, Chrome needs one extension:
    problem; `mewla agent-use` on the computer says what is missing.
 2. Tap **Set up**. Chrome on that computer opens its extensions page, and Mewla
    says which folder to load. Turn on **Developer mode**, choose **Load
-   unpacked** and pick `~/.mewla/extension/mewla` (the folder Mewla wrote).
+   unpacked** and pick `~/.mewla/extension/mewla` (the folder Mewla wrote;
+   on Windows `%USERPROFILE%\.mewla\extension\mewla`).
    Do this at the computer or through [Screen](screen.md). Once the extension
    is in the Chrome Web Store, **Set up** opens its page there and you click
    **Add to Chrome** instead.
 
-That is all: no key to copy. Mewla registers its helper with Chrome itself, and
-the extension connects to it whenever Chrome runs. If Chrome isn't running when
+That is all: no key to copy. Mewla registers its helper with Chrome itself (on
+Windows under your own user in the registry, which needs no administrator
+rights), and the extension connects to it whenever Chrome runs. If Chrome isn't running when
 an agent needs it, Mewla starts it in the background with no window, and the
 agent's window is the only one that appears.
 

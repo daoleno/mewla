@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/daoleno/mewla/daemon/platform"
 )
 
 // Tab cleanup bounds: each close waits this long, and all of them together
@@ -30,17 +32,27 @@ var (
 // a hang-up of the Worker's terminal or a kill (Claude kills its MCP servers
 // within half a second), the helper only sees its stdin end, and still has
 // the time to close the agent's tabs.
+//
+// On Windows the helper also leaves the Worker's job, which ends every process
+// in it at once, so it outlives the relay there too.
 func RelayMCP(helper, env []string, stdin io.Reader, stdout, stderr *os.File) error {
 	cmd := exec.Command(helper[0], helper[1:]...)
 	cmd.Env = env
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.SysProcAttr = detachedProcAttr()
-	in, err := cmd.StdinPipe()
+	// A pipe of our own, not StdinPipe: StartBackground may start the helper a
+	// second time, and a failed Start closes the pipe ends StdinPipe made.
+	childIn, in, err := os.Pipe()
 	if err != nil {
 		return err
 	}
-	if err := cmd.Start(); err != nil {
+	cmd.Stdin = childIn
+	// On Windows the helper's console has no window, and node and what else
+	// it starts share it, so none of them opens a window on the desktop.
+	err = platform.StartBackground(cmd)
+	childIn.Close()
+	if err != nil {
+		in.Close()
 		return err
 	}
 	go func() {

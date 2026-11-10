@@ -99,7 +99,14 @@ func directClaudePID(sessionID string) (int, bool) {
 func main() {
 	// MEWLA_STATE_ROOT relocates all state for a throwaway daemon; see statedir.
 	statedir.InitFromEnv()
-	if err := run(os.Args[1:], os.Stderr); err != nil {
+	args := os.Args[1:]
+	if stateDir := os.Getenv(agentuse.OpenShimEnv); stateDir != "" {
+		// The browser tools started Mewla in place of Chrome (Windows; see
+		// agentuse's openShim). Chrome, if it is started, must not inherit it.
+		_ = os.Unsetenv(agentuse.OpenShimEnv)
+		args = append([]string{"agent-use", "open", "--state-dir", stateDir, "--"}, args...)
+	}
+	if err := run(args, os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
 		}
