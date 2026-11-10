@@ -1,0 +1,164 @@
+import { host } from "nsh";
+import type { SocketLike } from "../../core/platform";
+
+/**
+ * A scripted computer for `nsh test`: the app's real session and Transport talk to it
+ * through the platform's socket. It holds Calendar items, Brain's snapshot and Work
+ * files, answers the requests the M3 pages make, broadcasts changes as the daemon does,
+ * and reports every frame it gets as the host post `app.testFrame` (`app.host.posts()`).
+ */
+export interface FakeDaemonState {
+  calendar_items?: Record<string, unknown>[];
+  brain?: Record<string, unknown>;
+  work_items?: Record<string, unknown>[];
+  live?: Record<string, unknown>;
+}
+
+type Frame = { type: string; request_id?: string; [key: string]: unknown };
+
+export class FakeDaemon {
+  private sockets = new Set<FakeSocket>();
+  private revision = 100;
+
+  constructor(private state: FakeDaemonState) {}
+
+  open(): SocketLike {
+    const socket = new FakeSocket(this);
+    this.sockets.add(socket);
+    setTimeout(() => {
+      socket.readyState = 1;
+      socket.onopen?.({});
+      // What the daemon sends unasked on every connection.
+      this.to(socket, { type: "calendar_items_snapshot", calendar_items: this.state.calendar_items ?? [] });
+      this.to(socket, { type: "work_items_snapshot", work_items: this.state.work_items ?? [] });
+      this.to(socket, { type: "brain_snapshot", brain: this.state.brain ?? {} });
+    }, 5);
+    return socket;
+  }
+
+  closed(socket: FakeSocket): void {
+    this.sockets.delete(socket);
+  }
+
+  private to(socket: FakeSocket, frame: Frame): void {
+    setTimeout(() => socket.onmessage?.({ data: JSON.stringify(frame) }), 1);
+  }
+
+  private broadcast(frame: Frame): void {
+    this.sockets.forEach((socket) => this.to(socket, frame));
+  }
+
+  private item(id: unknown) {
+    return (this.state.calendar_items ?? []).find((i) => i.id === id);
+  }
+
+  private upsert(item: Record<string, unknown>): Record<string, unknown> {
+    const items = (this.state.calendar_items ?? []).filter((i) => i.id !== item.id);
+    const next = { ...item, revision: ++this.revision, updated_at: new Date().toISOString() };
+    this.state.calendar_items = [...items, next];
+    this.broadcast({ type: "calendar_item_changed", calendar_item: next });
+    return next;
+  }
+
+  receive(socket: FakeSocket, frame: Frame): void {
+    host.post("app.testFrame", frame);
+    const reply = (type: string, body: Record<string, unknown>) => this.to(socket, { type, request_id: frame.request_id, ...body });
+    const fail = (message: string) => reply("error", { message });
+    switch (frame.type) {
+      case "brain_snapshot":
+        return reply("brain_snapshot", { brain: this.state.brain ?? {} });
+      case "list_calendar_items":
+        return reply("calendar_items_snapshot", { calendar_items: this.state.calendar_items ?? [] });
+      case "get_calendar_item": {
+        const item = this.item(frame.id);
+        return item ? reply("calendar_item", { calendar_item: item }) : fail("calendar item not found");
+      }
+      case "create_calendar_item": {
+        const draft = frame.calendar_item as Record<string, unknown>;
+        if (!draft?.title) return fail("calendar item title is required");
+        const at = draft.start_at ?? draft.notify_at ?? draft.due_at;
+        const created = this.upsert({ ...draft, id: `new-${this.revision}`, status: "scheduled", next_at: at, created_at: new Date().toISOString() });
+        return reply("calendar_item_created", { calendar_item: created });
+      }
+      case "update_calendar_item": {
+        const draft = frame.calendar_item as Record<string, unknown>;
+        const existing = this.item(draft?.id);
+        if (!existing) return fail("calendar item not found");
+        if (existing.revision !== frame.revision) return fail("calendar item changed");
+        const at = draft.start_at ?? draft.notify_at ?? draft.due_at;
+        return reply("calendar_item_updated", { calendar_item: this.upsert({ ...draft, status: "scheduled", next_at: at }) });
+      }
+      case "cancel_calendar_item": {
+        const existing = this.item(frame.id);
+        if (!existing) return fail("calendar item not found");
+        return reply("calendar_item_cancelled", { calendar_item: this.upsert({ ...existing, status: "cancelled" }) });
+      }
+      case "run_calendar_item": {
+        const existing = this.item(frame.id);
+        if (!existing) return fail("calendar item not found");
+        return reply("calendar_item_running", { calendar_item: this.upsert({ ...existing, status: "running" }) });
+      }
+      case "done_calendar_item":
+      case "snooze_calendar_item": {
+        const existing = this.item(frame.id);
+        if (!existing) return fail("calendar item not found");
+        const snoozed = frame.type === "snooze_calendar_item" ? { snoozed_until: new Date(Date.now() + Number(frame.snooze_minutes) * 60_000).toISOString() } : { status: existing.kind === "event" ? existing.status : "completed" };
+        return reply("calendar_item_updated", { calendar_item: this.upsert({ ...existing, ...snoozed, acked_at: existing.alerted_at }) });
+      }
+      case "brain_work_action": {
+        const brain = (this.state.brain ?? {}) as { current_work?: Record<string, unknown>[] };
+        const work = brain.current_work?.find((w) => w.work_id === frame.id);
+        if (!work) return reply("brain_work_action_failed", { message: "This Work no longer exists." });
+        const action = frame.action as string;
+        if (action === "close" || action === "dismiss" || action === "stop") work.status = action === "close" ? "done" : "cancelled";
+        if (action === "reply") Object.assign(work, { question: undefined, choices: undefined, user_action: { kind: "reply", text: frame.text, at: new Date().toISOString(), admission: "accepted" } });
+        if (action === "snooze") work.snoozed_until = frame.snooze_until;
+        work.unread_result = false;
+        reply("brain_work_action", { work_id: frame.id, status: work.status, admission: "accepted" });
+        return this.broadcast({ type: "brain_snapshot", brain: this.state.brain ?? {} });
+      }
+      case "list_work_items":
+        return reply("work_items_snapshot", { work_items: this.state.work_items ?? [] });
+      case "write_work_item": {
+        const items = this.state.work_items ?? [];
+        const existing = items.find((w) => w.id === frame.id);
+        if (existing && existing.mtime !== frame.base_mtime && new Date(String(existing.mtime)).toISOString() !== frame.base_mtime) return fail("work item changed on disk");
+        const written = { ...existing, id: frame.id, project: frame.project, path: frame.path, body: frame.body, frontmatter: frame.frontmatter, mtime: new Date(Date.now() + this.revision++).toISOString() };
+        this.state.work_items = [...items.filter((w) => w.id !== frame.id), written];
+        return reply("work_item_written", { work_item: written });
+      }
+      case "delete_work_item":
+        this.state.work_items = (this.state.work_items ?? []).filter((w) => w.id !== frame.id);
+        return reply("work_item_deleted_ack", { id: frame.id });
+      case "live_state_get":
+        return reply("live_state", { live: this.state.live ?? null });
+      case "widget_token_issue":
+        return reply("widget_token", { token: "widget-token", id: "w1" });
+      case "live_answer":
+        return reply("live_answer", { kind: "brain", text: "ok", duplicate: false });
+      default:
+        return;
+    }
+  }
+}
+
+class FakeSocket implements SocketLike {
+  readyState = 0;
+  onopen: SocketLike["onopen"] = null;
+  onmessage: SocketLike["onmessage"] = null;
+  onclose: SocketLike["onclose"] = null;
+  onerror: SocketLike["onerror"] = null;
+
+  constructor(private readonly daemon: FakeDaemon) {}
+
+  send(data: string): void {
+    this.daemon.receive(this, JSON.parse(data));
+  }
+
+  close(code = 1000, reason = ""): void {
+    if (this.readyState === 3) return;
+    this.readyState = 3;
+    this.daemon.closed(this);
+    setTimeout(() => this.onclose?.({ code, reason }), 1);
+  }
+}

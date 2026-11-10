@@ -73,6 +73,7 @@ class LiveHost(private val activity: ComponentActivity, nsh: NshView) {
         }
       }
     }
+    nsh.handle("live.supported") { _, reply -> reply.resolve(true) }
     nsh.handle("live.diagnostics") { _, reply ->
       answer(reply) {
         mapOf(

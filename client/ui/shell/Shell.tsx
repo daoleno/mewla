@@ -5,7 +5,9 @@ import { Onboarding } from "../screens/Onboarding";
 import { More } from "../screens/More";
 import { MorePageView } from "../more/Pages";
 import { Brain } from "../screens/Brain";
-import { Calendar, Sessions } from "../screens/Placeholders";
+import { Sessions } from "../screens/Placeholders";
+import { calendarNav, calendarRoute } from "../calendar/routes";
+import { workRoute, type BrainWorkRoute } from "../work/routes";
 import type { MoreRoute } from "./routes";
 
 const tabs = [
@@ -26,9 +28,8 @@ export function sectionOfLink(url: string): number | null {
   return index < 0 ? null : index;
 }
 const moreNav = createNavStack<MoreRoute>([{ name: "more" }]);
-const brainNav = createNavStack<{ name: "brain" }>([{ name: "brain" }]);
+export const brainNav = createNavStack<{ name: "brain" } | BrainWorkRoute>([{ name: "brain" }]);
 const sessionsNav = createNavStack<{ name: "sessions" }>([{ name: "sessions" }]);
-const calendarNav = createNavStack<{ name: "calendar" }>([{ name: "calendar" }]);
 
 function moreRoute(route: MoreRoute) {
   switch (route.name) {
@@ -43,9 +44,9 @@ function Section(props: { index: number }) {
   const shown = () => selectedTab() === props.index;
   return (
     <View class="absolute inset-0" style={{ display: shown() ? "flex" : "none" }}>
-      {props.index === 0 ? <NavStack state={brainNav} style={{ flex: 1 }}>{() => <Brain />}</NavStack>
+      {props.index === 0 ? <NavStack state={brainNav} style={{ flex: 1 }}>{(route) => (route.name === "brain" ? <Brain /> : workRoute(route, brainNav))}</NavStack>
         : props.index === 1 ? <NavStack state={sessionsNav} style={{ flex: 1 }}>{() => <Sessions />}</NavStack>
-        : props.index === 2 ? <NavStack state={calendarNav} style={{ flex: 1 }}>{() => <Calendar />}</NavStack>
+        : props.index === 2 ? <NavStack state={calendarNav} style={{ flex: 1 }}>{calendarRoute}</NavStack>
         : <NavStack state={moreNav} style={{ flex: 1 }}>{moreRoute}</NavStack>}
     </View>
   );

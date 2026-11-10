@@ -13,4 +13,3 @@ function Stub(props: { title: string; detail: string }) {
 }
 
 export const Sessions = () => <Stub title="Sessions" detail="Sessions arrive in the next preview." />;
-export const Calendar = () => <Stub title="Calendar" detail="Calendar arrives in a later preview." />;
