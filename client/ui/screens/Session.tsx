@@ -16,6 +16,15 @@ import { presentWorker } from "../../core/sessions/workerPresentation";
 import { workerStatusLabel } from "../../core/sessions/workerStatusPresentation";
 import { buildTerminalActionPrompt, type TerminalActionPromptOption } from "../../core/session/terminalActionPrompt";
 import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingChoice, PROMPT_GONE_NOTICE, visiblePendingChoice, type ChoiceAnswer } from "../../core/timeline/claudeChoiceModel";
+import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
+import type { ComposerAlert, ComposerSendRoute } from "../../core/session/composerSlash";
+import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
+import { canSwitchModel, chatSlashCommands, getThreadRuntime } from "../../core/session/sessionRequests";
+import type { ThreadRuntimeSelection } from "../../core/providers/types";
+import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
+import { CodexStatusSheet } from "../session/CodexStatusSheet";
+import { ModelSheet } from "../session/ModelSheet";
+import { ComposerPlusButton, insertSkillMention, routeComposerPick, routeComposerSend, showComposerAlert, SlashMenu } from "../session/SlashMenu";
 import { ActionPromptCard } from "../chat/ActionPromptCard";
 import { DSHPanel } from "../chat/DSHPanel";
 import { ChoiceCard } from "../chat/ChoiceCard";
@@ -236,9 +245,84 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     props.nav.pop();
   };
 
+  // The composer's "+" menu, Codex's slash commands, and the Session's model.
+  const connected = () => connection() === "connected";
+  const pinned = signal(false);
+  const modelOpen = signal(false);
+  const statusOpen = signal(false);
+  const skillsOpen = signal(false);
+  const slashCommands = signal<CodexSlashCommand[]>([]);
+  const slashUnavailable = signal(false);
+  const runtime = signal<ThreadRuntimeSelection | null>(null);
+  const codexLive = computed(() => kind() === "codex" && connected());
+  effect(() => {
+    if (!codexLive()) return;
+    untracked(() => void chatSlashCommands(transport)
+      .then((commands) => {
+        slashCommands.set(commands);
+        slashUnavailable.set(false);
+      })
+      .catch(() => slashUnavailable.set(true)));
+  });
+  const switchable = computed(() => canSwitchModel(worker()?.capabilities) && connected());
+  effect(() => {
+    if (!switchable()) return;
+    untracked(() => void getThreadRuntime(transport, props.workerId).then((selection) => runtime.set(selection)).catch(() => {}));
+  });
+  const modelChip = computed(() => resolveComposerModelControl({ capabilities: worker()?.capabilities, connectionConnected: connected(), selection: runtime(), refreshRequired: false }));
+
+  const answerAlert = async (alert: ComposerAlert) => {
+    const action = await showComposerAlert(alert);
+    if (action === "open_terminal") chooseMode("terminal");
+    else if (action === "send_as_message") {
+      const value = untracked(text.text);
+      if (!value.trim()) return;
+      chat.send(value);
+      text.clear();
+    }
+  };
+  /** Does what a routed send or pick asks; true when the composer's text went out. */
+  const follow = (route: ComposerSendRoute, fromDraft: boolean): boolean => {
+    pinned.set(false);
+    switch (route.kind) {
+      case "send":
+        chat.send(route.text);
+        return fromDraft;
+      case "prefill":
+        text.set(route.text);
+        if (route.alert) void answerAlert(route.alert);
+        return false;
+      case "alert":
+        void answerAlert(route);
+        return false;
+      case "status":
+        text.clear();
+        statusOpen.set(true);
+        return false;
+      case "skills":
+        text.clear();
+        skillsOpen.set(true);
+        return false;
+    }
+  };
+  const sendComposer = (value: string): void | false => {
+    if (untracked(editor.edit)) {
+      void editor.send(value);
+      return false;
+    }
+    const route = routeComposerSend(value, { agentKind: untracked(kind), slashCommands: untracked(slashCommands), canOpenTerminal: true });
+    return follow(route, true) ? undefined : false;
+  };
+  const pickCommand = (command: CodexSlashCommand) => {
+    // A command picked while the draft is that `/word` replaces the draft; otherwise the draft stays.
+    const typingCommand = untracked(text.text).trim().startsWith("/");
+    if (follow(routeComposerPick(command, { canOpenTerminal: true }), false) && typingCommand) text.clear();
+  };
+
   const menu = async () => {
     const actions = [
       ...(canChat() ? [{ id: "mode", label: mode() === "chat" ? "Open terminal" : "Open chat" }] : []),
+      ...(switchable() ? [{ id: "model", label: "Model & Effect" }] : []),
       { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
       { id: "terminate", label: "Terminate", role: "destructive" as const },
@@ -246,6 +330,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     ];
     const { action } = await AlertDialog.show({ title: untracked(title), presentation: "actionSheet", actions });
     if (action === "mode") chooseMode(untracked(mode) === "chat" ? "terminal" : "chat");
+    else if (action === "model") modelOpen.set(true);
     else if (action === "terminal") {
       newSessionTarget.set(props.workerId);
       newSessionOpen.set(true);
@@ -277,9 +362,18 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
             <View class="absolute inset-0 bg-background">
               <ChatTimeline testID="session-chat" items={items} handlers={handlers}
                 empty={() => <View class="flex-1 items-center justify-center p-8"><Text class="text-center text-base text-muted-foreground">{thread().loading ? "Loading conversation" : thread().error ?? "Nothing here yet."}</Text></View>} />
-              <Composer text={text} placeholder="Message" canSend={() => true} onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : chat.send(value))}
+              <Composer text={text} placeholder="Message" canSend={() => true} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
-                onStop={() => void stop()} active={() => props.active() && mode() === "chat"}>
+                onStop={() => void stop()} active={() => props.active() && mode() === "chat"}
+                leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
+                <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand} />
+                {modelChip() ? (
+                  <Button testID="model-chip" accessibilityLabel={modelChip()!.accessibilityLabel} onPress={() => modelOpen.set(true)}
+                    class="mb-2 flex-row items-center gap-1 self-start rounded-full border border-border px-2.5 py-1 active:bg-accent">
+                    <Text class="text-xs">{modelChip()!.label}</Text>
+                    <Icon name="chevron-down" size={14} />
+                  </Button>
+                ) : null}
                 {editor.edit() ? <EditChip editor={editor} /> : null}
                 {dshRun() ? <DSHPanel transport={transport} run={{ workerId: props.workerId, processId: Number(dshRun().split("|")[0]), startedAt: Number(dshRun().split("|")[1]) }} /> : null}
                 {questionKey() ? (
@@ -299,6 +393,14 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           ) : null}
         </View>
       </View>
+      <ModelSheet open={modelOpen} onClose={() => modelOpen.set(false)} transport={transport} workerId={props.workerId} onRuntime={(selection) => runtime.set(selection)} />
+      <CodexStatusSheet open={statusOpen} onClose={() => statusOpen.set(false)} transport={transport} workerId={props.workerId}
+        onOpenTerminal={() => {
+          statusOpen.set(false);
+          chooseMode("terminal");
+        }} />
+      <CodexSkillsSheet open={skillsOpen} onClose={() => skillsOpen.set(false)} transport={transport} cwd={worker()?.cwd}
+        onPick={(name) => text.set(insertSkillMention(untracked(text.text), name))} />
       <Sheet open={renaming()} onOpenChange={({ open }) => renaming.set(open)} popupClass="rounded-t-2xl bg-background p-4 gap-3" backdropClass="bg-black/40">
         <View class="gap-3 pb-6">
           <Text class="text-lg font-semibold">Rename</Text>
