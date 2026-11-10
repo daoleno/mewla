@@ -9,9 +9,11 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/getkin/kin-openapi v0.151.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/jsonschema-go v0.4.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/jezek/xgb v1.3.1
 	github.com/klauspost/compress v1.17.7
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/oklog/ulid/v2 v2.1.1
@@ -30,9 +32,6 @@ require (
 
 require (
 	github.com/go-openapi/swag/jsonname v0.25.5 // indirect
-	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/jezek/xgb v1.3.1 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 )
 
