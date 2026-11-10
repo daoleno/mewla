@@ -2,6 +2,8 @@ import { Text, View } from "nsh";
 import { NavPage } from "nsh/base";
 import { onTransport } from "../session";
 import { bindDaemon } from "./daemon";
+import { PetPage } from "./pet/Pet";
+import { restorePet } from "./pet/pets";
 import { Resources } from "./resources/Resources";
 import type { MorePage, PageNav } from "./routes";
 import { Computer } from "./settings/Computer";
@@ -12,6 +14,7 @@ import { Telegram } from "./settings/Telegram";
 import { Stats, StatsDay, StatsModel } from "./stats/Stats";
 
 restoreAppearance();
+restorePet();
 
 // The More pages follow the current computer: a switch binds the next one and drops the last.
 onTransport((transport) => {
@@ -32,7 +35,7 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "settings-agents": return <OutsideAgents />;
     case "settings-friends": return <Soon title="Friends" />;
     case "settings-iphone": return <Soon title="iPhone use" />;
-    case "settings-pet": return <Soon title="Pet" />;
+    case "settings-pet": return <PetPage />;
     case "settings-licenses": return <Soon title="Open-source Licenses" />;
     case "settings-license": return <Soon title="License" />;
     case "stats": return <Stats nav={props.nav} />;

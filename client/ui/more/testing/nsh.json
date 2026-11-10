@@ -4,10 +4,24 @@
   "version": "0.0.0",
   "appearance": "system",
   "capabilities": {
-    "host": ["app.*", "secure.*", "files.*", "links.*"],
-    "network": { "hosts": ["*"] },
+    "host": [
+      "app.*",
+      "secure.*",
+      "files.*",
+      "links.*",
+      "calendar.*"
+    ],
+    "network": {
+      "hosts": [
+        "*"
+      ]
+    },
     "openUrl": true,
-    "webview": { "hosts": ["*"] }
+    "webview": {
+      "hosts": [
+        "*"
+      ]
+    }
   },
   "theme": "../../theme.json"
 }
