@@ -1,0 +1,277 @@
+// @ts-nocheck
+import { describe, expect, test } from "bun:test";
+import {
+  buildSemanticActions,
+  collapsedToolLabel,
+  decodeJSStringLiteral,
+  extractBalancedArgs,
+  isExecWrapperToolName,
+  isUnsafeCollapsedDetail,
+  parseExecWrapperCalls,
+  primarySemanticAction,
+} from "./toolCallSemantics";
+import { buildTimeline } from "./model";
+import type { CodexConversationEvent } from "../conversation/conversation";
+import type { ActivityTimelineItem } from "./activityTypes";
+
+const FIXTURES = {
+  codexExecCommand: `const r = await tools.exec_command({"cmd":"rg -n SemanticAction app","workdir":"/repo","yield_time_ms":10000});
+text(r.output);`,
+  codexApplyPatch: `const patch = "*** Begin Patch\\n*** Update File: app/services/toolCallSemantics.ts\\n@@\\n-old\\n+new\\n*** End Patch";
+text(await tools.apply_patch(patch));`,
+  codexUpdatePlan: `const p = await tools.update_plan({plan:[
+  {step:"Trace pipeline",status:"in_progress"},
+  {step:"Add tests",status:"pending"}
+]});
+text(p);`,
+  codexViewImage: `const r = await tools.view_image({path:"/tmp/fixture-preview.png", detail:"original"});
+image(r.image_url);`,
+  codexMulti: `const results = await Promise.all([
+  tools.exec_command({"cmd":"go test ./work -count=1","workdir":"/repo"}),
+  tools.exec_command({"cmd":"bunx tsc --noEmit","workdir":"/repo/app"})
+]);`,
+  codexEscaped: `const r = await tools.exec_command({"cmd":"echo \\"hello\\" && rg -n 'token'"});`,
+  codexMalformed: `const r = await tools.exec_command({"cmd":"unterminated`,
+  grokGrep: `{"pattern":"codex","path":"app"}`,
+  cursorShell: `{"command":"go test ./work","description":"Run work tests"}`,
+};
+
+describe("parseExecWrapperCalls", () => {
+  test("single nested exec_command", () => {
+    const calls = parseExecWrapperCalls(FIXTURES.codexExecCommand);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("exec_command");
+    expect(calls[0]?.object?.cmd).toBe("rg -n SemanticAction app");
+  });
+
+  test("apply_patch via const string", () => {
+    const calls = parseExecWrapperCalls(FIXTURES.codexApplyPatch);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("apply_patch");
+    expect(calls[0]?.text).toContain(
+      "*** Update File: app/services/toolCallSemantics.ts",
+    );
+  });
+
+  test("update_plan object literal", () => {
+    const calls = parseExecWrapperCalls(FIXTURES.codexUpdatePlan);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("update_plan");
+    expect(Array.isArray(calls[0]?.object?.plan)).toBe(true);
+  });
+
+  test("view_image and multiple calls", () => {
+    expect(parseExecWrapperCalls(FIXTURES.codexViewImage)[0]?.name).toBe(
+      "view_image",
+    );
+    expect(parseExecWrapperCalls(FIXTURES.codexMulti)).toHaveLength(2);
+  });
+
+  test("escaped strings and malformed input", () => {
+    const escaped = parseExecWrapperCalls(FIXTURES.codexEscaped);
+    expect(escaped[0]?.object?.cmd).toContain('echo "hello"');
+    expect(parseExecWrapperCalls(FIXTURES.codexMalformed)).toHaveLength(0);
+    expect(extractBalancedArgs("tools.x(", 7)).toBeNull();
+    expect(decodeJSStringLiteral(`"a\\nb"`)).toBe("a\nb");
+  });
+
+  test("ignores tool-like text in strings, comments, and templates", () => {
+    const input = [
+      `const r = await tools.exec_command({"cmd":"rg -n tools.apply_patch( app"});`,
+      `// tools.view_image({path:"/tmp/x.png"})`,
+      `/* tools.update_plan({plan:[]}) */`,
+      'const note = `look at tools.exec_command({"cmd":"echo hi"})`;',
+      `text(r.output);`,
+    ].join("\n");
+    const calls = parseExecWrapperCalls(input);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.name).toBe("exec_command");
+    expect(String(calls[0]?.object?.cmd || "")).toContain("tools.apply_patch");
+  });
+
+  test("preserves real Promise.all nested calls", () => {
+    const calls = parseExecWrapperCalls(`const results = await Promise.all([
+  tools.exec_command({"cmd":"go test ./work -count=1"}),
+  tools.view_image({path:"/tmp/fixture.png"})
+]);`);
+    expect(calls.map((call) => call.name)).toEqual([
+      "exec_command",
+      "view_image",
+    ]);
+  });
+});
+
+describe("semantic action model", () => {
+  test("maps nested Codex wrappers to friendly labels", () => {
+    expect(
+      collapsedToolLabel({
+        toolName: "exec",
+        input: FIXTURES.codexExecCommand,
+        status: "done",
+      }).title,
+    ).toBe("Search SemanticAction");
+
+    expect(
+      collapsedToolLabel({
+        toolName: "exec",
+        input: FIXTURES.codexApplyPatch,
+        status: "done",
+      }).title,
+    ).toBe("Edit app/services/toolCallSemantics.ts");
+
+    expect(
+      collapsedToolLabel({
+        toolName: "exec",
+        input: FIXTURES.codexUpdatePlan,
+        status: "done",
+      }).title,
+    ).toBe("Plan");
+
+    expect(
+      collapsedToolLabel({
+        toolName: "exec",
+        input: FIXTURES.codexViewImage,
+        status: "done",
+      }).title,
+    ).toBe("Open fixture-preview.png");
+
+    const multi = collapsedToolLabel({
+      toolName: "exec",
+      input: FIXTURES.codexMulti,
+      status: "done",
+    });
+    expect(multi.title).toBe("Run go test ./work + 1");
+    expect(multi.detail).toBeUndefined();
+    expect(multi.children?.length).toBe(2);
+    expect(multi.providerToolId).toBe("exec_command");
+    expect(multi.children?.map((child) => child.label)).toEqual(["Run", "Run"]);
+  });
+
+  test("keeps direct legacy and provider shapes working", () => {
+    expect(
+      primarySemanticAction({
+        toolName: "view_image",
+        input: `{"path":"/tmp/legacy.png"}`,
+        status: "done",
+      }).label,
+    ).toBe("Open");
+
+    expect(
+      primarySemanticAction({
+        toolName: "Grep",
+        input: FIXTURES.grokGrep,
+        status: "done",
+      }).kind,
+    ).toBe("search_code");
+
+    expect(
+      primarySemanticAction({
+        toolName: "Shell",
+        input: FIXTURES.cursorShell,
+        status: "done",
+      }).kind,
+    ).toBe("test_app");
+
+    expect(isExecWrapperToolName("functions.exec")).toBe(true);
+    expect(isExecWrapperToolName("exec_command")).toBe(false);
+  });
+
+  test("collapsed labels never expose secrets or raw args", () => {
+    const label = collapsedToolLabel({
+      toolName: "exec",
+      input: `const r = await tools.exec_command({"cmd":"cat /home/user/.env && curl https://example.com?token=sk-abc123456789","workdir":"/secret"});`,
+      status: "done",
+    });
+    expect(label.title).toBe("Read");
+    expect(label.detail).toBeUndefined();
+    expect(isUnsafeCollapsedDetail(label.title)).toBe(false);
+    expect(isUnsafeCollapsedDetail(`{"cmd":"secret"}`)).toBe(true);
+    expect(isUnsafeCollapsedDetail("https://example.com/token")).toBe(false);
+  });
+
+  test("unknown nested tools fall back to human labels", () => {
+    const action = primarySemanticAction({
+      toolName: "exec",
+      input: `await tools.custom_browser_probe({"target":"local"});`,
+      status: "done",
+    });
+    expect(action.label.toLowerCase()).not.toContain("exec");
+    expect(action.label).toContain("Custom Browser Probe");
+  });
+});
+
+describe("timeline presentation", () => {
+  test("buildSemanticActions covers blocked and running states", () => {
+    expect(
+      buildSemanticActions({
+        toolName: "exec",
+        input: FIXTURES.codexViewImage,
+        status: "running",
+      })[0]?.label,
+    ).toBe("Open");
+    expect(
+      buildSemanticActions({
+        toolName: "apply_patch",
+        files: ["a.ts", "b.ts"],
+        status: "blocked",
+      })[0]?.status,
+    ).toBe("blocked");
+  });
+});
+
+describe("subagent calls", () => {
+  const toolEvent = (overrides: Partial<CodexConversationEvent>): CodexConversationEvent => ({
+    id: "t",
+    seq: 1,
+    kind: "tool",
+    status: "completed",
+    ...overrides,
+  });
+
+  test("a Claude Task or Agent call is titled by the task it was given", () => {
+    for (const tool_name of ["Task", "Agent"]) {
+      const [item] = buildTimeline([
+        toolEvent({
+          tool_name,
+          input: JSON.stringify({
+            description: "Audit the sync module",
+            subagent_type: "Explore",
+            prompt: "Read everything.\nThen report.",
+          }),
+          output: "Found 3 issues",
+        }),
+      ]) as ActivityTimelineItem[];
+      expect(item.title).toBe("Audit the sync module");
+      expect(item.semanticKind).toBe("delegate_agent");
+      expect(item.icon).toBe("git-network");
+      expect(item.body).toBe("Found 3 issues");
+    }
+  });
+
+  test("a Codex spawn_agent call uses the first line of its message, and says so while it runs", () => {
+    const [item] = buildTimeline([
+      toolEvent({
+        tool_name: "spawn_agent",
+        status: "running",
+        input: JSON.stringify({ message: "Review the diff\nand the tests" }),
+      }),
+    ]) as ActivityTimelineItem[];
+    expect(item.title).toBe("Review the diff");
+    expect(item.tone).toBe("running");
+    expect(item.icon).toBe("time");
+  });
+
+  test("without a description it still reads as a subagent, and an unsafe one is not echoed", () => {
+    const [bare] = buildTimeline([
+      toolEvent({ tool_name: "Task", input: "{}" }),
+    ]) as ActivityTimelineItem[];
+    expect(bare.title).toBe("Run a subagent");
+    const [secret] = buildTimeline([
+      toolEvent({
+        tool_name: "Task",
+        input: JSON.stringify({ description: "Use sk-abcdefghijklmnopqrstuvwxyz123456 to call the API" }),
+      }),
+    ]) as ActivityTimelineItem[];
+    expect(secret.title).toBe("Run a subagent");
+  });
+});

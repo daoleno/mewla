@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ProviderActivity } from "./conversation";
+import { mergePendingUserMessagesIntoTimeline } from "../timeline/model";
+import { projectTimeline } from "../timeline/projectTimeline";
 
 import {
   interfaceChatThreadReducer,
@@ -320,8 +322,7 @@ describe("process-local Chat reducer", () => {
     expect(next.pendingUserMessages).toBe(current.pendingUserMessages);
   });
 
-  // Needs the timeline projection (core/timeline, next in M1).
-  test.todo("a key round trip starts clean instead of restoring an old provider projection", () => {
+  test("a key round trip starts clean instead of restoring an old provider projection", () => {
     const acceptedA = interfaceChatThreadReducer(streamingState(), {
       type: "snapshot",
       generation: 1,
@@ -1316,8 +1317,7 @@ describe("one user bubble per send across stream ordering", () => {
     id, seq, kind: "user_message" as const, body: "same text",
   });
 
-  // Needs the timeline projection (core/timeline, next in M1).
-  test.todo("receipt snapshot before optimistic insertion consumes the local row immediately", () => {
+  test("receipt snapshot before optimistic insertion consumes the local row immediately", () => {
     const canonical = snapshot(state([]), [userEvent("receipt-a", 1)]);
     const next = add(canonical, "local-a", "receipt-a");
     expect(next.pendingUserMessages).toEqual([]);
@@ -1326,8 +1326,7 @@ describe("one user bubble per send across stream ordering", () => {
     expect(visibleUserIds(next)).toEqual(["receipt-a"]);
   });
 
-  // Needs the timeline projection (core/timeline, next in M1).
-  test.todo("different provider ids consume sends once through delta, snapshot and reconnect", () => {
+  test("different provider ids consume sends once through delta, snapshot and reconnect", () => {
     let current = snapshot(state([]), [userEvent("history", 1)]);
     current = add(current, "local-a", "receipt-a");
     current = add(current, "local-b", "receipt-b");
@@ -1361,8 +1360,7 @@ describe("one user bubble per send across stream ordering", () => {
     expect(visibleUserIds(current)).toEqual(["history", "provider-a", "provider-b"]);
   });
 
-  // Needs the timeline projection (core/timeline, next in M1).
-  test.todo("Brain chat shows one bubble per send for receipt rows and uncertain-delivery echoes across reconnect", () => {
+  test("Brain chat shows one bubble per send for receipt rows and uncertain-delivery echoes across reconnect", () => {
     const brainSnapshot = (
       current: ReturnType<typeof state>,
       events: NonNullable<ReturnType<typeof state>["conversation"]>["events"],
@@ -1404,8 +1402,7 @@ describe("one user bubble per send across stream ordering", () => {
     expect(visibleUserIds(current)).toEqual(["history", "receipt-a", "provider-b"]);
   });
 
-  // Needs the timeline projection (core/timeline, next in M1).
-  test.todo("failed retry is replaced by its receipt once and ignores late failure", () => {
+  test("failed retry is replaced by its receipt once and ignores late failure", () => {
     let current = add(snapshot(state([]), []), "local-a", "receipt-a");
     current = interfaceChatThreadReducer(current, {
       type: "settle_pending_user_message", id: "local-a",
@@ -1470,8 +1467,7 @@ describe("Brain echo claim across mixed seq spaces", () => {
       current.pendingUserMessages,
     ).filter((item) => item.type === "message" && item.role === "user");
 
-  // Needs the timeline projection (core/timeline, next in M1).
-  test.todo("a provider echo consumes the send when live events outnumber durable seq", () => {
+  test("a provider echo consumes the send when live events outnumber durable seq", () => {
     let current = brainSnapshot(state([]), [...durable, liveTool], 1);
     current = interfaceChatThreadReducer(current, {
       type: "add_pending_user_message",

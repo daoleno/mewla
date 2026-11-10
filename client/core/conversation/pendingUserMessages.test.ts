@@ -7,6 +7,10 @@ import {
   rejectPendingUserMessage,
   showsPendingSendStatusMark,
 } from "./pendingUserMessages";
+import {
+  buildTimeline,
+  mergePendingUserMessagesIntoTimeline,
+} from "../timeline/model";
 
 function pending(
   overrides: Partial<PendingUserMessage> = {},
@@ -392,5 +396,122 @@ describe("provider transcript reconciliation", () => {
         [{ id: "provider-echo", seq: 11, kind: "user_message" }],
       ).pendingUserMessages,
     ).toEqual([]);
+  });
+});
+
+describe("pending timeline rows", () => {
+  test("accepted receipt yields exactly one rendered user row without Pending text", () => {
+    const receiptId = "msh1e2ak_atzbs1";
+    const body = "live admitted chinese body";
+    const local = pending({
+      id: "local-optimistic",
+      body,
+      sentText: body,
+      dispatchRequestId: receiptId,
+      createdAfterMaxSeq: 99,
+    });
+    const reconciled = reconcilePendingUserMessagesAgainstEvents([local], [
+      { id: receiptId, seq: 2, kind: "user_message" },
+    ]);
+    expect(reconciled.pendingUserMessages).toEqual([]);
+
+    const timeline = buildTimeline([
+      {
+        id: receiptId,
+        seq: 2,
+        timestamp: "2026-08-06T04:49:00.000Z",
+        kind: "user_message",
+        body,
+      },
+    ]);
+    const merged = mergePendingUserMessagesIntoTimeline(
+      timeline,
+      reconciled.pendingUserMessages,
+    );
+    const userRows = merged.filter(
+      (item) => item.type === "message" && item.role === "user",
+    );
+    expect(userRows).toHaveLength(1);
+    expect(userRows[0]).toMatchObject({
+      id: receiptId,
+      body,
+    });
+    expect(userRows[0]?.type === "message" && userRows[0].pending).toBeFalsy();
+    expect(JSON.stringify(merged)).not.toContain("Pending");
+    expect(JSON.stringify(merged)).not.toContain("Sending");
+  });
+
+  test("local rows render in FIFO order at their causal boundary without Pending label", () => {
+    const timeline = buildTimeline([
+      {
+        id: "history",
+        seq: 10,
+        timestamp: "2026-07-17T09:59:00.000Z",
+        kind: "assistant_message",
+        body: "history",
+      },
+    ]);
+    const merged = mergePendingUserMessagesIntoTimeline(timeline, [
+      pending({ id: "first" }),
+      pending({
+        id: "second",
+        lifecycle: "failed",
+        dispatchRequestId: "request-b",
+        failureMessage: "provider refused input",
+      }),
+    ]);
+    expect(merged.map((item) => item.id)).toEqual([
+      "history",
+      "first",
+      "second",
+    ]);
+    expect(merged[1]).toMatchObject({
+      pending: true,
+      pendingLifecycle: "pending",
+    });
+    expect(JSON.stringify(merged[1])).not.toContain("Pending");
+    expect(JSON.stringify(merged[1])).not.toContain("Sending");
+    expect(merged[2]).toMatchObject({
+      pending: true,
+      pendingLifecycle: "failed",
+    });
+    expect(JSON.stringify(merged[2])).not.toContain("Not delivered");
+  });
+
+  test("Retry is attached only to failed local rows", () => {
+    const retried: string[] = [];
+    const merged = mergePendingUserMessagesIntoTimeline(
+      [],
+      [
+        pending({ id: "pending" }),
+        pending({ id: "failed", lifecycle: "failed" }),
+      ],
+      (id) => retried.push(id),
+    );
+    expect(
+      merged[0]?.type === "message" && merged[0].onRetryPending,
+    ).toBeUndefined();
+    if (merged[1]?.type !== "message" || !merged[1].onRetryPending) {
+      throw new Error("expected failed row retry action");
+    }
+    merged[1].onRetryPending();
+    expect(retried).toEqual(["failed"]);
+  });
+
+  test("provider rows never inherit App-local pending lifecycle", () => {
+    const timeline = buildTimeline([
+      {
+        id: "provider-user",
+        seq: 1,
+        kind: "user_message",
+        body: "provider truth",
+      },
+    ]);
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0]).toMatchObject({
+      id: "provider-user",
+      role: "user",
+    });
+    expect(timeline[0]?.type === "message" && timeline[0].pending).toBeFalsy();
   });
 });
