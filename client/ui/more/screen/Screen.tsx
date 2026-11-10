@@ -2,7 +2,7 @@ import { computed, effect, lifecycle, signal, Text, untracked, View } from "nsh"
 import type { JSX } from "nsh";
 import { Button, Menu, MenuItem, NavPage } from "nsh/base";
 import { displayRoute } from "../../../core/screen/displayRoute";
-import { haltDisplay, listDisplays, resumeDisplay, screenRequest, virtualScreen, type AgentDisplay, type ScreenAction, type ScreenAgent, type ScreenStatus } from "../../../core/screen/screen";
+import { haltDisplay, listDisplays, resumeDisplay, screenRequest, type AgentDisplay, type ScreenAction, type ScreenAgent, type ScreenStatus } from "../../../core/screen/screen";
 import { screenAgents, screenEntry, unsupportedScreen } from "../../../core/screen/screenPageModel";
 import { failureText } from "../../../core/more/daemon";
 import type { StoredServer } from "../../../core/storedServerContract";
@@ -11,6 +11,7 @@ import { EmptyState, Notice, Row, Section, Spinner, SwitchRow } from "../kit/kit
 import { Icon } from "../kit/Icon";
 import type { PageNav } from "../routes";
 import { modifiersFor, RemoteSession, RemoteView } from "./RemoteView";
+import { VirtualScreenSwitch } from "./VirtualScreen";
 
 /**
  * Screen: the current computer's own screen (Mac, Windows), or on Linux each
@@ -301,34 +302,6 @@ function Setup(props: { status: ScreenStatus; name: string; busy: boolean; reaso
         )}
         {props.reason ? <Text class="mt-2 text-center text-sm text-destructive line-clamp-2">{props.reason}</Text> : null}
       </View>
-    </View>
-  );
-}
-
-/** Linux: whether its agents' browsers get a screen of their own. Its one home is Screen. */
-function VirtualScreenSwitch() {
-  const state = signal<{ enabled: boolean | null; busy: boolean; error: string }>({ enabled: null, busy: false, error: "" });
-  const target = daemon()?.server ?? null;
-  const read = () => {
-    if (!target) return;
-    void virtualScreen(target)
-      .then((answer) => state.set({ enabled: answer.enabled, busy: false, error: "" }))
-      .catch((failure) => state.set({ ...state(), busy: false, error: failureText(failure, "That didn't finish") }));
-  };
-  read();
-  const set = (on: boolean) => {
-    if (!target) return;
-    state.set({ ...state(), busy: true, error: "" });
-    void virtualScreen(target, on)
-      .then((answer) => state.set({ enabled: answer.enabled, busy: false, error: "" }))
-      .catch((failure) => state.set({ ...state(), busy: false, error: failureText(failure, "That didn't finish") }));
-  };
-  return (
-    <View>
-      <Section>
-        <SwitchRow testID="virtual-screen" title="Virtual screen" subtitle={state().busy ? (state().enabled ? "Turning off…" : "Turning on…") : undefined} checked={state().enabled === true} busy={state().busy} disabled={state().enabled === null && !state().error} onChange={set} />
-      </Section>
-      {state().error ? <Notice tone="failed" title={state().error} action="Retry" onAction={read} /> : null}
     </View>
   );
 }

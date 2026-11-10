@@ -7,6 +7,7 @@ import { Icon } from "../kit/Icon";
 import { Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
 import { followFriends, friendsEnabled } from "../friends/state";
 import { pet } from "../pet/pets";
+import { followVirtualScreen, virtualScreenState } from "../screen/VirtualScreen";
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
 import { probeComputers, statusWord } from "./computers";
@@ -66,6 +67,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
   void untracked(probeComputers);
   followFriends();
   void loadStrongAlerts();
+  followVirtualScreen();
   // iPhone use, every 15 s while Settings is open: an agent may start or stop using it.
   let iphoneTimer: ReturnType<typeof setInterval> | null = null;
   effect(() => {
@@ -127,7 +129,9 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
       </Section>
 
       <Section title="Labs">
+        {daemon() && !virtualScreenState().unsupported ? <Row testID="settings-virtual-screen" icon="desktop" title="Virtual screen" value={virtualScreenState().enabled ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-virtual-screen" })} /> : null}
         <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
+        {platform.os === "android" ? <Row testID="settings-phone" icon="phone" title="Phone use" chevron onPress={() => props.nav.push({ name: "settings-phone" })} /> : null}
         {iphoneOffered(iphone()) ? <Row testID="settings-iphone" icon="phone" title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
       </Section>
 

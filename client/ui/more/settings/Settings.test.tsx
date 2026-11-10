@@ -230,6 +230,55 @@ describe("iPhone use", () => {
   });
 });
 
+describe("Labs", () => {
+  test("Virtual screen shows the computer's switch and opens its page, which turns it on", async () => {
+    let on = false;
+    const c = computer({ name: "settings" }, () => null, {
+      network: {
+        "GET http://desk.test:9877/auth-check": { status: 503 },
+        "POST http://desk.test:9877/browser": (request: { body?: string }) => {
+          const body = JSON.parse(String(request.body)) as { enabled?: boolean };
+          if (typeof body.enabled === "boolean") on = body.enabled;
+          return json({ virtual_screen: on });
+        },
+      },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:settings-virtual-screen");
+    await app.press("id:settings-virtual-screen");
+    await app.waitFor("id:virtual-screen-page");
+    await app.waitUntil(() => app.enabled("id:virtual-screen"));
+    await app.press("id:virtual-screen");
+    await app.waitUntil(() => on);
+    await app.back();
+    await app.waitUntil(() => app.texts().includes("On"));
+  });
+
+  test("a computer without a virtual screen has no Virtual screen row", async () => {
+    const c = computer({ name: "settings" }, () => null, {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "POST http://desk.test:9877/browser": json({ virtual_screen: false, virtual_screen_unsupported: true }) },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitUntil(() => app.requests().some((r) => r.url === "http://desk.test:9877/browser"));
+    await app.waitFor("text:Labs");
+    expect(app.shows("id:settings-virtual-screen")).toBe(false);
+  });
+
+  test("on Android, Phone use is there and says it is not built yet", async () => {
+    const c = computer({ name: "settings" }, () => null, { platform: "android", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
+    const app = await open(HARNESS, c.options);
+    await app.press("id:settings-phone");
+    await app.waitFor("text:Not built yet");
+  });
+
+  test("on iOS there is no Phone use row", async () => {
+    const c = computer({ name: "settings" }, () => null, { platform: "ios", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Labs");
+    expect(app.shows("id:settings-phone")).toBe(false);
+  });
+});
+
 describe("Open-source Licenses", () => {
   test("lists what the app ships and opens a license's text", async () => {
     const c = computer({ name: "settings-licenses" }, () => null);
