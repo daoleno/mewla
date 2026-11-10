@@ -1,4 +1,5 @@
-import { effect, host, Image, lifecycle, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
+import { cleanup, effect, host, Image, lifecycle, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
+import { getIPhoneStatus, iphoneOffered, iphoneStateWord, type IPhoneDaemonStatus } from "../../../core/settings/iphoneStatus";
 import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
 import { daemon, daemonState } from "../daemon";
@@ -45,6 +46,18 @@ function readAlertCapabilities(): void {
     .catch(() => fullScreenAllowed.set(null));
 }
 
+/** iPhone use on the current computer; Labs shows the row only where it is offered (a Mac). */
+const iphone = signal<IPhoneDaemonStatus | null>(null);
+let iphoneFor = "";
+
+function readIPhone(): void {
+  const server = daemon()?.server;
+  if (!server) return;
+  void getIPhoneStatus(server)
+    .then((next) => daemon()?.server.id === server.id && iphone.set(next))
+    .catch(() => daemon()?.server.id === server.id && iphone.set(null));
+}
+
 export const PRIVACY_URL = "https://mewla.ai/privacy/";
 export const SUPPORT_URL = "https://mewla.ai/support/";
 
@@ -53,6 +66,24 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
   void untracked(probeComputers);
   followFriends();
   void loadStrongAlerts();
+  // iPhone use, every 15 s while Settings is open: an agent may start or stop using it.
+  let iphoneTimer: ReturnType<typeof setInterval> | null = null;
+  effect(() => {
+    const id = daemon()?.server.id ?? "";
+    if (iphoneTimer) clearInterval(iphoneTimer);
+    iphoneTimer = null;
+    const active = lifecycle() === "active";
+    untracked(() => {
+      if (id !== iphoneFor) {
+        iphoneFor = id;
+        iphone.set(null);
+      }
+    });
+    if (!id || !active) return;
+    untracked(readIPhone);
+    iphoneTimer = setInterval(readIPhone, 15_000);
+  });
+  cleanup(() => iphoneTimer && clearInterval(iphoneTimer));
   // Back from Android's settings: ask again whether the lock-screen alert is allowed.
   effect(() => {
     if (lifecycle() === "active") untracked(readAlertCapabilities);
@@ -97,7 +128,7 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
 
       <Section title="Labs">
         <Row testID="settings-friends" icon="people" title="Friends" value={friendsEnabled() ? "On" : "Off"} chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
-        <Row testID="settings-iphone" icon="phone" title="iPhone use" disabled={!current()} chevron onPress={current() ? () => props.nav.push({ name: "settings-iphone" }) : undefined} />
+        {iphoneOffered(iphone()) ? <Row testID="settings-iphone" icon="phone" title="iPhone use" value={iphoneStateWord(iphone())} chevron onPress={() => props.nav.push({ name: "settings-iphone" })} /> : null}
       </Section>
 
       {platform.os === "web" ? null : (

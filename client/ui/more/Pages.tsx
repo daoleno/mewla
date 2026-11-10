@@ -1,5 +1,3 @@
-import { Text, View } from "nsh";
-import { NavPage } from "nsh/base";
 import { onTransport } from "../session";
 import { bindDaemon } from "./daemon";
 import { ExtensionsPageView } from "./extensions/Pages";
@@ -11,6 +9,8 @@ import { Resources } from "./resources/Resources";
 import { ScreenPage } from "./screen/Screen";
 import type { MorePage, PageNav } from "./routes";
 import { Computer } from "./settings/Computer";
+import { IPhone } from "./settings/IPhone";
+import { License, Licenses } from "./settings/Licenses";
 import { OutsideAgents } from "./settings/OutsideAgents";
 import { ProviderEditor, ProviderModels, Providers } from "./settings/Providers";
 import { restoreAppearance, Settings } from "./settings/Settings";
@@ -46,10 +46,10 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "friends-bookmarks":
     case "friends-blocked":
       return <FriendsPageView route={route} nav={props.nav} />;
-    case "settings-iphone": return <Soon title="iPhone use" />;
+    case "settings-iphone": return <IPhone />;
     case "settings-pet": return <PetPage />;
-    case "settings-licenses": return <Soon title="Open-source Licenses" />;
-    case "settings-license": return <Soon title="License" />;
+    case "settings-licenses": return <Licenses nav={props.nav} />;
+    case "settings-license": return <License id={route.id} nav={props.nav} />;
     case "stats": return <Stats nav={props.nav} />;
     case "stats-model": return <StatsModel model={route.model} pricing={route.pricing} />;
     case "stats-day": return <StatsDay day={route.day} />;
@@ -61,12 +61,4 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "extensions-agent":
       return <ExtensionsPageView route={route} nav={props.nav} />;
   }
-}
-
-function Soon(props: { title: string }) {
-  return (
-    <NavPage title={props.title}>
-      <View class="flex-1 items-center justify-center bg-background"><Text class="text-base text-muted-foreground">{`${props.title} arrives in a later preview.`}</Text></View>
-    </NavPage>
-  );
 }
