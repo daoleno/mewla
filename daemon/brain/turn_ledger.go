@@ -1443,6 +1443,13 @@ func derivedWorkUpdate(status watcher.TurnStatus, sessionID, eventKind string) W
 // durable projection write and do not advance the Work revision. Attention
 // rows remain untouched and orthogonal.
 func (s *Store) ReassertLiveTurnOwnership(workID, sessionID, turnID string) (Work, bool, error) {
+	return s.reassertTurnOwnership(workID, sessionID, turnID, "provider activity remains running")
+}
+
+// reassertTurnOwnership is ReassertLiveTurnOwnership with the evidence note the
+// renewal records: a running provider Activity, or a Worker waiting on its own
+// background work.
+func (s *Store) reassertTurnOwnership(workID, sessionID, turnID, note string) (Work, bool, error) {
 	workID = strings.TrimSpace(workID)
 	sessionID = strings.TrimSpace(sessionID)
 	turnID = strings.TrimSpace(turnID)
@@ -1459,7 +1466,7 @@ func (s *Store) ReassertLiveTurnOwnership(workID, sessionID, turnID string) (Wor
 	}
 	beforeRevision := state.Revision
 	identity := lifecycle.AttemptIdentity{SessionID: sessionID, TurnToken: state.Attempt.TurnToken, Fence: state.Attempt.Generation}
-	next, err := s.fsm.Progress(state.ID, identity, "provider activity remains running")
+	next, err := s.fsm.Progress(state.ID, identity, note)
 	if err != nil {
 		return Work{}, false, fsmObservationResult(err)
 	}

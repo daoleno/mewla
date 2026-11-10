@@ -125,7 +125,17 @@ The wait is counted from the first poll that saw the Session idle, not from when
 the provider settled. A Worker idle at its prompt while a background Monitor,
 shell or agent runs is not stopped (the footer says `· 1 monitor`); when that work
 ends, the footer disappears a moment before the provider's next Activity shows,
-and the Worker is not reported in that gap.
+and the Worker is not reported in that gap: the idle clock restarts whenever the
+pane changes, so a Worker already writing its answer is not reported either. A
+Worker whose pane stays unchanged is reported after the 90 s as before.
+
+The lifecycle lease follows the same rule. A Worker waiting on its own background
+shell, agent or monitor cannot check in, so while its pane shows that work the
+supervision sweep renews the Turn's lease instead of letting it lapse and be
+released as lost (`lease_expired_escalation`, 30 minutes after the lease). When the
+work is gone and the Worker has not reported, the lease runs out and Brain hears
+once. The loss review states that reason and time itself; it never reuses the
+provider's provisional "reported done" row.
 
 The brief Mewla submits is a typed `Execute: ` followed by one paste envelope.
 Its submitted digest is the brief's own, so the transcript parser and the hook
