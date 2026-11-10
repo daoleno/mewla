@@ -35,6 +35,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         OTHER_LDFLAGS: "-ObjC"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # NativeShell.xcframework's Simulator slice is arm64 only.
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
         DEVELOPMENT_TEAM: HD84J3DJ2B
         CODE_SIGN_STYLE: Automatic
     scheme:
