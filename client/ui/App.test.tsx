@@ -59,6 +59,17 @@ describe("Brain", () => {
   }, 20_000);
 });
 
+describe("Sessions", () => {
+  test("says the computer is offline with a way to retry, and New session waits for it", async () => {
+    const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("id:sessions-empty");
+    await app.waitFor("text:Server offline", { timeout: 15_000 });
+    expect(app.texts()).toContain("Retry connection");
+    expect(app.shows("id:new-session")).toBe(true);
+  }, 20_000);
+});
+
 describe("the in-place upgrade from the Expo app", () => {
   test("opens on the computer the Expo app had, without pairing, and takes the entries only once", async () => {
     let offered = 0;

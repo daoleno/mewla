@@ -69,6 +69,8 @@ export function onTransport(use: TransportUser): () => void {
  */
 export const workers = signal<Worker[]>([]);
 export const workersHydrated = signal(false);
+/** False after a create whose outcome is unknown, until a fresh list shows what happened. */
+export const canCreateSession = signal(true);
 let workerSessions: WorkerSessions | null = null;
 
 export function currentWorkerSessions(): WorkerSessions | null {
@@ -80,6 +82,7 @@ onTransport((owner, server) => {
     if (workerSessions !== next) return;
     workers.set(next.workers);
     workersHydrated.set(next.hydrated);
+    canCreateSession.set(next.canCreate);
   });
   workerSessions = store;
   return () => {
@@ -87,6 +90,7 @@ onTransport((owner, server) => {
     if (workerSessions === store) workerSessions = null;
     workers.set([]);
     workersHydrated.set(false);
+    canCreateSession.set(true);
   };
 });
 

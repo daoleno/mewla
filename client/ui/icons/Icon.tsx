@@ -2,7 +2,7 @@ import { Image, token, type Tokens } from "nsh";
 import { ICON_ASSETS } from "./assets";
 
 export type IconName = keyof typeof ICON_ASSETS;
-type ColorToken = { [K in keyof Tokens]: Tokens[K] extends string ? K : never }[keyof Tokens];
+export type ColorToken = { [K in keyof Tokens]: Tokens[K] extends string ? K : never }[keyof Tokens];
 
 /**
  * Mewla's one icon vocabulary (glyphs.ts: its own drawings on a 24 grid,

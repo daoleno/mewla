@@ -5,10 +5,14 @@ import { Onboarding } from "../screens/Onboarding";
 import { More } from "../screens/More";
 import { MorePageView } from "../more/Pages";
 import { Brain } from "../screens/Brain";
-import { Sessions } from "../screens/Placeholders";
 import { calendarNav, calendarRoute } from "../calendar/routes";
 import { workRoute, type BrainWorkRoute } from "../work/routes";
-import type { MoreRoute } from "./routes";
+import { Session } from "../screens/Session";
+import { Sessions } from "../screens/Sessions";
+import { NewSession, newSessionOpen } from "../screens/NewSession";
+import { onTransport } from "../session";
+import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
+import type { MoreRoute, SessionsRoute } from "./routes";
 
 const tabs = [
   { title: "Brain", ios: "sparkles", android: "tab_brain" },
@@ -29,7 +33,28 @@ export function sectionOfLink(url: string): number | null {
 }
 const moreNav = createNavStack<MoreRoute>([{ name: "more" }]);
 export const brainNav = createNavStack<{ name: "brain" } | BrainWorkRoute>([{ name: "brain" }]);
-const sessionsNav = createNavStack<{ name: "sessions" }>([{ name: "sessions" }]);
+const sessionsNav = createNavStack<SessionsRoute>([{ name: "sessions" }]);
+// A Session page belongs to the computer it was opened on: a switch goes back to the list.
+onTransport(() => () => sessionsNav.popToRoot());
+
+/** A Session the New session sheet made: open it on the list's stack. */
+function openCreated(workerId: string, hint: TerminalRouteSessionHint) {
+  selectedTab.set(1);
+  sessionsNav.setRoutes([{ name: "sessions" }, { name: "session", workerId, hint }]);
+}
+
+function sessionsRoute(route: SessionsRoute, index: () => number) {
+  switch (route.name) {
+    case "sessions":
+      return <Sessions nav={sessionsNav} onNew={() => newSessionOpen.set(true)} onPair={() => {
+        selectedTab.set(3);
+        moreNav.setRoutes([{ name: "more" }, { name: "settings" }, { name: "pair" }]);
+      }} />;
+    case "session":
+      return <Session nav={sessionsNav} workerId={route.workerId} hint={route.hint}
+        active={() => selectedTab() === 1 && index() === sessionsNav.routes().length - 1} />;
+  }
+}
 
 function moreRoute(route: MoreRoute) {
   switch (route.name) {
@@ -45,7 +70,7 @@ function Section(props: { index: number }) {
   return (
     <View class="absolute inset-0" style={{ display: shown() ? "flex" : "none" }}>
       {props.index === 0 ? <NavStack state={brainNav} style={{ flex: 1 }}>{(route) => (route.name === "brain" ? <Brain /> : workRoute(route, brainNav))}</NavStack>
-        : props.index === 1 ? <NavStack state={sessionsNav} style={{ flex: 1 }}>{() => <Sessions />}</NavStack>
+        : props.index === 1 ? <NavStack state={sessionsNav} style={{ flex: 1 }}>{sessionsRoute}</NavStack>
         : props.index === 2 ? <NavStack state={calendarNav} style={{ flex: 1 }}>{calendarRoute}</NavStack>
         : <NavStack state={moreNav} style={{ flex: 1 }}>{moreRoute}</NavStack>}
     </View>
@@ -65,12 +90,14 @@ export function Shell() {
           ))}
         </View>
         <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
+        <NewSession onCreated={openCreated} />
       </View>
     );
   }
   return (
     <View class="flex-1 bg-background">
       <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
+      <NewSession onCreated={openCreated} />
       <TabBar testID="tabs" items={tabs.map((t) => ({ title: t.title, icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>
