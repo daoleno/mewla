@@ -28,7 +28,8 @@ cd client/ui && nsh check && nsh test
   The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app.
 - **iOS:** `client/scripts/fetch-nsh.sh --ios && client/scripts/ios-project.sh` (`--dev` links NativeShellDev), then
   open `client/ios/Mewla.xcodeproj`. With `--dev`, launch with `-devServer ws://127.0.0.1:8790/ws` and run
-  `nsh dev --server-only client/ui`. Preview builds pass `PRODUCT_BUNDLE_IDENTIFIER=com.daoleno.mewla.preview`.
+  `nsh dev --server-only client/ui`. Preview builds pass `MEWLA_APP_ID=com.daoleno.mewla.preview`, which also names
+  the Live Activity / widget extension (`<id>.live`) and the App Group (`group.<id>`).
 - **Web:** `nsh dev --target web client/ui`.
 
 ## What the hosts give the app
@@ -40,6 +41,9 @@ cd client/ui && nsh check && nsh test
 | `links.open` `{url}` (event) | A `mewla://` link the system opened the app with; held until the app listens. |
 | `mewla.qrScanner` `{active}` → `scan {value}`, `unavailable {reason}` | The camera's QR reader. |
 | `host.params.deviceName` | The name a computer lists this phone under. |
+| `push.permission` / `push.requestPermission` / `push.deviceToken`, `push.opened {data}` (event) | Notifications allowed, the system prompt, the FCM / APNs token with the Expo installation id kept where expo-notifications kept it (Android: its uuid file; iOS: its Keychain item), so the Expo token survives the upgrade. A tapped notification, cold start included, is `push.opened`. |
+| `live.*` | The live notification (Android) / Live Activity (iOS) and the home-screen widgets of the current computer. iOS: the Expo app's WidgetKit extension (`ios/LiveExtension`, same bundle id, widget kind and activity type), its App Group files, and content-available `mewla_live` pushes applied in the background. |
+| `calendar.alerts*`, `calendar.zones`, `calendar.pickDate` / `pickTime` | The phone's own calendar alerts (Android: exact alarms and the lock-screen alert; iOS: local notifications on a calendar trigger pinned to the item's zone), the zone table QuickJS lacks, the system date and time pickers. |
 
 ## Upgrade
 
