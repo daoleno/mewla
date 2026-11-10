@@ -1,6 +1,7 @@
 import { onTransport } from "../session";
 import { bindDaemon } from "./daemon";
 import { ExtensionsPageView } from "./extensions/Pages";
+import { FilesPageView } from "./files/Pages";
 import { FriendsPageView } from "./friends/FriendsPages";
 import { FriendsSettings } from "./friends/FriendsSettings";
 import { PetPage } from "./pet/Pet";
@@ -60,5 +61,8 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "extensions-tools":
     case "extensions-agent":
       return <ExtensionsPageView route={route} nav={props.nav} />;
+    case "files-preview":
+    case "files-workspace":
+      return <FilesPageView route={route} nav={props.nav} />;
   }
 }

@@ -1,5 +1,6 @@
 import type { DayCell, ModelStat, PricingStatus } from "../../core/stats/statsPayload";
 import type { ExtensionsPage } from "./extensions/routes";
+import type { FilesPage } from "./files/routes";
 import type { FriendsPage } from "./friends/routes";
 
 /** The pages behind More, and the pages they push. */
@@ -22,7 +23,8 @@ export type MorePage =
   | { name: "resources" }
   | { name: "screen" }
   | ExtensionsPage
-  | FriendsPage;
+  | FriendsPage
+  | FilesPage;
 
 /** How a page opens the next one (the More tab's stack, or a test's). */
 export interface PageNav {

@@ -277,6 +277,8 @@ export function Field(props: {
   multiline?: boolean;
   keyboardType?: "default" | "url" | "email-address" | "number-pad";
   testID?: string;
+  /** What a screen reader says when there is no visible label. */
+  accessibilityLabel?: string;
   onChange: (value: string) => void;
   onSubmit?: () => void;
   /** The field lost focus: commit what was typed. */
@@ -289,6 +291,7 @@ export function Field(props: {
       <View class="flex-row items-center gap-2 rounded-xl border border-border bg-background px-3">
         <Input
           testID={props.testID}
+          accessibilityLabel={props.accessibilityLabel ?? props.label}
           class={props.mono ? "min-h-[44px] flex-1 py-2.5 font-mono text-sm" : "min-h-[44px] flex-1 py-2.5 text-base"}
           value={props.value}
           placeholder={props.placeholder}
