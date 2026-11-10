@@ -3,6 +3,16 @@
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-feature android:name="android.hardware.camera" android:required="false" />
+  <!-- Pushes, the live notification (Android 16 QPR1 promotes it: Live Updates) and the calendar's own
+       alerts: an alarm at the exact minute (granted to calendar apps), a lock-screen takeover, and
+       re-arming after a reboot. -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.VIBRATE" />
   <!-- Daemons on a home network are plain http; pairing pins them by key. -->
   <application
     android:label="@string/app_name"
@@ -12,6 +22,43 @@
     android:allowBackup="false"
     android:enableOnBackInvokedCallback="true"
     android:usesCleartextTraffic="true">
+    <!-- A push the system draws itself (app in the background): the Expo app's channel, glyph and seal color. -->
+    <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="mewla-agents" />
+    <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/notification_icon" />
+    <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/notification_icon_color" />
+    <service android:name=".push.MewlaFirebaseMessagingService" android:exported="false">
+      <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
+    </service>
+    <!-- These keep the Expo app's class names (live/ComponentNames.kt): the home screen binds widgets by them. -->
+    <receiver android:name="expo.modules.mewlalive.SmallWidgetProvider" android:exported="false" android:label="@string/mewla_widget_small_label">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/mewla_widget_small_info" />
+    </receiver>
+    <receiver android:name="expo.modules.mewlalive.MediumWidgetProvider" android:exported="false" android:label="@string/mewla_widget_medium_label">
+      <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+      <meta-data android:name="android.appwidget.provider" android:resource="@xml/mewla_widget_medium_info" />
+    </receiver>
+    <receiver android:name="expo.modules.mewlalive.LiveDismissReceiver" android:exported="false" />
+    <receiver android:name="expo.modules.mewlalive.CalendarAlarmReceiver" android:exported="false" />
+    <receiver android:name="expo.modules.mewlalive.CalendarActionReceiver" android:exported="false" />
+    <!-- System broadcasts only: the sender is the system, which is why this one is exported. -->
+    <receiver android:name="expo.modules.mewlalive.CalendarBootReceiver" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+        <action android:name="android.intent.action.TIME_SET" />
+        <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+      </intent-filter>
+    </receiver>
+    <activity
+      android:name="expo.modules.mewlalive.CalendarAlertActivity"
+      android:exported="false"
+      android:launchMode="singleInstance"
+      android:taskAffinity=""
+      android:excludeFromRecents="true"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:theme="@android:style/Theme.Material.NoActionBar" />
     <!-- The class name is the Expo app's: launcher shortcuts keep pointing at it after the upgrade. -->
     <activity
       android:name=".MainActivity"
