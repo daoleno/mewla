@@ -377,9 +377,9 @@ type Watcher struct {
 	// it is never the host server.
 	tmuxSocketPath string
 	tmuxScratchDir string
-	// tmuxGuardDir holds the `tmux` shim that Worker and Brain panes put first
-	// on PATH ("" = no shim). See package tmuxguard.
-	tmuxGuardDir string
+	// privateTmuxDirFailed logs a missing private TMUX_TMPDIR once, not every
+	// poll.
+	privateTmuxDirFailed atomic.Bool
 	// managedServicesPath is the persisted explicit registry for
 	// Agent-retained persistent services (user systemd units). Empty means
 	// persistent discovery is disabled; tmux discovery is unaffected.
@@ -1477,6 +1477,8 @@ func (w *Watcher) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-timer.C:
+			w.keepPrivateTmuxDir()
+			w.releaseEndedLeftInTmux(false)
 			w.poll()
 			timer.Reset(w.screens.nextPollDelay(w.pollInterval))
 		}
@@ -3894,6 +3896,8 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 			opts.ExecutorID = resolve(opts.Command)
 		}
 	}
+	// Decided on the command as asked for, before tools and adapters wrap it.
+	agent := sessionRunsAnAgent(opts)
 	backend := w.sessions()
 	placement, err := backend.place(preferredTarget, opts.Detached, createdSessionName(opts))
 	if err != nil {
@@ -3989,6 +3993,7 @@ func (w *Watcher) CreateSession(preferredTarget string, opts CreateSessionOption
 		command: shellCommand,
 		env:     workerLaunchEnvironment(opts),
 		labels:  createdSessionLabels(opts),
+		agent:   agent,
 	})
 	if err != nil {
 		return "", err
@@ -4073,6 +4078,13 @@ func createdSessionName(opts CreateSessionOptions) string {
 
 // createdSessionLabels is what a created Session records about itself; the
 // backend keeps it for as long as the Session lives.
+// sessionRunsAnAgent: Brain, a Worker, or an agent a person launched, rather
+// than a person's own shell.
+func sessionRunsAnAgent(opts CreateSessionOptions) bool {
+	return opts.ProgressEnv || opts.Hidden || opts.Delegated ||
+		strings.TrimSpace(opts.ExecutorID) != "" || workerProviderFamily(opts.Command) != ""
+}
+
 func createdSessionLabels(opts CreateSessionOptions) sessionLabels {
 	labels := sessionLabels{
 		hidden:       opts.Hidden,
@@ -4158,7 +4170,7 @@ func workerProgressEnvScript() string {
 	// remove that capability. TMUX_TMPDIR already points at private provider
 	// scratch, so later plain tmux commands (including kill-server) cannot
 	// target the host server.
-	return `MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellquote.Quote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX; if [ -n "${MEWLA_TMUX_GUARD_DIR:-}" ]; then PATH="$MEWLA_TMUX_GUARD_DIR:$PATH"; export PATH; fi`
+	return `MEWLA_WORKER_ID="${MEWLA_SESSION_ID:-$TMUX_PANE}"; if [ -z "${MEWLA_WORKER_PROGRESS_CMD:-}" ]; then MEWLA_WORKER_PROGRESS_CMD=` + shellquote.Quote(ExecutablePath()) + `; fi; export MEWLA_WORKER_ID MEWLA_WORKER_PROGRESS_CMD; unset TMUX`
 }
 
 // ExecutablePath returns the absolute path of the currently running mewla
@@ -4212,6 +4224,13 @@ func tmuxPaneEnvironment(base []string) []string {
 		// The session host sets it to the Session's own id; one inherited
 		// from where the daemon runs would name another Session.
 		"MEWLA_SESSION_ID": true,
+		// They describe the login the daemon was started from, not the
+		// Session. A shell startup file that attaches tmux for SSH logins
+		// would otherwise take the Session over before its program starts.
+		// SSH_AUTH_SOCK stays: git over ssh uses it.
+		"SSH_CONNECTION": true,
+		"SSH_CLIENT":     true,
+		"SSH_TTY":        true,
 	}
 
 	values := make(map[string]string, len(base))
@@ -4417,6 +4436,12 @@ func (w *Watcher) WorkerTurnActive(id string) bool {
 func (w *Watcher) KillSession(sessionID string) error {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
+		return nil
+	}
+	if w.isLeftInTmux(sessionID) {
+		// Left in tmux, no longer Mewla's: ending it for Mewla lets go of it.
+		// Its programs, lease and TempDir stay until its pane ends
+		// (releaseEndedLeftInTmux).
 		return nil
 	}
 	manager := w.resourceManager()

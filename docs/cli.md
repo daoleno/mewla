@@ -12,8 +12,8 @@ flags for that command.
 mewla                         # start on 127.0.0.1:9876 (same as mewla serve)
 mewla --lan                   # also listen on Wi-Fi/LAN and Tailscale, for a trusted network
 mewla -addr "$(tailscale ip -4):9876"   # listen on host:port only, here your Tailscale IP
-mewla doctor [--json]         # is this machine ready? tmux, state, port, agents
-mewla deps [-only tmux|agent] # offer this system's official tmux / agent CLI install, then sign-in
+mewla doctor [--json]         # is this machine ready? platform, state, port, agents
+mewla deps                    # offer this system's official agent CLI install, then sign-in
 mewla setup                   # guided first run: pick Brain's agent
 mewla setup remote            # over SSH: sign in with a code, run in the background, pair a phone
 mewla update [--check]        # verify and install the latest release
@@ -80,7 +80,13 @@ mewla worker answer -id <session> -prompt <id> -choice 1   # any blocking prompt
 mewla worker approvals [-id <session>]        # decisions agents wait on (Codex app-server requests)
 mewla worker approve -id <session> -approval <id> -option allow   # or deny
 mewla worker close -id <session>
+mewla attach <session>                        # show a Session in this terminal; Ctrl-\ detaches
+mewla host status [--json]                    # the session host and the Sessions it runs
 ```
+
+`attach` shows a Session's terminal where you type, at its size, and types
+into it; Ctrl-\ detaches and the Session keeps running. Every Session runs in
+the session host, which outlives daemon restarts and updates.
 
 `answer` replies to a prompt a delegated Worker is stopped at: a numbered menu
 (a permission or plan request, a startup question) by `-choice <option number>`,

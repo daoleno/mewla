@@ -25,7 +25,7 @@
 
 Mewla is a phone app and a small daemon that runs next to your repositories.
 The agents are the CLIs you already use (Claude Code, Codex, Cursor, Grok, Pi,
-OpenCode), each in a real `tmux` session on your machine. Mewla gives them a
+OpenCode), each in a real terminal on your machine. Mewla gives them a
 lead and gives you a remote. Open source, self-hosted, in beta.
 
 [Homepage](https://mewla.ai/) · [Docs](https://mewla.ai/docs/) · [Releases](https://github.com/daoleno/mewla/releases)
@@ -36,7 +36,7 @@ lead and gives you a remote. Open source, self-hosted, in beta.
    the settings copy, write release notes." In the app, or from Telegram.
 2. **Brain splits it into Work** and picks an agent for each part, following
    `routing.md`, a file you edit.
-3. **Real agents do it**, each in `tmux` on your computer. Read any of them as
+3. **Real agents do it**, each in its own terminal on your computer. Read any of them as
    Chat or as the live Terminal, or take over from your phone.
 4. **You hear about it only when it matters**: a push when an agent needs you,
    fails or finishes. In the app, its question comes with the answers as buttons.
@@ -58,8 +58,7 @@ model, and a live view of what agents use on the machine.
 ## Get started
 
 You need Linux (`amd64`/`arm64`), WSL2 or an Apple Silicon Mac. `mewla`
-offers to install `tmux` and an agent CLI (Claude Code or Codex) when they are
-missing.
+offers to install an agent CLI (Claude Code or Codex) when none is ready.
 
 ```sh
 # 1. Install: checksum-verified, no telemetry

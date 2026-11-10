@@ -57,7 +57,6 @@ import (
 	"github.com/daoleno/mewla/daemon/statedir"
 	"github.com/daoleno/mewla/daemon/stats"
 	telegramchannel "github.com/daoleno/mewla/daemon/telegram"
-	"github.com/daoleno/mewla/daemon/tmuxguard"
 	"github.com/daoleno/mewla/daemon/tmuxsocket"
 	"github.com/daoleno/mewla/daemon/vdisplay"
 	"github.com/daoleno/mewla/daemon/watch"
@@ -100,11 +99,6 @@ func directClaudePID(sessionID string) (int, bool) {
 func main() {
 	// MEWLA_STATE_ROOT relocates all state for a throwaway daemon; see statedir.
 	statedir.InitFromEnv()
-	// The pane tmux shim re-enters here for every `tmux` a Worker types; answer
-	// before any state, config or socket initialisation.
-	if len(os.Args) > 1 && os.Args[1] == "tmux-guard" {
-		os.Exit(tmuxguard.Main(os.Args[2:], os.Stderr))
-	}
 	if err := run(os.Args[1:], os.Stderr); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return
@@ -354,16 +348,11 @@ func runDaemon(args []string, stderr io.Writer) error {
 		return fmt.Errorf("create daemon tmux scratch directory: %w", err)
 	}
 	w.SetTmuxServer(tmuxSocketPath, tmuxScratchDir)
-	// A plain `tmux` in a Worker or Brain pane must never fall back to the live
-	// default server. Best effort: without the shim panes keep the older
-	// TMUX_TMPDIR containment. Windows has no tmux to guard, and the shim is
-	// a POSIX script.
-	if runtime.GOOS != "windows" {
-		if guardDir, err := tmuxguard.Install(stateDir, watcher.ExecutablePath()); err != nil {
-			log.Printf("tmux guard shim unavailable: %v", err)
-		} else {
-			w.SetTmuxGuard(guardDir)
-		}
+	// Mewla before 0.3 put a `tmux` shim first on PATH in its panes; it
+	// re-entered a `mewla tmux-guard` command that no longer exists. Without
+	// the shim a plain `tmux` in those panes is the real tmux again.
+	if err := os.RemoveAll(filepath.Join(stateDir, "tmux-guard")); err != nil {
+		log.Printf("remove the old tmux shim: %v", err)
 	}
 	configureSessionHost(w, stateDir)
 	w.SetActivityProbe(classifier.DefaultActivityProbe())
@@ -415,6 +404,8 @@ func runDaemon(args []string, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("initialize brain store: %w", err)
 	}
+	// Sessions an earlier Mewla started in tmux move to the session host.
+	go moveSessionsFromTmux(ctx, w, brainStore.SessionConversation)
 	// Brain hears of the Friends playbook only while Friends is on.
 	brainStore.GateSeed("playbooks/friends.md", func() bool {
 		_, on := (&friends.Local{StateDir: authManager.StorageDir()}).Enabled()
@@ -2743,7 +2734,7 @@ Connect a phone or browser
 
 Set up and maintain
   doctor    Check this computer is ready for Mewla
-  deps      Offer to install tmux and an agent CLI with this system's official commands
+  deps      Offer to install an agent CLI with this system's official commands
   setup     Guided first-run setup (uses doctor)
   boot      Start Mewla when you log in (systemd user unit)
   host      Run or inspect the session host that keeps agent terminals running

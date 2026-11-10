@@ -53,7 +53,8 @@ func newEngineScreen(opts ghosttyvt.Options) (screen, error) {
 }
 
 var (
-	sessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+	// A Session moved from tmux keeps its pane id, so ids may start with %.
+	sessionIDPattern = regexp.MustCompile(`^%?[A-Za-z0-9_.:-]{1,64}$`)
 	metaKeyPattern   = regexp.MustCompile(`^[a-z][a-z0-9_.-]{0,63}$`)
 )
 

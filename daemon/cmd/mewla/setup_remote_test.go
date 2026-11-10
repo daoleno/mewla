@@ -45,7 +45,6 @@ func (r *setupRemoteRecorder) steps() setupRemoteSteps {
 			return r.phones[index], nil
 		},
 		agentReady: func() bool { return r.agent },
-		tmuxReady:  func() bool { return true },
 		sleep:      func(d time.Duration) { r.clock = r.clock.Add(d) },
 		now:        func() time.Time { return r.clock },
 	}
@@ -111,7 +110,7 @@ func TestSetupRemoteTimesOutWithoutPhoneAndNamesMissingAgent(t *testing.T) {
 	if err := setupRemote(context.Background(), setupRemoteConfig{wait: true, waitFor: time.Minute}, r.steps(), &out); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "deps -only agent") {
+	if !strings.Contains(out.String(), "deps") || strings.Contains(out.String(), "-only") {
 		t.Fatalf("a computer with no signed-in agent was not told the next step:\n%s", out.String())
 	}
 }

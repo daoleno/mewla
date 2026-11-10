@@ -179,7 +179,7 @@ func applyStartupChoice(cfg *daemonConfig, args []string, stderr io.Writer) erro
 		if running {
 			deps.setBrainHost = func(id string) error { return setRunningBrainHost(cfg.stateDir, id) }
 		}
-		if _, _, err := deps.checkAll(); err != nil {
+		if _, err := deps.checkAll(); err != nil {
 			return err
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

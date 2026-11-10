@@ -7,7 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/daoleno/mewla/daemon/hostdeps"
 	"github.com/daoleno/mewla/daemon/work"
 )
 
@@ -40,21 +39,12 @@ type Remediation string
 
 const (
 	RemediationUnsupportedPlatform Remediation = "unsupported_platform"
-	RemediationInstallTmux         Remediation = "install_tmux"
-	RemediationFixTmux             Remediation = "fix_tmux"
 	RemediationStateDirUnwritable  Remediation = "state_dir_unwritable"
 	RemediationPortInUse           Remediation = "port_in_use"
 	RemediationInstallExecutor     Remediation = "install_executor"
 	RemediationAuthenticateExec    Remediation = "authenticate_executor"
 	RemediationConfigureExecutor   Remediation = "configure_executor"
 )
-
-// InstallHint is an OS-specific non-destructive install suggestion.
-type InstallHint struct {
-	ID      string `json:"id"`
-	OS      string `json:"os"`
-	Command string `json:"command"`
-}
 
 // RecommendationConfidence describes how strongly doctor trusts a recommendation.
 type RecommendationConfidence string
@@ -74,7 +64,6 @@ type Report struct {
 	Ready        bool           `json:"ready"`
 	GeneratedAt  time.Time      `json:"generated_at"`
 	Platform     PlatformCheck  `json:"platform"`
-	Tmux         TmuxCheck      `json:"tmux"`
 	StateDir     StateDirCheck  `json:"state_dir"`
 	Listen       ListenCheck    `json:"listen"`
 	Executors    ExecutorsCheck `json:"executors"`
@@ -135,21 +124,6 @@ type PlatformCheck struct {
 	Status      Status      `json:"status"`
 	Remediation Remediation `json:"remediation,omitempty"`
 	Summary     string      `json:"summary"`
-}
-
-// TmuxCheck reports tmux availability and a safe functional probe.
-type TmuxCheck struct {
-	Found      bool   `json:"found"`
-	Path       string `json:"path,omitempty"`
-	Version    string `json:"version,omitempty"`
-	Functional bool   `json:"functional"`
-	// NotNeeded: this platform runs no tmux (Windows); the check is left
-	// out of the report.
-	NotNeeded    bool          `json:"not_needed,omitempty"`
-	Status       Status        `json:"status"`
-	Remediation  Remediation   `json:"remediation,omitempty"`
-	Summary      string        `json:"summary"`
-	InstallHints []InstallHint `json:"install_hints,omitempty"`
 }
 
 // StateDirCheck reports Mewla state directory readiness.
@@ -219,27 +193,4 @@ type ExecutorCheck struct {
 	// run or failed ambiguously; never includes model lists or secrets.
 	ModelsStatus  Status `json:"models_status,omitempty"`
 	ServiceStatus Status `json:"service_status,omitempty"`
-}
-
-// TmuxInstallHints returns the one official tmux install command for this
-// machine (or the tmux install page when no package manager is known).
-// Doctor never runs it.
-func TmuxInstallHints() []InstallHint {
-	return tmuxInstallHints(hostdeps.Detect())
-}
-
-func tmuxInstallHints(platform hostdeps.Platform) []InstallHint {
-	plan := hostdeps.TmuxPlan(platform)
-	command := plan.Command()
-	if command == "" {
-		command = "see " + plan.Doc
-	}
-	id := platform.Manager
-	if platform.GOOS == "darwin" {
-		id = "brew"
-	}
-	if id == "" {
-		id = "manual"
-	}
-	return []InstallHint{{ID: id, OS: platform.Name(), Command: command}}
 }

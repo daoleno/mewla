@@ -433,24 +433,6 @@ append_profile_path() {
   PROFILE_UPDATED=$profile
 }
 
-# check_tmux lets the new binary find this computer's official tmux command
-# and, in a terminal, offer to run it. Releases before `mewla deps` only say
-# that tmux is missing and point to `mewla doctor`.
-check_tmux() {
-  binary=$1
-  if ! "$binary" deps --help >/dev/null 2>&1; then
-    if ! command -v tmux >/dev/null 2>&1; then
-      say "tmux is missing. Mewla runs every agent inside tmux; see how to install it: $binary doctor"
-    fi
-    return 0
-  fi
-  if [ -t 1 ] && (: </dev/tty) 2>/dev/null; then
-    "$binary" deps -only tmux </dev/tty || true
-  else
-    "$binary" deps -only tmux </dev/null || true
-  fi
-}
-
 # run_remote_setup hands over to `mewla setup remote` for a person at a
 # terminal with no browser. The installer serves whatever the latest release
 # is, so an older release without the command falls back to the usual next
@@ -555,7 +537,6 @@ say "Installed Mewla $VERSION at $target"
 if [ -n "$PROFILE_UPDATED" ]; then
   say "Added $HOME/.local/bin to $PROFILE_UPDATED for new terminals (marker: $PATH_MARKER)."
 fi
-check_tmux "$target"
 
 if [ "$SETUP_REMOTE" -eq 1 ]; then
   setup_status=0

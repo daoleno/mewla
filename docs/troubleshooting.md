@@ -6,8 +6,8 @@ Start with the host check on the computer that runs Mewla:
 mewla doctor
 ```
 
-It checks `tmux`, the state directory, the listen port, your agent CLIs and the
-network, and says what to fix.
+It checks the platform, the state directory, the listen port, your agent CLIs
+and the network, and says what to fix.
 
 ## Reading the daemon's terminal output
 
@@ -128,7 +128,6 @@ Authorization header are never logged.
 - If the Brain tab says its agent is "open but not ready", the agent is waiting
   at a sign-in or first-run question in its terminal. Run that agent once on the
   computer, finish its questions, and Brain continues.
-- Check that `tmux` works for that user.
 - If you have `~/.mewla/executors.toml`, check its commands; a typo there makes
   launches fail. Restart `mewla` after editing it.
 

@@ -34,7 +34,7 @@ Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
  /ws /pair /auth-check /upload /session-file-capability /session-file /health /devices
                 │
                 ▼
- [tmux, agent CLIs, repositories, daemon-local state]
+ [session host, agent CLIs, repositories, daemon-local state]
 ```
 
 LAN, Tailscale, Cloudflare Tunnel, and reverse-proxy origins continue to call

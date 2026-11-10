@@ -3,18 +3,27 @@ package watcher
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/daoleno/mewla/daemon/classifier"
 )
 
-// compositeBackend runs Sessions in tmux and in the session host side by
-// side while the session host is a Labs choice. An id belongs to the backend
-// that issued it; new Sessions go to the host while the switch is on, and a
-// Session keeps its backend until it ends.
+// compositeBackend runs every new Session in the session host and keeps
+// seeing the Sessions an earlier Mewla started in tmux until each moves to the
+// host (MoveToHost, keeping its id) or is left in tmux (LeaveInTmux). An id
+// belongs to the host once the host runs it.
 type compositeBackend struct {
 	w    *Watcher
 	tmux *tmuxBackend
 	host *hostBackend
+
+	// left are the tmux Sessions that stay in tmux, no longer Mewla's.
+	leftMu sync.Mutex
+	left   map[string]leftInTmux
+	// leftChecked is when tmux was last asked whether a left Session whose
+	// resources are still held has ended.
+	leftChecked time.Time
 }
 
 func (c *compositeBackend) of(id string) sessionBackend {
@@ -65,7 +74,12 @@ func (c *compositeBackend) listOwned() ([]sessionPane, error) {
 		return panes, err
 	}
 	tmuxPanes, tmuxErr := c.tmux.listOwned()
+	tmuxPanes = withoutLeft(c, tmuxPanes, func(p sessionPane) string { return p.target })
 	hostPanes, hostErr := c.host.listOwned()
+	// A Session that moved kept its pane id. A tmux server that restarted
+	// numbers its panes from %0 again; a pane there with a moved id is never
+	// that Session.
+	tmuxPanes = withoutMoved(c, tmuxPanes)
 	if errors.Is(hostErr, errSessionHostGone) && !c.knows(c.host.validID) {
 		// No host in play: tmux's answer stands as it always did, errors
 		// included, so a daemon that never used the host behaves as before.
@@ -91,6 +105,7 @@ func (c *compositeBackend) listServices() ([]servicePane, error) {
 	if err != nil {
 		return nil, err
 	}
+	tmuxPanes = withoutLeft(c, tmuxPanes, func(p servicePane) string { return p.paneID })
 	hostPanes, err := c.host.listServices()
 	if err != nil {
 		return nil, err
@@ -98,11 +113,31 @@ func (c *compositeBackend) listServices() ([]servicePane, error) {
 	return append(tmuxPanes, hostPanes...), nil
 }
 
+// isLeft reports a tmux Session left in tmux: it is no longer Mewla's.
+func (c *compositeBackend) isLeft(id string) bool {
+	if c.host.validID(id) {
+		return false
+	}
+	c.leftMu.Lock()
+	defer c.leftMu.Unlock()
+	_, left := c.left[id]
+	return left
+}
+
+// probeOwnership never claims a Session left in tmux: it runs on there, but
+// Mewla no longer owns it, so nothing of Mewla's may type into or end it.
 func (c *compositeBackend) probeOwnership(id string) (bool, bool, error) {
+	if c.isLeft(id) {
+		return false, false, nil
+	}
 	return c.of(id).probeOwnership(id)
 }
 
+// resolveAbsence: a Session left in tmux has ended as far as Mewla goes.
 func (c *compositeBackend) resolveAbsence(id string, sawInventory bool) (bool, error) {
+	if c.isLeft(id) {
+		return true, nil
+	}
 	return c.of(id).resolveAbsence(id, sawInventory)
 }
 
@@ -148,18 +183,13 @@ func (c *compositeBackend) sendBytes(id string, data []byte) error {
 	return c.of(id).sendBytes(id, data)
 }
 
-// place picks the backend for a new Session: the host while the Labs switch
-// is on, tmux otherwise.
+// place puts every new Session in the session host.
 func (c *compositeBackend) place(near string, detached bool, name string) (backendPlacement, error) {
-	if c.host.cfg.Enabled != nil && c.host.cfg.Enabled() {
-		return c.host.place(near, detached, name)
-	}
-	if c.host.validID(near) {
-		// A host Session to stand beside while new ones go to tmux: tmux
-		// places it on its own.
+	if !c.host.validID(near) {
+		// A Session still in tmux has no place in the host to stand beside.
 		near = ""
 	}
-	return c.tmux.place(near, detached, name)
+	return c.host.place(near, detached, name)
 }
 
 func (c *compositeBackend) create(at backendPlacement, spec backendCreateSpec) (string, error) {

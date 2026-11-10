@@ -74,7 +74,7 @@ func waitUntil(t *testing.T, timeout time.Duration, what string, cond func() boo
 	}
 }
 
-func hostWatcher(t *testing.T, h *inProcessHost, enabled bool) *Watcher {
+func hostWatcher(t *testing.T, h *inProcessHost) *Watcher {
 	t.Helper()
 	w := New(50 * time.Millisecond)
 	// tmux on a socket nothing listens on: only the host runs Sessions here.
@@ -84,7 +84,6 @@ func hostWatcher(t *testing.T, h *inProcessHost, enabled bool) *Watcher {
 		Executable: "/nonexistent/mewla",
 		StateDir:   t.TempDir(),
 		Version:    "watcher-test",
-		Enabled:    func() bool { return enabled },
 	})
 	return w
 }
@@ -132,7 +131,7 @@ func hostPaneOf(t *testing.T, w *Watcher, id string) (sessionPane, bool) {
 
 func TestHostBackendRunsASession(t *testing.T) {
 	h := startInProcessHost(t)
-	w := hostWatcher(t, h, true)
+	w := hostWatcher(t, h)
 	dir := t.TempDir()
 	id := createHostSession(t, w, backendCreateSpec{
 		name:    "probe",
@@ -203,7 +202,7 @@ func TestHostBackendRunsASession(t *testing.T) {
 
 func TestHostSessionKnowsItsWorkerID(t *testing.T) {
 	h := startInProcessHost(t)
-	w := hostWatcher(t, h, true)
+	w := hostWatcher(t, h)
 	// The prefix a progress-reporting Worker's command starts with.
 	id := createHostSession(t, w, backendCreateSpec{
 		name:    "worker",
@@ -217,7 +216,7 @@ func TestHostSessionKnowsItsWorkerID(t *testing.T) {
 
 func TestHostInputSubmitsAndKeepsReceipts(t *testing.T) {
 	h := startInProcessHost(t)
-	w := hostWatcher(t, h, true)
+	w := hostWatcher(t, h)
 	dir := t.TempDir()
 	out := filepath.Join(dir, "in.bin")
 	payload := "first line\nsecond line"
@@ -279,7 +278,7 @@ func TestHostInputSubmitsAndKeepsReceipts(t *testing.T) {
 
 func TestHostInventoryNeverReadsACrashAsTheEnd(t *testing.T) {
 	h := startInProcessHost(t)
-	w := hostWatcher(t, h, true)
+	w := hostWatcher(t, h)
 	id := createHostSession(t, w, backendCreateSpec{name: "kept", command: "sleep 60"})
 	if _, listed := hostPaneOf(t, w, id); !listed {
 		t.Fatal("Session not listed")
@@ -296,23 +295,5 @@ func TestHostInventoryNeverReadsACrashAsTheEnd(t *testing.T) {
 	// A fresh process that never saw the host: the Session is gone with it.
 	if gone, err := w.sessions().resolveAbsence(id, false); err != nil || !gone {
 		t.Fatalf("resolveAbsence in a process that never saw a host = %v, %v", gone, err)
-	}
-}
-
-func TestHostSwitchOnlyMovesNewSessions(t *testing.T) {
-	h := startInProcessHost(t)
-	enabled := true
-	w := New(50 * time.Millisecond)
-	w.SetTmuxServer(filepath.Join(t.TempDir(), "no-tmux"), t.TempDir())
-	w.SetSessionHost(SessionHostConfig{SocketPath: h.socket, Executable: "/nonexistent/mewla", Version: "t", Enabled: func() bool { return enabled }})
-	id := createHostSession(t, w, backendCreateSpec{name: "before", command: "sleep 60"})
-	enabled = false
-	at, err := w.sessions().place("", false, "after")
-	if err == nil && at.backend == backendHost {
-		t.Fatal("a new Session went to the host with the switch off")
-	}
-	// The host Session runs on and stays listed.
-	if pane, listed := hostPaneOf(t, w, id); !listed || pane.dead {
-		t.Fatalf("host Session after the switch went off: %v %+v", listed, pane)
 	}
 }

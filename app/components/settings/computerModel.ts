@@ -140,3 +140,17 @@ export function computerUpdateProblem(update: DaemonUpdateStatus | null, minVers
   if (update.error) return { key: "update", text: update.error };
   return null;
 }
+
+/**
+ * Sessions an earlier Mewla started in tmux whose agent could not resume in
+ * the session host: they still run in tmux, and Mewla no longer controls them.
+ */
+export function computerTmuxProblem(update: DaemonUpdateStatus | null): ComputerProblem | null {
+  const count = update?.sessions_in_tmux ?? 0;
+  if (!Number.isInteger(count) || count <= 0) return null;
+  const text =
+    count === 1
+      ? "1 session still runs in tmux and is no longer controlled by Mewla"
+      : `${count} sessions still run in tmux and are no longer controlled by Mewla`;
+  return { key: "tmux", text };
+}
