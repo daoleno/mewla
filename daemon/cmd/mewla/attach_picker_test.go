@@ -316,7 +316,7 @@ func TestPickerSelectsWithArrowsAndFilter(t *testing.T) {
 	size := func() (int, int) { return 100, 20 }
 	run := func(input string) (*attachEntry, string) {
 		var out bytes.Buffer
-		chosen, err := runPicker(strings.NewReader(input), &out, entries, size, termStyle{}, func() time.Time { return attachNow })
+		chosen, _, err := runPicker(strings.NewReader(input), &out, entries, size, termStyle{}, func() time.Time { return attachNow })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -362,7 +362,7 @@ func TestPickerLeavesInputToTheCaller(t *testing.T) {
 	var out bytes.Buffer
 	size := func() (int, int) { return 100, 20 }
 	// A reader that hands out one byte per Read models a slow typist.
-	chosen, err := runPicker(io.LimitReader(oneByteReader{in}, 1), &out, listedAttachEntries(testAttachEntries()), size, termStyle{}, func() time.Time { return attachNow })
+	chosen, _, err := runPicker(io.LimitReader(oneByteReader{in}, 1), &out, listedAttachEntries(testAttachEntries()), size, termStyle{}, func() time.Time { return attachNow })
 	if err != nil || chosen == nil {
 		t.Fatalf("%v %v", chosen, err)
 	}

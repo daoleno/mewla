@@ -3,35 +3,16 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/daoleno/mewla/daemon/sessionhost"
 )
-
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *lockedBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
 
 func attachTestHost(t *testing.T) *sessionhost.Client {
 	t.Helper()
@@ -74,17 +55,6 @@ func createAttachSession(t *testing.T, client *sessionhost.Client, id, script st
 		ID: id, Argv: []string{"/bin/sh", "-c", script}, Env: []string{"PATH=/usr/bin:/bin", "HOME=" + dir}, Dir: dir, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func waitOutput(t *testing.T, out *lockedBuffer, want string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !strings.Contains(out.String(), want) {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %q in %q", want, out.String())
-		}
-		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -142,7 +112,13 @@ func TestAttachShowsTypesAndDetaches(t *testing.T) {
 	if !strings.HasSuffix(out.String(), leaveAttach) {
 		t.Fatalf("detach did not give the screen back: %q", out.String())
 	}
-	capture, err := client.Capture(context.Background(), sessionhost.CaptureParams{ID: "mh-attach", Scope: sessionhost.ScopeScreen})
+	// The Session answers what was typed before the detach a moment later.
+	var capture sessionhost.Capture
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+		if capture, err = client.Capture(context.Background(), sessionhost.CaptureParams{ID: "mh-attach", Scope: sessionhost.ScopeScreen}); err == nil && strings.Contains(capture.Text, "got bye") {
+			break
+		}
+	}
 	if err != nil || !strings.Contains(capture.Text, "got bye") || strings.Contains(capture.Text, "after") {
 		t.Fatalf("after detach the Session shows %q (%v)", capture.Text, err)
 	}
@@ -176,5 +152,72 @@ func TestAttachReportsTheExit(t *testing.T) {
 	}
 	if _, err := attachLoop(context.Background(), client, "mh-none", strings.NewReader(""), io.Discard, func() (int, int) { return 80, 24 }, nil); err == nil || !strings.Contains(err.Error(), "no Session mh-none") {
 		t.Fatalf("attach to a missing Session: %v", err)
+	}
+}
+
+// The grid shows every Session from the host's own screens, opens the one
+// chosen, goes back to the grid on Ctrl-] and leaves on q, without ever
+// resizing a Session it only shows.
+func TestGridShowsOpensAndReturns(t *testing.T) {
+	client := attachTestHost(t)
+	createAttachSession(t, client, "mh-aaa", `printf '\033[32mgreen-alpha\033[0m\r\n'; sleep 30`)
+	createAttachSession(t, client, "mh-bbb", `stty -echo; printf 'ready-beta\r\n'; while read line; do printf 'beta got %s\r\n' "$line"; done`)
+	typing := make(chan []byte)
+	out := &lockedBuffer{}
+	result := make(chan string, 1)
+	go func() {
+		outcome, err := runGrid(context.Background(), client, 0, typing, out, func() (int, int) { return 100, 30 }, nil, termStyle{})
+		if err != nil {
+			outcome = "error: " + err.Error()
+		}
+		result <- outcome
+	}()
+	waitOutput(t, out, "green-alpha")
+	waitOutput(t, out, "ready-beta")
+	for _, id := range []string{"mh-aaa", "mh-bbb"} {
+		info, err := client.Info(context.Background(), id)
+		if err != nil || info.Cols != 80 || info.Rows != 24 {
+			t.Fatalf("the grid resized %s: %+v, %v", id, info, err)
+		}
+	}
+	// Two Sessions created in order: the newest, mh-bbb, is tile 1.
+	typing <- []byte("1")
+	waitOutput(t, out, enterAttach) // the Session takes the screen
+	typing <- []byte("hello\r")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		capture, err := client.Capture(context.Background(), sessionhost.CaptureParams{ID: "mh-bbb", Scope: sessionhost.ScopeScreen})
+		if err == nil && strings.Contains(capture.Text, "beta got hello") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("typing did not reach the opened Session: %q", capture.Text)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	mark := len(out.String())
+	typing <- []byte("\x1d") // back to the grid
+	for !strings.Contains(out.String()[mark:], gridMouseOn) {
+		if time.Now().After(deadline) {
+			t.Fatalf("Ctrl-] did not return to the grid: %q", out.String()[mark:])
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	typing <- []byte("q")
+	select {
+	case outcome := <-result:
+		if outcome != "" {
+			t.Fatalf("leaving the grid reported %q", outcome)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("q did not leave the grid")
+	}
+	if !strings.HasSuffix(out.String(), leaveAttach) && !strings.Contains(out.String()[mark:], leaveAttach) {
+		t.Fatalf("leaving did not give the screen back")
+	}
+	for _, id := range []string{"mh-aaa", "mh-bbb"} {
+		if info, err := client.Info(context.Background(), id); err != nil || !info.Alive {
+			t.Fatalf("%s did not survive the grid: %+v, %v", id, info, err)
+		}
 	}
 }

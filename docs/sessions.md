@@ -4,8 +4,8 @@ A **Session** is one agent or shell running on your computer in Mewla's session
 host. Mewla starts it, lists it and lets you read or drive it from the phone.
 The session host keeps it running while Mewla restarts or updates, and the same
 Session is there when you sit down at the desk: `mewla attach` lists the live
-ones to pick from (or `mewla attach <name>` goes straight in), and Ctrl-\
-detaches. `mewla host status` lists them in full.
+ones to pick from (or `mewla attach <name>` goes straight in, or `mewla attach
+--all` tiles every Session as a live grid to choose from), and Ctrl-\ detaches. `mewla host status` lists them in full.
 
 Sessions an earlier Mewla started in `tmux` move to the session host when their
 agent is idle; see [Updating from Mewla 0.2](install-daemon.md#updating-from-mewla-02).
