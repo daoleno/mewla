@@ -17,3 +17,28 @@ export async function answerChoice(transport: Transport, workerId: string, callI
     { reply: "choice_answered", timeoutMs: 30_000 },
   );
 }
+
+/**
+ * Answers the prompt open in a Session's terminal: a menu by its number, or a
+ * question (AskUserQuestion read off the screen) by its answers. Rejects with
+ * `code: "answer_prompt_gone"` once the prompt has passed.
+ */
+export async function answerPrompt(transport: Transport, workerId: string, promptId: string, answer: { number?: number; answers?: ChoiceAnswer[] }): Promise<void> {
+  await transport.request(
+    "answer_prompt",
+    {
+      worker_id: workerId,
+      prompt_answer: {
+        prompt_id: promptId,
+        ...(answer.number !== undefined ? { number: answer.number } : {}),
+        ...(answer.answers ? { answers: answer.answers.map((a) => ({ selected: a.selected, other: a.other })) } : {}),
+      },
+    },
+    { reply: "prompt_answered", timeoutMs: 30_000 },
+  );
+}
+
+/** Answers a decision the agent reported itself (its approval request) with one of its options. */
+export async function decideApproval(transport: Transport, workerId: string, approvalId: string, optionId: string): Promise<void> {
+  await transport.request("approval_decision", { worker_id: workerId, id: approvalId, option_id: optionId }, { reply: "approval_decided", timeoutMs: 8_000 });
+}

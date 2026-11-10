@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "../testing/memoryPlatform";
 import { Transport, transportTiming } from "../transport";
-import { answerChoice, stopTurn } from "./turn";
+import { answerChoice, answerPrompt, decideApproval, stopTurn } from "./turn";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -41,6 +41,28 @@ describe("turn controls", () => {
     expect(last()).toMatchObject({ type: "answer_choice", worker_id: "host", choice_answer: { call_id: "call-1", answers: [{ selected: [1], other: "" }] } });
     socket.receive({ type: "error", request_id: last().request_id, code: "answer_choice_gone", message: "gone" });
     await expect(done).rejects.toMatchObject({ code: "answer_choice_gone" });
+    transport.close();
+  });
+
+  test("a terminal menu is answered by number, a terminal question by its answers", async () => {
+    const { transport, socket, last } = await connected();
+    const menu = answerPrompt(transport, "w1", "p1", { number: 2 });
+    expect(last()).toMatchObject({ type: "answer_prompt", worker_id: "w1", prompt_answer: { prompt_id: "p1", number: 2 } });
+    socket.receive({ type: "prompt_answered", request_id: last().request_id, prompt_id: "p1" });
+    await menu;
+    const question = answerPrompt(transport, "w1", "p2", { answers: [{ selected: [0], other: "" }] });
+    expect(last().prompt_answer).toEqual({ prompt_id: "p2", answers: [{ selected: [0], other: "" }] });
+    socket.receive({ type: "error", request_id: last().request_id, code: "answer_prompt_gone", message: "gone" });
+    await expect(question).rejects.toMatchObject({ code: "answer_prompt_gone" });
+    transport.close();
+  });
+
+  test("an approval the agent reported is decided with its option id", async () => {
+    const { transport, socket, last } = await connected();
+    const done = decideApproval(transport, "w1", "ap-1", "allow");
+    expect(last()).toMatchObject({ type: "approval_decision", worker_id: "w1", id: "ap-1", option_id: "allow" });
+    socket.receive({ type: "approval_decided", request_id: last().request_id });
+    await done;
     transport.close();
   });
 });
