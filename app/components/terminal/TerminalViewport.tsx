@@ -163,6 +163,8 @@ function TerminalViewportImpl({
             accessoryBottomOffset={accessoryBottomOffset}
             serverUrl={serverUrl}
             daemonId={daemonId}
+            workerProcessId={agent?.process_id}
+            workerStartedAt={agent?.started_at}
             keyboardVisible={keyboardVisible}
             onRetryConnection={onRetryConnection}
             onAccessoryLayout={onAccessoryLayout}

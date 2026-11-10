@@ -1,4 +1,5 @@
 import { TERMINAL_SCROLL_ROUTE_SOURCE } from './terminalWheel';
+import { TERMINAL_LINK_SOURCE } from './terminalLinks';
 import { TERMINAL_ROW_UPDATES_SOURCE } from './terminalRowUpdates';
 import type { TerminalThemePalette } from '../../constants/terminalThemes';
 import {
@@ -119,6 +120,11 @@ export function buildGhosttyTerminalHtml(
       }
       .terminal-row * {
         white-space: pre;
+      }
+      .terminal-row.search-hit { background-color: ${theme.selectionBackground}; }
+      .terminal-row.search-current {
+        background-color: ${theme.selectionBackground};
+        box-shadow: inset 3px 0 0 ${theme.cursor};
       }
       /* The native formatter pins cells a fallback face may draw (CJK,
          symbols, emoji) to their grid width; 1ch is the bundled cell.
@@ -307,6 +313,13 @@ export function buildGhosttyTerminalHtml(
         let cursorBlinkVisible = true;
         let drawRAF = null;
         let historyLines = [];
+        let historyFlags = [];
+        let historyText = [];
+        let historyPaneId = '';
+        let searchHits = [];
+        let searchHitSet = new Set();
+        let searchCurrent = -1;
+        let searchQuery = '';
         let historyStart = -1;
         let historyEnd = -1;
         let followLive = true;
@@ -323,6 +336,10 @@ export function buildGhosttyTerminalHtml(
         let scrollSessionId = null;
         let scrollToken = null;
         const selectScrollRoute = ${TERMINAL_SCROLL_ROUTE_SOURCE};
+        const findLink = ${TERMINAL_LINK_SOURCE};
+        const TERMINAL_ROW_WRAPPED = 1;
+        const TERMINAL_ROW_CONTINUATION = 2;
+        const TERMINAL_ROW_PROMPT = 4;
         const wheelCenter = 1000000;
         let paneModes = [];
         let wheelViewport = false;
@@ -562,11 +579,29 @@ export function buildGhosttyTerminalHtml(
           cursor.style.transform = 'translate(' + x + 'px,' + y + 'px)';
         };
 
+        const markHistoryRow = (node, index) => {
+          const flags = historyFlags[index] | 0;
+          node.dataset.historyIndex = String(index);
+          node.dataset.wrap = flags & TERMINAL_ROW_WRAPPED ? '1' : '0';
+          node.dataset.wrapContinuation = flags & TERMINAL_ROW_CONTINUATION ? '1' : '0';
+          if (flags & TERMINAL_ROW_PROMPT) node.dataset.prompt = '1';
+          node.classList.toggle('search-hit', searchHitSet.has(index));
+          node.classList.toggle('search-current', index === searchCurrent);
+        };
+
         const drawHistory = () => {
-          if (nativeSelectionActive || wheelViewport) return;
+          if (wheelViewport) return;
           const visibleRows = Math.ceil(viewportHeight / cellHeight);
-          const start = Math.max(0, Math.floor(root.scrollTop / cellHeight) - visibleRows * 2);
-          const end = Math.min(historyLines.length, start + visibleRows * 5);
+          const topRow = Math.floor(root.scrollTop / cellHeight);
+          // A selection can only reach rows that are in the document, so while
+          // one is held the mounted rows widen and none are taken away.
+          const around = nativeSelectionActive ? 600 : visibleRows * 2;
+          let start = Math.max(0, topRow - around);
+          let end = Math.min(historyLines.length, topRow + visibleRows + around);
+          if (nativeSelectionActive && historyStart >= 0) {
+            start = Math.min(start, historyStart);
+            end = Math.min(historyLines.length, Math.max(end, historyEnd));
+          }
           if (start === historyStart && end === historyEnd) return;
           historyStart = start;
           historyEnd = end;
@@ -590,7 +625,7 @@ export function buildGhosttyTerminalHtml(
             node.style.right = '0';
             mountedHistoryRows.set(index, node);
             const following = Array.from(historyRows.children).find((child) => Number(child.dataset.historyIndex) > index);
-            node.dataset.historyIndex = String(index);
+            markHistoryRow(node, index);
             historyRows.insertBefore(node, following || null);
           }
         };
@@ -779,7 +814,7 @@ export function buildGhosttyTerminalHtml(
           if (pendingHistory) {
             const next = pendingHistory;
             pendingHistory = null;
-            applyHistory(next);
+            commitHistory(next);
           }
         };
 
@@ -797,28 +832,102 @@ export function buildGhosttyTerminalHtml(
           scheduleDraw();
         };
 
-        const applyHistory = (next) => {
-          if (interactionActive || nativeSelectionActive) {
-            pendingHistory = next;
-            return;
-          }
-          const oldTop = root.scrollTop;
-          historyLines = next.rows || [];
+        const historyHeight = () => wheelViewport
+          ? (wheelCenter * 2 + viewportHeight) + 'px'
+          : historyLines.length * cellHeight + 'px';
+
+        const remountHistory = () => {
           mountedHistoryRows.clear();
           historyRows.innerHTML = '';
           historyStart = -1;
           historyEnd = -1;
-          paneModes = next.panes || [];
-          setWheelViewport(paneModes.some((p) => p.id === next.paneId && p.alternate));
-          history.style.height = wheelViewport ? (wheelCenter * 2 + viewportHeight) + 'px' : historyLines.length * cellHeight + 'px';
+        };
+
+        // History arrives as instructions: void it, drop rows from its front,
+        // append rows to its end. Appending moves nothing the reader sees, so
+        // it never waits; the others replace rows under the reader's finger or
+        // selection and wait for them to let go. Held-back instructions merge
+        // in order, and everything after one queues behind it.
+        const rowFlags = (next) => next.rows.map((_, i) => (next.flags && next.flags[i]) | 0);
+
+        const mergeHistory = (a, b) => {
+          if (!a) return b;
+          if (b.reset) return b;
+          const merged = {
+            rows: a.rows.slice(), flags: a.flags.slice(), removed: a.removed, reset: a.reset,
+            notice: b.notice, panes: b.panes || a.panes, paneId: b.paneId || a.paneId,
+          };
+          let drop = b.removed || 0;
+          if (drop) {
+            const kept = a.reset ? 0 : Math.max(0, historyLines.length - a.removed);
+            const fromHeld = Math.min(drop, kept);
+            merged.removed += fromHeld;
+            drop -= fromHeld;
+            if (drop) {
+              merged.rows.splice(0, drop);
+              merged.flags.splice(0, drop);
+            }
+          }
+          merged.rows = merged.rows.concat(b.rows);
+          merged.flags = merged.flags.concat(b.flags);
+          return merged;
+        };
+
+        const commitHistory = (next) => {
+          const oldTop = root.scrollTop;
+          let removed = 0;
+          if (next.reset) {
+            historyLines = [];
+            historyFlags = [];
+            historyText = [];
+            remountHistory();
+          } else if (next.removed) {
+            removed = Math.min(next.removed, historyLines.length);
+            historyLines.splice(0, removed);
+            historyFlags.splice(0, removed);
+            historyText.splice(0, removed);
+            remountHistory();
+          }
+          historyLines = historyLines.concat(next.rows);
+          historyFlags = historyFlags.concat(next.flags);
+          historyText = historyText.concat(next.rows.map(() => undefined));
+          if (next.paneId !== undefined) historyPaneId = next.paneId;
+          if (next.panes) paneModes = next.panes;
+          else if (next.reset) paneModes = [];
+          setWheelViewport(paneModes.some((p) => p.id === historyPaneId && p.alternate));
+          history.style.height = historyHeight();
           historyNotice.textContent = next.notice || '';
+          if (next.reset) searchCurrent = -1;
+          if (next.reset || removed) refreshSearch(removed);
           if (followLive && !wheelViewport) root.scrollTop = root.scrollHeight;
           else if (!wheelViewport && next.reset) {
             // Pane/width changes replace coordinates. Keep the reader in history
             // at the closest physical row; never jump to the live screen.
             root.scrollTop = Math.min(oldTop, Math.max(0, historyLines.length * cellHeight - cellHeight));
-          } else if (!wheelViewport) root.scrollTop = Math.max(0, oldTop - next.removed * cellHeight);
+          } else if (!wheelViewport && removed) root.scrollTop = Math.max(0, oldTop - removed * cellHeight);
           drawHistory();
+        };
+
+        const applyHistory = (incoming) => {
+          const next = {
+            rows: incoming.rows || [], flags: rowFlags(incoming), removed: incoming.removed || 0,
+            reset: Boolean(incoming.reset), notice: incoming.notice || '',
+            panes: incoming.panes, paneId: incoming.paneId,
+          };
+          const nextPanes = next.panes || (next.reset ? [] : paneModes);
+          const wantWheel = nextPanes.some((p) => p.id === (next.paneId !== undefined ? next.paneId : historyPaneId) && p.alternate);
+          const structural = next.reset || next.removed > 0 || wantWheel !== wheelViewport;
+          if (pendingHistory || (structural && (interactionActive || nativeSelectionActive))) {
+            pendingHistory = mergeHistory(pendingHistory, next);
+            historyNotice.textContent = next.notice || '';
+            if (!interactionActive && !nativeSelectionActive) {
+              const held = pendingHistory;
+              pendingHistory = null;
+              commitHistory(held);
+            }
+            return;
+          }
+          commitHistory(next);
         };
 
         const syncNativeSelectionState = () => {
@@ -880,13 +989,14 @@ export function buildGhosttyTerminalHtml(
           wheelX = touchX - live.getBoundingClientRect().left;
           wheelY = touchY - live.getBoundingClientRect().top;
           const route = selectScrollRoute(paneModes, Math.floor(wheelX / cellWidth), Math.floor(wheelY / cellHeight));
+          const swipeRoute = route === 'wheel' || route === 'keys';
           if (tapInTerminal && followLive && !nativeSelectionActive && !hasTerminalSelection()) {
-            setWheelViewport(route === 'wheel' || (route === 'none' && wheelViewport));
+            setWheelViewport(swipeRoute || (route === 'none' && wheelViewport));
           }
           wheelTop = root.scrollTop;
           wheelGesture = wheelViewport && event.touches.length === 1 && tapInTerminal &&
             !nativeSelectionActive && !hasTerminalSelection() &&
-            route === 'wheel';
+            swipeRoute;
           setInteraction(true);
         }, { capture: true, passive: true });
         document.addEventListener('touchmove', (event) => {
@@ -913,7 +1023,15 @@ export function buildGhosttyTerminalHtml(
           touching = false;
           touchRow = null;
           const touch = event.changedTouches && event.changedTouches[0];
-          if (tapInTerminal && !moved && touch && !syncNativeSelectionState()) emitTap(touch.clientX, touch.clientY);
+          if (tapInTerminal && !moved && touch && !syncNativeSelectionState()) {
+            const link = linkAtPoint(touch.clientX, touch.clientY);
+            if (link) {
+              send({ type: 'openLink', sessionId: scrollSessionId, kind: link.kind, value: link.value,
+                line: link.line, column: link.column });
+            } else {
+              emitTap(touch.clientX, touch.clientY);
+            }
+          }
           scheduleDraw();
           scheduleIdle();
         }, { capture: true, passive: true });
@@ -950,6 +1068,183 @@ export function buildGhosttyTerminalHtml(
           scheduleDraw();
         }, 530);
 
+        // Links: the character under a tap, with the logical line it is on,
+        // which a soft wrap spreads over rows.
+        const rowOfNode = (node) => {
+          const element = node && node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+          return element && element.closest ? element.closest('.terminal-row') : null;
+        };
+
+        const charRect = (row, index) => {
+          const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+          let before = 0;
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const length = node.nodeValue.length;
+            if (index < before + length) {
+              const range = document.createRange();
+              range.setStart(node, index - before);
+              range.setEnd(node, index - before + 1);
+              return range.getBoundingClientRect();
+            }
+            before += length;
+          }
+          return null;
+        };
+
+        const linkAtPoint = (x, y) => {
+          if (typeof document.caretRangeFromPoint !== 'function') return null;
+          const caret = document.caretRangeFromPoint(x, y);
+          const row = caret && rowOfNode(caret.startContainer);
+          if (!row || !root.contains(row)) return null;
+          // A program that reports the mouse owns taps on its own screen.
+          if (terminalHtml.contains(row) && paneModes.some((p) => p.mouse)) return null;
+          let first = row;
+          for (let step = 0; step < 8; step++) {
+            const previous = first.previousElementSibling;
+            if (!previous || previous.dataset.wrap !== '1') break;
+            first = previous;
+          }
+          let text = '';
+          let target = null;
+          let tapped = -1;
+          for (let el = first, step = 0; el && el.classList.contains('terminal-row') && step < 16; el = el.nextElementSibling, step++) {
+            if (el === row) target = { el, base: text.length };
+            text += el.textContent;
+            if (el.dataset.wrap !== '1' && el === row) break;
+            if (el.dataset.wrap !== '1' && target) break;
+          }
+          if (!target) return null;
+          const range = document.createRange();
+          range.selectNodeContents(row);
+          range.setEnd(caret.startContainer, caret.startOffset);
+          const caretIndex = range.toString().length;
+          for (const candidate of [caretIndex, caretIndex - 1]) {
+            if (candidate < 0 || candidate >= row.textContent.length) continue;
+            const rect = charRect(row, candidate);
+            if (rect && x >= rect.left - 1 && x <= rect.right + 1 && y >= rect.top - 1 && y <= rect.bottom + 1) {
+              tapped = target.base + candidate;
+              break;
+            }
+          }
+          return tapped < 0 ? null : findLink(text, tapped);
+        };
+
+        // Prompts: rows the program marked (OSC 133), else the shape of a prompt
+        // line when nothing in the history is marked.
+        const PROMPT_SHAPE = /^\s*(?:[❯›»➜>$%#]\s|\S+@\S+[:~ ].*[$%#]\s)/;
+        const rowTextAt = (index) => {
+          let text = historyText[index];
+          if (text === undefined) {
+            const template = document.createElement('template');
+            template.innerHTML = historyLines[index];
+            text = template.content.textContent || '';
+            historyText[index] = text;
+          }
+          return text;
+        };
+        const promptRows = () => {
+          const marked = [];
+          for (let i = 0; i < historyFlags.length; i++) {
+            if (historyFlags[i] & TERMINAL_ROW_PROMPT) marked.push(i);
+          }
+          if (marked.length) return marked;
+          const shaped = [];
+          for (let i = 0; i < historyLines.length; i++) {
+            if (PROMPT_SHAPE.test(rowTextAt(i))) shaped.push(i);
+          }
+          return shaped;
+        };
+
+        const scrollToHistoryRow = (index, offsetRows) => {
+          root.scrollTo({ top: Math.max(0, (index - offsetRows) * cellHeight), behavior: 'instant' });
+          scheduleDraw();
+        };
+
+        window.__mewlaJumpPrompt = (direction) => {
+          if (wheelViewport || nativeSelectionActive) return;
+          stopWheel();
+          const rows = promptRows();
+          const top = root.scrollTop;
+          let target = -1;
+          if (direction < 0) {
+            for (let i = rows.length - 1; i >= 0; i--) {
+              if (rows[i] * cellHeight < top - 1) { target = rows[i]; break; }
+            }
+          } else {
+            for (const row of rows) {
+              if (row * cellHeight > top + 1) { target = row; break; }
+            }
+            if (target < 0) { jumpLive(); return; }
+          }
+          if (target >= 0) scrollToHistoryRow(target, 0);
+        };
+
+        // Search: rows of the history whose text holds the query, newest
+        // first to land on. The viewport moves only when asked to.
+        const updateSearchMarks = () => {
+          for (const [index, node] of mountedHistoryRows) {
+            node.classList.toggle('search-hit', searchHitSet.has(index));
+            node.classList.toggle('search-current', index === searchCurrent);
+          }
+        };
+
+        const reportSearch = () => {
+          const index = searchHits.indexOf(searchCurrent);
+          send({ type: 'searchResult', query: searchQuery, total: searchHits.length, index });
+        };
+
+        const clearSearchState = () => {
+          searchHits = [];
+          searchHitSet = new Set();
+          searchCurrent = -1;
+          searchQuery = '';
+          updateSearchMarks();
+        };
+
+        // step 0 is a new query, 1 the next newer row, -1 the next older one,
+        // null the same query after the history changed.
+        const runSearch = (query, step) => {
+          const needle = String(query || '').toLowerCase();
+          if (!needle) {
+            clearSearchState();
+            reportSearch();
+            return;
+          }
+          const hits = [];
+          for (let i = 0; i < historyLines.length; i++) {
+            if (rowTextAt(i).toLowerCase().indexOf(needle) >= 0) hits.push(i);
+          }
+          const previous = searchCurrent;
+          searchQuery = String(query);
+          searchHits = hits;
+          searchHitSet = new Set(hits);
+          const held = hits.indexOf(previous);
+          let at = -1;
+          if (hits.length) {
+            if (step === 0) at = hits.length - 1;
+            else if (step === null) at = held;
+            else at = held < 0 ? hits.length - 1 : (held + step + hits.length) % hits.length;
+          }
+          searchCurrent = at < 0 ? -1 : hits[at];
+          updateSearchMarks();
+          reportSearch();
+          if (step !== null && searchCurrent >= 0 && !wheelViewport) {
+            scrollToHistoryRow(searchCurrent, Math.floor(viewportHeight / cellHeight / 3));
+          }
+        };
+
+        const refreshSearch = (trimmed) => {
+          if (!searchQuery) return;
+          if (searchCurrent >= 0) searchCurrent = trimmed ? searchCurrent - trimmed : searchCurrent;
+          runSearch(searchQuery, null);
+        };
+
+        window.__mewlaSearch = (query, step) => runSearch(query, step);
+        window.__mewlaSearchClear = () => {
+          clearSearchState();
+          reportSearch();
+        };
+
         window.__mewlaRenderSnapshot = (nextSnapshot) => {
           if (!nextSnapshot || !rowUpdates.apply(nextSnapshot)) return;
           renderSnapshot = nextSnapshot;
@@ -984,6 +1279,10 @@ export function buildGhosttyTerminalHtml(
             interactionActive = false;
             pendingHistory = null;
             historyLines = [];
+            historyFlags = [];
+            historyText = [];
+            historyPaneId = '';
+            clearSearchState();
             history.style.height = '0px';
             historyRows.innerHTML = '';
             mountedHistoryRows.clear();

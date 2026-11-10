@@ -11,6 +11,7 @@ import type {
 import { TerminalAccessoryDock } from "./TerminalAccessoryDock";
 import { TerminalSurface, type TerminalSurfaceHandle } from "./TerminalSurface";
 import { TerminalOutputStateCard } from "./TerminalOutputStateCard";
+import { SessionFilePreviewSheet } from "./SessionFilePreviewSheet";
 
 interface TerminalOutputPaneProps {
   sessionKey: string | null;
@@ -35,6 +36,9 @@ interface TerminalOutputPaneProps {
   accessoryBottomOffset: number;
   serverUrl: string;
   daemonId: string;
+  /** Which run of the Worker a tapped path belongs to. */
+  workerProcessId?: number;
+  workerStartedAt?: number;
   keyboardVisible: boolean;
   onRetryConnection(): void;
   onAccessoryLayout(event: LayoutChangeEvent): void;
@@ -63,10 +67,17 @@ function TerminalOutputPaneImpl({
   accessoryBottomOffset,
   serverUrl,
   daemonId,
+  workerProcessId,
+  workerStartedAt,
   keyboardVisible,
   onRetryConnection,
   onAccessoryLayout,
 }: TerminalOutputPaneProps) {
+  const [filePreviewReference, setFilePreviewReference] = React.useState<string | null>(null);
+  const openPath = React.useCallback((path: string) => {
+    if (path && path.length <= 4096 && !path.includes("\u0000")) setFilePreviewReference(path);
+  }, []);
+  const closeFilePreview = React.useCallback(() => setFilePreviewReference(null), []);
   const hasTerminalTarget = Boolean(sessionKey && serverId && workerId);
   const shouldAutoResumeTerminal =
     terminalSurfaceActive && canRenderTerminal && hasTerminalTarget;
@@ -119,6 +130,7 @@ function TerminalOutputPaneImpl({
             theme={theme}
             ctrlArmed={ctrlArmed}
             onCtrlArmedChange={onCtrlArmedChange}
+            onOpenPath={workerProcessId && workerStartedAt ? openPath : undefined}
           />
         ) : null}
         {canRenderTerminal ? null : (
@@ -147,6 +159,21 @@ function TerminalOutputPaneImpl({
           bottomOffset={accessoryBottomOffset}
           onCtrlArmedChange={onCtrlArmedChange}
           onLayout={onAccessoryLayout}
+        />
+      ) : null}
+
+      {workerProcessId && workerStartedAt ? (
+        <SessionFilePreviewSheet
+          reference={filePreviewReference}
+          serverId={serverId}
+          serverUrl={serverUrl}
+          daemonId={daemonId}
+          workerId={workerId}
+          processId={workerProcessId}
+          startedAt={workerStartedAt}
+          chrome={chrome}
+          theme={theme}
+          onClose={closeFilePreview}
         />
       ) : null}
     </>

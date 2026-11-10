@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { wsClient } from '../../services/websocket';
 import type { TerminalThemePalette } from '../../constants/terminalThemes';
-import { historyRows, retainedHistoryOverlap, type TerminalHistoryRender } from './terminalHistory';
+import { isTerminalHistoryDelta } from '../../services/terminalHistory';
+import { historyRows, type TerminalHistoryRender } from './terminalHistory';
+import { TerminalHistoryModel, validateHistoryDelta } from './terminalHistoryModel';
 import { renderTerminalHistory } from './renderTerminalHistory';
 
-/** Output-driven idle refresh, never a scroll-frame request. One capture and
- * one decoder at a time. Session/renderer invalidation makes late work inert.
+/** A session host Session sends only the rows after the cursor, so a short
+ * wait after output is cheap; a tmux Session sends its whole snapshot. */
+const DELTA_REFRESH_MS = 250;
+const SNAPSHOT_REFRESH_MS = 750;
+
+const withoutRowIndex = (rows: string[]) => rows.map((row) => row.replace(/ data-row="\d+"/, ''));
+
+/** Output-driven refresh, never a scroll-frame request. One request and one
+ * decoder at a time. Session/renderer invalidation makes late work inert.
+ * A numbered (session host) history keeps arriving while the reader scrolls:
+ * its rows only ever append, which the renderer takes without moving what the
+ * reader is looking at. A snapshot is held back while the reader touches it.
  */
 export function useTerminalHistory(
   serverId: string,
@@ -17,54 +29,66 @@ export function useTerminalHistory(
   const state = useRef({
     session: null as string | null, epoch: 0, busy: false, pending: false,
     running: false, timer: null as ReturnType<typeof setTimeout> | null,
-    rows: [] as string[], pane: '', cols: 0, ansi: '', theme: null as TerminalThemePalette | null,
-    render: { rows: [], removed: 0, reset: true, notice: '' } as TerminalHistoryRender,
+    model: new TerminalHistoryModel(), ansi: '', theme: null as TerminalThemePalette | null,
+    notice: false,
   });
 
   const schedule = useCallback(() => {
     const s = state.current;
-    if (!s.session || s.busy || s.running || s.timer || !s.pending) return;
+    const held = s.busy && !s.model.numbered;
+    if (!s.session || held || s.running || s.timer || !s.pending) return;
     s.timer = setTimeout(async () => {
       s.timer = null;
-      if (s.busy || !s.session) return;
+      if ((s.busy && !s.model.numbered) || !s.session) return;
       s.running = true;
       s.pending = false;
       const session = s.session;
       const epoch = s.epoch;
       const c = config.current;
-      const current = () => s.session === session && s.epoch === epoch && !s.busy;
+      const current = () => s.session === session && s.epoch === epoch &&
+        !(s.busy && !s.model.numbered);
+      const emit = (render: TerminalHistoryRender) => {
+        s.notice = Boolean(render.notice);
+        c.publish(render);
+      };
       try {
-        const snapshot = await wsClient.getTerminalHistory(c.serverId, session);
-        if (!current()) return;
-        const rows = historyRows(snapshot);
-        if (snapshot.ansi === s.ansi && snapshot.pane_id === s.pane &&
-            snapshot.cols === s.cols && c.theme === s.theme &&
-            JSON.stringify(snapshot.panes) === JSON.stringify(s.render.panes) &&
-            !s.render.notice) return;
-        const rendered = await renderTerminalHistory(rows, snapshot.cols, c.theme, current);
-        if (!rendered || !current()) return;
-        const normalized = rendered.map((row) => row.replace(/ data-row="\d+"/, ''));
-        const samePane = s.pane === snapshot.pane_id && s.cols === snapshot.cols;
-        const overlap = samePane ? retainedHistoryOverlap(s.rows, normalized) : 0;
-        s.render = {
-          rows: normalized,
-          removed: s.rows.length - overlap,
-          reset: !samePane || (s.rows.length > 0 && overlap === 0),
-          notice: '',
-          panes: snapshot.panes,
-          paneId: snapshot.pane_id,
-        };
-        s.rows = normalized;
-        s.pane = snapshot.pane_id;
-        s.cols = snapshot.cols;
-        s.ansi = snapshot.ansi;
+        if (s.theme && s.theme !== c.theme && s.model.lines.length) {
+          // The rows are drawn in the old palette: draw every one again.
+          const html = await renderTerminalHistory(s.model.lines, s.model.cols, c.theme, current);
+          if (!html || !current()) return;
+          s.model.rows = withoutRowIndex(html);
+          emit(s.model.replay());
+        }
         s.theme = c.theme;
-        c.publish(s.render);
+        const response = await wsClient.getTerminalHistory(c.serverId, session, s.model.cursor());
+        if (!current()) return;
+        if (isTerminalHistoryDelta(response)) {
+          const delta = validateHistoryDelta(response);
+          const html = await renderTerminalHistory(delta.lines, delta.cols, c.theme, current);
+          if (!html || !current()) return;
+          const result = s.model.applyDelta(delta, withoutRowIndex(html));
+          if (result === 'resync') {
+            // It did not follow what is held: ask again from nothing.
+            s.model.clear();
+            s.pending = true;
+          } else if (result) emit(result);
+          else if (s.notice) emit({ rows: [], removed: 0, reset: false, notice: '',
+            panes: s.model.panes, paneId: s.model.paneId });
+          return;
+        }
+        const rows = historyRows(response);
+        if (response.ansi === s.ansi && response.pane_id === s.model.paneId &&
+            response.cols === s.model.cols && !s.model.numbered &&
+            JSON.stringify(response.panes || []) === JSON.stringify(s.model.panes) && !s.notice) return;
+        const html = await renderTerminalHistory(rows, response.cols, c.theme, current);
+        if (!html || !current()) return;
+        emit(s.model.applySnapshot(response.pane_id, response.cols, rows,
+          withoutRowIndex(html), response.panes || []));
+        s.ansi = response.ansi;
       } catch (error) {
         if (current()) {
-          s.render = { ...s.render, removed: 0, reset: false,
-            notice: 'History could not load. Tap to retry.' };
-          c.publish(s.render);
+          emit({ rows: [], removed: 0, reset: false, panes: s.model.panes, paneId: s.model.paneId,
+            notice: 'History could not load. Tap to retry.' });
           console.warn('[Terminal history]', error);
         }
       } finally {
@@ -72,7 +96,7 @@ export function useTerminalHistory(
         if (!current() && s.session) s.pending = true;
         schedule();
       }
-    }, 750);
+    }, state.current.model.numbered ? DELTA_REFRESH_MS : SNAPSHOT_REFRESH_MS);
   }, []);
 
   const output = useCallback(() => {
@@ -88,17 +112,17 @@ export function useTerminalHistory(
     s.session = session;
     s.busy = false;
     s.pending = Boolean(session);
-    s.rows = [];
-    s.pane = '';
-    s.cols = 0;
+    s.model.clear();
     s.ansi = '';
-    s.render = { rows: [], removed: 0, reset: true, notice: session ? 'Loading history…' : '' };
-    config.current.publish(s.render);
+    s.theme = null;
+    s.notice = Boolean(session);
+    config.current.publish({ rows: [], removed: 0, reset: true, notice: session ? 'Loading history…' : '' });
     schedule();
   }, [schedule]);
 
   const interaction = useCallback((busy: boolean) => {
     const s = state.current;
+    if (s.model.numbered) return; // its rows append under the reader's finger
     s.busy = busy;
     if (busy) {
       s.epoch++;
@@ -113,7 +137,7 @@ export function useTerminalHistory(
     s.epoch++;
     s.busy = false;
     s.pending = Boolean(s.session);
-    config.current.publish({ ...s.render, removed: 0, reset: true });
+    config.current.publish(s.model.replay());
     schedule();
   }, [schedule]);
 

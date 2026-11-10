@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from 'react';
 import {
   ActivityIndicator,
@@ -35,6 +36,7 @@ import {
   terminalWebViewDensityProps,
 } from './terminalFontDensity';
 import { useGhosttyTerminalController } from './useGhosttyTerminalController';
+import { TerminalSearchBar } from './TerminalSearchBar';
 import { Icon } from "../icons/Icon";
 
 export const TerminalSurfaceGhosttyWebView = forwardRef<
@@ -47,6 +49,7 @@ export const TerminalSurfaceGhosttyWebView = forwardRef<
   theme,
   ctrlArmed = false,
   onCtrlArmedChange,
+  onOpenPath,
 }, ref) => {
   const chrome = useMemo(
     () => buildTerminalChrome(theme),
@@ -89,7 +92,17 @@ export const TerminalSurfaceGhosttyWebView = forwardRef<
     rendererGeneration: renderer.generation,
     onCtrlArmedChange,
     onRendererBootstrapFailure: reportRendererFailure,
+    onOpenPath,
   });
+  const [searching, setSearching] = useState(false);
+  const closeSearch = useCallback(() => {
+    setSearching(false);
+    controller.clearSearch();
+  }, [controller]);
+  const stepSearch = useCallback((step: -1 | 1) => {
+    if (controller.search.query) controller.runSearch(controller.search.query, step);
+  }, [controller]);
+  const querySearch = useCallback((query: string) => controller.runSearch(query, 0), [controller]);
 
   const html = useMemo(
     () => buildGhosttyTerminalHtml(
@@ -242,22 +255,42 @@ export const TerminalSurfaceGhosttyWebView = forwardRef<
       ) : null}
 
       {controller.scrolledUp && controller.ready && (
-        <TouchableOpacity
-          accessibilityLabel="Scroll to bottom"
-          accessibilityRole="button"
-          style={[
-            styles.jumpButton,
-            {
-              backgroundColor: chrome.overlay,
-              borderColor: chrome.borderStrong,
-            },
-          ]}
-          onPress={controller.scrollToBottom}
-          activeOpacity={0.7}
-        >
-          <Icon name="arrow-down" size={16} color={chrome.text} />
-        </TouchableOpacity>
+        <View style={styles.jumpColumn} pointerEvents="box-none">
+          {[
+            { label: 'Search history', icon: 'search', onPress: () => setSearching(true) },
+            { label: 'Previous prompt', icon: 'chevron-up', onPress: () => controller.jumpPrompt(-1) },
+            { label: 'Next prompt', icon: 'chevron-down', onPress: () => controller.jumpPrompt(1) },
+            { label: 'Scroll to bottom', icon: 'arrow-down', onPress: controller.scrollToBottom },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              accessibilityLabel={item.label}
+              accessibilityRole="button"
+              style={[
+                styles.jumpButton,
+                {
+                  backgroundColor: chrome.overlay,
+                  borderColor: chrome.borderStrong,
+                },
+              ]}
+              onPress={item.onPress}
+              activeOpacity={0.7}
+            >
+              <Icon name={item.icon as 'search'} size={16} color={chrome.text} />
+            </TouchableOpacity>
+          ))}
+        </View>
       )}
+
+      {searching && controller.ready ? (
+        <TerminalSearchBar
+          chrome={chrome}
+          state={controller.search}
+          onQuery={querySearch}
+          onStep={stepSearch}
+          onClose={closeSearch}
+        />
+      ) : null}
 
       <TerminalInputHandler
         ref={controller.inputRef}
@@ -320,10 +353,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  jumpButton: {
+  jumpColumn: {
     position: 'absolute',
     right: 16,
     bottom: 16,
+    gap: 10,
+  },
+  jumpButton: {
     borderWidth: 1,
     borderRadius: 999,
     width: 44,

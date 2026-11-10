@@ -2418,11 +2418,18 @@ export class WebSocketClient {
     );
   }
 
-  getTerminalHistory(serverId: string, sessionId: string) {
-    return this.request<import("./terminalHistory").TerminalHistorySnapshot>(
+  /** The history of a Session's terminal. With a cursor, a session host
+   * Session answers with the rows after it; a tmux Session answers with its
+   * snapshot either way. */
+  getTerminalHistory(
+    serverId: string,
+    sessionId: string,
+    since?: import("./terminalHistory").TerminalHistoryCursor,
+  ) {
+    return this.request<import("./terminalHistory").TerminalHistoryResponse>(
       serverId,
       "terminal_history",
-      { session_id: sessionId },
+      since ? { session_id: sessionId, since } : { session_id: sessionId },
       {
         responseType: "terminal_history",
         timeoutMs: 10000,

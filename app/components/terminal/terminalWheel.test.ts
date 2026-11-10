@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { encodeTerminalWheel, selectTerminalScrollRoute } from './terminalWheel';
+import { encodeTerminalKeys, encodeTerminalWheel, selectTerminalScrollRoute } from './terminalWheel';
 
 test('selects the pane under the touch and never guesses arrow-key support', () => {
   const panes = [
@@ -30,4 +30,24 @@ test('uses the native encoder for each direction, bounds batches, and preserves 
     expect(encodeTerminalWheel(1.5, encode)).toBe('');
   }
   expect(encodeTerminalWheel(1, () => '')).toBe('');
+});
+
+test('the alternate screen without mouse reports scrolls with keys only when the host says 1007 is on', () => {
+  const pane = { id: 'mh-1', left: 0, top: 0, cols: 80, rows: 24, alternate: true, mouse: false };
+  expect(selectTerminalScrollRoute([pane], 5, 5)).toBe('none');
+  expect(selectTerminalScrollRoute([{ ...pane, alt_scroll: false }], 5, 5)).toBe('none');
+  expect(selectTerminalScrollRoute([{ ...pane, alt_scroll: true }], 5, 5)).toBe('keys');
+  // The program's own mouse reporting wins over the keys.
+  expect(selectTerminalScrollRoute([{ ...pane, mouse: true, alt_scroll: true }], 5, 5)).toBe('wheel');
+  // The primary screen scrolls its history whatever the modes say.
+  expect(selectTerminalScrollRoute([{ ...pane, alternate: false, alt_scroll: true }], 5, 5)).toBe('history');
+});
+
+test('keys follow the cursor-key mode and a swipe down is the up key', () => {
+  expect(encodeTerminalKeys(-1, false)).toBe('\x1b[A');
+  expect(encodeTerminalKeys(2, false)).toBe('\x1b[B\x1b[B');
+  expect(encodeTerminalKeys(-1, true)).toBe('\x1bOA');
+  expect(encodeTerminalKeys(3, true)).toBe('\x1bOB\x1bOB\x1bOB');
+  expect(encodeTerminalKeys(100, false)).toBe('\x1b[B'.repeat(3));
+  for (const bad of [0, NaN, 1.5, Infinity]) expect(encodeTerminalKeys(bad, false)).toBe('');
 });

@@ -17,4 +17,6 @@ export interface TerminalSurfaceProps {
   theme: TerminalThemePalette;
   ctrlArmed?: boolean;
   onCtrlArmedChange?: (next: boolean) => void;
+  /** A path in the output was tapped. */
+  onOpenPath?: (path: string, position: { line?: number; column?: number }) => void;
 }
