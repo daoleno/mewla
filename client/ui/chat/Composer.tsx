@@ -54,6 +54,8 @@ export function Composer(props: {
   onStop: () => void;
   /** Whether the page is on screen: only then does it lift for the keyboard. */
   active?: () => boolean;
+  /** Left of the field (a Session's "+"). */
+  leading?: unknown;
   children?: unknown;
 }) {
   const value = () => props.text.text();
@@ -67,6 +69,7 @@ export function Composer(props: {
       style={{ marginBottom: props.active && !props.active() ? 0 : Math.max(0, keyboardFrame().height - belowSections()) }}>
       {props.children as never}
       <View class="flex-row items-end gap-2">
+        {props.leading as never}
         <Input testID="composer" multiline value={value()} placeholder={props.placeholder}
           class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"
           onChange={({ value }) => props.text.set(value)} />
