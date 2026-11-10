@@ -1,0 +1,5 @@
+<resources>
+  <string name="mewla_widget_small_label">Mewla</string>
+  <string name="mewla_widget_medium_label">Mewla · Workers</string>
+  <string name="mewla_widget_desc">What is running, and when Brain needs you</string>
+</resources>

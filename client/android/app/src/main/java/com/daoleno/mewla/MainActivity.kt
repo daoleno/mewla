@@ -7,6 +7,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
+import com.daoleno.mewla.live.LiveHost
+import com.daoleno.mewla.push.PushHost
 import com.longbridge.nsh.NshHostReply
 import com.longbridge.nsh.NshView
 
@@ -19,6 +21,7 @@ class MainActivity : ComponentActivity() {
   private lateinit var nsh: NshView
   private val secure by lazy { SecureStore(this) }
   private val legacy by lazy { LegacyStorage(this) }
+  private lateinit var push: PushHost
 
   override fun onCreate(state: Bundle?) {
     super.onCreate(state)
@@ -30,6 +33,8 @@ class MainActivity : ComponentActivity() {
     nsh.handle("secure.remove") { data, reply -> answer(reply) { secure.remove(key(data)); null } }
     nsh.handle("app.legacyStorage") { _, reply -> answer(reply) { legacy.entries() } }
     nsh.handle("app.legacyStorageCopied") { _, reply -> answer(reply) { legacy.copied(); null } }
+    push = PushHost(this, nsh)
+    LiveHost(this, nsh)
     nsh.setParams(mapOf("deviceName" to deviceName()))
     setContentView(nsh)
     // scripts/dev-android.sh starts a debug build on `nsh dev`: every save reloads the app.
@@ -46,6 +51,7 @@ class MainActivity : ComponentActivity() {
 
   /** A `mewla://` link the system opened us with; the app holds the event until it listens. */
   private fun openLink(intent: Intent?) {
+    push.opened(intent)
     val url = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
     nsh.send("links.open", mapOf("url" to url))
   }
