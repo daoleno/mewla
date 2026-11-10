@@ -1,3 +1,4 @@
+import { awaitingChoiceAnswer } from "../timeline/claudeChoiceModel";
 import type { InterfaceChatThreadState } from "./thread";
 
 /** One row of a chat as the screen draws it. */
@@ -33,6 +34,8 @@ export function chatRows(state: InterfaceChatThreadState): ChatRow[] {
   }
   const last = rows.at(-1);
   const replying = last?.kind === "assistant" && last.partial;
-  if (state.conversation?.activity?.status === "running" && !replying) rows.push({ key: "working", kind: "working" });
+  // A question waiting for the person is not "working": the card says what is needed.
+  const asking = awaitingChoiceAnswer(state.conversation?.events);
+  if (state.conversation?.activity?.status === "running" && !replying && !asking) rows.push({ key: "working", kind: "working" });
   return rows;
 }
