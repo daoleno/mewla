@@ -75,12 +75,21 @@ class TerminalView(context: Context, private val events: Events) : View(context)
     relayout(width, height)
   }
 
+  /** Theme colors are CSS hex (`#rrggbb` or `#rrggbbaa`, what the app's `token()` gives); Android reads 8 digits as `#aarrggbb`. */
+  private fun cssColor(value: String): Int {
+    val hex = value.trim()
+    return if (hex.length == 9 && hex.startsWith("#")) Color.parseColor("#" + hex.substring(7, 9) + hex.substring(1, 7)) else Color.parseColor(hex)
+  }
+
+  /** The VT takes opaque `#rrggbb`. */
+  private fun opaque(value: String): String = value.trim().let { if (it.length == 9 && it.startsWith("#")) it.substring(0, 7) else it }
+
   fun setTheme(background: String, foreground: String, cursor: String, selection: String, palette: List<String>) {
-    this.background = Color.parseColor(background)
-    this.foreground = Color.parseColor(foreground)
-    cursorColor = Color.parseColor(cursor)
-    selectionColor = Color.parseColor(selection)
-    theme = listOf(foreground, background, cursor) to palette256(palette)
+    this.background = cssColor(background)
+    this.foreground = cssColor(foreground)
+    cursorColor = cssColor(cursor)
+    selectionColor = cssColor(selection)
+    theme = listOf(opaque(foreground), opaque(background), opaque(cursor)) to palette256(palette.map(::opaque))
     applyTheme()
     invalidate()
   }

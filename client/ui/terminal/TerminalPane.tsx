@@ -12,7 +12,7 @@ const PALETTE_LIGHT = ["#161412", "#b3372b", "#3f7a33", "#946112", "#2c55c0", "#
 /** The terminal's colors from the app's theme, light or dark like the rest of the app. */
 function theme(): TerminalTheme {
   const dark = colorScheme() === "dark";
-  return { background: token("background"), foreground: token("foreground"), cursor: token("foreground"), selection: dark ? "#553D7EFF" : "#552C55C0", palette: dark ? PALETTE_DARK : PALETTE_LIGHT };
+  return { background: token("background"), foreground: token("foreground"), cursor: token("foreground"), selection: dark ? "#3D7EFF55" : "#2C55C055", palette: dark ? PALETTE_DARK : PALETTE_LIGHT };
 }
 
 type Key = { label?: string; icon?: IconName; data?: string; repeat?: boolean; id: string };

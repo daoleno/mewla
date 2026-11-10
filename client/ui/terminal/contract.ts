@@ -10,6 +10,7 @@ import { nativeComponent } from "nsh";
  * own (long press, system menu); IME composition happens in the view, and only
  * committed text is reported as `input`.
  */
+/** Colors are CSS hex: `#rrggbb`, or `#rrggbbaa` (what `token()` gives; the VT drops the alpha). */
 export type TerminalTheme = {
   background: string;
   foreground: string;

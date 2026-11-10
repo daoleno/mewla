@@ -127,7 +127,7 @@ export function NewSession(props: { onCreated: (workerId: string, fromSession: b
   };
 
   return (
-    <Sheet open={newSessionOpen()} onOpenChange={({ open }) => newSessionOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4">
+    <Sheet open={newSessionOpen()} onOpenChange={({ open }) => newSessionOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4" backdropClass="bg-black/40">
       <View class="gap-3 pb-8">
         <View class="flex-row items-center">
           <Text class="flex-1 text-lg font-semibold">{newSessionTarget() ? "New terminal" : "New session"}</Text>

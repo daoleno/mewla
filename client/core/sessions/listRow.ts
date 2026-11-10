@@ -44,11 +44,12 @@ export type SessionRowModel = {
  * short title from its command and directory.
  */
 export function sessionRowModel(worker: Worker, options: { alias?: string; calendarLabel?: string; workTitle?: string } = {}): SessionRowModel {
-  const presented = presentWorker(worker, options.alias);
+  // The daemon names an unnamed Session after its id ("mh-…"): that is no name to show.
+  const presented = presentWorker(worker.name === worker.id ? { ...worker, name: "" } : worker, options.alias);
   const workTitle = options.calendarLabel?.trim() || options.workTitle?.trim();
   const title = presented.titleSource !== "default"
     ? presented.title
-    : workTitle || presented.shortTitle || shortWorkerLabel(worker.name) || presented.title;
+    : workTitle || presented.shortTitle || (worker.name === worker.id ? "" : shortWorkerLabel(worker.name)) || presented.title;
   const preview = formatWorkerSessionPreview(worker);
   return {
     title,
