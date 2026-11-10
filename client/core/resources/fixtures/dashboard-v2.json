@@ -1,0 +1,974 @@
+{
+  "version": 2,
+  "sampled_at": "2026-10-01T06:00:00Z",
+  "state": "elevated",
+  "cpu": {
+    "load1": 11.42,
+    "load5": 9.82,
+    "load15": 7.16,
+    "utilization_percent": 72.4,
+    "per_core_percent": [
+      91,
+      83,
+      78,
+      69,
+      77,
+      58,
+      62,
+      61
+    ]
+  },
+  "memory": {
+    "total_bytes": 34359738368,
+    "available_bytes": 5368709120,
+    "used_bytes": 28991029248,
+    "cache_bytes": 3221225472,
+    "shared_bytes": 650117120,
+    "swap_total_bytes": 8589934592,
+    "swap_used_bytes": 2147483648
+  },
+  "psi": {
+    "cpu": {
+      "some": {
+        "avg10": 8.4,
+        "avg60": 6.720000000000001,
+        "avg300": 3.3600000000000003
+      },
+      "full": {
+        "avg10": 1.26,
+        "avg60": 0.8400000000000001,
+        "avg300": 0.1
+      }
+    },
+    "memory": {
+      "some": {
+        "avg10": 3.2,
+        "avg60": 2.5600000000000005,
+        "avg300": 1.2800000000000002
+      },
+      "full": {
+        "avg10": 0.48,
+        "avg60": 0.32000000000000006,
+        "avg300": 0.1
+      }
+    },
+    "io": {
+      "some": {
+        "avg10": 1.1,
+        "avg60": 0.8800000000000001,
+        "avg300": 0.44000000000000006
+      },
+      "full": {
+        "avg10": 0.165,
+        "avg60": 0.11000000000000001,
+        "avg300": 0.1
+      }
+    }
+  },
+  "disks": [
+    {
+      "mount": "/",
+      "total_bytes": 549755813888,
+      "used_bytes": 394063249408,
+      "free_bytes": 155692564480,
+      "read_bytes_per_second": 25165824,
+      "write_bytes_per_second": 8388608
+    }
+  ],
+  "signals": [
+    {
+      "name": "psi.memory.some.avg10",
+      "value": 3.2,
+      "threshold": 2,
+      "state": "elevated"
+    }
+  ],
+  "consumers": [
+    {
+      "id": "worker:android-build",
+      "owner": "worker",
+      "title": "Android release build",
+      "worker_id": "worker-build",
+      "work_id": "work-release",
+      "executor": "codex",
+      "status": "running",
+      "cwd": "/workspace/mobile",
+      "rss_bytes": 7516192768,
+      "cpu_percent": 245,
+      "process_count": 18,
+      "commands": [
+        "java",
+        "node"
+      ],
+      "kinds": [
+        "gradle",
+        "node"
+      ],
+      "processes": [
+        {
+          "pid": 18420,
+          "start": "918204",
+          "command": "java",
+          "rss_bytes": 5368709120
+        },
+        {
+          "pid": 18432,
+          "start": "918220",
+          "command": "node",
+          "rss_bytes": 754974720
+        }
+      ]
+    },
+    {
+      "id": "docker:8f4e6b921d7a93bf",
+      "owner": "docker",
+      "status": "unknown",
+      "rss_bytes": 3221225472,
+      "cpu_percent": 68,
+      "process_count": 4,
+      "commands": [
+        "postgres"
+      ],
+      "kinds": [
+        "docker"
+      ],
+      "processes": [
+        {
+          "pid": 2013,
+          "start": "482010",
+          "command": "postgres",
+          "rss_bytes": 2147483648
+        }
+      ]
+    },
+    {
+      "id": "orphan:preview",
+      "owner": "orphaned_worker",
+      "title": "Preview browser checks",
+      "worker_id": "worker-preview",
+      "work_id": "work-preview",
+      "executor": "claude",
+      "status": "done",
+      "cwd": "/workspace/mobile",
+      "rss_bytes": 2147483648,
+      "cpu_percent": 32,
+      "process_count": 9,
+      "commands": [
+        "chromium"
+      ],
+      "kinds": [
+        "chrome"
+      ],
+      "processes": [
+        {
+          "pid": 21002,
+          "start": "930123",
+          "command": "chromium",
+          "rss_bytes": 1258291200
+        }
+      ]
+    },
+    {
+      "id": "brain:primary",
+      "owner": "brain",
+      "title": "Project Brain",
+      "status": "running",
+      "executor": "codex",
+      "rss_bytes": 891289600,
+      "cpu_percent": 12,
+      "process_count": 3,
+      "commands": [
+        "codex"
+      ],
+      "processes": [
+        {
+          "pid": 801,
+          "start": "441291",
+          "command": "codex",
+          "rss_bytes": 734003200
+        }
+      ]
+    },
+    {
+      "id": "user:node",
+      "owner": "user",
+      "status": "unknown",
+      "rss_bytes": 671088640,
+      "cpu_percent": 128,
+      "process_count": 2,
+      "kinds": [
+        "node"
+      ],
+      "processes": [
+        {
+          "pid": 9902,
+          "start": "729001",
+          "command": "node",
+          "rss_bytes": 503316480
+        }
+      ]
+    },
+    {
+      "owner": "user",
+      "rss_bytes": 25165824,
+      "process_count": 1,
+      "processes": [
+        {
+          "pid": 22001,
+          "start": "941992",
+          "rss_bytes": 25165824
+        }
+      ]
+    },
+    {
+      "owner": "worker",
+      "title": "Review API schema",
+      "executor": "codex",
+      "status": "idle",
+      "rss_bytes": 125829120,
+      "process_count": 1,
+      "cpu_percent": 0,
+      "commands": [
+        "codex"
+      ]
+    },
+    {
+      "owner": "user",
+      "rss_bytes": 0
+    }
+  ],
+  "history": [
+    {
+      "sampled_at": "2026-10-01T05:55:00Z",
+      "state": "normal",
+      "cpu_percent": 40.0,
+      "memory_used_bytes": 22548578304,
+      "swap_used_bytes": 0,
+      "psi_cpu_some_avg10": 2.0,
+      "psi_memory_some_avg10": 0.0,
+      "psi_io_some_avg10": 0.0,
+      "disk_read_bytes_per_second": 12582912,
+      "disk_write_bytes_per_second": 3145728
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:05Z",
+      "state": "normal",
+      "cpu_percent": 45.06713978716028,
+      "memory_used_bytes": 22655952486,
+      "swap_used_bytes": 35791394,
+      "psi_cpu_some_avg10": 2.9414709848078964,
+      "psi_memory_some_avg10": 0.05333333333333334,
+      "psi_io_some_avg10": 0.018333333333333333,
+      "disk_read_bytes_per_second": 17204358,
+      "disk_write_bytes_per_second": 3233109
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:10Z",
+      "state": "normal",
+      "cpu_percent": 48.556312687737815,
+      "memory_used_bytes": 22763326668,
+      "swap_used_bytes": 71582788,
+      "psi_cpu_some_avg10": 3.109297426825682,
+      "psi_memory_some_avg10": 0.10666666666666667,
+      "psi_io_some_avg10": 0.03666666666666667,
+      "disk_read_bytes_per_second": 17769679,
+      "disk_write_bytes_per_second": 3320490
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:15Z",
+      "state": "normal",
+      "cpu_percent": 49.44078104702556,
+      "memory_used_bytes": 22870700851,
+      "swap_used_bytes": 107374182,
+      "psi_cpu_some_avg10": 2.441120008059867,
+      "psi_memory_some_avg10": 0.16000000000000003,
+      "psi_io_some_avg10": 0.05500000000000001,
+      "disk_read_bytes_per_second": 13951932,
+      "disk_write_bytes_per_second": 3407872
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:20Z",
+      "state": "normal",
+      "cpu_percent": 47.60370544440921,
+      "memory_used_bytes": 22978075033,
+      "swap_used_bytes": 143165576,
+      "psi_cpu_some_avg10": 1.6431975046920717,
+      "psi_memory_some_avg10": 0.21333333333333335,
+      "psi_io_some_avg10": 0.07333333333333333,
+      "disk_read_bytes_per_second": 9453948,
+      "disk_write_bytes_per_second": 3495253
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:25Z",
+      "state": "normal",
+      "cpu_percent": 43.87896006447894,
+      "memory_used_bytes": 23085449216,
+      "swap_used_bytes": 178956970,
+      "psi_cpu_some_avg10": 1.5410757253368614,
+      "psi_memory_some_avg10": 0.26666666666666666,
+      "psi_io_some_avg10": 0.09166666666666667,
+      "disk_read_bytes_per_second": 8603963,
+      "disk_write_bytes_per_second": 3582634
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:30Z",
+      "state": "normal",
+      "cpu_percent": 39.75983645364118,
+      "memory_used_bytes": 23192823398,
+      "swap_used_bytes": 214748364,
+      "psi_cpu_some_avg10": 2.3205845018010742,
+      "psi_memory_some_avg10": 0.32000000000000006,
+      "psi_io_some_avg10": 0.11000000000000001,
+      "disk_read_bytes_per_second": 12376261,
+      "disk_write_bytes_per_second": 3670016
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:35Z",
+      "state": "normal",
+      "cpu_percent": 36.877393820691296,
+      "memory_used_bytes": 23300197580,
+      "swap_used_bytes": 250539758,
+      "psi_cpu_some_avg10": 3.3569865987187892,
+      "psi_memory_some_avg10": 0.37333333333333335,
+      "psi_io_some_avg10": 0.12833333333333335,
+      "disk_read_bytes_per_second": 17495420,
+      "disk_write_bytes_per_second": 3757397
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:40Z",
+      "state": "normal",
+      "cpu_percent": 36.43068312931327,
+      "memory_used_bytes": 23407571763,
+      "swap_used_bytes": 286331153,
+      "psi_cpu_some_avg10": 3.7893582466233817,
+      "psi_memory_some_avg10": 0.4266666666666667,
+      "psi_io_some_avg10": 0.14666666666666667,
+      "disk_read_bytes_per_second": 19447720,
+      "disk_write_bytes_per_second": 3844778
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:45Z",
+      "state": "normal",
+      "cpu_percent": 38.7678840995521,
+      "memory_used_bytes": 23514945945,
+      "swap_used_bytes": 322122547,
+      "psi_cpu_some_avg10": 3.3121184852417564,
+      "psi_memory_some_avg10": 0.48,
+      "psi_io_some_avg10": 0.165,
+      "disk_read_bytes_per_second": 16631036,
+      "disk_write_bytes_per_second": 3932160
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:50Z",
+      "state": "normal",
+      "cpu_percent": 43.26467601440859,
+      "memory_used_bytes": 23622320128,
+      "swap_used_bytes": 357913941,
+      "psi_cpu_some_avg10": 2.4559788891106304,
+      "psi_memory_some_avg10": 0.5333333333333333,
+      "psi_io_some_avg10": 0.18333333333333335,
+      "disk_read_bytes_per_second": 11827826,
+      "disk_write_bytes_per_second": 4019541
+    },
+    {
+      "sampled_at": "2026-10-01T05:55:55Z",
+      "state": "normal",
+      "cpu_percent": 48.54233090810702,
+      "memory_used_bytes": 23729694310,
+      "swap_used_bytes": 393705335,
+      "psi_cpu_some_avg10": 2.1000097934492965,
+      "psi_memory_some_avg10": 0.5866666666666667,
+      "psi_io_some_avg10": 0.20166666666666666,
+      "disk_read_bytes_per_second": 9646950,
+      "disk_write_bytes_per_second": 4106922
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:00Z",
+      "state": "normal",
+      "cpu_percent": 52.94934291079322,
+      "memory_used_bytes": 23837068492,
+      "swap_used_bytes": 429496729,
+      "psi_cpu_some_avg10": 2.6634270819995653,
+      "psi_memory_some_avg10": 0.6400000000000001,
+      "psi_io_some_avg10": 0.22000000000000003,
+      "disk_read_bytes_per_second": 12286306,
+      "disk_write_bytes_per_second": 4194304
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:05Z",
+      "state": "normal",
+      "cpu_percent": 55.13834676299684,
+      "memory_used_bytes": 23944442675,
+      "swap_used_bytes": 465288123,
+      "psi_cpu_some_avg10": 3.720167036826641,
+      "psi_memory_some_avg10": 0.6933333333333334,
+      "psi_io_some_avg10": 0.23833333333333337,
+      "disk_read_bytes_per_second": 17512094,
+      "disk_write_bytes_per_second": 4281685
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:10Z",
+      "state": "normal",
+      "cpu_percent": 54.536791264706245,
+      "memory_used_bytes": 24051816857,
+      "swap_used_bytes": 501079517,
+      "psi_cpu_some_avg10": 4.390607355694871,
+      "psi_memory_some_avg10": 0.7466666666666667,
+      "psi_io_some_avg10": 0.2566666666666667,
+      "disk_read_bytes_per_second": 20712560,
+      "disk_write_bytes_per_second": 4369066
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:15Z",
+      "state": "normal",
+      "cpu_percent": 51.54694788193405,
+      "memory_used_bytes": 24159191040,
+      "swap_used_bytes": 536870912,
+      "psi_cpu_some_avg10": 4.150287840157117,
+      "psi_memory_some_avg10": 0.8,
+      "psi_io_some_avg10": 0.275,
+      "disk_read_bytes_per_second": 19138021,
+      "disk_write_bytes_per_second": 4456448
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:20Z",
+      "state": "normal",
+      "cpu_percent": 47.40538575021616,
+      "memory_used_bytes": 24266565222,
+      "swap_used_bytes": 572662306,
+      "psi_cpu_some_avg10": 3.312096683334935,
+      "psi_memory_some_avg10": 0.8533333333333334,
+      "psi_io_some_avg10": 0.29333333333333333,
+      "disk_read_bytes_per_second": 14428912,
+      "disk_write_bytes_per_second": 4543829
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:25Z",
+      "state": "normal",
+      "cpu_percent": 43.75100249925166,
+      "memory_used_bytes": 24373939404,
+      "swap_used_bytes": 608453700,
+      "psi_cpu_some_avg10": 2.7386025081204433,
+      "psi_memory_some_avg10": 0.9066666666666667,
+      "psi_io_some_avg10": 0.3116666666666667,
+      "disk_read_bytes_per_second": 11107578,
+      "disk_write_bytes_per_second": 4631210
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:30Z",
+      "state": "normal",
+      "cpu_percent": 42.05251015946807,
+      "memory_used_bytes": 24481313587,
+      "swap_used_bytes": 644245094,
+      "psi_cpu_some_avg10": 3.0490127532283235,
+      "psi_memory_some_avg10": 0.96,
+      "psi_io_some_avg10": 0.33,
+      "disk_read_bytes_per_second": 12420449,
+      "disk_write_bytes_per_second": 4718592
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:35Z",
+      "state": "normal",
+      "cpu_percent": 43.0953717946826,
+      "memory_used_bytes": 24588687769,
+      "swap_used_bytes": 680036488,
+      "psi_cpu_some_avg10": 4.049877209662952,
+      "psi_memory_some_avg10": 1.0133333333333334,
+      "psi_io_some_avg10": 0.34833333333333333,
+      "disk_read_bytes_per_second": 17353289,
+      "disk_write_bytes_per_second": 4805973
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:40Z",
+      "state": "normal",
+      "cpu_percent": 46.70741665599652,
+      "memory_used_bytes": 24696061952,
+      "swap_used_bytes": 715827882,
+      "psi_cpu_some_avg10": 4.912945250727628,
+      "psi_memory_some_avg10": 1.0666666666666667,
+      "psi_io_some_avg10": 0.3666666666666667,
+      "disk_read_bytes_per_second": 21563678,
+      "disk_write_bytes_per_second": 4893354
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:45Z",
+      "state": "normal",
+      "cpu_percent": 51.81898437776909,
+      "memory_used_bytes": 24803436134,
+      "swap_used_bytes": 751619276,
+      "psi_cpu_some_avg10": 4.936655638536056,
+      "psi_memory_some_avg10": 1.1199999999999999,
+      "psi_io_some_avg10": 0.385,
+      "disk_read_bytes_per_second": 21373416,
+      "disk_write_bytes_per_second": 4980736
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:50Z",
+      "state": "normal",
+      "cpu_percent": 56.83658811765778,
+      "memory_used_bytes": 24910810316,
+      "swap_used_bytes": 787410670,
+      "psi_cpu_some_avg10": 4.191148690709596,
+      "psi_memory_some_avg10": 1.1733333333333333,
+      "psi_io_some_avg10": 0.4033333333333333,
+      "disk_read_bytes_per_second": 17150240,
+      "disk_write_bytes_per_second": 5068117
+    },
+    {
+      "sampled_at": "2026-10-01T05:56:55Z",
+      "state": "normal",
+      "cpu_percent": 60.199565355552835,
+      "memory_used_bytes": 25018184499,
+      "swap_used_bytes": 823202065,
+      "psi_cpu_some_avg10": 3.4537795958248303,
+      "psi_memory_some_avg10": 1.2266666666666668,
+      "psi_io_some_avg10": 0.42166666666666675,
+      "disk_read_bytes_per_second": 12969729,
+      "disk_write_bytes_per_second": 5155498
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:00Z",
+      "state": "normal",
+      "cpu_percent": 60.92526221239423,
+      "memory_used_bytes": 25125558681,
+      "swap_used_bytes": 858993459,
+      "psi_cpu_some_avg10": 3.4944216379933764,
+      "psi_memory_some_avg10": 1.2800000000000002,
+      "psi_io_some_avg10": 0.44000000000000006,
+      "disk_read_bytes_per_second": 12868238,
+      "disk_write_bytes_per_second": 5242880
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:05Z",
+      "state": "normal",
+      "cpu_percent": 58.952302721256935,
+      "memory_used_bytes": 25232932864,
+      "swap_used_bytes": 894784853,
+      "psi_cpu_some_avg10": 4.367648249902227,
+      "psi_memory_some_avg10": 1.3333333333333335,
+      "psi_io_some_avg10": 0.45833333333333337,
+      "disk_read_bytes_per_second": 17131887,
+      "disk_write_bytes_per_second": 5330261
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:10Z",
+      "state": "normal",
+      "cpu_percent": 55.16202921839555,
+      "memory_used_bytes": 25340307046,
+      "swap_used_bytes": 930576247,
+      "psi_cpu_some_avg10": 5.362558450479602,
+      "psi_memory_some_avg10": 1.3866666666666667,
+      "psi_io_some_avg10": 0.47666666666666674,
+      "disk_read_bytes_per_second": 22033509,
+      "disk_write_bytes_per_second": 5417642
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:15Z",
+      "state": "normal",
+      "cpu_percent": 51.070624108812275,
+      "memory_used_bytes": 25447681228,
+      "swap_used_bytes": 966367641,
+      "psi_cpu_some_avg10": 5.656375928404503,
+      "psi_memory_some_avg10": 1.4400000000000002,
+      "psi_io_some_avg10": 0.49500000000000005,
+      "disk_read_bytes_per_second": 23259386,
+      "disk_write_bytes_per_second": 5505024
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:20Z",
+      "state": "normal",
+      "cpu_percent": 48.29946373134797,
+      "memory_used_bytes": 25555055411,
+      "swap_used_bytes": 1002159035,
+      "psi_cpu_some_avg10": 5.070905788307869,
+      "psi_memory_some_avg10": 1.4933333333333334,
+      "psi_io_some_avg10": 0.5133333333333334,
+      "disk_read_bytes_per_second": 19875264,
+      "disk_write_bytes_per_second": 5592405
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:25Z",
+      "state": "normal",
+      "cpu_percent": 48.008724956234936,
+      "memory_used_bytes": 25662429593,
+      "swap_used_bytes": 1037950429,
+      "psi_cpu_some_avg10": 4.236366115787033,
+      "psi_memory_some_avg10": 1.5466666666666669,
+      "psi_io_some_avg10": 0.5316666666666667,
+      "disk_read_bytes_per_second": 15185299,
+      "disk_write_bytes_per_second": 5679786
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:30Z",
+      "state": "normal",
+      "cpu_percent": 50.49210202582659,
+      "memory_used_bytes": 25769803776,
+      "swap_used_bytes": 1073741824,
+      "psi_cpu_some_avg10": 4.011968375907138,
+      "psi_memory_some_avg10": 1.6,
+      "psi_io_some_avg10": 0.55,
+      "disk_read_bytes_per_second": 13694236,
+      "disk_write_bytes_per_second": 5767168
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:35Z",
+      "state": "normal",
+      "cpu_percent": 55.074210706107,
+      "memory_used_bytes": 25877177958,
+      "swap_used_bytes": 1109533218,
+      "psi_cpu_some_avg10": 4.695962354676935,
+      "psi_memory_some_avg10": 1.6533333333333335,
+      "psi_io_some_avg10": 0.5683333333333335,
+      "disk_read_bytes_per_second": 16965762,
+      "disk_write_bytes_per_second": 5854549
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:40Z",
+      "state": "normal",
+      "cpu_percent": 60.34651943055916,
+      "memory_used_bytes": 25984552140,
+      "swap_used_bytes": 1145324612,
+      "psi_cpu_some_avg10": 5.751426681241691,
+      "psi_memory_some_avg10": 1.7066666666666668,
+      "psi_io_some_avg10": 0.5866666666666667,
+      "disk_read_bytes_per_second": 22184862,
+      "disk_write_bytes_per_second": 5941930
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:45Z",
+      "state": "normal",
+      "cpu_percent": 64.65938990005685,
+      "memory_used_bytes": 26091926323,
+      "swap_used_bytes": 1181116006,
+      "psi_cpu_some_avg10": 6.299911860107268,
+      "psi_memory_some_avg10": 1.7600000000000002,
+      "psi_io_some_avg10": 0.6050000000000001,
+      "disk_read_bytes_per_second": 24745931,
+      "disk_write_bytes_per_second": 6029312
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:50Z",
+      "state": "normal",
+      "cpu_percent": 66.69834320114136,
+      "memory_used_bytes": 26199300505,
+      "swap_used_bytes": 1216907400,
+      "psi_cpu_some_avg10": 5.929082686120024,
+      "psi_memory_some_avg10": 1.8133333333333335,
+      "psi_io_some_avg10": 0.6233333333333334,
+      "disk_read_bytes_per_second": 22487145,
+      "disk_write_bytes_per_second": 6116693
+    },
+    {
+      "sampled_at": "2026-10-01T05:57:55Z",
+      "state": "normal",
+      "cpu_percent": 65.94324510828845,
+      "memory_used_bytes": 26306674688,
+      "swap_used_bytes": 1252698794,
+      "psi_cpu_some_avg10": 5.071817330503849,
+      "psi_memory_some_avg10": 1.866666666666667,
+      "psi_io_some_avg10": 0.6416666666666667,
+      "disk_read_bytes_per_second": 17678033,
+      "disk_write_bytes_per_second": 6204074
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:00Z",
+      "state": "normal",
+      "cpu_percent": 62.85000393323954,
+      "memory_used_bytes": 26414048870,
+      "swap_used_bytes": 1288490188,
+      "psi_cpu_some_avg10": 4.608221146556884,
+      "psi_memory_some_avg10": 1.92,
+      "psi_io_some_avg10": 0.66,
+      "disk_read_bytes_per_second": 14932881,
+      "disk_write_bytes_per_second": 6291456
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:05Z",
+      "state": "normal",
+      "cpu_percent": 58.69130863514593,
+      "memory_used_bytes": 26521423052,
+      "swap_used_bytes": 1324281582,
+      "psi_cpu_some_avg10": 5.056461866643001,
+      "psi_memory_some_avg10": 1.9733333333333336,
+      "psi_io_some_avg10": 0.6783333333333335,
+      "disk_read_bytes_per_second": 16968381,
+      "disk_write_bytes_per_second": 6378837
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:10Z",
+      "state": "normal",
+      "cpu_percent": 55.11204195164605,
+      "memory_used_bytes": 26628797235,
+      "swap_used_bytes": 1360072977,
+      "psi_cpu_some_avg10": 6.096368578709386,
+      "psi_memory_some_avg10": 2.026666666666667,
+      "psi_io_some_avg10": 0.6966666666666667,
+      "disk_read_bytes_per_second": 22105914,
+      "disk_write_bytes_per_second": 6466218
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:15Z",
+      "state": "normal",
+      "cpu_percent": 53.55467553503481,
+      "memory_used_bytes": 26736171417,
+      "swap_used_bytes": 1395864371,
+      "psi_cpu_some_avg10": 6.863795386284088,
+      "psi_memory_some_avg10": 2.08,
+      "psi_io_some_avg10": 0.7150000000000001,
+      "disk_read_bytes_per_second": 25814868,
+      "disk_write_bytes_per_second": 6553600
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:20Z",
+      "state": "elevated",
+      "cpu_percent": 54.75537310394701,
+      "memory_used_bytes": 26843545600,
+      "swap_used_bytes": 1431655765,
+      "psi_cpu_some_avg10": 6.745113160479349,
+      "psi_memory_some_avg10": 2.1333333333333333,
+      "psi_io_some_avg10": 0.7333333333333334,
+      "disk_read_bytes_per_second": 24878058,
+      "disk_write_bytes_per_second": 6640981
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:25Z",
+      "state": "elevated",
+      "cpu_percent": 58.486827276875,
+      "memory_used_bytes": 26950919782,
+      "swap_used_bytes": 1467447159,
+      "psi_cpu_some_avg10": 5.941377331195292,
+      "psi_memory_some_avg10": 2.186666666666667,
+      "psi_io_some_avg10": 0.7516666666666667,
+      "disk_read_bytes_per_second": 20349595,
+      "disk_write_bytes_per_second": 6728362
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:30Z",
+      "state": "elevated",
+      "cpu_percent": 63.637664580203804,
+      "memory_used_bytes": 27058293964,
+      "swap_used_bytes": 1503238553,
+      "psi_cpu_some_avg10": 5.283478452084366,
+      "psi_memory_some_avg10": 2.2399999999999998,
+      "psi_io_some_avg10": 0.77,
+      "disk_read_bytes_per_second": 16585737,
+      "disk_write_bytes_per_second": 6815744
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:35Z",
+      "state": "elevated",
+      "cpu_percent": 68.60068017696032,
+      "memory_used_bytes": 27165668147,
+      "swap_used_bytes": 1539029947,
+      "psi_cpu_some_avg10": 5.468225257371402,
+      "psi_memory_some_avg10": 2.2933333333333334,
+      "psi_io_some_avg10": 0.7883333333333334,
+      "disk_read_bytes_per_second": 17239770,
+      "disk_write_bytes_per_second": 6903125
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:40Z",
+      "state": "elevated",
+      "cpu_percent": 71.83428075594158,
+      "memory_used_bytes": 27273042329,
+      "swap_used_bytes": 1574821341,
+      "psi_cpu_some_avg10": 6.417701925105414,
+      "psi_memory_some_avg10": 2.3466666666666667,
+      "psi_io_some_avg10": 0.8066666666666666,
+      "disk_read_bytes_per_second": 21903189,
+      "disk_write_bytes_per_second": 6990506
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:45Z",
+      "state": "elevated",
+      "cpu_percent": 72.40100742723602,
+      "memory_used_bytes": 27380416512,
+      "swap_used_bytes": 1610612736,
+      "psi_cpu_some_avg10": 7.350903524534118,
+      "psi_memory_some_avg10": 2.4000000000000004,
+      "psi_io_some_avg10": 0.8250000000000001,
+      "disk_read_bytes_per_second": 26481281,
+      "disk_write_bytes_per_second": 7077888
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:50Z",
+      "state": "elevated",
+      "cpu_percent": 70.29501708333115,
+      "memory_used_bytes": 27487790694,
+      "swap_used_bytes": 1646404130,
+      "psi_cpu_some_avg10": 7.50178834764881,
+      "psi_memory_some_avg10": 2.4533333333333336,
+      "psi_io_some_avg10": 0.8433333333333335,
+      "disk_read_bytes_per_second": 26957779,
+      "disk_write_bytes_per_second": 7165269
+    },
+    {
+      "sampled_at": "2026-10-01T05:58:55Z",
+      "state": "elevated",
+      "cpu_percent": 66.44412356467488,
+      "memory_used_bytes": 27595164876,
+      "swap_used_bytes": 1682195524,
+      "psi_cpu_some_avg10": 6.823573122745224,
+      "psi_memory_some_avg10": 2.506666666666667,
+      "psi_io_some_avg10": 0.8616666666666667,
+      "disk_read_bytes_per_second": 23087405,
+      "disk_write_bytes_per_second": 7252650
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:00Z",
+      "state": "elevated",
+      "cpu_percent": 62.38568559183544,
+      "memory_used_bytes": 27702539059,
+      "swap_used_bytes": 1717986918,
+      "psi_cpu_some_avg10": 6.031745338676334,
+      "psi_memory_some_avg10": 2.5600000000000005,
+      "psi_io_some_avg10": 0.8800000000000001,
+      "disk_read_bytes_per_second": 18621374,
+      "disk_write_bytes_per_second": 7340032
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:05Z",
+      "state": "elevated",
+      "cpu_percent": 59.72956313431852,
+      "memory_used_bytes": 27809913241,
+      "swap_used_bytes": 1753778312,
+      "psi_cpu_some_avg10": 5.946247347240528,
+      "psi_memory_some_avg10": 2.6133333333333333,
+      "psi_io_some_avg10": 0.8983333333333334,
+      "disk_read_bytes_per_second": 17858546,
+      "disk_write_bytes_per_second": 7427413
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:10Z",
+      "state": "elevated",
+      "cpu_percent": 59.5957470072571,
+      "memory_used_bytes": 27917287424,
+      "swap_used_bytes": 1789569706,
+      "psi_cpu_some_avg10": 6.737625146296072,
+      "psi_memory_some_avg10": 2.666666666666667,
+      "psi_io_some_avg10": 0.9166666666666667,
+      "disk_read_bytes_per_second": 21693072,
+      "disk_write_bytes_per_second": 7514794
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:15Z",
+      "state": "elevated",
+      "cpu_percent": 62.22311385734723,
+      "memory_used_bytes": 28024661606,
+      "swap_used_bytes": 1825361100,
+      "psi_cpu_some_avg10": 7.770229175843375,
+      "psi_memory_some_avg10": 2.72,
+      "psi_io_some_avg10": 0.935,
+      "disk_read_bytes_per_second": 26792318,
+      "disk_write_bytes_per_second": 7602176
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:20Z",
+      "state": "elevated",
+      "cpu_percent": 66.88597967763289,
+      "memory_used_bytes": 28132035788,
+      "swap_used_bytes": 1861152494,
+      "psi_cpu_some_avg10": 8.186627592040486,
+      "psi_memory_some_avg10": 2.7733333333333334,
+      "psi_io_some_avg10": 0.9533333333333335,
+      "disk_read_bytes_per_second": 28660872,
+      "disk_write_bytes_per_second": 7689557
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:25Z",
+      "state": "elevated",
+      "cpu_percent": 72.14760210919567,
+      "memory_used_bytes": 28239409971,
+      "swap_used_bytes": 1896943889,
+      "psi_cpu_some_avg10": 7.695925150181835,
+      "psi_memory_some_avg10": 2.8266666666666667,
+      "psi_io_some_avg10": 0.9716666666666667,
+      "disk_read_bytes_per_second": 25773605,
+      "disk_write_bytes_per_second": 7776938
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:30Z",
+      "state": "elevated",
+      "cpu_percent": 76.36207588246224,
+      "memory_used_bytes": 28346784153,
+      "swap_used_bytes": 1932735283,
+      "psi_cpu_some_avg10": 6.841210951148384,
+      "psi_memory_some_avg10": 2.8800000000000003,
+      "psi_io_some_avg10": 0.9900000000000001,
+      "disk_read_bytes_per_second": 20977868,
+      "disk_write_bytes_per_second": 7864320
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:35Z",
+      "state": "elevated",
+      "cpu_percent": 78.24929488085814,
+      "memory_used_bytes": 28454158336,
+      "swap_used_bytes": 1968526677,
+      "psi_cpu_some_avg10": 6.50024482664138,
+      "psi_memory_some_avg10": 2.9333333333333336,
+      "psi_io_some_avg10": 1.0083333333333333,
+      "disk_read_bytes_per_second": 18875651,
+      "disk_write_bytes_per_second": 7951701
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:40Z",
+      "state": "elevated",
+      "cpu_percent": 77.34213003621154,
+      "memory_used_bytes": 28561532518,
+      "swap_used_bytes": 2004318071,
+      "psi_cpu_some_avg10": 7.078448997913089,
+      "psi_memory_some_avg10": 2.986666666666667,
+      "psi_io_some_avg10": 1.0266666666666668,
+      "disk_read_bytes_per_second": 21592533,
+      "disk_write_bytes_per_second": 8039082
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:45Z",
+      "state": "elevated",
+      "cpu_percent": 74.14961095165334,
+      "memory_used_bytes": 28668906700,
+      "swap_used_bytes": 2040109465,
+      "psi_cpu_some_avg10": 8.136164755247826,
+      "psi_memory_some_avg10": 3.04,
+      "psi_io_some_avg10": 1.045,
+      "disk_read_bytes_per_second": 26823437,
+      "disk_write_bytes_per_second": 8126464
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:50Z",
+      "state": "elevated",
+      "cpu_percent": 69.97910721636981,
+      "memory_used_bytes": 28776280883,
+      "swap_used_bytes": 2075900859,
+      "psi_cpu_some_avg10": 8.792872648084538,
+      "psi_memory_some_avg10": 3.0933333333333337,
+      "psi_io_some_avg10": 1.0633333333333335,
+      "disk_read_bytes_per_second": 29951905,
+      "disk_write_bytes_per_second": 8213845
+    },
+    {
+      "sampled_at": "2026-10-01T05:59:55Z",
+      "state": "elevated",
+      "cpu_percent": 66.47962659484067,
+      "memory_used_bytes": 28883655065,
+      "swap_used_bytes": 2111692253,
+      "psi_cpu_some_avg10": 8.536738007139139,
+      "psi_memory_some_avg10": 3.1466666666666665,
+      "psi_io_some_avg10": 1.0816666666666668,
+      "disk_read_bytes_per_second": 28294449,
+      "disk_write_bytes_per_second": 8301226
+    },
+    {
+      "sampled_at": "2026-10-01T06:00:00Z",
+      "state": "elevated",
+      "cpu_percent": 65.06576917245508,
+      "memory_used_bytes": 28991029248,
+      "swap_used_bytes": 2147483648,
+      "psi_cpu_some_avg10": 7.695189378897783,
+      "psi_memory_some_avg10": 3.2,
+      "psi_io_some_avg10": 1.1,
+      "disk_read_bytes_per_second": 23567738,
+      "disk_write_bytes_per_second": 8388608
+    }
+  ]
+}

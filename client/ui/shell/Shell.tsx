@@ -2,7 +2,8 @@ import { platform, signal, Text, View, windowSize } from "nsh";
 import { Button, createNavStack, NavStack } from "nsh/base";
 import { isAvailable as mobile, TabBar } from "nsh/mobile";
 import { Onboarding } from "../screens/Onboarding";
-import { More, Settings, StubPage } from "../screens/More";
+import { More } from "../screens/More";
+import { MorePageView } from "../more/Pages";
 import { Brain } from "../screens/Brain";
 import { Calendar, Sessions } from "../screens/Placeholders";
 import type { MoreRoute } from "./routes";
@@ -32,9 +33,8 @@ const calendarNav = createNavStack<{ name: "calendar" }>([{ name: "calendar" }])
 function moreRoute(route: MoreRoute) {
   switch (route.name) {
     case "more": return <More nav={moreNav} />;
-    case "settings": return <Settings onPair={() => moreNav.push({ name: "pair" })} />;
     case "pair": return <Onboarding />;
-    case "stub": return <StubPage title={route.title} />;
+    default: return <MorePageView route={route} nav={moreNav} onPair={() => moreNav.push({ name: "pair" })} />;
   }
 }
 
