@@ -1478,7 +1478,8 @@ Java_com_daoleno_mewla_terminal_Vt_nativeRowRuns(JNIEnv* env, jobject, jlong han
                             else appendUtf16(&runText, cp);
                         } else appendUtf16(&runText, cp);
                     }
-                    runCells += width; col += width;
+                    // A wide cell covers two columns, but its spacer tail is the second cell (counted above).
+                    runCells += width; col++;
                     if (width == 2) flush();
                 }
                 flush();
