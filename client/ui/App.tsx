@@ -1,4 +1,5 @@
-import { effect, host, lifecycle, mount, View } from "nsh";
+import { effect, host, lifecycle, mount, Storage, View } from "nsh";
+import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { nshPlatform } from "./platform";
 import { pairFromText } from "./screens/Onboarding";
@@ -7,7 +8,22 @@ import { FirstRun, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
 import { readPairingLink } from "../core/pairFlow";
 
 installPlatform(nshPlatform());
-void loadSession();
+
+// The first start after the in-place upgrade takes over what the Expo app kept (computers,
+// drafts, preferences); the device key stays where it was, in the host's secure store.
+async function start(): Promise<void> {
+  if (host.available()) {
+    await copyLegacyStorage(
+      {
+        entries: async () => (await host.call("app.legacyStorage")) as Record<string, string> | null,
+        copied: async () => void (await host.call("app.legacyStorageCopied")),
+      },
+      Storage,
+    ).catch((error) => console.warn("legacy storage not copied:", error));
+  }
+  await loadSession();
+}
+void start();
 
 // Coming back to the app skips the reconnect backoff.
 effect(() => {

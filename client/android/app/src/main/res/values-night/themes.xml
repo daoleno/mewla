@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="background">#141210</color>
+  <color name="tab_icon">#F4F0EA</color>
+  <style name="Theme.Mewla" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowBackground">@color/background</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+    <item name="android:windowLightStatusBar">false</item>
+    <item name="android:windowLightNavigationBar">false</item>
+  </style>
+</resources>
