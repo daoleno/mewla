@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -412,7 +413,13 @@ func (s *Service) runInstall(node, npm string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), installTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error")
+	args := []string{"ci", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
+	cmd := exec.CommandContext(ctx, npm, args...)
+	if strings.HasSuffix(npm, ".js") {
+		// npm's own script, run by node: Windows has no npm program, only
+		// npm.cmd, a batch file.
+		cmd = exec.CommandContext(ctx, node, append([]string{npm}, args...)...)
+	}
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(node)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -511,7 +518,7 @@ func (s *Service) Fix(fix string) (Status, error) {
 		}
 		// Chrome hands the page to the running browser, or starts it.
 		cmd := exec.Command(chrome.Executable, args...)
-		if err := cmd.Start(); err != nil {
+		if err := startChromeProcess(cmd); err != nil {
 			return Status{}, fmt.Errorf("open Chrome: %w", err)
 		}
 		go func() { _ = cmd.Wait() }()
@@ -565,12 +572,13 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 		return nil, nil, err
 	}
 	executable := l.chrome
+	var shimEnv []string
 	if l.mewla {
 		exe, err := s.executable()
 		if err != nil {
 			return nil, nil, err
 		}
-		if executable, err = s.writeOpenShim(exe); err != nil {
+		if executable, shimEnv, err = s.openShim(exe); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -604,23 +612,33 @@ func (s *Service) MCPServer() (argv []string, env []string, err error) {
 	}
 	// Agents' MCP hosts pass only a few variables on; Chrome also needs the
 	// desktop session, found by the daemon side.
-	replaced := map[string]bool{"PATH": true}
+	replaced := map[string]bool{envName("PATH"): true, envName(OpenShimEnv): true}
 	for _, entry := range l.desktop {
 		name, _, _ := strings.Cut(entry, "=")
-		replaced[name] = true
+		replaced[envName(name)] = true
 	}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
-		if !replaced[name] && !strings.HasPrefix(name, "PLAYWRIGHT_MCP_") {
+		if !replaced[envName(name)] && !strings.HasPrefix(name, "PLAYWRIGHT_MCP_") {
 			env = append(env, entry)
 		}
 	}
 	env = append(env, l.desktop...)
+	env = append(env, shimEnv...)
 	env = append(env,
 		"PLAYWRIGHT_MCP_EXTENSION_TOKEN="+l.key,
 		"PATH="+filepath.Dir(l.node)+string(os.PathListSeparator)+os.Getenv("PATH"),
 	)
 	return argv, env, nil
+}
+
+// envName is how the system compares a variable's name: Windows ignores
+// case, so its Path is PATH.
+func envName(name string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ToUpper(name)
+	}
+	return name
 }
 
 // randomToken is a key for the browser tools that nothing else will check.

@@ -17,6 +17,9 @@ func StartDetached(cmd *exec.Cmd) error {
 	return cmd.Start()
 }
 
+// StartBackground is StartDetached: only Windows tells the two apart.
+func StartBackground(cmd *exec.Cmd) error { return StartDetached(cmd) }
+
 // ExecReplace replaces this process with path: the same PID runs the new
 // image.
 func ExecReplace(path string, argv, env []string) error {

@@ -67,6 +67,10 @@ func installedMewlaExtension(userDataDir string) (profile string, ids []string, 
 // NativeHostName is the name the extension asks Chrome for.
 const NativeHostName = "com.mewla.browser"
 
+// OpenShimEnv, set to the state directory, makes Mewla's executable act as
+// the program the browser tools start in place of Chrome (see openShim).
+const OpenShimEnv = "MEWLA_CHROME_FOR_TOOLS_STATE_DIR"
+
 // MewlaStoreURL is where the person adds the extension. It stays empty until
 // the extension is published; until then it is added from the folder
 // ExtensionDir writes.
@@ -134,13 +138,12 @@ func (s *Service) installNativeHost(userDataDir, mewla string, extensionIDs []st
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return err
 	}
-	name, flag := "native-host.sh", ""
+	name, flag := "native-host", ""
 	if agent {
-		name, flag = "native-host-agent.sh", " --agent"
+		name, flag = "native-host-agent", " --agent"
 	}
-	launcher := filepath.Join(s.dir, name)
-	script := fmt.Sprintf("#!/bin/sh\nexec %s agent-use native-host --state-dir %s%s\n", shellQuote(mewla), shellQuote(filepath.Dir(s.dir)), flag)
-	if err := atomicfile.Write(launcher, []byte(script), 0o700); err != nil {
+	launcher := filepath.Join(s.dir, name+nativeHostLauncherExt)
+	if err := atomicfile.Write(launcher, nativeHostLauncher(mewla, filepath.Dir(s.dir), flag), 0o700); err != nil {
 		return err
 	}
 	manifest := hostManifest{
@@ -156,25 +159,15 @@ func (s *Service) installNativeHost(userDataDir, mewla string, extensionIDs []st
 	if err != nil {
 		return err
 	}
-	dir := filepath.Join(userDataDir, "NativeMessagingHosts")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	path := filepath.Join(dir, NativeHostName+".json")
-	if old, err := os.ReadFile(path); err == nil && string(old) == string(raw)+"\n" {
-		return nil
-	}
-	return atomicfile.Write(path, append(raw, '\n'), 0o644)
+	return s.registerNativeHost(userDataDir, agent, append(raw, '\n'))
 }
 
-// writeOpenShim writes the program the browser tools start in place of
-// Chrome. Playwright's tools run `<executable> [--profile-directory=…] <url>`
-// to make Chrome open the extension's connect page; the shim reads the relay
-// address from that URL and has Mewla's extension connect to it instead.
-func (s *Service) writeOpenShim(mewla string) (string, error) {
-	path := filepath.Join(s.dir, "chrome-for-tools.sh")
-	script := fmt.Sprintf("#!/bin/sh\nexec %s agent-use open --state-dir %s -- \"$@\"\n", shellQuote(mewla), shellQuote(filepath.Dir(s.dir)))
-	return path, atomicfile.Write(path, []byte(script), 0o700)
+// writeIfChanged writes path unless it already holds raw.
+func writeIfChanged(path string, raw []byte) error {
+	if old, err := os.ReadFile(path); err == nil && string(old) == string(raw) {
+		return nil
+	}
+	return atomicfile.Write(path, raw, 0o644)
 }
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
@@ -263,7 +256,7 @@ func StartChromeForExtension(chrome chromeInstall, profile string) error {
 	if runtime.GOOS == "linux" {
 		cmd.Env = os.Environ()
 	}
-	if err := cmd.Start(); err != nil {
+	if err := startChromeProcess(cmd); err != nil {
 		return err
 	}
 	go func() { _ = cmd.Wait() }()

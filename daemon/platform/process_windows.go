@@ -23,7 +23,17 @@ const (
 // it outlives the caller, its console window and an SSH or Task Scheduler
 // session. A job that forbids breakaway refuses the flag; the start is then
 // retried inside the job.
-func StartDetached(cmd *exec.Cmd) error {
+func StartDetached(cmd *exec.Cmd) error { return startOutsideJob(cmd, detachedFlags) }
+
+// StartBackground starts cmd outside the caller's job, as StartDetached, but
+// with a console of its own that has no window. Console programs it starts
+// share that console; started from a process with no console at all, each
+// would open a console window on the person's desktop.
+func StartBackground(cmd *exec.Cmd) error {
+	return startOutsideJob(cmd, windows.CREATE_NO_WINDOW|windows.CREATE_NEW_PROCESS_GROUP)
+}
+
+func startOutsideJob(cmd *exec.Cmd, detachedFlags uint32) error {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}

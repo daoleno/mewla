@@ -8,11 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // A job ends the whole tree: a child that starts its own child is gone
@@ -208,6 +210,29 @@ func TestMkdirPrivateMatchesCodexSocketDirectory(t *testing.T) {
 		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != windows.OBJECT_INHERIT_ACE|windows.CONTAINER_INHERIT_ACE ||
 			ace.Mask != fileAllAccess || !sid.Equals(user.User.Sid) {
 			t.Fatalf("round %d: entry type %d flags %#x mask %#x sid %v: %s", round, ace.Header.AceType, ace.Header.AceFlags, ace.Mask, sid, sd)
+		}
+	}
+}
+
+func TestSetUserRegistryDefault(t *testing.T) {
+	parent := `Software\MewlaPlatformTest`
+	key := parent + `\` + strconv.FormatInt(time.Now().UnixNano(), 10)
+	t.Cleanup(func() {
+		_ = registry.DeleteKey(registry.CURRENT_USER, key)
+		_ = registry.DeleteKey(registry.CURRENT_USER, parent)
+	})
+	for _, value := range []string{`C:\a\host.json`, `C:\a\host.json`, `C:\b\host.json`} {
+		if err := SetUserRegistryDefault(key, value); err != nil {
+			t.Fatal(err)
+		}
+		k, err := registry.OpenKey(registry.CURRENT_USER, key, registry.QUERY_VALUE)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _, err := k.GetStringValue("")
+		k.Close()
+		if err != nil || got != value {
+			t.Fatalf("default value = %q, %v; want %q", got, err, value)
 		}
 	}
 }

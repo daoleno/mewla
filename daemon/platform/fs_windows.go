@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // SyncDir does nothing on Windows: NTFS journals renames itself, and
@@ -46,4 +47,18 @@ func MkdirPrivate(dir string) error {
 	return windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT,
 		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
 		owner, nil, dacl, nil)
+}
+
+// SetUserRegistryDefault sets the default value of HKEY_CURRENT_USER\key,
+// creating the key, and leaves an equal value as it is.
+func SetUserRegistryDefault(key, value string) error {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, key, registry.QUERY_VALUE|registry.SET_VALUE)
+	if err != nil {
+		return err
+	}
+	defer k.Close()
+	if old, _, err := k.GetStringValue(""); err == nil && old == value {
+		return nil
+	}
+	return k.SetStringValue("", value)
 }
