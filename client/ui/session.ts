@@ -62,6 +62,7 @@ export function switchTo(server: StoredServer | null): void {
   void setCurrentServerId(server.id);
   const next = new Transport(server);
   transport = next;
+  void reopenLastBrainChat(server, next);
   stops = [
     next.onState((state) => {
       connection.set(state);
@@ -94,6 +95,7 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
     return;
   }
   stopWakePoll();
+  void Storage.setItem(LAST_BRAIN_CHAT + server.id, JSON.stringify({ host_worker: host, chat_thread_id: threadId })).catch(() => {});
   const scope = brainThreadScopeKey(threadId);
   const open = brainChat();
   if (open && open.cacheKey.endsWith(`:scope:${scope}`) && openHost === host.id) return;
@@ -120,6 +122,24 @@ function applyBrainSnapshot(server: StoredServer, owner: Transport, snapshot: Br
   brainThread.set(chat.current);
   stopChat = chat.onChange((state) => brainThread.set(state));
   brainChat.set(chat);
+}
+
+/**
+ * Brain's last thread and host on each computer: a start without a connection opens
+ * that chat at once (its draft and queued messages, the transcript once connected)
+ * instead of a dead "offline" screen.
+ */
+const LAST_BRAIN_CHAT = "mewla:v1:brain_last_chat:";
+
+async function reopenLastBrainChat(server: StoredServer, owner: Transport): Promise<void> {
+  try {
+    const raw = await Storage.getItem(LAST_BRAIN_CHAT + server.id);
+    const last = raw ? (JSON.parse(raw) as BrainSnapshot) : null;
+    if (!last?.host_worker?.id || !last.chat_thread_id || transport !== owner || brain()) return;
+    applyBrainSnapshot(server, owner, last);
+  } catch {
+    // Nothing remembered: the first snapshot opens the chat.
+  }
 }
 
 let openHost = "";
