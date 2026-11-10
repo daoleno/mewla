@@ -1,0 +1,23 @@
+{
+  "name": "Mewla",
+  "id": "com.daoleno.mewla",
+  "version": "0.3.0",
+  "build": 1,
+  "appearance": "system",
+  "capabilities": {
+    "host": [
+      "secure.*",
+      "push.*",
+      "app.*",
+      "scan.*",
+      "links.*"
+    ],
+    "network": {
+      "hosts": [
+        "*"
+      ]
+    },
+    "openUrl": true
+  },
+  "theme": "./theme.json"
+}
