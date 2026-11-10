@@ -1,11 +1,11 @@
-import { computed, effect, keyboardFrame, List, untracked, signal, Text, View } from "nsh";
-import { Button, Input, NavPage, TextView } from "nsh/base";
+import { computed, effect, keyboardFrame, untracked, signal, Text, View } from "nsh";
+import { Button, Input, NavPage } from "nsh/base";
 import { ChoiceCard, CHOICE_GONE_NOTICE } from "../chat/ChoiceCard";
-import { PlainText } from "../chat/PlainText";
+import { ChatTimeline } from "../chat/Timeline";
 import { answerChoice, stopTurn } from "../../core/conversation/turn";
 import { visiblePendingChoice } from "../../core/timeline/claudeChoiceModel";
 import { brainSurface, newBrainChat } from "../../core/brain";
-import { chatRows, type ChatRow } from "../../core/conversation/rows";
+import { createChatTimeline } from "../../core/conversation/timeline";
 import { belowSections, brainNav } from "../shell/Shell";
 import { WorkHeaderButton } from "../work/WorkPage";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport } from "../session";
@@ -21,6 +21,8 @@ const pendingChoiceKey = computed(() => pendingChoice()?.call_id ?? "");
 const activity = computed(() => brainThread().conversation?.activity);
 /** The activity a Stop was sent for: the button says "Stopping…" until that turn ends. */
 const stoppingFor = signal("");
+const timeline = createChatTimeline("brain");
+const items = computed(() => timeline(brainThread(), { onPendingAction: (id, action) => untracked(brainChat)?.actOnFailed(id, action) }));
 
 function hostId(): string {
   return brain()?.host_worker?.id ?? "";
@@ -81,43 +83,6 @@ async function startNewChat(): Promise<void> {
   }
 }
 
-function Bubble(props: { text: string; faded?: boolean; failed?: boolean }) {
-  return (
-    <View class={props.failed ? "rounded-2xl border border-destructive px-3.5 py-2.5" : props.faded ? "rounded-2xl bg-secondary px-3.5 py-2.5 opacity-60" : "rounded-2xl bg-secondary px-3.5 py-2.5"}>
-      <PlainText text={props.text} class="text-base" />
-    </View>
-  );
-}
-
-/** One recycled cell: everything is read from `row()` inside JSX, so a reused cell shows its new row. */
-function Row(props: { row: () => ChatRow }) {
-  const user = () => { const r = props.row(); return r.kind === "user" ? r : null; };
-  const reply = () => { const r = props.row(); return r.kind === "assistant" ? r : null; };
-  const pending = () => { const r = props.row(); return r.kind === "pending" ? r : null; };
-  return (
-    <View class="px-4 py-1.5">
-      {user() ? (
-        <View class="max-w-[85%] self-end"><Bubble text={user()!.text} /></View>
-      ) : reply() ? (
-        <TextView markdown={reply()!.text} options={{ streaming: reply()!.partial }} selectable class="text-base" />
-      ) : pending() ? (
-        <View class="max-w-[85%] items-end gap-1 self-end">
-          <Bubble text={pending()!.text} faded={!pending()!.failed} failed={pending()!.failed} />
-          {pending()!.note ? <Text class="text-sm text-muted-foreground">{pending()!.note}</Text> : null}
-          {pending()!.failed ? (
-            <View class="flex-row gap-3">
-              <Button testID="retry" onPress={() => brainChat()?.actOnFailed(pending()!.rowId, "retry")}><Text class="text-sm font-semibold text-primary">Send again</Text></Button>
-              <Button testID="discard" onPress={() => brainChat()?.actOnFailed(pending()!.rowId, "discard")}><Text class="text-sm text-muted-foreground">Delete</Text></Button>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <Text testID="working" class="text-base text-muted-foreground">Working…</Text>
-      )}
-    </View>
-  );
-}
-
 function Notice(props: { title: string; detail?: string }) {
   return (
     <View class="flex-1 items-center justify-center gap-2 p-8">
@@ -131,11 +96,8 @@ function Body() {
   return (
     <View class="flex-1">
       {surface() === "chat" ? (
-        <List testID="brain-chat" class="flex-1" each={chatRows(brainThread())} keyExtractor={(row) => row.key}
-          maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
-          empty={brainThread().loading ? <Notice title={connection() === "connected" ? "Loading…" : "The conversation shows when your computer is back"} /> : <Notice title="What should Brain do?" detail="Brain plans the work and runs the agents on your computer." />}>
-          {(row) => <Row row={row} />}
-        </List>
+        <ChatTimeline testID="brain-chat" items={items}
+          empty={() => (brainThread().loading ? <Notice title={connection() === "connected" ? "Loading…" : "The conversation shows when your computer is back"} /> : <Notice title="What should Brain do?" detail="Brain plans the work and runs the agents on your computer." />)} />
       ) : surface() === "waking" ? (
         <Notice title="Brain is starting…" />
       ) : surface() === "host_down" ? (
