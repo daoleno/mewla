@@ -1,5 +1,6 @@
 import { effect, keyboardFrame, List, untracked, signal, Text, View } from "nsh";
 import { Button, Input, NavPage, TextView } from "nsh/base";
+import { PlainText } from "../chat/PlainText";
 import { brainSurface, newBrainChat } from "../../core/brain";
 import { chatRows, type ChatRow } from "../../core/conversation/rows";
 import { belowSections } from "../shell/Shell";
@@ -54,7 +55,7 @@ async function startNewChat(): Promise<void> {
 function Bubble(props: { text: string; faded?: boolean; failed?: boolean }) {
   return (
     <View class={props.failed ? "rounded-2xl border border-destructive px-3.5 py-2.5" : props.faded ? "rounded-2xl bg-secondary px-3.5 py-2.5 opacity-60" : "rounded-2xl bg-secondary px-3.5 py-2.5"}>
-      <Text class="text-base">{props.text}</Text>
+      <PlainText text={props.text} class="text-base" />
     </View>
   );
 }
