@@ -9,9 +9,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/daoleno/mewla/daemon/control"
 	"github.com/daoleno/mewla/daemon/sessionhost"
 	"golang.org/x/term"
 )
@@ -38,24 +40,28 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 	fs.StringVar(&stateDir, "state-dir", "", "state directory whose session host to use (default: ~/.mewla)")
 	fs.StringVar(&socket, "socket", "", "session host socket (default: derived from the state directory)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: mewla attach [--state-dir DIR] [--socket PATH] SESSION")
+		fmt.Fprintln(stderr, "Usage: mewla attach [--state-dir DIR] [--socket PATH] [SESSION]")
 		fmt.Fprintln(stderr, "")
-		fmt.Fprintln(stderr, "Show a Session that runs in the session host in this terminal and type into")
-		fmt.Fprintln(stderr, "it. Ctrl-\\ detaches; the Session keeps running. This terminal's size becomes")
-		fmt.Fprintln(stderr, "the Session's. Sessions in tmux are attached with tmux itself.")
+		fmt.Fprintln(stderr, "Show a live Session in this terminal and type into it. SESSION is a Worker's")
+		fmt.Fprintln(stderr, "name (any case, or the start of one name), \"brain\", an id (mh-... or %N). With")
+		fmt.Fprintln(stderr, "none, pick from the live Sessions: arrow keys and typing filter, Enter attaches")
+		fmt.Fprintln(stderr, "(without a terminal the list is printed). Ctrl-\\ detaches; the Session keeps")
+		fmt.Fprintln(stderr, "running. This terminal's size becomes the Session's. A Session still in tmux")
+		fmt.Fprintln(stderr, "opens in tmux, which detaches with its own prefix key.")
 		fmt.Fprintln(stderr, "")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 1 {
+	if fs.NArg() > 1 {
 		fs.Usage()
 		return fmt.Errorf("name one Session to attach to")
 	}
-	id := fs.Arg(0)
+	query := strings.TrimSpace(fs.Arg(0))
 	in, out := os.Stdin, os.Stdout
-	if !term.IsTerminal(int(in.Fd())) || !term.IsTerminal(int(out.Fd())) {
+	interactive := term.IsTerminal(int(in.Fd())) && term.IsTerminal(int(out.Fd()))
+	if query != "" && !interactive {
 		return fmt.Errorf("mewla attach needs a terminal")
 	}
 	path, err := hostSocketPath(stateDir, socket)
@@ -67,14 +73,53 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 	dialCtx, dialCancel := context.WithTimeout(ctx, 10*time.Second)
 	client, err := sessionhost.Dial(dialCtx, path, hostVersion())
 	dialCancel()
-	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED) {
-		return fmt.Errorf("no session host is running on %s", path)
+	hostDown := errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ECONNREFUSED)
+	if err != nil && !hostDown {
+		return err
 	}
+	if client != nil {
+		defer client.Close()
+	}
+	all, err := gatherAttachEntries(ctx, client, stateDir)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
-
+	var entry attachEntry
+	if query == "" {
+		listed := listedAttachEntries(all)
+		if !interactive || len(listed) == 0 {
+			if len(listed) == 0 {
+				fmt.Fprintln(stdout, "No live Sessions.")
+				if hostDown {
+					fmt.Fprintf(stdout, "No session host is running on %s.\n", path)
+				}
+				return nil
+			}
+			writeAttachTable(stdout, listed, time.Now(), true)
+			return nil
+		}
+		chosen, err := pickAttachEntry(in, out, listed)
+		if err != nil || chosen == nil {
+			return err
+		}
+		entry = *chosen
+	} else {
+		entry, err = resolveAttach(all, query)
+		var missing *attachNotFoundError
+		if errors.As(err, &missing) && hostDown {
+			return fmt.Errorf("%w (no session host is running on %s)", err, path)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	if entry.Tmux != nil {
+		return runTmuxAttach(entry)
+	}
+	if client == nil {
+		return fmt.Errorf("no session host is running on %s", path)
+	}
+	fmt.Fprintf(out, "Attaching to %s (%s). Ctrl-\\ detaches; the Session keeps running.\r\n", entry.Name, entry.ID)
 	saved, err := term.MakeRaw(int(in.Fd()))
 	if err != nil {
 		return fmt.Errorf("raw terminal: %w", err)
@@ -89,13 +134,65 @@ func runAttachCommand(args []string, stdout, stderr io.Writer) error {
 		}
 		return cols, rows
 	}
-	outcome, err := attachLoop(ctx, client, id, in, out, size, resized)
+	outcome, err := attachLoop(ctx, client, entry.ID, in, out, size, resized)
 	_ = term.Restore(int(in.Fd()), saved)
 	if err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, outcome)
 	return nil
+}
+
+// gatherAttachEntries lists every Session this computer has: those the session
+// host runs (client is nil when none runs), and those still in tmux, which the
+// daemon knows. A daemon that does not answer only means no tmux Sessions are
+// listed and no prompt is reported.
+func gatherAttachEntries(ctx context.Context, client *sessionhost.Client, stateDir string) ([]attachEntry, error) {
+	var workers []control.Worker
+	if socketPath, err := control.DefaultSocketPath(resolveCLIStateDir(stateDir)); err == nil {
+		if resp, err := control.CallWithTimeout(socketPath, control.Request{Type: "worker_list"}, 3*time.Second); err == nil && resp.OK {
+			workers = resp.Workers
+		}
+	}
+	needsInput := map[string]bool{}
+	for _, worker := range workers {
+		if worker.PromptID != "" {
+			needsInput[worker.ID] = true
+		}
+	}
+	var all []attachEntry
+	hostIDs := map[string]bool{}
+	if client != nil {
+		callCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		infos, err := client.List(callCtx)
+		if err != nil {
+			return nil, err
+		}
+		all = hostAttachEntries(infos, needsInput)
+		for _, info := range infos {
+			hostIDs[info.ID] = true
+		}
+	}
+	return append(all, tmuxAttachEntries(workers, hostIDs, listTmuxPanes)...), nil
+}
+
+// pickAttachEntry shows the picker on this terminal and returns the chosen
+// Session; nil when the person cancels.
+func pickAttachEntry(in, out *os.File, entries []attachEntry) (*attachEntry, error) {
+	saved, err := term.MakeRaw(int(in.Fd()))
+	if err != nil {
+		return nil, fmt.Errorf("raw terminal: %w", err)
+	}
+	defer term.Restore(int(in.Fd()), saved)
+	size := func() (int, int) {
+		cols, rows, err := term.GetSize(int(out.Fd()))
+		if err != nil {
+			return 0, 0
+		}
+		return cols, rows
+	}
+	return runPicker(in, out, entries, size, styleForWriter(out), time.Now)
 }
 
 // attachLoop shows one host Session on out and sends what in reads to it,

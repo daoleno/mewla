@@ -655,6 +655,18 @@ func (a *controlApp) handleWorkerList() control.Response {
 		}
 	}
 	workers := visibleControlWorkers(a.watcher.Workers())
+	if targets, ok := a.watcher.(interface {
+		TerminalTarget(string) (watcher.TerminalTarget, bool)
+	}); ok {
+		for i := range workers {
+			if target, owned := targets.TerminalTarget(workers[i].ID); owned {
+				workers[i].Terminal = target.Backend
+				if target.Backend == "tmux" {
+					workers[i].TmuxSocket = target.Socket
+				}
+			}
+		}
+	}
 	sort.Slice(workers, func(i, j int) bool {
 		return workers[i].UpdatedAt.After(workers[j].UpdatedAt)
 	})

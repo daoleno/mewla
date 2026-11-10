@@ -204,7 +204,9 @@ read every agent's screen and type into it, so it is locked to you:
   terminal, such as the cursor position, the colors or what is on the
   clipboard. The host answers the ones it supports, so a viewer never answers
   twice or hands over its own clipboard.
-- `mewla attach` reaches a Session the same way, as you, over that socket.
+- `mewla attach` reaches a Session the same way, as you, over that socket. To
+  list Sessions still in tmux it also asks the daemon, over its own socket,
+  which tmux server they are on, and then opens them with tmux itself.
 - Like any terminal multiplexer, it does not protect your terminals from root
   or from other programs running as you.
 

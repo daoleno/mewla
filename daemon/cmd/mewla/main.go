@@ -2745,7 +2745,7 @@ Set up and maintain
   setup     Guided first-run setup (uses doctor)
   boot      Start Mewla when you log in (systemd user unit)
   host      Run or inspect the session host that keeps agent terminals running
-  attach    Show a Session that runs in the session host in this terminal (Ctrl-\ detaches)
+  attach    Pick a live Session, or name one, and show it in this terminal (Ctrl-\ detaches)
   update    Verify and install the latest Mewla release
   version   Print the Mewla version, commit and platform
 
