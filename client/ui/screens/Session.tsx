@@ -24,6 +24,7 @@ import { Icon } from "../icons/Icon";
 import { brain, connection, current, currentTransport, outbox, workers, workersHydrated } from "../session";
 import type { SessionsRoute } from "../shell/routes";
 import { TerminalPane } from "../terminal/TerminalPane";
+import { newSessionOpen, newSessionTarget } from "./NewSession";
 import { reloadAliases } from "./Sessions";
 
 const MISSING_SESSION_GRACE_MS = 2_500;
@@ -231,13 +232,17 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const menu = async () => {
     const actions = [
       ...(canChat() ? [{ id: "mode", label: mode() === "chat" ? "Open terminal" : "Open chat" }] : []),
+      { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
       { id: "terminate", label: "Terminate", role: "destructive" as const },
       { id: "cancel", label: "Cancel", role: "cancel" as const },
     ];
     const { action } = await AlertDialog.show({ title: untracked(title), presentation: "actionSheet", actions });
     if (action === "mode") chooseMode(untracked(mode) === "chat" ? "terminal" : "chat");
-    else if (action === "rename") {
+    else if (action === "terminal") {
+      newSessionTarget.set(props.workerId);
+      newSessionOpen.set(true);
+    } else if (action === "rename") {
       renameValue.set(aliasOf(props.workerId) ?? "");
       renaming.set(true);
     } else if (action === "terminate") void terminate();

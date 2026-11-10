@@ -9,6 +9,8 @@ import { canCreateSession, connection, currentTransport, currentWorkerSessions, 
 
 /** Open from the Sessions list (its + and its empty state). */
 export const newSessionOpen = signal(false);
+/** Set by a Session's "New Terminal": the new window joins that Session's tmux session, and its folder by default. */
+export const newSessionTarget = signal("");
 
 type Entry = { name: string; path: string };
 
@@ -79,7 +81,7 @@ function DirectoryPicker(props: { start: string; onPick: (path: string) => void;
  * Session's by default); Advanced sets the command and the window title.
  * Opens the new Session once the computer has made it.
  */
-export function NewSession(props: { onCreated: (workerId: string, hint: TerminalRouteSessionHint) => void }) {
+export function NewSession(props: { onCreated: (workerId: string, fromSession: boolean, hint: TerminalRouteSessionHint) => void }) {
   const cwd = signal("");
   const command = signal("");
   const name = signal("");
@@ -89,7 +91,8 @@ export function NewSession(props: { onCreated: (workerId: string, hint: Terminal
   const problem = signal("");
 
   const reset = () => {
-    cwd.set(untracked(workers).find((w) => w.cwd)?.cwd ?? "");
+    // From a Session, an empty folder means that pane's current folder.
+    cwd.set(untracked(newSessionTarget) ? "" : untracked(workers).find((w) => w.cwd)?.cwd ?? "");
     command.set("");
     name.set("");
     advanced.set(false);
@@ -99,6 +102,7 @@ export function NewSession(props: { onCreated: (workerId: string, hint: Terminal
   // Each opening starts fresh.
   effect(() => {
     if (newSessionOpen()) untracked(reset);
+    else newSessionTarget.set("");
   });
 
   const launch = async (launchCommand: string, launchName: string) => {
@@ -109,7 +113,8 @@ export function NewSession(props: { onCreated: (workerId: string, hint: Terminal
     busy.set(true);
     problem.set("");
     const startedAt = Date.now();
-    const result = await createSession(transport, { cwd: cwd().trim(), command: launchCommand.trim(), name: launchName.trim() });
+    const targetId = untracked(newSessionTarget);
+    const result = await createSession(transport, { cwd: cwd().trim(), command: launchCommand.trim(), name: launchName.trim(), targetId: targetId || undefined });
     busy.set(false);
     if (result.workerSession) store.added(result.workerSession);
     if (result.kind === "ambiguous") {
@@ -118,14 +123,14 @@ export function NewSession(props: { onCreated: (workerId: string, hint: Terminal
     }
     if (result.kind === "failed") return problem.set(result.message);
     newSessionOpen.set(false);
-    props.onCreated(result.workerId, { cwd: cwd().trim() || undefined, command: launchCommand.trim() || undefined, name: launchName.trim() || undefined, startedAt });
+    props.onCreated(result.workerId, Boolean(targetId), { cwd: cwd().trim() || undefined, command: launchCommand.trim() || undefined, name: launchName.trim() || undefined, startedAt });
   };
 
   return (
     <Sheet open={newSessionOpen()} onOpenChange={({ open }) => newSessionOpen.set(open)} closeOnSwipe popupClass="rounded-t-2xl bg-background px-4 pt-4">
       <View class="gap-3 pb-8">
         <View class="flex-row items-center">
-          <Text class="flex-1 text-lg font-semibold">New session</Text>
+          <Text class="flex-1 text-lg font-semibold">{newSessionTarget() ? "New terminal" : "New session"}</Text>
           {busy() ? <Text class="text-sm text-muted-foreground">Starting…</Text> : null}
         </View>
         {picking() ? (
@@ -138,7 +143,7 @@ export function NewSession(props: { onCreated: (workerId: string, hint: Terminal
             <View class="gap-1">
               <Text class="text-xs font-semibold uppercase text-muted-foreground">Working directory</Text>
               <View class="flex-row items-center gap-2">
-                <Input testID="new-cwd" value={cwd()} placeholder="Home" onChange={({ value }) => cwd.set(value)}
+                <Input testID="new-cwd" value={cwd()} placeholder={newSessionTarget() ? "This Session's folder" : "Home"} onChange={({ value }) => cwd.set(value)}
                   class="flex-1 rounded-xl border border-border bg-card px-3 py-2 font-mono text-sm" />
                 <Button testID="new-pick-dir" onPress={() => picking.set(true)} disabled={connection() !== "connected"} class="rounded-xl border border-border px-3 py-2 active:bg-accent">
                   <Icon name="folder-open" size={18} color="foreground" />
