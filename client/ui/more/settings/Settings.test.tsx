@@ -1,6 +1,7 @@
 import { describe, expect, open, test } from "nsh/test";
 
 const HARNESS = "../testing/Harness.tsx";
+const json = (body: unknown) => ({ status: 200, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 function secureStore() {
   const secure = new Map<string, string>();
@@ -176,5 +177,74 @@ describe("Outside agents", () => {
     await app.waitFor("text:Wants to hand work to Brain. Approve only if its terminal shows 4821.");
     await app.press("id:approve-a1");
     await app.waitFor("text:Not used yet");
+  });
+});
+
+describe("iPhone use", () => {
+  const mac = { enabled: true, state: "ready", summary: "Agents on Studio can use your iPhone." };
+
+  test("Labs shows iPhone use only where the computer offers it, with its state", async () => {
+    const c = computer({ name: "settings" }, () => null, {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "GET http://desk.test:9877/iphone": json({ ...mac, active: { worker: "w1", name: "Codex", since: "" } }) },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:settings-iphone");
+    expect(app.texts()).toContain("In use");
+
+    const linux = computer({ name: "settings" }, () => null, {
+      network: { "GET http://desk.test:9877/auth-check": { status: 503 }, "GET http://desk.test:9877/iphone": json({ enabled: false, state: "unsupported", summary: "" }) },
+    });
+    const other = await open(HARNESS, linux.options);
+    await other.waitFor("text:Labs");
+    await other.waitUntil(() => other.requests().some((r) => r.url.startsWith("http://desk.test:9877/iphone")));
+    expect(other.shows("id:settings-iphone")).toBe(false);
+  });
+
+  test("while an agent uses the iPhone, Done tells it the person finished and Stop stops it", async () => {
+    const sent: unknown[] = [];
+    const c = computer({ name: "settings-iphone" }, () => null, {
+      network: {
+        "GET http://desk.test:9877/iphone?picture=1": json({ ...mac, active: { worker: "w1", name: "Codex", since: "" } }),
+        "POST http://desk.test:9877/iphone": (request: { body?: string }) => {
+          sent.push(JSON.parse(String(request.body)));
+          return json({ ...mac, active: { worker: "w1", name: "Codex", since: "" } });
+        },
+      },
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Codex is using your iPhone");
+    expect(app.texts()).toContain("Agents on Studio can use your iPhone.");
+    await app.press("label:Done: tell the agent you finished");
+    await app.waitUntil(() => sent.length === 1);
+    await app.press("label:Stop Codex");
+    await app.waitUntil(() => sent.length === 2);
+    expect(sent).toEqual([{ handoff_done: true }, { stop_agent: true }]);
+  });
+
+  test("a computer without iPhone use says so, and the switch stays off", async () => {
+    const c = computer({ name: "settings-iphone" }, () => null, { network: { "GET http://desk.test:9877/iphone?picture=1": { status: 404, body: "not found" } } });
+    const app = await open(HARNESS, c.options);
+    await app.waitUntil(() => app.texts().some((t) => t.startsWith("This computer doesn't offer iPhone use (")));
+    expect(app.texts().some((t) => t.includes("no response is listed"))).toBe(false);
+    expect(app.enabled("id:iphone-switch")).toBe(false);
+  });
+});
+
+describe("Open-source Licenses", () => {
+  test("lists what the app ships and opens a license's text", async () => {
+    const c = computer({ name: "settings-licenses" }, () => null);
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Bundled code");
+    expect(app.texts()).toContain("noVNC");
+    expect(app.texts()).toContain("1.7.0 · MPL-2.0");
+    await app.press("text:noVNC");
+    await app.waitFor("id:license-text");
+    expect(app.texts().some((t) => t.includes("Mozilla Public License"))).toBe(true);
+  });
+
+  test("an unknown license says it is not found", async () => {
+    const c = computer({ name: "settings-license", id: "9/9" }, () => null);
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:License not found");
   });
 });
