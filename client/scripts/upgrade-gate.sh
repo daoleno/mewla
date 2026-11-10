@@ -39,10 +39,13 @@ shows() { screen | grep -qiE "$1"; }
 devices() { env -i HOME="$state/home" PATH="$PATH" "$MEWLA" devices list -json -state-dir "$state/mewla"; }
 
 log "emulator ABIs: $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
-mkdir -p "$state/home"
-# A daemon of its own: own state, own tmux server, an inert Brain host, nothing from this shell.
+mkdir -p "$state/home" "$state/bin"
+# A daemon of its own: own state, own tmux server, nothing from this shell, and an inert Brain host:
+# a cursor-agent that answers nothing, so Brain starts (the Expo app shows its composer) and never replies.
+printf '#!/bin/sh\n[ "$1" = --version ] && { echo 0.0.0-gate; exit 0; }\nexec sleep 86400\n' > "$state/bin/cursor-agent"
+chmod +x "$state/bin/cursor-agent"
 tmux -S "$state/tmux.sock" new-session -d -s gate
-env -i HOME="$state/home" PATH="$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX="$state/tmux.sock,0,0" \
+env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX="$state/tmux.sock,0,0" \
   "$MEWLA" serve -addr "0.0.0.0:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!
 trap 'kill "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state"' EXIT
