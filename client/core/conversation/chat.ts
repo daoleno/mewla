@@ -1,5 +1,5 @@
-import type { KeyValueStore } from "../platform";
 import type { Transport } from "../transport";
+import { chatCacheKey } from "./draft";
 import type { MessageOutbox, OutboxEntry, OutboxEvent } from "./outbox";
 import { UNCERTAIN_SEND_ERROR, UNDELIVERED_SEND_ERROR } from "./pendingUserMessages";
 import { subscribeConversation, type ConversationTarget } from "./subscription";
@@ -13,28 +13,18 @@ import {
   type PendingUserMessageInput,
 } from "./thread";
 
-const DRAFT_PREFIX = "mewla.draft.v1:";
-export const DRAFT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-export const DRAFT_WRITE_DELAY_MS = 400;
-
-/** The Expo app's chat cache key: its drafts and queued messages are found under it after the upgrade. */
-export function chatCacheKey(serverId: string, workerId: string, conversationScopeKey?: string): string {
-  return conversationScopeKey ? `${serverId}:scope:${conversationScopeKey}` : `${serverId}:agent:${workerId}`;
-}
+export { chatCacheKey };
 
 export interface ChatOptions {
   serverId: string;
   transport: Transport;
   target: ConversationTarget;
   outbox: MessageOutbox;
-  /** App storage, where drafts live (`mewla.draft.v1:<cache key>`, as the Expo app kept them). */
-  storage: KeyValueStore;
-  now?: () => number;
 }
 
 /**
  * One open chat (Brain's thread or a Session): the transcript the daemon streams,
- * the person's messages it has not echoed yet, and the draft. It follows the
+ * and the person's messages it has not echoed yet. It follows the
  * conversation whenever the transport is connected and again after every
  * reconnect or stream gap; sends go only through the outbox, under ids the
  * daemon dedupes on. Nothing here throws into the caller. `close()` when the
@@ -49,8 +39,6 @@ export class Chat {
   private unsubscribe: (() => void) | null = null;
   private generation = 0;
   private resyncToken = 0;
-  private draftTimer: ReturnType<typeof setTimeout> | null = null;
-  private draftWrite: (() => void) | null = null;
   private closed = false;
 
   constructor(private readonly options: ChatOptions) {
@@ -83,7 +71,6 @@ export class Chat {
     const rowId = this.addPending({ body, sentText: text, attachments: [], lifecycle: "pending", dispatchRequestId: requestId });
     this.rowByRequest.set(requestId, rowId);
     outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text });
-    this.saveDraft("");
   }
 
   /** "Send again" or "Delete" on a message that could not be delivered. */
@@ -104,49 +91,9 @@ export class Chat {
     outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text: message.sentText });
   }
 
-  /** The saved draft, or "" (a draft older than two weeks is dropped). */
-  async loadDraft(): Promise<string> {
-    const key = DRAFT_PREFIX + this.cacheKey;
-    try {
-      const raw = await this.options.storage.getItem(key);
-      if (!raw) return "";
-      const parsed = JSON.parse(raw) as { t?: number; v?: string };
-      const now = this.options.now?.() ?? Date.now();
-      if (typeof parsed.v !== "string" || typeof parsed.t !== "number" || now - parsed.t > DRAFT_MAX_AGE_MS) {
-        await this.options.storage.removeItem(key);
-        return "";
-      }
-      return parsed.v;
-    } catch {
-      return "";
-    }
-  }
-
-  /** Keeps the draft shortly after typing pauses; an empty one is removed at once. */
-  saveDraft(value: string): void {
-    if (this.draftTimer) clearTimeout(this.draftTimer);
-    this.draftTimer = null;
-    this.draftWrite = null;
-    const key = DRAFT_PREFIX + this.cacheKey;
-    const write = () => {
-      this.draftTimer = null;
-      this.draftWrite = null;
-      const now = this.options.now?.() ?? Date.now();
-      const done = value ? this.options.storage.setItem(key, JSON.stringify({ t: now, v: value })) : this.options.storage.removeItem(key);
-      // A draft is a convenience; storage being full or blocked is not an error.
-      void done.catch(() => {});
-    };
-    if (!value) return write();
-    this.draftWrite = write;
-    this.draftTimer = setTimeout(write, DRAFT_WRITE_DELAY_MS);
-  }
-
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    // The last keystrokes before a switch or "New chat" are kept.
-    if (this.draftTimer) clearTimeout(this.draftTimer);
-    this.draftWrite?.();
     this.stopFollowing();
     this.stops.splice(0).forEach((stop) => stop());
     this.listeners.clear();
