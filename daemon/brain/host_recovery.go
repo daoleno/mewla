@@ -67,6 +67,9 @@ func (s *Service) HostRecoveryDue() bool {
 		return false
 	}
 	if s.hostObserved(host.ID) {
+		if s.hostSessionExited(host.ID) {
+			return true
+		}
 		// A pane that is open but never became ready is retried too: the person
 		// may have signed in at its prompt since.
 		return s.hostActivationStuck()
@@ -152,4 +155,12 @@ func hostSignInStep(executorID string) string {
 		}
 	}
 	return "Sign in to " + executorID + " by running it"
+}
+
+// hostSessionExited reports a host Session whose program has ended. The
+// session host keeps such a Session, with its last screen, where tmux closed
+// the pane, so it is still observed; the Brain in it is gone all the same.
+func (s *Service) hostSessionExited(id string) bool {
+	exited, ok := s.watcher.(interface{ SessionExited(string) bool })
+	return ok && strings.TrimSpace(id) != "" && exited.SessionExited(id)
 }

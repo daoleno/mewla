@@ -186,6 +186,50 @@ func TestAutomaticHostContinuityReplacesABrainLeftInTmux(t *testing.T) {
 	}
 }
 
+// exitedSessionWatcher is a watcher whose session host keeps a Session whose
+// program ended.
+type exitedSessionWatcher struct {
+	*fakeWatcher
+	exited string
+}
+
+func (w exitedSessionWatcher) SessionExited(id string) bool {
+	_, present := w.sessions[id]
+	return id == w.exited && present
+}
+
+// The session host keeps a Session whose program ended, where tmux closed the
+// pane. A Brain whose agent ended is gone as if its pane had closed: the ended
+// Session is closed and the Brain starts again in its conversation.
+func TestAutomaticHostContinuityResumesABrainWhoseProgramEnded(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const conversation = "11111111-2222-4333-8444-555555555555"
+	if err := store.ReplaceHostSessionBinding("mh-brain", "codex", conversation, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	previous := hostLookPath
+	hostLookPath = func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	t.Cleanup(func() { hostLookPath = previous })
+	fw := &fakeWatcher{sessions: map[string]*classifier.Worker{"mh-brain": {ID: "mh-brain", Name: "Brain", Command: "codex"}}}
+	service := NewService(store, exitedSessionWatcher{fakeWatcher: fw, exited: "mh-brain"}, work.NewExecutorConfig(map[string]work.Executor{"codex": {Command: "codex", Kind: "codex"}}))
+	// Nothing reports the Session removed; the recovery tick finds it.
+	if !service.HostRecoveryDue() {
+		t.Fatal("a Brain whose program ended is not due for recovery")
+	}
+	if changed, err := service.ReconcileHostContinuity(); err != nil || !changed {
+		t.Fatalf("restart the ended Brain: %v %v", changed, err)
+	}
+	if len(fw.killed) != 1 || fw.killed[0] != "mh-brain" {
+		t.Fatalf("killed %#v, want the ended Session closed", fw.killed)
+	}
+	if len(fw.created) != 1 || !strings.Contains(fw.created[0].opts.Command, "resume "+conversation) {
+		t.Fatalf("created %#v, want the Brain resumed in its conversation", fw.created)
+	}
+}
+
 // A computer rebooted before its first message has a recorded host that never
 // held a conversation: nothing to lose, so Brain starts again by itself.
 func TestAutomaticHostContinuityRestartsAHostThatNeverHeldAConversation(t *testing.T) {

@@ -170,6 +170,15 @@ func (s *Service) discoverHostWorker(executor work.WorkerExecutor) (hostDiscover
 		return d, nil
 	}
 	presence, probeErr := s.watcher.ProbeSession(d.id)
+	if probeErr == nil && presence == watcher.SessionPresencePresent && s.hostSessionExited(d.id) {
+		// The session host keeps a Session whose program ended, where tmux
+		// closed its pane. The Brain is gone as if its pane had closed: close
+		// the ended Session and start the Brain again in its conversation.
+		if err := s.watcher.KillSession(d.id); err != nil {
+			return hostDiscovery{}, fmt.Errorf("close the ended Brain Session %s: %w", d.id, err)
+		}
+		presence = watcher.SessionPresenceAbsent
+	}
 	if probeErr == nil && presence == watcher.SessionPresenceAbsent {
 		// A cleanup probe may map a lost socket to absence. Replacement requires
 		// a second, successful inventory on the watcher's explicitly selected server.

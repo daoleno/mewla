@@ -1430,6 +1430,18 @@ func (w *Watcher) ProbeSession(target string) (SessionPresence, error) {
 	return SessionPresenceAbsent, nil
 }
 
+// SessionExited reports a session host Session whose program has ended: the
+// host keeps it, with its last screen, until it is closed. A tmux pane closes
+// with its program instead.
+func (w *Watcher) SessionExited(id string) bool {
+	c := w.composite()
+	if c == nil || !c.host.validID(strings.TrimSpace(id)) {
+		return false
+	}
+	info, present, err := c.host.info(strings.TrimSpace(id))
+	return err == nil && present && !info.Alive
+}
+
 // ResolveDelegatedAbsence proves that a previously-owned delegated target is
 // definitively gone on the selected server: the target is absent, or present
 // but no longer Mewla-owned (a foreign replacement). It is the restart/reconcile
