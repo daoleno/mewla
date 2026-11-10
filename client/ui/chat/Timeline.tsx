@@ -1,4 +1,5 @@
-import { Clipboard, List, Text, View } from "nsh";
+import { cleanup, Clipboard, List, signal, Text, View } from "nsh";
+import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, Sheet, TextView } from "nsh/base";
 import { isWorkingRow } from "../../core/conversation/timeline";
 import type { ActivityTimelineItem } from "../../core/timeline/activityTypes";
@@ -15,7 +16,18 @@ export type MessageHandlers = {
   onUserMessage?: (item: MessageTimelineItem) => void;
   /** A turn's final reply gets a Copy button under it. */
   isFinalReply?: (id: string) => boolean;
+  /** When the running turn started (the provider's own clock): "Working · 1:05". */
+  workingSince?: () => string | undefined;
 };
+
+/** "Working" with the turn's elapsed time, ticking each second while it shows. */
+function WorkingRow(props: { since: () => string | undefined }) {
+  const now = signal(Date.now());
+  const timer = setInterval(() => now.set(Date.now()), 1000);
+  cleanup(() => clearInterval(timer));
+  const label = () => providerActivityElapsedLabels({ startedAt: props.since(), nowMs: now(), active: true }).visual;
+  return <Text testID="working" class="px-4 text-base text-muted-foreground">{label() ? `Working · ${label()}` : "Working…"}</Text>;
+}
 
 function UserMessage(props: { item: () => MessageTimelineItem; handlers: MessageHandlers }) {
   const it = props.item;
@@ -67,7 +79,7 @@ export function TimelineRow(props: { item: () => TimelineItem; expansion: Expans
           ) : null}
         </View>
       ) : isWorkingRow(it()) ? (
-        <Text testID="working" class="px-4 text-base text-muted-foreground">Working…</Text>
+        <WorkingRow since={() => props.handlers.workingSince?.()} />
       ) : it().type === "activity" ? (
         <ActivityRow item={as("activity") as () => ActivityTimelineItem} expansion={props.expansion} />
       ) : it().type === "plan" ? (

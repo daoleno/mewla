@@ -108,6 +108,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
       void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
     isFinalReply: (id: string) => finalReplies().has(id),
+    workingSince: () => activity()?.started_at,
   };
   const stoppingFor = signal("");
   const notice = signal("");
