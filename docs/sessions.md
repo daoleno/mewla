@@ -7,6 +7,13 @@ Session is there when you sit down at the desk: `mewla attach` lists the live
 ones to pick from (or `mewla attach <name>` goes straight in, or `mewla attach
 --all` tiles every Session as a live grid to choose from), and Ctrl-\ detaches. `mewla host status` lists them in full.
 
+On Linux with a systemd user session, the session host runs as a user service
+of its own (`mewla-session-host-…`), not inside the terminal or service that
+started Mewla. When the computer runs out of memory and the kernel ends one
+process, systemd does not stop the host and the Sessions with it; closing the
+terminal Mewla was started from does not either. Without a systemd user
+session the host starts directly, as before.
+
 Sessions an earlier Mewla started in `tmux` move to the session host when their
 agent is idle; see [Updating from Mewla 0.2](install-daemon.md#updating-from-mewla-02).
 

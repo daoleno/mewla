@@ -94,12 +94,15 @@ func spawnHost(opts StartOptions) (<-chan error, error) {
 		defer logFile.Close()
 	}
 	args := append([]string{"host", "--socket", opts.SocketPath}, opts.Args...)
-	cmd := exec.Command(opts.Executable, args...)
-	cmd.Env = opts.Env
-	cmd.Dir = filepath.VolumeName(opts.Executable) + string(filepath.Separator)
-	if logFile != nil {
-		cmd.Stdout = logFile
-		cmd.Stderr = logFile
+	cmd, inUnit := hostUnitCommand(opts, args, logFile)
+	if !inUnit {
+		cmd = exec.Command(opts.Executable, args...)
+		cmd.Env = opts.Env
+		cmd.Dir = filepath.VolumeName(opts.Executable) + string(filepath.Separator)
+		if logFile != nil {
+			cmd.Stdout = logFile
+			cmd.Stderr = logFile
+		}
 	}
 	// Its own session (Unix) or a detached process outside the caller's Job
 	// (Windows): no terminal, and nothing sent to the caller reaches it.
