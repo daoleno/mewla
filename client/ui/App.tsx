@@ -6,6 +6,7 @@ import { pairFromText } from "./screens/Onboarding";
 import { current, loadSession, ready, resumeConnection } from "./session";
 import { FirstRun, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
 import { readPairingLink } from "../core/pairFlow";
+import { startNotifications } from "./push/push";
 
 installPlatform(nshPlatform());
 
@@ -24,6 +25,7 @@ async function start(): Promise<void> {
   await loadSession();
 }
 void start();
+startNotifications();
 
 // Coming back to the app skips the reconnect backoff.
 effect(() => {

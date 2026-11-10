@@ -3,7 +3,8 @@ import { Button, Input, NavPage, TextView } from "nsh/base";
 import { PlainText } from "../chat/PlainText";
 import { brainSurface, newBrainChat } from "../../core/brain";
 import { chatRows, type ChatRow } from "../../core/conversation/rows";
-import { belowSections } from "../shell/Shell";
+import { belowSections, brainNav } from "../shell/Shell";
+import { WorkHeaderButton } from "../work/WorkPage";
 import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport } from "../session";
 
 const draft = signal("");
@@ -143,7 +144,7 @@ function Composer() {
 
 export function Brain() {
   return (
-    <NavPage title="Brain"
+    <NavPage title="Brain" headerLeft={<WorkHeaderButton onPress={() => brainNav.push({ name: "work" })} />}
       headerRight={<Button testID="new-chat" onPress={() => void startNewChat()} disabled={connection() !== "connected" || startingChat()}><Text class="text-base text-primary">New chat</Text></Button>}>
       <View class="flex-1 bg-background">
         <Body />
