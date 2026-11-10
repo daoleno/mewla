@@ -42,3 +42,13 @@ export async function answerPrompt(transport: Transport, workerId: string, promp
 export async function decideApproval(transport: Transport, workerId: string, approvalId: string, optionId: string): Promise<void> {
   await transport.request("approval_decision", { worker_id: workerId, id: approvalId, option_id: optionId }, { reply: "approval_decided", timeoutMs: 8_000 });
 }
+
+/**
+ * Steps a Session's agent back to before one of the person's messages (its CLI
+ * must advertise `message_rewind`). `composerClean` false: it stepped back,
+ * but its input box still holds the old prompt.
+ */
+export async function rewindMessage(transport: Transport, workerId: string, eventId: string): Promise<{ composerClean: boolean }> {
+  const reply = await transport.request("rewind_message", { worker_id: workerId, message_rewind: { event_id: eventId } }, { reply: "message_rewound", timeoutMs: 30_000 });
+  return { composerClean: reply.composer_clean !== false };
+}

@@ -1,6 +1,8 @@
 import { computed, untracked, signal, Text, View } from "nsh";
 import { Button, NavPage } from "nsh/base";
 import { Composer as ChatComposer, createComposerText } from "../chat/Composer";
+import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdit";
+import { finalReplyIdsOf } from "../../core/timeline/model";
 import { ChoiceCard, CHOICE_GONE_NOTICE } from "../chat/ChoiceCard";
 import { ChatTimeline } from "../chat/Timeline";
 import { answerChoice, stopTurn } from "../../core/conversation/turn";
@@ -66,11 +68,11 @@ function Notice(props: { title: string; detail?: string }) {
   );
 }
 
-function Body() {
+function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] }) {
   return (
     <View class="flex-1">
       {surface() === "chat" ? (
-        <ChatTimeline testID="brain-chat" items={items}
+        <ChatTimeline testID="brain-chat" items={items} handlers={props.handlers}
           empty={() => (brainThread().loading ? <Notice title={connection() === "connected" ? "Loading…" : "The conversation shows when your computer is back"} /> : <Notice title="What should Brain do?" detail="Brain plans the work and runs the agents on your computer." />)} />
       ) : surface() === "waking" ? (
         <Notice title="Brain is starting…" />
@@ -85,14 +87,16 @@ function Body() {
   );
 }
 
-function Composer() {
-  const text = createComposerText(brainDraft);
+function Composer(props: { text: ReturnType<typeof createComposerText>; editor: ReturnType<typeof createMessageEdit> }) {
+  const editor = props.editor;
   return (
-    <ChatComposer text={text} placeholder="Tell Brain…" canSend={() => Boolean(brainChat())} onSend={(value) => brainChat()?.send(value)}
+    <ChatComposer text={props.text} placeholder="Tell Brain…" canSend={() => Boolean(brainChat())}
+      onSend={(value) => (untracked(editor.edit) ? (void editor.send(value), false) : brainChat()?.send(value))}
       running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"} onStop={() => void stop()}>
       {connection() !== "connected" && surface() === "chat" ? (
         <Text testID="offline" class="pb-1.5 text-center text-sm text-muted-foreground">Offline · messages send when your computer is back</Text>
       ) : null}
+      {editor.edit() ? <EditChip editor={editor} /> : null}
       {pendingChoiceKey() ? (
         <ChoiceCard choice={untracked(pendingChoice)!.choice} connected={() => connection() === "connected"}
           submit={(answers) => {
@@ -111,12 +115,21 @@ function Composer() {
 }
 
 export function Brain() {
+  const text = createComposerText(brainDraft);
+  // Brain's thread is never rewound: an edited message goes out as a new one.
+  const editor = createMessageEdit({ text, brain: true, messageRewind: () => false, send: (value) => brainChat()?.send(value) });
+  const finalReplies = computed(() => finalReplyIdsOf(brainThread().conversation?.events ?? []));
+  const handlers = {
+    onUserMessage: (item: Parameters<typeof showMessageMenu>[0]) =>
+      void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
+    isFinalReply: (id: string) => finalReplies().has(id),
+  };
   return (
     <NavPage title="Brain" headerLeft={<WorkHeaderButton onPress={() => brainNav.push({ name: "work" })} />}
       headerRight={<Button testID="new-chat" onPress={() => void startNewChat()} disabled={connection() !== "connected" || startingChat()}><Text class="text-base text-primary">New chat</Text></Button>}>
       <View class="flex-1 bg-background">
-        <Body />
-        <Composer />
+        <Body handlers={handlers} />
+        <Composer text={text} editor={editor} />
       </View>
     </NavPage>
   );

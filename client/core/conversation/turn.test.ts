@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type { StoredServer } from "../storedServerContract";
 import { FakeSocket, installMemoryPlatform } from "../testing/memoryPlatform";
 import { Transport, transportTiming } from "../transport";
-import { answerChoice, answerPrompt, decideApproval, stopTurn } from "./turn";
+import { answerChoice, answerPrompt, decideApproval, rewindMessage, stopTurn } from "./turn";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,6 +63,18 @@ describe("turn controls", () => {
     expect(last()).toMatchObject({ type: "approval_decision", worker_id: "w1", id: "ap-1", option_id: "allow" });
     socket.receive({ type: "approval_decided", request_id: last().request_id });
     await done;
+    transport.close();
+  });
+
+  test("a rewind reports whether the agent's input box came back clean", async () => {
+    const { transport, socket, last } = await connected();
+    const clean = rewindMessage(transport, "w1", "ev-3");
+    expect(last()).toMatchObject({ type: "rewind_message", worker_id: "w1", message_rewind: { event_id: "ev-3" } });
+    socket.receive({ type: "message_rewound", request_id: last().request_id });
+    expect(await clean).toEqual({ composerClean: true });
+    const dirty = rewindMessage(transport, "w1", "ev-3");
+    socket.receive({ type: "message_rewound", request_id: last().request_id, composer_clean: false });
+    expect(await dirty).toEqual({ composerClean: false });
     transport.close();
   });
 });
