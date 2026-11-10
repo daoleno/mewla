@@ -4,13 +4,13 @@ package platform
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
@@ -167,6 +167,9 @@ func TestProcessCreationFiletime(t *testing.T) {
 
 // Codex's app-server refuses a socket directory unless its ACL is exactly the
 // one Codex itself would set; see MkdirPrivate.
+// fileAllAccess is Win32's FILE_ALL_ACCESS, which x/sys/windows leaves out.
+const fileAllAccess = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1ff
+
 func TestMkdirPrivateMatchesCodexSocketDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "codex-ctl")
 	for round := 0; round < 2; round++ { // creating it, then repairing it
@@ -177,12 +180,34 @@ func TestMkdirPrivateMatchesCodexSocketDirectory(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Codex checks the owner, the protected bit and the one entry; the
-		// auto-inherited flag Windows adds (PAI) is not part of that.
-		_, sid, _ := CurrentUser()
-		got := sd.String()
-		if got != fmt.Sprintf("O:%sD:P(A;OICI;FA;;;%s)", sid, sid) && got != fmt.Sprintf("O:%sD:PAI(A;OICI;FA;;;%s)", sid, sid) {
-			t.Fatalf("round %d: descriptor %s, want owner %s and only D:P(A;OICI;FA;;;%s)", round, got, sid, sid)
+		// Codex's own check (windows_socket_validation.rs): this user owns
+		// it, the DACL is protected, and its one entry allows this user full
+		// access, inherited by what is created inside. The auto-inherited
+		// flag Windows adds is not part of it.
+		user, err := windows.GetCurrentProcessToken().GetTokenUser()
+		if err != nil {
+			t.Fatal(err)
+		}
+		owner, _, err := sd.Owner()
+		if err != nil || !owner.Equals(user.User.Sid) {
+			t.Fatalf("round %d: owner %v (%v), want %v; %s", round, owner, err, user.User.Sid, sd)
+		}
+		control, _, err := sd.Control()
+		if err != nil || control&windows.SE_DACL_PROTECTED == 0 {
+			t.Fatalf("round %d: DACL not protected: %s", round, sd)
+		}
+		dacl, _, err := sd.DACL()
+		if err != nil || dacl == nil || dacl.AceCount != 1 {
+			t.Fatalf("round %d: want one entry: %s", round, sd)
+		}
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err := windows.GetAce(dacl, 0, &ace); err != nil {
+			t.Fatal(err)
+		}
+		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+		if ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != windows.OBJECT_INHERIT_ACE|windows.CONTAINER_INHERIT_ACE ||
+			ace.Mask != fileAllAccess || !sid.Equals(user.User.Sid) {
+			t.Fatalf("round %d: entry type %d flags %#x mask %#x sid %v: %s", round, ace.Header.AceType, ace.Header.AceFlags, ace.Mask, sid, sd)
 		}
 	}
 }
