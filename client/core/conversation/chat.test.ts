@@ -161,7 +161,11 @@ describe("Chat", () => {
     expect(storage.entries.has("mewla.draft.v1:s1:scope:brain-thread:t1")).toBe(false);
     storage.entries.set("mewla.draft.v1:s1:scope:brain-thread:t1", JSON.stringify({ t: Date.now() - DRAFT_MAX_AGE_MS - 1, v: "stale" }));
     expect(await chat.loadDraft()).toBe("");
+    // Closing right after typing keeps what was typed.
+    chat.saveDraft("last words");
     chat.close();
+    await wait();
+    expect(JSON.parse(storage.entries.get("mewla.draft.v1:s1:scope:brain-thread:t1")!).v).toBe("last words");
     transport.close();
   });
 });

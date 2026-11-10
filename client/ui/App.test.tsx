@@ -32,7 +32,7 @@ describe("first run", () => {
 describe("a paired phone", () => {
   test("opens on the four sections, with the computer's connection in More", async () => {
     const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
-    await app.waitFor("text:Brain");
+    await app.waitFor("id:composer");
     await app.host.send("links.open", { url: "mewla://more" });
     await app.waitFor("id:connection");
     expect(app.texts().join(" ")).toMatch(/Desk · (Connecting…|Offline)/);
@@ -50,6 +50,15 @@ describe("a paired phone", () => {
   });
 });
 
+describe("Brain", () => {
+  test("says the computer is offline instead of spinning, and the composer is there", async () => {
+    const app = await open("./App.tsx", { host, storage: paired, platform: "android" });
+    await app.waitFor("id:brain-notice");
+    await app.waitFor("text:Your computer is offline", { timeout: 15_000 });
+    expect(app.shows("id:composer")).toBe(true);
+  }, 20_000);
+});
+
 describe("the in-place upgrade from the Expo app", () => {
   test("opens on the computer the Expo app had, without pairing, and takes the entries only once", async () => {
     let offered = 0;
@@ -62,7 +71,7 @@ describe("the in-place upgrade from the Expo app", () => {
       },
     };
     const app = await open("./App.tsx", { host: upgrade, platform: "android" });
-    await app.waitFor("text:Brain");
+    await app.waitFor("id:composer");
     expect(app.shows("id:scan")).toBe(false);
     expect(copied).toBe(true);
     expect(app.storage()["mewla.draft.v1:s1:chat"]).toContain("half");

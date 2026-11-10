@@ -50,6 +50,7 @@ export class Chat {
   private generation = 0;
   private resyncToken = 0;
   private draftTimer: ReturnType<typeof setTimeout> | null = null;
+  private draftWrite: (() => void) | null = null;
   private closed = false;
 
   constructor(private readonly options: ChatOptions) {
@@ -125,20 +126,27 @@ export class Chat {
   saveDraft(value: string): void {
     if (this.draftTimer) clearTimeout(this.draftTimer);
     this.draftTimer = null;
+    this.draftWrite = null;
     const key = DRAFT_PREFIX + this.cacheKey;
     const write = () => {
+      this.draftTimer = null;
+      this.draftWrite = null;
       const now = this.options.now?.() ?? Date.now();
       const done = value ? this.options.storage.setItem(key, JSON.stringify({ t: now, v: value })) : this.options.storage.removeItem(key);
       // A draft is a convenience; storage being full or blocked is not an error.
       void done.catch(() => {});
     };
     if (!value) return write();
+    this.draftWrite = write;
     this.draftTimer = setTimeout(write, DRAFT_WRITE_DELAY_MS);
   }
 
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    // The last keystrokes before a switch or "New chat" are kept.
+    if (this.draftTimer) clearTimeout(this.draftTimer);
+    this.draftWrite?.();
     this.stopFollowing();
     this.stops.splice(0).forEach((stop) => stop());
     this.listeners.clear();
