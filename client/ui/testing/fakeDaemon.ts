@@ -18,6 +18,8 @@ export interface FakeDaemonState {
   conversations?: Record<string, Record<string, unknown>[] | { source?: string; events: Record<string, unknown>[] }>;
   /** A DSH Session's pending requests (`dsh_interaction`). */
   dsh?: { epoch: string; items: Record<string, unknown>[] };
+  /** Canned answers to other requests, by request type: the reply's `type` and fields. */
+  replies?: Record<string, { type: string } & Record<string, unknown>>;
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -190,8 +192,11 @@ export class FakeDaemon {
       }
       case "live_answer":
         return reply("live_answer", { kind: "brain", text: "ok", duplicate: false });
-      default:
+      default: {
+        const canned = this.state.replies?.[frame.type];
+        if (canned) reply(canned.type, canned);
         return;
+      }
     }
   }
 }
