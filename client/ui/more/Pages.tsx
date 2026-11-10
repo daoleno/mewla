@@ -8,6 +8,7 @@ import { FriendsSettings } from "./friends/FriendsSettings";
 import { PetPage } from "./pet/Pet";
 import { restorePet } from "./pet/pets";
 import { Resources } from "./resources/Resources";
+import { ScreenPage } from "./screen/Screen";
 import type { MorePage, PageNav } from "./routes";
 import { Computer } from "./settings/Computer";
 import { OutsideAgents } from "./settings/OutsideAgents";
@@ -53,7 +54,7 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "stats-model": return <StatsModel model={route.model} pricing={route.pricing} />;
     case "stats-day": return <StatsDay day={route.day} />;
     case "resources": return <Resources />;
-    case "screen": return <Soon title="Screen" />;
+    case "screen": return <ScreenPage nav={props.nav} />;
     case "extensions":
     case "extensions-service":
     case "extensions-tools":

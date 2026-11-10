@@ -23,7 +23,12 @@
         "*"
       ]
     },
-    "openUrl": true
+    "openUrl": true,
+    "webview": {
+      "hosts": [
+        "viewer.mewla.invalid"
+      ]
+    }
   },
   "theme": "./theme.json"
 }
