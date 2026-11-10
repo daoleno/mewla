@@ -275,3 +275,43 @@ func (s *Service) recordTurnEndTranscript(fact watcher.TurnFact) {
 	}
 	go record()
 }
+
+// SessionConversation names the provider conversation Session sessionID last
+// ran in: the Brain host's recorded conversation when it is the host, else
+// the latest Work transcript link that names one. A Codex link without an id
+// takes it from its rollout.
+func (s *Store) SessionConversation(sessionID string) (string, bool) {
+	sessionID = strings.TrimSpace(sessionID)
+	if s == nil || sessionID == "" {
+		return "", false
+	}
+	if host, err := s.HostSession(); err == nil && host.ID == sessionID {
+		if id := strings.TrimSpace(host.ProviderSessionID); id != "" {
+			return id, true
+		}
+		if id := work.CodexSessionIDFromRolloutPath(host.TranscriptPath); id != "" {
+			return id, true
+		}
+	}
+	workTranscriptsMu.Lock()
+	all, err := s.readWorkTranscriptsLocked()
+	workTranscriptsMu.Unlock()
+	if err != nil {
+		return "", false
+	}
+	var latest WorkTranscriptLink
+	found := ""
+	for _, link := range all {
+		if link.SessionID != sessionID {
+			continue
+		}
+		id := strings.TrimSpace(link.ProviderSessionID)
+		if id == "" && link.Executor == work.WorkerProviderCodex {
+			id = work.CodexSessionIDFromRolloutPath(link.TranscriptPath)
+		}
+		if id != "" && (found == "" || !link.RecordedAt.Before(latest.RecordedAt)) {
+			latest, found = link, id
+		}
+	}
+	return found, found != ""
+}

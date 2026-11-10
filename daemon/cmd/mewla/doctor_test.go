@@ -44,9 +44,9 @@ func TestDoctorJSONSchemaSmoke(t *testing.T) {
 	report := doctor.Report{
 		Ready: false,
 		Checks: []doctor.NamedCheck{
-			{ID: "tmux", Status: doctor.StatusFail, Remediation: doctor.RemediationInstallTmux, Summary: "tmux not found on PATH"},
+			{ID: "executors", Status: doctor.StatusFail, Remediation: doctor.RemediationInstallExecutor, Summary: "no runnable executor"},
 		},
-		Remediations: []doctor.Remediation{doctor.RemediationInstallTmux},
+		Remediations: []doctor.Remediation{doctor.RemediationInstallExecutor},
 	}
 	raw, err := json.Marshal(report)
 	if err != nil {

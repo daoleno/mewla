@@ -6,11 +6,12 @@ cover the alternatives.
 
 ## The pieces
 
-![Six Sessions in tmux on your computer (codex, claude, grok, pi, opencode and a shell), each landing in the phone's Sessions list](assets/hero.svg)
+![Six Sessions on your computer (codex, claude, grok, pi, opencode and a shell), each landing in the phone's Sessions list](assets/hero.svg)
 
-- **The daemon** (`mewla`) runs on your computer next to your repositories,
-  `tmux` and agent CLIs. It owns Sessions, Brain, Work and pairing. One binary;
-  no cloud service is required, and remote access is an opt-in sign-in.
+- **The daemon** (`mewla`) runs on your computer next to your repositories and
+  agent CLIs. It owns Sessions, Brain, Work and pairing, and runs every agent
+  in its own session host, so nothing else, such as `tmux`, is needed. One
+  binary; no cloud service is required, and remote access is an opt-in sign-in.
 - **The app** on Android or iOS connects to one daemon at a time. The daemon
   also serves it as a web page.
 - **Your agent CLIs** (Claude Code, Codex, Cursor Agent, Grok, Pi, OpenCode)
@@ -21,7 +22,7 @@ Your code, keys and agent state stay on your computer.
 ## What you need
 
 - Linux (`amd64` or `arm64`), WSL2, or an Apple Silicon Mac
-- `tmux` and one signed-in agent CLI; `mewla` offers to install both
+- One signed-in agent CLI; `mewla` offers to install one
 - An arm64 Android phone, an iPhone, or a browser
 
 ## 1. Install the daemon
@@ -31,11 +32,8 @@ curl -fsSL https://mewla.ai/install.sh | sh
 ```
 
 It verifies the release checksum, installs `mewla` without `sudo` and sends no
-telemetry. If `tmux` is missing, it shows the one command for your system
-(`apt`, `dnf`, `pacman`, `zypper`, `apk`, or Homebrew on a Mac) and asks
-whether to run it; `sudo` asks for your own password. The last line is the
-command that starts Mewla: `mewla`, or its full path when your current shell
-cannot find it yet.
+telemetry. The last line is the command that starts Mewla: `mewla`, or its
+full path when your current shell cannot find it yet.
 
 ## 2. Start it and pair your phone
 
@@ -45,9 +43,8 @@ mewla
 
 The first time, it checks this computer before anything else. An existing
 install that never made these choices asks once, the next time you run
-`mewla` in a terminal, even while Mewla is already running in the background. Without
-`tmux`, it offers your system's install command. Without a signed-in agent
-CLI, it offers Claude Code or Codex with their official installers, then their
+`mewla` in a terminal, even while Mewla is already running in the background.
+Without a signed-in agent CLI, it offers Claude Code or Codex with their official installers, then their
 sign-in (`claude auth login` or `codex login`). One ready agent is enough, and
 Brain uses it. With more than one ready, it asks once which agent Brain should
 use, Claude Code first; change it any time with `mewla brain use <agent>`.
@@ -76,8 +73,10 @@ HTTPS address, are in [Connect and pair](connect-and-pair.md#choose-an-address).
 
 Open **Sessions**, tap **New session**, pick one of your repositories and tap
 an agent. Ask it something small. Switch between **Chat** and **Terminal** from
-the Session's ⋮ menu: both are the same `tmux` pane, which you can also attach
-to at your desk with `tmux attach`. More in [Sessions](sessions.md).
+the Session's ⋮ menu: both show the same terminal, which you can also open at
+your desk with `mewla attach <session>` (`mewla host status` lists the
+Sessions; Ctrl-\ detaches and leaves it running). More in
+[Sessions](sessions.md).
 
 ## 4. Give Brain a goal
 

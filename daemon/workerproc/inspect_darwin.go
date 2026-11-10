@@ -62,3 +62,16 @@ func Descendants(root int) []int {
 func OpenFiles(int) []string {
 	return nil
 }
+
+// Args returns pid's argument vector from kern.procargs2, or nil when it
+// cannot be read.
+func Args(pid int) []string {
+	if pid <= 0 {
+		return nil
+	}
+	raw, err := unix.SysctlRaw("kern.procargs2", pid)
+	if err != nil {
+		return nil
+	}
+	return parseProcArgs(raw)
+}

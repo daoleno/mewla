@@ -37,10 +37,8 @@ type setupRemoteSteps struct {
 	phones func() (int, error)
 	// agentReady reports whether an agent CLI is installed and signed in.
 	agentReady func() bool
-	// tmuxReady reports whether tmux works.
-	tmuxReady func() bool
-	sleep     func(time.Duration)
-	now       func() time.Time
+	sleep      func(time.Duration)
+	now        func() time.Time
 }
 
 type setupRemoteConfig struct {
@@ -140,9 +138,6 @@ func runSetupRemote(args []string, stderr io.Writer) error {
 			options := doctor.Options{LookPath: hostdeps.LookPath}
 			return readyAgent(doctor.CheckExecutors(options)) != ""
 		},
-		tmuxReady: func() bool {
-			return doctor.CheckTmux(doctor.Options{LookPath: hostdeps.LookPath}).Status == doctor.StatusOK
-		},
 		sleep: time.Sleep,
 		now:   time.Now,
 	}
@@ -182,9 +177,6 @@ func setupRemote(ctx context.Context, cfg setupRemoteConfig, steps setupRemoteSt
 	}
 
 	step(2, "Run in the background")
-	if !steps.tmuxReady() {
-		fmt.Fprintf(w, "  tmux is missing, and Mewla runs every agent inside it. See %s.\n", style.cmd(command+" deps -only tmux"))
-	}
 	note, err := steps.service()
 	if err != nil {
 		fmt.Fprintf(w, "\nSetup stopped: %s\n", firstLine(err))
@@ -241,7 +233,7 @@ func printSetupRemoteNext(w io.Writer, style termStyle, command string, agentRea
 	fmt.Fprintln(w)
 	if !agentReady {
 		fmt.Fprintln(w, style.bold("One more thing: no agent is signed in on this computer yet."))
-		fmt.Fprintf(w, "  Brain cannot answer until one is. Run %s, then sign in to it.\n", style.cmd(command+" deps -only agent"))
+		fmt.Fprintf(w, "  Brain cannot answer until one is. Run %s, then sign in to it.\n", style.cmd(command+" deps"))
 		return
 	}
 	fmt.Fprintln(w, "Open Mewla on your phone and send Brain your first message.")

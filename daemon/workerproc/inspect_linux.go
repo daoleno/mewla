@@ -62,3 +62,15 @@ func OpenFiles(pid int) []string {
 	}
 	return paths
 }
+
+// Args returns pid's argument vector, or nil when it cannot be read.
+func Args(pid int) []string {
+	if pid <= 0 {
+		return nil
+	}
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
+	if err != nil || len(raw) == 0 {
+		return nil
+	}
+	return strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00")
+}

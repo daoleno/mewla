@@ -278,11 +278,16 @@ func TestTmuxWindowEnvironmentPreservesUsefulEnvAndSkipsTmuxManagedKeys(t *testi
 		"PWD=/tmp/demo",
 		"TERM=screen-256color",
 		"LANG=en_US.UTF-8",
+		"SSH_CONNECTION=10.0.0.2 51000 10.0.0.1 22",
+		"SSH_CLIENT=10.0.0.2 51000 22",
+		"SSH_TTY=/dev/pts/3",
+		"SSH_AUTH_SOCK=/run/user/1000/ssh-agent.sock",
 	})
 	want := []string{
 		"LANG=en_US.UTF-8",
 		"OPENAI_API_KEY=test-key",
 		"PATH=/usr/local/bin:/usr/bin",
+		"SSH_AUTH_SOCK=/run/user/1000/ssh-agent.sock",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("tmuxPaneEnvironment() = %v, want %v", got, want)

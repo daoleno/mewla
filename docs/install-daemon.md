@@ -7,7 +7,6 @@ running as a service, updates, the app builds and uninstalling.
 
 - Linux `amd64`/`arm64`, WSL2, or an Apple Silicon Mac
 - `curl`, `tar`, and `sha256sum` (Linux) or `shasum` (macOS)
-- `tmux` on `PATH`; the installer and `mewla` offer to install it
 - At least one agent CLI on `PATH` and already signed in: `claude`, `codex`,
   `cursor-agent`, `grok`, `pi` or `opencode` (OpenCode 2; `mewla doctor` names
   the upgrade command when it finds OpenCode 1). One is enough; `mewla` offers
@@ -28,22 +27,6 @@ release (no GitHub API call, so API rate limits don't apply), downloads the
 archive for your platform and its `SHA256SUMS`, verifies the checksum, and
 installs `mewla` into a user-owned directory on your `PATH` (or
 `~/.local/bin`). It sends no telemetry and installs `mewla` without `sudo`.
-
-Then it runs `mewla deps -only tmux`. When `tmux` is missing, that prints the
-one official command for this system and, in a terminal, asks
-`Install tmux now? [Y/n]`. It runs exactly that command; `sudo` asks for your
-password. Without a terminal it only prints the command:
-
-| System | Command |
-| --- | --- |
-| Debian, Ubuntu, WSL | `sudo apt update && sudo apt install -y tmux` |
-| Fedora, RHEL family | `sudo dnf install -y tmux` (`yum` without `dnf`) |
-| Arch family | `sudo pacman -S --needed --noconfirm tmux` |
-| openSUSE | `sudo zypper install -y tmux` |
-| Alpine | `sudo apk add tmux` |
-| macOS with Homebrew | `brew install tmux` |
-| macOS without Homebrew | The [Homebrew installer](https://brew.sh), then `/opt/homebrew/bin/brew install tmux` |
-| Anything else | A link to the [tmux install page](https://github.com/tmux/tmux/wiki/Installing) |
 
 The last line is the command that starts Mewla: `mewla`, or its full path
 when the current shell cannot find it yet. New terminals find `mewla` once the
@@ -84,7 +67,7 @@ install -m 755 mewla ~/.local/bin/mewla
 ~/.local/bin/mewla doctor
 ```
 
-On macOS, install `tmux` with `brew install tmux`. If macOS blocks the binary,
+If macOS blocks the binary,
 confirm it came from an official Mewla release, then run
 `xattr -d com.apple.quarantine ~/.local/bin/mewla`.
 
@@ -114,7 +97,7 @@ yourself any time:
    then says so.
 
 If no agent CLI is signed in on that computer yet, it ends by naming the step:
-`mewla deps -only agent`. Brain cannot answer until one is.
+`mewla deps`. Brain cannot answer until one is.
 
 It is safe to run again: a computer already signed in skips step 1, and a
 running Mewla is left alone. With `-lan` it skips the sign-in and pairs over
@@ -140,7 +123,7 @@ The installer stops on an unsupported platform before downloading anything.
 ## Check the host
 
 ```sh
-mewla doctor          # tmux, state directory, listen port, agent CLIs
+mewla doctor          # platform, state directory, listen port, agent CLIs
 mewla doctor --json
 ```
 
@@ -164,8 +147,8 @@ and API rate limits don't apply. Betas are not offered; install one with
 checksum before it replaces the binary. Run by hand it does not restart a
 running daemon; stop and start `mewla` when convenient. On macOS with the
 service installed, it also replaces `Mewla.app` and restarts the service,
-keeping your address, directories and `PATH`. Your `tmux` sessions and agents
-keep running.
+keeping your address, directories and `PATH`. Your Sessions and agents keep
+running: they live in the session host, not in the daemon.
 
 ### Automatic updates
 
@@ -189,9 +172,20 @@ themselves. `MEWLA_NO_AUTOUPDATE=1` turns automatic updates off. Updating from
 a version that predates this (0.2.87 and older) is still the manual
 `mewla update`.
 
+### Updating from Mewla 0.2
+
+Mewla 0.3 runs every agent in its own session host and no longer needs `tmux`.
+Sessions an earlier Mewla started in `tmux` keep running through the update,
+and you can still read and type into them. Each one moves to the session host
+on its own once its agent finishes its turn: the agent starts again in the
+same conversation, under the same Session, with its Work. An agent Mewla cannot
+resume this way (Grok, Cursor Agent, a plain shell) keeps running in `tmux`,
+no longer controlled by Mewla; **Settings → your computer** says how many. You
+can uninstall `tmux` once none are left that you need.
+
 ## Keep it running
 
-`mewla` is the whole runtime. Run it in a terminal or a `tmux` window, or let
+`mewla` is the whole runtime. Run it in a terminal, or let
 Mewla start it for you: a user service on Linux with systemd, a LaunchAgent on
 macOS.
 
@@ -211,7 +205,7 @@ terminal.
 
 `mewla boot install` refuses to run as root and refuses to start a second daemon
 on a state directory that is already in use; stop the running `mewla` first.
-Restarting the service never stops your `tmux` sessions or agents.
+Restarting the service never stops your Sessions or agents.
 
 - **Linux**: to start it before you log in, enable lingering with
   `loginctl enable-linger` (the command tells you when this is needed).

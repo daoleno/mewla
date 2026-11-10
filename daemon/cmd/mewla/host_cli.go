@@ -136,11 +136,8 @@ func writeHostStatus(out io.Writer, path string, host sessionhost.Welcome, sessi
 	return table.Flush()
 }
 
-// configureSessionHost lets the watcher run Sessions in the session host
-// (Settings → Labs → Session host). Sessions a host already runs are seen
-// whatever the switch says; with the switch off and no host running, nothing
-// is started, created or dialed. The switch only takes effect in a build that
-// has the terminal engine, since the host runs from this binary.
+// configureSessionHost runs every new Session in the session host, which
+// runs from this binary; a build without the terminal engine can start none.
 func configureSessionHost(w *watcher.Watcher, stateDir string) {
 	socket, err := sessionhost.SocketPath(stateDir)
 	if err != nil {
@@ -153,10 +150,7 @@ func configureSessionHost(w *watcher.Watcher, stateDir string) {
 		StateDir:   stateDir,
 		LogPath:    filepath.Join(stateDir, "session-host", "host.log"),
 		Version:    hostVersion(),
-		// Windows has no tmux: there the host is the only place Sessions run.
-		Enabled: func() bool {
-			return ghosttyvt.Available() && (runtime.GOOS == "windows" || sessionhost.LoadSettings(stateDir).Enabled)
-		},
+		// Windows has no tmux: there the host is the only inventory.
 		HostOnly: runtime.GOOS == "windows",
 	})
 }

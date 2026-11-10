@@ -10,10 +10,10 @@ import (
 	"github.com/daoleno/mewla/daemon/classifier"
 )
 
-// TestSessionHostSwitchOffLeavesNoTrace: with the Labs switch off and no host
-// running, the daemon behaves as tmux alone and starts, creates or dials
-// nothing for the host.
-func TestSessionHostSwitchOffLeavesNoTrace(t *testing.T) {
+// TestSessionHostLeavesNoTraceUntilUsed: until a Session is created, the
+// daemon inventories as tmux alone and starts, creates or dials nothing for
+// the host; a new Session is placed in the host.
+func TestSessionHostLeavesNoTraceUntilUsed(t *testing.T) {
 	root := t.TempDir()
 	runtimeDir := filepath.Join(root, "runtime", "mewla")
 	logPath := filepath.Join(root, "state", "session-host", "host.log")
@@ -31,7 +31,6 @@ func TestSessionHostSwitchOffLeavesNoTrace(t *testing.T) {
 		StateDir:   filepath.Join(root, "state"),
 		LogPath:    logPath,
 		Version:    "t",
-		Enabled:    func() bool { return false },
 	})
 	if _, ok := w.sessions().(*compositeBackend); !ok {
 		t.Fatalf("backend = %T", w.sessions())
@@ -43,8 +42,8 @@ func TestSessionHostSwitchOffLeavesNoTrace(t *testing.T) {
 	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
 		t.Fatalf("services = %v, %v", services, err)
 	}
-	if at, err := w.sessions().place("", false, "x"); err == nil && at.backend == backendHost {
-		t.Fatal("a new Session went to the host with the switch off")
+	if at, err := w.sessions().place("%3", false, "x"); err != nil || at.backend != backendHost {
+		t.Fatalf("a new Session was placed in %v (%v), not the host", at.backend, err)
 	}
 	host := "mh-0123456789abcdef01234567"
 	if gone, err := w.sessions().resolveAbsence(host, false); err != nil || !gone {
@@ -55,7 +54,7 @@ func TestSessionHostSwitchOffLeavesNoTrace(t *testing.T) {
 	}
 	for _, path := range []string{filepath.Dir(runtimeDir), filepath.Dir(logPath)} {
 		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("%s exists with the switch off: %v", path, err)
+			t.Fatalf("%s exists before any Session was created: %v", path, err)
 		}
 	}
 }
@@ -99,16 +98,8 @@ func TestHostOnlyInventoryNeedsNoTmux(t *testing.T) {
 		StateDir:   filepath.Join(root, "state"),
 		LogPath:    filepath.Join(root, "state", "session-host", "host.log"),
 		Version:    "t",
-		Enabled:    func() bool { return true },
+		HostOnly:   true,
 	}
-	mixed := New(50 * time.Millisecond)
-	mixed.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
-	mixed.SetSessionHost(config)
-	if _, err := mixed.sessions().listOwned(); err == nil || errors.Is(err, ErrTmuxServerGone) {
-		t.Fatalf("without tmux installed, tmux's inventory = %v; want a failure that is not 'server gone'", err)
-	}
-
-	config.HostOnly = true
 	w := New(50 * time.Millisecond)
 	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
 	w.SetSessionHost(config)
@@ -134,5 +125,27 @@ func TestHostOnlyInventoryNeedsNoTmux(t *testing.T) {
 	w.mu.Unlock()
 	if panes, err := w.sessions().listOwned(); err == nil {
 		t.Fatalf("host-only inventory with a known Session and no host = %v, nil", panes)
+	}
+}
+
+// TestNoTmuxIsNoSessions: Mewla no longer needs tmux. Without it installed,
+// the inventory is the host's alone, not a failure.
+func TestNoTmuxIsNoSessions(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	root := t.TempDir()
+	w := New(50 * time.Millisecond)
+	w.SetTmuxServer(filepath.Join(root, "tmux.sock"), t.TempDir())
+	w.SetSessionHost(SessionHostConfig{SocketPath: filepath.Join(root, "host.sock"), Executable: "/nonexistent/mewla", StateDir: root, Version: "t"})
+	// With no host running either, this is the "no server" answer the poll
+	// reads as nothing running; it is never a tmux failure.
+	panes, err := w.sessions().listOwned()
+	if (err != nil && !errors.Is(err, ErrTmuxServerGone)) || len(panes) != 0 {
+		t.Fatalf("inventory without tmux = %v, %v", panes, err)
+	}
+	if services, err := w.sessions().listServices(); err != nil || len(services) != 0 {
+		t.Fatalf("services without tmux = %v, %v", services, err)
+	}
+	if n := w.LeftInTmux(); n != 0 {
+		t.Fatalf("LeftInTmux without tmux = %d", n)
 	}
 }
