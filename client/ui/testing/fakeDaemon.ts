@@ -12,6 +12,10 @@ export interface FakeDaemonState {
   brain?: Record<string, unknown>;
   work_items?: Record<string, unknown>[];
   live?: Record<string, unknown>;
+  /** The Sessions `worker_session_list` sends; `create_session` and `kill_worker` change them. */
+  worker_sessions?: Record<string, unknown>[];
+  /** Each Session's transcript (by worker id), as `codex_conversation_subscribe` answers it. */
+  conversations?: Record<string, Record<string, unknown>[]>;
 }
 
 type Frame = { type: string; request_id?: string; [key: string]: unknown };
@@ -19,6 +23,7 @@ type Frame = { type: string; request_id?: string; [key: string]: unknown };
 export class FakeDaemon {
   private sockets = new Set<FakeSocket>();
   private revision = 100;
+  private seq = 1;
 
   constructor(private state: FakeDaemonState) {}
 
@@ -32,6 +37,7 @@ export class FakeDaemon {
       this.to(socket, { type: "calendar_items_snapshot", calendar_items: this.state.calendar_items ?? [] });
       this.to(socket, { type: "work_items_snapshot", work_items: this.state.work_items ?? [] });
       this.to(socket, { type: "brain_snapshot", brain: this.state.brain ?? {} });
+      this.to(socket, { type: "worker_session_list", seq: this.seq, worker_sessions: this.state.worker_sessions ?? [] });
     }, 5);
     return socket;
   }
@@ -134,6 +140,31 @@ export class FakeDaemon {
         return reply("live_state", { live: this.state.live ?? null });
       case "widget_token_issue":
         return reply("widget_token", { token: "widget-token", id: "w1" });
+      case "codex_conversation_subscribe":
+        return reply("codex_conversation_snapshot", { worker_id: frame.worker_id, revision: 1, conversation: { available: true, events: this.state.conversations?.[String(frame.worker_id)] ?? [] } });
+      case "answer_prompt": {
+        const answer = frame.prompt_answer as { prompt_id?: string } | undefined;
+        reply("prompt_answered", { prompt_id: answer?.prompt_id });
+        const answered = (this.state.worker_sessions ?? []).find((w) => w.id === frame.worker_id);
+        if (!answered) return;
+        const next: Record<string, unknown> = { ...answered, status: "running", prompt: undefined };
+        this.state.worker_sessions = (this.state.worker_sessions ?? []).map((w) => (w.id === next.id ? next : w));
+        return this.broadcast({ type: "worker_session_updated", seq: ++this.seq, worker_session: next });
+      }
+      case "list_worker_sessions":
+        return this.to(socket, { type: "worker_session_list", seq: this.seq, worker_sessions: this.state.worker_sessions ?? [] });
+      case "create_session": {
+        const id = `w${++this.revision}`;
+        const session = { id, name: String(frame.name || ""), status: "running", cwd: String(frame.cwd || "/home/me"), command: String(frame.command || ""), started_at: Date.now(), updated_at: Date.now() };
+        this.state.worker_sessions = [...(this.state.worker_sessions ?? []), session];
+        reply("session_created", { worker_id: id, worker_session: session });
+        return this.broadcast({ type: "worker_session_created", seq: ++this.seq, worker_session: session });
+      }
+      case "kill_worker": {
+        this.state.worker_sessions = (this.state.worker_sessions ?? []).filter((w) => w.id !== frame.worker_id);
+        if (frame.request_id) reply("worker_killed", { worker_id: frame.worker_id });
+        return this.broadcast({ type: "worker_session_archived", seq: ++this.seq, worker_session: { id: frame.worker_id } });
+      }
       case "live_answer":
         return reply("live_answer", { kind: "brain", text: "ok", duplicate: false });
       default:
