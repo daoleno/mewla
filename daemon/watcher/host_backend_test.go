@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -147,5 +148,47 @@ func TestNoTmuxIsNoSessions(t *testing.T) {
 	}
 	if n := w.LeftInTmux(); n != 0 {
 		t.Fatalf("LeftInTmux without tmux = %d", n)
+	}
+}
+
+// TestSessionHostUnreachableLeavesMovedIDsUnknown: while the host cannot say
+// which Sessions moved from tmux, a %id is neither tmux's nor gone; once it
+// answers, the next question gets the host's answer.
+func TestSessionHostUnreachableLeavesMovedIDsUnknown(t *testing.T) {
+	dir, err := os.MkdirTemp("", "wu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "h.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Something listens but never says hello: a host that is there and
+	// cannot answer, not one that is gone.
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
+	w := New(50 * time.Millisecond)
+	w.SetTmuxServer(filepath.Join(dir, "tmux.sock"), t.TempDir())
+	w.SetSessionHost(SessionHostConfig{SocketPath: socket, Executable: "/nonexistent/mewla", StateDir: dir, Version: "t"})
+	if presence, err := w.ProbeSession("%7"); !errors.Is(err, ErrOwnershipProbeUnavailable) || presence != SessionPresenceUnknown {
+		t.Fatalf("ProbeSession with the host unreachable = %v, %v", presence, err)
+	}
+	if gone, err := w.sessions().resolveAbsence("%7", false); !errors.Is(err, ErrOwnershipProbeUnavailable) || gone {
+		t.Fatalf("resolveAbsence with the host unreachable = %v, %v", gone, err)
+	}
+	// The host stops: no host holds nothing, and a %id is tmux's again.
+	listener.Close()
+	os.Remove(socket)
+	if presence, err := w.ProbeSession("%7"); err != nil || presence != SessionPresenceAbsent {
+		t.Fatalf("ProbeSession with no host = %v, %v", presence, err)
 	}
 }

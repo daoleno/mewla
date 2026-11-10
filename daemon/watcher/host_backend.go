@@ -43,6 +43,12 @@ func (w *Watcher) SetSessionHost(cfg SessionHostConfig) {
 	}
 	backend := &compositeBackend{w: w, tmux: &tmuxBackend{w: w}, host: &hostBackend{w: w, cfg: cfg, moved: map[string]bool{}}}
 	backend.loadLeftInTmux()
+	// Before anything asks about a Session: a restarted daemon's first
+	// questions (its route sweep, Brain's host check) come before its first
+	// inventory.
+	if err := backend.host.learnMoved(); err != nil {
+		log.Printf("watcher: the session host has not said which Sessions moved from tmux: %v", err)
+	}
 	w.mu.Lock()
 	w.backend = backend
 	w.listPanes = backend.listOwned
@@ -98,9 +104,11 @@ type hostBackend struct {
 	client *sessionhost.Client
 
 	// moved holds the ids of Sessions that moved from tmux: they keep their
-	// %pane id, so the id pattern alone does not name them.
-	movedMu sync.RWMutex
-	moved   map[string]bool
+	// %pane id, so the id pattern alone does not name them. movedKnown says
+	// the host has said which they are (see learnMoved).
+	movedMu    sync.RWMutex
+	moved      map[string]bool
+	movedKnown bool
 }
 
 // conn returns a client. With start false it only dials a host that is
@@ -174,6 +182,38 @@ func (b *hostBackend) noteMoved(infos []sessionhost.Info) {
 			b.moved[info.ID] = true
 		}
 	}
+	b.movedKnown = true
+}
+
+// learnMovedFor learns, for an id that is not a host id, whether the host
+// runs it under the pane id it kept from tmux.
+func (b *hostBackend) learnMovedFor(id string) error {
+	if hostSessionIDPattern.MatchString(id) {
+		return nil
+	}
+	return b.learnMoved()
+}
+
+// learnMoved asks the host which of its Sessions moved from tmux, until it
+// has answered once. The answer lives in the host, not in this process: a
+// restarted daemon knows a moved %id is the host's only after asking. A host
+// that is not running holds none. An error leaves it unknown.
+func (b *hostBackend) learnMoved() error {
+	b.movedMu.RLock()
+	known := b.movedKnown
+	b.movedMu.RUnlock()
+	if known {
+		return nil
+	}
+	infos, err := b.list()
+	if errors.Is(err, errSessionHostGone) {
+		infos, err = nil, nil
+	}
+	if err != nil {
+		return err
+	}
+	b.noteMoved(infos)
+	return nil
 }
 
 // ready starts the host if needed and checks it can start Sessions by

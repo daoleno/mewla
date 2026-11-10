@@ -94,6 +94,21 @@ func TestTmuxSessionMovesToTheHostUnderItsID(t *testing.T) {
 	if n := countIn(h.w); n != 1 {
 		t.Fatalf("%s listed %d times", id, n)
 	}
+	// A restarted daemon decides whether its Sessions live before it lists
+	// anything: its route sweep runs first. The moved Session is the host's
+	// from the first question on, never a tmux pane that is gone.
+	fresh := func() *Watcher {
+		w := New(10 * time.Millisecond)
+		w.SetTmuxServer(h.selected, h.scratch)
+		w.SetSessionHost(cfg)
+		return w
+	}
+	if presence, err := fresh().ProbeSession(id); err != nil || presence != SessionPresencePresent {
+		t.Fatalf("after a restart, before any inventory, %s is %v (%v)", id, presence, err)
+	}
+	if gone, err := fresh().sessions().resolveAbsence(id, false); err != nil || gone {
+		t.Fatalf("after a restart, before any inventory, %s gone = %v (%v)", id, gone, err)
+	}
 	// After a daemon restart the moved Session is still the host's.
 	restarted := New(10 * time.Millisecond)
 	restarted.SetTmuxServer(h.selected, h.scratch)

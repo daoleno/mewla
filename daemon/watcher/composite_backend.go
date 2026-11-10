@@ -124,9 +124,22 @@ func (c *compositeBackend) isLeft(id string) bool {
 	return left
 }
 
+// settle learns whether the host runs a %id before anything is said about
+// it. A Session that moved from tmux kept its id; asked of tmux, where its
+// pane is gone, it would read as ended.
+func (c *compositeBackend) settle(id string) error {
+	if err := c.host.learnMovedFor(id); err != nil {
+		return fmt.Errorf("%w: whether the session host runs %s: %v", ErrOwnershipProbeUnavailable, id, err)
+	}
+	return nil
+}
+
 // probeOwnership never claims a Session left in tmux: it runs on there, but
 // Mewla no longer owns it, so nothing of Mewla's may type into or end it.
 func (c *compositeBackend) probeOwnership(id string) (bool, bool, error) {
+	if err := c.settle(id); err != nil {
+		return false, false, err
+	}
 	if c.isLeft(id) {
 		return false, false, nil
 	}
@@ -135,6 +148,9 @@ func (c *compositeBackend) probeOwnership(id string) (bool, bool, error) {
 
 // resolveAbsence: a Session left in tmux has ended as far as Mewla goes.
 func (c *compositeBackend) resolveAbsence(id string, sawInventory bool) (bool, error) {
+	if err := c.settle(id); err != nil {
+		return false, err
+	}
 	if c.isLeft(id) {
 		return true, nil
 	}
