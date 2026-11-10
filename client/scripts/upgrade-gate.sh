@@ -8,7 +8,7 @@
 set -euo pipefail
 : "${OLD_APK:?}" "${NEW_APK:?}" "${MEWLA:?}" "${OUT:?}"
 PKG=com.daoleno.mewla
-PORT=9941
+PORT="${PORT:-9941}"
 DRAFT="upgrade gate draft"
 mkdir -p "$OUT"
 state="$(mktemp -d)"
@@ -36,15 +36,18 @@ for node in re.finditer(r"<node [^>]*>", xml):
   return 1
 }
 shows() { screen | grep -qiE "$1"; }
-devices() { HOME="$state/home" "$MEWLA" devices list -json -state-dir "$state/mewla"; }
+devices() { env -i HOME="$state/home" PATH="$PATH" "$MEWLA" devices list -json -state-dir "$state/mewla"; }
 
 log "emulator ABIs: $(adb shell getprop ro.product.cpu.abilist | tr -d '\r')"
 mkdir -p "$state/home"
-HOME="$state/home" MEWLA_BRAIN_HOST_EXECUTOR=agent "$MEWLA" serve -addr "0.0.0.0:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
+# A daemon of its own: own state, own tmux server, an inert Brain host, nothing from this shell.
+tmux -S "$state/tmux.sock" new-session -d -s gate
+env -i HOME="$state/home" PATH="$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX="$state/tmux.sock,0,0" \
+  "$MEWLA" serve -addr "0.0.0.0:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!
-trap 'kill "$daemon" 2>/dev/null || true; rm -rf "$state"' EXIT
+trap 'kill "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state"' EXIT
 for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && break; sleep 1; done
-link=$(HOME="$state/home" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" | grep -o 'mewla://settings?p=[^ ]*' | head -1)
+link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" | grep -o 'mewla://settings?p=[^ ]*' | head -1)
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"
 
 log "1. the Expo app pairs and keeps a draft"
