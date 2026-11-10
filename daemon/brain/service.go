@@ -2598,6 +2598,9 @@ func (s *Service) BindHostProviderTranscript() (work.HostTranscriptIdentity, err
 					if !resolved.Bound() && existing.Bound() {
 						resolved = existing
 					}
+					if !resolved.Bound() && provider == work.WorkerProviderCodex {
+						resolved = s.codexBrainTranscript(*worker)
+					}
 					s.hostIdentityProof.record(host.ID, resolved, time.Now(), epoch)
 				}
 			}
@@ -2616,6 +2619,27 @@ func (s *Service) BindHostProviderTranscript() (work.HostTranscriptIdentity, err
 		// the current Host before publishing any native identity to a stream.
 	}
 	return work.HostTranscriptIdentity{}, nil
+}
+
+// codexBrainTranscript names the conversation of a Codex Brain whose
+// processes hold nothing that names it: a Codex TUI keeps its conversation in
+// Codex's own app-server daemon. It is the conversation the Brain's command
+// resumes, else the Codex thread written in the Brain workspace since the
+// Brain started; the workspace is the Brain's alone.
+func (s *Service) codexBrainTranscript(worker classifier.Worker) work.HostTranscriptIdentity {
+	identity := work.CodexTranscriptIdentity{}
+	if token, ok, err := work.ProviderResumeToken(work.WorkerProviderCodex, worker.Command); err == nil && ok {
+		// The Brain runs with the daemon's HOME.
+		home, _ := os.UserHomeDir()
+		identity = work.ResolveCodexTranscriptIdentityForWorker(worker, work.CodexTranscriptIdentity{SessionID: token, DataRoot: home})
+	} else if !worker.StartedAt.IsZero() {
+		// The rollout's time has whole-second precision on some filesystems.
+		identity, _ = work.CodexWorkspaceTranscript(s.brainWorkspace(), worker.StartedAt.Add(-2*time.Second))
+	}
+	if identity.Path == "" {
+		return work.HostTranscriptIdentity{Provider: work.WorkerProviderCodex}
+	}
+	return work.HostTranscriptIdentity{Provider: work.WorkerProviderCodex, SessionID: identity.SessionID, Path: identity.Path, DataRoot: identity.DataRoot}
 }
 
 func (s *Service) hostTranscriptProvider(host HostSession, worker *classifier.Worker) string {

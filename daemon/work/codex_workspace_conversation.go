@@ -16,23 +16,32 @@ import (
 // TUI's process tree and may have restarted since, so nothing the TUI's
 // processes hold open names it.
 func CodexWorkspaceConversation(workspace string) (string, bool) {
+	identity, ok := CodexWorkspaceTranscript(workspace, time.Time{})
+	return identity.SessionID, ok
+}
+
+// CodexWorkspaceTranscript is the transcript of the most recently updated
+// interactive Codex thread in workspace that was written at or after since:
+// for a Codex started at since, the conversation it runs.
+func CodexWorkspaceTranscript(workspace string, since time.Time) (CodexTranscriptIdentity, bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", false
+		return CodexTranscriptIdentity{}, false
 	}
 	dbPath := providerpaths.CodexStateDB(home)
 	if _, err := os.Stat(dbPath); err != nil {
-		return "", false
+		return CodexTranscriptIdentity{}, false
 	}
 	sqlite3, err := exec.LookPath("sqlite3")
 	if err != nil {
-		return "", false
+		return CodexTranscriptIdentity{}, false
 	}
-	found, latest := "", time.Time{}
+	var found CodexTranscriptIdentity
+	var latest time.Time
 	for _, cwd := range transcriptCWDCandidates(workspace) {
 		rows, err := queryCodexThreads(sqlite3, dbPath, cwd)
 		if err != nil {
-			return "", false
+			return CodexTranscriptIdentity{}, false
 		}
 		for _, row := range rows {
 			path := strings.TrimSpace(row.RolloutPath)
@@ -44,13 +53,14 @@ func CodexWorkspaceConversation(workspace string) (string, bool) {
 				continue
 			}
 			info, err := os.Stat(path)
-			if err != nil {
+			if err != nil || info.ModTime().Before(since) {
 				continue
 			}
-			if found == "" || info.ModTime().After(latest) {
-				found, latest = strings.TrimSpace(row.ID), info.ModTime()
+			if found.SessionID == "" || info.ModTime().After(latest) {
+				found = CodexTranscriptIdentity{SessionID: strings.TrimSpace(row.ID), Path: path, DataRoot: home}
+				latest = info.ModTime()
 			}
 		}
 	}
-	return found, found != ""
+	return found, found.SessionID != ""
 }
