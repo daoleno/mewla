@@ -130,7 +130,7 @@ export class Transport {
       const mine = (frame: Frame) => frame.request_id === requestId;
       stops.push(this.on(options.reply, (frame) => mine(frame) && finish(() => resolve(frame as T))));
       for (const errorType of options.errors ?? ["error"]) {
-        stops.push(this.on(errorType, (frame) => mine(frame) && finish(() => reject(new Error(String(frame.message ?? `${type} failed`))))));
+        stops.push(this.on(errorType, (frame) => mine(frame) && finish(() => reject(requestError(frame, `${type} failed`)))));
       }
       stops.push(this.on("disconnected", () => finish(() => reject(new Error("Daemon is not connected.")))));
       const timer = setTimeout(() => finish(() => reject(new Error(`${type} timed out`))), options.timeoutMs ?? 15_000);
@@ -264,4 +264,11 @@ export class Transport {
   private emit(frame: Frame): void {
     this.listeners.get(frame.type)?.forEach((listener) => listener(frame));
   }
+}
+
+/** A daemon error reply as an Error that keeps its `code` (`answer_choice_gone`, `input_uncertain`, …). */
+export function requestError(frame: Frame, fallback: string): Error & { code?: string } {
+  const error: Error & { code?: string } = new Error(String(frame.message || fallback));
+  if (typeof frame.code === "string") error.code = frame.code;
+  return error;
 }

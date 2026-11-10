@@ -1,6 +1,9 @@
-import { effect, keyboardFrame, List, untracked, signal, Text, View } from "nsh";
+import { computed, effect, keyboardFrame, List, untracked, signal, Text, View } from "nsh";
 import { Button, Input, NavPage, TextView } from "nsh/base";
+import { ChoiceCard, CHOICE_GONE_NOTICE } from "../chat/ChoiceCard";
 import { PlainText } from "../chat/PlainText";
+import { answerChoice, stopTurn } from "../../core/conversation/turn";
+import { visiblePendingChoice } from "../../core/timeline/claudeChoiceModel";
 import { brainSurface, newBrainChat } from "../../core/brain";
 import { chatRows, type ChatRow } from "../../core/conversation/rows";
 import { belowSections, brainNav } from "../shell/Shell";
@@ -10,6 +13,31 @@ import { brain, brainChat, brainDraft, brainThread, connection, current, current
 const draft = signal("");
 const draftFor = signal("");
 const startingChat = signal(false);
+/** Questions the computer said have passed; their card stays hidden even if the transcript lags. */
+const goneChoices = signal<ReadonlySet<string>>(new Set());
+const notice = signal("");
+const pendingChoice = computed(() => visiblePendingChoice(brainThread().conversation?.events, goneChoices()));
+const pendingChoiceKey = computed(() => pendingChoice()?.call_id ?? "");
+const activity = computed(() => brainThread().conversation?.activity);
+/** The activity a Stop was sent for: the button says "Stopping…" until that turn ends. */
+const stoppingFor = signal("");
+
+function hostId(): string {
+  return brain()?.host_worker?.id ?? "";
+}
+
+async function stop(): Promise<void> {
+  const transport = currentTransport();
+  const running = activity();
+  if (!transport || !hostId() || !running || running.status !== "running") return;
+  stoppingFor.set(running.id);
+  try {
+    await stopTurn(transport, hostId());
+  } catch {
+    stoppingFor.set("");
+    notice.set("Could not stop Brain. Try again.");
+  }
+}
 
 /**
  * Brings the composer to the thread's draft, once per thread (typing owns it
@@ -128,15 +156,34 @@ function Composer() {
       {connection() !== "connected" && surface() === "chat" ? (
         <Text testID="offline" class="pb-1.5 text-center text-sm text-muted-foreground">Offline · messages send when your computer is back</Text>
       ) : null}
+      {pendingChoiceKey() ? (
+        <ChoiceCard choice={untracked(pendingChoice)!.choice} connected={() => connection() === "connected"}
+          submit={(answers) => {
+            const transport = currentTransport();
+            const callId = untracked(pendingChoiceKey);
+            return transport ? answerChoice(transport, hostId(), callId, answers) : Promise.reject(new Error("Your computer is offline."));
+          }}
+          onGone={() => {
+            goneChoices.set(new Set([...goneChoices(), untracked(pendingChoiceKey)]));
+            notice.set(CHOICE_GONE_NOTICE);
+          }} />
+      ) : null}
+      {notice() ? <Text testID="brain-toast" class="pb-1.5 text-center text-sm text-muted-foreground" onPress={() => notice.set("")}>{notice()}</Text> : null}
       <View class="flex-row items-end gap-2">
         <Input testID="composer" multiline value={draft()} placeholder="Tell Brain…" class="max-h-40 flex-1 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-base"
           onChange={({ value }) => {
             draft.set(value);
             brainDraft()?.save(value);
           }} />
-        <Button testID="send" onPress={send} disabled={!brainChat() || !draft().trim()} class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
-          <Text class="text-base font-semibold text-primary-foreground">Send</Text>
-        </Button>
+{activity()?.status === "running" && !draft().trim() ? (
+          <Button testID="stop" onPress={() => void stop()} disabled={stoppingFor() === activity()?.id || connection() !== "connected"} class="rounded-full border border-border px-4 py-2.5 active:bg-accent">
+            <Text class="text-base font-semibold">{stoppingFor() === activity()?.id ? "Stopping…" : "Stop"}</Text>
+          </Button>
+        ) : (
+          <Button testID="send" onPress={send} disabled={!brainChat() || !draft().trim()} class="rounded-full bg-primary px-4 py-2.5 active:opacity-80">
+            <Text class="text-base font-semibold text-primary-foreground">Send</Text>
+          </Button>
+        )}
       </View>
     </View>
   );
