@@ -192,6 +192,7 @@ export function useInterfaceChatSurfaceState({
     conversationScopeKey,
     workerInfo,
     connectionState,
+    connectionGeneration,
     screenFocused: active,
   });
   const {
