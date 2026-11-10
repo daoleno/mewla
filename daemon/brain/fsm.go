@@ -289,6 +289,8 @@ func canonicalReviewEvent(database presentationDatabase, workID string, st *life
 		}
 		return projected
 	}
+	lossReview := st.Review.Reason == "turn_lost" || st.Review.Reason == "lease_expired"
+	ownEvidence := false
 	for index := len(database.BrainWorkEvents) - 1; index >= 0; index-- {
 		evidence := database.BrainWorkEvents[index]
 		if evidence.WorkID != workID || !isSessionLifecycleKind(evidence.Kind) ||
@@ -297,13 +299,30 @@ func canonicalReviewEvent(database presentationDatabase, workID string, st *life
 		}
 		projected.PayloadRef = evidence.PayloadRef
 		projected.SourceName = evidence.SourceName
+		if lossReview && !lossOwnEvidence(evidence.Kind) {
+			// Provider status rows (and their provisional "reported done" hints)
+			// say what the provider did, not why the Worker was released; the
+			// loss keeps its own reason and time instead of borrowing theirs.
+			continue
+		}
 		projected.Summary = firstNonEmpty(evidence.Summary, projected.Summary)
 		if !evidence.CreatedAt.IsZero() {
 			projected.CreatedAt = evidence.CreatedAt
 		}
+		ownEvidence = true
 		break
 	}
+	if lossReview && !ownEvidence && strings.TrimSpace(st.LastSummary) == "lease_expired_escalation" {
+		projected.Summary = "The Worker did not check in before its lease ran out and its provider is idle, so the turn was released as lost. It may still be waiting on a background task: look at the Session before replanning."
+	}
 	return projected
+}
+
+// lossOwnEvidence reports whether a session lifecycle row of this kind is
+// evidence the supervisor wrote for a loss (a stall, an unknown outcome), as
+// opposed to provider status.
+func lossOwnEvidence(kind string) bool {
+	return kind == "session.stale" || kind == "session.uncertain"
 }
 
 // fsmProjectAttempt derives the presentation fields from the active canonical

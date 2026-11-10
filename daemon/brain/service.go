@@ -2114,6 +2114,20 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 				}
 			}
 		}
+		// A Worker that ended its provider turn on purpose while its own
+		// background shell, agent or monitor runs will be woken by that work and
+		// cannot check in meanwhile: its Work is waiting, not lost. Only a
+		// delegated signal turn the Worker owns qualifies, and only its own pane
+		// is evidence; when the background work is gone the lease runs out as
+		// usual.
+		if waiter, ok := s.watcher.(backgroundWaitWatcher); ok && item.AttemptDelegated && turn.SignalProtocol &&
+			waiter.WorkerWaitingOnBackgroundWork(item.AttemptSessionID) {
+			if _, _, ownerErr := s.store.reassertTurnOwnership(item.ID, item.AttemptSessionID, turn.TurnID,
+				"Worker is waiting on its own background work"); ownerErr != nil {
+				log.Printf("brain waiting Work ownership renewal failed for %s: %v", item.ID, ownerErr)
+			}
+			continue
+		}
 		if worker.State != classifier.StateRunning && worker.State != classifier.StateUnknown {
 			continue
 		}
@@ -2125,6 +2139,12 @@ func (s *Service) ReconcileDelegatedSessions(workers []*classifier.Worker) {
 		log.Printf("brain Work supervisor sweep failed: %v", sweepErr)
 	}
 	_, _ = s.ReconcileHostLane()
+}
+
+// backgroundWaitWatcher is the optional watcher capability the sweep uses to
+// tell a Worker waiting on its own background work from a stopped one.
+type backgroundWaitWatcher interface {
+	WorkerWaitingOnBackgroundWork(sessionID string) bool
 }
 
 func providerObservationOwnsTurn(turn watcher.TurnSnapshot, observation watcher.ProviderActivityObservation) bool {

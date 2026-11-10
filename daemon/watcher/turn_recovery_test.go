@@ -607,3 +607,40 @@ func TestClaimedAdmissionIsNotReleasedByTheSupervisor(t *testing.T) {
 		t.Fatalf("released a claimed host delivery: %v", ledger.ambiguous)
 	}
 }
+
+// A Worker that wakes itself on a finished background agent writes its answer
+// into the pane before the provider transcript shows the new Activity. A pane
+// that keeps changing is a Worker at work, so the idle clock restarts with
+// each change; once it stops moving the Worker is judged stopped after the
+// usual grace (the static-pane Codex shape keeps escalating).
+func TestSuperviseDelegatedTurnsStoppedWaitsWhileThePaneKeepsChanging(t *testing.T) {
+	ledger := &recoveryLedger{fakeTurnLedger: newFakeTurnLedger(), workID: "work-1"}
+	submits := []string{}
+	w := newRecoveryWatcher(ledger, &submits)
+	settled := time.Date(2026, 11, 10, 19, 43, 40, 0, time.UTC)
+	poll := func(at time.Time, answer string) {
+		item := stalledPollItem(at, settled, "a1", nil)
+		item.workerSnap.Command = "claude"
+		item.content = "✻ Waiting for 1 background agent to finish\n● Agent \"Map Brain chat protocol\" finished · 5m 30s\n" +
+			answer + "\n────\n❯ \n────\n  ⏵⏵ bypass permissions on (shift+tab to cycle)"
+		item.turn.LeaseDeadline = settled.Add(time.Hour)
+		w.superviseDelegatedTurns([]probedPollWorker{item})
+	}
+	grace := DefaultTurnRecoveryPolicy().StoppedAfter
+	start := settled.Add(5*time.Minute + 30*time.Second) // the agent just finished; the footer count is gone
+	poll(start, "● The protocol map is back")
+	poll(start.Add(grace-time.Second), "● The protocol map is back, with four key facts:")
+	poll(start.Add(2*grace-2*time.Second), "● The protocol map is back, with four key facts:\n- brain_snapshot carries no messages.")
+	if len(ledger.stalls) != 0 {
+		t.Fatalf("told Brain while the Worker was still writing: %+v", ledger.stalls)
+	}
+	last := start.Add(2*grace - 2*time.Second)
+	poll(last.Add(grace-time.Second), "● The protocol map is back, with four key facts:\n- brain_snapshot carries no messages.")
+	if len(ledger.stalls) != 0 {
+		t.Fatalf("escalated inside the grace after the last pane change: %+v", ledger.stalls)
+	}
+	poll(last.Add(grace+time.Second), "● The protocol map is back, with four key facts:\n- brain_snapshot carries no messages.")
+	if len(ledger.stalls) != 1 || ledger.stalls[0].Reason != "stopped" {
+		t.Fatalf("a pane that stopped moving must escalate once after the grace: %+v", ledger.stalls)
+	}
+}

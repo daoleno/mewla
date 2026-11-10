@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"fmt"
+	"hash/fnv"
 	"log"
 	"regexp"
 	"strings"
@@ -288,6 +289,19 @@ func paneShowsBackgroundWork(pane string) bool {
 	return false
 }
 
+// WorkerWaitingOnBackgroundWork reports whether the Session's own pane shows
+// background shells, agents, tasks or monitors still running. Such a Worker
+// has ended its provider turn on purpose and will be woken by that work, so
+// the Work is waiting on it, not lost. The pane is structural evidence of the
+// Worker's own process, never a claim about what the work is.
+func (w *Watcher) WorkerWaitingOnBackgroundWork(sessionID string) bool {
+	content, err := w.CapturePaneContent(sessionID)
+	if err != nil {
+		return false
+	}
+	return paneShowsBackgroundWork(content)
+}
+
 // paneTail returns the last non-empty pane lines above the provider's own
 // prompt chrome, compacted for an escalation summary.
 func paneTail(pane string, lines int) string {
@@ -333,8 +347,14 @@ type turnRecoverySupervisor struct {
 	// seconds. Waiting is counted from the first poll that saw it stalled,
 	// never from when the provider settled.
 	idleSince map[string]time.Time
-	submit    func(sessionID, payload, workID, turnID string, at time.Time) (InputResult, error)
-	run       func(func())
+	// paneSeen is the last pane content (hashed) seen in the stalled shape. A
+	// pane that is still changing is a Worker still producing output whose
+	// transcript has not flushed yet, not a stopped one: the idle clock
+	// restarts whenever the pane moves. A truly stopped Worker's pane is
+	// static, so this never delays the report for one.
+	paneSeen map[string]uint64
+	submit   func(sessionID, payload, workID, turnID string, at time.Time) (InputResult, error)
+	run      func(func())
 }
 
 func newTurnRecoverySupervisor(w *Watcher) *turnRecoverySupervisor {
@@ -343,6 +363,7 @@ func newTurnRecoverySupervisor(w *Watcher) *turnRecoverySupervisor {
 		inflight:  map[string]bool{},
 		nextCheck: map[string]time.Time{},
 		idleSince: map[string]time.Time{},
+		paneSeen:  map[string]uint64{},
 		submit: func(sessionID, payload, workID, turnID string, at time.Time) (InputResult, error) {
 			return w.SubmitDelegatedWorkInput(sessionID, payload, workID, turnID, "", "", at)
 		},
@@ -398,13 +419,24 @@ func (w *Watcher) superviseDelegatedTurns(results []probedPollWorker) {
 					delete(supervisor.idleSince, existing)
 				}
 			}
+			for existing := range supervisor.paneSeen {
+				if strings.HasPrefix(existing, item.id+"\x00") {
+					delete(supervisor.paneSeen, existing)
+				}
+			}
 		} else {
 			if supervisor.idleSince == nil {
 				supervisor.idleSince = map[string]time.Time{}
 			}
-			if _, seen := supervisor.idleSince[key]; !seen {
+			if supervisor.paneSeen == nil {
+				supervisor.paneSeen = map[string]uint64{}
+			}
+			sum := paneChecksum(item.content)
+			before, hadPane := supervisor.paneSeen[key]
+			if _, seen := supervisor.idleSince[key]; !seen || (hadPane && before != sum) {
 				supervisor.idleSince[key] = item.now
 			}
+			supervisor.paneSeen[key] = sum
 		}
 		idleSince := supervisor.idleSince[key]
 		due, throttled := supervisor.nextCheck[key]
@@ -487,6 +519,12 @@ type delegatedStall struct {
 
 // turnRecoveryRecheck bounds how long a Session's stall decision is cached.
 const turnRecoveryRecheck = 15 * time.Second
+
+func paneChecksum(content string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(content))
+	return h.Sum64()
+}
 
 func (s *turnRecoverySupervisor) recheck(sessionID, key string, at time.Time) {
 	s.mu.Lock()
