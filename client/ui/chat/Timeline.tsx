@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, List, signal, Text, View } from "nsh";
+import { cleanup, Clipboard, List, signal, Text, View, type ListRef } from "nsh";
 import { providerActivityElapsedLabels } from "../../core/timeline/providerActivityElapsed";
 import { Button, Sheet, TextView } from "nsh/base";
 import { isWorkingRow } from "../../core/conversation/timeline";
@@ -112,14 +112,25 @@ function SelectTextSheet() {
 export function ChatTimeline(props: { testID: string; items: () => TimelineItem[]; empty: () => unknown; handlers?: MessageHandlers }) {
   const handlers = props.handlers ?? {};
   const expansion = createExpansion();
+  let list: ListRef | undefined;
+  // Read back from the newest row: "Latest" brings it into view again.
+  const away = signal(false);
   return (
     <View class="flex-1">
-    <SelectTextSheet />
-    <List testID={props.testID} class="flex-1" each={props.items()} keyExtractor={(item) => item.id}
-      maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
-      empty={props.empty() as never}>
-      {(item) => <TimelineRow item={item} expansion={expansion} handlers={handlers} />}
-    </List>
+      <SelectTextSheet />
+      <List testID={props.testID} class="flex-1" each={props.items()} keyExtractor={(item) => item.id} ref={(node) => (list = node)}
+        maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
+        onScroll={({ offset, contentSize, size }) => away.set(contentSize.height - (offset.y + size.height) > 240)}
+        empty={props.empty() as never}>
+        {(item) => <TimelineRow item={item} expansion={expansion} handlers={handlers} />}
+      </List>
+      {away() ? (
+        <Button testID="jump-latest" onPress={() => list?.scrollToEnd({ animated: true })}
+          class="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 active:bg-accent">
+          <Icon name="arrow-down" size={16} />
+          <Text class="text-sm">Latest</Text>
+        </Button>
+      ) : null}
     </View>
   );
 }
