@@ -40,6 +40,26 @@ export function currentTransport(): Transport | null {
   return transport;
 }
 
+type TransportUser = (transport: Transport, server: StoredServer) => (() => void) | void;
+const transportUsers = new Set<TransportUser>();
+let transportCleanups: Array<() => void> = [];
+
+/**
+ * How a feature follows the current computer: `use` runs with each computer's
+ * Transport (now, if there is one, and after every switch); what it returns runs
+ * when that computer stops being current, so the feature drops its state then.
+ * Listen with `transport.on(...)` inside; the Transport reconnects by itself.
+ */
+export function onTransport(use: TransportUser): () => void {
+  transportUsers.add(use);
+  const server = current();
+  if (transport && server) {
+    const cleanup = use(transport, server);
+    if (cleanup) transportCleanups.push(cleanup);
+  }
+  return () => transportUsers.delete(use);
+}
+
 export async function loadSession(): Promise<void> {
   const list = await getServers();
   servers.set(list);
@@ -52,6 +72,7 @@ export function switchTo(server: StoredServer | null): void {
   const previous = current();
   if (previous) outbox.onDisconnected(previous.id);
   stops.splice(0).forEach((stop) => stop());
+  transportCleanups.splice(0).forEach((cleanup) => cleanup());
   stopWakePoll();
   closeBrainChat();
   brainDraft()?.flush();
@@ -67,6 +88,10 @@ export function switchTo(server: StoredServer | null): void {
   void setCurrentServerId(server.id);
   const next = new Transport(server);
   transport = next;
+  for (const use of transportUsers) {
+    const cleanup = use(next, server);
+    if (cleanup) transportCleanups.push(cleanup);
+  }
   void reopenLastBrainChat(server, next);
   stops = [
     next.onState((state) => {
