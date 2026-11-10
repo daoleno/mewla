@@ -92,8 +92,10 @@ sleep 10
 shot 3-opened
 shows "Pair a computer" && fail "the NSH app asks to pair again"
 tap "^More$" 10 || true
-sleep 3
+for _ in $(seq 1 30); do shows "· Connected" && break; sleep 1; done
 shot 3-more
+shows "· Connected" || fail "the NSH app does not show the computer as connected"
+log "the app shows the computer as Connected"
 after=$(devices)
 python3 - "$before" "$after" "$seen_before" "$device_id" <<'PY' | tee -a "$OUT/gate.log"
 import json, sys

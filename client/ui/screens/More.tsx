@@ -22,13 +22,16 @@ function Row(props: { title: string; detail?: string; onPress: () => void; testI
 }
 
 /** The connection line: the menu footer of the previous app, one quiet line naming the computer and its state. */
+const WORDS = { connected: "Connected", connecting: "Connecting…", waiting: "Offline", idle: "Not connected" } as const;
+
+/** The current computer and its connection. Signals are read inside the JSX so the line follows them. */
 export function ConnectionLine() {
-  const state = connection();
-  const word = state === "connected" ? "Connected" : state === "connecting" ? "Connecting…" : state === "waiting" ? "Offline" : "Not connected";
   return (
     <View class="flex-row items-center gap-2 px-4 py-4">
-      <View class={state === "connected" ? "size-2 rounded-full bg-muted-foreground" : "size-2 rounded-full bg-warning"} />
-      <Text testID="connection" class="text-sm text-muted-foreground">{`${current()?.name || "No computer"} · ${word}${state === "waiting" && problem() ? ` (${problem()})` : ""}`}</Text>
+      <View class={connection() === "connected" ? "size-2 rounded-full bg-muted-foreground" : "size-2 rounded-full bg-warning"} />
+      <Text testID="connection" class="text-sm text-muted-foreground">
+        {`${current()?.name || "No computer"} · ${WORDS[connection()]}${connection() === "waiting" && problem() ? ` (${problem()})` : ""}`}
+      </Text>
     </View>
   );
 }
