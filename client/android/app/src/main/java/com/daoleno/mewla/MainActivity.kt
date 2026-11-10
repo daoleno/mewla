@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     nsh.handle("app.legacyStorageCopied") { _, reply -> answer(reply) { legacy.copied(); null } }
     push = PushHost(this, nsh)
     LiveHost(this, nsh)
+    com.daoleno.mewla.files.FilesHost(this, nsh)
     nsh.setParams(mapOf("deviceName" to deviceName()))
     setContentView(nsh)
     // scripts/dev-android.sh starts a debug build on `nsh dev`: every save reloads the app.
