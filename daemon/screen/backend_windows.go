@@ -67,7 +67,6 @@ func (b *windowsBackend) Capability(context.Context) Capability {
 	if !inInteractiveSession() {
 		return Capability{Reason: errNoSession.Error()}
 	}
-	b.startHooks()
 	return Capability{Supported: true}
 }
 
@@ -119,7 +118,6 @@ func screenSize() (int, int) {
 
 // Presence is whether the screen is locked and when the person last used it.
 func (b *windowsBackend) Presence() Presence {
-	b.startHooks()
 	var p Presence
 	p.Locked = locked()
 	for k := range p.Input {
@@ -149,7 +147,9 @@ func locked() bool {
 }
 
 // startHooks starts the low-level keyboard and mouse hooks, on a thread of
-// their own with the message loop hooks need. Input Mewla sent itself is
+// their own with the message loop hooks need. They start with the first
+// session (an agent's or a viewer's), not while Mewla only reports status:
+// a computer nobody's agent or viewer has used is never hooked. Input Mewla sent itself is
 // flagged injected and doesn't count as the person's.
 func (b *windowsBackend) startHooks() {
 	b.hooksOnce.Do(func() {
