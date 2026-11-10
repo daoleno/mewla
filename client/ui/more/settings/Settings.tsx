@@ -10,7 +10,7 @@ import { pet } from "../pet/pets";
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
 import { probeComputers, statusWord } from "./computers";
-import { loadTelegram, telegramRow } from "./telegram";
+import { loadTelegram, telegramRow } from "./telegramState";
 
 /** The appearance this phone chose: the system's, or always light or dark. */
 export type Appearance = "system" | "light" | "dark";
