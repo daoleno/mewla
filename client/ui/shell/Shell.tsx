@@ -37,8 +37,8 @@ const sessionsNav = createNavStack<SessionsRoute>([{ name: "sessions" }]);
 // A Session page belongs to the computer it was opened on: a switch goes back to the list.
 onTransport(() => () => sessionsNav.popToRoot());
 
-/** A Session the New session sheet made: open it on the list's stack. */
-function openCreated(workerId: string, hint: TerminalRouteSessionHint) {
+/** Opens a Session of the current computer on the Sessions tab (New session, Work, Calendar, Brain cards). */
+export function openSession(workerId: string, hint?: TerminalRouteSessionHint) {
   selectedTab.set(1);
   sessionsNav.setRoutes([{ name: "sessions" }, { name: "session", workerId, hint }]);
 }
@@ -90,14 +90,14 @@ export function Shell() {
           ))}
         </View>
         <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
-        <NewSession onCreated={openCreated} />
+        <NewSession onCreated={openSession} />
       </View>
     );
   }
   return (
     <View class="flex-1 bg-background">
       <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
-      <NewSession onCreated={openCreated} />
+      <NewSession onCreated={openSession} />
       <TabBar testID="tabs" items={tabs.map((t) => ({ title: t.title, icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>
