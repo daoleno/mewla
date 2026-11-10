@@ -45,6 +45,33 @@ describe("Sessions", () => {
     expect(active.at(-1)).toBe("w101");
   }, 20_000);
 
+  test("the menu's Services lists ports by project; a port's page opens its terminal and shares it after asking", async () => {
+    const web = { id: "svc-1", generation: "g1", worker_id: "a", worker_name: "dev server", project: "mewla", cwd: "/home/me/mewla", process: "vite", pid: 9, port: 5173, protocol: "tcp", binds: ["0.0.0.0"], urls: [{ label: "LAN", url: "http://192.0.2.10:5173", address: "192.0.2.10:5173", kind: "lan" }], local_only: false, source: "session" };
+    const app = await sessionsApp({
+      worker_sessions: [session("a", { name: "dev server" })],
+      replies: {
+        list_session_services: { type: "session_service_list", services: [web], interfaces: [] },
+        service_tunnel: { type: "service_tunnel", service_id: "svc-1", tunnel: { status: "running", url: "https://quiet-cat.trycloudflare.com", generation: "g1" } },
+      },
+    });
+    await app.waitFor("text:dev server");
+    app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : dialog.buttons.includes("Start tunnel") ? "Start tunnel" : null));
+    await app.press("id:sessions-menu");
+    await app.waitFor("id:service-row");
+    expect(app.texts()).toContain("5173");
+    expect(app.texts()).toContain("1 port");
+    await app.press("id:service-row");
+    await app.waitFor("id:service-terminal");
+    expect(app.texts()).toContain("192.0.2.10:5173");
+    await app.press("id:tunnel-toggle");
+    await app.waitFor("id:tunnel-copy");
+    expect(framesOf(app.host.posts(), "service_tunnel").at(-1)).toMatchObject({ service_id: "svc-1", service_generation: "g1", tunnel_action: "start" });
+    expect(app.texts()).toContain("Stop public tunnel");
+    await app.press("id:service-terminal");
+    await app.waitFor("id:session-menu");
+    expect(framesOf(app.host.posts(), "set_active_worker").at(-1)?.worker_id).toBe("a");
+  }, 20_000);
+
   test("a long press selects; Terminate asks, then ends them and they leave the list", async () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "one" }), session("b", { name: "two" })] });
     await app.waitFor("text:one");

@@ -1,4 +1,6 @@
-import { cleanup, computed, effect, signal, Storage, Text, untracked, View } from "nsh";
+import { cleanup, computed, effect, openUrl, signal, Storage, Text, untracked, View } from "nsh";
+import { listSessionServices } from "../../core/sessions/services";
+import { dshWebServiceURL } from "../../core/sessions/servicesPresentation";
 import { AlertDialog, Button, Input, NavPage, Sheet, type NavStackState } from "nsh/base";
 import { Chat } from "../../core/conversation/chat";
 import { chatCacheKey, Draft } from "../../core/conversation/draft";
@@ -269,6 +271,13 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     if (!switchable()) return;
     untracked(() => void getThreadRuntime(transport, props.workerId).then((selection) => runtime.set(selection)).catch(() => {}));
   });
+  // A DSH Session's web UI, when the computer runs it.
+  const dshWeb = signal<string | null>(null);
+  const dshLive = computed(() => kind() === "dsh" && connected());
+  effect(() => {
+    if (!dshLive()) return dshWeb.set(null);
+    untracked(() => void listSessionServices(transport).then((snapshot) => dshWeb.set(dshWebServiceURL(snapshot.services))).catch(() => dshWeb.set(null)));
+  });
   const modelChip = computed(() => resolveComposerModelControl({ capabilities: worker()?.capabilities, connectionConnected: connected(), selection: runtime(), refreshRequired: false }));
 
   const answerAlert = async (alert: ComposerAlert) => {
@@ -323,6 +332,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     const actions = [
       ...(canChat() ? [{ id: "mode", label: mode() === "chat" ? "Open terminal" : "Open chat" }] : []),
       ...(switchable() ? [{ id: "model", label: "Model & Effect" }] : []),
+      ...(dshWeb() ? [{ id: "web", label: "Open Web" }] : []),
       { id: "terminal", label: "New Terminal" },
       { id: "rename", label: "Rename" },
       { id: "terminate", label: "Terminate", role: "destructive" as const },
@@ -331,6 +341,10 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     const { action } = await AlertDialog.show({ title: untracked(title), presentation: "actionSheet", actions });
     if (action === "mode") chooseMode(untracked(mode) === "chat" ? "terminal" : "chat");
     else if (action === "model") modelOpen.set(true);
+    else if (action === "web") {
+      const url = untracked(dshWeb);
+      if (url) void openUrl(url).catch(() => notice.set("Could not open DSH Web."));
+    }
     else if (action === "terminal") {
       newSessionTarget.set(props.workerId);
       newSessionOpen.set(true);

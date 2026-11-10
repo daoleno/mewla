@@ -10,6 +10,7 @@ import { workRoute, type BrainWorkRoute } from "../work/routes";
 import { Session } from "../screens/Session";
 import { Sessions } from "../screens/Sessions";
 import { NewSession, newSessionOpen } from "../screens/NewSession";
+import { ServicesSheet } from "../sessions/ServicesSheet";
 import { onTransport } from "../session";
 import type { TerminalRouteSessionHint } from "../../core/session/sessionRoute";
 import type { MoreRoute, SessionsRoute } from "./routes";
@@ -91,6 +92,7 @@ export function Shell() {
         </View>
         <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
         <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
+        <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       </View>
     );
   }
@@ -98,6 +100,7 @@ export function Shell() {
     <View class="flex-1 bg-background">
       <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
+        <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <TabBar testID="tabs" items={tabs.map((t) => ({ title: t.title, icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>
