@@ -8,6 +8,7 @@ import {
 import type { TimelineItem } from "./types";
 import { projectTimeline } from "./projectTimeline";
 import { makeMixedTimelineEvents } from "./fixtures";
+import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
 
 /**
  * Distinguishes four invalidation layers on a long mixed timeline when a new
@@ -77,6 +78,114 @@ function memoPropsOf(item: TimelineRenderItem) {
 }
 
 describe("tool/activity append timeline stability layers", () => {
+  test("long mixed timeline: new tool preserves historical raw, grouped, and memo identities", () => {
+    const baseEvents = makeMixedTimelineEvents(120);
+    const initial = projectTimeline(baseEvents, null);
+    expect(initial.mode).toBe("full");
+    expect(initial.items.length).toBeGreaterThanOrEqual(110);
+
+    const nextEvents = appendRunningTool(baseEvents);
+    const projected = projectTimeline(nextEvents, initial.cache);
+
+    // Layer 1 — authoritative projection must keep historical raw item refs.
+    expect(projected.mode).toBe("incremental");
+    expect(projected.fallbackReason).toBeUndefined();
+    const previousRaw = indexById(initial.items);
+    const historicalRawIds = historicalIds(projected.items, NEW_TOOL_ID);
+    expect(historicalRawIds.length).toBe(initial.items.length);
+    for (const id of historicalRawIds) {
+      expect(projected.items.find((item) => item.id === id)).toBe(
+        previousRaw.get(id),
+      );
+    }
+    expect(projected.items.some((item) => item.id === NEW_TOOL_ID)).toBe(true);
+    expect(projected.stableRowChurn).toBeLessThanOrEqual(2);
+    expect(projected.stableRowReuse).toBeGreaterThanOrEqual(
+      initial.items.length - 1,
+    );
+
+    // Salvage mirror of useInterfaceTimelineItems (should be identity no-op when
+    // projection already preserved refs).
+    const salvaged: TimelineItem[] = projected.items.map((item) => {
+      const prior = previousRaw.get(item.id);
+      return prior && timelineItemsSemanticEqual(prior, item) ? prior : item;
+    });
+    for (const id of historicalRawIds) {
+      expect(salvaged.find((item) => item.id === id)).toBe(previousRaw.get(id));
+    }
+
+    // Layer 2 — grouped render items.
+    const previousRender = buildTimelineRenderItems([...initial.items].reverse(), {
+      showDateDividers: true,
+    });
+    const nextRender = buildTimelineRenderItems([...salvaged].reverse(), {
+      showDateDividers: true,
+    });
+    const stableRender = stabilizeTimelineRenderItems(
+      previousRender,
+      nextRender,
+    );
+    const previousGrouped = indexById(previousRender);
+    for (const id of historicalRawIds) {
+      const nextItem = stableRender.find((item) => item.id === id);
+      const priorItem = previousGrouped.get(id);
+      expect(nextItem).toBeDefined();
+      expect(priorItem).toBeDefined();
+      // Adjacent message grouping at the newest edge may change; everything
+      // else must keep the prior grouped object.
+      if (
+        priorItem?.type === "message" &&
+        nextItem?.type === "message" &&
+        priorItem.presentation?.groupPosition !==
+          nextItem.presentation?.groupPosition
+      ) {
+        const priorIndex = previousRender.findIndex((item) => item.id === id);
+        const nextIndex = stableRender.findIndex((item) => item.id === id);
+        // Only the chronological neighbor of the new tool may legitimately
+        // change grouping; that neighbor sits next to NEW_TOOL_ID in the
+        // inverted list (index 1 when tool is newest at index 0).
+        expect(nextIndex).toBeLessThanOrEqual(2);
+        expect(priorIndex).toBeLessThanOrEqual(2);
+        continue;
+      }
+      expect(nextItem).toBe(priorItem);
+    }
+
+    // Layer 3 — row memo props (item + presentation) for historical rows.
+    for (const id of historicalRawIds) {
+      const nextItem = stableRender.find((item) => item.id === id);
+      const priorItem = previousGrouped.get(id);
+      if (!nextItem || !priorItem) {
+        throw new Error(`missing render item ${id}`);
+      }
+      if (nextItem !== priorItem) {
+        // Legitimate adjacent grouping change only.
+        continue;
+      }
+      const nextMemo = memoPropsOf(nextItem);
+      const priorMemo = memoPropsOf(priorItem);
+      expect(nextMemo.item).toBe(priorMemo.item);
+      expect(nextMemo.presentation).toBe(priorMemo.presentation);
+    }
+
+    // Layer 4 — FlatList data identity may change on length growth, but every
+    // historical cell key must still resolve to the prior element reference
+    // (no blanket remount via new row objects).
+    expect(stableRender).not.toBe(previousRender);
+    expect(stableRender.length).toBeGreaterThan(previousRender.length);
+    let stableHistoricalCells = 0;
+    for (const id of historicalRawIds) {
+      if (
+        stableRender.find((item) => item.id === id) === previousGrouped.get(id)
+      ) {
+        stableHistoricalCells += 1;
+      }
+    }
+    expect(stableHistoricalCells).toBeGreaterThanOrEqual(
+      historicalRawIds.length - 2,
+    );
+  });
+
   test("same-id tool activity upsert preserves unrelated historical raw identities", () => {
     const baseEvents = makeMixedTimelineEvents(120);
     const toolEvent = baseEvents.find((event) => event.kind === "tool");

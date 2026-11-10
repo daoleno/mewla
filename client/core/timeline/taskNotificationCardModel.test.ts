@@ -5,6 +5,7 @@ import {
 } from "../conversation/conversation";
 import { buildTimeline } from "./model";
 import { reconcilePendingUserMessagesAgainstEvents } from "../conversation/pendingUserMessages";
+import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
 import {
   formatTaskDuration,
   formatTaskTokens,
@@ -201,5 +202,18 @@ describe("task notification in conversation surfaces", () => {
         { id: "echo", seq: agentDone.seq + 1, kind: "user_message" },
       ]).pendingUserMessages,
     ).toEqual([]);
+  });
+
+  test("semantic equality tracks rendered fields", () => {
+    const left = taskNotificationTimelineItem(agentDone)!;
+    expect(
+      timelineItemsSemanticEqual(left, taskNotificationTimelineItem(agentDone)!),
+    ).toBe(true);
+    expect(
+      timelineItemsSemanticEqual(
+        left,
+        taskNotificationTimelineItem({ ...agentDone, body: "changed" })!,
+      ),
+    ).toBe(false);
   });
 });

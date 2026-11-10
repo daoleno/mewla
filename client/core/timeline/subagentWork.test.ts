@@ -5,12 +5,15 @@ import {
   type CodexConversationEvent,
 } from "../conversation/conversation";
 import { SCREENSHOT_SUBAGENT_WORK_EVENTS } from "./subagentFixtures";
+import { createToolRunFolder } from "./foldToolRuns";
 import type { ActivityTimelineItem } from "./activityTypes";
+import { splitActivityStatusDetail } from "./activityModel";
 import {
   buildTimelineFromSortedEvents,
   formatSubagentDuration,
 } from "./model";
 import { projectTimeline } from "./projectTimeline";
+import { timelineItemsSemanticEqual } from "./timelineItemsSemanticEqual";
 
 const events = SCREENSHOT_SUBAGENT_WORK_EVENTS as CodexConversationEvent[];
 
@@ -22,6 +25,37 @@ function delegates(items: ReturnType<typeof buildTimelineFromSortedEvents>) {
 }
 
 describe("a subagent's own steps on its delegating row", () => {
+  test("the finished subagent carries its steps, their count and how long it took", () => {
+    const [finished] = delegates(buildTimelineFromSortedEvents(events));
+    expect(finished.title).toBe("Audit the sync module");
+    expect(finished.steps?.map((step) => step.id)).toEqual([
+      "sub-1-read",
+      "sub-1-read-2",
+      "sub-1-grep",
+      "sub-1-test",
+      "sub-1-read-3",
+      "sub-1-read-4",
+    ]);
+    expect(finished.detail).toBe("6 steps · 2m 14s");
+    expect(finished.tone).toBe("success");
+    expect(splitActivityStatusDetail(finished.detail, finished.tone)).toEqual({
+      mark: null,
+      rest: "6 steps · 2m 14s",
+    });
+  });
+
+  test("a subagent still at work keeps its row running, with no duration yet", () => {
+    const [, working] = delegates(buildTimelineFromSortedEvents(events));
+    expect(working.tone).toBe("running");
+    expect(working.icon).toBe("time");
+    expect(working.detail).toBe("2 steps");
+    expect(splitActivityStatusDetail(working.detail, working.tone).mark).toBe("running");
+    expect(working.steps?.map((step) => step.tone)).toEqual([
+      "success",
+      "running",
+    ]);
+  });
+
   test("a delegating call with no subagent transcript is the row it was", () => {
     const plain = events.map(({ subagent: _drop, ...event }) => event);
     for (const row of delegates(buildTimelineFromSortedEvents(plain))) {
@@ -41,6 +75,70 @@ describe("a subagent's own steps on its delegating row", () => {
     expect(at(134)).toBe("2m 14s");
     expect(at(3780)).toBe("1h 3m");
     expect(formatSubagentDuration(undefined, "x")).toBeUndefined();
+  });
+});
+
+describe("folding a subagent's steps", () => {
+  const folded = () => createToolRunFolder()(buildTimelineFromSortedEvents(events));
+
+  test("its finished steps fold like a turn's, the failed one inside the run", () => {
+    const [finished] = delegates(folded());
+    const steps = finished.steps ?? [];
+    expect(steps.map((step) => step.id)).toEqual(["sub-1-read"]);
+    expect(steps[0].steps?.map((step) => step.id)).toEqual([
+      "sub-1-read",
+      "sub-1-read-2",
+      "sub-1-grep",
+      "sub-1-test",
+      "sub-1-read-3",
+      "sub-1-read-4",
+    ]);
+    expect(steps[0].detail).toBe("6 steps · 1 failed");
+    expect(steps[0].defaultExpanded).toBe(false);
+    expect(steps[0].steps?.[3].tone).toBe("failed");
+  });
+
+  test("the subagent row is never folded into its neighbours", () => {
+    const out = folded();
+    expect(delegates(out)).toHaveLength(2);
+    expect(delegates(out)[0].semanticKind).toBe("delegate_agent");
+  });
+
+  test("an untouched subagent keeps its row object; a rebuilt one folds to an equal row", () => {
+    const fold = createToolRunFolder();
+    const items = buildTimelineFromSortedEvents(events);
+    const first = fold(items);
+    expect(delegates(fold(items))[0]).toBe(delegates(first)[0]);
+
+    const again = fold(buildTimelineFromSortedEvents(events));
+    const [before] = delegates(first);
+    const [after] = delegates(again);
+    expect(after).not.toBe(before);
+    expect(
+      timelineItemsSemanticEqual(before.steps![0], after.steps![0]),
+    ).toBe(true);
+    expect(timelineItemsSemanticEqual(before, after)).toBe(true);
+  });
+
+  test("a new step changes what the row says", () => {
+    const grown = events.map((event) =>
+      event.id === "subagent-agent" && event.subagent
+        ? {
+            ...event,
+            subagent: {
+              ...event.subagent,
+              steps: [
+                ...event.subagent.steps,
+                { ...event.subagent.steps[0], id: "sub-2-more", seq: 3 },
+              ],
+            },
+          }
+        : event,
+    );
+    const [, before] = delegates(createToolRunFolder()(buildTimelineFromSortedEvents(events)));
+    const [, after] = delegates(createToolRunFolder()(buildTimelineFromSortedEvents(grown)));
+    expect(timelineItemsSemanticEqual(before, after)).toBe(false);
+    expect(after.detail).toBe("3 steps");
   });
 });
 

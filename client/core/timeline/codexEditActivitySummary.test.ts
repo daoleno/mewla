@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildInterfaceTimelineActivityPresentation } from "./activityModel";
 import type { ActivityTimelineItem } from "./activityTypes";
 import { buildTimeline } from "./model";
 import { normalizeCodexConversation } from "../conversation/conversation";
@@ -25,6 +26,59 @@ function normalizedPatchActivity(event: Record<string, unknown>) {
 }
 
 describe("Codex edit activity summaries", () => {
+  test("normalizes canonical Codex file facts into the final single-file row title", () => {
+    const { activity, event } = normalizedPatchActivity({
+      body: "*** Begin Patch\n*** Update File: src/ledger/quote.ts\n@@\n-old\n+new\n*** End Patch",
+      files: ["src/ledger/quote.ts"],
+      file_changes: [
+        {
+          path: "src/ledger/quote.ts",
+          operation: "update",
+          additions: 9,
+          deletions: 5,
+        },
+      ],
+    });
+
+    expect(event.file_changes).toEqual([
+      {
+        path: "src/ledger/quote.ts",
+        move_path: undefined,
+        operation: "update",
+        additions: 9,
+        deletions: 5,
+      },
+    ]);
+    expect(activity).toMatchObject({
+      id: "synthetic-patch-event",
+      title: "Edit src/ledger/quote.ts",
+      detail: "+9 −5",
+      files: ["src/ledger/quote.ts"],
+      defaultExpanded: false,
+    });
+    expect(activity.fileSummaries).toEqual([
+      {
+        path: "src/ledger/quote.ts",
+        movePath: undefined,
+        operation: "update",
+        added: 9,
+        removed: 5,
+      },
+    ]);
+    expect(
+      buildInterfaceTimelineActivityPresentation(
+        activity,
+        {
+          textMuted: "#888",
+          textSubtle: "#666",
+          accent: "#aaa",
+          border: "#333",
+          appBackground: "#111",
+        } as any,
+      ).canExpand,
+    ).toBe(true);
+  });
+
   test("aggregates multiple known changes with shared target context", () => {
     const { activity } = normalizedPatchActivity({
       title: "Patch 2 files",

@@ -12,6 +12,10 @@ import {
 } from "./toolCallSemantics";
 import { buildTimeline } from "./model";
 import type { CodexConversationEvent } from "../conversation/conversation";
+import {
+  shouldAutoExpandActivity,
+  buildInterfaceTimelineActivityPresentation,
+} from "./activityModel";
 import type { ActivityTimelineItem } from "./activityTypes";
 
 const FIXTURES = {
@@ -201,6 +205,100 @@ describe("semantic action model", () => {
 });
 
 describe("timeline presentation", () => {
+  test("buildTimeline uses semantic titles for Codex/Grok/Cursor shapes", () => {
+    const events: CodexConversationEvent[] = [
+      {
+        id: "1",
+        seq: 1,
+        kind: "tool",
+        tool_name: "exec",
+        input: FIXTURES.codexExecCommand,
+        status: "done",
+      },
+      {
+        id: "2",
+        seq: 2,
+        kind: "tool",
+        tool_name: "multi:exec_command,view_image",
+        input: FIXTURES.codexMulti,
+        status: "done",
+      },
+      {
+        id: "3",
+        seq: 3,
+        kind: "tool",
+        tool_name: "Grep",
+        input: FIXTURES.grokGrep,
+        status: "done",
+      },
+      {
+        id: "4",
+        seq: 4,
+        kind: "command",
+        command: "go test ./work -count=1",
+        status: "done",
+        exit_code: 0,
+      },
+      {
+        id: "5",
+        seq: 5,
+        kind: "tool",
+        tool_name: "view_image",
+        input: `{"path":"/tmp/legacy.png"}`,
+        status: "failed",
+      },
+      {
+        id: "6",
+        seq: 6,
+        kind: "tool",
+        tool_name: "exec",
+        input: FIXTURES.codexViewImage,
+        status: "running",
+      },
+    ];
+
+    const timeline = buildTimeline(events);
+    const activities = timeline.filter(
+      (item): item is ActivityTimelineItem => item.type === "activity",
+    );
+    expect(activities.map((item) => item.title)).toEqual([
+      "Search SemanticAction",
+      "Run go test ./work + 1",
+      "Search codex",
+      "Run go test ./work",
+      "Open legacy.png",
+      "Open fixture-preview.png",
+    ]);
+    expect(activities[0]?.detail).toBe("Done");
+    expect(activities[0]?.providerToolId).toBeUndefined();
+    expect(activities[1]?.detail).toBe("Succeeded");
+    expect(activities[1]?.children?.length).toBe(2);
+    expect(activities[1]?.providerToolId).toBe("exec_command");
+    expect(activities[1]?.developerDetails?.providerToolId).toBe(
+      "exec_command",
+    );
+    expect(activities[4]?.tone).toBe("failed");
+    expect(activities[5]?.tone).toBe("running");
+    expect(shouldAutoExpandActivity(activities[0]!)).toBe(false);
+    expect(shouldAutoExpandActivity(activities[4]!)).toBe(false);
+    expect(shouldAutoExpandActivity(activities[5]!)).toBe(false);
+    expect(activities[5]?.defaultExpanded).toBe(false);
+    expect(activities[5]?.icon).toBe("time");
+
+    const presentation = buildInterfaceTimelineActivityPresentation(
+      activities[1]!,
+      {
+        textMuted: "#888",
+        textSubtle: "#666",
+        accent: "#aaa",
+        border: "#333",
+        appBackground: "#111",
+      } as any,
+      { red: "#f00", yellow: "#ff0", green: "#0f0" } as any,
+    );
+    expect(presentation.canExpand).toBe(true);
+  });
+
   test("buildSemanticActions covers blocked and running states", () => {
     expect(
       buildSemanticActions({
@@ -216,6 +314,76 @@ describe("timeline presentation", () => {
         status: "blocked",
       })[0]?.status,
     ).toBe("blocked");
+  });
+
+  test("blocked/error statuses use failed tone and auto-expand; running stays collapsed", () => {
+    const events: CodexConversationEvent[] = [
+      {
+        id: "blocked-cmd",
+        seq: 1,
+        kind: "command",
+        command: "go test ./work -count=1",
+        status: "blocked",
+        exit_code: 0,
+      },
+      {
+        id: "error-search",
+        seq: 2,
+        kind: "web_search",
+        status: "error",
+        input: `{"type":"search","query":"fixture"}`,
+      },
+      {
+        id: "blocked-tool",
+        seq: 3,
+        kind: "tool",
+        tool_name: "view_image",
+        input: `{"path":"/tmp/fixture.png"}`,
+        status: "blocked",
+      },
+      {
+        id: "running-tool",
+        seq: 4,
+        kind: "tool",
+        tool_name: "Grep",
+        input: FIXTURES.grokGrep,
+        status: "running",
+      },
+      {
+        id: "search-miss",
+        seq: 5,
+        kind: "command",
+        command: "rg -n missing-token app",
+        status: "done",
+        exit_code: 1,
+        body: "",
+      },
+    ];
+
+    const activities = buildTimeline(events).filter(
+      (item): item is ActivityTimelineItem => item.type === "activity",
+    );
+    expect(activities).toHaveLength(5);
+
+    expect(activities[0]?.tone).toBe("failed");
+    expect(activities[0]?.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(activities[0]!)).toBe(false);
+
+    expect(activities[1]?.tone).toBe("failed");
+    expect(activities[1]?.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(activities[1]!)).toBe(false);
+
+    expect(activities[2]?.tone).toBe("failed");
+    expect(activities[2]?.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(activities[2]!)).toBe(false);
+
+    expect(activities[3]?.tone).toBe("running");
+    expect(activities[3]?.defaultExpanded).toBe(false);
+    expect(shouldAutoExpandActivity(activities[3]!)).toBe(false);
+
+    // Explicit exit-code 1 search miss without failed/blocked/error stays non-failed.
+    expect(activities[4]?.tone).toBe("success");
+    expect(activities[4]?.defaultExpanded).toBe(false);
   });
 });
 
