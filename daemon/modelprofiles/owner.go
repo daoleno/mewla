@@ -118,20 +118,20 @@ type Owner struct {
 	nativeSettingsLookup func(routeID string) (codexctl.NativeSettings, bool)
 	// nativeThread names the thread a Session's agent announced ("" when it has
 	// not). Unset, monitors find the thread themselves.
-	nativeThread func(sessionID string) string
-	router               *Router
-	routes               *RouteStateFile
-	listener             *ListenerFile
-	ln                   net.Listener
-	srv                  *http.Server
-	addr                 string
-	listenNetwork        string
-	preferAddr           string
-	lookup               func(string) (string, bool)
-	creds                CredentialStore
-	verifier             ProfileContractVerifier
-	started              bool
-	closed               bool
+	nativeThread  func(sessionID string) string
+	router        *Router
+	routes        *RouteStateFile
+	listener      *ListenerFile
+	ln            net.Listener
+	srv           *http.Server
+	addr          string
+	listenNetwork string
+	preferAddr    string
+	lookup        func(string) (string, bool)
+	creds         CredentialStore
+	verifier      ProfileContractVerifier
+	started       bool
+	closed        bool
 	// idleListenerOwned is true when this Owner started the loopback listener
 	// from an inert (no live routes) state and may tear it down on failed first
 	// launch / last Abort when no routes remain.
@@ -140,6 +140,7 @@ type Owner struct {
 	listenerBackupHad    bool
 	listenerBackupSet    bool
 	discovery            *modelDiscoveryCache
+	routeRefresh         map[string]*routeRefreshCall
 	modelsDev            *modelsDevCatalog
 	codexModels          *codexModelList
 	modelsObserved       func([]string)
@@ -330,7 +331,7 @@ func StartOwner(cfg OwnerConfig) (*Owner, error) {
 		_ = o.Close()
 		return nil, err
 	}
-	o.router = NewRouter(o.table, WithRouterLookup(lookup), WithRouterCredentials(cfg.Credentials), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute))
+	o.router = NewRouter(o.table, WithRouterLookup(lookup), WithRouterCredentials(cfg.Credentials), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute))
 	if err := o.startGateway(cfg); err != nil {
 		_ = o.Close()
 		return nil, err
@@ -518,7 +519,7 @@ func (o *Owner) ensureListenerLocked(sticky bool) (PersistResult, error) {
 	}
 
 	if o.router == nil {
-		o.router = NewRouter(o.table, WithRouterLookup(o.lookup), WithRouterCredentials(o.creds), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute))
+		o.router = NewRouter(o.table, WithRouterLookup(o.lookup), WithRouterCredentials(o.creds), WithRouterReliableModelCatalog(o.routeModelCatalog), WithRouterModelRefresh(o.refreshRouteModelCatalog), WithRouterModelSwitch(o.ApplyTerminalModelSwitch), WithRouterNativeSettings(o.nativeSettingsForRoute))
 	}
 	srv := &http.Server{
 		Handler:           o.router.Handler(),
@@ -794,7 +795,73 @@ func (o *Owner) routeModelCatalog(profileID string) (RouteModelCatalog, error) {
 		}
 	}
 	o.mu.Unlock()
-	return RouteModelCatalog{Entries: entries, Reliable: reliable}, nil
+	return RouteModelCatalog{Entries: entries, Reliable: reliable, Connection: strings.TrimSpace(profile.Name)}, nil
+}
+
+// routeRefreshMinAge bounds route-triggered rediscovery: a list fetched this
+// recently (successfully or not) is not fetched again for a request naming an
+// unknown model, so junk model names cannot turn into upstream traffic.
+const routeRefreshMinAge = 30 * time.Second
+
+// refreshRouteModelCatalog is the preflight's one live look at a connection's
+// model list when the cache does not know the requested model. Concurrent
+// requests for the same connection share one fetch; the upstream is not
+// contacted when the list was fetched in the last routeRefreshMinAge. The
+// error is non-nil only when a fetch was attempted and failed; the returned
+// catalog is then last-known-good, exactly what preflight used before.
+func (o *Owner) refreshRouteModelCatalog(profileID string) (RouteModelCatalog, error) {
+	profile, err := o.GetProfile(profileID)
+	if err != nil {
+		return RouteModelCatalog{}, err
+	}
+	id := normalizeID(profile.ID)
+	o.mu.Lock()
+	cache := o.discovery
+	if o.routeRefresh == nil {
+		o.routeRefresh = map[string]*routeRefreshCall{}
+	}
+	if call, ok := o.routeRefresh[id]; ok {
+		o.mu.Unlock()
+		<-call.done
+		catalog, cerr := o.routeModelCatalog(profileID)
+		if cerr != nil {
+			return RouteModelCatalog{}, cerr
+		}
+		return catalog, call.err
+	}
+	if cache != nil {
+		if e, ok := cache.get(id); ok && !e.FetchedAt.IsZero() && o.routeRefreshNow().Sub(e.FetchedAt) < routeRefreshMinAge {
+			o.mu.Unlock()
+			return o.routeModelCatalog(profileID)
+		}
+	}
+	call := &routeRefreshCall{done: make(chan struct{})}
+	o.routeRefresh[id] = call
+	o.mu.Unlock()
+
+	_, call.err = o.DiscoverProviderModelsDetailed(id, true)
+	o.mu.Lock()
+	delete(o.routeRefresh, id)
+	o.mu.Unlock()
+	close(call.done)
+
+	catalog, cerr := o.routeModelCatalog(profileID)
+	if cerr != nil {
+		return RouteModelCatalog{}, cerr
+	}
+	return catalog, call.err
+}
+
+type routeRefreshCall struct {
+	done chan struct{}
+	err  error
+}
+
+func (o *Owner) routeRefreshNow() time.Time {
+	if o.discovery != nil && o.discovery.now != nil {
+		return o.discovery.now()
+	}
+	return time.Now()
 }
 
 // UpsertProfile creates or updates a profile under CAS revision after full

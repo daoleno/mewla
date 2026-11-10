@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ type Router struct {
 	// local GET /v1/models surface. Nil means the surface is unavailable.
 	models       func(profileID string) ([]ProviderModelEntry, error)
 	modelCatalog func(profileID string) (RouteModelCatalog, error)
+	modelRefresh func(profileID string) (RouteModelCatalog, error)
 	// modelSwitch applies a model/effect identity carried with Codex's reserved
 	// explicit model-switch contextual signal, or with an authoritative native
 	// settings snapshot for fragment-less changes.
@@ -54,6 +56,9 @@ type Router struct {
 type RouteModelCatalog struct {
 	Entries  []ProviderModelEntry
 	Reliable bool
+	// Connection is the connection's display name, used only to word a
+	// refusal; it is never a credential or URL.
+	Connection string
 }
 
 // RouterOption configures Router construction.
@@ -91,6 +96,14 @@ func WithRouterModelCatalog(models func(profileID string) ([]ProviderModelEntry,
 	return func(r *Router) {
 		r.models = models
 	}
+}
+
+// WithRouterModelRefresh installs the one-shot live rediscovery the preflight
+// runs when a reliable catalog does not list the requested model. The
+// returned catalog is the post-refresh view; a non-nil error means the
+// upstream list could not be fetched and the catalog is last-known-good.
+func WithRouterModelRefresh(refresh func(profileID string) (RouteModelCatalog, error)) RouterOption {
+	return func(r *Router) { r.modelRefresh = refresh }
 }
 
 // WithRouterReliableModelCatalog installs the request-preflight catalog
@@ -263,15 +276,24 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 			if catalog.Reliable && len(catalog.Entries) > 0 {
-				served := false
-				for _, entry := range catalog.Entries {
-					if entry.Available && normalizeSpace(entry.ID) == requestModel {
-						served = true
-						break
+				served := catalogServesModel(catalog, requestModel)
+				var refreshErr error
+				if !served && r.modelRefresh != nil {
+					// The discovery cache can be older than the upstream: a model
+					// added there since is only known after a live look. One
+					// bounded, deduplicated rediscovery decides before refusing.
+					if refreshed, err := r.modelRefresh(binding.ProfileID); err != nil {
+						refreshErr = err
+						if len(refreshed.Entries) > 0 {
+							catalog = refreshed
+						}
+					} else {
+						catalog = refreshed
 					}
+					served = catalogServesModel(catalog, requestModel)
 				}
 				if !served {
-					writeRouteError(w, http.StatusNotFound, fmt.Errorf("%w: %s", ErrModelUnsupported, requestModel))
+					writeModelRefusal(w, requestModel, catalog.Connection, refreshErr != nil)
 					return
 				}
 			}
@@ -719,6 +741,42 @@ func isLoopbackRemoteAddr(remoteAddr string) bool {
 	}
 	ip := net.ParseIP(strings.Trim(host, "[]"))
 	return ip != nil && ip.IsLoopback()
+}
+
+func catalogServesModel(catalog RouteModelCatalog, model string) bool {
+	for _, entry := range catalog.Entries {
+		if entry.Available && normalizeSpace(entry.ID) == model {
+			return true
+		}
+	}
+	return false
+}
+
+// writeModelRefusal answers a request for a model the connection's model list
+// does not contain. It names the model and the connection (never a URL or key)
+// so the person sees what to change instead of a generic "request failed".
+func writeModelRefusal(w http.ResponseWriter, model, connection string, listStale bool) {
+	if ValidateModelID(model) != nil {
+		model = "the requested model"
+	} else {
+		model = strconv.Quote(model)
+	}
+	name := "this connection"
+	if connection = normalizeSpace(connection); connection != "" {
+		name = "connection " + strconv.Quote(connection)
+	}
+	message := fmt.Sprintf("Model %s is not offered by %s. Pick a model from its model list.", model, name)
+	if listStale {
+		message = fmt.Sprintf("Model %s is not in the last known model list of %s, and the list could not be refreshed from the provider just now. Try again shortly or pick a listed model.", model, name)
+	}
+	payload, err := json.Marshal(map[string]any{"error": map[string]string{"type": "model_not_found", "message": message}})
+	if err != nil {
+		writeRouteError(w, http.StatusNotFound, ErrModelUnsupported)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write(payload)
 }
 
 func writeRouteError(w http.ResponseWriter, status int, err error) {
