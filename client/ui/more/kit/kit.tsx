@@ -310,6 +310,15 @@ export function Field(props: {
   );
 }
 
+/** A page the new app has not built yet: it says so, so nothing goes missing silently. */
+export function NotBuiltYet(props: { title: string }) {
+  return (
+    <Page title={props.title} testID="not-built-yet">
+      <EmptyState title="Not built yet" detail={`${props.title} comes in a later build of this preview.`} />
+    </Page>
+  );
+}
+
 /** Asks before an irreversible step; resolves true when the person chose `action`. */
 export async function confirmDestructive(title: string, message: string, action: string): Promise<boolean> {
   const answer = await AlertDialog.show({

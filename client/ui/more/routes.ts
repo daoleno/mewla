@@ -15,6 +15,8 @@ export type MorePage =
   | { name: "settings-agents" }
   | { name: "settings-friends" }
   | { name: "settings-iphone" }
+  | { name: "settings-phone" }
+  | { name: "settings-virtual-screen" }
   | { name: "settings-pet" }
   | { name: "settings-licenses" }
   | { name: "settings-license"; id: string }
