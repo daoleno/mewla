@@ -1,8 +1,9 @@
-import { effect, openUrl, signal, Storage, setColorScheme, untracked, View } from "nsh";
+import { effect, host, lifecycle, openUrl, platform, signal, Storage, setColorScheme, untracked, View } from "nsh";
+import { loadStrongAlerts, setStrongAlerts, strongAlerts } from "../../calendar/state";
 import manifest from "../../nsh.json";
 import { daemon, daemonState } from "../daemon";
 import { Icon } from "../kit/Icon";
-import { Page, Row, Section, StatusMark } from "../kit/kit";
+import { Page, Row, Section, StatusMark, SwitchRow } from "../kit/kit";
 import type { PageNav } from "../routes";
 import { current, servers } from "../../session";
 import { probeComputers, statusWord } from "./computers";
@@ -31,12 +32,28 @@ function chooseAppearance(next: Appearance): void {
   void Storage.setItem(APPEARANCE_KEY, next === "system" ? "system" : `classic-${next}`).catch(() => {});
 }
 
+/** Whether Android lets the calendar alert show over the lock screen (null: not asked, or not Android). */
+const fullScreenAllowed = signal<boolean | null>(null);
+
+function readAlertCapabilities(): void {
+  if (platform.os !== "android" || !host.available()) return;
+  void host
+    .call<{ fullScreen?: boolean }>("calendar.alertsCapabilities")
+    .then((caps) => fullScreenAllowed.set(caps?.fullScreen !== false))
+    .catch(() => fullScreenAllowed.set(null));
+}
+
 export const PRIVACY_URL = "https://mewla.ai/privacy/";
 export const SUPPORT_URL = "https://mewla.ai/support/";
 
 /** Settings: the computers, then each thing this phone decides, then About. */
 export function Settings(props: { nav: PageNav; onPair: () => void }) {
   void untracked(probeComputers);
+  void loadStrongAlerts();
+  // Back from Android's settings: ask again whether the lock-screen alert is allowed.
+  effect(() => {
+    if (lifecycle() === "active") untracked(readAlertCapabilities);
+  });
   effect(() => {
     if (daemon() && daemonState() === "connected") untracked(loadTelegram);
   });
@@ -79,6 +96,21 @@ export function Settings(props: { nav: PageNav; onPair: () => void }) {
         <Row testID="settings-friends" icon="people" title="Friends" chevron onPress={() => props.nav.push({ name: "settings-friends" })} />
         <Row testID="settings-iphone" icon="phone" title="iPhone use" disabled={!current()} chevron onPress={current() ? () => props.nav.push({ name: "settings-iphone" }) : undefined} />
       </Section>
+
+      {platform.os === "web" ? null : (
+        <Section title="Calendar">
+          <SwitchRow testID="strong-alerts" title="Strong calendar alerts" checked={strongAlerts()} onChange={(on) => void setStrongAlerts(on)} />
+          {platform.os === "android" && strongAlerts() && fullScreenAllowed() === false ? (
+            <Row
+              testID="full-screen-alerts"
+              title="Allow full-screen alerts"
+              subtitle="Android needs your OK to show an alert over the lock screen"
+              chevron
+              onPress={() => void host.call("calendar.alertsOpenSettings").catch(() => {})}
+            />
+          ) : null}
+        </Section>
+      )}
 
       <Section title="Appearance">
         {(["system", "light", "dark"] as const).map((choice) => (
