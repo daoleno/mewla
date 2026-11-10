@@ -832,7 +832,12 @@ func (o *Owner) refreshRouteModelCatalog(profileID string) (RouteModelCatalog, e
 	if cache != nil {
 		if e, ok := cache.get(id); ok && !e.FetchedAt.IsZero() && o.routeRefreshNow().Sub(e.FetchedAt) < routeRefreshMinAge {
 			o.mu.Unlock()
-			return o.routeModelCatalog(profileID)
+			catalog, cerr := o.routeModelCatalog(profileID)
+			if cerr == nil && e.Err != "" {
+				// The fetch that just failed is still the latest word.
+				cerr = errors.New(e.Err)
+			}
+			return catalog, cerr
 		}
 	}
 	call := &routeRefreshCall{done: make(chan struct{})}

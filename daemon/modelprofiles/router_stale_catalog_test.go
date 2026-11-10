@@ -218,6 +218,13 @@ func TestStaleCatalogKeepsLastKnownGoodWhenUpstreamIsDown(t *testing.T) {
 	if code != http.StatusNotFound || !strings.Contains(body, "could not be refreshed") || !strings.Contains(body, `"claude-new"`) || !strings.Contains(body, `"Studio Gateway"`) {
 		t.Fatalf("down upstream + unknown model: want a refusal that says the list could not be refreshed, got %d %s", code, body)
 	}
+	// A second miss inside the cooldown must not refetch, and still says the
+	// list could not be refreshed.
+	hits := f.listHits.Load()
+	_, raw2 := f.message("claude-newer")
+	if f.listHits.Load() != hits || !strings.Contains(raw2, "could not be refreshed") {
+		t.Fatalf("second miss inside the cooldown: refetched=%t body=%s", f.listHits.Load() != hits, raw2)
+	}
 	// Last-known-good is untouched: the old model still routes and the list is intact.
 	if code, _ := f.message("claude-old"); code != http.StatusOK {
 		t.Fatalf("last-known-good model must keep working with the upstream down, got %d", code)
