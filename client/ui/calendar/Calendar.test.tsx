@@ -56,13 +56,14 @@ describe("the Calendar tab", () => {
 
   test("a new item starts at the next quarter hour an hour from now, in the phone's zone", async () => {
     // The wall clock in Shanghai (GMT+8, no daylight saving) as the editor's time field shows it.
-    const expected = () => {
-      const at = new Date(Math.ceil((Date.now() + 3_600_000) / 900_000) * 900_000 + 8 * 3_600_000);
+    const expected = (now = Date.now()) => {
+      const at = new Date(Math.ceil((now + 3_600_000) / 900_000) * 900_000 + 8 * 3_600_000);
       const hour = at.getUTCHours();
       return `${hour % 12 || 12}:${String(at.getUTCMinutes()).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
     };
     const app = await calendarApp({ calendar_items: [] });
-    const before = expected();
+    // The editor reads the Calendar's clock, which ticks every 30 s: it may be that much behind.
+    const before = expected(Date.now() - 31_000);
     await app.press("id:add-item");
     await app.waitFor("id:calendar-editor");
     // Either side of a quarter hour passing while the editor opens.
