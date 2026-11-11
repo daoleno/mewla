@@ -35,14 +35,17 @@ function guardedOpen(props: { open?: boolean | null; onOpenChange?: (event: { op
 /** NSH's Dialog (a page sheet on iOS), closed by a switch of computer like AppSheet. */
 export function GuardedDialog(props: DialogProps) {
   const open = guardedOpen(props);
-  return <Dialog {...props} open={open()} />;
+  return <Dialog {...props} class={`${INK} ${props.class ?? ""}`} open={open()} />;
 }
 
 /** NSH's bottom sheet, closed by a switch of computer like AppSheet. */
 export function GuardedSheet(props: SheetProps) {
   const open = guardedOpen(props);
-  return <Sheet {...props} open={open()} />;
+  return <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} open={open()} />;
 }
+
+/** The theme's ink for a sheet's or dialog's texts that say no color of their own (NSH draws them black; unreadable in Dark). */
+const INK = "text-foreground";
 
 /** The card a sheet becomes on the desktop: centered near the top, one inset all round (app/DESIGN.md). */
 const DIALOG = "mt-24 w-[560px] max-w-[92%] self-center overflow-hidden rounded-xl border border-border";
@@ -54,8 +57,8 @@ const DIALOG = "mt-24 w-[560px] max-w-[92%] self-center overflow-hidden rounded-
  */
 export function AppSheet(props: SheetProps & { testID?: string }) {
   const open = guardedOpen(props);
-  if (mobile) return <Sheet {...props} open={open()} />;
-  const popup = () => `${DIALOG} ${(props.popupClass ?? "").replace(/\brounded-t-\S+/g, "")}`;
+  if (mobile) return <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} open={open()} />;
+  const popup = () => `${DIALOG} ${INK} ${(props.popupClass ?? "").replace(/\brounded-t-\S+/g, "")}`;
   return (
     <>
       {desktop() ? (
@@ -64,7 +67,7 @@ export function AppSheet(props: SheetProps & { testID?: string }) {
           onOpenChange={({ open, reason }) => props.onOpenChange?.({ open, reason })} onCancel={props.onCancel} onClose={props.onClose}>
           {props.children}
         </Dialog>
-      ) : <Sheet {...props} open={open()} />}
+      ) : <Sheet {...props} popupClass={`${INK} ${props.popupClass ?? ""}`} open={open()} />}
     </>
   );
 }

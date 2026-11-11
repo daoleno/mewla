@@ -16,6 +16,15 @@ export type AppNavPageProps = NavPageProps & {
 };
 
 /**
+ * NSH draws a Text with no color of its own black, and the system header in the platform's light
+ * colors: in Dark both were unreadable on the dark page (FINAL-VERIFY 6387f88f settings [94]). A
+ * page gives its texts the theme's ink (a text's or a button's own color still wins), and its
+ * system header the page's paper and ink in both appearances.
+ */
+const INK = "text-foreground";
+const HEADER = "bg-background text-foreground tint-foreground";
+
+/**
  * The app's page. iOS and Android draw their system header from `title`,
  * `headerLeft`, `headerTitle` and `headerRight`; the desktops and the web draw
  * none, so there these become the page's own 52 pt header: Back when the page
@@ -24,15 +33,15 @@ export type AppNavPageProps = NavPageProps & {
  */
 export function NavPage(props: AppNavPageProps) {
   if (mobile) {
-    const [, rest] = split(props, ["column", "frame"]);
-    return <BaseNavPage {...rest} />;
+    const [own, rest] = split(props, ["column", "frame", "class", "headerClass"]);
+    return <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`} headerClass={own.headerClass ?? HEADER} />;
   }
   // Read once each, into the one header: forwarded too, they would be made twice.
-  const [own, rest] = split(props, ["header", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children"]);
+  const [own, rest] = split(props, ["header", "headerLeft", "headerRight", "headerTitle", "column", "frame", "children", "class"]);
   const stack = PageStack();
   const width = () => pageColumnWidth(own.column ?? "page");
   return (
-    <BaseNavPage {...rest}
+    <BaseNavPage {...rest} class={`${INK} ${own.class ?? ""}`}
       header={own.header ?? <PageHeader title={props.title} titleView={own.headerTitle} left={own.headerLeft} right={own.headerRight} width={width()} canGoBack={stack.canGoBack} back={stack.back} />}>
       {own.frame === false || width() === null
         ? own.children
