@@ -1,4 +1,4 @@
-import { Scroll, signal, Text, View, WebView } from "nsh";
+import { platform, Scroll, signal, Text, View, WebView } from "nsh";
 import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
@@ -38,8 +38,18 @@ const KEYS: { key: ScreenKey; label: string; name: string }[] = [
   { key: "Right", label: "→", name: "Right arrow" },
 ];
 
-export function modifiersFor(platform: string | undefined): RemoteModifier[] {
-  return platform === "darwin" || platform === "macos" ? MAC_MODIFIERS : platform === "windows" ? WINDOWS_MODIFIERS : LINUX_MODIFIERS;
+export function modifiersFor(os: string | undefined): RemoteModifier[] {
+  return os === "darwin" || os === "macos" ? MAC_MODIFIERS : os === "windows" ? WINDOWS_MODIFIERS : LINUX_MODIFIERS;
+}
+
+/**
+ * Whether typing goes through the system's soft keyboard (a hidden field, the
+ * key bar and a keyboard button). A browser with a mouse has a keyboard of its
+ * own: a click gives the picture the keys, and the viewer sends every key,
+ * modifiers, shortcuts and paste included, as the Expo web app did.
+ */
+export function needsSoftKeyboard(): boolean {
+  return platform.os !== "web" || !platform.desktop;
 }
 
 // The document's base: WebCodecs (the video decoder) exists only in a secure
@@ -288,6 +298,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
   const mods = signal<ModifierState>(NO_MODIFIERS);
   const value = signal(KEYBOARD_SENTINEL);
   let input: InputRef | null = null;
+  const soft = needsSoftKeyboard();
   html ??= viewerHtml();
 
   const typed = (next: string) => {
@@ -316,24 +327,27 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
         scrollable={false}
         onMessage={(e) => props.session.onViewer(e.data)}
       />
-      <Input
-        ref={(node: InputRef) => {
-          input = node;
-        }}
-        testID="remote-keyboard"
-        accessibilityLabel="Type on the remote screen"
-        class="absolute h-px w-px opacity-0"
-        value={value()}
-        autoCapitalize="none"
-        autoCorrect={false}
-        autoComplete="off"
-        caret={false}
-        keyboardType="default"
-        onChange={({ value: next }) => typed(next)}
-        onSubmit={() => press("Return")}
-        onBlur={() => props.onTypingChange(false)}
-      />
-      {props.typing ? (
+      {/* A browser's own keyboard types into the picture: no field, no key bar. */}
+      {soft ? (
+        <Input
+          ref={(node: InputRef) => {
+            input = node;
+          }}
+          testID="remote-keyboard"
+          accessibilityLabel="Type on the remote screen"
+          class="absolute h-px w-px opacity-0"
+          value={value()}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="off"
+          caret={false}
+          keyboardType="default"
+          onChange={({ value: next }) => typed(next)}
+          onSubmit={() => press("Return")}
+          onBlur={() => props.onTypingChange(false)}
+        />
+      ) : null}
+      {soft && props.typing ? (
         // A narrow phone may not fit every key: the bar scrolls sideways.
         <Scroll horizontal testID="remote-key-bar" class="grow-0 border-t border-border bg-card" contentClass="flex-row items-center gap-1.5 px-2 py-1.5" keyboardShouldPersistTaps="always">
           {props.modifiers.map((modifier) => {
@@ -360,6 +374,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
       ) : null}
       {(() => {
         // Bring the keyboard up or down when the page asks.
+        if (!soft) return null;
         if (props.typing) queueMicrotask(() => input?.focus());
         else queueMicrotask(() => input?.blur());
         return null;
