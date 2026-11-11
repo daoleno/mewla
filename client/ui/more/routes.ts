@@ -18,7 +18,6 @@ export type MorePage =
   | { name: "settings-phone" }
   | { name: "settings-virtual-screen" }
   | { name: "settings-pet" }
-  | { name: "settings-update" }
   | { name: "settings-licenses" }
   | { name: "settings-license"; id: string }
   | { name: "stats" }

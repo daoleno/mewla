@@ -53,7 +53,6 @@ export function MorePageView(props: { route: MorePage; nav: PageNav; onPair: () 
     case "settings-iphone": return <IPhone />;
     case "settings-phone": return <PhonePage />;
     case "settings-virtual-screen": return <VirtualScreenPage />;
-    case "settings-update": return <NotBuiltYet title="App updates" />;
     case "settings-pet": return <PetPage />;
     case "settings-licenses": return <Licenses nav={props.nav} />;
     case "settings-license": return <License id={route.id} nav={props.nav} />;

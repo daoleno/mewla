@@ -308,13 +308,6 @@ describe("Model Providers", () => {
 });
 
 describe("Settings rows", () => {
-  test("App updates is there and says it is not built yet", async () => {
-    const s = setup({ page: { name: "settings" } }, none, { platform: "android", network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
-    const app = await open(HARNESS, s.options);
-    await app.press("id:settings-update");
-    await app.waitFor("text:Not built yet");
-  });
-
   test("Telegram says it is unavailable while the computer is away", async () => {
     const s = setup({ page: { name: "settings" }, state: "waiting" }, none, { network: { "GET http://desk.test:9877/auth-check": { status: 503 } } });
     const app = await open(HARNESS, s.options);
