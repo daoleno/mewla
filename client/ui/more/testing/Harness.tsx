@@ -18,7 +18,7 @@ import { current, servers } from "../../session";
  */
 installPlatform(nshPlatform());
 
-const params = host.params as { page?: MorePage; state?: ConnectionState };
+const params = host.params as { page?: MorePage; below?: MorePage; state?: ConnectionState };
 const fake = new FakeDaemon({}, testServer(), params.state ?? "connected");
 fake.request = (async (type: string, body: Record<string, unknown>, options: { reply: string }) => {
   fake.asked.push({ type, body });
@@ -56,7 +56,8 @@ host.on("app.daemonSwitch", (server) => {
   bindDaemon(next);
 });
 
-const nav = createNavStack<MorePage>([params.page ?? { name: "stats" }]);
+// `host.params.below`: a page under it, so a test can go back from the page.
+const nav = createNavStack<MorePage>([...(params.below ? [params.below] : []), params.page ?? { name: "stats" }]);
 
 mount(() => (
   <View class="flex-1 bg-background">
