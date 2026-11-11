@@ -81,9 +81,10 @@ jobs:
         run: |
           brew install xcodegen > /dev/null
           client/scripts/ios-project.sh
+      # A single-display iPhone: `simctl io screenshot` refuses a two-display one (iPhone Duo) without --display.
       - name: Pick a simulator
         run: |
-          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Duo' not in x['name']))")
           echo "SIM=$SIM" >> "$GITHUB_ENV"
       # Signed to run locally: the Keychain refuses an unsigned app.
       # TerminalTests saves the terminal it drew as out/terminal.png.
