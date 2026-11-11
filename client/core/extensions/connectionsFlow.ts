@@ -71,6 +71,7 @@ export class ConnectionsFlow {
   private mutation = false;
   private completion = false;
   private starting = false;
+  private openingBrowser = false;
   private checking: Promise<void> | null = null;
   private attempt = 0;
   private stopPoll: (() => void) | null = null;
@@ -277,15 +278,21 @@ export class ConnectionsFlow {
    */
   async openBrowser(): Promise<void> {
     const active = this.state.flow;
-    if (!active?.flow.authorization_url || !this.alive) return;
-    this.set({ phase: "waiting" });
-    // The code is on screen too; a clipboard that refuses never keeps the page closed.
-    if (active.flow.user_code) await Promise.resolve(this.deps.copy(active.flow.user_code)).catch(() => {});
+    // A second tap while the browser is still opening opens nothing more.
+    if (!active?.flow.authorization_url || !this.alive || this.openingBrowser) return;
+    this.openingBrowser = true;
     try {
-      await this.deps.openUrl(active.flow.authorization_url);
-    } catch {
-      this.fail("The browser could not open. Try again.");
-      return;
+      this.set({ phase: "waiting" });
+      // The code is on screen too; a clipboard that refuses never keeps the page closed.
+      if (active.flow.user_code) await Promise.resolve(this.deps.copy(active.flow.user_code)).catch(() => {});
+      try {
+        await this.deps.openUrl(active.flow.authorization_url);
+      } catch {
+        this.fail("The browser could not open. Try again.");
+        return;
+      }
+    } finally {
+      this.openingBrowser = false;
     }
     await this.check();
   }

@@ -193,4 +193,77 @@ describe("Tools & activity", () => {
     await app.waitFor("id:plugins-error");
     expect(app.texts()).toContain("Policy rejected.");
   });
+
+  test("without an account to show, the page stops loading", async () => {
+    const c = computer({ name: "extensions-tools", service: "notion" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitUntil(() => c.asked.some((r) => r.action === "list"));
+    await app.waitUntil(() => !app.shows("text:Loading tools"));
+  });
+});
+
+const more = [
+  ...catalog,
+  { id: "aws", name: "AWS", available: true, setup_url: "", description: "Cloud accounts" },
+  { id: "hyperliquid", name: "Hyperliquid", available: true, setup_url: "", description: "Markets" },
+];
+const account = (id: string, overrides: Record<string, unknown> = {}) => ({ ...notionAccount, id, name: id, identity: `${id}@example.com`, ...overrides });
+
+describe("As before the rewrite", () => {
+  test("after an AWS sign-in, the card offers a readable profile name and saves it", async () => {
+    const aws = { id: "aws:mewla-temp", integration: "aws", name: "mewla-temp", profile: "mewla-temp", identity: "", enabled: true, status: "connected", history: [], aws: { account_id: "123456789012", account_name: "ACE Labs Mgmt", who: "Admin" }, access: { read: "allowed", write: "off" } };
+    const c = computer({ name: "extensions" }, (request) => {
+      if (request.action === "list") return { catalog: more, accounts: [] };
+      if (request.action === "connect_start") return { flow: { id: "a1", integration: "aws", status: "connected", expires: expires() }, account: aws };
+      if (request.action === "cloud_rename") return { account: { ...aws, id: `aws:${request.profile}`, name: request.profile, profile: request.profile } };
+      return {};
+    });
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("id:connect-aws");
+    await app.press("id:connect-aws");
+    await app.waitFor("id:profile-name");
+    expect(app.value("id:profile-name-field")).toBe("ace-labs-mgmt-admin");
+    await app.press("id:profile-name-save");
+    await app.waitUntil(() => c.asked.some((r) => r.action === "cloud_rename"));
+    expect(c.asked.find((r) => r.action === "cloud_rename")).toEqual({ action: "cloud_rename", id: "aws:mewla-temp", profile: "ace-labs-mgmt-admin" });
+    await app.waitUntil(() => !app.shows("id:connected-card"));
+  });
+
+  test("a custom service's form says where its credentials stay", async () => {
+    const c = computer({ name: "extensions-service", id: "mcp" }, (request) => (request.action === "list" ? { catalog, accounts: [] } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Credentials stay on Desk. Each tool needs your permission.");
+  });
+
+  test("Hyperliquid offers another key only once an account holds one", async () => {
+    const reader = { id: "h1", integration: "hyperliquid", name: "Mainnet", identity: "0xabc", enabled: true, status: "connected", history: [] };
+    let accounts: unknown[] = [reader];
+    const c = computer({ name: "extensions-service", id: "hyperliquid" }, (request) => (request.action === "list" ? { catalog: more, accounts } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:Add API wallet key");
+    accounts = [{ ...reader, signer: "0x1234567890abcdef" }];
+    await app.host.send("app.daemonPush", { type: "connections_changed", connections: { accounts } });
+    await app.waitFor("text:Add another key");
+  });
+
+  test("a service with more than two accounts counts them, and more than eight can be filtered", async () => {
+    const many = Array.from({ length: 9 }, (_, i) => account(`acct-${i + 1}`));
+    const c = computer({ name: "extensions" }, (request) => (request.action === "list" ? { catalog, accounts: many } : {}));
+    const app = await open(HARNESS, c.options);
+    await app.waitFor("text:9 accounts");
+    await app.press("id:service-notion");
+    await app.waitFor("id:filter-accounts");
+    await app.type("id:filter-accounts", "acct-3");
+    await app.waitUntil(() => !app.shows("id:account-acct-4"));
+    expect(app.shows("id:account-acct-3")).toBe(true);
+  });
+
+  test("a computer still out of reach after a moment says so, not at once", async () => {
+    const c = computer({ name: "extensions" }, () => ({}));
+    const options = { host: { ...c.options.host, params: { page: { name: "extensions" }, state: "waiting" } } };
+    const app = await open(HARNESS, options);
+    await app.waitFor("text:Loading services");
+    await app.waitFor("id:services-unavailable", { timeout: 4_000 });
+    expect(app.texts()).toContain("Can't reach your computer.");
+  });
 });
