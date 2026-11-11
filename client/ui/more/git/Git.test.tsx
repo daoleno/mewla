@@ -503,6 +503,27 @@ describe("Git review: the repository's files on a phone", () => {
   });
 });
 
+describe("Git review: searching the repository's files on a phone", () => {
+  test("what a search finds is a list that keeps the keyboard's taps: one press opens the file (FAILURES R4#6)", async () => {
+    const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }]);
+    await app.waitFor("id:git-row-changes:app.ts");
+    app.onDialog((dialog) => (dialog.sheet ? "Browse files" : null));
+    await answering(app, () => app.press("id:git-more"));
+    await app.waitFor("id:git-files-query");
+    await app.type("id:git-files-query", "util");
+    await app.waitFor("id:git-files-results");
+    expect(app.shows("id:git-file-dir:src/lib")).toBe(true);
+    expect(app.shows("id:git-file-app.ts")).toBe(false);
+    // Another search: the list's cells show what this one found, not the last one's rows.
+    await app.clear("id:git-files-query");
+    await app.type("id:git-files-query", "app");
+    await app.waitFor("id:git-file-app.ts");
+    expect(app.shows("id:git-file-src/lib/util.ts")).toBe(false);
+    await app.press("id:git-file-app.ts");
+    await app.waitFor("id:git-file-view");
+  });
+});
+
 describe("Git review on the web", () => {
   test("a right click on a changed file opens its menu, and the diff reads in the browser", async () => {
     const { app, repo } = await openReview([app_ts, notes_md], { platform: "web" });
