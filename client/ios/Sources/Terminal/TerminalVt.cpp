@@ -28,7 +28,42 @@ struct MewlaVt {
     bool force_full = true;
     std::vector<int32_t> meta;
     std::u16string text;
+    // The last text a program copied (OSC 52 and the like) until mewla_vt_take_clipboard,
+    // and what that call handed out, valid until the next one.
+    std::string clipboard;
+    bool has_clipboard = false;
+    std::string taken;
 };
+
+// A program's clipboard write, during ghostty_terminal_vt_write: keep its first text
+// representation for the view to take after the write, and answer.
+static void onClipboardWrite(GhosttyTerminal, void* userdata, const GhosttyClipboardWrite* write)
+{
+    if (!write) {
+        return;
+    }
+    auto* vt = static_cast<MewlaVt*>(userdata);
+    GhosttyClipboardWriteReply reply = GHOSTTY_INIT_SIZED(GhosttyClipboardWriteReply);
+    reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+    for (size_t i = 0; vt && write->contents && i < write->contents_len; i++) {
+        const GhosttyClipboardContent& content = write->contents[i];
+        const std::string mime = content.mime.ptr
+            ? std::string(reinterpret_cast<const char*>(content.mime.ptr), content.mime.len)
+            : std::string();
+        if (mime.rfind("text/", 0) != 0) {
+            continue;
+        }
+        vt->clipboard = content.data.ptr
+            ? std::string(reinterpret_cast<const char*>(content.data.ptr), content.data.len)
+            : std::string();
+        vt->has_clipboard = true;
+        reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+        break;
+    }
+    if (write->reply) {
+        write->reply(write, &reply);
+    }
+}
 
 static GhosttyResult createTerminalInstance(uint16_t cols, uint16_t rows, GhosttyTerminal* out)
 {
@@ -171,7 +206,27 @@ extern "C" MewlaVt* mewla_vt_create(uint16_t cols, uint16_t rows)
         delete vt;
         return nullptr;
     }
+    // OSC 52 and the other clipboard writes reach the view; a failure here only loses copying.
+    if (ghostty_terminal_set(vt->terminal, GHOSTTY_TERMINAL_OPT_USERDATA, vt) != GHOSTTY_SUCCESS ||
+        ghostty_terminal_set(vt->terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, reinterpret_cast<const void*>(&onClipboardWrite)) != GHOSTTY_SUCCESS) {
+        LOGE("clipboard write callback not set");
+    }
     return vt;
+}
+
+extern "C" bool mewla_vt_take_clipboard(MewlaVt* vt, const uint8_t** data, size_t* length)
+{
+    *data = nullptr;
+    *length = 0;
+    if (!vt->has_clipboard) {
+        return false;
+    }
+    vt->has_clipboard = false;
+    vt->taken.swap(vt->clipboard);
+    vt->clipboard.clear();
+    *data = reinterpret_cast<const uint8_t*>(vt->taken.data());
+    *length = vt->taken.size();
+    return true;
 }
 
 extern "C" void mewla_vt_destroy(MewlaVt* vt)

@@ -1,10 +1,14 @@
-import { cleanup, colorScheme, keyboardFrame, signal, Text, token, View, type NativeComponentRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, keyboardFrame, openUrl, signal, Text, token, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
+import { TerminalNavigator } from "../../core/terminal/navigation";
 import { TerminalSession } from "../../core/terminal/session";
+import { HISTORY_FAILED } from "../../core/terminal/history";
+import { linkAction, NO_SEARCH } from "../../core/terminal/text";
 import type { Transport } from "../../core/transport";
 import { Icon, type IconName } from "../icons/Icon";
 import { belowSections } from "../shell/Shell";
 import { TerminalSurface, type TerminalTheme } from "./contract";
+import { TerminalJumpControls, TerminalRendererFailure, TerminalSearchBar } from "./TerminalOverlays";
 
 const PALETTE_DARK = ["#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea"];
 const PALETTE_LIGHT = ["#161412", "#b3372b", "#3f7a33", "#946112", "#2c55c0", "#80428f", "#21787a", "#d8d2c8", "#57514a", "#d24a3c", "#4f9441", "#b37a1a", "#3d6be0", "#9b56ab", "#2a9396", "#fbfaf7"];
@@ -39,28 +43,55 @@ export function withControl(data: string): string {
   return data;
 }
 
+/** A tapped file path, for the Session's file preview: `line` and `column` when the path carried them (`a.ts:12:5`). */
+export type TerminalPathPosition = { line?: number; column?: number };
+
 /**
- * A Session's terminal: the native view, attached to the Session's tmux pane,
- * with the key bar above the keyboard. Scrolling the view drives tmux's copy
- * mode on the computer; "Latest" comes back to the live screen.
+ * A Session's terminal: the native view, attached to the Session's pane, with
+ * the key bar above the keyboard. The view scrolls the history the computer
+ * keeps; scrolled up, it offers search, the previous and next prompt and the
+ * way back to the live screen. A tapped URL opens in the browser and a tapped
+ * file path (or file: URL) goes to `onOpenPath`; text a program copies
+ * (OSC 52) reaches the clipboard.
  */
-export function TerminalPane(props: { transport: Transport; targetId: string; active: () => boolean }) {
+export function TerminalPane(props: { transport: Transport; targetId: string; active: () => boolean; onOpenPath?: (path: string, position: TerminalPathPosition) => void }) {
   let surface: NativeComponentRef | undefined;
   const ctrl = signal(false);
   const keyboard = signal(false);
+  /** The view's own history viewport is above the live screen. */
   const scrolledBack = signal(false);
+  /** tmux copy mode on the computer (`terminal_scroll_state`). */
+  const copyMode = signal(false);
   const problem = signal("");
   const exited = signal<number | null | undefined>(undefined);
-  const pending: string[] = [];
+  const historyNotice = signal("");
+  const searching = signal(false);
+  const search = signal(NO_SEARCH);
+  const rendererFailure = signal<string | null>(null);
+  const pending: Array<[string, unknown]> = [];
+  /** Commands for the view, held until it exists. */
+  const command = (name: string, args: unknown) => (surface ? surface.command(name, args) : pending.push([name, args]));
 
-  const session = new TerminalSession(props.transport, props.targetId, {
+  const nav = new TerminalNavigator(() => session.history, {
+    scrollTo: (row) => command("scrollTo", { row }),
+    scrollToBottom: () => command("scrollToBottom", {}),
+    mark: (row) => command("mark", { row }),
+  }, (state) => search.set(state));
+
+  const session: TerminalSession = new TerminalSession(props.transport, props.targetId, {
     reset: () => {
-      pending.length = 0;
+      for (let i = pending.length - 1; i >= 0; i--) if (pending[i][0] === "write") pending.splice(i, 1);
       problem.set("");
-      surface ? surface.command("reset", {}) : undefined;
+      copyMode.set(false);
+      command("reset", {});
     },
-    output: (data) => (surface ? surface.command("write", { data }) : pending.push(data)),
-    scrollState: (s) => scrolledBack.set(!s.atBottom),
+    output: (data) => command("write", { data }),
+    scrollState: (s) => copyMode.set(!s.atBottom),
+    history: (render) => {
+      command("history", render);
+      nav.historyChanged(render);
+    },
+    historyNotice: (text) => historyNotice.set(text),
     exit: (code) => exited.set(code),
     error: (message) => problem.set(message),
   });
@@ -91,37 +122,91 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
   };
   cleanup(release);
 
+  /** Back to the live screen: the view's history and tmux copy mode. */
+  const toBottom = () => {
+    command("scrollToBottom", {});
+    if (copyMode()) session.scrollToBottom();
+    copyMode.set(false);
+  };
+  const closeSearch = () => {
+    searching.set(false);
+    nav.clearSearch();
+  };
+  const focusKeyboard = () => {
+    command("focus", {});
+    keyboard.set(true);
+  };
+
+  // A tap: a link opens; elsewhere on the live screen, the keyboard and the pane under the finger.
+  const tap = (col: number, row: number, text: string, index: number) => {
+    const link = index >= 0 ? linkAction(text, index) : null;
+    if (link?.kind === "url") return void openUrl(link.url).catch(() => {});
+    if (link?.kind === "path") return props.onOpenPath?.(link.path, { ...(link.line !== undefined ? { line: link.line } : {}), ...(link.column !== undefined ? { column: link.column } : {}) });
+    if (row < 0) return;
+    if (scrolledBack() || copyMode()) toBottom();
+    focusKeyboard();
+    session.focusPane(col, row);
+  };
+
   return (
     <View class="flex-1" style={{ backgroundColor: token("background") }}>
-      <TerminalSurface class="flex-1" fontSize={13} theme={theme()}
-        ref={(node) => {
-          surface = node;
-          for (const data of pending.splice(0)) node.command("write", { data });
-        }}
-        onSize={({ cols, rows }) => session.resize(cols, rows)}
-        onInput={({ data }) => type(data)}
-        onScroll={({ lines }) => session.scroll(lines)}
-        onTapCell={({ col, row }) => {
-          keyboard.set(true);
-          session.focusPane(col, row);
-        }} />
-      {problem() || exited() !== undefined ? (
-        <View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
-          <Text testID="terminal-notice" class="text-sm">{exited() !== undefined ? `The program ended${exited() === null ? "" : ` (exit ${exited()})`}.` : problem()}</Text>
-        </View>
-      ) : null}
-      {scrolledBack() ? (
-        <Button testID="terminal-latest" onPress={() => session.scrollToBottom()} class="absolute bottom-16 right-3 flex-row items-center gap-1 rounded-full border border-border bg-card px-3 py-1.5 active:bg-accent">
-          <Icon name="arrow-down" size={16} />
-          <Text class="text-sm">Latest</Text>
-        </Button>
-      ) : null}
+      {/* The surface and what floats over it, above the key bar (and so above the keyboard). */}
+      <View class="flex-1">
+        <TerminalSurface class="flex-1" fontSize={13} theme={theme()}
+          ref={(node) => {
+            surface = node;
+            for (const [name, args] of pending.splice(0)) node.command(name, args);
+          }}
+          onSize={({ cols, rows }) => {
+            rendererFailure.set(null);
+            nav.setGridRows(rows);
+            session.resize(cols, rows);
+          }}
+          onFailed={({ message }) => rendererFailure.set(message)}
+          onInput={({ data }) => {
+            if (scrolledBack()) command("scrollToBottom", {});
+            type(data);
+          }}
+          onScroll={({ lines }) => session.scroll(lines)}
+          onViewport={({ top, atBottom }) => {
+            nav.viewport(top, atBottom);
+            scrolledBack.set(!atBottom);
+          }}
+          onTapCell={({ col, row, text, index }) => tap(col, row, text, index)}
+          onCopy={({ text }) => void Clipboard.writeText(text).catch(() => {})} />
+        {problem() || exited() !== undefined ? (
+          <View class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
+            <Text testID="terminal-notice" class="text-sm">{exited() !== undefined ? `The program ended${exited() === null ? "" : ` (exit ${exited()})`}.` : problem()}</Text>
+          </View>
+        ) : (scrolledBack() || copyMode()) && historyNotice() && !searching() ? (
+          <Button testID="terminal-history-notice" disabled={historyNotice() !== HISTORY_FAILED} onPress={() => session.retryHistory()}
+            class="absolute left-3 right-3 top-3 rounded-xl border border-border bg-card px-3 py-2">
+            <Text class="text-sm text-muted-foreground">{historyNotice()}</Text>
+          </Button>
+        ) : null}
+        {(scrolledBack() || copyMode()) && rendererFailure() === null ? (
+          <TerminalJumpControls onSearch={() => searching.set(true)} onPrompt={(direction) => nav.jumpPrompt(direction)}
+            onBottom={() => {
+              closeSearch();
+              toBottom();
+            }} />
+        ) : null}
+        {searching() && rendererFailure() === null ? (
+          <TerminalSearchBar state={search} onQuery={(query) => nav.runSearch(query, 0)} onStep={(step) => nav.step(step)} onClose={closeSearch} />
+        ) : null}
+        {rendererFailure() !== null ? (
+          <TerminalRendererFailure message={rendererFailure()!} onRetry={() => command("retry", {})} />
+        ) : null}
+      </View>
       <View class="flex-row items-center gap-1 border-t border-border bg-background px-1.5 py-1.5"
         style={{ marginBottom: props.active() ? Math.max(0, keyboardFrame().height - belowSections()) : 0 }}>
         <Button testID="terminal-keyboard" onPress={() => {
           const show = keyboardFrame().height === 0;
-          surface?.command(show ? "focus" : "blur", {});
-          keyboard.set(show);
+          if (show) focusKeyboard();
+          else {
+            command("blur", {});
+            keyboard.set(false);
+          }
         }} class="rounded-lg px-2 py-2 active:bg-accent">
           <Icon name="keyboard" size={18} color="foreground" />
         </Button>

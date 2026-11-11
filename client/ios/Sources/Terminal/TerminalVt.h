@@ -40,6 +40,9 @@ bool mewla_vt_set_theme(MewlaVt *vt, uint32_t foreground, uint32_t background, u
 void mewla_vt_write(MewlaVt *vt, const uint8_t *_Nullable data, size_t length);
 /// The rows that changed (every row with `force_full`, or after a resize or a theme).
 bool mewla_vt_frame(MewlaVt *vt, bool force_full, MewlaVtFrame *out);
+/// The text a program copied (OSC 52, OSC 1337 Copy, OSC 5522) during the writes since the
+/// last call, once: UTF-8 in `*data` (valid until the next call on `vt`). False when none.
+bool mewla_vt_take_clipboard(MewlaVt *vt, const uint8_t *_Nullable *_Nonnull data, size_t *length);
 
 #pragma clang assume_nonnull end
 
