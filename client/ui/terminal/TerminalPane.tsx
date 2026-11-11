@@ -1,4 +1,4 @@
-import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
+import { cleanup, Clipboard, colorScheme, effect, keyboardFrame, openUrl, platform, signal, Text, token, untracked, View, type NativeComponentRef } from "nsh";
 import { Button } from "nsh/base";
 import { TerminalNavigator } from "../../core/terminal/navigation";
 import { TerminalSession } from "../../core/terminal/session";
@@ -10,6 +10,10 @@ import { AttachmentTray, createAttachmentUploads } from "../more/files/Pages";
 import { belowSections } from "../shell/Shell";
 import { TerminalSurface, type TerminalTheme } from "./contract";
 import { TerminalJumpControls, TerminalRendererFailure, TerminalSearchBar } from "./TerminalOverlays";
+import { keyboardOnlyWeb, WebTerminalSurface } from "./web/WebTerminalSurface";
+
+/** The phones' native view; the web's is xterm.js in a web view, with the same contract. */
+const Surface: typeof TerminalSurface = platform.os === "web" ? WebTerminalSurface : TerminalSurface;
 
 const PALETTE_DARK = ["#1d1b19", "#e0685a", "#8fbf7f", "#e3b55f", "#7aa2f7", "#c49bd8", "#6fc1c1", "#d8d2c8", "#57514a", "#ff8a7a", "#a8d898", "#f2cb7c", "#9ab6ff", "#d9b2ea", "#8ed8d8", "#f4f0ea"];
 const PALETTE_LIGHT = ["#161412", "#b3372b", "#3f7a33", "#946112", "#2c55c0", "#80428f", "#21787a", "#d8d2c8", "#57514a", "#d24a3c", "#4f9441", "#b37a1a", "#3d6be0", "#9b56ab", "#2a9396", "#fbfaf7"];
@@ -185,7 +189,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
     <View class="flex-1" style={{ backgroundColor: token("background") }}>
       {/* The surface and what floats over it, above the key bar (and so above the keyboard). */}
       <View class="flex-1">
-        <TerminalSurface class="flex-1" fontSize={13} theme={theme()}
+        <Surface class="flex-1" fontSize={13} theme={theme()}
           ref={(node) => {
             surface = node;
             for (const [name, args] of pending.splice(0)) node.command(name, args);
@@ -238,6 +242,8 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
         <Button testID="terminal-attach" accessibilityLabel="Attach" disabled={uploads.picking()} onPress={attach} class="rounded-lg px-2 py-2 active:bg-accent">
           <Icon name="attach" size={16} />
         </Button>
+        {/* A physical keyboard has every key here (keyboard-only web): only Attach stays. */}
+        {keyboardOnlyWeb() ? null : (<>
         <Button testID="terminal-keyboard" onPress={() => {
           const show = keyboardFrame().height === 0;
           if (show) focusKeyboard();
@@ -255,6 +261,7 @@ export function TerminalPane(props: { transport: Transport; targetId: string; ac
               : <Text class={key.id === "ctrl" && ctrl() ? "text-sm font-semibold text-primary-foreground" : "text-sm font-semibold"}>{key.label}</Text>}
           </Button>
         ))}
+        </>)}
       </View>
     </View>
   );
