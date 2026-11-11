@@ -11,6 +11,8 @@ export interface TerminalRouteSessionHint {
   cwd?: string;
   command?: string;
   startedAt?: number;
+  /** Just created from New session: the composer takes focus once. */
+  focusComposer?: boolean;
 }
 
 /** Agents with a structured chat surface (provider-neutral conversation UI). */
