@@ -22,11 +22,9 @@ export function refreshReminders(): void {
   });
 }
 
-let watching = false;
-function watch(): void {
-  if (watching || !host.available()) return;
-  watching = true;
-  // Checked again whenever the app comes back: the person may have changed it in Settings.
+/** At start, beside the other notification effects: checked again whenever the app comes back (the person may have changed it in Settings). */
+export function startReminderBanner(): void {
+  if (!host.available()) return;
   effect(() => {
     if (lifecycle() === "active") refreshReminders();
   });
@@ -36,7 +34,6 @@ const failure = signal("");
 
 /** Calendar's banner while the phone cannot remind: Enable asks, Settings leads where a no is undone. */
 export function ReminderBanner() {
-  watch();
   const enable = async () => {
     const value = await askForReminders(pushHost, Storage);
     permission.set(value);

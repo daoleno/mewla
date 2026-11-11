@@ -1,4 +1,4 @@
-import { List, Scroll, signal, Text, View } from "nsh";
+import { cleanup, List, Scroll, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input, NavPage } from "nsh/base";
 import type { NavStackState } from "nsh/base";
 import { markWorkRead, objectiveLine, workAction } from "../../core/work/brainWork";
@@ -211,6 +211,8 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   const slip = () => workSurface().slips.find((s) => s.workId === props.workId);
   const reply = signal("");
   const files = createAttachmentUploads();
+  // Leaving the page drops what was picked and stops an upload still going.
+  cleanup(() => files.dispose());
   const attachFailure = signal("");
   // An open page follows the Work; a successful action closes it, and the list says what happened.
   const context = (): ActionContext => ({
