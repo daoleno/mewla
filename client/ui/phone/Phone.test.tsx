@@ -80,6 +80,11 @@ function start(status: Status, extra: { answers?: Record<string, unknown>; param
 }
 
 type App = Awaited<ReturnType<typeof open>>;
+/** The host's Phone use moves to `status`: it says so (`phone.status`) and answers it from now on, as Android's does. */
+async function pushStatus(app: App, fake: { box: { status: Status } }, status: Status) {
+  fake.box.status = status;
+  await app.host.send("phone.status", status);
+}
 const calls = (app: App, name: string) => app.host.calls().filter((c) => c.name === name).map((c) => c.data);
 
 describe("Phone use, off", () => {
@@ -160,14 +165,14 @@ describe("Phone use, setup", () => {
   }, 20_000);
 
   test("with the service on, Set up walks Settings; only what Android reserves is asked of the person", async () => {
-    const { options } = start({ ...fresh, accessibility: true }, { answers: { "phone.pair": () => new Promise(() => {}) } });
+    const { fake, options } = start({ ...fresh, accessibility: true }, { answers: { "phone.pair": () => new Promise(() => {}) } });
     const app = await open(HARNESS, options);
     await app.waitFor("text:Set up");
     await app.press("id:phone-setup-primary");
     await app.waitUntil(() => calls(app, "phone.pair").length === 1);
-    await app.host.send("phone.status", { ...fresh, accessibility: true, guide: { step: "developer", needs: "lock", stalled: false } });
+    await pushStatus(app, fake, { ...fresh, accessibility: true, guide: { step: "developer", needs: "lock", stalled: false } });
     await app.waitFor("text:Confirm your screen lock");
-    await app.host.send("phone.status", { ...fresh, accessibility: true, developer_options: true, guide: { step: "wireless", needs: "allow", stalled: false } });
+    await pushStatus(app, fake, { ...fresh, accessibility: true, developer_options: true, guide: { step: "wireless", needs: "allow", stalled: false } });
     await app.waitFor("text:Tap Allow on the system prompt");
   }, 20_000);
 
@@ -197,7 +202,7 @@ describe("Phone use, live", () => {
   }, 20_000);
 
   test("an agent at work: its name, Float, Take over and Stop; taking over offers Give back", async () => {
-    const { options } = start(working);
+    const { fake, options } = start(working);
     const app = await open(HARNESS, options);
     await app.waitFor("text:Writer");
     await app.press("label:Float");
@@ -205,7 +210,7 @@ describe("Phone use, live", () => {
     expect(calls(app, "phone.enterPip")).toEqual([{ w: 720, h: 1600 }]);
     await app.press("id:phone-take-over");
     await app.waitUntil(() => calls(app, "phone.takeOver").length === 1);
-    await app.host.send("phone.status", { ...working, state: "person_in_control" });
+    await pushStatus(app, fake, { ...working, state: "person_in_control" });
     await app.waitFor("id:phone-give-back");
     await app.press("id:phone-give-back");
     await app.waitUntil(() => calls(app, "phone.giveBack").length === 1);
@@ -285,16 +290,16 @@ describe("Phone use, the floating screen", () => {
   }, 20_000);
 
   test("driving offers Give back, a handoff Done with the ring; an app that could not open says so", async () => {
-    const { options } = start({ ...working, state: "person_in_control" }, { params: { page: "home" } });
+    const { fake, options } = start({ ...working, state: "person_in_control" }, { params: { page: "home" } });
     const app = await open(HARNESS, options);
     const menu = menus(app);
     await app.waitFor("id:screen-float");
     expect(await menu(null)).toEqual(["Give back", "Stop", "Cancel"]);
-    await app.host.send("phone.status", { ...working, state: "person_in_control", handoff: "Pay" });
+    await pushStatus(app, fake, { ...working, state: "person_in_control", handoff: "Pay" });
     await app.waitFor("id:screen-float-attention");
     expect(await menu("Done")).toEqual(["Done", "Stop", "Cancel"]);
     await app.waitUntil(() => calls(app, "phone.handoffDone").length === 1);
-    await app.host.send("phone.status", { ...working, drawn: false, launch_failed: "微信" });
+    await pushStatus(app, fake, { ...working, drawn: false, launch_failed: "微信" });
     await app.waitFor("text:Couldn't open 微信");
   }, 20_000);
 
