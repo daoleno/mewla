@@ -15,7 +15,7 @@ import {
   type GitReviewGroup,
   type GitReviewRow,
 } from "../../../core/git/gitReviewModel";
-import { formatGitAge } from "../../../core/git/gitReviewTime";
+import { formatGitAge, spokenGitAge } from "../../../core/git/gitReviewTime";
 import { EmptyState, Field, Notice, Page, Row, Section, Spinner, Tag } from "../kit/kit";
 import { Icon } from "../kit/Icon";
 import { Segmented } from "../kit/Segmented";
@@ -440,7 +440,7 @@ function CommitRow(props: { review: GitReview; nav: PageNav; commit: GitCommitSu
       testID={`git-commit-${c.short}`}
       title={c.subject || "(no message)"}
       subtitle={[c.short, c.author, formatGitAge(c.date)].join(" · ")}
-      accessibilityLabel={`${c.subject || "(no message)"}, ${c.author}, ${formatGitAge(c.date)} ago`}
+      accessibilityLabel={`${c.subject || "(no message)"}, ${c.author}, ${spokenGitAge(c.date)}`}
       trailing={refs ? <Tag label={refs} /> : undefined}
       chevron
       onPress={() => props.nav.push({ name: "git-commit", ...target(props.review), sha: c.sha })}
