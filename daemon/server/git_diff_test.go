@@ -171,3 +171,33 @@ func runGitDiffTestGit(t *testing.T, repoRoot string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// A file staged and changed again: each group's whole sides are that group's
+// comparison (FINAL-VERIFY 6387f88f gitfiles D4: without them the reader fell
+// back to the bare patch, plain and without collapsed context).
+func TestBuildGitDiffFileContentGivesEachGroupItsSides(t *testing.T) {
+	repoRoot := initGitDiffTestRepo(t)
+	writeGitDiffTestFile(t, repoRoot, "tracked.txt", "one\n")
+	runGitDiffTestGit(t, repoRoot, "add", "tracked.txt")
+	runGitDiffTestGit(t, repoRoot, "commit", "-m", "initial")
+	writeGitDiffTestFile(t, repoRoot, "tracked.txt", "two\n")
+	runGitDiffTestGit(t, repoRoot, "add", "tracked.txt")
+	writeGitDiffTestFile(t, repoRoot, "tracked.txt", "three\n")
+
+	for _, tc := range []struct{ scope, base, current string }{
+		{"", "one\n", "three\n"},
+		{"staged", "one\n", "two\n"},
+		{"unstaged", "two\n", "three\n"},
+	} {
+		payload, err := (&Server{}).buildGitDiffFileContent("", repoRoot, "tracked.txt", tc.scope)
+		if err != nil {
+			t.Fatalf("scope %q: %v", tc.scope, err)
+		}
+		if payload.Scope != tc.scope || payload.Base.Content != tc.base || payload.Current.Content != tc.current {
+			t.Fatalf("scope %q: got scope %q base %q current %q, want base %q current %q", tc.scope, payload.Scope, payload.Base.Content, payload.Current.Content, tc.base, tc.current)
+		}
+	}
+	if _, err := (&Server{}).buildGitDiffFileContent("", repoRoot, "tracked.txt", "both"); err == nil {
+		t.Fatal("an unknown scope was accepted")
+	}
+}

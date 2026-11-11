@@ -71,10 +71,13 @@ type gitDiffPatchSection struct {
 }
 
 type gitDiffFileContentPayload struct {
-	RepoRoot string                 `json:"repo_root"`
-	Path     string                 `json:"path"`
-	Current  gitDiffContentSnapshot `json:"current"`
-	Base     gitDiffContentSnapshot `json:"base"`
+	RepoRoot string `json:"repo_root"`
+	Path     string `json:"path"`
+	// Scope is the comparison the sides are of: "" HEAD → working tree,
+	// "staged" HEAD → index, "unstaged" index → working tree.
+	Scope   string                 `json:"scope,omitempty"`
+	Current gitDiffContentSnapshot `json:"current"`
+	Base    gitDiffContentSnapshot `json:"base"`
 }
 
 type gitDiffContentSnapshot struct {
@@ -229,7 +232,14 @@ func (s *Server) buildGitDiffPatch(targetID, cwd, path string) (gitDiffPatchPayl
 	}, nil
 }
 
-func (s *Server) buildGitDiffFileContent(targetID, cwd, path string) (gitDiffFileContentPayload, error) {
+// buildGitDiffFileContent gives the two whole sides of a file's comparison.
+// A file with both staged and unstaged edits has the index between HEAD and
+// the working tree: `scope` "staged" gives HEAD → index and "unstaged" index →
+// working tree, the sides of that group's patch.
+func (s *Server) buildGitDiffFileContent(targetID, cwd, path, scope string) (gitDiffFileContentPayload, error) {
+	if scope != "" && scope != "staged" && scope != "unstaged" {
+		return gitDiffFileContentPayload{}, fmt.Errorf("git diff scope must be staged or unstaged, not %q", scope)
+	}
 	repoRoot, reason, err := s.resolveGitRepoRoot(targetID, cwd)
 	if err != nil {
 		return gitDiffFileContentPayload{}, err
@@ -246,12 +256,20 @@ func (s *Server) buildGitDiffFileContent(targetID, cwd, path string) (gitDiffFil
 		return gitDiffFileContentPayload{}, err
 	}
 
-	current, err := workingTreeContentSnapshot(repoRoot, *file)
+	var base, current gitDiffContentSnapshot
+	if scope == "unstaged" {
+		base, err = indexContentSnapshot(repoRoot, *file)
+	} else {
+		base, err = baseContentSnapshot(repoRoot, *file)
+	}
 	if err != nil {
 		return gitDiffFileContentPayload{}, err
 	}
-
-	base, err := baseContentSnapshot(repoRoot, *file)
+	if scope == "staged" {
+		current, err = indexContentSnapshot(repoRoot, *file)
+	} else {
+		current, err = workingTreeContentSnapshot(repoRoot, *file)
+	}
 	if err != nil {
 		return gitDiffFileContentPayload{}, err
 	}
@@ -259,9 +277,27 @@ func (s *Server) buildGitDiffFileContent(targetID, cwd, path string) (gitDiffFil
 	return gitDiffFileContentPayload{
 		RepoRoot: repoRoot,
 		Path:     file.Path,
+		Scope:    scope,
 		Current:  current,
 		Base:     base,
 	}, nil
+}
+
+// indexContentSnapshot is the file as staged (`git show :path`).
+func indexContentSnapshot(repoRoot string, file gitDiffFileInfo) (gitDiffContentSnapshot, error) {
+	spec := ":" + file.Path
+	exists, err := gitObjectExists(repoRoot, spec)
+	if err != nil {
+		return gitDiffContentSnapshot{}, err
+	}
+	if !exists {
+		return gitDiffContentSnapshot{Label: "Index", Reason: "missing"}, nil
+	}
+	content, err := gitObjectContent(repoRoot, spec)
+	if err != nil {
+		return gitDiffContentSnapshot{}, err
+	}
+	return buildGitDiffContentSnapshot("Index", content), nil
 }
 
 func (s *Server) resolveGitRepoRoot(targetID, cwd string) (repoRoot string, reason string, err error) {

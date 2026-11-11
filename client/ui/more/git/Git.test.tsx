@@ -99,7 +99,7 @@ function repository(initial: File[]) {
         };
       case "git_diff_file_content": {
         const side = (content: string) => ({ label: "", exists: true, byte_count: content.length, line_count: content.split("\n").length, content });
-        return { reply: "git_diff_file_content", content: { repo_root: "/repo", path: body.path, base: side("const a = 1;\nconst b = 2;\nconst c = 4;\n"), current: side("const a = 1;\nconst b = 3;\nconst c = 4;\n") } };
+        return { reply: "git_diff_file_content", content: { repo_root: "/repo", path: body.path, scope: body.scope, base: side("const a = 1;\nconst b = 2;\nconst c = 4;\n"), current: side("const a = 1;\nconst b = 3;\nconst c = 4;\n") } };
       }
       case "git_branches":
         return {
@@ -334,10 +334,11 @@ describe("Git review: the reader", () => {
     const { app, repo } = await openReview([app_ts]);
     await openDiffOf(app, "changes:app.ts");
     expect(repo.asked.find((r) => r.type === "git_diff_file_content")?.body).toEqual({ target_id: "w1", cwd: "/repo", path: "app.ts" });
-    // A file staged and changed again has an index between: it keeps its hunks.
+    // A file staged and changed again has the index between: each group asks for its own pair
+    // (FINAL-VERIFY gitfiles D4: the bare patch it showed instead was drawn plain).
     const both = await openReview([{ ...app_ts, staged: true, staged_additions: 1 }]);
     await openDiffOf(both.app, "changes:app.ts");
-    expect(both.repo.asked.some((r) => r.type === "git_diff_file_content")).toBe(false);
+    expect(both.repo.asked.find((r) => r.type === "git_diff_file_content")?.body).toEqual({ target_id: "w1", cwd: "/repo", path: "app.ts", scope: "unstaged" });
   });
 
   test("staging the last unstaged file moves the reader on to the same file in Staged, instead of out", async () => {

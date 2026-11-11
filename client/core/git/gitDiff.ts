@@ -95,6 +95,8 @@ export interface GitDiffContentSnapshot {
 export interface GitDiffFileContentPayload {
   repo_root: string;
   path: string;
+  /** The comparison the sides are of (`gitDiffContentScope`); none: HEAD → working tree. */
+  scope?: "staged" | "unstaged";
   current: GitDiffContentSnapshot;
   base: GitDiffContentSnapshot;
 }
