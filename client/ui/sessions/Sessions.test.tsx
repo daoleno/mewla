@@ -258,4 +258,15 @@ describe("a Session", () => {
     expect(framesOf(app.host.posts(), "send_input")[0]).toMatchObject({ worker_id: "w6", text: "Read this", attachments: [{ name: "plan.pdf", path: "/state/uploads/plan.pdf", content_type: "application/pdf" }] });
     await app.waitFor("text:Ready", { state: "gone" });
   }, 20_000);
+
+  test("a reply's image on the computer is read through the Session and shown", async () => {
+    const reply = [{ id: "a1", seq: 1, kind: "assistant_message", timestamp: new Date().toISOString(), body: "Here is the chart:\n\n![chart](out/chart.png)" }];
+    const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const app = await sessionsApp({ worker_sessions: [session("w8", { name: "charts" })], conversations: { w8: reply }, replies: { codex_asset: { type: "codex_asset", path: "/home/me/mewla/out/chart.png", content_type: "image/png", data_url: png } } });
+    await app.waitFor("text:charts", { timeout: 10_000 });
+    await app.press("text:charts");
+    await app.waitUntil(() => framesOf(app.host.posts(), "codex_asset").length === 1);
+    expect(framesOf(app.host.posts(), "codex_asset")[0]).toMatchObject({ path: "out/chart.png", cwd: "/home/me/mewla" });
+    expect(app.texts()).toContain("Today");
+  }, 20_000);
 });
