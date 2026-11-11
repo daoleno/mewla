@@ -58,7 +58,7 @@ export function LiveSurfaceBridge() {
       // the server is switched or cleared; re-issuing here would undo the revocation.
       if (provisioning || live.widgetState() !== "none") return;
       if (!baseUrl) {
-        // Mewla Link has no address a widget can fetch, and no token to give it: it shows the
+        // Mewla Relay has no address a widget can fetch, and no token to give it: it shows the
         // states this app and the pushes apply.
         live.configureWidgetPushed();
         return;

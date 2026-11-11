@@ -98,9 +98,9 @@ private enum LinkTransportError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case .invalidInput(let detail): return detail
-    case .invalidPin: return "Mewla Link SPKI pin is invalid."
-    case .unavailable: return "Mewla Link could not reach a pinned relay candidate."
-    case .pinMismatch: return "Mewla Link transport certificate pin mismatch."
+    case .invalidPin: return "Mewla Relay SPKI pin is invalid."
+    case .unavailable: return "Mewla Relay could not reach a pinned relay candidate."
+    case .pinMismatch: return "Mewla Relay transport certificate pin mismatch."
     }
   }
 }
@@ -121,19 +121,19 @@ private func validate(
   mode: String
 ) throws {
   guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-    throw LinkTransportError.invalidInput("Mewla Link tunnel key is required.")
+    throw LinkTransportError.invalidInput("Mewla Relay tunnel key is required.")
   }
   guard !host.isEmpty, !host.contains("/"), !host.contains("\0") else {
-    throw LinkTransportError.invalidInput("Mewla Link host is invalid.")
+    throw LinkTransportError.invalidInput("Mewla Relay host is invalid.")
   }
   guard (1...65535).contains(port) else {
-    throw LinkTransportError.invalidInput("Mewla Link port is invalid.")
+    throw LinkTransportError.invalidInput("Mewla Relay port is invalid.")
   }
   guard pin.range(of: "^[0-9a-fA-F]{64}$", options: .regularExpression) != nil else {
     throw LinkTransportError.invalidPin
   }
   guard mode == "measure" || mode == "on-demand" else {
-    throw LinkTransportError.invalidInput("Mewla Link tunnel mode is invalid.")
+    throw LinkTransportError.invalidInput("Mewla Relay tunnel mode is invalid.")
   }
 }
 

@@ -122,7 +122,7 @@ async function joinAll(servers: readonly StoredServer[], deps: TeamDeps): Promis
       const failed = apart.get(key);
       if (failed && deps.now() - failed.at < RETRY_APART_MS) continue;
       // Dial the one with an address another computer can reach first; a
-      // computer reached only through Mewla Link can still dial out.
+      // computer reached only through Mewla Relay can still dial out.
       const [from, to] =
         otherComputerURLs(right).length === 0 && otherComputerURLs(left).length > 0
           ? [right, left]

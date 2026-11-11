@@ -40,7 +40,7 @@ function nestedPrivateTypesUsedOutsideEnclosingType(source: string): string[] {
   return violations;
 }
 
-describe("Mewla Link native pin contract", () => {
+describe("Mewla Relay native pin contract", () => {
   test("Android and iOS both pin TLS 1.3 SPKI and bind loopback only", () => {
     const android = readFileSync(
       join(

@@ -13,7 +13,7 @@ interface MewlaLiveNativeModule {
   apply(rawLiveState: string): boolean;
   setCurrentServer(serverRef: string): void;
   configureWidget(baseUrl: string, token: string): void;
-  /** For a server with no address a widget can fetch (Mewla Link): the widgets show the state the app and pushes apply. */
+  /** For a server with no address a widget can fetch (Mewla Relay): the widgets show the state the app and pushes apply. */
   configureWidgetPushed(): void;
   clearWidget(): void;
   refreshWidgets(): void;

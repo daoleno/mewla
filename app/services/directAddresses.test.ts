@@ -72,7 +72,7 @@ describe("which addresses may be tried directly", () => {
         transportPin: "3".repeat(64),
         linkRouteId: "4".repeat(32),
         transportCandidates: [
-          { name: "Mewla Link", kind: "link", url: "wss://relay.link.test/ws" },
+          { name: "Mewla Relay", kind: "link", url: "wss://relay.link.test/ws" },
           directCandidate({ host: "192.168.1.20", port: 9876, kind: "lan" }),
           { name: "bad", kind: "direct", url: "wss://evil.example:9876/ws" },
         ],
