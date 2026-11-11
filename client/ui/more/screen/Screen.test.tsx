@@ -193,6 +193,16 @@ describe("Screen: agents", () => {
     expect(posted(app, SCREEN)[0]).toEqual({ keep_awake: true });
   });
 
+  test("an open menu and the agent card's buttons survive the computer being asked again", async () => {
+    const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: () => json({ ...base, keep_awake: false, agent: codex, agents: [codex] }), [`POST ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }));
+    await app.waitFor("id:screen-agents");
+    await app.press("id:screen-options");
+    await app.wait(3_500);
+    await app.press("text:Keep this computer awake");
+    await app.waitUntil(() => posted(app, SCREEN).length > 0);
+    expect(posted(app, SCREEN)[0]).toEqual({ keep_awake: true });
+  });
+
   test("on Android the menu has Phone, which says it is not built yet", async () => {
     const app = await open(HARNESS, options({ [`GET ${SCREEN}`]: json({ ...base, agent: codex, agents: [codex] }) }, { platform: "android" }));
     await app.waitFor("id:screen-agents");
