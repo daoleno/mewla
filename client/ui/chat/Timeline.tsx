@@ -214,7 +214,10 @@ export function ChatTimeline(props: {
         }}
         onScrollDragStart={() => (touched = true)}
         initialScrollIndex={initialIndex}
-        onViewableItemsChange={({ viewableItems }) => (shownFirst = readingPlace(viewableItems))}
+        onViewableItemsChange={({ viewableItems }) => {
+          // A hidden list's rows (a browser resets its scroll) are not where the person was.
+          if (untracked(shown)) shownFirst = readingPlace(viewableItems);
+        }}
         maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 80 }} keyboardDismissMode="interactive" contentClass="py-3"
         onScroll={({ offset, contentSize, size }) => {
           // A hidden list's scroll (a browser resets it) is not where the person was.
