@@ -15,14 +15,14 @@
 // - files.*: M4's Files contract (client/ui/more/files/host.ts) the browser's way: an
 //   `<input type=file>` picker, an XHR upload with progress and abort, and a download into memory
 //   handed to the browser's own download (`<a download>`), and a picked picture's thumbnail.
-//
-// The web player has no host posts (only calls reach the page), so the app sends `files.cancel`
-// and `files.cancelDownload` as calls in the browser.
 // - links.pluginReturn: how a Plugins sign-in ended, as the computer's callback sent this tab back
 //   (`/plugins?connected=<account>` or `?plugin_error=<step>`, with `service=`): read once and taken
 //   out of the address bar, so a reload or Back doesn't replay it.
 // - links.openHere: opens a sign-in page in this tab ({url}, http or https); its provider returns
 //   the tab to `/plugins`.
+//
+// The web player has no host posts (only calls reach the page), so the app sends `files.cancel`
+// and `files.cancelDownload` as calls in the browser.
 
 const SECURE_PREFIX = "mewla:secure:";
 const LEGACY_COPIED = "mewla:web-host:legacy-copied";
