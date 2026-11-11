@@ -33,15 +33,26 @@ export function gitDiffSectionsForGroup(payload: GitDiffPatchPayload, group: Git
 }
 
 /**
- * Collapsed context can expand only when the full old and new sides are what
- * the daemon returns: HEAD and the working tree. A file with both staged and
- * unstaged edits has an index in between, and an untracked or binary file has
- * nothing to expand, so those keep their hunks as they are.
+ * Collapsed context can expand when the daemon can give the full old and new
+ * sides: HEAD and the working tree, or, for a file with both staged and
+ * unstaged edits, its group's pair through the index (`gitDiffContentScope`).
+ * An untracked or binary file has nothing to expand and keeps its hunks.
  */
 export function canExpandGitDiffFile(file: GitDiffFileInfo): boolean {
   if (file.binary || file.untracked) return false;
-  if (file.staged === file.unstaged) return false;
+  if (!file.staged && !file.unstaged) return false;
   return file.status === "modified" || file.status === "changed" || file.status === "renamed";
+}
+
+/**
+ * Which comparison a file's whole sides are asked for: a file with both staged
+ * and unstaged edits has the index between HEAD and the working tree, so each
+ * group asks for its own pair (Staged: HEAD → index, Changes: index → working
+ * tree); any other file, none (HEAD → working tree).
+ */
+export function gitDiffContentScope(file: GitDiffFileInfo, group: GitReviewGroup): "staged" | "unstaged" | null {
+  if (!file.staged || !file.unstaged) return null;
+  return group === "staged" ? "staged" : "unstaged";
 }
 
 export function planGitDiffReview(
@@ -85,7 +96,10 @@ export interface GitDiffExpansionSides {
 export function gitDiffExpansionSides(
   payload: GitDiffFileContentPayload,
   file: GitDiffFileInfo,
+  scope: "staged" | "unstaged" | null = null,
 ): GitDiffExpansionSides | null {
+  // A daemon that does not know scopes answers HEAD → working tree: not this group's sides.
+  if ((payload.scope ?? null) !== scope) return null;
   const { base, current } = payload;
   for (const side of [base, current]) {
     if (!side.exists || side.binary || side.truncated) return null;
