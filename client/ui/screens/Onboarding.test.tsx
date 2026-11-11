@@ -228,6 +228,21 @@ describe("Settings' Pair a computer", () => {
     expect(JSON.parse(app.storage()["mewla:v3:servers"]!).map((s: { url: string }) => s.url).sort()).toEqual(["ws://10.0.0.5:9876/ws", desk.url]);
   }, 15_000);
 
+  test("pairing again with the computer already paired asks nothing and still shows the connected step", async () => {
+    const same = { id: "s2", name: "Desk", url: "ws://10.0.0.5:9876/ws", daemonId: "a1".repeat(32), daemonPublicKey: computer.publicKey };
+    const app = await open("../App.tsx", {
+      host: phone(), platform: "android",
+      storage: { "mewla:v3:servers": JSON.stringify([same]), "mewla:v1:current_server_id": "s2", "mewla:onboarded": "true" },
+      network: { [computer.pairURL]: () => computer.answer() },
+    });
+    app.onDialog(() => { throw new Error("no dialog for a computer already paired"); });
+    await app.host.send("links.open", { url: "mewla://settings?addServer=1" });
+    await app.waitFor("id:pair-link");
+    await app.type("id:pair-link", computer.link());
+    await app.press("id:pair-link-submit");
+    await app.waitFor("id:connected-title", { timeout: 10_000 });
+  }, 15_000);
+
   test("Pair with an empty field reads the clipboard; with nothing there it asks for the link", async () => {
     const app = await pairPage();
     await app.press("id:pair-link-submit");
