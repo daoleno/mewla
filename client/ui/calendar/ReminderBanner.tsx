@@ -1,4 +1,5 @@
-import { effect, host, lifecycle, signal, Storage, Text, View } from "nsh";
+import { effect, host, signal, Storage, Text, View } from "nsh";
+import { lifecycle } from "../lifecycle";
 import { Button } from "nsh/base";
 import { askForReminders, reminderPermission, type PushHost, type ReminderPermission } from "../../core/push/registration";
 

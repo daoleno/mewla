@@ -1,4 +1,5 @@
-import { cleanup, effect, host, lifecycle, nativeComponent, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, host, nativeComponent, signal, Text, untracked, View } from "nsh";
+import { lifecycle } from "../lifecycle";
 import { Button } from "nsh/base";
 import { cameraSearching, finderState, readCameraPermission, type CameraPermission } from "../../core/onboarding";
 import { Spinner } from "../more/kit/kit";

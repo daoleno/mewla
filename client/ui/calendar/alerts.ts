@@ -1,4 +1,5 @@
-import { effect, lifecycle } from "nsh";
+import { effect } from "nsh";
+import { lifecycle } from "../lifecycle";
 import { AlertDialog } from "nsh/base";
 import { nextAlertDueAt, openAlerts } from "../../core/calendar/alerts";
 import { kindLabel, type CalendarItem } from "../../core/calendar/model";
