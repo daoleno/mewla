@@ -216,6 +216,8 @@ describe("iPhone use", () => {
     expect(app.texts()).toContain("Agents on Studio can use your iPhone.");
     await app.press("label:Done: tell the agent you finished");
     await app.waitUntil(() => sent.length === 1);
+    // Done holds both buttons until the computer answers it.
+    await app.waitUntil(() => app.enabled("label:Stop Codex"));
     await app.press("label:Stop Codex");
     await app.waitUntil(() => sent.length === 2);
     expect(sent).toEqual([{ handoff_done: true }, { stop_agent: true }]);
