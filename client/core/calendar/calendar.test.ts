@@ -127,4 +127,30 @@ describe("the current computer's Calendar", () => {
     await tick();
     expect(other.requests).toEqual([{ type: "done_calendar_item", body: { id: "z" } }]);
   });
+
+  // FINAL-VERIFY 6387f88f m3 162–165 / 79: Done on the full-screen alert, then the app asked again.
+  test("an alert answered on the phone is not asked again: asking waits for the phone's answers, which count until the computer has them", async () => {
+    let release: (actions: NativeAlertAction[]) => void = () => {};
+    const alerts = new FakeAlerts();
+    alerts.takeActions = () => new Promise<NativeAlertAction[]>((resolve) => (release = resolve));
+    const transport = new FakeTransport();
+    let reply: (frame: Frame) => void = () => {};
+    transport.request = <T,>(type: string, body: Record<string, unknown>) => {
+      transport.requests.push({ type, body });
+      return new Promise<T>((resolve) => (reply = resolve as (frame: Frame) => void));
+    };
+    const fired = "2026-07-14T08:55:00Z";
+    const calendar = new CalendarModel("s1", transport, alerts, () => NOW);
+    transport.emit({ type: "calendar_items_snapshot", calendar_items: [item("a", { alerted_at: fired })] });
+    expect(calendar.alertsSettled()).toBe(false);
+    release([{ type: "done", itemId: "a", serverId: "s1", minutes: 0, atMs: NOW - 60_000 }]);
+    await tick();
+    expect(calendar.alertsSettled()).toBe(true);
+    expect(transport.requests).toEqual([{ type: "done_calendar_item", body: { id: "a" } }]);
+    expect(calendar.answered("a")).toBe(true);
+    reply({ type: "calendar_item_updated", calendar_item: item("a", { alerted_at: fired, acked_at: fired, status: "completed", revision: 2 }) });
+    await tick();
+    expect(calendar.answered("a")).toBe(false);
+    expect(calendar.item("a")).toMatchObject({ acked_at: fired, revision: 2 });
+  });
 });

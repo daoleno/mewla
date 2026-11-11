@@ -23,6 +23,7 @@ import { Sessions } from "../screens/Sessions";
 import { NewSession, newSessionOpen } from "../screens/NewSession";
 import { ServicesSheet } from "../sessions/ServicesSheet";
 import { EnrollmentApproval } from "../enrollment/Approval";
+import { CalendarAlertCard } from "../calendar/AlertCard";
 import { BrowserJoin } from "../enrollment/BrowserJoin";
 import { current, onTransport, workers } from "../session";
 import { routeOwner, screenRoute } from "../../core/screen/float";
@@ -314,6 +315,7 @@ function WideShell() {
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />
+      <CalendarAlertCard />
       <DesktopOverlays />
     </View>
   );
@@ -328,6 +330,7 @@ export function Shell() {
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
         <EnrollmentApproval />
+        <CalendarAlertCard />
       <TabBar testID="tabs" items={tabs.map((t, i) => ({ title: tabTitle(t.title, needsYou(t.key), selectedTab() === i), icon: platform.select({ ios: t.ios, android: t.android, default: t.android }) }))}
         selectedIndex={selectedTab()} onChange={({ index }) => selectedTab.set(index)} />
     </View>
