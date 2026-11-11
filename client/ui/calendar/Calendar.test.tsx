@@ -147,6 +147,22 @@ describe("the Calendar tab", () => {
     expect(app.texts()).toContain("Dentist");
   }, 20_000);
 
+  test("an image in a run's result is read from the computer, in Brain's host folder", async () => {
+    const run = { id: "r1", status: "completed", scheduled_for: "2026-07-17T03:00:00Z", started_at: "2026-07-17T03:00:00Z", result_preview: "Chart", result: "Here is the chart.\n\n![Weekly chart](out/chart.png)\n" };
+    const daemon = {
+      calendar_items: [item("Digest", 20, { kind: "scheduled_action", action_instruction: "Draw the chart.", runs: [run] })],
+      brain: { host_worker: { id: "%1", name: "brain", status: "running", cwd: "/home/me/brain" } },
+      replies: { codex_asset: { type: "codex_asset", content_type: "image/png", data_url: "data:image/png;base64,iVBORw0KGgo=" } },
+    };
+    const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar?id=Digest&run=r1" });
+    await app.waitFor("id:run-result", SLOW);
+    // The result draws again once the run's full result comes, so the image may be asked for twice.
+    await app.waitUntil(() => framesOf(app.host.posts(), "codex_asset").length >= 1, SLOW);
+    expect(framesOf(app.host.posts(), "codex_asset")[0]).toMatchObject({ path: "out/chart.png", cwd: "/home/me/brain" });
+    // (What a TextView draws through renderImage is not in `nsh test`'s tree; the picture itself is for the device.)
+  }, 20_000);
+
   test("a title is required, and the editor says so instead of saving", async () => {
     const app = await calendarApp({ calendar_items: [] });
     await app.press("id:add-item");
