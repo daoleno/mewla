@@ -40,6 +40,7 @@ const (
 	CodeRouteListenerFailed        = "route_listener_failed"
 	CodeRouteSnapshotInvalid       = "route_snapshot_invalid"
 	CodeLaunchBypass               = "model_profile_bypass"
+	CodeConnectionTestFailed       = "provider_connection_test_failed"
 )
 
 // OwnerConfig configures production Owner paths and seams.
@@ -1806,6 +1807,8 @@ func ControlErrorCode(err error) string {
 		return "close_failed"
 	case errors.Is(err, ErrPersistDirSync):
 		return CodeRouteSnapshotInvalid
+	case errors.Is(err, ErrConnectionTestFailed):
+		return CodeConnectionTestFailed
 	default:
 		return CodeProfilesUnavailable
 	}

@@ -25,7 +25,7 @@ fake.request = (async (type: string, body: Record<string, unknown>, options: { r
   fake.asked.push({ type, body });
   if (fake.state !== "connected") throw new Error("Daemon is not connected.");
   const answer = (await host.call("app.daemon", { type, body })) as Record<string, unknown> | null;
-  if (answer && typeof answer.error === "string") throw new Error(answer.error);
+  if (answer && typeof answer.error === "string") throw Object.assign(new Error(answer.error), typeof answer.code === "string" ? { code: answer.code } : {});
   return { type: options.reply, ...(answer ?? {}) };
 }) as FakeDaemon["request"];
 // A request sent as a frame (with a request_id) is answered the same way: the answer's

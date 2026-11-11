@@ -110,7 +110,31 @@ func runConnectionProbe(client string, profile Profile, lookup func(string) (str
 	ids, err := fetchUpstreamModelIDs(ctx, NewSafeHTTPClient(15*time.Second), profile, nil, lookup)
 	latencyMS := time.Since(startedAt).Milliseconds()
 	if err != nil {
-		return ProviderConnectionTestResult{}, err
+		return ProviderConnectionTestResult{}, connectionTestError(err, profile, lookup)
 	}
 	return ProviderConnectionTestResult{Client: client, ModelCount: len(ids), LatencyMS: latencyMS}, nil
 }
+
+// connectionTestError keeps a typed failure (its own wire code) and gives any
+// other one ErrConnectionTestFailed, so the App shows the probe's reason
+// ("connection refused", "HTTP 404") instead of "Providers are not
+// available". The key never leaves in it: an endpoint that echoes it back
+// (in a URL or a body) gets it replaced.
+func connectionTestError(err error, profile Profile, lookup func(string) (string, bool)) error {
+	if ControlErrorCode(err) != CodeProfilesUnavailable {
+		return err
+	}
+	message := err.Error()
+	if secret, ok := lookup(profile.CredentialEnv); ok {
+		if secret = strings.TrimSpace(secret); secret != "" {
+			message = strings.ReplaceAll(message, secret, "[redacted]")
+		}
+	}
+	return connectionTestFailure{reason: message}
+}
+
+// connectionTestFailure is ErrConnectionTestFailed whose words are only the reason.
+type connectionTestFailure struct{ reason string }
+
+func (e connectionTestFailure) Error() string { return e.reason }
+func (e connectionTestFailure) Unwrap() error { return ErrConnectionTestFailed }
