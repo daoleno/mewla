@@ -69,6 +69,16 @@ func TestWebUIServesLoopbackClientsOfLoopbackHosts(t *testing.T) {
 			!strings.Contains(policy, "media-src 'self' data: blob: https:") {
 			t.Fatalf("%s: policy = %q", host, policy)
 		}
+		// A hash, nonce or 'strict-dynamic' makes browsers ignore 'unsafe-inline': NSH's web views stop.
+		for _, directive := range strings.Split(policy, ";") {
+			if fields := strings.Fields(directive); len(fields) > 0 && fields[0] == "script-src" {
+				for _, source := range fields[1:] {
+					if strings.HasPrefix(source, "'sha") || strings.HasPrefix(source, "'nonce-") || source == "'strict-dynamic'" {
+						t.Fatalf("%s: script-src has %s, which turns off 'unsafe-inline'", host, source)
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -170,6 +180,14 @@ func TestAppRoutesServeTheWebUIToPageLoadsOnly(t *testing.T) {
 		}
 		if response.Header().Get("Content-Security-Policy") == "" || response.Header().Values("Vary")[0] != "Accept" {
 			t.Fatalf("page load %s served without the web UI headers", path)
+		}
+	}
+	// A Plugins sign-in in a browser comes back to /plugins with how it ended: the app's page loads
+	// there (no file or API owns the path), and reads the query itself.
+	for _, path := range []string{"/plugins?connected=n1&service=notion", "/plugins?plugin_error=denied"} {
+		response := serve(http.MethodGet, path, browserPageAccept, loopbackHost, loopbackRemote)
+		if response.Code != http.StatusOK || response.Body.String() != "<html>mewla</html>" || response.Header().Get("Content-Security-Policy") == "" {
+			t.Fatalf("sign-in return %s: status=%d body=%q", path, response.Code, response.Body.String())
 		}
 	}
 	apiCases := []struct{ method, path, accept, host, remote string }{
