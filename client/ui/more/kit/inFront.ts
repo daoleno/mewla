@@ -1,4 +1,5 @@
-import { lifecycle, platform } from "nsh";
+import { platform } from "nsh";
+import { lifecycle } from "../../lifecycle";
 
 /**
  * Whether the app is in front, for what streams or polls while it is (reactive).

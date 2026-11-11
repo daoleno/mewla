@@ -1,4 +1,5 @@
-import { cleanup, effect, Image, lifecycle, reduceMotion, signal, Text, untracked, View } from "nsh";
+import { cleanup, effect, Image, reduceMotion, signal, Text, untracked, View } from "nsh";
+import { lifecycle } from "../../lifecycle";
 import { Button } from "nsh/base";
 import { PREVIEW_STEP_MS, previewState } from "../../../core/settings/petPreview";
 import { Page, Section } from "../kit/kit";
