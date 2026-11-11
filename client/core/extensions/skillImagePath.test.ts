@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { skillImagePath } from "./skillImagePath";
+import { skillFileLink, skillImagePath } from "./skillImagePath";
+
+test("a link in a Skill file opens another file of the same copy, and nothing outside it", () => {
+  const files = [{ path: "SKILL.md" }, { path: "docs/setup.md" }, { path: "scripts/run.sh" }];
+  expect(skillFileLink("docs/setup.md#usage", "SKILL.md", files)).toBe("docs/setup.md");
+  expect(skillFileLink("./docs/setup.md", "SKILL.md", files)).toBe("docs/setup.md");
+  expect(skillFileLink("../scripts/run.sh", "docs/setup.md", files)).toBe("scripts/run.sh");
+  for (const url of ["#usage", "https://example.com/docs", "/etc/passwd", "../../outside.md", "missing.md", ""]) {
+    expect(skillFileLink(url, "SKILL.md", files)).toBeNull();
+  }
+});
 
 test("Markdown image resolution stays in the exact advertised Skill copy", () => {
   const files = [{ path: "images/photo one.png" }, { path: "docs/screen.png" }];

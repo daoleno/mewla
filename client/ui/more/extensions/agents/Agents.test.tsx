@@ -228,7 +228,9 @@ describe("The Skill inspector", () => {
     const app = await open(HARNESS, c.host(page));
     await app.waitFor("id:skill-review");
     await app.press("id:skill-review");
-    await app.waitFor("text:# Review\nRead the diff.");
+    // SKILL.md is rendered, not shown as its source.
+    await app.waitFor("text:Read the diff.");
+    expect(app.shows("text:# Review\nRead the diff.")).toBe(false);
     await app.press("id:skill-file-config.json");
     await app.waitFor('text:{\n  "depth": 2\n}');
     expect(c.asked.filter((entry) => entry.type === "skills_inspect").at(-1)!.body).toMatchObject({ skill_name: "review", skill_id: review.id, path: "config.json" });

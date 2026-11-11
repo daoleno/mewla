@@ -44,11 +44,22 @@ export function AgentMark(props: { agent: ManagedSkillAgent; size?: number }) {
   );
 }
 
-/** The agents a copy is available to, as marks (or "Unknown" when it names none). */
-export function AgentMarks(props: { agents: readonly ManagedSkillAgent[]; size?: number }) {
+/** The agents a copy is available to, as marks (or "Unknown" when it names none); with `showLabels`, each with its name. */
+export function AgentMarks(props: { agents: readonly ManagedSkillAgent[]; size?: number; showLabels?: boolean }) {
   return (
-    <View class="flex-row items-center gap-1" accessibilityLabel={props.agents.length ? `Available to ${props.agents.map(skillAgentLabel).join(", ")}` : "Available to an unknown Agent"}>
-      {props.agents.length ? props.agents.map((agent) => <AgentMark agent={agent} size={props.size} />) : <Text class="text-xs text-muted-foreground">Unknown</Text>}
+    <View class={props.showLabels ? "flex-row flex-wrap items-center gap-x-3 gap-y-1.5" : "flex-row items-center gap-1"} accessibilityLabel={props.agents.length ? `Available to ${props.agents.map(skillAgentLabel).join(", ")}` : "Available to an unknown Agent"}>
+      {props.agents.length
+        ? props.agents.map((agent) =>
+            props.showLabels ? (
+              <View class="flex-row items-center gap-1.5">
+                <AgentMark agent={agent} size={props.size} />
+                <Text class="text-sm">{skillAgentLabel(agent)}</Text>
+              </View>
+            ) : (
+              <AgentMark agent={agent} size={props.size} />
+            ),
+          )
+        : <Text class="text-xs text-muted-foreground">Unknown</Text>}
     </View>
   );
 }

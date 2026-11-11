@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
 import type { PluginAccount } from "./connections";
-import { cloudProfileExpiry, cloudProfileGroups, cloudProfileIdentity, cloudProfileName, cloudProfilesSummary } from "./cloudProfilesModel";
+import { cloudProfileExpiry, cloudProfileGroups, cloudProfileIdentity, cloudProfileName, cloudProfilesSummary, suggestedAWSProfile, validAWSProfileName } from "./cloudProfilesModel";
+test("a new AWS profile is offered a name from its account alias and role, which the CLI accepts", () => {
+  const account: PluginAccount = { id: "a", integration: "aws", name: "mewla-temp", profile: "mewla-temp", identity: "", enabled: true, status: "connected", history: [], aws: { account_id: "123456789012", account_name: "ACE Labs Mgmt", who: "Admin" } };
+  expect(suggestedAWSProfile(account)).toBe("ace-labs-mgmt-admin");
+  expect(suggestedAWSProfile({ ...account, aws: { account_id: "123456789012", who: "Role ReadOnly" } })).toBe("123456789012-readonly");
+  expect(suggestedAWSProfile({ ...account, aws: undefined })).toBe("aws");
+  expect(validAWSProfileName("ace-labs-mgmt-admin")).toBe(true);
+  expect(validAWSProfileName("../bad")).toBe(false);
+});
 const profile = (name: string, status: string, integration = "aws"): PluginAccount => ({ id: name, profile: name, name, profile_status: status, integration, identity: "", enabled: false, status: "authorization_required", history: [] });
 test("summaries use sign-in state, independent of agent access", () => {
   expect(cloudProfilesSummary([profile("work", "valid"), profile("personal", "valid")])).toBe("personal · work");
