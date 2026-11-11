@@ -1,4 +1,5 @@
-import { cleanup, effect, Image, type ImageAsset, lifecycle, platform, reduceMotion, signal, untracked, View } from "nsh";
+import { cleanup, effect, Image, type ImageAsset, platform, reduceMotion, signal, untracked, View } from "nsh";
+import { lifecycle } from "../../lifecycle";
 import { CLIP_TIMING, petTransition, type PetState } from "../../../core/settings/petPreview";
 import type { Pet } from "./pets";
 

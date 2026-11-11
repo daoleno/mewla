@@ -1,4 +1,5 @@
-import { type Accessor, computed, effect, host, lifecycle, openUrl, platform, signal } from "nsh";
+import { type Accessor, computed, effect, host, openUrl, platform, signal } from "nsh";
+import { lifecycle } from "../lifecycle";
 import { appUpdatePending, type AppUpdateState, type UpdateHostInfo } from "../../core/update/appUpdate";
 import { AppUpdateController, type AppInstaller, type AppUpdateDeps, type DownloadProgress, type DownloadRequest } from "../../core/update/controller";
 
