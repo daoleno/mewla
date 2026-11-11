@@ -8,6 +8,7 @@ import type { TaskNotificationTimelineItem } from "../../core/timeline/taskNotif
 import type { BrainWorkEventTimelineItem, DateDividerItem, MessageTimelineItem, PlanTimelineItem, TimelineItem } from "../../core/timeline/types";
 import { compactAge, latestTimestamp, withDayDividers } from "../../core/timeline/dayDividers";
 import { Icon } from "../icons/Icon";
+import { ChatImage } from "./ChatImage";
 import { PlainText } from "./PlainText";
 import { selectingText } from "./messageEdit";
 import { ActivityRow, ComputerMessageCard, createExpansion, PlanRow, TaskNotificationCard, WorkEventCard, type Expansion } from "./TimelineRows";
@@ -23,6 +24,8 @@ export type MessageHandlers = {
   onLink?: (url: string) => void;
   /** A file a tool call names, pressed. */
   onFile?: (path: string) => void;
+  /** An image a reply shows by its path on the computer, as a data URL. */
+  loadImage?: (path: string) => Promise<string | null>;
 };
 
 /** "Working" with the turn's elapsed time, ticking each second while it shows. */
@@ -80,7 +83,8 @@ export function TimelineRow(props: { item: () => TimelineItem | DateDividerItem;
       ) : it().type === "message" ? (
         <View class="px-4">
           <TextView markdown={(it() as MessageTimelineItem).body} options={{ streaming: Boolean((it() as MessageTimelineItem).streaming) }} selectable class="text-base"
-            onLinkPress={(event) => props.handlers.onLink?.(event.url)} />
+            onLinkPress={(event) => props.handlers.onLink?.(event.url)}
+            renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={props.handlers.loadImage} />} />
           {!(it() as MessageTimelineItem).streaming && props.handlers.isFinalReply?.(it().id) ? (
             <Button testID="copy-reply" onPress={() => void Clipboard.writeText((it() as MessageTimelineItem).body.replace(/\s+$/u, "")).catch(() => {})}
               class="mt-1 self-start rounded-lg p-1.5 active:bg-accent">

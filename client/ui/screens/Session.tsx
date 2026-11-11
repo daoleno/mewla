@@ -21,7 +21,7 @@ import { CHOICE_GONE_NOTICE, choiceFromPrompt, isPromptGoneError, latestPendingC
 import type { CodexSlashCommand } from "../../core/session/codexSlashCommands";
 import type { ComposerAlert, ComposerSendRoute } from "../../core/session/composerSlash";
 import { resolveComposerModelControl } from "../../core/session/sessionModelHelpers";
-import { canSwitchModel, chatSlashCommands, getThreadRuntime } from "../../core/session/sessionRequests";
+import { canSwitchModel, chatSlashCommands, codexAsset, getThreadRuntime } from "../../core/session/sessionRequests";
 import type { ThreadRuntimeSelection } from "../../core/providers/types";
 import { CodexSkillsSheet } from "../session/CodexSkillsSheet";
 import { CodexStatusSheet } from "../session/CodexStatusSheet";
@@ -36,6 +36,9 @@ import { AgentIcon } from "../icons/AgentIcon";
 import { showCalendarItem } from "../calendar/routes";
 import { workLinkOf } from "../sessions/workLinks";
 import { selectedTab } from "../shell/Shell";
+import { terminalShowing } from "../shell/desktop/keys";
+import { lastEditablePrompt } from "../../core/web/composer";
+import { slashMenuState } from "../../core/session/composerSlash";
 import { DSHPanel } from "../chat/DSHPanel";
 import { ChoiceCard } from "../chat/ChoiceCard";
 import { Composer, createComposerText } from "../chat/Composer";
@@ -136,6 +139,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     workingSince: () => activity()?.started_at,
     onLink: (url: string) => openLink(url),
     onFile: (path: string) => openPath(path),
+    loadImage: (path: string) => codexAsset(transport, path, untracked(worker)?.cwd),
   };
   const stoppingFor = signal("");
   const durability = signal(hint.durabilityWarning ?? "");
@@ -280,6 +284,19 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
   const skillsOpen = signal(false);
   const slashCommands = signal<CodexSlashCommand[]>([]);
   const slashUnavailable = signal(false);
+  /** A typed `/` opened the command list (not the "+" menu): Return waits for a pick. */
+  const slashPicking = () => slashMenuState({ text: text.text(), agentKind: kind(), commands: slashCommands(), connected: connected(), pinned: false }).open;
+  /** ↑ in the empty composer edits the last message, as Edit in its menu does. */
+  const recall = () => {
+    const item = lastEditablePrompt(untracked(items), { connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" });
+    if (item?.type === "message") editor.open(item);
+  };
+  // The terminal owns every key while it shows: the desktop's shortcuts step aside.
+  effect(() => {
+    if (!props.active() || mode() !== "terminal") return;
+    terminalShowing.set(true);
+    return () => terminalShowing.set(false);
+  });
   const runtime = signal<ThreadRuntimeSelection | null>(null);
   const codexLive = computed(() => kind() === "codex" && connected());
   effect(() => {
@@ -546,7 +563,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
               <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
-                onStop={() => void stop()} active={() => props.active() && mode() === "chat"}
+                onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
                 leading={<ComposerPlusButton pinned={pinned} connected={connected} onPress={() => pinned.set(!untracked(pinned))} />}>
                 <SlashMenu text={text.text} commands={slashCommands} commandsUnavailable={slashUnavailable} agentKind={kind} connected={connected} pinned={pinned} onPick={pickCommand}
                   onAttach={attach} uploading={uploading} />
