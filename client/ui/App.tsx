@@ -57,8 +57,8 @@ host.on("links.open", (payload) => {
 mount(() => (
   // The ink every text takes unless it says its own (NSH draws a bare Text black, unreadable in Dark).
   <View class="flex-1 bg-background text-foreground">
-    {/* The app is not under the connected step: on Android its native tab and navigation views were drawn
-        over the step once the notification prompt or a navigation came back, so the step vanished. */}
+    {/* The app is not under the connected step: on Android the step vanished behind the app while it still
+        held (after the notification prompt, after a Settings pairing), most likely the app's native views. */}
     {!ready() ? null : current() && !justPaired() ? <Shell /> : null}
     {/* First run, and on a phone the connected step after any pairing. */}
     {ready() && (!current() || justPaired()) ? <View class="absolute inset-0 bg-background"><FirstRun /></View> : null}
