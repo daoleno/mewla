@@ -1,8 +1,6 @@
 package com.daoleno.mewla
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -28,7 +26,9 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(state: Bundle?) {
     super.onCreate(state)
     nsh = NshView(this)
-    nsh.setErrorListener { Log.e(TAG, it) }
+    nsh.setErrorListener { Log.e(TAG, it); CrashLog.js(this, it) }
+    CrashLog.register(this, nsh)
+    ScanHost(this, nsh)
     nsh.registerComponent("mewla.qrScanner") { events -> QrScanner(this, events) }
     nsh.registerComponent("mewla.terminal") { events -> TerminalComponent(this, events) }
     nsh.handle("secure.get") { data, reply -> answer(reply) { secure.get(key(data)) } }
@@ -77,17 +77,6 @@ class MainActivity : ComponentActivity() {
     nsh.send("links.open", mapOf("url" to url))
   }
 
-  fun cameraAllowed(): Boolean {
-    if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) return true
-    requestPermissions(arrayOf(Manifest.permission.CAMERA), CAMERA_REQUEST)
-    return false
-  }
-
-  override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
-    super.onRequestPermissionsResult(code, permissions, results)
-    if (code == CAMERA_REQUEST) QrScanner.cameraAnswered(results.firstOrNull() == PackageManager.PERMISSION_GRANTED)
-  }
-
   override fun onDestroy() {
     channelHosts.onDestroy()
     nsh.destroy()
@@ -115,6 +104,5 @@ class MainActivity : ComponentActivity() {
 
   private companion object {
     const val TAG = "Mewla"
-    const val CAMERA_REQUEST = 1
   }
 }
