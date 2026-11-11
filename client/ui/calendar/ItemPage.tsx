@@ -6,6 +6,9 @@ import {
   activeRun, itemSummary, kindLabel, mergeRunResults, nextLine, runPreview, runsNewestFirst, runWhen, scheduleLine, statusLabel,
   type CalendarItem, type CalendarRun,
 } from "../../core/calendar/model";
+import { codexAsset } from "../../core/session/sessionRequests";
+import { ChatImage } from "../chat/ChatImage";
+import { brain, currentTransport } from "../session";
 import { clock } from "./clock";
 import { openEditor } from "./Editor";
 import { Row, SectionTitle, StatusDot } from "./parts";
@@ -13,6 +16,16 @@ import type { CalendarRoute } from "./routes";
 import { calendar, calendarItems } from "./state";
 
 const RUNS_SHOWN = 5;
+
+/**
+ * An image in a run's result, by its path on the computer: read as the same result reads in Brain's
+ * conversation, in Brain's host Session's folder (a relative path is under it).
+ */
+function loadResultImage(path: string): Promise<string | null> {
+  const transport = currentTransport();
+  if (!transport) return Promise.resolve(null);
+  return codexAsset(transport, path, brain()?.host_worker?.cwd);
+}
 
 /** The item with its runs' full results, fetched for a scheduled action and again when it changes. */
 function useFullItem(id: string) {
@@ -143,7 +156,7 @@ export function RunPage(props: { itemId: string; runId: string; nav: NavStackSta
             {run()!.status === "failed"
               ? <View selectable><Text class="text-base text-destructive">{run()!.failure_reason || "It failed without saying why."}</Text></View>
               : run()!.result
-                ? <TextView testID="run-result" markdown={run()!.result!} />
+                ? <TextView testID="run-result" markdown={run()!.result!} renderImage={(image) => <ChatImage src={image.src} alt={image.alt} load={loadResultImage} />} />
                 : <Text class="text-base text-muted-foreground">{run()!.result_preview ? `${run()!.result_preview}…` : run()!.status === "running" ? "Still running." : "No result."}</Text>}
             {run()!.worker_session && activeRun(item()!)?.id === run()!.id ? (
               <Button testID="open-session" onPress={() => props.openSession(run()!.worker_session!)} class="self-start rounded-full border border-border px-4 py-2 active:bg-accent">
