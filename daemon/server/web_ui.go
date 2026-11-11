@@ -113,7 +113,8 @@ func (s *Server) webUIHandler() http.Handler {
 			"worker-src 'self' blob:",
 			"frame-src 'none'",
 			"object-src 'none'",
-			"base-uri 'none'",
+			// The page's <base href="/"> keeps relative files at the root on deep links.
+			"base-uri 'self'",
 			"form-action 'none'",
 			"frame-ancestors 'none'",
 		}, "; "))

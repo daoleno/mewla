@@ -27,6 +27,17 @@ fi
 # The package is one folder named after the app.
 APP="$(dirname "$(find "$STAGE/package" -mindepth 2 -maxdepth 2 -name index.html | head -1)")"
 test -f "$APP/index.html"
+# The page loads its files by relative URL; a reload of /sessions/<id> must
+# still find them at the root, where the daemon always serves the app.
+python3 - "$APP/index.html" <<'PY'
+import sys
+path = sys.argv[1]
+page = open(path, encoding="utf-8").read()
+if "<base " not in page:
+    assert page.count("<head>") == 1, "index.html has no single <head>"
+    page = page.replace("<head>", '<head>\n<base href="/">', 1)
+open(path, "w", encoding="utf-8").write(page)
+PY
 # NSH writes .gz and .br beside some files: keep one gzip of every file.
 find "$APP" -type f \( -name '*.gz' -o -name '*.br' \) -delete
 find "$APP" -type f -exec gzip -9 -n {} +
