@@ -46,6 +46,6 @@ mount(() => (
         )
       }
     </NavStack>
-    <ScreenFloatHost page={() => ({ owner: null, screenPage: false })} onOpenPhone={open} onOpenScreen={() => {}} />
+    <ScreenFloatHost page={() => ({ owner: null, screenPage: false, phonePage: nav.routes().at(-1) === "phone" })} onOpenPhone={open} onOpenScreen={() => {}} />
   </View>
 ));

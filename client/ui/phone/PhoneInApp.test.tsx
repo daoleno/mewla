@@ -33,6 +33,15 @@ describe("Phone use in the app", () => {
     expect(app.texts()).toContain("Ready");
   }, 20_000);
 
+  test("the Phone page left under More while another tab shows: the float comes back over that tab (phone 19)", async () => {
+    const { app } = await phoneApp({ ...ready, agent: "Writer" });
+    await app.host.send("links.open", { url: "mewla://phone" });
+    await app.waitFor("id:phone-page", { timeout: 10_000 });
+    await app.waitUntil(() => !app.shows("id:screen-float"));
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("id:screen-float", { timeout: 10_000 });
+  }, 25_000);
+
   test("while an agent works the phone, its floating screen is over the app; Take over takes it and opens the Phone page, where the float hides", async () => {
     const { app, calls } = await phoneApp({ ...ready, agent: "Writer" });
     app.onDialog((dialog) => (dialog.sheet ? "Take over" : null));

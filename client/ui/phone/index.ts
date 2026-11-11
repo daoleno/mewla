@@ -2,4 +2,4 @@
 // the floating control over every page, and what the Labs row says.
 export { isPhoneLink } from "../../core/phone/link";
 export { PhonePage } from "./PhonePage";
-export { phoneAvailable, phoneLabsWord, phonePageOpen, phoneStatus, startPhoneUse } from "./state";
+export { phoneAvailable, phoneLabsWord, phoneStatus, startPhoneUse } from "./state";
