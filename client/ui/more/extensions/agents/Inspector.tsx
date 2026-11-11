@@ -395,7 +395,7 @@ function PluginSkillEntryView(props: { entry: PluginSkillEntry }) {
         </View>
         {props.entry.copy ? null : <Icon name="help" size={16} tone="faint" />}
       </View>
-      <View class="px-3 pb-3" style={{ display: open() ? "flex" : "none" }}>
+      <View class="flex-col px-3 pb-3" style={{ display: open() ? "flex" : "none" }}>
         {!props.entry.copy ? (
           <Text class="text-sm text-muted-foreground">This Skill copy was not found in the current Skills inventory, so its files cannot be shown here.</Text>
         ) : null}

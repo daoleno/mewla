@@ -196,7 +196,7 @@ export function AgentPage(props: { scope: AgentExtensionsScope; nav: PageNav }) 
       refreshing={loadingNow() && Boolean(skillsRequestData(skillsState()))}
       onRefresh={refresh}
       aside={
-        <View testID="details-panel" class="w-[400px] border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
+        <View testID="details-panel" class="w-[400px] flex-col border-l border-border bg-card" style={{ display: wide() && panel() ? "flex" : "none" }}>
           {((key) => untracked(() => (!key ? null : <Scroll keyboardShouldPersistTaps="handled" class="flex-1" contentClass="px-4 pb-8 pt-4">{key.startsWith("skill:") ? inspector() : pluginDetails()}</Scroll>)))(wide() ? panel() : "")}
         </View>
       }
@@ -544,7 +544,7 @@ function Choice<K extends string>(props: { title: string; options: readonly K[];
 
 function AgentChoice(props: { agents: readonly ManagedSkillAgent[]; value: readonly ManagedSkillAgent[]; onChange: (agents: ManagedSkillAgent[]) => void; title: string }) {
   return (
-    <View class="mt-4 gap-2" style={{ display: props.agents.length < 2 ? "none" : "flex" }}>
+    <View class="mt-4 flex-col gap-2" style={{ display: props.agents.length < 2 ? "none" : "flex" }}>
       <Text class="text-sm font-medium text-muted-foreground" role="header">{props.title}</Text>
       <View class="flex-row flex-wrap gap-2">
         {props.agents.map((agent) => {

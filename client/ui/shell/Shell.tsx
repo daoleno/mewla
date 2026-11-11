@@ -258,7 +258,7 @@ function Paged<R>(props: { nav: NavStackState<R>; children: JSX.Element }) {
 function Section(props: { index: number }) {
   const shown = () => selectedTab() === props.index;
   return (
-    <View class="absolute inset-0" style={{ display: shown() ? "flex" : "none" }}>
+    <View class="absolute inset-0 flex-col" style={{ display: shown() ? "flex" : "none" }}>
       {props.index === 0 ? <Paged nav={brainNav}><NavStack state={brainNav} style={{ flex: 1 }}>{(route) => (route.name === "brain" ? <Brain /> : workRoute(route, brainNav))}</NavStack></Paged>
         : props.index === 1 ? <Paged nav={sessionsNav}><NavStack state={sessionsNav} style={{ flex: 1 }}>{sessionsRoute}</NavStack></Paged>
         : props.index === 2 ? <Paged nav={calendarNav}><NavStack state={calendarNav} style={{ flex: 1 }}>{calendarRoute}</NavStack></Paged>
