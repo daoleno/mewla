@@ -6,7 +6,8 @@ import { bindSessionFileRequestToGeneration, buildSessionFileBinarySource, type 
 import { sessionFileMediaKindForPath } from "../../../core/files/sessionFileMedia";
 import {
   brainWorkspaceEntryIconName,
-  workspaceFolder,
+  workspaceFolderEntries,
+  workspaceFolderKey,
   type BrainWorkspaceFile,
   type BrainWorkspaceTree,
 } from "../../../core/files/workspace";
@@ -15,8 +16,10 @@ import { daemon } from "../daemon";
 import { EmptyState, Row, Section } from "../kit/kit";
 import type { PageNav } from "../routes";
 
-// What the workspace holds, per computer, while the app runs: going into a folder reads nothing.
+// Each folder the workspace showed, per (computer, folder), while the app runs: going back into one reads nothing.
 const trees = new Map<string, BrainWorkspaceTree>();
+// Each computer's workspace folder, for the media its Brain Session plays.
+const roots = new Map<string, string>();
 
 /** Brain's workspace on the current computer: folders, then a file. A computer switch closes it. */
 export function WorkspacePage(props: { trail?: string[]; file?: string; hostSession?: SessionFileIdentity; nav: PageNav }) {
@@ -37,16 +40,19 @@ export function WorkspacePage(props: { trail?: string[]; file?: string; hostSess
 
 function WorkspaceFolder(props: { trail: string[]; hostSession?: SessionFileIdentity; nav: PageNav }) {
   const id = daemon()?.server.id ?? "";
-  const tree = signal<BrainWorkspaceTree | null>(trees.get(id) ?? null);
+  const path = props.trail.at(-1) ?? "";
+  const tree = signal<BrainWorkspaceTree | null>(trees.get(workspaceFolderKey(id, path)) ?? null);
   const error = signal("");
   const busy = signal(false);
+  // Each folder is its own `brain_workspace_tree {path}`: the daemon lists one level at a time.
   const read = async () => {
     const d = daemon();
     if (!d) return error.set("Connect to this computer to browse Brain's workspace.");
     busy.set(true);
     try {
-      const next = await getBrainWorkspaceTree(d, "");
-      trees.set(d.server.id, next);
+      const next = await getBrainWorkspaceTree(d, path);
+      trees.set(workspaceFolderKey(d.server.id, path), next);
+      if (next.workspace) roots.set(d.server.id, next.workspace);
       tree.set(next);
       error.set("");
     } catch (failure) {
@@ -70,7 +76,7 @@ function WorkspaceFolder(props: { trail: string[]; hostSession?: SessionFileIden
         ? <EmptyState testID="workspace-error" icon="alert-circle" title={error()} action="Try again" onAction={() => void read()} />
         : <EmptyState testID="workspace-loading" busy title="Loading workspace" />;
     }
-    const entries = workspaceFolder(t, props.trail);
+    const entries = workspaceFolderEntries(t);
     if (!entries.length) return <EmptyState testID="workspace-empty" icon="folder-open" title="This folder is empty." />;
     return (
       <Section title={props.trail.length ? undefined : t.workspace?.replace(/^\/(Users|home)\/[^/]+/, "~")}>
@@ -106,7 +112,7 @@ function WorkspaceFile(props: { path: string; hostSession?: SessionFileIdentity 
     try {
       if (media) {
         if (!props.hostSession) throw new Error("Brain isn't running, so this file can't be played yet.");
-        const root = trees.get(d.server.id)?.workspace;
+        const root = roots.get(d.server.id);
         const request = { ...props.hostSession, path: root ? `${root.replace(/\/$/, "")}/${props.path}` : props.path };
         const metadata = await getSessionFileMetadata(d, request);
         if (metadata.kind !== "video" && metadata.kind !== "audio") throw new Error("This file isn't a video or audio file Mewla can play.");

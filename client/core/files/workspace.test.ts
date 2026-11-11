@@ -4,7 +4,8 @@ import {
   brainWorkspaceEntryIconName,
   brainWorkspaceMarkdownPath,
   normalizeBrainWorkspaceTree,
-  workspaceFolder,
+  workspaceFolderEntries,
+  workspaceFolderKey,
   workspaceLinkPath,
 } from "./workspace";
 
@@ -25,18 +26,24 @@ describe("Brain workspace", () => {
     expect(brainWorkspaceEntryIconName("file", "data.csv")).toBe("document");
   });
 
-  test("folders come first, nameless entries are dropped, and a trail walks into a folder", () => {
-    const tree = normalizeBrainWorkspaceTree({
+  test("folders come first and nameless entries are dropped; a folder is its own answer, without children", () => {
+    // What the daemon sends for `brain_workspace_tree {path: ""}`: one level, `children` never filled.
+    const root = normalizeBrainWorkspaceTree({
+      workspace: "/home/me/brain",
       entries: [
         { name: "b.md", path: "b.md", kind: "file" },
         { name: "", path: "ghost", kind: "file" },
-        { name: "notes", path: "notes", kind: "directory", children: [{ name: "z.md", path: "notes/z.md" }, { name: "a.md", path: "notes/a.md" }] },
+        { name: "notes", path: "notes", kind: "directory" },
         { name: "a.md", path: "a.md", kind: "file" },
       ],
     });
-    expect(workspaceFolder(tree, []).map((entry) => entry.name)).toEqual(["notes", "a.md", "b.md"]);
-    expect(workspaceFolder(tree, ["notes"]).map((entry) => entry.name)).toEqual(["a.md", "z.md"]);
-    expect(workspaceFolder(tree, ["gone"])).toEqual([]);
+    expect(workspaceFolderEntries(root).map((entry) => entry.name)).toEqual(["notes", "a.md", "b.md"]);
+    expect(root.entries.find((entry) => entry.name === "notes")?.children).toEqual([]);
+    // `brain_workspace_tree {path: "notes"}`.
+    const notes = normalizeBrainWorkspaceTree({ path: "notes", entries: [{ name: "z.md", path: "notes/z.md" }, { name: "a.md", path: "notes/a.md" }] });
+    expect(workspaceFolderEntries(notes).map((entry) => entry.path)).toEqual(["notes/a.md", "notes/z.md"]);
+    expect(workspaceFolderKey("s1", "notes")).not.toBe(workspaceFolderKey("s2", "notes"));
+    expect(workspaceFolderKey("s1", "")).not.toBe(workspaceFolderKey("s1", "notes"));
   });
 
   test("a link in a note opens another workspace file, never one outside it", () => {
