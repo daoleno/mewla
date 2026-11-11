@@ -257,7 +257,7 @@ android_native = root / ".github/actions/android-native/action.yml"
 native_action = android_native.read_text(encoding="utf-8") if android_native.is_file() else ""
 for required in (
     "android-ghostty-output-v2-arm64-",
-    "app/modules/terminal-vt/android/src/main/cpp/ghostty",
+    "native/terminal-vt/include/ghostty",
     "./scripts/verify-libghostty.sh --release",
 ):
     if required not in native_action:
@@ -317,11 +317,6 @@ CLIENT_GHOSTTY_NOTICE = "client/ui/more/settings/licenses/texts/Ghostty-MIT.txt"
 for rel in ("LICENSE", "NOTICE", "TRADEMARKS.md", CLIENT_GHOSTTY_NOTICE):
     if not (root / rel).is_file():
         errors.append(f"missing repo legal/notice file: {rel}")
-# The client packages its own copy; the libghostty build still copies app/'s next to the libraries.
-expo_notice = root / "app/assets/notices/GHOSTTY-MIT.txt"
-if expo_notice.is_file() and (root / CLIENT_GHOSTTY_NOTICE).is_file():
-    if expo_notice.read_bytes() != (root / CLIENT_GHOSTTY_NOTICE).read_bytes():
-        errors.append(f"{CLIENT_GHOSTTY_NOTICE} differs from app/assets/notices/GHOSTTY-MIT.txt")
 
 public_key_pem = root / "release/mewla-update-public-key.pem"
 updater_go = root / "daemon/selfupdate/selfupdate.go"

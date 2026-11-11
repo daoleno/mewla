@@ -155,7 +155,8 @@ PET_GROUND = 232 / 256
 
 def pet(s, clip, x, y, width, frame=-1):
     """The default pet in one frame of a clip, feet on y, centred on x."""
-    path = os.path.join(ROOT, "app", "assets", "pets", "p05", f"{clip}.webp")
+    # The default pet's clips the drawings use, written by scripts/import-pets.py.
+    path = os.path.join(HERE, f"pet-{clip}.webp")
     if frame < 0:
         from PIL import Image  # noqa: PLC0415
 

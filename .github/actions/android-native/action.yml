@@ -47,18 +47,18 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: |
-          app/modules/terminal-vt/libs/android
-          app/modules/terminal-vt/android/src/main/cpp/ghostty
-        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+          native/terminal-vt/libs/android
+          native/terminal-vt/include/ghostty
+        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'client/ui/more/settings/licenses/texts/Ghostty-MIT.txt') }}
     - name: Restore or save verified Android Ghostty output
       id: ghostty-output-cache-rw
       if: ${{ inputs.save-caches == 'true' }}
       uses: actions/cache@v4
       with:
         path: |
-          app/modules/terminal-vt/libs/android
-          app/modules/terminal-vt/android/src/main/cpp/ghostty
-        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+          native/terminal-vt/libs/android
+          native/terminal-vt/include/ghostty
+        key: android-ghostty-output-v2-arm64-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh', 'scripts/verify-libghostty.sh', 'scripts/verify-android-native-symbols.py', 'client/ui/more/settings/licenses/texts/Ghostty-MIT.txt') }}
 
     # Ghostty build inputs: the pinned Zig and the signed release tarballs.
     - name: Restore pinned Zig and Ghostty source
@@ -68,7 +68,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
+        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
     - name: Restore or save pinned Zig and Ghostty source
       if: ${{ steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' && inputs.save-caches == 'true' }}
       uses: actions/cache@v4
@@ -76,7 +76,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
+        key: android-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/build-libghostty.sh', 'scripts/lib/zig.sh') }}
 
     - name: Build release-grade arm64 Ghostty when the cache misses
       if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' && steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' }}
@@ -101,7 +101,7 @@ runs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle', 'client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
+        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
         restore-keys: |
           android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Restore or save Gradle home
@@ -111,15 +111,14 @@ runs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/build.gradle', 'client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
+        key: android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/**/*.gradle.kts', 'client/android/gradle.properties', 'client/android/gradle/wrapper/gradle-wrapper.properties') }}
         restore-keys: |
           android-gradle-v1-${{ runner.os }}-${{ runner.arch }}-
 
-    # ccache for the CMake builds: the NSH client's terminal bridge (and, for
-    # the Expo app's CI link, React Native, its codegen and native modules). The NDK is reinstalled on every runner, so the compiler
-    # is checked by content, not mtime, and codegen headers written during the
-    # build stay cacheable. Restore is by prefix, so a dependency bump still
-    # starts from the previous objects.
+    # ccache for the CMake build of the NSH client's terminal bridge. The NDK
+    # is reinstalled on every runner, so the compiler is checked by content,
+    # not mtime. Restore is by prefix, so a dependency bump still starts from
+    # the previous objects.
     - name: Install pinned ccache
       shell: bash
       run: |
@@ -147,7 +146,7 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ${{ runner.temp }}/ccache
-        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**', 'client/android/app/CMakeLists.txt', 'client/android/app/src/main/cpp/**') }}
+        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/app/CMakeLists.txt', 'client/android/app/src/main/cpp/**') }}
         restore-keys: |
           android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Restore or save ccache
@@ -155,7 +154,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ runner.temp }}/ccache
-        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/plugins/**', 'app/modules/*/android/**', 'client/android/app/CMakeLists.txt', 'client/android/app/src/main/cpp/**') }}
+        key: android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/android/app/CMakeLists.txt', 'client/android/app/src/main/cpp/**') }}
         restore-keys: |
           android-ccache-v1-${{ runner.os }}-${{ runner.arch }}-
     - name: Zero ccache statistics

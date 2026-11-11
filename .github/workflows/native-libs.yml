@@ -1,7 +1,7 @@
 name: Native libs (libghostty-vt)
 
 # Optional / release path: builds pinned Ghostty VT Android libraries and the
-# iOS XCFramework into app/modules/terminal-vt/libs (where client/android and
+# iOS XCFramework into native/terminal-vt/libs (where client/android and
 # client/ios link them from, -Pmewla.ghostty / MEWLA_GHOSTTY), and links the
 # NSH client's iOS host against the XCFramework.
 # Not part of default PR CI (Zig + Ghostty compile is heavy).
@@ -40,11 +40,11 @@ jobs:
         with:
           name: libghostty-vt-android
           path: |
-            app/modules/terminal-vt/libs/android/**/libghostty_vt.so
-            app/modules/terminal-vt/libs/android/SHA256SUMS
-            app/modules/terminal-vt/libs/android/build-manifest.json
-            app/modules/terminal-vt/libs/android/GHOSTTY-MIT.txt
-            app/assets/notices/GHOSTTY-MIT.txt
+            native/terminal-vt/libs/android/**/libghostty_vt.so
+            native/terminal-vt/libs/android/SHA256SUMS
+            native/terminal-vt/libs/android/build-manifest.json
+            native/terminal-vt/libs/android/GHOSTTY-MIT.txt
+            native/terminal-vt/include/ghostty/**
           if-no-files-found: error
 
   build-libghostty-ios:
@@ -106,8 +106,8 @@ jobs:
         with:
           name: libghostty-vt-ios
           path: |
-            app/modules/terminal-vt/libs/ios/GhosttyVt.xcframework/**
-            app/modules/terminal-vt/libs/ios/GHOSTTY-MIT.txt
-            app/modules/terminal-vt/libs/ios/SHA256SUMS
-            app/modules/terminal-vt/libs/ios/build-manifest.json
+            native/terminal-vt/libs/ios/GhosttyVt.xcframework/**
+            native/terminal-vt/libs/ios/GHOSTTY-MIT.txt
+            native/terminal-vt/libs/ios/SHA256SUMS
+            native/terminal-vt/libs/ios/build-manifest.json
           if-no-files-found: error

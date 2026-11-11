@@ -375,25 +375,15 @@ and sorting. Switching the canonical server still clears the previous snapshot.
 
 ### Reproducible fixture inspection
 
-`app/__fixtures__/telemetry/dashboard-v2.json` is synthetic, with all five owners,
-unknown names, missing CPU, orphaned status, process identities and five minutes
-of history. It is separate from existing local telemetry captures. The standalone
-Metro entry renders the actual ResourcesView, ThemeProvider, app fonts, native
-pressables and SVG charts without requiring pairing or modifying runtime routes.
-
-With the repository's Expo Metro server on port 8081, run from the repository root:
+`client/core/resources/fixtures/dashboard-v2.json` is synthetic, with all five
+owners, unknown names, missing CPU, orphaned status, process identities and five
+minutes of history. It is separate from existing local telemetry captures. The
+core and UI tests render Resources from it without pairing:
 
 ```sh
-bun app/__fixtures__/telemetry/serve-dashboard-preview.ts
+cd client && bun test core/resources
+cd client/ui && ~/.nsh/bin/nsh test more/resources
 ```
 
-Open `http://127.0.0.1:8097/` and emulate dark/light media and phone/wide viewport
-sizes. This loopback-only fixture server is a development tool; it is not a
-production route or a fallback for live Resources data. The Refresh callback is
-a no-op in this static fixture; real refresh/polling is covered by lifecycle tests.
-
-```sh
-cd app
-bun test services/resourceTelemetry.test.ts components/resources/resources.test.tsx components/resources/resourceConsumers.test.tsx
-bunx tsc --noEmit
-```
+The Refresh callback is a no-op in this static fixture; real refresh/polling is
+covered by the lifecycle tests (`core/resources/poll.test.ts`).

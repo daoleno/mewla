@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="app/assets/branding/mewla-icon.png" width="88" alt="Mewla seal-cat logo">
+  <img src="client/ios/Assets.xcassets/AppIcon.appiconset/icon.png" width="88" alt="Mewla seal-cat logo">
 </p>
 
 <h1 align="center">Mewla</h1>
@@ -106,13 +106,13 @@ Known issues: [Releases](docs/releases/README.md#known-issues).
 ## Develop
 
 ```sh
-bun install                           # workspace dependencies (Bun 1.3)
-bun run daemon:build                  # builds bin/mewla
+bun run daemon:build                  # builds bin/mewla (Bun 1.3)
 cd daemon && go test ./...
-cd app && bun test && bunx tsc --noEmit
+client/scripts/fetch-nsh.sh           # NSH into ~/.nsh
+cd client && bun test core && (cd ui && ~/.nsh/bin/nsh check && ~/.nsh/bin/nsh test)
 ```
 
-The daemon is Go in `daemon/`, the app is Expo/React Native in `app/`. Start
+The daemon is Go in `daemon/`, the app is the NSH client in `client/`. Start
 with [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md) and
 [Architecture](docs/architecture.md). Report vulnerabilities as described in
 [SECURITY.md](SECURITY.md).

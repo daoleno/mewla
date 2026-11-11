@@ -3,6 +3,7 @@ package screen
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
@@ -23,10 +24,12 @@ import (
 )
 
 // The end-to-end check without a phone: the app's real viewer (noVNC and its
-// H.264 path, from app/components/screen/screenViewerRuntime.js) runs in
-// headless Chrome, served from localhost (a secure context, so WebCodecs
-// exists), against the real RFB server on a Session. The page reports what
-// the viewer's canvas shows; the test compares it with a direct capture.
+// H.264 path, the WebView script of client/ui/more/screen/viewerSource.ts)
+// runs in headless Chrome, served from localhost (a secure context, so
+// WebCodecs exists), against the real RFB server on a Session. The page plays
+// the NSH WebView host (window.nsh.postMessage out, message events in),
+// reports what the viewer's canvas shows, and the test compares it with a
+// direct capture.
 
 // wsNetConn presents a WebSocket as the net.Conn the RFB server serves.
 type wsNetConn struct {
@@ -83,22 +86,25 @@ func (c *wsNetConn) SetDeadline(t time.Time) error {
 	return c.Conn.SetWriteDeadline(t)
 }
 
-const e2ePage = `<!doctype html><meta charset=utf-8><body style="margin:0;background:#777">
-<div id=v style="position:absolute;left:0;top:0;width:1300px;height:900px"></div>
+const e2ePage = `<!doctype html><meta charset=utf-8><body style="margin:0;background:#777;position:absolute;left:0;top:0;width:1300px;height:900px">
 <script type=module>
 const note = (text) => fetch('/log', { method: 'POST', body: text });
 window.addEventListener('error', (e) => note('error: ' + e.message));
 window.addEventListener('unhandledrejection', (e) => note('rejection: ' + e.reason));
-import('/runtime.js').then(({ mountScreenViewer }) => {
+let ws = { readyState: 0, send() {} };
+const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+// The NSH WebView host: the viewer answers through window.nsh.postMessage and
+// takes batches as message events, both JSON strings.
+window.nsh = { postMessage: (json) => {
+  const m = JSON.parse(json);
+  if (m.type !== 'stats' && m.type !== 'send') note('viewer: ' + m.type);
+  if (m.type === 'send') { const bin = atob(m.data); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); if (ws.readyState === 1) ws.send(u); }
+  else if (m.type === 'connected') note('connected ' + m.width + 'x' + m.height);
+  else if (m.type === 'disconnected') note('disconnected clean=' + m.clean);
+} };
+const viewer = { handle: (batch) => window.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(batch) })) };
+import('/runtime.js').then(() => {
   note('secure=' + isSecureContext + ' VideoDecoder=' + typeof VideoDecoder);
-  let ws = { readyState: 0, send() {} };
-  const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
-  const viewer = mountScreenViewer(document.getElementById('v'), (m) => {
-    if (m.type !== 'stats' && m.type !== 'send') note('viewer: ' + m.type);
-    if (m.type === 'send') { const bin = atob(m.data); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); if (ws.readyState === 1) ws.send(u); }
-    else if (m.type === 'connected') note('connected ' + m.width + 'x' + m.height);
-    else if (m.type === 'disconnected') note('disconnected clean=' + m.clean);
-  });
   // As the app does: the viewer is opened first, and the server's bytes are
   // relayed only once its channel exists (it waits up to 800 ms for the
   // H.264 probe).
@@ -146,17 +152,38 @@ type e2eResult struct {
 	edge           float64
 }
 
+// clientViewerSource is the script the client's Screen WebView runs: the
+// SCREEN_VIEWER_SOURCE string of client/ui/more/screen/viewerSource.ts (a JSON
+// string literal, written by its runtime/generate.mjs).
+func clientViewerSource(t *testing.T) string {
+	t.Helper()
+	_, runtimeFile, _, _ := runtime.Caller(0)
+	path := filepath.Join(filepath.Dir(runtimeFile), "..", "..", "client", "ui", "more", "screen", "viewerSource.ts")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const prefix = "export const SCREEN_VIEWER_SOURCE = "
+	for _, line := range strings.Split(string(data), "\n") {
+		if literal, ok := strings.CutPrefix(line, prefix); ok {
+			var source string
+			if err := json.Unmarshal([]byte(strings.TrimSuffix(literal, ";")), &source); err != nil {
+				t.Fatalf("%s: SCREEN_VIEWER_SOURCE: %v", path, err)
+			}
+			return source
+		}
+	}
+	t.Fatalf("%s has no SCREEN_VIEWER_SOURCE", path)
+	return ""
+}
+
 // runViewerE2E serves session to the real viewer in Chrome until the page
 // has scrolled and stopped, then compares the viewer's canvas with a direct
 // capture. The session must show the marker (awaitFixture is called first).
 func runViewerE2E(t *testing.T, ctx context.Context, session Session, video videoFactory, chrome, out string) e2eResult {
 	t.Helper()
 	var res e2eResult
-	_, runtimeFile, _, _ := runtime.Caller(0)
-	viewerJS, err := os.ReadFile(filepath.Join(filepath.Dir(runtimeFile), "..", "..", "app", "components", "screen", "screenViewerRuntime.js"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	viewerJS := clientViewerSource(t)
 	if _, _, err := awaitFixture(ctx, session, 12*time.Second); err != nil {
 		t.Fatalf("not measurable: %v", err)
 	}
@@ -176,7 +203,7 @@ func runViewerE2E(t *testing.T, ctx context.Context, session Session, video vide
 	})
 	mux.HandleFunc("/runtime.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
-		_, _ = w.Write(viewerJS)
+		_, _ = io.WriteString(w, viewerJS)
 	})
 	mux.HandleFunc("/log", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)

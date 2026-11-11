@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Build the pinned libghostty-vt XCFramework for arm64 iOS devices and
 # Apple Silicon iOS Simulator from the signed vt-X.Y.Z release tarball (see
-# scripts/build-libghostty.sh). The output is consumed by TerminalVt.podspec.
+# scripts/build-libghostty.sh). client/ios/project.yml links the output
+# (MEWLA_GHOSTTY, default native/terminal-vt).
 #
 #   MEWLA_GHOSTTY_RELEASE_DIR=/dir/with/tarballs ./scripts/build-libghostty-ios.sh  # offline
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
-OUT_DIR="$ROOT/app/modules/terminal-vt/libs/ios"
-NOTICE_SRC="$ROOT/app/assets/notices/GHOSTTY-MIT.txt"
+LOCK="$ROOT/native/terminal-vt/native.lock.json"
+OUT_DIR="$ROOT/native/terminal-vt/libs/ios"
+NOTICE_SRC="$ROOT/client/ui/more/settings/licenses/texts/Ghostty-MIT.txt"
 TOOL_CACHE="${MEWLA_TOOL_CACHE:-$ROOT/.cache/mewla-tools}"
 GHOSTTY_CACHE="${MEWLA_GHOSTTY_CACHE:-$ROOT/.cache/mewla/ghostty}"
 BUILD_TMP_ROOT="${MEWLA_BUILD_TMPDIR:-${TMPDIR:-/tmp}}"

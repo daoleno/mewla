@@ -1,6 +1,6 @@
 name: Client (NSH)
 
-# The NSH client that replaces app/ in one cutover release (client/README.md).
+# The NSH client, which replaced the Expo app in one cutover release (client/README.md).
 # Until it is stable it runs on pull requests and manual dispatch only, never on
 # a push to main, so it cannot turn main red; prove a change on a branch with
 # `gh workflow run client.yml --ref <branch> -f gate=false`. A run builds both hosts: the Android preview APK
@@ -59,7 +59,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      # The verified libghostty-vt XCFramework the terminal links (app/modules/terminal-vt/libs/ios, cached on main).
+      # The verified libghostty-vt XCFramework the terminal links (native/terminal-vt/libs/ios, cached on main).
       - name: iOS Ghostty XCFramework
         uses: ./.github/actions/ios-native
       - uses: actions/cache@v4

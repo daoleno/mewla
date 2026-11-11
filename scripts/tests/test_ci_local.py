@@ -35,7 +35,7 @@ class CILocalCoversCITests(unittest.TestCase):
     def test_commands_are_ci_yml_text_not_copies(self):
         planned = {(s.job, s.name): s.run for s in ci_local.plan("/tmp/runner") if s.run}
         self.assertIn("go test ./...", planned[("daemon", "Test")])
-        self.assertIn("licenses:generate --check", planned[("app", "Open-source licenses are current")])
+        self.assertIn("licenses/generate.py --check", planned[("client", "Open-source licenses are current")])
 
 
 if __name__ == "__main__":

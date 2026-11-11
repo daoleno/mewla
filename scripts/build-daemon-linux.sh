@@ -109,7 +109,7 @@ LIBS=""
 ZIG_BIN_PATH=""
 ZIG_CC_CACHE=""
 if [[ "$ENGINE" == required ]]; then
-  LOCK="$ROOT/app/modules/terminal-vt/native.lock.json"
+  LOCK="$ROOT/native/terminal-vt/native.lock.json"
   LIBS="${MEWLA_GHOSTTY_DESKTOP_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/mewla/ghostty-desktop}"
   lib_targets=()
   for target in "${TARGET_LIST[@]}"; do

@@ -26,9 +26,9 @@ val releaseKeystore = providers.environmentVariable("MEWLA_ANDROID_KEYSTORE").or
 val channel = providers.gradleProperty("mewla.channel").orNull ?: "github"
 if (channel !in setOf("github", "play")) throw GradleException("mewla.channel must be github or play, not $channel")
 
-// The terminal's libghostty-vt: built once per ABI by scripts/build-libghostty.sh into app/modules/terminal-vt
-// (it moves into client/ at the cutover). -Pmewla.ghostty=<dir> points elsewhere.
-val ghostty = file(providers.gradleProperty("mewla.ghostty").orNull ?: "${rootDir}/../../app/modules/terminal-vt")
+// The terminal's libghostty-vt: built once per ABI by scripts/build-libghostty.sh into native/terminal-vt
+// (libs/android/<abi> and include/ghostty, the daemon's engine shares its lock). -Pmewla.ghostty=<dir> points elsewhere.
+val ghostty = file(providers.gradleProperty("mewla.ghostty").orNull ?: "${rootDir}/../../native/terminal-vt")
 val abis = (providers.gradleProperty("mewla.abis").orNull ?: "arm64-v8a,x86_64").split(",")
 for (abi in abis) {
   val so = ghostty.resolve("libs/android/$abi/libghostty_vt.so")
@@ -126,8 +126,9 @@ val ghosttyNotice = tasks.register<GhosttyNotice>("ghosttyNotice") {
 }
 // Push: Firebase reads its app entry from resources (what the google-services plugin writes). The plugin
 // fails every variant whose package has no entry in the file, so the entry is looked up here instead and a
-// variant without one (the preview identity, until Firebase lists it) builds without push.
-val googleServices = rootProject.file("../../app/google-services.json")
+// variant without one (the preview identity, until Firebase lists it) builds without push. A production
+// release without its entry would ship without push and say nothing, so checkProductionReleasePush fails it.
+val googleServices = file("google-services.json")
 @Suppress("UNCHECKED_CAST")
 fun firebaseEntry(packageName: String): Map<String, String>? {
   if (!googleServices.isFile) return null
@@ -151,8 +152,16 @@ androidComponents {
   onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(bundleUi, BundleUi::assets)
     variant.sources.assets?.addGeneratedSourceDirectory(ghosttyNotice, GhosttyNotice::assets)
-    firebaseEntry(variant.applicationId.get())?.forEach { (name, value) ->
+    val firebase = firebaseEntry(variant.applicationId.get())
+    firebase?.forEach { (name, value) ->
       variant.resValues.put(variant.makeResValueKey("string", name), com.android.build.api.variant.ResValue(value, null))
+    }
+    if (variant.flavorName == "production" && variant.buildType == "release") {
+      val variantName = variant.name.replaceFirstChar { it.uppercase() }
+      val hasPush = firebase != null
+      val missing = "${googleServices.path} has no Firebase entry for ${variant.applicationId.get()}: the $variantName build would have no push"
+      val check = tasks.register("check${variantName}Push") { doLast { if (!hasPush) throw GradleException(missing) } }
+      tasks.matching { it.name == "pre${variantName}Build" }.configureEach { dependsOn(check) }
     }
   }
 }

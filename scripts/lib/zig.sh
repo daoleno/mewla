@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Resolve the Zig pinned in app/modules/terminal-vt/native.lock.json.
+# Resolve the Zig pinned in native/terminal-vt/native.lock.json.
 #
 # Source this file, then run:
 #   ZIG_BIN="$(mewla_resolve_zig "$LOCK" "$TOOL_CACHE")"

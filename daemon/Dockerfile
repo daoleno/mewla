@@ -30,7 +30,7 @@ RUN set -eu; \
     esac; \
     ./scripts/build-libghostty-desktop.sh --out /libs --targets "linux_${goarch}_musl"; \
     . scripts/lib/zig.sh; \
-    zig="$(mewla_resolve_zig app/modules/terminal-vt/native.lock.json /tools)"; \
+    zig="$(mewla_resolve_zig native/terminal-vt/native.lock.json /tools)"; \
     cd daemon; \
     ZIG_GLOBAL_CACHE_DIR=/tmp/zig-cc ZIG_LOCAL_CACHE_DIR=/tmp/zig-cc \
     CGO_ENABLED=1 CC="$zig cc -target ${zigarch}-linux-musl" \

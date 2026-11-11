@@ -299,25 +299,22 @@ You can also build the app from source on an Apple Silicon Mac.
 #### Build the iOS app from source
 
 You need full Xcode, an iOS Simulator runtime or a signed device target,
-CocoaPods, Bun, and network access for the first native build. Installing on a
+xcodegen, and network access for the first native build. Installing on a
 physical iPhone also needs an Apple development team.
 
 Clone the source, then from the repository root:
 
 ```sh
 git clone https://github.com/daoleno/mewla.git && cd mewla
-bun install
-bun run native:build:ios     # builds the pinned terminal library
-bun run native:verify:ios
-cd app
-bunx expo prebuild --platform ios --clean
-cd ios && pod install && cd ..
-bun run ios
+./scripts/build-libghostty-ios.sh     # builds the pinned terminal library
+./scripts/verify-libghostty-ios.sh
+client/scripts/fetch-nsh.sh --ios     # NSH and its iOS framework
+client/scripts/ios-project.sh         # generates client/ios/Mewla.xcodeproj
+open client/ios/Mewla.xcodeproj
 ```
 
-You can also open `app/ios/Mewla.xcworkspace` in Xcode after `pod install`. The
-app targets iOS 17.5 or newer and asks for local-network access (to reach your
-daemon) and camera access (to scan pairing codes).
+Build and run the Mewla scheme from Xcode. The app asks for local-network
+access (to reach your daemon) and camera access (to scan pairing codes).
 
 ### Web UI
 

@@ -1,5 +1,10 @@
 # Android app
 
+The Android app is the NSH client's Gradle host in `client/android` (see
+[client/README.md](../../client/README.md)): the `ui/` bundle built by `nsh build`,
+native views, the Keystore secrets, the camera reader and the terminal's
+libghostty-vt.
+
 ## Install the APK
 
 Open [GitHub Releases](https://github.com/daoleno/mewla/releases) and download the newest `mewla-android-arm64-v*.apk` together with `SHA256SUMS`.
@@ -23,22 +28,11 @@ Android will ask you to allow installation from the browser or file manager you 
 
 After installation, follow [Connect and pair](../connect-and-pair.md): use `mewla --lan` on a trusted private network or keep bare `mewla` behind an HTTPS endpoint, then scan or import the generated pairing code in Settings.
 
-## Current scope
-
-| Claim                                          | Status                                                                                              |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Pair, reconnect, session list, structured Chat | Supported release surface                                                                            |
-| Native terminal (Ghostty VT)                   | Requires built `libghostty_vt.so` for **arm64-v8a** (devices) and optionally **x86_64** (emulator)  |
-| Structured agent interfaces                    | Codex, Claude Code, Cursor Agent, Grok, Pi, and OpenCode share the same React Native Chat/Terminal UI used on iOS |
-| iOS                                            | Separate source-build target; see [ios.md](ios-development.md)                                                  |
-| Expo Go                                        | Can paste/scan pairing links; custom `mewla://` deep links need a dev build/APK                       |
-| Play Store                                     | Not part of this release foundation                                                                 |
-
 ## Architecture / ABI contract
 
 Canonical machine-readable contract:
 
-[`app/modules/terminal-vt/native.lock.json`](../../app/modules/terminal-vt/native.lock.json)
+[`native/terminal-vt/native.lock.json`](../../native/terminal-vt/native.lock.json)
 
 | Android ABI | Zig target              | Role                              | Sideload required |
 | ----------- | ----------------------- | --------------------------------- | ----------------- |
@@ -49,121 +43,31 @@ Canonical machine-readable contract:
 
 Invariants:
 
-1. Only the ABIs listed above may appear under `app/modules/terminal-vt/libs/android/`.
-2. Release sideload APKs are **arm64-v8a only** (`-PreactNativeArchitectures=arm64-v8a`).
-3. `libghostty_vt.so` and Ghostty C headers are **gitignored**. Strangers do not get terminal binaries from a bare clone until they build or consume release artifacts.
-4. Toolchain and Android source-derivation pins live in `native.lock.json` (Zig version, Ghostty git commit, and checksummed upstream patches). Dirty Ghostty trees are refused by default.
-5. Redistributed APKs must embed Ghostty MIT at `assets/notices/GHOSTTY-MIT.txt` (source: `app/assets/notices/GHOSTTY-MIT.txt`), packaged by Expo plugin `app/plugins/withAndroidRelease.js` during prebuild. Verify with `./scripts/verify-apk-notice.sh <apk>`.
+1. Only the ABIs listed above may appear under `native/terminal-vt/libs/android/`.
+2. Release APKs are **arm64-v8a only** (`-Pmewla.abis=arm64-v8a`).
+3. `libghostty_vt.so` and the Ghostty C headers are **gitignored**. A bare clone has no terminal binaries until it builds them or uses release artifacts.
+4. The toolchain and source pins live in `native.lock.json` (Zig version, the signed Ghostty release tarballs and their digests).
+5. Redistributed APKs embed Ghostty MIT at `assets/notices/GHOSTTY-MIT.txt` (source: `client/ui/more/settings/licenses/texts/Ghostty-MIT.txt`), packaged by the `ghosttyNotice` task of `client/android/app/build.gradle.kts`. Verify with `./scripts/verify-apk-notice.sh <apk>`.
 6. Release-grade native builds come only from the signed libghostty-vt release tarball pinned in the lock, taken unmodified (`release_grade: true`, `provenance: signed_release` in `build-manifest.json`). There is no developer override; `./scripts/verify-libghostty.sh --release` checks the manifest against the lock.
 7. Raw and APK-packaged `libghostty_vt.so` artifacts must not import symbols listed in `android.forbidden_undefined_symbols`. `verify-libghostty.sh` and the APK verifiers enforce this before distribution.
 
-Module wiring (source of truth for packaging):
+Wiring (source of truth for packaging):
 
-- `app/modules/terminal-vt/android/build.gradle` — `abiFilters` from `-PreactNativeArchitectures` (release: `arm64-v8a` only; unset: both supported ABIs); fails if the matching `libghostty_vt.so` is missing
-- `app/modules/terminal-vt/android/CMakeLists.txt` — imports `libs/android/${ANDROID_ABI}/libghostty_vt.so`
-- `app/plugins/withAndroidRelease.js` — copies MIT notice into `android/app/src/main/assets/notices/` and wires optional env-based release signing
+- `client/android/app/build.gradle.kts`: `mewla.ghostty` (default `native/terminal-vt`) and `mewla.abis` (default `arm64-v8a,x86_64`); fails when a selected ABI's `libghostty_vt.so` is missing.
+- `client/android/app/CMakeLists.txt`: imports `libs/android/${ANDROID_ABI}/libghostty_vt.so` and includes `include/` (the headers) from `MEWLA_GHOSTTY`.
+- `./scripts/verify-libghostty.sh --contract` checks this wiring, the lock and the notice (CI's native-contract job).
 
 ## Prerequisites
 
-- Bun (see root `packageManager`)
-- JDK 17 for native Android builds (see root `app:android` script)
-- Android SDK / device or emulator for `expo run:android`
-- For native terminal: the signed **libghostty-vt `vt-1.0.0` release tarballs** (downloaded on demand into `~/.cache/mewla/ghostty`, sha256-pinned in the lock, minisign-checked when `minisign` or Python `cryptography` is available) and Zig **0.17.0** (see lock). `build-libghostty.sh` uses a matching `zig` from `PATH` or downloads the pinned, checksum-verified one into `.cache/mewla-tools` (`MEWLA_TOOL_CACHE`). The build is offline (`zig build --system` with the dependency tarball); `MEWLA_GHOSTTY_RELEASE_DIR` points it at pre-downloaded tarballs
+- NSH: `client/scripts/fetch-nsh.sh` (pinned, into `~/.nsh`)
+- JDK 17 and the Android SDK, NDK 27.1 and CMake 3.22 (`.github/actions/android-native` lists the packages)
+- For the native terminal: the signed **libghostty-vt `vt-1.0.0` release tarballs** (downloaded on demand into `~/.cache/mewla/ghostty`, sha256-pinned in the lock, minisign-checked when `minisign` or Python `cryptography` is available) and Zig **0.17.0** (see lock). `build-libghostty.sh` uses a matching `zig` from `PATH` or downloads the pinned, checksum-verified one into `.cache/mewla-tools` (`MEWLA_TOOL_CACHE`). The build is offline (`zig build --system` with the dependency tarball); `MEWLA_GHOSTTY_RELEASE_DIR` points it at pre-downloaded tarballs
 
-## Day-to-day JS workflow
+## Day-to-day workflow
 
-Build the current arm64 Metro debug APK with one repeatable command from the
-repository root. It runs Expo prebuild first so the `Mewla Debug` identity,
-`MetroConnectActivity`, and native modules stay synchronized, then assembles
-only the debug variant with `mewlaStandalone=false`:
-
-```bash
-bun run android:debug:apk
-```
-
-The command does not start Metro. It prints the deterministic artifact path
-`app/android/app/build/outputs/apk/debug/mewla-debug-arm64.apk` and uses the
-existing debug keystore. Start or reuse Metro separately, then connect from
-**Mewla Development** on the phone.
-
-Until a host is saved, **Mewla Development** prefills the build machine's
-address from React Native's `react_native_dev_server_ip` and
-`react_native_dev_server_port` resources. Gradle detects that address at build
-time. To bake a different reachable address, such as a VPN address, pass
-`-PreactNativeDevServerIp=<host>` (and `-PreactNativeDevServerPort=<port>`) to
-`assembleDebug`. Check the result with
-`aapt2 dump resources <apk> | grep -A1 react_native_dev_server`.
-
-Use a **Metro-connected debug APK** for development, not a standalone APK or
-Expo Go. Mewla's custom terminal and pinned Link transport need
-their compiled native modules. The development APK uses the existing React
-Native dev-support runtime; it does not require an additional Expo Dev Client
-dependency. Android and iOS continue to share product JS; the native connection
-screen described below is Android-only, while iOS uses its native development
-build and standard React Native developer-menu server configuration.
-
-Reuse an already-running Metro for this checkout. Only when none is running,
-start it from the monorepo root:
-
-```bash
-bun install
-cd app
-bunx expo start
-```
-
-Install the compatible debug APK once, open **Mewla Debug**, check or enter the
-computer's reachable Metro `host:port` in **Mewla Development**, and tap **Connect**. An HTTP
-origin with a port is also accepted. Use the computer's LAN address, not the
-phone's `localhost`. No USB cable, ADB reverse command or daemon pairing is
-needed to configure Metro. Metro is separate from the canonical Mewla server;
-selecting Metro never selects or changes a paired daemon.
-
-The address is saved in native development preferences across relaunches. The
-connection screen checks Metro before opening JS and provides **Retry** when it
-cannot connect. Reopening the launcher returns to the connection screen; the
-standard React Native developer menu also provides server settings and reload.
-Shake the device to open that menu and enable **Fast Refresh**. Keep the computer
-and phone on a trusted network that allows the Metro port.
-
-- Saving ordinary JS, TS, component or style edits uses Fast Refresh. Compatible
-  component edits normally retain local React state; hook changes and module
-  boundaries can cause a remount or full reload. State retention is not a promise.
-- **Reload** fetches current JS again and resets in-memory state. Persisted app
-  settings and pairing credentials remain stored; normal server-switch and
-  authentication boundaries still apply.
-- Rebuild and install a compatible, same-signed APK for native dependency,
-  Kotlin/Java/C++ code, native config/permission or native resource changes.
-  Keep the same debug package and certificate and a nondecreasing version code.
-  Never uninstall or clear data to work around an incompatible upgrade.
-- This APK requires reachable Metro for startup and reload. It contains no
-  embedded application JS fallback. If Metro disappears during a session, the
-  already-running UI may remain visible, but new edits and reloads cannot work
-  until Metro is reachable. Reconnect or retry; do not treat that UI as updated.
-- This is trusted-network development, **not signed OTA production updating**.
-  Release builds never expose the connection activity or enable dev support.
-
-After applying native config with Expo prebuild, ordinary `assembleDebug` uses
-Metro (`mewlaStandalone=false`, the default, and React's default
-`debuggableVariants=['debug']`). Do not use a standalone packaging init script
-that empties `debuggableVariants` or sets `mewlaStandalone=true`. Explicit
-standalone debug builds retain their embedded-bundle workflow and disable the
-Metro launcher; release builds keep their normal launcher. The config plugin
-writes the connection activity and launcher overlay only to `src/debug`.
-
-Typecheck and unit tests:
-
-```bash
-cd app
-bun test
-bunx tsc --noEmit
-```
-
-Bundle export check (no Play Store upload; does **not** require `libghostty_vt.so`):
-
-```bash
-cd app
-npx expo export --platform android
-```
+- **Hot reload:** `client/scripts/dev-android.sh` installs the preview debug build on the one device `adb` sees and runs it from `nsh dev`: every save reloads it.
+- **A build to install:** `cd client/android && ./gradlew assemblePreviewRelease -Pmewla.abis=arm64-v8a`. The preview identity (`com.daoleno.mewla.preview`, "Mewla Preview") installs beside the store app.
+- **Checks:** `cd client && bun test core`, then `cd client/ui && ~/.nsh/bin/nsh check && ~/.nsh/bin/nsh test`.
 
 ## Pairing on device
 
@@ -172,16 +76,15 @@ npx expo export --platform android
 3. Open Settings in the app.
 4. Paste the `mewla://...` link, scan the QR, or import a QR photo.
 
-Release builds allow cleartext HTTP by default, through the `network_security_config.xml` that `withAndroidRelease` writes, so dynamic LAN and Tailscale IPs work. Android matches cleartext rules by host name, never by address range, so the config cannot say "private networks only"; it denies cleartext only for Mewla's own `mewla.ai` domains. Keeping `http://` to private addresses is the daemon address book's job (`addressbook.Normalize`). Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
+The app allows cleartext HTTP (`usesCleartextTraffic` in `client/android/app/src/main/AndroidManifest.xml`) so dynamic LAN and Tailscale IPs work. Keeping `http://` to private addresses is the daemon address book's job (`addressbook.Normalize`). Use HTTP only on a trusted private network; use an HTTPS endpoint on shared or untrusted networks.
 
-Remote push works in official builds: `app/app.config.js` carries Mewla's public EAS project ID and `app/google-services.json` is the public Firebase client config for `com.daoleno.mewla` and `com.daoleno.mewla.debug`. FCM delivery needs the FCM V1 key uploaded to that Expo project for each package (see [Notifications](../notifications.md)). A fork with its own package sets `MEWLA_EXPO_PROJECT_ID` (see `app/.env.example`), replaces `google-services.json`, and uploads its own key; a package name missing from `google-services.json` fails the build.
+Remote push works in official builds: `client/android/app/google-services.json` is the public Firebase client config for `com.daoleno.mewla`, which `build.gradle.kts` turns into the resources Firebase reads. FCM delivery needs the FCM V1 key uploaded to Mewla's Expo project (see [Notifications](../notifications.md)). A variant whose package has no entry in the file builds without push (the preview identity); a production release build without its entry fails (`checkProductionReleasePush`). A fork with its own package replaces `google-services.json` and uploads its own key.
 
 ## Native terminal library
 
-Android and iOS share the [terminal row-update pipeline](terminal-rendering.md),
-including the native formatter, renderer lifecycle, and DOM reuse rules.
+Android and iOS share the [terminal row-update pipeline](terminal-rendering.md).
 
-`app/modules/terminal-vt/libs/android/*/libghostty_vt.so` is **gitignored**. Without those binaries, the terminal surface is unavailable even if Chat works.
+`native/terminal-vt/libs/android/*/libghostty_vt.so` is **gitignored**. Without those binaries the Gradle build stops and names the missing ABI.
 
 ### Build (reproducible path)
 
@@ -196,7 +99,7 @@ including the native formatter, renderer lifecycle, and DOM reuse rules.
 # Verify ABI/ELF (+ checksums if present)
 ./scripts/verify-libghostty.sh
 ./scripts/verify-libghostty.sh --release    # arm64 only
-./scripts/verify-libghostty.sh --contract   # CI: lock + notice + scripts, no .so
+./scripts/verify-libghostty.sh --contract   # CI: lock + notice + wiring, no .so
 ```
 
 The builder downloads the signed release tarball and dependency tarball, checks
@@ -206,29 +109,21 @@ with `zig build --system` and a fresh Zig cache, and records the release
 version, both tarball digests, the Zig version and the library digests in the
 build manifest. Nothing is patched.
 
-Build outputs (all gitignored except the tracked lock/notice):
+Build outputs under `native/terminal-vt/` (all gitignored; the lock and `NOTICE.Ghostty` are tracked):
 
 | Path                                  | Purpose                                                          |
 | ------------------------------------- | ---------------------------------------------------------------- |
-| `libs/android/<abi>/libghostty_vt.so` | Imported by CMake / jniLibs                                      |
+| `libs/android/<abi>/libghostty_vt.so` | Imported by CMake                                                |
 | `libs/android/SHA256SUMS`             | Per-ABI digests for release notes                                |
 | `libs/android/build-manifest.json`    | Release version + tarball digests + Zig version + library digests |
 | `libs/android/GHOSTTY-MIT.txt`        | Copy of MIT notice for tarballs                                  |
-| `android/src/main/cpp/ghostty/`       | Headers for JNI bridge                                           |
+| `include/ghostty/`                    | Headers for the JNI bridge                                       |
 
-### Clean-clone expectations
-
-| Path                  | Bare `git clone`                                                                         | After `build-libghostty.sh` | Maintainer release artifact                                    |
-| --------------------- | ---------------------------------------------------------------------------------------- | --------------------------- | -------------------------------------------------------------- |
-| Chat / pairing JS     | Works                                                                                    | Works                       | Works                                                          |
-| Native terminal       | Unavailable                                                                              | Works (local)               | Works if APK includes arm64 `.so`                              |
-| CI default (`ci.yml`) | Bounded `android-native` job builds arm64 `libghostty_vt.so` and assembles debug AAR/APK | n/a                         | Optional `native-libs` workflow uploads multi-ABI `.so` + SUMS |
-
-There is **no** committed binary. Honest redistributable terminal support requires either:
+There is **no** committed binary. Redistributable terminal support requires either:
 
 1. Building from the pin locally, or
 2. Publishing checksummed libs/APK with the MIT notice (GitHub Release), or
-3. Running the optional native CI workflow and attaching its artifacts.
+3. Running the optional `native-libs` workflow and attaching its artifacts.
 
 ## Release APK (sideload)
 
@@ -241,50 +136,31 @@ There is **no** committed binary. Honest redistributable terminal support requir
 ./scripts/android-release-apk.sh
 ```
 
-The release script runs `expo prebuild --clean` so package identity and
-autolinking cannot retain a previous application ID, then asserts generated
-`applicationId` / `versionName` / `versionCode` match `app/app.base.json`.
-Use `--skip-prebuild` only after a clean prebuild for the current tracked config.
-
-Or via package script after libs exist and `app/android` is prebuilt:
-
-```bash
-cd app
-bun run build:apk
-# → android/app/build/outputs/apk/release/app-release-arm64.apk
-```
+The release script builds `:app:assembleProductionRelease` (or the Play bundle with `--aab`) and checks the APK's package, version name and version code against `client/ui/nsh.json` through `scripts/lib/release_identity.py`.
 
 ### Signing (secret-safe)
 
 - **Never** commit keystores, passwords, or `.jks` files.
-- Default local builds use the Expo/RN **debug** keystore for release variants (fine for personal sideload only).
-- Optional release signing is wired by `withAndroidRelease` via **Gradle `System.getenv`** (not `-P` secrets on the command line):
+- Without a keystore, release variants are debug-signed (fine for personal sideload only).
+- Release signing reads the environment (`System.getenv` in `client/android/app/build.gradle.kts`, never `-P` secrets on the command line):
 
 ```bash
 export MEWLA_ANDROID_KEYSTORE=/absolute/path/to/release.keystore
 export MEWLA_ANDROID_KEYSTORE_PASSWORD='…'   # do not commit; do not echo
 export MEWLA_ANDROID_KEY_ALIAS='…'
 export MEWLA_ANDROID_KEY_PASSWORD='…'
-./scripts/android-release-apk.sh   # runs prebuild, refuses if plugin wiring missing
+./scripts/android-release-apk.sh
 ```
 
-`android-release-apk.sh` aborts if generated `app/android/app/build.gradle` does not contain the env-based signing hook, and never prints secret values.
+`android-release-apk.sh` aborts if `client/android/app/build.gradle.kts` lacks the `MEWLA_ANDROID_*` signing config, and never prints secret values.
 
 ## Package identity
 
-Canonical tracked identity is [`app/app.base.json`](../../app/app.base.json) (loaded by [`app/app.config.js`](../../app/app.config.js)):
-
-| Field                 | Owner                                                                                                |
-| --------------------- | ---------------------------------------------------------------------------------------------------- |
-| `expo.version`        | [`app/app.base.json`](../../app/app.base.json)                                                          |
-| `android.package`     | [`app/app.base.json`](../../app/app.base.json) (`com.daoleno.mewla`)                                      |
-| `android.versionCode` | [`app/app.base.json`](../../app/app.base.json) (read the live integer; do not copy a stale table value) |
+The version is `client/ui/nsh.json`'s; `scripts/lib/release_identity.py` derives the version code from it (X·1 000 000 + Y·10 000 + Z·100 + 99, or + N for beta.N). The package is `com.daoleno.mewla`, the Expo app's, so the NSH app replaces it in place.
 
 Verify with `./scripts/verify-release-identity.sh` (also `bun run release:identity`).
 
-**Sideload note:** changing `android.package` from the old `com.anonymous.mewla` means Android treats this as a different app. Uninstall the previous package before installing a `com.daoleno.mewla` APK if both were installed on the same device.
-
-Official release APKs are signed by the release pipeline. Local builds without signing env use the debug keystore and are only suitable for personal testing. Never commit `MEWLA_ANDROID_*` secrets or local signing files.
+Official release APKs are signed by the release pipeline. Local builds without signing env are debug-signed and only suitable for personal testing. Never commit `MEWLA_ANDROID_*` secrets or local signing files.
 
 ### Staging (local, not a GitHub Release)
 
@@ -306,7 +182,7 @@ Each release has versioned notes under `docs/releases/`; the release page includ
 
 ### CI (GitHub Actions)
 
-Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../../.github/workflows/release-artifacts.yml). The workflow publishes the matching GitHub Release with the verified daemon archives first, then attaches the signed APK and the complete signed manifest when the Android build is verified. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. Required secret **names** and release preparation details: [ci-release.md](../ci-release.md).
+Signed arm64 APK and daemon binaries are built in parallel when a reviewed annotated stable or beta tag is pushed by [`.github/workflows/release-artifacts.yml`](../../.github/workflows/release-artifacts.yml). The workflow publishes the matching GitHub Release with the verified daemon archives first, then attaches the signed APK and the complete signed manifest when the Android build is verified. Stable tags become normal Latest releases; beta tags remain prereleases. Manual dispatch is build-only by default and requires an explicit reviewed boolean for publication recovery. Pull requests that touch `client/` build the preview APK in `client.yml`; `native-cache.yml` builds the release task graph on main. Required secret **names** and release preparation details: [ci-release.md](../ci-release.md).
 
 ## Related docs
 
@@ -316,58 +192,11 @@ Signed arm64 APK and daemon binaries are built in parallel when a reviewed annot
 - [Release blockers](../release-blockers.md)
 - [Troubleshooting](../troubleshooting.md)
 
-### Attachment document providers
+### Attachments
 
-Android composer attachments use a native `ACTION_GET_CONTENT` chooser with
-`CATEGORY_OPENABLE` for one-shot import, including content supplied by apps that
-do not expose a DocumentsProvider. It preserves the selected content URI and UTF-8 display name,
-then streams from that URI through the existing authenticated upload transport.
-Older installed binaries that lack the native `pickDocument` method continue to
-use Expo's picker, avoiding an undefined-method error after a JS update. Install
-the updated native APK to receive the provider metadata handling described here;
-the compatibility guard alone does not fix provider errors in older binaries.
-A provider may omit display name or size, return an empty metadata cursor, or
-throw from optional MIME/metadata APIs: Mewla checks stream read access before accepting the selection,
-uses `upload` for an absent name, and keeps unknown size unknown. Directories,
-invalid URIs and inaccessible streams fail before an attachment/upload is created;
-canceling returns no attachment. No storage permission or guessed filesystem path
-is used. Settings import retains Expo's picker; iOS retains its existing picker
-and the shared upload/cancellation/current-server contract.
-
-The picker launches on the main queue and owns one selection through metadata
-validation. Module destruction cancels pending reads and discards late results.
-The activity's temporary read grant covers the immediate streamed upload; Mewla
-does not persist grants or promise upload resumption after the activity/task ends.
-Mewla requests one openable item through this single import flow
-and rejects ambiguous data/ClipData results instead of choosing a different file.
-Unknown size remains chunked even when the transport's advisory size query fails.
-
-Picker errors include `PICK-RESULT` (missing/ambiguous selection), `PICK-URI`
-(invalid URI shape), `PICK-DIRECTORY`, `PICK-OPEN` (descriptor access), or
-`PICK-READ` (stream creation/read). `-PERMISSION` identifies access denial.
-Debug builds log bounded structural result facts, read-grant presence, metadata
-stage/exception class and stream stage/exception class under `UploadDocumentPicker`
-in Android logcat. Debug stream failures also include the provider authority and
-up to four exception/cause class names (plus numeric errno when available) in the
-alert, since Expo does not pass native causes to JavaScript. A null descriptor is
-identified as `NoStreamException`. Release alerts omit these diagnostic details.
-Diagnostics never include full URIs, names, paths, file bytes, or raw provider
-exception messages. Metadata failures alone do not imply access denial;
-the original stream must still open and read. A stage code diagnoses a failure
-boundary, not a confirmed device-specific cause.
-
-The probe's `openAssetFileDescriptor(uri, "r", signal)` followed by
-`createInputStream()` uses the same content-provider opening semantics as the
-uploader's `openInputStream(uri)` (which delegates to those operations in AOSP).
-No alternate URI, provider fallback chain, persistent grant or cache copy is used.
-The temporary grant supports immediate upload while the activity/task lives;
-background resumption after task destruction is not supported. Copying into cache
-would still require opening the same source and would not repair an open failure.
-Android documents `GET_CONTENT` for attachment import and `OPEN_DOCUMENT` for
-document access: see the [Intent contract](https://developer.android.com/reference/android/content/Intent#ACTION_GET_CONTENT)
-and [AndroidX GetContent](https://developer.android.com/reference/androidx/activity/result/contract/ActivityResultContracts.GetContent).
-
-The native provider regression fixture lives in `file-upload/android/src/androidTest`.
-Run `:file-upload:connectedDebugAndroidTest` from `app/android` with an emulator.
-Its optional `PickerFixtureActivity` exercises the real system picker and test-only
-DocumentsProvider; fixture components are excluded from release APKs.
+Composer attachments use the system's `ACTION_GET_CONTENT` chooser with
+`CATEGORY_OPENABLE` (`client/android/app/src/main/java/com/daoleno/mewla/files/Picker.kt`):
+any app that offers files, several at once. Each picked `content://` URI and its
+read grant are kept as they are and streamed through the authenticated upload
+transport; nothing is copied and no storage permission is used. A file that
+cannot be read comes back with a selection error instead of an attachment.

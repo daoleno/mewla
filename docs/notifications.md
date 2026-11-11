@@ -71,8 +71,9 @@ pushes again after a daemon restart once its app connects.
 Remote push on iOS is not yet available in official builds; Android is.
 
 A fork that signs its own build needs its own Expo project and Firebase app:
-set `MEWLA_EXPO_PROJECT_ID`, replace `app/google-services.json` with the file
-for your Android package, and upload your FCM V1 key to that Expo project.
+change `EXPO_PROJECT_ID` in `client/core/push/registration.ts`, replace
+`client/android/app/google-services.json` with the file for your Android
+package, and upload your FCM V1 key to that Expo project.
 Without them a fork still works, just without remote push.
 
 ## Telegram

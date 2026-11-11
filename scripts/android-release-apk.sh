@@ -128,7 +128,7 @@ fi
 
 APK="$OUTPUT"
 "$ROOT/scripts/verify-android-native-symbols.py" --lock \
-  "$ROOT/app/modules/terminal-vt/native.lock.json" --apk "$APK"
+  "$ROOT/native/terminal-vt/native.lock.json" --apk "$APK"
 "$ROOT/scripts/verify-apk-notice.sh" "$APK"
 
 # The built APK carries the tracked identity (versionName / versionCode from client/ui/nsh.json).
@@ -147,18 +147,18 @@ echo "ok: APK identity package=$PACKAGE versionName=$VERSION versionCode=$VERSIO
 OUT_DIR="$ROOT/dist-download/android-native"
 mkdir -p "$OUT_DIR"
 # Name from canonical app identity + pin short + content hash (not a formal release).
-PIN_SHORT="$(python3 -c "import json;print(json.load(open('app/modules/terminal-vt/native.lock.json'))['ghostty']['commit'][:12])")"
+PIN_SHORT="$(python3 -c "import json;print(json.load(open('$ROOT/native/terminal-vt/native.lock.json'))['ghostty']['commit'][:12])")"
 APK_SHA="$(sha256sum "$APK" | awk '{print $1}')"
 COPY="$OUT_DIR/mewla-android-arm64-v${VERSION}-${PIN_SHORT}-${APK_SHA:0:12}.apk"
 cp -f "$APK" "$COPY"
 echo "$APK_SHA  $(basename "$COPY")" | tee "$COPY.sha256"
 # Adjacent copy for humans who unpack the directory (APK itself already verified)
 cp -f "$ROOT/client/ui/more/settings/licenses/texts/Ghostty-MIT.txt" "$OUT_DIR/GHOSTTY-MIT.txt"
-if [[ -f "$ROOT/app/modules/terminal-vt/libs/android/SHA256SUMS" ]]; then
-  cp -f "$ROOT/app/modules/terminal-vt/libs/android/SHA256SUMS" "$OUT_DIR/libghostty-SHA256SUMS"
+if [[ -f "$ROOT/native/terminal-vt/libs/android/SHA256SUMS" ]]; then
+  cp -f "$ROOT/native/terminal-vt/libs/android/SHA256SUMS" "$OUT_DIR/libghostty-SHA256SUMS"
 fi
-if [[ -f "$ROOT/app/modules/terminal-vt/libs/android/build-manifest.json" ]]; then
-  cp -f "$ROOT/app/modules/terminal-vt/libs/android/build-manifest.json" "$OUT_DIR/libghostty-build-manifest.json"
+if [[ -f "$ROOT/native/terminal-vt/libs/android/build-manifest.json" ]]; then
+  cp -f "$ROOT/native/terminal-vt/libs/android/build-manifest.json" "$OUT_DIR/libghostty-build-manifest.json"
 fi
 
 echo ""

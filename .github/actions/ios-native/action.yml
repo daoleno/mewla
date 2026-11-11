@@ -1,11 +1,10 @@
 name: iOS native toolchain
 description: >
-  The verified iOS Ghostty XCFramework and the CocoaPods download cache. Shared
-  by the signed release, the tag-time Simulator build and the cache warmer so
-  their cache keys cannot drift. Only native-cache.yml on main saves caches:
-  GitHub scopes a cache to the ref that saved it, so a tag run can read main's
-  caches but nothing can read a tag's. Never caches signing material or signed
-  output.
+  The verified iOS Ghostty XCFramework the NSH client links. Shared by the
+  signed release, the client's Simulator build and the cache warmer so their
+  cache keys cannot drift. Only native-cache.yml on main saves caches: GitHub
+  scopes a cache to the ref that saved it, so a tag run can read main's caches
+  but nothing can read a tag's. Never caches signing material or signed output.
 
 inputs:
   save-caches:
@@ -21,7 +20,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        TOOLCHAIN_KEY="$( { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; pod --version; } | shasum -a 256 | cut -c1-20)"
+        TOOLCHAIN_KEY="$( { xcodebuild -version; xcrun --sdk iphoneos --show-sdk-version; } | shasum -a 256 | cut -c1-20)"
         echo "cache_key=$TOOLCHAIN_KEY" >> "$GITHUB_OUTPUT"
 
     - name: Verify shared native contract
@@ -34,15 +33,15 @@ runs:
       if: ${{ inputs.save-caches != 'true' }}
       uses: actions/cache/restore@v4
       with:
-        path: app/modules/terminal-vt/libs/ios
-        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+        path: native/terminal-vt/libs/ios
+        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'client/ui/more/settings/licenses/texts/Ghostty-MIT.txt') }}
     - name: Restore or save verified iOS Ghostty output
       id: ghostty-output-cache-rw
       if: ${{ inputs.save-caches == 'true' }}
       uses: actions/cache@v4
       with:
-        path: app/modules/terminal-vt/libs/ios
-        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'app/assets/notices/GHOSTTY-MIT.txt') }}
+        path: native/terminal-vt/libs/ios
+        key: ios-ghostty-output-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**', 'scripts/verify-libghostty-ios.sh', 'client/ui/more/settings/licenses/texts/Ghostty-MIT.txt') }}
 
     # Ghostty build inputs: the pinned Zig and the signed release tarballs.
     - name: Restore pinned Zig and Ghostty source
@@ -52,7 +51,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**') }}
+        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**') }}
     - name: Restore or save pinned Zig and Ghostty source
       if: ${{ steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' && inputs.save-caches == 'true' }}
       uses: actions/cache@v4
@@ -60,7 +59,7 @@ runs:
         path: |
           ${{ runner.temp }}/tools
           ${{ runner.temp }}/ghostty
-        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('app/modules/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**') }}
+        key: ios-native-inputs-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('native/terminal-vt/native.lock.json', 'scripts/build-libghostty-ios.sh', 'scripts/lib/zig.sh', 'scripts/lib/ghostty_release.py', 'scripts/lib/minisign_verify.py', 'scripts/lib/zig-xcode-compat.sh', 'scripts/zig-xcode-compat/**') }}
 
     - name: Build iOS Ghostty XCFramework when the cache misses
       if: ${{ steps.ghostty-output-cache.outputs.cache-hit != 'true' && steps.ghostty-output-cache-rw.outputs.cache-hit != 'true' }}
@@ -73,22 +72,3 @@ runs:
     - name: Verify iOS Ghostty XCFramework
       shell: bash
       run: ./scripts/verify-libghostty-ios.sh
-
-    # CocoaPods downloads and specs. The caller runs prebuild and pod install;
-    # actions/cache saves in its post step, after that install has filled them.
-    - name: Restore CocoaPods download cache
-      if: ${{ inputs.save-caches != 'true' }}
-      uses: actions/cache/restore@v4
-      with:
-        path: |
-          ~/Library/Caches/CocoaPods
-          ~/.cocoapods/repos
-        key: cocoapods-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/TerminalVt.podspec') }}
-    - name: Restore or save CocoaPods download cache
-      if: ${{ inputs.save-caches == 'true' }}
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/Library/Caches/CocoaPods
-          ~/.cocoapods/repos
-        key: cocoapods-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.cache_key }}-${{ hashFiles('bun.lock', 'app/package.json', 'app/modules/terminal-vt/native.lock.json', 'app/modules/terminal-vt/TerminalVt.podspec') }}

@@ -1,8 +1,9 @@
 # Mewla client (NSH)
 
 The app on [NSH](https://nsh.dev): one TSX app with native views on iOS and Android, and the same TSX on the web.
-It is built complete beside `app/` (Expo) and replaces it in one release, in place: same package and signing key on
-Android, same bundle id on iOS, so a phone keeps its pairing and its drafts. Until then `app/` is what ships.
+It replaces the Expo app in one release, in place: same package and signing key on Android, same bundle id on iOS,
+so a phone keeps its pairing and its drafts. The terminal links libghostty-vt from `native/terminal-vt/` (built by
+`scripts/build-libghostty.sh` and `scripts/build-libghostty-ios.sh`, pinned by its `native.lock.json`).
 
 | Directory | What it is | Owns |
 |---|---|---|
