@@ -124,7 +124,7 @@ from this endpoint, so a revoked token stops it for good.
   arrives, by push or by socket. A token the daemon refuses clears the widgets
   and is not re-issued until the server is switched; an unreadable token is
   dropped and issued again.
-- A server paired through Mewla Link has no address a widget can fetch, so its
+- A server paired through Mewla Relay has no address a widget can fetch, so its
   widgets are fed instead: every state the app applies, by socket or by a push
   that wakes the service with the app closed, is cached and repainted. States
   are ordered by `(epoch, seq)`, so a late one never overwrites a newer one.
@@ -146,7 +146,7 @@ from this endpoint, so a revoked token stops it for good.
 - Widgets (small, medium) read `live_state.json` from the App Group the app
   writes on every state, and, on a plain URL, fetch `/widget/snapshot` with the
   same revocable token as Android. A refused token clears them and they ask to
-  open Mewla; Mewla Link servers show only what the app and pushes applied.
+  open Mewla; Mewla Relay servers show only what the app and pushes applied.
 - The extension is built only when `MEWLA_IOS_LIVE=1` (repository variable
   `MEWLA_IOS_LIVE` for releases), after its App IDs, App Group and provisioning
   profile exist: see `docs/ios-ci-release.md`. A build without it behaves as before.
@@ -158,7 +158,7 @@ from this endpoint, so a revoked token stops it for good.
   from the background, so the first card of a run appears once the app is open.
 
 - On a plain URL the widget fetches the daemon itself and a revoked phone stops
-  at the next refresh. On Mewla Link the widget only shows what was pushed: it
+  at the next refresh. On Mewla Relay the widget only shows what was pushed: it
   shows "Open Mewla" once its last state is more than 12 hours old. Revoking
   that phone stops the pushes (the daemon turns live pushes off for the device
   that registered them), but the widget keeps its last state until that point.

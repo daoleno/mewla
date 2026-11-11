@@ -1,10 +1,10 @@
-# Mewla Link Relay operations
+# Mewla Relay operations
 
 This runbook describes a single-region MVP. Mewla operates one hosted relay
 and account service for remote access (`connect.mewla.ai`, computers under
 `*.m.mewla.ai`), deployed from this repository with Kamal; see
 [Hosted remote access](#hosted-remote-access). There is no global SLO or
-backbone. Self-hosted Link examples stay inert until an operator supplies
+backbone. Self-hosted Relay examples stay inert until an operator supplies
 configuration, credentials, certificates and DNS.
 
 The relay runs in two modes, and one relay may accept both:
@@ -14,7 +14,7 @@ The relay runs in two modes, and one relay may accept both:
   verifies it with `-grant-public-key-file`. See
   [Hosted remote access](#hosted-remote-access).
 - **Self-hosted**: daemons share one connector token
-  (`MEWLA_LINK_CONNECTOR_TOKEN`) and a `link.json`, described below.
+  (`MEWLA_LINK_CONNECTOR_TOKEN`) and a `relay.json`, described below.
 
 ## Ports and prerequisites
 
@@ -68,7 +68,7 @@ secret manager.
 
 ## Daemon configuration
 
-Create `<state-dir>/link.json` (default `~/.mewla/link.json`) with mode `0600`:
+Create `<state-dir>/relay.json` (default `~/.mewla/relay.json`) with mode `0600`:
 
 ```json
 {
@@ -105,15 +105,18 @@ Start the daemon with that environment:
 MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' mewla
 ```
 
-An explicit config elsewhere uses `mewla -link-config /path/link.json`. The
-daemon continues listening on loopback and opens only outbound Link sockets.
+An explicit config elsewhere uses `mewla -link-config /path/relay.json` (the flag
+keeps its earlier name: a daemon restarted by `mewla update` replays its
+original arguments). A `link.json` from an earlier version in the state directory
+is renamed to `relay.json` once, when `mewla` starts. The
+daemon continues listening on loopback and opens only outbound Relay sockets.
 After it connects:
 
 ```bash
 MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' mewla pair
 ```
 
-If Link is not configured, `mewla pair` uses the best address in
+If Relay is not configured, `mewla pair` uses the best address in
 `mewla address list` (or `mewla pair <address>`); it remains Pairing V1.
 
 ## Health, readiness, and metrics
@@ -180,7 +183,7 @@ go test -run TestOpaqueRelayConnectorHealthAndAdmissionReplay -v ./link
 
 # Also execute the real TS importConnection owner through an on-demand
 # loopback pinned-transport adapter, the same Relay/Connector, and daemon /pair.
-MEWLA_LINK_MOBILE_RELAY_E2E=1 \
+MEWLA_RELAY_MOBILE_E2E=1 \
   go test -run TestOpaqueRelayConnectorHealthAndAdmissionReplay -v ./link
 ```
 
@@ -214,7 +217,7 @@ Rollout order:
 1. Run one relay process in one region.
 2. Validate health/readiness, metadata-only metrics, admission, pair, probe,
    WSS/Terminal, upload, and Range.
-3. Distribute `link.json` only to opt-in daemon hosts.
+3. Distribute `relay.json` only to opt-in daemon hosts.
 4. Keep explicit V1/LAN/Tailscale/Cloudflare paths unchanged.
 5. Add a second region as a Pairing V2 candidate only after connector/mobile
    failover testing.
@@ -232,13 +235,13 @@ on that window.
 
 Rollback:
 
-1. Remove/rename `link.json` and restart the daemon in the operator's normal
+1. Remove/rename `relay.json` and restart the daemon in the operator's normal
    maintenance window, or launch without `-link-config`.
 2. Existing self-managed server records and Pairing V1 links continue working.
 3. Stop the relay after connectors drain.
-4. Do not delete daemon identity, trusted-device, or Link identity state merely
-   to roll back transport. Preserving the Link identity avoids needless pin
-   rotation if Link is re-enabled.
+4. Do not delete daemon identity, trusted-device, or Relay identity state merely
+   to roll back transport. Preserving the Relay identity avoids needless pin
+   rotation if Relay is re-enabled.
 
 ## Multi-region boundary
 
@@ -367,6 +370,11 @@ depend on any of this.
 | `connect.mewla.ai:443` | The relay passes the TLS stream, by SNI, to the account service (`-sni-route`), with a PROXY protocol v1 header carrying the client's address (`-sni-route-proxy-protocol`). The account service holds its own Let's Encrypt certificate (`-tls-addr`, TLS-ALPN-01 through the relay) and reads the header (`-proxy-protocol`). |
 | `connect.mewla.ai:8443` | The relay's control plane for daemons. Self-signed certificate that the account service hands to each computer, which pins it. |
 | `*.m.mewla.ai:443` | The relay, by SNI label, to that computer. The computer holds the certificate; the relay sees only encrypted bytes. |
+
+The product is Mewla Relay. The deployed pieces below keep the names they were
+created with (`mewla-link-*` services, volumes and images, `MEWLA_LINK_VERSION`,
+the `mewla_link_*` metrics): renaming one means redeploying and re-pointing
+dashboards, so they stay literal in this runbook.
 
 | Kamal piece | Role |
 | --- | --- |
