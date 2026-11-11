@@ -10,10 +10,17 @@ import {
   rememberInterfaceConversation,
   type InterfaceChatThreadAction,
   type InterfaceChatThreadState,
+  type ComposerAttachment,
   type PendingUserMessageInput,
 } from "./thread";
+import type { SendAttachment } from "./send";
 
 export { chatCacheKey };
+
+/** What the daemon is told about each file: where it keeps it (the phone's own URI stays here). */
+function sendAttachments(files: readonly ComposerAttachment[]): SendAttachment[] {
+  return files.map((file) => ({ name: file.name, path: file.path, ...(file.mimeType ? { content_type: file.mimeType } : {}) }));
+}
 
 export interface ChatOptions {
   serverId: string;
@@ -63,14 +70,14 @@ export class Chat {
   }
 
   /** Queues the message: the row shows at once, delivery (now or after a reconnect) is the outbox's. */
-  send(text: string): void {
+  send(text: string, attachments: ComposerAttachment[] = []): void {
     const body = text.trim();
-    if (!body || this.closed) return;
+    if ((!body && attachments.length === 0) || this.closed) return;
     const { outbox, serverId, target } = this.options;
     const requestId = outbox.mintId();
-    const rowId = this.addPending({ body, sentText: text, attachments: [], lifecycle: "pending", dispatchRequestId: requestId });
+    const rowId = this.addPending({ body, sentText: text, attachments, lifecycle: "pending", dispatchRequestId: requestId });
     this.rowByRequest.set(requestId, rowId);
-    outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text });
+    outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text, attachments: sendAttachments(attachments) });
   }
 
   /** "Send again" or "Delete" on a message that could not be delivered. */
@@ -88,7 +95,7 @@ export class Chat {
     const requestId = outbox.mintId();
     this.rowByRequest.set(requestId, message.id);
     this.dispatch({ type: "begin_pending_user_message_attempt", id: message.id, requestId });
-    outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text: message.sentText });
+    outbox.enqueue({ id: requestId, serverId, workerId: target.targetId, conversationScopeKey: target.conversationScopeKey, text: message.sentText, attachments: sendAttachments(message.attachments) });
   }
 
   close(): void {
