@@ -105,9 +105,9 @@ Start the daemon with that environment:
 MEWLA_LINK_CONNECTOR_TOKEN='from-your-secret-manager' mewla
 ```
 
-An explicit config elsewhere uses `mewla -link-config /path/relay.json` (the flag
-keeps its earlier name: a daemon restarted by `mewla update` replays its
-original arguments). A `link.json` from an earlier version in the state directory
+An explicit config elsewhere uses `mewla -relay-config /path/relay.json` (also
+`mewla pair -relay-config …`; the earlier `-link-config` still works, so a
+daemon restarted by `mewla update` with its original arguments starts). A `link.json` from an earlier version in the state directory
 is renamed to `relay.json` once, when `mewla` starts. The
 daemon continues listening on loopback and opens only outbound Relay sockets.
 After it connects:
@@ -236,7 +236,7 @@ on that window.
 Rollback:
 
 1. Remove/rename `relay.json` and restart the daemon in the operator's normal
-   maintenance window, or launch without `-link-config`.
+   maintenance window, or launch without `-relay-config`.
 2. Existing self-managed server records and Pairing V1 links continue working.
 3. Stop the relay after connectors drain.
 4. Do not delete daemon identity, trusted-device, or Relay identity state merely

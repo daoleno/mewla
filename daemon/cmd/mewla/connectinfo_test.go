@@ -1176,3 +1176,29 @@ func TestLegacyLinkJSONIsMovedToRelayJSONAtStart(t *testing.T) {
 		t.Fatalf("relay.json mode = %v", info.Mode().Perm())
 	}
 }
+
+func TestRelayConfigFlagAndItsEarlierNameMeanTheSame(t *testing.T) {
+	for _, name := range []string{"-relay-config", "-link-config"} {
+		daemon, err := parseDaemonConfig([]string{name, "/tmp/relay.json"}, io.Discard)
+		if err != nil || daemon.linkConfigPath != "/tmp/relay.json" {
+			t.Fatalf("serve %s = %q, %v", name, daemon.linkConfigPath, err)
+		}
+		pair, err := parsePairConfig([]string{name, "/tmp/relay.json"}, io.Discard)
+		if err != nil || pair.linkConfigPath != "/tmp/relay.json" {
+			t.Fatalf("pair %s = %q, %v", name, pair.linkConfigPath, err)
+		}
+	}
+}
+
+func TestEarlierRelayConfigFlagStaysOutOfHelp(t *testing.T) {
+	var help bytes.Buffer
+	_, _ = parsePairConfig([]string{"-h"}, &help)
+	if !strings.Contains(help.String(), "-relay-config") || strings.Contains(help.String(), "link-config") {
+		t.Fatalf("pair help:\n%s", help.String())
+	}
+	var top bytes.Buffer
+	printTopLevelUsage(&top)
+	if !strings.Contains(top.String(), "-relay-config") || strings.Contains(top.String(), "link-config") {
+		t.Fatalf("top-level help:\n%s", top.String())
+	}
+}
