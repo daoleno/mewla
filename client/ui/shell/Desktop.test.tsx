@@ -104,7 +104,8 @@ describe("the desktop layout", () => {
     const id = "mh-c76c35d267c789a94b2d013b";
     const sessions = [{ id, name: `${id} (${id})`, cwd: "/home/me/gitdemo", command: "zsh", status: "running", started_at: 1 }];
     const app = await open(APP, { ...desk, host: webHost({ brain: {}, worker_sessions: sessions }, { "web.initialPath": { path: `/sessions/${id}`, state: null } }) });
-    await app.waitUntil(() => last(app)?.path === `/sessions/${id}` && !!last(app)?.title, { timeout: 10_000 });
+    // Before the Session list arrives the tab says "Session"; then the page's title.
+    await app.waitUntil(() => last(app)?.path === `/sessions/${id}` && last(app)?.title !== "Session · Mewla", { timeout: 10_000 });
     await app.wait(300);
     expect(last(app)!.title).toBe("gitdemo · Mewla");
   }, 20_000);
