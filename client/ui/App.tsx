@@ -56,8 +56,10 @@ host.on("links.open", (payload) => {
 
 mount(() => (
   <View class="flex-1 bg-background">
-    {!ready() ? null : current() ? <Shell /> : null}
-    {/* First run, and on a phone the connected step after any pairing, over the app. */}
+    {/* The app is not under the connected step: on Android its native tab and navigation views were drawn
+        over the step once the notification prompt or a navigation came back, so the step vanished. */}
+    {!ready() ? null : current() && !justPaired() ? <Shell /> : null}
+    {/* First run, and on a phone the connected step after any pairing. */}
     {ready() && (!current() || justPaired()) ? <View class="absolute inset-0 bg-background"><FirstRun /></View> : null}
     <CrashReportSheet />
   </View>
