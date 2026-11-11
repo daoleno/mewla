@@ -676,7 +676,7 @@ func VerifyServerAssertion(publicKeyHex, purpose string, assertion ServerAsserti
 	return ed25519.Verify(ed25519.PublicKey(publicKey), payload, signature)
 }
 
-// CreateLinkSignature signs a domain-separated Mewla Link control-plane
+// CreateLinkSignature signs a domain-separated Mewla Relay control-plane
 // payload with the daemon identity. The Link transport key is separate; this
 // signature binds route and transport metadata back to the existing daemon
 // trust anchor.

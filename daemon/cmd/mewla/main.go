@@ -1012,13 +1012,13 @@ func runDaemon(args []string, stderr io.Writer) error {
 			switch {
 			case state.Phase == "connected":
 				log.Printf(
-					"Mewla Link connected via %s (registration RTT %s)",
+					"Mewla Relay connected via %s (registration RTT %s)",
 					state.Relay,
 					state.MeasuredRTT.Round(time.Millisecond),
 				)
 			case state.Phase == "offline" && state.LastError != "":
 				log.Printf(
-					"Mewla Link offline: %s; check relay reachability, connector credentials, and route ownership",
+					"Mewla Relay offline: %s; check relay reachability, connector credentials, and route ownership",
 					state.LastError,
 				)
 			}
@@ -1030,15 +1030,15 @@ func runDaemon(args []string, stderr io.Writer) error {
 			srv.Handler(),
 		)
 		if connectorErr != nil {
-			return fmt.Errorf("initialize Mewla Link connector: %w", connectorErr)
+			return fmt.Errorf("initialize Mewla Relay connector: %w", connectorErr)
 		}
 		runtimeOwners = append(runtimeOwners, runtimeOwner{
-			name: "Mewla Link connector",
+			name: "Mewla Relay connector",
 			run:  connector.Run,
 		})
 		fmt.Fprintf(
 			stderr,
-			"Mewla Link configured from %s; connecting outbound.\n",
+			"Mewla Relay configured from %s; connecting outbound.\n",
 			linkConfigPath,
 		)
 	}
@@ -2548,7 +2548,7 @@ func runPair(cfg pairConfig, stderr io.Writer) error {
 		ExpiresAt: pairingInfo.ExpiresAt,
 	}
 	// The live runtime owner issued the token; read its state without
-	// constructing a second auth manager unless Mewla Link needs one.
+	// constructing a second auth manager unless Mewla Relay needs one.
 	stateDir, err := auth.ResolveStorageDir(cfg.stateDir)
 	if err != nil {
 		return fmt.Errorf("resolve auth storage directory: %w", err)
@@ -2603,7 +2603,7 @@ func runPair(cfg pairConfig, stderr io.Writer) error {
 			if err != nil {
 				return err
 			}
-			links.phoneAddress, links.phoneLink = "Mewla Link", connectLink
+			links.phoneAddress, links.phoneLink = relayLabel, connectLink
 		}
 	}
 	if links.phoneLink == "" && links.localBrowser == "" && len(links.httpsBrowser) == 0 {
@@ -2629,7 +2629,7 @@ func runPair(cfg pairConfig, stderr io.Writer) error {
 // applyRemotePairing puts the remote access Link pairing in the phone QR. When
 // remote access is on but its admission failed, the phone QR the address book
 // would give is that same hosted address as a direct pairing: a phone that
-// scans it is saved without the pinned Mewla Link route, then dials the
+// scans it is saved without the pinned Mewla Relay route, then dials the
 // computer's own TLS server, which not every phone stack can (an iPhone's
 // WebSocket fails against TLS 1.3 only). Showing it as if nothing happened
 // leaves a person stuck on a connection that never opens, so it is an error
@@ -2648,7 +2648,7 @@ func applyRemotePairing(links pairingLinks, remoteURL, connectLink, address stri
 	return links, nil
 }
 
-// buildLinkPairingLink admits one phone through the configured Mewla Link
+// buildLinkPairingLink admits one phone through the configured Mewla Relay
 // relay and returns its connect link.
 func buildLinkPairingLink(
 	authManager *auth.Manager,
@@ -2661,7 +2661,7 @@ func buildLinkPairingLink(
 		link.RelayDomains(linkConfig),
 	)
 	if err != nil {
-		return "", fmt.Errorf("initialize Mewla Link transport identity: %w", err)
+		return "", fmt.Errorf("initialize Mewla Relay transport identity: %w", err)
 	}
 	pairContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -2674,7 +2674,7 @@ func buildLinkPairingLink(
 	)
 	if err != nil {
 		return "", fmt.Errorf(
-			"request Mewla Link pairing admission from %s: %w (make sure mewla is running and Link is connected)",
+			"request Mewla Relay pairing admission from %s: %w (make sure mewla is running and Mewla Relay is connected)",
 			linkConfigPath,
 			err,
 		)
@@ -2687,7 +2687,7 @@ func buildLinkPairingLink(
 		admissions,
 	)
 	if err != nil {
-		return "", fmt.Errorf("build Mewla Link pairing payload: %w", err)
+		return "", fmt.Errorf("build Mewla Relay pairing payload: %w", err)
 	}
 	return connectLink, nil
 }
@@ -2700,7 +2700,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	fs.StringVar(&cfg.addr, "addr", "127.0.0.1:9876", "listen on host:port")
 	fs.BoolVar(&cfg.lan, "lan", false, "listen on all networks (plain HTTP; trusted networks only)")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
-	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Link config (default: <state-dir>/link.json when present)")
+	bindRelayConfigFlags(fs, &cfg.linkConfigPath, "Mewla Relay config (default: <state-dir>/relay.json when present)")
 	fs.Usage = func() { printTopLevelUsage(stderr) }
 
 	if err := fs.Parse(args); err != nil {
@@ -2773,9 +2773,35 @@ Flags
   -lan                  listen on all networks (plain HTTP; trusted networks only)
   -addr host:port       listen on host:port instead of 127.0.0.1:9876
   -state-dir dir        state directory (default ~/.mewla)
-  -link-config path     Mewla Link relay config, for self-hosted Link (default <state-dir>/link.json)
+  -relay-config path    Mewla Relay config, for a self-hosted relay (default <state-dir>/relay.json)
   -v, --version         print the Mewla version and exit
 `)
+}
+
+// legacyRelayConfigFlag is -relay-config's earlier name. `mewla update` restarts
+// the daemon with its original arguments, so a daemon started with it must
+// keep starting. It means the same as -relay-config and is not documented.
+const legacyRelayConfigFlag = "link-config"
+
+func bindRelayConfigFlags(fs *flag.FlagSet, target *string, usage string) {
+	fs.StringVar(target, "relay-config", "", usage)
+	fs.StringVar(target, legacyRelayConfigFlag, "", usage)
+}
+
+// printDefaultsWithout prints fs's flag defaults, leaving out the named flags.
+func printDefaultsWithout(fs *flag.FlagSet, w io.Writer, hidden ...string) {
+	visible := flag.NewFlagSet(fs.Name(), flag.ContinueOnError)
+	visible.SetOutput(w)
+	fs.VisitAll(func(f *flag.Flag) {
+		for _, name := range hidden {
+			if f.Name == name {
+				return
+			}
+		}
+		visible.Var(f.Value, f.Name, f.Usage)
+		visible.Lookup(f.Name).DefValue = f.DefValue
+	})
+	visible.PrintDefaults()
 }
 
 func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
@@ -2784,17 +2810,17 @@ func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 
 	cfg := pairConfig{}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
-	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Link config (default: <state-dir>/link.json)")
+	bindRelayConfigFlags(fs, &cfg.linkConfigPath, "Mewla Relay config (default: <state-dir>/relay.json)")
 	fs.BoolVar(&cfg.details, "details", false, "also show the paste link, every browser link and how to revoke a device")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla pair [flags] [address]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Show a one-time QR code and links that pair a new phone or browser.")
-		fmt.Fprintln(stderr, "The phone QR uses Mewla Link when configured, otherwise this computer's best")
+		fmt.Fprintln(stderr, "The phone QR uses Mewla Relay when configured, otherwise this computer's best")
 		fmt.Fprintln(stderr, "address (HTTPS, then Tailscale, then Wi-Fi/LAN). Give an address to use that")
 		fmt.Fprintln(stderr, "one instead, such as a tunnel: mewla pair https://mewla.example.com")
 		fmt.Fprintln(stderr, "")
-		fs.PrintDefaults()
+		printDefaultsWithout(fs, stderr, legacyRelayConfigFlag)
 	}
 
 	if err := fs.Parse(args); err != nil {
@@ -2816,6 +2842,17 @@ func loadOptionalLinkConfig(
 	path := strings.TrimSpace(explicitPath)
 	explicit := path != ""
 	if path == "" {
+		// Only the default location: an explicit path is the operator's own.
+		moved, err := link.MoveLegacyConfig(stateDir)
+		if err != nil {
+			return link.ConnectorConfig{}, path, false, err
+		}
+		switch moved {
+		case link.LegacyConfigMoved:
+			log.Printf("Moved %s to %s", link.LegacyConfigFilename, link.DefaultConfigFilename)
+		case link.LegacyConfigIgnored:
+			log.Printf("Using %s; %s next to it is no longer read and can be removed", link.DefaultConfigFilename, link.LegacyConfigFilename)
+		}
 		path = link.DefaultConfigPath(stateDir)
 	}
 	config, err := link.LoadConnectorConfig(path)
@@ -2826,7 +2863,7 @@ func loadOptionalLinkConfig(
 		return link.ConnectorConfig{}, path, false, nil
 	}
 	return link.ConnectorConfig{}, path, false, fmt.Errorf(
-		"load Mewla Link config %s: %w",
+		"load Mewla Relay config %s: %w",
 		path,
 		err,
 	)

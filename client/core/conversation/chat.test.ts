@@ -8,8 +8,8 @@ import { createOutbox } from "./outboxRuntime";
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
 const target = { targetId: "brain-host", conversationScopeKey: "brain-thread:t1" };
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
-/** Waits until `ready()` holds (a timer-driven step finished), at most a second: a fixed sleep loses under load. */
-const until = async (ready: () => boolean, ms = 1000) => {
+/** Waits until `ready()` holds (a timer-driven step finished), at most 4 s (inside bun's 5 s): a fixed sleep, or a short limit, loses under load. */
+const until = async (ready: () => boolean, ms = 4000) => {
   const end = Date.now() + ms;
   while (!ready() && Date.now() < end) await wait(2);
 };
@@ -25,7 +25,8 @@ beforeEach(() => {
       return socket;
     },
   });
-  Object.assign(transportTiming, { firstRetryMs: 10, maxRetryMs: 40, checkMs: 10, silentLimitMs: 500 });
+  // Quick retries; the silence watchdog (transport.test's to prove) never fires here, as a busy runner's late timers would read as silence.
+  Object.assign(transportTiming, { firstRetryMs: 10, maxRetryMs: 40, checkMs: 10, silentLimitMs: 60_000 });
 });
 afterEach(() => Object.assign(transportTiming, saved));
 
@@ -39,11 +40,15 @@ async function open(storage = memoryStore()) {
   transport.on("connected", () => outbox.onConnected(server.id));
   transport.on("disconnected", () => outbox.onDisconnected(server.id));
   transport.connect();
-  await until(() => sockets.length > 0);
-  sockets.at(-1)!.open();
   const chat = new Chat({ serverId: server.id, transport, target, outbox });
-  await until(() => sent(sockets.at(-1)!, "codex_conversation_subscribe").length > 0);
-  return { transport, outbox, chat, storage, socket: sockets.at(-1)! };
+  // Open every socket being tried (one may be a reconnect of another file's transport, which bun runs in the
+  // same process), until the chat's subscribe goes out on one.
+  const subscribed = () => sockets.find((s) => s.readyState === 1 && sent(s, "codex_conversation_subscribe").length > 0);
+  await until(() => {
+    for (const s of sockets) if (s.readyState === 0) s.open();
+    return Boolean(subscribed());
+  });
+  return { transport, outbox, chat, storage, socket: subscribed()! };
 }
 
 const event = (id: string, seq: number, kind: string, body: string, extra: object = {}) => ({ id, seq, kind, body, timestamp: new Date(1_700_000_000_000 + seq * 1000).toISOString(), ...extra });
@@ -90,12 +95,14 @@ describe("Chat", () => {
     const { chat, socket, transport } = await open();
     snapshot(socket, 1, []);
     socket.close(1006, "gone");
-    await wait(30);
-    const next = sockets.at(-1)!;
-    expect(next).not.toBe(socket);
-    next.open();
-    await wait();
-    expect(sent(next, "codex_conversation_subscribe")).toHaveLength(1);
+    // Open whichever socket the transport is trying now (a slow runner can replace a reconnect with the next one).
+    const before = sockets.length;
+    const fresh = () => sockets.slice(before);
+    await until(() => {
+      for (const s of fresh()) if (s.readyState === 0) s.open();
+      return fresh().some((s) => sent(s, "codex_conversation_subscribe").length > 0);
+    });
+    expect(fresh().flatMap((s) => sent(s, "codex_conversation_subscribe"))).toHaveLength(1);
     chat.close();
     transport.close();
   });
@@ -133,8 +140,7 @@ describe("Chat", () => {
     const before = sockets.length;
     const fresh = () => sockets.slice(before);
     await until(() => {
-      const latest = sockets.at(-1)!;
-      if (sockets.length > before && latest.readyState === 0) latest.open();
+      for (const s of fresh()) if (s.readyState === 0) s.open();
       return fresh().some((s) => sent(s, "send_input").length > 0);
     }, 3000);
     const inputs = fresh().flatMap((s) => sent(s, "send_input"));

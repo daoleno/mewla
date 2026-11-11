@@ -52,6 +52,15 @@ jobs:
           name: mewla-preview-android
           path: client/android/app/build/outputs/apk/preview/release/*.apk
           retention-days: 14
+      # What turns a captured trace back into names: R8's mapping (`retrace`) and the JS source map
+      # (`nsh symbolicate`), kept beside the APK they belong to.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mewla-preview-android-symbols
+          path: |
+            client/android/app/build/outputs/mapping/previewRelease/mapping.txt
+            client/android/app/build/generated/assets/bundleUi.js.map
+          retention-days: 90
 
   ios:
     name: iOS host (Simulator, upgrade tests)
@@ -72,9 +81,10 @@ jobs:
         run: |
           brew install xcodegen > /dev/null
           client/scripts/ios-project.sh
+      # A single-display iPhone: `simctl io screenshot` refuses a two-display one (iPhone Duo) without --display.
       - name: Pick a simulator
         run: |
-          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
+          SIM=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in sorted(d.items(), reverse=True) if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Duo' not in x['name']))")
           echo "SIM=$SIM" >> "$GITHUB_ENV"
       # Signed to run locally: the Keychain refuses an unsigned app.
       # TerminalTests saves the terminal it drew as out/terminal.png.

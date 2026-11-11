@@ -50,11 +50,11 @@ export async function diagnoseConnectionIssue(input: {
   } catch (error) {
     return createIssue(
       "network_unreachable",
-      "Mewla Link is offline",
+      "Mewla Relay is offline",
       error instanceof Error
         ? error.message
-        : "The app could not open a pinned Mewla Link transport.",
-      "Keep mewla running on your computer and check that its Mewla Link status is connected. Advanced/Self-managed connections remain independent.",
+        : "The app could not open a pinned Mewla Relay transport.",
+      "Keep mewla running on your computer and check that its Mewla Relay status is connected. Advanced/Self-managed connections remain independent.",
     );
   }
   const probeURL = buildProbeURL(transportURL);

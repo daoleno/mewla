@@ -18,7 +18,7 @@ export interface FakeDaemonState {
   conversations?: Record<string, Record<string, unknown>[] | { source?: string; available?: boolean; reason?: string; events: Record<string, unknown>[] }>;
   /** A DSH Session's pending requests (`dsh_interaction`). */
   dsh?: { epoch: string; items: Record<string, unknown>[] };
-  /** Canned answers to other requests, by request type: the reply's `type` and fields. */
+  /** Canned answers by request type (before any built-in one): the reply's `type` and fields, e.g. `{ type: "error", message }`. */
   replies?: Record<string, { type: string } & Record<string, unknown>>;
 }
 
@@ -77,6 +77,9 @@ export class FakeDaemon {
     host.post("app.testFrame", frame);
     const reply = (type: string, body: Record<string, unknown>) => this.to(socket, { type, request_id: frame.request_id, ...body });
     const fail = (message: string) => reply("error", { message });
+    // A canned answer wins over the built-in one: a test makes any request fail this way.
+    const canned = this.state.replies?.[frame.type];
+    if (canned) return reply(canned.type, canned);
     switch (frame.type) {
       case "brain_snapshot":
         return reply("brain_snapshot", { brain: this.state.brain ?? {} });
@@ -192,11 +195,8 @@ export class FakeDaemon {
       }
       case "live_answer":
         return reply("live_answer", { kind: "brain", text: "ok", duplicate: false });
-      default: {
-        const canned = this.state.replies?.[frame.type];
-        if (canned) reply(canned.type, canned);
+      default:
         return;
-      }
     }
   }
 }

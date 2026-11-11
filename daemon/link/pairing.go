@@ -42,7 +42,7 @@ func BuildPairingLink(
 	admissions []AdmissionOffer,
 ) (string, PairingPayload, error) {
 	if authManager == nil || identity == nil {
-		return "", PairingPayload{}, errors.New("daemon auth and Link transport identity are required")
+		return "", PairingPayload{}, errors.New("daemon auth and Mewla Relay transport identity are required")
 	}
 	admissionByRelay := make(map[string]AdmissionOffer, len(admissions))
 	for _, admission := range admissions {
@@ -74,7 +74,7 @@ func BuildPairingLink(
 		}
 	}
 	if !hasAdmission {
-		return "", PairingPayload{}, errors.New("no connected Link relay issued a pairing admission")
+		return "", PairingPayload{}, errors.New("no connected relay issued a pairing admission")
 	}
 	payload := PairingPayload{
 		Version:         PairingVersion,
@@ -90,7 +90,7 @@ func BuildPairingLink(
 	)
 	encoded, err := EncodeCompactPairing(payload)
 	if err != nil {
-		return "", PairingPayload{}, fmt.Errorf("encode Link pairing link: %w", err)
+		return "", PairingPayload{}, fmt.Errorf("encode Mewla Relay pairing link: %w", err)
 	}
 	return CompactPairingLink(encoded), payload, nil
 }
@@ -128,17 +128,17 @@ func ValidatePairingPayload(payload PairingPayload, now time.Time) error {
 		!linkID(payload.RouteID, 16) ||
 		len(strings.TrimSpace(payload.TransportPin)) != 64 ||
 		len(payload.Candidates) == 0 {
-		return errors.New("invalid Link pairing payload")
+		return errors.New("invalid Mewla Relay pairing payload")
 	}
 	if now.UnixMilli() > payload.ExpiresAtMS {
-		return errors.New("Link pairing payload expired")
+		return errors.New("Mewla Relay pairing payload expired")
 	}
 	if !auth.VerifyLinkPairingSignature(
 		payload.DaemonPublicKey,
 		PairingBindingPayload(payload),
 		payload.Signature,
 	) {
-		return errors.New("Link pairing payload failed daemon identity proof")
+		return errors.New("Mewla Relay pairing payload failed daemon identity proof")
 	}
 	return nil
 }

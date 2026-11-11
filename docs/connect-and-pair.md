@@ -22,7 +22,7 @@ no shared password.
 | [Tailscale](#tailscale) | Private access from anywhere | `mewla --lan`, or `mewla -addr "$(tailscale ip -4):9876"` |
 | [Remote access](#remote-access) | Phone and browsers on any network, nothing to set up | `mewla login` |
 | [HTTPS tunnel or reverse proxy](#https-tunnel-or-reverse-proxy) | A stable HTTPS address without a VPN app | `mewla`, then `mewla address add https://…` |
-| [Mewla Link](#mewla-link) | You run your own relay | `mewla` with a `link.json` |
+| [Mewla Relay](#mewla-relay) | You run your own relay | `mewla` with a `relay.json` |
 
 Mewla finds the first three itself each time it starts: this computer when it
 listens on loopback or on all networks, and the Wi-Fi/LAN and Tailscale
@@ -120,7 +120,7 @@ for the phone with the time it expires, and a short link for a browser on this
 computer (`http://127.0.0.1:9876/p/…`, which opens the pairing page and works
 only from this computer).
 
-The QR uses Mewla Link when it is configured; otherwise the best address in
+The QR uses Mewla Relay when it is configured; otherwise the best address in
 the list: HTTPS, then Tailscale, then Wi-Fi/LAN. A phone can't reach
 `127.0.0.1`, so a loopback address (`http` or `https`) is never in the QR.
 When remote access is on but the relay does not issue a pairing admission,
@@ -130,7 +130,7 @@ addresses. To use one particular address,
 pass it: `mewla pair https://mewla.example.com`. When the terminal is too narrow
 for the QR, it says how wide it needs to be instead of drawing a broken code.
 
-With remote access or Mewla Link, the QR holds a compact signed code (about 67
+With remote access or Mewla Relay, the QR holds a compact signed code (about 67
 columns by 33 rows). It carries the signed route, transport pin and one-time
 admission. The app 0.2.17 or later reads it; a code from an older computer's
 longer format no longer pairs, so update both sides and run `mewla pair` again.
@@ -250,7 +250,7 @@ mewla address remove https://mewla.example.com
 ```
 
 `list` shows each address, its kind (This computer, Wi-Fi/LAN, Tailscale,
-HTTPS or Mewla Link) and how Mewla knows it:
+HTTPS or Mewla Relay) and how Mewla knows it:
 
 - **detected**: found when the daemon started. Detected addresses are refreshed
   at each start, so an old network's address disappears.
@@ -337,15 +337,16 @@ the account and every computer signed in with it; the others drop off within
 an hour. Run it from any computer still signed in with that account. See the
 [privacy policy](https://mewla.ai/privacy/).
 
-## Mewla Link
+## Mewla Relay
 
-Mewla Link is the relay remote access runs on. You can also run your own
-relay: configure relay infrastructure and a `link.json` file in the state
-directory. See the operator guide in `docs/internal/mewla-link-relay.md`.
+Mewla Relay is what remote access runs on. You can also run your own: set up
+the relay infrastructure and put a `relay.json` file in the state directory
+(a `relay.json` from an earlier version is renamed to `relay.json` when `mewla`
+starts). See the operator guide in `docs/internal/mewla-relay.md`.
 
 ### Direct when it can
 
-A phone paired through Mewla Link goes straight to the computer when it can
+A phone paired through Mewla Relay goes straight to the computer when it can
 reach it on the same Wi-Fi/LAN or over Tailscale, and uses the relay otherwise.
 The connection details on the Screen page (tap its dot) say which: **LAN**, **Tailscale** or **Relay**.
 The same path shows as a small glyph beside the computer in the menu and in Settings → Computers (a link when direct, a cloud on the relay); tap the menu glyph or long-press the row for **LAN**, **Tailscale** or **Relay** with its round trip.

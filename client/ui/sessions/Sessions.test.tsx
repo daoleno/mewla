@@ -29,6 +29,8 @@ describe("Sessions", () => {
     expect(one.count("id:section")).toBe(0);
     const none = await sessionsApp({ worker_sessions: [] });
     await none.waitFor("text:No sessions yet");
+    // The chosen pet, idle, above it.
+    expect(none.shows("id:sessions-empty-cat")).toBe(true);
     expect(none.texts()).toContain("New session");
   }, 20_000);
 

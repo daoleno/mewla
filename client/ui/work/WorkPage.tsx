@@ -1,4 +1,4 @@
-import { List, Scroll, signal, Text, View } from "nsh";
+import { cleanup, List, Scroll, signal, Text, View } from "nsh";
 import { AlertDialog, Button, Input } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import type { NavStackState } from "nsh/base";
@@ -18,7 +18,8 @@ export type WorkRoute = { name: "work" } | { name: "workDetail"; workId: string 
 /** Where the Work pages lead outside themselves: a Session, the Calendar, Brain's composer. */
 export interface WorkLinks {
   openSession(sessionId: string): void;
-  openCalendarItem(itemId: string): void;
+  /** The item, and its run when the Work came from one (v0.3.1's Calendar origin link). */
+  openCalendarItem(itemId: string, runId?: string): void;
   /** "Ask Brain about this": Brain's composer with the Work quoted, never sent. */
   askBrain(text: string): void;
 }
@@ -212,6 +213,8 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
   const slip = () => workSurface().slips.find((s) => s.workId === props.workId);
   const reply = signal("");
   const files = createAttachmentUploads();
+  // Leaving the page drops what was picked and stops an upload still going.
+  cleanup(() => files.dispose());
   const attachFailure = signal("");
   // An open page follows the Work; a successful action closes it, and the list says what happened.
   const context = (): ActionContext => ({
@@ -250,7 +253,7 @@ export function WorkDetail(props: { workId: string; nav: NavStackState<any>; lin
             </View>
             <View selectable><Text testID="work-title" class="text-xl font-semibold">{slip()!.title}</Text></View>
             {slip()!.calendar && slip()!.calendarLink ? (
-              <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId)} class="self-start">
+              <Button testID="work-calendar-link" accessibilityLabel={`From Calendar: ${slip()!.calendarLink!}`} onPress={() => props.links.openCalendarItem(slip()!.calendar!.itemId, slip()!.calendar!.runId || undefined)} class="self-start">
                 <Text class="text-base text-primary">{slip()!.calendarLink!}</Text>
               </Button>
             ) : null}

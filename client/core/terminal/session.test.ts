@@ -7,8 +7,8 @@ import { TerminalSession, type TerminalHandlers } from "./session";
 
 const server = { id: "s1", name: "Desk", url: "ws://127.0.0.1:9/ws", daemonId: "a".repeat(64), daemonPublicKey: "b".repeat(64) } as StoredServer;
 const wait = (ms = 5) => new Promise((resolve) => setTimeout(resolve, ms));
-/** Waits until `ready()` holds (a timer-driven step finished), at most a second: a fixed sleep loses under load. */
-const until = async (ready: () => boolean, ms = 1000) => {
+/** Waits until `ready()` holds (a timer-driven step finished), at most 4 s (inside bun's 5 s): a fixed sleep, or a short limit, loses under load. */
+const until = async (ready: () => boolean, ms = 4000) => {
   const end = Date.now() + ms;
   while (!ready() && Date.now() < end) await wait(2);
 };
@@ -19,7 +19,8 @@ let sockets: FakeSocket[];
 beforeEach(() => {
   sockets = [];
   installMemoryPlatform({ openSocket: (url, protocols) => { const s = new FakeSocket(url, protocols); sockets.push(s); return s; } });
-  Object.assign(transportTiming, { firstRetryMs: 10, maxRetryMs: 40, checkMs: 10, silentLimitMs: 500 });
+  // Quick retries; the silence watchdog (transport.test's to prove) never fires here, as a busy runner's late timers would read as silence.
+  Object.assign(transportTiming, { firstRetryMs: 10, maxRetryMs: 40, checkMs: 10, silentLimitMs: 60_000 });
   Object.assign(historyTiming, { deltaMs: 5, snapshotMs: 10, timeoutMs: 200 });
 });
 afterEach(() => {
@@ -28,10 +29,13 @@ afterEach(() => {
 });
 
 async function connected() {
+  const before = sockets.length;
   const transport = new Transport(server);
   transport.connect();
-  await wait();
-  sockets.at(-1)!.open();
+  await until(() => sockets.length > before);
+  // Its own socket; another file's leftover transport (bun runs them in one process) may add one too.
+  for (const s of sockets.slice(before)) if (s.readyState === 0) s.open();
+  await until(() => transport.state === "connected");
   return transport;
 }
 const frames = (socket: FakeSocket, type: string) => socket.sent.map((t) => JSON.parse(t)).filter((f) => f.type === type);

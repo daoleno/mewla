@@ -9,6 +9,7 @@
       "app.*",
       "secure.*",
       "links.*",
+      "link.*",
       "scan.*",
       "push.*",
       "terminal.*",
@@ -25,6 +26,7 @@
       ]
     },
     "openUrl": true,
+    "clipboard": true,
     "webview": {
       "hosts": [
         "viewer.mewla.invalid"

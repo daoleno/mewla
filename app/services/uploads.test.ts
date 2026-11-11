@@ -275,7 +275,7 @@ describe("native attachment upload", () => {
     };
 
     await expect(uploadDocumentForServer("server-a")).rejects.toThrow(
-      "Mewla Link is offline",
+      "Mewla Relay is offline",
     );
     expect(nativeTunnelStarts).toBe(1);
     expect(uploadCalls).toHaveLength(0);

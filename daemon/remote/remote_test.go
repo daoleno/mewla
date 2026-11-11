@@ -253,13 +253,14 @@ func TestServerTLSConfigServesWebPKICertOnlyForTheHostname(t *testing.T) {
 	}
 }
 
-func TestUserTextNeverSaysLink(t *testing.T) {
+func TestUserTextNeverSaysMewlaRelay(t *testing.T) {
 	for _, message := range []string{
-		"no Link relay is available: local: dial tcp: connection refused",
-		"Link relay local disconnected: EOF",
-		"request Mewla Link pairing admission from remote access: boom (make sure mewla is running and Link is connected)",
+		"no relay is available: local: dial tcp: connection refused",
+		"relay local disconnected: EOF",
+		"inner Mewla Relay TLS handshake: EOF",
+		"request Mewla Relay pairing admission from remote access: boom (make sure mewla is running and Mewla Relay is connected)",
 	} {
-		if got := UserText(message); strings.Contains(got, "Link") {
+		if got := UserText(message); strings.Contains(got, "Link") || strings.Contains(got, "Mewla Relay") {
 			t.Fatalf("%q -> %q", message, got)
 		}
 	}

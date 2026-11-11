@@ -184,7 +184,7 @@ func TestPrintStartupInfoWithLink(t *testing.T) {
 	printStartupInfo(&output, "127.0.0.1:9876", "/tmp/mewla-state", "/tmp/mewla-state", true, testEntries("http://127.0.0.1:9876"), false)
 	rendered := output.String()
 	for _, expected := range []string{
-		"Mewla Link  connecting outbound",
+		"Mewla Relay connecting outbound",
 		"Pair        mewla pair -state-dir /tmp/mewla-state",
 	} {
 		if !strings.Contains(rendered, expected) {
@@ -370,12 +370,12 @@ func TestPairConfigUsesOnePositionalEndpoint(t *testing.T) {
 func TestPairConfigAllowsNoEndpointOnlyForConfiguredLinkPath(t *testing.T) {
 	cfg, err := parsePairConfig([]string{
 		"-state-dir", "/tmp/mewla-state",
-		"-link-config", "/tmp/mewla-link.json",
+		"-link-config", "/tmp/relay-config.json",
 	}, io.Discard)
 	if err != nil {
 		t.Fatalf("parsePairConfig returned error: %v", err)
 	}
-	if cfg.endpoint != "" || cfg.linkConfigPath != "/tmp/mewla-link.json" {
+	if cfg.endpoint != "" || cfg.linkConfigPath != "/tmp/relay-config.json" {
 		t.Fatalf("unexpected no-endpoint config: %#v", cfg)
 	}
 }
@@ -1130,5 +1130,75 @@ func TestFirstDeviceStartupLeavesTheQRToPairWhenRemoteAccessIsOn(t *testing.T) {
 	printed, err := printFirstDevicePairing(&output, manager, book, "", true)
 	if err != nil || printed || output.Len() != 0 {
 		t.Fatalf("printed = %v, err = %v, output:\n%s", printed, err, output.String())
+	}
+}
+
+func TestLegacyLinkJSONIsMovedToRelayJSONAtStart(t *testing.T) {
+	stateDir := t.TempDir()
+	legacy := filepath.Join(stateDir, link.LegacyConfigFilename)
+	raw := []byte(`{
+  "version": 1,
+  "connector_token": "0123456789abcdef0123456789abcdef",
+  "relays": [{
+    "name": "region-a",
+    "control_address": "control.test:8443",
+    "control_server_name": "control.test",
+    "client_domain": "relay.test"
+  }]
+}`)
+	if err := os.WriteFile(legacy, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// An explicit path is the operator's own: nothing is moved.
+	if _, _, _, err := loadOptionalLinkConfig(stateDir, filepath.Join(stateDir, "elsewhere.json")); err == nil {
+		t.Fatal("explicit missing config was silently ignored")
+	}
+	if _, err := os.Stat(legacy); err != nil {
+		t.Fatalf("explicit path moved the legacy file: %v", err)
+	}
+
+	_, path, enabled, err := loadOptionalLinkConfig(stateDir, "")
+	if err != nil || !enabled {
+		t.Fatalf("legacy config after start: enabled %t, err %v", enabled, err)
+	}
+	if path != filepath.Join(stateDir, "relay.json") {
+		t.Fatalf("config path = %q", path)
+	}
+	if _, err := os.Stat(legacy); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("link.json still exists after the move: %v", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != string(raw) {
+		t.Fatalf("relay.json content changed: %q", got)
+	}
+	info, _ := os.Stat(path)
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("relay.json mode = %v", info.Mode().Perm())
+	}
+}
+
+func TestRelayConfigFlagAndItsEarlierNameMeanTheSame(t *testing.T) {
+	for _, name := range []string{"-relay-config", "-link-config"} {
+		daemon, err := parseDaemonConfig([]string{name, "/tmp/relay.json"}, io.Discard)
+		if err != nil || daemon.linkConfigPath != "/tmp/relay.json" {
+			t.Fatalf("serve %s = %q, %v", name, daemon.linkConfigPath, err)
+		}
+		pair, err := parsePairConfig([]string{name, "/tmp/relay.json"}, io.Discard)
+		if err != nil || pair.linkConfigPath != "/tmp/relay.json" {
+			t.Fatalf("pair %s = %q, %v", name, pair.linkConfigPath, err)
+		}
+	}
+}
+
+func TestEarlierRelayConfigFlagStaysOutOfHelp(t *testing.T) {
+	var help bytes.Buffer
+	_, _ = parsePairConfig([]string{"-h"}, &help)
+	if !strings.Contains(help.String(), "-relay-config") || strings.Contains(help.String(), "link-config") {
+		t.Fatalf("pair help:\n%s", help.String())
+	}
+	var top bytes.Buffer
+	printTopLevelUsage(&top)
+	if !strings.Contains(top.String(), "-relay-config") || strings.Contains(top.String(), "link-config") {
+		t.Fatalf("top-level help:\n%s", top.String())
 	}
 }

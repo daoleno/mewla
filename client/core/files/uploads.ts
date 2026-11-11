@@ -1,3 +1,4 @@
+import { serverURLNow } from "../link/pinnedTransport";
 import { deviceAuthorization } from "../more/daemon";
 import type { StoredServer } from "../storedServerContract";
 
@@ -111,7 +112,7 @@ export function createAttachmentUploadOperation(
   host: UploadHost,
   options: AttachmentUploadOperationOptions = {},
 ): AttachmentUploadOperation {
-  const uploadUrl = buildUploadUrl(server.url);
+  const uploadUrl = buildUploadUrl(serverURLNow(server));
   if (!uploadUrl) throw new Error("Server URL is not configured.");
   if (typeof asset.size === "number" && asset.size > V1_MAX_UPLOAD_FILE_BYTES) throw new Error("File exceeds the 2 GiB upload limit.");
   const originalName = asset.name || "upload";

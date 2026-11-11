@@ -111,7 +111,7 @@ describe("shared Android/iOS pinned transport owner", () => {
           { name: "b", kind: "link", url: "wss://b.link.test/ws" },
         ],
       }),
-    ).rejects.toThrow("Mewla Link is offline");
+    ).rejects.toThrow("Mewla Relay is offline");
   });
 
   test("fails closed instead of returning an unpinned Link endpoint", async () => {
@@ -135,7 +135,7 @@ describe("shared Android/iOS pinned transport owner", () => {
     failures = new Set(["offline.link.test"]);
 
     await expect(resolveCanonicalServerURL(linkServer)).rejects.toThrow(
-      "Mewla Link is offline",
+      "Mewla Relay is offline",
     );
   });
 
@@ -163,7 +163,7 @@ describe("shared Android/iOS pinned transport owner", () => {
         daemonPublicKey: "2".repeat(64),
         transportKind: "link",
       }),
-    ).rejects.toThrow("Mewla Link needs setup");
+    ).rejects.toThrow("Mewla Relay needs setup");
     expect(starts).toHaveLength(0);
   });
 
@@ -261,7 +261,7 @@ describe("direct path beside the relay", () => {
       transportPin: "3".repeat(64),
       linkRouteId: "4".repeat(32),
       transportCandidates: [
-        { name: "Mewla Link", kind: "link" as const, url: "wss://relay.link.test/ws" },
+        { name: "Mewla Relay", kind: "link" as const, url: "wss://relay.link.test/ws" },
         ...addresses.map((address) => ({
           name: "LAN",
           kind: "direct" as const,

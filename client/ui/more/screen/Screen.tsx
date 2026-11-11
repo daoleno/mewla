@@ -11,6 +11,8 @@ import { daemon } from "../daemon";
 import { EmptyState, Notice, Row, Section, Spinner, SwitchRow } from "../kit/kit";
 import { Icon } from "../kit/Icon";
 import type { PageNav } from "../routes";
+import { phoneAvailable, phoneStatus } from "../../phone";
+import { IPhoneRow } from "./IPhoneRow";
 import { modifiersFor, RemoteSession, RemoteView } from "./RemoteView";
 import { VirtualScreenSwitch } from "./VirtualScreen";
 
@@ -142,6 +144,8 @@ export function ScreenPage(props: { nav: PageNav }) {
   };
 
   const view = computed(() => ({ key: `${entry()}:${session() ? "s" : ""}` }), { equals: (a, b) => a.key === b.key });
+  /** Screen's menu lists the Phone while Phone use is on (Android, the GitHub APK). */
+  const phoneEntry = () => phoneAvailable() && phoneStatus()?.enabled === true;
 
   const body = (): JSX.Element => {
     const e = entry();
@@ -150,8 +154,8 @@ export function ScreenPage(props: { nav: PageNav }) {
     if (!s) return error() ? <EmptyState icon="cloud-offline" title="Disconnected" detail={error()} action="Reconnect" onAction={() => void read()} /> : <EmptyState busy />;
     if (e === "displays") return <AgentDisplays server={server()!} nav={props.nav} />;
     if (e === "setup") return <Setup status={s} name={name()} busy={busy()} reason={error() || null} onAct={(action) => void act(action)} onCheck={() => void read()} onChooseComputer={() => props.nav.push({ name: "settings" })} />;
-    if (e === "local") return <LocalCard status={s} onStop={(agent) => void stop(agent)} />;
-    if (e === "agent") return <AgentCard status={s} onWatch={watch} onStop={(agent) => void stop(agent)} onTakeOver={takeOver} />;
+    if (e === "local") return <LocalCard status={s} nav={props.nav} onStop={(agent) => void stop(agent)} />;
+    if (e === "agent") return <AgentCard status={s} nav={props.nav} onWatch={watch} onStop={(agent) => void stop(agent)} onTakeOver={takeOver} />;
     const current = session();
     return current ? <Live session={current} status={s} watching={how().mode === "watch"} typing={typing()} onTyping={(on) => typing.set(on)} onTakeOver={takeOver} onStop={() => void stop(screenAgents(s).find((a) => a.worker === how().worker))} /> : <EmptyState busy />;
   };
@@ -169,20 +173,27 @@ export function ScreenPage(props: { nav: PageNav }) {
               <Icon name="keyboard" size={20} />
             </Button>
           ) : null}
-          {session() ? (
+          {session() || phoneEntry() ? (
             <Menu trigger={<View testID="screen-options" accessibilityLabel="Screen options" class="p-2"><Icon name="more-horizontal" size={20} /></View>} popupClass="rounded-2xl bg-popover p-2" backdropClass="bg-black/30">
-              {how().mode !== "watch" ? (
+              {session() && how().mode !== "watch" ? (
                 <MenuItem onSelect={() => { const next = mode() === "touch" ? "trackpad" : "touch"; mode.set(next); session()?.setMode(next); }} class="rounded-lg px-4 py-3 active:bg-accent">
                   <Text class="text-base">{mode() === "touch" ? "Use as trackpad" : "Touch to click"}</Text>
                 </MenuItem>
               ) : null}
-              <MenuItem onSelect={() => session()?.fit()} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Fit screen</Text></MenuItem>
+              {session() ? <MenuItem onSelect={() => session()?.fit()} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Fit screen</Text></MenuItem> : null}
               {status()?.approved && how().mode !== "watch" ? (
                 <MenuItem onSelect={() => void act({ keep_awake: !status()!.keep_awake })} class="rounded-lg px-4 py-3 active:bg-accent">
                   <Text class="text-base">{status()!.keep_awake ? "Let this computer sleep" : "Keep this computer awake"}</Text>
                 </MenuItem>
               ) : null}
-              {how().mode === "watch" ? (
+              {/* Phone use: who is using this phone, and its own live page. */}
+              {phoneEntry() ? (
+                <MenuItem onSelect={() => props.nav.push({ name: "settings-phone" })} class="flex-row items-center gap-3 rounded-lg px-4 py-3 active:bg-accent">
+                  <Text class="flex-1 text-base">Phone</Text>
+                  <Text class="text-sm text-muted-foreground line-clamp-1">{phoneStatus()?.agent || "Ready"}</Text>
+                </MenuItem>
+              ) : null}
+              {!session() ? null : how().mode === "watch" ? (
                 <MenuItem onSelect={() => { session()?.disconnect(); session.set(null); how.set({ mode: "auto" }); }} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Stop watching</Text></MenuItem>
               ) : session()!.phase() === "live" ? (
                 <MenuItem onSelect={() => session()?.lose(null)} class="rounded-lg px-4 py-3 active:bg-accent"><Text class="text-base">Disconnect</Text></MenuItem>
@@ -227,7 +238,7 @@ function Live(props: { session: RemoteSession; status: ScreenStatus; watching: b
   );
 }
 
-function AgentCard(props: { status: ScreenStatus; onWatch: (agent: ScreenAgent) => void; onStop: (agent: ScreenAgent) => void; onTakeOver: () => void }) {
+function AgentCard(props: { status: ScreenStatus; nav: PageNav; onWatch: (agent: ScreenAgent) => void; onStop: (agent: ScreenAgent) => void; onTakeOver: () => void }) {
   const agents = screenAgents(props.status);
   const label = (agent: ScreenAgent) => agent.name || "An agent";
   return (
@@ -249,19 +260,21 @@ function AgentCard(props: { status: ScreenStatus; onWatch: (agent: ScreenAgent) 
           ))}
         </Section>
       </View>
+      <IPhoneRow nav={props.nav} />
       <Button testID="take-over" onPress={props.onTakeOver} class="mt-2 rounded-full bg-primary px-5 py-2.5"><Text class="text-base font-medium text-primary-foreground">{agents.length > 1 ? "Take over (stops all)" : "Take over"}</Text></Button>
     </View>
   );
 }
 
 /** This device is the computer: a live view would only mirror itself. */
-function LocalCard(props: { status: ScreenStatus; onStop: (agent: ScreenAgent) => void }) {
+function LocalCard(props: { status: ScreenStatus; nav: PageNav; onStop: (agent: ScreenAgent) => void }) {
   const agents = screenAgents(props.status);
   return (
-    <View class="flex-1 px-4">
+    <View class="flex-1 gap-3 px-4">
       <Section>
         {agents.length ? agents.map((agent) => <Row icon="desktop" title={agent.name || "An agent"} trailing={<Button accessibilityLabel={`Stop ${agent.name || "An agent"}`} onPress={() => props.onStop(agent)} class="rounded-full bg-secondary px-3 py-1.5"><Text class="text-sm font-medium text-destructive">Stop</Text></Button>} />) : <Row icon="desktop" title="No agent on this screen" />}
       </Section>
+      <IPhoneRow nav={props.nav} />
     </View>
   );
 }

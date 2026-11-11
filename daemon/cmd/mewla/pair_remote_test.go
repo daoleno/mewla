@@ -9,7 +9,7 @@ import (
 
 // A failed remote access admission must not leave the phone QR as the hosted
 // address in a direct (non-Link) pairing: a phone that scans it connects past
-// the pinned Mewla Link route, to the computer's own TLS 1.3 server.
+// the pinned Mewla Relay route, to the computer's own TLS 1.3 server.
 func TestFailedRemoteAdmissionIsNotASilentDirectQR(t *testing.T) {
 	const remote = "https://warm-cedar-b69f.m.mewla.ai"
 	direct := pairingLinks{phoneAddress: remote + "/", phoneLink: "mewla://settings?p=AQ-direct"}

@@ -1,6 +1,6 @@
 // Package clientaddr carries the address of the client behind a relay.
 //
-// Requests that reach the daemon through Mewla Link come from the relay's
+// Requests that reach the daemon through Mewla Relay come from the relay's
 // connection, so their RemoteAddr is the relay for every client. The relay
 // reports each client's address when it opens a stream; the Link connector
 // stores it here. Use it only to share limits fairly between clients, never
@@ -18,14 +18,14 @@ type contextKey struct{}
 
 type relayKey struct{}
 
-// MarkRelayed returns ctx marked as arriving through Mewla Link, for a client
+// MarkRelayed returns ctx marked as arriving through Mewla Relay, for a client
 // whose address the relay did not report.
 func MarkRelayed(ctx context.Context) context.Context {
 	return context.WithValue(ctx, relayKey{}, true)
 }
 
 // Path names how a request reached this computer, from a bounded set:
-// "relay" through Mewla Link, "loopback", "tailscale", "lan" for a private
+// "relay" through Mewla Relay, "loopback", "tailscale", "lan" for a private
 // address, and "direct" for any other. It is only for telling a viewer why
 // its link is slow; it grants nothing.
 func Path(r *http.Request) string {
@@ -104,7 +104,7 @@ var forwardedHeaders = []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Hos
 
 // Local reports whether the request comes from a browser or app on this very
 // computer: it arrived over loopback, addressed to a loopback host, not through
-// Mewla Link and not through a proxy or tunnel on this computer that relays
+// Mewla Relay and not through a proxy or tunnel on this computer that relays
 // someone else. It exists so a viewer of this computer's own screen can be
 // told it is looking at itself; like Path it grants nothing, and when in doubt
 // it says false, which only costs a live view.

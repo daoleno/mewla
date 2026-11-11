@@ -17,8 +17,8 @@ invite and hands it to the other, which pairs with it and pins its key. No
 terminal, no copying links, no visit to either computer.
 
 One of the two must be able to reach the other: over Tailscale, an HTTPS
-address, or the address your phone uses (not Mewla Link, which only your phone
-can use). A Mac reached only through Mewla Link dials out to the other
+address, or the address your phone uses (not Mewla Relay, which only your phone
+can use). A Mac reached only through Mewla Relay dials out to the other
 computer instead, so one such computer is fine. When neither can reach the
 other, the computer's page in **Settings** says so.
 

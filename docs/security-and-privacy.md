@@ -57,7 +57,7 @@ See [Your other computers](computers.md).
 An agent that Mewla did not start can hand work to Brain through
 `/mcp`, after you approve it by name once. It holds a random token; Mewla stores
 only its hash, and you can revoke it at any time. The door is served to this
-computer itself and over Mewla Link's HTTPS only, never over plain Wi-Fi/LAN
+computer itself and over Mewla Relay's HTTPS only, never over plain Wi-Fi/LAN
 HTTP or the direct private listeners. The agent can read Work and request
 things of Brain; it cannot start a Worker, open a terminal or read files, and
 Brain treats its words as relayed, never as your permission. See
@@ -324,9 +324,9 @@ include:
 Do not open a public issue for an unpatched flaw that can be exploited
 remotely. Security fixes target the latest stable release and the main branch.
 
-## Direct connections from a Link phone
+## Direct connections from a phone on Mewla Relay
 
-A phone paired through Mewla Link may reach the computer on its Wi-Fi/LAN or
+A phone paired through Mewla Relay may reach the computer on its Wi-Fi/LAN or
 Tailscale address instead of the relay. It only dials private-network IP
 addresses the computer itself announced over an authenticated connection, never
 a name. The stream is TLS pinned to the computer's transport key, and before
@@ -340,7 +340,7 @@ only carries the same pinned TLS stream.
 
 ### The private-network listener
 
-So that a Link phone can go direct without any setting, a daemon that listens
+So that a phone on Mewla Relay can go direct without any setting, a daemon that listens
 only on loopback also listens, on the same port, on this computer's private
 IPv4 addresses (the usual home and office ranges, and the carrier-grade NAT range Tailscale uses), and follows those
 addresses as they change. That is new exposure on the local network, kept small:

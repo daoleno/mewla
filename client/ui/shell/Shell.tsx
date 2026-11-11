@@ -8,7 +8,7 @@ import { clampPanelWidth, isDesktopLayout, SIDEBAR_WIDTH, SIDEBAR_WIDTH_KEY, sid
 import { DesktopOverlays } from "./desktop/Overlays";
 import { Sidebar } from "./desktop/Sidebar";
 import { syncWebLocation, type PageSnapshot } from "./webLocation";
-import { Onboarding } from "../screens/Onboarding";
+import { Onboarding, PairPage } from "../screens/Onboarding";
 import { More } from "../screens/More";
 import { MorePageView } from "../more/Pages";
 import { FilesPageView } from "../more/files/Pages";
@@ -79,11 +79,6 @@ function moreRoutes(routes: readonly MoreRoute[]): MoreRoute[] {
 export function openMore(...routes: MoreRoute[]) {
   selectedTab.set(3);
   moreNav.setRoutes(moreRoutes(routes));
-}
-
-/** Phone use's page (`mewla://phone`: its notifications, the picture-in-picture tap, Take over). */
-export function openPhone() {
-  openMore({ name: "settings" }, { name: "settings-phone" });
 }
 
 const PLACE_ROUTES: Record<Exclude<DesktopPlaceKey, "brain" | "sessions" | "calendar">, MoreRoute> = {
@@ -171,6 +166,12 @@ function saveSidebarWidth(size: number) {
   void Storage.setItem(SIDEBAR_WIDTH_KEY, String(width)).catch(() => {});
 }
 
+/** Phone use's page, under More › Settings: `mewla://phone` (its notifications) and its floating control open it. */
+export function openPhonePage() {
+  selectedTab.set(3);
+  moreNav.setRoutes([{ name: "more" }, { name: "settings" }, { name: "settings-phone" }]);
+}
+
 /**
  * How a Session's Git review and file previews push their next page: theirs stay on the
  * Sessions stack, anything else opens under More.
@@ -191,8 +192,8 @@ function sessionsRoute(route: SessionsRoute, index: () => number) {
       return <Session nav={sessionsNav} workerId={route.workerId} hint={route.hint}
         active={() => selectedTab() === 1 && index() === sessionsNav.routes().length - 1} />;
     case "workFile":
-      return <WorkFilePage id={route.id} onClose={() => sessionsNav.pop()} openCalendarItem={(id) => {
-        showCalendarItem(id);
+      return <WorkFilePage id={route.id} onClose={() => sessionsNav.pop()} openCalendarItem={(id, runId) => {
+        showCalendarItem(id, runId);
         selectedTab.set(2);
       }} />;
     case "files-preview":
@@ -206,7 +207,7 @@ function sessionsRoute(route: SessionsRoute, index: () => number) {
 function moreRoute(route: MoreRoute) {
   switch (route.name) {
     case "more": return <More nav={moreNav} />;
-    case "pair": return <Onboarding />;
+    case "pair": return <PairPage onPaired={() => moreNav.pop()} />;
     default: return <MorePageView route={route} nav={moreNav} onPair={() => moreNav.push({ name: "pair" })} />;
   }
 }
@@ -278,7 +279,7 @@ function WideShell() {
           <View class="flex-1">{tabs.map((_, i) => <Section index={i} />)}</View>
         </ResizablePanel>
       </ResizablePanelGroup>
-      <PhoneFloat onOpen={openPhone} />
+      <PhoneFloat onOpen={openPhonePage} />
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
       <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
       <EnrollmentApproval />
@@ -292,7 +293,7 @@ export function Shell() {
   return (
     <View class="flex-1 bg-background">
       <View class="flex-1" onLayout={({ bounds }) => belowSections.set(Math.max(0, windowSize().height - bounds.origin.y - bounds.size.height))}>{tabs.map((_, i) => <Section index={i} />)}</View>
-      <PhoneFloat onOpen={openPhone} bottom={belowSections()} />
+      <PhoneFloat onOpen={openPhonePage} bottom={belowSections()} />
       <NewSession onCreated={(workerId, fromSession, hint) => (fromSession ? sessionsNav.replace({ name: "session", workerId, hint }) : openSession(workerId, hint))} />
         <ServicesSheet onOpenSession={(workerId) => openSession(workerId)} />
         <EnrollmentApproval />
@@ -308,11 +309,17 @@ export function Shell() {
  */
 export function FirstRun() {
   const web = platform.os === "web" && host.available();
-  const nav = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: web ? "join" : "pair" }]);
+  // A phone: the guided onboarding, which also shows the connected step after any pairing.
+  const settings = () => {
+    selectedTab.set(3);
+    moreNav.setRoutes([{ name: "more" }, { name: "settings" }]);
+  };
+  if (!web) return <Onboarding onContinue={() => selectedTab.set(0)} onSettings={settings} />;
+  const nav = createNavStack<{ name: "join" } | { name: "pair" }>([{ name: "join" }]);
   return (
     <Paged nav={nav}>
       <NavStack state={nav} style={{ flex: 1 }}>
-        {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => nav.push({ name: "pair" })} /> : <Onboarding />)}
+        {(route) => (route.name === "join" ? <BrowserJoin onPairingLink={() => nav.push({ name: "pair" })} /> : <PairPage />)}
       </NavStack>
     </Paged>
   );

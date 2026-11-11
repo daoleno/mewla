@@ -83,7 +83,7 @@ refer to the previous tab during render and leave the selected page hidden.
 | Brain, Sessions, Work, Settings  | Same as mobile                                          |
 | Terminal                         | xterm.js renderer with the same terminal protocol       |
 | Pairing                          | `mewla pair` browser link or paste a `mewla://` link; no QR camera scan |
-| Mewla Link (relay with pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
+| Mewla Relay (pinned TLS) | Unsupported; browsers cannot pin the daemon certificate |
 | Push notifications               | Unsupported                                             |
 | Mermaid diagrams                 | Shown as source                                         |
 | File upload from the device      | Unsupported                                             |

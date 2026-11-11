@@ -2,9 +2,10 @@ import { effect, host, lifecycle, mount, platform, Storage, View } from "nsh";
 import { copyLegacyStorage } from "../core/legacyStorage";
 import { installPlatform } from "../core/platform";
 import { nshPlatform } from "./platform";
-import { pairFromText } from "./screens/Onboarding";
+import { justPaired, pairFromText } from "./pairing";
+import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
 import { current, loadSession, ready, resumeConnection } from "./session";
-import { FirstRun, openPhone, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
+import { FirstRun, openPhonePage, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
 import { startNotifications } from "./push/push";
@@ -25,6 +26,7 @@ async function start(): Promise<void> {
     ).catch((error) => console.warn("legacy storage not copied:", error));
   }
   await loadSession();
+  void loadCrashReports();
   // A browser opened with `mewla pair`'s link (`<origin>/#pair=<link>`): pair with it, once.
   if (platform.os === "web" && host.available()) {
     const link = (await host.call("links.initial").catch(() => null)) as string | null;
@@ -45,14 +47,16 @@ host.on("links.open", (payload) => {
   const url = (payload as { url?: string } | null)?.url;
   if (!url) return;
   if (readPairingLink(url)) return void pairFromText(url);
-  // Phone use's notifications, its picture-in-picture tap and Take over open its page.
-  if (isPhoneLink(url)) return openPhone();
+  if (isPhoneLink(url)) return void openPhonePage();
   const section = sectionOfLink(url);
   if (section !== null) selectedTab.set(section);
 });
 
 mount(() => (
   <View class="flex-1 bg-background">
-    {!ready() ? null : current() ? <Shell /> : <FirstRun />}
+    {!ready() ? null : current() ? <Shell /> : null}
+    {/* First run, and on a phone the connected step after any pairing, over the app. */}
+    {ready() && (!current() || justPaired()) ? <View class="absolute inset-0 bg-background"><FirstRun /></View> : null}
+    <CrashReportSheet />
   </View>
 ));

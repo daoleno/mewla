@@ -1,19 +1,19 @@
 # Security engineering notes
 
 Transport, relay, mobile-bridge and device-administration details behind
-[Security and privacy](../security-and-privacy.md). Mewla Link is optional.
+[Security and privacy](../security-and-privacy.md). Mewla Relay is optional.
 Mewla operates one hosted relay for remote access (`mewla login`); see
-[Mewla Link Relay operations](mewla-link-relay.md).
+[Mewla Relay operations](mewla-relay.md).
 
-## Trust model with Mewla Link
+## Trust model with Mewla Relay
 
 Mewla's normal self-managed path separates daemon identity and device
-authorization from reachability. Optional Mewla Link adds a distinct transport
+authorization from reachability. Optional Mewla Relay adds a distinct transport
 identity. Across all configured paths, the boundaries are:
 
-1. **Reachability** — Mewla Link, LAN, Tailnet, tunnel, or reverse proxy.
+1. **Reachability** — Mewla Relay, LAN, Tailnet, tunnel, or reverse proxy.
 2. **Daemon identity** — persistent Ed25519 key under the daemon state directory.
-3. **Link transport identity** — separate Ed25519 TLS key and X.509 certificate,
+3. **Relay transport identity** — separate Ed25519 TLS key and X.509 certificate,
    whose SPKI pin is signed by the daemon identity in Pairing V2.
 4. **Device authorization** — enrolled phone Ed25519 keys and purpose-bound
    `Device` request signatures.
@@ -37,7 +37,7 @@ resolve on the daemon host. Pair only devices you trust with Terminal access.
 
 ## Pairing and replay boundaries
 
-- V1 manual pairing and V2 Link pairing both use the existing one-time daemon
+- V1 manual pairing and V2 Relay pairing both use the existing one-time daemon
   enrollment token (15-minute default).
 - V2 adds a random, short-lived relay admission alias. Relay routing reserves
   it for one stream, but only the Connector's daemon-signed confirmation of an
@@ -90,7 +90,7 @@ The relay enforces:
 - graceful listener shutdown and connector re-registration after restart
 
 The daemon independently enforces device authorization and route-specific size
-limits. A public Link operator still needs network DDoS controls, egress alerts,
+limits. A public Relay operator still needs network DDoS controls, egress alerts,
 per-admission rate policy, token rotation, and regional capacity alarms before
 claiming production readiness. The MVP intentionally does not implement user
 accounts, billing, or a global abuse database.
@@ -103,7 +103,7 @@ The device Ed25519 seed is held in platform secure storage. Server identity,
 transport candidates, route, and public SPKI pin are app metadata. The web UI
 has no keychain and keeps the seed in the origin's local storage.
 
-For Link, the shared TypeScript owner asks the Android/iOS native module for a
+For Relay, the shared TypeScript owner asks the Android/iOS native module for a
 loopback-only local L4 bridge. That bridge opens TLS 1.3 to the selected relay
 hostname, sets SNI, verifies SHA-256 of the daemon certificate SPKI in constant
 time, and streams bytes with bounded buffers/backpressure. The same bridge is
@@ -111,8 +111,8 @@ used by WSS, Pair/Probe HTTP, native streaming upload, and Session File/Range.
 It is not a WebSocket-only pin. Pairing starts the bridge in on-demand mode so
 creating the local listener cannot spend a one-time admission. Every
 post-pairing HTTP/WSS owner accepts the canonical `StoredServer`, not a bare
-Link URL; missing route, pin, or candidate availability fails closed with a
-Mewla Link setup/offline error. Manual V1/self-managed servers continue to return
+Relay URL; missing route, pin, or candidate availability fails closed with a
+Mewla Relay setup/offline error. Manual V1/self-managed servers continue to return
 their original endpoint.
 
 Native image/PDF loaders may issue HEAD, Range, and automatic retries. Mewla does
