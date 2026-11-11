@@ -72,6 +72,22 @@ describe("Sessions", () => {
     expect(framesOf(app.host.posts(), "set_active_worker").at(-1)?.worker_id).toBe("a");
   }, 20_000);
 
+  test("a switch of computer closes an open sheet first, then switches", async () => {
+    const servers = JSON.parse(paired["mewla:v3:servers"]);
+    const storage = { ...paired, "mewla:v3:servers": JSON.stringify([...servers, { ...servers[0], id: "s2", name: "Lab", daemonId: "c".repeat(64) }]) };
+    const app = await open(APP, { host: phoneHost({ brain: {}, worker_sessions: [session("a", { name: "dev server" })] }), storage, platform: "android" });
+    await app.host.send("links.open", { url: "mewla://sessions" });
+    await app.waitFor("text:dev server");
+    app.onDialog((dialog) => (dialog.buttons.includes("Services") ? "Services" : null));
+    await app.press("id:sessions-menu");
+    await app.waitFor("id:services-sheet");
+    await app.host.send("links.open", { url: "mewla://sessions?serverId=s2" });
+    await app.waitUntil(() => !app.shows("id:services-sheet"));
+    expect(app.storage()["mewla:v1:current_server_id"]).toBe("s1");
+    await app.waitUntil(() => app.storage()["mewla:v1:current_server_id"] === "s2");
+    expect(app.shows("id:services-sheet")).toBe(false);
+  }, 20_000);
+
   test("a long press selects; Terminate asks, then ends them and they leave the list", async () => {
     const app = await sessionsApp({ worker_sessions: [session("a", { name: "one" }), session("b", { name: "two" })] });
     await app.waitFor("text:one");

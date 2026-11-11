@@ -12,7 +12,7 @@ import { refreshReminders, reminderLinks } from "../calendar/ReminderBanner";
 import { closeEditor } from "../calendar/Editor";
 import { calendarLinks, calendarNav, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
-import { current, currentTransport, onTransport, ready, servers, switchTo } from "../session";
+import { current, currentTransport, onTransport, openBrainThread, ready, servers, switchTo } from "../session";
 import { brainNav, selectedTab, openSession } from "../shell/Shell";
 import { draftForBrain } from "../work/WorkPage";
 import { workLinks } from "../work/routes";
@@ -153,7 +153,9 @@ export function openNotificationLink(url: string): void {
   if (serverId && serverId !== current()?.id) {
     const target = servers().find((s) => s.id === serverId);
     if (!target) return;
-    switchTo(target);
+    // Open the link once the switch is done (it waits for open sheets to close).
+    void switchTo(target).then(() => openNotificationLink(url));
+    return;
   }
   switch (link.section) {
     case "calendar":
@@ -167,6 +169,8 @@ export function openNotificationLink(url: string): void {
       return;
     case "brain":
       selectedTab.set(0);
+      // A Brain notification names its thread: a past one opens read-only.
+      if (link.params.thread) openBrainThread(link.params.thread);
       if (link.path[0] === "work") brainNav.setRoutes([{ name: "brain" }, { name: "work" }, ...(link.path[1] ? [{ name: "workDetail" as const, workId: link.path[1] }] : [])]);
       else brainNav.popToRoot();
       return;

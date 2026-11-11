@@ -6,6 +6,7 @@ import { friendsEnabled } from "../../more/friends/state";
 import { Icon, type IconName } from "../../more/kit/Icon";
 import { ConnectionLine } from "../../screens/More";
 import { openPlace, selectedPlace } from "../Shell";
+import { needsYou } from "../attention";
 import { paletteOpen } from "./Overlays";
 
 const ICONS: Record<DesktopPlaceKey, IconName> = {
@@ -48,7 +49,8 @@ export function Sidebar() {
               onPress={() => openPlace({ key: row.key } as WebPlace)}
               class={selectedPlace() === row.key ? "flex-row items-center gap-3 rounded-lg bg-accent px-3 py-2" : "flex-row items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent"}>
               <Icon name={ICONS[row.key]} size={18} tone={selectedPlace() === row.key ? "ink" : "soft"} />
-              <Text class={selectedPlace() === row.key ? "text-sm font-semibold" : "text-sm text-muted-foreground"}>{row.label}</Text>
+              <Text class={selectedPlace() === row.key ? "flex-1 text-sm font-semibold" : "flex-1 text-sm text-muted-foreground"}>{row.label}</Text>
+              {needsYou(row.key) ? <View testID={`sidebar-${row.key}-dot`} accessibilityLabel="Needs you" class="h-2 w-2 rounded-full bg-seal" /> : null}
             </Button>
           );
         })}

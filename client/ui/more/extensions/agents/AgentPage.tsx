@@ -1,6 +1,7 @@
 import { effect, Scroll, signal, Text, untracked, View } from "nsh";
 import type { JSX } from "nsh";
-import { Button, Input, Sheet } from "nsh/base";
+import { Button, Input } from "nsh/base";
+import { GuardedSheet as Sheet } from "../../../shell/AppSheet";
 import { agentExtensionsScopeLabel, pluginsForScope, skillCopyScope, skillsForScope, type AgentExtensionsScope } from "../../../../core/extensions/agentExtensionsModel";
 import type { InstalledPluginCopy } from "../../../../core/extensions/pluginsManagement";
 import { filterLogicalPlugins, groupLogicalPlugins, pluginCopyLabel, type LogicalPlugin, type PluginCapabilityFilter, type PluginFilters } from "../../../../core/extensions/pluginsScreenModel";

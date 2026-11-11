@@ -6,6 +6,7 @@ import { createMessageEdit, EditChip, showMessageMenu } from "../chat/messageEdi
 import { finalReplyIdsOf } from "../../core/timeline/model";
 import { ChoiceCard, CHOICE_GONE_NOTICE } from "../chat/ChoiceCard";
 import { ChatTimeline } from "../chat/Timeline";
+import { chatImage } from "../chat/assets";
 import { answerChoice, stopTurn } from "../../core/conversation/turn";
 import { visiblePendingChoice } from "../../core/timeline/claudeChoiceModel";
 import { brainSurface, newBrainChat } from "../../core/brain";
@@ -16,7 +17,7 @@ import { markWorkRead } from "../../core/work/brainWork";
 import { brainNav, selectedTab } from "../shell/Shell";
 import { lastEditablePrompt } from "../../core/web/composer";
 import { WorkHeaderButton } from "../work/WorkPage";
-import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport } from "../session";
+import { brain, brainChat, brainDraft, brainThread, connection, current, currentTransport, openBrainThread, routedBrainThread } from "../session";
 
 const startingChat = signal(false);
 /** Questions the computer said have passed; their card stays hidden even if the transcript lags. */
@@ -84,6 +85,21 @@ function Notice(props: { title: string; detail?: string }) {
   );
 }
 
+/** A past thread a notification opened: read-only, with the way back to Brain's current chat. */
+function PastThread() {
+  return (
+    <View testID="brain-past-thread" class="flex-row items-center gap-3 border-b border-border px-4 py-2.5">
+      <View class="flex-1">
+        <Text class="text-sm font-semibold">Earlier Brain thread</Text>
+        <Text class="text-sm text-muted-foreground">Read-only.</Text>
+      </View>
+      <Button testID="brain-current-thread" onPress={() => openBrainThread(null)}>
+        <Text class="text-sm text-primary">Current chat</Text>
+      </Button>
+    </View>
+  );
+}
+
 function Body(props: { handlers: Parameters<typeof ChatTimeline>[0]["handlers"] }) {
   return (
     <View class="flex-1">
@@ -145,13 +161,19 @@ export function Brain() {
       void showMessageMenu(item, { editor, connected: untracked(connection) === "connected", running: untracked(activity)?.status === "running" }),
     isFinalReply: (id: string) => finalReplies().has(id),
     workingSince: () => activity()?.started_at,
+    // A reply's image (a Calendar run's result too) is a file on Brain's host.
+    loadImage: (path: string) => {
+      const server = untracked(current);
+      return server ? chatImage(currentTransport(), server.id, untracked(brain)?.host_worker?.cwd, path) : Promise.resolve(null);
+    },
   };
   return (
     <NavPage title="Brain" column="reading" headerLeft={<WorkHeaderButton onPress={() => brainNav.push({ name: "work" })} />}
       headerRight={<Button testID="new-chat" onPress={() => void startNewChat()} disabled={connection() !== "connected" || startingChat()}><Text class="text-base text-primary">New chat</Text></Button>}>
       <View class="flex-1 bg-background">
+        {routedBrainThread() ? <PastThread /> : null}
         <Body handlers={handlers} />
-        <Composer text={text} editor={editor} />
+        {routedBrainThread() ? null : <Composer text={text} editor={editor} />}
       </View>
     </NavPage>
   );
