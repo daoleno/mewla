@@ -181,7 +181,8 @@ export async function removeComputer(server: StoredServer): Promise<{ title: str
   const { [server.id]: _gone, ...rest } = checks();
   checks.set(rest);
   if (wasCurrent) {
-    clearCalendarAlerts();
+    // A browser arms no calendar alerts (as v0.3.1).
+    if (platform.os !== "web") clearCalendarAlerts();
     await switchTo(list[0] ?? null);
   }
   return missedComputersMessage(server, missed);
