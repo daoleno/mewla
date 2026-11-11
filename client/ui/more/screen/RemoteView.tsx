@@ -9,6 +9,7 @@ import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type 
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
 import type { StoredServer } from "../../../core/storedServerContract";
 import { SCREEN_VIEWER_SOURCE } from "./viewerSource";
+import { viewerBaseUrl } from "../../viewerBase";
 
 export interface RemoteModifier {
   key: ScreenModifier;
@@ -52,9 +53,6 @@ export function needsSoftKeyboard(): boolean {
   return platform.os !== "web" || !platform.desktop;
 }
 
-// The document's base: WebCodecs (the video decoder) exists only in a secure
-// context. `.invalid` never resolves and the CSP forbids every request.
-const VIEWER_BASE_URL = "https://viewer.mewla.invalid/";
 
 /** Pixel-only document with no network access: the app relays the RFB bytes. */
 export function viewerHtml(): string {
@@ -323,7 +321,7 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
         accessibilityLabel={props.label}
         class="flex-1 bg-background"
         html={html}
-        baseUrl={VIEWER_BASE_URL}
+        baseUrl={viewerBaseUrl}
         scrollable={false}
         onMessage={(e) => props.session.onViewer(e.data)}
       />
