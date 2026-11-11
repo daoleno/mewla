@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 
@@ -219,7 +220,7 @@ describe("A service", () => {
       expect(dialog.buttons).toEqual(["Keep", "Disconnect"]);
       return "Disconnect";
     });
-    await app.press("id:disconnect-n1");
+    await answering(app, () => app.press("id:disconnect-n1"));
     await app.waitUntil(() => c.asked.some((r) => r.action === "disconnect"));
     await app.waitFor("id:service-connect");
     expect(app.texts()).toContain("What Brain can do");

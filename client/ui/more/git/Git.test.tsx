@@ -1,4 +1,5 @@
 import { describe, expect, open, test } from "nsh/test";
+import { answering } from "../../testing/fixtures";
 
 const HARNESS = "../testing/Harness.tsx";
 const PAGE = { name: "git", targetId: "w1", cwd: "/repo" };
@@ -173,7 +174,7 @@ describe("Git review", () => {
 
     // Cancel changes nothing.
     app.onDialog((dialog) => (dialog.sheet ? "Discard changes" : "Cancel"));
-    await app.longPress("id:git-row-changes:app.ts");
+    await answering(app, () => app.longPress("id:git-row-changes:app.ts"), 2);
     await app.wait(200);
     expect(repo.asked.some((r) => r.type === "git_discard")).toBe(false);
     const asked = app.dialogs().find((d) => !d.sheet);
@@ -181,7 +182,7 @@ describe("Git review", () => {
     expect(asked?.message).toBe("Your edits to the file will be lost.");
 
     app.onDialog((dialog) => (dialog.sheet ? "Discard changes" : "Discard"));
-    await app.longPress("id:git-row-changes:app.ts");
+    await answering(app, () => app.longPress("id:git-row-changes:app.ts"), 2);
     await app.waitFor("id:git-flash-action");
     expect(repo.asked.find((r) => r.type === "git_discard")?.body).toEqual({ target_id: "w1", cwd: "/repo", repo_root: "/repo", paths: ["app.ts"], scope: "working" });
     expect(app.texts()).toContain("Changes discarded");
@@ -290,7 +291,7 @@ describe("Git review: the reader", () => {
     const { app } = await openReview([app_ts]);
     await openDiffOf(app, "changes:app.ts");
     app.onDialog((dialog) => (dialog.sheet ? "Find in diff" : null));
-    await app.press("id:git-diff-more");
+    await answering(app, () => app.press("id:git-diff-more"));
     await app.waitFor("id:git-find-query");
     expect(app.enabled("id:git-find-next")).toBe(false);
     await app.type("id:git-find-query", "const b");
@@ -312,7 +313,7 @@ describe("Git review: the reader", () => {
     const { app } = await openReview([app_ts]);
     await openDiffOf(app, "changes:app.ts");
     app.onDialog((dialog) => (dialog.sheet ? "Display options" : null));
-    await app.press("id:git-diff-more");
+    await answering(app, () => app.press("id:git-diff-more"));
     await app.waitFor("id:git-display");
     expect(app.texts()).toContain("Wrap lines");
     expect(app.texts()).toContain("File headers");
@@ -388,7 +389,7 @@ describe("Git review: the reader", () => {
     await app.press("id:git-commit-file-app.ts");
     await app.waitFor("id:git-diff-view");
     app.onDialog((dialog) => (dialog.sheet ? "Open working file" : null));
-    await app.press("id:git-diff-more");
+    await answering(app, () => app.press("id:git-diff-more"));
     await app.waitFor("id:git-file-page");
     await app.waitUntil(() => repo.asked.some((r) => r.type === "git_repo_file_content"));
   });
@@ -457,7 +458,7 @@ describe("Git review: the repository's files", () => {
     const { app, repo } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }]);
     await app.waitFor("id:git-row-changes:app.ts");
     app.onDialog((dialog) => (dialog.sheet ? "Browse files" : null));
-    await app.press("id:git-more");
+    await answering(app, () => app.press("id:git-more"));
     await app.waitFor("id:git-files-tree");
     expect(app.shows("label:app.ts, Modified")).toBe(true);
     expect(app.shows("label:src, has changes")).toBe(true);
@@ -477,7 +478,7 @@ describe("Git review on the web", () => {
     const { app, repo } = await openReview([app_ts, notes_md], { platform: "web" });
     await app.waitFor("id:git-row-changes:notes.md");
     app.onDialog((dialog) => (dialog.sheet ? "Stage" : null));
-    await app.rightClick("id:git-row-changes:notes.md");
+    await answering(app, () => app.rightClick("id:git-row-changes:notes.md"));
     await app.waitUntil(() => repo.asked.some((r) => r.type === "git_stage"));
     expect(app.dialogs().find((d) => d.sheet)?.title).toBe("notes.md");
     await app.waitFor("id:git-row-staged:notes.md");
@@ -488,12 +489,12 @@ describe("Git review on the web", () => {
     const { app } = await openReview([app_ts, { ...app_ts, path: "src/lib/util.ts" }], { platform: "web" });
     await app.waitFor("id:git-row-changes:app.ts");
     app.onDialog((dialog) => (dialog.sheet ? "Browse files" : null));
-    await app.press("id:git-more");
+    await answering(app, () => app.press("id:git-more"));
     await app.waitFor("id:git-files-tree");
     await app.type("id:git-files-query", "util");
     await app.waitFor("id:git-file-src/lib/util.ts");
     app.onDialog((dialog) => (dialog.sheet ? "Open file" : null));
-    await app.rightClick("id:git-file-src/lib/util.ts");
+    await answering(app, () => app.rightClick("id:git-file-src/lib/util.ts"));
     await app.waitFor("id:git-file-view");
   });
 });
