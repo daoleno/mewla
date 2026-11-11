@@ -18,6 +18,7 @@ export type MorePage =
   | { name: "settings-phone" }
   | { name: "settings-virtual-screen" }
   | { name: "settings-pet" }
+  | { name: "settings-update" }
   | { name: "settings-licenses" }
   | { name: "settings-license"; id: string }
   | { name: "stats" }
@@ -35,6 +36,6 @@ export type MorePage =
 export interface PageNav {
   push(route: MorePage): void;
   pop(): void;
-  /** The stack's routes, bottom to top (reactive): a page is on top when the last one is its route. */
-  routes?: () => readonly unknown[];
+  /** The stack's routes, bottom to top (reactive): a page is on top again when the last one is its route. */
+  routes?: () => readonly { name: string }[];
 }
