@@ -1,9 +1,9 @@
-import { platform, Scroll, signal, Text, View, WebView } from "nsh";
+import { effect, keyboardFrame, platform, Scroll, signal, Text, untracked, View, WebView } from "nsh";
 import { Input } from "nsh/base";
 import type { InputRef, WebViewRef } from "nsh";
 import { Button } from "nsh/base";
 import { ScreenConnection, type ScreenRoute } from "../../../core/screen/screen";
-import { activeModifiers, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, type ModifierState } from "../../../core/screen/screenPageModel";
+import { activeModifiers, KEYBOARD_SENTINEL, keyboardEdit, NO_MODIFIERS, spendModifiers, tapModifier, typingKeyboardStep, type ModifierState } from "../../../core/screen/screenPageModel";
 import { startLiveDeadline, LIVE_DEADLINE_REASON } from "../../../core/screen/screenLiveDeadline";
 import { parseScreenViewerMessage, type ScreenHostMessage, type ScreenKey, type ScreenModifier, type ScreenPointerMode } from "../../../core/screen/screenViewerProtocol";
 import type { ScreenStreamStats } from "../../../core/screen/screenStream";
@@ -316,6 +316,15 @@ export function RemoteView(props: { session: RemoteSession; label: string; modif
     props.session.key(key, activeModifiers(mods()));
     mods.set(spendModifiers(mods()));
   };
+  // Android's Back hides the keyboard without blurring the field: end typing when it goes down.
+  let keyboardSeen = false;
+  if (soft) {
+    effect(() => {
+      const step = typingKeyboardStep(keyboardSeen, props.typing, keyboardFrame().height > 0);
+      keyboardSeen = step.seen;
+      if (step.end) untracked(() => props.onTypingChange(false));
+    });
+  }
 
   return (
     <View class={props.class ?? "flex-1"}>

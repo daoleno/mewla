@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   activeModifiers,
   connectionProblem,
   diagnosticRows,
   indicatorTone,
   KEYBOARD_SENTINEL,
+  typingKeyboardStep,
   keyboardEdit,
   NO_MODIFIERS,
   nextSlowStreak,
@@ -247,5 +250,26 @@ describe("a computer's own screen looked at from that computer", () => {
   test("agents are the list, else the single one", () => {
     expect(screenAgents(null)).toEqual([]);
     expect(screenAgents({ agent })).toEqual([agent]);
+  });
+});
+
+describe("typing ends when the soft keyboard goes down (screen [69])", () => {
+  test("Back hides the keyboard after it came up: typing ends", () => {
+    let seen = false;
+    ({ seen } = typingKeyboardStep(seen, true, false));
+    expect(seen).toBe(false);
+    const up = typingKeyboardStep(seen, true, true);
+    expect(up).toEqual({ seen: true, end: false });
+    expect(typingKeyboardStep(up.seen, true, false)).toEqual({ seen: false, end: true });
+  });
+
+  test("the remote view follows the keyboard with it", () => {
+    const view = readFileSync(join(import.meta.dir, "../../ui/more/screen/RemoteView.tsx"), "utf8");
+    expect(view).toContain("typingKeyboardStep(keyboardSeen, props.typing, keyboardFrame().height > 0)");
+  });
+
+  test("a keyboard not up yet, or typing already off, ends nothing", () => {
+    expect(typingKeyboardStep(false, true, false)).toEqual({ seen: false, end: false });
+    expect(typingKeyboardStep(true, false, false)).toEqual({ seen: false, end: false });
   });
 });
