@@ -3,7 +3,7 @@
 Mewla is a mobile-native control plane for coding agents that continue to run on
 the user's computer. The daemon remains the business-logic and data owner.
 Self-managed Pair/direct connectivity is the normal path. Explicitly configured
-Mewla Link adds an optional reachability path; it does not move Sessions,
+Mewla Relay adds an optional reachability path; it does not move Sessions,
 Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
 
 ## System shape
@@ -18,7 +18,7 @@ Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
           │                           │
           │ inner TLS 1.3 carrying HTTP/1.1 + WSS
           ▼                           ▼
-┌──────────────── Regional Mewla Link Relay ────────────────┐
+┌───────────────── Regional Mewla Relay ──────────────────┐
 │ bounded TLS ClientHello SNI routing only                │
 │ opaque bidirectional L4 streams; no inner TLS keys      │
 │ in-memory route presence and one-time admissions        │
@@ -27,7 +27,7 @@ Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
                 │ one control connection + one outbound data
                 │ connection per mobile stream
                 ▼
-        [daemon Link Connector]
+        [daemon Relay Connector]
                 │ terminates the pinned inner TLS
                 ▼
         [the existing daemon HTTP handler]
@@ -38,8 +38,8 @@ Terminal, Brain, Chat, Calendar, Work, files, or credentials into the relay.
 ```
 
 LAN, Tailscale, Cloudflare Tunnel, and reverse-proxy origins continue to call
-the exact same daemon HTTP handler without Mewla Link. The daemon opens no new
-public listener for Link.
+the exact same daemon HTTP handler without Mewla Relay. The daemon opens no new
+public listener for Mewla Relay.
 
 The same handler also serves the app's web export (`daemon/webui`) to loopback
 and to the HTTPS addresses in the daemon's address book (`mewla address`). A
@@ -48,7 +48,7 @@ browser pairs as one more device and uses the same signed requests; see
 
 ## Durable invariants
 
-1. Exactly one `StoredServer` is current. Link regions and future direct paths
+1. Exactly one `StoredServer` is current. Relay regions and future direct paths
    are transport candidates of that record, never extra servers and never a
    feature-local server picker.
 2. The daemon is the sole application endpoint. Relay loss cannot make a
@@ -56,7 +56,7 @@ browser pairs as one more device and uses the same signed requests; see
 3. The relay has no inner TLS private key and cannot read HTTP paths, headers,
    device signatures, WebSocket messages, Terminal bytes, prompts, or files.
 4. Existing Ed25519 daemon identity and enrolled device keys remain the
-   application trust anchors. A separate Link TLS key is explicitly signed by
+   application trust anchors. A separate Relay TLS key is explicitly signed by
    the daemon identity in Pairing V2.
 5. Pairing admissions, enrollment tokens, stream tickets, auth nonces, and
    device signatures are purpose-bound and replay resistant.
@@ -91,7 +91,7 @@ Unsaved Work text remains in the app-lifetime Work draft store, keyed by server
 and document. This is not durable offline storage; daemon saves remain the
 durable document authority.
 
-## Mewla Link relay protocol
+## Mewla Relay protocol
 
 The MVP deliberately uses standard, widely implemented primitives:
 
@@ -139,7 +139,7 @@ either direction reaches the idle timeout. A one-sided EOF propagates
 TCP backpressure reaches the sender. Each HTTP or WebSocket connection has its
 own outer connector socket, so a large `/upload` body is independent of a live
 Terminal WebSocket. Existing daemon uploads are HTTP, while Terminal remains on
-`/ws`; Link preserves that separation.
+`/ws`; Relay preserves that separation.
 
 Inside the daemon, each `/ws` client has its own ordered send queue and a single
 writer goroutine. Broadcasts, request replies and watcher events only enqueue,
@@ -199,29 +199,29 @@ have it:
 
 ### Pairing V1 — preserved
 
-`mewla pair` without Link, or `mewla pair <address>`, emits the compact binary V1
+`mewla pair` without Relay, or `mewla pair <address>`, emits the compact binary V1
 payload for the chosen address (never loopback when chosen automatically). It includes
 the full phone-reachable `/ws` URL, daemon public key, and one-time enrollment
 token. HTTP(S) is normalized to WS(S); the app derives the other root routes.
 This is the contract for LAN, Tailscale, Cloudflare Tunnel, and reverse proxies.
 
-### Pairing V2 — Mewla Link
+### Pairing V2 — Mewla Relay
 
-When `link.json` exists, `mewla pair` with no address requests a short-lived
+When `relay.json` exists, `mewla pair` with no address requests a short-lived
 relay admission and emits a JSON V2 payload inside URL-safe base64. It includes:
 
 - daemon ID and public key
 - one-time daemon enrollment token and expiration
 - stable unenumerable route ID
 - relay candidate names, one admission URL, and stable URLs
-- Link transport SPKI SHA-256 pin
+- Relay transport SPKI SHA-256 pin
 - daemon Ed25519 signature over every field above
 
 The app verifies this binding before opening the pinned transport. For the
 admission URL it starts only the loopback listener; it does not open a remote
 TLS preflight. The actual `POST /pair` creates the first admission-bearing
 stream. After enrollment it stores stable relay candidates on the same
-`StoredServer`. Re-importing Link for the same daemon updates/reuses that server
+`StoredServer`. Re-importing Relay for the same daemon updates/reuses that server
 record instead of creating a region-specific duplicate.
 
 ## Request authentication and revocation
@@ -257,7 +257,7 @@ The app probes all stable candidates through the same native pin owner, chooses
 the lowest successful RTT deterministically, and caches that selection briefly.
 If the connector has failed over to another configured relay, the next mobile
 selection reaches the new route. Manual candidates are not silently mixed into
-Link failover; the user selects a self-managed record/path explicitly.
+Relay failover; the user selects a self-managed record/path explicitly.
 
 Route presence is in memory. A relay restart deliberately disconnects routes;
 connectors re-register. A single-region MVP therefore runs one relay process
@@ -301,7 +301,7 @@ These are acceptance targets, not claims that a production network exists.
 | HTTP/2 CONNECT        | Not needed; mobile and daemon already share a full HTTP/WSS origin                    |
 | HTTP/3 / WebTransport | Prototype later only if cellular loss/hand-off data proves benefit                    |
 | custom QUIC mux       | Not in MVP; would duplicate congestion, resume, and mobile work                       |
-| WireGuard / DERP      | Not selected; would turn Link into a device VPN/overlay and expand platform/ACL scope |
+| WireGuard / DERP      | Not selected; would turn Mewla Relay into a device VPN/overlay and expand platform/ACL scope |
 | ICE / STUN / TURN     | Future direct-path optimization only; NAT traversal must not block relay MVP          |
 | P2P hole punching     | Explicitly out of scope for this slice                                                |
 
@@ -309,9 +309,9 @@ These are acceptance targets, not claims that a production network exists.
 
 Daemon state adds:
 
-- `<state>/link.json` — optional operator connector configuration; may name an
+- `<state>/relay.json` — optional operator connector configuration; may name an
   environment variable instead of embedding its token
-- `<state>/link-identity.json` — stable random route and Link Ed25519 transport
+- `<state>/link-identity.json` — stable random route and Relay Ed25519 transport
   private key, mode `0600`
 
 Existing identity, pairing token, trusted-device, upload, Work, Brain, Calendar,
@@ -319,7 +319,7 @@ and agent state remain owned by the daemon. The relay has no database and
 persists none of them.
 
 The app keeps its Ed25519 device seed in secure storage. AsyncStorage keeps one
-server record with daemon trust plus optional Link route, SPKI pin, and
+server record with daemon trust plus optional Relay route, SPKI pin, and
 transport candidates.
 
 ## Capacity and cost drivers

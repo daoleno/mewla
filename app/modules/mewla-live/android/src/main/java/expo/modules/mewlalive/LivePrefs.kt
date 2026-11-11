@@ -51,7 +51,7 @@ internal class LivePrefs(context: Context) {
 
   /**
    * How the widgets get their data: "direct" (the scoped token and /widget/snapshot) or "pushed"
-   * (the state the app or the push service just applied; servers reached through Mewla Link have
+   * (the state the app or the push service just applied; servers reached through Mewla Relay have
    * no address a widget can fetch). Empty until provisioned.
    */
   var widgetMode: String

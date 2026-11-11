@@ -8,7 +8,7 @@ import type { StoredServer } from "../../core/storedServerContract";
 import type { Transport } from "../../core/transport";
 import { startCalendarAlerts } from "../calendar/alerts";
 import { deviceZone } from "../calendar/clock";
-import { refreshReminders, reminderLinks } from "../calendar/ReminderBanner";
+import { refreshReminders, reminderLinks, startReminderBanner } from "../calendar/ReminderBanner";
 import { closeEditor } from "../calendar/Editor";
 import { calendarLinks, calendarNav, showCalendarItem } from "../calendar/routes";
 import { clearCalendarAlerts, loadStrongAlerts, onStrongAlertsChange, strongAlerts } from "../calendar/state";
@@ -153,6 +153,8 @@ export function openNotificationLink(url: string): void {
   if (serverId && serverId !== current()?.id) {
     const target = servers().find((s) => s.id === serverId);
     if (!target) return;
+    // The editor goes first: switching under an open sheet crashes NSH 0.4.0's runtime (SIGSEGV in `nsh test`).
+    closeEditor();
     // Open the link once the switch is done (it waits for open sheets to close).
     void switchTo(target).then(() => openNotificationLink(url));
     return;
@@ -186,7 +188,7 @@ export function startNotifications(): void {
   const openSession = (sessionId: string) => openNotificationLink(`mewla://sessions/${encodeURIComponent(sessionId)}`);
   calendarLinks.openSession = openSession;
   workLinks.openSession = openSession;
-  workLinks.openCalendarItem = (itemId) => openNotificationLink(`mewla://calendar?id=${encodeURIComponent(itemId)}`);
+  workLinks.openCalendarItem = (itemId, runId) => openNotificationLink(`mewla://calendar?id=${encodeURIComponent(itemId)}${runId ? `&run=${encodeURIComponent(runId)}` : ""}`);
   workLinks.askBrain = (text) => {
     draftForBrain(text);
     brainNav.popToRoot();
@@ -208,6 +210,7 @@ export function startNotifications(): void {
   if (!hosted) return;
 
   void loadStrongAlerts();
+  startReminderBanner();
   onTransport((transport, server) => {
     void host.call("live.setCurrentServer", { serverId: server.id }).catch(() => {});
     const connected = () => {

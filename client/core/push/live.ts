@@ -21,7 +21,7 @@ export function liveAnswerRequestId(answer: LiveAnswer): string {
 }
 
 /**
- * Where a widget fetches its snapshot: only a plain address works. A relay (Mewla Link)
+ * Where a widget fetches its snapshot: only a plain address works. A relay (Mewla Relay)
  * has no URL a widget can reach; those widgets show the states the app and pushes apply.
  */
 export function widgetBaseUrl(server: Pick<StoredServer, "url" | "transportKind">): string | null {

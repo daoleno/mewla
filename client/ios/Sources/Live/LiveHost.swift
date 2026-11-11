@@ -21,7 +21,7 @@ enum LiveHost {
       store.configureWidget(baseUrl: try field(data, "baseUrl").trimmingCharacters(in: .whitespaces), token: try field(data, "token"))
       return nil
     }
-    // A computer reached through Mewla Link has no address a widget can fetch: its widgets show the pushed state.
+    // A computer reached through Mewla Relay has no address a widget can fetch: its widgets show the pushed state.
     app.handle("live.configureWidgetPushed") { _ -> Any? in
       store.configureWidgetPushed()
       return nil

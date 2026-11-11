@@ -132,7 +132,7 @@ describe("Pairing V3", () => {
   });
 });
 
-test("QR and paste accept HTTPS fragment links as well as mewla links", () => {
+test("QR and paste accept HTTPS fragment links as well as mewla:// links", () => {
   const query = `u=${encodeURIComponent("wss://mewla.example/ws")}&k=${"a".repeat(64)}&t=${"b".repeat(64)}`;
   const current = `mewla://settings?${query}`;
   const expected = parseConnectLink(current);
@@ -146,7 +146,7 @@ test("QR and paste accept HTTPS fragment links as well as mewla links", () => {
 });
 
 test("reads the compact link the daemon prints for a plain LAN or Tailscale address", () => {
-  // Printed by `mewla pair` on a daemon with no Mewla Link: a version 1 payload
+  // Printed by `mewla pair` on a daemon with no Mewla Relay: a version 1 payload
   // (address, daemon key, one-time token) in the `p` parameter, no `v`.
   const printed =
     "mewla://settings?p=AQAXd3M6Ly8xMDAuOTIuMTc0LjkwOjk4OTVHHP7dxlX0zaLK5et3b5-J2j8CAtWfBkaokDtuDeNf4XI0E2sWgLagbSggpg8GyjHp4XBIrZmAi12ffdjAhOoX";

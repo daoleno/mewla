@@ -1,65 +1,324 @@
-import { host, nativeComponent, platform, signal, Text, View } from "nsh";
-import { AlertDialog, Button, Input } from "nsh/base";
+import { cleanup, Clipboard, createMotion, effect, host, Image, openUrl, platform, reduceMotion, safeArea, Scroll, signal, Text, untracked, View } from "nsh";
+import type { JSX } from "nsh";
+import { Button } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
-import { pairWith, readPairingLink } from "../../core/pairFlow";
-import { addPairedServer } from "../session";
+import { BackHandler } from "nsh/mobile";
+import {
+  INSTALL_COMMAND,
+  INSTALL_NOTE,
+  OTHER_WAYS_URL,
+  START_COMMAND,
+  START_NOTE,
+  WELCOME_LEDE,
+  WELCOME_TITLE,
+  belowHero,
+  catBoxForStep,
+  catClipFor,
+  computerName,
+  connectedCopy,
+  headerHeight,
+  heroCatBox,
+  heroZoneWidth,
+  isCompactFrame,
+  previousOnboardingStep,
+  sealShown,
+  type CatBox,
+  type Frame,
+  type OnboardingStep,
+} from "../../core/onboarding";
+import { Icon, type IconName } from "../icons/Icon";
+import { Spinner } from "../more/kit/kit";
+import { restorePet } from "../more/pet/pets";
+import { justPaired, pairingBusy, pairingIssue, pairingStatus, pairings, pasteFromClipboard } from "../pairing";
+import { petClip } from "../pets/clips";
+import { connection, problem, resumeConnection } from "../session";
+import { OnboardingScanner, scannerSearching } from "./OnboardingScanner";
 
-/** The host's camera reader (CameraX + ML Kit on Android, AVFoundation on iOS). */
-const CodeScanner = nativeComponent<{ active: boolean }, { scan: { value: string }; unavailable: { reason: string } }>("mewla.qrScanner", {
-  props: ["active"],
-  events: ["scan", "unavailable"],
-});
+export { pairFromText } from "../pairing";
 
-const busy = signal(false);
-const failure = signal("");
-
-/** Pairing from a scanned code, a pasted link or an opened `mewla://` link: one flow. */
-export async function pairFromText(text: string): Promise<void> {
-  const payload = readPairingLink(text);
-  if (!payload) return failure.set("That isn't a Mewla pairing code. Run mewla pair on the computer and scan the code it shows.");
-  const device = platform.os === "web" ? "browser" : "phone";
-  const { action } = await AlertDialog.show({
-    title: `Pair this ${device}?`,
-    description: `Pairing gives this ${device} access to sessions, terminal, Brain, Workers and files on that computer.`,
-    actions: [
-      { id: "cancel", label: "Cancel", role: "cancel" },
-      { id: "pair", label: "Pair" },
-    ],
+/**
+ * First run: Welcome → Install → Scan → Connected, with Brain's cat hopping between the hero spot
+ * and the corner. Also the connected step after any later pairing (Settings, an opened link):
+ * `justPaired` holds the computer until the person goes on.
+ */
+export function Onboarding(props: { onContinue(): void; onSettings(): void }) {
+  restorePet();
+  const step = signal<OnboardingStep>(justPaired() ? "connected" : "welcome");
+  const cameFrom = signal<OnboardingStep | null>(null);
+  const size = signal<{ width: number; height: number } | null>(null);
+  const go = (next: OnboardingStep) => {
+    cameFrom.set(step());
+    step.set(next);
+  };
+  effect(() => {
+    if (justPaired()) step.set("connected");
   });
-  if (action !== "pair") return;
-  busy.set(true);
-  failure.set("");
-  try {
-    await addPairedServer(await pairWith(payload));
-  } catch (error) {
-    failure.set(error instanceof Error ? error.message : String(error));
-  } finally {
-    busy.set(false);
-  }
+  cleanup(BackHandler.on("press", () => {
+    const previous = previousOnboardingStep(step(), cameFrom());
+    if (!previous) return false;
+    cameFrom.set(null);
+    step.set(previous);
+    return true;
+  }));
+
+  const frame = (): Frame | null => {
+    const s = size();
+    return s ? { ...s, top: safeArea().top, bottom: safeArea().bottom } : null;
+  };
+  const compact = () => (frame() ? isCompactFrame(frame()!) : false);
+  const server = () => justPaired();
+  const name = () => computerName(server()?.name);
+  const finish = (then: () => void) => {
+    justPaired.set(null);
+    then();
+  };
+
+  return (
+    <View testID="onboarding" class="flex-1 bg-background"
+      style={{ paddingTop: safeArea().top, paddingBottom: safeArea().bottom, paddingLeft: safeArea().left, paddingRight: safeArea().right }}
+      onLayout={({ bounds }) => {
+        const { width, height } = bounds.size;
+        const s = size();
+        if (s?.width !== width || s?.height !== height) size.set({ width, height });
+      }}>
+      {step() === "welcome" ? (
+        <HeroStep frame={frame()} compact={compact()} center={
+          <>
+            <Text role="header" class="text-center text-[34px] font-extrabold leading-10 tracking-tight text-foreground">{WELCOME_TITLE.replace(". ", ".\n")}</Text>
+            <Text class="max-w-[320px] text-center text-base text-muted-foreground">{WELCOME_LEDE}</Text>
+          </>
+        } actions={
+          <>
+            <FilledButton testID="set-up" label="Set up my computer" onPress={() => go("install")} />
+            <PlainButton testID="scan-now" label="Mewla already running? Scan its code" onPress={() => go("scan")} />
+          </>
+        } />
+      ) : step() === "install" ? (
+        <SplitStep compact={compact()} content={
+          <>
+            <StepHeader frame={frame()} compact={compact()} number={1} place="ON YOUR COMPUTER" title="Install Mewla" />
+            <CommandCard />
+            <Text class="text-xs text-muted-foreground">{INSTALL_NOTE}</Text>
+            <Text class="mt-1.5 text-base text-muted-foreground">
+              Then run <Text class="rounded bg-secondary font-mono text-sm text-foreground">{` ${START_COMMAND} `}</Text>. {START_NOTE}
+            </Text>
+            <Text class="text-sm text-muted-foreground">It prints a QR code. Keep it on screen for the next step.</Text>
+          </>
+        } actions={<FilledButton testID="next-scan" label="Next: scan the code" onPress={() => go("scan")} />} />
+      ) : step() === "scan" ? (
+        <SplitStep compact={compact()} content={
+          <>
+            <StepHeader frame={frame()} compact={compact()} number={2} place="ON THIS PHONE" title="Scan the code in your terminal" />
+            <OnboardingScanner compact={compact()} />
+            <ScanStatus />
+          </>
+        } actions={<PairAlternatives />} />
+      ) : (
+        <HeroStep frame={frame()} compact={compact()} live center={
+          <>
+            <Text testID="connected-title" role="header" class="text-center text-[34px] font-extrabold leading-10 tracking-tight text-foreground">
+              {connectedCopy(connection(), name(), problem()).title}
+            </Text>
+            <Text class="max-w-[320px] text-center text-base text-muted-foreground">{connectedCopy(connection(), name(), problem()).lede}</Text>
+            {connection() === "connecting" || connection() === "idle" ? <Spinner /> : null}
+          </>
+        } actions={
+          <>
+            {connection() === "connected" ? <FilledButton testID="open-brain" icon="arrow-forward" label="Open Brain" onPress={() => finish(props.onContinue)} /> : null}
+            {connection() === "waiting" ? <FilledButton testID="retry" icon="refresh" label="Retry connection" onPress={() => resumeConnection()} /> : null}
+            {connection() !== "connected" ? <PlainButton testID="server-settings" icon="settings" label="Server settings" onPress={() => finish(props.onSettings)} /> : null}
+          </>
+        } />
+      )}
+      {frame() ? <Cat step={step()} frame={frame()!} /> : null}
+    </View>
+  );
 }
 
-export function Onboarding() {
-  const scanning = signal(false);
-  const pasted = signal("");
+/** Settings → "Pair a computer": the scan step on its own page; the connected step follows a pairing. */
+export function PairPage(props: { onPaired?(): void }) {
+  const before = untracked(pairings);
+  effect(() => {
+    if (pairings() !== before) untracked(() => props.onPaired?.());
+  });
+  // A browser has no camera reader: it pastes the link.
+  const camera = platform.os !== "web";
   return (
     <NavPage title="Pair a computer">
-      <View class="flex-1 gap-4 bg-background p-5">
-        <Text class="text-base text-muted-foreground">On your computer, run mewla pair, then scan the code or paste the link.</Text>
-        {scanning() ? (
-          <CodeScanner active class="h-72 overflow-hidden rounded-xl" onScan={({ value }) => { scanning.set(false); void pairFromText(value); }}
-            onUnavailable={({ reason }) => { scanning.set(false); failure.set(`Camera unavailable: ${reason}`); }} />
-        ) : (
-          <Button testID="scan" onPress={() => scanning.set(true)} disabled={!host.available() || busy()} class="rounded-xl bg-primary px-4 py-3 active:opacity-80">
-            <Text class="text-center text-base font-semibold text-primary-foreground">Scan code</Text>
-          </Button>
-        )}
-        <Input testID="link" value={pasted()} onChange={({ value }) => pasted.set(value)} placeholder="mewla://…" autoCapitalize="none" autoCorrect={false}
-          class="rounded-xl border border-border bg-card px-3 py-3 text-base" />
-        <Button testID="pair" onPress={() => pairFromText(pasted())} disabled={!pasted().trim() || busy()} class="rounded-xl border border-border px-4 py-3 active:bg-accent">
-          <Text class="text-center text-base font-semibold">{busy() ? "Pairing…" : "Pair"}</Text>
-        </Button>
-        {failure() ? <Text testID="failure" class="text-base text-destructive">{failure()}</Text> : null}
-      </View>
+      <Scroll class="flex-1 bg-background" contentClass="gap-4 p-5">
+        <Text class="text-base text-muted-foreground">
+          {camera ? "On your computer, run mewla pair, then scan the code it shows." : "On your computer, run mewla pair --details, copy the pairing link, then paste it here."}
+        </Text>
+        {camera ? <OnboardingScanner /> : null}
+        <ScanStatus />
+        <PairAlternatives />
+      </Scroll>
     </NavPage>
+  );
+}
+
+/** Welcome and connected: the cat above the text, or beside it when the window is short. */
+function HeroStep(props: { frame: Frame | null; compact: boolean; center: JSX.Element; actions: JSX.Element; live?: boolean }) {
+  const fade = createMotion({ enter: "fadeIn", delay: 140, duration: 240 });
+  return props.compact ? (
+    <View class="flex-1 pb-2 pl-0 pr-6" style={{ marginLeft: props.frame ? heroZoneWidth(props.frame) : 0, ...fade.style }}>
+      <Scroll class="flex-1" contentClass="grow justify-center gap-5 py-3">
+        <View class="items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
+        <View class="w-full max-w-[360px] gap-2 self-center">{props.actions}</View>
+      </Scroll>
+    </View>
+  ) : (
+    <View class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={{ paddingTop: props.frame ? belowHero(props.frame) : 260, ...fade.style }}>
+      <View class="flex-1 items-center gap-3" android={{ accessibilityLiveRegion: props.live ? "polite" : "none" }}>{props.center}</View>
+      <View class="gap-2">{props.actions}</View>
+    </View>
+  );
+}
+
+/** Install and scan: the content scrolls, the buttons stay in reach (beside it when the window is short). */
+function SplitStep(props: { compact: boolean; content: JSX.Element; actions: JSX.Element }) {
+  const fade = createMotion({ enter: "fadeIn", delay: 140, duration: 240 });
+  return props.compact ? (
+    <View class="flex-1 flex-row gap-6 px-6 pb-2" style={fade.style}>
+      <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+      <View class="w-[220px] justify-end gap-2">{props.actions}</View>
+    </View>
+  ) : (
+    <View class="w-full max-w-[520px] flex-1 self-center px-6 pb-4" style={fade.style}>
+      <Scroll class="flex-1" contentClass="gap-4 pb-4">{props.content}</Scroll>
+      <View class="gap-2">{props.actions}</View>
+    </View>
+  );
+}
+
+function StepHeader(props: { frame: Frame | null; compact: boolean; number: number; place: string; title: string }) {
+  return (
+    <View class={props.compact ? "gap-2.5 pb-1.5 pt-3" : "justify-end gap-2.5 pb-1.5 pr-[100px] pt-[22px]"}
+      style={{ minHeight: props.frame && !props.compact ? headerHeight(props.frame) : undefined }}>
+      <View class="flex-row items-center gap-2">
+        <View class="h-5 w-5 items-center justify-center rounded-full border border-border">
+          <Text class="text-[11px] font-semibold text-muted-foreground">{props.number}</Text>
+        </View>
+        <Text class="text-[11px] font-semibold tracking-wider text-muted-foreground">{props.place}</Text>
+      </View>
+      <Text role="header" class="text-[30px] font-extrabold leading-9 tracking-tight text-foreground">{props.title}</Text>
+    </View>
+  );
+}
+
+/** The one command, with Copy and Send to computer (the system share sheet). */
+function CommandCard() {
+  const copied = signal(false);
+  return (
+    <View class="gap-3.5 rounded-xl border border-border bg-card p-4">
+      <Text testID="install-command" style={{ userSelect: "text" }} class="font-mono text-sm leading-[21px] text-foreground">{INSTALL_COMMAND}</Text>
+      <View class="flex-row flex-wrap gap-2">
+        <TintedButton testID="copy-command" icon={copied() ? "check" : "copy"} label={copied() ? "Copied" : "Copy"}
+          onPress={() => void Clipboard.writeText(INSTALL_COMMAND).then(() => { copied.set(true); setTimeout(() => copied.set(false), 1_600); })} />
+        {host.available() ? (
+          <TintedButton testID="share-command" icon="share" label="Send to computer" onPress={() => void host.call("app.share", { text: INSTALL_COMMAND }).catch(() => {})} />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/** Under the finder: what the camera is doing, or why the last code did not pair. */
+function ScanStatus() {
+  return (
+    <View class="gap-2" android={{ accessibilityLiveRegion: "polite" }}>
+      <View class="min-h-6 flex-row items-center justify-center gap-2">
+        {pairingBusy() ? <Spinner size={16} /> : null}
+        {pairingBusy() || scannerSearching() ? <Text testID="scan-status" class="text-sm text-muted-foreground">{pairingBusy() ? pairingStatus() || "Pairing…" : "Looking for a Mewla code…"}</Text> : null}
+      </View>
+      {pairingIssue() ? (
+        <View testID="pair-issue" class="gap-1 rounded-xl border border-border bg-card p-3">
+          <Text class="text-base font-semibold text-destructive">{pairingIssue()!.title}</Text>
+          <Text style={{ userSelect: "text" }} class="text-sm text-muted-foreground">{pairingIssue()!.detail}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/** Paste and the docs: pairing never depends on the camera. */
+function PairAlternatives() {
+  return (
+    <>
+      <OutlinedButton testID="paste" icon="clipboard" label="Paste a pairing link" disabled={pairingBusy()} onPress={() => void pasteFromClipboard()} />
+      <Button testID="other-ways" role="link" accessibilityLabel="Other ways to connect" onPress={() => void openUrl(OTHER_WAYS_URL)}
+        class="min-h-11 flex-row items-center justify-center gap-1.5 active:opacity-70">
+        <Text class="text-sm font-semibold text-muted-foreground">Other ways to connect</Text>
+        <Icon name="open-external" size={14} />
+      </Button>
+    </>
+  );
+}
+
+const CAT_BASE = 164;
+
+/** Brain's cat: one image that moves between the hero spot and the corner; the seal stamps in behind it. */
+function Cat(props: { step: OnboardingStep; frame: Frame }) {
+  const box = (): CatBox => catBoxForStep(props.step, props.frame);
+  const hero = () => heroCatBox(props.frame);
+  const clip = () => catClipFor(props.step, pairingBusy(), justPaired() ? connection() : undefined);
+  const seal = () => sealShown(props.step, justPaired() ? connection() : undefined);
+  const move = () => (reduceMotion() ? 0 : 440);
+  return (
+    <>
+      <Image src={petClip("homeless")} accessibilityElementsHidden
+        style={{
+          position: "absolute", pointerEvents: "none", left: hero().cx - hero().size / 2, top: hero().cy - hero().size / 2, width: hero().size, height: hero().size,
+          opacity: seal() ? 1 : 0, transform: [{ scale: seal() ? 1 : 1.5 }],
+          transitionProperty: "opacity, transform", transitionDuration: reduceMotion() ? 0 : 260, transitionDelay: seal() && !reduceMotion() ? 380 : 0,
+        }} />
+      {/* Drawn at one size and moved by a transform, so the move between spots runs natively. */}
+      <Image testID="cat" src={petClip(clip())} accessibilityElementsHidden
+        style={{
+          position: "absolute", pointerEvents: "none", left: 0, top: 0, width: CAT_BASE, height: CAT_BASE,
+          transform: [{ translateX: box().cx - CAT_BASE / 2 }, { translateY: box().cy - CAT_BASE / 2 }, { scale: box().size / CAT_BASE }],
+          transitionProperty: "transform", transitionDuration: move(), transitionTimingFunction: "ease-in-out",
+        }} />
+    </>
+  );
+}
+
+function FilledButton(props: { testID: string; label: string; icon?: IconName; onPress(): void }) {
+  return (
+    <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
+      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 active:opacity-80">
+      <Text class="text-base font-semibold text-primary-foreground">{props.label}</Text>
+      {props.icon ? <Icon name={props.icon} color="primary-foreground" size={18} /> : null}
+    </Button>
+  );
+}
+
+function OutlinedButton(props: { testID: string; label: string; icon?: IconName; disabled?: boolean; onPress(): void }) {
+  return (
+    <Button testID={props.testID} onPress={props.onPress} disabled={props.disabled} accessibilityLabel={props.label}
+      class="min-h-[52px] flex-row items-center justify-center gap-2 rounded-xl border border-border px-4 py-3.5 active:bg-accent disabled:opacity-50">
+      {props.icon ? <Icon name={props.icon} color="foreground" size={18} /> : null}
+      <Text class="text-base font-semibold text-foreground">{props.label}</Text>
+    </Button>
+  );
+}
+
+function PlainButton(props: { testID: string; label: string; icon?: IconName; onPress(): void }) {
+  return (
+    <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
+      class="min-h-11 flex-row items-center justify-center gap-2 px-4 py-2.5 active:opacity-70">
+      {props.icon ? <Icon name={props.icon} color="muted-foreground" size={16} /> : null}
+      <Text class="text-center text-base font-semibold text-muted-foreground">{props.label}</Text>
+    </Button>
+  );
+}
+
+function TintedButton(props: { testID: string; label: string; icon: IconName; onPress(): void }) {
+  return (
+    <Button testID={props.testID} onPress={props.onPress} accessibilityLabel={props.label}
+      class="min-h-9 flex-row items-center gap-1.5 rounded-lg bg-secondary px-3 py-2 active:opacity-80">
+      <Icon name={props.icon} color="foreground" size={16} />
+      <Text class="text-sm font-semibold text-foreground">{props.label}</Text>
+    </Button>
   );
 }

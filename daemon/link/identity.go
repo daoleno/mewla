@@ -40,7 +40,7 @@ type persistedTransportIdentity struct {
 	TLSPrivateKeyHex string `json:"tls_private_key_hex,omitempty"`
 }
 
-// TransportIdentity is a daemon-local TLS identity used only by Mewla Link.
+// TransportIdentity is a daemon-local TLS identity used only by Mewla Relay.
 // Its SPKI pin remains stable while self-signed certificates are reissued for
 // changed relay domains.
 type TransportIdentity struct {
@@ -103,24 +103,24 @@ func loadTransportIdentity(path string) (persistedTransportIdentity, error) {
 	}
 	var persisted persistedTransportIdentity
 	if err := json.Unmarshal(raw, &persisted); err != nil {
-		return persistedTransportIdentity{}, fmt.Errorf("decode Link transport identity: %w", err)
+		return persistedTransportIdentity{}, fmt.Errorf("decode Mewla Relay transport identity: %w", err)
 	}
 	persisted.RouteID = normalizeRouteID(persisted.RouteID)
 	if persisted.RouteID == "" {
-		return persistedTransportIdentity{}, errors.New("Link transport identity has an invalid route id")
+		return persistedTransportIdentity{}, errors.New("Mewla Relay transport identity has an invalid route id")
 	}
 	identityKey, err := hex.DecodeString(strings.TrimSpace(persisted.PrivateKeyHex))
 	if err != nil || len(identityKey) != ed25519.PrivateKeySize {
-		return persistedTransportIdentity{}, errors.New("Link transport identity has an invalid identity key")
+		return persistedTransportIdentity{}, errors.New("Mewla Relay transport identity has an invalid identity key")
 	}
 	if rawTLS := strings.TrimSpace(persisted.TLSPrivateKeyHex); rawTLS != "" {
 		der, err := hex.DecodeString(rawTLS)
 		if err != nil {
-			return persistedTransportIdentity{}, errors.New("Link transport identity has an invalid TLS key")
+			return persistedTransportIdentity{}, errors.New("Mewla Relay transport identity has an invalid TLS key")
 		}
 		key, err := x509.ParseECPrivateKey(der)
 		if err != nil || key.Curve != elliptic.P256() {
-			return persistedTransportIdentity{}, errors.New("Link transport identity has an invalid TLS key")
+			return persistedTransportIdentity{}, errors.New("Mewla Relay transport identity has an invalid TLS key")
 		}
 	}
 	return persisted, nil
@@ -129,19 +129,19 @@ func loadTransportIdentity(path string) (persistedTransportIdentity, error) {
 func createTransportIdentity(path string) (persistedTransportIdentity, error) {
 	routeBytes := make([]byte, 16)
 	if _, err := rand.Read(routeBytes); err != nil {
-		return persistedTransportIdentity{}, fmt.Errorf("generate Link route id: %w", err)
+		return persistedTransportIdentity{}, fmt.Errorf("generate Mewla Relay route id: %w", err)
 	}
 	_, identityKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return persistedTransportIdentity{}, fmt.Errorf("generate Link transport key: %w", err)
+		return persistedTransportIdentity{}, fmt.Errorf("generate Mewla Relay transport key: %w", err)
 	}
 	tlsKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return persistedTransportIdentity{}, fmt.Errorf("generate Link TLS key: %w", err)
+		return persistedTransportIdentity{}, fmt.Errorf("generate Mewla Relay TLS key: %w", err)
 	}
 	tlsDER, err := x509.MarshalECPrivateKey(tlsKey)
 	if err != nil {
-		return persistedTransportIdentity{}, fmt.Errorf("encode Link TLS key: %w", err)
+		return persistedTransportIdentity{}, fmt.Errorf("encode Mewla Relay TLS key: %w", err)
 	}
 	persisted := persistedTransportIdentity{
 		RouteID:          hex.EncodeToString(routeBytes),
@@ -162,22 +162,22 @@ func persistedTransportTLSKey(persisted *persistedTransportIdentity) (*ecdsa.Pri
 	if raw == "" {
 		key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {
-			return nil, false, fmt.Errorf("generate Link TLS key: %w", err)
+			return nil, false, fmt.Errorf("generate Mewla Relay TLS key: %w", err)
 		}
 		der, err := x509.MarshalECPrivateKey(key)
 		if err != nil {
-			return nil, false, fmt.Errorf("encode Link TLS key: %w", err)
+			return nil, false, fmt.Errorf("encode Mewla Relay TLS key: %w", err)
 		}
 		persisted.TLSPrivateKeyHex = hex.EncodeToString(der)
 		return key, true, nil
 	}
 	der, err := hex.DecodeString(raw)
 	if err != nil {
-		return nil, false, errors.New("Link transport identity has an invalid TLS key")
+		return nil, false, errors.New("Mewla Relay transport identity has an invalid TLS key")
 	}
 	key, err := x509.ParseECPrivateKey(der)
 	if err != nil {
-		return nil, false, errors.New("Link transport identity has an invalid TLS key")
+		return nil, false, errors.New("Mewla Relay transport identity has an invalid TLS key")
 	}
 	return key, false, nil
 }
@@ -185,7 +185,7 @@ func persistedTransportTLSKey(persisted *persistedTransportIdentity) (*ecdsa.Pri
 func writeTransportIdentity(path string, persisted persistedTransportIdentity) error {
 	raw, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
-		return fmt.Errorf("encode Link transport identity: %w", err)
+		return fmt.Errorf("encode Mewla Relay transport identity: %w", err)
 	}
 	return writePrivateFileAtomic(path, raw)
 }
@@ -198,7 +198,7 @@ func issueTransportCertificate(
 ) (tls.Certificate, *x509.Certificate, error) {
 	serialBytes := make([]byte, 16)
 	if _, err := rand.Read(serialBytes); err != nil {
-		return tls.Certificate{}, nil, fmt.Errorf("generate Link certificate serial: %w", err)
+		return tls.Certificate{}, nil, fmt.Errorf("generate Mewla Relay certificate serial: %w", err)
 	}
 	serial := new(big.Int).SetBytes(serialBytes)
 	if serial.Sign() <= 0 {
@@ -221,11 +221,11 @@ func issueTransportCertificate(
 	publicKey := privateKey.Public()
 	der, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
 	if err != nil {
-		return tls.Certificate{}, nil, fmt.Errorf("issue Link transport certificate: %w", err)
+		return tls.Certificate{}, nil, fmt.Errorf("issue Mewla Relay transport certificate: %w", err)
 	}
 	leaf, err := x509.ParseCertificate(der)
 	if err != nil {
-		return tls.Certificate{}, nil, fmt.Errorf("parse Link transport certificate: %w", err)
+		return tls.Certificate{}, nil, fmt.Errorf("parse Mewla Relay transport certificate: %w", err)
 	}
 	return tls.Certificate{
 		Certificate: [][]byte{der},
@@ -280,11 +280,11 @@ func PinnedClientTLSConfig(serverName, spkiSHA256 string) (*tls.Config, error) {
 		InsecureSkipVerify: true, // Replaced by the explicit SPKI verification below.
 		VerifyConnection: func(state tls.ConnectionState) error {
 			if len(state.PeerCertificates) == 0 {
-				return errors.New("Link peer did not provide a certificate")
+				return errors.New("Mewla Relay peer did not provide a certificate")
 			}
 			got := sha256.Sum256(state.PeerCertificates[0].RawSubjectPublicKeyInfo)
 			if !equalBytes(got[:], pin) {
-				return errors.New("Link transport certificate pin mismatch")
+				return errors.New("Mewla Relay transport certificate pin mismatch")
 			}
 			return nil
 		},
@@ -295,7 +295,7 @@ func PinnedClientTLSConfig(serverName, spkiSHA256 string) (*tls.Config, error) {
 func decodePin(value string) ([]byte, error) {
 	decoded, err := hex.DecodeString(strings.ToLower(strings.TrimSpace(value)))
 	if err != nil || len(decoded) != sha256.Size {
-		return nil, errors.New("Link transport SPKI pin must be 32-byte lowercase hex")
+		return nil, errors.New("Mewla Relay transport SPKI pin must be 32-byte lowercase hex")
 	}
 	return decoded, nil
 }
@@ -313,10 +313,10 @@ func normalizeRouteID(value string) string {
 
 func writePrivateFileAtomic(path string, raw []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create Link state directory: %w", err)
+		return fmt.Errorf("create Mewla Relay state directory: %w", err)
 	}
 	if err := atomicfile.Write(path, raw, 0o600); err != nil {
-		return fmt.Errorf("install Link transport identity: %w", err)
+		return fmt.Errorf("install Mewla Relay transport identity: %w", err)
 	}
 	return nil
 }

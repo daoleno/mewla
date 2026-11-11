@@ -3,7 +3,8 @@
 #   1. the released Expo app (OLD_APK) pairs with a fresh daemon and keeps a typed draft;
 #   2. the NSH app (NEW_APK, same package, same signing key) installs over it with `install -r`;
 #   3. it opens without pairing, signs in with the same device key (the daemon lists one device,
-#      seen again after the upgrade) and holds the draft.
+#      seen again after the upgrade) and holds the draft;
+#   4. its scanner opens in this release build: the camera prompt, then the camera running, the app up.
 # Inputs: OLD_APK, NEW_APK, MEWLA (daemon binary), OUT (evidence directory). Exit 0 only if all hold.
 set -euo pipefail
 : "${OLD_APK:?}" "${NEW_APK:?}" "${MEWLA:?}" "${OUT:?}"
@@ -48,7 +49,9 @@ tmux -S "$state/tmux.sock" new-session -d -s gate
 env -i HOME="$state/home" PATH="$state/bin:$PATH" TERM=xterm-256color MEWLA_BRAIN_HOST_EXECUTOR=agent TMUX="$state/tmux.sock,0,0" \
   "$MEWLA" serve -addr "0.0.0.0:$PORT" -state-dir "$state/mewla" > "$OUT/daemon.log" 2>&1 &
 daemon=$!
-trap 'kill "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state"' EXIT
+# The trap's last status becomes the script's: a cleanup that trips (the daemon still writing as
+# its state is removed) must not turn a PASS into a failure.
+trap 'kill "$daemon" 2>/dev/null || true; wait "$daemon" 2>/dev/null || true; tmux -S "$state/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$state" 2>/dev/null || true' EXIT
 for _ in $(seq 1 60); do (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null && break; sleep 1; done
 link=$(env -i HOME="$state/home" PATH="$PATH" "$MEWLA" pair -details -state-dir "$state/mewla" "http://10.0.2.2:$PORT" 2>&1 | grep -o 'mewla://settings?p=[^ ]*' | head -1)
 [[ -n "$link" ]] || fail "the daemon gave no pairing link"
@@ -72,8 +75,17 @@ if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
   log "the Expo app quit after pairing ($(grep -m1 -o 'JavascriptException: .*' "$OUT/old-app-crash.txt" || echo 'see old-app-crash.txt')); opening it again"
   adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 > /dev/null 2>&1
 fi
-tap "android.widget.EditText" 60 || { shot 1-no-composer; fail "no composer to type the draft in"; }
-adb shell input text "${DRAFT// /%s}"
+# The Expo app can still be settling Brain when the composer first takes focus, and the typed text
+# is lost; type it again until the composer shows it.
+for attempt in 1 2 3; do
+  tap "android.widget.EditText" 60 || { shot 1-no-composer; fail "no composer to type the draft in"; }
+  sleep 1
+  adb shell input text "${DRAFT// /%s}"
+  sleep 1
+  shows "$DRAFT" && break
+  log "the draft did not land in the Expo app's composer (try $attempt)"
+done
+shows "$DRAFT" || { shot 1-no-draft; fail "the Expo app's composer did not take the draft"; }
 sleep 3 # the draft is written 400 ms after typing stops
 shot 1-draft
 adb shell am force-stop "$PKG"
@@ -125,4 +137,23 @@ assert any(sys.argv[1] in v for v in drafts), "the draft did not come over"
 assert "mewla:v3:servers" in data, "the computers did not come over"
 print("draft and computers came over")
 ' "$DRAFT" | tee -a "$OUT/gate.log"
+
+# The M1 preview died on its first "Scan code" in a release build (R8 had dropped ML Kit's registrar):
+# open the scanner in this release build, answer the system's camera prompt, and the app must stay up
+# with the camera looking for a code.
+log "4. the scanner runs in the release build"
+adb logcat -c
+adb shell am start -W -a android.intent.action.VIEW -d "mewla://more" "$PKG" > /dev/null
+tap "^Settings$" 20 || { shot 4-no-settings; fail "More has no Settings row"; }
+tap "^Pair a computer$" 20 || { shot 4-no-pair; fail "Settings has no Pair a computer"; }
+tap "^While using the app$" 20 || { shot 4-no-prompt; fail "the scanner did not ask for the camera"; }
+for _ in $(seq 1 20); do shows "Looking for a Mewla code" && break; sleep 1; done
+sleep 3
+shot 4-scanner
+if [[ -z "$(adb shell pidof "$PKG" | tr -d '\r')" ]]; then
+  adb logcat -d -b crash > "$OUT/scanner-crash.txt"
+  fail "the app died with the scanner open (scanner-crash.txt)"
+fi
+shows "Looking for a Mewla code" || fail "the scanner is not looking for a code"
+log "the scanner runs: camera allowed, app up, looking for a code"
 log "PASS"

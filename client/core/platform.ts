@@ -20,6 +20,18 @@ export interface SocketLike {
   close(code?: number, reason?: string): void;
 }
 
+/**
+ * Mewla Relay's pinned tunnels, which the hosts open (`link.*`): a loopback port whose every
+ * connection is carried over TLS to host:port, trusting only the computer's pinned transport key.
+ * `measure` dials once first and reports the handshake time; `on-demand` only listens.
+ */
+export interface LinkTunnels {
+  start(key: string, host: string, port: number, pin: string, mode: "measure" | "on-demand"): Promise<{ port: number; rttMs: number }>;
+  stop(key: string): Promise<void>;
+  /** What a tunnel saw, for a pairing that did not finish; empty where there is nothing to say. */
+  events(key: string): Promise<string[]>;
+}
+
 export interface Platform {
   os: "ios" | "android" | "web" | "desktop" | "test";
   /** The name a computer lists this device under. */
@@ -33,6 +45,8 @@ export interface Platform {
   secure: KeyValueStore;
   openSocket(url: string, protocols: string[]): SocketLike;
   fetch(input: string, init?: RequestInit): Promise<Response>;
+  /** Absent where no host carries them (a browser, an old build). */
+  linkTunnels?: LinkTunnels;
 }
 
 let current: Platform | null = null;

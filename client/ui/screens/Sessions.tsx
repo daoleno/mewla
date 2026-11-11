@@ -1,4 +1,4 @@
-import { computed, createMotion, effect, List, signal, Storage, Text, untracked, View } from "nsh";
+import { computed, createMotion, effect, Image, List, signal, Storage, Text, untracked, View } from "nsh";
 import { AlertDialog, Button, type NavStackState } from "nsh/base";
 import { NavPage } from "../shell/NavPage";
 import { makeSessionKey } from "../../core/sessions/sessionKeys";
@@ -7,7 +7,8 @@ import { servicesOpen } from "../sessions/ServicesSheet";
 import { workLinkOf } from "../sessions/workLinks";
 import { selectedTab } from "../shell/Shell";
 import { buildSessionListSections, collapsedSectionsToStore, toggleCollapsedSection, type SessionListSection } from "../../core/sessions/sessionSections";
-import { sessionEmptyState } from "../../core/sessions/sessionEmptyState";
+import { sessionEmptyCat, sessionEmptyState } from "../../core/sessions/sessionEmptyState";
+import { petClip } from "../pets/clips";
 import { countSessionSelection, EMPTY_SESSION_SELECTION, pruneSessionSelection, selectionCountLabel, toggleSessionSelection, type SessionSelection } from "../../core/sessions/sessionSelection";
 import {
   SessionTerminationBatch,
@@ -159,9 +160,12 @@ function SessionRow(props: { worker: () => Worker; open: (worker: Worker) => voi
 function Empty(props: { onPair: () => void; onNew: () => void }) {
   const state = () => sessionEmptyState(Boolean(current()), connection() === "waiting" ? "offline" : connection() === "idle" ? "connecting" : connection());
   const loading = () => connection() === "connected" && !workersHydrated();
+  const cat = () => sessionEmptyCat(state().action, loading() || Boolean(state().busy));
   return (
     <View class="flex-1 items-center justify-center gap-3 p-8">
-      <Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />
+      {/* The chosen pet, in the state's clip (waking while it loads); a filter that matches nothing keeps its icon. */}
+      {cat() ? <Image testID="sessions-empty-cat" src={petClip(cat()!)} accessibilityElementsHidden style={{ width: 104, height: 104 }} />
+        : <Icon name={(loading() ? "server" : state().icon) as IconName} size={40} />}
       <Text testID="sessions-empty" class="text-center text-lg font-semibold">{loading() ? "Loading sessions" : state().title}</Text>
       {!loading() && state().action ? (
         <Button testID="sessions-empty-action" onPress={() => (state().action === "pair" ? props.onPair() : state().action === "retry" ? resumeConnection() : props.onNew())}

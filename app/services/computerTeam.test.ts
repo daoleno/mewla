@@ -64,7 +64,7 @@ if (!isolated) {
     now: () => now,
   });
 
-  test("a computer reached only through Mewla Link dials the other", async () => {
+  test("a computer reached only through Mewla Relay dials the other", async () => {
     resetComputerTeamForTests();
     const dialed: string[] = [];
     await joinComputers([mac, linux], deps({ mac: [], linux: [] }, async (from, to) => {
@@ -123,7 +123,7 @@ if (!isolated) {
     answer = async () => new Response("", { status: 401 });
     expect(await checkComputer(mac)).toEqual({ state: "unpaired" });
     answer = async () => {
-      throw new Error("Mewla Link is offline.");
+      throw new Error("Mewla Relay is offline.");
     };
     expect(await checkComputer(mac)).toEqual({ state: "offline" });
   });

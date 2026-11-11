@@ -266,7 +266,7 @@ func (b bearer) RoundTrip(r *http.Request) (*http.Response, error) {
 
 var tlsState = tlsConnectionState()
 
-// A request that Mewla Link forwards arrives over TLS from a loopback peer with
+// A request that Mewla Relay forwards arrives over TLS from a loopback peer with
 // the public host name; the SDK's rebinding guard must not refuse it.
 func TestDoorServesTLSWithPublicHostFromLoopback(t *testing.T) {
 	m, _ := New(t.TempDir())

@@ -1,4 +1,5 @@
 import { buildAuthorizationHeader } from "./auth";
+import { directPathBecameAvailable, invalidateStoredServerTransport, resolveStoredServerURL, transportFailed } from "./link/pinnedTransport";
 import { platform, type SocketLike } from "./platform";
 import type { StoredServer } from "./storedServerContract";
 import { authSubprotocol } from "./webSocketAuth";
@@ -28,9 +29,11 @@ export const transportTiming = {
   checkMs: 5_000,
   firstRetryMs: 1_000,
   maxRetryMs: 30_000,
+  /** On Mewla Relay's relay, how often to look for a direct path (a phone that joined the computer's Wi-Fi). */
+  directCheckMs: 20_000,
 };
 
-/** Resolves the socket URL for a server: the stored address, or a local tunnel the host opens. */
+/** Resolves the socket URL for a server: the stored address, or a local tunnel the host opens (Mewla Relay). */
 export type URLResolver = (server: StoredServer) => Promise<string>;
 
 type Listener = (frame: Frame) => void;
@@ -55,12 +58,13 @@ export class Transport {
   private retryMs = transportTiming.firstRetryMs;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private watchdog: ReturnType<typeof setInterval> | null = null;
+  private directCheck: ReturnType<typeof setInterval> | null = null;
   private lastFrameAt = 0;
   private nextId = 0;
 
   constructor(
     readonly server: StoredServer,
-    private readonly resolveURL: URLResolver = async (s) => s.url,
+    private readonly resolveURL: URLResolver = resolveStoredServerURL,
   ) {}
 
   connect(): void {
@@ -78,6 +82,8 @@ export class Transport {
     this.socket = null;
     this.queue = [];
     socket?.close(1000, "closed");
+    // A computer that is no longer current keeps no tunnels open; coming back measures afresh.
+    void invalidateStoredServerTransport(this.server);
     this.setState("idle");
     this.emit({ type: "disconnected", intentional: true });
   }
@@ -179,7 +185,10 @@ export class Transport {
       if (attempt !== this.attempt) return;
       socket = platform().openSocket(url, [authSubprotocol(authorization)]);
     } catch (error) {
-      if (attempt === this.attempt) this.retry(error instanceof Error ? error.message : String(error));
+      if (attempt === this.attempt) {
+        void transportFailed(this.server);
+        this.retry(error instanceof Error ? error.message : String(error));
+      }
       return;
     }
     this.socket = socket;
@@ -213,6 +222,8 @@ export class Transport {
       this.queue = [];
       const wasConnected = this.state === "connected";
       if (wasConnected) this.emit({ type: "disconnected", intentional: false });
+      // Moving onto a direct path keeps the relay open as the fallback; any other end measures afresh.
+      if (why !== "direct-available") void transportFailed(this.server);
       this.retry(why);
     };
     socket.onerror = () => end("error");
@@ -239,6 +250,20 @@ export class Transport {
       lastTick = now;
       if (!away && now - this.lastFrameAt > transportTiming.silentLimitMs) this.kill("silent");
     }, transportTiming.checkMs);
+    if (this.server.transportKind !== "link") return;
+    // A phone that joined the computer's network after connecting through the relay moves onto
+    // the direct path with one quick reconnect.
+    let probing = false;
+    this.directCheck = setInterval(() => {
+      if (probing || this.state !== "connected") return;
+      probing = true;
+      void directPathBecameAvailable(this.server)
+        .then((available) => {
+          if (available && this.state === "connected") this.kill("direct-available");
+        })
+        .catch(() => undefined)
+        .finally(() => (probing = false));
+    }, transportTiming.directCheckMs);
   }
 
   /** Ends the current socket as lost (not intentional): what is waiting fails, and the retry follows. */
@@ -250,8 +275,10 @@ export class Transport {
 
   private clearTimers(): void {
     if (this.watchdog) clearInterval(this.watchdog);
+    if (this.directCheck) clearInterval(this.directCheck);
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.watchdog = null;
+    this.directCheck = null;
     this.retryTimer = null;
   }
 

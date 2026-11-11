@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import type { ConnectionIssue } from "../../services/connectionIssue";
 import { connectionAttention } from "./connectionAttention";
 
-const issue = { title: "Mewla Link is offline" } as ConnectionIssue;
+const issue = { title: "Mewla Relay is offline" } as ConnectionIssue;
 
 describe("connection signal", () => {
   test("healthy and a short reconnect are quiet", () => {
@@ -22,8 +22,8 @@ describe("connection signal", () => {
     expect(connectionAttention({ hasServer: true, connection: "offline", issue: null, stalled: false }).badge).toBe("offline");
     expect(connectionAttention({ hasServer: true, connection: "connecting", issue, stalled: false })).toMatchObject({
       badge: "issue",
-      detail: "Mewla Link is offline",
-      menuLabel: "Open navigation drawer, Mewla Link is offline",
+      detail: "Mewla Relay is offline",
+      menuLabel: "Open navigation drawer, Mewla Relay is offline",
     });
   });
 

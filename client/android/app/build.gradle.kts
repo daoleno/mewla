@@ -148,6 +148,24 @@ fun firebaseEntry(packageName: String): Map<String, String>? {
   )
 }
 
+// After R8: every component registrar the manifest names (Firebase, ML Kit) must still have the no-arg
+// constructor they are built with by reflection, or that component is silently missing at run time
+// (a release-only crash: proguard-rules.pro). Reads R8's seeds, so it costs nothing to run on every build.
+tasks.matching { it.name.startsWith("minify") && it.name.endsWith("WithR8") }.configureEach {
+  val variant = name.removePrefix("minify").removeSuffix("WithR8").replaceFirstChar { it.lowercase() }
+  val build = layout.buildDirectory
+  doLast {
+    val seeds = build.file("outputs/mapping/$variant/seeds.txt").get().asFile
+    val manifest = build.dir("intermediates/merged_manifests/$variant").get().asFile.walk().firstOrNull { it.name == "AndroidManifest.xml" }
+      ?: throw GradleException("verifyRegistrars: no merged manifest for $variant")
+    val registrars = Regex("""android:name="com\.google\.firebase\.components:([\w.$]+)"""").findAll(manifest.readText()).map { it.groupValues[1] }.toList()
+    val kept = seeds.readLines().toSet()
+    val missing = registrars.filter { "$it: ${it.substringAfterLast('.')}()" !in kept }
+    if (missing.isNotEmpty()) throw GradleException("verifyRegistrars: R8 removed the constructor of ${missing.joinToString()}; see proguard-rules.pro")
+    logger.lifecycle("verifyRegistrars: ${registrars.size} component registrars keep their constructors ($variant)")
+  }
+}
+
 androidComponents {
   onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(bundleUi, BundleUi::assets)

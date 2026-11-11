@@ -1,24 +1,27 @@
 import { describe, expect, open, test } from "nsh/test";
-import { expoTokenService, framesOf, item, paired, phoneHost } from "../testing/fixtures";
+import { expoTokenService, framesOf, item, paired, pairedTwo, phoneHost, zoneTable } from "../testing/fixtures";
 
 const APP = "../FakeDaemonApp.tsx";
+const SLOW = { timeout: 10_000 };
 
+/** The Calendar tab once the phone's zone is in (a slow runner gets it late, and the agenda redraws then). */
 async function calendarApp(daemon: Record<string, unknown>, extra: Record<string, (data: any) => unknown> = {}) {
   const app = await open(APP, { host: phoneHost(daemon, extra), storage: paired, platform: "android", network: expoTokenService });
   await app.host.send("links.open", { url: "mewla://calendar" });
   await app.waitFor("id:calendar-page");
+  await app.waitUntil(() => app.texts().some((text) => text.includes("GMT+8")), SLOW);
   return app;
 }
 
 describe("the Calendar tab", () => {
   test("lists what is planned by day, hides cancelled items and opens one", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1), item("Dentist", 26, { kind: "event", start_at: new Date(Date.now() + 26 * 3_600_000).toISOString(), end_at: new Date(Date.now() + 27 * 3_600_000).toISOString() }), item("Old plan", 2, { status: "cancelled" })] });
-    await app.waitFor("text:Call the bank");
-    expect(app.texts()).toContain("Dentist");
+    await app.waitFor("id:calendar-item-Call the bank", SLOW);
+    await app.waitFor("text:Dentist", SLOW);
     expect(app.texts()).not.toContain("Old plan");
     expect(app.texts().join(" ")).toMatch(/Scheduled · Reminder/);
-    await app.press("text:Call the bank");
-    await app.waitFor("id:calendar-item-page");
+    await app.press("id:calendar-item-Call the bank");
+    await app.waitFor("id:calendar-item-page", SLOW);
     expect(app.texts().join(" ")).toMatch(/at \d+:\d\d (AM|PM)/);
   }, 20_000);
 
@@ -33,6 +36,39 @@ describe("the Calendar tab", () => {
     await app.press("id:reminder-settings");
     await app.waitUntil(() => calls.includes("settings"));
     expect(calls.filter((c) => c === "ask")).toHaveLength(1);
+  }, 20_000);
+
+  test("back from Settings with notifications allowed there, the banner goes and the phone registers for pushes", async () => {
+    let granted = false;
+    const app = await calendarApp({ calendar_items: [] }, {
+      "push.permission": () => ({ granted }),
+      "push.requestPermission": () => false,
+      "push.openSettings": () => void (granted = true),
+    });
+    await app.waitFor("text:Reminders disabled");
+    expect(framesOf(app.host.posts(), "register_push")).toHaveLength(0);
+    await app.press("id:reminder-settings");
+    await app.setLifecycle("background");
+    await app.setLifecycle("active");
+    await app.waitUntil(() => !app.shows("id:reminder-banner"), SLOW);
+    await app.waitUntil(() => framesOf(app.host.posts(), "register_push").length === 1, SLOW);
+  }, 20_000);
+
+  test("a new item starts at the next quarter hour an hour from now, in the phone's zone", async () => {
+    // The wall clock in Shanghai (GMT+8, no daylight saving) as the editor's time field shows it.
+    const expected = () => {
+      const at = new Date(Math.ceil((Date.now() + 3_600_000) / 900_000) * 900_000 + 8 * 3_600_000);
+      const hour = at.getUTCHours();
+      return `${hour % 12 || 12}:${String(at.getUTCMinutes()).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+    };
+    const app = await calendarApp({ calendar_items: [] });
+    const before = expected();
+    await app.press("id:add-item");
+    await app.waitFor("id:calendar-editor");
+    // Either side of a quarter hour passing while the editor opens.
+    await app.waitUntil(() => app.texts().includes(before) || app.texts().includes(expected()), SLOW);
+    expect(app.texts()).toContain("Reminder");
+    expect(app.texts()).toContain("None");
   }, 20_000);
 
   test("the heading says Today, the month picks a day and Hide month goes back to the whole agenda", async () => {
@@ -50,8 +86,9 @@ describe("the Calendar tab", () => {
 
   test("cancels an item after asking, goes back to the agenda, and the item leaves it", async () => {
     const app = await calendarApp({ calendar_items: [item("Call the bank", 1)] });
+    await app.waitFor("id:calendar-item-Call the bank", SLOW);
     await app.press("id:calendar-item-Call the bank");
-    await app.waitFor("id:cancel-item");
+    await app.waitFor("id:cancel-item", SLOW);
     app.onDialog((dialog) => (dialog.title === "Cancel calendar item?" ? "Cancel item" : null));
     await app.press("id:cancel-item");
     await app.waitUntil(() => framesOf(app.host.posts(), "cancel_calendar_item").length === 1);
@@ -68,15 +105,62 @@ describe("the Calendar tab", () => {
     await app.press("id:add-item");
     await app.waitFor("id:calendar-editor");
     await app.type("id:editor-title", "Pick up the parcel");
+    await app.waitFor("id:editor-start-date", SLOW);
     await app.press("id:editor-start-date");
     await app.press("id:editor-start-time");
-    await app.waitFor("text:Monday, July 14, 2031, 6:20 PM GMT+8");
+    await app.waitFor("text:Monday, July 14, 2031, 6:20 PM GMT+8", SLOW);
     await app.press("id:editor-save");
     await app.waitUntil(() => framesOf(app.host.posts(), "create_calendar_item").length === 1);
     expect(framesOf(app.host.posts(), "create_calendar_item")[0].calendar_item).toMatchObject({
       title: "Pick up the parcel", kind: "reminder", timezone: "Asia/Shanghai", recurrence: "none", notify_at: "2031-07-14T18:20:00+08:00",
     });
     await app.waitFor("text:Pick up the parcel");
+  }, 20_000);
+
+  test("a new item opened before the phone's zone is known takes that zone once it comes, not UTC", async () => {
+    const slowZones = { "calendar.zones": ({ zones }: { zones: string[] }) => new Promise((resolve) => setTimeout(() => resolve(zoneTable(zones)), 1_500)) };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [] }, slowZones), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("id:add-item", SLOW);
+    expect(app.texts().some((text) => text.includes("GMT+8"))).toBe(false);
+    await app.press("id:add-item");
+    await app.waitFor("id:calendar-editor");
+    await app.type("id:editor-title", "Water the plants");
+    await app.waitUntil(() => app.texts().some((text) => text.includes("PM GMT+8") || text.includes("AM GMT+8")), SLOW);
+    await app.press("id:editor-save");
+    await app.waitUntil(() => framesOf(app.host.posts(), "create_calendar_item").length === 1, SLOW);
+    const created = framesOf(app.host.posts(), "create_calendar_item")[0].calendar_item as { timezone: string; notify_at: string };
+    expect(created).toMatchObject({ timezone: "Asia/Shanghai" });
+    expect(String(created.notify_at)).toMatch(/\+08:00$/);
+  }, 20_000);
+
+  // (`texts()` lists a List's cells in their pool's order, not the screen's, so the order is not checked here.)
+  test("the agenda redraws in the phone's zone when it comes late, and its rows still open their own item", async () => {
+    const slowZones = { "calendar.zones": ({ zones }: { zones: string[] }) => new Promise((resolve) => setTimeout(() => resolve(zoneTable(zones)), 1_500)) };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1), item("Dentist", 26)] }, slowZones), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("text:Dentist", SLOW);
+    await app.waitUntil(() => app.texts().some((text) => text.includes("GMT+8")), SLOW);
+    await app.wait(300);
+    await app.press("id:calendar-item-Dentist");
+    await app.waitFor("id:item-title", SLOW);
+    expect(app.texts()).toContain("Dentist");
+  }, 20_000);
+
+  test("an image in a run's result is read from the computer, in Brain's host folder", async () => {
+    const run = { id: "r1", status: "completed", scheduled_for: "2026-07-17T03:00:00Z", started_at: "2026-07-17T03:00:00Z", result_preview: "Chart", result: "Here is the chart.\n\n![Weekly chart](out/chart.png)\n" };
+    const daemon = {
+      calendar_items: [item("Digest", 20, { kind: "scheduled_action", action_instruction: "Draw the chart.", runs: [run] })],
+      brain: { host_worker: { id: "%1", name: "brain", status: "running", cwd: "/home/me/brain" } },
+      replies: { codex_asset: { type: "codex_asset", content_type: "image/png", data_url: "data:image/png;base64,iVBORw0KGgo=" } },
+    };
+    const app = await open(APP, { host: phoneHost(daemon), storage: paired, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar?id=Digest&run=r1" });
+    await app.waitFor("id:run-result", SLOW);
+    // The result draws again once the run's full result comes, so the image may be asked for twice.
+    await app.waitUntil(() => framesOf(app.host.posts(), "codex_asset").length >= 1, SLOW);
+    expect(framesOf(app.host.posts(), "codex_asset")[0]).toMatchObject({ path: "out/chart.png", cwd: "/home/me/brain" });
+    // (What a TextView draws through renderImage is not in `nsh test`'s tree; the picture itself is for the device.)
   }, 20_000);
 
   test("a title is required, and the editor says so instead of saving", async () => {
@@ -146,6 +230,39 @@ describe("notifications", () => {
     const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)] }, slowStart), storage: paired, platform: "android", network: expoTokenService });
     await app.host.send("push.opened", { data: { screen: "calendar", calendar_id: "Call the bank", server_id: "s1" } });
     await app.waitFor("id:calendar-item-page");
+  }, 20_000);
+
+  // Switching computers under the editor's open sheet crashed `nsh test` 0.4.0 (SIGSEGV); the link closes the editor first.
+  test("a tap for another paired computer switches to it and still lands on its page; the last one's editor closes", async () => {
+    const brain = { current_work: [{ work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() }] };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)], brain }), storage: pairedTwo, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://calendar" });
+    await app.waitFor("id:add-item");
+    await app.press("id:add-item");
+    await app.waitFor("id:calendar-editor");
+    await app.host.send("push.opened", { data: { screen: "calendar", calendar_id: "Call the bank", server_id: "s2" } });
+    await app.waitFor("id:calendar-item-page");
+    await app.wait(500);
+    expect(app.shows("id:calendar-item-page")).toBe(true);
+    expect(app.shows("id:editor-save")).toBe(false);
+    // And back to the first computer, onto a Work of Brain's.
+    await app.host.send("links.open", { url: "mewla://brain/work/w-q?serverId=s1" });
+    await app.waitFor("id:work-detail");
+    await app.wait(500);
+    expect(app.shows("id:work-detail")).toBe(true);
+  }, 20_000);
+
+  test("another computer: the last one's Calendar item and Work pages close", async () => {
+    const brain = { current_work: [{ work_id: "w-q", revision: 1, title: "pick-a-name", status: "needs_input", progress_mode: "waiting", unread_result: false, question: "Which name?", attention_since: new Date().toISOString() }] };
+    const app = await open(APP, { host: phoneHost({ calendar_items: [item("Call the bank", 1)], brain }), storage: pairedTwo, platform: "android", network: expoTokenService });
+    await app.host.send("links.open", { url: "mewla://brain/work/w-q?serverId=s1" });
+    await app.waitFor("id:work-detail", SLOW);
+    await app.host.send("links.open", { url: "mewla://calendar?id=Call%20the%20bank&serverId=s1" });
+    await app.waitFor("id:calendar-item-page", SLOW);
+    // Both are open, the Work page on its hidden tab.
+    expect(app.shows("id:work-detail")).toBe(true);
+    await app.host.send("links.open", { url: "mewla://sessions?serverId=s2" });
+    await app.waitUntil(() => !app.shows("id:calendar-item-page") && !app.shows("id:work-detail"), SLOW);
   }, 20_000);
 
   test("an alert's link opens the item too, and a link for a computer this phone does not know opens nothing", async () => {

@@ -5,7 +5,7 @@ package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 Pod::Spec.new do |s|
   s.name           = 'LinkTransport'
   s.version        = package['version']
-  s.summary        = 'Pinned TLS transport for Mewla Link'
+  s.summary        = 'Pinned TLS transport for Mewla Relay'
   s.description    = 'Loopback-only L4 bridge that applies a Pairing V2 SPKI pin to every Mewla HTTP and WebSocket stream.'
   s.license        = 'Apache-2.0'
   s.author         = 'Mewla contributors'

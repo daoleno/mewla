@@ -82,7 +82,7 @@ it starts, and learns an HTTPS address the first time a paired device uses it.
 		}
 		linkRow := ""
 		if linkEnabled {
-			linkRow = "Mewla Link"
+			linkRow = relayLabel
 			if domains := strings.Join(link.RelayDomains(linkConfig), ", "); domains != "" {
 				linkRow += " (" + domains + ")"
 			}
@@ -146,7 +146,7 @@ func writeAddressList(w io.Writer, entries []addressbook.Entry, linkRow string) 
 		)
 	}
 	if linkRow != "" {
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n", linkRow, "Mewla Link", "link.json", "—")
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n", linkRow, relayLabel, link.DefaultConfigFilename, "—")
 	}
 	return table.Flush()
 }

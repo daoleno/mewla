@@ -4,6 +4,7 @@ import UIKit
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
   func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    CrashLog.install()
     // Before launch ends: the tap that started the app reaches this delegate right after.
     PushCenter.shared.start()
     return true
@@ -39,7 +40,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
     guard let scene = scene as? UIWindowScene else { return }
-    app.onError = { NSLog("Mewla: %@", $0) }
+    app.onError = { NSLog("Mewla: %@", $0); CrashLog.js($0) }
+    CrashLog.register(app)
+    ScanHost.register(app)
+    LinkTransportHost.register(app)
     app.register(component: "mewla.qrScanner") { QrScanner($0) }
     app.register(component: "mewla.terminal") { TerminalComponent($0) }
     app.handle("secure.get") { [secure] data in try secure.get(Self.field(data, "key")) }

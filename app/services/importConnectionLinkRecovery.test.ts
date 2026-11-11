@@ -4,7 +4,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import nacl from "tweetnacl";
 
-// A Mewla Link /pair answer can be lost after the daemon trusted the phone:
+// A Mewla Relay /pair answer can be lost after the daemon trusted the phone:
 // the stream resets, or a repeated scan finds the one-time admission spent
 // and the native pinned proxy resets the local socket. These tests drive
 // importConnection against a fake daemon to lock in that the app confirms
@@ -16,7 +16,7 @@ import nacl from "tweetnacl";
 const isolated = process.env.MEWLA_PAIRING_RECOVERY_ISOLATED === "1";
 
 if (!isolated) {
-  test("Mewla Link pairing recovery passes in its own process", () => {
+  test("Mewla Relay pairing recovery passes in its own process", () => {
     const run = Bun.spawnSync([process.execPath, "test", import.meta.path], {
       cwd: `${import.meta.dir}/..`,
       env: { ...process.env, MEWLA_PAIRING_RECOVERY_ISOLATED: "1" },
@@ -221,7 +221,7 @@ if (!isolated) {
     expect(message).not.toContain("/health");
   }
 
-  describe("Mewla Link pairing recovery", () => {
+  describe("Mewla Relay pairing recovery", () => {
     test("a /pair reply lost after the daemon trusted the phone still connects", async () => {
       pairMode = "trust-then-drop";
       const progress: string[] = [];

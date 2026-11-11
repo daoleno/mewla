@@ -130,7 +130,7 @@ enum MewlaLiveShared {
 
   /// The last applied state, as the JSON the widget reads.
   static var stateURL: URL? { container?.appendingPathComponent("live_state.json") }
-  /// {"base_url": ..., "token": ...} for a server a widget can fetch; absent for Mewla Link.
+  /// {"base_url": ..., "token": ...} for a server a widget can fetch; absent for Mewla Relay.
   static var widgetConfigURL: URL? { container?.appendingPathComponent("widget_config.json") }
   /// Written by the extension when the daemon refuses the widget token; removed when a new one is configured.
   static var revokedMarkerURL: URL? { container?.appendingPathComponent("widget_revoked") }

@@ -50,7 +50,7 @@ class LiveHost(private val activity: ComponentActivity, nsh: NshView) {
         null
       }
     }
-    // A computer reached through Mewla Link has no address a widget can fetch: its widgets show the pushed state.
+    // A computer reached through Mewla Relay has no address a widget can fetch: its widgets show the pushed state.
     nsh.handle("live.configureWidgetPushed") { _, reply ->
       answer(reply) {
         val prefs = LivePrefs(context)
