@@ -142,6 +142,8 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     loadImage: (path: string) => codexAsset(transport, path, untracked(worker)?.cwd),
   };
   const stoppingFor = signal("");
+  /** The person's sends from this screen: each brings the sent message to the top. */
+  const sends = signal(0);
   const durability = signal(hint.durabilityWarning ?? "");
   const fallback = computed(() => terminalFallback(connection(), connectionProblem()));
   const notice = signal("");
@@ -386,6 +388,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
     switch (route.kind) {
       case "send":
         chat.send(route.text, uploads.ready());
+        sends.set(untracked(sends) + 1);
         uploads.clear();
         return fromDraft;
       case "prefill":
@@ -560,7 +563,7 @@ export function Session(props: { nav: NavStackState<SessionsRoute>; workerId: st
           </View>
           {mode() === "chat" ? (
             <View class="absolute inset-0 bg-background">
-              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} />
+              <ChatTimeline testID="session-chat" items={items} handlers={handlers} empty={() => <ChatEmpty />} scope={sessionKey} sent={sends} />
               <Composer text={text} placeholder={placeholder} autoFocus={hint.focusComposer} canSend={() => !uploading()} onSend={sendComposer}
                 running={() => activity()?.status === "running"} stopping={() => stoppingFor() === activity()?.id} canStop={() => connection() === "connected"}
                 onStop={() => void stop()} active={() => props.active() && mode() === "chat"} pickerOpen={slashPicking} onRecall={recall}
