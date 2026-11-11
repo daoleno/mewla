@@ -5,7 +5,7 @@ import { nshPlatform } from "./platform";
 import { justPaired, pairFromText } from "./pairing";
 import { CrashReportSheet, loadCrashReports } from "./crash/CrashReports";
 import { current, loadSession, ready, resumeConnection } from "./session";
-import { FirstRun, openPhonePage, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
+import { FirstRun, openPhonePage, openSettingsLink, sectionOfLink, selectedTab, Shell } from "./shell/Shell";
 import { isPhoneLink } from "./phone";
 import { readPairingLink } from "../core/pairFlow";
 import { startNotifications } from "./push/push";
@@ -48,6 +48,7 @@ host.on("links.open", (payload) => {
   if (!url) return;
   if (readPairingLink(url)) return void pairFromText(url);
   if (isPhoneLink(url)) return void openPhonePage();
+  if (openSettingsLink(url)) return;
   const section = sectionOfLink(url);
   if (section !== null) selectedTab.set(section);
 });
