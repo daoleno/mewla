@@ -312,6 +312,10 @@ export function Field(props: {
   /** The field lost focus: commit what was typed. */
   onCommit?: () => void;
   trailing?: JSX.Element;
+  /** Takes the focus (and the keyboard) when it appears. */
+  autoFocus?: boolean;
+  /** Read only for now (while what it holds is being sent). */
+  disabled?: boolean;
 }) {
   return (
     <View class="gap-1.5 px-4 py-3">
@@ -326,6 +330,8 @@ export function Field(props: {
           masked={props.masked}
           multiline={props.multiline}
           keyboardType={props.keyboardType}
+          autoFocus={props.autoFocus}
+          disabled={props.disabled}
           autoCapitalize="none"
           autoCorrect={false}
           onChange={({ value }) => props.onChange(value)}

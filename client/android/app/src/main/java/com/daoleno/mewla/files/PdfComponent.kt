@@ -40,6 +40,8 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
   }
   private var source: String? = null
   private var headers: Map<String, String> = emptyMap()
+  // The size the file was inspected at (-1: unknown); a stream of any other size is a changed file.
+  private var expectedBytes = -1L
   private var scheduled = false
   private var loaded: String? = null
   private var staged: File? = null
@@ -58,6 +60,7 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
     when (name) {
       "source" -> source = value as? String
       "headers" -> headers = (value as? Map<*, *>)?.entries?.mapNotNull { (k, v) -> if (k is String && v is String) k to v else null }?.toMap().orEmpty()
+      "expectedBytes" -> expectedBytes = (value as? Number)?.toLong()?.takeIf { it > 0 } ?: -1
       else -> return
     }
     // The props of one render come together: open once they are all set.
@@ -81,7 +84,7 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
       "http", "https" -> {
         val file = File(list.context.cacheDir, "mewla-pdf-${UUID.randomUUID()}.pdf")
         staged = file
-        val job = Fetch(URL(target), headers, file)
+        val job = Fetch(URL(target), headers, file, expectedBytes)
         fetch = job
         thread(name = "mewla-pdf") {
           val failure = runCatching { job.run() }.exceptionOrNull()
@@ -164,8 +167,12 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
     }.getOrNull()
   }
 
-  /** The stream into the staged file, with the preview's size limit. */
-  private class Fetch(private val url: URL, private val headers: Map<String, String>, private val file: File) {
+  /**
+   * The stream into the staged file, with the preview's size limit and, when known, the
+   * inspected size: more than it, or a different total, means the file changed (stale).
+   */
+  private class Fetch(private val url: URL, private val headers: Map<String, String>, private val file: File, private val expected: Long) {
+    private val limit = if (expected > 0) minOf(expected, PDF_LIMIT_BYTES) else PDF_LIMIT_BYTES
     val cancelled = AtomicBoolean(false)
     @Volatile private var connection: HttpURLConnection? = null
 
@@ -182,8 +189,9 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
       try {
         if (cancelled.get()) return
         val status = c.responseCode
+        if (status == 409) throw IllegalStateException("The PDF changed before it could be opened.")
         if (status !in 200..299) throw IllegalStateException("Could not download the PDF into the secure preview.")
-        if (c.contentLengthLong > PDF_LIMIT_BYTES) throw IllegalStateException("The PDF stream exceeded its inspected file size.")
+        if (c.contentLengthLong > limit) throw IllegalStateException("The PDF stream exceeded its inspected file size.")
         var received = 0L
         c.inputStream.use { input ->
           file.outputStream().use { output ->
@@ -193,11 +201,12 @@ class PdfComponent(context: Context, private val events: NshComponentContext) : 
               val read = input.read(buffer)
               if (read < 0) break
               received += read
-              if (received > PDF_LIMIT_BYTES) throw IllegalStateException("The PDF stream exceeded its inspected file size.")
+              if (received > limit) throw IllegalStateException("The PDF stream exceeded its inspected file size.")
               output.write(buffer, 0, read)
             }
           }
         }
+        if (expected > 0 && received != expected) throw IllegalStateException("The PDF changed while it was being downloaded.")
       } finally {
         c.disconnect()
       }

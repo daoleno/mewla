@@ -19,6 +19,7 @@ import type { NativeUploadProgress, UploadDocumentAsset, UploadHost } from "../.
  *   have, refuses more than `maxBytes` and any size but `expectedSize`, and deletes the file
  *   it made when it fails.
  * - `files.cancelDownload {downloadId}` (a post): rejects with "Session file download was cancelled.".
+ * - `files.thumbnail {uri, maxPixels}` → `{dataUrl}` or null: a picked picture, scaled (below).
  * - `mewla.pdf` (below): a PDF's pages.
  *
  * The calls that wait on a person or a transfer have no timeout.
@@ -54,6 +55,27 @@ export const downloadHost: SessionFileDownloadHost = {
   download: (request) => host.call<{ bytesWritten: number; name: string }>("files.download", request, WAIT),
 };
 
+const thumbnails = new Map<string, Promise<string | null>>();
+
+/**
+ * `files.thumbnail {uri, maxPixels}` → `{dataUrl}` or null: a picked picture (`files.pick`'s
+ * `uri`, the host's handle of it), scaled so its longer side is at most `maxPixels`, as a
+ * JPEG data URL; null when it is not a picture the host can decode. Asked once per picture
+ * and size while the app runs.
+ */
+export function thumbnail(uri: string, maxPixels: number): Promise<string | null> {
+  const key = `${maxPixels}\u0000${uri}`;
+  let pending = thumbnails.get(key);
+  if (!pending) {
+    pending = host
+      .call<{ dataUrl?: string } | null>("files.thumbnail", { uri, maxPixels })
+      .then((answer) => (typeof answer?.dataUrl === "string" && answer.dataUrl.startsWith("data:image/") ? answer.dataUrl : null));
+    pending.catch(() => thumbnails.delete(key));
+    thumbnails.set(key, pending);
+  }
+  return pending;
+}
+
 export function cancelDownload(downloadId: string): void {
   cancel("files.cancelDownload", { downloadId });
 }
@@ -61,9 +83,13 @@ export function cancelDownload(downloadId: string): void {
 /**
  * `mewla.pdf`: the pages of a PDF, scrolled (Android PdfRenderer, iOS PDFKit). `source` is
  * a local file URL or an http(s) stream URL the host fetches with `headers`, staged in its
- * cache and deleted with the view. `load {pageCount}` once it shows, `error {message}`.
+ * cache and deleted with the view. `expectedBytes` (when > 0) is the size the file was
+ * inspected at: a stream that runs past it errors with "The PDF stream exceeded its inspected
+ * file size.", one that ends short or long of it with "The PDF changed while it was being
+ * downloaded." (the preview reads that as the file having changed). `load {pageCount}` once
+ * it shows, `error {message}`.
  */
 export const MewlaPdf = nativeComponent<
-  { source: string; headers?: Record<string, string> },
+  { source: string; headers?: Record<string, string>; expectedBytes?: number },
   { load: { pageCount: number }; error: { message: string } }
->("mewla.pdf", { props: ["source", "headers"], events: ["load", "error"] });
+>("mewla.pdf", { props: ["source", "headers", "expectedBytes"], events: ["load", "error"] });

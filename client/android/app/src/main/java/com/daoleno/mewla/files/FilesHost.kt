@@ -91,6 +91,14 @@ class FilesHost(private val activity: ComponentActivity, private val nsh: NshVie
       val id = field(data, "downloadId") as? String
       reply.resolve(id?.let(transfers::cancelDownload) ?: false)
     }
+    nsh.handle("files.thumbnail") { data, reply ->
+      val uri = (field(data, "uri") as? String)?.let(Uri::parse) ?: return@handle reply.resolve(null)
+      val maxPixels = ((field(data, "maxPixels") as? Number)?.toInt() ?: 256).coerceIn(16, 4096)
+      work.execute {
+        val url = runCatching { Thumbnails.dataUrl(activity.contentResolver, uri, maxPixels) }.getOrNull()
+        reply.resolve(url?.let { mapOf("dataUrl" to it) })
+      }
+    }
     nsh.registerComponent("mewla.pdf") { events -> PdfComponent(activity, events) }
   }
 

@@ -12,6 +12,8 @@ final class PdfComponent: NshComponent {
   private let events: NshComponentContext
   private var source: String?
   private var headers: [String: String] = [:]
+  /// The size the file was inspected at: a stream of any other size is a changed file.
+  private var expectedBytes: Int64?
   private var loaded: String?
   private var scheduled = false
   private var task: URLSessionDownloadTask?
@@ -35,6 +37,7 @@ final class PdfComponent: NshComponent {
     switch name {
     case "source": source = value as? String
     case "headers": headers = value as? [String: String] ?? [:]
+    case "expectedBytes": expectedBytes = (value as? NSNumber).map { $0.int64Value }.flatMap { $0 > 0 ? $0 : nil }
     default: return
     }
     // The props of one render come together: open once they are all set.
@@ -56,15 +59,21 @@ final class PdfComponent: NshComponent {
       var request = URLRequest(url: url)
       request.cachePolicy = .reloadIgnoringLocalCacheData
       headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
+      let expected = expectedBytes
+      let limit = min(expected ?? Self.limit, Self.limit)
       let next = URLSession.shared.downloadTask(with: request) { [weak self] file, response, error in
         // The temp file goes when this returns: keep it under a name of ours first.
         var kept: URL?
         var failure: String?
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        if let file, error == nil, (200..<300).contains(status) {
+        if status == 409 {
+          failure = "The PDF changed before it could be opened."
+        } else if let file, error == nil, (200..<300).contains(status) {
           let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map { Int64($0) } ?? 0
-          if size > Self.limit {
+          if size > limit {
             failure = "The PDF stream exceeded its inspected file size."
+          } else if let expected, size != expected {
+            failure = "The PDF changed while it was being downloaded."
           } else {
             let ours = FileManager.default.temporaryDirectory.appendingPathComponent("mewla-pdf-\(UUID().uuidString).pdf")
             if (try? FileManager.default.moveItem(at: file, to: ours)) != nil { kept = ours } else { failure = "Could not prepare the PDF preview." }
