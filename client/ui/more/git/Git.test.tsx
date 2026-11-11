@@ -374,7 +374,8 @@ describe("Git review: the reader", () => {
     await app.type("id:ask-comment", "Why 3?");
     await app.press("id:ask-send");
     await app.waitUntil(() => sent().length === 2);
-    expect(sent()[1]!.text).toBe("In the working-tree diff, app.ts:1-3:\n>   const a = 1;\n> + const b = 3;\n>   const c = 4;\n\nWhy 3?");
+    // The hunk goes whole, its removed line too (FAILURES R4#5).
+    expect(sent()[1]!.text).toBe("In the working-tree diff, app.ts:1-3:\n>   const a = 1;\n> - const b = 2;\n> + const b = 3;\n>   const c = 4;\n\nWhy 3?");
   });
 
   test("a Session without an agent offers no Ask", async () => {
