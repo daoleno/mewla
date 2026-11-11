@@ -104,6 +104,11 @@ export interface ScreenTarget {
   route?: ScreenRoute;
 }
 
+/** Screen's route for the float's Open: an agent's display opens Screen at that agent's card. */
+export function screenRoute(worker: string | null): { name: "screen"; worker?: string } {
+  return worker ? { name: "screen", worker } : { name: "screen" };
+}
+
 export function screenTarget(source: Pick<ScreenSource, "kind" | "owner">): ScreenTarget | null {
   if (source.kind === "display" && source.owner) return { watch: false, route: displayRoute(source.owner) };
   if (source.kind === "mac" && source.owner) return { watch: true, worker: source.owner };

@@ -21,6 +21,7 @@ import {
   pickSource,
   resizedFloatWidth,
   routeOwner,
+  screenRoute,
   screenTarget,
   toggledFloatFraction,
 } from "./float";
@@ -122,6 +123,9 @@ describe("what opens a screen", () => {
   test("a display opens its viewer route; a Mac only watches that Worker, it never takes the screen", () => {
     expect(screenTarget(displaySource(display))).toEqual({ watch: false, route: { path: "/display/viewer", purpose: "mewla-display-view", params: { worker: "%1" } } });
     expect(screenTarget(macSource({ worker: "%2", since: "" } as never))).toEqual({ watch: true, worker: "%2" });
+    // Open: a display at its agent's card on Screen, the Mac on Screen as it is.
+    expect(screenRoute("%1")).toEqual({ name: "screen", worker: "%1" });
+    expect(screenRoute(null)).toEqual({ name: "screen" });
     expect(screenTarget({ kind: "phone", owner: "%1" })).toBeNull();
   });
 });
