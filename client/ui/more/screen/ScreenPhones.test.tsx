@@ -64,7 +64,8 @@ describe("Screen and the person's phones", () => {
       { "phone.status": () => phone, "phone.follow": null, "phone.setPipAuto": null },
       "android",
     ));
-    await app.waitFor("id:screen-options");
+    // The menu is made from what the computer said: open it once that has come (the button is there before).
+    await app.waitFor("text:Codex is using the screen");
     await app.press("id:screen-options");
     await app.waitFor("text:Phone");
     expect(app.texts()).toContain("Writer");

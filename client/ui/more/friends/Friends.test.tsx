@@ -230,7 +230,8 @@ describe("a switch of computer", () => {
     await app.host.send("app.daemonSwitch", { id: "s2", name: "Laptop", url: "ws://other.test:9877/ws" });
     await app.waitFor("id:friends-open", { state: "gone" });
     expect(app.texts()).not.toContain("@me");
-    expect(app.requests().some((r) => r.method === "GET" && r.url === "http://other.test:9877/friends")).toBe(true);
+    // The last computer's page goes at once; the next one is asked a moment later.
+    await app.waitUntil(() => app.requests().some((r) => r.method === "GET" && r.url === "http://other.test:9877/friends"));
   });
 });
 
