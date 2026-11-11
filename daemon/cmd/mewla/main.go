@@ -2700,7 +2700,7 @@ func parseDaemonConfig(args []string, stderr io.Writer) (daemonConfig, error) {
 	fs.StringVar(&cfg.addr, "addr", "127.0.0.1:9876", "listen on host:port")
 	fs.BoolVar(&cfg.lan, "lan", false, "listen on all networks (plain HTTP; trusted networks only)")
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
-	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Relay config (default: <state-dir>/link.json when present)")
+	bindRelayConfigFlags(fs, &cfg.linkConfigPath, "Mewla Relay config (default: <state-dir>/relay.json when present)")
 	fs.Usage = func() { printTopLevelUsage(stderr) }
 
 	if err := fs.Parse(args); err != nil {
@@ -2773,9 +2773,35 @@ Flags
   -lan                  listen on all networks (plain HTTP; trusted networks only)
   -addr host:port       listen on host:port instead of 127.0.0.1:9876
   -state-dir dir        state directory (default ~/.mewla)
-  -link-config path     Mewla Relay config, for a self-hosted relay (default <state-dir>/link.json)
+  -relay-config path    Mewla Relay config, for a self-hosted relay (default <state-dir>/relay.json)
   -v, --version         print the Mewla version and exit
 `)
+}
+
+// legacyRelayConfigFlag is -relay-config's earlier name. `mewla update` restarts
+// the daemon with its original arguments, so a daemon started with it must
+// keep starting. It means the same as -relay-config and is not documented.
+const legacyRelayConfigFlag = "link-config"
+
+func bindRelayConfigFlags(fs *flag.FlagSet, target *string, usage string) {
+	fs.StringVar(target, "relay-config", "", usage)
+	fs.StringVar(target, legacyRelayConfigFlag, "", usage)
+}
+
+// printDefaultsWithout prints fs's flag defaults, leaving out the named flags.
+func printDefaultsWithout(fs *flag.FlagSet, w io.Writer, hidden ...string) {
+	visible := flag.NewFlagSet(fs.Name(), flag.ContinueOnError)
+	visible.SetOutput(w)
+	fs.VisitAll(func(f *flag.Flag) {
+		for _, name := range hidden {
+			if f.Name == name {
+				return
+			}
+		}
+		visible.Var(f.Value, f.Name, f.Usage)
+		visible.Lookup(f.Name).DefValue = f.DefValue
+	})
+	visible.PrintDefaults()
 }
 
 func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
@@ -2784,7 +2810,7 @@ func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 
 	cfg := pairConfig{}
 	fs.StringVar(&cfg.stateDir, "state-dir", "", "state directory for daemon identity and trusted devices")
-	fs.StringVar(&cfg.linkConfigPath, "link-config", "", "Mewla Relay config (default: <state-dir>/link.json)")
+	bindRelayConfigFlags(fs, &cfg.linkConfigPath, "Mewla Relay config (default: <state-dir>/relay.json)")
 	fs.BoolVar(&cfg.details, "details", false, "also show the paste link, every browser link and how to revoke a device")
 	fs.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: mewla pair [flags] [address]")
@@ -2794,7 +2820,7 @@ func parsePairConfig(args []string, stderr io.Writer) (pairConfig, error) {
 		fmt.Fprintln(stderr, "address (HTTPS, then Tailscale, then Wi-Fi/LAN). Give an address to use that")
 		fmt.Fprintln(stderr, "one instead, such as a tunnel: mewla pair https://mewla.example.com")
 		fmt.Fprintln(stderr, "")
-		fs.PrintDefaults()
+		printDefaultsWithout(fs, stderr, legacyRelayConfigFlag)
 	}
 
 	if err := fs.Parse(args); err != nil {
