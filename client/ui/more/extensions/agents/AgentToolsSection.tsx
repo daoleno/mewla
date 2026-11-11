@@ -41,6 +41,7 @@ export function AgentToolsSection(props: { nav: PageNav }) {
             title={row.label}
             subtitle={row.scope === "shared" ? `${agentExtensionsCountLabel(row)} · used by ${joinAgentLabels(row.agents)}` : agentExtensionsCountLabel(row)}
             chevron
+            accessibilityHint={`Shows ${row.label === "Shared" ? "the shared Skills" : `${row.label}'s plugins and Skills`}`}
             onPress={() => props.nav.push({ name: "extensions-agent", scope: row.scope })}
           />
         ))}

@@ -88,7 +88,7 @@ function ViewerBody(props: { images: readonly string[]; start: string; read: Ima
           <Icon name="close" size={20} />
         </Button>
       </View>
-      <View class="flex-1 items-center justify-center">
+      <View class="flex-1 items-center justify-center" panActivation={{ activeOffsetX: 24, failOffsetY: 14 }} onPanEnd={(event) => !event.cancelled && Math.abs(event.translation.x) > 60 && go(event.translation.x < 0 ? 1 : -1)}>
         {src() ? <Image src={src()} class="h-full w-full" style={{ objectFit: "contain" }} accessibilityLabel={list[index()]!} /> : error() ? <Text class="text-sm text-muted-foreground">{error()}</Text> : <Spinner />}
       </View>
       {list.length > 1 ? (
